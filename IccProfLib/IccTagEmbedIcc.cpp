@@ -295,6 +295,20 @@ bool CIccTagEmbeddedProfile::Write(CIccIO *pIO)
 }
 
 
+static std::string fillColumns(std::string tag, std::string id, std::string offset, std::string size, std::string pad)
+{
+  char buf[200];
+  memset(buf, ' ', 199);
+  buf[199] = 0;
+  strncpy(buf, tag.c_str(), tag.size());
+  strncpy(buf + 30, id.c_str(), id.size());
+  strncpy(buf + 40, offset.c_str(), offset.size());
+  strncpy(buf + 48, size.c_str(), size.size());
+  strcpy(buf + 56, pad.c_str());
+
+  return buf;
+}
+
 /**
 ****************************************************************************
 * Name: CIccTagEmbedProfile::Describe
@@ -313,11 +327,12 @@ void CIccTagEmbeddedProfile::Describe(std::string &sDescription, int nVerbosenes
     // Code below is copied from iccDumpProfile.cpp
     icHeader* pHdr = &m_pProfile->m_Header;
     CIccInfo Fmt;
-    char buf[180];
+    char buf[180], sigbuf[180];
 
     if (Fmt.IsProfileIDCalculated(&pHdr->profileID)) {
-        sDescription += "Profile ID:         %s\n";
+        sDescription += "Profile ID:         ";
         sDescription += Fmt.GetProfileID(&pHdr->profileID);
+        sDescription += "\n";
     }
     else
         sDescription += "Profile ID:         Profile ID not calculated.\n";
@@ -399,10 +414,8 @@ void CIccTagEmbeddedProfile::Describe(std::string &sDescription, int nVerbosenes
     sDescription += "\nProfile Tags\n";
     sDescription += "------------\n";
 
-    sprintf(buf, "%28s    ID    %8s\t%8s\t%8s\n", "Tag", "Offset", "Size", "Pad");
-    sDescription += buf;
-    sprintf(buf, "%28s  ------  %8s\t%8s\t%8s\n", "----", "------", "----", "---");
-    sDescription += buf;
+    sDescription += fillColumns("Tag", "ID", "Offset", "Size", "Pad") + "\n";
+    sDescription += fillColumns("---", "--", "------", "----", "---") + "\n";
 
     int n, closest, pad;
     TagEntryList::iterator i, j;
@@ -420,9 +433,11 @@ void CIccTagEmbeddedProfile::Describe(std::string &sDescription, int nVerbosenes
         // Should be 0-3 if compliant. Negative number if tags overlap!
         pad = closest - i->TagInfo.offset - i->TagInfo.size;
 
-        sprintf(buf, "%28s  %s  %8d\t%8d\t%8d\n", Fmt.GetTagSigName(i->TagInfo.sig),
-            icGetSig(buf, i->TagInfo.sig, false), i->TagInfo.offset, i->TagInfo.size, pad);
-        sDescription += buf;
+        char sOffset[20], sSize[20], sPad[20];
+        sprintf(sOffset, "%u", i->TagInfo.offset);
+        sprintf(sSize, "%u", i->TagInfo.size);
+        sprintf(sPad, "%u", pad);
+        sDescription += fillColumns(Fmt.GetTagSigName(i->TagInfo.sig), icGetSig(sigbuf, i->TagInfo.sig, false), sOffset, sSize, sPad) + "\n";
     }
   }
   else {

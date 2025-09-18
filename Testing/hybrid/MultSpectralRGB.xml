@@ -78,8 +78,8 @@
         <PreferredCMMType></PreferredCMMType>
         <ProfileVersion>5.10</ProfileVersion>
         <ProfileDeviceClass>spac</ProfileDeviceClass>
-    <ProfileDeviceSubClass>mspc</ProfileDeviceSubClass>
-    <ProfileSubClassVersion>1.0</ProfileSubClassVersion>
+        <ProfileDeviceSubClass>mspc</ProfileDeviceSubClass>
+        <ProfileSubClassVersion>1.0</ProfileSubClassVersion>
         <DataColourSpace>8CLR</DataColourSpace>
         <PCS></PCS>
         <CreationDateTime>now</CreationDateTime>
