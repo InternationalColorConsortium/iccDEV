@@ -1,12 +1,16 @@
 {
-  "name": "iccmax",
-  "version": "2.2.26",
+  "name": "iccdev",
+  "version": "2.2.61",
+  "description": "Developer tools for ICC color profiles",
   "builtin-baseline": "35c4249523ecc2ade23826f120d3f9f6a07a697c",
   "dependencies": [
+    "vcpkg-cmake",
+    "vcpkg-cmake-config",
     "libpng",
     "wxwidgets",
     "tiff",
     "libxml2",
+    "libiconv",
     "nlohmann-json",
     "libjpeg-turbo"
   ],

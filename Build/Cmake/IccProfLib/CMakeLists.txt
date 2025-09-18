@@ -4,13 +4,13 @@
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 24-MAR-2025 1222 EDT by David Hoyt
-#  date -d @1742833338
-#  Mon Mar 24 12:22:18 EDT 2025
+#  Last Updated: 15-AUGUST-2025 at 1700Z by David Hoyt
 #
-# Changes:  Modified output target to fix a few subproject pathing issues
-#           Added to CMakelists.txt: IccPngDump
-#           Adjusted Cross Platform Build Args
+#
+#
+# Changes:  Fix Typo
+#           Add Missing Headers
+#           
 #						
 # TODO: Refactor Debug, Release, Asan, subproject pathing issues
 #       Collapse 3-tier CMakeLists.txt, Housekeeping
@@ -99,7 +99,8 @@ IF(ENABLE_INSTALL_RIM)
     ${SRC_PATH}/IccProfLib/IccUtil.h
     ${SRC_PATH}/IccProfLib/IccWrapper.h
     ${SRC_PATH}/IccProfLib/IccXformFactory.h
-    ${SRC_PATH}/IccProfLib/icProfileHeader.h
+    ${SRC_PATH}/IccProfLib/IccMD5.h
+    ${SRC_PATH}/IccProfLib/IccSignatureUtils.h
   )
   INSTALL( FILES
 	     ${HEADERS_PUBLIC}

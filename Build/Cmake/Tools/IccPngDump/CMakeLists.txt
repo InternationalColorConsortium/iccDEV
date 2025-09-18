@@ -4,11 +4,11 @@
 #                                        All rights reserved.
 # 
 #
-# Last Updated: 24-MAR-2025 1200 EDT by David Hoyt
+# Last Updated: 13-AUGUST-2025 at 1200Z by David Hoyt
 #
-# Changes: 	Modified output target to fix a few subproject pathing issues
-#           Added to CMakelists.txt: IccPngDump
-#           Adjusted Cross Platform Build Args
+# Changes: 	Fixups for Windows PNG Header Includes
+#           Update Cmake Configs to reduce logging outputs
+#           
 #						
 # TODO: Refactor Debug, Release, Asan, subproject pathing issues
 #       Collapse 3-tier CMakeLists.txt, Housekeeping
@@ -36,35 +36,71 @@ message(STATUS "PROJECT_ROOT_DIR resolved as: ${PROJECT_ROOT_DIR}")
 set(TARGET_NAME iccPngDump)
 message(STATUS "Added executable target: ${TARGET_NAME}")
 
-# Include directories
-include_directories(
-    ${SRC_PATH}/Tools/CmdLine/IccPngDump/
-    ${SRC_PATH}/Libraries/IccProfLib/
-    /usr/include
-    /usr/local/include
-)
-
-message(STATUS "Include directories added for ${TARGET_NAME}")
-
-# Find required libraries
-find_package(PNG REQUIRED)
-
-# Add executable
+# Add executable 
 add_executable(${TARGET_NAME} ${SOURCES})
 
+# Include directories
+target_include_directories(${TARGET_NAME} PRIVATE
+    ${SRC_PATH}/Tools/CmdLine/IccPngDump/
+    ${SRC_PATH}/Libraries/IccProfLib/
+)
+
+# Unix check
+if(UNIX)
+  target_include_directories(${TARGET_NAME} PRIVATE /usr/include /usr/local/include)
+endif()
+
+# Find PNG
+find_package(PNG REQUIRED)
+
+# Windows check
+# Find the location of png.h
+if(WIN32)
+  set(_libpng16_candidates
+    "$ENV{VCPKG_ROOT}/installed/$ENV{VCPKG_DEFAULT_TRIPLET}/include/libpng16"
+    "$ENV{VCPKG_ROOT}/installed/$ENV{VCPKG_TARGET_TRIPLET}/include/libpng16"
+    "C:/vcpkg/installed/x64-windows/include/libpng16"
+    "C:/vcpkg/installed/x64-windows-static/include/libpng16"
+  )
+  if(DEFINED CMAKE_TOOLCHAIN_FILE)
+    get_filename_component(_tc_dir "${CMAKE_TOOLCHAIN_FILE}" DIRECTORY)
+    list(APPEND _libpng16_candidates
+      "${_tc_dir}/../installed/x64-windows/include/libpng16"
+      "${_tc_dir}/../installed/x64-windows-static/include/libpng16"
+    )
+  endif()
+  foreach(_cand IN LISTS _libpng16_candidates)
+    if(EXISTS "${_cand}/png.h")
+      target_include_directories(${TARGET_NAME} PRIVATE "${_cand}")
+      message(STATUS "Added Windows libpng16 include: ${_cand}")
+      break()
+    endif()
+  endforeach()
+endif()
+
 # Link libraries
-target_link_libraries(${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB} ${PNG_LIBRARY})
+if(TARGET PNG::PNG)
+  target_link_libraries(${TARGET_NAME} PRIVATE PNG::PNG)
+else()
+  target_link_libraries(${TARGET_NAME} PRIVATE ${PNG_LIBRARY})
+endif()
+
+# Target Link Lib
+if(DEFINED TARGET_LIB_ICCPROFLIB)
+  target_link_libraries(${TARGET_NAME} PRIVATE ${TARGET_LIB_ICCPROFLIB})
+endif()
 
 message(STATUS "Libraries linked for ${TARGET_NAME}")
 
-# Set output directories
+# 
 # set_target_properties(${TARGET_NAME} PROPERTIES
 #    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PROJECT_ROOT_DIR}/Testing/Release"
-#    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${PROJECT_ROOT_DIR}/Testing/Debug"
+#    RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${PROJECT_ROOT_DIR}/Testing/Debug"
 # )
 message(STATUS "Output directories set for ${TARGET_NAME}")
 
-# Optional installation rule
+# RIM Install
 if(ENABLE_INSTALL_RIM)
+    include(GNUInstallDirs)
     install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif(ENABLE_INSTALL_RIM)
+endif()

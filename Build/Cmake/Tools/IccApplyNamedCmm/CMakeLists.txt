@@ -1,36 +1,62 @@
-#
+# 
 # IccApplyNamedCmm CMakeLists.txt | DemoIccMAX Project
-# Copyright (©) 2024 The International Color Consortium. All rights reserved.
+# Copyright (©) 2024-2025 The International Color Consortium. All rights reserved.
+# 
+#
+# Last Updated: 10-AUGUST-2025 at 1500Z by David Hoyt
+#
+# Changes: 	Fixups for ApplyNamedCmm & NamedProfiles CMakeLists.txt
+#						
 #
 #
-# Last Updated: 09-APRIL-2025 at 1300 EDT by David Hoyt
 #
-# Changes:      Added JSON Dependency
-#               Adjusted Cross Platform Build Args
+#
+#
+#
 #
 #
 #
 #
 #
 
-# Check if the target is already defined before adding it
+# project(iccApplyNamedCmm LANGUAGES CXX)
+
+# set(CMAKE_CXX_STANDARD 17)
+# set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Dependencies
+find_package(nlohmann_json REQUIRED)  # provides nlohmann_json::nlohmann_json
+
+# ---- Sources ----
+# Reminder: CMAKE_SOURCE_DIR is Build/Cmake; the repo root is two levels up.
+set(SRC_ROOT "${CMAKE_SOURCE_DIR}/../..")
+
+set(SOURCES
+  "${SRC_ROOT}/Tools/CmdLine/IccApplyNamedCmm/iccApplyNamedCmm.cpp"
+  "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp"
+  "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp"
+)
+
+# Optional (if headers used from this dir)
+set(PRIVATE_INCLUDES
+  "${SRC_ROOT}/Tools/CmdLine/IccApplyProfiles"
+)
+
+# ---- Target ----
 if(NOT TARGET iccApplyNamedCmm)
-  set(SRC_PATH ../../../..)
+  add_executable(iccApplyNamedCmm ${SOURCES})
 
-  set(SOURCES
-    ${SRC_PATH}/Tools/CmdLine/IccApplyNamedCmm/iccApplyNamedCmm.cpp
-    ${SRC_PATH}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp
-    ${SRC_PATH}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp
+  target_include_directories(iccApplyNamedCmm PRIVATE ${PRIVATE_INCLUDES})
+
+  target_link_libraries(iccApplyNamedCmm PRIVATE
+    ${TARGET_LIB_ICCPROFLIB}
+    IccXML2
+    nlohmann_json::nlohmann_json
   )
 
-  set(TARGET_NAME iccApplyNamedCmm)
-
-  include_directories(${SRC_PATH}/Tools/CmdLine/IccApplyProfiles/)
-
-  add_executable(${TARGET_NAME} ${SOURCES})
-  target_link_libraries(${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB})
-
   if(ENABLE_INSTALL_RIM)
-    install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS iccApplyNamedCmm DESTINATION ${CMAKE_INSTALL_BINDIR})
   endif()
+else()
+  message(STATUS "iccApplyNamedCmm already defined; skipping.")
 endif()

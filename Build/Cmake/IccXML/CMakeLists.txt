@@ -4,13 +4,13 @@
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 24-MAR-2025 1222 EDT by David Hoyt
-#  date -d @1742833338
-#  Mon Mar 24 12:22:18 EDT 2025
+#  Last Updated: 12-AUGUST-2025 1300Z by David Hoyt
 #
-# Changes:  Modified output target to fix a few subproject pathing issues
-#           Added to CMakelists.txt: IccPngDump
-#           Adjusted Cross Platform Build Args
+#
+#
+# Changes:  Reduce Logging
+#           
+#           
 #						
 # TODO: Refactor Debug, Release, Asan, subproject pathing issues
 #       Collapse 3-tier CMakeLists.txt, Housekeeping
@@ -49,13 +49,13 @@ IF(ENABLE_INSTALL_RIM)
 	     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
 ENDIF(ENABLE_INSTALL_RIM)
 
-message(STATUS "Starting CMake debug for target: ${TARGET_NAME}")
-message(STATUS "CFILES = ${CFILES}")
-message(STATUS "ENABLE_SHARED_LIBS = ${ENABLE_SHARED_LIBS}")
-message(STATUS "ENABLE_STATIC_LIBS = ${ENABLE_STATIC_LIBS}")
-message(STATUS "ENABLE_INSTALL_RIM = ${ENABLE_INSTALL_RIM}")
-message(STATUS "LIBXML2_LIBRARIES = ${LIBXML2_LIBRARIES}")
-message(STATUS "PROJECT_UP_NAME = ${PROJECT_UP_NAME}")
+# message(STATUS "Starting CMake debug for target: ${TARGET_NAME}")
+# message(STATUS "CFILES = ${CFILES}")
+# message(STATUS "ENABLE_SHARED_LIBS = ${ENABLE_SHARED_LIBS}")
+# message(STATUS "ENABLE_STATIC_LIBS = ${ENABLE_STATIC_LIBS}")
+# message(STATUS "ENABLE_INSTALL_RIM = ${ENABLE_INSTALL_RIM}")
+# message(STATUS "LIBXML2_LIBRARIES = ${LIBXML2_LIBRARIES}")
+# message(STATUS "PROJECT_UP_NAME = ${PROJECT_UP_NAME}")
 
 SET(SOURCES ${CFILES})
 
@@ -71,10 +71,10 @@ IF(APPLE)
 ENDIF()
 
 SET(EXTRA_LIBS ${EXTRA_LIBS} ${LIBXML2_LIBRARIES})
-message(STATUS "EXTRA_LIBS = ${EXTRA_LIBS}")
+# message(STATUS "EXTRA_LIBS = ${EXTRA_LIBS}")
 
 IF(ENABLE_SHARED_LIBS)
-  message(STATUS "Building SHARED library: ${TARGET_NAME}")
+#  message(STATUS "Building SHARED library: ${TARGET_NAME}")
   ADD_LIBRARY(${TARGET_NAME} SHARED ${SOURCES})
   SET_TARGET_PROPERTIES(${TARGET_NAME}
     PROPERTIES VERSION ${${PROJECT_UP_NAME}_VERSION}
@@ -82,7 +82,7 @@ IF(ENABLE_SHARED_LIBS)
   TARGET_LINK_LIBRARIES(${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
-    message(STATUS "Installing SHARED library")
+#    message(STATUS "Installing SHARED library")
     INSTALL(TARGETS ${TARGET_NAME}
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -91,13 +91,13 @@ IF(ENABLE_SHARED_LIBS)
 ENDIF()
 
 IF(ENABLE_STATIC_LIBS)
-  message(STATUS "Building STATIC library: ${TARGET_NAME}-static")
+#  message(STATUS "Building STATIC library: ${TARGET_NAME}-static")
   ADD_LIBRARY(${TARGET_NAME}-static STATIC ${SOURCES})
   SET_TARGET_PROPERTIES(${TARGET_NAME}-static PROPERTIES OUTPUT_NAME "${TARGET_NAME}-static")
   TARGET_LINK_LIBRARIES(${TARGET_NAME}-static ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
-    message(STATUS "Installing STATIC library")
+#    message(STATUS "Installing STATIC library")
     INSTALL(TARGETS ${TARGET_NAME}-static
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -122,12 +122,12 @@ ELSE()
 ENDIF()
 
 SET(TARGET_LIB ${TARGET_LIB} PARENT_SCOPE)
-message(STATUS "Final TARGET_LIB = ${TARGET_LIB}")
+# message(STATUS "Final TARGET_LIB = ${TARGET_LIB}")
 
 # Debug logging for output paths
 GET_TARGET_PROPERTY(SHARED_OUTPUT_NAME ${TARGET_NAME} OUTPUT_NAME)
 GET_TARGET_PROPERTY(SHARED_OUTPUT_DIR ${TARGET_NAME} LIBRARY_OUTPUT_DIRECTORY)
 GET_TARGET_PROPERTY(SHARED_ARCHIVE_DIR ${TARGET_NAME} ARCHIVE_OUTPUT_DIRECTORY)
-message(STATUS "SHARED lib output name: ${SHARED_OUTPUT_NAME}")
-message(STATUS "SHARED lib output dir: ${SHARED_OUTPUT_DIR}")
-message(STATUS "SHARED archive dir: ${SHARED_ARCHIVE_DIR}")
+# message(STATUS "SHARED lib output name: ${SHARED_OUTPUT_NAME}")
+# message(STATUS "SHARED lib output dir: ${SHARED_OUTPUT_DIR}")
+# message(STATUS "SHARED archive dir: ${SHARED_ARCHIVE_DIR}")

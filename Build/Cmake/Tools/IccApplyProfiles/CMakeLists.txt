@@ -1,40 +1,68 @@
-#
+# 
 # IccApplyProfiles CMakeLists.txt | DemoIccMAX Project
-# Copyright (©) 2024 The International Color Consortium. All rights reserved.
+# Copyright (©) 2024-2025 The International Color Consortium. All rights reserved.
+# 
+#
+# Last Updated: 10-AUGUST-2025 at 1500Z by David Hoyt
+#
+# Changes: 	Fixups for ApplyNamedCmm & NamedProfiles CMakeLists.txt
+#						
 #
 #
-# Last Updated: 28-JULY-2025 0100Z  by David Hoyt
-#
-# Changes:      Added JSON Dependency
-#               Adjusted Cross Platform Build Args
 #
 #
-# Found the missing Tiff Include Dep from AFL and Graph - DHOYT
+#
+#
+#
+#
+#
 #
 #
 
-# Check if the target is already defined before adding it
-IF(NOT TARGET iccApplyProfiles)
-  # Define the source path relative to this file
-  SET(SRC_PATH ../../../..)
-  SET(SOURCES ${SRC_PATH}/Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp
-              ${SRC_PATH}/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp
-              ${SRC_PATH}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp
-              ${SRC_PATH}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp
-              )
-  SET(TARGET_NAME iccApplyProfiles)
+if(NOT TARGET iccApplyProfiles)
+  # Top of repo is two dirs above Build/Cmake
+  set(SRC_ROOT "${CMAKE_SOURCE_DIR}/../..")
 
-  # Define the executable target
-  ADD_EXECUTABLE(${TARGET_NAME} ${SOURCES})
+  # Find deps
+  find_package(nlohmann_json CONFIG REQUIRED) # provides nlohmann_json::nlohmann_json
+  # If TIFF wasn't already found/created elsewhere, this makes sure we have either the target or the plain var
+  if(NOT TARGET TIFF::TIFF AND NOT TIFF_LIBRARY)
+    find_package(TIFF REQUIRED)
+  endif()
 
-  # Link the necessary libraries to the target
-  TARGET_LINK_LIBRARIES(${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB}) ${TIFF_LIBRARY} )
+  set(SOURCES
+    "${SRC_ROOT}/Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp"
+    "${SRC_ROOT}/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp"
+    "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp"
+    "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp"
+  )
 
-  # Optional: Install the executable if enabled
-  IF(ENABLE_INSTALL_RIM)
-    INSTALL(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
-  ENDIF()
-ELSE()
-  # Log a warning if the target already exists
-  MESSAGE(WARNING "Target ${TARGET_NAME} already exists. Skipping duplicate addition.")
-ENDIF()
+  foreach(f IN LISTS SOURCES)
+    if(NOT EXISTS "${f}")
+      message(FATAL_ERROR "iccApplyProfiles: missing source: ${f}")
+    endif()
+  endforeach()
+
+  set(TARGET_NAME iccApplyProfiles)
+  add_executable(${TARGET_NAME} ${SOURCES})
+
+  # Normalize TIFF link name
+  if(TARGET TIFF::TIFF)
+    set(_TIFF_LIB TIFF::TIFF)
+  else()
+    set(_TIFF_LIB ${TIFF_LIBRARY})
+  endif()
+
+  target_link_libraries(${TARGET_NAME}
+    PRIVATE
+      ${TARGET_LIB_ICCPROFLIB}
+      ${_TIFF_LIB}
+      nlohmann_json::nlohmann_json
+  )
+
+  if(ENABLE_INSTALL_RIM)
+    install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+  endif()
+else()
+  message(WARNING "Target iccApplyProfiles already exists. Skipping duplicate addition.")
+endif()
