@@ -104,6 +104,8 @@ public:
 
   virtual icFloatNumber costFunc(CIccSearchVec& point);
 
+  virtual bool boundsCheck(const CIccSearchVec& point, icFloatNumber& boundsCost) const;
+
   virtual icStatusCMM Apply(icFloatNumber* DstPixel, const icFloatNumber* SrcPixel);
 
   //Make sure that when DstPixel==SrcPixel the sizeof DstPixel is less than size of SrcPixel
@@ -117,6 +119,12 @@ protected:
   icFloatVector m_startPixel;
   size_t m_nApply;
   icUInt16Number m_nSamples;
+
+  bool m_bUnitBounds;
+  icFloatVector m_minBounds;
+  icFloatVector m_maxBounds;
+
+  bool m_bNeedPcsToLab;
 };
 
 
@@ -125,7 +133,7 @@ class ICCPROFLIB_API CIccCmmSearch : public CIccCmm
 {
   friend class CIccApplyCmmSearch;
 public:
-  CIccCmmSearch();
+  CIccCmmSearch(bool bUseBounds=true, icFloatNumber overBoundsCost = 1.0e6, const icFloatVector &minBounds=icFloatVector(), const icFloatVector &maxBounds=icFloatVector());
   virtual ~CIccCmmSearch();
 
   //Must make two or three calls to some form of AddXform() before calling Begin()
@@ -170,6 +178,12 @@ public:
 protected:
 
   int m_nAttached=0;
+  bool m_bUsesBounds;
+  icFloatNumber m_fOverBoundsCost;
+  icFloatVector m_minBounds;
+  icFloatVector m_maxBounds;
+
+  bool m_bNeedPcsToLab;
   
   CIccProfile* m_pSrcProfile = nullptr;
   icRenderingIntent m_nSrcIntent;

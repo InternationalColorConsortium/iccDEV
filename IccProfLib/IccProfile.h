@@ -148,7 +148,6 @@ typedef enum {
  */
 class ICCPROFLIB_API CIccProfile : public IIccProfileConnectionConditions 
 {
-  friend class CIccCmm;
 public:
   CIccProfile();
   CIccProfile(const CIccProfile &Profile);
@@ -175,6 +174,8 @@ public:
   bool Attach(CIccIO *pIO, bool bUseSubProfile=false);
   bool Detach();
   bool HasIO() { return m_pAttachIO != NULL;  }
+
+  void CopyAttach(CIccProfile* pProfile, bool bSharedIO=false);
 
   bool Read(CIccIO *pIO, bool bUseSubProfile=false);
   icValidateStatus ReadValidate(CIccIO *pIO, std::string &sReport);
@@ -240,6 +241,7 @@ protected:
   bool CheckFileSize(CIccIO *pIO) const;
 
   CIccIO *m_pAttachIO;
+  bool m_bSharedIO = false;
 
   TagPtrList *m_TagVals;
 

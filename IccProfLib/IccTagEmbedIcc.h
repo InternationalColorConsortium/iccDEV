@@ -96,6 +96,7 @@ public:
   virtual const icChar *GetClassName() const { return "CIccTagEmbeddedProfile"; }
 
   virtual CIccProfile *GetProfile() const { return m_pProfile; }
+  virtual void SetProfile(CIccProfile *pProfile); //The tag will assume ownership of pProfile
 
   virtual bool Read(icUInt32Number size, CIccIO *pIO) { return Read(size, pIO, NULL); }
   virtual bool Read(icUInt32Number size, CIccIO *pIO, CIccProfile *pProfile);

@@ -137,21 +137,7 @@ namespace refIccMAX {
       return c;
     }
 
-   CIccSearchVec& min(const CIccSearchVec& point) {
-      for (unsigned int i = 0; i < n; i++) {
-        if (point.val[i] < val[i])
-        val[i] = point.val[i];
-      }
-      return *this;
-    }
-
-   CIccSearchVec& max(const CIccSearchVec& point) {
-     for (unsigned int i = 0; i < n; i++) {
-       if (point.val[i] > val[i])
-         val[i] = point.val[i];
-     }
-     return *this;
-   }
+    icFloatNumber index(size_t i) const { return val[i]; }
 
   private:
     icFloatVector val;
@@ -166,18 +152,26 @@ namespace refIccMAX {
     //Override costFunction to implement search
     virtual icFloatNumber costFunc(CIccSearchVec &point) = 0;
 
+    //Set bUsebouds true, and override boundsCheck to implement bounds checking setting boundsCost with "distance" out of bounds
+    virtual bool boundsCheck(const CIccSearchVec& point, icFloatNumber& boundsCost) const {
+      boundsCost = 0;
+      return false;
+    }
+
     icFloatVector findMin(icFloatVector& startingPoint, const std::vector<icFloatVector>& startingSimplex = {}) {
       unsigned int nFuncCallCount = 0;
-      auto         f = [&](CIccSearchVec& p) {
+      icFloatNumber cost;
+      auto  f = [&](CIccSearchVec& p) {
         nFuncCallCount++;
+        if (bUseBounds && boundsCheck(p, cost))
+          return cost + overBoundsCost;
         return costFunc(p);
       };
 
       // Getting the dimension of function input
       unsigned int nDimension = (unsigned int)startingPoint.size();
       if (nDimension <= 0)
-        throw std::invalid_argument(
-          "A starting point must have at least one dimension.");
+        return icFloatVector();
 
       // Setting parameters
       icFloatNumber alpha, beta, gamma, delta;
@@ -204,20 +198,14 @@ namespace refIccMAX {
           icFloatNumber tau = (p(i - 1) < 1e-6f && p(i - 1) > -1e-6f) ? 0.00025f : 0.05f;
           p(i - 1) += tau;
           simplex[i] = p;
-
-          if (bUseBounds)
-            simplex[i].min(maxBound).max(minBound);
         }
       }
       else {
         if (startingSimplex.size() != nDimension + 1)
-          throw std::invalid_argument(
-            "The initial simplex must have dimension + 1 elements");
+          return icFloatVector(nDimension);
+
         for (unsigned int i = 0; i < startingSimplex.size(); i++) {
           simplex[i] = startingSimplex[i];
-
-          if (bUseBounds)
-            simplex[i].min(maxBound).max(minBound);
         }
       }
 
@@ -232,7 +220,8 @@ namespace refIccMAX {
       icFloatNumber valSmallest;
 
       //Perform search
-      while (maxIterations--) {
+      unsigned int iterations = maxIterations;
+      while (iterations--) {
         // Find the points that generate the biggest, second biggest and smallest value
         icFloatNumber val;
         if (!valueCache[0].first) {
@@ -287,7 +276,7 @@ namespace refIccMAX {
           }
         }
         if ((maxValDiff <= funcTolerance && maxPointDiff <= valTolerance) ||
-          (nFuncCallCount >= maxFuncEvals) || (maxIterations == 0)) {
+          (nFuncCallCount >= maxFuncEvals) || (iterations == 0)) {
           icFloatVector res = simplex[idxSmallest].vec();
           return res;
         }
@@ -304,15 +293,11 @@ namespace refIccMAX {
 
         // Calculate the reflection point
         CIccSearchVec xReflect = xCenter + alpha * (xCenter - simplex[idxBiggest]);
-        if (bUseBounds)
-          xReflect.min(maxBound).max(minBound);
 
         icFloatNumber valReflection = f(xReflect);
         if (valReflection < valSmallest) {
           // Expansion
           CIccSearchVec xExpand = xCenter + beta * (xReflect - xCenter);
-          if (bUseBounds)
-            xExpand.min(maxBound).max(minBound);
 
           icFloatNumber      expansion_val = f(xExpand);
           if (expansion_val < valReflection) {
@@ -370,14 +355,13 @@ namespace refIccMAX {
 
     protected:
       bool bAdaptive = false;
-      icFloatNumber funcTolerance = 1e-8f;
-      icFloatNumber valTolerance = 1e-8f;
-      unsigned int maxIterations = 1000000;
-      unsigned int maxFuncEvals = 100000;
+      icFloatNumber funcTolerance = 1e-4f;
+      icFloatNumber valTolerance = 1e-4f;
+      unsigned int maxIterations = 10000;
+      unsigned int maxFuncEvals = 10000;
 
       bool bUseBounds = false;
-      icFloatVector minBound;
-      icFloatVector maxBound;
+      icFloatNumber overBoundsCost = 1.0e6f;  //base cost when out of bounds
   };
 
 

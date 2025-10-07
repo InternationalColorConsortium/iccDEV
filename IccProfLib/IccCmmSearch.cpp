@@ -75,21 +75,27 @@ CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCm
 {
   CIccCmmSearch* pCmm = (CIccCmmSearch*)pBaseCmm;
 
-  if (pCmm->m_dst_to_mid.size() && pCmm->m_pcc.size()) {
-    m_nApply = pCmm->m_pcc.size();
-    
-  }
-  else if (pCmm->m_src_to_mid.size()) {
+  m_nApply = pCmm->m_pcc.size();
+  if (!m_nApply)
     m_nApply = 1;
-  }
-  m_mid_data.resize(m_nApply);
+
   m_nSamples = pCmm->m_dst_to_mid[0]->GetDestSamples();
   icUInt16Number nSrcSamples = pCmm->m_dst_to_mid[0]->GetSourceSamples();
+
+  m_mid_data.resize(m_nApply);
   for (size_t i = 0; i < m_nApply; i++) {
     m_mid_data[i].resize(m_nSamples);
   }
   m_pixel.resize(m_nSamples);
   m_startPixel.resize(nSrcSamples);
+
+  bUseBounds = pCmm->m_bUsesBounds;
+  overBoundsCost = pCmm->m_fOverBoundsCost;
+  m_bUnitBounds = pCmm->m_minBounds.size() != nSrcSamples || pCmm->m_maxBounds.size() != nSrcSamples;
+  m_minBounds = pCmm->m_minBounds;
+  m_maxBounds = pCmm->m_maxBounds;
+
+  m_bNeedPcsToLab = pCmm->m_bNeedPcsToLab;
 }
 
 CIccApplyCmmSearch::~CIccApplyCmmSearch()
@@ -104,6 +110,11 @@ icFloatNumber CIccApplyCmmSearch::costFunc(CIccSearchVec& point)
   icFloatNumber sum = 0.0;
   for (size_t i = 0; i < m_nApply; i++) {
     pCmm->m_dst_to_mid[i]->Apply(&m_pixel[0], &point.vec()[0]);
+
+    if (m_bNeedPcsToLab) {
+      icLabFromPcs(&m_pixel[0]);
+    }
+
     icFloatNumber difSum = 0;
     for (icUInt16Number j = 0; j < m_nSamples; j++) {
       difSum += sq(m_pixel[j] - m_mid_data[i][j]);
@@ -113,15 +124,65 @@ icFloatNumber CIccApplyCmmSearch::costFunc(CIccSearchVec& point)
   return sum;
 }
 
+bool CIccApplyCmmSearch::boundsCheck(const CIccSearchVec& point, icFloatNumber& boundsCost) const
+{
+  bool rv = false;
+  boundsCost = 0;
+  if (m_bUnitBounds) {
+    for (size_t i = 0; i < point.size(); i++) {
+      icFloatNumber v = point.index(i);
+      if (v < 0.0f) {
+        rv = true;
+        boundsCost += sq(v);
+      }
+      else if (v > 1.0f) {
+        rv = true;
+        boundsCost += sq(v - 1.0f);
+      }
+    }
+  }
+  else {
+    for (size_t i = 0; i < point.size(); i++) {
+      icFloatNumber v = point.index(i);
+      if (v < m_minBounds[i]) {
+        rv = true;
+        boundsCost += sq(m_minBounds[i] - v);
+      }
+      else if (v > m_maxBounds[i]) {
+        rv = true;
+        boundsCost += sq(m_maxBounds[i] - 1.0f);
+      }
+    }
+  }
+  if (rv) {
+    boundsCost = sqrt(boundsCost);
+  }
+  return rv;
+}
+
 icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumber* SrcPixel)
 {
   CIccCmmSearch* pCmm = (CIccCmmSearch*)m_pCmm;
 
-  for (size_t i = 0; i < m_nApply; i++) {
-    pCmm->m_src_to_mid[i]->Apply(&m_mid_data[i][0], SrcPixel);
+    if (!pCmm->m_src_to_mid.size()) { //src == mid so copy pixel data into mid search pixels
+    for (size_t i = 0; i < m_nApply; i++) {
+      memcpy(&m_mid_data[i][0], SrcPixel, m_nSamples*sizeof(icFloatNumber));
+    }
+  }
+  else {
+    for (size_t i = 0; i < m_nApply; i++) {
+      pCmm->m_src_to_mid[i]->Apply(&m_mid_data[i][0], SrcPixel);
+    }
   }
 
   pCmm->m_mid_to_dst->Apply(&m_startPixel[0], &m_mid_data[0][0]);
+
+  //Cost function needs delteEab so convert from PCS encoding to Lab for comparisons
+  if (m_bNeedPcsToLab) {
+    for (size_t i = 0; i < m_nApply; i++) {
+      icLabFromPcs(&m_mid_data[i][0]);
+    }
+  }
 
   icFloatVector result = findMin(m_startPixel);
 
@@ -146,8 +207,12 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
 }
 
 
-CIccCmmSearch::CIccCmmSearch()
+CIccCmmSearch::CIccCmmSearch(bool bUsesBounds, icFloatNumber overBoundsCost, const icFloatVector &minBounds, const icFloatVector &maxBounds)
 {
+  m_bUsesBounds = bUsesBounds;
+  m_fOverBoundsCost = overBoundsCost;
+  m_minBounds = minBounds;
+  m_maxBounds = maxBounds;
 }
 
 CIccCmmSearch::~CIccCmmSearch()
@@ -268,12 +333,12 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool bUsePcsConversion)
 
     m_mid_to_dst = cmm;
 
-    //src_to_mid
+    //dst_to_mid
     cmm = CIccCmmPtr(new CIccCmm);
-    rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pSrcPcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags);
+    rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pDstPcc, m_nSrcLutType, m_bDstUseD2BxB2DxTags);
     checkCmmStatus(rv);
 
-    rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pDstPcc, m_nSrcLutType, m_bDstUseD2BxB2DxTags);
+    rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pSrcPcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags);
     checkCmmStatus(rv);
 
     delete m_pDstProfile;
@@ -281,12 +346,12 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool bUsePcsConversion)
 
     rv = cmm->Begin();
     checkCmmStatus(rv);
-    m_src_to_mid.push_back(cmm);
-   
-    m_nSrcSpace = cmm->GetSourceSpace();
-    m_nDestSpace = cmm->GetDestSpace();
-    m_nLastIntent = cmm->GetLastIntent();
-    m_nLastSpace = cmm->GetLastSpace();
+    m_dst_to_mid.push_back(cmm);
+       
+    m_nSrcSpace = m_mid_to_dst->GetSourceSpace();
+    m_nDestSpace = m_mid_to_dst->GetDestSpace();
+    m_nLastIntent = m_mid_to_dst->GetLastIntent();
+    m_nLastSpace = m_mid_to_dst->GetLastSpace();
 
     if (!m_weight.size())
       m_weight.push_back(1.0);
@@ -355,6 +420,14 @@ icStatusCMM CIccCmmSearch::Begin(bool bAllocNewApply, bool bUsePcsConversion)
     m_nLastIntent = m_mid_to_dst->GetLastIntent();
     m_nLastSpace = m_mid_to_dst->GetLastSpace();
   }
+
+  CIccXform* pLastXform = m_dst_to_mid[0]->GetLastXform();
+  if (pLastXform && pLastXform->GetProfile() &&
+      pLastXform->GetProfile()->m_Header.version<icVersionNumberV5 &&
+      pLastXform->GetProfile()->m_Header.colorSpace == icSigLabData)
+    m_bNeedPcsToLab = true;
+  else
+    m_bNeedPcsToLab = false;
 
   m_pApply = new CIccApplyCmmSearch(this);
 

@@ -102,6 +102,7 @@ namespace refIccMAX {
 CIccProfile::CIccProfile()
 {
   m_pAttachIO = NULL;
+  m_bSharedIO = false;
   memset(&m_Header, 0, sizeof(m_Header));
   m_Tags = new(TagEntryList);
   m_TagVals = new(TagPtrList);
@@ -254,10 +255,10 @@ CIccProfile::~CIccProfile()
  */
 void CIccProfile::Cleanup()
 {
-  if (m_pAttachIO) {
+  if (m_pAttachIO && !m_bSharedIO) {
     delete m_pAttachIO;
-    m_pAttachIO = nullptr;
   }
+  m_pAttachIO = nullptr;
 
   TagPtrList::iterator i;
 
@@ -702,7 +703,7 @@ bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 */
 bool CIccProfile::Detach()
 {
-  if (m_pAttachIO) {
+  if (m_pAttachIO && !m_bSharedIO) {
     TagEntryList::iterator i;
 
     for (i = m_Tags->begin(); i != m_Tags->end(); i++) {
@@ -715,8 +716,42 @@ bool CIccProfile::Detach()
     m_pAttachIO = NULL;
     return true;
   }
+  else if (m_bSharedIO) {
+    m_pAttachIO = NULL;
+    m_bSharedIO = false;
+
+    return true;
+  }
 
   return false;
+}
+
+
+/**
+******************************************************************************
+* Name: CIccProfile::CopyAttach
+*
+* Purpose: Allows a copy of a profile object to share the IO of another object
+*  The shared object does not own the shared IO so it will not be deleted when
+*  detached.
+*
+* Args:
+*  pProfile - pointer to a profile to get a copy of the shared IO (if null then
+*             shared IO is disconnected)
+*  bShareIO - flag indicating whether pAttachedIO should be considered shared
+*******************************************************************************
+*/
+
+void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
+{
+  if (!pProfile) {
+    m_pAttachIO = nullptr;
+    m_bSharedIO = false;
+  }
+  else {
+    m_pAttachIO = pProfile->m_pAttachIO;
+    m_bSharedIO = bSharedIO;
+  }
 }
 
 /**

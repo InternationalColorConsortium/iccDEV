@@ -1664,6 +1664,7 @@ public:
                                IIccProfileConnectionConditions *pPcc = NULL,
                                bool bUseD2BxB2DxTags =false,
                                CIccCreateXformHintManager *pHintManager = NULL);  //Note: profile will be owned by the CMM
+  virtual icStatusCMM AddXform(CIccXform* pXform); //note pXform will be owned by the CMM
 
   //The Begin function should be called before Apply or GetNewApplyCmm()
   virtual icStatusCMM Begin(bool bAllocNewApply=true, bool bUsePcsConversion=false);
@@ -1682,6 +1683,12 @@ public:
 
   ///Returns the number of profiles/transforms added 
   virtual icUInt32Number GetNumXforms() const;
+
+  ///Returns the number of profiles/transforms added 
+  bool HasXformsOfType(icXformType nXformType) const;
+
+  CIccXform* GetFirstXform() const;
+  CIccXform* GetLastXform() const;
 
   virtual void IterateXforms(IXformIterator* pIterater) const;
 

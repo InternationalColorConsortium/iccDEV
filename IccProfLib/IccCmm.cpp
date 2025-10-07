@@ -8434,17 +8434,34 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
     return icCmmStatAllocErr;
 
   //borrow the caller's AttachIO to perform the AddXform
-  pProfile->m_pAttachIO = Profile.m_pAttachIO;
+  pProfile->CopyAttach(&Profile);
 
- icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
+  icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
- //Now that we have added the xform disconnect from the callers AttachIO
- pProfile->m_pAttachIO = nullptr;
+  //Now that we have added the xform disconnect from the callers AttachIO
+  pProfile->CopyAttach(nullptr);
 
   if (stat != icCmmStatOk)
     delete pProfile;
 
   return stat;
+}
+
+icStatusCMM CIccCmm::AddXform(CIccXform* pXform)
+{
+  if (!pXform)
+    return icCmmStatBadXform;
+
+  m_nLastSpace = pXform->GetDstSpace();
+  m_nLastParentSpace = icSigNoColorData;
+  m_nLastIntent = icUnknownIntent;
+  m_bLastInput = false;
+
+  CIccXformPtr ptr;
+  ptr.ptr = pXform;
+  m_Xforms->push_back(ptr);
+
+  return icCmmStatOk;
 }
 
 icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
@@ -9580,6 +9597,70 @@ icUInt32Number CIccCmm::GetNumXforms() const
 {
   return (icUInt32Number)m_Xforms->size();
 }
+
+
+/**
+ **************************************************************************
+ * Name: CIccCmm::HasXformsOfType
+ *
+ * Purpose:
+ * Check to see if one of the xforms has a given type
+ *
+ * Return:
+ * true if one of the xforme is of a given type
+ **************************************************************************
+ */
+bool CIccCmm::HasXformsOfType(icXformType nXformType) const
+{
+  CIccXformList::iterator xform;
+  for (xform = m_Xforms->begin(); xform != m_Xforms->end(); xform++) {
+    if (xform->ptr->GetXformType() == nXformType) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+/**
+ **************************************************************************
+ * Name: CIccCmm::GetFirstXform
+ *
+ * Purpose:
+ *  Get first xform in the xform list
+ *
+ * Return:
+ * firs xform or null if no xforms
+ **************************************************************************
+ */
+CIccXform* CIccCmm::GetFirstXform() const
+{
+  if (!m_Xforms->size())
+    return nullptr;
+
+  return m_Xforms->front().ptr;
+}
+
+
+/**
+ **************************************************************************
+ * Name: CIccCmm::GetLastXform
+ *
+ * Purpose:
+ *  Get last xform in the xform list
+ *
+ * Return:
+ * firs xform or null if no xforms
+ **************************************************************************
+ */
+CIccXform* CIccCmm::GetLastXform() const
+{
+  if (!m_Xforms->size())
+    return nullptr;
+
+  return m_Xforms->back().ptr;
+}
+
 
 
 /**
