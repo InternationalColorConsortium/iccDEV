@@ -1,4 +1,5 @@
 2025-OCT-17 Max Derhak
+* Update IccProfLib and IccXml to version to 2.3.1
 * Update licenses in source code to match LICENSE.md
 * Add CIccCmmSearch object allowing for color management using forward transforms
 * Add IccApplySearch command line tool allowing for spectral reproduction using forward transforms
