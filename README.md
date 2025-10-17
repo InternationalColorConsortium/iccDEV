@@ -7,10 +7,10 @@ the use and adoption of open, vendor-neutral, cross-platform color management sy
 The International Color Consortium encourages vendors to support the ICC profile
 format and the workflows required to use ICC profiles.
 
-The iccDEV project (formally known as DemoIccMAX) provides an
+The iccDEV project (formerly known as DemoIccMAX) provides an
 open source set of libraries and tools that allow for the interaction, manipulation,
 and application of ICC based color management profiles based on the 
-[ICC profile specification](http://www.color.org/icc_specs2.xalter) and 
+[ICC profile specification](http://www.color.org/icc_specs2.xalter) and the 
 [iccMAX profile specification](http://www.color.org/iccmax.xalter).
 
 All documentation is in the "docs" directory. If you're just getting started, 
