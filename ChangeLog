@@ -1,3 +1,13 @@
+2025-OCT-17 Max Derhak
+* Update licenses in source code to match LICENSE.md
+* Add CIccCmmSearch object allowing for color management using forward transforms
+* Add IccApplySearch command line tool allowing for spectral reproduction using forward transforms
+* Add support and examples for hybrid ICC/iccMAX profiles
+* Add IccV5DspObsToV4Dsp command line tool allowing for creation of V4 display profiles using V5/hybrid observer specific color managment 
+* Add example 2015 observer and Asano categorical observer PPC profiles
+* Added support for multispectral images in IccApplyProfiles using hybrid ICC/iccMAX profiles
+* Various bug fixes
+
 2025-MAY-02 David Hoyt
 * Align Cmakelists.txt
 * Add IccProfLib/IccSignatureUtils.h debug helper
