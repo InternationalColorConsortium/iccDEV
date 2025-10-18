@@ -141,8 +141,8 @@ void Usage()
   printf("    60 - BDRF Direct\n");
   printf("    70 - BDRF MCS Parameters\n");
   printf("    80 - MCS connection\n");
-  printf("  +100 - Use Luminance based PCS adjustment\n");
-  printf(" +1000 - Use V5 sub-profile if present\n");
+  printf("  +1000 - Use Luminance based PCS adjustment\n");
+  printf(" +10000 - Use V5 sub-profile if present\n");
 }
 
 //===================================================
@@ -197,7 +197,7 @@ int main(int argc, const char** argv)
   }
 
   int i, j, k;
-  unsigned int sn, sphoto, photo, bps, dbps;
+  unsigned int sn, sen, sphoto, photo, bps, dbps;
   CTiffImg SrcImg, DstImg;
   unsigned char *sptr, *dptr;
   bool bSuccess = true;
@@ -210,6 +210,7 @@ int main(int argc, const char** argv)
     return false;
   }
   sn = SrcImg.GetSamples();
+  sen = SrcImg.GetExtraSamples();
   sphoto = SrcImg.GetPhoto();
   bps = SrcImg.GetBitsPerSample();
 
@@ -367,20 +368,43 @@ int main(int argc, const char** argv)
 
   //Get and validate the source color space from the Cmm.
   icColorSpaceSignature SrcspaceSig = theCmm.GetSourceSpace();
-  int nSrcSamples = icGetSpaceSamples(SrcspaceSig);
+  int nSrcColorSamples = icGetSpaceSamples(SrcspaceSig);
+  int nSrcSamples = nSrcColorSamples;
 
-  if (nSrcSamples != (int)sn) {
-    printf("Number of samples %d in image[%s] doesn't match device samples %d in first profile\n", sn, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
-    return -1;
+  if (nSrcSamples != (int)sn ) {
+    //Allow color management to ignore extra samples when non extra samples match samples in profile
+    if (sen != 0) {
+      if (nSrcSamples != (int)(sn - sen)) {
+        printf("Number of non-extra samples %d in image[%s] doesn't match device samples %d in first profile\n", sn - sen, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+        return -1;
+      }
+      else
+        nSrcSamples = sn;
+    }
+    else {
+      printf("Number of samples %d in image[%s] doesn't match device samples %d in first profile\n", sn, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+      return -1;
+    }
   }
 
   //Get and validate the destination color space from theCmm.
-  icColorSpaceSignature DestspaceSig = theCmm.GetDestSpace();
-  int nDestSamples = icGetSpaceSamples(DestspaceSig);
+  icColorSpaceSignature DestSpaceSig = theCmm.GetDestSpace();
+  icColorSpaceSignature DestColorSpaceSig = DestSpaceSig;
+  int nDestSamples = icGetSpaceSamples(DestSpaceSig);
 
-  switch (DestspaceSig) {
+  icColorSpaceSignature DestParentSpaceSig = theCmm.GetLastParentSpace();
+  int nDestParentSamples = icGetSpaceSamples(DestParentSpaceSig);
+  
+  int nExtraSamples = 0;
+
+  if (nDestParentSamples && nDestSamples != nDestParentSamples) {
+    DestColorSpaceSig = DestParentSpaceSig;
+    nExtraSamples = nDestSamples - nDestParentSamples;
+  }
+
+  switch (DestColorSpaceSig) {
   case icSigRgbData:
-    photo = PHOTO_MINISBLACK;
+    photo = PHOTO_RGB;
     break;
 
   case icSigCmyData:
@@ -410,7 +434,7 @@ int main(int argc, const char** argv)
   unsigned long dbpp = (nDestSamples * dbps  + 7)/ 8;
 
   //Open up output image using information from SrcImg and theCmm
-  if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation)) {
+  if (!DstImg.Create(cfgApply.m_dstImgFile.c_str(), SrcImg.GetWidth(), SrcImg.GetHeight(), dbps, photo, nDestSamples, nExtraSamples, SrcImg.GetXRes(), SrcImg.GetYRes(), bCompress, bSeparation)) {
     printf("Unable to create Tiff file - '%s'\n", cfgApply.m_dstImgFile.c_str());
     return false;
   }
@@ -474,7 +498,7 @@ int main(int argc, const char** argv)
           else {
             unsigned char *pSPixel = sptr;
             icFloatNumber *pPixel = SrcPixel;
-            for (k=0; k<nSrcSamples; k++) {
+            for (k=0; k<nSrcColorSamples; k++) {
               pPixel[k] = (icFloatNumber)pSPixel[k] / 255.0f;
             }
           }
@@ -491,7 +515,7 @@ int main(int argc, const char** argv)
           else {
             unsigned short *pSPixel = (unsigned short*)sptr;
             icFloatNumber *pPixel = SrcPixel;
-            for (k=0; k<nSrcSamples; k++) {
+            for (k=0; k<nSrcColorSamples; k++) {
               pPixel[k] = (icFloatNumber)pSPixel[k] / 65535.0f;
             }
           }
@@ -505,7 +529,7 @@ int main(int argc, const char** argv)
             else {
               icFloat32Number *pSPixel = (icFloat32Number*)sptr;
               icFloatNumber *pPixel = SrcPixel;
-              for (k=0; k<nSrcSamples; k++) {
+              for (k=0; k<nSrcColorSamples; k++) {
                 pPixel[k] = (icFloatNumber)pSPixel[k];
               }
             }
@@ -530,7 +554,7 @@ int main(int argc, const char** argv)
      theCmm.Apply(DestPixel, SrcPixel);
 
       //Special conversions need to be made to convert from internal PCS encoding CIELAB
-      if (photo==PHOTO_CIELAB && DestspaceSig==icSigXYZData) {
+      if (photo==PHOTO_CIELAB && DestSpaceSig==icSigXYZData) {
         icXyzFromPcs(DestPixel);
         icXYZtoLab(DestPixel);
         icLabToPcs(DestPixel);

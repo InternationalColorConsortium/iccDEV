@@ -95,6 +95,7 @@ IdList photo_types[] = {
   {PHOTO_MINISBLACK, "Min Is Black"},
   {PHOTO_CIELAB,     "CIELab"},
   {PHOTO_ICCLAB,     "IccLab"},
+  {PHOTO_RGB,        "RGB"},
   {UNKNOWNID,        "Unknown"},
 };
 
@@ -117,6 +118,62 @@ void Usage()
 {
   printf("iccTiffDump built with IccProfLib version " ICCPROFLIBVER "\n\n");
   printf("Usage: iccTiffDump tiff_file {exported_icc_file}\n\n");
+}
+
+void DumpProfileInfo(CIccProfile* pProfile, std::string prefix)
+{
+  icHeader* pHdr = &pProfile->m_Header;
+  CIccInfo Fmt;
+
+  printf("%sVersion:          %s\n", prefix.c_str(), Fmt.GetVersionName(pHdr->version));
+
+  if (pHdr->colorSpace)
+    printf("%sColor Space:      %s\n", prefix.c_str(), Fmt.GetColorSpaceSigName(pHdr->colorSpace));
+  if (pHdr->pcs)
+    printf("%sColorimetric PCS: %s\n", prefix.c_str(), Fmt.GetColorSpaceSigName(pHdr->pcs));
+  if (pHdr->spectralPCS) {
+    printf("%sSpectral PCS:     %s\n", prefix.c_str(), Fmt.GetSpectralColorSigName(pHdr->spectralPCS));
+    if (pHdr->spectralRange.start || pHdr->spectralRange.end || pHdr->spectralRange.steps) {
+      printf("%sSpectral Range:   start=%.1fnm, end=%.1fnm, steps=%d\n", prefix.c_str(),
+        icF16toF(pHdr->spectralRange.start),
+        icF16toF(pHdr->spectralRange.end),
+        pHdr->spectralRange.steps);
+    }
+    if (pHdr->biSpectralRange.start || pHdr->biSpectralRange.end || pHdr->biSpectralRange.steps) {
+      printf("%sBiSpectral Range: start=%.1fnm, end=%.1fnm, steps=%d\n", prefix.c_str(),
+        icF16toF(pHdr->biSpectralRange.start),
+        icF16toF(pHdr->biSpectralRange.end),
+        pHdr->biSpectralRange.steps);
+    }
+  }
+
+  CIccTag* pDesc = pProfile->FindTag(icSigProfileDescriptionTag);
+  if (pDesc) {
+    if (pDesc->GetType() == icSigTextDescriptionType) {
+      CIccTagTextDescription* pText = (CIccTagTextDescription*)pDesc;
+      printf("%sDescription:      %s\n", prefix.c_str(), pText->GetText());
+    }
+    else if (pDesc->GetType() == icSigMultiLocalizedUnicodeType) {
+      CIccTagMultiLocalizedUnicode* pStrs = (CIccTagMultiLocalizedUnicode*)pDesc;
+      if (pStrs->m_Strings) {
+        CIccMultiLocalizedUnicode::iterator text = pStrs->m_Strings->begin();
+        if (text != pStrs->m_Strings->end()) {
+          std::string line;
+          text->GetText(line);
+          printf("%sDescription:      %s\n", prefix.c_str(), line.c_str());
+        }
+      }
+    }
+  }
+  
+  CIccTag* pEmbedded = pProfile->FindTag(icSigEmbeddedV5ProfileTag);
+  if (pEmbedded) {
+    CIccTagEmbeddedProfile* pEmbeddedTag = (CIccTagEmbeddedProfile*)pEmbedded;
+    if (pEmbeddedTag->GetProfile()) {
+      printf("%sSub-Profile:      Embedded\n", prefix.c_str());
+      DumpProfileInfo(pEmbeddedTag->GetProfile(), prefix + " ");
+    }
+  }
 }
 
 //===================================================
@@ -171,45 +228,14 @@ int main(int argc, icChar* argv[])
     // Profile description and metadata
     CIccProfile *pProfile = OpenIccProfile(pProfMem, nLen);
     if (pProfile) {
-      icHeader *pHdr = &pProfile->m_Header;
-      CIccInfo Fmt;
-
-      if (pHdr->colorSpace)
-        printf(" Color Space:      %s\n", Fmt.GetColorSpaceSigName(pHdr->colorSpace));
-      if (pHdr->pcs)
-        printf(" Colorimetric PCS: %s\n", Fmt.GetColorSpaceSigName(pHdr->pcs));
-      if (pHdr->spectralPCS) {
-        printf(" Spectral PCS:     %s\n", Fmt.GetSpectralColorSigName(pHdr->spectralPCS));
-        if (pHdr->spectralRange.start || pHdr->spectralRange.end || pHdr->spectralRange.steps) {
-          printf(" Spectral Range:   start=%.1fnm, end=%.1fnm, steps=%d\n",
-            icF16toF(pHdr->spectralRange.start),
-            icF16toF(pHdr->spectralRange.end),
-            pHdr->spectralRange.steps);
+      DumpProfileInfo(pProfile, " ");
+      if (argc > 2) {
+        pProfile->ReadTags(pProfile);
+        if (SaveIccProfile(argv[2], pProfile)) {
+          printf("\nProfile extracted to: %s\n", argv[1]);
         }
-        if (pHdr->biSpectralRange.start || pHdr->biSpectralRange.end || pHdr->biSpectralRange.steps) {
-          printf(" BiSpectral Range: start=%.1fnm, end=%.1fnm, steps=%d\n",
-            icF16toF(pHdr->biSpectralRange.start),
-            icF16toF(pHdr->biSpectralRange.end),
-            pHdr->biSpectralRange.steps);
-        }
-      }
-
-      CIccTag *pDesc = pProfile->FindTag(icSigProfileDescriptionTag);
-      if (pDesc) {
-        if (pDesc->GetType() == icSigTextDescriptionType) {
-          CIccTagTextDescription *pText = (CIccTagTextDescription*)pDesc;
-          printf(" Description:      %s\n", pText->GetText());
-        }
-        else if (pDesc->GetType() == icSigMultiLocalizedUnicodeType) {
-          CIccTagMultiLocalizedUnicode *pStrs = (CIccTagMultiLocalizedUnicode*)pDesc;
-          if (pStrs->m_Strings) {
-            CIccMultiLocalizedUnicode::iterator text = pStrs->m_Strings->begin();
-            if (text != pStrs->m_Strings->end()) {
-              std::string line;
-              text->GetText(line);
-              printf(" Description:      %s\n", line.c_str());
-            }
-          }
+        else {
+          printf("\nUnable to extract profile\n");
         }
       }
     }

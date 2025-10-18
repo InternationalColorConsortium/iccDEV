@@ -415,6 +415,7 @@
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Release|x64'">MaxSpeed</Optimization>
       <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Release|x64'">4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
+    <ClCompile Include="IccCmmSearch.cpp" />
     <ClCompile Include="IccConvertUTF.cpp" />
     <ClCompile Include="IccEncoding.cpp" />
     <ClCompile Include="IccEnvVar.cpp" />
@@ -598,6 +599,7 @@
     <ClInclude Include="IccArrayFactory.h" />
     <ClInclude Include="IccCAM.h" />
     <ClInclude Include="IccCmm.h" />
+    <ClInclude Include="IccCmmSearch.h" />
     <ClInclude Include="IccConvertUTF.h" />
     <ClInclude Include="IccDefs.h" />
     <ClInclude Include="IccEncoding.h" />
@@ -615,6 +617,7 @@
     <ClInclude Include="IccProfile.h" />
     <ClInclude Include="IccProfLibConf.h" />
     <ClInclude Include="IccProfLibVer.h" />
+    <ClInclude Include="IccSearch.h" />
     <ClInclude Include="IccSolve.h" />
     <ClInclude Include="IccSparseMatrix.h" />
     <ClInclude Include="IccStructBasic.h" />

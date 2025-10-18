@@ -7878,6 +7878,7 @@ CIccCmm::CIccCmm(icColorSpaceSignature nSrcSpace /*=icSigUnknownData*/,
   m_nDestSpace = nDestSpace;
 
   m_nLastSpace = nSrcSpace;
+  m_nLastParentSpace = icSigNoColorData;
   m_nLastIntent = icUnknownIntent;
 
   m_Xforms = new CIccXformList;
@@ -8032,7 +8033,7 @@ icStatusCMM CIccCmm::AddXform(icUInt8Number *pProfileMem,
 {
   CIccMemIO *pFile = new CIccMemIO;
 
-  if (!pFile || !pFile->Attach(pProfileMem, nProfileLen, bUseSubProfile))
+  if (!pFile || !pFile->Attach(pProfileMem, nProfileLen))
     return icCmmStatCantOpenProfile;
 
   CIccProfile *pProfile = new CIccProfile;
@@ -8040,7 +8041,7 @@ icStatusCMM CIccCmm::AddXform(icUInt8Number *pProfileMem,
   if (!pProfile)
     return icCmmStatCantOpenProfile;
 
-  if (!pProfile->Attach(pFile)) {
+  if (!pProfile->Attach(pFile, bUseSubProfile)) {
     delete pFile;
     delete pProfile;
     return icCmmStatCantOpenProfile;
@@ -8082,7 +8083,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
                               bool bUseD2BxB2DxTags /*=true*/,
                               CIccCreateXformHintManager *pHintManager /*=NULL*/)
 {
-  icColorSpaceSignature nSrcSpace, nDstSpace;
+  icColorSpaceSignature nSrcSpace, nDstSpace, nParentSpace=icSigNoColorData;
   bool bInput = !m_bLastInput;
 
   if (!pProfile)
@@ -8107,6 +8108,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
       //Check pProfile if nIntent and input can be found.
       if (bInput) {
         nSrcSpace = pProfile->m_Header.colorSpace;
+        nParentSpace = pProfile->GetParentColorSpace();
 
         if (nLutType == icXformLutSpectral || (bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric))
           nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
@@ -8128,6 +8130,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
           nSrcSpace = pProfile->m_Header.pcs;
 
         nDstSpace = pProfile->m_Header.colorSpace;
+        nParentSpace = pProfile->GetParentColorSpace();
       }
     }
     break;
@@ -8170,6 +8173,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
     case icXformLutMCS:
       if (bInput) {
         nSrcSpace = pProfile->m_Header.colorSpace;
+        nParentSpace = pProfile->GetParentColorSpace();
         nDstSpace = (icColorSpaceSignature)pProfile->m_Header.mcs;
       }
       else {
@@ -8211,6 +8215,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
         }
         else if (pProfile->m_Header.deviceClass==icSigMaterialLinkClass) {
           nDstSpace = pProfile->m_Header.colorSpace;
+          nParentSpace = pProfile->GetParentColorSpace();
         }
         else {
           return icCmmStatBadSpaceLink;
@@ -8226,6 +8231,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   if (!m_Xforms->size()) {
     if (m_nSrcSpace == icSigUnknownData) {
       m_nLastSpace = nSrcSpace;
+      m_nLastParentSpace = nParentSpace;
       m_nSrcSpace = nSrcSpace;
     }
     else if (!IsCompatSpace(m_nSrcSpace, nSrcSpace)) {
@@ -8264,6 +8270,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   }
 
   m_nLastSpace = nDstSpace;
+  m_nLastParentSpace = nParentSpace;
   m_nLastIntent = nIntent;
   m_bLastInput = bInput;
 
@@ -8299,7 +8306,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
                               bool bUseSpectralPCS /*=false*/,
                               CIccCreateXformHintManager *pHintManager /*=NULL*/)
 {
-  icColorSpaceSignature nSrcSpace, nDstSpace;
+  icColorSpaceSignature nSrcSpace, nDstSpace, nParentSpace = icSigNoColorData;
   bool bInput = !m_bLastInput;
 
   if (!pProfile)
@@ -8318,6 +8325,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   //Check pProfile if nIntent and input can be found.
   if (bInput) {
     nSrcSpace = pProfile->m_Header.colorSpace;
+    nParentSpace = pProfile->GetParentColorSpace();
 
     if (bUseSpectralPCS && pProfile->m_Header.spectralPCS)
       nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
@@ -8343,6 +8351,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
     }
 
     nDstSpace = pProfile->m_Header.colorSpace;
+    nParentSpace = pProfile->GetParentColorSpace();
   }
 
   //Make sure colorspaces match with previous xforms
@@ -8383,6 +8392,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   }
 
   m_nLastSpace = nDstSpace;
+  m_nLastParentSpace = nParentSpace;
   m_nLastIntent = nIntent;
   m_bLastInput = bInput;
 
@@ -8423,12 +8433,35 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
   if (!pProfile) 
     return icCmmStatAllocErr;
 
- icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
+  //borrow the caller's AttachIO to perform the AddXform
+  pProfile->CopyAttach(&Profile);
+
+  icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
+
+  //Now that we have added the xform disconnect from the callers AttachIO
+  pProfile->CopyAttach(nullptr);
 
   if (stat != icCmmStatOk)
     delete pProfile;
 
   return stat;
+}
+
+icStatusCMM CIccCmm::AddXform(CIccXform* pXform)
+{
+  if (!pXform)
+    return icCmmStatBadXform;
+
+  m_nLastSpace = pXform->GetDstSpace();
+  m_nLastParentSpace = icSigNoColorData;
+  m_nLastIntent = icUnknownIntent;
+  m_bLastInput = false;
+
+  CIccXformPtr ptr;
+  ptr.ptr = pXform;
+  m_Xforms->push_back(ptr);
+
+  return icCmmStatOk;
 }
 
 icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
@@ -9002,6 +9035,7 @@ icStatusCMM CIccCmm::ToInternalEncoding(icColorSpaceSignature nSpace, icFloatCol
           }
         
         case icEncodeFloat:
+        case icEncodeUnitFloat:
           {
             if (bClip) {
               for(i=0; i<nSamples; i++) {
@@ -9563,6 +9597,70 @@ icUInt32Number CIccCmm::GetNumXforms() const
 {
   return (icUInt32Number)m_Xforms->size();
 }
+
+
+/**
+ **************************************************************************
+ * Name: CIccCmm::HasXformsOfType
+ *
+ * Purpose:
+ * Check to see if one of the xforms has a given type
+ *
+ * Return:
+ * true if one of the xforme is of a given type
+ **************************************************************************
+ */
+bool CIccCmm::HasXformsOfType(icXformType nXformType) const
+{
+  CIccXformList::iterator xform;
+  for (xform = m_Xforms->begin(); xform != m_Xforms->end(); xform++) {
+    if (xform->ptr->GetXformType() == nXformType) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+/**
+ **************************************************************************
+ * Name: CIccCmm::GetFirstXform
+ *
+ * Purpose:
+ *  Get first xform in the xform list
+ *
+ * Return:
+ * firs xform or null if no xforms
+ **************************************************************************
+ */
+CIccXform* CIccCmm::GetFirstXform() const
+{
+  if (!m_Xforms->size())
+    return nullptr;
+
+  return m_Xforms->front().ptr;
+}
+
+
+/**
+ **************************************************************************
+ * Name: CIccCmm::GetLastXform
+ *
+ * Purpose:
+ *  Get last xform in the xform list
+ *
+ * Return:
+ * firs xform or null if no xforms
+ **************************************************************************
+ */
+CIccXform* CIccCmm::GetLastXform() const
+{
+  if (!m_Xforms->size())
+    return nullptr;
+
+  return m_Xforms->back().ptr;
+}
+
 
 
 /**

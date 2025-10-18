@@ -68,11 +68,15 @@
  //
  //////////////////////////////////////////////////////////////////////
 
+
 #include "IccCmmConfig.h"
 #include <stdio.h>
 #include <fstream>
 #include <string.h>
 
+#ifdef USEREFICCMAXNAMESPACE
+namespace refIccMAX {
+#endif
 
 static const icChar* icGetJsonFloatColorEncoding(icFloatColorEncoding val)
 {
@@ -679,6 +683,8 @@ void CIccCfgProfile::toJson(json& j) const
 {
   if (m_iccFile.size())
     j["iccProfile"] = m_iccFile;
+  if (m_intent)
+    j["intent"] = m_intent;
   json iccMap;
   if (jsonFromEnvMap(iccMap, m_iccEnvVars))
     j["iccEnvVars"] = iccMap;
@@ -826,6 +832,332 @@ void CIccCfgProfileSequence::toJson(json& obj) const
     obj.push_back(prof);
   }
 }
+
+CIccCfgPccWeight::CIccCfgPccWeight()
+{
+
+}
+
+CIccCfgPccWeight::~CIccCfgPccWeight() {
+
+}
+
+void CIccCfgPccWeight::reset()
+{
+
+}
+
+int CIccCfgPccWeight::fromArgs(const char** args, int nArg, bool bReset)
+{
+  int nUsed = 0;
+
+  if (nArg >= 2) {
+    m_pccPath = args[0];
+    m_dWeight = (icFloatNumber)atof(args[1]);
+
+    args += 2;
+    nArg -= 2;
+    nUsed += 2;
+  }
+
+  return nUsed;
+}
+
+bool CIccCfgPccWeight::fromJson(json j, bool bReset)
+{
+  if (!j.is_object())
+    return false;
+
+  jsonToValue(j["pccFile"], m_dWeight);
+  jsonToValue(j["weight"], m_pccPath);
+  
+  return true;
+}
+
+void CIccCfgPccWeight::toJson(json& obj) const
+{
+  obj["pccFile"] = m_pccPath;
+  obj["weight"] = m_dWeight;
+}
+
+CIccCfgSearchApply::CIccCfgSearchApply()
+{
+}
+
+void CIccCfgSearchApply::reset()
+{
+  m_pccWeights.clear();
+  m_profiles.clear();
+}
+
+int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
+{
+  int nUsed = 0;
+  if (bReset)
+    reset();
+
+  icXformInterp interpolation = icInterpTetrahedral;
+
+  if (nArg > 1) {
+    interpolation = (icXformInterp)atoi(args[0]);
+    args++;
+    nArg--;
+    nUsed++;
+  }
+
+  bool bFirst = true;
+  while (nArg >= 2) {
+
+    if (!stricmp(args[0], "-INIT"))
+      break;
+
+    CIccCfgProfilePtr pProf = CIccCfgProfilePtr(new CIccCfgProfile());
+
+    while (nArg >= 2 && !strnicmp(args[0], "-ENV:", 5)) {  //check for -ENV: to allow for Cmm Environment variables to be defined for next transform
+      icSignature sig = icGetSigVal(args[0] + 5);
+      icFloatNumber val = (icFloatNumber)atof(args[1]);
+      args += 2;
+      nArg -= 2;
+      nUsed += 2;
+
+      pProf->m_iccEnvVars[sig] = val;
+    }
+
+    if (nArg >= 2) {
+
+      pProf->m_iccFile = args[0];
+      if (bFirst) {
+        if (!stricmp(args[0], "-embedded")) {
+          pProf->m_iccFile.clear();
+        }
+        bFirst = false;
+      }
+      int nType;
+      int nIntent = atoi(args[1]);
+
+      pProf->m_useD2BxB2Dx = true;
+      pProf->m_useHToS = (nIntent / 100000) != 0;
+      pProf->m_useV5SubProfile = (nIntent / 10000) != 0;
+      nIntent = nIntent % 10000;
+      pProf->m_adjustPcsLuminance = nIntent / 1000 != 0;
+      nIntent = nIntent % 1000;
+      nType = abs(nIntent) / 10;
+      nIntent = nIntent % 10;
+
+      if (nType == 1) {
+        pProf->m_useD2BxB2Dx = false;
+        nType = icXformLutColor;
+      }
+      else if (nType == 4) {
+        pProf->m_useBPC = true;
+        nType = icXformLutColor;
+      }
+
+      pProf->m_intent = (icRenderingIntent)nIntent;
+      pProf->m_transform = (icXformLutType)nType;
+      pProf->m_interpolation = interpolation;
+
+      args += 2;
+      nArg -= 2;
+      nUsed += 2;
+    }
+
+    if (nArg >= 2 && !stricmp(args[0], "-PCC")) {
+      pProf->m_pccFile = args[1];
+      args += 2;
+      nArg -= 2;
+      nUsed += 2;
+    }
+    m_profiles.push_back(pProf);
+  }
+
+  if (nArg >= 2 && !strcmp(args[0], "-INIT")) {
+    int nIntent = atoi(args[1]);
+    int nType;
+
+    m_bInitialized = true;
+
+    m_useD2BxB2DxInitial = true;
+    nIntent = nIntent % 100000;
+    m_useV5SubProfileInitial = (nIntent / 10000) != 0;
+    nIntent = nIntent % 10000;
+    m_adjustPcsLuminanceInitial = nIntent / 1000 != 0;
+    nIntent = nIntent % 1000;
+    nType = abs(nIntent) / 10;
+    nIntent = nIntent % 10;
+
+    if (nType == 1) {
+      m_useD2BxB2DxInitial = false;
+      nType = icXformLutColor;
+    }
+    else if (nType == 4) {
+      nType = icXformLutColor;
+    }
+
+    m_intentInitial = (icRenderingIntent)nIntent;
+    m_transformInitial = (icXformLutType)nType;
+    m_interpolationInitial = interpolation;
+
+    args += 2;
+    nArg -= 2;
+    nUsed += 2;
+  }
+  
+  while (nArg >= 2) {
+    CIccCfgPccWeightPtr pPccWeight = CIccCfgPccWeightPtr(new CIccCfgPccWeight());
+    pPccWeight->m_pccPath = args[0];
+    pPccWeight->m_dWeight = (icFloatNumber)atof(args[1]);
+
+    m_pccWeights.push_back(pPccWeight);
+
+    args += 2;
+    nArg -= 2;
+    nUsed += 2;
+  }
+
+  return m_profiles.size() > 0 ? nUsed : 0;
+}
+
+bool CIccCfgSearchApply::fromJsonProfiles(json j)
+{
+  if (!j.is_array())
+    return false;
+
+  for (auto p = j.begin(); p != j.end(); p++) {
+    if (p->is_object()) {
+      CIccCfgProfilePtr pProf(new CIccCfgProfile);
+      if (pProf->fromJson(*p)) {
+        m_profiles.push_back(pProf);
+      }
+      else {
+        pProf.reset();
+      }
+    }
+  }
+
+  return true;
+}
+
+void CIccCfgSearchApply::toJsonProfiles(json& obj) const
+{
+  for (auto p = m_profiles.begin(); p != m_profiles.end(); p++) {
+    CIccCfgProfile* pProf = p->get();
+    if (!pProf)
+      continue;
+    json prof;
+    pProf->toJson(prof);
+    obj.push_back(prof);
+  }
+}
+
+bool CIccCfgSearchApply::fromJsonPccWeights(json j)
+{
+  if (!j.is_array())
+    return false;
+
+  for (auto p = j.begin(); p != j.end(); p++) {
+    if (p->is_object()) {
+      CIccCfgPccWeightPtr pPccWeight(new CIccCfgPccWeight);
+      if (pPccWeight->fromJson(*p)) {
+        m_pccWeights.push_back(pPccWeight);
+      }
+      else {
+        pPccWeight.reset();
+      }
+    }
+  }
+
+  return true;
+}
+
+void CIccCfgSearchApply::toJsonPccWeights(json& obj) const
+{
+  for (auto p = m_pccWeights.begin(); p != m_pccWeights.end(); p++) {
+    CIccCfgPccWeight* pPccWeight = p->get();
+    if (!pPccWeight)
+      continue;
+    json prof;
+    pPccWeight->toJson(prof);
+    obj.push_back(prof);
+  }
+}
+
+void CIccCfgSearchApply::toJsonInit(json &j) const
+{
+  j["intent"] = m_intentInitial;
+  if (m_adjustPcsLuminanceInitial)
+    j["adjustPcsLuminance"] = m_adjustPcsLuminanceInitial;
+  if (m_useV5SubProfileInitial)
+    j["useV5SubProfile"] = m_useV5SubProfileInitial;
+  int i;
+  for (i = 0; icInterpNames[i]; i++)
+    if (icInterpValues[i] == m_interpolationInitial)
+      break;
+  if (icInterpValues[i] == icInterpLinear)
+    j["interpolation"] = icInterpNames;
+
+}
+
+bool CIccCfgSearchApply::fromJsonInit(json j)
+{
+  if (!j.is_object())
+    return false;
+
+  m_bInitialized = true;
+
+  int intent;
+  icGetJsonRenderingIntent(j["intent"], intent);
+  m_intentInitial = (icRenderingIntent)intent;
+
+  std::string str;
+  if (jsonToValue(j["transform"], str)) {
+    int i;
+    for (i = 0; icTranNames[i]; i++) {
+      if (str == icTranNames[i])
+        break;
+    }
+    m_transformInitial = (icXformLutType)icTranValues[i];
+  }
+
+  jsonToValue(j["adjustPcsLuminance"], m_adjustPcsLuminanceInitial);
+  jsonToValue(j["useV5SubProfile"], m_useV5SubProfileInitial);
+
+  if (jsonToValue(j["transform"], str)) {
+    int i;
+    for (i = 0; icInterpNames[i]; i++) {
+      if (str == icInterpNames[i])
+        break;
+    }
+    m_interpolationInitial = icInterpValues[i];
+  }
+
+  return true;
+}
+
+void CIccCfgSearchApply::toJson(json& j) const
+{
+  if (jsonExistsField(j, "profileSequence"))
+    toJsonProfiles(j["profileSequence"]);
+  if (jsonExistsField(j, "initial"))
+    toJsonInit(j["initial"]);
+  if (jsonExistsField(j, "pccWeights"))
+    toJsonPccWeights(j["pccWeights"]);
+}
+
+bool CIccCfgSearchApply::fromJson(json j, bool bReset)
+{
+  if (!j.is_object())
+    return false;
+
+  if (bReset)
+    reset();
+
+  return fromJsonProfiles(j["profileSequence"]) && 
+         fromJsonInit(j["initial"]) &&
+         fromJsonPccWeights(j["pccWeights"]);
+}
+
+
 
 class CIccIt8Parser
 {
@@ -1398,7 +1730,7 @@ bool CIccCfgColorData::fromJson(json j, bool bReset)
   return true;
 }
 
-bool CIccCfgColorData::toLegacy(const char* filename, CIccCfgProfileSequence *pProfiles, icUInt8Number nDigits, icUInt8Number nPrecision, bool bShowDebug)
+bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray &profiles, icUInt8Number nDigits, icUInt8Number nPrecision, bool bShowDebug)
 {
   FILE* f;
   char tempBuf[256];
@@ -1438,21 +1770,20 @@ bool CIccCfgColorData::toLegacy(const char* filename, CIccCfgProfileSequence *pP
   fwrite(out.c_str(), out.size(), 1, f);
 
   fprintf(f, ";Source data is after semicolon\n");
-  if (pProfiles) {
-    fprintf(f, "\n;Profiles applied\n");
-    for (auto pIter = pProfiles->m_profiles.begin(); pIter != pProfiles->m_profiles.end(); pIter++) {
-      CIccCfgProfile* pProf = pIter->get();
-      if (!pProf)
-        continue;
-      if (pProf->m_pccFile.size()) {
-        fprintf(f, "; %s -PCC %s\n", pProf->m_iccFile.c_str(), pProf->m_pccFile.c_str());
-      }
-      else {
-        fprintf(f, "; %s\n", pProf->m_iccFile.c_str());
-      }
+  
+  fprintf(f, "\n;Profiles applied\n");
+  for (auto pIter = profiles.begin(); pIter != profiles.end(); pIter++) {
+    CIccCfgProfile* pProf = pIter->get();
+    if (!pProf)
+      continue;
+    if (pProf->m_pccFile.size()) {
+      fprintf(f, "; %s -PCC %s\n", pProf->m_iccFile.c_str(), pProf->m_pccFile.c_str());
+    }
+    else {
+      fprintf(f, "; %s\n", pProf->m_iccFile.c_str());
     }
   }
-  fprintf(f, "\n");
+fprintf(f, "\n");
 
   for (auto dIter = m_data.begin(); dIter != m_data.end(); dIter++) {
     CIccCfgDataEntry* pData = dIter->get();
@@ -1836,3 +2167,8 @@ void CIccCfgDataEntry::toJson(json& obj)
   if (m_debugInfo.size())
     obj["d"] = m_debugInfo;
 }
+
+
+#ifdef USEREFICCMAXNAMESPACE
+} //namespace refIccMAX
+#endif

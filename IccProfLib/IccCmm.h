@@ -5,15 +5,11 @@
 
     Version:    V1
 
-    Copyright:  (c) see ICC Software License
+    Copyright:  (c) see Software License
 */
 
 /*
- * The ICC Software License, Version 0.2
- *
- *
- * Copyright (c) 2003-2012 The International Color Consortium. All rights 
- * reserved.
+ * Copyright (c) International Color Consortium.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -107,6 +103,7 @@ typedef enum {
   icCmmStatBadTintXform       = 15,
   icCmmStatTooManySamples     = 16,
   icCmmStatBadMCSLink         = 17,
+  icCmmStatUnsupported        = 18,
 } icStatusCMM;
 
 /// CMM Interpolation types
@@ -1638,7 +1635,8 @@ public:
                                icRenderingIntent nIntent=icUnknownIntent, 
                                icXformInterp nInterp=icInterpLinear,
                                IIccProfileConnectionConditions *pPcc=NULL,
-                               icXformLutType nLutType=icXformLutColor, bool bUseD2BxB2DxTags =true,
+                               icXformLutType nLutType=icXformLutColor,
+                               bool bUseD2BxB2DxTags =true,
                                CIccCreateXformHintManager *pHintManager=NULL,
                                bool bUseSubProfile=false);
   virtual icStatusCMM AddXform(CIccProfile *pProfile, 
@@ -1662,6 +1660,7 @@ public:
                                IIccProfileConnectionConditions *pPcc = NULL,
                                bool bUseD2BxB2DxTags =false,
                                CIccCreateXformHintManager *pHintManager = NULL);  //Note: profile will be owned by the CMM
+  virtual icStatusCMM AddXform(CIccXform* pXform); //note pXform will be owned by the CMM
 
   //The Begin function should be called before Apply or GetNewApplyCmm()
   virtual icStatusCMM Begin(bool bAllocNewApply=true, bool bUsePcsConversion=false);
@@ -1681,6 +1680,12 @@ public:
   ///Returns the number of profiles/transforms added 
   virtual icUInt32Number GetNumXforms() const;
 
+  ///Returns the number of profiles/transforms added 
+  bool HasXformsOfType(icXformType nXformType) const;
+
+  CIccXform* GetFirstXform() const;
+  CIccXform* GetLastXform() const;
+
   virtual void IterateXforms(IXformIterator* pIterater) const;
 
   ///Returns the source color space
@@ -1689,6 +1694,9 @@ public:
   icColorSpaceSignature GetDestSpace() const { return m_nDestSpace; }
     ///Returns the color space of the last profile added
   icColorSpaceSignature GetLastSpace() const { return m_nLastSpace; }
+  ///Returns the parent's color space of the last profile added
+  icColorSpaceSignature GetLastParentSpace() const { return m_nLastParentSpace; }
+
   ///Returns the rendering intent of the last profile added
   icRenderingIntent GetLastIntent() const { return m_nLastIntent; }
 
@@ -1749,6 +1757,7 @@ protected:
   icColorSpaceSignature m_nDestSpace;
 
   icColorSpaceSignature m_nLastSpace;
+  icColorSpaceSignature m_nLastParentSpace;
   icRenderingIntent m_nLastIntent;
 
   CIccXformList *m_Xforms;

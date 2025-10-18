@@ -102,9 +102,12 @@ namespace refIccMAX {
 CIccProfile::CIccProfile()
 {
   m_pAttachIO = NULL;
+  m_bSharedIO = false;
   memset(&m_Header, 0, sizeof(m_Header));
   m_Tags = new(TagEntryList);
   m_TagVals = new(TagPtrList);
+
+  m_parentColorSpace = icSigNoColorData;
 }
 
 /**
@@ -187,6 +190,7 @@ CIccProfile &CIccProfile::operator=(const CIccProfile &Profile)
   Cleanup();
 
   memcpy(&m_Header, &Profile.m_Header, sizeof(m_Header));
+  m_parentColorSpace = Profile.m_parentColorSpace;
 
   if (!Profile.m_TagVals->empty()) {
     TagPtrList::const_iterator i;
@@ -251,10 +255,10 @@ CIccProfile::~CIccProfile()
  */
 void CIccProfile::Cleanup()
 {
-  if (m_pAttachIO) {
+  if (m_pAttachIO && !m_bSharedIO) {
     delete m_pAttachIO;
-    m_pAttachIO = nullptr;
   }
+  m_pAttachIO = nullptr;
 
   TagPtrList::iterator i;
 
@@ -266,6 +270,7 @@ void CIccProfile::Cleanup()
   m_Tags->clear();
   m_TagVals->clear();
   memset(&m_Header, 0, sizeof(m_Header));
+  m_parentColorSpace = icSigNoColorData;
 }
 
 /**
@@ -289,6 +294,36 @@ IccTagEntry* CIccProfile::GetTag(icSignature sig) const
     if (i->TagInfo.sig==(icTagSignature)sig)
       return (IccTagEntry*)&(i->TagInfo);
   }
+
+  return NULL;
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::GetTag
+ *
+ * Purpose: Get a tag entry with a given signature
+ *
+ * Args:
+ *  sig - signature id to find in tag directory
+ *  pParentProfile is pointer to parent object of embedded profile
+ *
+ * Return:
+ *  Pointer to desired tag directory entry, or NULL if not found.
+ *****************************************************************************
+ */
+IccTagEntry* CIccProfile::GetTag(icSignature sig, const CIccProfile *pParentProfile) const
+{
+  TagEntryList::const_iterator i;
+
+  for (i = m_Tags->begin(); i != m_Tags->end(); i++) {
+    if (i->TagInfo.sig == (icTagSignature)sig)
+      return (IccTagEntry*)&(i->TagInfo);
+  }
+
+  if (pParentProfile)
+    return pParentProfile->GetTag(sig);
 
   return NULL;
 }
@@ -394,7 +429,7 @@ CIccTag* CIccProfile::FindTag(icSignature sig)
  *  The desired tag object, or NULL if unable to find the loaded tag.
  *******************************************************************************
  */
-const CIccTag* CIccProfile::FindTagConst (icSignature sig) const
+const CIccTag* CIccProfile::FindTagConst(icSignature sig) const
 {
   IccTagEntry* pEntry = GetTag(sig);
 
@@ -636,7 +671,10 @@ bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
     CIccIO *pSubIO = ConnectSubProfile(pIO, true);
 
     if (pSubIO) {
+      icColorSpaceSignature parentColorSpace = m_Header.colorSpace;
+
       Cleanup();
+      m_parentColorSpace = parentColorSpace;
       if (!ReadBasic(pSubIO)) {
         Cleanup();
         return false;
@@ -665,7 +703,7 @@ bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 */
 bool CIccProfile::Detach()
 {
-  if (m_pAttachIO) {
+  if (m_pAttachIO && !m_bSharedIO) {
     TagEntryList::iterator i;
 
     for (i = m_Tags->begin(); i != m_Tags->end(); i++) {
@@ -678,8 +716,42 @@ bool CIccProfile::Detach()
     m_pAttachIO = NULL;
     return true;
   }
+  else if (m_bSharedIO) {
+    m_pAttachIO = NULL;
+    m_bSharedIO = false;
+
+    return true;
+  }
 
   return false;
+}
+
+
+/**
+******************************************************************************
+* Name: CIccProfile::CopyAttach
+*
+* Purpose: Allows a copy of a profile object to share the IO of another object
+*  The shared object does not own the shared IO so it will not be deleted when
+*  detached.
+*
+* Args:
+*  pProfile - pointer to a profile to get a copy of the shared IO (if null then
+*             shared IO is disconnected)
+*  bShareIO - flag indicating whether pAttachedIO should be considered shared
+*******************************************************************************
+*/
+
+void CIccProfile::CopyAttach(CIccProfile* pProfile, bool bSharedIO)
+{
+  if (!pProfile) {
+    m_pAttachIO = nullptr;
+    m_bSharedIO = false;
+  }
+  else {
+    m_pAttachIO = pProfile->m_pAttachIO;
+    m_bSharedIO = bSharedIO;
+  }
 }
 
 /**
@@ -760,7 +832,9 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
     CIccIO *pSubIO = ConnectSubProfile(pIO, false);
 
     if (pSubIO) {
+      icColorSpaceSignature parentColorSpace = m_Header.colorSpace;
       Cleanup();
+      m_parentColorSpace = parentColorSpace;
       if (!ReadBasic(pSubIO)) {
         Cleanup();
         return false;
@@ -1025,6 +1099,17 @@ bool CIccProfile::ReadProfileID(icProfileID &profileID)
 
   return true;
 }
+
+
+bool CIccProfile::ReadPccTags()
+{
+  FindTag(icSigStandardToCustomPccTag);
+  FindTag(icSigCustomToStandardPccTag);
+  FindTag(icSigSpectralViewingConditionsTag);
+
+  return true;
+}
+
 
 /**
  ******************************************************************************
@@ -2386,7 +2471,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
  *  icValidateOK if valid, or other error status.
  *****************************************************************************
  */
-icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport) const
+icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIccProfile *pParentProfile) const
 {
   if (m_Tags->size() <= 0) {
     sReport += icMsgValidateCriticalError;
@@ -2407,15 +2492,15 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport) const
     return rv;
   }
   else {
-    if (!GetTag(icSigProfileDescriptionTag) ||
-       !GetTag(icSigCopyrightTag)) {
+    if (!pParentProfile && (!GetTag(icSigProfileDescriptionTag, pParentProfile) ||
+        !GetTag(icSigCopyrightTag, pParentProfile))) {
          sReport += icMsgValidateNonCompliant;
          sReport += "Required tags missing.\n";
          rv = icMaxStatus(rv, icValidateNonCompliant);
     }
 
     if (sig != icSigLinkClass && sig != icSigMaterialIdentificationClass && sig != icSigMaterialLinkClass) {
-      if ((m_Header.version<icVersionNumberV5 || m_Header.pcs != 0) && !GetTag(icSigMediaWhitePointTag)) {
+      if ((m_Header.version<icVersionNumberV5 || m_Header.pcs != 0) && !GetTag(icSigMediaWhitePointTag, pParentProfile)) {
         sReport += icMsgValidateCriticalError;
         sReport += "Media white point tag missing.\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
@@ -2843,7 +2928,7 @@ bool CIccProfile::CheckFileSize(CIccIO *pIO) const
  *  icValidateOK if profile is valid, warning/error level otherwise
  *****************************************************************************
  */
-icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPath/*=""*/) const
+icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPath/*=""*/, const CIccProfile *pParentProfile) const
 {
   icValidateStatus rv = icValidateOK;
 
@@ -2858,7 +2943,7 @@ icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPat
   }
 
   // Check Required Tags which includes exclusion tests
-  rv = icMaxStatus(rv, CheckRequiredTags(sReport));
+  rv = icMaxStatus(rv, CheckRequiredTags(sReport, pParentProfile));
 
   // Per Tag tests
   rv = icMaxStatus(rv, CheckTagTypes(sReport));
@@ -2874,8 +2959,7 @@ icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPat
  ****************************************************************************
  * Name: CIccProfile::GetSpaceSamples
  * 
- * Purpose: Get the number of device channels from the color space
- *  of data.
+ * Purpose: Get the number of device channels from the data color space
  * 
  * Return: Number of device channels.
  *  
@@ -2884,6 +2968,22 @@ icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPat
 icUInt16Number CIccProfile::GetSpaceSamples() const
 {
   return (icUInt16Number)icGetSpaceSamples(m_Header.colorSpace);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::GetParentSpaceSamples
+ *
+ * Purpose: Get the number of device channels from the parent's data color space
+ *
+ * Return: Number of parent's device channels.
+ *
+ *****************************************************************************
+ */
+icUInt16Number CIccProfile::GetParentSpaceSamples() const
+{
+  return (icUInt16Number)icGetSpaceSamples(m_parentColorSpace);
 }
 
 

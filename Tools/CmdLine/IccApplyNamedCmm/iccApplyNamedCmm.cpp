@@ -576,7 +576,7 @@ int main(int argc, const char* argv[])
 //   cfgApply.m_debugCalc = false;
 
   if (cfgApply.m_dstType == icCfgLegacy) {
-    outData.toLegacy(cfgApply.m_dstFile.c_str(), &cfgProfiles, cfgApply.m_dstDigits, cfgApply.m_dstPrecision, cfgApply.m_debugCalc);
+    outData.toLegacy(cfgApply.m_dstFile.c_str(), cfgProfiles.m_profiles, cfgApply.m_dstDigits, cfgApply.m_dstPrecision, cfgApply.m_debugCalc);
   }
   else if (cfgApply.m_dstType == icCfgColorData) {
     json out;

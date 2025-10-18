@@ -142,6 +142,62 @@ public:
 	CIccCfgProfileArray m_profiles;
 };
 
+class CIccCfgPccWeight
+{
+public:
+	CIccCfgPccWeight();
+	virtual ~CIccCfgPccWeight();
+
+	void reset();
+  int fromArgs(const char** args, int nArg, bool bReset = false); //return args used
+  bool fromJson(json obj, bool bReset = false);
+  void toJson(json& obj) const;
+
+
+	std::string m_pccPath;
+	icFloatNumber m_dWeight;
+};
+
+typedef std::shared_ptr<CIccCfgPccWeight> CIccCfgPccWeightPtr;
+typedef std::vector<CIccCfgPccWeightPtr> CIccCfgPccWeightArray;
+
+class CIccCfgSearchApply
+{
+public:
+	CIccCfgSearchApply();
+  virtual ~CIccCfgSearchApply() {}
+
+  void reset();
+  int fromArgs(const char** args, int nArg, bool bReset = false); //return args used
+  bool fromJson(json obj, bool bReset = false);
+  void toJson(json& obj) const;
+
+	bool isInitialized() { return m_bInitialized; }
+
+  icRenderingIntent m_intentInitial;
+  icXformLutType m_transformInitial;
+  bool m_useD2BxB2DxInitial;
+  bool m_adjustPcsLuminanceInitial;
+  bool m_useV5SubProfileInitial;
+	icXformInterp m_interpolationInitial;
+
+	CIccCfgProfileArray m_profiles;
+	CIccCfgPccWeightArray m_pccWeights;
+
+protected:
+	bool m_bInitialized = false;
+
+	void toJsonInit(json& obj) const;
+	bool fromJsonInit(json obj);
+
+	void toJsonPccWeights(json& obj) const;
+	bool fromJsonPccWeights(json obj);
+	
+	bool fromJsonProfiles(json j);
+	void toJsonProfiles(json& obj) const;
+};
+
+
 class CIccCfgDataEntry
 {
 public:
@@ -174,7 +230,7 @@ public:
 	bool fromLegacy(const char *filename, bool bReset=false);
 	bool fromIt8(const char* filename, bool bReset=false);
 	bool fromJson(json obj, bool bReset=false);
-	bool toLegacy(const char *filename, CIccCfgProfileSequence *pProfiles, icUInt8Number nDigits, icUInt8Number nPrecision, bool bShowDebug=false);
+	bool toLegacy(const char *filename, const CIccCfgProfileArray &profiles, icUInt8Number nDigits, icUInt8Number nPrecision, bool bShowDebug=false);
   bool toIt8(const char *filename, icUInt8Number nDigits, icUInt8Number nPrecision);
 
 	void toJson(json& obj) const;

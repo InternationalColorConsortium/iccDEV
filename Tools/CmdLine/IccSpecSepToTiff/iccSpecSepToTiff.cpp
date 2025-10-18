@@ -177,7 +177,7 @@ int main(int argc, char* argv[]) {
     yRes = 72;
 
   if (outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK, 
-                     n, xRes, yRes, bCompress, bSep)) {
+                     n, 0, xRes, yRes, bCompress, bSep)) {
 
     if (argc>8) {
       unsigned long length = 0;

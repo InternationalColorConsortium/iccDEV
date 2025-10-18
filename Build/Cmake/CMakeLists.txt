@@ -1,16 +1,16 @@
 #################################################################################
-# Cmake Project Configuration| iccMAX Project
+# Cmake Project Configuration| iccDEV Project
 # Copyright (C) 2024-2025 The International Color Consortium.
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 11-AUGUST-2025 at 1900Z EDT by David Hoyt
+#  Last Updated: 18-OCT-2025 at 1200Z by David Hoyt
 #
 #
 #
-#  Changes: Align with pending WASM PR
-#           Dup check on flags etc
-#           Aligned NamedCmm, IccApplyProfiles Configs
+#  Changes: Add Source to ProfLib
+#           Add Tool iccApplySearch
+#           Modify Cmake Configs, bump Version
 #						
 #  TODO:    Align Version on IccProfLibVer.h, Housekeeping, Debug Options
 #           Version Headers, Doxygen Config, Exports etc...
@@ -95,8 +95,8 @@ set(PROJECT_DOWN_NAME "reficcmax")
 
 # Version components
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
-set(${PROJECT_UP_NAME}_MINOR_VERSION 2)
-set(${PROJECT_UP_NAME}_MICRO_VERSION 61)
+set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
+set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
@@ -792,6 +792,8 @@ IF(ENABLE_TOOLS)
   ADD_SUBDIRECTORY(Tools/IccV5DspObsToV4Dsp)
   message(STATUS "Adding Subdirectory IccApplyToLink.")
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
+  message(STATUS "Adding Subdirectory IccApplySearch.")
+  ADD_SUBDIRECTORY(Tools/IccApplySearch)
 
 # --- PNG ---
 message(STATUS "Checking for PNG...")
@@ -885,6 +887,7 @@ ADD_CUSTOM_TARGET( dist-bin2
     COMMAND mkdir -p ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/IccApplyNamedCmm ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyProfiles ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
+    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplySearch ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyToLink ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccDumpProfile ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccDumpProfileGui ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/ || echo ""

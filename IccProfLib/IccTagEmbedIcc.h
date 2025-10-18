@@ -6,15 +6,11 @@ and inherited classes
 
 Version:    V1
 
-Copyright:  see ICC Software License
+Copyright:  (c) see Software License
 */
 
 /*
-* The ICC Software License, Version 0.2
-*
-*
-* Copyright (c) 2003-2018 The International Color Consortium. All rights
-* reserved.
+* Copyright (c) International Color Consortium.
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions
@@ -96,6 +92,7 @@ public:
   virtual const icChar *GetClassName() const { return "CIccTagEmbeddedProfile"; }
 
   virtual CIccProfile *GetProfile() const { return m_pProfile; }
+  virtual void SetProfile(CIccProfile *pProfile); //The tag will assume ownership of pProfile
 
   virtual bool Read(icUInt32Number size, CIccIO *pIO) { return Read(size, pIO, NULL); }
   virtual bool Read(icUInt32Number size, CIccIO *pIO, CIccProfile *pProfile);

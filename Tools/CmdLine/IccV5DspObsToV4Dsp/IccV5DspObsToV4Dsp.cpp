@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
     return -1;
   }
 
-  CIccProfileSharedPtr dspIcc = CIccProfileSharedPtr(ReadIccProfile(argv[1]));
+  CIccProfileSharedPtr dspIcc = CIccProfileSharedPtr(ReadIccProfile(argv[1], true));
 
   if (!dspIcc) {
     printf("Unable to parse '%s'\n", argv[1]);
@@ -180,7 +180,7 @@ int main(int argc, char* argv[])
   pIcc->AttachTag(icSigProfileDescriptionTag, pDspText);
 
   pDspText = new CIccTagMultiLocalizedUnicode();
-  pDspText->SetText("Copyright (C) 2023 International Color Consortium");
+  pDspText->SetText("Copyright (C) 2025 International Color Consortium");
 
   pIcc->AttachTag(icSigCopyrightTag, pDspText);
 

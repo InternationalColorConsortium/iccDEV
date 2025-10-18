@@ -390,6 +390,17 @@ bool jsonToColorSpace(const json& j, icColorSpaceSignature& sig)
   return false;
 }
 
+bool jsonExistsField(const json& j, const char* field)
+{
+  if (!j.is_object())
+    return false;
+
+  auto f = j.find(field);
+  if (f != j.end())
+    return true;
+  return false;
+}
+
 bool saveJsonAs(const json& j, const char* szFname, int indent)
 {
   if (!j.is_object())

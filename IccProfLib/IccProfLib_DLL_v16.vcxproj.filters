@@ -113,6 +113,9 @@
     <ClCompile Include="IccTagEmbedIcc.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="IccCmmSearch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="IccApplyBPC.h">
@@ -236,6 +239,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="IccTagEmbedIcc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IccCmmSearch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IccSearch.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

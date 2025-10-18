@@ -122,7 +122,7 @@ void CTiffImg::Close()
 }
 
 bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHeight,
-              unsigned int nBPS, unsigned int nPhoto, unsigned int nSamples,
+              unsigned int nBPS, unsigned int nPhoto, unsigned int nSamples, unsigned int nExtraSamples,
               float fXRes, float fYRes, bool bCompress, bool bSep)
 {
   Close();
@@ -132,6 +132,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   m_nHeight = nHeight;
   m_nBitsPerSample = (icUInt16Number)nBPS;
   m_nSamples = (icUInt16Number)nSamples;
+  m_nExtraSamples = (icUInt16Number)nExtraSamples;
   m_nRowsPerStrip = 1;
   m_fXRes = fXRes;
   m_fYRes = fYRes;
@@ -139,8 +140,12 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   m_nCompress = bCompress ? COMPRESSION_LZW : COMPRESSION_NONE;
 
   switch(nPhoto) {
+  case PHOTO_RGB:
+    m_nPhoto = PHOTOMETRIC_RGB;
+    break;
+
   case PHOTO_MINISBLACK:
-    if (m_nSamples==3) 
+    if (m_nSamples-m_nExtraSamples==3) 
       m_nPhoto = PHOTOMETRIC_RGB;
     else
       m_nPhoto = PHOTOMETRIC_MINISBLACK;
@@ -172,6 +177,13 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   TIFFSetField(m_hTif, TIFFTAG_PHOTOMETRIC, m_nPhoto);
   TIFFSetField(m_hTif, TIFFTAG_PLANARCONFIG, m_nPlanar);
   TIFFSetField(m_hTif, TIFFTAG_SAMPLESPERPIXEL, m_nSamples);
+  if (m_nExtraSamples) {
+    unsigned short* extrasamplevalues = (unsigned short*)calloc(m_nExtraSamples, sizeof(unsigned short));
+    if (extrasamplevalues) {
+      TIFFSetField(m_hTif, TIFFTAG_EXTRASAMPLES, m_nExtraSamples, extrasamplevalues);
+      free(extrasamplevalues);
+    }
+  }
   TIFFSetField(m_hTif, TIFFTAG_BITSPERSAMPLE, m_nBitsPerSample);
   if (m_nBitsPerSample==32)
     TIFFSetField(m_hTif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
@@ -390,11 +402,13 @@ bool CTiffImg::WriteLine(unsigned char *pBuf)
 
 unsigned int CTiffImg::GetPhoto()
 {
-  if (m_nPhoto==PHOTOMETRIC_MINISBLACK ||
-      m_nPhoto==PHOTOMETRIC_RGB) {
+  if (m_nPhoto == PHOTOMETRIC_RGB) {
+    return PHOTO_RGB;
+  }
+  else if (m_nPhoto == PHOTOMETRIC_MINISBLACK) {
     return PHOTO_MINISBLACK;
   }
-  else if (m_nPhoto==PHOTOMETRIC_MINISWHITE ||
+  else if (m_nPhoto == PHOTOMETRIC_MINISWHITE ||
            m_nPhoto==PHOTOMETRIC_SEPARATED) {
     return PHOTO_MINISWHITE;
   }

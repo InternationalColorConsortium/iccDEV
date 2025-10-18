@@ -4,14 +4,13 @@
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 15-AUGUST-2025 at 1700Z by David Hoyt
+#  Last Updated: 18-OCT-2025 at 1200Z by David Hoyt
 #
 #
 #
-# Changes:  Fix Typo
-#           Add Missing Headers
+# Changes:  Add Source Files for IccSearch & IccCmm Search
 #           
-#						
+##
 # TODO: Refactor Debug, Release, Asan, subproject pathing issues
 #       Collapse 3-tier CMakeLists.txt, Housekeeping
 #       Refactor Base Configs & logging to .mk's 
@@ -57,6 +56,7 @@ SET( CFILES
 	${SRC_PATH}/IccProfLib/IccUtil.cpp
 	${SRC_PATH}/IccProfLib/IccXformFactory.cpp
 	${SRC_PATH}/IccProfLib/IccMD5.cpp
+	${SRC_PATH}/IccProfLib/IccCmmSearch.cpp
    )
 
 IF(ENABLE_INSTALL_RIM)
@@ -101,6 +101,8 @@ IF(ENABLE_INSTALL_RIM)
     ${SRC_PATH}/IccProfLib/IccXformFactory.h
     ${SRC_PATH}/IccProfLib/IccMD5.h
     ${SRC_PATH}/IccProfLib/IccSignatureUtils.h
+    ${SRC_PATH}/IccProfLib/IccSearch.h
+    ${SRC_PATH}/IccProfLib/IccCmmSearch.h
   )
   INSTALL( FILES
 	     ${HEADERS_PUBLIC}

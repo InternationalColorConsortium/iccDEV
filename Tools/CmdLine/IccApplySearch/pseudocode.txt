@@ -1,0 +1,59 @@
+
+object search
+  function init(num)
+	  num_cond = num
+		cnm mid_to_src
+		cmm target_to_mid[num_cond]
+		cmm src_to_mid[num_cond]
+		data pcc_data[num_cond]
+
+	function weight = search.costFunc(src_eval)
+		sum = 0;
+		for i=0; i<search.num_cond; i++
+			sum += sq(dif(src_to_mid[i].apply(src_eval), search.pcc_data[i])) * search.weight[i]
+		weight = sqrt(sum)
+
+
+function searchApplyMulti(target_data target target_intent src src_intent init_intent init_pcc middle middle_intent cond[])
+
+  search.init(cond.size())
+	search.mid_to_src = cmm(profile(middle, middle_intent),  profile(src, init_intent, init_pcc))
+
+	for i=0; i<search.num_cond; i++
+		search.target_to_mid[i] = cmm(profile(target, target_intent, cond[i].pcc), profile(middle, middle_intent))
+		search.src_to_mid[i] = cmm(profile(src, src_intent, cond[i].pcc), profile(middle, middle_intent))
+		search.weight[i] = cond[i].weight
+
+	for j=0;j<target_data.size(); j++
+
+		//find condition middle data
+		for i=0; i<search.num_cond; i++
+			search.middle_data[i] = target_to_mid[i].apply(taget_data[j])
+
+		//find inital src_data
+		init_src_data = search.src_to_mid.apply(search.middle_data[0])
+
+		search_src_data = search.findMin(init_src_data)
+		
+		output(search_src_data, search.weight, search.iterations)
+
+
+function searchApply(target_data target target_intent src src_intent init_intent)
+
+  search.init(1)
+	search.mid_to_src = cmm(profile(target, target_intent),  profile(src, init_intent))
+	
+	search.src_to_mid[0] = cmm(profile(src, src_intent, cond[i].pcc), profile(target, target_intent))
+	search.weight[0] = 1
+
+	for j=0;j<target_data.size(); j++
+
+		//find condition middle data
+		search.middle_data = mid_to_src.apply(taget_data[j])
+
+		//find inital src_data
+		init_src_data = search.src_to_mid.apply(search.middle_data[0])
+
+		search_src_data = search.findMin(init_src_data)
+		
+		output(search_src_data, search.weight, search.iterations)

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>spac</ProfileDeviceClass>
+    <DataColourSpace>Lab </DataColourSpace>
+    <PCS>Lab </PCS>
+    <CreationDateTime>now</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="1.098489888501049" Y="1.00000000" Z="0.355824758532463"/>
+    </PCSIlluminant>
+    <ProfileCreator>RICC</ProfileCreator>
+    <ProfileID>1</ProfileID>
+  </Header>
+
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Lab colorimetric PCC profile using Illuminant A with Standard 2deg observer using Wpt based MAT]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+
+    <multiProcessElementType>
+      <TagSignature>A2B3</TagSignature>
+	    <MultiProcessElements InputChannels="3" OutputChannels="3"/>
+    </multiProcessElementType>
+	
+    <multiProcessElementType>
+      <TagSignature>B2A3</TagSignature>
+	    <MultiProcessElements InputChannels="3" OutputChannels="3"/>
+    </multiProcessElementType>
+	
+    <multiProcessElementType>
+      <TagSignature>c2sp</TagSignature>
+	    <MultiProcessElements InputChannels="3" OutputChannels="3">
+				<MatrixElement InputChannels="3" OutputChannels="3">
+					<MatrixData>
+					 0.6297691687062642   0.1748952298419769   0.2741666200381239
+					-0.2857790400415592   1.2610840881638432   0.1485037125726726
+					 0.0168160180637885  -0.0448602643923962   2.3918153874017021
+					</MatrixData>
+				</MatrixElement>
+			</MultiProcessElements>
+    </multiProcessElementType>
+	
+    <multiProcessElementType>
+      <TagSignature>s2cp</TagSignature>
+	    <MultiProcessElements InputChannels="3" OutputChannels="3">
+				<MatrixElement InputChannels="3" OutputChannels="3">
+					<MatrixData>
+					 1.49544030192650412  -0.21302456398797609  -0.15819150441941940
+					 0.33937593147804929   0.74287710545962093  -0.08502560911381353
+					-0.00414867182820989   0.01543091012476644   0.41760993977714961
+					</MatrixData>
+				</MatrixElement>
+			</MultiProcessElements>
+    </multiProcessElementType>
+	
+	  <spectralViewingConditionsType>
+			<TagSignature>svcn</TagSignature>
+				<StdObserver>CIE 1931 standard colorimetric observer</StdObserver>
+			<IlluminantXYZ X="175.7583821601679" Y="160.00000000" Z="56.93196136519408"/>
+			<ObserverFuncs start="380" end="780" steps="81">
+				0.001368    0.002236    0.004243    0.007650    0.014310    0.023190    0.043510
+				0.077630    0.134380    0.214770    0.283900    0.328500    0.348280    0.348060
+				0.336200    0.318700    0.290800    0.251100    0.195360    0.142100    0.095640
+				0.057950    0.032010    0.014700    0.004900    0.002400    0.009300    0.029100
+				0.063270    0.109600    0.165500    0.225750    0.290400    0.359700    0.433450
+				0.512050    0.594500    0.678400    0.762100    0.842500    0.916300    0.978600
+				1.026300    1.056700    1.062200    1.045600    1.002600    0.938400    0.854450
+				0.751400    0.642400    0.541900    0.447900    0.360800    0.283500    0.218700
+				0.164900    0.121200    0.087400    0.063600    0.046770    0.032900    0.022700
+				0.015840    0.011359    0.008111    0.005790    0.004109    0.002899    0.002049
+				0.001440    0.001000    0.000690    0.000476    0.000332    0.000235    0.000166
+				0.000117    0.000083    0.000059    0.000042
+				0.000039    0.000064    0.000120    0.000217    0.000396    0.000640    0.001210
+				0.002180    0.004000    0.007300    0.011600    0.016840    0.023000    0.029800
+				0.038000    0.048000    0.060000    0.073900    0.090980    0.112600    0.139020
+				0.169300    0.208020    0.258600    0.323000    0.407300    0.503000    0.608200
+				0.710000    0.793200    0.862000    0.914850    0.954000    0.980300    0.994950
+				1.000000    0.995000    0.978600    0.952000    0.915400    0.870000    0.816300
+				0.757000    0.694900    0.631000    0.566800    0.503000    0.441200    0.381000
+				0.321000    0.265000    0.217000    0.175000    0.138200    0.107000    0.081600
+				0.061000    0.044580    0.032000    0.023200    0.017000    0.011920    0.008210
+				0.005723    0.004102    0.002929    0.002091    0.001484    0.001047    0.000740
+				0.000520    0.000361    0.000249    0.000172    0.000120    0.000085    0.000060
+				0.000042    0.000030    0.000021    0.000015
+                0.006450    0.010550    0.020050    0.036210    0.067850    0.110200    0.207400
+				0.371300    0.645600    1.039050    1.385600    1.622960    1.747060    1.782600
+				1.772110    1.744100    1.669200    1.528100    1.287640    1.041900    0.812950
+				0.616200    0.465180    0.353300    0.272000    0.212300    0.158200    0.111700
+				0.078250    0.057250    0.042160    0.029840    0.020300    0.013400    0.008750
+				0.005750    0.003900    0.002750    0.002100    0.001800    0.001650    0.001400
+				0.001100    0.001000    0.000800    0.000600    0.000340    0.000240    0.000190
+				0.000100    0.000050    0.000030    0.000020    0.000010    0.000000    0.000000
+				0.000000    0.000000    0.000000    0.000000    0.000000    0.000000    0.000000
+				0.000000    0.000000    0.000000    0.000000    0.000000    0.000000    0.000000
+				0.000000    0.000000    0.000000    0.000000    0.000000    0.000000    0.000000
+				0.000000    0.000000    0.000000    0.000000
+			</ObserverFuncs>
+			<StdIlluminant>Illuminant A</StdIlluminant>
+			<ColorTemperature>2800</ColorTemperature>
+			<IlluminantSPD start="380" end="780" steps="81">
+					9.7951   10.8996   12.0853   13.3543   14.7080   16.1480   17.6753   19.2907
+				 20.9950   22.7883   24.6709   26.6425   28.7027   30.8508   33.0859   35.4068
+				 37.8121   40.3002   42.8693   45.5174   48.2423   51.0418   53.9132   56.8539
+				 59.8611   62.9320   66.0635   69.2525   72.4959   75.7903   79.1326   82.5193
+				 85.9470   89.4124   92.9120   96.4423  100.0000  103.5820  107.1840  110.8030
+				114.4360  118.0800  121.7310  125.3860  129.0430  132.6970  136.3460  139.9880
+				143.6180  147.2350  150.8360  154.4180  157.9790  161.5160  165.0280  168.5100
+				171.9630  175.3830  178.7690  182.1180  185.4290  188.7010  191.9310  195.1180
+				198.2610  201.3590  204.4090  207.4110  210.3650  213.2680  216.1200  218.9200
+				221.6670  224.3610  227.0000  229.5850  232.1150  234.5890  237.0080  239.3700
+				241.6750
+			</IlluminantSPD>
+			<SurroundXYZ X="175.7583821601679" Y="160.00000000" Z="56.93196136519408"/>
+    </spectralViewingConditionsType>
+    
+	<XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="1.098489888501049" Y="1.00000000" Z="0.355824758532463"/>
+    </XYZType>
+	
+	<multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2025 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+
+  </Tags>
+</IccProfile>

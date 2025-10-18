@@ -135,6 +135,8 @@ bool jsonToList(const json& v, std::list<std::string>& vals);
 bool jsonToCStr(const json& j, char* str, int nSize);
 bool jsonToColorSpace(const json& j, icColorSpaceSignature& sig);
 
+bool jsonExistsField(const json& j, const char* field);
+
 // ========================
 // JSON File I/O
 // ========================
