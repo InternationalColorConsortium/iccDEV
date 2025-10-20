@@ -78,8 +78,8 @@
 #include <list>
 
 //CIccProcessStruct factory support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 class IIccStruct;
@@ -325,8 +325,8 @@ private:
   CIccStructFactoryList factoryStack;
 };
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif //_ICCSTRUCTFACTORY_H

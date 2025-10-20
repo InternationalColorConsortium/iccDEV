@@ -70,8 +70,8 @@
 #include "IccDefs.h"
 #include "stdio.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 ///Seek types
@@ -271,8 +271,8 @@ protected:
 };
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCIO_H)

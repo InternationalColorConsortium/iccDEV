@@ -69,8 +69,8 @@
 
 #include "IccDefs.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 class ICCPROFLIB_API CIccProfile;
@@ -152,8 +152,8 @@ protected:
 };
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCPCC_H)

@@ -79,8 +79,8 @@
 #include <string>
 
 //CIccXform factory support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -237,8 +237,8 @@ private:
   CIccXformFactoryList factoryStack;
 };
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif //_ICCXFORMFACTORY_H

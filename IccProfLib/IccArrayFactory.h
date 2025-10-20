@@ -77,8 +77,8 @@
 #include <list>
 
 //CIccArray factory support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 class IIccArray;
@@ -325,8 +325,8 @@ private:
   CIccArrayFactoryList factoryStack;
 };
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif //_ICCSTRUCTFACTORY_H

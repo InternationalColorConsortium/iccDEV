@@ -71,8 +71,8 @@
 
 #include "IccProfile.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 #define icNearRange 0.000001
@@ -122,7 +122,7 @@ protected:
   icFloatNumber *m_vals;
 };
 
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 

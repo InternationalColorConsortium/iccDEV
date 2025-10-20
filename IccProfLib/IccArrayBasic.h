@@ -72,8 +72,8 @@
 #include <map>
 #include "IccDefs.h"
 #include "IccTagComposite.h"
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -203,8 +203,8 @@ protected:
 
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCARRAYBASIC_H)

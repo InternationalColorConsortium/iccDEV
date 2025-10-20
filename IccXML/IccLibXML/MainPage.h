@@ -41,14 +41,12 @@
  * as a replacement for the ICC profile specificaiton provided by the ICC
  * which does undergo a formal standardization process.
  * 
+ * 
+ * Copyright © The International Color Consortium.
+ *
  * LICENSE
  * -------
  * 
-  * <b>The ICC Software License, Version 0.2</b>
- *
- * Copyright © 2003-2007 The International Color Consortium. All rights 
- * reserved.
- *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:

@@ -77,8 +77,8 @@
 #include <cstring>
 #include <cstdlib>
 
-#if defined(__cpluplus) && defined(USEREFICCMAXNAMESPACE)
-namespace refIccMAX {
+#if defined(__cpluplus) && defined(USEICCDEVNAMESPACE)
+namespace iccDEV {
 #endif
   
 /// CMM return status values
@@ -1995,8 +1995,8 @@ protected:
 
 #endif //__cplusplus
 
-#if defined(__cplusplus) && defined(USEREFICCMAXNAMESPACE)
-}; //namespace refIccMAX
+#if defined(__cplusplus) && defined(USEICCDEVNAMESPACE)
+}; //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCCMM_H)

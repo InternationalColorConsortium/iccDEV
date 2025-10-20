@@ -72,8 +72,8 @@
 #include <list>
 #include <string>
 
-#if defined(__cplusplus) && defined(USEREFICCMAXNAMESPACE)
-namespace refIccMAX {
+#if defined(__cplusplus) && defined(USEICCDEVNAMESPACE)
+namespace iccDEV {
 #endif
 
 #ifdef __cplusplus
@@ -272,8 +272,8 @@ typedef CIccProfile* CIccProfilePtr;
 
 #endif //__cplusplus
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCPROFILE_H)

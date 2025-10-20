@@ -71,8 +71,8 @@
 #include "IccDefs.h"
 #include "IccIO.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 //: ICCCAM transformation Object definition
@@ -156,8 +156,8 @@ public:
 };
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCCAM_H)

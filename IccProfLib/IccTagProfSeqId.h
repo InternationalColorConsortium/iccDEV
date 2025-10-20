@@ -74,8 +74,8 @@ Copyright:  (c) see Software License
 #include <memory>
 #include <list>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 class ICCPROFLIB_API CIccProfileIdDesc
@@ -146,7 +146,7 @@ protected:
 
 
 //CIccTagProfSeq support
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 

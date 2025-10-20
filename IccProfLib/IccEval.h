@@ -69,8 +69,8 @@ Copyright:  (c) see Software License
 
 #include "IccCmm.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 
@@ -88,8 +88,8 @@ public:
                                              bool buseMpeTags=true);
 };
 
-#ifdef USEREFICCMAXNAMESPACE
-}; //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+}; //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCCMM_H)

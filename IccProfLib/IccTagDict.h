@@ -76,8 +76,8 @@ Copyright:  (c) see Software License
 #include <list>
 #include <string>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 
@@ -220,7 +220,7 @@ protected:
 
 
 //CIccFloatTag support
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 

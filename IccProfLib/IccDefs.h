@@ -67,8 +67,8 @@
 //Get any platform specific prototypes
 #include "IccProfLibConf.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 //Include the standard icProfileHeader definition file
@@ -121,8 +121,8 @@ typedef enum {
 
 #pragma pack()
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif /* _ICCDEFS_H */

@@ -81,8 +81,8 @@
 #include <list>
 
 //CIccProcessElement factory support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 class CIccMultiProcessElement;
@@ -285,8 +285,8 @@ private:
   CIccMpeFactoryList factoryStack;
 };
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif //_ICCMPEFACTORY_H

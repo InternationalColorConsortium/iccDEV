@@ -71,8 +71,8 @@
 #include <string>
 #include "IccDefs.h"
 #include "IccTagComposite.h"
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 struct ICCPROFLIB_API SIccElemNameSig
@@ -286,8 +286,8 @@ protected:
 };
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCSTRUCTBASIC_H)

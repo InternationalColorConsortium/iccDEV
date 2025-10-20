@@ -73,8 +73,8 @@ Copyright:  (c) see Software License
 
 
 //CIccFloatTag support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 //declare class for referencing by CIccMpeInvEmissionMatrix
@@ -419,7 +419,7 @@ protected:
 
 
 //CIccMPElements support
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 

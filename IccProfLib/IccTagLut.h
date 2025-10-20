@@ -70,8 +70,8 @@
 #if !defined(_ICCTAGLUT_H)
 #define _ICCTAGLUT_H
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 #include "IccTagBasic.h"
@@ -662,8 +662,8 @@ protected:
 
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif // !defined(_ICCTAG_H)

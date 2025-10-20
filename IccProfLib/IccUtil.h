@@ -72,8 +72,8 @@
 #include <string>
 #include <limits>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 ICCPROFLIB_API void* icRealloc(void *ptr, size_t size);
@@ -407,8 +407,8 @@ public:
 
 extern ICCPROFLIB_API CIccInfo icInfo;
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif

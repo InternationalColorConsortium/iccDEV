@@ -79,8 +79,8 @@
 #include <string>
 
 //CIccTag factory support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 class CIccTag;
@@ -393,8 +393,8 @@ private:
   CIccTagFactoryList factoryStack;
 };
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif
 
 #endif //_ICCTAGFACTORY_H

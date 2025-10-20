@@ -69,8 +69,8 @@ Copyright:  (c) see Software License
 
 #include "IccCmm.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -123,8 +123,8 @@ private:
 	CIccCmm* getBlackXfm(icRenderingIntent nIntent, const CIccProfile *pProfile) const;
 };
 
-#ifdef USEREFICCMAXNAMESPACE
-}; //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+}; //namespace iccDEV
 #endif
 
 #endif // _ICCAPPLYBPC_H

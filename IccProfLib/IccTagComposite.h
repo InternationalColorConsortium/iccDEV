@@ -75,8 +75,8 @@ Copyright:  (c) see Software License
 #include <memory>
 #include <list>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 class CIccTagStruct;
@@ -275,7 +275,7 @@ ICCPROFLIB_API IIccArray* icGetTagArrayHandler(CIccTag* pTag);
 ICCPROFLIB_API IIccArray* icGetTagArrayHandlerOfType(CIccTag* pTag, icStructSignature sig);
 
 
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 

@@ -82,8 +82,8 @@ Copyright:  (c) see Software License
 
 
 //CIccFloatTag support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 typedef enum {
@@ -429,7 +429,7 @@ protected:
 
 
 //CIccMpeTag support
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 

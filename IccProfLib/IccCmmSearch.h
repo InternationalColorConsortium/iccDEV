@@ -73,8 +73,8 @@
 #include "IccSearch.h"
 #include <vector>
 
-#if defined(USEREFICCMAXNAMESPACE)
-namespace refIccMAX {
+#if defined(USEICCDEVNAMESPACE)
+namespace iccDEV {
 #endif
 
 
@@ -217,8 +217,8 @@ protected:
   std::vector<icFloatNumber> m_weight;
 };
 
-#if defined(USEREFICCMAXNAMESPACE)
-}; //namespace refIccMAX
+#if defined(USEICCDEVNAMESPACE)
+}; //namespace iccDEV
 #endif
 
 

@@ -76,8 +76,8 @@ Copyright:  (c) see Software License
 #include <vector>
 
 //CIccFloatTag support
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 //Declare forward references
@@ -556,7 +556,7 @@ public:
 #define icCalcDebuggerConsole ((IIccCalcDebugger*)-1) 
 
 //CIccMPElements support  
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 
