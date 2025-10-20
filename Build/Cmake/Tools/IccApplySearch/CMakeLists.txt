@@ -29,6 +29,7 @@ set(SOURCES
   ${SRC_ROOT}/Tools/CmdLine/IccApplySearch/iccApplySearch.cpp
   ${SRC_ROOT}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp
   ${SRC_ROOT}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp
+  ${SRC_ROOT}/IccProfLib/IccCmmSearch.cpp
 )
 
 # Define the executable

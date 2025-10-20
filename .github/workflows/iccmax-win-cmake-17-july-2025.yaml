@@ -61,7 +61,6 @@ jobs:
         run: |
           git clone https://github.com/InternationalColorConsortium/DemoIccMAX.git
           cd DemoIccMAX
-          git checkout cmake
           vcpkg integrate install
           vcpkg install
       - name: Configure
