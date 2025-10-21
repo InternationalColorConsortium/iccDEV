@@ -3,9 +3,9 @@
 # Copyright (©) 2025 The International Color Consortium. All rights reserved.
 # 
 #
-# Last Updated: 18-OCT-2025 at 1200Z by David Hoyt
+# Last Updated: 21-OCT-2025 at 0300Z by David Hoyt
 #
-# Changes: 	ADD iccApplySearch
+# Changes: 	Asan ODR Bug for IccCmmSearch.cpp
 #						
 #						
 # TODO: Refactor Debug, Release, Asan 
@@ -29,7 +29,6 @@ set(SOURCES
   ${SRC_ROOT}/Tools/CmdLine/IccApplySearch/iccApplySearch.cpp
   ${SRC_ROOT}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp
   ${SRC_ROOT}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp
-  ${SRC_ROOT}/IccProfLib/IccCmmSearch.cpp
 )
 
 # Define the executable
