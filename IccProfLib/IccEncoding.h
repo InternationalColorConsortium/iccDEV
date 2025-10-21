@@ -66,6 +66,7 @@ Copyright:  (c) see Software License
 ////////////////////////////////////////////////////////////////////// 
 
 #include "IccProfile.h"
+#include "IccDefs.h"
 
 typedef enum {
   icEncConvertOk = 0,

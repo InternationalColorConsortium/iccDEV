@@ -144,10 +144,11 @@ abridged spectral encoding is provided.
 
 ## Installation
 
-Install iccDEV using the Homebrew package manager:
+Install iccDEV using the Homebrew or NPM:
 
 ```
 brew install iccdev
+npm install iccdev
 ```
 
 [Build on Windows, macOS, Linux](BUILD.md)
