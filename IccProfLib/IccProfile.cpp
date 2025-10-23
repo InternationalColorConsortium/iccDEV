@@ -1122,7 +1122,7 @@ bool CIccProfile::ReadPccTags()
 void CIccProfile::InitHeader()
 {
   m_Header.size = 0;
-  m_Header.cmmId = icSigDemoIccMAX;
+  m_Header.cmmId = icSigIccDEV;
   m_Header.version=icVersionNumberV4;
   m_Header.deviceClass = (icProfileClassSignature)0;
   m_Header.colorSpace = (icColorSpaceSignature)0;
@@ -1151,7 +1151,7 @@ void CIccProfile::InitHeader()
   m_Header.illuminant.X = icDtoF((icFloatNumber)0.9642);
   m_Header.illuminant.Y = icDtoF((icFloatNumber)1.0000);
   m_Header.illuminant.Z = icDtoF((icFloatNumber)0.8249);
-  m_Header.creator = icSigDemoIccMAX;
+  m_Header.creator = icSigIccDEV;
   m_Header.spectralPCS = icSigNoSpectralData;
   m_Header.spectralRange.start = 0;
   m_Header.spectralRange.end = 0;
@@ -1780,6 +1780,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport) const
     case icSigMutoh:
     case icSigRefIccMAX:
     case icSigDemoIccMAX:
+	case icSigIccDEV:
     case icSigRolfGierling:
     case icSigSampleICC:
     case icSigToshiba:

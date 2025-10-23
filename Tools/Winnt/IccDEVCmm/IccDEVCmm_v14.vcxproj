@@ -19,7 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectName>DemoIccMAXCmm</ProjectName>
+    <ProjectName>IccDEVCmm</ProjectName>
     <ProjectGuid>{62025065-8784-4EBD-A380-57763DDBD26D}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
   </PropertyGroup>
@@ -95,7 +95,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\..\..\IccProfLib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -106,14 +106,14 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>IccProfLib.lib;Mscms.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>$(OutDir)DemoIccMAXCmm.dll</OutputFile>
-      <ModuleDefinitionFile>DemoIccMAXCmm.def</ModuleDefinitionFile>
+      <OutputFile>$(OutDir)IccDEVCmm.dll</OutputFile>
+      <ModuleDefinitionFile>IccDEVCmm.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ProgramDatabaseFile>$(OutDir)DemoIccMAXCmm.pdb</ProgramDatabaseFile>
+      <ProgramDatabaseFile>$(OutDir)IccDEVCmm.pdb</ProgramDatabaseFile>
       <SubSystem>Windows</SubSystem>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention />
-      <ImportLibrary>$(OutDir)DemoIccMAXCmm.lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)IccDEVCmm.lib</ImportLibrary>
       <TargetMachine>MachineX86</TargetMachine>
       <AdditionalLibraryDirectories>..\..\..\IccProfLib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
@@ -121,7 +121,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
       <AdditionalIncludeDirectories>..\..\..\IccProfLib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -130,15 +130,15 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>IccProfLib.lib;Mscms.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>$(OutDir)DemoIccMAXCmm.dll</OutputFile>
-      <ModuleDefinitionFile>DemoIccMAXCmm.def</ModuleDefinitionFile>
+      <OutputFile>$(OutDir)IccDEVCmm.dll</OutputFile>
+      <ModuleDefinitionFile>IccDEVCmm.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention />
-      <ImportLibrary>$(OutDir)DemoIccMAXCmm.lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)IccDEVCmm.lib</ImportLibrary>
       <TargetMachine>MachineX86</TargetMachine>
       <AdditionalLibraryDirectories>..\..\..\IccProfLib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
@@ -150,7 +150,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\..\..\IccProfLib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
@@ -161,14 +161,14 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>IccProfLib.lib;Mscms.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>$(OutDir)DemoIccMAXCmm.dll</OutputFile>
-      <ModuleDefinitionFile>DemoIccMAXCmm.def</ModuleDefinitionFile>
+      <OutputFile>$(OutDir)IccDEVCmm.dll</OutputFile>
+      <ModuleDefinitionFile>IccDEVCmm.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <ProgramDatabaseFile>$(OutDir)DemoIccMAXCmm.pdb</ProgramDatabaseFile>
+      <ProgramDatabaseFile>$(OutDir)IccDEVCmm.pdb</ProgramDatabaseFile>
       <SubSystem>Windows</SubSystem>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention />
-      <ImportLibrary>$(OutDir)DemoIccMAXCmm.lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)IccDEVCmm.lib</ImportLibrary>
       <TargetMachine>MachineX64</TargetMachine>
       <AdditionalLibraryDirectories>..\..\..\IccProfLib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
@@ -179,7 +179,7 @@
     </Midl>
     <ClCompile>
       <AdditionalIncludeDirectories>..\..\..\IccProfLib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -188,21 +188,21 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>IccProfLib.lib;Mscms.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>$(OutDir)DemoIccMAXCmm.dll</OutputFile>
-      <ModuleDefinitionFile>DemoIccMAXCmm.def</ModuleDefinitionFile>
+      <OutputFile>$(OutDir)IccDEVCmm.dll</OutputFile>
+      <ModuleDefinitionFile>IccDEVCmm.def</ModuleDefinitionFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention />
-      <ImportLibrary>$(OutDir)DemoIccMAXCmm.lib</ImportLibrary>
+      <ImportLibrary>$(OutDir)IccDEVCmm.lib</ImportLibrary>
       <TargetMachine>MachineX64</TargetMachine>
       <AdditionalLibraryDirectories>..\..\..\IccProfLib\$(Platform)\$(Configuration)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="DemoIccMAXCmm.cpp" />
+    <ClCompile Include="IccDEVCmm.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">4996;%(DisableSpecificWarnings)</DisableSpecificWarnings>
@@ -215,10 +215,10 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="DemoIccMAXCmm.def" />
+    <None Include="IccDEVCmm.def" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DemoIccMAXCmm.h" />
+    <ClInclude Include="IccDEVCmm.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
   </ItemGroup>
@@ -227,7 +227,7 @@
     <Image Include="SampleIcc.ico" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="DemoIccMAXCmm.rc" />
+    <ResourceCompile Include="IccDEVCmm.rc" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />

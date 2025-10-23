@@ -2,7 +2,7 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9.00"
-	Name="DemoIccMAXCmm"
+	Name="IccDEVCmm"
 	ProjectGUID="{62025065-8784-4EBD-A380-57763DDBD26D}"
 	Keyword="Win32Proj"
 	TargetFrameworkVersion="131072"
@@ -45,7 +45,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="..\..\..\IccProfLib"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -67,15 +67,15 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="Mscms.lib"
-				OutputFile="$(OutDir)/DemoIccMAXCmm.dll"
+				OutputFile="$(OutDir)/IccDEVCmm.dll"
 				LinkIncremental="2"
-				ModuleDefinitionFile="DemoIccMAXCmm.def"
+				ModuleDefinitionFile="IccDEVCmm.def"
 				GenerateDebugInformation="true"
-				ProgramDatabaseFile="$(OutDir)/DemoIccMAXCmm.pdb"
+				ProgramDatabaseFile="$(OutDir)/IccDEVCmm.pdb"
 				SubSystem="2"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)/DemoIccMAXCmm.lib"
+				ImportLibrary="$(OutDir)/IccDEVCmm.lib"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -126,7 +126,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="..\..\..\IccProfLib"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="2"
 				WarningLevel="3"
@@ -146,16 +146,16 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="Mscms.lib"
-				OutputFile="$(OutDir)/DemoIccMAXCmm.dll"
+				OutputFile="$(OutDir)/IccDEVCmm.dll"
 				LinkIncremental="1"
-				ModuleDefinitionFile="DemoIccMAXCmm.def"
+				ModuleDefinitionFile="IccDEVCmm.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)/DemoIccMAXCmm.lib"
+				ImportLibrary="$(OutDir)/IccDEVCmm.lib"
 				TargetMachine="1"
 			/>
 			<Tool
@@ -208,7 +208,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="..\..\..\IccProfLib"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
@@ -230,15 +230,15 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="Mscms.lib"
-				OutputFile="$(OutDir)/DemoIccMAXCmm.dll"
+				OutputFile="$(OutDir)/IccDEVCmm.dll"
 				LinkIncremental="2"
-				ModuleDefinitionFile="DemoIccMAXCmm.def"
+				ModuleDefinitionFile="IccDEVCmm.def"
 				GenerateDebugInformation="true"
-				ProgramDatabaseFile="$(OutDir)/DemoIccMAXCmm.pdb"
+				ProgramDatabaseFile="$(OutDir)/IccDEVCmm.pdb"
 				SubSystem="2"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)/DemoIccMAXCmm.lib"
+				ImportLibrary="$(OutDir)/IccDEVCmm.lib"
 				TargetMachine="17"
 			/>
 			<Tool
@@ -290,7 +290,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="..\..\..\IccProfLib"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;DemoIccMAXCmm_EXPORTS"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;IccDEVCmm_EXPORTS"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="2"
 				WarningLevel="3"
@@ -310,16 +310,16 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalDependencies="Mscms.lib"
-				OutputFile="$(OutDir)/DemoIccMAXCmm.dll"
+				OutputFile="$(OutDir)/IccDEVCmm.dll"
 				LinkIncremental="1"
-				ModuleDefinitionFile="DemoIccMAXCmm.def"
+				ModuleDefinitionFile="IccDEVCmm.def"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				OptimizeReferences="2"
 				EnableCOMDATFolding="2"
 				RandomizedBaseAddress="1"
 				DataExecutionPrevention="0"
-				ImportLibrary="$(OutDir)/DemoIccMAXCmm.lib"
+				ImportLibrary="$(OutDir)/IccDEVCmm.lib"
 				TargetMachine="17"
 			/>
 			<Tool
@@ -354,11 +354,11 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath=".\DemoIccMAXCmm.cpp"
+				RelativePath=".\IccDEVCmm.cpp"
 				>
 			</File>
 			<File
-				RelativePath=".\DemoIccMAXCmm.def"
+				RelativePath=".\IccDEVCmm.def"
 				>
 			</File>
 			<File
@@ -408,7 +408,7 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath=".\DemoIccMAXCmm.h"
+				RelativePath=".\IccDEVCmm.h"
 				>
 			</File>
 			<File
@@ -430,7 +430,7 @@
 				>
 			</File>
 			<File
-				RelativePath=".\DemoIccMAXCmm.rc"
+				RelativePath=".\IccDEVCmm.rc"
 				>
 			</File>
 			<File

@@ -18,7 +18,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="DemoIccMAXCmm.cpp">
+    <ClCompile Include="IccDEVCmm.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="stdafx.cpp">
@@ -26,12 +26,12 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="DemoIccMAXCmm.def">
+    <None Include="IccDEVCmm.def">
       <Filter>Source Files</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="DemoIccMAXCmm.h">
+    <ClInclude Include="IccDEVCmm.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
@@ -50,7 +50,7 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="DemoIccMAXCmm.rc">
+    <ResourceCompile Include="IccDEVCmm.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>

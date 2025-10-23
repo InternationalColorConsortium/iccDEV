@@ -43,7 +43,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IccFromXml", "..\..\IccXML\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IccToXml", "..\..\IccXML\CmdLine\IccToXml\IccToXml_v14.vcxproj", "{7F7A836B-C5DC-4CF1-95E6-2D5F6212ABE8}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "DemoIccMAXCmm", "..\..\Tools\Winnt\DemoIccMAXCmm\DemoIccMAXCmm_v14.vcxproj", "{62025065-8784-4EBD-A380-57763DDBD26D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "IccDEVCmm", "..\..\Tools\Winnt\IccDEVCmm\IccDEVCmm_v14.vcxproj", "{62025065-8784-4EBD-A380-57763DDBD26D}"
 	ProjectSection(ProjectDependencies) = postProject
 		{A6480823-31F6-41FE-AA64-D11B1AF8B3FF} = {A6480823-31F6-41FE-AA64-D11B1AF8B3FF}
 	EndProjectSection

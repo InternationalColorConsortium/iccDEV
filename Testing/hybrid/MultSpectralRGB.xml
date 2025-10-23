@@ -13,7 +13,7 @@
     <PCSIlluminant>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </PCSIlluminant>
-    <ProfileCreator></ProfileCreator>
+    <ProfileCreator>ICCD</ProfileCreator>
     <ProfileID>1</ProfileID>
   </Header>
   <Tags>

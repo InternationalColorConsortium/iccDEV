@@ -196,6 +196,9 @@ int main(int argc, char* argv[])
     (*pTrcG)[i] = out[1];
     (*pTrcB)[i] = out[2];
   }
+  pIcc->AttachTag(icSigRedTRCTag, pTrcR);
+  pIcc->AttachTag(icSigGreenTRCTag, pTrcG);
+  pIcc->AttachTag(icSigBlueTRCTag, pTrcB);
 
   const icFloatNumber rRGB[3] = { 1.0f, 0.0f, 0.0f };
   const icFloatNumber gRGB[3] = { 0.0f, 1.0f, 0.0f };

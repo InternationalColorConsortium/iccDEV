@@ -1,5 +1,5 @@
 /** @file
-    File:       DemoIccMAXCmm.cpp
+    File:       IccDEVCmm.cpp
 
     Contains:   Defines the entry point for the DLL application.
 
@@ -73,7 +73,7 @@
 #include "IccCmm.h"
 #include "IccDefs.h"
 #include "Icm.h"
-#include "DemoIccMAXCmm.h"
+#include "IccDEVCmm.h"
 #include "resource.h"
 #include <string>
 #include "Winerror.h"
@@ -209,7 +209,7 @@ static BOOL IsValidColorType(COLORTYPE ctSpace, icColorSpaceSignature sigSpace)
       }
       break;
 
-    case COLOR_NAMED:  //DemoIccMAXCmm Unsupported color spaace in transform
+    case COLOR_NAMED:  //IccDEVCmm Unsupported color spaace in transform
     default:
       return FALSE;
   }
@@ -307,7 +307,7 @@ static BOOL IsValidBitmapType(BMFORMAT bmType, icColorSpaceSignature sigSpace)
       }
       break;
 
-    case COLOR_NAMED:  //DemoIccMAXCmm Unsupported color spaace in transform
+    case COLOR_NAMED:  //IccDEVCmm Unsupported color spaace in transform
     default:
       return FALSE;
   }
@@ -1230,7 +1230,7 @@ DWORD WINAPI CMGetInfo(
       return 0x01;
 
     case CMM_IDENT:
-      return icSigDemoIccMAX;
+      return icSigIccDEV;
 
     case CMM_LOGOICON:
       return IDI_LOGO;

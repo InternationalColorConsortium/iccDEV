@@ -9,14 +9,14 @@
     <CreationDateTime>now</CreationDateTime>
     <PrimaryPlatform></PrimaryPlatform>
     <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
-    <DeviceManufacturer>DICC</DeviceManufacturer>
+    <DeviceManufacturer>ICCD</DeviceManufacturer>
     <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy"
                       MediaPolarity="positive" MediaColour="colour"/>
     <RenderingIntent>Perceptual</RenderingIntent>
     <PCSIlluminant>
       <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
     </PCSIlluminant>
-    <ProfileCreator>DICC</ProfileCreator>
+    <ProfileCreator>ICCD</ProfileCreator>
     <ProfileID>1</ProfileID>
   </Header>
   <Tags>

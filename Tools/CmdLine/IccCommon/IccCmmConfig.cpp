@@ -1999,7 +1999,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     return false;
 
   fprintf(f, "CGATS.17\n");
-  fprintf(f, "ORIGINATOR\t\"DemoIccMAX\"\n");
+  fprintf(f, "ORIGINATOR\t\"iccDEV\"\n");
   fprintf(f, "FILE_DESCRIPTOR\t\"Color Data\"\n");
 
   fprintf(f, "NUMBER_OF_FIELDS\t%d\n", nFields);

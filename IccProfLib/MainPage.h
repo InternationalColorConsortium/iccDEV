@@ -107,7 +107,7 @@
  * <b>CONTACT</b>
  *
  * Please send your questions, comments, and or suggestions to forums
- * on the DemoIccMAX project site. (https://github.com/InternationalColorConsortium/DemoIccMAX).\n
+ * on the iccDEV project site. (https://github.com/InternationalColorConsortium/iccDEV).\n
  *
  */
 

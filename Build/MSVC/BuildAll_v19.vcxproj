@@ -134,7 +134,7 @@
       <Project>{f89dd157-d661-47fe-adb5-64b171525056}</Project>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
-    <ProjectReference Include="..\..\Tools\Winnt\DemoIccMAXCmm\DemoIccMAXCmm_v19.vcxproj">
+    <ProjectReference Include="..\..\Tools\Winnt\IccDEVCmm\IccDEVCmm_v19.vcxproj">
       <Project>{62025065-8784-4ebd-a380-57763ddbd26d}</Project>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>

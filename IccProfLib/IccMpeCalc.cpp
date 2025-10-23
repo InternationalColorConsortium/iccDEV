@@ -4560,7 +4560,7 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
         free(posvals);
         return false;
       }
-      SetSubElem((icUInt16Number)n, (CIccMpeCalculator*)pElem);
+      SetSubElem((icUInt16Number)n, pElem);
       pos++;
     }
   }  
