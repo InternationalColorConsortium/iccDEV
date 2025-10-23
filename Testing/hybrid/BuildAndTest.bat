@@ -58,5 +58,3 @@
 %TOOLDIR%iccApplySearch.exe Results\cmykGraysRef.txt 0 1 ICC\Spec380_10_730-d50_2deg.icc 3 ICC\Lab_float-D50_2deg.icc 3 ICC\UCD_candidate_hybrid.icc 10003 -INIT 3 ICC\Lab_float-D50_2deg.icc 1 ICC\Lab_float-D93_2deg-MAT.icc 1 ICC\Lab_float-F11_2deg-MAT.icc 1 ICC\Lab_float-illumA_2deg-MAT.icc 1 > Results\cmykGraysEst.txt
 
 @type Results\cmykGraysEst.txt
-
-pause

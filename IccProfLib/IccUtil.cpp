@@ -74,6 +74,7 @@
 #include "IccStructFactory.h"
 #include "IccArrayFactory.h"
 #include "IccMpeFactory.h"
+#include "IccDefs.h"
 #include <stdlib.h>
 #include <memory.h>
 #include <ctype.h>

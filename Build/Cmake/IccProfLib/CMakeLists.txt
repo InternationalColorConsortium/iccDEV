@@ -4,11 +4,11 @@
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 18-OCT-2025 at 1200Z by David Hoyt
+#  Last Updated: 20-OCT-2025 at 2000Z by David Hoyt
 #
 #
 #
-# Changes:  Add Source Files for IccSearch & IccCmm Search
+# Changes:  Restore include for icProfileHeader.h
 #           
 ##
 # TODO: Refactor Debug, Release, Asan, subproject pathing issues
@@ -103,6 +103,7 @@ IF(ENABLE_INSTALL_RIM)
     ${SRC_PATH}/IccProfLib/IccSignatureUtils.h
     ${SRC_PATH}/IccProfLib/IccSearch.h
     ${SRC_PATH}/IccProfLib/IccCmmSearch.h
+    ${SRC_PATH}/IccProfLib/icProfileHeader.h
   )
   INSTALL( FILES
 	     ${HEADERS_PUBLIC}

@@ -20,9 +20,9 @@ libraries included in iccDEV.
 
 ## Quickstart
 
-Install iccDEV using the Homebrew package manager:
+Install iccDEV using the Homebrew or NPM package managers:
 
-`brew install iccdev`
+`brew install iccdev` or `npm install iccdev`
 
 To build from source view the [Build documentation](docs/build.md).
 

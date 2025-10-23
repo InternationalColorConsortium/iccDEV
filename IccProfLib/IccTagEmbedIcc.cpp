@@ -81,6 +81,7 @@ Copyright:  ? see ICC Software License
 #include "IccProfile.h"
 #include "IccTagFactory.h"
 #include "IccIO.h"
+#include "IccDefs.h"
 
 /**
 ****************************************************************************

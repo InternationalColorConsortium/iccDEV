@@ -69,6 +69,8 @@ Copyright:  (c) see Software License
 #define _ICCTAGEMBEDICC_H
 
 #include "IccTagBasic.h"
+#include "IccDefs.h"
+#include "IccProfile.h"
 /**
 ****************************************************************************
 * Class: IccTagEmbeddedProfile
