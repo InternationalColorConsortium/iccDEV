@@ -63,8 +63,8 @@ Copyright:  (c) see ICC Software License
 
 #include "IccIoXml.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -115,6 +115,6 @@ void IccSetOpenFileIO(IIccOpenFileIO *pOpenIO)
 // Class CIccIO
 //////////////////////////////////////////////////////////////////////
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

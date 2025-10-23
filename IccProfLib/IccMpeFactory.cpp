@@ -78,8 +78,8 @@
 #include "IccUtil.h"
 #include "IccProfile.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 CIccMultiProcessElement* CIccBasicMpeFactory::CreateElement(icElemTypeSignature elemTypeSig)
@@ -286,6 +286,6 @@ IIccMpeFactory* CIccMpeCreator::DoPopFactory(bool bAll /*=false*/)
   return NULL;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

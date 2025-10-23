@@ -75,8 +75,8 @@
 #include "IccProfile.h"
 #include <map>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 typedef std::map<icTagSignature, std::string> icTagSigToNameMap;
@@ -635,6 +635,6 @@ IIccTagFactory* CIccTagCreator::DoPopFactory(bool bAll /*=false*/)
   return NULL;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

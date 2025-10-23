@@ -86,8 +86,8 @@ using std::min;
 #define __min min
 #endif
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 
@@ -637,6 +637,6 @@ IIccStruct* CIccStructTintZero::NewCopy(CIccTagStruct *pTagStruct) const
   return rv;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

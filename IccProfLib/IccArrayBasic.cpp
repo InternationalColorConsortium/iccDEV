@@ -87,8 +87,8 @@ using std::min;
 #define __min min
 #endif
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 
@@ -600,6 +600,6 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
 }
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

@@ -82,8 +82,8 @@
 #include <map>
 #include "IccUtil.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -1889,6 +1889,6 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
   return rv;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

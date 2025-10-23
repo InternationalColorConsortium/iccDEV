@@ -95,8 +95,8 @@ using std::min;
 #define __min min
 #endif
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 // For Describe() nVerboseness levels < 25, maximum length of strings
@@ -12334,6 +12334,6 @@ icValidateStatus CIccTagEmbeddedNormalImage::Validate(std::string sigPath, std::
 
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

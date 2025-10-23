@@ -76,8 +76,8 @@
 #include "IccProfile.h"
 #include <cstring>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 IIccStruct* CIccBasicStructFactory::CreateStruct(icStructSignature structTypeSig, CIccTagStruct *pTagStruct)
@@ -237,6 +237,6 @@ IIccStructFactory* CIccStructCreator::DoPopFactory(bool bAll /*=false*/)
   return NULL;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

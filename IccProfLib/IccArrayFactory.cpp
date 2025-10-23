@@ -76,8 +76,8 @@
 #include "IccProfile.h"
 #include <string.h>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 IIccArray* CIccBasicArrayFactory::CreateArray(icArraySignature arrayTypeSig, CIccTagArray *pTagArray)
@@ -218,6 +218,6 @@ IIccArrayFactory* CIccArrayCreator::DoPopFactory(bool bAll /*=false*/)
   return NULL;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

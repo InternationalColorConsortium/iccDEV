@@ -84,8 +84,8 @@
 #include "IccUtil.h"
 #include "IccCAM.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -2138,6 +2138,6 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp nInterp, CIccTagMultiProcess
   return true;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

@@ -21,9 +21,9 @@ set(TARGET_NAME RefIccMAX)
 # Detect OS and Set Source Paths (Only build on Windows, bypass macOS and Unix)
 if (WIN32)
     message(STATUS "Configuring for Windows...")
-    set(OS_SPECIFIC_SOURCES "${CMAKE_CURRENT_LIST_DIR}/../../../../Tools/Winnt/DemoIccMAXCmm")
+    set(OS_SPECIFIC_SOURCES "${CMAKE_CURRENT_LIST_DIR}/../../../../Tools/Winnt/IccDEVCmm")
 else()
-    message(STATUS "Skipping DemoIccMAXCmm build on non-Windows platforms.")
+    message(STATUS "Skipping IccDEVCmm build on non-Windows platforms.")
     add_custom_target(${TARGET_NAME})  # dummy target to prevent dependency errors
     return()
 endif()
@@ -34,16 +34,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # Output Directory based on Configuration
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Tools/DemoIccMAXCmm/x64/$<CONFIG>")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Tools/DemoIccMAXCmm/x64/$<CONFIG>")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Tools/DemoIccMAXCmm/x64/$<CONFIG>")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Tools/IccDEVCmm/x64/$<CONFIG>")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Tools/IccDEVCmm/x64/$<CONFIG>")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Tools/IccDEVCmm/x64/$<CONFIG>")
 
 # Source Files
 set(SOURCES
-    "${OS_SPECIFIC_SOURCES}/DemoIccMAXCmm.cpp"
-    "${OS_SPECIFIC_SOURCES}/DemoIccMAXCmm.rc"
+    "${OS_SPECIFIC_SOURCES}/IccDEVCmm.cpp"
+    "${OS_SPECIFIC_SOURCES}/IccDEVCmm.rc"
     "${OS_SPECIFIC_SOURCES}/resource.h"
-    "${OS_SPECIFIC_SOURCES}/DemoIccMAXCmm.h"
+    "${OS_SPECIFIC_SOURCES}/IccDEVCmm.h"
     "${OS_SPECIFIC_SOURCES}/stdafx.cpp"
     "${OS_SPECIFIC_SOURCES}/stdafx.h"
 )
@@ -64,11 +64,11 @@ if (MSVC)
                 PROPERTIES COMPILE_FLAGS "/Yustdafx.h /Fp${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/RefIccMAX.pch")
         endif()
     endforeach()
-    set_source_files_properties("${OS_SPECIFIC_SOURCES}/DemoIccMAXCmm.rc" PROPERTIES COMPILE_FLAGS "")
+    set_source_files_properties("${OS_SPECIFIC_SOURCES}/IccDEVCmm.rc" PROPERTIES COMPILE_FLAGS "")
 endif()
 
 # Compiler Definitions
-target_compile_definitions(${TARGET_NAME} PRIVATE WIN32 _WINDOWS _USRDLL DemoIccMAXCmm_EXPORTS _MBCS)
+target_compile_definitions(${TARGET_NAME} PRIVATE WIN32 _WINDOWS _USRDLL IccDEVCmm_EXPORTS _MBCS)
 
 # Include Directories
 # include_directories(${OS_SPECIFIC_SOURCES} ${TOP_SOURCE_DIR}/IccProfLib)

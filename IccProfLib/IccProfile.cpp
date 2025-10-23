@@ -83,8 +83,8 @@
 #include "IccMD5.h"
 
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -3969,6 +3969,6 @@ bool CalcProfileID(const icWChar *szFilename, icProfileID *pProfileID)
 #endif
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

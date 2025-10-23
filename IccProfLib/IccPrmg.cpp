@@ -64,8 +64,8 @@ Copyright:  (c) see ICC Software License
 #include "IccPrmg.h"
 #include "IccUtil.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**********************************************************************
@@ -310,6 +310,6 @@ icStatusCMM CIccPRMG::EvaluateProfile(const icChar *szProfilePath, icRenderingIn
 }
 
 
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif

@@ -83,8 +83,8 @@
 #include "IccProfile.h"
 #include "IccMpeBasic.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -5834,6 +5834,6 @@ icValidateStatus CIccTagGamutBoundaryDesc::Validate(std::string sigPath, std::st
 
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

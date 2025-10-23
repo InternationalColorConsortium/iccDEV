@@ -81,8 +81,8 @@
 #include <map>
 #include "IccUtil.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 
@@ -486,6 +486,6 @@ CIccMpeEAcs::~CIccMpeEAcs()
 {
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

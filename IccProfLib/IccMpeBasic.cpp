@@ -83,8 +83,8 @@
 #include "IccCAM.h"
 #include "IccMpeCalc.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -6393,6 +6393,6 @@ void CIccMpeXYZToJab::Apply(CIccApplyMpe *pApply, icFloatNumber *dstPixel, const
 }
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

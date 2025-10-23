@@ -76,8 +76,8 @@
 #endif
 #endif
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 bool CIccMpeXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
@@ -3567,6 +3567,6 @@ bool CIccMpeXmlReflectanceObserver::ToXml(std::string &xml, std::string blanks/*
   return true;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif

@@ -79,8 +79,8 @@
 #include <cstring>
 #include <cstdio>
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 /**
@@ -420,6 +420,6 @@ CIccMatrixMath *CIccMatrixMath::rangeMap(const icSpectralRange &srcRange, const 
   return NULL;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

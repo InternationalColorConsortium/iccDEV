@@ -85,8 +85,8 @@
 #include "IccEncoding.h"
 #include "IccMatrixMath.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 ////
@@ -11279,6 +11279,6 @@ icStatusCMM CIccApplyMruCmm::Apply(icFloatNumber *DstPixel, const icFloatNumber 
 }
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

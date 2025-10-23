@@ -66,8 +66,8 @@ Copyright:  (c) see ICC Software License
 #include "IccUtil.h"
 #include "IccProfile.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 CIccTag* CIccTagXmlFactory::CreateTag(icTagTypeSignature tagSig)
@@ -246,7 +246,7 @@ icTagTypeSignature CIccTagXmlFactory::GetTagTypeNameSig(const icChar *szName)
   return icSigUnknownType;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif
 

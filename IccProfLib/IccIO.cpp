@@ -81,8 +81,8 @@
 #define __min(a,b)  (((a) < (b)) ? (a) : (b))
 #endif
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -899,6 +899,6 @@ icInt32Number CIccNullIO::Tell()
 }
 
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

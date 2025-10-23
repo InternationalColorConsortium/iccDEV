@@ -71,8 +71,8 @@
 
 #include "IccXformFactory.h"
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 CIccXform* CIccBaseXformFactory::CreateXform(icXformType xformSig, CIccTag *pTag/*=NULL*/, CIccCreateXformHintManager *pHintManager/*=NULL*/)
@@ -169,6 +169,6 @@ IIccXformFactory* CIccXformCreator::DoPopFactory(bool bAll /*=false*/)
   return NULL;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

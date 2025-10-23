@@ -78,8 +78,8 @@
 
 typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 
@@ -5280,6 +5280,6 @@ bool CIccTagXmlEmbeddedNormalImage::ToXml(std::string &xml, std::string blanks/*
 }
 
 
-#ifdef USEREFICCMAXNAMESPACE
+#ifdef USEICCDEVNAMESPACE
 }
 #endif

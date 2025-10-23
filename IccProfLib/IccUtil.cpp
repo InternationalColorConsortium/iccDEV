@@ -84,8 +84,8 @@
 
 #define PI 3.1415926535897932384626433832795
 
-#ifdef USEREFICCMAXNAMESPACE
-namespace refIccMAX {
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
 #endif
 
 ICCPROFLIB_API const char *icMsgValidateWarning = "Warning! - ";
@@ -2613,6 +2613,6 @@ CIccPixelBuf::~CIccPixelBuf()
     delete [] m_pixel;
 }
 
-#ifdef USEREFICCMAXNAMESPACE
-} //namespace refIccMAX
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
 #endif

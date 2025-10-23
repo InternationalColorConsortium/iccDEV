@@ -409,11 +409,11 @@ option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked loggin
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_FUZZING             "Enable fuzzing instrumentation (libFuzzer)"          OFF)
 option(ENABLE_SPECTRE_MITIGATION  "Enable /Qspectre on MSVC for Spectre V1 mitigation"  OFF)
-option(ENABLE_USEREFICCMAXNAMESPACE "Use refIccMAX namespace wrapping"                  OFF)
+option(ENABLE_USEICCDEVNAMESPACE  "Use iccDEV namespace wrapping"                       OFF)
 
-if(ENABLE_USEREFICCMAXNAMESPACE)
-  message(STATUS ">>> Namespace wrapping enabled (refIccMAX)")
-  add_compile_definitions(USEREFICCMAXNAMESPACE=1)
+if(ENABLE_USEICCDEVNAMESPACE)
+  message(STATUS ">>> Namespace wrapping enabled (iccDEV)")
+  add_compile_definitions(USEICCDEVNAMESPACE=1)
 endif()
 
 # Apply compile definitions for feature toggles
@@ -810,8 +810,8 @@ message(STATUS "Adding Subdirectory IccPngDump.")
 ADD_SUBDIRECTORY(Tools/IccPngDump)
 
 
-    message(STATUS "Adding Subdirectory DemoIccMAXCmm.")
-    ADD_SUBDIRECTORY(Tools/DemoIccMAXCmm)
+    message(STATUS "Adding Subdirectory IccDEVCmm.")
+    ADD_SUBDIRECTORY(Tools/IccDEVCmm)
 
 
   # Check for TIFF library
