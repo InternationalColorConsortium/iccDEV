@@ -5,7 +5,7 @@
 
 %TOOLDIR%iccFromXml.exe MultSpectralRGB.xml ICC\MultSpectralRGB.icc
 %TOOLDIR%iccFromXml.exe LCDDisplay.xml ICC\LCDDisplay.icc
-%TOOLDIR%iccFromXml.exe UCD_candidate_hybrid.xml ICC\UCD_candidate_hybrid.icc
+%TOOLDIR%iccFromXml.exe CMYK_Hybrid_Profile.xml ICC\CMYK_Hybrid_Profile.icc
 
 %TOOLDIR%iccFromXml.exe Data\Lab_float-D50_2deg.xml ICC\Lab_float-D50_2deg.icc
 %TOOLDIR%iccFromXml.exe Data\Lab_float-D93_2deg-MAT.xml ICC\Lab_float-D93_2deg-MAT.icc
@@ -48,13 +48,15 @@
 %TOOLDIR%iccDumpProfile Results\LCDDisplayCat8Obs.icc
 
 @ECHO *****************************************************************
-@ECHO Do some spectral color management from an extended print ICC
+@ECHO Do some spectral color management from an hybrid print profile
 @ECHO *****************************************************************
 
-%TOOLDIR%iccApplyNamedCmm.exe Data\cmykGrays.txt 3 1 ICC\UCD_candidate_hybrid.icc 10003 ICC\Spec380_10_730-D50_2deg.icc 3 > Results\cmykGraysRef.txt
+@type Data\cmykGrays.txt
+
+%TOOLDIR%iccApplyNamedCmm.exe Data\cmykGrays.txt 3 1 ICC\CMYK_Hybrid_Profile.icc 10003 ICC\Spec380_10_730-D50_2deg.icc 3 > Results\cmykGraysRef.txt
 
 @type Results\cmykGraysRef.txt
 
-%TOOLDIR%iccApplySearch.exe Results\cmykGraysRef.txt 0 1 ICC\Spec380_10_730-d50_2deg.icc 3 ICC\Lab_float-D50_2deg.icc 3 ICC\UCD_candidate_hybrid.icc 10003 -INIT 3 ICC\Lab_float-D50_2deg.icc 1 ICC\Lab_float-D93_2deg-MAT.icc 1 ICC\Lab_float-F11_2deg-MAT.icc 1 ICC\Lab_float-illumA_2deg-MAT.icc 1 > Results\cmykGraysEst.txt
+%TOOLDIR%iccApplySearch.exe Results\cmykGraysRef.txt 0 1 ICC\Spec380_10_730-d50_2deg.icc 3 ICC\Lab_float-D50_2deg.icc 3 ICC\CMYK_Hybrid_Profile.icc 10003 -INIT 3 ICC\Lab_float-D50_2deg.icc 1 ICC\Lab_float-D93_2deg-MAT.icc 1 ICC\Lab_float-F11_2deg-MAT.icc 1 ICC\Lab_float-illumA_2deg-MAT.icc 1 > Results\cmykGraysEst.txt
 
 @type Results\cmykGraysEst.txt

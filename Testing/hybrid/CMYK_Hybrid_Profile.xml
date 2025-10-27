@@ -19,7 +19,7 @@
   </Header>
   <Tags>
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[UCD_candidate.icc]]></LocalizedText>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[CMYK_Hybrid_Profile.icc]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 
     <mediaWhitePointTag> <XYZArrayType>
