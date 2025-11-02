@@ -28,15 +28,10 @@ To build from source view the [Build documentation](docs/build.md).
 
 ## Contributing
 
-This software consists of voluntary contributions made by many individuals
-on behalf of the The International Color Consortium.
-
-The first thing to do, before anything else, is talk to us! Whether you're
-reporting an issue, requesting or implementing a feature, or just asking a
-question; please don’t hesitate to reach out to project maintainers or the
-community as a whole. This is an important first step because your issue,
-feature, or the question may have been solved or discussed already, and you’ll
-save yourself a lot of time by asking first.
+Contributors are ICC members and other individual contributors who have volunteered to
+maintain ICC software, documentation, or other technical artifacts. Our CONTRIBUTING
+document explains our contribution processes and procedures, so please review it first:
+[CONTRIBUTING](../docs/CONTRIBUTING.md). Contributors are asked to sign a [Contributor License Agreement](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)
 
 ## License
 
