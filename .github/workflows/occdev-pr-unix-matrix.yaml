@@ -1,0 +1,120 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: TEST CI PR Trigger
+#
+#
+#
+#
+#
+###############################################################
+
+name: PR CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - ci-test, master
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.number }}
+  cancel-in-progress: true
+
+env:
+  GH_REPO: ${{ github.repository }}
+  GH_NO_UPDATE_NOTIFIER: 1
+  GH_PROMPT_DISABLED: 1
+  RUN_URL: ${{github.event.repository.html_url}}/actions/runs/${{github.run_id}}
+  PR: ${{ github.event.number }}
+
+jobs:
+  build:
+    name: "${{ matrix.os }} • ${{ matrix.compiler }} • ${{ matrix.build_type }}"
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        compiler: [gcc, clang]
+        build_type: [Release, Debug]
+        exclude:
+          - os: macos-latest
+            compiler: gcc
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Verify Branch Context
+        run: |
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Base branch:  ${{ github.base_ref }}"
+          echo "Head branch:  ${{ github.head_ref }}"
+          echo "Commit SHA:   ${{ github.event.pull_request.head.sha }}"
+          echo "Build Type:   ${{ matrix.build_type }}"
+          echo "Compiler:     ${{ matrix.compiler }}"
+          echo "OS:           ${{ matrix.os }}"
+      - name: Install Dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake gcc g++ clang clang-tools \
+            libpng-dev libxml2 libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common \
+            python3 python3-pip curl git llvm
+      - name: Install Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install cmake llvm wxwidgets libpng libtiff libxml2 nlohmann-json
+      - name: Set Compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            echo "CC=gcc" >> $GITHUB_ENV
+            echo "CXX=g++" >> $GITHUB_ENV
+          else
+            echo "CC=clang" >> $GITHUB_ENV
+            echo "CXX=clang++" >> $GITHUB_ENV
+          fi
+      - name: Print Compiler Version
+        run: |
+          echo "Compiler Version:" >> $GITHUB_STEP_SUMMARY
+          $CC --version >> $GITHUB_STEP_SUMMARY
+      - name: CMake Configure
+        run: |
+          mkdir -p Build
+          cd Build
+          cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DENABLE_TOOLS=ON \
+                -DENABLE_STATIC_LIBS=ON \
+                -DENABLE_SHARED_LIBS=ON \
+                -Wno-dev Cmake/
+      - name: Build
+        run: |
+          cd Build
+          make -j$(nproc || sysctl -n hw.logicalcpu)
+      - name: Summary Report
+        if: always()
+        run: |
+          echo "### Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- OS: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Compiler: ${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Type: ${{ matrix.build_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts: iccmax-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
