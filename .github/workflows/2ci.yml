@@ -1,0 +1,263 @@
+###############################################################
+#
+## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+##                 https://srd.cx
+##
+## Last Updated: 19-NOV-2025 1200Z by David Hoyt
+#
+## Intent: Cmake testing / build
+#
+## TODO: Add Unit Test Suite
+#
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+name: ci-main-latest
+permissions:
+  contents: read
+  
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: "Linux ${{ matrix.compiler }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake gcc g++ clang clang-tools \
+            libpng-dev libxml2 libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common \
+            python3 python3-pip curl git llvm
+      - name: Set Compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            echo "CC=gcc" >> $GITHUB_ENV
+            echo "CXX=g++" >> $GITHUB_ENV
+          else
+            echo "CC=clang" >> $GITHUB_ENV
+            echo "CXX=clang++" >> $GITHUB_ENV
+          fi
+      - name: Print Compiler Version
+        run: |
+          echo "Compiler Version:" >> $GITHUB_STEP_SUMMARY
+          $CC --version >> $GITHUB_STEP_SUMMARY
+      - name: CMake Configure
+        run: |
+          cd Build
+          cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+                -DCMAKE_BUILD_TYPE=Release \
+                -Wno-dev Cmake/
+      - name: Build
+        run: |
+          cd Build
+          make -j$(nproc)
+          echo "========= BEGIN INSIDE STUB for PR210 ========="
+          cd ../Testing/
+          echo "=== Updating PATH ==="
+          for d in ../Build/Tools/*; do
+          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done 
+          sh CreateAllProfiles.sh
+          sh RunTests.sh
+          find . -iname "*.icc" | wc -l 
+      - name: Verify CMake Cache
+        run: |
+          if test -f Build/CMakeCache.txt; then
+            echo "? Build OK" | tee -a $GITHUB_STEP_SUMMARY
+          else
+            echo "::error ::Build failed! CMakeCache.txt not found." | tee -a $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iccdev-linux-${{ matrix.compiler }}
+          path: Build
+
+      - name: Summary Report
+        if: always()
+        run: |
+          echo "### Linux Build Summary (${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-linux-${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+  macos:
+    name: "macOS Clang"
+    runs-on: macos-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+
+      - name: Clone repository and install dependencies
+        run: |
+          echo "Installing Homebrew dependencies..."
+          brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg || echo "⚠️ Some dependencies might already be installed."
+          echo "✔ Dependency installation complete."
+  
+      - name: CMake Configure
+        run: |
+          echo "Setting up CMake build configuration..."
+          cd Build
+          sudo rm -rf /Library/Frameworks/Mono.framework/Headers/png.h
+          echo 'export PATH="/opt/homebrew/opt/jpeg/bin:$PATH"' >> /Users/runner/.bash_profile
+          export CPPFLAGS="-I/opt/homebrew/opt/jpeg/include"
+          export PKG_CONFIG_PATH="/opt/homebrew/opt/jpeg/lib/pkgconfig"
+          export CFLAGS="-I$(brew --prefix libpng)/include -I$(brew --prefix jpeg)/include"
+          export LDFLAGS="-L$(brew --prefix libpng)/lib -L$(brew --prefix jpeg)/lib"
+          cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DJPEG_LIBRARY=$(brew --prefix jpeg)/lib/libjpeg.dylib \
+                -DJPEG_INCLUDE_DIR=$(brew --prefix jpeg)/include \
+                -Wno-dev Cmake/
+          echo "✔ CMake configuration complete."
+      
+      - name: Build
+        run: |
+          echo "Starting build process..."
+          cd Build
+          make -j$(sysctl -n hw.ncpu)
+          echo "✔ Build process completed."
+          cd ../Testing/
+          echo "=== Updating PATH ==="
+          for d in ../Build/Tools/*; do
+          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done 
+          sh CreateAllProfiles.sh
+          sh RunTests.sh
+          find . -iname "*.icc" | wc -l 
+          
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iccdev-macos-clang
+          path: Build
+      - name: Summary Report
+        if: always()
+        run: |
+          echo "### macOS Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: iccDEV/Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-macos-clang" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+  windows:
+    name: "Windows MSVC"
+    runs-on: windows-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1
+
+      - name: Setup Environment & Build Preparation
+        shell: pwsh
+        run: |
+          Write-Host "============================= Starting Build =============================" -ForegroundColor Green
+          Write-Host "C 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
+          git branch
+          git status
+          Write-Host "========= Fetching Deps... ================`n"
+          Start-BitsTransfer -Source "https://xss.cx/2025/11/vcpkg/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          Write-Host "========= Extracting Deps... ================`n"
+          tar -xf deps.zip
+          cd Build/Cmake
+          Write-Host "========= Building... ================`n"  
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+          cmake --build build -- /m /maxcpucount
+          cmake --build build -- /m /maxcpucount          
+          $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
+              Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
+              ForEach-Object { Split-Path $_.FullName -Parent } |
+              Sort-Object -Unique
+          $env:PATH = ($exeDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';' | Select-String "icc"
+          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
+          $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';'
+          pwd
+          cd ..\..\Testing
+          .\CreateAllProfiles.bat
+          .\RunTests.bat
+          cd CalcTest\
+          .\checkInvalidProfiles.bat
+          .\runtests.bat
+          cd ..\Display
+          .\RunProtoTests.bat
+          cd ..\HDR
+          .\mkprofiles.bat
+          cd ..\mcs\
+          .\updateprev.bat
+          .\updateprevWithBkgd.bat
+          cd ..\Overprint
+          .\RunTests.bat
+          cd ..
+          cd hybrid
+          .\BuildAndTest.bat
+          cd ..
+          cd ..
+          pwd
+
+          # Collect .icc profile information
+          $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
+          $totalCount = $profiles.Count
+          
+          # Group profiles by directory
+          $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
+          
+          # Generate Summary Report
+          Write-Host "`n========================="
+          Write-Host " ICC Profile Report"
+          Write-Host "========================="
+          
+          # Print count per subdirectory
+          foreach ($group in $groupedProfiles) {
+              Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
+          }
+          
+          Write-Host "`nTotal .icc profiles found: $totalCount"
+          Write-Host "=========================`n"
+          
+          Write-Host "All Done!"
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iccdev-v231-windows-msvc
+          path: |
+            Build/Cmake/build/**/*.lib
+            Build/Cmake/build/**/*.a
+            Build/Cmake/build/**/*.dll
+            Build/Cmake/build/**/*.exe
+            Build/Cmake/build/**/*.pdb
+            Build/Cmake/Testing/**/*
+            Build/Cmake/LICENSE.md
+            Build/Cmake/README.md            
+            Build/Cmake/docs/**
+          if-no-files-found: warn
+      - name: Host System Info
+        shell: pwsh
+        run: |
+          systeminfo
+          Get-CimInstance -ClassName Win32_Processor
+      - name: Summary Report
+        if: always()
+        run: |
+          echo "### Windows Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-macos-clang" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY

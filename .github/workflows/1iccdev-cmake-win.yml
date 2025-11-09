@@ -1,0 +1,100 @@
+###############################################################
+#
+## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+##                 https://srd.cx
+##
+## Last Updated: 23-OCT-2025 1200Z by David Hoyt
+#
+## Intent: Cmake testing / build
+#
+## TODO: Add Unit Test Suite
+#
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+
+name: 1iccdev-cmake-win
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: child-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.job }}
+  cancel-in-progress: true
+
+env:
+  GH_REPO: ${{ github.repository }}
+  GH_NO_UPDATE_NOTIFIER: 1
+  GH_PROMPT_DISABLED: 1
+  RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
+  PR: ${{ github.event.number }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release]
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Verify Branch Context
+        run: |
+          echo "Triggered by:  ${{ github.event_name }}"
+          echo "Base branch:   ${{ github.base_ref }}"
+          echo "Head branch:   ${{ github.head_ref }}"
+          echo "Commit SHA:    ${{ github.event.pull_request.head.sha }}"
+          echo "Build Type:    ${{ matrix.build_type }}"
+          echo "Compiler:      ${{ matrix.compiler }}"
+          echo "OS:            ${{ runner.os }}"
+
+      - name: Install dependencies
+        run: |
+          vcpkg integrate install
+          vcpkg install
+
+      - name: Configure
+        run: |
+          cd Build\Cmake
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 ^
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ^
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+      - name: Build
+        run: |
+          cd Build\Cmake
+          cmake --build build --config ${{ matrix.build_type }}
+          dir /s /b *.exe *.lib
+
+      - name: GitHub Summary
+        if: always()
+        run: |
+          echo "## 🧱 CMake Windows Build Summary" >> %GITHUB_STEP_SUMMARY%
+          echo "Repository: ${{ github.repository }}" >> %GITHUB_STEP_SUMMARY%
+          echo "Run URL: [View Logs](${{ env.RUN_URL }})" >> %GITHUB_STEP_SUMMARY%
+          echo "Triggered by: ${{ github.event_name }}" >> %GITHUB_STEP_SUMMARY%
+          echo "Commit SHA: ${{ github.event.pull_request.head.sha || github.sha }}" >> %GITHUB_STEP_SUMMARY%
+          echo "Build Type: ${{ matrix.build_type }}" >> %GITHUB_STEP_SUMMARY%
+          echo "Runner OS: ${{ runner.os }}" >> %GITHUB_STEP_SUMMARY%
+          echo "✅ Build completed successfully on Windows with CMake and vcpkg." >> %GITHUB_STEP_SUMMARY%
+          

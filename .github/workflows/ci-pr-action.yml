@@ -1,0 +1,179 @@
+###############################################################
+#
+## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+##                 https://srd.cx
+##
+## Last Updated: 04-NOV-2025 1200Z by David Hoyt
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+
+name: "ci-pr-action"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+  workflow_call:
+
+  # Optional: auto-trigger for PRs to master/test
+  pull_request:
+    branches: [ master, runner ]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: dispatcher-${{ github.workflow }}-${{ github.run_id }}-${{ github.job }}
+  cancel-in-progress: false
+
+jobs:
+  detect-src:
+    name: 🔎 Detect Source Changes
+    runs-on: ubuntu-latest
+    outputs:
+      src_changed: ${{ steps.diffcheck.outputs.src_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: diffcheck
+        shell: bash
+        run: |
+          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+          base_ref="${{ github.base_ref }}"
+          git fetch origin "${base_ref}" --depth=1
+          if git diff --name-only "origin/${base_ref}"...HEAD | grep -E '\.(cpp|cxx|cc|h|hpp)$'; then
+            echo "src_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          
+  setup:
+    name: 🧭 Init
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Display Environment Info
+        run: |
+          echo "============================"
+          echo "   iccDEV PR Build & Check  "
+          echo "============================"
+          echo ""
+          echo "International Color Consortium"
+          echo "Thank you for opening a PR"
+          echo ""
+          echo "Trigger: manual (workflow_dispatch)"
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch:     ${{ github.ref_name }}"
+          echo "Commit:     ${{ github.sha }}"
+          echo "Actor:      ${{ github.actor }}"
+          echo "Run ID:     ${{ github.run_id }}"
+          echo "Start time: $(date)"
+          echo ""
+      - name: Write Summary to GitHub UI
+        run: |
+          echo "## 🧭 Init Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Workflow:** ci-pr-action" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Event type:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID:** ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Session start:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- Source changed: ${{ needs.detect-src.outputs.src_changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ CI environment successfully initialized and ready for subsequent jobs." >> $GITHUB_STEP_SUMMARY
+  unix-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧱 Unix Matrix Build and Test
+    needs: [setup, detect-src]
+    uses: ./.github/workflows/ci-pr-unix.yml
+
+  scan-build:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🔍 Clang Scan-Build Analysis
+    needs: [unix-ci, detect-src]
+    uses: ./.github/workflows/ci-pr-unix-sb.yml
+
+  cppcheck-linters:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧪 Cppcheck and Linters
+    needs: [unix-ci, win-ci, detect-src]
+    uses: ./.github/workflows/ci-pr-lint.yml
+
+  win-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧱 Windows Build and Test
+    needs: [setup, detect-src]
+    uses: ./.github/workflows/ci-pr-win.yml
+    
+  finalize:
+    name: 🧾 GitHub Summary Report
+    runs-on: ubuntu-latest
+    needs:
+      - detect-src
+      - unix-ci
+      - scan-build
+      - cppcheck-linters
+
+    if: always()
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "## 🧩 ICCDEV PR Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.detect-src.outputs.src_changed }}" != "true" ]; then
+            echo "- 💤 Non-source PR detected — build, analysis, and linting skipped." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ Overall Result: SUCCESS (Bypass: Non-Source Change)" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          if [ "${{ needs.unix-ci.result }}" == "success" ]; then
+            echo "- ✅ Unix Build + Tests: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Unix Build + Tests: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.scan-build.result }}" == "success" ]; then
+            echo "- ✅ Clang Static Report: Available" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Clang Static Analysis: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.cppcheck-linters.result }}" == "success" ]; then
+            echo "- ✅ Cppcheck + Linter Report: Available" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Cppcheck + Linters: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.win-ci.result }}" == "success" ]; then
+            echo "- ✅ Windows Build + Tests: Passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ❌ Windows Build + Tests: Failed" >> $GITHUB_STEP_SUMMARY
+          fi
+                        
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Uploaded artifacts for all stages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "### ✅ Overall Result: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ Overall Result: FAILURE" >> $GITHUB_STEP_SUMMARY
+          fi

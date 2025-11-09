@@ -1,0 +1,85 @@
+name: PR Status Labeler
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to process manually'
+        required: false
+        default: ''
+  schedule:
+    - cron: '0 */4 * * *'   # Every 4 hours
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  label-status:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Determine PR number or input
+        id: get_pr
+        run: |
+          if [[ -n "${{ github.event.inputs.pr_number }}" ]]; then
+            echo "Manual input detected: ${{ github.event.inputs.pr_number }}"
+            echo "pr_number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          elif [[ -n "${{ github.event.pull_request.number }}" ]]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "No PR context found. Exiting."
+            echo "pr_number=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Evaluate PR combined status
+        id: status
+        if: steps.get_pr.outputs.pr_number != '0'
+        run: |
+          STATUS=$(gh api repos/${{ github.repository }}/commits/$(gh pr view ${{ steps.get_pr.outputs.pr_number }} --json headRefOid -q .headRefOid)/status | jq -r '.state')
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "Detected status: $STATUS"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Relabel PR based on status
+        id: relabel
+        if: steps.status.outputs.status != '' && steps.get_pr.outputs.pr_number != '0'
+        run: |
+          STATUS=${{ steps.status.outputs.status }}
+          PR=${{ steps.get_pr.outputs.pr_number }}
+          ADDED=""
+          REMOVED=""
+          if [[ "$STATUS" == "success" ]]; then
+            gh pr edit "$PR" --add-label "passed" --remove-label "failed" || true
+            ADDED="passed"
+            REMOVED="failed"
+          elif [[ "$STATUS" == "failure" ]] || [[ "$STATUS" == "error" ]]; then
+            gh pr edit "$PR" --add-label "failed" --remove-label "passed" || true
+            ADDED="failed"
+            REMOVED="passed"
+          else
+            echo "No label change required for status: $STATUS"
+          fi
+          echo "added_label=$ADDED" >> $GITHUB_OUTPUT
+          echo "removed_label=$REMOVED" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate summary report
+        run: |
+          echo "### 🧾 PR Labeler Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger Type:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**PR Number:** ${{ steps.get_pr.outputs.pr_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Detected Status:** ${{ steps.status.outputs.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Label Added:** ${{ steps.relabel.outputs.added_label }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Label Removed:** ${{ steps.relabel.outputs.removed_label }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Workflow completed successfully."

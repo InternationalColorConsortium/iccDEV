@@ -1,0 +1,64 @@
+###############################################################
+#
+## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+##                 https://srd.cx
+##
+## Last Updated: 04-NOV-2025 1200Z by David Hoyt
+#
+#
+#
+#
+# TEST
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+
+Source:
+  - '**/*.cpp'
+  - '**/*.h'
+  - '**/*.hpp'
+
+Documentation:
+  - '**/*.md'
+  - 'docs/**'
+  - 'README*'
+  - 'CHANGELOG*'
+
+Configuration:
+  - '**/*.json'
+  - '**/*.yaml'
+  - '**/*.yml'
+  - '**/*.cmake'
+  - '**/*.txt'
+
+CI:
+  - '.github/workflows/**'
+  - '.github/**.yml'
+  - '.github/**.yaml'
+
+Scripts:
+  - 'scripts/**'
+  - 'Testing/**'
+  - '**/*.py'
+  - '**/*.sh'
+  - '**/*.zsh'
+  - '**/*.ps1'
+  
+Licenses:
+  - 'LICENSE*'
+  - 'COPYING*'
+
+Tools:
+  - 'Tools/**'
+
+Profiles:
+  - 'Testing/**'
+  
+Build:
+  - 'Build/**'
