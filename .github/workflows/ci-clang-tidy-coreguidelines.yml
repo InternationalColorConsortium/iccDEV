@@ -1,0 +1,80 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent:iccdev-tidy-coreguidelines
+#
+## Last Updated: 22-NOV-2025 0000Z by David Hoyt 
+#                Add Permission Block
+## TODO: Push binary releases, tags etc...
+#
+## Comment: Known good and working
+#
+#
+#
+#
+#
+###############################################################
+
+name: iccdev-tidy-coreguidelines
+
+permissions:
+  contents: read
+  pull-requests: read
+  
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_type: [Release]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake git pkg-config
+          sudo apt-get install -y \
+            build-essential cmake gcc g++ clang clang-tools \
+            libpng-dev libxml2 libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common \
+            python3 python3-pip curl git llvm zsh
+          git clone https://github.com/InternationalColorConsortium/iccDEV.git          
+          cd iccDEV
+          BUILD_DIR="Build"
+          CHECKS="modernize-*,readability-*,cppcoreguidelines-*"
+          OUTDIR="tidy-out"
+          mkdir -p "${OUTDIR}"
+          cd Build
+          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          make -j$(nproc)
+          cd ..
+          
+          # Extract translation units
+          jq -r '.[].file' "${BUILD_DIR}/compile_commands.json" \
+            | xargs -I{} -P"$(nproc)" sh -c '
+                  f="{}"
+                  base=$(basename "$f")
+                  log="'"${OUTDIR}"'/${base}.log"
+                  echo "[+] $(date +"%H:%M:%S") START $f"
+                  run-clang-tidy -p "'"${BUILD_DIR}"'" -checks="'"${CHECKS}"'" "$f" > "$log" 2>&1
+                  echo "[+] $(date +"%H:%M:%S") DONE  $f"
+              '
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: iccdev-clang-tidy-${{ matrix.build_type }}-linux
+          path: |
+            iccDEV/tidy-out/*
+          if-no-files-found: warn

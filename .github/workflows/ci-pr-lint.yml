@@ -1,0 +1,112 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: iccDEV Action ci-pr-lint
+#
+## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
+##               Add Action lint
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+name: "ci-pr-lint"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  # Allow manual trigger
+  workflow_dispatch:
+
+  # Allow other workflows to call this
+  workflow_call:
+    inputs:
+      ubuntu-version:
+        description: "Ubuntu version for runner"
+        required: false
+        default: "ubuntu-latest"
+        type: string
+
+jobs:
+  build-linux:
+    name: Lint on ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up Git anonymous identity
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck clang-format build-essential cmake git pkg-config \
+            gcc g++ clang clang-tools libpng-dev libxml2 libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common python3 python3-pip curl git llvm zsh
+
+      - name: Detect modified source files
+        id: diff
+        shell: bash
+        run: |
+          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+          base_ref="${{ github.base_ref }}"
+          git fetch origin "${base_ref}" --depth=1
+          CHANGED=$(git diff --name-only "origin/${base_ref}"...HEAD | grep -E '\.(cpp|cxx|cc|h|hpp)$' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$CHANGED" > changed_files.txt
+            echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint & code checks
+        if: ${{ steps.diff.outputs.no_src_changes == 'false' }}
+        run: |
+          mkdir -p lint_reports
+          echo "Running cppcheck on modified source files..."
+          xargs cppcheck --enable=warning --quiet --std=c++17 --output-file=lint_reports/cppcheck.txt < changed_files.txt || true
+          cd Build
+          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          make
+          cd ..
+          run-clang-tidy -p Build -checks='modernize-*,readability-*,cppcoreguidelines-*' < changed_files.txt || true
+
+      - name: Skip lint (no source changes)
+        if: ${{ steps.diff.outputs.no_src_changes == 'true' }}
+        run: |
+          echo "No .cpp/.h changes detected; skipping lint." > lint_reports/cppcheck.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cppcheck-report
+          path: lint_reports/cppcheck.txt
+
+      - name: Generate GitHub summary
+        if: always()
+        run: |
+          echo "## 🧹 Lint Report Summary" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.diff.outputs.no_src_changes }}" == "true" ]; then
+            echo "🟦 Skipped — no modified source files detected." >> $GITHUB_STEP_SUMMARY
+          elif [ -s lint_reports/cppcheck.txt ]; then
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            tail -n 30 lint_reports/cppcheck.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No cppcheck warnings or errors detected." >> $GITHUB_STEP_SUMMARY
+          fi

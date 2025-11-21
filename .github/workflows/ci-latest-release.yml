@@ -5,21 +5,22 @@
 ##                 https://color.org
 #
 #
-## Intent: iccMAX-CI Runner for Matrix OS
+## Intent: ci-latest-release
 #
-## Last Updated: 24-JULY-2025 0000Z by David Hoyt 
+## Last Updated: 22-NOV-2025 0000Z by David Hoyt 
 #                Add Permission Block
 ## TODO: Push binary releases, tags etc...
 #
 ## Comment: Known good and working
 #
-# Notes - Uses a Cache, Delete on Fail, Windows
-#       - Uses a manual trigger to avoid wasting resources 
+#
+#
 #
 #
 ###############################################################
 
-name: iccMAX-CI
+name: ci-latest-release
+
 permissions:
   contents: read
   
@@ -46,7 +47,6 @@ jobs:
             libpng-dev libxml2 libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
             python3 python3-pip curl git llvm
-
       - name: Set Compiler
         run: |
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
@@ -56,27 +56,28 @@ jobs:
             echo "CC=clang" >> $GITHUB_ENV
             echo "CXX=clang++" >> $GITHUB_ENV
           fi
-
       - name: Print Compiler Version
         run: |
           echo "Compiler Version:" >> $GITHUB_STEP_SUMMARY
           $CC --version >> $GITHUB_STEP_SUMMARY
-
       - name: CMake Configure
         run: |
           cd Build
           cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
                 -DCMAKE_BUILD_TYPE=Release \
-                -DENABLE_TOOLS=ON \
-                -DENABLE_STATIC_LIBS=ON \
-                -DENABLE_SHARED_LIBS=ON \
                 -Wno-dev Cmake/
-
       - name: Build
         run: |
           cd Build
           make -j$(nproc)
-
+          cd ../Testing/
+          echo "=== Updating PATH ==="
+          for d in ../Build/Tools/*; do
+          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done 
+          sh CreateAllProfiles.sh
+          sh RunTests.sh
+          find . -iname "*.icc" | wc -l 
       - name: Verify CMake Cache
         run: |
           if test -f Build/CMakeCache.txt; then
@@ -85,7 +86,6 @@ jobs:
             echo "::error ::Build failed! CMakeCache.txt not found." | tee -a $GITHUB_STEP_SUMMARY
             exit 1
           fi
-
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -99,7 +99,6 @@ jobs:
           echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
           echo "- Artifacts Uploaded: iccmax-linux-${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
           echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
-
   macos:
     name: "macOS Clang"
     runs-on: macos-latest
@@ -109,9 +108,6 @@ jobs:
 
       - name: Clone repository and install dependencies
         run: |
-          echo "Cloning IccMAX repository..."
-          git clone https://github.com/InternationalColorConsortium/DemoIccMAX.git
-          cd DemoIccMAX
           echo "Installing Homebrew dependencies..."
           brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg || echo "⚠️ Some dependencies might already be installed."
           echo "✔ Dependency installation complete."
@@ -119,8 +115,7 @@ jobs:
       - name: CMake Configure
         run: |
           echo "Setting up CMake build configuration..."
-          mkdir -p DemoIccMAX/Build
-          cd DemoIccMAX/Build
+          cd Build
           sudo rm -rf /Library/Frameworks/Mono.framework/Headers/png.h
           echo 'export PATH="/opt/homebrew/opt/jpeg/bin:$PATH"' >> /Users/runner/.bash_profile
           export CPPFLAGS="-I/opt/homebrew/opt/jpeg/include"
@@ -129,9 +124,6 @@ jobs:
           export LDFLAGS="-L$(brew --prefix libpng)/lib -L$(brew --prefix jpeg)/lib"
           cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
                 -DCMAKE_BUILD_TYPE=Release \
-                -DENABLE_TOOLS=ON \
-                -DENABLE_STATIC_LIBS=ON \
-                -DENABLE_SHARED_LIBS=ON \
                 -DJPEG_LIBRARY=$(brew --prefix jpeg)/lib/libjpeg.dylib \
                 -DJPEG_INCLUDE_DIR=$(brew --prefix jpeg)/include \
                 -Wno-dev Cmake/
@@ -140,13 +132,23 @@ jobs:
       - name: Build
         run: |
           echo "Starting build process..."
-          cd DemoIccMAX/Build
+          cd Build
           make -j$(sysctl -n hw.ncpu)
-          echo "✔ Build process completed. Listing generated files..."
+          echo "✔ Build process completed."
+          echo "========= BEGIN INSIDE STUB for PR210 ========="
+          cd ../Testing/
+          echo "=== Updating PATH ==="
+          for d in ../Build/Tools/*; do
+          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done 
+          sh CreateAllProfiles.sh
+          sh RunTests.sh
+          find . -iname "*.icc" | wc -l 
+          
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: iccmax-macos-${{ matrix.compiler }}
+          name: iccmax-macos-clang
           path: Build
       - name: Summary Report
         if: always()
@@ -165,98 +167,89 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
 
-      - name: Restore vcpkg Cache
-        uses: actions/cache@v3
-        with:
-          path: C:\test\vcpkg
-          key: Win70-${{ runner.os }}-${{ hashFiles('**/vcpkg.json', '**/bootstrap-vcpkg.bat') }}
-          restore-keys: |
-            Win70-${{ runner.os }}-
       - name: Setup Environment & Build Preparation
         shell: pwsh
         run: |
           Write-Host "============================= Starting Build =============================" -ForegroundColor Green
           Write-Host "C 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
-          
-          $env:VSCMD_ARG_HOST_ARCH = "x64"
-          $env:VSCMD_ARG_TGT_ARCH = "x64"
-          
-          $optDir = "C:\test"
-          $vcpkgDir = "$optDir\vcpkg"
-          $patchDir = "$optDir\DemoIccMAX"
-          
-          git config --global user.email "you@example.com"
-          git config --global user.name "Your Name"
-          
-          if (-Not (Test-Path $optDir)) { New-Item -ItemType Directory -Path $optDir | Out-Null }
-          if (-Not (Test-Path "$vcpkgDir\vcpkg.exe")) {
-              git clone https://github.com/microsoft/vcpkg.git $vcpkgDir
-              & "$vcpkgDir\bootstrap-vcpkg.bat"
-          }
-          if (-Not (Test-Path "$vcpkgDir\vcpkg.exe")) {
-              Write-Host "? ERROR: vcpkg failed to install!" -ForegroundColor Red
-              exit 1
-          }
+          git branch
+          git status
+          Write-Host "========= Fetching Deps... ================`n"
+          Start-BitsTransfer -Source "https://xss.cx/2025/11/vcpkg/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          Write-Host "========= Extracting Deps... ================`n"
+          tar -xf deps.zip
+          cd Build/Cmake
+          Write-Host "========= Building... ================`n"  
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+          cmake --build build -- /m /maxcpucount
+          cmake --build build -- /m /maxcpucount          
+          $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
+              Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
+              ForEach-Object { Split-Path $_.FullName -Parent } |
+              Sort-Object -Unique
+          $env:PATH = ($exeDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';' | Select-String "icc"
+          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
+          $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';'
           pwd
-          dir
-          del vcpkg.json
-          $packages = @(
-          "libpng:x64-windows", "jpeg:x64-windows", "jpeg:x64-windows-static",
-          "nlohmann-json:x64-windows", "nlohmann-json:x64-windows-static",
-          "libxml2:x64-windows", "libxml2:x64-windows-static",
-          "tiff:x64-windows", "tiff:x64-windows-static",
-          "wxwidgets:x64-windows", "wxwidgets:x64-windows-static"
-          )
-          foreach ($pkg in $packages) { & "$vcpkgDir\vcpkg.exe" install $pkg }
-      - name: Clone DemoIccMAX Repository
-        shell: pwsh
-        run: |
-          $patchDir = "C:\test\DemoIccMAX"
-          if (Test-Path $patchDir) { Remove-Item -Recurse -Force $patchDir }
-          git clone https://github.com/InternationalColorConsortium/DemoIccMAX.git $patchDir
-          cd $patchDir
-      - name: Configure & Build with CMake
-        shell: pwsh
-        run: |
-          cd C:\test\DemoIccMAX\Build\Cmake
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_TOOLCHAIN_FILE=C:/test/vcpkg/scripts/buildsystems/vcpkg.cmake `
-            -DCMAKE_C_FLAGS="/MD /I C:/test/vcpkg/installed/x64-windows/include" `
-            -DCMAKE_CXX_FLAGS="/MD /I C:/test/vcpkg/installed/x64-windows/include" `
-            -DCMAKE_SHARED_LINKER_FLAGS="/LIBPATH:C:/test/vcpkg/installed/x64-windows/lib" `
-            -DENABLE_TOOLS=ON `
-            -DENABLE_SHARED_LIBS=ON `
-            -DENABLE_STATIC_LIBS=ON `
-            -DENABLE_TESTS=ON `
-            -DENABLE_INSTALL_RIM=ON `
-            -DENABLE_ICCXML=ON
-          cmake --build build --config Release -- /m /maxcpucount:32
-          Get-ChildItem -Recurse -Include *.exe -Path .\build_* | Where-Object { -not $_.PSIsContainer -and $_.FullName -notmatch '\\CMakeFiles\\' } | Select-Object FullName, Length | Sort-Object FullName
-          Get-ChildItem -Recurse -Include *.lib -Path .\build_* | Where-Object { -not $_.PSIsContainer -and $_.FullName -notmatch '\\CMakeFiles\\' } | Select-Object FullName, Length | Sort-Object FullName
-          Get-ChildItem -Recurse -Include *.exe,*.lib -Path .\build_* | Where-Object { -not $_.PSIsContainer -and $_.FullName -notmatch '\\CMakeFiles\\' } | Select-Object FullName, Length | Sort-Object FullName
-      - name: Verify Build Output
-        shell: pwsh
-        run: |
-          $cmakeCache = "C:\test\DemoIccMAX\Build\Cmake\build\CMakeCache.txt"
-          if (Test-Path $cmakeCache) {
-            Write-Host "? Build succeeded. CMake cache found."
-          } else {
-            Write-Host "? Build failed! No CMakeCache.txt found."
-            exit 1
+          cd ..\..\Testing
+          .\CreateAllProfiles.bat
+          .\RunTests.bat
+          cd CalcTest\
+          .\checkInvalidProfiles.bat
+          .\runtests.bat
+          cd ..\Display
+          .\RunProtoTests.bat
+          cd ..\HDR
+          .\mkprofiles.bat
+          cd ..\mcs\
+          .\updateprev.bat
+          .\updateprevWithBkgd.bat
+          cd ..\Overprint
+          .\RunTests.bat
+          cd ..
+          cd hybrid
+          .\BuildAndTest.bat
+          cd ..
+          cd ..
+          pwd
+          # Collect .icc profile information
+          $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
+          $totalCount = $profiles.Count
+          
+          # Group profiles by directory
+          $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
+          
+          # Generate Summary Report
+          Write-Host "`n========================="
+          Write-Host " ICC Profile Report"
+          Write-Host "========================="
+          
+          # Print count per subdirectory
+          foreach ($group in $groupedProfiles) {
+              Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
           }
-      - name: Upload Windows Artifacts
+          
+          Write-Host "`nTotal .icc profiles found: $totalCount"
+          Write-Host "=========================`n"
+          
+          Write-Host "All Done!"
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: iccmax-windows-msvc
-          path: C:\test\DemoIccMAX
-
-      - name: Upload Windows Logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: iccmax-windows-logs
-          path: C:\test\DemoIccMAX\Build\Cmake\build\CMakeCache.txt
-
+          name: iccdev-v231-windows-msvc
+          path: |
+            Build/Cmake/build/**/*.lib
+            Build/Cmake/build/**/*.a
+            Build/Cmake/build/**/*.dll
+            Build/Cmake/build/**/*.exe
+            Build/Cmake/build/**/*.pdb
+            Build/Cmake/Testing/**/*
+            Build/Cmake/LICENSE.md
+            Build/Cmake/README.md            
+            Build/Cmake/docs/**
+          if-no-files-found: warn
       - name: Host System Info
         shell: pwsh
         run: |
@@ -266,6 +259,6 @@ jobs:
         if: always()
         run: |
           echo "### Windows Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Build Directory: DemoIccMAX/Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded: iccmax-macos-clang" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-macos-clang" >> $GITHUB_STEP_SUMMARY
           echo "- Status: Success" >> $GITHUB_STEP_SUMMARY

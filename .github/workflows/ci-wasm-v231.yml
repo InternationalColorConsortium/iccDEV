@@ -1,0 +1,139 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: wasm-mtx-v231
+#
+## Last Updated: 22-NOV-2025 0000Z by David Hoyt 
+#                Add Permission Block
+## TODO: Push binary releases, tags etc...
+#
+## Comment: Known good and working
+#
+#
+#
+#
+#
+###############################################################
+
+name: "wasm-mtx-v231"
+
+permissions:
+  contents: read
+  pull-requests: read
+  
+on:
+  workflow_dispatch:
+
+jobs:
+  wasm-build:
+    name: WASM Matrix Build (${{ matrix.build_type }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_type: [Release, Debug, Asan]
+      fail-fast: false
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Git Identity
+      run: |
+        git config --global user.email "github-actions@github.com"
+        git config --global user.name "GitHub Actions"
+    - name: Install Emscripten SDK
+      run: |
+        git clone https://github.com/emscripten-core/emsdk.git
+        cd emsdk
+        ./emsdk install latest
+        ./emsdk activate latest
+    - name: Clone iccDEV Repo and Build Dependencies
+      run: |
+        source emsdk/emsdk_env.sh
+        git clone https://github.com/InternationalColorConsortium/iccDEV.git
+        cd iccDEV
+        git checkout wasm
+        mkdir -p Build && cd Build
+        # Build third-party dependencies (zlib, libpng, libjpeg, libtiff, libxml2, json)
+        mkdir -p third_party && cd third_party
+        git clone https://github.com/madler/zlib.git && cd zlib
+        emconfigure ./configure --static --prefix=$(pwd)/out
+        emmake make -j$(nproc) && emmake make install
+        cd ..
+        curl -LO https://download.sourceforge.net/libpng/libpng-1.6.51.tar.gz
+        tar -xzf libpng-1.6.51.tar.gz && mv libpng-1.6.51 libpng && cd libpng
+        CPPFLAGS="-I$(pwd)/../zlib" LDFLAGS="-L$(pwd)/../zlib/out/lib" emconfigure ./configure --disable-shared --enable-static --prefix=$(pwd)/out
+        emmake make -j$(nproc) && emmake make install
+        cd ..
+        curl -LO https://ijg.org/files/jpegsrc.v9e.tar.gz
+        tar -xzf jpegsrc.v9e.tar.gz && mv jpeg-9e libjpeg && cd libjpeg
+        emconfigure ./configure --prefix=$(pwd)/out --disable-shared --enable-static
+        emmake make -j$(nproc) && emmake make install
+        cd ..
+        git clone https://gitlab.com/libtiff/libtiff.git && cd libtiff
+        mkdir wasm && cd wasm
+        emcmake cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=../out \
+          -DZLIB_INCLUDE_DIR=$(realpath ../../zlib) \
+          -DZLIB_LIBRARY=$(realpath ../../zlib/out/lib/libz.a) \
+          -DJPEG_INCLUDE_DIR=$(realpath ../../libjpeg/out/include) \
+          -DJPEG_LIBRARY=$(realpath ../../libjpeg/out/lib/libjpeg.a)
+        emmake make -j$(nproc) && emmake make install
+        cd ../..
+        git clone https://gitlab.gnome.org/GNOME/libxml2.git && cd libxml2
+        emconfigure ./autogen.sh --without-python --disable-shared --enable-static --prefix=$(pwd)/out
+        emmake make -j$(nproc) && emmake make install
+        cd ..
+        mkdir -p nlohmann/json/include
+        curl -L https://github.com/nlohmann/json/releases/latest/download/json.hpp -o nlohmann/json/include/json.hpp
+        cd ..
+    - name: Configure and Build iccDEV-WASM
+      run: |
+        source emsdk/emsdk_env.sh
+        cd iccDEV/Build
+        BUILD_FLAGS=""
+        if [[ "${{ matrix.build_type }}" == "Asan" ]]; then
+          BUILD_FLAGS="-fsanitize=address"
+          BUILD_TYPE="Debug"
+        else
+          BUILD_TYPE="${{ matrix.build_type }}"
+        fi
+        emcmake cmake Cmake \
+          -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+          -DENABLE_TOOLS=ON \
+          -DENABLE_STATIC_LIBS=ON \
+          -DLIBXML2_INCLUDE_DIR=$(pwd)/third_party/libxml2/out/include/libxml2 \
+          -DLIBXML2_LIBRARY=$(pwd)/third_party/libxml2/out/lib/libxml2.a \
+          -DTIFF_INCLUDE_DIR=$(pwd)/third_party/libtiff/out/include \
+          -DTIFF_LIBRARY=$(pwd)/third_party/libtiff/out/lib/libtiff.a \
+          -DJPEG_INCLUDE_DIR=$(pwd)/third_party/libjpeg/out/include \
+          -DJPEG_LIBRARY=$(pwd)/third_party/libjpeg/out/lib/libjpeg.a \
+          -DPNG_INCLUDE_DIR=$(pwd)/third_party/libpng/out/include \
+          -DPNG_LIBRARY=$(pwd)/third_party/libpng/out/lib/libpng16.a \
+          -DZLIB_INCLUDE_DIR=$(pwd)/third_party/zlib \
+          -DZLIB_LIBRARY=$(pwd)/third_party/zlib/out/lib/libz.a \
+          -DCMAKE_CXX_FLAGS="\
+            $BUILD_FLAGS \
+            -I$(pwd)/third_party/libtiff/out/include \
+            -I$(pwd)/third_party/libjpeg/out/include \
+            -I$(pwd)/third_party/libpng/out/include \
+            -I$(pwd)/third_party/zlib \
+            -I$(pwd)/third_party/nlohmann/json/include" \
+          -DCMAKE_EXE_LINKER_FLAGS="\
+            -s INITIAL_MEMORY=128MB \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s FORCE_FILESYSTEM=1 \
+            -s MODULARIZE=1 \
+            -s EXPORT_NAME=createModule \
+            -s EXPORTED_RUNTIME_METHODS=['FS','callMain']" \
+          -Wno-dev
+        emmake make -j$(nproc)
+        find . -type f \( -name '*.js' -o -name '*.wasm' \) -ls
+    - name: Upload WASM Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasm-artifacts-${{ matrix.build_type }}
+        path: iccDEV/Build/Tools/*

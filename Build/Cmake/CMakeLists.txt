@@ -4,13 +4,13 @@
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 18-OCT-2025 at 1200Z by David Hoyt
+#  Last Updated: 24-NOV-2025 at 2343Z by David Hoyt
+#
+#  Changes: Bump Version String
+#           Recent Pr's address range of security & stability issues
+#           NaN, UB & Overflows
 #
 #
-#
-#  Changes: Add Source to ProfLib
-#           Add Tool iccApplySearch
-#           Modify Cmake Configs, bump Version
 #						
 #  TODO:    Align Version on IccProfLibVer.h, Housekeeping, Debug Options
 #           Version Headers, Doxygen Config, Exports etc...
@@ -96,7 +96,7 @@ set(PROJECT_DOWN_NAME "reficcmax")
 # Version components
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
-set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
+set(${PROJECT_UP_NAME}_MICRO_VERSION 2)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
