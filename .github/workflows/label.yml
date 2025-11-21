@@ -1,0 +1,40 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: Apply file-pattern-based labels to PRs using actions/labeler
+#
+## Last Updated: 28-NOV-2025 2300Z by David Hoyt 
+##               Added user-controllable input (uci) checks to validate PR inputs
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+          
+name: Labeler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  apply-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Apply PR labels
+        uses: actions/labeler@25abb3cad4f14b7ac27968a495c37798860a5a1a
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          configuration-path: .github/labeler.yml

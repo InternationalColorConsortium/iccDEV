@@ -1,0 +1,183 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: Unix/Linux static analysis using Clang scan-build for PR validation
+#
+## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
+##               Add Action ci-pr-unix-sb
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+name: "ci-pr-unix-sb"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+
+  # Reusable workflow support
+  workflow_call:
+    inputs:
+      build-type:
+        description: "CMake build type"
+        required: false
+        default: "Release"
+        type: string
+
+concurrency:
+  group: child-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.job }}
+  cancel-in-progress: true
+
+env:
+  GH_REPO: ${{ github.repository }}
+  GH_NO_UPDATE_NOTIFIER: 1
+  GH_PROMPT_DISABLED: 1
+  RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
+  PR: ${{ github.event.number }}
+
+jobs:
+  scan-build:
+    name: Ubuntu • scan-build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout PR Source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+      - name: Verify Branch Context
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          echo "Triggered by:  ${{ github.event_name }}"
+          echo "Base branch:   ${{ github.base_ref }}"
+          echo "Head branch:   ${{ github.head_ref }}"
+          echo "Commit SHA:    ${{ github.event.pull_request.head.sha }}"
+          echo "OS:            ubuntu-latest"
+          echo "Build Type:    ${{ inputs.build-type || 'Release' }}"
+          echo "Static Analysis: Enabled (scan-build)"
+
+      - name: Install Dependencies
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            clang clang-tools build-essential cmake \
+            libpng-dev libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common \
+            python3 python3-pip curl git llvm
+
+      - name: Prepare Environment
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          export CC=clang
+          export CXX=clang++
+          echo "CC=$CC" >> $GITHUB_ENV
+          echo "CXX=$CXX" >> $GITHUB_ENV
+          echo "Compiler: $($CC --version | head -n 1)"
+          mkdir -p Build
+
+      - name: Run scan-build cmake config
+        shell: bash        
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          cd Build
+          echo "::group::CMake Configure (scan-build)"
+          scan-build cmake \
+            -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+            -DCMAKE_BUILD_TYPE=${{ inputs.build-type || 'Release' }} \
+             Cmake/ || true
+          echo "::endgroup::"
+
+      - name: Run scan-build cmake build
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          cd Build
+          echo "::group::scan-build Analysis"
+          scan-build --status-bugs --keep-going -o scan-build-reports \
+            make -j$(nproc) || true
+          echo "::endgroup::"
+          echo "scan-build finished (errors ignored for CI success)."
+
+      - name: Upload Reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: scan-build-reports
+          path: Build/scan-build-reports
+
+      - name: Generate GitHub Summary
+        if: always()
+        run: |
+          echo "## 🧠 Clang Static Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **OS:** ubuntu-latest" >> $GITHUB_STEP_SUMMARY
+          echo "- **Compiler:** clang" >> $GITHUB_STEP_SUMMARY
+          echo "- **Analysis Tool:** scan-build" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type:** ${{ inputs.build-type || 'Release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Reports:** Build/scan-build-reports" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run URL:** $RUN_URL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Recent scan-build Output" >> $GITHUB_STEP_SUMMARY
+          if ls Build/scan-build-reports/*/index.html >/dev/null 2>&1; then
+            echo "✅ Reports generated successfully." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No scan-build HTML reports found (no issues or build skipped)." >> $GITHUB_STEP_SUMMARY
+          fi

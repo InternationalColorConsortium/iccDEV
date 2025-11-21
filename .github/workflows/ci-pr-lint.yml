@@ -1,0 +1,203 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: Static code analysis and linting (cppcheck, clang-tidy, clang-format) for PR validation
+#
+## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
+##               Add Action lint
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+name: "ci-pr-lint"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  # Allow manual trigger
+  workflow_dispatch:
+
+  # Allow other workflows to call this
+  workflow_call:
+    inputs:
+      ubuntu-version:
+        description: "Ubuntu version for runner"
+        required: false
+        default: "ubuntu-latest"
+        type: string
+
+jobs:
+  build-linux:
+    name: Lint on ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+
+      # --- Bump any Self-Hosted ---
+      - name: Validate ubuntu-version input
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ inputs.ubuntu-version }}" in
+            ubuntu-latest|ubuntu-22.04|ubuntu-24.04|"")
+              ;;
+            *)
+              echo "ERROR: Invalid runner: '${{ inputs.ubuntu-version }}' — blocked." >&2
+              exit 1
+              ;;
+          esac
+
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 2
+
+      - name: Set up Git anonymous identity
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cppcheck clang-format build-essential cmake git pkg-config \
+            gcc g++ clang clang-tools libpng-dev libxml2 libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common python3 python3-pip curl git llvm zsh
+
+      - name: Detect modified source files
+        id: diff
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+
+          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+
+          base_ref="${{ github.base_ref }}"
+
+          # --- List the allowed base branches ---
+          case "$base_ref" in master)
+              ;;
+            *)
+              echo "Only 'master' branch is supported as base_ref, got: $base_ref" >&2
+              echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+              exit 1
+              ;;
+          esac
+
+          # Minimal fetch
+          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=1
+
+          # --- filename list ---
+          git diff --name-only "origin/${base_ref}"...HEAD \
+            | grep -Ei '\.(cpp|cxx|cc|h|hpp)$' \
+            | tr '\n' '\0' > changed_files.txt
+
+          changed_file_count=$(xargs -0 -n1 < changed_files.txt | wc -l)
+           if [ "$changed_file_count" -eq 0 ]; then
+           echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+          else
+           echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Lint & code checks
+        if: ${{ steps.diff.outputs.no_src_changes == 'false' }}
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+  
+          mkdir -p lint_reports Build
+  
+          echo "Running cppcheck on modified source files..."
+  
+          # --- SECURITY: null-delimited xargs ---
+          : > lint_reports/cppcheck.txt
+          xargs -0 cppcheck \
+            --enable=warning,performance,portability \
+            --std=c++17 \
+            --output-file=lint_reports/cppcheck.txt \
+            < changed_files.txt || true
+  
+          # Prepare clang-tidy
+          cd Build
+          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          make
+          cd ..
+  
+          # --- clang-tidy ---
+          : > lint_reports/clang_tidy.txt
+          xargs -0 run-clang-tidy \
+            -p Build \
+            -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
+            < changed_files.txt \
+            | tee lint_reports/clang_tidy.txt || true
+
+      - name: Skip lint (no source changes)
+        if: ${{ steps.diff.outputs.no_src_changes == 'true' }}
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          mkdir -p lint_reports
+          echo "No .cpp/.h changes detected; skipping lint." > lint_reports/cppcheck.txt
+          : > lint_reports/clang_tidy.txt
+
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: lint-reports
+          path: lint_reports/
+
+
+      - name: Generate GitHub summary
+        if: always()
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          echo "## 🧹 Lint Report Summary" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.diff.outputs.no_src_changes }}" == "true" ]; then
+            echo "🟦 Skipped — no modified source files detected." >> $GITHUB_STEP_SUMMARY
+          elif [ -s lint_reports/cppcheck.txt ]; then
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            tail -n 30 lint_reports/cppcheck.txt >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No cppcheck warnings or errors detected." >> $GITHUB_STEP_SUMMARY
+          fi

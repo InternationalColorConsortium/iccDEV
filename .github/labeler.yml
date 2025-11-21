@@ -1,0 +1,71 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: iccDEV labeler.yml
+#
+## Last Updated: 28-NOV-2025 2300Z by David Hoyt 
+##               Added user-controllable input (uci) checks
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+Source:
+  - any:
+      - 'IccProfLib/**/*.cpp'
+      - 'IccProfLib/**/*.h'
+      - 'IccProfLib/**/*.hpp'
+      - 'IccXML/**/*.cpp'
+      - 'IccXML/**/*.h'
+      - 'IccXML/**/*.hpp'
+      - 'Tools/**/**/*.cpp'
+      - 'Tools/**/**/*.h'
+      - 'Tools/**/**/*.hpp'
+      - 'Tools/wxWidget/wxProfileDump/*.cpp'
+      - 'Tools/wxWidget/wxProfileDump/*.h'
+      - 'Tools/wxWidget/wxProfileDump/*.hpp'
+
+Documentation:
+  - any:
+      - 'docs/*.md'
+      - '*.md'
+      - 'LICENSE*'
+      - 'SECURITY*'
+      - 'README*'
+      - 'CHANGELOG*'
+
+Configuration:
+  - any:
+      - '**/**/*.json'
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.cmake'
+      - 'Build/Cmake/*.txt'
+      - 'Build/Cmake/**/**/*.txt'
+
+CI:
+  - any:
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+
+Licenses:
+  - any:
+      - 'LICENSE*'
+      - 'COPYING*'
+
+Profiles:
+  - any:
+      - 'Testing/**/**/**'
+
+Build:
+  - any:
+      - 'Build/Cmake/**/**'

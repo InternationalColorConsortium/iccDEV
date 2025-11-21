@@ -4,13 +4,13 @@
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 18-OCT-2025 at 1200Z by David Hoyt
+#  Last Updated: 02-DEC-2025 at 2330Z by David Hoyt
+#
+#  Changes: Bump Version String
+#           Recent PRs address range of security & stability issues
+#           NaN, Undefined Behavior (UB) & Overflows
 #
 #
-#
-#  Changes: Add Source to ProfLib
-#           Add Tool iccApplySearch
-#           Modify Cmake Configs, bump Version
 #						
 #  TODO:    Align Version on IccProfLibVer.h, Housekeeping, Debug Options
 #           Version Headers, Doxygen Config, Exports etc...
@@ -93,23 +93,24 @@ project(RefIccMAX LANGUAGES C CXX)
 set(PROJECT_UP_NAME "REFICCMAX")
 set(PROJECT_DOWN_NAME "reficcmax")
 
-# Version components
+# Version components (4-part version: 2.3.1.1)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
+set(${PROJECT_UP_NAME}_TWEAK_VERSION 1)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
-  "${${PROJECT_UP_NAME}_MAJOR_VERSION}.${${PROJECT_UP_NAME}_MINOR_VERSION}.${${PROJECT_UP_NAME}_MICRO_VERSION}"
+  "${${PROJECT_UP_NAME}_MAJOR_VERSION}.${${PROJECT_UP_NAME}_MINOR_VERSION}.${${PROJECT_UP_NAME}_MICRO_VERSION}.${${PROJECT_UP_NAME}_TWEAK_VERSION}"
 )
+
 set(${PROJECT_UP_NAME}_VERSION_MAJORMINOR
   "${${PROJECT_UP_NAME}_MAJOR_VERSION}.${${PROJECT_UP_NAME}_MINOR_VERSION}"
 )
 
-# Optional: expose as RefIccMAX_VERSION too
+# Mirror to ${PROJECT_NAME}
 set(${PROJECT_NAME}_VERSION "${${PROJECT_UP_NAME}_VERSION}")
 set(${PROJECT_NAME}_VERSION_MAJORMINOR "${${PROJECT_UP_NAME}_VERSION_MAJORMINOR}")
-
 
 # Set C++ standard globally
 set(CMAKE_CXX_STANDARD 17)

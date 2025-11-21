@@ -1,0 +1,445 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: ci-latest-release
+#
+## Last Updated: 22-NOV-2025 0000Z by David Hoyt 
+#                Add Permission Block
+## TODO: Push binary releases, tags etc...
+#
+##
+#
+#
+#
+#
+#
+###############################################################
+
+name: ci-latest-release
+
+permissions:
+  contents: read
+  
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: "Linux ${{ matrix.compiler }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+
+      - name: Install Dependencies
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake gcc g++ clang clang-tools \
+            libpng-dev libxml2 libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common \
+            python3 python3-pip curl git llvm
+      - name: Set Compiler
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            echo "CC=gcc" >> $GITHUB_ENV
+            echo "CXX=g++" >> $GITHUB_ENV
+          else
+            echo "CC=clang" >> $GITHUB_ENV
+            echo "CXX=clang++" >> $GITHUB_ENV
+          fi
+      - name: Print Compiler Version
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          echo "Compiler Version:" >> $GITHUB_STEP_SUMMARY
+          $CC --version >> $GITHUB_STEP_SUMMARY
+      - name: CMake Configure
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd Build
+          cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+                -DCMAKE_BUILD_TYPE=Release \
+                -Wno-dev Cmake/
+      - name: Build
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd Build
+          make -j$(nproc)
+          cd ../Testing/
+          echo "=== Updating PATH ==="
+          for d in ../Build/Tools/*; do
+          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done 
+          sh CreateAllProfiles.sh
+          sh RunTests.sh
+          find . -iname "*.icc" | wc -l 
+      - name: Verify CMake Cache
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if test -f Build/CMakeCache.txt; then
+          echo "✅ Build OK" | tee -a $GITHUB_STEP_SUMMARY
+          else
+            echo "::error ::Build failed! CMakeCache.txt not found." | tee -a $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: iccmax-linux-${{ matrix.compiler }}
+          path: |
+            Build
+            LICENSE.md
+            README.md            
+            docs/**
+
+      - name: Summary Report
+        if: always()
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          echo "### Linux Build Summary (${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-linux-${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+  macos:
+    name: "macOS Clang"
+    runs-on: macos-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+
+      - name: Clone repository and install dependencies
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          echo "Installing Homebrew dependencies..."
+          brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg || echo "⚠️ Some dependencies might already be installed."
+          echo "✔ Dependency installation complete."
+  
+      - name: CMake Configure
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          echo "Setting up CMake build configuration..."
+          cd Build
+          sudo rm -rf /Library/Frameworks/Mono.framework/Headers/png.h
+          echo 'export PATH="/opt/homebrew/opt/jpeg/bin:$PATH"' >> /Users/runner/.bash_profile
+          export CPPFLAGS="-I/opt/homebrew/opt/jpeg/include"
+          export PKG_CONFIG_PATH="/opt/homebrew/opt/jpeg/lib/pkgconfig"
+          export CFLAGS="-I$(brew --prefix libpng)/include -I$(brew --prefix jpeg)/include"
+          export LDFLAGS="-L$(brew --prefix libpng)/lib -L$(brew --prefix jpeg)/lib"
+          cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DJPEG_LIBRARY=$(brew --prefix jpeg)/lib/libjpeg.dylib \
+                -DJPEG_INCLUDE_DIR=$(brew --prefix jpeg)/include \
+                -Wno-dev Cmake/
+          echo "✔ CMake configuration complete."
+      
+      - name: Build
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          echo "Starting build process..."
+          cd Build
+          make -j$(sysctl -n hw.ncpu)
+          echo "✔ Build process completed."
+          echo "========= BEGIN INSIDE STUB ========="
+          cd ../Testing/
+          echo "=== Updating PATH ==="
+          for d in ../Build/Tools/*; do
+          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done 
+          sh CreateAllProfiles.sh
+          sh RunTests.sh
+          find . -iname "*.icc" | wc -l 
+          
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: iccdev-macos-clang
+          path: |
+            Build
+            LICENSE.md
+            README.md            
+            docs/**
+      - name: Summary Report
+        if: always()
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          echo "### macOS Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-macos-clang" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+  windows:
+    name: "Windows MSVC"
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: UCI Gate 1 for Windows Powershell
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+         Set-StrictMode -Version Latest
+         $ErrorActionPreference = 'Stop'
+         $ProgressPreference = 'SilentlyContinue'
+         
+         # --- Disable telemetry sources (pwsh / dotnet / gh) ---
+         $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
+         $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+         $env:GH_NO_UPDATE_NOTIFIER = "1"
+         $env:GH_PROMPT_DISABLED = "1"
+         $env:NUGET_XMLDOC_MODE = "skip"
+         
+         # --- Validate workspace path (defense-in-depth) ---
+         if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
+             throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
+         }
+         
+         # --- Remove tokens or uci that should not exist in PR CI ---
+         foreach ($v in @(
+             'GITHUB_TOKEN',
+             'ACTIONS_RUNTIME_TOKEN',
+             'ACTIONS_ID_TOKEN_REQUEST_URL',
+             'ACTIONS_ID_TOKEN_REQUEST_TOKEN'
+         )) {
+             if (Test-Path "Env:$v") {
+                 Remove-Item "Env:$v" -ErrorAction SilentlyContinue
+             }
+         }
+         
+         # --- Canonicalization then sanitize user controllable input ---
+         function Canonicalize([string]$s) {
+             if (-not $s) { return "" }
+             $s = $s.Trim()
+             $s = $s.Replace("`r","").Replace("`n","")
+             $s = -join ($s.ToCharArray() | Where-Object { [int]$_ -ge 32 })
+             return $s
+         }
+         
+         # --- Canonicalize PR-controlled environment values ---
+         $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
+         $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
+         $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
+         
+         # --- Harden Git configuration ---
+         git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+         git config --global credential.helper ""
+         
+         # --- PATH hardening: limit to trusted tool locations ---
+         $trustedPath = @(
+             "$env:SystemRoot\system32",
+             "$env:SystemRoot",
+             "$env:ProgramFiles\Git\bin",
+             "$env:ProgramFiles\PowerShell\7"
+         ) -join ';'
+         $env:PATH = $trustedPath
+         
+          Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+
+          Write-Host "Triggered by:  $env:GITHUB_EVENT_NAME"
+          Write-Host "Base branch:   $env:GITHUB_BASE_REF"
+          Write-Host "Head branch:   $env:GITHUB_HEAD_REF"
+          Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
+          Write-Host "OS:            $env:RUNNER_OS"
+
+      - name: Install dependencies and build
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          Write-Host "============================= Starting Build =============================" -ForegroundColor Green
+          Write-Host "Copyright (©) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
+          git branch
+          git status
+          Write-Host "========= Fetching Deps... ================`n"
+          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          Write-Host "========= Extracting Deps... ================`n"
+          tar -xf deps.zip
+          cd Build/Cmake
+          Write-Host "========= Building... ================`n"  
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+          cmake --build build -- /m /maxcpucount
+          cmake --build build -- /m /maxcpucount          
+          $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
+              Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
+              ForEach-Object { Split-Path $_.FullName -Parent } |
+              Sort-Object -Unique
+          $env:PATH = ($exeDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';' | Select-String "icc"
+          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
+          $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';'
+          pwd
+          cd ..\..\Testing
+          .\CreateAllProfiles.bat
+          .\RunTests.bat
+          cd CalcTest\
+          .\checkInvalidProfiles.bat
+          .\runtests.bat
+          cd ..\Display
+          .\RunProtoTests.bat
+          cd ..\HDR
+          .\mkprofiles.bat
+          cd ..\mcs\
+          .\updateprev.bat
+          .\updateprevWithBkgd.bat
+          cd ..\Overprint
+          .\RunTests.bat
+          cd ..
+          cd hybrid
+          .\BuildAndTest.bat
+          cd ..
+          cd ..
+          pwd
+          # Collect .icc profile information
+          $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
+          $totalCount = $profiles.Count
+          
+          # Group profiles by directory
+          $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
+          
+          # Generate Summary Report
+          Write-Host "`n========================="
+          Write-Host " ICC Profile Report"
+          Write-Host "========================="
+          
+          # Print count per subdirectory
+          foreach ($group in $groupedProfiles) {
+              Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
+          }
+          
+          Write-Host "`nTotal .icc profiles found: $totalCount"
+          Write-Host "=========================`n"
+          
+          Write-Host "All Done!"
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: iccdev-windows-msvc
+          path: |
+            Build/Cmake/build/**/*.lib
+            Build/Cmake/build/**/*.a
+            Build/Cmake/build/**/*.dll
+            Build/Cmake/build/**/*.exe
+            Build/Cmake/build/**/*.pdb
+            Build/Cmake/Testing/**/*
+            LICENSE.md
+            README.md            
+            docs/**
+          if-no-files-found: warn
+      - name: Host System Info
+        shell: pwsh
+        run: |
+          systeminfo
+          Get-CimInstance -ClassName Win32_Processor
+      - name: Summary Report
+        if: always()
+        run: |
+          echo "### Windows Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded:  iccdev-v231-windows-msvc" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,240 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: Windows MSVC build and test pipeline for PR validation
+#
+## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
+##               ci-pr-win
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+
+name: ci-pr-win
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.job }}
+  cancel-in-progress: true
+
+env:
+  GH_REPO: ${{ github.repository }}
+  GH_NO_UPDATE_NOTIFIER: 1
+  GH_PROMPT_DISABLED: 1
+  RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
+  PR: ${{ github.event.number }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: UCI Gate 1 for Windows Powershell
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+         Set-StrictMode -Version Latest
+         $ErrorActionPreference = 'Stop'
+         $ProgressPreference = 'SilentlyContinue'
+         
+         # --- Disable telemetry sources (pwsh / dotnet / gh) ---
+         $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
+         $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
+         $env:GH_NO_UPDATE_NOTIFIER = "1"
+         $env:GH_PROMPT_DISABLED = "1"
+         $env:NUGET_XMLDOC_MODE = "skip"
+         
+         # --- Validate workspace path (defense-in-depth) ---
+         if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
+             throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
+         }
+         
+         # --- Remove tokens or uci that should not exist in PR CI ---
+         foreach ($v in @(
+             'GITHUB_TOKEN',
+             'ACTIONS_RUNTIME_TOKEN',
+             'ACTIONS_ID_TOKEN_REQUEST_URL',
+             'ACTIONS_ID_TOKEN_REQUEST_TOKEN'
+         )) {
+             if (Test-Path "Env:$v") {
+                 Remove-Item "Env:$v" -ErrorAction SilentlyContinue
+             }
+         }
+         
+         # --- Canonicalization then sanitize user controllable input ---
+         function Canonicalize([string]$s) {
+             if (-not $s) { return "" }
+             $s = $s.Trim()
+             $s = $s.Replace("`r","").Replace("`n","")
+             $s = -join ($s.ToCharArray() | Where-Object { [int]$_ -ge 32 })
+             return $s
+         }
+         
+         # --- Canonicalize PR-controlled environment values ---
+         $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
+         $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
+         $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
+         
+         # --- Harden Git configuration ---
+         git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+         git config --global credential.helper ""
+         
+         # --- PATH hardening: limit to trusted tool locations ---
+         $trustedPath = @(
+             "$env:SystemRoot\system32",
+             "$env:SystemRoot",
+             "$env:ProgramFiles\Git\bin",
+             "$env:ProgramFiles\PowerShell\7"
+         ) -join ';'
+         $env:PATH = $trustedPath
+         
+          Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+
+          Write-Host "Triggered by:  $env:GITHUB_EVENT_NAME"
+          Write-Host "Base branch:   $env:GITHUB_BASE_REF"
+          Write-Host "Head branch:   $env:GITHUB_HEAD_REF"
+          Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
+          Write-Host "OS:            $env:RUNNER_OS"
+
+      - name: Install dependencies and build
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          pwd
+          git branch
+          git status
+          Write-Host "========= Fetching Deps... ================`n"
+          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          Write-Host "========= Extracting Deps... ================`n"
+          tar -xf deps.zip
+          cd Build/Cmake
+          Write-Host "========= Building... ================`n"  
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+          cmake --build build -- /m /maxcpucount
+          cmake --build build -- /m /maxcpucount          
+          $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
+              Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
+              ForEach-Object { Split-Path $_.FullName -Parent } |
+              Sort-Object -Unique
+          $env:PATH = ($exeDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';' | Select-String "icc"
+          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
+          $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
+          $env:PATH -split ';'
+          pwd
+          cd ..\..\Testing
+          .\CreateAllProfiles.bat
+          .\RunTests.bat
+          cd CalcTest\
+          .\checkInvalidProfiles.bat
+          .\runtests.bat
+          cd ..\Display
+          .\RunProtoTests.bat
+          cd ..\HDR
+          .\mkprofiles.bat
+          cd ..\mcs\
+          .\updateprev.bat
+          .\updateprevWithBkgd.bat
+          cd ..\Overprint
+          .\RunTests.bat
+          cd ..
+          cd hybrid
+          .\BuildAndTest.bat
+          cd ..
+          cd ..
+          pwd
+          # Collect .icc profile information
+          $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
+          $totalCount = $profiles.Count
+          
+          # Group profiles by directory
+          $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
+          
+          # Generate Summary Report
+          Write-Host "`n========================="
+          Write-Host " ICC Profile Report"
+          Write-Host "========================="
+          
+          # Print count per subdirectory
+          foreach ($group in $groupedProfiles) {
+              Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
+          }
+          
+          Write-Host "`nTotal .icc profiles found: $totalCount"
+          Write-Host "=========================`n"
+          
+          Write-Host "All Done!"          
+          
+      - name: GitHub Summary
+        if: always()
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          "## 🧱 CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Repository: ${{ github.repository }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Run URL: ${{ env.RUN_URL }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Triggered by: ${{ github.event_name }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Commit SHA: ${{ github.event.pull_request.head.sha || github.sha }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Build Type: $env:BUILD_TYPE" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Runner OS: ${{ runner.os }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Status: ${{ job.status }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append

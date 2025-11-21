@@ -1,0 +1,416 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: iccDEV ci-pr-action
+#
+## Last Updated: 02-DEC-2025 2300Z by David Hoyt 
+##               Added user-controllable input (uci) checks
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+
+name: "ci-pr-action"
+
+permissions:
+  contents: read
+  pull-requests: read
+  # Avoid unnecessary permissions; do not add write permissions.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    branches:
+      - master
+      
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+concurrency:
+  group: "ci-pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  detect-src:
+    name: Detect Source Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      src_changed: ${{ steps.diffcheck.outputs.src_changed }}
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 2
+          # Disable unsafe fetch options
+          persist-credentials: false
+
+      - name: Verify remote origin URL (opt out of malicious git configs)
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          origin_url=$(git remote get-url origin || true)
+          echo "Remote origin: $origin_url"
+          # Enforce that origin points to the expected GitHub repository for this workflow run
+          expected="https://github.com/${{ github.repository }}.git"
+          # Allow both HTTPS and git@ forms if needed
+          if [[ "$origin_url" != "$expected" && "$origin_url" != "${expected%.git}" && "$origin_url" != "git@github.com:InternationalColorConsortium/iccDEV.git" ]]; then
+            echo "Origin URL mismatch: expected $expected, ${expected%.git}, or git@github.com:InternationalColorConsortium/iccDEV.git, got $origin_url" >&2
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+      - id: diffcheck
+        name: diffcheck for file changes
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+
+          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+
+          # If not a pull_request event (e.g., workflow_dispatch or workflow_call),
+          # skip source diff checking and mark as non-source change.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "Non-PR event (${{ github.event_name }}) — skipping source diff check" >&2
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          base_ref="${{ github.base_ref }}"
+
+          # check to avoid fetching refs from untrusted or uncontrolled input (uci)
+          case "$base_ref" in master)
+              ;;
+            *)
+              echo "Ref blocked or unsupported: $base_ref" >&2
+              echo "src_changed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          # Short fetch, single ref; avoid tags and deep history
+          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=1
+
+          # Case-insensitive extension match (c/h/cpp variants)
+          if git diff --name-only "origin/${base_ref}"...HEAD |
+             grep -Ei '\.(cpp|cxx|cc|c|h|hpp|hh)$' >/dev/null; then
+            echo "src_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+ 
+      - name: Print PR Info
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # ================================
+          #   ICCDEV – Welcome Banner
+          # ================================
+          {
+            echo "<div align=\"center\">"
+            echo "  <a href=\"https://color.org\" target=\"_blank\">"
+            echo "    <img src=\"https://color.org/system/images/ICC_logo_text.gif\" alt=\"ICC Logo\" width=\"320\">"
+            echo "  </a>"
+            echo "  <h3>Welcome to the ICC Development Workflow</h3>"
+            echo "</div>"
+            echo ""        
+            echo "## 🧩 ICCDEV PR Summary"
+            echo "  ⏱️ <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"     
+            echo ""       
+            echo "  <strong>PRs Are Typically Reviewed Within 14 Days</strong><br>"            
+            echo ""
+            echo "## ✔️ PR Checklist"
+            echo ""
+            echo "- [x] You have followed the [guidelines for contributing](https://github.com/InternationalColorConsortium/iccDEV/blob/master/CONTRIBUTING.md)"
+            echo "- [x] Commits follow GitHub’s [acceptable use policy](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)"
+            echo "- [x] You checked for duplicate [pull requests](https://github.com/InternationalColorConsortium/iccDEV/pulls)"
+            echo "- [x] You built your PR locally using the official [Build Instructions](https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/build.md)"
+            echo "- [x] You included Unit Tests and/or Issue reproduction steps + fix"
+            echo ""
+            echo "> iccDEV Maintainers will review your PR within **14 days**."
+            echo ""
+            echo "If you have questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/tree/master/.github/CODEOWNERS)."
+            echo ""
+            echo "## 🛡️ Legal Requirements"
+            echo ""
+            echo "All contributions to ICC open-source projects follow:"
+            echo "- The [International Color Consortium IP Policy](https://www.color.org/iccip.xalter)"
+            echo "- Open-source software best practices"
+            echo "- Contributor License Agreement (CLA) requirements"
+            echo ""
+            echo "### 📄 Contributor License Agreements"
+            echo "Before contributing code, you must complete a **Contributor License Agreement (CLA)**."
+            echo ""
+            echo "- [🧍 Personal CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)"
+            echo "- [🏢 Corporate CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/icc-individual-cla.pdf)"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # ================================
+          #   Branch / PR Context
+          # ================================
+          echo "## 📌 PR / Branch Context" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "HEAD_REF:  ${GITHUB_HEAD_REF:-<none>}" >> "$GITHUB_STEP_SUMMARY"
+          echo "BASE_REF:  ${GITHUB_BASE_REF:-<none>}" >> "$GITHUB_STEP_SUMMARY"
+          echo "GITHUB_REF: $GITHUB_REF" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          # ================================
+          #   Recent Commits
+          # ================================
+          echo "## 📝 Recent Git Commits" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git --no-pager log -n 5 --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%nMessage: %s%n" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  setup:
+    name: 🧭 Init
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    needs: [detect-src]
+    steps:
+      - name: Display Environment Info
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          echo "============================"
+          echo "   iccDEV PR Build & Check  "
+          echo "============================"
+          echo ""
+          echo "International Color Consortium"
+          echo "Thank you for opening a PR"
+          echo ""
+          echo "Trigger:   ${{ github.event_name }}"
+          echo "Repository:${{ github.repository }}"
+          echo "Branch:    ${{ github.ref_name }}"
+          echo "Commit:    ${{ github.sha }}"
+          echo "Actor:     ${{ github.actor }}"
+          echo "Run ID:    ${{ github.run_id }}"
+          echo "Start time: $(date)"
+          echo "Source changed: ${{ needs.detect-src.outputs.src_changed }}"
+          echo ""
+
+
+      - name: Write Summary to GitHub UI
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          {
+            echo "## 🧭 Init Complete"
+            echo ""
+            echo "**Workflow:** ci-pr-action"
+            echo "- **Triggered by:** \`${{ github.actor }}\`"
+            echo "- **Event type:** \`${{ github.event_name }}\`"
+            echo "- **Branch:** \`${{ github.ref_name }}\`"
+            echo "- **Commit:** \`${{ github.sha }}\`"
+            echo "- **Run ID:** \`${{ github.run_id }}\`"
+            echo "- **Session start:** $(date)"
+            echo "- **Source changed:** \`${{ needs.detect-src.outputs.src_changed }}\`"
+            echo ""
+            echo "✅ CI environment successfully initialized and ready for subsequent jobs."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate-inputs:
+    name: Validate Matrix Inputs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    needs: [setup, detect-src]
+
+    outputs:
+      os-list: ${{ steps.v.outputs.os }}
+      compilers: ${{ steps.v.outputs.comp }}
+      build-types: ${{ steps.v.outputs.bt }}
+
+    steps:
+      - name: Validate fixed or upstream inputs
+        id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # --- Define for child workflows ---
+          # Windows is Hardcoded - TODO
+          allowed_os=( "ubuntu-latest" "macos-latest" )
+          allowed_comp=( "gcc" "clang" )
+          allowed_bt=( "Release" "Debug" )
+          # --- Define for child workflows ---
+          # Windows is Hardcoded - TODO
+          os_raw='["ubuntu-latest","macos-latest"]'
+          comp_raw='["gcc","clang"]'
+          bt_raw='["Release","Debug"]'
+
+          validate() {
+            local json="$1"; shift
+            local allowed=("$@")
+
+            readarray -t vals < <(jq -r '.[]' <<<"$json")
+
+            for v in "${vals[@]}"; do
+              local ok=0
+              for a in "${allowed[@]}"; do
+                [[ "$v" == "$a" ]] && ok=1
+              done
+              if [[ $ok -eq 0 ]]; then
+                echo "Invalid matrix value: $v" >&2
+                exit 1
+              fi
+            done
+          }
+
+          validate "$os_raw"   "${allowed_os[@]}"
+          validate "$comp_raw" "${allowed_comp[@]}"
+          validate "$bt_raw"   "${allowed_bt[@]}"
+
+          echo "os=$os_raw"   >> "$GITHUB_OUTPUT"
+          echo "comp=$comp_raw" >> "$GITHUB_OUTPUT"
+          echo "bt=$bt_raw"     >> "$GITHUB_OUTPUT"
+
+
+  unix-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧱 Unix Matrix Build and Test
+    needs: [setup, detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-pr-unix.yml
+    # pass minimized inputs
+    with:
+      # only these, bail if not defined
+      os-list: ${{ needs.validate-inputs.outputs.os-list }}
+      build-types: ${{ needs.validate-inputs.outputs.build-types }}
+      compilers: ${{ needs.validate-inputs.outputs.compilers }}
+
+  scan-build:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🔍 Clang Scan-Build Analysis
+    needs: [unix-ci, detect-src]
+    uses: ./.github/workflows/ci-pr-unix-sb.yml
+    with:
+      build-type: 'Release'
+
+  cppcheck-linters:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧪 Cppcheck and Linters
+    needs: [unix-ci, win-ci, detect-src]
+    uses: ./.github/workflows/ci-pr-lint.yml
+    with:
+      ubuntu-version: 'ubuntu-latest'
+
+  win-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧱 Windows Build and Test
+    needs: [setup, detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-pr-win.yml
+    
+  finalize:
+    name: 🧾 GitHub Summary Report
+    runs-on: ubuntu-latest
+    needs:
+      - detect-src
+      - unix-ci
+      - scan-build
+      - cppcheck-linters
+      - win-ci
+    if: always()
+    steps:
+      - name: Generate Summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+
+          {
+            echo "<div align=\"center\">"
+            echo "  <a href=\"https://color.org\" target=\"_blank\">"
+            echo "    <img src=\"https://color.org/system/images/ICC_logo_text.gif\" alt=\"ICC Logo\" width=\"320\">"
+            echo "  </a>"
+            echo "</div>"
+            echo ""
+            echo "## 🧩 ICCDEV PR Summary"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+            
+          if [ "${{ needs.detect-src.outputs.src_changed }}" != "true" ]; then
+            echo "- 💤 Non-source PR detected — build, analysis, and linting skipped." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### ✅ Overall Result: SUCCESS (Bypass: Non-Source Change)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [ "${{ needs.unix-ci.result }}" == "success" ]; then
+            echo "- ✅ Unix Build + Tests: Passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- ❌ Unix Build + Tests: ${{ needs.unix-ci.result }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "${{ needs.scan-build.result }}" == "success" ]; then
+            echo "- ✅ Clang Static Report: Available" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- ❌ Clang Static Analysis: ${{ needs.scan-build.result }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "${{ needs.cppcheck-linters.result }}" == "success" ]; then
+            echo "- ✅ Cppcheck + Linter Report: Available" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- ❌ Cppcheck + Linters: ${{ needs.cppcheck-linters.result }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "${{ needs.win-ci.result }}" == "success" ]; then
+            echo "- ✅ Windows Build + Tests: Passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- ❌ Windows Build + Tests: ${{ needs.win-ci.result }}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Uploaded artifacts for all stages" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "### ✅ Overall Result: SUCCESS" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ❌ Overall Result: FAILURE" >> "$GITHUB_STEP_SUMMARY"
+          fi

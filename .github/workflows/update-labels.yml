@@ -1,0 +1,136 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: PR Status Labeler (update-labels.yml) - Labels PRs based on CI results
+#
+## Last Updated: 28-NOV-2025 2300Z by David Hoyt 
+##               Added user-controllable input (uci) checks
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+name: PR Status Labeler
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to process manually'
+        required: false
+        default: ''
+        type: string
+  schedule:
+    - cron: '0 */4 * * *'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: read  # Explicitly added for clarity; required to read commit status
+
+jobs:
+  label-status:
+    # Only allow manual runs from the repo owner; PR/schedule events still allowed
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      contains(fromJson('["xsscx","maxderhak","ChrisCoxArt","dwtza"]'), github.actor)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+
+      - name: Determine PR number or input
+        id: get_pr
+        run: |
+          INPUT="${{ github.event.inputs.pr_number }}"
+          EVENT_PR="${{ github.event.pull_request.number }}"
+          if [[ "$INPUT" =~ ^[0-9]+$ ]] && [[ -n "$INPUT" ]]; then
+            echo "pr_number=$INPUT" >> "$GITHUB_OUTPUT"
+          elif [[ "$EVENT_PR" =~ ^[0-9]+$ ]]; then
+            echo "pr_number=$EVENT_PR" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_number=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluate PR combined status
+        id: status
+        if: steps.get_pr.outputs.pr_number != '0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR="${{ steps.get_pr.outputs.pr_number }}"
+
+          # Ensure PR belongs to this repository
+          BASE_REPO=$(gh pr view "$PR" --json baseRepository -q .baseRepository.nameWithOwner 2>/dev/null || echo "")
+          if [[ -z "$BASE_REPO" || "$BASE_REPO" != "${GITHUB_REPOSITORY}" ]]; then
+            echo "status=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          HEAD=$(gh pr view "$PR" --json headRefOid -q .headRefOid 2>/dev/null || echo "")
+          if [[ -z "$HEAD" ]]; then
+            echo "status=unknown" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD/status" \
+            --jq '.state' 2>/dev/null || echo "unknown")
+
+          echo "status=$STATE" >> "$GITHUB_OUTPUT"
+          echo "Detected status: $STATE"
+
+      - name: Relabel PR based on status
+        id: relabel
+        if: steps.get_pr.outputs.pr_number != '0' && steps.status.outputs.status != '' && steps.status.outputs.status != 'unknown'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR="${{ steps.get_pr.outputs.pr_number }}"
+          STATE="${{ steps.status.outputs.status }}"
+          ADDED=""
+          REMOVED=""
+
+          case "$STATE" in
+            success)
+              gh pr edit "$PR" --add-label "passed" --remove-label "failed" || true
+              ADDED="passed"
+              REMOVED="failed"
+              ;;
+            failure|error)
+              gh pr edit "$PR" --add-label "failed" --remove-label "passed" || true
+              ADDED="failed"
+              REMOVED="passed"
+              ;;
+            *)
+              echo "No label change required for status: $STATE"
+              ;;
+          esac
+
+          echo "added_label=$ADDED" >> "$GITHUB_OUTPUT"
+          echo "removed_label=$REMOVED" >> "$GITHUB_OUTPUT"
+
+      - name: Generate summary report
+        run: |
+          {
+            echo "### 🧾 PR Status Labeler Summary"
+            echo ""
+            echo "**Trigger Type:** ${{ github.event_name }}"
+            echo "**PR Number:** ${{ steps.get_pr.outputs.pr_number }}"
+            echo "**Detected Status:** ${{ steps.status.outputs.status }}"
+            echo "**Label Added:** ${{ steps.relabel.outputs.added_label }}"
+            echo "**Label Removed:** ${{ steps.relabel.outputs.removed_label }}"
+            echo ""
+            echo "✅ Workflow completed."
+          } >> "$GITHUB_STEP_SUMMARY"

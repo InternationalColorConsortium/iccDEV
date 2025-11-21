@@ -1,3 +1,8 @@
+2025-DEC-02 David Hoyt
+* Update IccProfLib and IccXml to version to 2.3.1.1
+* Security Patches
+* Bug Fixes
+
 2025-OCT-17 Max Derhak
 * Update IccProfLib and IccXml to version to 2.3.1
 * Update licenses in source code to match LICENSE.md
