@@ -68,10 +68,7 @@
  // -Modification to support iccMAX by Max Derhak in 2014
  // -Addition of JSON configuraiton by Max Derhak in 2024
  //
- // TEST
- // TEST
  //////////////////////////////////////////////////////////////////////
-
 
 #include "IccCmm.h"
 #include "IccUtil.h"

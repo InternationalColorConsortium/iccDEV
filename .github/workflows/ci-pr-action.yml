@@ -32,7 +32,7 @@ on:
 
   # Optional: auto-trigger for PRs to master/test
   pull_request:
-    branches: [ master, runner ]
+    branches: [ master, runner, pr-checks ]
     types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
