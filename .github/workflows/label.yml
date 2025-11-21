@@ -1,0 +1,42 @@
+###############################################################
+#
+## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+##                 https://srd.cx
+##
+## Last Updated: 04-NOV-2025 1200Z by David Hoyt
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+
+
+name: Labeler
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  apply-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Apply PR labels
+        uses: actions/labeler@v4
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          configuration-path: .github/labeler.yml

@@ -1,0 +1,98 @@
+###############################################################
+#
+## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+##                 https://srd.cx
+##
+## Last Updated: 23-OCT-2025 1200Z by David Hoyt
+#
+## Intent: Cmake testing / build
+#
+## TODO: Add Unit Test Suite
+#
+#
+#
+#
+#
+#
+#
+#
+#
+###############################################################
+
+name: ci-pr-win
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  GH_REPO: ${{ github.repository }}
+  GH_NO_UPDATE_NOTIFIER: 1
+  GH_PROMPT_DISABLED: 1
+  RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
+  PR: ${{ github.event.number }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
+    strategy:
+      fail-fast: false
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Verify Branch Context
+        run: |
+          echo "Triggered by:  ${{ github.event_name }}"
+          echo "Base branch:   ${{ github.base_ref }}"
+          echo "Head branch:   ${{ github.head_ref }}"
+          echo "Commit SHA:    ${{ github.event.pull_request.head.sha }}"
+          echo "Build Type:    ${{ matrix.build_type }}"
+          echo "Compiler:      ${{ matrix.compiler }}"
+          echo "OS:            ${{ runner.os }}"
+
+      - name: Install dependencies and build
+        run: |
+          pwd
+          git branch
+          git status
+          Write-Host "========= Fetching Deps... ================`n"
+          Start-BitsTransfer -Source "https://xss.cx/2025/11/vcpkg/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          Write-Host "========= Extracting Deps... ================`n"
+          tar -xf deps.zip
+          cd Build/Cmake
+          Write-Host "========= Building... ================`n"  
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+          cmake --build build -- /m /maxcpucount
+          cmake --build build -- /m /maxcpucount          
+          Write-Host "All Done!"
+          
+      - name: GitHub Summary
+        if: always()
+        shell: pwsh
+        run: |
+          "## 🧱 CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Repository: ${{ github.repository }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Run URL: ${{ env.RUN_URL }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Triggered by: ${{ github.event_name }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Commit SHA: ${{ github.event.pull_request.head.sha || github.sha }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Build Type: $env:BUILD_TYPE" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Runner OS: ${{ runner.os }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Status: ${{ job.status }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
