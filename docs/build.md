@@ -11,6 +11,8 @@
 | Image Libraries    | libpng-dev, libjpeg-dev, libtiff6| libpng, jpeg, libtiff  | libpng, libjpeg-turbo, libtiff |
 | GUI & Config       | libwxgtk3.2-dev, nlohmann-json3-dev, libxml2-dev | wxwidgets, nlohmann-json, libxml2 | wxwidgets, nlohmann-json, libxml2 |
 
+iccDEV requires C++17 or higher to compile.
+
 
 ## Ubuntu GNU
 

@@ -235,8 +235,6 @@ std::string wstringToUTF8Converter( std::wstring &input )
   }
 
 // output_start has been moved to point to the end of the output, and should have a terminating NULL
-// TODO - ccox - really should test the output string
-// but I can't find a profile that exercises this code path!
 
   return std::string ( (char *)output_data );     // this makes a copy of the output string data
 #else
