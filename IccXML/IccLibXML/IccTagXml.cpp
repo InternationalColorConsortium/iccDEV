@@ -3192,7 +3192,8 @@ bool icMBBToXml(std::string &xml, CIccMBB *pMBB, icConvertType nType, std::strin
 
       if (pMBB->GetCurvesM()) {
         // added if-statement 
-        if (!icCurvesToXml(xml, "MCurves", pMBB->GetCurvesM(), 3, nType, blanks)){
+        // hard coding the channel count to 3 could cause a buffer overread, as seen below
+        if (!icCurvesToXml(xml, "MCurves", pMBB->GetCurvesM(), pMBB->InputChannels(), nType, blanks)){
           return false;
         }
       }
@@ -3213,6 +3214,7 @@ bool icMBBToXml(std::string &xml, CIccMBB *pMBB, icConvertType nType, std::strin
     }
   }
   else {
+    // is an output matrix
     if (pMBB->GetCurvesA()) {
       // added if-statement 
       if (!icCurvesToXml(xml, "ACurves", pMBB->GetCurvesA(), pMBB->InputChannels(), nType, blanks)){
@@ -3228,8 +3230,9 @@ bool icMBBToXml(std::string &xml, CIccMBB *pMBB, icConvertType nType, std::strin
     }
 
     if (pMBB->GetCurvesM()) {
-      // added if-statement 
-      if (!icCurvesToXml(xml, "MCurves", pMBB->GetCurvesM(), 3, nType, blanks)){
+      // added if-statement
+      // hard coding the channel count to 3 causes a buffer overread when output channels == 1
+      if (!icCurvesToXml(xml, "MCurves", pMBB->GetCurvesM(), pMBB->OutputChannels(), nType, blanks)){
         return false;
       }
     }

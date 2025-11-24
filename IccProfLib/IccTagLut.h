@@ -432,13 +432,13 @@ public:
   virtual CIccTag* NewCopy() const {return new CIccMBB(*this);}
   virtual ~CIccMBB();
 
-  virtual bool IsMBBType() { return true;}
+  virtual bool IsMBBType() const { return true; }
 
-  virtual icUInt8Number GetPrecision() { return 2; }
-  virtual bool IsInputMatrix() { return m_bInputMatrix; } //Is matrix on input side of CLUT?
+  virtual icUInt8Number GetPrecision() const { return 2; }
+  virtual bool IsInputMatrix() const { return m_bInputMatrix; } //Is matrix on input side of CLUT?
   virtual bool UseLegacyPCS() const { return false; } //Treat Lab Encoding differently?
 
-  bool IsInputB() { return IsInputMatrix(); }
+  bool IsInputB() const { return IsInputMatrix(); }
   bool SwapMBCurves() { return m_bUseMCurvesAsBCurves; }
 
   void Cleanup();
@@ -550,7 +550,7 @@ public:
   virtual ~CIccTagLut8();
 
   virtual icTagTypeSignature GetType() const { return icSigLut8Type; }
-  virtual icUInt8Number GetPrecision() { return 1; }
+  virtual icUInt8Number GetPrecision() const { return 1; }
 
   bool Read(icUInt32Number size, CIccIO *pIO);
   bool Write(CIccIO *pIO);

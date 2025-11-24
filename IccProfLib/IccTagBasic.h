@@ -129,7 +129,7 @@ public:
   virtual icArraySignature GetTagArrayType() const { return icSigUndefinedArray; }
 
   virtual bool IsArrayType() { return false; }
-  virtual bool IsMBBType() { return false; } //If true then CIccTag can be cast as an CIccMBB 
+  virtual bool IsMBBType() const { return false; } //If true then CIccTag can be cast as an CIccMBB
   virtual bool IsNumArrayType() const { return false;} //If true then CIccTag can be cast as a CIccTagNumArray
 
   virtual const icChar *GetClassName() const { return "CIccTag"; }
