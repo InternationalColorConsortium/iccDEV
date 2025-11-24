@@ -3646,7 +3646,7 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
   }
   case icSigGamutTag:
     {
-      nInput = 1;
+      nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
       if (m_nInput!=nInput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
@@ -3654,7 +3654,7 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
-      nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+      nOutput = 1;
       if (m_nOutput!=nOutput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
@@ -4663,7 +4663,7 @@ void CIccTagLut8::SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSign
     }
   
     if (!m_Matrix) {
-      CIccMatrix *pMatrix = NewMatrix();
+      CIccMatrix *pMatrix = NewMatrix();        // memory leak?
       for (i=0; i<9; i++) {
         pMatrix->m_e[i] = icFtoD(m_XYZMatrix[i]);
       }
@@ -4832,14 +4832,12 @@ icValidateStatus CIccTagLut8::Validate(std::string sigPath, std::string &sReport
   case icSigGamutTag:
     {
       icUInt32Number nInput, nOutput;
-      if (sig==icSigAToB0Tag || sig==icSigAToB1Tag || sig==icSigAToB2Tag || sig==icSigGamutTag) {
-        nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
-        nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-      }
-      else {
-        nInput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-        nOutput = icGetSpaceSamples(pProfile->m_Header.pcs);
-      }
+      
+      nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
+      nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+      
+      if (sig==icSigAToB0Tag || sig==icSigAToB1Tag || sig==icSigAToB2Tag)
+        std::swap(nInput,nOutput);
 
       if (sig==icSigGamutTag) {
         nOutput = 1;
@@ -5109,7 +5107,7 @@ void CIccTagLut16::SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSig
     }
 
     if (!m_Matrix) {
-      CIccMatrix *pMatrix = NewMatrix();
+      CIccMatrix *pMatrix = NewMatrix();        // memory leak?
       for (i=0; i<9; i++) {
         pMatrix->m_e[i] = icFtoD(m_XYZMatrix[i]);
       }
@@ -5255,14 +5253,12 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
   case icSigGamutTag:
     {
       icUInt32Number nInput, nOutput;
-      if (sig==icSigAToB0Tag || sig==icSigAToB1Tag || sig==icSigAToB2Tag || sig==icSigGamutTag) {
-        nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
-        nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-      }
-      else {
-        nInput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-        nOutput = icGetSpaceSamples(pProfile->m_Header.pcs);
-      }
+      
+      nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
+      nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+      
+      if (sig==icSigAToB0Tag || sig==icSigAToB1Tag || sig==icSigAToB2Tag)
+        std::swap(nInput,nOutput);
 
       if (sig==icSigGamutTag) {
         nOutput = 1;
