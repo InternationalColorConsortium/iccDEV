@@ -4663,7 +4663,7 @@ void CIccTagLut8::SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSign
     }
   
     if (!m_Matrix) {
-      CIccMatrix *pMatrix = NewMatrix();        // memory leak?
+      CIccMatrix *pMatrix = NewMatrix();
       for (i=0; i<9; i++) {
         pMatrix->m_e[i] = icFtoD(m_XYZMatrix[i]);
       }
@@ -5108,7 +5108,7 @@ void CIccTagLut16::SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSig
     }
 
     if (!m_Matrix) {
-      CIccMatrix *pMatrix = NewMatrix();        // memory leak?
+      CIccMatrix *pMatrix = NewMatrix();
       for (i=0; i<9; i++) {
         pMatrix->m_e[i] = icFtoD(m_XYZMatrix[i]);
       }
