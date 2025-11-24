@@ -10895,9 +10895,7 @@ CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions()
 CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions(const CIccTagSpectralViewingConditions &SVCT)
 {
   m_stdObserver = SVCT.m_stdObserver;
-  m_observerRange.start = SVCT.m_observerRange.start;
-  m_observerRange.end = SVCT.m_observerRange.end;
-  m_observerRange.steps = SVCT.m_observerRange.steps;
+  m_observerRange = SVCT.m_observerRange;
 
   if (SVCT.m_observer && SVCT.m_observerRange.steps) {
     m_observer = new icFloat32Number[SVCT.m_observerRange.steps*3];
@@ -10912,10 +10910,6 @@ CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions(const CIccTag
   m_stdIlluminant = SVCT.m_stdIlluminant;
   m_colorTemperature = SVCT.m_colorTemperature;
 
-  m_illuminantRange.start = 0;
-  m_illuminantRange.end = 0;
-  m_illuminantRange.steps = 0;
-
   if (SVCT.m_illuminant && SVCT.m_illuminantRange.steps) {
     m_illuminant = new icFloat32Number[SVCT.m_illuminantRange.steps];
     if (m_illuminant) {
@@ -10926,13 +10920,9 @@ CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions(const CIccTag
     m_illuminant = NULL;
   }
 
-  m_illuminantXYZ.X = 0;
-  m_illuminantXYZ.Y = 0;
-  m_illuminantXYZ.Z = 0;
-
-  m_surroundXYZ.X = 0;
-  m_surroundXYZ.Y = 0;
-  m_surroundXYZ.Z = 0;
+  m_illuminantXYZ = SVCT.m_illuminantXYZ;
+  m_surroundXYZ = SVCT.m_surroundXYZ;
+  m_illuminantRange = SVCT.m_illuminantRange;
 }
 
 
@@ -10949,9 +10939,7 @@ CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions(const CIccTag
 CIccTagSpectralViewingConditions &CIccTagSpectralViewingConditions::operator=(const CIccTagSpectralViewingConditions &SVCT)
 {
   m_stdObserver = SVCT.m_stdObserver;
-  m_observerRange.start = SVCT.m_observerRange.start;
-  m_observerRange.end = SVCT.m_observerRange.end;
-  m_observerRange.steps = SVCT.m_observerRange.steps;
+  m_observerRange = SVCT.m_observerRange;
 
   if (SVCT.m_observer && SVCT.m_observerRange.steps) {
     m_observer = new icFloat32Number[SVCT.m_observerRange.steps*3];
@@ -10966,10 +10954,6 @@ CIccTagSpectralViewingConditions &CIccTagSpectralViewingConditions::operator=(co
   m_stdIlluminant = SVCT.m_stdIlluminant;
   m_colorTemperature = SVCT.m_colorTemperature;
 
-  m_illuminantRange.start = 0;
-  m_illuminantRange.end = 0;
-  m_illuminantRange.steps = 0;
-
   if (SVCT.m_illuminant && SVCT.m_illuminantRange.steps) {
     m_illuminant = new icFloat32Number[SVCT.m_illuminantRange.steps];
     if (m_illuminant) {
@@ -10980,13 +10964,9 @@ CIccTagSpectralViewingConditions &CIccTagSpectralViewingConditions::operator=(co
     m_illuminant = NULL;
   }
 
-  m_illuminantXYZ.X = 0;
-  m_illuminantXYZ.Y = 0;
-  m_illuminantXYZ.Z = 0;
-
-  m_surroundXYZ.X = 0;
-  m_surroundXYZ.Y = 0;
-  m_surroundXYZ.Z = 0;
+  m_illuminantXYZ = SVCT.m_illuminantXYZ;
+  m_surroundXYZ = SVCT.m_surroundXYZ;
+  m_illuminantRange = SVCT.m_illuminantRange;
 
   return *this;
 }
