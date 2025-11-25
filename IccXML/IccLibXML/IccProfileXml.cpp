@@ -394,13 +394,13 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       std::string ver;
       unsigned long verClassMajor = 0, verClassMinor = 0;
 
-      for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
-        ver = *szVer;
-      }
-      verClassMajor = (unsigned char)atoi(ver.c_str());
-      ver.clear();
-
       if (szVer) {
+        for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
+          ver = *szVer;
+        }
+        verClassMajor = (unsigned char)atoi(ver.c_str());
+        ver.clear();
+        
         for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
           ver = *szVer;
         }
