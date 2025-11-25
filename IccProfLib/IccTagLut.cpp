@@ -1842,6 +1842,10 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
 {
   if (nMaxSize && !nBytesPerPoint)
     return false;
+  
+  // must have at least 1 input and 1 output
+  if (m_nInput < 1 || m_nOutput < 1)
+    return false;
 
   icUInt64Number nNumPoints;
   memset(m_nReserved2, 0, sizeof(m_nReserved2));
@@ -1865,7 +1869,7 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
     m_pData = NULL;
   }
 
-  int i=m_nInput-1;
+  int i = m_nInput-1;
 
   // m_DimSize[] is a fixed size of 16
   if (i >= 16)
@@ -3956,6 +3960,10 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
   if (sig!=GetType())
     return false;
 
+  // must have at least 1 input and 1 output
+  if (m_nInput < 1 || m_nOutput < 1)
+    return false;
+
   //B Curves
   if (Offset[0]) {
     nCurves = IsInputB() ? m_nInput : m_nOutput;
@@ -4583,6 +4591,10 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
   if (sig!=GetType())
     return false;
 
+  // must have at least 1 input and 1 output
+  if (m_nInput < 1 || m_nOutput < 1)
+    return false;
+
   //B Curves
   pCurves = NewCurvesB();
 
@@ -5032,6 +5044,9 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
   if (sig!=GetType())
     return false;
 
+  // must have at least 1 input and 1 output
+  if (m_nInput < 1 || m_nOutput < 1)
+    return false;
 
   //B Curves
   pCurves = NewCurvesB();
