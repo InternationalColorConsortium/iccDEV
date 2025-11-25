@@ -136,13 +136,14 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
   // determine granularity
   if (!nGran)
   {
-    CIccTagLutAtoB* pTag = (CIccTagLutAtoB*)pProfile->FindTag(icSigAToB0Tag+(nIntent==icAbsoluteColorimetric ? icRelativeColorimetric : nIntent));
-    if (!pTag || ndim==3)
+    CIccTag* pTag = (CIccTag*)pProfile->FindTag( icSigAToB0Tag+(nIntent==icAbsoluteColorimetric ? icRelativeColorimetric : nIntent) );
+    if ( !pTag || (ndim == 3) || !(pTag->IsMBBType()) )   // ccox - Why is ndim == 3 tested here?
     {
       nGran = 33;
     }
     else {
-      CIccCLUT* pClut = pTag->GetCLUT();
+      CIccMBB *lutTag = (CIccMBB *)pTag;  // we now know the tag is at least MBB type
+      CIccCLUT* pClut = lutTag->GetCLUT();
       if (pClut)
         nGran = pClut->GridPoints()+2;
       else
