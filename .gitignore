@@ -69,3 +69,5 @@ Tools/CmdLine/IccTiffDump/TiffImg.cpp
 Tools/CmdLine/IccTiffDump/TiffImg.h
 /Build/XCBuildData
 /CMakeFiles
+CMakeCache.txt
+/RefIccMAX.xcodeproj
