@@ -819,16 +819,17 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         pNamedColorHint->csSpectralPcs = pProfile->m_Header.spectralPCS;
         pNamedColorHint->spectralRange = pProfile->m_Header.spectralRange;
         pNamedColorHint->biSpectralRange = pProfile->m_Header.biSpectralRange;
-				if (pHintManager) {
-					pHintManager->AddHint(pNamedColorHint);
-					rv = CIccXformCreator::CreateXform(icXformTypeNamedColor, pTag, pHintManager);
-					pHintManager->DeleteHint(pNamedColorHint);
-				}
-				else {
-					CIccCreateXformHintManager HintManager;
-					HintManager.AddHint(pNamedColorHint);
-					rv = CIccXformCreator::CreateXform(icXformTypeNamedColor, pTag, &HintManager);
-				}
+        
+        if (pHintManager) {
+          pHintManager->AddHint(pNamedColorHint);
+          rv = CIccXformCreator::CreateXform(icXformTypeNamedColor, pTag, pHintManager);
+//	      pHintManager->DeleteHint(pNamedColorHint);    // hint manager takes ownership, we should not delete
+        }
+        else {
+          CIccCreateXformHintManager HintManager;
+          HintManager.AddHint(pNamedColorHint);
+          rv = CIccXformCreator::CreateXform(icXformTypeNamedColor, pTag, &HintManager);
+        }
 
         if (pProfile->m_Header.spectralPCS)
           bUseSpectralPCS = true;
