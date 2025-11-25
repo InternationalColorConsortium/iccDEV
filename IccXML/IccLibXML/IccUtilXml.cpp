@@ -614,7 +614,7 @@ icUInt32Number icXmlGetHexData(void *pBuf, const char *szText, icUInt32Number nB
   unsigned char *pDest = (unsigned char*)pBuf;
   icUInt32Number rv =0;
 
-  while(*szText && rv<nBufSize) {
+  while( rv<nBufSize && *szText ) {
     int c1=hexValue(szText[0]);
     int c2=hexValue(szText[1]);
     if (c1>=0 && c2>=0) {
@@ -932,29 +932,29 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseTextCountNum(const char *szText, 
   
   //while (*szText) {
   for (icUInt32Number i=0; i<num; i++) {
-	  if (icIsNumChar(*szText)) {
-		  if (!bInNum) {
-			  bInNum = true;
-		  }
-	  }
+    if (icIsNumChar(*szText)) {
+      if (!bInNum) {
+        bInNum = true;
+      }
+    }
     else if (bInNum && !strncmp(szText, "#QNAN", 5)) { //Handle 1.#QNAN000 (non a number)
       i+=4;
       szText+=4;
     }
-	  // an invalid character is encountered (not digit and not space)
-	  else if (!isspace(*szText) && i <= num ){
-          const size_t lineSize = 100;
-		  char line[lineSize];
-		  snprintf(line, lineSize, "Data '%c' in position %d is not a number. ", *szText, i);
-		  parseStr += line;
-		  return false;
-	  }
-	  else if (bInNum) { //char is a space
-		  n++;
-		  bInNum = false;
-	  }	  
-	  szText++;
-	  //count++;
+    // an invalid character is encountered (not digit and not space)
+    else if ( i <= num && !isspace(*szText) ) {
+      const size_t lineSize = 100;
+      char line[lineSize];
+      snprintf(line, lineSize, "Data '%c' in position %d is not a number. ", *szText, i);
+      parseStr += line;
+      return false;
+    }
+    else if (bInNum) { //char is a space
+      n++;
+      bInNum = false;
+    }
+    szText++;
+    //count++;
   }
   if (bInNum) {
     n++;
@@ -998,8 +998,8 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
   bool bInNum = false;
   char num[256] = {0};
 
-  while ( (n < nSize) && *szText ) {	  
-	  if (icIsNumChar(*szText)) {
+  while ( (n < nSize) && *szText ) {
+    if (icIsNumChar(*szText)) {
       if (!bInNum) {
         bInNum = true;
         b=0;
@@ -1022,7 +1022,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
     }
     szText++;
   }
-  if ( bInNum &&  (n < nSize) ) {
+  if ( bInNum && (n < nSize) ) {
     num[b] = 0;
     if (!strncmp(num, "nan", 3) || !strncmp(num, "-nan", 4)) {
       pBuf[n] = (T)nanf(num);
