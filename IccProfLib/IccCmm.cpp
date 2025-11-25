@@ -7638,6 +7638,8 @@ CIccApplyXformMpe::CIccApplyXformMpe(CIccXformMpe *pXform) : CIccApplyXform(pXfo
 */
 CIccApplyXformMpe::~CIccApplyXformMpe()
 {
+  if (m_pApply)
+    delete m_pApply;
 }
 
 
