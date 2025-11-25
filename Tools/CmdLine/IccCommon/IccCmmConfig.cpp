@@ -1532,7 +1532,7 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       }
       else {
       int nColor = -1;
-      if (sscanf(szFmt, "%uCOLOR_", &nColor) && nColor >= 1) {
+      if ( (sscanf(szFmt, "%uCOLOR_", &nColor) == 1) && nColor >= 1) {  // sscanf can also return EOF(-1)
         const size_t bufSize = 30;
         char buf[bufSize];
         snprintf(buf, bufSize, "%uCOLOR", nColor);
