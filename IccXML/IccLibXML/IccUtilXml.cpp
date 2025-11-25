@@ -998,7 +998,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
   bool bInNum = false;
   char num[256] = {0};
 
-  while (*szText && n<nSize) {	  
+  while ( (n < nSize) && *szText ) {	  
 	  if (icIsNumChar(*szText)) {
       if (!bInNum) {
         bInNum = true;
@@ -1022,7 +1022,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
     }
     szText++;
   }
-  if (bInNum) {
+  if ( bInNum &&  (n < nSize) ) {
     num[b] = 0;
     if (!strncmp(num, "nan", 3) || !strncmp(num, "-nan", 4)) {
       pBuf[n] = (T)nanf(num);
