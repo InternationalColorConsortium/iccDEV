@@ -3913,6 +3913,8 @@ void CalcProfileID(CIccIO *pIO, icProfileID *pProfileID)
   nBlock = 0;
   while(len) {
     size_t num = pIO->Read8(&buffer[0],1024);
+    if (num == 0)
+        break;              // can't give a useful error here, but we need to break the infinite loop
     if (!nBlock) {  // Zero out 3 header contents in Profile ID calculation
       memset(buffer+44, 0, 4); //Profile flags
       memset(buffer+64, 0, 4);  //Rendering Intent
@@ -3920,7 +3922,7 @@ void CalcProfileID(CIccIO *pIO, icProfileID *pProfileID)
     }
     icMD5Update(&context,buffer, (unsigned int) num);
     nBlock++;
-    len -=num;
+    len -= num;
   }
   icMD5Final(&pProfileID->ID8[0],&context);
 
