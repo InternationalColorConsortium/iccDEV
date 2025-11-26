@@ -6623,6 +6623,8 @@ bool CIccTagFloatNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumb
     pos=0.0;
   if (pos>1.0)
     pos=1.0;
+  if (isnan(pos))
+    pos=0.0;
 
   icFloatNumber fpos = (icFloatNumber)(nVector-1) * pos;
   icUInt32Number iPos = (icUInt32Number)fpos;

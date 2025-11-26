@@ -2506,8 +2506,14 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
 
+  // UnitClip is calling "NoClip", but now removes NaN and Inf
   icFloatNumber x = UnitClip(srcPixel[0]) * mx;
   icFloatNumber y = UnitClip(srcPixel[1]) * my;
+  
+  if (x < 0.0)
+    x = 0.0;
+  if (y < 0.0)
+    y = 0.0;
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2526,8 +2532,16 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
 
   const icFloatNumber nt = 1.0f - t;
   const icFloatNumber nu = 1.0f - u;
+  
+  int offset = ix*n001 + iy*n010;
 
-  const icFloatNumber *p = &m_pData[ ix*n001 + iy*n010 ];
+  // clip offset to valid data address, in case of bad inputs
+  int maxDataSize = NumPoints()*m_nOutput;
+  int maxDataOffset = maxDataSize - (m_nOutput + n011);
+  if (offset > maxDataOffset)
+    offset = maxDataOffset;
+
+  const icFloatNumber *p = &m_pData[ offset ];
 
   // Normalize grid units
   const icFloatNumber dF0 = nt * nu;

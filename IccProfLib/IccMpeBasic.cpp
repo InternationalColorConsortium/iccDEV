@@ -1801,8 +1801,10 @@ bool CIccSingleSampledCurve::Begin(icElemInterp /* nInterp */, CIccTagMultiProce
 ******************************************************************************/
 icFloatNumber CIccSingleSampledCurve::Apply(icFloatNumber v) const
 {
+  if (isnan(v))
+    return m_loIntercept;
   if (v<m_firstEntry) {
-    return m_loSlope * v + m_loIntercept;;
+    return m_loSlope * v + m_loIntercept;
   }
   else if (v>m_lastEntry) {
     return m_hiSlope * v + m_hiIntercept;
@@ -5363,8 +5365,13 @@ icValidateStatus CIccMpeMatrix::Validate(std::string sigPath, std::string &sRepo
 
 static icFloatNumber NoClip(icFloatNumber v)
 {
+  if (isnan(v))
+    return icFloatNumber(0);
+  if (isinf(v))
+    return icFloatNumber(1000);  // value chosen arbitrarily, but doesn't overflow integer types
   return v;
 }
+
 
 /**
  ******************************************************************************

@@ -80,6 +80,7 @@
 #include "IccMpeCalc.h"
 #include "IccIO.h"
 #include <map>
+#include <limits>
 #include "IccUtil.h"
 
 //#define ICC_VERBOSE_CALC_APPLY 1
@@ -935,6 +936,7 @@ class CIccOpDefModulus : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
+    const icFloatNumber epsilon = 1e-12;        // value chosen somewhat arbitrarily to allow division to work and not overflow
     int j, n = op->data.select.v1+1;
     int tn = n*2;
     size_t ss = os.pStack->size();
@@ -942,7 +944,13 @@ public:
       return false;
     icFloatNumber *s = &(*os.pStack)[ss-tn];
     for (j=0; j<n; j++) {
-      s[j] = s[j] - (icFloatNumber)((int)(s[j] / s[j+n]))*s[j+n];
+      icFloatNumber temp = s[j];
+      icFloatNumber tempN = s[j+n];
+      if (isnan(temp) || isinf(temp)
+        || isnan(tempN) || isinf(tempN) || fabs(tempN) < epsilon)
+        s[j] = 0.0;
+      else
+        s[j] = temp - (icFloatNumber)((int)(temp / tempN))*tempN;
     }
     OsShrinkArgs(n);
     return true;
@@ -1194,7 +1202,17 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     for (j=0; j<n; j++) {
       //Casting to an int results in truncation
-      s[j] = (icFloatNumber)((int)(s[j]));
+      icFloatNumber temp = s[j];
+      if (isnan(temp))
+        temp = 0.0;
+      else if (isinf(temp)) {
+        if (temp > 0.0)
+            s[j] = (icFloatNumber)std::numeric_limits<int>::max();
+        else
+            s[j] = (icFloatNumber)std::numeric_limits<int>::min();
+      }
+      else
+        s[j] = (icFloatNumber)((int)temp);
     }
     return true;
   }
@@ -1245,10 +1263,15 @@ public:
       return false;
     icFloatNumber *s = &(*os.pStack)[ss-n];
     for (j=0; j<n; j++) {
+      icFloatNumber temp = s[j];
+      if (isnan(temp))
+        temp = 0.0;
+      if (isinf(temp))
+        temp = 1000.0;
       if (s[j]<0.0)
-        s[j] = icFloatNumber((int)(s[j]-0.5));
+        s[j] = icFloatNumber((int)(temp-0.5));
       else
-        s[j] = icFloatNumber((int)(s[j]+0.5));
+        s[j] = icFloatNumber((int)(temp+0.5));
     }
     return true;
   }
@@ -3619,7 +3642,14 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
     else if (op->sig==icSigSelectOp) {
       icFloatNumber a1;
       OsPopArg(a1);
-      icInt32Number nSel = (a1 >= 0.0) ? (icInt32Number)(a1+0.5f) : (icInt32Number)(a1-0.5f);
+      if (isnan(a1))
+        a1 = 0.0;
+        
+      icInt32Number nSel;
+      if (isinf(a1))
+        nSel = std::numeric_limits<icInt32Number>::max();
+      else
+        nSel = (a1 >= 0.0) ? (icInt32Number)(a1+0.5f) : (icInt32Number)(a1-0.5f);
 
       if (!op->extra) {
         return false;
