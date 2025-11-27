@@ -1204,7 +1204,7 @@ public:
       //Casting to an int results in truncation
       icFloatNumber temp = s[j];
       if (isnan(temp))
-        temp = 0.0;
+        s[j] = 0.0;
       else if (isinf(temp)) {
         if (temp > 0.0)
             s[j] = (icFloatNumber)std::numeric_limits<int>::max();
