@@ -992,6 +992,9 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseTextCount(const char *szText)
   return n;
 }
 
+// because VisualC has some really bad macros and doesn't test with standard templates
+#undef max
+
 // clip the input value to the valid output range
 template<typename T, typename F>
 T clipTypeRange( const F &input )
