@@ -1209,7 +1209,7 @@ public:
         if (temp > 0.0)
             s[j] = (icFloatNumber)std::numeric_limits<int>::max();
         else
-            s[j] = (icFloatNumber)std::numeric_limits<int>::min();
+            s[j] = (icFloatNumber)std::numeric_limits<int>::lowest();
       }
       else
         s[j] = (icFloatNumber)((int)temp);
@@ -1266,9 +1266,9 @@ public:
       icFloatNumber temp = s[j];
       if (isnan(temp))
         temp = 0.0;
-      if (isinf(temp))
-        temp = 1000.0;
-      if (s[j]<0.0)
+      else if (isinf(temp))
+        temp = 10000.0;          // value chosen arbitrarily to not overflow int
+      if (temp < 0.0)
         s[j] = icFloatNumber((int)(temp-0.5));
       else
         s[j] = icFloatNumber((int)(temp+0.5));
