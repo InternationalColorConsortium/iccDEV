@@ -593,7 +593,7 @@ icUtfConversionResult icConvertUTF8toUTF16 (const UTF8* source, const UTF8* sour
       /* UTF-16 surrogate values are illegal in UTF-32 */
       if (ch >= UNI_SUR_HIGH_START && ch <= UNI_SUR_LOW_END) {
         if (flags == strictConversion) {
-          source -= (extraBytesToRead+1); /* return to the illegal value itself */
+          //source -= (extraBytesToRead+1); /* return to the illegal value itself */
           result = sourceIllegal;
           break;
         } else {
@@ -605,7 +605,7 @@ icUtfConversionResult icConvertUTF8toUTF16 (const UTF8* source, const UTF8* sour
     } else if (ch > UNI_MAX_UTF16) {
       if (flags == strictConversion) {
         result = sourceIllegal;
-        source -= (extraBytesToRead+1); /* return to the start */
+        //source -= (extraBytesToRead+1); /* return to the start */
         break; /* Bail out; shouldn't continue */
       } else {
         target.push_back(UNI_REPLACEMENT_CHAR);
@@ -819,7 +819,7 @@ icUtfConversionResult icConvertUTF8toUTF32 (const UTF8* source, const UTF8* sour
       */
       if (ch >= UNI_SUR_HIGH_START && ch <= UNI_SUR_LOW_END) {
         if (flags == strictConversion) {
-          source -= (extraBytesToRead+1); /* return to the illegal value itself */
+          //source -= (extraBytesToRead+1); /* return to the illegal value itself */
           result = sourceIllegal;
           break;
         } else {
