@@ -1707,6 +1707,12 @@ CIccCLUT::CIccCLUT(icUInt8Number nInputChannels, icUInt16Number nOutputChannels,
   m_nPrecision = nPrecision;
   m_pData = NULL;
   m_nOffset = NULL;
+  m_pOutText = NULL;
+  m_pVal = NULL;
+  m_nNumPoints = 0;
+  m_nNodes = 0;
+  m_csInput = icSigUnknownData;
+  m_csOutput = icSigUnknownData;
   memset(&m_nReserved2, 0 , sizeof(m_nReserved2));
 
   UnitClip = ClutUnitClip;
