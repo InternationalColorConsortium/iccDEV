@@ -5,10 +5,10 @@
 ##                 https://color.org
 #
 #
-## Intent: iccMAX Scan Build Runner for Matrix OS
+## Intent: iccDEV Scan Build Runner for ubuntu-latest
 #
-## Last Updated: 24-JULY-2025 0000Z by David Hoyt 
-##               Add Read Permission Block
+## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
+##               Change Banners
 ## TODO: Push binary releases, tags etc.. 
 #
 ## Comment: Known good and working from PatchIccMax
@@ -19,7 +19,7 @@
 #
 ###############################################################
 
-name: "iccMAX Scan Build"
+name: "iccDEV Scan Build"
 
 on:
   workflow_dispatch:
@@ -79,23 +79,10 @@ jobs:
           name: scan-build-reports
           path: Build/scan-build-reports
 
-      # Upload built binaries as artifacts
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: master-build-linux
-          path: Build
-
-      # Upload build logs
-      - name: Upload build logs
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: DemoIccMAX/Build/CMakeCache.txt
       - name: Summary Report
         if: always()
         run: |
           echo "### Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Build Directory: DemoIccMAX/Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded: iccmax-linux-clang" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-linux-clang" >> $GITHUB_STEP_SUMMARY
           echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
