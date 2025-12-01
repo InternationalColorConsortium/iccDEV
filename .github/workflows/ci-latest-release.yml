@@ -81,7 +81,7 @@ jobs:
       - name: Verify CMake Cache
         run: |
           if test -f Build/CMakeCache.txt; then
-          echo "✅ Build OK" | tee -a $GITHUB_STEP_SUMMARY
+            echo "✅ Build OK" | tee -a $GITHUB_STEP_SUMMARY
           else
             echo "::error ::Build failed! CMakeCache.txt not found." | tee -a $GITHUB_STEP_SUMMARY
             exit 1
@@ -89,15 +89,19 @@ jobs:
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: iccmax-linux-${{ matrix.compiler }}
-          path: Build
+          name: iccdev-linux-${{ matrix.compiler }}
+          path: |
+                Build
+                LICENSE.md
+                README.md            
+                docs/**
 
       - name: Summary Report
         if: always()
         run: |
           echo "### Linux Build Summary (${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
           echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded: iccmax-linux-${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-linux-${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
           echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
   macos:
     name: "macOS Clang"
@@ -149,7 +153,12 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: iccdev-macos-clang
-          path: Build
+          path: |
+                Build
+                LICENSE.md
+                README.md            
+                docs/**
+                
       - name: Summary Report
         if: always()
         run: |
@@ -162,7 +171,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout master
-        uses: actions/checkout@v4
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
@@ -246,9 +255,9 @@ jobs:
             Build/Cmake/build/**/*.exe
             Build/Cmake/build/**/*.pdb
             Build/Cmake/Testing/**/*
-            Build/Cmake/LICENSE.md
-            Build/Cmake/README.md            
-            Build/Cmake/docs/**
+            LICENSE.md
+            README.md            
+            docs/**
           if-no-files-found: warn
       - name: Host System Info
         shell: pwsh
@@ -260,5 +269,5 @@ jobs:
         run: |
           echo "### Windows Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded:  iccdev-v231-windows-msvc" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccdev-v231-windows-msvc" >> $GITHUB_STEP_SUMMARY
           echo "- Status: Success" >> $GITHUB_STEP_SUMMARY

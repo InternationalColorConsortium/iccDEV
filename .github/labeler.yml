@@ -1,0 +1,78 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: iccDEV labeler.yml
+#
+## Last Updated: 28-NOV-2025 2300Z by David Hoyt 
+##               Added user-controllable input (uci) checks
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+Source:
+  - any:
+      - 'IccProfLib/**/*.cpp'
+      - 'IccProfLib/**/*.h'
+      - 'IccProfLib/**/*.hpp'
+      - 'IccXML/**/*.cpp'
+      - 'IccXML/**/*.h'
+      - 'IccXML/**/*.hpp'
+      - 'Tools/**/**/*.cpp'
+      - 'Tools/**/**/*.h'
+      - 'Tools/**/**/*.hpp'
+
+Documentation:
+  - any:
+      - 'docs/*.md'
+      - '*.md'
+      - 'LICENSE*'
+      - 'SECURITY*'
+      - 'README*'
+      - 'CHANGELOG*'
+
+Configuration:
+  - any:
+      - '**/**/*.json'
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.cmake'
+      - 'config/**/*.txt'
+
+CI:
+  - any:
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+
+Scripts:
+  - any:
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'scripts/**/*.zsh'
+      - 'scripts/**/*.ps1'
+
+Licenses:
+  - any:
+      - 'LICENSE*'
+      - 'COPYING*'
+
+Tools:
+  - any:
+      - 'Tools/**'
+
+Profiles:
+  - any:
+      - 'profiles/**'
+
+Build:
+  - any:
+      - 'Build/**'
