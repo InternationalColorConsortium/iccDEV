@@ -5787,7 +5787,7 @@ void CIccXform3DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   Pixel[1] = SrcPixel[1];
   Pixel[2] = SrcPixel[2];
   
-  // make sure all output pixel values are intialized, just in case
+  // make sure all output pixel values are initialized, just in case
   for (int i = 3; i < m_pTag->m_nOutput; ++i) {
      Pixel[i] = 0.0;
   }
