@@ -130,8 +130,12 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
   icFloatNumber sPixel[15];
   icFloatNumber devPcs[15], roundPcs1[15], roundPcs2[15];
 
-  int ndim = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-  int ndim1 = ndim+1;
+  const int ndim = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+  // safety, and add hints for static analysis
+  if (ndim < 1)
+    return icCmmStatUnsupported;
+  if (ndim > 16)
+    return icCmmStatTooManySamples;
 
   // determine granularity
   if (!nGran)
@@ -151,22 +155,24 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     }
   }
 
-  int i, j;
-  icFloatNumber stepsize = (icFloatNumber)(1.0/(icFloatNumber)(nGran-1));
-  icFloatNumber* steps = new icFloatNumber[ndim1];
-  icFloatNumber nstart = 0.0;
-  icFloatNumber nEnd = (icFloatNumber)(1.0+stepsize/2.0);
-  for(j=0; j<ndim1; j++) {
+  // ccox - what the heck are we trying to do with steps? We don't really use the values.
+  const icFloatNumber stepsize = (icFloatNumber)(1.0/(icFloatNumber)(nGran-1));
+  const icFloatNumber nstart = 0.0;
+  const icFloatNumber nEnd = (icFloatNumber)(1.0+stepsize/2.0);
+  icFloatNumber steps[ 17 ];        // maximum ndim + 1
+  for ( int j=0; j < 17; j++ ) {
     steps[j] = nstart;
   }
 
-  while(steps[0]==nstart) {
-    for(j=0; j<ndim; j++) {
+  while ( steps[0] == nstart ) {
+    for(int j=0; j<ndim; j++) {
       sPixel[j] = icMin(steps[j+1],1.0);
     }
     steps[ndim] = (steps[ndim]+stepsize);
-    for(i=ndim; i>=0; i--) {
-      if(steps[i]>nEnd) {
+    
+    // NOTE - if i == 0, then we cannot access steps[i-1], but steps[0] should always be zero
+    for(int i=ndim; i>0; i--) {
+      if ( steps[i] > nEnd ) {
         steps[i] = nstart;
         steps[i-1] = (steps[i-1]+stepsize);
       }
@@ -183,8 +189,6 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
 
     Compare(sPixel, devPcs, roundPcs1, roundPcs2);
   }
-
-  delete[] steps;
   
   return icCmmStatOk;
 }
