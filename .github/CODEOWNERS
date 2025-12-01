@@ -1,0 +1,37 @@
+# ============================================================
+# CODEOWNERS — Individuals
+# ============================================================
+
+* @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# GitHub Actions workflows (CI, deploy, labelers, automation)
+.github/workflows/*       @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# File-pattern labeler rules
+.github/labeler.yml        @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# Pull-request CI-status labeler workflow
+.github/workflows/pr-status-labeler.yml   @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# File-pattern labeler workflow
+.github/workflows/labeler.yml             @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# Dependabot / Renovate (package update automation)
+.github/dependabot.yml     @xsscx @maxderhak @ChrisCoxArt @dwtza
+.github/renovate.json      @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# Workflow support scripts (if repo uses any)
+scripts/**                 @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# Deployment logic
+deploy/**                  @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# Build system logic
+Build/**                  @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# Protect the CODEOWNERS file itself
+CODEOWNERS                 @xsscx @maxderhak @ChrisCoxArt @dwtza
+
+# Protect SECURITY and top-level docs that could influence reviewers
+SECURITY.md                @xsscx @maxderhak @ChrisCoxArt @dwtza
+README.md                 @xsscx @maxderhak @ChrisCoxArt @dwtza
