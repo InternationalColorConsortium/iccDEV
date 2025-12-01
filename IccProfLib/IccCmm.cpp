@@ -11169,7 +11169,7 @@ bool CIccMruCache<T>::Apply(T *DstPixel, const T *SrcPixel)
   }
 
   //If we get here SrcPixel is not in the cache
-  if (i < m_nCacheSize || last == NULL) {
+  if (i < m_nCacheSize) {
     pixel = &m_pixelData[i*m_nTotalSamples];
 
     ptr = &m_cache[i];
