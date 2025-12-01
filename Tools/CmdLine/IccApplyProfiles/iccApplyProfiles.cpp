@@ -213,16 +213,13 @@ int main(int argc, const char** argv)
   bps = SrcImg.GetBitsPerSample();
 
   //Setup source encoding based on bits per sample (bps) in source image
-  icFloatColorEncoding srcEncoding, destEncoding;
+  // really just error checking
   switch(bps) {
-    case 8:
-      srcEncoding = icEncode8Bit;
+    case 8:     // 8 bit uint
       break;
-    case 16:
-      srcEncoding = icEncode16Bit;
+    case 16:    // 16 bit uint
       break;
-    case 32:
-      srcEncoding = icEncodeFloat;
+    case 32:    // 32 bit float
       break;
     default:
       printf("Source bit depth / color data encoding not supported.\n");
@@ -230,11 +227,10 @@ int main(int argc, const char** argv)
   }
 
   if (cfgApply.m_dstEncoding == icEncodeUnknown) {
-    destEncoding = srcEncoding;
     dbps = bps;
   }
   else {
-    destEncoding = cfgApply.m_dstEncoding;
+    icFloatColorEncoding destEncoding = cfgApply.m_dstEncoding;
     switch (destEncoding) {
       case icEncode8Bit:
         dbps = 8;
