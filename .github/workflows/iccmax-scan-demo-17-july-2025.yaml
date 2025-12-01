@@ -32,10 +32,9 @@ jobs:
       contents: read
     strategy:
       fail-fast: false
-
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
 
     - name: Set up Git anonymous identity
       run: |
@@ -108,19 +107,19 @@ jobs:
           exit 0
           echo "=== licc Testing DONE ==="
     - name: Upload binaries
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
       with:
         name: iccmax-cov-binaries
         path: DemoIccMAX/contrib/Build/cmake/cov/**/*
 
     - name: Upload coverage HTML report
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
       with:
         name: html-coverage-report
         path: DemoIccMAX/contrib/Build/cmake/cov/cov_html/
 
     - name: Upload build logs and tree
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
       with:
         name: build-logs
         path: |
@@ -128,7 +127,7 @@ jobs:
           DemoIccMAX/contrib/Build/cmake/cov/check.log
           DemoIccMAX/contrib/Build/cmake/cov/tree.txt
     - name: Upload diagnostics
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
       with:
         name: diagnostics
         path: |
