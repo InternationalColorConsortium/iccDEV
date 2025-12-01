@@ -7,7 +7,7 @@
 #
 ## Intent: iccMAX Scan Build Runner for Matrix OS
 #
-## Last Updated: 28-NOV-2025 0000Z by David Hoyt 
+## Last Updated: 24-JULY-2025 0000Z by David Hoyt 
 ##               Add Read Permission Block
 ## TODO: Push binary releases, tags etc.. 
 #
@@ -19,7 +19,7 @@
 #
 ###############################################################
 
-name: "iccDEV Scan Build"
+name: "iccMAX Scan Build"
 
 on:
   workflow_dispatch:
@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: 📥 Checkout master
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@v4
 
       # Install dependencies
       - name: Install dependencies
@@ -74,21 +74,21 @@ jobs:
 
       # Upload scan-build reports
       - name: Upload scan-build reports
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@v4
         with:
           name: scan-build-reports
           path: Build/scan-build-reports
 
       # Upload built binaries as artifacts
       - name: Upload build artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@v4
         with:
           name: master-build-linux
           path: Build
 
       # Upload build logs
       - name: Upload build logs
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@v4
         with:
           name: build-logs
           path: DemoIccMAX/Build/CMakeCache.txt
