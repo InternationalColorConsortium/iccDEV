@@ -204,7 +204,6 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
                 if (memcmp(&segment[i], "acsp", 4) == 0) {
                     iccData.insert(iccData.end(), segment.begin() + i, segment.end());
                     printf("[INFO] Found 'acsp' ICC magic in APP segment 0x%02X at offset %zu.\n", marker[1], i);
-                    found = true;
                     goto done;
                 }
             }
@@ -228,7 +227,6 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
             if (memcmp(&raw[i], "acsp", 4) == 0) {
                 iccData.insert(iccData.end(), raw.begin() + i, raw.end());
                 printf("[INFO] Fallback: Found 'acsp' in raw file at offset %zu.\n", i);
-                found = true;
                 break;
             }
         }
