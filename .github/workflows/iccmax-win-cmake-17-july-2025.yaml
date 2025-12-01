@@ -1,0 +1,81 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: iccMAX for Cmake Windows Build
+#
+## Last Updated: 24-JULY-2025 0000Z by David Hoyt 
+#                Add Permission Block
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+name: WindowsCmake
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    strategy:
+      matrix:
+        build_type: [Release]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Cache vcpkg packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            C:\vcpkg\installed
+            C:\vcpkg\buildtrees
+            C:\vcpkg\downloads
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-
+      - name: Cache build binaries
+        uses: actions/cache@v3
+        with:
+          path: |
+            DemoIccMAX\Build\Cmake\build
+          key: cmake-build-${{ runner.os }}-${{ matrix.build_type }}-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: |
+            cmake-build-${{ runner.os }}-${{ matrix.build_type }}-
+      - name: Install dependencies
+        run: |
+          git clone https://github.com/InternationalColorConsortium/DemoIccMAX.git
+          cd DemoIccMAX
+          vcpkg integrate install
+          vcpkg install
+      - name: Configure
+        run: |
+          cd DemoIccMAX
+          cd Build\Cmake
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 ^
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} ^
+          -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+      - name: Build
+        run: |
+          cd DemoIccMAX\Build\Cmake
+          cmake --build build --config ${{ matrix.build_type }}
+          dir /s /b *.exe *.lib
+      - name: Run Unit Tests
+        run: |
+          cd DemoIccMAX\Testing
+          dir

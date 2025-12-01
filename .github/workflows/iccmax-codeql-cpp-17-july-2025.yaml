@@ -1,0 +1,102 @@
+###############################################################
+#
+## Copyright (©) International Color Consortium. All rights reserved.
+##                 
+##
+## Last Updated: 17-JULY-2025 2300Z by David Hoyt
+#
+## Intent: CodeQL with cpp checks
+#
+## TODO: Refactor to reduce the Noise around legacy code
+#
+#
+## Notes: Known good and working copy from PatchIccMAX
+#
+#
+#
+#
+#
+#
+###############################################################
+
+name: iccMAX CodeQL
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize the CodeQL tools
+        uses: github/codeql-action/init@v3
+        with:
+          languages: cpp
+          queries: security-and-quality
+          source-root: .
+
+      - name: Debug File Paths
+        run: |
+          echo "Listing all .cpp and .h files excluding Build/ directory:"
+          find . -type f \( -name "*.cpp" -o -name "*.h" \) ! -path "./Build/*" ! -path "**/CMakeFiles/**" > all_files_list.txt
+          cat all_files_list.txt
+        working-directory: .
+
+      - name: Build with CMake
+        run: |
+          pwd
+          ls
+          cd Build/
+          pwd
+          ls
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxml2 libxml2-dev nlohmann-json3-dev build-essential \
+            cmake libopencl-clang-17-dev libwxgtk3.2-dev libtiff-dev  \
+            curl git llvm clang-tools clang-17 libpng-dev libtiff6 libtiff5-dev libtiff-tools libtiff-dev libjpeg-dev
+          export CC=clang
+          export CXX=clang++
+          cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-g -fsanitize=address,undefined -fno-omit-frame-pointer -Wall" -Wno-dev Cmake/
+          make -j8
+        working-directory: .
+
+      - name: Verify CodeQL Extracted Files
+        run: |
+          echo "Checking extracted .cpp and .h files excluding Build/ directory:"
+          find . -type f \( -name "*.cpp" -o -name "*.h" \) ! -path "./Build/*" ! -path "**/CMakeFiles/**" > scanned_files_list.txt
+          cat scanned_files_list.txt
+          echo "Comparing expected and scanned files:"
+          comm -23 <(sort all_files_list.txt) <(sort scanned_files_list.txt) > missing_files.txt
+          cat missing_files.txt
+        working-directory: .
+
+      - name: Log Missing Header Files
+        run: |
+          echo "Verifying presence of known missing headers:"
+          for file in IccXML/CmdLine/IccToXml/stdafx.h IccXML/IccLibXML/MainPage.h IccProfLib/IccWrapper.h IccProfLib/MainPage.h Tools/wxWidget/wxProfileDump/wxProfileDump.h; do
+            if [ ! -f "$file" ]; then
+              echo "Missing: $file"
+            else
+              echo "Found: $file"
+            fi
+          done
+        working-directory: .
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+      - name: Summary Report
+        if: always()
+        run: |
+          echo "### Ubuntu Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Build Directory: DemoIccMAX/Build/" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded: iccmax-macos-clang" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
