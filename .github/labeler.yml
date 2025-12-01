@@ -1,0 +1,70 @@
+###############################################################
+#
+## Copyright (©) 2025 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
+#
+#
+## Intent: iccDEV label.yml
+#
+## Last Updated: 28-NOV-2025 2300Z by David Hoyt 
+##               Added uci checks
+## TODO: Push binary releases, tags etc.. 
+#
+## Comment: Known good and working from PatchIccMax
+#
+#
+#
+#
+#
+###############################################################
+
+Source:
+  - any:
+      - 'src/**/*.cpp'
+      - 'src/**/*.h'
+      - 'src/**/*.hpp'
+
+Documentation:
+  - any:
+      - 'docs/**/*.md'
+      - '*.md'
+      - 'README*'
+      - 'CHANGELOG*'
+
+Configuration:
+  - any:
+      - 'config/**/*.json'
+      - '**/*.yaml'
+      - '**/*.yml'
+      - '**/*.cmake'
+      - 'config/**/*.txt'
+
+CI:
+  - any:
+      - '.github/workflows/*.yml'
+      - '.github/workflows/*.yaml'
+
+Scripts:
+  - any:
+      - 'scripts/**/*.py'
+      - 'scripts/**/*.sh'
+      - 'scripts/**/*.zsh'
+      - 'scripts/**/*.ps1'
+
+Licenses:
+  - any:
+      - 'LICENSE*'
+      - 'COPYING*'
+
+Tools:
+  - any:
+      - 'Tools/**'
+
+Profiles:
+  - any:
+      - 'profiles/**'
+
+Build:
+  - any:
+      - 'Build/**'
