@@ -2849,18 +2849,16 @@ void CIccCalculatorFunc::InsertBlanks(std::string &sDescription, int nBlanks)
 void CIccCalculatorFunc::DescribeSequence(std::string &sDescription,
                                        icUInt32Number nOps, SIccCalcOp *op, int nBlanks)
 {
-  icUInt32Number i;
-  int pos;
   std::string opName;
   std::string funcDesc;
 
   InsertBlanks(funcDesc, nBlanks);
   funcDesc += "{ ";
 
-  pos = nBlanks + 2;
+  int pos = nBlanks + 2;
 
-  for (i=0; i<nOps;) {
-    if (pos >nBlanks + 65) {
+  for (icUInt32Number i=0; i<nOps;) {
+    if (pos > (nBlanks + 65)) {
       funcDesc += "\n";
       InsertBlanks(funcDesc, nBlanks + 2);
       pos = nBlanks + 2;
@@ -2886,7 +2884,7 @@ void CIccCalculatorFunc::DescribeSequence(std::string &sDescription,
 
         InsertBlanks(funcDesc, nBlanks+2);
         funcDesc += "else\n";
-        pos = 0;
+        //pos = 0;  // value overwritten below
 
         nSubOps = (icUInt32Number)icIntMin(nOps-i, elseop->data.size);
         DescribeSequence(funcDesc, nSubOps, &op[1], nBlanks+2);
@@ -2944,6 +2942,7 @@ void CIccCalculatorFunc::DescribeSequence(std::string &sDescription,
     op++;
     i++;
   }
+  
   funcDesc += "}\n";
 
   sDescription += funcDesc;
@@ -4810,7 +4809,7 @@ void CIccMpeCalculator::Apply(CIccApplyMpe *pApply, icFloatNumber *pDestPixel, c
     g_pDebugger->EndApply();
   }
   else {
-    rv = m_calcFunc->Apply(pApplyCalc);
+    (void) m_calcFunc->Apply(pApplyCalc);
   }
 }
 
