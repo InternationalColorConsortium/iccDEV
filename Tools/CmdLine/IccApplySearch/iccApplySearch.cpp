@@ -318,8 +318,6 @@ int main(int argc, const char* argv[])
 
   //Setup source encoding
   srcEncoding = cfgData.m_encoding;
-  
-  icColorSpaceSignature SrcspaceSig = cfgData.m_srcSpace;
 
   //Allocate a CIccCmm to use to apply profiles
   CIccCmmSearch cmm;
@@ -440,7 +438,7 @@ int main(int argc, const char* argv[])
   pccList.clear();
 
   //Get and validate the source color space from namedCmm.
-  SrcspaceSig = cmm.GetSourceSpace();
+  icColorSpaceSignature SrcspaceSig = cmm.GetSourceSpace();
   icUInt32Number nSrcSamples = icGetSpaceSamples(SrcspaceSig);
 
   bool bClip = true;
