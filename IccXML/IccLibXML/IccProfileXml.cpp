@@ -692,6 +692,7 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
           parseStr += nodeName;
           snprintf(str, strSize, ") Tag on line %d\n", pTypeNode->line);
           parseStr += str;
+          delete pTag;
           return false;
         }
       }
@@ -702,6 +703,7 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
         parseStr += "\" (";
         snprintf(str, strSize, ") Tag on line %d\n", pTypeNode->line);
         parseStr += str;
+        delete pTag;
         return false;
       }
     }
@@ -752,6 +754,7 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
         parseStr += nodeName;
         snprintf(str, strSize, ") Tag on line %d\n", pNode->line);
         parseStr += str;
+        delete pTag;
         return false;
       }
     }
@@ -762,6 +765,7 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
       parseStr += nodeName;
       snprintf(str, strSize, ") Tag on line %d\n", pNode->line);
       parseStr += str;
+      delete pTag;
       return false;
     }
   }

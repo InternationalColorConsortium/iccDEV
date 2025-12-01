@@ -275,16 +275,17 @@ CIccCamConverter::CalcCoefficients ()
 	rgbP[0] = rgbC[0];
 	rgbP[1] = rgbC[1];
 	rgbP[2] = rgbC[2];
+ 
+    // Hyperbolic function uses the m_x0 and m_cc values, so they must be initialized first
+//	m_x0 = (icFloatNumber) (m_Fl * 0.25 / 255.0);
+// m_x0 = (icFloatNumber) (m_Fl * 1.00 / 255.0)
+	m_x0 = (icFloatNumber) (m_Fl * 4.00 / 255.0);
+	m_cc = ((1 + m_alfa) * H_Function (m_x0) / H_Function (m_Fl) - m_alfa) * F_Function (m_Fl) / m_x0;
 
 	rgbP[0] = Hyperbolic (m_Fl * rgbP[0] / 100) + 0.1f;
 	rgbP[1] = Hyperbolic (m_Fl * rgbP[1] / 100) + 0.1f;
 	rgbP[2] = Hyperbolic (m_Fl * rgbP[2] / 100) + 0.1f;
 	m_AWhite = (icFloatNumber)((2.0 * rgbP[0] + rgbP[1] + rgbP[2] / 20.0 - 0.305) * m_Nbb);
-
-//	m_x0 = (icFloatNumber) (m_Fl * 0.25 / 255.0);
-// m_x0 = (icFloatNumber) (m_Fl * 1.00 / 255.0)
-	m_x0 = (icFloatNumber) (m_Fl * 4.00 / 255.0);
-	m_cc = ((1 + m_alfa) * H_Function (m_x0) / H_Function (m_Fl) - m_alfa) * F_Function (m_Fl) / m_x0;
 }
 
 

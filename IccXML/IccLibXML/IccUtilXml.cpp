@@ -74,6 +74,7 @@
 #endif
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <math.h>  /* nanf */
+#include <limits>
 
 
 
@@ -991,6 +992,34 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseTextCount(const char *szText)
   return n;
 }
 
+// because VisualC has some really bad macros and doesn't test with standard templates
+#undef max
+
+// clip the input value to the valid output range
+template<typename T, typename F>
+T clipTypeRange( const F &input )
+{
+  if (input > std::numeric_limits<T>::max())
+    return std::numeric_limits<T>::max();
+  if (input < std::numeric_limits<T>::lowest()) // not min, which is a positive small number for floating point
+    return std::numeric_limits<T>::lowest();
+  if ( !std::numeric_limits<F>::is_integer && isnan(input) )
+    return T(0);    // flush NaN to zero
+  return T(input);  // passed all the checks, just cast it
+}
+
+// special case when types are equal
+double clipTypeRange( const double &input )
+{
+  return input;
+}
+
+// special case when types are equal
+float clipTypeRange( const float &input )
+{
+  return input;
+}
+
 template <class T, icTagTypeSignature Tsig>
 icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSize, const char *szText)
 {	
@@ -1015,7 +1044,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
         pBuf[n] = (T)nanf(num);
       }
       else {
-        pBuf[n] = (T)atof(num);
+        pBuf[n] = clipTypeRange<T>(atof(num));  // clip input to valid output range
       }
       n++;
       bInNum = false;
@@ -1028,7 +1057,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseText(T* pBuf, icUInt32Number nSiz
       pBuf[n] = (T)nanf(num);
     }
     else {
-      pBuf[n] = (T)atof(num);
+      pBuf[n] = clipTypeRange<T>(atof(num));  // clip input to valid output range
     }
     n++;
   } 
