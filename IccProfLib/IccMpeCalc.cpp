@@ -3646,8 +3646,9 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         a1 = 0.0;
         
       icInt32Number nSel;
-      if (isinf(a1))
-        nSel = std::numeric_limits<icInt32Number>::max();
+      if (isinf(a1)) {
+        nSel = (a1 < 0.0) ? std::numeric_limits<icInt32Number>::lowest() : std::numeric_limits<icInt32Number>::max();
+      }
       else
         nSel = (a1 >= 0.0) ? (icInt32Number)(a1+0.5f) : (icInt32Number)(a1-0.5f);
 

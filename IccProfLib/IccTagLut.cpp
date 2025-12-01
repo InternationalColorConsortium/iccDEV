@@ -2506,7 +2506,7 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
 
-  // UnitClip is calling "NoClip", but now removes NaN and Inf
+  // The UnitClip function pointer is calling "NoClip", but now removes NaN and Inf
   icFloatNumber x = UnitClip(srcPixel[0]) * mx;
   icFloatNumber y = UnitClip(srcPixel[1]) * my;
   
