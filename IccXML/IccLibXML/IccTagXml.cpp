@@ -676,9 +676,9 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
   for (i=0; i<(int)m_nSize; i++) {
     SIccNamedColorEntry *pEntry= GetEntry(i);
 
-    const char *szNodeName = "";
 
     if (pEntry) {
+      const char *szNodeName = NULL;
       if (m_csPCS==icSigLabData) {
         icFloatNumber lab[3];
 
@@ -3016,7 +3016,7 @@ bool CIccTagXmlParametricCurve::ParseXml(xmlNode *pNode, icConvertType /*nType*/
 
 bool CIccTagXmlParametricCurve::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 {
-  xmlNode *pCurveNode = icXmlFindNode(pNode->children, "ParametricCurve");
+  xmlNode *pCurveNode = NULL;   //  icXmlFindNode(pNode->children, "ParametricCurve");  // this appears to do the same search as below, but value is never used
 
   for (pCurveNode = pNode; pCurveNode; pCurveNode=pCurveNode->next) {
     if (pCurveNode->type==XML_ELEMENT_NODE) {
@@ -4645,7 +4645,6 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
     }
   }
   else {  //Legacy parsing of XML tags by type
-    sigTag = (icTagSignature)0;
     // get the tag type signature
     icTagTypeSignature sigType = icGetTypeNameTagSig(nodeName.c_str());
 
