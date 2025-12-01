@@ -336,7 +336,7 @@ print_usage:
 
       for (i=pIcc->m_Tags->begin(); i!=pIcc->m_Tags->end(); i++) {
         rndup = 4 * ((i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
-        pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
+        //pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
 
         // Is the Tag offset + Tag Size beyond EOF?
         if (i->TagInfo.offset + i->TagInfo.size > pHdr->size) {
