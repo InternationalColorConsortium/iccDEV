@@ -1061,33 +1061,27 @@ MyRoundTripDialog::MyRoundTripDialog(wxWindow *pParent, const wxString& title, w
         (pIcc->FindTag(icSigRedMatrixColumnTag) && pIcc->FindTag(icSigGreenMatrixColumnTag) && pIcc->FindTag(icSigBlueMatrixColumnTag) &&
         pIcc->FindTag(icSigRedTRCTag) && pIcc->FindTag(icSigGreenTRCTag) && pIcc->FindTag(icSigBlueTRCTag))) {
       theReport += AnalyzeRoundTrip(profilePath, icRelativeColorimetric, false);
-      bRelative = true;
     }
 
     //Check MPE absolute intent
     if (pIcc->FindTag(icSigDToB3Tag) && pIcc->FindTag(icSigBToD3Tag)) {
       theReport += AnalyzeRoundTrip(profilePath, icAbsoluteColorimetric, true);
-      bRelative = true;
     }
 
     //Perceptual intent
     if (pIcc->FindTag(icSigAToB0Tag) && pIcc->FindTag(icSigBToA0Tag)) {
       theReport += AnalyzeRoundTrip(profilePath, icPerceptual, false);
-      bRelative = true;
     }
     if (pIcc->FindTag(icSigDToB0Tag) && pIcc->FindTag(icSigBToD0Tag)) {
       theReport += AnalyzeRoundTrip(profilePath, icPerceptual, true);
-      bRelative = true;
     }
 
     //Saturation intent
     if (pIcc->FindTag(icSigAToB2Tag) && pIcc->FindTag(icSigBToA2Tag)) {
       theReport += AnalyzeRoundTrip(profilePath, icSaturation, false);
-      bRelative = true;
     }
     if (pIcc->FindTag(icSigDToB2Tag) && pIcc->FindTag(icSigBToD2Tag)) {
       theReport += AnalyzeRoundTrip(profilePath, icSaturation, true);
-      bRelative = true;
     }
 
     wxEndBusyCursor();
