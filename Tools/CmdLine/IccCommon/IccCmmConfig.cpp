@@ -851,8 +851,7 @@ int CIccCfgPccWeight::fromArgs(const char** args, int nArg, bool /*bReset*/)
     m_pccPath = args[0];
     m_dWeight = (icFloatNumber)atof(args[1]);
 
-    args += 2;
-    nArg -= 2;
+//    args += 2;    // static analysis says value unread
     nUsed += 2;
   }
 
@@ -1101,7 +1100,7 @@ bool CIccCfgSearchApply::fromJsonInit(json j)
 
   m_bInitialized = true;
 
-  int intent;
+  int intent = icUnknownIntent; // just incase json parsing fails
   icGetJsonRenderingIntent(j["intent"], intent);
   m_intentInitial = (icRenderingIntent)intent;
 
