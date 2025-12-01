@@ -1801,8 +1801,14 @@ bool CIccSingleSampledCurve::Begin(icElemInterp /* nInterp */, CIccTagMultiProce
 ******************************************************************************/
 icFloatNumber CIccSingleSampledCurve::Apply(icFloatNumber v) const
 {
- if (isnan(v) || isinf(v))
-    return m_loIntercept;
+  if (isnan(v))
+    return 0.0;
+  if (isinf(v)) {
+    if (v < 0.0)
+      return 0.0;
+    else
+      return 1.0;
+  }
   if (v<m_firstEntry) {
     return m_loSlope * v + m_loIntercept;
   }
