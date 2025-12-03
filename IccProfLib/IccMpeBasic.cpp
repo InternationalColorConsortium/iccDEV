@@ -3554,7 +3554,7 @@ CIccMpeTintArray &CIccMpeTintArray::operator=(const CIccMpeTintArray &tintArray)
   if (this == &tintArray)   // safety
     return (*this);
 
-  m_nReserved = m_nReserved;
+  m_nReserved = tintArray.m_nReserved;
 
   if (m_Array) {
     delete m_Array;
