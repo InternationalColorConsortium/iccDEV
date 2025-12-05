@@ -14,6 +14,9 @@
 # Build system logic
 Build/** @xsscx @ChrisCoxArt
 
+# Protect the CODEOWNERS file itself
+CODEOWNERS                 @xsscx @maxderhak @ChrisCoxArt @dwtza
+
 # Governance: protect CODEOWNERS and key security/docs
 SECURITY.md @xsscx @maxderhak @ChrisCoxArt @dwtza
 README.md @xsscx @maxderhak @ChrisCoxArt @dwtza
