@@ -2,37 +2,30 @@
 name: Bug report
 about: Create a report to help us improve
 title: ''
-labels: ''
+labels: 'bag'
 assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+## **Describe the bug**
+Provide a clear and concise description of the issue you're experiencing.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+## **To Reproduce**
+List the steps required to reproduce the issue. For command-line issues, include the exact command(s) you ran.
+1. Run `<command>`
+2. Observe the output
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## **Expected behavior**
+Describe what you expected to happen instead.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+## **Terminal Output or Screenshots**
+If applicable, attach screenshots or paste terminal output (use fenced code blocks for logs).
 
-**Desktop (please complete the following information):**
- - OS: [e.g. Windows 10, macOS, Ubuntu]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+## **Environment (please complete the following information):**
+- **OS**: (e.g., Ubuntu 24.04, macOS 15.7.2, Windows 11)
+- **iccDEV version**: (e.g., 2.3.1)
+- **Shell**: (e.g., bash, zsh, PowerShell)
+- **Other relevant tools/versions**: (if applicable)
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
-
-**Additional context**
-Add any other context about the problem here.
+## **Additional context**
+Include any other details that might help diagnose the problem (configuration files, reproduction project, etc.).
