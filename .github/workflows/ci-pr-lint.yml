@@ -7,8 +7,8 @@
 #
 ## Intent: Static code analysis and linting (cppcheck, clang-tidy, clang-format) for PR validation
 #
-## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
-##               Add Action lint
+## Last Updated: 06-DEC-2025 1400Z by David Hoyt 
+##               TEST job Failures
 ## TODO: Push binary releases, tags etc.. 
 #
 ## Comment: Known good and working from PatchIccMax
@@ -62,11 +62,31 @@ jobs:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
           fetch-depth: 0
+          # Disable unsafe fetch options
+          persist-credentials: false
 
       - name: Set up Git anonymous identity
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
+
+      - name: Verify remote origin URL (opt out of malicious git configs)
+        shell: bash
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          origin_url=$(git remote get-url origin || true)
+          echo "Remote origin: $origin_url"
+          # Enforce that origin points to the expected GitHub repository for this workflow run
+          expected="https://github.com/${{ github.repository }}.git"
+          # Allow both HTTPS and git@ forms if needed
+          if [[ "$origin_url" != "$expected" && "$origin_url" != "${expected%.git}" && "$origin_url" != "git@github.com:InternationalColorConsortium/iccDEV.git" ]]; then
+            echo "Origin URL mismatch: expected $expected, ${expected%.git}, or git@github.com:InternationalColorConsortium/iccDEV.git, got $origin_url" >&2
+            exit 1
+          fi
 
       - name: Install Linux dependencies
         run: |
@@ -91,16 +111,6 @@ jobs:
           git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
 
           base_ref="${{ github.base_ref }}"
-
-          # --- List the allowed base branches ---
-          case "$base_ref" in master)
-              ;;
-            *)
-              echo "Only 'master' branch is supported as base_ref, got: $base_ref" >&2
-              echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
-              exit 1
-              ;;
-          esac
 
           # Full fetch due to Job Failure at URL https://github.com/InternationalColorConsortium/iccDEV/actions/runs/19976940423
           git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=0

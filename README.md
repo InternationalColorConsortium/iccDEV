@@ -1,5 +1,16 @@
 # iccDEV
 
+## Quickstart
+
+| Method | Command |
+|--------|---------|
+| **Homebrew** | `brew install iccdev` |
+| **NPM** | `npm install iccdev` |
+| **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
+| **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest bash -l` |
+
+To build from source, see: [Build documentation](docs/build.md)
+
 ## Introduction
 
 The purpose of the International Color Consortium (ICC) is to promote
@@ -16,15 +27,6 @@ and application of ICC based color management profiles based on the
 All documentation is in the "docs" directory. If you're just getting started, 
 here's how we recommend you read the Introduction for a list of features and 
 libraries included in iccDEV.
-
-
-## Quickstart
-
-Install iccDEV using the Homebrew or NPM package managers:
-
-`brew install iccdev` or `npm install iccdev`
-
-To build from source view the [Build documentation](docs/build.md).
 
 ## Contributing
 

@@ -7,8 +7,8 @@
 #
 ## Intent: iccDEV ci-pr-action
 #
-## Last Updated: 02-DEC-2025 2300Z by David Hoyt 
-##               Added user-controllable input (uci) checks
+## Last Updated: 07-DEC-2025 1600Z by David Hoyt 
+##               Additional UCI Checks
 #
 #
 #
@@ -103,7 +103,7 @@ jobs:
 
           base_ref="${{ github.base_ref }}"
 
-          # check to avoid fetching refs from untrusted or uncontrolled input (uci)
+          # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in master)
               ;;
             *)
