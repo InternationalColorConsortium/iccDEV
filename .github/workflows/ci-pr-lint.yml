@@ -93,7 +93,7 @@ jobs:
           base_ref="${{ github.base_ref }}"
 
           # Full fetch due to Job Failure at URL https://github.com/InternationalColorConsortium/iccDEV/actions/runs/19976940423
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=0
+          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=1
 
           # --- filename list ---
           git diff --name-only "origin/${base_ref}"...HEAD \
