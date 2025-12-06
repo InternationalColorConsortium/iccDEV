@@ -85,7 +85,7 @@ jobs:
           # Allow both HTTPS and git@ forms if needed
           if [[ "$origin_url" != "$expected" && "$origin_url" != "${expected%.git}" && "$origin_url" != "git@github.com:InternationalColorConsortium/iccDEV.git" ]]; then
             echo "Origin URL mismatch: expected $expected, ${expected%.git}, or git@github.com:InternationalColorConsortium/iccDEV.git, got $origin_url" >&2
-            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+            echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
