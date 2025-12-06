@@ -75,47 +75,35 @@ jobs:
             gcc g++ clang clang-tools libpng-dev libxml2 libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common python3 python3-pip curl git llvm zsh
 
-      - name: Detect modified source files
-        id: diff
-        shell: bash
-        env:
-         BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
-          unset GITHUB_TOKEN || true
-
-          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
-
-          base_ref="${{ github.base_ref }}"
-
-          # --- List the allowed base branches ---
-          case "$base_ref" in master)
-              ;;
-            *)
-              echo "Only 'master' branch is supported as base_ref, got: $base_ref" >&2
-              echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
-              exit 1
-              ;;
-          esac
-
-          # Full fetch due to Job Failure at URL https://github.com/InternationalColorConsortium/iccDEV/actions/runs/19976940423
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=0
-
-          # --- filename list ---
-          git diff --name-only "origin/${base_ref}"...HEAD \
-            | grep -Ei '\.(cpp|cxx|cc|h|hpp)$' \
-            | tr '\n' '\0' > changed_files.txt
-
-          changed_file_count=$(xargs -0 -n1 < changed_files.txt | wc -l)
+       - name: Detect modified source files 
+         id: diff
+         shell: bash
+         env:
+           BASH_ENV: /dev/null
+         run: |
+           set -euo pipefail
+           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+           git config --global credential.helper ""
+           unset GITHUB_TOKEN || true
+       
+           git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+       
+           base_ref="${{ github.base_ref }}"
+       
+           # Fetch the base branch — any branch allowed
+           git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=0
+       
+           git diff --name-only "origin/${base_ref}"...HEAD \
+             | grep -Ei '\.(cpp|cxx|cc|h|hpp)$' \
+             | tr '\n' '\0' > changed_files.txt
+       
+           changed_file_count=$(xargs -0 -n1 < changed_files.txt | wc -l)
+       
            if [ "$changed_file_count" -eq 0 ]; then
-           echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
-          else
-           echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
-          fi
+             echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+           else
+             echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
+           fi
 
       - name: Lint & code checks
         if: ${{ steps.diff.outputs.no_src_changes == 'false' }}
