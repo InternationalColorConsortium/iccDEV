@@ -67,7 +67,7 @@
  // -Initial implementation by Max Derhak 5-15-2003
  // -Modification to support iccMAX by Max Derhak in 2014
  // -Addition of JSON configuraiton by Max Derhak in 2024
- //
+ // TEST ci-pr-lint in URL https://github.com/InternationalColorConsortium/iccDEV/pull/296
  //////////////////////////////////////////////////////////////////////
 
 
