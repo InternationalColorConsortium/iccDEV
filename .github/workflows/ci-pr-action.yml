@@ -59,7 +59,7 @@ jobs:
           # Disable unsafe fetch options
           persist-credentials: false
 
-      - name: Verify remote origin URL (opt out of malicious git configs)
+      - name: UCI Gate 1 - Verify Remote Origin (opt out of malicious git configs)
         shell: bash
         env:
          BASH_ENV: /dev/null
@@ -103,7 +103,7 @@ jobs:
 
           base_ref="${{ github.base_ref }}"
 
-          # check to avoid fetching refs from untrusted or uncontrolled input (uci)
+          # UCI Gate 2 - Verify Remote Origin (opt out of malicious $base_ref)
           case "$base_ref" in master)
               ;;
             *)
@@ -267,7 +267,7 @@ jobs:
       build-types: ${{ steps.v.outputs.bt }}
 
     steps:
-      - name: Validate fixed or upstream inputs
+      - name: UCI Gate 3 - Last Chance - UCI Sanity Checks
         id: v
         shell: bash
         run: |
