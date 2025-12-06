@@ -90,18 +90,6 @@ jobs:
 
           git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
 
-          base_ref="${{ github.base_ref }}"
-
-          # --- List the allowed base branches ---
-          case "$base_ref" in master)
-              ;;
-            *)
-              echo "Only 'master' branch is supported as base_ref, got: $base_ref" >&2
-              echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
-              exit 1
-              ;;
-          esac
-
           # Full fetch due to Job Failure at URL https://github.com/InternationalColorConsortium/iccDEV/actions/runs/19976940423
           git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=0
 
