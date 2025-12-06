@@ -7,8 +7,8 @@
 #
 ## Intent: Static code analysis and linting (cppcheck, clang-tidy, clang-format) for PR validation
 #
-## Last Updated: 06-DEC-2025 1400Z by David Hoyt 
-##               TEST job Failure at URL https://github.com/InternationalColorConsortium/iccDEV/actions/runs/19990609368
+## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
+##               Add Action lint
 ## TODO: Push binary releases, tags etc.. 
 #
 ## Comment: Known good and working from PatchIccMax
@@ -89,6 +89,18 @@ jobs:
           unset GITHUB_TOKEN || true
 
           git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+
+          base_ref="${{ github.base_ref }}"
+
+          # --- List the allowed base branches ---
+          case "$base_ref" in master)
+              ;;
+            *)
+              echo "Only 'master' branch is supported as base_ref, got: $base_ref" >&2
+              echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+              exit 1
+              ;;
+          esac
 
           # Full fetch due to Job Failure at URL https://github.com/InternationalColorConsortium/iccDEV/actions/runs/19976940423
           git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=0
