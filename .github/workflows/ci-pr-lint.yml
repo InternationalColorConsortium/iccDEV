@@ -62,11 +62,32 @@ jobs:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
           fetch-depth: 0
+          # Disable unsafe fetch options
+          persist-credentials: false
 
       - name: Set up Git anonymous identity
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
+
+      - name: Verify remote origin URL (opt out of malicious git configs)
+        shell: bash
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          origin_url=$(git remote get-url origin || true)
+          echo "Remote origin: $origin_url"
+          # Enforce that origin points to the expected GitHub repository for this workflow run
+          expected="https://github.com/${{ github.repository }}.git"
+          # Allow both HTTPS and git@ forms if needed
+          if [[ "$origin_url" != "$expected" && "$origin_url" != "${expected%.git}" && "$origin_url" != "git@github.com:InternationalColorConsortium/iccDEV.git" ]]; then
+            echo "Origin URL mismatch: expected $expected, ${expected%.git}, or git@github.com:InternationalColorConsortium/iccDEV.git, got $origin_url" >&2
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
       - name: Install Linux dependencies
         run: |
