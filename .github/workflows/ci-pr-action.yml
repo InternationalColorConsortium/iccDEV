@@ -254,7 +254,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   validate-inputs:
-    name: Validate Matrix Inputs
+    name: UCI Gate 2 - Validate Matrix Inputs
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -267,7 +267,7 @@ jobs:
       build-types: ${{ steps.v.outputs.bt }}
 
     steps:
-      - name: UCI Gate 3 - Last Chance - UCI Sanity Checks
+      - name: UCI Gate 3 - Sanity Checks
         id: v
         shell: bash
         run: |
