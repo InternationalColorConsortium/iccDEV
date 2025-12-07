@@ -8,7 +8,7 @@
 ## Intent: Static code analysis and linting (cppcheck, clang-tidy, clang-format) for PR validation
 #
 ## Last Updated: 06-DEC-2025 1400Z by David Hoyt 
-##               TEST job Failure at URL https://github.com/InternationalColorConsortium/iccDEV/actions/runs/19990609368
+##               TEST job Failures
 ## TODO: Push binary releases, tags etc.. 
 #
 ## Comment: Known good and working from PatchIccMax
