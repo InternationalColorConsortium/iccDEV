@@ -166,7 +166,7 @@ authorization from SunSoft Inc.
 #ifndef icPROFILEHEADER_H
 #define icPROFILEHEADER_H
 
-#if !defined(ICCCONFIG_h)
+#if !defined(_ICCCONFIG_h)
     #error Include IccProfLibConf.h before this file
 #endif
 

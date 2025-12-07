@@ -92,4 +92,4 @@ public:
 }; //namespace iccDEV
 #endif
 
-#endif // !defined(_ICCCMM_H)
+#endif // !defined(_ICCEVAL_H)

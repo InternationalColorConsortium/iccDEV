@@ -80,8 +80,8 @@ Copyright:  (c) see Software License
 
 #pragma once
 
-#ifndef ICC_SIGNATURE_UTILS_H
-#define ICC_SIGNATURE_UTILS_H
+#ifndef _ICC_SIGNATURE_UTILS_H
+#define _ICC_SIGNATURE_UTILS_H
 
 #include "IccDefs.h"
 #include <cstdint>
@@ -465,4 +465,4 @@ inline void DebugColorSpaceMeta(icUInt32Number sig) {
 
 
 
-#endif // ICC_SIGNATURE_UTILS_H
+#endif // _ICC_SIGNATURE_UTILS_H

@@ -58,8 +58,8 @@
  */
 
 /* Header file guard bands */
-#ifndef ICCCONFIG_h
-#define ICCCONFIG_h
+#ifndef _ICCCONFIG_h
+#define _ICCCONFIG_h
 
 //Define the following to use namespace
 //#define USEICCDEVNAMESPACE
@@ -174,4 +174,4 @@ namespace iccDEV {
 }
 #endif
 
-#endif //ICCCOFIG_h
+#endif // _ICCCONFIG_h

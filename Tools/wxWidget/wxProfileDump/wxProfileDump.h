@@ -58,6 +58,9 @@ Copyright:  (c) see Software License
 * 
 */
 
+#ifndef _WXPROFILEDUMP_H
+#define _WXPROFILEDUMP_H
+
 #include <wx/toolbar.h>
 #include <wx/listctrl.h>
 #include <wx/docview.h>
@@ -216,3 +219,5 @@ enum
     MDI_CHILD_QUIT,
     MDI_ABOUT = wxID_ABOUT
 };
+
+#endif // _WXPROFILEDUMP_H

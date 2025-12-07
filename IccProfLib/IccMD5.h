@@ -35,6 +35,9 @@ August 2012
 - Change typedef of UINT4 to use ICCUINT32 (oops!)
 ------------------------------------------------------------------------ */
 
+#ifndef _ICCMD5_H
+#define _ICCMD5_H
+
 #include "IccProfLibConf.h"
 
 
@@ -59,3 +62,4 @@ void ICCPROFLIB_API icMD5Init  (MD5_CTX *);
 void ICCPROFLIB_API icMD5Update  (MD5_CTX *, unsigned char *, unsigned int);
 void ICCPROFLIB_API icMD5Final  (unsigned char* , MD5_CTX *);
 
+#endif  // _ICCMD5_H

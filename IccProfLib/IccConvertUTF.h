@@ -20,6 +20,9 @@
 * remains attached.
 */
 
+#ifndef _ICCCONVERTUTF_H
+#define _ICCCONVERTUTF_H
+
 /* ---------------------------------------------------------------------
 
 Conversions between UTF32, UTF-16, and UTF-8.  Header file.
@@ -192,3 +195,4 @@ icUtfConversionResult ICCPROFLIB_API icConvertUTF32toUTF16 (
 #endif
 
 /* --------------------------------------------------------------------- */
+#endif // _ICCCONVERTUTF_H

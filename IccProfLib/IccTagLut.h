@@ -666,4 +666,4 @@ protected:
 } //namespace iccDEV
 #endif
 
-#endif // !defined(_ICCTAG_H)
+#endif // !defined(_ICCTAGLUT_H)

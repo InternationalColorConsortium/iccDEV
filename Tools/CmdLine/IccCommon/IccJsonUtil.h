@@ -65,8 +65,8 @@
  //
  //////////////////////////////////////////////////////////////////////
 
-#ifndef ICCJSONUTIL_H
-#define ICCJSONUTIL_H
+#ifndef _ICCJSONUTIL_H
+#define _ICCJSONUTIL_H
 
 #include <list>
 #include <string>
@@ -146,4 +146,4 @@ extern template bool jsonToValue<int>(const json&, int&);
 extern template bool jsonToValue<bool>(const json&, bool&);
 extern template bool jsonToValue<std::string>(const json&, std::string&);
 
-#endif  // ICCJSONUTIL_H
+#endif  // _ICCJSONUTIL_H

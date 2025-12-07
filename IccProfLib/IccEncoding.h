@@ -65,6 +65,9 @@ Copyright:  (c) see Software License
 //
 ////////////////////////////////////////////////////////////////////// 
 
+#ifndef _ICCENCODING_H
+#define _ICCENCODING_H
+
 #include "IccProfile.h"
 #include "IccDefs.h"
 
@@ -100,3 +103,5 @@ public:
 };
 
 icStatusEncConvert ICCPROFLIB_API icConvertEncodingProfile(CIccProfilePtr &newIcc, CIccProfile *pEncodeIcc);
+
+#endif  // _ICCENCODING_H

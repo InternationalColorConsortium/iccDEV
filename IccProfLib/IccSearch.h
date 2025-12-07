@@ -435,4 +435,4 @@ namespace iccDEV {
 }; // namespace iccDEV {
 #endif
 
-#endif
+#endif  // _ICCSEARCH_H

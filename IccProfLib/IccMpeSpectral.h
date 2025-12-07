@@ -66,8 +66,8 @@ Copyright:  (c) see Software License
 //
 //////////////////////////////////////////////////////////////////////
 
-#ifndef _ICCELEMSPECTRAL_H
-#define _ICCELEMSPECTRAL_H
+#ifndef _ICCMPESPECTRAL_H
+#define _ICCMPESPECTRAL_H
 
 #include "IccTagMPE.h"
 
@@ -425,4 +425,4 @@ protected:
 
 
 
-#endif //_ICCELEMSPECTRAL_H
+#endif //_ICCMPESPECTRAL_H

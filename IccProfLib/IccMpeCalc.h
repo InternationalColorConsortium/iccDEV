@@ -68,8 +68,8 @@ Copyright:  (c) see Software License
 //
 //////////////////////////////////////////////////////////////////////
 
-#ifndef _ICCELEMCALC_H
-#define _ICCELEMCALC_H
+#ifndef _ICCMPECALC_H
+#define _ICCMPECALC_H
 
 #include "IccTagMPE.h"
 #include "IccSolve.h"
@@ -560,4 +560,4 @@ public:
 }
 #endif
 
-#endif //_ICCELEMCALC_H
+#endif //_ICCMPECALC_H

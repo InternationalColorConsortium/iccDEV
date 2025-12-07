@@ -119,4 +119,4 @@ protected:
 } //namespace iccDEV
 #endif
 
-#endif // !defined(_ICCPCC_H)
+#endif // !defined(_ICCENVVAR_H)

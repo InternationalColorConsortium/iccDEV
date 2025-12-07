@@ -412,4 +412,4 @@ extern ICCPROFLIB_API CIccInfo icInfo;
 } //namespace iccDEV
 #endif
 
-#endif
+#endif  // _ICCUTIL_H

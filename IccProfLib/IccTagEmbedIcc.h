@@ -111,4 +111,4 @@ public:
   CIccProfile *m_pProfile;
 };
 
-#endif
+#endif  // _ICCTAGEMBEDICC_H

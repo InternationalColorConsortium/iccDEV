@@ -66,8 +66,8 @@ Copyright:  (c) see Software License
 //
 //////////////////////////////////////////////////////////////////////
 
-#ifndef _ICCTAGSUBTAG_H
-#define _ICCTAGSUBTAG_H
+#ifndef _ICCTAGDICT_H
+#define _ICCTAGDICT_H
 
 #include "IccProfile.h"
 #include "IccTag.h"
@@ -224,5 +224,5 @@ protected:
 }
 #endif
 
-#endif //_ICCTAGDICTTAG_H
+#endif //_ICCTAGDICT_H
 
