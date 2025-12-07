@@ -9,7 +9,7 @@
 | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
 | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest bash -l` |
 
-To build from source, see: [docs/build.md](docs/build.md)
+To build from source, see: [Build documentation](docs/build.md)
 
 ## Introduction
 
