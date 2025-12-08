@@ -2682,7 +2682,7 @@ bool CIccSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
 
   Reset();
 
-  size_t pos = pIO->Tell();
+  int64_t pos = pIO->Tell();
   icCurveSegSignature segSig;
   CIccCurveSegment *pSeg;
 
@@ -2714,7 +2714,8 @@ bool CIccSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
     if (!breakpoints)
       return false;
 
-    if (pIO->ReadFloat32Float(breakpoints, nSegments-1)!=nSegments-1) {
+    size_t segmentsRead = nSegments-1;
+    if (pIO->ReadFloat32Float(breakpoints, segmentsRead)!=segmentsRead) {
       free(breakpoints);
       return false;
     }
@@ -3294,7 +3295,7 @@ bool CIccMpeCurveSet::Read(icUInt32Number size, CIccIO *pIO)
     icCurveElemSignature curveSig;
     for (i=0; i<m_nInputChannels; i++) {
       if (!map[m_position[i].offset]) {
-        size_t pos;
+        int64_t pos;
         if (!m_position[i].offset || !m_position[i].size) {
           return false;
         }

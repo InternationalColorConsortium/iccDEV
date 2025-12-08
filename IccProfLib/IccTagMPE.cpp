@@ -1039,7 +1039,7 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
     //Use hash to cache offset duplication
     CIccMultiProcessElement *element = loadedElements[m_position[i].offset];
     if (!element) {
-      size_t pos = tagStart + m_position[i].offset;
+      int64_t pos = tagStart + m_position[i].offset;
 
       if (pIO->Seek(pos, icSeekSet)!= pos) {
         return false;
