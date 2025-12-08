@@ -481,7 +481,7 @@ size_t CIccFileIO::GetLength()
 }
 
 
-size_t CIccFileIO::Seek(size_t nOffset, icSeekVal pos)
+int64_t CIccFileIO::Seek(int64_t nOffset, icSeekVal pos)
 {
   if (!m_fFile)
     return -1;
@@ -490,7 +490,7 @@ size_t CIccFileIO::Seek(size_t nOffset, icSeekVal pos)
 }
 
 
-size_t CIccFileIO::Tell()
+int64_t CIccFileIO::Tell()
 {
   if (!m_fFile)
     return -1;
@@ -582,15 +582,15 @@ size_t CIccEmbedIO::GetLength()
 }
 
 
-size_t CIccEmbedIO::Seek(size_t nOffset, icSeekVal pos)
+int64_t CIccEmbedIO::Seek(int64_t nOffset, icSeekVal pos)
 {
-  size_t nPos;
+  int64_t nPos;
   if (!m_pIO)
     return -1;
 
   if (pos == icSeekSet) {
-    if (m_nSize > 0 && nOffset > m_nSize)
-      nOffset = m_nSize;
+    if (m_nSize > 0 && nOffset > int64_t(m_nSize))
+      nOffset = int64_t(m_nSize);
     else if (nOffset < 0)
       nOffset = m_nStartPos;
 
@@ -613,7 +613,7 @@ size_t CIccEmbedIO::Seek(size_t nOffset, icSeekVal pos)
   else {//pos == icSeekCur
     nOffset = m_pIO->Tell() + nOffset;
 
-    if (m_nSize && nOffset - m_nStartPos > m_nSize)
+    if (m_nSize && (nOffset - m_nStartPos) > int64_t(m_nSize))
       nOffset = m_nStartPos + m_nSize;
     else if (nOffset < m_nStartPos)
       nOffset = m_nStartPos;
@@ -628,12 +628,12 @@ size_t CIccEmbedIO::Seek(size_t nOffset, icSeekVal pos)
 }
 
 
-size_t CIccEmbedIO::Tell()
+int64_t CIccEmbedIO::Tell()
 {
   if (!m_pIO)
     return -1;
 
-  size_t nPos = m_pIO->Tell();
+  int64_t nPos = m_pIO->Tell();
 
   if (nPos >= m_nStartPos)
     return nPos - m_nStartPos;
@@ -758,12 +758,12 @@ size_t CIccMemIO::GetLength()
 }
 
 
-size_t CIccMemIO::Seek(size_t nOffset, icSeekVal pos)
+int64_t CIccMemIO::Seek(int64_t nOffset, icSeekVal pos)
 {
   if (!m_pData)
     return -1;
 
-  size_t nPos;
+  int64_t nPos;
   switch(pos) {
   case icSeekSet:
     nPos = nOffset;
@@ -797,7 +797,7 @@ size_t CIccMemIO::Seek(size_t nOffset, icSeekVal pos)
 }
 
 
-size_t CIccMemIO::Tell()
+int64_t CIccMemIO::Tell()
 {
   if (!m_pData)
     return -1;
@@ -863,9 +863,9 @@ size_t CIccNullIO::GetLength()
 }
 
 
-size_t CIccNullIO::Seek(size_t nOffset, icSeekVal pos)
+int64_t CIccNullIO::Seek(int64_t nOffset, icSeekVal pos)
 {
-  size_t nPos;
+  int64_t nPos;
   switch(pos) {
   case icSeekSet:
     nPos = nOffset;
@@ -893,7 +893,7 @@ size_t CIccNullIO::Seek(size_t nOffset, icSeekVal pos)
 }
 
 
-size_t CIccNullIO::Tell()
+int64_t CIccNullIO::Tell()
 {
   return m_nPos;
 }

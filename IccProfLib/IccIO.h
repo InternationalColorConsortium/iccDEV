@@ -69,6 +69,7 @@
 
 #include "IccDefs.h"
 #include "stdio.h"
+#include <stdint.h>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -126,8 +127,8 @@ public:
 
   virtual size_t GetLength() {return 0;}
 
-  virtual size_t Seek(size_t /*nOffset*/, icSeekVal /*pos*/) {return -1;}
-  virtual size_t Tell() {return 0;}
+  virtual int64_t Seek(int64_t /*nOffset*/, icSeekVal /*pos*/) {return -1;}
+  virtual int64_t Tell() {return 0;}
 
   ///Write operation to make sure that filelength is evenly divisible by 4
   bool Align32(); 
@@ -164,8 +165,8 @@ public:
 
   virtual size_t GetLength();
 
-  virtual size_t Seek(size_t nOffset, icSeekVal pos);
-  virtual size_t Tell();
+  virtual int64_t Seek(int64_t nOffset, icSeekVal pos);
+  virtual int64_t Tell();
 
 protected:
   FILE *m_fFile;
@@ -192,12 +193,12 @@ public:
 
   virtual size_t GetLength();
 
-  virtual size_t Seek(size_t nOffset, icSeekVal pos);
-  virtual size_t Tell();
+  virtual int64_t Seek(int64_t nOffset, icSeekVal pos);
+  virtual int64_t Tell();
 
 protected:
  CIccIO *m_pIO;
- size_t m_nStartPos;
+ int64_t m_nStartPos;
  size_t m_nSize;
  bool m_bOwnIO;
 };
@@ -226,8 +227,8 @@ public:
 
   virtual size_t GetLength();
 
-  virtual size_t Seek(size_t nOffset, icSeekVal pos);
-  virtual size_t Tell();
+  virtual int64_t Seek(int64_t nOffset, icSeekVal pos);
+  virtual int64_t Tell();
 
   icUInt8Number *GetData() { return m_pData; }
 
@@ -263,8 +264,8 @@ public:
 
   virtual size_t GetLength();
 
-  virtual size_t Seek(size_t nOffset, icSeekVal pos);
-  virtual size_t Tell();
+  virtual int64_t Seek(int64_t nOffset, icSeekVal pos);
+  virtual int64_t Tell();
 
 protected:
   size_t m_nSize;
