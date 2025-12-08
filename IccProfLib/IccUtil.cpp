@@ -974,7 +974,7 @@ void icMemDump(std::string &sDump, void *pBuf, size_t nNum)
       buf[76] = ' ';
       buf[77] = '\n';
       buf[78] = '\0';
-      snprintf(num, numSize, "%08zX:", i);
+      snprintf(num, numSize, "%08X:", uint32_t(i));    // NOTE - this formatting will have to change if we want to move beyond 4 Gig.
       strncpy(buf, num, 9);
     }
 
