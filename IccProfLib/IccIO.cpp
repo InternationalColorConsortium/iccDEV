@@ -615,7 +615,7 @@ int64_t CIccEmbedIO::Seek(int64_t nOffset, icSeekVal pos)
 
     if (m_nSize && (nOffset - m_nStartPos) > int64_t(m_nSize))
       nOffset = m_nStartPos + m_nSize;
-    else if (int64_t(nOffset) < m_nStartPos)
+    else if (nOffset < m_nStartPos)
       nOffset = m_nStartPos;
 
     nPos = m_pIO->Seek(nOffset, icSeekSet);
