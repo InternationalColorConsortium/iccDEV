@@ -4751,8 +4751,8 @@ bool CIccTagSparseMatrixArray::Write(CIccIO *pIO)
 
     //int n = (nRows+3)*sizeof(icUInt16Number);
 
-    size_t rowsRead = nRows+3;
-    if (pIO->Write16(pMatrix, rowsRead)!=rowsRead ||
+    size_t rowsToWrite = nRows+3;
+    if (pIO->Write16(pMatrix, rowsToWrite)!=rowsToWrite ||
         pIO->Write16(mtx.GetColumnsForRow(0), mtx.GetNumEntries())!=mtx.GetNumEntries()) {
       return false;
     }
