@@ -69,6 +69,7 @@
 
 #include "IccDefs.h"
 #include "stdio.h"
+#include <stdint.h>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
