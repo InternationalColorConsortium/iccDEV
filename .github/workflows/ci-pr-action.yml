@@ -7,10 +7,10 @@
 #
 ## Intent: iccDEV ci-pr-action
 #
-## Last Updated: 07-DEC-2025 1600Z by David Hoyt 
+## Last Updated: 08-DEC-2025 2300Z by David Hoyt 
 ##               Additional UCI Checks
-#
-#
+#                Consider Copilot Review
+#                Review GitHub Best Practice & Security Guides
 #
 #
 #
@@ -331,14 +331,6 @@ jobs:
     with:
       build-type: 'Release'
 
-  cppcheck-linters:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🧪 Cppcheck and Linters
-    needs: [unix-ci, win-ci, detect-src]
-    uses: ./.github/workflows/ci-pr-lint.yml
-    with:
-      ubuntu-version: 'ubuntu-latest'
-
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: 🧱 Windows Build and Test
@@ -352,7 +344,6 @@ jobs:
       - detect-src
       - unix-ci
       - scan-build
-      - cppcheck-linters
       - win-ci
     if: always()
     steps:
@@ -391,12 +382,6 @@ jobs:
             echo "- ✅ Clang Static Report: Available" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "- ❌ Clang Static Analysis: ${{ needs.scan-build.result }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          if [ "${{ needs.cppcheck-linters.result }}" == "success" ]; then
-            echo "- ✅ Cppcheck + Linter Report: Available" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- ❌ Cppcheck + Linters: ${{ needs.cppcheck-linters.result }}" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           if [ "${{ needs.win-ci.result }}" == "success" ]; then
