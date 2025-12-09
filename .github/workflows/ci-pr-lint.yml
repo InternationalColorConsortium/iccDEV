@@ -91,7 +91,7 @@ jobs:
       - name: Install Linux dependencies
         shell: bash
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -144,15 +144,21 @@ jobs:
           git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=1
 
           # Case-insensitive extension match (c/h/cpp variants)
-          if git diff --name-only "origin/${base_ref}"...HEAD |
-             grep -Ei '\.(cpp|cxx|cc|c|h|hpp|hh)$' >/dev/null; then
-            echo "src_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "src_changed=false" >> "$GITHUB_OUTPUT"
-          fi
+           git diff --name-only "origin/${base_ref}"...HEAD \
+             | tr -cd '[:alnum:]./_-\n' \
+             | grep -E '\.(cpp|cxx|cc|h|hpp)$' \
+             | tr '\n' '\0' > changed_files.txt
+
+           changed_file_count="$(xargs -0 -n1 < changed_files.txt | wc -l)"
+
+           if [ "$changed_file_count" -eq 0 ]; then
+             echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+           else
+             echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
+           fi
           
       - name: Lint & code checks
-        if: ${{ steps.diff.outputs.no_src_changes == 'false' }}
+        if: ${{ steps.diffcheck.outputs.src_changed == 'true' }}
         shell: bash
         env:
          BASH_ENV: /dev/null
