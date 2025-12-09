@@ -56,6 +56,7 @@
  * 
  */
 
+#include <stdint.h>
 #include <stddef.h>
 
 /* Header file guard bands */
