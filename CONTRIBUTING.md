@@ -81,6 +81,27 @@ and [Configuring a remote for a fork](https://help.github.com/articles/configuri
 
 You are now ready to contribute.
 
+## Code Style
+It's an older codebase, it isn't perfect, but let's at least **try** to keep things consistent.
+| Category                   |  Style
+| -------------------------- | ---------------------------- |
+| **Indentation**            | 2 space indentation, no tabs. |
+| **Braces**                   | **K&R** style  |
+| **Naming class/struct members** |  prefix with m_ |
+| **Naming variables** | There is currently no uniform convention. Try to match nearby code. |
+| **Header guards**         | Use header guards.   |
+| **Namespaces**           | Currently not using namespaces, though there is work in progress. |
+| **File organization**      | Multiple classes per file, grouped by functionality.  | 
+| **Use of `std` namespace** | Minimize pollution.   | 
+| **Commenting style**       | There is no consistent style. Try to match nearby code.   | 
+| **Const correctness**      | Make inputs const when possible, class functions const when appropriate, and variables const as needed. |
+| **Compiler Warnings** | Should be zero (or as close as we can get across all platforms). |
+| **Static Analysis Warnings** | Should be zero (or as close as we can get across all platforms). |
+| **Templates / Generics**   | Currently minimal.  Make sure new templates are readable. | 
+| **Exceptions**             | Most of the code uses manual return values for error handling. |
+| **Containers vs. Raw Pointers**  | Prefer STL containers, but historically uses a lot of raw pointers. |
+
+
 ## Development and Pull Requests
 
 Contributions should be submitted as Github pull requests. See
