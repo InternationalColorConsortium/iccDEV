@@ -438,8 +438,13 @@ jobs:
           Get-CimInstance -ClassName Win32_Processor
       - name: Summary Report
         if: always()
+        shell: pwsh
         run: |
-          echo "### Windows Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded:  iccdev-v231-windows-msvc" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+          # Gather and sanitize git info
+          $branch = (git.exe rev-parse --abbrev-ref HEAD).Trim() -replace '[\r\n`]', ''
+          $commit = (git.exe rev-parse --short HEAD).Trim() -replace '[\r\n`]', ''
+          echo "### Windows Build Summary" >> $env:GITHUB_STEP_SUMMARY
+          echo "" >> $env:GITHUB_STEP_SUMMARY
+          echo "**Build Directory:** Build/" >> $env:GITHUB_STEP_SUMMARY
+          echo "**Branch:** $branch" >> $env:GITHUB_STEP_SUMMARY
+          echo "**Commit:** $commit" >> $env:GITHUB_STEP_SUMMARY

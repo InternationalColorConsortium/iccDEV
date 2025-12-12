@@ -62,7 +62,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
-      - name: UCI Gate 1 for Windows Powershell
+      - name: Check RO, Validate Inputs
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -122,12 +122,12 @@ jobs:
          ) -join ';'
          $env:PATH = $trustedPath
          
-          Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
+          Write-Host "Finished - Check RO, Validate Inputs" -ForegroundColor Green
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
+      - name: Print PR Info
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -143,7 +143,7 @@ jobs:
           Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
           Write-Host "OS:            $env:RUNNER_OS"
 
-      - name: Install dependencies and build
+      - name: Install dependencies
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -157,15 +157,57 @@ jobs:
           pwd
           git branch
           git status
-          Write-Host "========= Fetching Deps... ================`n"
+          Write-Host "========= Fetching Deps from Releases... ================`n"
           Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
-          Write-Host "========= Extracting Deps... ================`n"
+          Write-Host "========= Extracting Dependencies ...    ================`n"
           tar -xf deps.zip
+      - name: Cmake Configure
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          pwd
           cd Build/Cmake
-          Write-Host "========= Building... ================`n"  
+          Write-Host "========= Configuring iccDEV ... ================`n"  
           cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+
+      - name: Building iccDEV
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          pwd
+          cd Build/Cmake
+          Write-Host "========= Building iccDEV ... ================`n"  
           cmake --build build -- /m /maxcpucount
           cmake --build build -- /m /maxcpucount          
+
+      - name: Create Profiles
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          pwd
+          cd Build/Cmake
+          Write-Host "========= Creating Profiles ... ================`n"  
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
               Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
               ForEach-Object { Split-Path $_.FullName -Parent } |

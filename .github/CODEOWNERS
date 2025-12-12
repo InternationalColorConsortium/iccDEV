@@ -15,9 +15,9 @@
 Build/** @xsscx @ChrisCoxArt
 
 # Protect the CODEOWNERS file itself
-CODEOWNERS                 @xsscx @maxderhak @ChrisCoxArt @dwtza
+.github/CODEOWNERS @xsscx @dwtza                
 
 # Governance: protect CODEOWNERS and key security/docs
-SECURITY.md @xsscx @maxderhak @ChrisCoxArt @dwtza
-README.md @xsscx @maxderhak @ChrisCoxArt @dwtza
-docs/** @xsscx @maxderhak @ChrisCoxArt @dwtza
+SECURITY.md docs/** @InternationalColorConsortium/iccdev-team
+README.md docs/** @InternationalColorConsortium/iccdev-team
+docs/** docs/** @InternationalColorConsortium/iccdev-team

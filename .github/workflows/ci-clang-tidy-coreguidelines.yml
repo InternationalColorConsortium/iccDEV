@@ -39,6 +39,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
       - name: Install dependencies
         shell: bash
         env:

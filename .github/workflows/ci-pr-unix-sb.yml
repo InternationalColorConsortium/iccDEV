@@ -26,10 +26,6 @@ permissions:
   pull-requests: read
 
 on:
-  # Manual trigger
-  workflow_dispatch:
-
-  # Reusable workflow support
   workflow_call:
     inputs:
       build-type:
@@ -51,7 +47,7 @@ env:
 
 jobs:
   scan-build:
-    name: Ubuntu • scan-build
+    name: SAST
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 20
@@ -65,25 +61,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
-      - name: Verify Branch Context
-        shell: bash
-        env:
-         BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
-          unset GITHUB_TOKEN || true
-          echo "Triggered by:  ${{ github.event_name }}"
-          echo "Base branch:   ${{ github.base_ref }}"
-          echo "Head branch:   ${{ github.head_ref }}"
-          echo "Commit SHA:    ${{ github.event.pull_request.head.sha }}"
-          echo "OS:            ubuntu-latest"
-          echo "Build Type:    ${{ inputs.build-type || 'Release' }}"
-          echo "Static Analysis: Enabled (scan-build)"
-
+          persist-credentials: false
       - name: Install Dependencies
         env:
          BASH_ENV: /dev/null

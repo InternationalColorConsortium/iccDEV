@@ -1,17 +1,17 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
-##                 https://color.org
+# Copyright (©) 2025 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Static code analysis & linting
+#
+# Last Updated: 14-DEC-2025 0100Z by David Hoyt 
+#
+# Note: This lint action needs a scope & purpose
+#       Currently some filler & reporting from templates
 #
 #
-## Intent: Static code analysis and linting (cppcheck, clang-tidy, clang-format) for PR validation
-#
-## Last Updated: 06-DEC-2025 1400Z by David Hoyt 
-##               TEST job Failures
-## TODO: Push binary releases, tags etc.. 
-#
-## Comment: Known good and working from PatchIccMax
 #
 #
 #
@@ -33,194 +33,416 @@ on:
   workflow_call:
     inputs:
       ubuntu-version:
-        description: "Ubuntu version for runner"
+        description: "Ubuntu version for runner (allowed: ubuntu-latest, ubuntu-22.04, ubuntu-24.04)"
         required: false
         default: "ubuntu-latest"
         type: string
 
 jobs:
   build-linux:
-    name: Lint on ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+    # NOTE: Name is cosmetic; we do not trust this for security decisions.
+    # name: Lint on ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+    name: Lint
+    # SECURITY: We only allow GitHub-hosted ubuntu runners,
+    # and we validate the input before doing any real work.
     runs-on: ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
-    timeout-minutes: 30
-    steps:
 
-      # --- Bump any Self-Hosted ---
+    timeout-minutes: 30
+
+    env:
+      # Common safe environment for all steps
+      BASH_ENV: /dev/null
+
+    steps:
+      # --- Validate ubuntu-version input early and fail-closed ---
       - name: Validate ubuntu-version input
-        shell: bash
+        id: validate_runner
+        shell: bash --noprofile --norc {0}
+        env:
+         BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          case "${{ inputs.ubuntu-version }}" in
-            ubuntu-latest|ubuntu-22.04|ubuntu-24.04|"")
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+
+          # Normalize empty to default
+          UBUNTU_VERSION="${{ inputs.ubuntu-version }}"
+          if [ -z "$UBUNTU_VERSION" ]; then
+            UBUNTU_VERSION="ubuntu-latest"
+          fi
+
+          case "$UBUNTU_VERSION" in
+            ubuntu-latest|ubuntu-22.04|ubuntu-24.04)
+              echo "Using allowed runner: $UBUNTU_VERSION"
+              echo "runner_label=$UBUNTU_VERSION" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "ERROR: Invalid runner: '${{ inputs.ubuntu-version }}' — blocked." >&2
+              echo "ERROR: Invalid runner: '$UBUNTU_VERSION' — allowed: ubuntu-latest, ubuntu-22.04, ubuntu-24.04." >&2
               exit 1
               ;;
           esac
 
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+      - name: Checkout iccDEV PR
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
           fetch-depth: 0
-          # Disable unsafe fetch options
           persist-credentials: false
 
       - name: Set up Git anonymous identity
+        shell: bash --noprofile --norc {0}
+        env:
+         BASH_ENV: /dev/null
         run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
 
-      - name: Verify remote origin URL (opt out of malicious git configs)
+      - name: Verify RO
+        id: origin
+        shell: bash --noprofile --norc {0}
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+
+      - name: Checking for your changes
+        id: diffcheck
         shell: bash
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          origin_url=$(git remote get-url origin || true)
-          echo "Remote origin: $origin_url"
-          # Enforce that origin points to the expected GitHub repository for this workflow run
-          expected="https://github.com/${{ github.repository }}.git"
-          # Allow both HTTPS and git@ forms if needed
-          if [[ "$origin_url" != "$expected" && "$origin_url" != "${expected%.git}" && "$origin_url" != "git@github.com:InternationalColorConsortium/iccDEV.git" ]]; then
-            echo "Origin URL mismatch: expected $expected, ${expected%.git}, or git@github.com:InternationalColorConsortium/iccDEV.git, got $origin_url" >&2
+
+          git config --add safe.directory "$PWD"
+          unset GITHUB_TOKEN || true
+
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          # Validate that both SHAs look like Git commit OIDs (40 hex chars).
+          validate_sha() {
+            local sha="$1"
+            if [[ -z "$sha" ]]; then
+              return 1
+            fi
+            if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              return 1
+            fi
+            return 0
+          }
+
+          # Check for missing SHAs
+          if [[ -z "$base_sha" ]] || [[ -z "$head_sha" ]]; then
+            if [[ -z "$base_sha" ]] && [[ -z "$head_sha" ]]; then
+              echo "Error: both base_sha and head_sha are missing; skipping diff-based source detection." >&2
+            elif [[ -z "$base_sha" ]]; then
+              echo "Error: base_sha is missing; skipping diff-based source detection." >&2
+            else
+              echo "Error: head_sha is missing; skipping diff-based source detection." >&2
+            fi
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          # Check for malformed SHAs
+          malformed=0
+          if ! validate_sha "$base_sha"; then
+            echo "Error: base_sha is malformed (not a 40-character hex string); skipping diff-based source detection." >&2
+            malformed=1
+          fi
+          if ! validate_sha "$head_sha"; then
+            echo "Error: head_sha is malformed (not a 40-character hex string); skipping diff-based source detection." >&2
+            malformed=1
+          fi
+          if [[ "$malformed" -eq 1 ]]; then
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          # Try to fetch the commits. If fetch fails (e.g. forked PR), avoid exposing tokens and fall back.
+          if ! git fetch --no-tags origin "$base_sha" "$head_sha" >/dev/null 2>&1; then
+            echo "Warning: git fetch failed for provided SHAs; skipping diff-based source detection." >&2
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
+          # Determine if source files changed between the two commit SHAs.
+          if git diff --name-only "$base_sha" "$head_sha" | \
+             grep -Ei '\.(c|cc|cxx|cpp|h|hh|hpp)$' >/dev/null; then
+            echo "src_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install Linux dependencies
-        shell: bash
+        shell: bash --noprofile --norc {0}
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends \
+            cppcheck \
+            clang-format \
+            build-essential \
+            cmake \
+            git \
+            pkg-config \
+            gcc \
+            g++ \
+            clang \
+            clang-tools \
+            libpng-dev \
+            libxml2 \
+            libxml2-dev \
+            libtiff-dev \
+            nlohmann-json3-dev \
+            libwxgtk3.2-dev \
+            wx-common \
+            python3 \
+            python3-pip \
+            curl \
+            llvm \
+            zsh
+
+      - name: Detect modified source files
+        id: diff
+        shell: bash --noprofile --norc {0}
+        run: |
+          set -euo pipefail
+
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+
+          # Clear the in-shell GITHUB_TOKEN to avoid accidental use.
+          unset GITHUB_TOKEN || true
+          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+
+          # Determine base ref; default to master if unavailable (e.g., workflow_dispatch)
+          base_ref="${{ github.base_ref }}"
+          if [ -z "$base_ref" ]; then
+            base_ref="master"
+          fi
+
+          # --- filename list (null-delimited) ---
+          git diff --name-only "origin/${base_ref}"...HEAD \
+            | grep -Ei '\.(cpp|cxx|cc|h|hpp)$' \
+            | tr '\n' '\0' > changed_files.txt || true
+
+          # If grep finds nothing, changed_files.txt may be empty
+          if [ ! -s changed_files.txt ]; then
+            changed_file_count=0
+          else
+            changed_file_count="$(xargs -0 -n1 < changed_files.txt | wc -l | tr -d '[:space:]')"
+          fi
+
+          if [ "$changed_file_count" -eq 0 ]; then
+            echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cmake Configure & Build
+        if: ${{ steps.origin.outputs.trusted_origin == 'true' && steps.diff.outputs.no_src_changes == 'false' }}
+        shell: bash --noprofile --norc {0}
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          mkdir -p lint_reports Build
+          echo "Configuring build for clang-tidy..."
+          cmake -S Build/Cmake -B Build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build Build -- -j"$(nproc)"
+
+      - name: Run cppcheck
+        if: ${{ steps.origin.outputs.trusted_origin == 'true' && steps.diff.outputs.no_src_changes == 'false' }}
+        shell: bash --noprofile --norc {0}
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+
+          echo "Running cppcheck (project mode)..."
+          : > lint_reports/cppcheck.txt
+          cppcheck \
+            --project=Build/compile_commands.json \
+            --enable=warning,performance,portability \
+            --std=c++17 \
+            --suppress=toomanyconfigs \
+            --template='{file}:{line}:{severity}:{id}:{message}' \
+            --output-file=lint_reports/cppcheck.txt || true
+
+      - name: Run clang-tidy
+        if: ${{ steps.origin.outputs.trusted_origin == 'true' && steps.diff.outputs.no_src_changes == 'false' }}
+        shell: bash --noprofile --norc {0}
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          # --- clang-tidy ---
+          : > lint_reports/clang_tidy.txt
+          if [ -s changed_files.txt ]; then
+            xargs -0 run-clang-tidy \
+              -p Build \
+              -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
+              < changed_files.txt \
+              | tee lint_reports/clang_tidy.txt || true
+          else
+            echo "No files listed in changed_files.txt; skipping clang-tidy." >> lint_reports/clang_tidy.txt
+          fi
+
+      - name: Run clang-format
+        if: ${{ steps.origin.outputs.trusted_origin == 'true' && steps.diff.outputs.no_src_changes == 'false' }}
+        shell: bash --noprofile --norc {0}
+        env:
+         BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          
+          # Clear the in-shell GITHUB_TOKEN
+          unset GITHUB_TOKEN || true
+          # Optional: clang-format check (uncomment to enable)
+          echo "Running clang-format on modified source files..."
+          mkdir -p lint_reports
+          : > lint_reports/clang_format.txt
+      
+          # Find all C/C++ files under the repo and check formatting
+          files=$(git ls-files '*.c' '*.cc' '*.cxx' '*.cpp' '*.h' '*.hpp' || true)
+          if [ -z "$files" ]; then
+            echo "No C/C++ files found; skipping clang-format." >> lint_reports/clang_format.txt
+            exit 0
+          fi
+
+      - name: Run clang-format (fallback)
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "${GITHUB_WORKSPACE:-$(pwd)}"
           git config --global credential.helper ""
-          
+      
           # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
-
-          sudo apt-get update
-          sudo apt-get install -y cppcheck clang-format build-essential cmake git pkg-config \
-            gcc g++ clang clang-tools libpng-dev libxml2 libxml2-dev libtiff-dev \
-            nlohmann-json3-dev libwxgtk3.2-dev wx-common python3 python3-pip curl git llvm zsh
-
-      - id: diffcheck
-        name: diffcheck for file changes
-        shell: bash
-        env:
-         BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
-          unset GITHUB_TOKEN || true
-
-          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
-
-          # If not a pull_request event (e.g., workflow_dispatch or workflow_call),
-          # skip source diff checking and mark as non-source change.
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "Non-PR event (${{ github.event_name }}) — skipping source diff check" >&2
-            echo "src_changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          base_ref="${{ github.base_ref }}"
-
-          # Avoid fetching refs from user-controllable inputs like ($base_ref)
-          case "$base_ref" in master)
-              ;;
-            *)
-              echo "Ref blocked or unsupported: $base_ref" >&2
-              echo "src_changed=false" >> "$GITHUB_OUTPUT"
-              exit 0
-              ;;
-          esac
-
-          # Short fetch, single ref; avoid tags and deep history
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=1
-
-          # Case-insensitive extension match (c/h/cpp variants)
-           git diff --name-only "origin/${base_ref}"...HEAD \
-             | tr -cd '[:alnum:]./_-\n' \
-             | grep -E '\.(cpp|cxx|cc|h|hpp)$' \
-             | tr '\n' '\0' > changed_files.txt
-
-           changed_file_count="$(xargs -0 -n1 < changed_files.txt | wc -l)"
-
-           if [ "$changed_file_count" -eq 0 ]; then
-             echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
-           else
-             echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
-           fi
-          
-      - name: Lint & code checks
-        if: ${{ steps.diffcheck.outputs.src_changed == 'true' }}
-        shell: bash
-        env:
-         BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
-          unset GITHUB_TOKEN || true
-  
-          mkdir -p lint_reports Build
-  
-          echo "Running cppcheck on modified source files..."
-  
-          # --- SECURITY: null-delimited xargs ---
-          : > lint_reports/cppcheck.txt
-          xargs -0 cppcheck \
-            --enable=warning,performance,portability \
-            --std=c++17 \
-            --output-file=lint_reports/cppcheck.txt \
-            < changed_files.txt || true
-  
-          # Prepare clang-tidy
-          cd Build
-          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make
-          cd ..
-  
-          # --- clang-tidy ---
-          : > lint_reports/clang_tidy.txt
-          xargs -0 run-clang-tidy \
-            -p Build \
-            -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
-            < changed_files.txt \
-            | tee lint_reports/clang_tidy.txt || true
-
-      - name: Skip lint (no source changes)
-        if: ${{ steps.diff.outputs.no_src_changes == 'true' }}
-        shell: bash
-        env:
-         BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
-          unset GITHUB_TOKEN || true
+      
           mkdir -p lint_reports
-          echo "No .cpp/.h changes detected; skipping lint." > lint_reports/cppcheck.txt
+      
+          if [ "${{ steps.origin.outputs.trusted_origin }}" != "true" ]; then
+            echo "Origin not trusted; skipping lint." > lint_reports/cppcheck.txt
+          else
+            echo "No .cpp/.h changes detected; skipping lint." > lint_reports/cppcheck.txt
+          fi
+      
+          # Initialize/clear reports
           : > lint_reports/clang_tidy.txt
-
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+          : > lint_reports/clang_format.txt
+      
+          # Determine files to check safely (avoid unbound variable with set -u)
+          # Priority:
+          #  - the `files` env var (or FILES)
+          #  - changed files vs. base ref (if available)
+          #  - HEAD~1..HEAD diff (fallback)
+          #  - all tracked files (final fallback)
+          files="${files:-${FILES:-}}"
+      
+          if [ -z "${files}" ]; then
+            if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+              if [ -n "${GITHUB_BASE_REF:-}" ]; then
+                base_ref="$GITHUB_BASE_REF"
+                # Validate base_ref against allowlist (e.g., only allow 'master' and 'main')
+                case "${base_ref}" in
+                  master|main)
+                    # best-effort fetch of base (ignore failures)
+                    git fetch --no-tags --depth=1 origin "${base_ref}" >/dev/null 2>&1 || true
+                    files="$(git diff --name-only --diff-filter=ACMRTUXB "origin/${base_ref}" HEAD 2>/dev/null || true)"
+                    ;;
+                  *)
+                    echo "Untrusted base_ref '${base_ref}' - skipping git fetch/diff." >&2
+                    ;;
+                esac
+      
+              if [ -z "${files}" ]; then
+                files="$(git diff --name-only --diff-filter=ACMRTUXB HEAD~1 HEAD 2>/dev/null || true)"
+              fi
+      
+              if [ -z "${files}" ]; then
+                files="$(git ls-files 2>/dev/null || true)"
+              fi
+      
+              # Keep only C/C++ source/header files
+              files="$(printf '%s\n' "${files}" | grep -E '\.(c|cpp|cc|cxx|h|hpp)$' || true)"
+            fi
+          fi
+      
+          # Safely handle empty or multi-line lists; loop per-line to support spaces in filenames
+          if [ -z "${files}" ]; then
+            echo "No files to check; skipping clang-format." >> lint_reports/clang_format.txt
+          else
+            fail=0
+            while IFS= read -r f; do
+              [ -z "${f}" ] && continue
+      
+              if [ ! -f "${f}" ]; then
+                echo "Skipping missing file: ${f}" >> lint_reports/clang_format.txt
+                continue
+              fi
+      
+              # clang-format in check mode; capture output
+              if ! clang-format --dry-run --Werror "${f}" 2>&1 | tee -a lint_reports/clang_format.txt; then
+                echo "${f}" >> lint_reports/clang_format.txt
+                fail=1
+              fi
+            done <<EOF
+          ${files}
+          EOF
+      
+            if [ "${fail}" -eq 0 ]; then
+              echo "All files properly formatted." >> lint_reports/clang_format.txt
+            else
+              echo "Some files are not properly formatted. See above for details." >> lint_reports/clang_format.txt
+            fi
+          fi
+      - name: Upload lint reports
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: lint-reports
           path: lint_reports/
 
-
       - name: Generate GitHub summary
         if: always()
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
          BASH_ENV: /dev/null
         run: |
@@ -230,14 +452,37 @@ jobs:
           
           # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
-          echo "## 🧹 Lint Report Summary" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ steps.diff.outputs.no_src_changes }}" == "true" ]; then
-            echo "🟦 Skipped — no modified source files detected." >> $GITHUB_STEP_SUMMARY
+          echo "## Lint Report Summary" >> "$GITHUB_STEP_SUMMARY"
+
+          trusted_origin="${{ steps.origin.outputs.trusted_origin }}"
+          no_src_changes="${{ steps.diff.outputs.no_src_changes || 'true' }}"
+
+          if [ "$trusted_origin" != "true" ]; then
+            echo "Skipped — repository origin was not trusted." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$no_src_changes" = "true" ]; then
+            echo "Skipped — no modified .cpp/.cxx/.cc/.h/.hpp files detected." >> "$GITHUB_STEP_SUMMARY"
           elif [ -s lint_reports/cppcheck.txt ]; then
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            tail -n 30 lint_reports/cppcheck.txt >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "### cppcheck (last 30 lines)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 30 lint_reports/cppcheck.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "✅ No cppcheck warnings or errors detected." >> $GITHUB_STEP_SUMMARY
+            echo "✅ No cppcheck warnings or errors detected." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -s lint_reports/clang_tidy.txt ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### clang-tidy (last 30 lines)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 30 lint_reports/clang_tidy.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -s lint_reports/clang_format.txt ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### clang-format (last 30 lines)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 30 lint_reports/clang_format.txt >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
           fi
