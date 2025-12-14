@@ -2,10 +2,15 @@
 # CODEOWNERS — https://github.com/InternationalColorConsortium
 # ============================================================
 #
-# Updated 04-DEC-2025 1800Z by David Hoyt @xsscx
+# Updated 17-DEC-2025 1200Z by David Hoyt @xsscx
 # Intent: Governance, Transparency, Best Practice
+# Last Modification: Add Absolute Path for CODEOWNERS
+#
+#
 # ============================================================
 
+# Notify Default
+# Triage Point of Contact
 * @xsscx
 
 # GitHub Actions workflows & PR automation
@@ -15,7 +20,7 @@
 Build/** @xsscx @ChrisCoxArt
 
 # Protect the CODEOWNERS file itself
-CODEOWNERS                 @xsscx @maxderhak @ChrisCoxArt @dwtza
+.github/CODEOWNERS                 @xsscx @maxderhak @ChrisCoxArt @dwtza
 
 # Governance: protect CODEOWNERS and key security/docs
 SECURITY.md @xsscx @maxderhak @ChrisCoxArt @dwtza
