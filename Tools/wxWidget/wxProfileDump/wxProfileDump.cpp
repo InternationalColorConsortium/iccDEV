@@ -558,7 +558,7 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
         else
             m_textSubClass->SetLabel(_T("Not Defined"));
 
-	    m_textVersion->SetLabel(Fmt.GetVersionName(pHdr->version));
+        m_textVersion->SetLabel(Fmt.GetVersionName(pHdr->version));
     
         if (pHdr && (pHdr->version >= icVersionNumberV5) && pHdr->deviceSubClass)
             m_textSubClassVersion->SetLabel(Fmt.GetSubClassVersionName(pHdr->version));
