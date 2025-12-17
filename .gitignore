@@ -2,6 +2,7 @@
 *.slo
 *.lo
 *.o
+*.d
 *.obj
 
 # Precompiled Headers
@@ -31,11 +32,8 @@
 Testing/*/*.icc
 Testing/private/**
 
-# Xcode deps
-Build/XCode/libtiff/*.h*
-Build/XCode/libxml/*.h*
-
 # Xcode build files
+/Build/XCBuildData
 **/*.noindex
 **/Build
 !/Build
@@ -43,6 +41,7 @@ Build/XCode/libxml/*.h*
 **/DerivedData
 **/DataStore
 **/.DS_Store
+*.xcodeproj
 
 # Visual Studio
 **/.vs
@@ -61,9 +60,22 @@ Build/XCode/libxml/*.h*
 **/vc_msw*/**
 Developer Defs.props
 
+# CMake generated files
+CMakeCache.txt
+**/CMakeFiles
+cmake_install.cmake
+*Uninstall.cmake
+*Config.cmake
+ReRunCMake.make
+Makefile
+
+# vcpkg folder on Windows
+/vcpkg_installed
 
 # copied code
-/Build/XCBuildData
-/CMakeFiles
-CMakeCache.txt
-/RefIccMAX.xcodeproj
+Tools/CmdLine/IccSpecSepToTiff/TiffImg.cpp
+Tools/CmdLine/IccSpecSepToTiff/TiffImg.h
+Tools/CmdLine/IccTiffDump/TiffImg.cpp
+Tools/CmdLine/IccTiffDump/TiffImg.h
+
+# Further additions that need to be moved to a proper category
