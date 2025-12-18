@@ -72,10 +72,4 @@ Makefile
 # vcpkg folder on Windows
 /vcpkg_installed
 
-# copied code
-Tools/CmdLine/IccSpecSepToTiff/TiffImg.cpp
-Tools/CmdLine/IccSpecSepToTiff/TiffImg.h
-Tools/CmdLine/IccTiffDump/TiffImg.cpp
-Tools/CmdLine/IccTiffDump/TiffImg.h
-
 # Further additions that need to be moved to a proper category
