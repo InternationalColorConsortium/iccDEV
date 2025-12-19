@@ -6998,10 +6998,11 @@ CIccLocalizedUnicode::CIccLocalizedUnicode()
 CIccLocalizedUnicode::CIccLocalizedUnicode(const CIccLocalizedUnicode& ILU)
 {
   m_nLength = ILU.GetLength();
-  m_pBuf = (icUInt16Number*)malloc((m_nLength+1) * sizeof(icUInt16Number));
+  m_pBuf = (icUInt16Number*)malloc((m_nLength+2) * sizeof(icUInt16Number));
   if (m_nLength)
     memcpy(m_pBuf, ILU.GetBuf(), m_nLength*sizeof(icUInt16Number));
-  m_pBuf[m_nLength] = 0;
+  m_pBuf[m_nLength] = 0;    // safety against malformed unicode
+  m_pBuf[m_nLength+1] = 0;  // safety against malformed unicode
   m_nLanguageCode = ILU.m_nLanguageCode;
   m_nCountryCode = ILU.m_nCountryCode;
 }
@@ -7111,7 +7112,8 @@ bool CIccLocalizedUnicode::GetText(std::string &sText)
   sText.clear();
 
   icUInt16Number* str = m_pBuf;
-  while (*str) {
+  icUInt16Number *str_end = m_pBuf + m_nLength;
+  while ( (str < str_end) && *str ) {
     icUInt32Number code32 = 0x0;
 
     //UTF-16 to UTF-32
@@ -7173,7 +7175,7 @@ bool CIccLocalizedUnicode::SetSize(icUInt32Number nSize)
   if (nSize == m_nLength)
     return true;
 
-  m_pBuf = (icUInt16Number*)icRealloc(m_pBuf, (nSize+1)*sizeof(icUInt16Number));
+  m_pBuf = (icUInt16Number*)icRealloc(m_pBuf, (nSize+2)*sizeof(icUInt16Number));
 
   if (!m_pBuf) {
     m_nLength = 0;
@@ -7182,7 +7184,8 @@ bool CIccLocalizedUnicode::SetSize(icUInt32Number nSize)
 
   m_nLength = nSize;
 
-  m_pBuf[nSize]=0;
+  m_pBuf[nSize]=0;      // safety against malformed unicode
+  m_pBuf[nSize+1]=0;    // safety against malformed unicode
 
   return true;
 }
@@ -7337,7 +7340,7 @@ bool CIccLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text,
 
   for (len=0; *pBuf; len++, pBuf++);
 
-  if (!SetSize(len))
+  if (!SetSize(len+1))
     return false;
   memcpy(m_pBuf, sszUnicode16Text, (len+1)*sizeof(icUInt16Number));
 
