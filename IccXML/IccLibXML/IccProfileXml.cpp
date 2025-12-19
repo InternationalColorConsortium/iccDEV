@@ -217,7 +217,7 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
   CIccInfo Fmt;
   IccOffsetTagSigMap offsetTags;
 
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (sigSet.find(i->TagInfo.sig)==sigSet.end()) {
       CIccTag *pTag = FindTag(i->TagInfo.sig);
 
@@ -261,7 +261,7 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
             sigSet.insert(i->TagInfo.sig);
 
             // print out the rest of the tag signatures
-            for (j++; j != m_Tags->end(); j++) {
+            for (j++; j != m_Tags.end(); j++) {
               if (j->pTag == i->pTag || j->TagInfo.offset == i->TagInfo.offset) {
                 sprintf(line, "      <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, j->TagInfo.sig)));
                 xml += line;

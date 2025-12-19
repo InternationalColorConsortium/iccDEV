@@ -104,8 +104,6 @@ CIccProfile::CIccProfile()
   m_pAttachIO = NULL;
   m_bSharedIO = false;
   memset(&m_Header, 0, sizeof(m_Header));
-  m_Tags = new(TagEntryList);
-  m_TagVals = new(TagPtrList);
 
   m_parentColorSpace = icSigNoColorData;
 }
@@ -128,27 +126,25 @@ CIccProfile::CIccProfile(const CIccProfile &Profile)
 {
   m_pAttachIO = NULL;
   memset(&m_Header, 0, sizeof(m_Header));
-  m_Tags = new(TagEntryList);
-  m_TagVals = new(TagPtrList);
   memcpy(&m_Header, &Profile.m_Header, sizeof(m_Header));
 
-  if (!Profile.m_TagVals->empty()) {
+  if (!Profile.m_TagVals.empty()) {
     TagPtrList::const_iterator i;
     IccTagPtr tagptr = {0};
-    for (i=Profile.m_TagVals->begin(); i!=Profile.m_TagVals->end(); i++) {
+    for (i=Profile.m_TagVals.begin(); i!=Profile.m_TagVals.end(); i++) {
       tagptr.ptr = i->ptr->NewCopy();
-      m_TagVals->push_back(tagptr);
+      m_TagVals.push_back(tagptr);
     }
   }
 
-  if (!Profile.m_Tags->empty()) {
+  if (!Profile.m_Tags.empty()) {
     TagEntryList::const_iterator i;
     IccTagEntry entry = {};
-    for (i=Profile.m_Tags->begin(); i!=Profile.m_Tags->end(); i++) {
+    for (i=Profile.m_Tags.begin(); i!=Profile.m_Tags.end(); i++) {
       TagPtrList::const_iterator j, k;
 
       //Make sure that tag entry values point to shared tags in m_TagVals
-      for (j=Profile.m_TagVals->begin(), k=m_TagVals->begin(); j!=Profile.m_TagVals->end() && k!=m_TagVals->end(); j++, k++) {
+      for (j=Profile.m_TagVals.begin(), k=m_TagVals.begin(); j!=Profile.m_TagVals.end() && k!=m_TagVals.end(); j++, k++) {
         if (i->pTag == j->ptr) {
           //k should point to the the corresponding copied tag
           entry.pTag = k->ptr;
@@ -156,12 +152,12 @@ CIccProfile::CIccProfile(const CIccProfile &Profile)
         }
       }
 
-      if (j==Profile.m_TagVals->end()) {  //Did we not find the tag?
+      if (j==Profile.m_TagVals.end()) {  //Did we not find the tag?
         entry.pTag = NULL;
       }
 
       memcpy(&entry.TagInfo, &i->TagInfo, sizeof(icTag));
-      m_Tags->push_back(entry);
+      m_Tags.push_back(entry);
     }
   }
 
@@ -192,23 +188,23 @@ CIccProfile &CIccProfile::operator=(const CIccProfile &Profile)
   memcpy(&m_Header, &Profile.m_Header, sizeof(m_Header));
   m_parentColorSpace = Profile.m_parentColorSpace;
 
-  if (!Profile.m_TagVals->empty()) {
+  if (!Profile.m_TagVals.empty()) {
     TagPtrList::const_iterator i;
     IccTagPtr tagptr = {0};
-    for (i=Profile.m_TagVals->begin(); i!=Profile.m_TagVals->end(); i++) {
+    for (i=Profile.m_TagVals.begin(); i!=Profile.m_TagVals.end(); i++) {
       tagptr.ptr = i->ptr->NewCopy();
-      m_TagVals->push_back(tagptr);
+      m_TagVals.push_back(tagptr);
     }
   }
 
-  if (!Profile.m_Tags->empty()) {
+  if (!Profile.m_Tags.empty()) {
     TagEntryList::const_iterator i;
     IccTagEntry entry = {};
-    for (i=Profile.m_Tags->begin(); i!=Profile.m_Tags->end(); i++) {
+    for (i=Profile.m_Tags.begin(); i!=Profile.m_Tags.end(); i++) {
       TagPtrList::const_iterator j, k;
 
       //Make sure that tag entry values point to shared tags in m_TagVals
-      for (j=Profile.m_TagVals->begin(), k=m_TagVals->begin(); j!=Profile.m_TagVals->end() && k!=m_TagVals->end(); j++, k++) {
+      for (j=Profile.m_TagVals.begin(), k=m_TagVals.begin(); j!=Profile.m_TagVals.end() && k!=m_TagVals.end(); j++, k++) {
         if (i->pTag == j->ptr) {
           //k should point to the the corresponding copied tag
           entry.pTag = k->ptr;
@@ -216,12 +212,12 @@ CIccProfile &CIccProfile::operator=(const CIccProfile &Profile)
         }
       }
 
-      if (j==Profile.m_TagVals->end()) {  //Did we not find the tag?
+      if (j==Profile.m_TagVals.end()) {  //Did we not find the tag?
         entry.pTag = NULL;
       }
 
       memcpy(&entry.TagInfo, &i->TagInfo, sizeof(icTag));
-      m_Tags->push_back(entry);
+      m_Tags.push_back(entry);
     }
   }
 
@@ -241,9 +237,6 @@ CIccProfile &CIccProfile::operator=(const CIccProfile &Profile)
 CIccProfile::~CIccProfile()
 {
   Cleanup();
-
-  delete m_Tags;
-  delete m_TagVals;
 }
 
 /**
@@ -262,13 +255,13 @@ void CIccProfile::Cleanup()
 
   TagPtrList::iterator i;
 
-  for (i=m_TagVals->begin(); i!=m_TagVals->end(); i++) {
+  for (i=m_TagVals.begin(); i!=m_TagVals.end(); i++) {
     if (i->ptr != nullptr) {
       delete i->ptr;
     }
   }
-  m_Tags->clear();
-  m_TagVals->clear();
+  m_Tags.clear();
+  m_TagVals.clear();
   memset(&m_Header, 0, sizeof(m_Header));
   m_parentColorSpace = icSigNoColorData;
 }
@@ -290,7 +283,7 @@ IccTagEntry* CIccProfile::GetTag(icSignature sig) const
 {
   TagEntryList::const_iterator i;
 
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (i->TagInfo.sig==(icTagSignature)sig)
       return (IccTagEntry*)&(i->TagInfo);
   }
@@ -317,7 +310,7 @@ IccTagEntry* CIccProfile::GetTag(icSignature sig, const CIccProfile *pParentProf
 {
   TagEntryList::const_iterator i;
 
-  for (i = m_Tags->begin(); i != m_Tags->end(); i++) {
+  for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
     if (i->TagInfo.sig == (icTagSignature)sig)
       return (IccTagEntry*)&(i->TagInfo);
   }
@@ -346,9 +339,9 @@ bool CIccProfile::AreTagsUnique() const
 {
   TagEntryList::const_iterator i, j;
 
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     j=i;
-    for (j++; j!= m_Tags->end(); j++) {
+    for (j++; j!= m_Tags.end(); j++) {
       if (i->TagInfo.sig == j->TagInfo.sig)
         return false;
     }
@@ -376,7 +369,7 @@ IccTagEntry* CIccProfile::GetTag(CIccTag *pTag) const
 {
   TagEntryList::const_iterator i;
 
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (i->pTag==pTag)
       return (IccTagEntry*)&(i->TagInfo);
   }
@@ -545,18 +538,18 @@ bool CIccProfile::AttachTag(icSignature sig, CIccTag *pTag)
   Entry.TagInfo.size = 0;
   Entry.pTag = pTag;
 
-  m_Tags->push_back(Entry);
+  m_Tags.push_back(Entry);
 
   TagPtrList::iterator i;
 
-  for (i=m_TagVals->begin(); i!=m_TagVals->end(); i++)
+  for (i=m_TagVals.begin(); i!=m_TagVals.end(); i++)
     if (i->ptr == pTag)
       break;
 
-  if (i==m_TagVals->end()) {
+  if (i==m_TagVals.end()) {
     IccTagPtr TagPtr = {};
     TagPtr.ptr = pTag;
-    m_TagVals->push_back(TagPtr);
+    m_TagVals.push_back(TagPtr);
   }
 
   return true;
@@ -582,13 +575,13 @@ bool CIccProfile::DeleteTag(icSignature sig)
 {
   TagEntryList::iterator i;
 
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (i->TagInfo.sig==(icTagSignature)sig)
       break;
   }
-  if (i!=m_Tags->end()) {
+  if (i!=m_Tags.end()) {
     CIccTag *pTag = i->pTag;
-    m_Tags->erase(i);
+    m_Tags.erase(i);
 
     if (pTag && !GetTag(pTag)) {
       DetachTag(pTag);
@@ -619,9 +612,9 @@ bool CIccProfile::DeleteTag(icSignature sig)
 */
 CIccIO* CIccProfile::ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const
 {
-  TagEntryList::iterator i;
+  TagEntryList::const_iterator i;
 
-  for (i = m_Tags->begin(); i != m_Tags->end(); i++) {
+  for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
     if (i->TagInfo.sig == icSigEmbeddedV5ProfileTag && i->TagInfo.size>2*sizeof(icUInt32Number)) {
       pIO->Seek(i->TagInfo.offset, icSeekSet);
       icTagTypeSignature sig=(icTagTypeSignature)0, extra;
@@ -659,7 +652,7 @@ CIccIO* CIccProfile::ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const
  */
 bool CIccProfile::Attach(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 {
-  if (m_Tags->size())
+  if (m_Tags.size())
     Cleanup();
 
   if (!ReadBasic(pIO)) {
@@ -706,7 +699,7 @@ bool CIccProfile::Detach()
   if (m_pAttachIO && !m_bSharedIO) {
     TagEntryList::iterator i;
 
-    for (i = m_Tags->begin(); i != m_Tags->end(); i++) {
+    for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
       if (i->pTag)
         i->pTag->DetachIO();
     }
@@ -779,7 +772,7 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
   //If there is no IO handle then ReadTags is successful if they have all been
   //loaded in
   if (!pIO) {
-    for (i = m_Tags->begin(); i != m_Tags->end(); i++) {
+    for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
       if (!i->pTag) {
         return false;
       }
@@ -789,7 +782,7 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
 
 	size_t pos = pIO->Tell();
 
-	for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+	for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
 		if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO, true)) {
 			pIO->Seek(pos, icSeekSet);
 			return false;
@@ -820,7 +813,7 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
  */
 bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 {
-  if (m_Tags->size())
+  if (m_Tags.size())
     Cleanup();
 
   if (!ReadBasic(pIO)) {
@@ -845,7 +838,7 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
 
   TagEntryList::iterator i;
 
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO)) {
       Cleanup();
       return false;
@@ -875,7 +868,7 @@ icValidateStatus CIccProfile::ReadValidate(CIccIO *pIO, std::string &sReport)
 {
   icValidateStatus rv = icValidateOK;
 
-  if (m_Tags->size())
+  if (m_Tags.size())
     Cleanup();
 
   if (!ReadBasic(pIO)) {
@@ -920,7 +913,7 @@ icValidateStatus CIccProfile::ReadValidate(CIccIO *pIO, std::string &sReport)
 
   TagEntryList::iterator i;
 
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if ((i->TagInfo.offset % 4) != 0) {
         sReport += icMsgValidateNonCompliant;
         sReport += Info.GetTagSigName(i->TagInfo.sig);
@@ -1002,7 +995,7 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
   TagEntryList::iterator i, j;
   icUInt32Number count;
 
-  for (count=0, i=m_Tags->begin(); i!= m_Tags->end(); i++) {
+  for (count=0, i=m_Tags.begin(); i!= m_Tags.end(); i++) {
     if (i->pTag)
       count++;
   }
@@ -1012,7 +1005,7 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
   size_t dirpos = pIO->GetLength();
 
   //Write Unintialized TagDir
-  for (i=m_Tags->begin(); i!= m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!= m_Tags.end(); i++) {
     if (i->pTag) {
       i->TagInfo.offset = 0;
       i->TagInfo.size = 0;
@@ -1024,9 +1017,9 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
   }
 
   //Write Tags
-  for (i=m_Tags->begin(); i!= m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!= m_Tags.end(); i++) {
     if (i->pTag) {
-      for (j=m_Tags->begin(); j!=i; j++) {
+      for (j=m_Tags.begin(); j!=i; j++) {
         if (i->pTag == j->pTag)
           break;
       }
@@ -1048,7 +1041,7 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
   pIO->Seek(dirpos, icSeekSet);
 
   //Write TagDir with offsets and sizes
-  for (i=m_Tags->begin(); i!= m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!= m_Tags.end(); i++) {
     if (i->pTag) {
       pIO->Write32(&i->TagInfo.sig);
       pIO->Write32(&i->TagInfo.offset);
@@ -1237,7 +1230,7 @@ bool CIccProfile::ReadBasic(CIccIO *pIO)
         !pIO->Read32(&TagEntry.TagInfo.size)) {
       return false;
     }
-    m_Tags->push_back(TagEntry);
+    m_Tags.push_back(TagEntry);
   }
 
 
@@ -1353,11 +1346,11 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
 
   TagPtr.ptr = pTag;
 
-  m_TagVals->push_back(TagPtr);
+  m_TagVals.push_back(TagPtr);
 
   TagEntryList::iterator i;
 
-  for (i=m_Tags->begin(); i!= m_Tags->end(); i++) {
+  for (i=m_Tags.begin(); i!= m_Tags.end(); i++) {
     if (i->TagInfo.offset == pTagEntry->TagInfo.offset &&
         i->pTag != pTag)
       i->pTag = pTag; 
@@ -1392,20 +1385,20 @@ bool CIccProfile::DetachTag(CIccTag *pTag)
   
   TagPtrList::iterator i;
 
-  for (i=m_TagVals->begin(); i!=m_TagVals->end(); i++) {
+  for (i=m_TagVals.begin(); i!=m_TagVals.end(); i++) {
     if (i->ptr == pTag)
       break;
   }
 
-  if (i==m_TagVals->end())
+  if (i==m_TagVals.end())
     return false;
 
-  m_TagVals->erase(i);
+  m_TagVals.erase(i);
 
   TagEntryList::iterator j;
-  for (j=m_Tags->begin(); j!=m_Tags->end();) {
+  for (j=m_Tags.begin(); j!=m_Tags.end();) {
     if (j->pTag == pTag) {
-      j=m_Tags->erase(j);
+      j=m_Tags.erase(j);
     }
     else
       j++;
@@ -1968,14 +1961,8 @@ icValidateStatus CIccProfile::CheckTagTypes(std::string &sReport) const
   icChar buf[bufSize];
   CIccInfo Info;
   
-  // if the tag list pointer is NULL, this would be a serious problem
-// NOTE - ccox - a better solution would be to get rid of the pointer and put the container directly in the class, ditto m_TagVals
-// but that will require changes to several files, and more testing
-  if (!m_Tags)
-    return icValidateCriticalError;
-  
   TagEntryList::const_iterator i;
-  for (i = m_Tags->begin(); i != m_Tags->end(); ++i) {
+  for (i = m_Tags.begin(); i != m_Tags.end(); ++i) {
     icTagSignature tagsig = i->TagInfo.sig;
     
     icTagTypeSignature typesig = icSigUnknownType;
@@ -2494,7 +2481,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
  */
 icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIccProfile *pParentProfile) const
 {
-  if (!m_Tags || m_Tags->size() <= 0) {
+  if (m_Tags.size() <= 0) {
     sReport += icMsgValidateCriticalError;
     sReport += "No tags present.\n";
     return icValidateCriticalError;
@@ -2969,8 +2956,8 @@ icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPat
 
   // Per Tag tests
   rv = icMaxStatus(rv, CheckTagTypes(sReport));
-  TagEntryList::iterator i;
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
+  TagEntryList::const_iterator i;
+  for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (i->pTag)        // should we give an error if pTag is NULL/Not loaded?
       rv = icMaxStatus(rv, i->pTag->Validate(sSigPath + icGetSigPath(i->TagInfo.sig), sReport, this));
   }

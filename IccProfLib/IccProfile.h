@@ -154,10 +154,6 @@ public:
 
   virtual const char *GetClassName() const { return "CIccProfile"; }
 
-  icHeader m_Header;
-
-  TagEntryList *m_Tags;
-
   CIccTag* FindTag(icSignature sig);
   const CIccTag* FindTagConst(icSignature sig) const;
   CIccTag* FindTagOfType(icSignature tagSig, icTagTypeSignature typeSig);
@@ -236,10 +232,18 @@ protected:
                    icArraySignature arraySig=icSigUndefinedArray) const;
   bool CheckFileSize(CIccIO *pIO) const;
 
+
+public:
+
+  icHeader m_Header;
+  TagEntryList m_Tags;
+
+protected:
+
   CIccIO *m_pAttachIO;
   bool m_bSharedIO = false;
 
-  TagPtrList *m_TagVals;
+  TagPtrList m_TagVals;
 
   icColorSpaceSignature m_parentColorSpace = icSigNoColorData;
 };

@@ -597,12 +597,12 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
 
         TagEntryList::iterator i, j;
 
-        for (n = 0, i = pIcc->m_Tags->begin(); i != pIcc->m_Tags->end(); i++, n++) {
+        for (n = 0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); i++, n++) {
             long item = m_tagsCtrl->InsertItem(n, wxString::Format("%d", n));
 
             // Find closest tag after this tag, by scanning all offsets of other tags
             int closest = pHdr->size;
-            for (j = pIcc->m_Tags->begin(); j != pIcc->m_Tags->end(); j++) {
+            for (j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++) {
                 if ((i != j) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && ((int)j->TagInfo.offset <= closest)) {
                     closest = j->TagInfo.offset;
                 }
@@ -751,8 +751,8 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
 
             // Report all duplicated tags in the tag index
             // Both ICC.1 and ICC.2 are silent on what should happen for this but report as a warning!!!
-            for (n = 0, i = pIcc->m_Tags->begin(); i != pIcc->m_Tags->end(); i++, n++)
-                for (m = 0, j = pIcc->m_Tags->begin(); j != pIcc->m_Tags->end(); j++, m++)
+            for (n = 0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); i++, n++)
+                for (m = 0, j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++, m++)
                     if ((i != j) && (i->TagInfo.sig == j->TagInfo.sig)) {
                         snprintf(str, strSize, "%28s is duplicated at positions %d and %d!\n", Fmt.GetTagSigName(i->TagInfo.sig), n, m);
                         sReport += str;
@@ -782,7 +782,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                 nStat = icMaxStatus(nStat, icValidateNonCompliant);
             }
 
-            for (i = pIcc->m_Tags->begin(); i != pIcc->m_Tags->end(); i++) {
+            for (i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); i++) {
                 rndup = 4 * ((i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
                 //pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
 
@@ -802,7 +802,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
 
                 // Find closest tag after this tag, by scanning all other tag offsets
                 closest = pHdr->size;
-                for (j = pIcc->m_Tags->begin(); j != pIcc->m_Tags->end(); j++) {
+                for (j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++) {
                     if ((i != j) && (j->TagInfo.offset > i->TagInfo.offset) && ((int)j->TagInfo.offset <= closest)) {
                         closest = j->TagInfo.offset;
                     }

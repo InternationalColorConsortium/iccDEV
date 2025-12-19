@@ -442,10 +442,10 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
     TagEntryList::iterator i, j;
 
     // n is number of Tags in Tag Table
-    for (n = 0, i = m_pProfile->m_Tags->begin(); i != m_pProfile->m_Tags->end(); i++, n++) {
+    for (n = 0, i = m_pProfile->m_Tags.begin(); i != m_pProfile->m_Tags.end(); i++, n++) {
       // Find closest tag after this tag, by scanning all offsets of other tags 
       closest = pHdr->size;
-      for (j = m_pProfile->m_Tags->begin(); j != m_pProfile->m_Tags->end(); j++) {
+      for (j = m_pProfile->m_Tags.begin(); j != m_pProfile->m_Tags.end(); j++) {
         if ((i != j) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && ((int)j->TagInfo.offset <= closest)) {
           closest = j->TagInfo.offset;
         }
