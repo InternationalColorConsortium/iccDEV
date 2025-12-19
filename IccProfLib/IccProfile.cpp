@@ -590,7 +590,7 @@ bool CIccProfile::DeleteTag(icSignature sig)
     CIccTag *pTag = i->pTag;
     m_Tags->erase(i);
 
-    if (!GetTag(pTag)) {
+    if (pTag && !GetTag(pTag)) {
       DetachTag(pTag);
       delete pTag;
     }
@@ -1967,17 +1967,28 @@ icValidateStatus CIccProfile::CheckTagTypes(std::string &sReport) const
   const size_t bufSize = 128;
   icChar buf[bufSize];
   CIccInfo Info;
-
-  icTagSignature tagsig;
-  icTagTypeSignature typesig;
-  icStructSignature structSig;
-  icArraySignature arraySig;
+  
+  // if the tag list pointer is NULL, this would be a serious problem
+// NOTE - ccox - a better solution would be to get rid of the pointer and put the container directly in the class, ditto m_TagVals
+// but that will require changes to several files, and more testing
+  if (!m_Tags)
+    return icValidateCriticalError;
+  
   TagEntryList::const_iterator i;
-  for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
-    tagsig = i->TagInfo.sig;
-    typesig = i->pTag->GetType();
-    structSig = i->pTag->GetTagStructType();
-    arraySig = i->pTag->GetTagArrayType();
+  for (i = m_Tags->begin(); i != m_Tags->end(); ++i) {
+    icTagSignature tagsig = i->TagInfo.sig;
+    
+    icTagTypeSignature typesig = icSigUnknownType;
+    icStructSignature structSig = icSigUnknownStruct;
+    icArraySignature arraySig = icSigUnknownArray;
+    
+    // missing the internal tag data would cause a problem, issue #322
+    if (i->pTag) {
+      typesig = i->pTag->GetType();
+      structSig = i->pTag->GetTagStructType();
+      arraySig = i->pTag->GetTagArrayType();
+    }
+    
     snprintf(buf, bufSize, "%s", Info.GetSigName(tagsig));
     if (!IsTypeValid(tagsig, typesig, structSig, arraySig)) {
       sReport += icMsgValidateNonCompliant;
@@ -2483,7 +2494,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
  */
 icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIccProfile *pParentProfile) const
 {
-  if (m_Tags->size() <= 0) {
+  if (!m_Tags || m_Tags->size() <= 0) {
     sReport += icMsgValidateCriticalError;
     sReport += "No tags present.\n";
     return icValidateCriticalError;
@@ -2960,7 +2971,8 @@ icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPat
   rv = icMaxStatus(rv, CheckTagTypes(sReport));
   TagEntryList::iterator i;
   for (i=m_Tags->begin(); i!=m_Tags->end(); i++) {
-    rv = icMaxStatus(rv, i->pTag->Validate(sSigPath + icGetSigPath(i->TagInfo.sig), sReport, this));
+    if (i->pTag)        // should we give an error if pTag is NULL/Not loaded?
+      rv = icMaxStatus(rv, i->pTag->Validate(sSigPath + icGetSigPath(i->TagInfo.sig), sReport, this));
   }
 
   return rv;
