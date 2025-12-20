@@ -504,13 +504,14 @@ CIccMemIO* CIccProfile::GetTagIO(icSignature sig)
     }
 
     m_pAttachIO->Seek(pEntry->TagInfo.offset, icSeekSet);
-    size_t expected_length = pIO->GetLength();
-    size_t read_length = m_pAttachIO->Read8(pIO->GetData(), pIO->GetLength());
+    
+    const size_t expected_length = pIO->GetLength();
+    size_t read_length = m_pAttachIO->Read8(pIO->GetData(), expected_length);
     if (read_length == expected_length)
-        return pIO;
+      return pIO;
     else {
-        delete pIO;
-        return NULL;
+      delete pIO;
+      return NULL;
     }
   }
 
