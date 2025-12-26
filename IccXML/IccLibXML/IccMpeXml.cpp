@@ -603,16 +603,16 @@ bool CIccSampledCalculatorCurveXml::ParseXml(xmlNode *pNode, std::string &parseS
 }
 
 
-class CIccSinglSampledeCurveXml : public CIccSingleSampledCurve
+class CIccSingleSampledeCurveXml : public CIccSingleSampledCurve
 {
 public:
-  CIccSinglSampledeCurveXml(icFloatNumber first = 0, icFloatNumber last = 0) : CIccSingleSampledCurve(first, last) {}
+  CIccSingleSampledeCurveXml(icFloatNumber first = 0, icFloatNumber last = 0) : CIccSingleSampledCurve(first, last) {}
 
   bool ToXml(std::string &xml, std::string blanks/* = ""*/);
   bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-bool CIccSinglSampledeCurveXml::ToXml(std::string &xml, std::string blanks)
+bool CIccSingleSampledeCurveXml::ToXml(std::string &xml, std::string blanks)
 {
   const size_t lineSize = 256;
   char line[lineSize];
@@ -638,7 +638,7 @@ bool CIccSinglSampledeCurveXml::ToXml(std::string &xml, std::string blanks)
 }
 
 
-bool CIccSinglSampledeCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
+bool CIccSingleSampledeCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   xmlAttr *attr = icXmlFindAttr(pNode, "FirstEntry");
 
@@ -1029,7 +1029,7 @@ bool CIccSegmentedCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 static bool ToXmlCurve(std::string& xml, std::string blanks, icCurveSetCurvePtr pCurve)
 {
   if (pCurve->GetType() == icSigSingleSampledCurve) {
-    CIccSinglSampledeCurveXml* m_ptr = (CIccSinglSampledeCurveXml*)pCurve;
+    CIccSingleSampledeCurveXml* m_ptr = (CIccSingleSampledeCurveXml*)pCurve;
 
     if (!(m_ptr->ToXml(xml, blanks + "  ")))
       return false;
@@ -1106,7 +1106,7 @@ static icCurveSetCurvePtr ParseXmlCurve(xmlNode* pNode, std::string parseStr)
       delete pCurve;
   }
   else if (!strcmp((const char*)pNode->name, "SingleSampledCurve")) {
-    CIccSinglSampledeCurveXml* pCurve = new CIccSinglSampledeCurveXml();
+    CIccSingleSampledeCurveXml* pCurve = new CIccSingleSampledeCurveXml();
 
     if (pCurve->ParseXml(pNode, parseStr)) {
       rv = pCurve;
