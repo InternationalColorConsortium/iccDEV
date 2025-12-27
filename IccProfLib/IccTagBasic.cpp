@@ -2846,7 +2846,7 @@ bool CIccTagNamedColor2::SetSize(icUInt32Number nSize, icInt32Number nDeviceCoor
   }
   free(m_NamedColor);
 
-  m_nColorEntrySize = nColorEntrySize;
+  m_nColorEntrySize = (icUInt32Number)nColorEntrySize;
 
   m_NamedColor = pNamedColor;
   m_nSize = nSize;
@@ -3626,8 +3626,6 @@ bool CIccTagXYZ::Read(icUInt32Number size, CIccIO *pIO)
 
   if (!pIO->Read32(&m_nReserved))
     return false;
-    
-  size_t number = ((size-2*sizeof(icUInt32Number)) / sizeof(icXYZNumber));
 
   icUInt32Number nNum=((size-2*sizeof(icUInt32Number)) / sizeof(icXYZNumber));
   icUInt32Number nNum32 = nNum*sizeof(icXYZNumber)/sizeof(icUInt32Number);
