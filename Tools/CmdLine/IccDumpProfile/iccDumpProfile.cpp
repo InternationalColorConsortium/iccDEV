@@ -72,6 +72,9 @@
 
 #include <stdio.h>
 #include <cstring>
+#include <vector>
+#include <unordered_map>
+#include <algorithm>
 #include "IccProfile.h"
 #include "IccTag.h"
 #include "IccUtil.h"
@@ -86,10 +89,9 @@
 #include <mcheck.h>
 #endif
 
-
-void DumpTag(CIccProfile *pIcc, icTagSignature sig, int nVerboseness)
+// core function to dump tag data
+void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
 {
-  CIccTag *pTag = pIcc->FindTag(sig);
   const size_t bufSize = 64;
   char buf[bufSize];
   CIccInfo Fmt;
@@ -110,6 +112,30 @@ void DumpTag(CIccProfile *pIcc, icTagSignature sig, int nVerboseness)
     printf("Tag (%s) not found in profile\n", icGetSig(buf, bufSize, sig));
   }
 }
+
+// This does a search of all tags, slow
+void DumpTagSig(CIccProfile *pIcc, icTagSignature sig, int nVerboseness)
+{
+  CIccTag *pTag = pIcc->FindTag(sig);
+  DumpTagCore( pTag, sig, nVerboseness );
+}
+
+// This directly accesses the tag data, does not need to search
+void DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
+{
+  CIccTag *pTag = pIcc->FindTag(entry);
+  DumpTagCore( pTag, entry.TagInfo.sig, nVerboseness );
+}
+
+int printUsage(void)
+{
+    printf("Usage: iccDumpProfile {-v} {int} profile {tagId to dump/\"ALL\"}\n");
+    printf("\nThe -v option causes profile validation to be performed.\n"
+           "The optional integer parameter specifies verboseness of output (1-100, default=100).\n");
+    printf("iccDumpProfile built with IccProfLib version " ICCPROFLIBVER "\n\n");
+    return -1;
+}
+
 
 int main(int argc, char* argv[])
 {
@@ -134,16 +160,8 @@ int main(int argc, char* argv[])
   int nArg = 1;
   int verbosity = 100; // default is maximum verbosity (old behaviour)
 
-  if (argc <= 1) {
-print_usage:
-    printf("Usage: iccDumpProfile {-v} {int} profile {tagId to dump/\"ALL\"}\n");
-    printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
-    printf("\nThe -v option causes profile validation to be performed."
-           "\nThe optional integer parameter specifies verboseness of output (1-100, default=100).\n");
-    printf("iccDumpProfile built with IccProfLib version " ICCPROFLIBVER "\n\n");
-
-    return -1;
-  }
+  if (argc <= 1)
+    return printUsage();
 
   CIccProfile *pIcc;
   std::string sReport;
@@ -153,7 +171,7 @@ print_usage:
   if (!strncmp(argv[1], "-V", 2) || !strncmp(argv[1], "-v", 2)) {
     nArg++;
     if (argc <= nArg)
-      goto print_usage;
+      return printUsage();
 
     // support case where ICC filename starts with an integer: e.g. "123.icc"
     char *endptr = nullptr;
@@ -166,7 +184,7 @@ print_usage:
         verbosity = 100;
       nArg++;
       if (argc <= nArg)
-        goto print_usage;
+        return printUsage();
     }
     else if (argv[nArg] == endptr) {
         verbosity = 100;
@@ -187,7 +205,7 @@ print_usage:
         verbosity = 100;
       nArg++;
       if (argc <= nArg)
-        goto print_usage;
+        return printUsage();
     }
 
     pIcc = OpenIccProfile(argv[nArg]);
@@ -277,35 +295,56 @@ print_usage:
 
     int n, closest, pad;
     TagEntryList::iterator i, j;
+    
 
-    // n is number of Tags in Tag Table
-    for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); i++, n++) {
-        // Find closest tag after this tag, by scanning all offsets of other tags
-        closest = pHdr->size;
-        for (j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++) {
-            if ((i != j) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && ((int)j->TagInfo.offset <= closest)) {
-                closest = j->TagInfo.offset;
-            }
-        }
+    // Create a list of sorted offsets, to calculate padding for each tag in O(logN) time instead of O(N)
+    // We use this in two places below
+    typedef  std::vector<int> offsetVector;
+    offsetVector sortedTagOffsets;
+    sortedTagOffsets.resize( pIcc->m_Tags.size() );
+    for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i, n++) {
+        sortedTagOffsets[n] = i->TagInfo.offset;
+    }
+    std::sort( sortedTagOffsets.begin(), sortedTagOffsets.end() );
+    // NOTE - ccox - removing duplicates would be nice, but not really necessary  (std::unique(), followed by erase)
+    
+
+    // n is index of the iterated Tag in the Tag Table
+    for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i, n++) {
+        // Find closest tag after this tag, by checking offsets of other tags
+        // use upper_bound to allow for duplicate tags (pointing to the same offset)
+        offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
+        if (match == sortedTagOffsets.cend())
+            closest = (int)pHdr->size;
+        else
+            closest = *match;
+        closest = std::min( closest, (int)pHdr->size );
+
         // Number of actual padding bytes between this tag and closest neighbour (or EOF)
         // Should be 0-3 if compliant. Negative number if tags overlap!
         pad = closest - i->TagInfo.offset - i->TagInfo.size;
 
         printf("%28s  %s  %8d\t%8d\t%8d\n", Fmt.GetTagSigName(i->TagInfo.sig),
-            icGetSig(buf, i->TagInfo.sig, false), i->TagInfo.offset, i->TagInfo.size, pad);
+            icGetSig(buf, bufSize, i->TagInfo.sig, false), i->TagInfo.offset, i->TagInfo.size, pad);
     }
 
     printf("\n");
 
-    // Report all duplicated tags in the tag index
+    // Report all duplicated tag signatures in the tag index
     // Both ICC.1 and ICC.2 are silent on what should happen for this but report as a warning!!!
-    int m;
-    for (n=0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); i++, n++)
-        for (m=0, j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++, m++)
-            if ((i != j) && (i->TagInfo.sig == j->TagInfo.sig)) {
-                printf("%28s is duplicated at positions %d and %d!\n", Fmt.GetTagSigName(i->TagInfo.sig), n,  m);
-                nStatus = icMaxStatus(nStatus, icValidateWarning);
-            }
+    typedef std::unordered_map<icTagSignature,int> tag_lookup_map;
+    tag_lookup_map tag_lookup;
+    for (n=0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i, n++) {
+        // check for a previous tag with the same sig/type
+        tag_lookup_map::const_iterator found = tag_lookup.find(i->TagInfo.sig);
+        if ( found != tag_lookup.end() ) {
+            printf("%28s is duplicated at positions %d and %d!\n", Fmt.GetTagSigName(i->TagInfo.sig), n,  found->second);
+            nStatus = icMaxStatus(nStatus, icValidateWarning);
+        } else {
+            // else this is the first of this type seen, so insert it into our list
+            tag_lookup[i->TagInfo.sig] = n;
+        }
+    }
 
 
     // Check additional details if doing detailed validation:
@@ -334,7 +373,7 @@ print_usage:
           nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
       }
 
-      for (i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); i++) {
+      for (i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i) {
         rndup = 4 * ((i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
         //pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
 
@@ -352,13 +391,14 @@ print_usage:
             smallest_offset = (int)i->TagInfo.offset;
         }
 
-        // Find closest tag after this tag, by scanning all other tag offsets
-        closest = pHdr->size;
-        for (j=pIcc->m_Tags.begin(); j!=pIcc->m_Tags.end(); j++) {
-           if ((i!=j) && (j->TagInfo.offset > i->TagInfo.offset) && ((int)j->TagInfo.offset <= closest)) {
-             closest = j->TagInfo.offset;
-           }
-        }
+        // Find closest tag after this tag, by checking offsets of other tags
+        // use upper_bound to allow for duplicate tags (pointing to the same offset)
+        offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
+        if (match == sortedTagOffsets.cend())
+            closest = (int)pHdr->size;
+        else
+            closest = *match;
+        closest = std::min( closest, (int)pHdr->size );
 
         // Check if closest tag after this tag is less than offset+size - in which case it overlaps! Ignore last tag.
         if ((closest < (int)i->TagInfo.offset + (int)i->TagInfo.size) && (closest < (int)pHdr->size)) {
@@ -392,12 +432,12 @@ print_usage:
 
     if (argc>nArg+1) {
       if (!stricmp(argv[nArg+1], "ALL")) {
-        for (i = pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); i++) {
-          DumpTag(pIcc, i->TagInfo.sig, verbosity);
+        for (i = pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i) {
+          DumpTagEntry(pIcc, *i, verbosity);
         }
       }
       else {
-        DumpTag(pIcc, (icTagSignature)icGetSigVal(argv[nArg+1]), verbosity);
+        DumpTagSig(pIcc, (icTagSignature)icGetSigVal(argv[nArg+1]), verbosity);
       }
     }
   }
