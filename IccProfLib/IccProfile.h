@@ -155,6 +155,7 @@ public:
   virtual const char *GetClassName() const { return "CIccProfile"; }
 
   CIccTag* FindTag(icSignature sig);
+  CIccTag* FindTag(IccTagEntry &entry);
   const CIccTag* FindTagConst(icSignature sig) const;
   CIccTag* FindTagOfType(icSignature tagSig, icTagTypeSignature typeSig);
 
