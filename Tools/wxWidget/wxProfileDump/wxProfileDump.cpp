@@ -74,6 +74,9 @@ Copyright:  (c) see ICC Software License
 #include "IccEval.h"
 #include "IccPrmg.h"
 #include "IccProfLibVer.h"
+#include <vector>
+#include <unordered_map>
+#include <algorithm>
 // For compilers that support precompilation, includes "wx/wx.h".
 #include "wx/wxprec.h"
 
@@ -596,23 +599,37 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
         }
 
         TagEntryList::iterator i, j;
+        
+        // Create a list of sorted offsets, to calculate padding in O(logN) time instead of O(N)
+        // We use this below
+        typedef  std::vector<int> offsetVector;
+        offsetVector sortedTagOffsets;
+        sortedTagOffsets.resize( pIcc->m_Tags.size() );
+        for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i, n++) {
+            sortedTagOffsets[n] = i->TagInfo.offset;
+        }
+        std::sort( sortedTagOffsets.begin(), sortedTagOffsets.end() );
 
-        for (n = 0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); i++, n++) {
+        for (n = 0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i, n++) {
             long item = m_tagsCtrl->InsertItem(n, wxString::Format("%d", n));
 
-            // Find closest tag after this tag, by scanning all offsets of other tags
-            int closest = pHdr->size;
-            for (j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++) {
-                if ((i != j) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && ((int)j->TagInfo.offset <= closest)) {
-                    closest = j->TagInfo.offset;
-                }
-            }
+            // Find closest tag after this tag, by checking offsets of other tags
+            // use upper_bound to allow for duplicate tags (pointing to the same offset)
+            int closest;
+            offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
+            if (match == sortedTagOffsets.end())
+                closest = (int)pHdr->size;
+            else
+                closest = *match;
+            closest = std::min( closest, (int)pHdr->size );
+
             // Number of actual padding bytes between this tag and closest neighbour (or EOF)
             // Should be 0-3 if compliant. Negative number if tags overlap!
             int pad = closest - i->TagInfo.offset - i->TagInfo.size;
 
             m_tagsCtrl->SetItem(item, 1, Fmt.GetTagSigName(i->TagInfo.sig));
-            CIccTag* pTag = pIcc->FindTag(i->TagInfo.sig);
+
+            CIccTag* pTag = pIcc->FindTag( *i );
             if (!pTag)
                 m_tagsCtrl->SetItem(item, 2, _T("***Invalid Tag!***"));
             else
@@ -739,7 +756,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
     std::string path = profilePath.ToStdString(wxConvUTF8);
 		CIccProfile *pIcc = ValidateIccProfile(path.c_str(), sReport, nStat);
         if (pIcc) {
-            int m, n;
+            int n;
             TagEntryList::iterator i, j;
             CIccInfo Fmt;
             const size_t strSize = 256;
@@ -751,13 +768,20 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
 
             // Report all duplicated tags in the tag index
             // Both ICC.1 and ICC.2 are silent on what should happen for this but report as a warning!!!
-            for (n = 0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); i++, n++)
-                for (m = 0, j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++, m++)
-                    if ((i != j) && (i->TagInfo.sig == j->TagInfo.sig)) {
-                        snprintf(str, strSize, "%28s is duplicated at positions %d and %d!\n", Fmt.GetTagSigName(i->TagInfo.sig), n, m);
-                        sReport += str;
-                        nStat = icMaxStatus(nStat, icValidateWarning);
-                    }
+            typedef std::unordered_map<icTagSignature,int> tag_lookup_map;
+            tag_lookup_map tag_lookup;
+            for (n=0, i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i, n++) {
+                // check for a previous tag with the same sig/type
+                tag_lookup_map::const_iterator found = tag_lookup.find(i->TagInfo.sig);
+                if ( found != tag_lookup.end() ) {
+                    snprintf(str,strSize,"%28s is duplicated at positions %d and %d!\n", Fmt.GetTagSigName(i->TagInfo.sig), n,  found->second);
+                    sReport += str;
+                    nStat = icMaxStatus(nStat, icValidateWarning);
+                } else {
+                    // else this is the first of this type seen, so insert it into our list
+                    tag_lookup[i->TagInfo.sig] = n;
+                }
+            }
 
             // Check additional details if doing detailed validation:
             // - First tag data offset is immediately after the Tag Table
@@ -781,8 +805,18 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                 sReport += "File size is not a multiple of 4 bytes (last tag needs padding?).\n";
                 nStat = icMaxStatus(nStat, icValidateNonCompliant);
             }
+            
+            // Create a list of sorted offsets, to calculate padding in O(logN) time instead of O(N)
+            // We use this in the loop below
+            typedef  std::vector<int> offsetVector;
+            offsetVector sortedTagOffsets;
+            sortedTagOffsets.resize( pIcc->m_Tags.size() );
+            for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i, n++) {
+                sortedTagOffsets[n] = i->TagInfo.offset;
+            }
+            std::sort( sortedTagOffsets.begin(), sortedTagOffsets.end() );
 
-            for (i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); i++) {
+            for (i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i) {
                 rndup = 4 * ((i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
                 //pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
 
@@ -801,12 +835,13 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                 }
 
                 // Find closest tag after this tag, by scanning all other tag offsets
-                closest = pHdr->size;
-                for (j = pIcc->m_Tags.begin(); j != pIcc->m_Tags.end(); j++) {
-                    if ((i != j) && (j->TagInfo.offset > i->TagInfo.offset) && ((int)j->TagInfo.offset <= closest)) {
-                        closest = j->TagInfo.offset;
-                    }
-                }
+                // use upper_bound to allow for duplicate tags (pointing to the same offset)
+                offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
+                if (match == sortedTagOffsets.end())
+                    closest = (int)pHdr->size;
+                else
+                    closest = *match;
+                closest = std::min( closest, (int)pHdr->size );
 
                 // Check if closest tag after this tag is less than offset+size - in which case it overlaps! Ignore last tag.
                 if ((closest < (int)i->TagInfo.offset + (int)i->TagInfo.size) && (closest < (int)pHdr->size)) {
@@ -1090,7 +1125,7 @@ MyRoundTripDialog::MyRoundTripDialog(wxWindow *pParent, const wxString& title, w
       theReport = "There is nothing to report\n";
   }
 
-  textReport->SetLabel(theReport);
+  textReport->SetValue(theReport);
 
   SetSizer(sizer);
   sizer->Fit(this);
