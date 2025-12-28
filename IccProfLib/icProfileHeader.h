@@ -941,10 +941,13 @@ typedef enum {
 } icColorSpaceSignature;
 
 
-typedef enum {
+typedef enum : icUInt32Number {
   icSigNoMCSData                 = 0x00000000,
   icSigMCSData                   = 0x6d630000,  /* "mc0000" */
-  /*Note: "nc0001" through "ncFFFF" are also valid signatures defined using macro icNColorSpaceSig()*/
+  /*Note: "mc0001" through "mcFFFF" are also valid signatures defined using macro icNColorSpaceSig()*/
+  icSigMCSDataEnd                = 0x6d63FFFF,   // provide clues to UBSan
+
+  icSigMCSMaxEnumData            = 0xFFFFFFFF,
 } icMaterialColorSignature;
 
 #define icGetColorSpaceType(sig) ((icColorSpaceSignature)(((icUInt32Number)sig)&0xffff0000))
