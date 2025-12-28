@@ -287,7 +287,7 @@ int main(int argc, char* argv[])
       printf("MCS Color Space:    Not Defined\n");
     }
 
-    printf("\nProfile Tags\n");
+    printf("\nProfile Tags (%d)\n", (int)pIcc->m_Tags.size() );
     printf(  "------------\n");
 
     printf("%28s    ID    %8s\t%8s\t%8s\n", "Tag",  "Offset", "Size", "Pad");
