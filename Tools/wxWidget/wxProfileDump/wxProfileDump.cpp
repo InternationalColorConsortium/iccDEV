@@ -602,7 +602,7 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
         
         // Create a list of sorted offsets, to calculate padding in O(logN) time instead of O(N)
         // We use this below
-        typedef  std::vector<int> offsetVector;
+        typedef  std::vector<icUInt32Number> offsetVector;
         offsetVector sortedTagOffsets;
         sortedTagOffsets.resize( pIcc->m_Tags.size() );
         for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i, n++) {
@@ -808,7 +808,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
             
             // Create a list of sorted offsets, to calculate padding in O(logN) time instead of O(N)
             // We use this in the loop below
-            typedef  std::vector<int> offsetVector;
+            typedef  std::vector<icUInt32Number> offsetVector;
             offsetVector sortedTagOffsets;
             sortedTagOffsets.resize( pIcc->m_Tags.size() );
             for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i, n++) {
