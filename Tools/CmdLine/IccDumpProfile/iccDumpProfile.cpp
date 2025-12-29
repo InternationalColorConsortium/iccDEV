@@ -299,7 +299,7 @@ int main(int argc, char* argv[])
 
     // Create a list of sorted offsets, to calculate padding for each tag in O(logN) time instead of O(N)
     // We use this in two places below
-    typedef  std::vector<int> offsetVector;
+    typedef  std::vector<icUInt32Number> offsetVector;
     offsetVector sortedTagOffsets;
     sortedTagOffsets.resize( pIcc->m_Tags.size() );
     for (n=0, i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i, n++) {
