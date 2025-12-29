@@ -1576,7 +1576,6 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport) const
       }
 
       switch(icGetColorSpaceType(m_Header.spectralPCS)) {
-// ERROR -- comparison of different enum types!
         case icSigNoSpectralData:
           if (m_Header.spectralRange.start ||
               m_Header.spectralRange.end ||
@@ -1785,6 +1784,8 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport) const
     case icSigArgyllCMS:
     case icSigLogoSync:
     case icSigHeidelberg:
+    case icSigLinoColor:
+    case icSigMonaco:
     case icSigLittleCMS:
     case icSigKodak:
     case icSigKonicaMinolta:

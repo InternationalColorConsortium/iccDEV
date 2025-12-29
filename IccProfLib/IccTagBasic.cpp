@@ -7672,8 +7672,10 @@ void CIccTagMultiLocalizedUnicode::Describe(std::string &sDescription, int /* nV
 
     // Bad ICCs can have unprintables...
     sDescription += "Language = ";
-    if (isprint(i->m_nLanguageCode >> 8) && isprint(i->m_nLanguageCode & 0x00FF)) {
-        snprintf(szBuf, szBufSize, "'%c%c'", i->m_nLanguageCode >> 8, i->m_nLanguageCode & 0x00FF);
+    icUInt8Number c0 = i->m_nLanguageCode >> 8;
+    icUInt8Number c1 = i->m_nLanguageCode & 0x00FF;
+    if (isprint(c0) && isprint(c1) && (c0 <= 126) && (c1 <= 126)) {
+        snprintf(szBuf, szBufSize, "'%c%c'", c0, c1);
     }
     else {
       snprintf(szBuf, szBufSize, "'\?\?' (0x%04X)", i->m_nLanguageCode);
@@ -7683,8 +7685,10 @@ void CIccTagMultiLocalizedUnicode::Describe(std::string &sDescription, int /* nV
     if (i->m_nCountryCode) {
         // Region Codes are optional according to ISO 
         sDescription += ", Region = ";
-        if (isprint(i->m_nCountryCode >> 8) && isprint(i->m_nCountryCode & 0x00FF)) {
-          snprintf(szBuf, szBufSize, "'%c%c'", i->m_nCountryCode>>8, i->m_nCountryCode & 0x00FF);
+        c0 = i->m_nCountryCode >> 8;
+        c1 = i->m_nCountryCode & 0x00FF;
+        if (isprint(c0) && isprint(c1) && (c0 <= 126) && (c1 <= 126)) {
+          snprintf(szBuf, szBufSize, "'%c%c'", c0, c1);
         }
         else {
           snprintf(szBuf, szBufSize, "'\?\?' (0x%04X)", i->m_nCountryCode);

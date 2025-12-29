@@ -1014,6 +1014,8 @@ typedef enum {
     icSigArgyllCMS                      = 0x6172676C,  /* 'argl' */
     icSigLogoSync                       = 0x44676f53,  /* 'LgoS' */
     icSigHeidelberg                     = 0x48444d20,  /* 'HDM ' */
+    icSigLinoColor                      = 0x4C696E6F,  /* 'Lino' */
+    icSigMonaco                         = 0x6D6E636F,  /* 'mnco' */
     icSigLittleCMS                      = 0x6C636D73,  /* 'lcms' */
     icSigKodak                          = 0x4b434d53,  /* 'KCMS' */
     icSigKonicaMinolta                  = 0x4d434d44,  /* 'MCML' */

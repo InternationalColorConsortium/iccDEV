@@ -987,7 +987,7 @@ void icMemDump(std::string &sDump, void *pBuf, size_t nNum)
     strncpy(buf+10+j*3, num, 2);
 
     c=*pData;
-    if (!isprint(c))
+    if (!isprint(c) || c > 126)
       c='.';
     buf[10+16*3 + 1 + j] = c;
   }
@@ -1020,11 +1020,11 @@ const icChar* icGet16bitSig(icChar* pBuf, size_t bufSize, icUInt16Number nSig, b
 
     pBuf[0] = '\'';
     c = (icUInt8Number)(sig >> 8);
-    if (!isprint(c))
+    if (!isprint(c) || c > 126)
         c = '?';
     pBuf[1] = c;
     c = (icUInt8Number)(sig & 0x00FF);
-    if (!isprint(c))
+    if (!isprint(c) || c > 126)
         c = '?';
     pBuf[2] = c;
 
@@ -1049,18 +1049,23 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
   }
 
   pBuf[0] = '\'';
+  
+  // 126 is ~, and 127 is DEL, over 127 is undefined and depends on local code page
+  // isprint() lies about values > 127 on MacOS and Linux, haven't tested Windows
   for (i=1; i<5; i++) {
     c=(icUInt8Number)(sig>>24);
-    if (!isprint(c))
+    if (!isprint(c) || c > 126) {
       c='?';
+      bGetHexVal = true;
+    }
     pBuf[i]=c;
     sig <<=8;
   }
 
   if (bGetHexVal)
-    snprintf(pBuf+5, bufSize-5, "' = %08X", nSig);
+    snprintf(pBuf+5, bufSize-5, "' = %08X", nSig);  // 17 characcter plus NULL
   else
-    snprintf(pBuf+5, bufSize-5, "'");
+    snprintf(pBuf+5, bufSize-5, "'");   // 6 characters plus NULL
 
   return pBuf;
 }
@@ -1081,7 +1086,7 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
     else if (j!=-1) {
       bGetHexVal = true;
     }
-    else if (!isprint(c) ||c==':') {
+    else if (!isprint(c) || c==':' || c > 126) {
       c='?';
       bGetHexVal = true;
     }
@@ -1128,7 +1133,7 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
       pBuf[0] = '\'';
       for (i=1; i<5; i++) {
         c=(icUInt8Number)(sig>>24);
-        if (!isprint(c)) {
+        if (!isprint(c) || c > 126) {
           c = '?';
           bNeedHexVal = true;
         }
@@ -1184,7 +1189,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
           else if (j!=-1) {
             bGetHexVal = true;
           }
-          else if (!isprint(c) ||c==':') {
+          else if (!isprint(c) || c==':' || c > 126) {
             c='?';
             bGetHexVal = true;
           }
@@ -1927,6 +1932,12 @@ const icChar *CIccInfo::GetCmmSigName(icCmmSignature sig)
 
   case icSigHeidelberg:
     return "Heidelberg";
+  
+  case icSigLinoColor:
+    return "LinoColor";
+  
+  case icSigMonaco:
+    return "Monaco";
 
   case icSigLittleCMS:
     return "Little CMS";
