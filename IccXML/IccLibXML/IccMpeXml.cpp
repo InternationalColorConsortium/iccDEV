@@ -1029,25 +1029,29 @@ bool CIccSegmentedCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 static bool ToXmlCurve(std::string& xml, std::string blanks, icCurveSetCurvePtr pCurve)
 {
   if (pCurve->GetType() == icSigSingleSampledCurve) {
-    CIccSingleSampledeCurveXml* m_ptr = (CIccSingleSampledeCurveXml*)pCurve;
+    CIccSingleSampledeCurveXml* m_ptr =
+      static_cast<CIccSingleSampledeCurveXml*>(pCurve);
 
-    if (!(m_ptr->ToXml(xml, blanks + "  ")))
+    if (!m_ptr->ToXml(xml, blanks + "  "))
       return false;
   }
   else if (pCurve->GetType() == icSigSegmentedCurve) {
-    CIccSegmentedCurveXml* m_ptr = (CIccSegmentedCurveXml*)pCurve;
+    CIccSegmentedCurveXml* m_ptr =
+      static_cast<CIccSegmentedCurveXml*>(pCurve);
 
-    if (!(m_ptr->ToXml(xml, blanks + "  ")))
+    if (!m_ptr->ToXml(xml, blanks + "  "))
       return false;
   }
   else if (pCurve->GetType() == icSigSampledCalculatorCurve) {
-    CIccSampledCalculatorCurveXml* m_ptr = (CIccSampledCalculatorCurveXml*)pCurve;
+    CIccSampledCalculatorCurveXml* m_ptr =
+      static_cast<CIccSampledCalculatorCurveXml*>(pCurve);
 
-    if (!(m_ptr->ToXml(xml, blanks + "  ")))
+    if (!m_ptr->ToXml(xml, blanks + "  "))
       return false;
   }
-  else
+  else {
     return false;
+  }
 
   return true;
 }
