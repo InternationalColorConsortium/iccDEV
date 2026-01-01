@@ -265,6 +265,17 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetField(m_hTif, TIFFTAG_XRESOLUTION, &m_fXRes);
   TIFFGetField(m_hTif, TIFFTAG_YRESOLUTION, &m_fYRes);
   TIFFGetField(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
+  
+  if (m_nRowsPerStrip == 0 || m_nSamples == 0 || m_nBitsPerSample == 0) {
+    // Corrupt parameters - can't read the file
+    // If the file is uncompressed, we might guess some of the values,
+    // but it would take a bit of testing to get right.  Probably not worth it.
+    Close();
+    return false;
+  }
+  
+  if (m_nRowsPerStrip > m_nHeight)
+    m_nRowsPerStrip = m_nHeight;    // best guess, to limit memory allocated
 
   //Validate what we expect to work with
   if ((m_nBitsPerSample==32 && nSampleFormat!=SAMPLEFORMAT_IEEEFP) ||
@@ -273,6 +284,7 @@ bool CTiffImg::Open(const char *szFname)
     Close();
     return false;
   }
+  
   m_nCurStrip=(unsigned int)-1;
   m_nCurLine = 0;
 
@@ -313,7 +325,7 @@ bool CTiffImg::Open(const char *szFname)
 
 bool CTiffImg::ReadLine(unsigned char *pBuf)
 {
-  if (!m_bRead)
+  if (!m_bRead || m_nRowsPerStrip == 0)
     return false;
 
   unsigned int nStrip = m_nCurLine / m_nRowsPerStrip;
