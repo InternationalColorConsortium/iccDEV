@@ -1278,6 +1278,9 @@ icSignature icGetSecondSigPathSig(std::string sigPath)
 icUInt32Number icGetSigVal(const icChar *pBuf)
 {
   icUInt32Number v;
+  
+  if (!pBuf)    // can't return an error, so do something sane to avoid a segfault
+    return 0;
 
   switch(strlen(pBuf)) {
     case 0:
