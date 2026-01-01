@@ -2348,12 +2348,13 @@ void CIccTagTextDescription::Release()
  */
 icUInt16Number *CIccTagTextDescription::GetUnicodeBuffer(icUInt32Number nSize)
 {
-  if (m_nUnicodeSize < nSize) {
-    m_uzUnicodeText = (icUInt16Number*)icRealloc(m_uzUnicodeText, (nSize+1)*sizeof(icUInt16Number));
+  if (m_nUnicodeSize < (nSize+2)) { // test for existing size must include the NULL termination!
+    m_uzUnicodeText = (icUInt16Number*)icRealloc(m_uzUnicodeText, (nSize+2)*sizeof(icUInt16Number));
 
     m_uzUnicodeText[nSize] = 0;
+    m_uzUnicodeText[nSize+1] = 0;
 
-    m_nUnicodeSize = nSize;
+    m_nUnicodeSize = nSize+2;
   }
 
   return m_uzUnicodeText;
@@ -2370,13 +2371,18 @@ icUInt16Number *CIccTagTextDescription::GetUnicodeBuffer(icUInt32Number nSize)
 void CIccTagTextDescription::ReleaseUnicode()
 {
   int i;
-  for (i=0; m_uzUnicodeText[i]; i++);
+  // even if the string is not NULL terminated, don't read over the end!
+  for (i=0; i < (int)m_nUnicodeSize && m_uzUnicodeText[i]; i++);
 
   icUInt32Number nSize = i+1;
 
-  if (nSize < m_nUnicodeSize-1) {
-    m_uzUnicodeText=(icUInt16Number*)icRealloc(m_uzUnicodeText, (nSize+1)*sizeof(icUInt16Number));
-    m_nUnicodeSize = nSize+1;
+  // try to keep 2 NULLs at the end, to deal with malformed unicode
+  // but don't reallocate because of the NULLs
+  if (nSize < (m_nUnicodeSize-2)) {
+    m_uzUnicodeText=(icUInt16Number*)icRealloc(m_uzUnicodeText, (nSize+2)*sizeof(icUInt16Number));
+    m_uzUnicodeText[nSize] = 0;
+    m_uzUnicodeText[nSize+1] = 0;
+    m_nUnicodeSize = nSize+2;
   }
 }
 
