@@ -95,9 +95,11 @@ bool CIccTagXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 {
-  const char *tagType = icXmlAttrValue(pNode->parent, "type");
-  if (tagType) {
-    m_nType = (icTagTypeSignature)icGetSigVal(tagType);
+  if (pNode) {
+    const char *tagType = icXmlAttrValue(pNode->parent, "type");
+    if (tagType) {
+      m_nType = (icTagTypeSignature)icGetSigVal(tagType);
+    }
   }
 
   pNode = icXmlFindNode(pNode, "UnknownData");
