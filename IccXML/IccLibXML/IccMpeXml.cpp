@@ -2703,6 +2703,12 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
 
       MacroMap::iterator m = m_macroMap.find(name.c_str());
       if (m != m_macroMap.end()) {
+        if (name == macroName) {
+          // there is a self/circular reference in the macro, error out before we recurse infinitely
+          parseStr += "Self reference in macro '" + macroName + "'\n";
+          return false;
+        }
+
         icUInt16Number nLocalsSize = 0;
         TempDeclVarMap::iterator locals = m_macroLocalMap.find(macroName);
         if (locals != m_macroLocalMap.end()) {
