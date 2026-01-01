@@ -4632,7 +4632,7 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
   icPositionNumber lumPos;
   lumPos.offset = (icUInt32Number)(pIO->Tell()- nTagStartPos);
 
-  if (!m_pLumCurve->Write(pIO))
+  if (!m_pLumCurve || !m_pLumCurve->Write(pIO))
     return false;
 
   lumPos.size = (icUInt32Number)(pIO->Tell() - (lumPos.offset + nTagStartPos));
@@ -4642,7 +4642,7 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
 
   //write out first tone function
   funcPos[0].offset = (icUInt32Number)(pIO->Tell() - nTagStartPos);
-  if (!m_pToneFuncs[0]->Write(pIO)) {
+  if (!m_pToneFuncs[0] || !m_pToneFuncs[0]->Write(pIO)) {
     return false;
   }
   funcPos[0].size = (icUInt32Number)(pIO->Tell() - (funcPos[0].offset + nTagStartPos));
@@ -4658,7 +4658,7 @@ bool CIccMpeToneMap::Write(CIccIO* pIO)
     }
     else {
       funcPos[i].offset = (icUInt32Number)(pIO->Tell() - nTagStartPos);
-      if (!m_pToneFuncs[i]->Write(pIO)) {
+      if (!m_pToneFuncs[i] || !m_pToneFuncs[i]->Write(pIO)) {
         return false;
       }
       funcPos[i].size = (icUInt32Number)(pIO->Tell() - (funcPos[i].offset + nTagStartPos));

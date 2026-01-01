@@ -1819,6 +1819,7 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
   }
   else {
     parseStr += "Missing Luminance Curve";
+    return false;
   }
 
   pSubNode = icXmlFindNode(pNode->children, "ToneMapFunctions");
@@ -1872,6 +1873,7 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
     }
     if (nIndex < m_nOutputChannels) {
       parseStr += "Missing ToneMap Functions\n";
+      return false;
     }
   }
 
