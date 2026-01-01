@@ -3096,6 +3096,9 @@ bool CIccMpeXmlCalculator::ParseChanMap(ChanVarMap& chanMap, const char *szNames
 bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   xmlNode *pChild;
+
+  if (!pNode)
+    return false;
   
   SetSize(atoi(icXmlAttrValue(pNode, "InputChannels")),
           atoi(icXmlAttrValue(pNode, "OutputChannels")));
