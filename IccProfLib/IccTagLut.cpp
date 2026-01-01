@@ -4422,21 +4422,17 @@ icValidateStatus CIccTagLutBtoA::Validate(std::string sigPath, std::string &sRep
   case icSigBToA2Tag:
   case icSigGamutTag:
     {
-      icUInt32Number nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
+//      icUInt32Number nInput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+//      icUInt32Number nOutput = icGetSpaceSamples(pProfile->m_Header.pcs);
+// m_nInput should match nInput, and m_nOutput should match nOutput
+// That is validated in CIccMBB::Validate
+// Here we don't want to crash while validating the curves, even if the count of them is incorrect, so we use the same counts obtained from reading the LUT.
 
-      icUInt32Number nOutput;
+      icUInt32Number nInput = m_nInput;
+      icUInt32Number nOutput = m_nOutput;
+
       if (sig==icSigGamutTag) {
         nOutput = 1;
-      }
-      else {
-        nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-      }
-
-      if (m_nOutput!=nOutput) {
-        sReport += icMsgValidateCriticalError;
-        sReport += sSigPathName;
-        sReport += " - Incorrect number of output channels.\n";
-        rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
       icUInt8Number i;
@@ -4863,13 +4859,14 @@ icValidateStatus CIccTagLut8::Validate(std::string sigPath, std::string &sReport
   case icSigBToA2Tag:
   case icSigGamutTag:
     {
-      icUInt32Number nInput, nOutput;
-      
-      nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
-      nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-      
-      if (sig==icSigAToB0Tag || sig==icSigAToB1Tag || sig==icSigAToB2Tag)
-        std::swap(nInput,nOutput);
+//      icUInt32Number nInput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+//      icUInt32Number nOutput = icGetSpaceSamples(pProfile->m_Header.pcs);
+// m_nInput should match nInput, and m_nOutput should match nOutput
+// That is validated in CIccMBB::Validate
+// Here we don't want to crash while validating the curves, even if the count of them is incorrect, so we use the same counts obtained from reading the LUT.
+
+      icUInt32Number nInput = m_nInput;
+      icUInt32Number nOutput = m_nOutput;
 
       if (sig==icSigGamutTag) {
         nOutput = 1;
@@ -5288,13 +5285,14 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
   case icSigBToA2Tag:
   case icSigGamutTag:
     {
-      icUInt32Number nInput, nOutput;
-      
-      nInput = icGetSpaceSamples(pProfile->m_Header.pcs);
-      nOutput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
-      
-      if (sig==icSigAToB0Tag || sig==icSigAToB1Tag || sig==icSigAToB2Tag)
-        std::swap(nInput,nOutput);
+//      icUInt32Number nInput = icGetSpaceSamples(pProfile->m_Header.colorSpace);
+//      icUInt32Number nOutput = icGetSpaceSamples(pProfile->m_Header.pcs);
+// m_nInput should match nInput, and m_nOutput should match nOutput
+// That is validated in CIccMBB::Validate
+// Here we don't want to crash while validating the curves, even if the count of them is incorrect, so we use the same counts obtained from reading the LUT.
+
+      icUInt32Number nInput = m_nInput;
+      icUInt32Number nOutput = m_nOutput;
 
       if (sig==icSigGamutTag) {
         nOutput = 1;
