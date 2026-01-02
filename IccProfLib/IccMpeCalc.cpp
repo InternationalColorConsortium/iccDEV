@@ -4527,14 +4527,12 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
 
   size_t startPos = pIO->Tell();
   
-  size_t headerSize = sizeof(icTagTypeSignature) + 
-    sizeof(icUInt32Number) + 
-    sizeof(icUInt16Number) + 
-    sizeof(icUInt16Number) +
-    sizeof(icUInt16Number) +
-    sizeof(icUInt16Number) +
-    sizeof(icUInt16Number) +
-    sizeof(icUInt16Number);
+  size_t headerSize = sizeof(icTagTypeSignature) + // typeSig
+    sizeof(icUInt32Number) +    // reserved
+    sizeof(icUInt16Number) +    // inputChannels
+    sizeof(icUInt16Number) +    // outputChannels
+    sizeof(icUInt32Number) +    // SubElement count
+    sizeof(icPositionNumber);   // at least one icPositionNumber
 
   if (headerSize > size)
     return false;
@@ -4588,10 +4586,14 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
     SetSubElem(nSubElem-1, NULL); //Initialize array
 
     for (n=0; n<nSubElem; n++) {
-      if (pos->offset + pos->size > size) {
+      // No, you may not make circular references in the tag,
+      // reference back into the tag header,
+      // or try to load more data than we have available.
+      if ( (pos->offset < headerSize) || ((pos->offset + pos->size) > size) ) {
         free(posvals);
         return false;
       }
+      
       pIO->Seek(startPos + pos->offset, icSeekSet);
 
       if (!pIO->Read32(&elemSig)) {
@@ -4617,8 +4619,9 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
 
   m_calcFunc = new CIccCalculatorFunc(this);
   pos = posvals;
-
-  if (!m_calcFunc || pos->offset + pos->size > size) {
+  
+  // overreading, references into the header, or not having a calc func would be bad
+  if ( !m_calcFunc || (pos->offset < headerSize) || ((pos->offset + pos->size) > size) ) {
     free(posvals);
     return false;
   }
@@ -4626,8 +4629,10 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
   pIO->Seek(startPos + pos->offset, icSeekSet);
 
   if (!m_calcFunc->Read(pos->size, pIO)) {
+    free(posvals);
     return false;
   }
+  
   free(posvals);
 
   pIO->Seek(startPos + size, icSeekSet);
