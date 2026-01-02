@@ -4553,7 +4553,7 @@ bool CIccMpeToneMap::Read(icUInt32Number size, CIccIO* pIO)
   }
 
   for (int i = 1; i < m_nOutputChannels; i++) {
-    for (j = 0; j < i; i++) {
+    for (j = 0; j < i; j++) {
       if (funcPos[j].offset == funcPos[i].offset)
         break;
     }
