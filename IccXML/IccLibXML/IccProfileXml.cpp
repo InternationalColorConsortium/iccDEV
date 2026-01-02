@@ -348,8 +348,12 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
     return false;
 
   for (pNode=pNode->children; pNode; pNode=pNode->next) {
-	  if (pNode->type==XML_ELEMENT_NODE) {
-		if (!icXmlStrCmp((const char*)pNode->name, "ProfileVersion")) {
+    if (pNode->type==XML_ELEMENT_NODE) {
+      if (!icXmlStrCmp((const char*)pNode->name, "ProfileVersion")) {
+        if (!pNode->children) {
+          parseStr += "Cannot parse ProfileVersion, no value specified\n";
+          continue;
+        }
       const char *szVer = (const char*)pNode->children->content;
       std::string ver;
       unsigned long verMajor=0, verMinor=0, verClassMajor=0, verClassMinor=0;
@@ -393,6 +397,10 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       m_Header.version = icUInt32Number( (verMajor << 24) | (verMinor << 16) | (verClassMajor << 8) | verClassMinor );
 		}
     else if (!icXmlStrCmp((const char*)pNode->name, "ProfileSubClassVersion")) {
+      if (!pNode->children) {
+        parseStr += "Cannot parse ProfileSubClassVersion, no value specified\n";
+        continue;
+      }
       const char *szVer = (const char*)pNode->children->content;
       std::string ver;
       unsigned long verClassMajor = 0, verClassMinor = 0;
