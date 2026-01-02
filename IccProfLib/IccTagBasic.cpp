@@ -4501,7 +4501,7 @@ CIccTagSparseMatrixArray &CIccTagSparseMatrixArray::operator=(const CIccTagSpars
 
   if (m_RawData)
     free(m_RawData);
-  m_RawData = (icUInt8Number*)calloc(m_nSize, m_nChannelsPerMatrix);
+  m_RawData = (icUInt8Number*)calloc(m_nSize, GetBytesPerMatrix());
   memcpy(m_RawData, ITSMA.m_RawData, m_nSize*GetBytesPerMatrix());
 
   m_bNonZeroPadding = ITSMA.m_bNonZeroPadding;
@@ -4564,6 +4564,10 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
       !pIO->Read16(&nChannels) ||
       !pIO->Read16(&nMatrixType) ||
       !pIO->Read32(&nNumMatrices))
+    return false;
+  
+  // reject tags with invalid counts of items
+  if (nNumMatrices < 1 || nChannels < 1)
     return false;
 
   m_nMatrixType = (icSparseMatrixType)nMatrixType;
