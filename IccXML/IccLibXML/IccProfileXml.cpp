@@ -342,7 +342,10 @@ static unsigned char parseVersion(const char *szVer)
 bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 {  	  
   std::string temp;
-  memset(&m_Header, 0, sizeof(m_Header));  
+  memset(&m_Header, 0, sizeof(m_Header));
+  
+  if (!pNode)
+    return false;
 
   for (pNode=pNode->children; pNode; pNode=pNode->next) {
 	  if (pNode->type==XML_ELEMENT_NODE) {
@@ -437,15 +440,16 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 		}		
 		else if (!icXmlStrCmp(pNode->name, "ProfileFlags")) {
 			m_Header.flags = 0;			
-			xmlAttr *attr = icXmlFindAttr(pNode, "EmbeddedInFile");
+      
+      xmlAttr *attr = icXmlFindAttr(pNode, "EmbeddedInFile");
       if (attr && !strcmp(icXmlAttrValue(attr), "true")) {
-				m_Header.flags |= icEmbeddedProfileTrue; 
-			}
+		m_Header.flags |= icEmbeddedProfileTrue;
+      }
 
-			attr = icXmlFindAttr(pNode, "UseWithEmbeddedDataOnly");
+        attr = icXmlFindAttr(pNode, "UseWithEmbeddedDataOnly");
       if (attr && !strcmp(icXmlAttrValue(attr), "true")) {
-					m_Header.flags |= icUseWithEmbeddedDataOnly;
-			}
+        m_Header.flags |= icUseWithEmbeddedDataOnly;
+      }
 
       attr = icXmlFindAttr(pNode, "ExtendedRangePCS");
       if (attr && !strcmp(icXmlAttrValue(attr), "true")) {
@@ -474,15 +478,18 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 			m_Header.attributes = icGetDeviceAttrValue(pNode);
 		}
 		else if (!icXmlStrCmp(pNode->name, "RenderingIntent")) {
-			if (!strcmp((const char*)pNode->children->content, "Perceptual"))
-				m_Header.renderingIntent = icPerceptual;
-			else if (!strcmp((const char*)pNode->children->content, "Relative Colorimetric") || !strcmp((const char*)pNode->children->content, "Relative"))
-				m_Header.renderingIntent = icRelativeColorimetric;
-			else if (!strcmp((const char*)pNode->children->content, "Saturation"))
-				m_Header.renderingIntent = icSaturation;
-			else if (!strcmp((const char*)pNode->children->content, "Absolute Colorimetric") || !strcmp((const char*)pNode->children->content, "Absolute"))
-				m_Header.renderingIntent = icAbsoluteColorimetric;
-
+          if (!pNode->children) {
+            parseStr += "Cannot parse RenderingIntent, no value specified\n";
+            continue;
+          }
+          if (!strcmp((const char*)pNode->children->content, "Perceptual"))
+            m_Header.renderingIntent = icPerceptual;
+          else if (!strcmp((const char*)pNode->children->content, "Relative Colorimetric") || !strcmp((const char*)pNode->children->content, "Relative"))
+            m_Header.renderingIntent = icRelativeColorimetric;
+          else if (!strcmp((const char*)pNode->children->content, "Saturation"))
+            m_Header.renderingIntent = icSaturation;
+          else if (!strcmp((const char*)pNode->children->content, "Absolute Colorimetric") || !strcmp((const char*)pNode->children->content, "Absolute"))
+            m_Header.renderingIntent = icAbsoluteColorimetric;
 		}
 		else if (!icXmlStrCmp(pNode->name, "PCSIlluminant")) { 
 			xmlNode *xyzNode = icXmlFindNode(pNode->children, "XYZNumber");
