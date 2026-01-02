@@ -3893,8 +3893,10 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
       memcpy(ifTemps, tempUsage, nMaxTemp);
 
       p=i+2;
-      if (p > nOps)
+      if (p > nOps) {
+        free(ifTemps);
         return true;
+      }
       rv = rv || SequenceNeedTempReset(&op[p], icIntMin(nOps-p, op[i].data.size), ifTemps, nMaxTemp);
 
       if (i<nOps && op[i+1].sig==icSigElseOp) {
@@ -3907,8 +3909,11 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
         memcpy(elseTemps, tempUsage, nMaxTemp);
 
         p=i+2+op[i].data.size;
-        if (p > nOps)
+        if (p > nOps) {
+          free(ifTemps);
+          free(elseTemps);
           return true;
+        }
         rv = rv || SequenceNeedTempReset(&op[p], icIntMin(nOps-p, op[i+1].data.size), elseTemps, nMaxTemp);
 
         if (!rv) {
