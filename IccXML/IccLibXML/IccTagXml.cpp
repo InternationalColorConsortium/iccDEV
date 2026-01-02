@@ -1281,7 +1281,10 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccTagXmlFixedNum<T, Tsig>::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 {
   pNode = icXmlFindNode(pNode, "Array");
-  pNode = pNode->children;  
+  if (!pNode)
+    return false;
+
+  pNode = pNode->children;
 
   CIccFloatArray a;
 
