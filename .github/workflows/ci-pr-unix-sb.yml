@@ -7,11 +7,11 @@
 #
 ## Intent: Unix/Linux static analysis using Clang scan-build for PR validation
 #
-## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
-##               Add Action ci-pr-unix-sb
-## TODO: Push binary releases, tags etc.. 
+# Last Updated: 14-DEC-2025 1810Z by David Hoyt 
+#               Refactor workflow with sanitization
+#               Improved job names
 #
-## Comment: Known good and working from PatchIccMax
+#
 #
 #
 #
@@ -26,10 +26,6 @@ permissions:
   pull-requests: read
 
 on:
-  # Manual trigger
-  workflow_dispatch:
-
-  # Reusable workflow support
   workflow_call:
     inputs:
       build-type:
@@ -51,13 +47,13 @@ env:
 
 jobs:
   scan-build:
-    name: Ubuntu • scan-build
+    name: SAST (scan-build)
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 20
     defaults:
       run:
-        shell: bash
+        shell: bash --noprofile --norc {0}
 
     steps:
       - name: Checkout PR Source
@@ -65,52 +61,58 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
+      
+      - name: Checkout base commit (trusted sanitizers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+      
       - name: Verify Branch Context
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
-          echo "Triggered by:  ${{ github.event_name }}"
-          echo "Base branch:   ${{ github.base_ref }}"
-          echo "Head branch:   ${{ github.head_ref }}"
-          echo "Commit SHA:    ${{ github.event.pull_request.head.sha }}"
-          echo "OS:            ubuntu-latest"
-          echo "Build Type:    ${{ inputs.build-type || 'Release' }}"
+          echo "==== PR Context ===="
+          echo "Event Name: ${{ github.event_name }}"
+          echo "Base Branch: ${{ github.event.pull_request.base.ref }}"
+          echo "Head Branch: ${{ github.event.pull_request.head.ref }}"
+          echo "Commit SHA: ${{ github.event.pull_request.head.sha }}"
+          echo "OS: ${{ runner.os }}"
+          echo "Build Type: ${{ inputs.build-type }}"
           echo "Static Analysis: Enabled (scan-build)"
-
+          echo "===================="
       - name: Install Dependencies
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
           sudo apt-get update -qq
           sudo apt-get install -y \
-            clang clang-tools build-essential cmake \
+            build-essential cmake gcc g++ clang clang-tools \
             libpng-dev libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
             python3 python3-pip curl git llvm
 
       - name: Prepare Environment
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
           export CC=clang
           export CXX=clang++
@@ -119,42 +121,38 @@ jobs:
           echo "Compiler: $($CC --version | head -n 1)"
           mkdir -p Build
 
-      - name: Run scan-build cmake config
-        shell: bash        
+      - name: Run scan-build CMake config
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
           cd Build
           echo "::group::CMake Configure (scan-build)"
           scan-build cmake \
             -DCMAKE_INSTALL_PREFIX=$HOME/.local \
             -DCMAKE_BUILD_TYPE=${{ inputs.build-type || 'Release' }} \
-             Cmake/ || true
+            Cmake
           echo "::endgroup::"
 
-      - name: Run scan-build cmake build
-        shell: bash
+      - name: Run scan-build CMake build
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
           cd Build
           echo "::group::scan-build Analysis"
           scan-build --status-bugs --keep-going -o scan-build-reports \
             make -j$(nproc) || true
           echo "::endgroup::"
-          echo "scan-build finished (errors ignored for CI success)."
+          echo "Scan-build complete - check reports for findings"
 
       - name: Upload Reports
         if: always()
@@ -165,15 +163,46 @@ jobs:
 
       - name: Generate GitHub Summary
         if: always()
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          BUILD_TYPE: ${{ inputs.build-type || 'Release' }}
+          JOB_STATUS: ${{ job.status }}
         run: |
+          set -euo pipefail
+          
+          # Load trusted sanitizers
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SANITIZER"
+          else
+            # Fallback sanitizer
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+          
+          # Sanitize all outputs
+          safe_build_type=$(sanitize_line "$BUILD_TYPE")
+          safe_run_url=$(sanitize_line "$RUN_URL")
+          safe_status=$(sanitize_line "$JOB_STATUS")
+          
           echo "## 🧠 Clang Static Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **OS:** ubuntu-latest" >> $GITHUB_STEP_SUMMARY
           echo "- **Compiler:** clang" >> $GITHUB_STEP_SUMMARY
           echo "- **Analysis Tool:** scan-build" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Type:** ${{ inputs.build-type || 'Release' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type:** $safe_build_type" >> $GITHUB_STEP_SUMMARY
           echo "- **Reports:** Build/scan-build-reports" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Run URL:** $RUN_URL" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** $safe_status" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run URL:** $safe_run_url" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📊 Recent scan-build Output" >> $GITHUB_STEP_SUMMARY
           if ls Build/scan-build-reports/*/index.html >/dev/null 2>&1; then

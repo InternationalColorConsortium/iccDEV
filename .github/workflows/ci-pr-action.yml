@@ -1,19 +1,25 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
-##                 https://color.org
+# Copyright (©) 2025 International Color Consortium. 
+#                 All rights reserved. 
+#                 https://color.org
 #
 #
 ## Intent: iccDEV ci-pr-action
 #
-## Last Updated: 08-DEC-2025 2300Z by David Hoyt 
-##               Additional UCI Checks
+## Last Updated: 02-JAN-2026 2100Z by David Hoyt
+##               Fix "no merge base" error in diffcheck step
 #                Consider Copilot Review
 #                Review GitHub Best Practice & Security Guides
 #
+# Last Updated: 17-DEC-2025 0030Z by David Hoyt 
+#               Refactor workflow with sanitization
+#               Improved job names
+#    
 #
 #
+#  Note: We continue to monitor the ci-pr- labels for issues
+#        Add TODO Issues with Comments, Suggestions & Feedback
 #
 #
 #
@@ -27,12 +33,9 @@ permissions:
   # Avoid unnecessary permissions; do not add write permissions.
 
 on:
-  workflow_dispatch:
-  workflow_call:
   pull_request:
     branches:
       - master
-      
     types:
       - opened
       - synchronize
@@ -40,63 +43,76 @@ on:
       - ready_for_review
 
 concurrency:
-  group: "ci-pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}"
+  group: "ci-pr-${{ github.workflow }}-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
 jobs:
   detect-src:
-    name: Detect Source Changes
+    name: 🧭 Welcome to iccDEV
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
+
     outputs:
       src_changed: ${{ steps.diffcheck.outputs.src_changed }}
+
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
-          fetch-depth: 2
+          fetch-depth: 50  # Increased from 2 to allow merge-base detection
           # Disable unsafe fetch options
           persist-credentials: false
 
-      - name: Verify remote origin URL (opt out of malicious git configs)
-        shell: bash
-        env:
-         BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          origin_url=$(git remote get-url origin || true)
-          echo "Remote origin: $origin_url"
-          # Enforce that origin points to the expected GitHub repository for this workflow run
-          expected="https://github.com/${{ github.repository }}.git"
-          # Allow both HTTPS and git@ forms if needed
-          if [[ "$origin_url" != "$expected" && "$origin_url" != "${expected%.git}" && "$origin_url" != "git@github.com:InternationalColorConsortium/iccDEV.git" ]]; then
-            echo "Origin URL mismatch: expected $expected, ${expected%.git}, or git@github.com:InternationalColorConsortium/iccDEV.git, got $origin_url" >&2
-            echo "src_changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+      # Checkout the trusted base commit into a separate path so we do not
+      # source code from the PR workspace (untrusted).
+      - name: Checkout base commit (trusted sanitizers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          # Use the base commit SHA to ensure we fetch the exact trusted version.
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
 
-      - id: diffcheck
-        name: diffcheck for file changes
-        shell: bash
+      - name: Configure Git Environment
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
+
+      - name: Check for source changes
+        id: diffcheck
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+
+          git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
 
-          git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          head_sha="${{ github.event.pull_request.head.sha }}"
 
-          # If not a pull_request event (e.g., workflow_dispatch or workflow_call),
-          # skip source diff checking and mark as non-source change.
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "Non-PR event (${{ github.event_name }}) — skipping source diff check" >&2
+          # Validate that both SHAs look like exact Git commit OIDs (40 hex chars).
+          validate_sha() {
+            local sha="$1"
+            if [[ -z "$sha" ]]; then
+              return 1
+            fi
+            # require exactly 40 hexadecimal characters
+            if [[ ! "$sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              return 1
+            fi
+            return 0
+          }
+
+          if ! validate_sha "$base_sha" || ! validate_sha "$head_sha"; then
+            echo "Warning: invalid or missing commit sha(s); skipping diff-based source detection." >&2
             echo "src_changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -113,8 +129,15 @@ jobs:
               ;;
           esac
 
-          # Short fetch, single ref; avoid tags and deep history
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=1
+          # Fetch with increased depth to find merge base
+          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=50
+
+          # Check if merge base exists before running diff
+          if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
+            echo "Warning: no merge base found between origin/${base_ref} and HEAD; assuming source changed for safety" >&2
+            echo "src_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Case-insensitive extension match (c/h/cpp variants)
           if git diff --name-only "origin/${base_ref}"...HEAD |
@@ -123,32 +146,50 @@ jobs:
           else
             echo "src_changed=false" >> "$GITHUB_OUTPUT"
           fi
- 
-      - name: Print PR Info
-        shell: bash
+
+      - name: Generate Summary
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          # ================================
-          #   ICCDEV – Welcome Banner
-          # ================================
+          # --- load trusted canonical sanitizers from the checked-out base ---
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+            # source the trusted sanitizer (from the base commit)
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SANITIZER"
+          else
+            # Fallback: provide a minimal, safe sanitizer to ensure step summaries
+            # are escaped. This is intentionally conservative.
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_print() { escape_html "$1"; }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
           {
             echo "<div align=\"center\">"
-            echo "  <a href=\"https://color.org\" target=\"_blank\">"
-            echo "    <img src=\"https://color.org/system/images/ICC_logo_text.gif\" alt=\"ICC Logo\" width=\"320\">"
-            echo "  </a>"
             echo "  <h3>Welcome to the ICC Development Workflow</h3>"
+            echo "  ⏱️ <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             echo "</div>"
-            echo ""        
-            echo "## 🧩 ICCDEV PR Summary"
-            echo "  ⏱️ <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"     
-            echo ""       
-            echo "  <strong>PRs Are Typically Reviewed Within 14 Days</strong><br>"            
             echo ""
             echo "## ✔️ PR Checklist"
             echo ""
@@ -157,8 +198,6 @@ jobs:
             echo "- [x] You checked for duplicate [pull requests](https://github.com/InternationalColorConsortium/iccDEV/pulls)"
             echo "- [x] You built your PR locally using the official [Build Instructions](https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/build.md)"
             echo "- [x] You included Unit Tests and/or Issue reproduction steps + fix"
-            echo ""
-            echo "> iccDEV Maintainers will review your PR within **14 days**."
             echo ""
             echo "If you have questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/tree/master/.github/CODEOWNERS)."
             echo ""
@@ -177,84 +216,140 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # ================================
-          #   Branch / PR Context
-          # ================================
-          echo "## 📌 PR / Branch Context" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "HEAD_REF:  ${GITHUB_HEAD_REF:-<none>}" >> "$GITHUB_STEP_SUMMARY"
-          echo "BASE_REF:  ${GITHUB_BASE_REF:-<none>}" >> "$GITHUB_STEP_SUMMARY"
-          echo "GITHUB_REF: $GITHUB_REF" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          # ================================
-          #   Recent Commits
-          # ================================
-          echo "## 📝 Recent Git Commits" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          git --no-pager log -n 5 --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%nMessage: %s%n" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-
   setup:
-    name: 🧭 Init
+    name: 🧭 Thank You for the PR
     runs-on: ubuntu-latest
+    needs: [detect-src]
     permissions:
       contents: read
       pull-requests: read
-    needs: [detect-src]
     steps:
-      - name: Display Environment Info
-        shell: bash
+      - name: Checkout repository (for shared sanitize helpers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout base commit (trusted sanitizers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Print PR Details
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_RUN_ID: ${{ github.run_id }}
+          SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          # Load canonical sanitizers from trusted checkout
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_print() { escape_html "$1"; }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
           echo "============================"
-          echo "   iccDEV PR Build & Check  "
+          echo "   iccDEV PR Build Runner   "
           echo "============================"
           echo ""
           echo "International Color Consortium"
-          echo "Thank you for opening a PR"
+          echo "Thank you for the PR"
           echo ""
-          echo "Trigger:   ${{ github.event_name }}"
-          echo "Repository:${{ github.repository }}"
-          echo "Branch:    ${{ github.ref_name }}"
-          echo "Commit:    ${{ github.sha }}"
-          echo "Actor:     ${{ github.actor }}"
-          echo "Run ID:    ${{ github.run_id }}"
+          echo "Trigger: $(sanitize_print "$GH_EVENT_NAME")"
+          echo "Repository: $(sanitize_print "$GH_REPOSITORY")"
+          echo "Branch: $(sanitize_print "$GH_REF_NAME")"
+          echo "Commit: $(sanitize_print "$GH_SHA")"
+          echo "Actor: $(sanitize_print "$GH_ACTOR")"
+          echo "Run ID: $(sanitize_print "$GH_RUN_ID")"
           echo "Start time: $(date)"
-          echo "Source changed: ${{ needs.detect-src.outputs.src_changed }}"
-          echo ""
+          echo "Source changed: $(sanitize_print "$SRC_CHANGED")"
 
-
-      - name: Write Summary to GitHub UI
-        shell: bash
+      - name: Generate Summary
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          # ensure these are available in the step; if not, the defaults below will be used
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+      
+          # load trusted canonical sanitizers
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+            sanitize_print() { escape_html "$1"; }
+          fi
+      
+          # Safe defaults.
+          : "${GITHUB_EVENT_NAME:=<none>}"
+          : "${GITHUB_REPOSITORY:=<none>}"
+          : "${GITHUB_REF_NAME:=<none>}"
+          : "${GITHUB_SHA:=<none>}"
+          : "${GITHUB_RUN_ID:=<none>}"
+          : "${SRC_CHANGED:=false}"
+      
+          # write step summary (all dynamic values passed through sanitize_line)
           {
-            echo "## 🧭 Init Complete"
+            echo "## 🧭 PR Init Complete"
             echo ""
             echo "**Workflow:** ci-pr-action"
-            echo "- **Triggered by:** \`${{ github.actor }}\`"
-            echo "- **Event type:** \`${{ github.event_name }}\`"
-            echo "- **Branch:** \`${{ github.ref_name }}\`"
-            echo "- **Commit:** \`${{ github.sha }}\`"
-            echo "- **Run ID:** \`${{ github.run_id }}\`"
-            echo "- **Session start:** $(date)"
-            echo "- **Source changed:** \`${{ needs.detect-src.outputs.src_changed }}\`"
+            echo "- **GITHUB_Repository:** \`$(sanitize_line "${GITHUB_REPOSITORY}")\`"
+            echo "- **Event type:** \`$(sanitize_line "${GITHUB_EVENT_NAME}")\`"
+            echo "- **Branch:** \`$(sanitize_line "${GITHUB_REF_NAME}")\`"
+            echo "- **Commit:** \`$(sanitize_line "${GITHUB_SHA}")\`"
+            echo "- **Run ID:** \`$(sanitize_line "${GITHUB_RUN_ID}")\`"
+            echo "- **Session start:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "- **Source changed:** \`$(sanitize_line "${SRC_CHANGED}")\`"
             echo ""
             echo "✅ CI environment successfully initialized and ready for subsequent jobs."
           } >> "$GITHUB_STEP_SUMMARY"
 
   validate-inputs:
-    name: Validate Matrix Inputs
+    name: 🧭 Init PR Build Matrix
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -267,9 +362,9 @@ jobs:
       build-types: ${{ steps.v.outputs.bt }}
 
     steps:
-      - name: Validate fixed or upstream inputs
+      - name: Set up Matrix Runners
         id: v
-        shell: bash
+        shell: bash --noprofile --norc {0}
         run: |
           set -euo pipefail
 
@@ -287,6 +382,12 @@ jobs:
           validate() {
             local json="$1"; shift
             local allowed=("$@")
+
+            # ensure jq is present
+            if ! command -v jq >/dev/null 2>&1; then
+              echo "Error: jq is required for input validation" >&2
+              exit 1
+            fi
 
             readarray -t vals < <(jq -r '.[]' <<<"$json")
 
@@ -310,10 +411,9 @@ jobs:
           echo "comp=$comp_raw" >> "$GITHUB_OUTPUT"
           echo "bt=$bt_raw"     >> "$GITHUB_OUTPUT"
 
-
   unix-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🧱 Unix Matrix Build and Test
+    name: 🧱 Unix Build & Test Profiles
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
     # pass minimized inputs
@@ -323,9 +423,17 @@ jobs:
       build-types: ${{ needs.validate-inputs.outputs.build-types }}
       compilers: ${{ needs.validate-inputs.outputs.compilers }}
 
+  lint:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧹 Lint & Code Quality
+    needs: [setup, detect-src]
+    uses: ./.github/workflows/ci-pr-lint.yml
+    with:
+      ubuntu-version: 'ubuntu-latest'
+
   scan-build:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🔍 Clang Scan-Build Analysis
+    name: 🔍 Scan-Build
     needs: [unix-ci, detect-src]
     uses: ./.github/workflows/ci-pr-unix-sb.yml
     with:
@@ -333,69 +441,137 @@ jobs:
 
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🧱 Windows Build and Test
+    name: 🧱 Windows Build & Test Profiles
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
-    
+
   finalize:
-    name: 🧾 GitHub Summary Report
+    name: 🧾 PR Summary
     runs-on: ubuntu-latest
     needs:
       - detect-src
       - unix-ci
+      - lint
       - scan-build
       - win-ci
     if: always()
     steps:
-      - name: Generate Summary
-        shell: bash
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Checkout base commit (trusted sanitizers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: 🧭 PR Details
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          UNIX_RESULT: ${{ needs.unix-ci.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          SCAN_RESULT: ${{ needs['scan-build'].result }}
+          WIN_RESULT: ${{ needs['win-ci'].result }}
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-
+  
+          # load canonical sanitizers from trusted checkout
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+            sanitize_print() { escape_html "$1"; }
+          fi
+  
+          # --- normalize upstream job results (default to success if missing) ---
+          UNIX_RESULT="${UNIX_RESULT:-success}"
+          LINT_RESULT="${LINT_RESULT:-success}"
+          SCAN_RESULT="${SCAN_RESULT:-success}"
+          WIN_RESULT="${WIN_RESULT:-success}"
+  
+          # remove CRs, trim whitespace and lowercase each value
+          trim_and_norm() {
+            local v="$1"
+            # remove CRs
+            v="${v//$'\r'/}"
+            # trim leading/trailing whitespace (awk used for portability)
+            v="$(printf '%s' "$v" | awk '{$1=$1;print}')"
+            # lowercase (use tr for portability)
+            v="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
+            printf '%s' "$v"
+          }
+  
+          UNIX_RESULT="$(trim_and_norm "$UNIX_RESULT")"
+          LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
+          SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
+          WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
+  
+          # --- compute overall result from upstream jobs ----------------------
+          job_res=success
+          for s in "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT"; do
+            # 'skipped' is acceptable (jobs are skipped when src_changed is false)
+            # only 'failure' or 'cancelled' should cause overall failure
+            if [[ "$s" != "success" && "$s" != "skipped" ]]; then
+              job_res=failure
+              break
+            fi
+          done
+  
+          # --- write header ----------------------------------------------------
           {
             echo "<div align=\"center\">"
-            echo "  <a href=\"https://color.org\" target=\"_blank\">"
-            echo "    <img src=\"https://color.org/system/images/ICC_logo_text.gif\" alt=\"ICC Logo\" width=\"320\">"
-            echo "  </a>"
+            echo "  <h3>Completed the ICC Development Workflow</h3>"
+            echo "  ⏱️ <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo ""
             echo "</div>"
             echo ""
-            echo "## 🧩 ICCDEV PR Summary"
+            echo "## 🧩 PR Summary"
+            echo "  <strong>PRs Are Typically Reviewed Within 14 Days</strong><br>"
+            echo ""
+            echo "## 📌 PR / Branch Context"
+            echo '```text'
+            printf "HEAD_REF:   %s\n" "$(sanitize_line "${GITHUB_HEAD_REF:-<none>}")"
+            printf "BASE_REF:   %s\n" "$(sanitize_line "${GITHUB_BASE_REF:-<none>}")"
+            printf "GITHUB_REF: %s\n" "$(sanitize_line "${GITHUB_REF:-<none>}")"
+            echo '```'
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
-            
-          if [ "${{ needs.detect-src.outputs.src_changed }}" != "true" ]; then
-            echo "- 💤 Non-source PR detected — build, analysis, and linting skipped." >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### ✅ Overall Result: SUCCESS (Bypass: Non-Source Change)" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
 
-          if [ "${{ needs.unix-ci.result }}" == "success" ]; then
-            echo "- ✅ Unix Build + Tests: Passed" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- ❌ Unix Build + Tests: ${{ needs.unix-ci.result }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          if [ "${{ needs.scan-build.result }}" == "success" ]; then
-            echo "- ✅ Clang Static Report: Available" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- ❌ Clang Static Analysis: ${{ needs.scan-build.result }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          if [ "${{ needs.win-ci.result }}" == "success" ]; then
-            echo "- ✅ Windows Build + Tests: Passed" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "- ❌ Windows Build + Tests: ${{ needs.win-ci.result }}" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Uploaded artifacts for all stages" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "### ✅ Overall Result: SUCCESS" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "### ❌ Overall Result: FAILURE" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          # --- write job status summary ---------------------------------------
+          {
+            echo "## 🛠️ Job Status"
+            echo ""
+            echo "| Job                | Status   |"
+            echo "|--------------------|----------|"
+            printf "| unix-ci            | %s |\n" "$(sanitize_line "$UNIX_RESULT")"
+            printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
+            printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
+            printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
+            echo ""
+            echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"

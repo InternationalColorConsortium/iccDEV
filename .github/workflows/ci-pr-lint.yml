@@ -1,17 +1,16 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
-##                 https://color.org
+# Copyright (©) 2025 International Color Consortium. 
+#                 All rights reserved. 
+#                 https://color.org
 #
 #
-## Intent: Static code analysis and linting (cppcheck, clang-tidy, clang-format) for PR validation
+# Intent: Static code analysis and linting
+# Last Updated: 02-JAN-2025 2100Z by David Hoyt 
+# 
+#               Change git depth, other changes
 #
-## Last Updated: 06-DEC-2025 1400Z by David Hoyt 
-##               TEST job Failures
-## TODO: Push binary releases, tags etc.. 
 #
-## Comment: Known good and working from PatchIccMax
 #
 #
 #
@@ -47,7 +46,9 @@ jobs:
 
       # --- Bump any Self-Hosted ---
       - name: Validate ubuntu-version input
-        shell: bash
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
           case "${{ inputs.ubuntu-version }}" in
@@ -65,18 +66,29 @@ jobs:
           # Disable unsafe fetch options
           persist-credentials: false
 
+      - name: Checkout base commit (trusted sanitizers)
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          # For workflow_call from ci-pr-action: use github.sha (the base branch)
+          # For pull_request: use github.event.pull_request.base.sha
+          # For workflow_dispatch: use github.sha
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: base
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Set up Git anonymous identity
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
 
       - name: Verify remote origin URL (opt out of malicious git configs)
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           origin_url=$(git remote get-url origin || true)
           echo "Remote origin: $origin_url"
@@ -89,33 +101,32 @@ jobs:
           fi
 
       - name: Install Linux dependencies
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
 
-          sudo apt-get update
-          sudo apt-get install -y cppcheck clang-format build-essential cmake git pkg-config \
-            gcc g++ clang clang-tools libpng-dev libxml2 libxml2-dev libtiff-dev \
-            nlohmann-json3-dev libwxgtk3.2-dev wx-common python3 python3-pip curl git llvm zsh
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential cmake gcc g++ clang clang-tools \
+            cppcheck clang-format pkg-config \
+            libpng-dev libxml2-dev libtiff-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common \
+            python3 python3-pip curl git llvm
 
       - id: diffcheck
         name: diffcheck for file changes
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
 
           git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
@@ -124,7 +135,7 @@ jobs:
           # skip source diff checking and mark as non-source change.
           if [ "${{ github.event_name }}" != "pull_request" ]; then
             echo "Non-PR event (${{ github.event_name }}) — skipping source diff check" >&2
-            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+            echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -135,17 +146,18 @@ jobs:
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
-              echo "src_changed=false" >> "$GITHUB_OUTPUT"
+              echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
               exit 0
               ;;
           esac
 
-          # Short fetch, single ref; avoid tags and deep history
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=1
+          # Fetch enough history to find merge base
+          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=50
 
           # Case-insensitive extension match (c/h/cpp variants)
-           git diff --name-only "origin/${base_ref}"...HEAD \
-             | tr -cd '[:alnum:]./_-\n' \
+          # Use three-dot syntax to show changes since merge-base
+           git diff --name-only "origin/${base_ref}...HEAD" \
+             | tr -cd '[:alnum:]./\-_\n' \
              | grep -E '\.(cpp|cxx|cc|h|hpp)$' \
              | tr '\n' '\0' > changed_files.txt
 
@@ -157,20 +169,35 @@ jobs:
              echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
            fi
           
-      - name: Lint & code checks
-        if: ${{ steps.diffcheck.outputs.src_changed == 'true' }}
-        shell: bash
+      - name: Configure and build
+        if: ${{ steps.diffcheck.outputs.no_src_changes == 'false' }}
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
   
-          mkdir -p lint_reports Build
+          mkdir -p Build
+          cd Build
+          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          make
+          cd ..
+
+      - name: Run cppcheck
+        if: ${{ steps.diffcheck.outputs.no_src_changes == 'false' }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+  
+          mkdir -p lint_reports
   
           echo "Running cppcheck on modified source files..."
   
@@ -181,12 +208,18 @@ jobs:
             --std=c++17 \
             --output-file=lint_reports/cppcheck.txt \
             < changed_files.txt || true
-  
-          # Prepare clang-tidy
-          cd Build
-          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make
-          cd ..
+
+      - name: Run clang-tidy
+        if: ${{ steps.diffcheck.outputs.no_src_changes == 'false' }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          mkdir -p lint_reports
   
           # --- clang-tidy ---
           : > lint_reports/clang_tidy.txt
@@ -197,16 +230,14 @@ jobs:
             | tee lint_reports/clang_tidy.txt || true
 
       - name: Skip lint (no source changes)
-        if: ${{ steps.diff.outputs.no_src_changes == 'true' }}
-        shell: bash
+        if: ${{ steps.diffcheck.outputs.no_src_changes == 'true' }}
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
           mkdir -p lint_reports
           echo "No .cpp/.h changes detected; skipping lint." > lint_reports/cppcheck.txt
@@ -220,23 +251,45 @@ jobs:
 
       - name: Generate GitHub summary
         if: always()
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
-         BASH_ENV: /dev/null
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-          
-          # Clear the in-shell GITHUB_TOKEN
           unset GITHUB_TOKEN || true
+          
+          # Load trusted canonical sanitizer functions from base commit
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SANITIZER"
+          else
+            # Fallback sanitizer
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+          
           echo "## 🧹 Lint Report Summary" >> $GITHUB_STEP_SUMMARY
 
-          if [ "${{ steps.diff.outputs.no_src_changes }}" == "true" ]; then
+          if [ "${{ steps.diffcheck.outputs.no_src_changes }}" == "true" ]; then
             echo "🟦 Skipped — no modified source files detected." >> $GITHUB_STEP_SUMMARY
           elif [ -s lint_reports/cppcheck.txt ]; then
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            tail -n 30 lint_reports/cppcheck.txt >> $GITHUB_STEP_SUMMARY
+            # Sanitize each line properly - avoid subshell issues
+            while IFS= read -r line; do
+              safe_line=$(sanitize_line "$line")
+              echo "$safe_line"
+            done < <(tail -n 30 lint_reports/cppcheck.txt) >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
             echo "✅ No cppcheck warnings or errors detected." >> $GITHUB_STEP_SUMMARY

@@ -1,17 +1,17 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
-##                 https://color.org
+# Copyright (©) 2025 International Color Consortium.
+# All rights reserved.
+# https://color.org
 #
 #
-## Intent: Unix/Linux and macOS multi-compiler build and test pipeline for PR validation
+# Intent: Unix/Linux and macOS multi-compiler build and test pipeline for PR validation
 #
-## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
-##               PR Status Labeler
-## TODO: Push binary releases, tags etc.. 
+# Last Updated: 14-DEC-2025 1810Z by David Hoyt 
+#               Refactor workflow with sanitization
+#               Improved job names
 #
-## Comment: Known good and working from PatchIccMax
+#
 #
 #
 #
@@ -66,7 +66,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        shell: bash
+        shell: bash --noprofile --norc {0}
 
     strategy:
       fail-fast: false
@@ -80,7 +80,7 @@ jobs:
 
     steps:
       - name: Validate matrix inputs
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
@@ -106,14 +106,21 @@ jobs:
             *) echo "ERROR: invalid build type: '$BT'. Allowed: Release, Debug"; exit 1 ;;
           esac
 
-      - name: Checkout PR source
+      - name: Check out Repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
-      - name: Verify Branch Context
+      - name: Print the PR Branch Details
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
         run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           echo "Triggered by:  ${{ github.event_name }}"
           echo "Base branch:   ${{ github.base_ref }}"
           echo "Head branch:   ${{ github.head_ref }}"
@@ -122,36 +129,53 @@ jobs:
           echo "Compiler:      ${{ matrix.compiler }}"
           echo "OS:            ${{ matrix.os }}"
 
-      - name: Install Dependencies (Linux)
+          {
+            echo "### PR Branch Details"
+            echo ""
+            echo "**Triggered by:**  ${{ github.event_name }}"
+            echo "**Base branch:**   ${{ github.base_ref }}"
+            echo "**Head branch:**   ${{ github.head_ref }}"
+            echo "**Commit SHA:**    ${{ github.event_pull_request.head.sha }}"
+            echo "**Build Type:**    ${{ matrix.build_type }}"
+            echo "**Compiler:**      ${{ matrix.compiler }}"
+            echo "**OS:**            ${{ matrix.os }}"
+          } >> $GITHUB_STEP_SUMMARY
+      - name: Install Build Dependencies (Linux)
         if: runner.os == 'Linux'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
         run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           sudo apt-get update -qq
           sudo apt-get install -y \
             build-essential cmake gcc g++ clang clang-tools \
-            libpng-dev libxml2 libxml2-dev libtiff-dev \
+            libpng-dev libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
             python3 python3-pip curl git llvm
 
-      - name: Install Dependencies (macOS)
+      - name: Install Build Dependencies (macOS)
         if: runner.os == 'macOS'
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          brew update
           brew install cmake llvm wxwidgets libpng libtiff libxml2 nlohmann-json
 
-      - name: Set Compiler
-        shell: bash
+      - name: Set Compiler Environment Variables
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
@@ -162,13 +186,13 @@ jobs:
             echo "CXX=clang++" >> $GITHUB_ENV
           fi
 
-      - name: Configure CMake
-        shell: bash
+      - name: Configure with CMake
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "Configuring CMake project..."
@@ -182,21 +206,32 @@ jobs:
           cat CMakeCache.txt || true
           echo "::endgroup::"
 
-      - name: Build
-        shell: bash
+      - name: Build Project
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          echo "Starting build..."
+          echo "Start build..."
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
           echo "CMake build type: ${{ matrix.build_type }}"
           make -j$(nproc || sysctl -n hw.logicalcpu)
-          cd ../Testing/
+
+      - name: Create Profiles
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          echo "Creating profiles..."
+          cd Testing
           echo "=== Updating PATH ==="
           for d in ../Build/Tools/*; do
           [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
@@ -206,20 +241,26 @@ jobs:
           find . -iname "*.icc" | wc -l 
           echo "Build complete."
 
-      - name: Summary Report
+      - name: Generate PR Unix Summary Report
         if: always()
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          # Use canonical sanitization from .github/scripts/sanitize-sed.sh
+          if [ ! -r .github/scripts/sanitize-sed.sh ]; then
+            echo "ERROR: .github/scripts/sanitize-sed.sh not found or not readable" >&2
+            exit 1
+          fi
+          source .github/scripts/sanitize-sed.sh
+          SANITIZED_OS=$(sanitize_line "${{ matrix.os }}")
+          SANITIZED_COMPILER=$(sanitize_line "${{ matrix.compiler }}")
+          SANITIZED_BUILD_TYPE=$(sanitize_line "${{ matrix.build_type }}")
           echo "## 🧱 ci-pr-unix Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **OS:**         ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Compiler:**   ${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Type:** ${{ matrix.build_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Artifacts:**  Omitted iccdev-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:**     ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Run URL:**    $RUN_URL" >> $GITHUB_STEP_SUMMARY
+          echo "- **OS:**         $SANITIZED_OS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Compiler:**   $SANITIZED_COMPILER" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Type:** $SANITIZED_BUILD_TYPE" >> $GITHUB_STEP_SUMMARY
