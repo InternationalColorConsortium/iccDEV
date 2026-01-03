@@ -122,7 +122,7 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
   xml += blanks + line;
 
  // if (m_Header.magic != 0){
- //	  sprintf(line, "    <Signature>%s</Signature>\n", icFixXml(fix, icGetSigStr(buf, m_Header.magic)));
+ //	  sprintf(line, "    <Signature>%s</Signature>\n", icFixXml(fix, icGetSigStr(buf, bufSize, m_Header.magic)));
  //	  xml += line;
  // }
 
@@ -255,7 +255,7 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
             j = i;
 #if 0
             // print out the tag signature (there is at least one)
-            sprintf(line, "      <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, i->TagInfo.sig)));
+            sprintf(line, "      <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, bufSize, i->TagInfo.sig)));
             xml += line;
 
             sigSet.insert(i->TagInfo.sig);
@@ -263,7 +263,7 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
             // print out the rest of the tag signatures
             for (j++; j != m_Tags.end(); j++) {
               if (j->pTag == i->pTag || j->TagInfo.offset == i->TagInfo.offset) {
-                sprintf(line, "      <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, j->TagInfo.sig)));
+                sprintf(line, "      <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, bufSize, j->TagInfo.sig)));
                 xml += line;
                 sigSet.insert(j->TagInfo.sig);
               }

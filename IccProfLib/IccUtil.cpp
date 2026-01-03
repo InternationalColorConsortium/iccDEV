@@ -1011,27 +1011,32 @@ const icChar* icGet16bitSig(icChar* pBuf, size_t bufSize, icUInt16Number nSig, b
 {
     icUInt16Number sig = nSig;
     icUInt8Number c;
-// TODO - really need to check bufSize for minimum limits
 
     if (!nSig) {
-        strcpy(pBuf, "NULL");
-        return pBuf;
+      strcpy(pBuf, "NULL");
+      return pBuf;
+    }
+
+    if (bufSize < 5 || bufSize > 256) {
+      // this is caused by bad parameters, usually with bufSize replaced by the sig
+      strcpy(pBuf, "BADP");
+      return pBuf;
     }
 
     pBuf[0] = '\'';
     c = (icUInt8Number)(sig >> 8);
     if (!isprint(c) || c > 126)
-        c = '?';
+      c = '?';
     pBuf[1] = c;
     c = (icUInt8Number)(sig & 0x00FF);
     if (!isprint(c) || c > 126)
-        c = '?';
+      c = '?';
     pBuf[2] = c;
 
     if (bGetHexVal)
-        snprintf(pBuf + 3, bufSize-3, "' = %04X", nSig);
+      snprintf(pBuf + 3, bufSize-3, "' = %04X", nSig);
     else
-        snprintf(pBuf + 3, bufSize-3, "'");
+      snprintf(pBuf + 3, bufSize-3, "'");
 
     return pBuf;
 }
@@ -1041,10 +1046,15 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
   int i;
   icUInt32Number sig=nSig;
   icUInt8Number c;
-// TODO - really need to check bufSize for minimum limits
 
   if (!nSig) {
     strcpy(pBuf, "NULL");
+    return pBuf;
+  }
+  
+  if (bufSize < 7 || bufSize > 65535) {
+    // this is caused by bad parameters, usually with bufSize replaced by the sig
+    strcpy(pBuf, "BADP");
     return pBuf;
   }
 
@@ -1076,7 +1086,17 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
   icUInt32Number sig=nSig;
   icUInt8Number c;
   bool bGetHexVal = false;
-// TODO - really need to check bufSize for minimum limits
+
+  if (!nSig) {
+    strcpy(pBuf, "NULL");
+    return pBuf;
+  }
+  
+  if (bufSize < 5 || bufSize > 65535) {
+    // this is caused by bad parameters, usually with bufSize replaced by the sig
+    strcpy(pBuf, "BADP");
+    return pBuf;
+  }
 
   for (i=0; i<4; i++) {
     c=(icUInt8Number)(sig>>24);
@@ -1106,7 +1126,17 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool bGetHexVal)
 {
   icUInt32Number sig=nSig;
-// TODO - really need to check bufSize for minimum limits
+
+  if (!nSig) {
+    strcpy(pBuf, "NULL");
+    return pBuf;
+  }
+  
+  if (bufSize < 7 || bufSize > 65535) {
+    // this is caused by bad parameters, usually with bufSize replaced by the sig
+    strcpy(pBuf, "BADP");
+    return pBuf;
+  }
 
   switch (icGetColorSpaceType(nSig)) {
     case icSigNChannelData:
@@ -1158,7 +1188,17 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
 const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 {
   icUInt32Number sig=nSig;
-// TODO - really need to check bufSize for minimum limits
+
+  if (!nSig) {
+    strcpy(pBuf, "NULL");
+    return pBuf;
+  }
+  
+  if (bufSize < 7 || bufSize > 65535) {
+    // this is caused by bad parameters, usually with bufSize replaced by the sig
+    strcpy(pBuf, "BADP");
+    return pBuf;
+  }
 
   switch (icGetColorSpaceType(nSig)) {
     case icSigNChannelData:

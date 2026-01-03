@@ -1729,6 +1729,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
   FILE* f;
   const size_t tempSize = 256;
   char tempBuf[tempSize];
+  char tempBuf2[tempSize];
   const size_t fmtSize = 20;
   char fmt[fmtSize];
   if (!nDigits)
@@ -1745,7 +1746,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     return false;
 
   std::string out;
-  snprintf(tempBuf, tempSize, "%s\t; ", icGetColorSig(tempBuf, m_space, false));
+  snprintf(tempBuf, tempSize, "%s\t; ", icGetColorSig(tempBuf2, tempSize, m_space, false));
   out = tempBuf;
   out += "Data Format\n";
   fwrite(out.c_str(), out.size(), 1, f);
@@ -1756,7 +1757,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
   fwrite(out.c_str(), out.size(), 1, f);
 
   out = ";Source Data Format: ";
-  snprintf(tempBuf, tempSize, "%s\n", icGetColorSig(tempBuf, m_srcSpace, false));
+  snprintf(tempBuf, tempSize, "%s\n", icGetColorSig(tempBuf2, tempSize, m_srcSpace, false));
   out += tempBuf;
   fwrite(out.c_str(), out.size(), 1, f);
 

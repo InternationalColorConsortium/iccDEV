@@ -2220,7 +2220,7 @@ bool icProfDescToXml(std::string &xml, CIccProfileDescStruct &p, std::string bla
   xml += blanks + blanks + buf;
 
   std::string szAttributes = icGetDeviceAttrName(p.m_attributes);
-  //snprintf(buf, bufSize, "<DeviceAttributes>\"%016lX\" technology=\"%s\">\n", p.m_attributes, icFixXml(fix, icGetSigStr(data, p.m_technology)));
+  //snprintf(buf, bufSize, "<DeviceAttributes>\"%016lX\" technology=\"%s\">\n", p.m_attributes, icFixXml(fix, icGetSigStr(data, bufSize, p.m_technology)));
   //xml += buf;
   xml += blanks + blanks + icGetDeviceAttrName(p.m_attributes);
 
@@ -4456,7 +4456,7 @@ bool CIccTagXmlStruct::ToXml(std::string &xml, std::string blanks/* = ""*/)
             j = i;
 #if 0
             // print out the tag signature (there is at least one)
-            sprintf(line, "  <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, i->TagInfo.sig)));
+            sprintf(line, "  <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, bufSize, i->TagInfo.sig)));
             xml += blanks + line;
 
             sigSet.insert(i->TagInfo.sig);
@@ -4464,7 +4464,7 @@ bool CIccTagXmlStruct::ToXml(std::string &xml, std::string blanks/* = ""*/)
             // print out the rest of the tag signatures
             for (j++; j != m_ElemEntries->end(); j++) {
               if (j->pTag == i->pTag || j->TagInfo.offset == i->TagInfo.offset) {
-                sprintf(line, "  <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, j->TagInfo.sig)));
+                sprintf(line, "  <TagSignature>%s</TagSignature>\n", icFixXml(fix, icGetSigStr(buf, bufSize, j->TagInfo.sig)));
                 xml += blanks + line;
                 sigSet.insert(j->TagInfo.sig);
               }
