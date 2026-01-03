@@ -260,7 +260,7 @@ public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
     size_t ss = os.pStack->size();
-    if ((size_t)(op->data.select.v1+1)>ss)
+    if (((size_t)op->data.select.v1+1)>ss)
       return false;
     os.pStack->resize(ss-(op->data.select.v1+1));
     return true;
@@ -2250,6 +2250,9 @@ bool SIccCalcOp::IsValidOp(CIccMpeCalculator *pCalc)
 ******************************************************************************/
 icUInt16Number SIccCalcOp::ArgsUsed(CIccMpeCalculator *pCalc)
 {
+  // make sure our max value fits in our result type
+  static_assert( icMaxDataStackSize <= std::numeric_limits<icUInt16Number>::max() );
+  
   switch (sig) {
     case icSigDataOp:
     case icSigPiOp:
@@ -2277,38 +2280,62 @@ icUInt16Number SIccCalcOp::ArgsUsed(CIccMpeCalculator *pCalc)
     case icSigOutputChanOp:
     case icSigTempPutChanOp:
     case icSigTempSaveChanOp:
-      return data.select.v2+1;
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v2+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigCopyOp:
     case icSigRotateLeftOp:       
     case icSigRotateRightOp:
     case icSigPositionDupOp:
     case icSigPopOp:
-      return data.select.v1+1;
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigSolveOp:
-      return (data.select.v1+1)*(data.select.v2+1) + (data.select.v1+1);
+      {
+      uint64_t fullResult = ((uint64_t)data.select.v1+1)
+                            *((uint64_t)data.select.v2+1)
+                            + ((uint64_t)data.select.v1+1);
+      if (fullResult > icMaxDataStackSize)
+        fullResult = icMaxDataStackSize;
+      return (icUInt16Number)fullResult;
+      }
 
     case icSigTransposeOp:
-      return (data.select.v1+1)*(data.select.v2+1);
+      {
+      uint64_t fullResult = ((uint64_t)data.select.v1+1)
+                            *((uint64_t)data.select.v2+1);
+      if (fullResult > icMaxDataStackSize)
+        fullResult = icMaxDataStackSize;
+      return (icUInt16Number)fullResult;
+      }
 
     case icSigFlipOp:
-      return data.select.v1+2;
-
     case icSigSumOp:              
     case icSigProductOp:         
     case icSigMinimumOp:          
     case icSigMaximumOp:          
     case icSigAndOp:
     case icSigOrOp:
-      return data.select.v1+2;
-
     case icSigGammaOp:
     case icSigScalarAddOp:
     case icSigScalarSubtractOp:
     case icSigScalarMultiplyOp:
     case icSigScalarDivideOp:
-      return data.select.v1+2;
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v1+2);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigAddOp:
     case icSigSubtractOp:
@@ -2330,7 +2357,12 @@ icUInt16Number SIccCalcOp::ArgsUsed(CIccMpeCalculator *pCalc)
     case icSigVectorMaximumOp:
     case icSigVectorAndOp:
     case icSigVectorOrOp:
-      return (data.select.v1+1)*2;
+      {
+      uint32_t fullSum = 2*((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigSquareOp:       
     case icSigSquareRootOp:       
@@ -2354,11 +2386,21 @@ icUInt16Number SIccCalcOp::ArgsUsed(CIccMpeCalculator *pCalc)
     case icSigArcCosineOp:        
     case icSigArcTangentOp:      
     case icSigNotOp:
-      return data.select.v1+1;
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
     
     case icSigToLabOp:
     case icSigToXYZOp:
-      return (data.select.v1+1)*3;
+      {
+      uint32_t fullSum = 3*((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigIfOp:
     case icSigSelectOp:
@@ -2374,14 +2416,17 @@ icUInt16Number SIccCalcOp::ArgsUsed(CIccMpeCalculator *pCalc)
 ******************************************************************************
 * Name: SIccCalcOp::ArgsPushed
 * 
-* Purpose: 
-* 
-* Args: 
-* 
-* Return: 
+* Purpose: Checking for stack over/underflow
+*
+* Args: calculator object pointer
+*
+* Return: number of stack spaces pushed OR icMaxDataStackSize if too large
 ******************************************************************************/
 icUInt16Number SIccCalcOp::ArgsPushed(CIccMpeCalculator *pCalc)
 {
+  // make sure our max value fits in our result type
+  static_assert( icMaxDataStackSize <= std::numeric_limits<icUInt16Number>::max() );
+
   switch (sig) {
     case icSigOutputChanOp:
     case icSigTempPutChanOp:
@@ -2407,7 +2452,12 @@ icUInt16Number SIccCalcOp::ArgsPushed(CIccMpeCalculator *pCalc)
     case icSigInputChanOp:        
     case icSigTempGetChanOp:
     case icSigTempSaveChanOp:
-      return data.select.v2+1;
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v2+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigApplyCurvesOp:
     case icSigApplyMatrixOp:
@@ -2422,23 +2472,56 @@ icUInt16Number SIccCalcOp::ArgsPushed(CIccMpeCalculator *pCalc)
         return (pMpe ? pMpe->NumOutputChannels() : 0);
       }
 
-    case icSigCopyOp:             
-      return (data.select.v1+1)*(data.select.v2+2);
-    case icSigRotateLeftOp:       
+    case icSigCopyOp:
+      {
+      uint64_t fullResult = ((uint64_t)data.select.v1+1)
+                            *((uint64_t)data.select.v2+2);
+      if (fullResult > icMaxDataStackSize)
+        fullResult = icMaxDataStackSize;
+      return (icUInt16Number)fullResult;
+      }
+    
+    case icSigRotateLeftOp:
     case icSigRotateRightOp:
-      return (data.select.v1+1);
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigFlipOp:
-      return (data.select.v1+2);
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v1+2);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigPositionDupOp:
-      return data.select.v1+2+data.select.v2;
+      {
+      uint32_t fullSum = (uint32_t)data.select.v1+2+(uint32_t)data.select.v2;
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigSolveOp:
-      return (data.select.v2+1) + 1;
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v2+2);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigTransposeOp:
-      return (data.select.v1+1)*(data.select.v2+1);
+      {
+      uint64_t fullResult = ((uint64_t)data.select.v1+1)
+                            *((uint64_t)data.select.v2+1);
+      if (fullResult > icMaxDataStackSize)
+        fullResult = icMaxDataStackSize;
+      return (icUInt16Number)fullResult;
+      }
 
     case icSigSumOp:
     case icSigProductOp:         
@@ -2493,15 +2576,30 @@ icUInt16Number SIccCalcOp::ArgsPushed(CIccMpeCalculator *pCalc)
     case icSigVectorMaximumOp:
     case icSigVectorAndOp:
     case icSigVectorOrOp:
-      return data.select.v1+1;
+      {
+      uint32_t fullSum = ((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigCartesianToPolarOp:
     case icSigPolarToCartesianOp:
-      return (data.select.v1+1)*2;
+      {
+      uint32_t fullSum = 2*((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     case icSigToLabOp:
     case icSigToXYZOp:
-      return (data.select.v1+1)*3;
+      {
+      uint32_t fullSum = 3*((uint32_t)data.select.v1+1);
+      if (fullSum > icMaxDataStackSize)
+        fullSum = icMaxDataStackSize;
+      return (icUInt16Number)fullSum;
+      }
 
     default:
       return 0;
