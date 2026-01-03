@@ -3131,7 +3131,7 @@ bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
   }
 
   pChild = icXmlFindNode(pNode->children, "MainFunction");
-  if (pChild && pNode->children && pChild->children->content) {
+  if (pChild && pChild->children && pChild->children->content) {
     char *content = (char*)pChild->children->content;
     std::string flatFunc;
 
