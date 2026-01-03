@@ -320,15 +320,17 @@ typedef double icFloat64Number;
 /** 16-bit unicode characters **/
 typedef icUInt16Number icUnicodeChar;
 
-#define icDataTypeMask 0x0000ffff
-#define icCompressedData 0x00010000
-
 /*------------------------------------------------------------------------*/
 
+// This is actually a bitfield, be careful when defining new values
 typedef enum : uint32_t {     /* Used in dataType Tags */
   icAsciiData                             = 0x0000,
   icBinaryData                            = 0x0001,
   icUtfData                               = 0x0002,
+  
+  icDataTypeMask                          = 0x0000ffff,
+  icCompressedData                        = 0x00010000,
+  
   icCompressedAsciiData                   = icCompressedData|icAsciiData,
   icCompressedBinaryData                  = icCompressedData|icBinaryData,
   icCompressedUtfData                     = icCompressedData|icUtfData,

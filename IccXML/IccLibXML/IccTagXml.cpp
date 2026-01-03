@@ -1732,7 +1732,7 @@ bool CIccTagXmlTagData::ToXml(std::string &xml, std::string blanks/* = ""*/)
   char buf[bufSize];
   std::string szFlag("ASCII");
 
-  if (m_nDataFlag == 1)
+  if ( m_nDataFlag & icBinaryData )
     szFlag = "binary";
   snprintf (buf, bufSize, "<Data Flag=\"%s\">\n", szFlag.c_str());
   xml += blanks + buf;
