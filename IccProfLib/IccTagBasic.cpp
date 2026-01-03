@@ -7887,6 +7887,7 @@ CIccTagData::CIccTagData(int nSize/*=1*/)
   if (m_nSize <1)
     m_nSize = 1;
   m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  m_nDataFlag = icAsciiData;
 }
 
 

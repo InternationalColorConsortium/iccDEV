@@ -325,13 +325,16 @@ typedef icUInt16Number icUnicodeChar;
 
 /*------------------------------------------------------------------------*/
 
-typedef enum {     /* Used in dataType Tags */
+typedef enum : uint32_t {     /* Used in dataType Tags */
   icAsciiData                             = 0x0000,
   icBinaryData                            = 0x0001,
   icUtfData                               = 0x0002,
   icCompressedAsciiData                   = icCompressedData|icAsciiData,
   icCompressedBinaryData                  = icCompressedData|icBinaryData,
   icCompressedUtfData                     = icCompressedData|icUtfData,
+  
+/* Convenience Enum Definitions - Not defined in ICC specification */
+  icMaxDataBlockType                      = 0xFFFFFFFF,
 } icDataBlockType;
 
 
