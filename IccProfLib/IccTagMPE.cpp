@@ -341,7 +341,7 @@ bool CIccMpeUnknown::SetDataSize(icUInt32Number nSize, bool /* bZeroData =true *
  ******************************************************************************/
 bool CIccMpeUnknown::Read(icUInt32Number nSize, CIccIO *pIO)
 {
-  icUInt32Number nHeaderSize = sizeof(icTagTypeSignature) + 
+  icUInt32Number nHeaderSize = sizeof(icUInt32Number) + 
     sizeof(icUInt32Number) + 
     sizeof(icUInt16Number) + 
     sizeof(icUInt16Number);
@@ -434,7 +434,7 @@ icValidateStatus CIccMpeUnknown::Validate(std::string sigPath, std::string &sRep
   sReport += icMsgValidateCriticalError;
   sReport += sSigPathName;
   sReport += " - Contains unknown processing element type (";
-  icGetSig(buf, m_sig, true);
+  icGetSig(buf, 40, m_sig, true);
   sReport += buf;
   sReport += ").\n";
 
@@ -972,11 +972,11 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
 {
   icTagTypeSignature sig;
   
-  icUInt32Number headerSize = sizeof(icTagTypeSignature) + 
+  icUInt32Number headerSize = sizeof(icUInt32Number) + 
     sizeof(icUInt32Number) + 
-    sizeof(icUInt8Number) + 
-    sizeof(icUInt8Number) + 
-    sizeof(icUInt16Number);
+    sizeof(icUInt16Number) +
+    sizeof(icUInt16Number) +
+    sizeof(icUInt32Number);
 
   if (headerSize > size)
     return false;
@@ -1004,15 +1004,13 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&m_nProcElements))
     return false;
 
-  if (headerSize + (icUInt64Number)m_nProcElements*sizeof(icUInt32Number) > size)
+  if ( (headerSize + (icUInt64Number)m_nProcElements*sizeof(icPositionNumber)) > size)
     return false;
 
   m_list = new CIccMultiProcessElementList();
 
   if (!m_list)
     return false;
-
-  icUInt32Number i;
 
   m_position = (icPositionNumber*)calloc(m_nProcElements, sizeof(icPositionNumber));
 
@@ -1021,6 +1019,7 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
 
   CIccLutOffsetMap loadedElements;
 
+  icUInt32Number i;
   for (i=0; i<m_nProcElements; i++) {
     if (!pIO->Read32(&m_position[i].offset))
       return false;
