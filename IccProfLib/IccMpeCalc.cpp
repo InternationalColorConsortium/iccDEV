@@ -1822,7 +1822,7 @@ void SIccCalcOp::Describe(std::string &desc, int /* nVerboseness */)
   char name[10];
   int i;
 
-  icGetSig(name, sig, false);
+  icGetSig(name, 10, sig, false);
   name[5]=0;
   for (i=4; i>0; i--)
     if (name[i]==' ')

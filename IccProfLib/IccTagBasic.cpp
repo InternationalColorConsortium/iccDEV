@@ -9750,16 +9750,16 @@ void CIccTagProfileSeqDesc::Describe(std::string &sDescription, int nVerboseness
     snprintf(buf, bufSize, "Profile Description Structure Number [%u] follows:\n", count+1);
     sDescription += buf;
 
-    snprintf(buf, bufSize, "Device Manufacturer Signature: %s\n", icGetSig(buf2, i->m_deviceMfg, false));
+    snprintf(buf, bufSize, "Device Manufacturer Signature: %s\n", icGetSig(buf2, bufSize, i->m_deviceMfg, false));
     sDescription += buf;
 
-    snprintf(buf, bufSize, "Device Model Signature: %s\n", icGetSig(buf2, i->m_deviceModel, false));
+    snprintf(buf, bufSize, "Device Model Signature: %s\n", icGetSig(buf2, bufSize, i->m_deviceModel, false));
     sDescription += buf;
 
     snprintf(buf, bufSize, "Device Attributes: %08x%08x\n", (icUInt32Number)(i->m_attributes >> 32), (icUInt32Number)(i->m_attributes));
     sDescription += buf;
 
-    snprintf(buf, bufSize, "Device Technology Signature: %s\n", icGetSig(buf2, i->m_technology, false));
+    snprintf(buf, bufSize, "Device Technology Signature: %s\n", icGetSig(buf2, bufSize, i->m_technology, false));
     sDescription += buf;
 
     snprintf(buf, bufSize, "Description of device manufacturer: \n");

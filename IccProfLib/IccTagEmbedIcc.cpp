@@ -459,7 +459,7 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
       snprintf(sOffset, tempSize, "%u", i->TagInfo.offset);
       snprintf(sSize, tempSize, "%u", i->TagInfo.size);
       snprintf(sPad, tempSize, "%u", pad);
-      sDescription += fillColumns(Fmt.GetTagSigName(i->TagInfo.sig), icGetSig(sigbuf, i->TagInfo.sig, false), sOffset, sSize, sPad) + "\n";
+      sDescription += fillColumns(Fmt.GetTagSigName(i->TagInfo.sig), icGetSig(sigbuf, bufSize, i->TagInfo.sig, false), sOffset, sSize, sPad) + "\n";
     }
   }
   else {
