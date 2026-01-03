@@ -350,7 +350,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
   for (pNode=pNode->children; pNode; pNode=pNode->next) {
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp((const char*)pNode->name, "ProfileVersion")) {
-        if (!pNode->children) {
+        if (!pNode->children || !pNode->children->content) {
           parseStr += "Cannot parse ProfileVersion, no value specified\n";
           continue;
         }
@@ -358,7 +358,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       std::string ver;
       unsigned long verMajor=0, verMinor=0, verClassMajor=0, verClassMinor=0;
 
-      for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
+      for (; szVer && *szVer != '.' && *szVer != ','; szVer++) {
         ver += *szVer;
       }
       verMajor = parseVersion(ver.c_str());
@@ -395,9 +395,9 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       }
 
       m_Header.version = icUInt32Number( (verMajor << 24) | (verMinor << 16) | (verClassMajor << 8) | verClassMinor );
-		}
+    }
     else if (!icXmlStrCmp((const char*)pNode->name, "ProfileSubClassVersion")) {
-      if (!pNode->children) {
+      if (!pNode->children || !pNode->children->content) {
         parseStr += "Cannot parse ProfileSubClassVersion, no value specified\n";
         continue;
       }
@@ -557,8 +557,8 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       m_Header.deviceSubClass = (icProfileClassSignature)icXmlGetChildSigVal(pNode);
     }
 		else if (!icXmlStrCmp(pNode->name, "Reserved")) {
-      if (pNode->children && pNode->content)
-		    icXmlGetHexData(&m_Header.reserved, (const char*)pNode->children->content, sizeof(m_Header.reserved));
+      if (pNode->children && pNode->children->content)
+        icXmlGetHexData(&m_Header.reserved, (const char*)pNode->children->content, sizeof(m_Header.reserved));
       else
         memset(&m_Header.reserved, 0, sizeof(m_Header.reserved));
 		}
