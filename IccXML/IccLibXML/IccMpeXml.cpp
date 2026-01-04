@@ -981,17 +981,13 @@ bool CIccSegmentedCurveXml::ToXml(std::string &xml, std::string blanks)
   for (seg = m_list->begin(); seg!=m_list->end(); ++seg) {
     CIccCurveSegment* pSeg = *seg;
     if (pSeg && pSeg->GetType() == icSigFormulaCurveSeg) {
-      CIccFormulaCurveSegment *fcs = dynamic_cast<CIccFormulaCurveSegment*>(pSeg);
-      if (!fcs)
-        return false;
+      CIccFormulaCurveSegment *fcs = static_cast<CIccFormulaCurveSegment*>(pSeg);
       CIccFormulaCurveSegmentXml xmlSeg( fcs );
       if (!xmlSeg.ToXml(xml, blanks+"  "))
         return false;
     }
     else if (pSeg && pSeg->GetType() == icSigSampledCurveSeg) {
-      CIccSampledCurveSegment *scs = dynamic_cast<CIccSampledCurveSegment*>(pSeg);
-      if (!scs)
-        return false;
+      CIccSampledCurveSegment *scs = static_cast<CIccSampledCurveSegment*>(pSeg);
       CIccSampledCurveSegmentXml xmlSeg( scs );
       if (!xmlSeg.ToXml(xml, blanks+"  "))
         return false;
@@ -1045,25 +1041,19 @@ bool CIccSegmentedCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 static bool ToXmlCurve(std::string& xml, std::string blanks, icCurveSetCurvePtr pCurve)
 {
   if (pCurve->GetType() == icSigSingleSampledCurve) {
-    CIccSingleSampledCurve *ssc = dynamic_cast<CIccSingleSampledCurve *>(pCurve);
-    if (!ssc)
-      return false;
+    CIccSingleSampledCurve *ssc = static_cast<CIccSingleSampledCurve *>(pCurve);
     CIccSingleSampledCurveXml sscXml( ssc );
     if (!sscXml.ToXml(xml, blanks + "  "))
       return false;
   }
   else if (pCurve->GetType() == icSigSegmentedCurve) {
-    CIccSegmentedCurve *sc = dynamic_cast<CIccSegmentedCurve *>(pCurve);
-    if (!sc)
-      return false;
+    CIccSegmentedCurve *sc = static_cast<CIccSegmentedCurve *>(pCurve);
     CIccSegmentedCurveXml scXml( sc );
     if (!scXml.ToXml(xml, blanks + "  "))
       return false;
   }
   else if (pCurve->GetType() == icSigSampledCalculatorCurve) {
-    CIccSampledCalculatorCurve *scc = dynamic_cast<CIccSampledCalculatorCurve *>(pCurve);
-    if (!scc)
-      return false;
+    CIccSampledCalculatorCurve *scc = static_cast<CIccSampledCalculatorCurve *>(pCurve);
     CIccSampledCalculatorCurveXml sccXml( scc );
     if (!sccXml.ToXml(xml, blanks + "  "))
       return false;
