@@ -72,6 +72,11 @@ Copyright:  (c) see Software License
 class CIccMpeXml : public IIccExtensionMpe
 {
 public:
+  CIccMpeXml() : IIccExtensionMpe() {}
+  CIccMpeXml( const IIccExtensionMpe &parent) : IIccExtensionMpe(parent) {}
+  CIccMpeXml( const IIccExtensionMpe *parent) : IIccExtensionMpe(*parent) {}
+  
+public:
   virtual ~CIccMpeXml(void) {}
 
   virtual bool ToXml(std::string &xml, std::string blanks="") = 0;
@@ -82,6 +87,11 @@ public:
 
 class CIccMpeXmlUnknown : public CIccMpeUnknown, public CIccMpeXml
 {
+public:
+  CIccMpeXmlUnknown() : CIccMpeUnknown() {}
+  CIccMpeXmlUnknown( const CIccMpeUnknown &parent) : CIccMpeUnknown(parent) {}
+  CIccMpeXmlUnknown( const CIccMpeUnknown *parent) : CIccMpeUnknown(*parent) {}
+
 public:
   virtual ~CIccMpeXmlUnknown() {}
 
@@ -97,6 +107,11 @@ public:
 class CIccSegmentedCurveXml : public CIccSegmentedCurve
 {
 public:
+  CIccSegmentedCurveXml() : CIccSegmentedCurve() {}
+  CIccSegmentedCurveXml( const CIccSegmentedCurve &parent) : CIccSegmentedCurve(parent) {}
+  CIccSegmentedCurveXml( const CIccSegmentedCurve *parent) : CIccSegmentedCurve(*parent) {}
+
+public:
   bool ToXml(std::string &xml, std::string blanks/* = ""*/);
   bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
@@ -104,6 +119,11 @@ public:
 
 class CIccMpeXmlCurveSet : public CIccMpeCurveSet, public CIccMpeXml
 {
+public:
+  CIccMpeXmlCurveSet() : CIccMpeCurveSet() {}
+  CIccMpeXmlCurveSet( const CIccMpeCurveSet &parent) : CIccMpeCurveSet(parent) {}
+  CIccMpeXmlCurveSet( const CIccMpeCurveSet *parent) : CIccMpeCurveSet(*parent) {}
+
 public:
   virtual ~CIccMpeXmlCurveSet() {}
 
@@ -121,6 +141,11 @@ protected:
 class CIccMpeXmlTintArray : public CIccMpeTintArray, public CIccMpeXml
 {
 public:
+  CIccMpeXmlTintArray() : CIccMpeTintArray() {}
+  CIccMpeXmlTintArray( const CIccMpeTintArray &parent) : CIccMpeTintArray(parent) {}
+  CIccMpeXmlTintArray( const CIccMpeTintArray *parent) : CIccMpeTintArray(*parent) {}
+
+public:
   virtual ~CIccMpeXmlTintArray() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlTintArray"; }
@@ -134,6 +159,11 @@ public:
 class CIccXmlToneMapFunc : public CIccToneMapFunc
 {
 public:
+  CIccXmlToneMapFunc() : CIccToneMapFunc() {}
+  CIccXmlToneMapFunc( const CIccToneMapFunc &parent) : CIccToneMapFunc(parent) {}
+  CIccXmlToneMapFunc( const CIccToneMapFunc *parent) : CIccToneMapFunc(*parent) {}
+
+public:
   virtual ~CIccXmlToneMapFunc() {}
 
   virtual CIccToneMapFunc* NewCopy() const;
@@ -146,6 +176,11 @@ public:
 
 class CIccMpeXmlToneMap : public CIccMpeToneMap, public CIccMpeXml
 {
+public:
+  CIccMpeXmlToneMap() : CIccMpeToneMap() {}
+  CIccMpeXmlToneMap( const CIccMpeToneMap &parent) : CIccMpeToneMap(parent) {}
+  CIccMpeXmlToneMap( const CIccMpeToneMap *parent) : CIccMpeToneMap(*parent) {}
+
 public:
   virtual ~CIccMpeXmlToneMap() {}
 
@@ -162,6 +197,11 @@ public:
 class CIccMpeXmlMatrix : public CIccMpeMatrix, public CIccMpeXml
 {
 public:
+  CIccMpeXmlMatrix() : CIccMpeMatrix() {}
+  CIccMpeXmlMatrix( const CIccMpeMatrix &parent) : CIccMpeMatrix(parent) {}
+  CIccMpeXmlMatrix( const CIccMpeMatrix *parent) : CIccMpeMatrix(*parent) {}
+
+public:
   virtual ~CIccMpeXmlMatrix() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlMatrix"; }
@@ -174,6 +214,11 @@ public:
 
 class CIccMpeXmlCLUT : public CIccMpeCLUT, public CIccMpeXml
 {
+public:
+  CIccMpeXmlCLUT() : CIccMpeCLUT() {}
+  CIccMpeXmlCLUT( const CIccMpeCLUT &parent) : CIccMpeCLUT(parent) {}
+  CIccMpeXmlCLUT( const CIccMpeCLUT *parent) : CIccMpeCLUT(*parent) {}
+
 public:
   virtual ~CIccMpeXmlCLUT() {}
 
@@ -188,6 +233,11 @@ public:
 class CIccMpeXmlExtCLUT : public CIccMpeExtCLUT, public CIccMpeXml
 {
 public:
+  CIccMpeXmlExtCLUT() : CIccMpeExtCLUT() {}
+  CIccMpeXmlExtCLUT( const CIccMpeExtCLUT &parent) : CIccMpeExtCLUT(parent) {}
+  CIccMpeXmlExtCLUT( const CIccMpeExtCLUT *parent) : CIccMpeExtCLUT(*parent) {}
+
+public:
   virtual ~CIccMpeXmlExtCLUT() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlExtCLUT"; }
@@ -200,6 +250,11 @@ public:
 
 class CIccMpeXmlBAcs : public CIccMpeBAcs, public CIccMpeXml
 {
+public:
+  CIccMpeXmlBAcs() : CIccMpeBAcs() {}
+  CIccMpeXmlBAcs( const CIccMpeBAcs &parent) : CIccMpeBAcs(parent) {}
+  CIccMpeXmlBAcs( const CIccMpeBAcs *parent) : CIccMpeBAcs(*parent) {}
+  
 public:
   virtual ~CIccMpeXmlBAcs() {}
 
@@ -214,6 +269,11 @@ public:
 class CIccMpeXmlEAcs : public CIccMpeEAcs, public CIccMpeXml
 {
 public:
+  CIccMpeXmlEAcs() : CIccMpeEAcs() {}
+  CIccMpeXmlEAcs( const CIccMpeEAcs &parent) : CIccMpeEAcs(parent) {}
+  CIccMpeXmlEAcs( const CIccMpeEAcs *parent) : CIccMpeEAcs(*parent) {}
+  
+public:
   virtual ~CIccMpeXmlEAcs() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlEAcs"; }
@@ -227,6 +287,11 @@ public:
 class CIccMpeXmlJabToXYZ : public CIccMpeJabToXYZ, public CIccMpeXml
 {
 public:
+  CIccMpeXmlJabToXYZ() : CIccMpeJabToXYZ() {}
+  CIccMpeXmlJabToXYZ( const CIccMpeJabToXYZ &parent) : CIccMpeJabToXYZ(parent) {}
+  CIccMpeXmlJabToXYZ( const CIccMpeJabToXYZ *parent) : CIccMpeJabToXYZ(*parent) {}
+
+public:
   virtual ~CIccMpeXmlJabToXYZ() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlJabToXYZ"; }
@@ -239,6 +304,11 @@ public:
 
 class CIccMpeXmlXYZToJab : public CIccMpeXYZToJab, public CIccMpeXml
 {
+public:
+  CIccMpeXmlXYZToJab() : CIccMpeXYZToJab() {}
+  CIccMpeXmlXYZToJab( const CIccMpeXYZToJab &parent) : CIccMpeXYZToJab(parent) {}
+  CIccMpeXmlXYZToJab( const CIccMpeXYZToJab *parent) : CIccMpeXYZToJab(*parent) {}
+
 public:
   virtual ~CIccMpeXmlXYZToJab() {}
 
@@ -295,7 +365,11 @@ typedef std::map<std::string, std::string> MacroMap;
 class CIccMpeXmlCalculator : public CIccMpeCalculator, public CIccMpeXml
 {
 public:
-  CIccMpeXmlCalculator() { m_sImport = "*"; }
+  CIccMpeXmlCalculator() : CIccMpeCalculator() { m_sImport = "*"; }
+  CIccMpeXmlCalculator( const CIccMpeCalculator &parent) : CIccMpeCalculator(parent) {}
+  CIccMpeXmlCalculator( const CIccMpeCalculator *parent) : CIccMpeCalculator(*parent) {}
+
+public:
   virtual ~CIccMpeXmlCalculator() {  clean(); }
 
   virtual const char *GetClassName() const { return "CIccMpeXmlCalculator"; }
@@ -337,6 +411,11 @@ protected:
 class CIccMpeXmlEmissionMatrix : public CIccMpeEmissionMatrix, public CIccMpeXml
 {
 public:
+  CIccMpeXmlEmissionMatrix() : CIccMpeEmissionMatrix() {}
+  CIccMpeXmlEmissionMatrix( const CIccMpeEmissionMatrix &parent) : CIccMpeEmissionMatrix(parent) {}
+  CIccMpeXmlEmissionMatrix( const CIccMpeEmissionMatrix *parent) : CIccMpeEmissionMatrix(*parent) {}
+
+public:
   virtual ~CIccMpeXmlEmissionMatrix() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlEmissionMatrix"; }
@@ -349,6 +428,11 @@ public:
 
 class CIccMpeXmlInvEmissionMatrix : public CIccMpeInvEmissionMatrix, public CIccMpeXml
 {
+public:
+  CIccMpeXmlInvEmissionMatrix() : CIccMpeInvEmissionMatrix() {}
+  CIccMpeXmlInvEmissionMatrix( const CIccMpeInvEmissionMatrix &parent) : CIccMpeInvEmissionMatrix(parent) {}
+  CIccMpeXmlInvEmissionMatrix( const CIccMpeInvEmissionMatrix *parent) : CIccMpeInvEmissionMatrix(*parent) {}
+
 public:
   virtual ~CIccMpeXmlInvEmissionMatrix() {}
 
@@ -363,6 +447,11 @@ public:
 class CIccMpeXmlEmissionCLUT : public CIccMpeEmissionCLUT, public CIccMpeXml
 {
 public:
+  CIccMpeXmlEmissionCLUT() : CIccMpeEmissionCLUT() {}
+  CIccMpeXmlEmissionCLUT( const CIccMpeEmissionCLUT &parent) : CIccMpeEmissionCLUT(parent) {}
+  CIccMpeXmlEmissionCLUT( const CIccMpeEmissionCLUT *parent) : CIccMpeEmissionCLUT(*parent) {}
+
+public:
   virtual ~CIccMpeXmlEmissionCLUT() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlEmissionCLUT"; }
@@ -375,6 +464,11 @@ public:
 
 class CIccMpeXmlReflectanceCLUT : public CIccMpeReflectanceCLUT, public CIccMpeXml
 {
+public:
+  CIccMpeXmlReflectanceCLUT() : CIccMpeReflectanceCLUT() {}
+  CIccMpeXmlReflectanceCLUT( const CIccMpeReflectanceCLUT &parent) : CIccMpeReflectanceCLUT(parent) {}
+  CIccMpeXmlReflectanceCLUT( const CIccMpeReflectanceCLUT *parent) : CIccMpeReflectanceCLUT(*parent) {}
+
 public:
   virtual ~CIccMpeXmlReflectanceCLUT() {}
 
@@ -389,6 +483,11 @@ public:
 class CIccMpeXmlEmissionObserver : public CIccMpeEmissionObserver, public CIccMpeXml
 {
 public:
+  CIccMpeXmlEmissionObserver() : CIccMpeEmissionObserver() {}
+  CIccMpeXmlEmissionObserver( const CIccMpeEmissionObserver &parent) : CIccMpeEmissionObserver(parent) {}
+  CIccMpeXmlEmissionObserver( const CIccMpeEmissionObserver *parent) : CIccMpeEmissionObserver(*parent) {}
+
+public:
   virtual ~CIccMpeXmlEmissionObserver() {}
 
   virtual const char *GetClassName() const { return "CIccMpeXmlEmissionObserver"; }
@@ -401,6 +500,11 @@ public:
 
 class CIccMpeXmlReflectanceObserver : public CIccMpeReflectanceObserver, public CIccMpeXml
 {
+public:
+  CIccMpeXmlReflectanceObserver() : CIccMpeReflectanceObserver() {}
+  CIccMpeXmlReflectanceObserver( const CIccMpeReflectanceObserver &parent) : CIccMpeReflectanceObserver(parent) {}
+  CIccMpeXmlReflectanceObserver( const CIccMpeReflectanceObserver *parent) : CIccMpeReflectanceObserver(*parent) {}
+
 public:
   virtual ~CIccMpeXmlReflectanceObserver() {}
 
