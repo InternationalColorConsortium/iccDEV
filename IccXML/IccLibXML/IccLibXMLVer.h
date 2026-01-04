@@ -1,4 +1,4 @@
 #ifndef ICCLIBXMLVER
-#define ICCLIBXMLVER "2.3.1.1"
-#define ICCPROFLIBLIBXMLVER "2.3.1.1"
+#define ICCLIBXMLVER "2.3.1.2"
+#define ICCPROFLIBLIBXMLVER "2.3.1.2"
 #endif

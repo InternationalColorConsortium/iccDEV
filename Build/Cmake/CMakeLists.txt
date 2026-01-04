@@ -1,17 +1,17 @@
 #################################################################################
 # Cmake Project Configuration| iccDEV Project
-# Copyright (C) 2024-2025 The International Color Consortium.
+# Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
-# 
 #
-#  Last Updated: 02-DEC-2025 at 2330Z by David Hoyt
 #
-#  Changes: Bump Version String
+#  Last Updated: 04-JAN-2026 at 2350Z by David Hoyt
+#
+#  Changes: Bump Version String to v2.3.1.2
 #           Recent PRs address range of security & stability issues
-#           NaN, Undefined Behavior (UB) & Overflows
+#           Stack Corruption, NaN, Undefined Behavior (UB) & Overflows
 #
 #
-#						
+#
 #  TODO:    Align Version on IccProfLibVer.h, Housekeeping, Debug Options
 #           Version Headers, Doxygen Config, Exports etc...
 #           Refactor this to .mk's, add research args, other Housekeeping
@@ -64,9 +64,9 @@ cmake_policy(SET CMP0135 NEW)
 string(TIMESTAMP CURRENT_DATETIME "%Y-%m-%d %H:%M:%S")
 message(STATUS "")
 message(STATUS "############################################################")
-message(STATUS "## Developer tools for ICC color profiles ##") 
+message(STATUS "## Developer tools for ICC color profiles ##")
 message(STATUS "############################################################")
-message(STATUS "## Configuration and Build started at ${CURRENT_DATETIME} ##") 
+message(STATUS "## Configuration and Build started at ${CURRENT_DATETIME} ##")
 message(STATUS "")
 
 # ----------------------------------------------------------------------
@@ -80,9 +80,9 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 # ----------------------------------------------------------------------
 
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo" CACHE STRING "Available configurations" FORCE)
+  set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;MinSizeRel" CACHE STRING "Available configurations" FORCE)
   set_property(GLOBAL PROPERTY DEBUG_CONFIGURATIONS Debug)
-  set_property(GLOBAL PROPERTY RELEASE_CONFIGURATIONS Release)
+  set_property(GLOBAL PROPERTY RELEASE_CONFIGURATIONS Release RelWithDebInfo MinSizeRel)
 endif()
 
 # ----------------------------------------------------------------------
@@ -93,15 +93,15 @@ project(RefIccMAX LANGUAGES C CXX)
 set(PROJECT_UP_NAME "REFICCMAX")
 set(PROJECT_DOWN_NAME "reficcmax")
 
-# Version components (4-part version: 2.3.1.1)
+# Version components (4-part version: 2.3.1.2)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
-set(${PROJECT_UP_NAME}_TWEAK_VERSION 1)
+set(${PROJECT_UP_NAME}_PATCH_VERSION 2)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
-  "${${PROJECT_UP_NAME}_MAJOR_VERSION}.${${PROJECT_UP_NAME}_MINOR_VERSION}.${${PROJECT_UP_NAME}_MICRO_VERSION}.${${PROJECT_UP_NAME}_TWEAK_VERSION}"
+  "${${PROJECT_UP_NAME}_MAJOR_VERSION}.${${PROJECT_UP_NAME}_MINOR_VERSION}.${${PROJECT_UP_NAME}_MICRO_VERSION}.${${PROJECT_UP_NAME}_PATCH_VERSION}"
 )
 
 set(${PROJECT_UP_NAME}_VERSION_MAJORMINOR
@@ -408,6 +408,11 @@ option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"               
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
+option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
+option(ENABLE_UBSAN               "Enable UndefinedBehaviorSanitizer only"              OFF)
+option(ENABLE_TSAN                "Enable ThreadSanitizer (conflicts with ASan)"        OFF)
+option(ENABLE_MSAN                "Enable MemorySanitizer (Clang only)"                 OFF)
+option(ENABLE_LSAN                "Enable LeakSanitizer standalone"                     OFF)
 option(ENABLE_FUZZING             "Enable fuzzing instrumentation (libFuzzer)"          OFF)
 option(ENABLE_SPECTRE_MITIGATION  "Enable /Qspectre on MSVC for Spectre V1 mitigation"  OFF)
 option(ENABLE_USEICCDEVNAMESPACE  "Use iccDEV namespace wrapping"                       OFF)
@@ -447,26 +452,112 @@ message(STATUS "ICC_CLUT_DEBUG             = ${ICC_CLUT_DEBUG}")
 message(STATUS "ICC_ENABLE_ASSERTS         = ${ICC_ENABLE_ASSERTS}")
 message(STATUS "ICC_LOG_SAFE               = ${ICC_LOG_SAFE}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
+message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
+message(STATUS "ENABLE_UBSAN               = ${ENABLE_UBSAN}")
+message(STATUS "ENABLE_TSAN                = ${ENABLE_TSAN}")
+message(STATUS "ENABLE_MSAN                = ${ENABLE_MSAN}")
+message(STATUS "ENABLE_LSAN                = ${ENABLE_LSAN}")
 message(STATUS "ENABLE_FUZZING             = ${ENABLE_FUZZING}")
 message(STATUS "ENABLE_SPECTRE_MITIGATION  = ${ENABLE_SPECTRE_MITIGATION}")
 message(STATUS "")
 
-# Compose sanitizer flags only once
-set(SANITIZER_FLAGS "")
-if(ENABLE_FUZZING)
-  message(STATUS ">>> Fuzzing instrumentation enabled (libFuzzer + ASan + UBSan)")
-  list(APPEND SANITIZER_FLAGS "-fsanitize=fuzzer,address,undefined")
-elseif(ENABLE_SANITIZERS)
-  message(STATUS ">>> Sanitizers enabled: AddressSanitizer and UndefinedBehaviorSanitizer active")
-  list(APPEND SANITIZER_FLAGS "-fsanitize=address,undefined")
+# ----------------------------------------------------------------------
+# Sanitizer Configuration
+# ----------------------------------------------------------------------
+
+# Validate conflicting sanitizer options
+if(ENABLE_TSAN AND (ENABLE_ASAN OR ENABLE_SANITIZERS))
+  message(FATAL_ERROR "ThreadSanitizer cannot be used with AddressSanitizer")
 endif()
 
-# Apply sanitizer flags if any are set
-if(SANITIZER_FLAGS)
+if(ENABLE_MSAN AND (ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_TSAN))
+  message(FATAL_ERROR "MemorySanitizer cannot be combined with other sanitizers")
+endif()
+
+# Compose sanitizer flags
+set(SANITIZER_FLAGS "")
+set(SANITIZER_LIST "")
+
+if(ENABLE_FUZZING)
+  message(STATUS ">>> Fuzzing instrumentation enabled (libFuzzer + ASan + UBSan)")
+  if(MSVC)
+    message(WARNING "Fuzzing with libFuzzer is not supported on MSVC")
+  else()
+    list(APPEND SANITIZER_LIST "fuzzer" "address" "undefined")
+  endif()
+elseif(ENABLE_SANITIZERS)
+  message(STATUS ">>> Sanitizers enabled: AddressSanitizer and UndefinedBehaviorSanitizer active")
+  if(MSVC)
+    list(APPEND SANITIZER_FLAGS "/fsanitize=address")
+    # MSVC doesn't have UBSan, but has runtime checks via /RTC1 in debug
+  else()
+    list(APPEND SANITIZER_LIST "address" "undefined")
+  endif()
+else()
+  # Individual sanitizer options
+  if(ENABLE_ASAN)
+    message(STATUS ">>> AddressSanitizer enabled")
+    if(MSVC)
+      list(APPEND SANITIZER_FLAGS "/fsanitize=address")
+    else()
+      list(APPEND SANITIZER_LIST "address")
+    endif()
+  endif()
+  
+  if(ENABLE_UBSAN)
+    message(STATUS ">>> UndefinedBehaviorSanitizer enabled")
+    if(MSVC)
+      message(WARNING "UndefinedBehaviorSanitizer not available on MSVC")
+    else()
+      list(APPEND SANITIZER_LIST "undefined")
+    endif()
+  endif()
+  
+  if(ENABLE_TSAN)
+    message(STATUS ">>> ThreadSanitizer enabled")
+    if(MSVC)
+      message(WARNING "ThreadSanitizer not available on MSVC")
+    else()
+      list(APPEND SANITIZER_LIST "thread")
+    endif()
+  endif()
+  
+  if(ENABLE_MSAN)
+    message(STATUS ">>> MemorySanitizer enabled (Clang only)")
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      message(FATAL_ERROR "MemorySanitizer requires Clang compiler")
+    endif()
+    if(MSVC)
+      message(FATAL_ERROR "MemorySanitizer not available on MSVC")
+    else()
+      list(APPEND SANITIZER_LIST "memory")
+    endif()
+  endif()
+  
+  if(ENABLE_LSAN)
+    message(STATUS ">>> LeakSanitizer enabled")
+    if(MSVC)
+      message(WARNING "LeakSanitizer not available on MSVC")
+    else()
+      list(APPEND SANITIZER_LIST "leak")
+    endif()
+  endif()
+endif()
+
+# Apply sanitizer flags for GCC/Clang
+if(SANITIZER_LIST)
+  string(REPLACE ";" "," SANITIZER_STRING "${SANITIZER_LIST}")
+  list(APPEND SANITIZER_FLAGS "-fsanitize=${SANITIZER_STRING}")
   list(APPEND SANITIZER_FLAGS "-g" "-O1" "-fno-omit-frame-pointer")
+endif()
+
+# Apply all sanitizer flags
+if(SANITIZER_FLAGS)
   string(JOIN " " FINAL_SAN_FLAGS ${SANITIZER_FLAGS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FINAL_SAN_FLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FINAL_SAN_FLAGS}")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
   message(STATUS ">>> Final sanitizer flags: ${FINAL_SAN_FLAGS}")
 endif()
 
@@ -513,21 +604,46 @@ endif()
 
 message(STATUS "")
 message(STATUS "### Initializing Compiler Flags ###")
-# Allow per-config extensions
-set(CMAKE_CXX_FLAGS_DEBUG   "${CMAKE_CXX_FLAGS_DEBUG}")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2")
-
 
 # Platform-Specific Flags
 if(MSVC)
+    # Debug: Full debug info, no optimization, runtime checks
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd /Zi /Ob0 /Od /RTC1")
+    
+    # Release: Full optimization, no debug info
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD /O2 /Ob2 /DNDEBUG")
+    
+    # RelWithDebInfo: Optimized with debug info (for profiling/debugging release builds)
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /MD /Zi /O2 /Ob1 /DNDEBUG")
+    
+    # MinSizeRel: Minimize binary size
+    set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} /MD /O1 /Ob1 /DNDEBUG")
+    
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     message(STATUS "Configuring MSVC runtime and flags")
+    message(STATUS "  DEBUG:          /MDd /Zi /Ob0 /Od /RTC1")
+    message(STATUS "  RELEASE:        /MD /O2 /Ob2 /DNDEBUG")
+    message(STATUS "  RELWITHDEBINFO: /MD /Zi /O2 /Ob1 /DNDEBUG")
+    message(STATUS "  MINSIZEREL:     /MD /O1 /Ob1 /DNDEBUG")
+    
 elseif(UNIX)
+    # Debug: Full debug info, no optimization, extra warnings
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -Wall -Wextra -DDEBUG")
+    
+    # Release: Full optimization (-O3 for maximum performance on ICC profile processing)
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+    
+    # RelWithDebInfo: Moderate optimization with debug info
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g -O2 -DNDEBUG")
+    
+    # MinSizeRel: Optimize for size
+    set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os -DNDEBUG")
+    
     message(STATUS "Configuring GCC/Clang runtime and flags")
+    message(STATUS "  DEBUG:          -g -O0 -Wall -Wextra -DDEBUG")
+    message(STATUS "  RELEASE:        -O3 -DNDEBUG")
+    message(STATUS "  RELWITHDEBINFO: -g -O2 -DNDEBUG")
+    message(STATUS "  MINSIZEREL:     -Os -DNDEBUG")
 endif()
 
 # ----------------------------------------------------------------------
@@ -738,8 +854,12 @@ endif()
 message(STATUS "Adding subdirectory for IccXML.")
 add_subdirectory(IccXML)
 
-# Set default link target for IccXML
-set(TARGET_LIB_ICCXML IccXML2 CACHE INTERNAL "Link target for IccXML2")
+# Set default link target for IccXML (matches build configuration)
+IF(ENABLE_SHARED_LIBS)
+  set(TARGET_LIB_ICCXML IccXML2 CACHE INTERNAL "Link target for IccXML2")
+ELSE()
+  set(TARGET_LIB_ICCXML IccXML2-static CACHE INTERNAL "Link target for IccXML2")
+ENDIF()
 
 # Ensure IccXML headers are available globally
 include_directories(${TOP_SOURCE_DIR}/IccXML/IccLibXML/)
@@ -795,6 +915,15 @@ IF(ENABLE_TOOLS)
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
   message(STATUS "Adding Subdirectory IccApplySearch.")
   ADD_SUBDIRECTORY(Tools/IccApplySearch)
+
+  # Ensure IccXML-dependent tools are built after IccXML library (safety net)
+  IF(TARGET iccFromXml AND TARGET ${TARGET_LIB_ICCXML})
+    ADD_DEPENDENCIES(iccFromXml ${TARGET_LIB_ICCXML})
+  ENDIF()
+  IF(TARGET iccToXml AND TARGET ${TARGET_LIB_ICCXML})
+    ADD_DEPENDENCIES(iccToXml ${TARGET_LIB_ICCXML})
+  ENDIF()
+
 
 # --- PNG ---
 message(STATUS "Checking for PNG...")

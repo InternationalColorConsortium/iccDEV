@@ -58,6 +58,56 @@
       }
     },
     {
+      "name": "linux-gcc-asan",
+      "inherits": "linux-gcc",
+      "displayName": "Linux GCC with AddressSanitizer",
+      "binaryDir": "${sourceDir}/build/linux-gcc-asan",
+      "cacheVariables": {
+        "ENABLE_SANITIZERS": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "linux-clang-asan",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with AddressSanitizer",
+      "binaryDir": "${sourceDir}/build/linux-clang-asan",
+      "cacheVariables": {
+        "ENABLE_SANITIZERS": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "linux-clang-tsan",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with ThreadSanitizer",
+      "binaryDir": "${sourceDir}/build/linux-clang-tsan",
+      "cacheVariables": {
+        "ENABLE_TSAN": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "linux-clang-msan",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with MemorySanitizer",
+      "binaryDir": "${sourceDir}/build/linux-clang-msan",
+      "cacheVariables": {
+        "ENABLE_MSAN": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "linux-clang-ubsan",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with UBSanitizer",
+      "binaryDir": "${sourceDir}/build/linux-clang-ubsan",
+      "cacheVariables": {
+        "ENABLE_UBSAN": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
       "name": "macos-xcode",
       "inherits": "default-base",
       "displayName": "macOS (Xcode)",
