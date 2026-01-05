@@ -980,11 +980,11 @@ void icMemDump(std::string &sDump, void *pBuf, size_t nNum)
       buf[77] = '\n';
       buf[78] = '\0';
       snprintf(num, numSize, "%08X:", uint32_t(i));    // NOTE - this formatting will have to change if we want to move beyond 4 Gig.
-      strncpy(buf, num, 9);
+      memcpy(buf, num, 9); // 8 hex digits, plus ':', and no terminating NULL
     }
 
     snprintf(num, numSize, "%02X", *pData);
-    strncpy(buf+10+j*3, num, 2);
+    memcpy(buf+10+j*3, num, 2);    // 2 hex digits, no terminating NULL
 
     c=*pData;
     if (!isprint(c) || c > 126)
