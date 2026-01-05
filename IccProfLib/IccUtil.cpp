@@ -635,7 +635,8 @@ icFloatNumber icUCFtoD(icU8Fixed8Number num)
 icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
 {
   icUInt16Number numsgn, numexp, nummnt;
-  icUInt32Number rv, rvsgn, rvexp, rvmnt;
+  icUInt32Number rv = 0;    // because static analysis isn't perfect
+  icUInt32Number rvsgn, rvexp, rvmnt;
   icInt32Number tmpexp;
   icFloatNumber * rvfp, rvf;
   int exp;
