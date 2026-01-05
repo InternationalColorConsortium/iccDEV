@@ -1,7 +1,7 @@
 /*
     File:       iccV5DspObsToV4Dsp.cpp
 
-    Contains:   Console app to parse and display profile contents
+    Contains:   Convert an ICCVersion5 display and observer profiles to ICCVersion4 display profile
 
     Version:    V1
 
@@ -81,18 +81,31 @@
 #include "IccProfLibVer.h"
 #include <memory>
 
+
+// we aren't sharing these, so they could be unique_ptr
 typedef std::shared_ptr<CIccProfile> CIccProfileSharedPtr;
+typedef std::shared_ptr<CIccApplyTagMpe> CICCApplyMPEPtr;
+
+
+void Usage() {
+    printf("Usage: iccV5DspObsToV4Dsp inputV5.icc inputObserverV5.icc outputV4.icc\n");
+    printf("Convert an ICCVersion5 display and observer to ICCVersion4 display profile,\n");
+    printf("allowing version5 profiles to be used by legacy applications.\n");
+    printf("\tinputV5.icc: input version5 display profile\n");
+    printf("\tinputObserverV5.icc: input version5 observer profile\n");
+    printf("\toutputV4.icc: output version4 display profile\n");
+    printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
+}
+
 
 int main(int argc, char* argv[])
 {
-  if (argc <= 3) {
-    printf("Usage: iccV5DspObsToV4Dsp v5DspIccPath v5ObsPcc v4DspIccPath\n");
-    printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
-
+  if (argc <= 4) {
+    Usage();
     return -1;
   }
 
-  CIccProfileSharedPtr dspIcc = CIccProfileSharedPtr(ReadIccProfile(argv[1], true));
+  CIccProfileSharedPtr dspIcc( ReadIccProfile(argv[1], true) );
 
   if (!dspIcc) {
     printf("Unable to parse '%s'\n", argv[1]);
@@ -118,14 +131,14 @@ int main(int argc, char* argv[])
       pTagIn->NumInputChannels() != 3 ||
       pTagIn->NumOutputChannels() != 3 ||
       ((curveMpe = pTagIn->GetElement(0))==nullptr) ||
-      curveMpe->GetType()!= icSigCurveSetElemType ||
+        curveMpe->GetType()!= icSigCurveSetElemType ||
       ((matrixMpe = pTagIn->GetElement(1))==nullptr) ||
-      matrixMpe->GetType()!=icSigEmissionMatrixElemType) {
+        matrixMpe->GetType()!=icSigEmissionMatrixElemType) {
     printf("%s doesn't have a spectral emission AToB1Tag\n", argv[1]);
     return -2;
   }
 
-  CIccProfileSharedPtr pccIcc = CIccProfileSharedPtr(ReadIccProfile(argv[2]));
+  CIccProfileSharedPtr pccIcc( ReadIccProfile(argv[2]) );
 
   if (!pccIcc) {
     printf("Unable to parse '%s'\n", argv[2]);
@@ -133,7 +146,7 @@ int main(int argc, char* argv[])
   }
 
   if (pccIcc->m_Header.version < icVersionNumberV5) {
-    printf("%s is not a V5 profile\n", argv[1]);
+    printf("%s is not a V5 profile\n", argv[2]);
     return -2;
   }
 
@@ -150,7 +163,7 @@ int main(int argc, char* argv[])
 
   pTagIn->Begin(icElemInterpLinear, dspIcc.get(), pccIcc.get());
 
-  std::shared_ptr<CIccApplyTagMpe> pApplyMpe = std::shared_ptr<CIccApplyTagMpe>(pTagIn->GetNewApply());
+  CICCApplyMPEPtr pApplyMpe( pTagIn->GetNewApply() );
 
   auto applyList = pApplyMpe->GetList();
   auto applyIter = applyList->begin();
@@ -160,10 +173,9 @@ int main(int argc, char* argv[])
 
   pTagC2S->Begin(icElemInterpLinear, pccIcc.get());
   
-  std::shared_ptr<CIccApplyTagMpe> pAppyC2S = std::shared_ptr<CIccApplyTagMpe>(pTagC2S->GetNewApply());
+  CICCApplyMPEPtr pAppyC2S( pTagC2S->GetNewApply() );
 
-
-  CIccProfilePtr pIcc = CIccProfilePtr(new CIccProfile());
+  CIccProfilePtr pIcc( new CIccProfile() );
 
   pIcc->InitHeader();
   pIcc->m_Header.deviceClass = icSigDisplayClass;
@@ -177,11 +189,13 @@ int main(int argc, char* argv[])
     text = std::string("Display profile from '") + argv[1] + "' and PCC '" + argv[2] + "'";
   pDspText->SetText(text.c_str());
 
+  // pointer ownership is passed to the profile
   pIcc->AttachTag(icSigProfileDescriptionTag, pDspText);
 
   pDspText = new CIccTagMultiLocalizedUnicode();
   pDspText->SetText("Copyright (C) 2025 International Color Consortium");
 
+  // pointer ownership is passed to the profile
   pIcc->AttachTag(icSigCopyrightTag, pDspText);
 
   CIccTagCurve* pTrcR = new CIccTagCurve(2048);
@@ -196,6 +210,7 @@ int main(int argc, char* argv[])
     (*pTrcG)[i] = out[1];
     (*pTrcB)[i] = out[2];
   }
+  // pointer ownership is passed to the profile
   pIcc->AttachTag(icSigRedTRCTag, pTrcR);
   pIcc->AttachTag(icSigGreenTRCTag, pTrcG);
   pIcc->AttachTag(icSigBlueTRCTag, pTrcB);
@@ -204,28 +219,26 @@ int main(int argc, char* argv[])
   const icFloatNumber gRGB[3] = { 0.0f, 1.0f, 0.0f };
   const icFloatNumber bRGB[3] = { 0.0f, 0.0f, 1.0f };
 
-  CIccTagS15Fixed16* primaryXYZ;
-  
   matrixMpe->Apply(mtxApply, in, rRGB);
   pTagC2S->Apply(pAppyC2S.get(), out, in);
  
-  primaryXYZ = new CIccTagS15Fixed16(3);
+  CIccTagS15Fixed16* primaryXYZ = new CIccTagS15Fixed16(3);
   (*primaryXYZ)[0] = icDtoF(out[0]); (*primaryXYZ)[1] = icDtoF(out[1]); (*primaryXYZ)[2] = icDtoF(out[2]);
-  pIcc->AttachTag(icSigRedColorantTag, primaryXYZ);
+  pIcc->AttachTag(icSigRedColorantTag, primaryXYZ); // pointer ownership is passed to the profile
 
   matrixMpe->Apply(mtxApply, in, gRGB);
   pTagC2S->Apply(pAppyC2S.get(), out, in);
 
   primaryXYZ = new CIccTagS15Fixed16(3);
   (*primaryXYZ)[0] = icDtoF(out[0]); (*primaryXYZ)[1] = icDtoF(out[1]); (*primaryXYZ)[2] = icDtoF(out[2]);
-  pIcc->AttachTag(icSigGreenColorantTag, primaryXYZ);
+  pIcc->AttachTag(icSigGreenColorantTag, primaryXYZ); // pointer ownership is passed to the profile
 
   matrixMpe->Apply(mtxApply, in, bRGB);
   pTagC2S->Apply(pAppyC2S.get(), out, in);
 
   primaryXYZ = new CIccTagS15Fixed16(3);
   (*primaryXYZ)[0] = icDtoF(out[0]); (*primaryXYZ)[1] = icDtoF(out[1]); (*primaryXYZ)[2] = icDtoF(out[2]);
-  pIcc->AttachTag(icSigBlueColorantTag, primaryXYZ);
+  pIcc->AttachTag(icSigBlueColorantTag, primaryXYZ); // pointer ownership is passed to the profile
 
   SaveIccProfile(argv[3], pIcc);
   printf("%s successfully created\n", argv[3]);
