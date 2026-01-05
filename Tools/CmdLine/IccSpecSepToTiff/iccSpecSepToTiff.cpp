@@ -71,172 +71,200 @@
 //////////////////////////////////////////////////////////////////////
 
 
-#include <iostream>
 #include <cstdlib>
-#include <stdio.h>
+#include <cstdio>
+#include <cstring>
+#include <cmath>
+#include <iostream>
+#include <vector>
+#include <memory>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccApplyBPC.h"
 #include "TiffImg.h"
 
-void Usage() 
-{
-  printf("Usage: SpecSep2Tiff output_file compress_flag sep_flag infile_fmt_file start_nm end_nm inc_nm {embedded_icc_profile_file}\n\n");
-}
+//===================================================
 
-#ifndef _MAX_PATH
-#define _MAX_PATH 510
-#endif
+void Usage(const char *name)
+{
+  // remove path before command name
+  const char *strippedName = strrchr( name, '/' );      // Unix/MacOS
+  if (strippedName == NULL) {
+    strippedName = strrchr( name, '\\' );    // Windows
+    if (strippedName == NULL)
+      strippedName = name;
+  }
+  else
+    ++strippedName;
+
+  printf("Usage: %s output compress sep infile_fmt start end incr {profile}\n", strippedName ); // argv[0]
+  printf("Concatenates several spectral TIFF files into a single file, with optional embedded ICC profile.\n");
+  
+  printf("\toutput: path/name of the TIFF file to be created\n");                               // argv[1]
+  printf("\tcompress: boolean (0 | 1), should the output be compressed\n");                     // argv[2]
+  printf("\tsep: boolean (0 | 1), plane data be seperated in the output TIFF\n");               // argv[3]
+  printf("\tinfile_fmt: printf format string for input files, example: \"spec_%%06d.tiff\"\n"); // argv[4]
+  printf("\tstart: integer, first channel number to process\n");                                // argv[5]
+  printf("\tend: integer, last channel number to process\n");                                   // argv[6]
+  printf("\tincrement: integer, increment between channels\n");                                 // argv[7]
+  printf("\tprofile: optional ICC profile to embed in the output TIFF\n");                      // argv[8]
+  printf("\n");
+}
 
 //===================================================
 
 int main(int argc, char* argv[]) {
-    int minargs = 8; // Minimum number of arguments should account for the optional ICC profile
-    if (argc < minargs) {
-        std::cerr << "Usage: SpecSep2Tiff output_file compress_flag sep_flag infile_fmt_file start_nm end_nm inc_nm [embedded_icc_profile_file]\n";
-        return -1;
-    }
+  const int minargs = 8; // argc = 8 without profile, 9 with profile
+  
+  if (argc < minargs) {
+    Usage(argv[0]);
+    return -1;
+  }
 
-    CTiffImg infile[100], outfile;
-    char filename[_MAX_PATH];
-    int i, j;
-    long bpl, bps;
-    bool invert = false;
-    int start, end, step, n;
-    float xRes, yRes;
+  bool bCompress = atoi(argv[2]) != 0;
+  bool bSep = atoi(argv[3]) != 0;
 
-    bool bCompress = atoi(argv[2]) != 0;
-    bool bSep = atoi(argv[3]) != 0;
+  int start = atoi(argv[5]);
+  int end = atoi(argv[6]);
+  int step = atoi(argv[7]);
 
-    start = atoi(argv[5]);
-    end = atoi(argv[6]);
-    step = atoi(argv[7]);
+  if (step == 0) {
+    printf("Error: increment cannot be zero.\n");
+    return -1;  // Exit the program with an error code
+  }
 
-    if (step == 0) {
-        std::cerr << "Error: increment ('inc_nm') cannot be zero.\n";
-        return -1;  // Exit the program with an error code
-    }
+  // we do allow end < start, when step is negative
+  if ( ((end < start) && (step > 0))
+    || ((end > start) && (step < 0)) ) {
+    printf("Bad steps values would overflow: %d, %d, %d\n", start, end, step );
+    return -1;
+  }
 
-    n = (end - start) / step + 1;  // Safe to perform division now
+  int nSamples = std::abs(end - start) / step + 1;  // Safe to perform division now
 
-  for (i=0; i<n; i++) {
-    snprintf(filename, _MAX_PATH, argv[4], i*step + start);
+  if (nSamples < 1) {  // just in case
+    printf("Zero samples specified: %d, %d, %d\n", start, end, step );
+    return -1;
+  }
+
+  // open ALL input files
+  std::vector<CTiffImg> infile(nSamples);
+
+  for (int i=0; i<nSamples; i++) {
+    const int max_path_length = 510;
+    char filename[ max_path_length ];
+    
+    int channelNum = i*step + start;
+    snprintf(filename, max_path_length, argv[4], channelNum);
     if (!infile[i].Open(filename)) {
-      printf("Cannot open %s\n", filename);
+      printf("Cannot open input %s\n", filename);
       return -1;
     }
 
     if (infile[i].GetSamples() != 1) {
-      printf("%s does not have 1 sampleperpixel\n", filename);
+      printf("input %s does not have 1 sample per pixel\n", filename);
       return -1;
     }
 
     if (infile[i].GetPhoto() == PHOTOMETRIC_PALETTE) {
-      printf("%s is a palette based file\n", filename);
+      printf("input %s is a palette based file\n", filename);
       return -1;
     }
 
     if (i && (infile[i].GetWidth() != infile[0].GetWidth() ||
-      infile[i].GetHeight() != infile[i-1].GetHeight() ||
-      infile[i].GetBitsPerSample() != infile[i-1].GetBitsPerSample() ||
-      infile[i].GetPhoto() != infile[i-1].GetPhoto() ||
-      infile[i].GetXRes() != infile[i-1].GetXRes() ||
-      infile[i].GetYRes() != infile[i-1].GetYRes())) {
-        printf("%s doesn't have same format as other files\n", filename);
+      infile[i].GetHeight() != infile[0].GetHeight() ||
+      infile[i].GetBitsPerSample() != infile[0].GetBitsPerSample() ||
+      infile[i].GetPhoto() != infile[0].GetPhoto() ||
+      infile[i].GetXRes() != infile[0].GetXRes() ||
+      infile[i].GetYRes() != infile[0].GetYRes())) {
+        printf("input %s does not have same format as other files\n", filename);
         return -1;
     }
   }
-  bpl = infile[0].GetBytesPerLine();
+  
+  // all inputs are open now
+  
+  // use the first input file for error checking and format info
+  // since we made sure all inputs match basic format.
   CTiffImg *f = &infile[0];
 
+  long bytePerLine = f->GetBytesPerLine();
+  
+  bool invert = false;
   if (f->GetPhoto()==PHOTO_MINISWHITE)
     invert = true;
   else if (f->GetPhoto()!=PHOTO_MINISBLACK) {
-    printf("Photometric must be MinIsWhite or MinIsBlack\n");
+    printf("Input photometric interpretation must be MinIsWhite or MinIsBlack\n");
     return -1;
   }
 
-  bps = f->GetBitsPerSample()/8;
+  long bytesPerSample = f->GetBitsPerSample()/8;
   
-  icUInt8Number *inbuf = (icUInt8Number*)malloc(bpl*n);
-  icUInt8Number *buf = (icUInt8Number*)malloc(f->GetWidth() * bps * n );
-  icUInt8Number *sptr, *tptr;
+  // use unique_ptr to automatically free the buffers
+  std::unique_ptr<icUInt8Number> inbufffer( new icUInt8Number[ bytePerLine*nSamples ] );
+  std::unique_ptr<icUInt8Number> outbuffer( new icUInt8Number[ f->GetWidth() * bytesPerSample * nSamples ] );
+  icUInt8Number *inbuf = inbufffer.get();
+  icUInt8Number *outbuf = outbuffer.get();
 
-  if (!inbuf || !buf) {
-    printf("Memory allocation error!\n");
-    goto cleanup;
-  }
-
-  xRes=f->GetXRes();
-  yRes=f->GetYRes();
+  float xRes = f->GetXRes();
+  float yRes = f->GetYRes();
 
   if (xRes<1)
     xRes = 72;
   if (yRes<1)
     yRes = 72;
 
-  if (outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK, 
-                     n, 0, xRes, yRes, bCompress, bSep)) {
-
-    if (argc>8) {
-      unsigned long length = 0;
-      icUInt8Number *pDestProfile = NULL;
-
-      CIccFileIO io;
-      if (io.Open(argv[8], "r")) {
-        length = io.GetLength();
-        pDestProfile = (icUInt8Number *)malloc(length);
-        if (pDestProfile) {
-          io.Read8(pDestProfile, (icInt32Number)length);
-          outfile.SetIccProfile(pDestProfile, (unsigned int)length);
-          free(pDestProfile);
-        }
-        io.Close();
-      }
-    }
-
-    for (i=0; i<(int)f->GetHeight(); i++) {
-      for (j=0; j<n; j++) {
-        sptr = inbuf + j*bpl;
-        if (!infile[j].ReadLine(sptr)) {
-          printf("Error reading line %d of file %d\n", i, j);
-          goto cleanup;
-        }
-        if (invert) {
-          for (long k=bpl; k>0; k--) {
-            *sptr ^= 0xff;
-            sptr++;
-          }
-        }
-      }
-      tptr = buf;
-      for (unsigned int k=0; k<f->GetWidth(); k++) {
-        for (j=0; j<n; j++) {
-          sptr = inbuf + j*bpl + k*bps;
-          memcpy(tptr, sptr, bps);
-          tptr+=bps;
-        }
-      }
-      outfile.WriteLine(buf);
-    }
-    printf("Image successfully written!\n");
-  }
-  else {
+  CTiffImg outfile;
+  if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
+                     nSamples, 0, xRes, yRes, bCompress, bSep)) {
     printf("Unable to create %s\n", argv[1]);
+    return -1;
   }
 
-cleanup:
-  if (inbuf)
-    free(inbuf);
+  // profile pointer lifetime needs to last until output file is written!
+  std::unique_ptr<unsigned char> destProfile;
+  if (argc>8) {
+    CIccFileIO io;
+    if (io.Open(argv[8], "rb")) {
+      size_t length = io.GetLength();
+      destProfile.reset( new unsigned char[length] );
+      io.Read8( destProfile.get(), length );
+      outfile.SetIccProfile( destProfile.get(), (unsigned int)length );
+      io.Close();
+    }
+  }
 
-  if (buf)
-    free(buf);
-
-  for (i=0; i<n; i++)
-    infile[i].Close();
-
+  for (unsigned int i=0; i<f->GetHeight(); i++) {
+    icUInt8Number *sptr, *tptr;
+    for (int j=0; j<nSamples; j++) {
+      sptr = inbuf + j*bytePerLine;
+      if (!infile[j].ReadLine(sptr)) {
+        printf("Error reading line %d of file %d\n", i, j);
+        return -1;
+      }
+      if (invert) {     // NOTE - this will not work for floating point data, but that should never be inverted anyway
+        for (long k=0; k<bytePerLine; k++) {
+          sptr[k] ^= 0xff;
+        }
+      }
+    }
+    tptr = outbuf;
+    for (unsigned int k=0; k<f->GetWidth(); k++) {
+      for (int j=0; j<nSamples; j++) {
+        sptr = inbuf + j*bytePerLine + k*bytesPerSample;
+        memcpy(tptr, sptr, bytesPerSample);
+        tptr += bytesPerSample;
+      }
+    }
+    outfile.WriteLine(outbuf);
+  }
+  
+  // We need to close output first, to use all pointer data before buffers are destructed.
   outfile.Close();
 
+  printf("Image successfully written!\n");
+
+  // buffers and input files closed by destructors
   return 0;
 }
