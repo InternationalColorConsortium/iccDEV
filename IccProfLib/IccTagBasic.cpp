@@ -7022,6 +7022,8 @@ CIccLocalizedUnicode::CIccLocalizedUnicode()
   m_pBuf = (icUInt16Number*)malloc(1*sizeof(icUInt16Number));
   *m_pBuf = 0;
   m_nLength = 0;
+  m_nLanguageCode = icLanguageCodeEnglish;
+  m_nCountryCode = icCountryCodeUSA;
 }
 
 
