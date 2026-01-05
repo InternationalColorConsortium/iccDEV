@@ -85,11 +85,13 @@ bool CIccMpeXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
   //icUInt8Number *m_ptr = m_pData;
 
   const size_t bufSize = 256;
-  char line[bufSize];
-  char buf[bufSize];
+  const size_t smallBufSize = 20;
+  char line[bufSize*2];
+  char buf[smallBufSize];
   char fix[bufSize];
-  snprintf(line, bufSize, "<UnknownElement Type=\"%s\" InputChannels=\"%d\" OutputChannels=\"%d\"", 
-           icFixXml(fix, icGetSigStr(buf, bufSize, GetType())), NumInputChannels(), NumOutputChannels());
+  
+  snprintf(line, bufSize*2, "<UnknownElement Type=\"%s\" InputChannels=\"%d\" OutputChannels=\"%d\"",
+           icFixXml(fix, icGetSigStr(buf, smallBufSize, GetType())), NumInputChannels(), NumOutputChannels());
   xml += blanks + line;
 
   if (m_nReserved) {
@@ -164,13 +166,14 @@ icFloatNumber icGetSegPos(const char *str)
 bool CIccFormulaCurveSegmentXml::ToXml(std::string &xml, std::string blanks)
 {
   const size_t bufSize = 256;
-  char buf[bufSize];
+  const size_t smallBufSize = 20;
+  char buf[smallBufSize];
   char line[bufSize];
 
-  snprintf(line, bufSize, "<FormulaSegment Start=\"%s\"", icSegPos(buf, bufSize, m_startPoint));
+  snprintf(line, bufSize, "<FormulaSegment Start=\"%s\"", icSegPos(buf, smallBufSize, m_startPoint));
   xml += blanks + line;
 
-  snprintf(line, bufSize, " End=\"%s\"",icSegPos(buf, bufSize, m_endPoint));
+  snprintf(line, bufSize, " End=\"%s\"", icSegPos(buf, smallBufSize, m_endPoint));
   xml += line;
     
   snprintf(line, bufSize, " FunctionType=\"%d\"", m_nFunctionType);
@@ -273,13 +276,14 @@ public:
 bool CIccSampledCurveSegmentXml::ToXml(std::string &xml, std::string blanks)
 {
   const size_t bufSize = 256;
-  char buf[bufSize];
+  const size_t smallBufSize = 20;
+  char buf[smallBufSize];
   char line[bufSize];
 
-  snprintf(line, bufSize, "<SampledSegment Start=\"%s\"", icSegPos(buf, bufSize, m_startPoint));
+  snprintf(line, bufSize, "<SampledSegment Start=\"%s\"", icSegPos(buf, smallBufSize, m_startPoint));
   xml += blanks + line;
 
-  snprintf(line, bufSize, " End=\"%s\">\n",icSegPos(buf, bufSize, m_endPoint));
+  snprintf(line, bufSize, " End=\"%s\">\n",icSegPos(buf, smallBufSize, m_endPoint));
   xml += line;
 
   CIccFloatArray::DumpArray(xml, blanks+"  ", m_pSamples, m_nCount, icConvertFloat, 8);
@@ -1976,11 +1980,12 @@ bool CIccMpeXmlExtCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 bool CIccMpeXmlBAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   const size_t bufSize = 256;
-  char line[bufSize];
-  char buf[bufSize], fix[bufSize];
+  char line[bufSize*2];
+  char buf[bufSize/2];
+  char fix[bufSize];
 
-  snprintf(line, bufSize, "<BAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
-                icFixXml(fix, icGetSigStr(buf, bufSize, m_signature)));
+  snprintf(line, bufSize*2, "<BAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
+                icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
   xml += blanks + line;
 
   if (m_nReserved) {
@@ -2031,11 +2036,12 @@ bool CIccMpeXmlBAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
 bool CIccMpeXmlEAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   const size_t bufSize = 256;
-  char line[bufSize];
-  char buf[bufSize], fix[bufSize];
+  char line[bufSize*2];
+  char buf[bufSize/2];
+  char fix[bufSize];
 
-  snprintf(line, bufSize, "<EAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
-    icFixXml(fix, icGetSigStr(buf, bufSize, m_signature)));
+  snprintf(line, bufSize*2, "<EAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
+    icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
   xml += blanks + line;
 
   if (m_nReserved) {
