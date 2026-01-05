@@ -1,6 +1,6 @@
 # 🔄 iccV5DspObsToV4Dsp
 
-**iccV5DspObsToV4Dsp** converts ICC v5 Display Observer profiles into ICC v4 Display profiles.
+**iccV5DspObsToV4Dsp** converts ICC v5 Display and Observer profiles into ICC v4 Display profiles.
 This enables broader compatibility with systems and applications that only support ICC v4.
 
 ---
@@ -21,10 +21,10 @@ This enables broader compatibility with systems and applications that only suppo
 ## 🚀 Usage
 
 ```bash
-iccV5DspObsToV4Dsp input.icc --output output.icc
+iccV5DspObsToV4Dsp inputV5Disp.icc inputV5Obs.icc output.icc
 ```
 
-Converts the `input.icc` (v5 observer-based) profile into a legacy v4 format written to `output.icc`.
+Converts the `inputV5Disp.icc` and `inputV5Obs.icc` (v5 observer-based) profiles into a legacy v4 format written to `output.icc`.
 
 ---
 

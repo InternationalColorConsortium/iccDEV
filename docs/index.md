@@ -90,6 +90,11 @@ Within the project are several libraries and tools as follows:
   * wxProfileDump provides a [wxWidgets](https://www.wxwidgets.org/) GUI based
     ICC and iccMAX profile inspector tool. The code for this tool is based on
     wxWidgets 3.2.
+    
+  * iccV5DspObsToV4Dsp is a cross platform command line tool to combine a
+    V5 display profile with a V5 observer profile to create a V4 display profile.
+    This allows conversion to support legacy applications which only read
+    V4 profiles.
 
 
 ## Example iccMAX Profiles
