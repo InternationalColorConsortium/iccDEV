@@ -84,6 +84,7 @@
 #include "IccSparseMatrix.h"
 #include "IccEncoding.h"
 #include "IccMatrixMath.h"
+#include <cassert>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -11183,6 +11184,10 @@ bool CIccMruCache<T>::Apply(T *DstPixel, const T *SrcPixel)
   else {  //Reuse oldest value and put it at the front of the list
     if (prev)
       prev->pNext = NULL;
+
+    // Static analysis gets a false positive here, because it doesn't understand the relation between count and pointers in the list
+    // assert avoids the static analysis warning, and should never fire
+    assert( m_pFirst != NULL );
     last->pNext = m_pFirst;
 
     m_pFirst = last;
