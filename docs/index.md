@@ -56,8 +56,10 @@ Within the project are several libraries and tools as follows:
     from a ICC profile and/or a iccMAX profile to be output to the console. Data
     with non-printable values are replaced with '?'. Output from this tool is
     not guaranteed to be ASCII or UTF-8, but line-endings are consistent for a
-    given platform.
-
+    given platform. This tool is particularly useful for developers, color scientists,
+    and QA engineers who need to ensure ICC profiles conform to standards and contain
+    expected metadata.
+    
     Detailed validation messages start with either "Warning!", "Error!" or "NonCompliant!".
     The overall status of validation is reported 2 lines below the line starting
     "Validation Report" and can be located using the following simple `grep`:
@@ -107,6 +109,18 @@ Within the project are several libraries and tools as follows:
     Profile Connection Conditions profiles allows for spectral color reproduction to
     be performed. This tool supports JSON and legacy data inputs, and ICCv5
     capabilities including debugging of calculator-based profiles.
+
+  * iccApplyToLink is a versatile command line tool that builds either an ICC
+    DeviceLink profile or a `.cube` LUT file by applying a sequence of ICC profiles.
+    It supports fine-grained control over rendering intents, LUT size, interpolation,
+    and Profile Connection Conditions (PCC). This tool is especially useful for creating
+    link profiles for production workflows or transforming color spaces for VFX, printing,
+    or display calibration.
+
+  * iccFromCube is a command line utility that converts a 3D LUT file in `.cube` format
+    (common in video and color grading applications) into an ICC.2 DeviceLink profile.
+    This tool enables integration of creative grading LUTs into ICC color management
+    workflows.
 
 
 ## Example iccMAX Profiles
