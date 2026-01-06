@@ -358,7 +358,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       std::string ver;
       unsigned long verMajor=0, verMinor=0, verClassMajor=0, verClassMinor=0;
 
-      for (; szVer && *szVer != '.' && *szVer != ','; szVer++) {
+      for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
         ver += *szVer;
       }
       verMajor = parseVersion(ver.c_str());
