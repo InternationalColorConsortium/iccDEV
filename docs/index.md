@@ -48,7 +48,7 @@ Within the project are several libraries and tools as follows:
     testing various features of iccMAX.
 
   * IccApplyProfiles is a cross platform command line tool that allows a sequence of
-    ICC profiles mat and/or iccMAX profiles to a source TIFF image resulting in a
+    ICC profiles and/or iccMAX profiles to a source TIFF image resulting in a
     destination TIFF image. The final destination profile can optionally be embedded
     in the resulting TIFF image.
 
@@ -68,7 +68,7 @@ Within the project are several libraries and tools as follows:
 
   * IccRoundTrip is a cross platform command line tool that allows round trip
     colorimetric processing characteristics of rendering intent of a profile to be
-    evaluated. (Evaluation goes from device values to PCS to establish initial PCS
+    evaluated. Evaluation goes from device values to PCS to establish initial PCS
     values. These are then converted to device values and then PCS values for the
     first round trip. Second round trip comparison then converts the second PCS
     values to device values to PCS values for comparison to the second PCS values.
@@ -96,19 +96,17 @@ Within the project are several libraries and tools as follows:
     This allows conversion to support legacy applications which only read
     V4 profiles.
     
-  * iccApplySearch is a cross platform command-line tool that applies a
+  * iccApplySearch is a cross platform command line tool that applies a
     sequence of profiles utilizing a search with the forward transform of
-    the last profile. apply the reverse application of two profiles. When the
-    first profile is a PCS encoding profile this provides a logical inverse
-    of the forward transform of the last profile. This is especally useful
-    when the forward transfom of the last profile results in a spectral
-    PCS without the availability of a reverse transform in the last profile
-    and the first profile is a spectral PCS encoding profile. Using a
-    colorimetric PCS encoding intermediate profile with a weighted set of
-    Profile Connection Condtions profiles allows for spectral color
-    reproduction to be performed.
-    This tool supports JSON and legacy data inputs, and ICCv5 capabilities
-    including debugging of calculator-based profiles.
+    the last profile. When the first profile is a PCS encoding profile this
+    provides a logical inverse of the forward transform of the last profile.
+    This is especially useful when the forward transform of the last profile
+    results in a spectral PCS without the availability of a reverse transform
+    in the last profile and the first profile is a spectral PCS encoding profile.
+    Using a colorimetric PCS encoding intermediate profile with a weighted set of
+    Profile Connection Conditions profiles allows for spectral color reproduction to
+    be performed. This tool supports JSON and legacy data inputs, and ICCv5
+    capabilities including debugging of calculator-based profiles.
 
 
 ## Example iccMAX Profiles
