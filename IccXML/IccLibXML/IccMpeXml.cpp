@@ -2710,7 +2710,7 @@ bool CIccMpeXmlCalculator::ValidateMacroCalls(std::string &parseStr) const
   MacroMap::const_iterator m;
 
   for (m = m_macroMap.begin(); m != m_macroMap.end(); m++) {
-    if (!ValidMacroCalls(m->second.c_str(), "*", parseStr)) {
+    if (!ValidMacroCalls(m->second.c_str(), std::string("*") + m->first + "*", parseStr)) {
       return false;
     }
   }
