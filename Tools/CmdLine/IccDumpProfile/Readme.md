@@ -79,7 +79,7 @@ Tools/IccDumpProfile/iccDumpProfile -v 50 profile.icc desc
 ## Validation Options
 
 - `-v` enables validation mode
-- Optional verbosity level (1–100); default is 100
+- Optional verbosity level (1-100); default is 100
 - Tag name can be `ALL` or a specific tag (e.g., `desc`, `wtpt`)
 
 ---
