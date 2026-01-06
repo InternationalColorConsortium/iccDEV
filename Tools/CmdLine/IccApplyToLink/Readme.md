@@ -69,19 +69,6 @@ Supports all ICC intents plus combinations:
 
 ---
 
-## Build Instructions
-
-```sh
-cd Build/
-rm -rf CMakeCache.txt CMakeFiles/ Makefile IccProfLib/ IccXML/ Testing/ Tools/
-
-cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local       -DCMAKE_BUILD_TYPE=Debug       -DCMAKE_CXX_FLAGS="-g -fsanitize=address,undefined -fno-omit-frame-pointer -Wall"       -Wno-dev -DENABLE_TOOLS=YES Cmake/
-
-make -j32
-```
-
----
-
 ## Changelog
 
 - Initial implementation by Max Derhak (Mar 2023)

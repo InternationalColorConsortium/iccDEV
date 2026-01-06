@@ -32,26 +32,6 @@ For each trip:
 - % of values below ?E thresholds: 1.0, 2.0, 3.0, 5.0, 10.0
 - Total pixel count evaluated
 
----
-
-## Build Instructions
-
-### Clean previous build files
-```sh
-cd Build/
-rm -rf CMakeCache.txt CMakeFiles/ Makefile IccProfLib/ IccXML/ Testing/ Tools/
-```
-
-### Configure with AddressSanitizer and debug flags
-```sh
-cd Build/
-cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local       -DCMAKE_BUILD_TYPE=Debug       -DCMAKE_CXX_FLAGS="-g -fsanitize=address,undefined -fno-omit-frame-pointer -Wall"       -Wno-dev -DENABLE_TOOLS=YES Cmake/
-```
-
-### Compile with multiple threads
-```sh
-make -j32
-```
 
 ---
 
