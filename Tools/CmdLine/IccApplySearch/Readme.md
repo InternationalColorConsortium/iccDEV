@@ -36,7 +36,7 @@ iccApplySearch -cfg config.json
 ### Legacy CLI Mode
 
 ```sh
-iccApplySearch input.txt encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1.icc intent1 {-ENV:tag value} mid_profile.icc mid_intent2} {-ENV:tag value}} profile2.icc intent2 init_intent2 {pcc1.pcc weight1 ... }
+iccApplySearch {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}
 ```
 
 ---
@@ -59,11 +59,10 @@ iccApplySearch input.txt encoding[:precision[:digits]] interpolation {-ENV:tag v
 - **Intent** (plus modifiers):
   - `0–3`: Perceptual, Relative, Saturation, Absolute
   - `+10`: Disable D2Bx/B2Dx
-  - `+20`: Preview
-  - `+30`: Gamut
   - `+40`: With BPC
-  - `+100`: Luminance-based PCS match
-  - `+10000`: ICCv5 SubProfile
+  - `+90 + Intent - Colorimetric Only`
+  - `100 + Intent - Spectral Only`
+  - `+10000 - Use V5 sub-profile if present`
 
 ---
 
@@ -73,19 +72,6 @@ Determined by config or filename:
 - `output.txt`: legacy textual
 - `output.json`: JSON color set
 - `output.it8`: IT8 table
-
----
-
-## Build Instructions
-
-```sh
-cd Build/
-rm -rf CMakeCache.txt CMakeFiles/ Makefile IccProfLib/ IccXML/ Testing/ Tools/
-
-cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local       -DCMAKE_BUILD_TYPE=Debug       -DCMAKE_CXX_FLAGS="-g -fsanitize=address,undefined -fno-omit-frame-pointer -Wall"       -Wno-dev -DENABLE_TOOLS=YES Cmake/
-
-make -j32
-```
 
 ---
 

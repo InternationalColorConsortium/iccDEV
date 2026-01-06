@@ -95,6 +95,20 @@ Within the project are several libraries and tools as follows:
     V5 display profile with a V5 observer profile to create a V4 display profile.
     This allows conversion to support legacy applications which only read
     V4 profiles.
+    
+  * iccApplySearch is a cross platform command-line tool that applies a
+    sequence of profiles utilizing a search with the forward transform of
+    the last profile. apply the reverse application of two profiles. When the
+    first profile is a PCS encoding profile this provides a logical inverse
+    of the forward transform of the last profile. This is especally useful
+    when the forward transfom of the last profile results in a spectral
+    PCS without the availability of a reverse transform in the last profile
+    and the first profile is a spectral PCS encoding profile. Using a
+    colorimetric PCS encoding intermediate profile with a weighted set of
+    Profile Connection Condtions profiles allows for spectral color
+    reproduction to be performed.
+    This tool supports JSON and legacy data inputs, and ICCv5 capabilities
+    including debugging of calculator-based profiles.
 
 
 ## Example iccMAX Profiles

@@ -78,6 +78,7 @@
 #include "IccProfLibVer.h"
 #include "IccSearch.h"
 #include "../IccCommon/IccCmmConfig.h"
+#include <vector>
 
 
 using namespace nlohmann;
@@ -85,9 +86,6 @@ using namespace nlohmann;
 //----------------------------------------------------
 // Function Declarations
 //----------------------------------------------------
-#define IsSpacePCS(x) ((x)==icSigXYZData || (x)==icSigLabData)
-
-
 
 class CIccLogDebugger : public IIccCalcDebugger
 {
@@ -168,10 +166,12 @@ public:
 
     return false;
   }
+  
   virtual void Error(const char* szMsg)
   {
     m_log.push_back(szMsg);
   }
+
 };
 
 typedef std::shared_ptr<CIccLogDebugger> LogDebuggerPtr;
@@ -180,17 +180,21 @@ typedef std::shared_ptr<CIccLogDebugger> LogDebuggerPtr;
 // Function Definitions
 //----------------------------------------------------
 
+static
+bool IsSpacePCS( const icColorSpaceSignature &x )
+{
+    return ((x)==icSigXYZData || (x)==icSigLabData);
+}
 
-typedef std::list<CIccProfile*> IccProfilePtrList;
+
+typedef std::vector<CIccProfile*> IccProfilePtrList;
 
 void Usage()
 {
-  printf("iccApplySearch built with IccProfLib version " ICCPROFLIBVER "\n\n");
-
   printf("Usage 1: iccApplySearch -cfg config_file_path\n");
   printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplySearch {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n\n");
-  printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
+  printf("Usage 2: iccApplySearch {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
+  printf("Built with IccProfLib version " ICCPROFLIBVER "\n\n");
   
   printf("  For final_data_encoding:\n");
   printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -201,8 +205,8 @@ void Usage()
   printf("    5 - icEncode16Bit\n");
   printf("    6 - icEncode16BitV2\n\n");
 
-  printf("    FmtPrecision - formatting for # of digits after decimal (default=4)\n");
-  printf("    FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
+  printf("  FmtPrecision - formatting for # of digits after decimal (default=4)\n");
+  printf("  FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
 
   printf("  For interpolation:\n");
   printf("    0 - Linear\n");
@@ -218,6 +222,8 @@ void Usage()
   printf("     90 + Intent - Colorimetric Only\n");
   printf("    100 + Intent - Spectral Only\n");
   printf(" +10000 - Use V5 sub-profile if present\n");
+  
+  printf("\n");
 }
 
 
@@ -225,7 +231,7 @@ void Usage()
 
 int main(int argc, const char* argv[])
 {
-  int minargs = 2;
+  int minargs = 3;  // name -cfg file.json
   if (argc < minargs) {
     Usage();
     return -1;
