@@ -440,7 +440,7 @@ bool loadJsonFrom(json& j, const char* szFname)
     fseek(f, 0, SEEK_SET);
     char* buf = (char*)malloc(flen+1);
 
-    if (buf) {
+    if (buf && flen) {
       buf[flen] = 0;
       if (fread(buf, 1, flen, f) == flen) {
         try {
