@@ -2652,14 +2652,40 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
   return true;
 }
 
+// macros can be call{a} or #a, and both could be used in the same expression!
+static
+const char *FindNextMacro(const char *macroText)
+{
+  const char *ptr = strstr(macroText, "call{");
+  const char *ptrHash = strchr(macroText, '#');
+  
+  // if only one is found, choose that one
+  // if both are found, choose the first one in the string
+  if (ptrHash && (!ptr || ptrHash < ptr))
+    ptr = ptrHash;
+
+  return ptr;
+}
+
 bool CIccMpeXmlCalculator::ValidMacroCalls(const char *szMacroText, std::string macroStack, std::string &parseStr) const
 {
   const char *ptr;
-  for (ptr = strstr(szMacroText, "call{"); ptr; ptr = strstr(ptr, "call{")) {
-    CIccFuncTokenizer parse(ptr, true);
-    parse.GetNext();
 
-    std::string name = parse.GetReference();
+  for (ptr = FindNextMacro(szMacroText); ptr; ptr = FindNextMacro(ptr)) {
+    bool isHash = false;
+    if (ptr[0] == '#') {
+      isHash = true;
+      ptr++;
+    }
+    CIccFuncTokenizer parse(ptr, true); // tokenizer doesn't seem to recoginze # syntax
+    parse.GetNext();
+    
+    std::string name;
+    if (isHash)
+      name = parse.GetName();
+    else
+      name = parse.GetReference();
+    
     MacroMap::const_iterator m = m_macroMap.find(name);
     if (m == m_macroMap.end()) {
       parseStr += "Call to undefined macro '" + name + "'\n";
