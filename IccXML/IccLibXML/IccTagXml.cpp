@@ -3383,6 +3383,11 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
     CIccUInt8Array points;
 
     if (points.ParseArray(grid->children)) {
+      if (points.GetSize() < nInput) {
+        parseStr += "Error! - The number of GridPoints and InputChannels do not match.\n";
+        delete pCLUT;
+        return NULL;
+      }
       if (!pCLUT->Init(points.GetBuf())) {
         parseStr += "Error in setting the size of GridPoints. Check values of GridPoints, InputChannel, or OutputChannels.\n";
         delete pCLUT;
