@@ -2993,8 +2993,9 @@ void CIccCalculatorFunc::DescribeSequence(std::string &sDescription,
     if (op->sig == icSigIfOp) {
       SIccCalcOp *ifop = op;
 
-      if  (i+1<nOps && op[1].sig == icSigElseOp) {
+      if  ((i+1)<nOps && op[1].sig == icSigElseOp) {
         SIccCalcOp *elseop = &op[1];
+        // TODO - nOps-i probably should be nOps-i-2 as in CIccCalculatorFunc::CheckUnderflowOverflow
         icUInt32Number nSubOps = (icUInt32Number)icIntMin(nOps-i, ifop->data.size);
         op++;
         i++;
@@ -3006,14 +3007,16 @@ void CIccCalculatorFunc::DescribeSequence(std::string &sDescription,
         InsertBlanks(funcDesc, nBlanks+2);
         funcDesc += "else\n";
         //pos = 0;  // value overwritten below
-
+        
+        // TODO - nOps-i probably should be nOps-i-2 as in CIccCalculatorFunc::CheckUnderflowOverflow
         nSubOps = (icUInt32Number)icIntMin(nOps-i, elseop->data.size);
         DescribeSequence(funcDesc, nSubOps, &op[1], nBlanks+2);
         op += nSubOps;
         i += nSubOps;
       }
       else {
-        icUInt32Number nSubOps = (icUInt32Number)icIntMin(nOps-i, ifop->data.size);
+        icUInt32Number remaining = nOps - i - 1;
+        icUInt32Number nSubOps = (icUInt32Number)icIntMin(remaining, ifop->data.size);
         funcDesc += "\n";
         DescribeSequence(funcDesc, nSubOps, &op[1], nBlanks+2);
         op += nSubOps;
