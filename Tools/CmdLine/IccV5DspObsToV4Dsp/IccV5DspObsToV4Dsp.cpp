@@ -100,7 +100,7 @@ void Usage() {
 
 int main(int argc, char* argv[])
 {
-  if (argc <= 4) {
+  if (argc < 4) {   // name + 3 arguments
     Usage();
     return -1;
   }
