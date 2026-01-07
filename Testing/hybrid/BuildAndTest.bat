@@ -32,10 +32,10 @@
 @ECHO Apply PCC's to the spectral images to get colorimetric renderings
 @ECHO *****************************************************************
 
-%TOOLDIR%iccApplyProfiles.exe Data\smCows380_5_780.tif Results\cowsA_fromRef.tif 1 1 0 1 1 -embedded 3 -pcc ICC\Spec400_10_700-illumA_2deg-Abs.icc %TOOLDIR%sRGB_v4_ICC_preference.icc 1
-%TOOLDIR%iccApplyProfiles.exe Results\MS_smCows.tif Results\cowsA_fromMS.tif 1 1 0 1 1 -embedded 10003 -pcc ICC\Spec400_10_700-illumA_2deg-Abs.icc %TOOLDIR%sRGB_v4_ICC_preference.icc 1
-%TOOLDIR%iccApplyProfiles.exe Data\smCows380_5_780.tif Results\cowsF11_fromRef.tif 1 1 0 1 1 -embedded 3 -pcc ICC\Spec400_10_700-F11_2deg-Abs.icc %TOOLDIR%sRGB_v4_ICC_preference.icc 1
-%TOOLDIR%iccApplyProfiles.exe Results\MS_smCows.tif Results\cowsF11_fromMS.tif 1 1 0 1 1 -embedded 10003 -pcc ICC\Spec400_10_700-F11_2deg-Abs.icc %TOOLDIR%sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccApplyProfiles.exe Data\smCows380_5_780.tif Results\cowsA_fromRef.tif 1 1 0 1 1 -embedded 3 -pcc ICC\Spec400_10_700-illumA_2deg-Abs.icc ..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccApplyProfiles.exe Results\MS_smCows.tif Results\cowsA_fromMS.tif 1 1 0 1 1 -embedded 10003 -pcc ICC\Spec400_10_700-illumA_2deg-Abs.icc ..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccApplyProfiles.exe Data\smCows380_5_780.tif Results\cowsF11_fromRef.tif 1 1 0 1 1 -embedded 3 -pcc ICC\Spec400_10_700-F11_2deg-Abs.icc ..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccApplyProfiles.exe Results\MS_smCows.tif Results\cowsF11_fromMS.tif 1 1 0 1 1 -embedded 10003 -pcc ICC\Spec400_10_700-F11_2deg-Abs.icc ..\sRGB_v4_ICC_preference.icc 1
 
 @ECHO *****************************************************************
 @ECHO Apply custom observer
