@@ -1,18 +1,18 @@
 #!/bin/sh
 #################################################################################
-# updateprev.sh | iccMAX Project
-# Copyright (C) 2024-2025 The International Color Consortium. 
+# updateprev.sh | iccDEV Project
+# Copyright (C) 2024-2026 The International Color Consortium. 
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: Mon Mar 24 16:40:19 EDT 2025 by David Hoyt
-#  date -d @1742848819
-#  Mon Mar 24 16:40:19 EDT 2025
+#  Last Updated: Wed Jan 7 03:27:11 AM UTC 2026 by David Hoyt
 #
 #
 #
 #
-# Intent: iccMAX CICD
+#
+#
+# Intent: iccDEV CICD
 #
 #
 #
@@ -41,6 +41,6 @@ iccFromXml 18ChanWithSpots-MVIS.xml 18ChanWithSpots-MVIS.icc
 
 echo "====================== Running iccApplyNamedCmm CMYKSS-Numbered-Overprint.tif prev.tif ====================="
 
-iccApplyNamedCmm CMYKSS-Numbered-Overprint.tif prev.tif 1 0 1 0 1 6ChanSelect-MID.icc 0 18ChanWithSpots-MVIS.icc 0 ..\sRGB_IEC61966_21.icm 1
+iccApplyNamedCmm CMYKSS-Numbered-Overprint.tif prev.tif 1 0 1 0 1 6ChanSelect-MID.icc 0 18ChanWithSpots-MVIS.icc 0 ../sRGB_v4_ICC_preference.icc 1
 
 echo "====================== Exiting mcs/updateprev.sh =========================="
