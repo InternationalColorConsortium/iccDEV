@@ -1,17 +1,17 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
-##                 https://color.org
+# Copyright (©) 2025 International Color Consortium. 
+#                 All rights reserved. 
+#                 https://color.org
 #
 #
-## Intent: Windows MSVC build and test pipeline for PR validation
+# Intent: Windows MSVC build and test pipeline for PR validation
 #
-## Last Updated: 21-NOV-2025 1800Z by David Hoyt 
-##               ci-pr-win
-## TODO: Push binary releases, tags etc.. 
+# Last Updated: 16-DEC-2025 0223Z
+#               Add PowerShell sanitization tests
 #
-## Comment: Known good and working from PatchIccMax
+#
+#
 #
 #
 #
@@ -62,7 +62,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
 
-      - name: UCI Gate 1 for Windows Powershell
+      - name: Harden Environment and Validate Inputs
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -83,7 +83,7 @@ jobs:
              throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
          }
          
-         # --- Remove tokens or uci that should not exist in PR CI ---
+         # --- Remove tokens or UCI that should not exist in PR CI ---
          foreach ($v in @(
              'GITHUB_TOKEN',
              'ACTIONS_RUNTIME_TOKEN',
@@ -122,12 +122,66 @@ jobs:
          ) -join ';'
          $env:PATH = $trustedPath
          
-          Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
+         Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
+
+      - name: Test Sanitization Functions
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          
+          Write-Host "========================================" -ForegroundColor Cyan
+          Write-Host "Testing Sanitization Functions" -ForegroundColor Cyan
+          Write-Host "========================================" -ForegroundColor Cyan
+          Write-Host ""
+          
+          # Source the sanitization functions
+          . .github/scripts/sanitize.ps1
+          
+          # Quick validation tests
+          $tests = @(
+              @{Name="XSS prevention"; Input="<script>alert(1)</script>"; Expected="&lt;script&gt;alert(1)&lt;/script&gt;"},
+              @{Name="HTML entities"; Input="A&B"; Expected="A&amp;B"},
+              @{Name="Quotes"; Input="'test'"; Expected="&#39;test&#39;"},
+              @{Name="Unicode"; Input="Hello 世界"; Expected="Hello 世界"},
+              @{Name="Null bytes"; Input="test$([char]0x00)null"; Expected="testnull"},
+              @{Name="CR/LF"; Input="line1`r`nline2"; Expected="line1 line2"}
+          )
+          
+          $pass = 0
+          $fail = 0
+          
+          foreach ($test in $tests) {
+              $result = Sanitize-Line -InputString $test.Input
+              if ($result -eq $test.Expected) {
+                  Write-Host "  ✅ PASS: $($test.Name)" -ForegroundColor Green
+                  $pass++
+              } else {
+                  Write-Host "  ❌ FAIL: $($test.Name)" -ForegroundColor Red
+                  Write-Host "     Expected: [$($test.Expected)]"
+                  Write-Host "     Got:      [$result]"
+                  $fail++
+              }
+          }
+          
+          Write-Host ""
+          Write-Host "Results: $pass passed, $fail failed"
+          
+          if ($fail -gt 0) {
+              throw "Sanitization tests failed"
+          }
+          
+          Write-Host ""
+          Write-Host "✅ All sanitization functions validated" -ForegroundColor Green
+          Write-Host ""
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
-      - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
+      - name: Print PR Information
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -143,7 +197,7 @@ jobs:
           Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
           Write-Host "OS:            $env:RUNNER_OS"
 
-      - name: Install dependencies and build
+      - name: Install dependencies
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -157,15 +211,57 @@ jobs:
           pwd
           git branch
           git status
-          Write-Host "========= Fetching Deps... ================`n"
+          Write-Host "========= Fetching Deps from Releases... ================`n"
           Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
-          Write-Host "========= Extracting Deps... ================`n"
+          Write-Host "========= Extracting Dependencies ...    ================`n"
           tar -xf deps.zip
+      - name: CMake Configure
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          pwd
           cd Build/Cmake
-          Write-Host "========= Building... ================`n"  
+          Write-Host "========= Configuring iccDEV ... ================`n"  
           cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+
+      - name: Build iccDEV
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          pwd
+          cd Build/Cmake
+          Write-Host "========= Building iccDEV ... ================`n"  
           cmake --build build -- /m /maxcpucount
           cmake --build build -- /m /maxcpucount          
+
+      - name: Create Profiles
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+            if (Test-Path Env:GITHUB_TOKEN) {
+              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+            }
+          pwd
+          cd Build/Cmake
+          Write-Host "========= Creating Profiles ... ================`n"  
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
               Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
               ForEach-Object { Split-Path $_.FullName -Parent } |
@@ -224,17 +320,27 @@ jobs:
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_URL: ${{ env.RUN_URL }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_BUILD_TYPE: Debug
+          GH_RUNNER_OS: ${{ runner.os }}
+          GH_JOB_STATUS: ${{ job.status }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
+          # Use canonical sanitization from .github/scripts/sanitize.ps1
+          # PowerShell dot-sourcing: loads the script into the current scope
+          . .github/scripts/sanitize.ps1
           "## 🧱 CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Repository: ${{ github.repository }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Run URL: ${{ env.RUN_URL }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Triggered by: ${{ github.event_name }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Commit SHA: ${{ github.event.pull_request.head.sha || github.sha }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Build Type: $env:BUILD_TYPE" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Runner OS: ${{ runner.os }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Status: ${{ job.status }}" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Run URL: $(Sanitize-Line $env:GH_RUN_URL)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Triggered by: $(Sanitize-Line $env:GH_EVENT_NAME)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Commit SHA: $(Sanitize-Line $env:GH_COMMIT_SHA)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Build Type: $(Sanitize-Line $env:GH_BUILD_TYPE)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Runner OS: $(Sanitize-Line $env:GH_RUNNER_OS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
