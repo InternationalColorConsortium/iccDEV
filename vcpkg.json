@@ -1,6 +1,6 @@
 {
   "name": "iccdev",
-  "version": "2.3.1.1",
+  "version": "2.3.1.2",
   "description": "Developer tools for ICC color profiles",
   "builtin-baseline": "af752f21c9d79ba3df9cb0250ce2233933f58486",
   "dependencies": [

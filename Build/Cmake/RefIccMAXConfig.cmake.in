@@ -1,51 +1,210 @@
-# - Find RefIccMAX
-# Find the native RefIccMAX headers and libraries.
+###############################################################
 #
-#  REFICCMAX_FOUND        - True if RefIccMAX found.
-#  REFICCMAX_INCLUDE_DIRS - where to find kdb.h, etc.
-#  REFICCMAX_LIBRARIES    - List of libraries when using RefIccMAX.
+# Copyright (©) 2026 International Color Consortium. 
+#                 All rights reserved. 
+#                 https://color.org
 #
-#  REFICCMAX_VERSION       - The version of openicc (x.y.z)
-#  REFICCMAX_VERSION_MAJOR - The major version of openicc (x)
-#  REFICCMAX_VERSION_MINOR - The minor version of openicc (y)
-#  REFICCMAX_VERSION_MICRO - The patch version of openicc (z)
 #
+# Intent: iccDEV RefIccMAXConfig.cmake.in
+#
+# Last Updated: 12-JAN-2026 2300Z by David Hoyt
+#               
+#
+###############################################################
+# RefIccMAX CMake Config File
+# Provides modern IMPORTED targets for ICC color management libraries
+#
+# Usage:
+#   find_package(RefIccMAX CONFIG REQUIRED)
+#   target_link_libraries(myapp PRIVATE IccProfLib2 IccXML2)
+#
+# Modern targets (recommended):
+#   IccProfLib2        - Core ICC profile library (shared if available, else static)
+#   IccXML2            - XML serialization library (shared if available, else static)
+#   IccProfLib2-static - Static version of IccProfLib2
+#   IccXML2-static     - Static version of IccXML2
+#
+# Legacy variables (for backward compatibility):
+#   REFICCMAX_FOUND        - True if RefIccMAX found
+#   REFICCMAX_INCLUDE_DIRS - Include directories
+#   REFICCMAX_LIBRARIES    - Libraries to link
+#   REFICCMAX_VERSION      - Version string (x.y.z.w)
+###############################################################
+# Version information
+set(REFICCMAX_VERSION_MAJOR @REFICCMAX_MAJOR_VERSION@)
+set(REFICCMAX_VERSION_MINOR @REFICCMAX_MINOR_VERSION@)
+set(REFICCMAX_VERSION_MICRO @REFICCMAX_MICRO_VERSION@)
+set(REFICCMAX_VERSION_PATCH @REFICCMAX_PATCH_VERSION@)
+set(REFICCMAX_VERSION @REFICCMAX_VERSION@)
 
+# Compute installation prefix relative to this file
+get_filename_component(REFICCMAX_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+get_filename_component(REFICCMAX_PREFIX "${REFICCMAX_CMAKE_DIR}/../../.." ABSOLUTE)
 
-
-# Set path to the header file.
-FIND_PATH(REFICCMAX_INCLUDE_DIR
-	NAMES @TARGET_LIB_ICCPROFLIB@/IccProfLibVer.h
-	PATHS @CMAKE_INSTALL_FULL_INCLUDEDIR@/@TARGET_INCLUDE_FOLDER@/
+# Find include directory
+find_path(REFICCMAX_INCLUDE_DIR
+  NAMES @TARGET_LIB_ICCPROFLIB@/IccProfLibVer.h
+  HINTS "${REFICCMAX_PREFIX}/include/@TARGET_INCLUDE_FOLDER@"
+  PATHS @CMAKE_INSTALL_FULL_INCLUDEDIR@/@TARGET_INCLUDE_FOLDER@
+  NO_DEFAULT_PATH
 )
-MARK_AS_ADVANCED(REFICCMAX_INCLUDE_DIR)
 
+if(NOT REFICCMAX_INCLUDE_DIR)
+  # Fallback for system-wide installation
+  find_path(REFICCMAX_INCLUDE_DIR
+    NAMES @TARGET_LIB_ICCPROFLIB@/IccProfLibVer.h
+    PATHS @CMAKE_INSTALL_FULL_INCLUDEDIR@/@TARGET_INCLUDE_FOLDER@
+  )
+endif()
 
-# Set path to the library.
-FIND_LIBRARY( REFICCMAX_LIBRARIES
-	NAMES @TARGET_LIB_ICCPROFLIB@
-	PATHS @CMAKE_INSTALL_FULL_LIBDIR@/
+# Find libraries
+find_library(ICCPROFLIB2_LIBRARY
+  NAMES @TARGET_LIB_ICCPROFLIB@
+  HINTS "${REFICCMAX_PREFIX}/lib"
+  PATHS @CMAKE_INSTALL_FULL_LIBDIR@
+  NO_DEFAULT_PATH
 )
-FIND_LIBRARY( REFICCMAX_STATIC_LIBRARY
-	NAMES @TARGET_LIB_ICCPROFLIB@-static
-	PATHS @CMAKE_INSTALL_FULL_LIBDIR@/
+
+find_library(ICCPROFLIB2_LIBRARY_DEBUG
+  NAMES @TARGET_LIB_ICCPROFLIB@d
+  HINTS "${REFICCMAX_PREFIX}/debug/lib"
+  NO_DEFAULT_PATH
 )
-MARK_AS_ADVANCED(REFICCMAX_STATIC_LIBRARY)
-IF(NOT REFICCMAX_LIBRARIES AND REFICCMAX_STATIC_LIBRARY)
-  SET( REFICCMAX_LIBRARIES ${REFICCMAX_STATIC_LIBRARY}} )
-ENDIF()
-MARK_AS_ADVANCED(REFICCMAX_LIBRARIES)
 
-# handle the QUIETLY and REQUIRED arguments and set REFICCMAX_FOUND to TRUE if
-# all listed variables are TRUE
-INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(@TARGET_LIB_ICCPROFLIB@ DEFAULT_MSG REFICCMAX_LIBRARIES REFICCMAX_INCLUDE_DIR)
+find_library(ICCPROFLIB2_STATIC_LIBRARY
+  NAMES @TARGET_LIB_ICCPROFLIB@-static
+  HINTS "${REFICCMAX_PREFIX}/lib"
+  PATHS @CMAKE_INSTALL_FULL_LIBDIR@
+  NO_DEFAULT_PATH
+)
 
-IF (REFICCMAX_FOUND)
-  SET( REFICCMAX_VERSION_MAJOR @REFICCMAX_MAJOR_VERSION@ )
-  SET( REFICCMAX_VERSION_MINOR @REFICCMAX_MINOR_VERSION@ )
-  SET( REFICCMAX_VERSION_MICRO @REFICCMAX_MICRO_VERSION@ )
-  SET( REFICCMAX_VERSION @REFICCMAX_VERSION@ )
-  SET( HAVE_REFICCMAX TRUE )
-	SET( REFICCMAX_INCLUDE_DIRS ${REFICCMAX_INCLUDE_DIR})
-ENDIF (REFICCMAX_FOUND)
+find_library(ICCXML2_LIBRARY
+  NAMES IccXML2
+  HINTS "${REFICCMAX_PREFIX}/lib"
+  PATHS @CMAKE_INSTALL_FULL_LIBDIR@
+  NO_DEFAULT_PATH
+)
+
+find_library(ICCXML2_LIBRARY_DEBUG
+  NAMES IccXML2d
+  HINTS "${REFICCMAX_PREFIX}/debug/lib"
+  NO_DEFAULT_PATH
+)
+
+find_library(ICCXML2_STATIC_LIBRARY
+  NAMES IccXML2-static
+  HINTS "${REFICCMAX_PREFIX}/lib"
+  PATHS @CMAKE_INSTALL_FULL_LIBDIR@
+  NO_DEFAULT_PATH
+)
+
+# Handle find_package() arguments
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(RefIccMAX
+  REQUIRED_VARS REFICCMAX_INCLUDE_DIR
+  VERSION_VAR REFICCMAX_VERSION
+  HANDLE_COMPONENTS
+)
+
+if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
+  set(REFICCMAX_FOUND TRUE)
+  set(REFICCMAX_INCLUDE_DIRS "${REFICCMAX_INCLUDE_DIR}")
+
+  # Set up include directories for all subdirectories
+  # IccXML2 headers need access to IccProfLib2 headers via relative includes
+  set(REFICCMAX_INTERFACE_INCLUDES
+    "${REFICCMAX_INCLUDE_DIR}"
+    "${REFICCMAX_INCLUDE_DIR}/IccProfLib2"
+    "${REFICCMAX_INCLUDE_DIR}/IccXML2"
+  )
+
+  # Create IMPORTED targets
+
+  # IccProfLib2 shared library
+  if(ICCPROFLIB2_LIBRARY AND NOT TARGET IccProfLib2)
+    add_library(IccProfLib2 SHARED IMPORTED)
+    set_target_properties(IccProfLib2 PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_INTERFACE_INCLUDES}"
+      IMPORTED_LOCATION "${ICCPROFLIB2_LIBRARY}"
+    )
+    if(ICCPROFLIB2_LIBRARY_DEBUG)
+      set_target_properties(IccProfLib2 PROPERTIES
+        IMPORTED_LOCATION_DEBUG "${ICCPROFLIB2_LIBRARY_DEBUG}"
+      )
+    endif()
+    list(APPEND REFICCMAX_LIBRARIES IccProfLib2)
+  endif()
+
+  # IccProfLib2 static library
+  if(ICCPROFLIB2_STATIC_LIBRARY AND NOT TARGET IccProfLib2-static)
+    add_library(IccProfLib2-static STATIC IMPORTED)
+    set_target_properties(IccProfLib2-static PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_INTERFACE_INCLUDES}"
+      IMPORTED_LOCATION "${ICCPROFLIB2_STATIC_LIBRARY}"
+    )
+    if(NOT TARGET IccProfLib2)
+      # If no shared library, alias static as main target
+      add_library(IccProfLib2 ALIAS IccProfLib2-static)
+      list(APPEND REFICCMAX_LIBRARIES IccProfLib2-static)
+    endif()
+  endif()
+
+  # IccXML2 shared library
+  if(ICCXML2_LIBRARY AND NOT TARGET IccXML2)
+    add_library(IccXML2 SHARED IMPORTED)
+    set_target_properties(IccXML2 PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_INTERFACE_INCLUDES}"
+      IMPORTED_LOCATION "${ICCXML2_LIBRARY}"
+    )
+    if(ICCXML2_LIBRARY_DEBUG)
+      set_target_properties(IccXML2 PROPERTIES
+        IMPORTED_LOCATION_DEBUG "${ICCXML2_LIBRARY_DEBUG}"
+      )
+    endif()
+    if(TARGET IccProfLib2)
+      set_target_properties(IccXML2 PROPERTIES
+        INTERFACE_LINK_LIBRARIES IccProfLib2
+      )
+    endif()
+    list(APPEND REFICCMAX_LIBRARIES IccXML2)
+  endif()
+
+  # IccXML2 static library
+  if(ICCXML2_STATIC_LIBRARY AND NOT TARGET IccXML2-static)
+    add_library(IccXML2-static STATIC IMPORTED)
+    set_target_properties(IccXML2-static PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_INTERFACE_INCLUDES}"
+      IMPORTED_LOCATION "${ICCXML2_STATIC_LIBRARY}"
+    )
+    if(TARGET IccProfLib2-static)
+      set_target_properties(IccXML2-static PROPERTIES
+        INTERFACE_LINK_LIBRARIES IccProfLib2-static
+      )
+    endif()
+    if(NOT TARGET IccXML2)
+      # If no shared library, alias static as main target
+      add_library(IccXML2 ALIAS IccXML2-static)
+      list(APPEND REFICCMAX_LIBRARIES IccXML2-static)
+    endif()
+  endif()
+
+  # Legacy support - set REFICCMAX_LIBRARIES if not already set
+  if(NOT REFICCMAX_LIBRARIES)
+    if(ICCPROFLIB2_LIBRARY)
+      list(APPEND REFICCMAX_LIBRARIES "${ICCPROFLIB2_LIBRARY}")
+    elseif(ICCPROFLIB2_STATIC_LIBRARY)
+      list(APPEND REFICCMAX_LIBRARIES "${ICCPROFLIB2_STATIC_LIBRARY}")
+    endif()
+  endif()
+
+  # Mark variables as advanced
+  mark_as_advanced(
+    REFICCMAX_INCLUDE_DIR
+    ICCPROFLIB2_LIBRARY
+    ICCPROFLIB2_LIBRARY_DEBUG
+    ICCPROFLIB2_STATIC_LIBRARY
+    ICCXML2_LIBRARY
+    ICCXML2_LIBRARY_DEBUG
+    ICCXML2_STATIC_LIBRARY
+  )
+endif()
