@@ -281,6 +281,11 @@ bool CIccTagUnknown::Read(icUInt32Number size, CIccIO *pIO)
 
   m_nSize = size - sizeof(icTagTypeSignature);
 
+  // Prevent excessive allocation - limit to 256MB
+  const icUInt32Number MAX_UNKNOWN_TAG_SIZE = 268435456;
+  if (m_nSize > MAX_UNKNOWN_TAG_SIZE)
+    return false;
+
   if (m_nSize > 0) { // size could be stored as smaller than expected value, therefore the size check
 
     m_pData = new icUInt8Number[m_nSize];
@@ -2088,6 +2093,11 @@ bool CIccTagTextDescription::Read(icUInt32Number size, CIccIO *pIO)
   if (3*sizeof(icUInt32Number) + nSize > size)
     return false;
 
+  // Prevent excessive allocation - limit to 64MB
+  const icUInt32Number MAX_TEXT_SIZE = 67108864;
+  if (nSize > MAX_TEXT_SIZE)
+    return false;
+
   icChar *pBuf = GetBuffer(nSize+1);
 
   if (nSize) {
@@ -2110,6 +2120,11 @@ bool CIccTagTextDescription::Read(icUInt32Number size, CIccIO *pIO)
 
   // Calculations in GetUnicodeBuffer() can cause wrap-around error
   if (nSize == 0xFFFFFFFF) 
+    return false;
+
+  // Prevent excessive allocation - limit to 64MB (33M icUInt16Number)
+  const icUInt32Number MAX_UNICODE_SIZE = 33554432;
+  if (nSize > MAX_UNICODE_SIZE)
     return false;
 
   icUInt16Number *pBuf16 = GetUnicodeBuffer(nSize);
