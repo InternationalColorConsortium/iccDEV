@@ -3290,7 +3290,7 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
   m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", 0));
+  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
 
   if (!m_nInputChannels || !m_nOutputChannels) {
     parseStr += "Invalid InputChannels or OutputChannels In CLutElement\n";
@@ -3404,7 +3404,7 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
   m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", 0));
+  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
 
   if (!m_nInputChannels || !m_nOutputChannels) {
     parseStr += "Invalid InputChannels or OutputChannels In CLutElement\n";
