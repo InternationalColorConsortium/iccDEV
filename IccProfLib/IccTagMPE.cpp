@@ -315,6 +315,14 @@ bool CIccMpeUnknown::SetDataSize(icUInt32Number nSize, bool /* bZeroData =true *
   if (m_pData)
     free(m_pData);
 
+  // Prevent excessive allocation - limit to 256MB for unknown MPE data
+  const icUInt32Number MAX_MPE_UNKNOWN_SIZE = 268435456; // 256 MB
+  if (nSize > MAX_MPE_UNKNOWN_SIZE) {
+    m_pData = NULL;
+    m_nSize = 0;
+    return false;
+  }
+
   m_nSize = nSize;
   if (m_nSize) {
     m_pData = (icUInt8Number*)malloc(m_nSize);
