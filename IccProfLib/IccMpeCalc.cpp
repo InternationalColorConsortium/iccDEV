@@ -5108,6 +5108,11 @@ bool CIccMpeCalculator::SetElem(icUInt32Number idx, CIccMultiProcessElement *pEl
 {
   bool rv = true;
 
+  // Prevent excessive allocation - limit to 65536 elements (reasonable max)
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (idx >= MAX_CALC_ELEMENTS)
+    return false;
+
   if (idx + 1 > count) {
     if (*pArray) {
       *pArray = (CIccMultiProcessElement**)icRealloc(*pArray, (idx + 1) * sizeof(CIccMultiProcessElement*));
