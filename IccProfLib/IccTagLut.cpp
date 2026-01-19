@@ -82,6 +82,7 @@
 #include "IccUtil.h"
 #include "IccProfile.h"
 #include "IccMpeBasic.h"
+#include <cmath>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
