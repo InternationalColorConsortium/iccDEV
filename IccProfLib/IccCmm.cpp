@@ -6521,17 +6521,20 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   if (m_bSrcPcsConversion)
     SrcPixel = CheckSrcAbs(pApply, SrcPixel);
 
-  for (i=0; i<m_nNumInput; i++)
+  // Prevent array bounds overflow - Pixel has 16 elements
+  int nInput = (m_nNumInput > 16) ? 16 : m_nNumInput;
+
+  for (i=0; i<nInput; i++)
     Pixel[i] = SrcPixel[i];
 
   if (m_pTag->m_bInputMatrix) {
     if (m_ApplyCurvePtrB) {
-      for (i=0; i<m_nNumInput; i++)
+      for (i=0; i<nInput; i++)
         Pixel[i] = m_ApplyCurvePtrB[i]->Apply(Pixel[i]);
     }
 
     if (m_pTag->m_CLUT) {
-      switch(m_nNumInput) {
+      switch(nInput) {
       case 5:
         m_pTag->m_CLUT->Interp5d(Pixel, Pixel);
         break;
@@ -6556,7 +6559,7 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
   }
   else {
     if (m_ApplyCurvePtrA) {
-      for (i=0; i<m_nNumInput; i++)
+      for (i=0; i<nInput; i++)
         Pixel[i] = m_ApplyCurvePtrA[i]->Apply(Pixel[i]);
     }
 
@@ -6595,7 +6598,8 @@ void CIccXformNDLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
     }
   }
 
-  for (i=0; i<m_pTag->m_nOutput; i++) {
+  int nOutput = (m_pTag->m_nOutput > 16) ? 16 : m_pTag->m_nOutput;
+  for (i=0; i<nOutput; i++) {
     DstPixel[i] = Pixel[i];
   }
 
