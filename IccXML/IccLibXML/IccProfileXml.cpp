@@ -877,7 +877,7 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
   doc = xmlReadFile(szFilename, NULL, 0);
 
   if (doc == NULL) 
-    return NULL;
+    return false;
 
   if (szRelaxNGDir && szRelaxNGDir[0]) {
     xmlRelaxNGParserCtxt* rlxParser;
