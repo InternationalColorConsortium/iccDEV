@@ -292,6 +292,7 @@ static SIccElemNameSig g_IccStructColorEncodingParamsMbrTable[] = {
   { icSigCeptGreenPrimaryXYZMbr,               "cptGreenPrimaryXYZMbr" },
   { icSigCeptRedPrimaryXYZMbr,                 "ceptRedPrimaryXYZMbr" },
   { icSigCeptTransferFunctionMbr,              "ceptTransferFunctionMbr" },
+  { icSigCeptInverseTransferFunctionMbr,       "ceptInverseTransferFunctionMbr" },
   { icSigCeptLumaChromaMatrixMbr,              "ceptLumaChromaMatrixMbr" },
   { icSigCeptWhitePointLuminanceMbr,           "ceptWhitePointLuminanceMbr" },
   { icSigCeptWhitePointChromaticityMbr,        "ceptWhitePointChromaticityMbr" },
