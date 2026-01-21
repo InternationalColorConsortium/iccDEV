@@ -1624,7 +1624,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport) const
         case icSigBiSpectralReflectanceData:
         case icSigSparseMatrixReflectanceData:
           if (icGetColorSpaceType(m_Header.spectralPCS)==icSigBiSpectralReflectanceData) {
-            if (icNumColorSpaceChannels(m_Header.spectralPCS)!=m_Header.biSpectralRange.steps * m_Header.spectralRange.steps) {
+            if (icNumColorSpaceChannels(m_Header.spectralPCS)!=(icUInt32Number)m_Header.biSpectralRange.steps * m_Header.spectralRange.steps) {
               sReport += icMsgValidateCriticalError;
               sReport += "Number of channels defined for spectral PCS do not match spectral range definitions.\n";
               rv = icMaxStatus(rv, icValidateCriticalError);
