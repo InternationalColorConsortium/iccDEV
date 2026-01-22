@@ -104,6 +104,9 @@ typedef enum {
  * Calculator operator signatures
  ************************************************************************/
 typedef enum {
+  // useful value that is not defined by the spec.
+  icSigNullDataOp                   = 0x00000000, /* not valid, used for data range */
+
   //Floating point constant operation
   icSigDataOp                       = 0x64617461,  /* 'data' */
   icSigPiOp                         = 0x70692020,  /* 'pi  ' */
@@ -212,6 +215,9 @@ typedef enum {
   icSigDefaultOp                    = 0x64666c74,  /* 'dflt' */
 
   //Boolean operation
+  
+  // useful value that is not defined by the spec.
+  icSigLastValueRangeOp             = 0xffffffff,    /* not valid, used for data range */
 }icSigCalcOp;
 
 
