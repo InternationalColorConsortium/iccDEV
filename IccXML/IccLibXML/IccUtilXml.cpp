@@ -1069,6 +1069,10 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNode *pNode)
 {
   icUInt32Number n;
+  
+  if (!pNode)
+    return false;
+  
   if (Tsig==icSigFloatArrayType) {
     n = icXmlNodeCount(pNode, "f");
 
