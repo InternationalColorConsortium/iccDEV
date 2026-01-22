@@ -70,6 +70,7 @@
 #include "IccProfileXml.h"
 #include "IccStructFactory.h"
 #include "IccArrayFactory.h"
+#include "IccConvertUTF.h"
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <set>
 #include <map>
@@ -122,10 +123,18 @@ bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
   return false;
 }
 
+static bool isTextLegalXML( const char *szText )
+{
+  size_t length = strlen(szText);
+
+// scan for CRLF
+
+  return isLegalUTF8( (const UTF8 *)szText, (int)length ) != 0;
+}
 
 static bool icXmlDumpTextData(std::string &xml, std::string blanks, const char *szText, bool bConvert=true)
 {
-  if (strstr(szText, "]]>")) {
+  if (!isTextLegalXML(szText) || strstr(szText, "]]>")) {
     xml += blanks + "<HexTextData>";
     icXmlDumpHexData(xml, blanks+" ", (void*)szText, (icUInt32Number)strlen(szText));
     xml += blanks + "</HexTextData>\n";

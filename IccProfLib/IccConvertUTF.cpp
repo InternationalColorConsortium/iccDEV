@@ -443,7 +443,7 @@ icUtfConversionResult icConvertUTF16toUTF8 (const UTF16* source, const UTF16* so
 * definition of UTF-8 goes up to 4-byte sequences.
 */
 
-static Boolean isLegalUTF8(const UTF8 *source, int length)
+Boolean isLegalUTF8(const UTF8 *source, int length)
 {
   UTF8 a;
   const UTF8 *srcptr = source+length;
