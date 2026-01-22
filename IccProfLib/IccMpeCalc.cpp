@@ -946,8 +946,8 @@ public:
     for (j=0; j<n; j++) {
       icFloatNumber temp = s[j];
       icFloatNumber tempN = s[j+n];
-      if (isnan(temp) || isinf(temp)
-        || isnan(tempN) || isinf(tempN) || fabs(tempN) < epsilon)
+      if (std::isnan(temp) || std::isinf(temp)
+        || std::isnan(tempN) || std::isinf(tempN) || fabs(tempN) < epsilon)
         s[j] = 0.0;
       else
         s[j] = temp - (icFloatNumber)((int)(temp / tempN))*tempN;
@@ -1203,9 +1203,9 @@ public:
     for (j=0; j<n; j++) {
       //Casting to an int results in truncation
       icFloatNumber temp = s[j];
-      if (isnan(temp))
+      if (std::isnan(temp))
         s[j] = 0.0;
-      else if (isinf(temp)) {
+      else if (std::isinf(temp)) {
         if (temp > 0.0)
             s[j] = (icFloatNumber)std::numeric_limits<int>::max();
         else
@@ -1264,9 +1264,9 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     for (j=0; j<n; j++) {
       icFloatNumber temp = s[j];
-      if (isnan(temp))
+      if (std::isnan(temp))
         temp = 0.0;
-      else if (isinf(temp))
+      else if (std::isinf(temp))
         temp = 10000.0;          // value chosen arbitrarily to not overflow int
       if (temp < 0.0)
         s[j] = icFloatNumber((int)(temp-0.5));
@@ -3742,11 +3742,11 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
     else if (op->sig==icSigSelectOp) {
       icFloatNumber a1;
       OsPopArg(a1);
-      if (isnan(a1))
+      if (std::isnan(a1))
         a1 = 0.0;
         
       icInt32Number nSel;
-      if (isinf(a1)) {
+      if (std::isinf(a1)) {
         nSel = (a1 < 0.0) ? std::numeric_limits<icInt32Number>::lowest() : std::numeric_limits<icInt32Number>::max();
       }
       else

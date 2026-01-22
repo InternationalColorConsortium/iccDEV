@@ -1003,7 +1003,7 @@ T clipTypeRange( const F &input )
     return std::numeric_limits<T>::max();
   if (input < std::numeric_limits<T>::lowest()) // not min, which is a positive small number for floating point
     return std::numeric_limits<T>::lowest();
-  if ( !std::numeric_limits<F>::is_integer && isnan(input) )
+  if ( !std::numeric_limits<F>::is_integer && std::isnan(input) )
     return T(0);    // flush NaN to zero
   return T(input);  // passed all the checks, just cast it
 }
