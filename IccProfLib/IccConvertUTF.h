@@ -161,7 +161,7 @@ icUtfConversionResult ICCPROFLIB_API icConvertUTF32toUTF16 (
 
 Boolean ICCPROFLIB_API icIsLegalUTF8Sequence(const UTF8 *source, const UTF8 *sourceEnd);
 
-Boolean ICCPROFLIB_API isLegalUTF8(const UTF8 *source, int length);
+Boolean ICCPROFLIB_API isLegalUTF8String(const UTF8 *source, int length);
 
 #ifdef __cplusplus
 }
