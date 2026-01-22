@@ -3094,7 +3094,7 @@ bool icCurvesToXml(std::string &xml, const char *szName, CIccCurve **pCurves, in
 bool CIccTagXmlSegmentedCurve::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   if (m_pCurve)
-    return ((CIccSegmentedCurveXml*)m_pCurve)->ToXml(xml, blanks);
+    return CIccSegmentedCurveXml(m_pCurve).ToXml(xml, blanks);
 
   return true;
 }
