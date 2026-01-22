@@ -4668,6 +4668,11 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&nSubElem))
     return false;
 
+  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   icUInt32Number nPos = nSubElem + 1;
 
   if (headerSize + (icUInt64Number)nPos*sizeof(icPositionNumber) > size) {
