@@ -123,18 +123,31 @@ bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
   return false;
 }
 
-static bool isTextLegalXML( const char *szText )
+static bool isTextLegalCDATA( const char *szText )
 {
+  // an empty string is legal
+  if (szText[0] == 0)
+    return true;
+
+  // scan for any CR, don't care if it's CRLF, because UTF8 should only have LF
+  if (strchr(szText,'\r'))
+    return false;
+  
+  // scan for XML tags that would make this an invalid text block
+  if ( strstr(szText, "]]>") )
+    return false;
+
+  // and last check for illegal UTF8 values
   size_t length = strlen(szText);
+  if ( isLegalUTF8String( (const UTF8 *)szText, (int)length ) == 0 )
+    return false;
 
-// scan for CRLF
-
-  return isLegalUTF8( (const UTF8 *)szText, (int)length ) != 0;
+  return true;
 }
 
 static bool icXmlDumpTextData(std::string &xml, std::string blanks, const char *szText, bool bConvert=true)
 {
-  if (!isTextLegalXML(szText) || strstr(szText, "]]>")) {
+  if ( !isTextLegalCDATA(szText) ) {
     xml += blanks + "<HexTextData>";
     icXmlDumpHexData(xml, blanks+" ", (void*)szText, (icUInt32Number)strlen(szText));
     xml += blanks + "</HexTextData>\n";
