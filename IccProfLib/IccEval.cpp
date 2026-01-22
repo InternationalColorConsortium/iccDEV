@@ -68,7 +68,7 @@ Copyright:  (c) see ICC Software License
 //
 //////////////////////////////////////////////////////////////////////
 
-#include <math.h>
+#include <cmath>
 #include "IccEval.h"
 #include "IccTag.h"
 

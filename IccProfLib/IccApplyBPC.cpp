@@ -69,7 +69,7 @@ Copyright:  (c) see ICC Software License
 //////////////////////////////////////////////////////////////////////
 
 #include "IccApplyBPC.h"
-#include <math.h>
+#include <cmath>
 
 #define IsSpacePCS(x) ((x)==icSigXYZData || (x)==icSigLabData)
 

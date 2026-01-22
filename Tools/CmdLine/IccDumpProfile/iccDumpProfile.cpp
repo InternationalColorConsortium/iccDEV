@@ -70,7 +70,7 @@
 //////////////////////////////////////////////////////////////////////
 
 
-#include <stdio.h>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 #include <unordered_map>

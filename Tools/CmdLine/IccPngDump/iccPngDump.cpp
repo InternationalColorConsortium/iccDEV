@@ -81,9 +81,9 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <png.h>
 #include "IccCmm.h"
 #include "IccUtil.h"

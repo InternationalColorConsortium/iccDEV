@@ -69,7 +69,7 @@
 //////////////////////////////////////////////////////////////////////
 
 
-#include <stdio.h>
+#include <cstdio>
 #include <cstring>
 #include "IccProfile.h"
 #include "IccTag.h"

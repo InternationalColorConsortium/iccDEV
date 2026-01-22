@@ -69,7 +69,7 @@
 //////////////////////////////////////////////////////////////////////
 
 
-#include <stdio.h>
+#include <cstdio>
 #include <string>
 #include "IccCmm.h"
 #include "IccUtil.h"

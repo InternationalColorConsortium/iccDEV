@@ -75,11 +75,11 @@
 #include "IccArrayFactory.h"
 #include "IccMpeFactory.h"
 #include "IccDefs.h"
-#include <stdlib.h>
+#include <cstdlib>
 #include <memory.h>
-#include <ctype.h>
-#include <math.h>
-#include <string.h>
+#include <cctype>
+#include <cmath>
+#include <cstring>
 #include <time.h>
 
 #define PI 3.1415926535897932384626433832795

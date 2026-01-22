@@ -69,8 +69,8 @@
 //////////////////////////////////////////////////////////////////////
 
 
-#include <stdio.h>
-#include <math.h>
+#include <cstdio>
+#include <cmath>
 #include "IccUtil.h"
 #include "IccEval.h"
 #include "IccPrmg.h"

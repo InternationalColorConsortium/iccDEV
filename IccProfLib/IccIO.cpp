@@ -70,9 +70,9 @@
 
 #include "IccIO.h"
 #include "IccUtil.h"
-#include <stdlib.h>
+#include <cstdlib>
 #include <memory.h>
-#include <string.h>
+#include <cstring>
 
 #ifndef __max
 #define __max(a,b)  (((a) > (b)) ? (a) : (b))

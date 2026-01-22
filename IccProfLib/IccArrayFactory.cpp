@@ -74,7 +74,7 @@
 #include "IccArrayFactory.h"
 #include "IccUtil.h"
 #include "IccProfile.h"
-#include <string.h>
+#include <cstring>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {

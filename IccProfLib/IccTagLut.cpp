@@ -74,15 +74,14 @@
   #pragma warning( disable: 4786) //disable warning in <list.h>
   #include <windows.h>
 #endif
-#include <stdio.h>
-#include <math.h>
-#include <string.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cmath>
+#include <cstring>
+#include <cstdlib>
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfile.h"
 #include "IccMpeBasic.h"
-#include <cmath>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {

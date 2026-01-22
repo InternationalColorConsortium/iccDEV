@@ -71,7 +71,7 @@
 
 #include "IccJsonUtil.h"
 #include "IccUtil.h"
-#include <stdio.h>
+#include <cstdio>
 #include <string>
 #include <sstream>  // For std::to_string fallback
 

@@ -66,9 +66,9 @@
 
 
 #include "IccCmmConfig.h"
-#include <stdio.h>
+#include <cstdio>
 #include <fstream>
-#include <string.h>
+#include <cstring>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {

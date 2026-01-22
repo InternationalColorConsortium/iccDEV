@@ -1,7 +1,7 @@
 // IccToXml.cpp : Defines the entry point for the console application.
 //
 
-#include <stdio.h>
+#include <cstdio>
 #include "IccTagXmlFactory.h"
 #include "IccMpeXmlFactory.h"
 #include "IccProfileXml.h"

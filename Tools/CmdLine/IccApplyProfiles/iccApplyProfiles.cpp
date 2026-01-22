@@ -70,7 +70,7 @@
 //////////////////////////////////////////////////////////////////////
 
 
-#include <stdio.h>
+#include <cstdio>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"

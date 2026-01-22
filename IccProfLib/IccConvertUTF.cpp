@@ -41,7 +41,7 @@ See the header file "icConvertUTF.h" for complete documentation.
 
 #include "IccConvertUTF.h"
 #ifdef CVTUTF_DEBUG
-#include <stdio.h>
+#include <cstdio>
 #endif
 
 static const int halfShift  = 10; /* used for shifting by 10 bits */

@@ -60,7 +60,7 @@
  *  
  * 
  */
-#include "stdio.h"
+#include <cstdio>
 #include "IccProfileXml.h"
 #include "IccTagXml.h"
 #include "IccUtilXml.h"
