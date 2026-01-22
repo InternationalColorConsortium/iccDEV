@@ -749,9 +749,9 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
         strncpy(m_szSufix, icUtf8ToAnsi(str, szSufix), sizeof(m_szSufix));
         m_szSufix[sizeof(m_szSufix)-1] = '\0';
 
-        m_nDeviceCoords = atoi(szDeviceCoords);
+        icUInt32Number newDeviceCoords = atoi(szDeviceCoords);
         icUInt32Number n = icXmlNodeCount3(pNode->children, "NamedColor", "LabNamedColor", "XYZNamedColor");
-        SetSize(n, m_nDeviceCoords);
+        SetSize(n, newDeviceCoords);
 
         icUInt32Number i;
 
@@ -843,7 +843,7 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
                 icUInt32Number j;
                 for (j = 0; j < m_nDeviceCoords && j < coords.GetSize(); j++) {
-                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[i] / 255.0f;
+                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j] / 255.0f;
                 }
               }
               else if (!strcmp(szDeviceEncoding, "int16")) {
@@ -854,7 +854,7 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
                 icUInt32Number j;
                 for (j = 0; j < m_nDeviceCoords && j < coords.GetSize(); j++) {
-                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[i] / 65535.0f;
+                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j] / 65535.0f;
                 }
               }
               else if (!strcmp(szDeviceEncoding, "float")) {
@@ -865,7 +865,7 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
                 icUInt32Number j;
                 for (j = 0; j < m_nDeviceCoords && j < coords.GetSize(); j++) {
-                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[i];
+                  pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j];
                 }
               }
               else
