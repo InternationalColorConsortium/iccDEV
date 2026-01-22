@@ -486,7 +486,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 			m_Header.attributes = icGetDeviceAttrValue(pNode);
 		}
 		else if (!icXmlStrCmp(pNode->name, "RenderingIntent")) {
-          if (!pNode->children) {
+          if (!pNode->children || !pNode->children->content) {
             parseStr += "Cannot parse RenderingIntent, no value specified\n";
             continue;
           }
