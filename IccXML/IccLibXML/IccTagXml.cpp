@@ -202,10 +202,8 @@ bool CIccTagXmlUtf16Text::ToXml(std::string &xml, std::string blanks/* = ""*/)
   return icXmlDumpTextData(xml, blanks, GetText(buf), false);
 }
 
-static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, bool bConvert = true)
+static bool icXmlParseTextString(xmlNode *pNode, std::string &parseStr, std::string &str, bool bConvert = true)
 {
-  std::string str;
-
   while (pNode) {
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexTextData") && pNode->children && pNode->children->content) {
@@ -213,7 +211,7 @@ static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, b
         icUInt32Number hexSize = icXmlGetHexDataSize((const icChar*)pNode->children->content);
         if (!buf.SetSize(hexSize+2) ||
           icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, hexSize)!=hexSize)
-          return str;
+          return false;
         
         // make sure the string is NULL terminated, even for UTF8
         uint8_t *strPtr = buf.GetBuf();
@@ -234,7 +232,7 @@ static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, b
             parseStr += filename;
             parseStr +="' not found.\n";
             delete file;
-            return str;
+            return false;
           }
 
           size_t fileLength = file->GetLength();
@@ -246,7 +244,7 @@ static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, b
             parseStr += filename;
             parseStr += "' may not be a valid text file.\n";
             delete file;
-            return str;
+            return false;
           }
           // read the contents of the file
           if (file->ReadLine(ansiStr, fileLength)!=fileLength) {
@@ -255,7 +253,7 @@ static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, b
             parseStr += "'. Size read is not equal to file length. File may not be a valid text file.\n";
             free(ansiStr);
             delete file;             
-            return str;
+            return false;
           }   
           // convert utf8 (xml format) to ansi (icc format)
           if (bConvert)
@@ -278,24 +276,28 @@ static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, b
     pNode = pNode->next; 
   }
 
-  return str;
+  return true;
 }
 
 bool CIccTagXmlText::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  std::string str = icXmlParseTextString(pNode, parseStr);
+  std::string outStr;
+  if( !icXmlParseTextString(pNode, parseStr, outStr) )
+    return false;
   
   // even an empty string is a valid string
-  SetText(str.c_str());
+  SetText(outStr.c_str());
   return true;
 }
 
 bool CIccTagXmlUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  std::string str = icXmlParseTextString(pNode, parseStr, false);
-
+  std::string outStr;
+  if( !icXmlParseTextString(pNode, parseStr, outStr, false) )
+    return false;
+  
   // even an empty string is a valid string
-  SetText(str.c_str());
+  SetText(outStr.c_str());
   return true;
 }
 
@@ -319,9 +321,11 @@ bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
     pNode = pNode->next; 
   }
 
-  std::string str = icXmlParseTextString(pNode, parseStr, false);
+  std::string outStr;
+  if( !icXmlParseTextString(pNode, parseStr, outStr, false) )
+    return false;
 
-  return SetText(str.c_str());
+  return SetText(outStr.c_str());
 }
 
 bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
@@ -344,17 +348,21 @@ bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     pNode = pNode->next; 
   }
 
-  std::string str = icXmlParseTextString(pNode, parseStr, false);
+  std::string outStr;
+  if( !icXmlParseTextString(pNode, parseStr, outStr, false) )
+    return false;
 
-  return SetText(str.c_str());
+  return SetText(outStr.c_str());
 }
 
 bool CIccTagXmlUtf16Text::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  std::string str = icXmlParseTextString(pNode, parseStr, false);
+  std::string outStr;
+  if( !icXmlParseTextString(pNode, parseStr, outStr, false) )
+    return false;
 
   // even an empty string is a valid string
-  SetText(str.c_str());
+  SetText(outStr.c_str());
   return true;
 }
 
@@ -490,7 +498,10 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   // file does not exist
   else {
-    std::string str = icXmlParseTextString(pNode, parseStr);
+    std::string str;
+    if( !icXmlParseTextString(pNode, parseStr, str) )
+      return false;
+    
     icUInt32Number nSize = (icUInt32Number)str.size();
     (void) GetBuffer(nSize);        // has hidden side effects
 
