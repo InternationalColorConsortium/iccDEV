@@ -3870,7 +3870,7 @@ bool icMBBFromXml(CIccMBB *pMBB, xmlNode *pNode, icConvertType nType, std::strin
       }
       else if (!icXmlStrCmp(pNode->name, "MCurves") && !pMBB->GetCurvesM()) {
         LPIccCurve *pCurves = pMBB->NewCurvesM();
-        if (!icCurvesFromXml(pCurves, !pMBB->IsInputMatrix() ? nIn : nOut, pNode->children, nType, parseStr)) {
+        if (!icCurvesFromXml(pCurves, pMBB->IsInputMatrix() ? nIn : nOut, pNode->children, nType, parseStr)) {
           parseStr += "Error! - Failed to parse MCurves.\n";
           return false;
         }
