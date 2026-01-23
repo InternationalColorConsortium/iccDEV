@@ -284,23 +284,19 @@ static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, b
 bool CIccTagXmlText::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   std::string str = icXmlParseTextString(pNode, parseStr);
-
-  if (!str.empty()){    
-    SetText(str.c_str());
-    return true;
-  }
-  return false;
+  
+  // even an empty string is a valid string
+  SetText(str.c_str());
+  return true;
 }
 
 bool CIccTagXmlUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   std::string str = icXmlParseTextString(pNode, parseStr, false);
 
-  if (!str.empty()){    
-    SetText(str.c_str());
-    return true;
-  }
-  return false;
+  // even an empty string is a valid string
+  SetText(str.c_str());
+  return true;
 }
 
 bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
@@ -357,11 +353,9 @@ bool CIccTagXmlUtf16Text::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   std::string str = icXmlParseTextString(pNode, parseStr, false);
 
-  if (!str.empty()){    
-    SetText(str.c_str());
-    return true;
-  }
-  return false;
+  // even an empty string is a valid string
+  SetText(str.c_str());
+  return true;
 }
 
 bool CIccTagXmlTextDescription::ToXml(std::string &xml, std::string blanks/* = ""*/)
