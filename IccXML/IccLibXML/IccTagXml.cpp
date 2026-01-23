@@ -125,14 +125,15 @@ bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
 static bool isTextLegalCDATA( const char *szText )
 {
-  // an empty string is legal
+  // an empty string is legal, and happens in real profiles.
   if (szText[0] == 0)
     return true;
 
-  // scan for any CR, don't care if it's CRLF, because UTF8 should only have LF
-  if (strchr(szText,'\r'))
-    return false;
-  
+// XML says CR and other control characters are legal inside a CDATA block
+//  // scan for any CR
+//  if (strchr(szText,'\r'))
+//    return false;
+
   // scan for XML tags that would make this an invalid text block
   if ( strstr(szText, "]]>") )
     return false;
@@ -209,11 +210,17 @@ static std::string icXmlParseTextString(xmlNode *pNode, std::string &parseStr, b
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexTextData") && pNode->children && pNode->children->content) {
         CIccUInt8Array buf;
-        if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content) ||
-          icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize()))
+        icUInt32Number hexSize = icXmlGetHexDataSize((const icChar*)pNode->children->content);
+        if (!buf.SetSize(hexSize+2) ||
+          icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, hexSize)!=hexSize)
           return str;
-
-        str += (char*)buf.GetBuf();
+        
+        // make sure the string is NULL terminated, even for UTF8
+        uint8_t *strPtr = buf.GetBuf();
+        strPtr[hexSize] = 0;
+        strPtr[hexSize+1] = 0;
+        
+        str += (char*)strPtr;
       }      
       else if (!icXmlStrCmp(pNode->name, "TextData") ) {
         std::string buf;
