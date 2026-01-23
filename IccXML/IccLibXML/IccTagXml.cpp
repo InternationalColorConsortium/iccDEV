@@ -129,10 +129,12 @@ static bool isTextLegalCDATA( const char *szText )
   if (szText[0] == 0)
     return true;
 
-// XML says CR and other control characters are legal inside a CDATA block
-//  // scan for any CR
-//  if (strchr(szText,'\r'))
-//    return false;
+// XML says CR and other control characters are legal inside a CDATA block...
+// W3C also says XML normalizes the file by removing CR before parsing.  https://www.w3.org/TR/REC-xml/#sec-line-ends
+// In order to preserve data, we either have to hex encode, or escape all CR
+  // scan for any CR
+  if (strchr(szText,'\r'))
+    return false;
 
   // scan for XML tags that would make this an invalid text block
   if ( strstr(szText, "]]>") )
