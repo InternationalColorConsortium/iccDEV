@@ -390,11 +390,7 @@ const char *icAnsiToUtf8(std::string &buf, const char *szSrc)
   free(szBuf);
   free(szUnicodeBuf);
 #else
-// if this works, consider replacing the Windows code as well
-// This probably won't work.
-  CIccUTF16String buf16;
-  buf16.FromUtf8( szSrc );
-  buf16.ToUtf8( buf );
+  buf = szSrc;
 #endif
   return buf.c_str();
 }
