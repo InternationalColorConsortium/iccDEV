@@ -159,8 +159,10 @@ icUtfConversionResult ICCPROFLIB_API icConvertUTF32toUTF16 (
   const UTF32** sourceStart, const UTF32* sourceEnd, 
   UTF16** targetStart, UTF16* targetEnd, icUtfConversionFlags flags);
 
+// per character test that sets the length internally based on first byte
 Boolean ICCPROFLIB_API icIsLegalUTF8Sequence(const UTF8 *source, const UTF8 *sourceEnd);
 
+// full string test
 Boolean ICCPROFLIB_API isLegalUTF8String(const UTF8 *source, int length);
 
 #ifdef __cplusplus
@@ -193,8 +195,6 @@ icUtfConversionResult ICCPROFLIB_API icConvertUTF16toUTF32 (
 icUtfConversionResult ICCPROFLIB_API icConvertUTF32toUTF16 (
   const UTF32* sourceStart, const UTF32* sourceEnd, 
   icUtf16Vector &target, icUtfConversionFlags flags);
-
-Boolean ICCPROFLIB_API isLegalUTF8(const UTF8 *source, int length);
 
 #endif
 
