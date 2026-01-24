@@ -499,12 +499,12 @@ Boolean isLegalUTF8String (const UTF8* sourceStart, int length )
     UTF32 ch = 0;
     unsigned short extraBytesToRead = trailingBytesForUTF8[*source];
     if (source + extraBytesToRead >= sourceEnd) {
-//      result = sourceExhausted;
+      // result = sourceExhausted;
       return false;
     }
     /* Do this check whether lenient or strict */
     if (! isLegalUTF8(source, extraBytesToRead+1)) {
-//      result = sourceIllegal;
+        // result = sourceIllegal;
         return false;
     }
 
@@ -524,11 +524,11 @@ Boolean isLegalUTF8String (const UTF8* sourceStart, int length )
     if (ch <= UNI_MAX_BMP) { /* Target is a character <= 0xFFFF */
       /* UTF-16 surrogate values are illegal in UTF-32 */
       if (ch >= UNI_SUR_HIGH_START && ch <= UNI_SUR_LOW_END) {
-//        result = sourceIllegal;
+        // result = sourceIllegal;
         return false;
       }
     } else if (ch > UNI_MAX_UTF16) {
-//      result = sourceIllegal;
+      // result = sourceIllegal;
       return false;
     }
   }
