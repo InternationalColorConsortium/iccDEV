@@ -7,15 +7,13 @@
 #
 ## Intent: ci-latest-release
 #
-## Last Updated: 22-NOV-2025 0000Z by David Hoyt 
-#                Add Permission Block
-## TODO: Push binary releases, tags etc...
+## Last Updated: 31-JAN-2025 0100Z by David Hoyt 
+#                Add bash & pwsh shell prologues
 #
-##
-#
+#  TODO: Extract repetitive shell commands to reusable script
 #
 #
-#
+#  Ref: https://github.com/xsscx/governance/tree/main/actions
 #
 ###############################################################
 
@@ -41,12 +39,12 @@ jobs:
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
 
       - name: Install Dependencies
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           sudo apt-get update
@@ -56,12 +54,12 @@ jobs:
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
             python3 python3-pip curl git llvm
       - name: Set Compiler
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
@@ -72,23 +70,23 @@ jobs:
             echo "CXX=clang++" >> $GITHUB_ENV
           fi
       - name: Print Compiler Version
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "Compiler Version:" >> $GITHUB_STEP_SUMMARY
           $CC --version >> $GITHUB_STEP_SUMMARY
       - name: CMake Configure
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           cd Build
@@ -96,12 +94,12 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Release \
                 -Wno-dev Cmake/
       - name: Build
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           cd Build
@@ -115,12 +113,12 @@ jobs:
           sh RunTests.sh
           find . -iname "*.icc" | wc -l 
       - name: Verify CMake Cache
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           if test -f Build/CMakeCache.txt; then
@@ -132,7 +130,7 @@ jobs:
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: iccmax-linux-${{ matrix.compiler }}
+          name: iccdev-linux-${{ matrix.compiler }}
           path: |
             Build
             LICENSE.md
@@ -141,12 +139,12 @@ jobs:
 
       - name: Summary Report
         if: always()
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "### Linux Build Summary (${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
@@ -156,17 +154,18 @@ jobs:
   macos:
     name: "macOS Clang"
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout master
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
 
       - name: Clone repository and install dependencies
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "Installing Homebrew dependencies..."
@@ -174,12 +173,12 @@ jobs:
           echo "✔ Dependency installation complete."
   
       - name: CMake Configure
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "Setting up CMake build configuration..."
@@ -198,12 +197,12 @@ jobs:
           echo "✔ CMake configuration complete."
       
       - name: Build
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "Starting build process..."
@@ -231,12 +230,12 @@ jobs:
             docs/**
       - name: Summary Report
         if: always()
-        shell: bash
+        shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "### macOS Build Summary" >> $GITHUB_STEP_SUMMARY
@@ -247,9 +246,11 @@ jobs:
     name: "Windows MSVC"
     runs-on: windows-latest
     timeout-minutes: 20
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: "1"
     defaults:
       run:
-        shell: powershell
+        shell: pwsh
     strategy:
       fail-fast: false
     steps:
@@ -307,8 +308,8 @@ jobs:
          $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
          
          # --- Harden Git configuration ---
-         git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
-         git config --global credential.helper ""
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
          
          # --- PATH hardening: limit to trusted tool locations ---
          $trustedPath = @(
@@ -322,7 +323,7 @@ jobs:
           Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@767f00a3f09872d96a0cb9fcd5e6a4ff33311330
 
       - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
         shell: pwsh
@@ -342,8 +343,6 @@ jobs:
 
       - name: Install dependencies and build
         shell: pwsh
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -441,5 +440,5 @@ jobs:
         run: |
           echo "### Windows Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded:  iccdev-v231-windows-msvc" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifacts Uploaded:  iccdev-windows-msvc" >> $GITHUB_STEP_SUMMARY
           echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
