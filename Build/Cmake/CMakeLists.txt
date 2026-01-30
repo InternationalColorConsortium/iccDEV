@@ -3,19 +3,9 @@
 # Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
+#  Last Updated: 30-JAN-2026 at 2000Z by David Hoyt
 #
-#  Last Updated: 04-JAN-2026 at 2350Z by David Hoyt
-#
-#  Changes: Bump Version String to v2.3.1.2
-#           Recent PRs address range of security & stability issues
-#           Stack Corruption, NaN, Undefined Behavior (UB) & Overflows
-#
-#
-#
-#  TODO:    Align Version on IccProfLibVer.h, Housekeeping, Debug Options
-#           Version Headers, Doxygen Config, Exports etc...
-#           Refactor this to .mk's, add research args, other Housekeeping
-#
+#  Changes: Modify composed args
 #
 #################################################################################
 
@@ -115,6 +105,12 @@ set(${PROJECT_NAME}_VERSION_MAJORMINOR "${${PROJECT_UP_NAME}_VERSION_MAJORMINOR}
 # Set C++ standard globally
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Generate compile_commands.json for IDE/LSP support (clangd, vscode)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Enable Position Independent Code globally for static library compatibility
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Descriptive metadata (for packaging, install, CI)
 set(PACKAGE_NAME "${PROJECT_DOWN_NAME}")
@@ -414,6 +410,7 @@ option(ENABLE_TSAN                "Enable ThreadSanitizer (conflicts with ASan)"
 option(ENABLE_MSAN                "Enable MemorySanitizer (Clang only)"                 OFF)
 option(ENABLE_LSAN                "Enable LeakSanitizer standalone"                     OFF)
 option(ENABLE_FUZZING             "Enable fuzzing instrumentation (libFuzzer)"          OFF)
+option(ENABLE_COVERAGE            "Enable code coverage instrumentation"                OFF)
 option(ENABLE_SPECTRE_MITIGATION  "Enable /Qspectre on MSVC for Spectre V1 mitigation"  OFF)
 option(ENABLE_USEICCDEVNAMESPACE  "Use iccDEV namespace wrapping"                       OFF)
 
@@ -458,6 +455,7 @@ message(STATUS "ENABLE_TSAN                = ${ENABLE_TSAN}")
 message(STATUS "ENABLE_MSAN                = ${ENABLE_MSAN}")
 message(STATUS "ENABLE_LSAN                = ${ENABLE_LSAN}")
 message(STATUS "ENABLE_FUZZING             = ${ENABLE_FUZZING}")
+message(STATUS "ENABLE_COVERAGE            = ${ENABLE_COVERAGE}")
 message(STATUS "ENABLE_SPECTRE_MITIGATION  = ${ENABLE_SPECTRE_MITIGATION}")
 message(STATUS "")
 
@@ -548,7 +546,7 @@ endif()
 if(SANITIZER_LIST)
   string(REPLACE ";" "," SANITIZER_STRING "${SANITIZER_LIST}")
   list(APPEND SANITIZER_FLAGS "-fsanitize=${SANITIZER_STRING}")
-  list(APPEND SANITIZER_FLAGS "-g" "-O1" "-fno-omit-frame-pointer")
+  list(APPEND SANITIZER_FLAGS "-fno-omit-frame-pointer")
 endif()
 
 # Apply all sanitizer flags
@@ -561,6 +559,39 @@ if(SANITIZER_FLAGS)
   message(STATUS ">>> Final sanitizer flags: ${FINAL_SAN_FLAGS}")
 endif()
 
+# Apply coverage instrumentation flags
+if(ENABLE_COVERAGE)
+  message(STATUS ">>> Coverage instrumentation enabled")
+  list(APPEND COVERAGE_FLAGS "--coverage")
+  string(JOIN " " FINAL_COV_FLAGS ${COVERAGE_FLAGS})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FINAL_COV_FLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FINAL_COV_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_COV_FLAGS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_COV_FLAGS}")
+  message(STATUS ">>> Final coverage flags: ${FINAL_COV_FLAGS}")
+endif()
+
+# ----------------------------------------------------------------------
+# Link-Time Optimization (LTO/IPO)
+# ----------------------------------------------------------------------
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
+
+if(ipo_supported)
+  if(CMAKE_BUILD_TYPE MATCHES "Release" AND NOT ENABLE_COVERAGE AND NOT SANITIZER_FLAGS)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    message(STATUS ">>> Link-Time Optimization (LTO) enabled for Release builds")
+  elseif(CMAKE_BUILD_TYPE MATCHES "Release")
+    if(ENABLE_COVERAGE)
+      message(STATUS ">>> Link-Time Optimization (LTO) disabled because ENABLE_COVERAGE is ON")
+    elseif(SANITIZER_FLAGS)
+      message(STATUS ">>> Link-Time Optimization (LTO) disabled because sanitizers are enabled")
+    endif()
+  endif()
+else()
+  message(STATUS ">>> Link-Time Optimization (LTO) not supported: ${ipo_output}")
+endif()
 
 # ----------------------------------------------------------------------
 # Build Context Detection: Top-Level vs Subproject
@@ -627,23 +658,17 @@ if(MSVC)
     message(STATUS "  MINSIZEREL:     /MD /O1 /Ob1 /DNDEBUG")
     
 elseif(UNIX)
-    # Debug: Full debug info, no optimization, extra warnings
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -Wall -Wextra -DDEBUG")
+    # Debug: No optimization, extra warnings (CMake default: -g)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -Wall -Wextra -DDEBUG")
     
-    # Release: Full optimization (-O3 for maximum performance on ICC profile processing)
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-    
-    # RelWithDebInfo: Moderate optimization with debug info
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -g -O2 -DNDEBUG")
-    
-    # MinSizeRel: Optimize for size
-    set(CMAKE_CXX_FLAGS_MINSIZEREL "${CMAKE_CXX_FLAGS_MINSIZEREL} -Os -DNDEBUG")
+    # Release, RelWithDebInfo, MinSizeRel: Use CMake defaults (-O3/-O2/-Os -DNDEBUG)
+    # No changes needed - CMake defaults are appropriate
     
     message(STATUS "Configuring GCC/Clang runtime and flags")
     message(STATUS "  DEBUG:          -g -O0 -Wall -Wextra -DDEBUG")
-    message(STATUS "  RELEASE:        -O3 -DNDEBUG")
-    message(STATUS "  RELWITHDEBINFO: -g -O2 -DNDEBUG")
-    message(STATUS "  MINSIZEREL:     -Os -DNDEBUG")
+    message(STATUS "  RELEASE:        -O3 -DNDEBUG (CMake default)")
+    message(STATUS "  RELWITHDEBINFO: -g -O2 -DNDEBUG (CMake default)")
+    message(STATUS "  MINSIZEREL:     -Os -DNDEBUG (CMake default)")
 endif()
 
 # ----------------------------------------------------------------------
@@ -730,8 +755,18 @@ elseif(UNIX AND NOT APPLE)
     -Wno-unused-parameter
     -Wno-unused-variable
     -Wno-missing-field-initializers
+    -fstack-protector-strong
   )
-  message(STATUS "Linux build: Standard warning flags applied.")
+
+  # Hardening: PIE and RELRO for executables
+  add_link_options(-Wl,-z,relro,-z,now)
+
+  # Fortify source for Release builds
+  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    add_compile_definitions(_FORTIFY_SOURCE=2)
+  endif()
+
+  message(STATUS "Linux build: Standard warning flags and hardening applied.")
 
 elseif(WIN32)
   message(STATUS "Detected platform: Windows")

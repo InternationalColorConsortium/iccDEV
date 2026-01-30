@@ -130,6 +130,9 @@ set_target_properties(${TARGET_NAME}
         SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
 )
 
+  # Enforce C++17 standard per-target
+  target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
+
   TARGET_LINK_LIBRARIES(${TARGET_NAME} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
@@ -143,6 +146,9 @@ ENDIF()
 IF(ENABLE_STATIC_LIBS)
   ADD_LIBRARY(${TARGET_NAME}-static STATIC ${SOURCES})
   SET_TARGET_PROPERTIES(${TARGET_NAME}-static PROPERTIES OUTPUT_NAME "${TARGET_NAME}-static")
+
+  # Enforce C++17 standard per-target
+  target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
 
   TARGET_LINK_LIBRARIES(${TARGET_NAME}-static ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
