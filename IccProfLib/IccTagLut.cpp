@@ -4730,8 +4730,6 @@ bool CIccTagLut8::Write(CIccIO *pIO)
   icTagTypeSignature sig = GetType();
   icUInt8Number i, nGrid;
   icS15Fixed16Number XYZMatrix[9];
-  //icUInt16Number nInputEntries;
-  //icUInt16Number nOutputEntries;
   LPIccCurve *pCurves;
   CIccTagCurve *pCurve;
   icFloat32Number v;
@@ -4757,8 +4755,7 @@ bool CIccTagLut8::Write(CIccIO *pIO)
 
   nGrid = m_CLUT->GridPoints();
 
-  //nInputEntries = (icUInt16Number)(((CIccTagCurve*)pCurves[0])->GetSize());
-  //nOutputEntries = (icUInt16Number)(((CIccTagCurve*)m_CurvesA[0])->GetSize());
+  // NOTE - input and output table sizes are always 256 for 8 bit tables
 
   if (!pIO->Write32(&sig) ||
       !pIO->Write32(&m_nReserved) ||
@@ -5227,6 +5224,10 @@ bool CIccTagLut16::Write(CIccIO *pIO)
     pCurve = (CIccTagCurve*)pCurves[i];
     if (!pCurve)
       return false;
+    
+    // validate that the sizes match between all curves
+    if (pCurve->GetSize() != nInputEntries)
+        return false;
 
     if (pIO->WriteUInt16Float(&(*pCurve)[0], nInputEntries) != nInputEntries)
       return false;
@@ -5244,6 +5245,10 @@ bool CIccTagLut16::Write(CIccIO *pIO)
       return false;
 
     pCurve = (CIccTagCurve*)pCurves[i];
+    
+    // validate that the sizes match between all curves
+    if (pCurve->GetSize() != nOutputEntries)
+        return false;
 
     if (pIO->WriteUInt16Float(&(*pCurve)[0], nOutputEntries) != nOutputEntries)
       return false;
