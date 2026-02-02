@@ -256,11 +256,14 @@ size_t CIccIO::WriteUInt8Float(void *pBufFloat, size_t nNum)
   size_t i;
 
   for (i=0; i<nNum; i++) {
-    tmp = (icUInt8Number)(__max(0.0, __min(1.0, *ptr)) * 255.0 + 0.5);
+    icFloatNumber input = ptr[i];
+    if (std::isnan(input))
+      tmp = 0;
+    else
+      tmp = (icUInt8Number)(__max(0.0, __min(1.0, input)) * 255.0 + 0.5);
 
     if (Write8(&tmp, 1)!=1)
       break;
-    ptr++;
   }
 
   return i;
@@ -295,11 +298,14 @@ size_t CIccIO::WriteUInt16Float(void *pBufFloat, size_t nNum)
   size_t i;
 
   for (i=0; i<nNum; i++) {
-    tmp = (icUInt16Number)(__max(0.0, __min(1.0, *ptr)) * 65535.0 + 0.5);
+    icFloatNumber input = ptr[i];
+    if (std::isnan(input))
+      tmp = 0;
+    else
+      tmp = (icUInt16Number)(__max(0.0, __min(1.0, input)) * 65535.0 + 0.5);
 
     if (Write16(&tmp, 1)!=1)
       break;
-    ptr++;
   }
 
   return i;
