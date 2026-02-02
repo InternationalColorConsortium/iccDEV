@@ -1627,6 +1627,13 @@ bool CIccTagUtf16Text::Read(icUInt32Number size, CIccIO *pIO)
     m_szText[0] = '\0';
     return false;
   }
+  
+  size_t minimumSize = sizeof(icTagTypeSignature)
+                    + sizeof(icUInt32Number)
+                    + sizeof(icUChar16);
+  
+  if (size < minimumSize)
+    return false;
 
   if (!pIO->Read32(&sig))
     return false;
