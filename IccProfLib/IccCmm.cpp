@@ -10742,6 +10742,9 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
       nIntent = icPerceptual;
   }
 
+  // this must be done before CIccXform::Create frees the profile pointer
+  bool bLinked = (pProfile->m_Header.deviceClass == icSigLinkClass);
+
   if (!Xform.ptr)
     Xform.ptr = CIccXform::Create(pProfile, bInput, nIntent, nInterp, pPcc, nUseLutType, bUseD2BxB2DxTags, pHintManager);
 
@@ -10752,7 +10755,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   m_nLastSpace = Xform.ptr->GetDstSpace();
   m_nLastIntent = nIntent;
 
-  if (pProfile->m_Header.deviceClass == icSigLinkClass)
+  if (bLinked)
     bInput = false;
   m_bLastInput = bInput;
   
