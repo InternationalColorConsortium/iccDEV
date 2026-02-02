@@ -5595,8 +5595,13 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
 	
 	if (!pIO->Read32(&m_NumberOfVertices) ||
 		!pIO->Read32(&m_NumberOfTriangles))
-		return false;	
-
+		return false;
+  
+  // minimum number to make a solid shape
+  if (m_NumberOfVertices < 4 || m_NumberOfTriangles < 4)
+    return false;
+  
+  // maximum count will be enforced by file size and tag size limitations
   if (sizeof(icTagTypeSignature) + 
       sizeof(icUInt32Number)*3 +
       sizeof(icUInt16Number)*2 + 
