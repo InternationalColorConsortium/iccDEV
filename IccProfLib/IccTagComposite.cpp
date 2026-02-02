@@ -1508,8 +1508,8 @@ void CIccTagArray::Cleanup()
     pTag = m_TagVals[i].ptr;
     if (pTag) {
       for (j=i+1; j<m_nSize; j++) {
-        if (m_TagVals[i].ptr==pTag)
-          m_TagVals[i].ptr = NULL;
+        if (m_TagVals[j].ptr == pTag)
+          m_TagVals[j].ptr = NULL;
       }
       delete pTag;
       m_TagVals[i].ptr = NULL;
