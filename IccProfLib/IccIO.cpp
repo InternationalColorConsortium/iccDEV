@@ -73,6 +73,8 @@
 #include <cstdlib>
 #include <memory.h>
 #include <cstring>
+#include <cmath>
+
 
 #ifndef __max
 #define __max(a,b)  (((a) > (b)) ? (a) : (b))
