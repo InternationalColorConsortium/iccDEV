@@ -3036,6 +3036,7 @@ CIccMpeCurveSet::CIccMpeCurveSet(const CIccMpeCurveSet &curveSet)
   else {
     m_nInputChannels = m_nOutputChannels = 0;
     m_curve = NULL;
+    m_position = NULL;
   }
 }
 
@@ -3080,6 +3081,7 @@ CIccMpeCurveSet &CIccMpeCurveSet::operator=(const CIccMpeCurveSet &curveSet)
   else {
     m_nInputChannels = m_nOutputChannels = 0;
     m_curve = NULL;
+    m_position = NULL;
   }
 
   return *this;
@@ -3123,9 +3125,11 @@ bool CIccMpeCurveSet::SetSize(int nNewSize)
       }
     }
     free(m_curve);
+    m_curve = NULL;
   }
   if (m_position) {
     free(m_position);
+    m_position = NULL;
   }
 
   if (nNewSize) {
