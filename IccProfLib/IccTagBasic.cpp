@@ -6632,12 +6632,12 @@ bool  CIccTagFloatNum<T, Tsig>::SetSize(icUInt32Number nSize, bool bZeroNew/*=tr
 template <class T, icTagTypeSignature Tsig>
 bool CIccTagFloatNum<T, Tsig>::GetValues(icFloatNumber *DstVector, icUInt32Number nStart, icUInt32Number nVectorSize) const
 {
-  if (nVectorSize >m_nSize)
+  if (nVectorSize > m_nSize)
     return false;
 
   icUInt32Number i;
 
-  for (i=0; i<m_nSize; i++) {
+  for (i=0; i<nVectorSize; i++) {   // always used the vector size passed in, so we don't overrun an output array
     DstVector[i] = (icFloatNumber)m_Num[i+nStart];
   }
   return true;
