@@ -1856,6 +1856,10 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
   if (m_nInput < 1 || m_nOutput < 1)
     return false;
 
+  // and the current limit is for 15 channels
+  if (m_nInput > 15 || m_nOutput > 15)
+    return false;
+
   icUInt64Number nNumPoints;
   memset(m_nReserved2, 0, sizeof(m_nReserved2));
   if (pGridPoints!=&m_GridPoints[0]) {
@@ -3987,6 +3991,10 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
   if (m_nInput < 1 || m_nOutput < 1)
     return false;
 
+  // and the current limit is for 15 channels
+  if (m_nInput > 15 || m_nOutput > 15)
+    return false;
+
   //B Curves
   if (Offset[0]) {
     nCurves = IsInputB() ? m_nInput : m_nOutput;
@@ -4614,6 +4622,10 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
   if (m_nInput < 1 || m_nOutput < 1)
     return false;
 
+  // and the current limit is for 15 channels
+  if (m_nInput > 15 || m_nOutput > 15)
+    return false;
+
   //B Curves
   pCurves = NewCurvesB();
 
@@ -5065,6 +5077,10 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
 
   // must have at least 1 input and 1 output
   if (m_nInput < 1 || m_nOutput < 1)
+    return false;
+
+  // and the current limit is for 15 channels
+  if (m_nInput > 15 || m_nOutput > 15)
     return false;
 
   //B Curves
@@ -5565,6 +5581,12 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
 	if (!pIO->Read16(&m_nPCSChannels) ||
 		!pIO->Read16(&m_nDeviceChannels))
 		return false;
+    
+    if (m_nPCSChannels > 3)
+        return false;
+    
+    if (m_nDeviceChannels > 15)
+        return false;
 	
 	if (!pIO->Read32(&m_NumberOfVertices) ||
 		!pIO->Read32(&m_NumberOfTriangles))
