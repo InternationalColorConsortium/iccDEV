@@ -13,7 +13,7 @@
 
 | Platform          | Libraries                                                                 |
 |-------------------|---------------------------------------------------------------------------|
-| **macOS**         | libpng, jpeg, libtiff, libxml2, wxwidgets, nlohmann-json                  |
+| **macOS**         | libpng, jpeg-turbo, libtiff, libxml2, wxwidgets, nlohmann-json                  |
 | **Windows**       | libpng, libjpeg-turbo, libtiff, libxml2, wxwidgets, nlohmann-json         |
 | **Linux (Ubuntu)** | libpng-dev, libjpeg-dev, libtiff-dev, libxml2-dev, wxwidgets*, nlohmann-json |
 
@@ -39,7 +39,7 @@ make -j"$(nproc)"
 
 ```
 export CXX=clang++
-brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg
+brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo
 git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
 cd iccdev
 cmake -G "Xcode" Build/Cmake
