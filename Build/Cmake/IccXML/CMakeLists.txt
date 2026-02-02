@@ -3,20 +3,10 @@
 # Copyright (©) 2024-2025 The International Color Consortium. 
 #                                        All rights reserved.
 # 
+#  Last Updated: 02-FEB-2026 at 1426Z by David Hoyt
 #
-#  Last Updated: 12-AUGUST-2025 1300Z by David Hoyt
-#
-#
-#
-# Changes:  Reduce Logging
+#  Changes: Modify Version String to v2.3.1.3
 #           
-#           
-#						
-# TODO: Refactor Debug, Release, Asan, subproject pathing issues
-#       Collapse 3-tier CMakeLists.txt, Housekeeping
-#       Refactor Base Configs & logging to .mk's 
-#
-#
 #################################################################################
 
 SET( TARGET_NAME IccXML2 )

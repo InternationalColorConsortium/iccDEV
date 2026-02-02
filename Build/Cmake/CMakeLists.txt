@@ -3,9 +3,9 @@
 # Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 30-JAN-2026 at 2000Z by David Hoyt
+#  Last Updated: 02-FEB-2026 at 1426Z by David Hoyt
 #
-#  Changes: Modify composed args
+#  Changes: Modify Version String to v2.3.1.3
 #
 #################################################################################
 
@@ -83,11 +83,11 @@ project(RefIccMAX LANGUAGES C CXX)
 set(PROJECT_UP_NAME "REFICCMAX")
 set(PROJECT_DOWN_NAME "reficcmax")
 
-# Version components (4-part version: 2.3.1.2)
+# Version components (4-part version: 2.3.1.3)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
-set(${PROJECT_UP_NAME}_PATCH_VERSION 2)
+set(${PROJECT_UP_NAME}_PATCH_VERSION 3)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
