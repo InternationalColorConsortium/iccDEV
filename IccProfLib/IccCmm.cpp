@@ -7818,8 +7818,6 @@ icStatusCMM CIccApplyCmm::Apply(icFloatNumber *DstPixel, const icFloatNumber *Sr
     i = m_Xforms->begin();
 
     // pLastXform = i->ptr->GetXform();  // set, but only used by unused value below
-    // NOTE - at this point, the xform gets channel counts from the profile in and out colorspaces.
-    // it doesn't read the actual transform data, so we can't make sure the channel counts match
     i->ptr->Apply(DstPixel, SrcPixel);
 
 #ifdef DEBUG_CMM_APPLY
