@@ -574,7 +574,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
   if (reclen!=16 && reclen!=24 && reclen!=32)
     return false;
 
-  if (headerSize + count*reclen > size)
+  if ((headerSize + (size_t)count*reclen) > (size_t)size)
     return false;
 
   icDictRecordPos *pos = (icDictRecordPos*)calloc(count, sizeof(icDictRecordPos));
