@@ -7512,6 +7512,15 @@ icStatusCMM CIccXformMpe::Begin()
   if (!m_pTag) {
     return icCmmStatInvalidLut;
   }
+  
+  // make sure the input and output samples match, or we could cause an access violation
+  icUInt16Number inputSamples = GetNumSrcSamples();
+  icUInt16Number outputSamples = GetNumDstSamples();
+  icUInt16Number xformInputSamples = m_pTag->NumInputChannels();
+  icUInt16Number xformOutputSamples = m_pTag->NumOutputChannels();
+  
+  if (inputSamples != xformInputSamples || outputSamples != xformOutputSamples)
+    return icCmmStatBadXform;
 
   if (!m_pTag->Begin(icElemInterpLinear, GetProfileCC(), GetConnectionConditions(), GetCmmEnvVarLookup())) {
     return icCmmStatInvalidProfile;
@@ -7570,20 +7579,6 @@ CIccApplyXform *CIccXformMpe::GetNewApply(icStatusCMM &status)
 void CIccXformMpe::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
 {
   const CIccTagMultiProcessElement *pTag = m_pTag;
-  
-  // make sure the channel counts for the transform match up!
-  // or we could cause an access violation
-  // this should be validated at a higher level, but sometimes is not
-  icUInt16Number inputSamples = GetNumSrcSamples();
-  icUInt16Number outputSamples = GetNumDstSamples();
-  icUInt16Number xformInputSamples = pTag->NumInputChannels();
-  icUInt16Number xformOutputSamples = pTag->NumOutputChannels();
-  
-  if (inputSamples != xformInputSamples || outputSamples != xformOutputSamples) {
-    // we can't return an error at this point, so just set output to zero
-    memset( DstPixel, 0, outputSamples*sizeof(icFloatNumber) );
-    return;
-  }
 
   icFloatNumber temp[3];
   if (!m_bInput || m_bPcsAdjustXform) { //PCS comming in?
