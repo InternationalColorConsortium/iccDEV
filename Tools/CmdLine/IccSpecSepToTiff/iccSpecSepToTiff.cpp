@@ -119,7 +119,7 @@ int main(int argc, char* argv[]) {
   
   if (argc < minargs) {
     Usage(argv[0]);
-    return -1;
+    return 0;
   }
 
   bool bCompress = atoi(argv[2]) != 0;

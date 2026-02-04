@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
 {
   if (argc < 4) {   // name + 3 arguments
     Usage();
-    return -1;
+    return 0;
   }
 
   CIccProfileSharedPtr dspIcc( ReadIccProfile(argv[1], true) );

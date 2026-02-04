@@ -152,7 +152,7 @@ int main(int argc, const char** argv)
   int minargs = 2;
   if (argc < minargs) {
     Usage();
-    return -1;
+    return 0;
   }
 
   CIccCfgImageApply cfgApply;

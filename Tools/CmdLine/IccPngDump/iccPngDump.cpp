@@ -187,7 +187,7 @@ int main(int argc, char* argv[]) {
 
     if (argc < 2) {
         Usage();
-        safe_exit("Missing input file argument.");
+        return 0;
     }
 
     const char *inputFile = NULL;

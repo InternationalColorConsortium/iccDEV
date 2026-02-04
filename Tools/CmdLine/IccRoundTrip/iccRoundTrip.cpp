@@ -152,7 +152,7 @@ int main(int argc, char* argv[])
     printf("Usage: iccRoundTrip profile {rendering_intent=1 {use_mpe=0}}\n");
     printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
     printf("  where rendering_intent is (0=perceptual, 1=relative, 2=saturation, 3=absolute)\n");
-    return -1;
+    return 0;
   }
 
   icRenderingIntent nIntent = icRelativeColorimetric;

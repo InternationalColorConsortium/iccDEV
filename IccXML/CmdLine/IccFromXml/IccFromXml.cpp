@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
 {
   if (argc<=2) {
     printf("IccFromXml built with IccProfLib Version " ICCPROFLIBVER ", IccLibXML Version " ICCLIBXMLVER "\n\nUsage: IccFromXml xml_file saved_profile_file {-noid -v{=[relax_ng_schema_file - optional]}}\n");
-    return -1;
+    return 0;
   }
 
   CIccTagCreator::PushFactory(new CIccTagXmlFactory());

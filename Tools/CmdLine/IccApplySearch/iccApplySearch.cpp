@@ -234,7 +234,7 @@ int main(int argc, const char* argv[])
   int minargs = 3;  // name -cfg file.json
   if (argc < minargs) {
     Usage();
-    return -1;
+    return 0;
   }
 
   CIccCfgDataApply cfgApply;

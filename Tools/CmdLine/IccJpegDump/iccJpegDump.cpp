@@ -355,7 +355,7 @@ bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* o
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         Usage();
-        safe_exit("Missing arguments.");
+        return 0;
     }
 
     // ------------------------------------------------------------------------

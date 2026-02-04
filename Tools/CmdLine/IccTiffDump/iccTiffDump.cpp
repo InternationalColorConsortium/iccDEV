@@ -186,7 +186,7 @@ int main(int argc, icChar* argv[])
   int minargs = 1;
   if (argc <= minargs) {
     Usage();
-    return -1;
+    return 0;
   }
 
   CTiffImg SrcImg;

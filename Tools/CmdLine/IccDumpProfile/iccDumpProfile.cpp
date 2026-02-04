@@ -127,13 +127,12 @@ void DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
   DumpTagCore( pTag, entry.TagInfo.sig, nVerboseness );
 }
 
-int printUsage(void)
+void printUsage(void)
 {
     printf("Usage: iccDumpProfile {-v} {int} profile {tagId to dump/\"ALL\"}\n");
     printf("\nThe -v option causes profile validation to be performed.\n"
            "The optional integer parameter specifies verboseness of output (1-100, default=100).\n");
     printf("iccDumpProfile built with IccProfLib version " ICCPROFLIBVER "\n\n");
-    return -1;
 }
 
 
@@ -160,8 +159,10 @@ int main(int argc, char* argv[])
   int nArg = 1;
   int verbosity = 100; // default is maximum verbosity (old behaviour)
 
-  if (argc <= 1)
-    return printUsage();
+  if (argc <= 1) {
+    printUsage();
+    return 0;
+  }
 
   CIccProfile *pIcc;
   std::string sReport;
@@ -170,8 +171,10 @@ int main(int argc, char* argv[])
 
   if (!strncmp(argv[1], "-V", 2) || !strncmp(argv[1], "-v", 2)) {
     nArg++;
-    if (argc <= nArg)
-      return printUsage();
+    if (argc <= nArg) {
+      printUsage();
+      return -1;
+    }
 
     // support case where ICC filename starts with an integer: e.g. "123.icc"
     char *endptr = nullptr;
@@ -183,8 +186,10 @@ int main(int argc, char* argv[])
       else if (verbosity > 100)
         verbosity = 100;
       nArg++;
-      if (argc <= nArg)
-        return printUsage();
+      if (argc <= nArg) {
+        printUsage();
+        return -1;
+      }
     }
     else if (argv[nArg] == endptr) {
         verbosity = 100;
@@ -204,8 +209,10 @@ int main(int argc, char* argv[])
       else if (verbosity > 100)
         verbosity = 100;
       nArg++;
-      if (argc <= nArg)
-        return printUsage();
+      if (argc <= nArg) {
+        printUsage();
+        return -1;
+      }
     }
 
     pIcc = OpenIccProfile(argv[nArg]);
