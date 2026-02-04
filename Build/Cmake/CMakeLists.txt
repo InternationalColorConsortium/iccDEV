@@ -3,9 +3,9 @@
 # Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 02-FEB-2026 at 1426Z by David Hoyt
+#  Last Updated: 03-FEB-2026 at 2346Z by David Hoyt
 #
-#  Changes: Modify Version String to v2.3.1.3
+#  Changes: Modify Version String to v2.3.1.4 References (#579)
 #
 #################################################################################
 
@@ -87,7 +87,7 @@ set(PROJECT_DOWN_NAME "reficcmax")
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
-set(${PROJECT_UP_NAME}_PATCH_VERSION 3)
+set(${PROJECT_UP_NAME}_PATCH_VERSION 4)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
