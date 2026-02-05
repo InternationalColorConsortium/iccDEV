@@ -1,53 +1,53 @@
 #################################################################################
 # IccProfLib Cmake Project Configuration| iccMAX Project
-# Copyright (©) 2024-2025 The International Color Consortium. 
+# Copyright (©) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
-# 
-#  Last Updated: 02-FEB-2026 at 1426Z by David Hoyt
 #
-#  Changes: Modify Version String to v2.3.1.3
-#           
+#  Last Updated: 05-FEB-2026 1645Z by David Hoyt
+#
+#  Changes: Modify Version String with Commit Hash
+#
 #################################################################################
 
 SET( TARGET_NAME IccProfLib2)
 
 SET( SRC_PATH ../../.. )
 SET( CFILES
-	${SRC_PATH}/IccProfLib/IccApplyBPC.cpp
-	${SRC_PATH}/IccProfLib/IccArrayBasic.cpp
-	${SRC_PATH}/IccProfLib/IccArrayFactory.cpp
-	${SRC_PATH}/IccProfLib/IccCAM.cpp
-	${SRC_PATH}/IccProfLib/IccCmm.cpp
-	${SRC_PATH}/IccProfLib/IccConvertUTF.cpp
-	${SRC_PATH}/IccProfLib/IccEncoding.cpp
-	${SRC_PATH}/IccProfLib/IccEnvVar.cpp
-	${SRC_PATH}/IccProfLib/IccEval.cpp
-	${SRC_PATH}/IccProfLib/IccIO.cpp
-	${SRC_PATH}/IccProfLib/IccMatrixMath.cpp
-	${SRC_PATH}/IccProfLib/IccMpeACS.cpp
-	${SRC_PATH}/IccProfLib/IccMpeBasic.cpp
-	${SRC_PATH}/IccProfLib/IccMpeCalc.cpp
-	${SRC_PATH}/IccProfLib/IccMpeFactory.cpp
-	${SRC_PATH}/IccProfLib/IccMpeSpectral.cpp
-	${SRC_PATH}/IccProfLib/IccPrmg.cpp
-	${SRC_PATH}/IccProfLib/IccPcc.cpp
-	${SRC_PATH}/IccProfLib/IccProfile.cpp
-	${SRC_PATH}/IccProfLib/IccSolve.cpp
-	${SRC_PATH}/IccProfLib/IccSparseMatrix.cpp
-	${SRC_PATH}/IccProfLib/IccStructBasic.cpp
-	${SRC_PATH}/IccProfLib/IccStructFactory.cpp
-	${SRC_PATH}/IccProfLib/IccTagBasic.cpp
-	${SRC_PATH}/IccProfLib/IccTagComposite.cpp
-	${SRC_PATH}/IccProfLib/IccTagDict.cpp
-	${SRC_PATH}/IccProfLib/IccTagEmbedIcc.cpp
-	${SRC_PATH}/IccProfLib/IccTagFactory.cpp
-	${SRC_PATH}/IccProfLib/IccTagLut.cpp
-	${SRC_PATH}/IccProfLib/IccTagMPE.cpp
-	${SRC_PATH}/IccProfLib/IccTagProfSeqId.cpp
-	${SRC_PATH}/IccProfLib/IccUtil.cpp
-	${SRC_PATH}/IccProfLib/IccXformFactory.cpp
-	${SRC_PATH}/IccProfLib/IccMD5.cpp
-	${SRC_PATH}/IccProfLib/IccCmmSearch.cpp
+    ${SRC_PATH}/IccProfLib/IccApplyBPC.cpp
+    ${SRC_PATH}/IccProfLib/IccArrayBasic.cpp
+    ${SRC_PATH}/IccProfLib/IccArrayFactory.cpp
+    ${SRC_PATH}/IccProfLib/IccCAM.cpp
+    ${SRC_PATH}/IccProfLib/IccCmm.cpp
+    ${SRC_PATH}/IccProfLib/IccConvertUTF.cpp
+    ${SRC_PATH}/IccProfLib/IccEncoding.cpp
+    ${SRC_PATH}/IccProfLib/IccEnvVar.cpp
+    ${SRC_PATH}/IccProfLib/IccEval.cpp
+    ${SRC_PATH}/IccProfLib/IccIO.cpp
+    ${SRC_PATH}/IccProfLib/IccMatrixMath.cpp
+    ${SRC_PATH}/IccProfLib/IccMpeACS.cpp
+    ${SRC_PATH}/IccProfLib/IccMpeBasic.cpp
+    ${SRC_PATH}/IccProfLib/IccMpeCalc.cpp
+    ${SRC_PATH}/IccProfLib/IccMpeFactory.cpp
+    ${SRC_PATH}/IccProfLib/IccMpeSpectral.cpp
+    ${SRC_PATH}/IccProfLib/IccPrmg.cpp
+    ${SRC_PATH}/IccProfLib/IccPcc.cpp
+    ${SRC_PATH}/IccProfLib/IccProfile.cpp
+    ${SRC_PATH}/IccProfLib/IccSolve.cpp
+    ${SRC_PATH}/IccProfLib/IccSparseMatrix.cpp
+    ${SRC_PATH}/IccProfLib/IccStructBasic.cpp
+    ${SRC_PATH}/IccProfLib/IccStructFactory.cpp
+    ${SRC_PATH}/IccProfLib/IccTagBasic.cpp
+    ${SRC_PATH}/IccProfLib/IccTagComposite.cpp
+    ${SRC_PATH}/IccProfLib/IccTagDict.cpp
+    ${SRC_PATH}/IccProfLib/IccTagEmbedIcc.cpp
+    ${SRC_PATH}/IccProfLib/IccTagFactory.cpp
+    ${SRC_PATH}/IccProfLib/IccTagLut.cpp
+    ${SRC_PATH}/IccProfLib/IccTagMPE.cpp
+    ${SRC_PATH}/IccProfLib/IccTagProfSeqId.cpp
+    ${SRC_PATH}/IccProfLib/IccUtil.cpp
+    ${SRC_PATH}/IccProfLib/IccXformFactory.cpp
+    ${SRC_PATH}/IccProfLib/IccMD5.cpp
+    ${SRC_PATH}/IccProfLib/IccCmmSearch.cpp
    )
 
 IF(ENABLE_INSTALL_RIM)
@@ -97,9 +97,22 @@ IF(ENABLE_INSTALL_RIM)
     ${SRC_PATH}/IccProfLib/icProfileHeader.h
   )
   INSTALL( FILES
-	     ${HEADERS_PUBLIC}
-	     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
+    ${HEADERS_PUBLIC}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
 ENDIF(ENABLE_INSTALL_RIM)
+
+# Generate version header with git commit hash
+if(GIT_COMMIT_HASH)
+    set(ICCPROFLIB_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}+${GIT_COMMIT_HASH}")
+else()
+    set(ICCPROFLIB_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}")
+endif()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccProfLib/IccProfLibVer.h.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccProfLib/IccProfLibVer.h"
+    @ONLY
+)
 
 SET(SOURCES ${CFILES})
 
@@ -116,9 +129,9 @@ IF(ENABLE_SHARED_LIBS)
   ADD_LIBRARY(${TARGET_NAME} SHARED ${SOURCES})
 
 set_target_properties(${TARGET_NAME}
-    PROPERTIES
-        VERSION   "${${PROJECT_UP_NAME}_VERSION}"
-        SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
+  PROPERTIES
+            VERSION   "${${PROJECT_UP_NAME}_VERSION}"
+            SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
 )
 
   # Enforce C++17 standard per-target
@@ -150,7 +163,7 @@ IF(ENABLE_STATIC_LIBS)
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
   ENDIF()
 
-  # 💡 Provide alias to resolve MSVC LNK1104: expected IccProfLib2.lib
+  # Provide alias to resolve MSVC LNK1104: expected IccProfLib2.lib
   IF(WIN32 AND ENABLE_SHARED_LIBS)
 ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}-static POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different

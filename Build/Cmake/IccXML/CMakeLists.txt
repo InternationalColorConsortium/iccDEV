@@ -1,43 +1,56 @@
 #################################################################################
 # IccXML Cmake Project Configuration| iccMAX Project
-# Copyright (©) 2024-2025 The International Color Consortium. 
+# Copyright (©) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
-# 
-#  Last Updated: 02-FEB-2026 at 1426Z by David Hoyt
 #
-#  Changes: Modify Version String to v2.3.1.3
-#           
+#  Last Updated: 04-FEB-2026 at 0430Z by David Hoyt
+#
+#  Changes: Modify Version to contain Commit Hash
+#
 #################################################################################
 
 SET( TARGET_NAME IccXML2 )
 
 SET( SRC_PATH ../../.. )
 SET( CFILES
-	${SRC_PATH}/IccXML/IccLibXML/IccIoXml.cpp
-	${SRC_PATH}/IccXML/IccLibXML/IccMpeXml.cpp
-	${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.cpp
-	${SRC_PATH}/IccXML/IccLibXML/IccProfileXml.cpp
-	${SRC_PATH}/IccXML/IccLibXML/IccTagXml.cpp
-	${SRC_PATH}/IccXML/IccLibXML/IccTagXmlFactory.cpp
-	${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.cpp
+        ${SRC_PATH}/IccXML/IccLibXML/IccIoXml.cpp
+        ${SRC_PATH}/IccXML/IccLibXML/IccMpeXml.cpp
+        ${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.cpp
+        ${SRC_PATH}/IccXML/IccLibXML/IccProfileXml.cpp
+        ${SRC_PATH}/IccXML/IccLibXML/IccTagXml.cpp
+        ${SRC_PATH}/IccXML/IccLibXML/IccTagXmlFactory.cpp
+        ${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.cpp
   )
 
 IF(ENABLE_INSTALL_RIM)
   SET( HEADERS_PUBLIC
-	${SRC_PATH}/IccXML/IccLibXML/IccIoXml.h
-	${SRC_PATH}/IccXML/IccLibXML/IccLibXMLVer.h
-	${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.h
-	${SRC_PATH}/IccXML/IccLibXML/IccMpeXml.h
-	${SRC_PATH}/IccXML/IccLibXML/IccProfileXml.h
-	${SRC_PATH}/IccXML/IccLibXML/IccTagXmlFactory.h
-	${SRC_PATH}/IccXML/IccLibXML/IccTagXml.h
-	${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.h
-	${SRC_PATH}/IccXML/IccLibXML/IccXmlConfig.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccIoXml.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccLibXMLVer.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccMpeXml.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccProfileXml.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccTagXmlFactory.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccTagXml.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.h
+        ${SRC_PATH}/IccXML/IccLibXML/IccXmlConfig.h
   )
   INSTALL( FILES
-	     ${HEADERS_PUBLIC}
-	     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
+             ${HEADERS_PUBLIC}
+             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
 ENDIF(ENABLE_INSTALL_RIM)
+
+# Generate version header with git commit hash
+if(GIT_COMMIT_HASH)
+    set(ICCLIBXML_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}+${GIT_COMMIT_HASH}")
+else()
+    set(ICCLIBXML_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}")
+endif()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML/IccLibXMLVer.h.in"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML/IccLibXMLVer.h"
+    @ONLY
+)
 
 # message(STATUS "Starting CMake debug for target: ${TARGET_NAME}")
 # message(STATUS "CFILES = ${CFILES}")
@@ -104,7 +117,7 @@ IF(ENABLE_STATIC_LIBS)
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
   ENDIF()
 
-  # 💡 Provide alias for MSVC .lib linking fallback
+  # Provide alias for MSVC .lib linking fallback
   IF(WIN32 AND ENABLE_SHARED_LIBS)
     ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}-static POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
