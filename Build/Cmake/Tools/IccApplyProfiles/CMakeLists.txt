@@ -46,13 +46,6 @@ if(NOT TARGET iccApplyProfiles)
   set(TARGET_NAME iccApplyProfiles)
   add_executable(${TARGET_NAME} ${SOURCES})
 
-  # Normalize TIFF link name
-  if(TARGET TIFF::TIFF)
-    set(_TIFF_LIB TIFF::TIFF)
-  else()
-    set(_TIFF_LIB ${TIFF_LIBRARY})
-  endif()
-
   target_link_libraries(${TARGET_NAME}
     PRIVATE
       ${TARGET_LIB_ICCPROFLIB}

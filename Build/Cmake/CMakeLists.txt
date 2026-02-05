@@ -310,6 +310,14 @@ find_package(TIFF REQUIRED)
 message(STATUS "TIFF                   : ${TIFF_LIBRARIES} (version: ${TIFF_VERSION})")
 message(STATUS "TIFF Include Directory : ${TIFF_INCLUDE_DIR}")
 
+# Normalize TIFF link name
+if(TARGET TIFF::TIFF)
+  set(_TIFF_LIB TIFF::TIFF CACHE INTERNAL "")
+else()
+  set(_TIFF_LIB ${TIFF_LIBRARY} CACHE INTERNAL "")
+endif()
+
+
 # --- PNG ---
 message(STATUS "Checking for PNG...")
 find_package(PNG REQUIRED)
