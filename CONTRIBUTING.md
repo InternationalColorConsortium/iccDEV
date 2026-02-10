@@ -18,15 +18,27 @@ We require all participants to abide by our [Code of Conduct](CODE_OF_CONDUCT.md
 
 ## Get Connected
 
-The first thing to do, before anything else, is to talk to us! Whether you are reporting an issue, requesting or implementing a feature, or just asking a question, please don’t hesitate to reach out to project maintainers or the community as a whole. This is an important first step because your issue, feature, or question may have been solved or discussed already, and you will save yourself a lot of time by asking first.
+The first thing to do, before anything else, is to talk to us! Whether you are reporting an issue, requesting or implementing a feature, or just asking a question, please don’t hesitate to reach out to the project maintainers or the community. This is an important first step because your issue, feature, or question may have been solved or discussed already, and you will save yourself a lot of time by asking first.
 
-How do you talk to us? There are several ways to get in touch:
+**Before opening a Pull Request, please start a conversation with us.**  
+All Pull Requests should be tied to an existing Issue that discusses the problem or feature being addressed. This helps ensure the change aligns with project goals and prevents wasted effort on work that may already be in progress or out of scope.
 
-* [GitHub Issues](https://github.com/InternationalColorConsortium/iccDev/issues):
-GitHub **issues** are a great place to start a conversation! Issues aren’t
-restricted to bugs; we happily welcome feature requests and other suggestions
-submitted as issues. The only conversations we would direct away from issues are
-questions in the form of “How do I do X”. Those questions should be discussed on the ICC Members Mailing List.
+### How do you talk to us?
+
+* [GitHub Issues](https://github.com/InternationalColorConsortium/iccDev/issues)  
+  GitHub **issues** are the primary place for project discussion. Issues aren’t
+  restricted to bugs; we happily welcome feature requests and other suggestions
+  submitted as issues. Opening an issue is the expected first step before
+  submitting a Pull Request.
+
+* [GitHub Discussions](https://github.com/InternationalColorConsortium/iccDev/discussions)  
+  GitHub **Discussions** are the place for open-ended conversation and exploration.
+  Use Discussions to ask questions, float new ideas, firm up enhancement proposals,
+  or gather feedback before opening an Issue or Pull Request.
+
+  The only conversations we would direct away from GitHub are questions in the
+  form of “How do I do X with ICC profiles”. Those questions should be discussed on
+  the ICC Members Mailing List.
 
 ## Legal Requirements
 
