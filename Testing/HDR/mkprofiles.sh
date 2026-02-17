@@ -1,18 +1,18 @@
 #!/bin/sh
 #################################################################################
-# mkprofiles.sh | iccMAX Project
-# Copyright (C) 2024-2025 The International Color Consortium. 
+# mkprofiles.sh | iccDEV Project
+# Copyright (C) 2024-2026 The International Color Consortium. 
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: Mon Mar 24 16:40:19 EDT 2025 by David Hoyt
-#  date -d @1742848819
-#  Mon Mar 24 16:40:19 EDT 2025
+#  Last Updated: 2026-02-11 16:41:15 UTC by David Hoyt
+#                Remove PATH
 #
 #
 #
 #
-# Intent: iccMAX CICD
+#
+# Intent: iccDEV CICD
 #
 #
 #
@@ -20,15 +20,6 @@
 #################################################################################
 
 echo "====================== Entering HDR/mkprofiles.sh =========================="
-
-# Properly handle newline-separated paths as a list
-find ../../Build/Tools -type f -perm -111 -exec dirname {} \; | sort -u | while read -r d; do
-  abs_path=$(cd "$d" && pwd)
-  PATH="$abs_path:$PATH"
-done
-
-export PATH
-
 
 echo "====================== Running iccFromXml Checks =========================="
 

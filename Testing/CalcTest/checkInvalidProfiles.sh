@@ -1,33 +1,23 @@
 #!/bin/sh
 #################################################################################
-# CalcTest/checkInvalidProfiles.sh | iccMAX Project
-# Copyright (C) 2024-2025 The International Color Consortium. 
+# CalcTest/checkInvalidProfiles.sh | iccDEV Project
+# Copyright (C) 2024-2026 The International Color Consortium. 
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 24-APRIL-2025 16:00 EDT 2025 by David Hoyt
+#  Last Updated: 2026-02-11 16:41:15 UTC by David Hoyt
+#                Remove PATH
 #
 #
 #
 #
 #
-#
-# Intent: iccMAX CICD
+# Intent: iccDEV CICD
 #
 #
 #
 #
 #################################################################################
-
-echo "====================== Entering CalcTest/checkInvalidProfiles.sh =========================="
-
-# Properly handle newline-separated paths as a list
-find ../../Build/Tools -type f -perm -111 -exec dirname {} \; | sort -u | while read -r d; do
-  abs_path=$(cd "$d" && pwd)
-  PATH="$abs_path:$PATH"
-done
-
-export PATH
 
 echo "====================== Running checkInvalidProfiles.sh Checks =========================="
 

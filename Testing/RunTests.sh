@@ -1,34 +1,31 @@
 #!/bin/sh
 #################################################################################
-# Testing/RunTests.sh | iccMAX Project
-# Copyright (C) 2024-2025 The International Color Consortium. 
+# Testing/RunTests.sh | iccDEV Project
+# Copyright (C) 2024-2026 The International Color Consortium. 
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: Thu May  8 07:33:04 EDT 2025 by David Hoyt
+#  Last Updated: 2026-02-11 16:41:15 UTC by David Hoyt
+#                Remove PATH
 #
 #
 #
 #
 #
-#
-# Intent: iccMAX CICD
+# Intent: iccDEV CICD
 #
 #
 #
 #
 #################################################################################
 
+# Auto-source path.sh if present (sets PATH and LD_LIBRARY_PATH/DYLD_LIBRARY_PATH)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/path.sh" ]; then
+	. "$SCRIPT_DIR/path.sh"
+fi
+
 echo "====================== Entering Testing/RunTests.sh =========================="
-
-# Properly handle newline-separated paths as a list
-find ../Build/Tools -type f -perm -111 -exec dirname {} \; | sort -u | while read -r d; do
-  abs_path=$(cd "$d" && pwd)
-  PATH="$abs_path:$PATH"
-done
-
-export PATH
-
 
 if ! command -v iccApplyNamedCmm   # print which executable is being used
 then

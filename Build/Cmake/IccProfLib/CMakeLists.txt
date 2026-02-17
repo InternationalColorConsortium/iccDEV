@@ -3,9 +3,9 @@
 # Copyright (©) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 05-FEB-2026 1645Z by David Hoyt
+#  Last Updated: 2026-02-17 16:34:07 UTC by David Hoyt
 #
-#  Changes: Modify Version String with Commit Hash
+#  Changes: Add WASM Toolchain, CFL & libFuzzer
 #
 #################################################################################
 
@@ -108,11 +108,15 @@ else()
     set(ICCPROFLIB_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}")
 endif()
 
+# Generate version header into build directory (not source tree)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccProfLib/IccProfLibVer.h.in"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccProfLib/IccProfLibVer.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/IccProfLibVer.h"
     @ONLY
 )
+
+# Ensure build directory is in include path for generated header
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 SET(SOURCES ${CFILES})
 
@@ -161,6 +165,12 @@ IF(ENABLE_STATIC_LIBS)
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  ENDIF()
+
+  # Create ALIAS target when no shared library (STATIC_ONLY configuration)
+  # This ensures ${TARGET_NAME} always exists for target_link_libraries
+  IF(NOT ENABLE_SHARED_LIBS)
+    ADD_LIBRARY(${TARGET_NAME} ALIAS ${TARGET_NAME}-static)
   ENDIF()
 
   # Provide alias to resolve MSVC LNK1104: expected IccProfLib2.lib

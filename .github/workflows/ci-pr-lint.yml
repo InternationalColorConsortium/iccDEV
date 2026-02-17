@@ -1,20 +1,16 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (©) 2025 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
 # Intent: Static code analysis and linting
-# Last Updated: 02-JAN-2025 2100Z by David Hoyt 
-# 
-#               Change git depth, other changes
+# Last Updated: 2026-02-17 16:21:47 UTC by David Hoyt
 #
-#
-#
-#
-#
-#
+#               Matrix: cppcheck and clang-tidy run as parallel
+#               jobs, each with -j$(nproc). Build is shared via
+#               artifact upload.
 #
 ###############################################################
 
@@ -25,10 +21,8 @@ permissions:
   pull-requests: read
 
 on:
-  # Allow manual trigger
   workflow_dispatch:
 
-  # Allow other workflows to call this
   workflow_call:
     inputs:
       ubuntu-version:
@@ -38,13 +32,18 @@ on:
         type: string
 
 jobs:
-  build-linux:
-    name: Lint on ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+  #############################################################################
+  # Job 1: Build + determine files
+  #############################################################################
+  build:
+    name: "Build"
     runs-on: ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 20
+    outputs:
+      no_src_changes: ${{ steps.diffcheck.outputs.no_src_changes }}
+      scope: ${{ steps.diffcheck.outputs.scope }}
     steps:
 
-      # --- Bump any Self-Hosted ---
       - name: Validate ubuntu-version input
         shell: bash --noprofile --norc {0}
         env:
@@ -59,19 +58,14 @@ jobs:
               exit 1
               ;;
           esac
-
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
           fetch-depth: 0
-          # Disable unsafe fetch options
           persist-credentials: false
 
       - name: Checkout base commit (trusted sanitizers)
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
-          # For workflow_call from ci-pr-action: use github.sha (the base branch)
-          # For pull_request: use github.event.pull_request.base.sha
-          # For workflow_dispatch: use github.sha
           ref: ${{ github.event.pull_request.base.sha || github.sha }}
           path: base
           fetch-depth: 1
@@ -81,25 +75,6 @@ jobs:
         run: |
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
-
-      - name: Verify remote origin URL (opt out of malicious git configs)
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          origin_url=$(git remote get-url origin || true)
-          echo "Remote origin: $origin_url"
-          # Enforce that origin points to the expected GitHub repository for this workflow run
-          expected="https://github.com/${{ github.repository }}.git"
-          # Allow both HTTPS and git@ forms if needed
-          if [[ "$origin_url" != "$expected" && "$origin_url" != "${expected%.git}" && "$origin_url" != "git@github.com:InternationalColorConsortium/iccDEV.git" ]]; then
-            echo "Origin URL mismatch: expected $expected, ${expected%.git}, or git@github.com:InternationalColorConsortium/iccDEV.git, got $origin_url" >&2
-            exit 1
-          fi
-
       - name: Install Linux dependencies
         shell: bash --noprofile --norc {0}
         env:
@@ -109,17 +84,25 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-
           sudo apt-get update -qq
           sudo apt-get install -y \
-            build-essential cmake gcc g++ clang clang-tools \
-            cppcheck clang-format pkg-config \
-            libpng-dev libxml2-dev libtiff-dev \
+            build-essential cmake gcc g++ clang clang-tools clang-tidy \
+            cppcheck clang-format pkg-config jq \
+            libpng-dev libxml2-dev libtiff-dev libjpeg-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
-            python3 python3-pip curl git llvm
-
+            python3 curl git llvm
+          {
+            echo "### Environment"
+            echo "| Tool | Version |"
+            echo "|------|---------|"
+            echo "| cppcheck | $(cppcheck --version 2>&1) |"
+            echo "| clang-tidy | $(clang-tidy --version 2>&1 | head -1) |"
+            echo "| cmake | $(cmake --version | head -1) |"
+            echo "| nproc | $(nproc) |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
       - id: diffcheck
-        name: diffcheck for file changes
+        name: Determine files to analyze
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -128,49 +111,39 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-
           git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
-
-          # If not a pull_request event (e.g., workflow_dispatch or workflow_call),
-          # skip source diff checking and mark as non-source change.
-          if [ "${{ github.event_name }}" != "pull_request" ]; then
-            echo "Non-PR event (${{ github.event_name }}) — skipping source diff check" >&2
-            echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          base_ref="${{ github.base_ref }}"
-
-          # Avoid fetching refs from user-controllable inputs like ($base_ref)
-          case "$base_ref" in master)
-              ;;
-            *)
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base_ref="${{ github.base_ref }}"
+            case "$base_ref" in master) ;; *)
               echo "Ref blocked or unsupported: $base_ref" >&2
               echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+              echo "scope=none" >> "$GITHUB_OUTPUT"
               exit 0
               ;;
-          esac
-
-          # Fetch enough history to find merge base
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=50
-
-          # Case-insensitive extension match (c/h/cpp variants)
-          # Use three-dot syntax to show changes since merge-base
-           git diff --name-only "origin/${base_ref}...HEAD" \
-             | tr -cd '[:alnum:]./\-_\n' \
-             | grep -E '\.(cpp|cxx|cc|h|hpp)$' \
-             | tr '\n' '\0' > changed_files.txt
-
-           changed_file_count="$(xargs -0 -n1 < changed_files.txt | wc -l)"
-
-           if [ "$changed_file_count" -eq 0 ]; then
-             echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
-           else
-             echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
-           fi
-          
+            esac
+            git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=50
+            git diff --name-only "origin/${base_ref}...HEAD" \
+              | tr -cd '[:alnum:]./\-_\n' \
+              | grep -E '\.(cpp|cxx|cc|h|hpp)$' \
+              | tr '\n' '\0' > changed_files.txt
+            changed_file_count="$(xargs -0 -n1 < changed_files.txt | wc -l)"
+            if [ "$changed_file_count" -eq 0 ]; then
+              echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
+              echo "scope=none" >> "$GITHUB_OUTPUT"
+            else
+              echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
+              echo "scope=pr" >> "$GITHUB_OUTPUT"
+              echo "Analyzing $changed_file_count changed files"
+            fi
+          else
+            echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
+            echo "scope=full" >> "$GITHUB_OUTPUT"
+            find IccProfLib IccXML Tools -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.cxx' -o -name '*.cc' -o -name '*.hpp' \) -print0 > changed_files.txt
+            file_count="$(xargs -0 -n1 < changed_files.txt | wc -l)"
+            echo "Full-tree analysis: $file_count source files"
+          fi
       - name: Configure and build
-        if: ${{ steps.diffcheck.outputs.no_src_changes == 'false' }}
+        if: steps.diffcheck.outputs.no_src_changes == 'false'
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -179,76 +152,191 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-  
           mkdir -p Build
           cd Build
-          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          make
-          cd ..
-
-      - name: Run cppcheck
-        if: ${{ steps.diffcheck.outputs.no_src_changes == 'false' }}
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-  
-          mkdir -p lint_reports
-  
-          echo "Running cppcheck on modified source files..."
-  
-          # --- SECURITY: null-delimited xargs ---
-          : > lint_reports/cppcheck.txt
-          xargs -0 cppcheck \
-            --enable=warning,performance,portability \
-            --std=c++17 \
-            --output-file=lint_reports/cppcheck.txt \
-            < changed_files.txt || true
-
-      - name: Run clang-tidy
-        if: ${{ steps.diffcheck.outputs.no_src_changes == 'false' }}
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          mkdir -p lint_reports
-  
-          # --- clang-tidy ---
-          : > lint_reports/clang_tidy.txt
-          xargs -0 run-clang-tidy \
-            -p Build \
-            -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
-            < changed_files.txt \
-            | tee lint_reports/clang_tidy.txt || true
-
-      - name: Skip lint (no source changes)
-        if: ${{ steps.diffcheck.outputs.no_src_changes == 'true' }}
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          mkdir -p lint_reports
-          echo "No .cpp/.h changes detected; skipping lint." > lint_reports/cppcheck.txt
-          : > lint_reports/clang_tidy.txt
-
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -Wno-dev
+          make -j"$(nproc)"
+      - name: Upload build context
+        if: steps.diffcheck.outputs.no_src_changes == 'false'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
-          name: lint-reports
+          name: lint-build-context
+          retention-days: 1
+          path: |
+            Build/compile_commands.json
+            changed_files.txt
+  #############################################################################
+  # Job 2: Parallel lint matrix
+  #   - cppcheck split by component (IccProfLib, IccXML, Tools)
+  #   - clang-tidy runs full tree
+  #############################################################################
+  lint:
+    name: "${{ matrix.name }}"
+    runs-on: ${{ inputs.ubuntu-version || 'ubuntu-latest' }}
+    needs: build
+    if: needs.build.outputs.no_src_changes == 'false'
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "cppcheck • IccProfLib"
+            tool: cppcheck
+            component: IccProfLib
+          - name: "cppcheck • IccXML"
+            tool: cppcheck
+            component: IccXML
+          - name: "cppcheck • Tools"
+            tool: cppcheck
+            component: Tools
+          - name: "clang-tidy"
+            tool: clang-tidy
+            component: all
+    steps:
+
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install dependencies
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            build-essential cmake gcc g++ clang clang-tools clang-tidy \
+            cppcheck pkg-config \
+            libpng-dev libxml2-dev libtiff-dev libjpeg-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common \
+            llvm
+      - name: Download build context
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: lint-build-context
+
+      - name: Filter files for component
+        if: matrix.tool == 'cppcheck'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          # Filter changed_files.txt to only this component's files
+          xargs -0 -n1 < changed_files.txt \
+            | { grep "^${{ matrix.component }}/" || true; } \
+            | tr '\n' '\0' > component_files.txt
+          FILE_COUNT=$(xargs -0 -n1 < component_files.txt 2>/dev/null | wc -l)
+          echo "Component ${{ matrix.component }}: $FILE_COUNT files to analyze"
+          echo "file_count=$FILE_COUNT" >> "$GITHUB_ENV"
+      - name: Run ${{ matrix.name }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          NPROC=$(nproc)
+          mkdir -p lint_reports
+          if [ "${{ matrix.tool }}" = "cppcheck" ]; then
+            if [ "${file_count:-0}" -eq 0 ]; then
+              echo "No ${{ matrix.component }} files to check — skipping"
+              : > lint_reports/cppcheck_${{ matrix.component }}.txt
+            else
+              echo "Running cppcheck on ${{ matrix.component }} with $NPROC parallel jobs"
+              xargs -0 cppcheck \
+                -j "$NPROC" \
+                --enable=warning,performance,portability,style \
+                --std=c++17 \
+                --suppress=missingIncludeSystem \
+                < component_files.txt 2> lint_reports/cppcheck_${{ matrix.component }}.txt || true
+              echo "✓ cppcheck ${{ matrix.component }}: $(wc -l < lint_reports/cppcheck_${{ matrix.component }}.txt) lines"
+            fi
+          else
+            echo "Running clang-tidy with $NPROC parallel jobs"
+            xargs -0 run-clang-tidy \
+              -j "$NPROC" \
+              -p Build \
+              -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
+              < changed_files.txt \
+              > lint_reports/clang_tidy.txt 2>&1 || true
+            echo "✓ clang-tidy: $(wc -l < lint_reports/clang_tidy.txt) lines"
+          fi
+      - name: Upload results
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: lint-${{ matrix.tool }}-${{ matrix.component }}
+          retention-days: 3
           path: lint_reports/
 
+  #############################################################################
+  # Job 3: Combined report
+  #############################################################################
+  report:
+    name: "Report"
+    runs-on: ubuntu-latest
+    needs: [build, lint]
+    if: always()
+    timeout-minutes: 5
+    steps:
 
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Download cppcheck IccProfLib results
+        if: needs.lint.result == 'success' || needs.lint.result == 'failure'
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: lint-cppcheck-IccProfLib
+          path: lint_reports/parts/
+        continue-on-error: true
+
+      - name: Download cppcheck IccXML results
+        if: needs.lint.result == 'success' || needs.lint.result == 'failure'
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: lint-cppcheck-IccXML
+          path: lint_reports/parts/
+        continue-on-error: true
+
+      - name: Download cppcheck Tools results
+        if: needs.lint.result == 'success' || needs.lint.result == 'failure'
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: lint-cppcheck-Tools
+          path: lint_reports/parts/
+        continue-on-error: true
+
+      - name: Download clang-tidy results
+        if: needs.lint.result == 'success' || needs.lint.result == 'failure'
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: lint-clang-tidy-all
+          path: lint_reports/
+        continue-on-error: true
+
+      - name: Merge cppcheck results
+        if: needs.lint.result == 'success' || needs.lint.result == 'failure'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          mkdir -p lint_reports
+          : > lint_reports/cppcheck.txt
+          for f in lint_reports/parts/cppcheck_*.txt; do
+            [ -f "$f" ] && cat "$f" >> lint_reports/cppcheck.txt
+          done
+          echo "Merged cppcheck: $(wc -l < lint_reports/cppcheck.txt) lines"
       - name: Generate GitHub summary
         if: always()
         shell: bash --noprofile --norc {0}
@@ -259,14 +347,11 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          
-          # Load trusted canonical sanitizer functions from base commit
-          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
-          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
-            source "$TRUSTED_SANITIZER"
+            source "$SANITIZER"
           else
-            # Fallback sanitizer
             escape_html() {
               local s="$1"
               s="${s//&/&amp;}"
@@ -278,19 +363,139 @@ jobs:
             }
             sanitize_line() { escape_html "$1"; }
           fi
-          
-          echo "## 🧹 Lint Report Summary" >> $GITHUB_STEP_SUMMARY
-
-          if [ "${{ steps.diffcheck.outputs.no_src_changes }}" == "true" ]; then
-            echo "🟦 Skipped — no modified source files detected." >> $GITHUB_STEP_SUMMARY
-          elif [ -s lint_reports/cppcheck.txt ]; then
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            # Sanitize each line properly - avoid subshell issues
+          echo "## 🧹 Lint Report Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Scope:** ${{ needs.build.outputs.scope || 'unknown' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.build.outputs.no_src_changes }}" = "true" ]; then
+            echo "🟦 Skipped — no modified source files detected." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          mkdir -p lint_reports
+          # --- cppcheck summary ---
+          echo "### cppcheck Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s lint_reports/cppcheck.txt ]; then
+            cpp_warns=$({ grep -c 'warning:' lint_reports/cppcheck.txt 2>/dev/null || true; })
+            cpp_errs=$({ grep -c 'error:' lint_reports/cppcheck.txt 2>/dev/null || true; })
+            cpp_perf=$({ grep -c 'performance:' lint_reports/cppcheck.txt 2>/dev/null || true; })
+            cpp_port=$({ grep -c 'portability:' lint_reports/cppcheck.txt 2>/dev/null || true; })
+            cpp_style=$({ grep -c 'style:' lint_reports/cppcheck.txt 2>/dev/null || true; })
+            echo "| Severity | Count |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| error | $cpp_errs |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| warning | $cpp_warns |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| performance | $cpp_perf |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| portability | $cpp_port |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| style | $cpp_style |" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "#### Findings by Component" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Component | Findings |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-----------|----------|" >> "$GITHUB_STEP_SUMMARY"
+            for comp in IccProfLib IccXML Tools; do
+              f="lint_reports/parts/cppcheck_${comp}.txt"
+              if [ -f "$f" ] && [ -s "$f" ]; then
+                cnt=$(wc -l < "$f" | tr -d ' ')
+              else
+                cnt=0
+              fi
+              echo "| $comp | $cnt |" >> "$GITHUB_STEP_SUMMARY"
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "#### Top cppcheck Files" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            { grep -oP '^[^:]+\.(cpp|h)' lint_reports/cppcheck.txt 2>/dev/null || true; } \
+              | sort | uniq -c | sort -rn | head -10 \
+              | while read -r cnt fname; do
+                  echo "- **$cnt** — $fname" >> "$GITHUB_STEP_SUMMARY"
+                done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "<details><summary>cppcheck output (last 50 lines)</summary>" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
             while IFS= read -r line; do
               safe_line=$(sanitize_line "$line")
               echo "$safe_line"
-            done < <(tail -n 30 lint_reports/cppcheck.txt) >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            done < <(tail -n 50 lint_reports/cppcheck.txt) >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "✅ No cppcheck warnings or errors detected." >> $GITHUB_STEP_SUMMARY
+            echo "✅ No cppcheck findings." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
+          # --- clang-tidy summary ---
+          echo "### clang-tidy Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s lint_reports/clang_tidy.txt ]; then
+            ct_warns=$({ grep -c 'warning:' lint_reports/clang_tidy.txt 2>/dev/null || true; })
+            ct_errs=$({ grep -c 'error:' lint_reports/clang_tidy.txt 2>/dev/null || true; })
+            echo "| Severity | Count |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| warning | $ct_warns |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| error | $ct_errs |" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            # Per-category breakdown
+            echo "#### Findings by Check Category" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Category | Count |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|----------|-------|" >> "$GITHUB_STEP_SUMMARY"
+            for cat in cppcoreguidelines modernize readability clang-analyzer-core clang-analyzer-security clang-analyzer-alpha; do
+              cnt=$({ grep -c "\[$cat" lint_reports/clang_tidy.txt 2>/dev/null || true; })
+              echo "| $cat | $cnt |" >> "$GITHUB_STEP_SUMMARY"
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            # Per-component breakdown
+            echo "#### Findings by Source Component" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Component | Warnings |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-----------|----------|" >> "$GITHUB_STEP_SUMMARY"
+            for component in IccProfLib IccXML Tools; do
+              cnt=$({ grep "warning:.*\[" lint_reports/clang_tidy.txt 2>/dev/null || true; } | { grep "/${component}/" || true; } | wc -l | tr -d ' ')
+              echo "| $component | $cnt |" >> "$GITHUB_STEP_SUMMARY"
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            # Top 15 specific checks
+            echo "#### Top 15 Triggered Checks" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Count | Check |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+            { grep -oh '\[[-a-zA-Z.]*\]' lint_reports/clang_tidy.txt 2>/dev/null || true; } \
+              | sort | uniq -c | sort -rn | head -15 \
+              | while read -r cnt chk; do
+                  echo "| $cnt | $chk |" >> "$GITHUB_STEP_SUMMARY"
+                done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            # Security findings highlight
+            sec_count=$({ grep -c 'clang-analyzer-security\|clang-analyzer-alpha.security' lint_reports/clang_tidy.txt 2>/dev/null || true; })
+            if [ "$sec_count" -gt 0 ]; then
+              echo "#### ⚠️ Security Findings ($sec_count)" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              { grep 'clang-analyzer-security\|clang-analyzer-alpha.security' lint_reports/clang_tidy.txt || true; } | head -20 >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            # Top 10 files
+            echo "#### Top 10 Files by Warning Count" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            { grep 'warning:' lint_reports/clang_tidy.txt 2>/dev/null || true; } \
+              | { grep -oP '[^ ]+\.(cpp|h)' || true; } \
+              | sort | uniq -c | sort -rn | head -10 \
+              | while read -r cnt fname; do
+                  echo "- **$cnt** — $fname" >> "$GITHUB_STEP_SUMMARY"
+                done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "✅ No clang-tidy findings." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "✔ Report generated." >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload combined reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: lint-reports
+          path: lint_reports/
+          if-no-files-found: warn

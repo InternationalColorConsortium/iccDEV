@@ -1,27 +1,29 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
-##                 https://color.org
+# Copyright (©) 2025-2026 International Color Consortium. 
+#                 All rights reserved. 
+#                 https://color.org
 #
 #
-## Intent: ci-latest-release
+# Intent: ci-latest-release
 #
-## Last Updated: 31-JAN-2025 0100Z by David Hoyt 
+# Last Updated: 2026-02-17 16:18:35 UTC by David Hoyt
+#                Clean .pdb files from Zip Bundle
+#                Change Build to Release per Developer Spec
+#                Note that Cmake Default Build = Release (now) 
 #                Add bash & pwsh shell prologues
+#                Align Unix & Windows Bundle per Developer Spec
+#                Thank you Max & Phil for the Corrections!
 #
 #  TODO: Extract repetitive shell commands to reusable script
-#
-#
-#  Ref: https://github.com/xsscx/governance/tree/main/actions
-#
+#  
 ###############################################################
 
 name: ci-latest-release
 
 permissions:
   contents: read
-  
+
 on:
   workflow_dispatch:
 
@@ -127,15 +129,82 @@ jobs:
             echo "::error ::Build failed! CMakeCache.txt not found." | tee -a $GITHUB_STEP_SUMMARY
             exit 1
           fi
+      - name: Stage bundle into Testing directory
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          stage="staging/iccDEV-Testing"
+          mkdir -p "$stage"
+          # 1. Copy Testing contents (exclude Fuzzing)
+          for item in Testing/*; do
+            [ "$(basename "$item")" = "Fuzzing" ] && continue
+            cp -a "$item" "$stage/"
+          done
+          # 2. Copy tool binaries and libraries from build
+          find Build/Tools -type f \( -perm -u+x -o -name '*.so*' -o -name '*.a' \) \
+            -exec cp -a {} "$stage/" \;
+          find Build/IccProfLib -type f -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccProfLib -type l -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccXML -type f -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccXML -type l -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
+          cp Testing/Readme.md  "$stage/"
+          cp LICENSE.md "$stage/"
+          cp -a docs    "$stage/docs"
+          # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
+          printf '%s\n' \
+            '#!/bin/sh' \
+            '# Resolve the directory where this script lives' \
+            'if [ -n "${BASH_SOURCE:-}" ]; then' \
+            '  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' \
+            'else' \
+            '  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"' \
+            'fi' \
+            'export PATH="$SCRIPT_DIR:$PATH"' \
+            'export LD_LIBRARY_PATH="$SCRIPT_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' \
+            'for d in "$SCRIPT_DIR"/*/; do' \
+            '  [ -d "$d" ] && export PATH="$d:$PATH"' \
+            'done' \
+            'echo "PATH and LD_LIBRARY_PATH updated."' \
+            'echo "Tools directory: $SCRIPT_DIR"' \
+            > "$stage/path.sh"
+          chmod +x "$stage/path.sh"
+          # Summary of staged bundle contents
+          total=$(find "$stage" -type f | wc -l)
+          echo ""
+          echo "===== Staged Bundle Contents ($total files) ====="
+          for ext in so 'so.*' a icc md; do
+            count=$(find "$stage" -maxdepth 1 -type f -name "*.$ext" -o -type l -name "*.$ext" | wc -l)
+            if [ "$count" -gt 0 ]; then
+              echo ""
+              echo "--- *.$ext ($count) ---"
+              find "$stage" -maxdepth 1 \( -type f -o -type l \) -name "*.$ext" -printf '  %f  (%k KB)\n' 2>/dev/null || \
+                find "$stage" -maxdepth 1 \( -type f -o -type l \) -name "*.$ext" -exec bash -c 'echo "  $(basename {})  ($(( $(stat -f%z {} 2>/dev/null || stat -c%s {}) / 1024 )) KB)"' \;
+            fi
+          done
+          # List executables (ELF binaries without extension)
+          exes=$(find "$stage" -maxdepth 1 -type f -executable ! -name '*.*' | wc -l)
+          if [ "$exes" -gt 0 ]; then
+            echo ""
+            echo "--- executables ($exes) ---"
+            find "$stage" -maxdepth 1 -type f -executable ! -name '*.*' -printf '  %f  (%k KB)\n' 2>/dev/null || \
+              find "$stage" -maxdepth 1 -type f -executable ! -name '*.*' -exec bash -c 'echo "  $(basename {})  ($(( $(stat -f%z {} 2>/dev/null || stat -c%s {}) / 1024 )) KB)"' \;
+          fi
+          echo ""
+          echo "Total: $total files staged into $stage"
+          echo ""
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: iccdev-linux-${{ matrix.compiler }}
-          path: |
-            Build
-            LICENSE.md
-            README.md            
-            docs/**
+          path: staging
+          if-no-files-found: warn
 
       - name: Summary Report
         if: always()
@@ -169,9 +238,9 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "Installing Homebrew dependencies..."
-          brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg || echo "⚠️ Some dependencies might already be installed."
+          brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo || echo "⚠️ Some dependencies might already be installed."
           echo "✔ Dependency installation complete."
-  
+
       - name: CMake Configure
         shell: bash --noprofile --norc {0}
         env:
@@ -184,18 +253,18 @@ jobs:
           echo "Setting up CMake build configuration..."
           cd Build
           sudo rm -rf /Library/Frameworks/Mono.framework/Headers/png.h
-          echo 'export PATH="/opt/homebrew/opt/jpeg/bin:$PATH"' >> /Users/runner/.bash_profile
-          export CPPFLAGS="-I/opt/homebrew/opt/jpeg/include"
-          export PKG_CONFIG_PATH="/opt/homebrew/opt/jpeg/lib/pkgconfig"
-          export CFLAGS="-I$(brew --prefix libpng)/include -I$(brew --prefix jpeg)/include"
-          export LDFLAGS="-L$(brew --prefix libpng)/lib -L$(brew --prefix jpeg)/lib"
+          echo 'export PATH="/opt/homebrew/opt/jpeg-turbo/bin:$PATH"' >> /Users/runner/.bash_profile
+          export CPPFLAGS="-I/opt/homebrew/opt/jpeg-turbo/include"
+          export PKG_CONFIG_PATH="/opt/homebrew/opt/jpeg-turbo/lib/pkgconfig"
+          export CFLAGS="-I$(brew --prefix libpng)/include -I$(brew --prefix jpeg-turbo)/include"
+          export LDFLAGS="-L$(brew --prefix libpng)/lib -L$(brew --prefix jpeg-turbo)/lib"
           cmake -DCMAKE_INSTALL_PREFIX=$HOME/.local \
                 -DCMAKE_BUILD_TYPE=Release \
-                -DJPEG_LIBRARY=$(brew --prefix jpeg)/lib/libjpeg.dylib \
-                -DJPEG_INCLUDE_DIR=$(brew --prefix jpeg)/include \
+                -DJPEG_LIBRARY=$(brew --prefix jpeg-turbo)/lib/libjpeg.dylib \
+                -DJPEG_INCLUDE_DIR=$(brew --prefix jpeg-turbo)/include \
                 -Wno-dev Cmake/
           echo "✔ CMake configuration complete."
-      
+
       - name: Build
         shell: bash --noprofile --norc {0}
         env:
@@ -214,20 +283,85 @@ jobs:
           echo "=== Updating PATH ==="
           for d in ../Build/Tools/*; do
           [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done 
+          done
           sh CreateAllProfiles.sh
           sh RunTests.sh
-          find . -iname "*.icc" | wc -l 
-          
+          find . -iname "*.icc" | wc -l
+
+      - name: Stage bundle into Testing directory
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          stage="staging/iccDEV-Testing"
+          mkdir -p "$stage"
+          # 1. Copy Testing contents (exclude Fuzzing)
+          for item in Testing/*; do
+            [ "$(basename "$item")" = "Fuzzing" ] && continue
+            cp -a "$item" "$stage/"
+          done
+          # 2. Copy tool binaries and libraries from build
+          find Build/Tools -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.a' \) \
+            -exec cp -a {} "$stage/" \;
+          find Build/IccProfLib -type f -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccProfLib -type l -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccXML -type f -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccXML -type l -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
+          cp Testing/Readme.md  "$stage/"
+          cp LICENSE.md "$stage/"
+          cp -a docs    "$stage/docs"
+          # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
+          printf '%s\n' \
+            '#!/bin/sh' \
+            '# Resolve the directory where this script lives' \
+            'if [ -n "${BASH_SOURCE:-}" ]; then' \
+            '  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' \
+            'else' \
+            '  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"' \
+            'fi' \
+            'export PATH="$SCRIPT_DIR:$PATH"' \
+            'export DYLD_LIBRARY_PATH="$SCRIPT_DIR${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"' \
+            'for d in "$SCRIPT_DIR"/*/; do' \
+            '  [ -d "$d" ] && export PATH="$d:$PATH"' \
+            'done' \
+            'echo "PATH and DYLD_LIBRARY_PATH updated."' \
+            'echo "Tools directory: $SCRIPT_DIR"' \
+            > "$stage/path.sh"
+          chmod +x "$stage/path.sh"
+          # Summary of staged bundle contents
+          total=$(find "$stage" -type f | wc -l)
+          echo ""
+          echo "===== Staged Bundle Contents ($total files) ====="
+          for ext in dylib a icc md; do
+            count=$(find "$stage" -maxdepth 1 -type f -name "*.$ext" -o -type l -name "*.$ext" | wc -l)
+            if [ "$count" -gt 0 ]; then
+              echo ""
+              echo "--- *.$ext ($count) ---"
+              find "$stage" -maxdepth 1 \( -type f -o -type l \) -name "*.$ext" -exec bash -c 'echo "  $(basename {})  ($(( $(stat -f%z {} 2>/dev/null || stat -c%s {}) / 1024 )) KB)"' \;
+            fi
+          done
+          # List executables (Mach-O binaries without extension)
+          exes=$(find "$stage" -maxdepth 1 -type f -perm +111 ! -name '*.*' | wc -l)
+          if [ "$exes" -gt 0 ]; then
+            echo ""
+            echo "--- executables ($exes) ---"
+            find "$stage" -maxdepth 1 -type f -perm +111 ! -name '*.*' -exec bash -c 'echo "  $(basename {})  ($(( $(stat -f%z {} 2>/dev/null || stat -c%s {}) / 1024 )) KB)"' \;
+          fi
+          echo ""
+          echo "Total: $total files staged into $stage"
+          echo ""
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: iccdev-macos-clang
-          path: |
-            Build
-            LICENSE.md
-            README.md            
-            docs/**
+          path: staging
+          if-no-files-found: warn
       - name: Summary Report
         if: always()
         shell: bash --noprofile --norc {0}
@@ -245,7 +379,7 @@ jobs:
   windows:
     name: "Windows MSVC"
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       POWERSHELL_TELEMETRY_OPTOUT: "1"
     defaults:
@@ -268,19 +402,19 @@ jobs:
          Set-StrictMode -Version Latest
          $ErrorActionPreference = 'Stop'
          $ProgressPreference = 'SilentlyContinue'
-         
+
          # --- Disable telemetry sources (pwsh / dotnet / gh) ---
          $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
          $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
          $env:GH_NO_UPDATE_NOTIFIER = "1"
          $env:GH_PROMPT_DISABLED = "1"
          $env:NUGET_XMLDOC_MODE = "skip"
-         
+
          # --- Validate workspace path (defense-in-depth) ---
          if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
              throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
          }
-         
+
          # --- Remove tokens or uci that should not exist in PR CI ---
          foreach ($v in @(
              'GITHUB_TOKEN',
@@ -292,7 +426,7 @@ jobs:
                  Remove-Item "Env:$v" -ErrorAction SilentlyContinue
              }
          }
-         
+
          # --- Canonicalization then sanitize user controllable input ---
          function Canonicalize([string]$s) {
              if (-not $s) { return "" }
@@ -301,16 +435,16 @@ jobs:
              $s = -join ($s.ToCharArray() | Where-Object { [int]$_ -ge 32 })
              return $s
          }
-         
+
          # --- Canonicalize PR-controlled environment values ---
          $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
          $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
          $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
-         
+
          # --- Harden Git configuration ---
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-         
+
          # --- PATH hardening: limit to trusted tool locations ---
          $trustedPath = @(
              "$env:SystemRoot\system32",
@@ -319,9 +453,8 @@ jobs:
              "$env:ProgramFiles\PowerShell\7"
          ) -join ';'
          $env:PATH = $trustedPath
-         
-          Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
 
+          Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@767f00a3f09872d96a0cb9fcd5e6a4ff33311330
 
@@ -334,13 +467,11 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-
           Write-Host "Triggered by:  $env:GITHUB_EVENT_NAME"
           Write-Host "Base branch:   $env:GITHUB_BASE_REF"
           Write-Host "Head branch:   $env:GITHUB_HEAD_REF"
           Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
           Write-Host "OS:            $env:RUNNER_OS"
-
       - name: Install dependencies and build
         shell: pwsh
         run: |
@@ -354,15 +485,12 @@ jobs:
           Write-Host "Copyright (©) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
           git branch
           git status
-          Write-Host "========= Fetching Deps... ================`n"
-          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
-          Write-Host "========= Extracting Deps... ================`n"
-          tar -xf deps.zip
+          vcpkg integrate install
+          vcpkg install
           cd Build/Cmake
-          Write-Host "========= Building... ================`n"  
-          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+          cmake --preset vs2022-x64 -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
           cmake --build build -- /m /maxcpucount
-          cmake --build build -- /m /maxcpucount          
+          cmake --build build -- /m /maxcpucount
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
               Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
               ForEach-Object { Split-Path $_.FullName -Parent } |
@@ -397,38 +525,88 @@ jobs:
           # Collect .icc profile information
           $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
           $totalCount = $profiles.Count
-          
           # Group profiles by directory
           $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
-          
           # Generate Summary Report
           Write-Host "`n========================="
           Write-Host " ICC Profile Report"
           Write-Host "========================="
-          
           # Print count per subdirectory
           foreach ($group in $groupedProfiles) {
               Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
           }
-          
           Write-Host "`nTotal .icc profiles found: $totalCount"
           Write-Host "=========================`n"
-          
           Write-Host "All Done!"
+      - name: Stage bundle into Testing directory
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $stage = "staging/iccDEV-Testing"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          # 1. Copy the entire Testing directory contents (exclude Fuzzing)
+          Get-ChildItem -Path "Testing" -Exclude "Fuzzing" |
+            Copy-Item -Destination $stage -Recurse -Force
+          # 2. Copy .exe files to bundle root, .dll and .lib to libs/ subdirectory
+          New-Item -ItemType Directory -Force -Path "$stage/libs" | Out-Null
+          Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.exe |
+            Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
+            ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
+          Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.dll,*.lib |
+            Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' } |
+            ForEach-Object { Copy-Item $_.FullName -Destination "$stage/libs" -Force }
+          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
+          Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
+          Copy-Item -Path "LICENSE.md" -Destination $stage -Force
+          Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
+          # 4. Generate path.bat helper script
+          @'
+          @echo off
+          setlocal EnableDelayedExpansion
+          set "SCRIPT_DIR=%~dp0"
+          if "!SCRIPT_DIR:~-1!"=="\" set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"
+          :: Add script dir, libs subdir, and all subdirs containing .exe to PATH
+          set "NEW_PATH=!SCRIPT_DIR!\libs;!SCRIPT_DIR!;!PATH!"
+          for /R "!SCRIPT_DIR!" %%F in (*.exe) do (
+              set "dir=%%~dpF"
+              if "!dir:~-1!"=="\" set "dir=!dir:~0,-1!"
+              echo !NEW_PATH! | findstr /I /C:"!dir!" >nul || set "NEW_PATH=!dir!;!NEW_PATH!"
+          )
+          :: Export PATH back to caller via endlocal trick
+          endlocal & set "PATH=%NEW_PATH%"
+          '@ | Set-Content -Path "$stage/path.bat" -Encoding ASCII
+          # Summary of staged bundle contents
+          $allFiles = Get-ChildItem -Path $stage -Recurse -File
+          $count = $allFiles.Count
+          Write-Host "`n===== Staged Bundle Contents ($count files) =====" -ForegroundColor Cyan
+          foreach ($ext in @('*.exe','*.dll','*.lib','*.icc','*.md')) {
+            $matched = $allFiles | Where-Object { $_.Name -like $ext }
+            if ($matched) {
+              Write-Host "`n--- $ext ($($matched.Count)) ---"
+              $matched | ForEach-Object {
+                $rel = $_.FullName.Replace((Resolve-Path $stage).Path + '\', '')
+                Write-Host "  $rel  ($([math]::Round($_.Length/1KB,1)) KB)"
+              }
+            }
+          }
+          $otherExts = $allFiles |
+            Where-Object { $_.Extension -notin '.exe','.dll','.lib','.icc','.md' } |
+            Group-Object Extension |
+            Sort-Object Count -Descending
+          if ($otherExts) {
+            Write-Host "`n--- Other files ---"
+            foreach ($g in $otherExts) {
+              Write-Host ("  {0}: {1} file(s)" -f ($g.Name ? $g.Name : '(no ext)'), $g.Count)
+            }
+          }
+          Write-Host "`nTotal: $count files staged into $stage`n"
       - name: Upload build artifacts
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: iccdev-windows-msvc
-          path: |
-            Build/Cmake/build/**/*.lib
-            Build/Cmake/build/**/*.a
-            Build/Cmake/build/**/*.dll
-            Build/Cmake/build/**/*.exe
-            Build/Cmake/build/**/*.pdb
-            Build/Cmake/Testing/**/*
-            LICENSE.md
-            README.md            
-            docs/**
+          path: staging
           if-no-files-found: warn
       - name: Host System Info
         shell: pwsh
@@ -437,8 +615,24 @@ jobs:
           Get-CimInstance -ClassName Win32_Processor
       - name: Summary Report
         if: always()
+        shell: pwsh
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_RUNNER_OS: ${{ runner.os }}
+          GH_JOB_STATUS: ${{ job.status }}
         run: |
-          echo "### Windows Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded:  iccdev-windows-msvc" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          # Source trusted sanitizer from checked-out workspace
+          . .github/scripts/sanitize.ps1
+          "### Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Commit SHA: $(Sanitize-Line $env:GH_COMMIT_SHA)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Runner OS: $(Sanitize-Line $env:GH_RUNNER_OS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Build Directory: Build/" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Artifacts Uploaded: iccdev-windows-msvc" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append

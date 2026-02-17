@@ -1,18 +1,18 @@
 #!/bin/bash
 #################################################################################
-# Testing/CreateAllProfiles.sh | iccMAX Project
-# Copyright (C) 2024-2025 The International Color Consortium. 
+# Testing/CreateAllProfiles.sh | iccDEV Project
+# Copyright (C) 2024-2026 The International Color Consortium. 
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: 20-OCT-2025 by David Hoyt
-#
-# file Location: Testing/hybrid
-#
+#  Last Updated: 2026-02-11 16:41:15 UTC by David Hoyt
+#                Remove PATH
 #
 #
 #
-# Intent: iccMAX CICD
+#
+#
+# Intent: iccDEV CICD
 #
 #
 #

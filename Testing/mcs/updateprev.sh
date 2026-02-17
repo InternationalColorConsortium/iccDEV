@@ -5,8 +5,8 @@
 #                                        All rights reserved.
 # 
 #
-#  Last Updated: Wed Jan 7 03:27:11 AM UTC 2026 by David Hoyt
-#
+#  Last Updated: 2026-02-11 16:41:15 UTC by David Hoyt
+#                Remove PATH
 #
 #
 #
@@ -20,16 +20,6 @@
 #################################################################################
 
 echo "====================== Entering mcs/updateprev.sh =========================="
-
-echo "====================== Updating PATH =========================="
-
-# Properly handle newline-separated paths as a list
-find ../../Build/Tools -type f -perm -111 -exec dirname {} \; | sort -u | while read -r d; do
-  abs_path=$(cd "$d" && pwd)
-  PATH="$abs_path:$PATH"
-done
-
-export PATH
 
 echo "====================== Running iccFromXml 6ChanSelect-MID.xml 6ChanSelect-MID.icc =========================="
 

@@ -3,9 +3,9 @@
 # Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 03-FEB-2026 at 2346Z by David Hoyt
+#  Last Updated: 2026-02-17 16:31:50 UTC by David Hoyt
 #
-#  Changes: Modify Version String to v2.3.1.4 References (#579)
+#  Changes: Add WASM Toolchain, CFL & libFuzzer
 #
 #################################################################################
 
@@ -77,16 +77,16 @@ endif()
 
 # ----------------------------------------------------------------------
 # Compiler Selection for Unix (Clang preferred, GCC fallback)
+# Skip when cross-compiling with Emscripten (toolchain file sets em++/emcc)
 # ----------------------------------------------------------------------
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     # Check if compiler was specified via environment or command line
     if(NOT DEFINED CMAKE_C_COMPILER OR NOT DEFINED CMAKE_CXX_COMPILER)
         if(NOT DEFINED ENV{CC} AND NOT DEFINED ENV{CXX})
             # No user preference - auto-detect with Clang preferred
             find_program(CLANG_C_COMPILER NAMES clang-18 clang-17 clang-16 clang-15 clang-14 clang)
             find_program(CLANG_CXX_COMPILER NAMES clang++-18 clang++-17 clang++-16 clang++-15 clang++-14 clang++)
-            
             if(CLANG_C_COMPILER AND CLANG_CXX_COMPILER)
                 set(CMAKE_C_COMPILER "${CLANG_C_COMPILER}" CACHE FILEPATH "C compiler" FORCE)
                 set(CMAKE_CXX_COMPILER "${CLANG_CXX_COMPILER}" CACHE FILEPATH "C++ compiler" FORCE)
@@ -95,7 +95,6 @@ if(UNIX AND NOT APPLE)
                 # Fallback to GCC
                 find_program(GCC_C_COMPILER NAMES gcc-13 gcc-12 gcc-11 gcc-10 gcc)
                 find_program(GCC_CXX_COMPILER NAMES g++-13 g++-12 g++-11 g++-10 g++)
-                
                 if(GCC_C_COMPILER AND GCC_CXX_COMPILER)
                     set(CMAKE_C_COMPILER "${GCC_C_COMPILER}" CACHE FILEPATH "C compiler" FORCE)
                     set(CMAKE_CXX_COMPILER "${GCC_CXX_COMPILER}" CACHE FILEPATH "C++ compiler" FORCE)
@@ -523,12 +522,13 @@ option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
+option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)
 option(ENABLE_UBSAN               "Enable UndefinedBehaviorSanitizer only"              OFF)
 option(ENABLE_TSAN                "Enable ThreadSanitizer (conflicts with ASan)"        OFF)
 option(ENABLE_MSAN                "Enable MemorySanitizer (Clang only)"                 OFF)
 option(ENABLE_LSAN                "Enable LeakSanitizer standalone"                     OFF)
-option(ENABLE_FUZZING             "Enable fuzzing instrumentation (libFuzzer)"          OFF)
 option(ENABLE_COVERAGE            "Enable code coverage instrumentation"                OFF)
+option(ENABLE_PROFILING           "Enable gprof/perf profiling instrumentation"         OFF)
 option(ENABLE_SPECTRE_MITIGATION  "Enable /Qspectre on MSVC for Spectre V1 mitigation"  OFF)
 option(ENABLE_USEICCDEVNAMESPACE  "Use iccDEV namespace wrapping"                       OFF)
 
@@ -574,6 +574,7 @@ message(STATUS "ENABLE_MSAN                = ${ENABLE_MSAN}")
 message(STATUS "ENABLE_LSAN                = ${ENABLE_LSAN}")
 message(STATUS "ENABLE_FUZZING             = ${ENABLE_FUZZING}")
 message(STATUS "ENABLE_COVERAGE            = ${ENABLE_COVERAGE}")
+message(STATUS "ENABLE_PROFILING           = ${ENABLE_PROFILING}")
 message(STATUS "ENABLE_SPECTRE_MITIGATION  = ${ENABLE_SPECTRE_MITIGATION}")
 message(STATUS "")
 
@@ -608,7 +609,6 @@ if(ENABLE_FUZZING OR ENABLE_SANITIZERS)
   if(ENABLE_LSAN)
     list(APPEND _ignored_options "ENABLE_LSAN")
   endif()
-  
   if(_ignored_options)
     string(REPLACE ";" ", " _ignored_str "${_ignored_options}")
     if(ENABLE_FUZZING)
@@ -627,11 +627,9 @@ set(SANITIZER_LIST "")
 
 if(ENABLE_FUZZING)
   message(STATUS ">>> Fuzzing instrumentation enabled (libFuzzer + ASan + UBSan)")
-  if(MSVC)
-    message(WARNING "Fuzzing with libFuzzer is not supported on MSVC")
-  else()
-    list(APPEND SANITIZER_LIST "fuzzer" "address" "undefined")
-  endif()
+  message(STATUS ">>> Fuzzer harnesses live on the CFL branch")
+  # DO NOT apply fuzzer flags globally - causes linker conflicts with regular tools
+  # Fuzzer targets get flags via target_compile_options/target_link_options
 elseif(ENABLE_SANITIZERS)
   message(STATUS ">>> Sanitizers enabled: AddressSanitizer and UndefinedBehaviorSanitizer active")
   if(MSVC)
@@ -650,7 +648,6 @@ else()
       list(APPEND SANITIZER_LIST "address")
     endif()
   endif()
-  
   if(ENABLE_UBSAN)
     message(STATUS ">>> UndefinedBehaviorSanitizer enabled")
     if(MSVC)
@@ -659,7 +656,6 @@ else()
       list(APPEND SANITIZER_LIST "undefined")
     endif()
   endif()
-  
   if(ENABLE_TSAN)
     message(STATUS ">>> ThreadSanitizer enabled")
     if(MSVC)
@@ -668,7 +664,6 @@ else()
       list(APPEND SANITIZER_LIST "thread")
     endif()
   endif()
-  
   if(ENABLE_MSAN)
     message(STATUS ">>> MemorySanitizer enabled (Clang only)")
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -680,7 +675,6 @@ else()
       list(APPEND SANITIZER_LIST "memory")
     endif()
   endif()
-  
   if(ENABLE_LSAN)
     message(STATUS ">>> LeakSanitizer enabled")
     if(MSVC)
@@ -696,6 +690,11 @@ if(SANITIZER_LIST)
   string(REPLACE ";" "," SANITIZER_STRING "${SANITIZER_LIST}")
   list(APPEND SANITIZER_FLAGS "-fsanitize=${SANITIZER_STRING}")
   list(APPEND SANITIZER_FLAGS "-fno-omit-frame-pointer")
+  # Make UndefinedBehaviorSanitizer violations fatal (abort on first UB)
+  list(FIND SANITIZER_LIST "undefined" _ubsan_idx)
+  if(NOT _ubsan_idx EQUAL -1)
+    list(APPEND SANITIZER_FLAGS "-fno-sanitize-recover=undefined")
+  endif()
 endif()
 
 # Apply all sanitizer flags
@@ -705,23 +704,36 @@ if(SANITIZER_FLAGS)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FINAL_SAN_FLAGS}")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
-  if(VERBOSE_CONFIG)
-    message(STATUS ">>> Final sanitizer flags: ${FINAL_SAN_FLAGS}")
-  endif()
+  message(STATUS ">>> Final sanitizer flags: ${FINAL_SAN_FLAGS}")
 endif()
 
 # Apply coverage instrumentation flags
 if(ENABLE_COVERAGE)
   message(STATUS ">>> Coverage instrumentation enabled")
-  list(APPEND COVERAGE_FLAGS "--coverage")
-  string(JOIN " " FINAL_COV_FLAGS ${COVERAGE_FLAGS})
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FINAL_COV_FLAGS}")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FINAL_COV_FLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_COV_FLAGS}")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_COV_FLAGS}")
-  if(VERBOSE_CONFIG)
-    message(STATUS ">>> Final coverage flags: ${FINAL_COV_FLAGS}")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # Clang source-based coverage (preferred: precise, mergeable)
+    set(COVERAGE_COMPILE_FLAGS "-fprofile-instr-generate -fcoverage-mapping")
+    set(COVERAGE_LINK_FLAGS "-fprofile-instr-generate")
+    message(STATUS ">>> Using Clang source-based coverage (llvm-profdata/llvm-cov)")
+  else()
+    # GCC gcov-based coverage
+    set(COVERAGE_COMPILE_FLAGS "--coverage")
+    set(COVERAGE_LINK_FLAGS "--coverage")
+    message(STATUS ">>> Using GCC gcov-based coverage")
   endif()
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COVERAGE_COMPILE_FLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COVERAGE_COMPILE_FLAGS}")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${COVERAGE_LINK_FLAGS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${COVERAGE_LINK_FLAGS}")
+endif()
+
+# Apply profiling instrumentation flags
+if(ENABLE_PROFILING)
+  message(STATUS ">>> Profiling instrumentation enabled (-pg)")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pg -fno-omit-frame-pointer")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pg -fno-omit-frame-pointer")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pg")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pg")
 endif()
 
 # ----------------------------------------------------------------------
@@ -732,24 +744,22 @@ include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
 
 if(ipo_supported)
-  if(CMAKE_BUILD_TYPE MATCHES "Release" AND NOT ENABLE_COVERAGE AND NOT SANITIZER_FLAGS)
+  if(CMAKE_BUILD_TYPE MATCHES "Release" AND NOT ENABLE_COVERAGE AND NOT ENABLE_PROFILING AND NOT SANITIZER_FLAGS)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-    if(VERBOSE_CONFIG)
-      message(STATUS ">>> Link-Time Optimization (LTO) enabled for Release builds")
-    endif()
+    message(STATUS ">>> Link-Time Optimization (LTO) enabled for Release builds")
   elseif(CMAKE_BUILD_TYPE MATCHES "Release")
-    if(VERBOSE_CONFIG)
-      if(ENABLE_COVERAGE)
-        message(STATUS ">>> Link-Time Optimization (LTO) disabled because ENABLE_COVERAGE is ON")
-      elseif(SANITIZER_FLAGS)
-        message(STATUS ">>> Link-Time Optimization (LTO) disabled because sanitizers are enabled")
-      endif()
+    set(_lto_reason "")
+    if(ENABLE_COVERAGE)
+      set(_lto_reason "ENABLE_COVERAGE is ON")
+    elseif(ENABLE_PROFILING)
+      set(_lto_reason "ENABLE_PROFILING is ON")
+    elseif(SANITIZER_FLAGS)
+      set(_lto_reason "sanitizers are enabled")
     endif()
+    message(STATUS ">>> Link-Time Optimization (LTO) disabled: ${_lto_reason}")
   endif()
 else()
-  if(VERBOSE_CONFIG)
-    message(STATUS ">>> Link-Time Optimization (LTO) not supported: ${ipo_output}")
-  endif()
+  message(STATUS ">>> Link-Time Optimization (LTO) not supported: ${ipo_output}")
 endif()
 
 # ----------------------------------------------------------------------
@@ -802,24 +812,19 @@ endif()
 if(MSVC)
     # Debug: CMake defaults only (no extra flags)
     # CMAKE_CXX_FLAGS_DEBUG uses CMake defaults
-    
     # Release: CMake defaults only (no extra flags)
     # CMAKE_CXX_FLAGS_RELEASE uses CMake defaults
-    
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
     message(STATUS "Configuring MSVC runtime and flags (CMake defaults)")
     message(STATUS "  DEBUG:          CMake defaults only")
     message(STATUS "  RELEASE:        CMake defaults only")
     message(STATUS "  RELWITHDEBINFO: CMake defaults only")
     message(STATUS "  MINSIZEREL:     CMake defaults only")
-    
 elseif(UNIX)
     # Debug: CMake defaults only (no extra flags)
     # CMAKE_CXX_FLAGS_DEBUG uses CMake defaults
-    
     # Release: CMake defaults only (no extra flags)
     # CMAKE_CXX_FLAGS_RELEASE uses CMake defaults
-    
     message(STATUS "Configuring GCC/Clang runtime and flags (CMake defaults)")
     message(STATUS "  DEBUG:          CMake defaults only")
     message(STATUS "  RELEASE:        CMake defaults only")
@@ -906,23 +911,28 @@ elseif(UNIX AND NOT APPLE)
   # Recommended flags for Linux/Clang or GCC
   add_compile_options(
     -Wall
+    -Wextra
+    -Wformat
+    -Wformat-security
+    -Wimplicit-fallthrough
     -Wno-overloaded-virtual
     -Wno-switch
     -Wno-unused-parameter
     -Wno-unused-variable
     -Wno-missing-field-initializers
     -fstack-protector-strong
+    -fstack-clash-protection
   )
 
-  # Hardening: PIE and RELRO for executables
+  # Hardening: RELRO and BIND_NOW for executables
   add_link_options(-Wl,-z,relro,-z,now)
 
-  # Fortify source for Release builds
+  # Fortify source for optimized builds (requires -O1 or higher)
   if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     add_compile_definitions(_FORTIFY_SOURCE=2)
   endif()
 
-  message(STATUS "Linux build: Standard warning flags and hardening applied.")
+  message(STATUS "Linux build: Warning flags and security hardening applied.")
 
 elseif(WIN32)
   message(STATUS "Detected platform: Windows")
@@ -942,15 +952,15 @@ unset(IccProfLib2_LIB CACHE)
 unset(IccProfLib2 CACHE)
 
 # ----------------------------------------------------------------------
-# Third-Party Dependencies
+# Third-Party Dependencies (already found above — verify availability)
 # ----------------------------------------------------------------------
 message(STATUS "")
 message(STATUS "## Third Party Dependencies ##")
-find_package(LibXml2 REQUIRED)
-find_package(nlohmann_json REQUIRED)
-find_package(TIFF REQUIRED)
-find_package(PNG REQUIRED)
-find_package(JPEG REQUIRED)
+message(STATUS "  LibXml2:        ${LIBXML2_LIBRARIES}")
+message(STATUS "  nlohmann_json:  found")
+message(STATUS "  TIFF:           ${TIFF_LIBRARIES}")
+message(STATUS "  PNG:            ${PNG_LIBRARIES}")
+message(STATUS "  JPEG:           ${JPEG_LIBRARIES}")
 
 message(STATUS "")
 #
@@ -1001,9 +1011,13 @@ message(STATUS "## Project Configuration ##")
 message(STATUS "Adding subdirectory for IccProfLib.")
 add_subdirectory(IccProfLib)
 
-# Set default link target for IccProfLib
+# Set default link target for IccProfLib (matches build configuration)
 # Use CACHE INTERNAL so that it's available in Tools/* subdirectories
-set(TARGET_LIB_ICCPROFLIB IccProfLib2 CACHE INTERNAL "Link target for IccProfLib2")
+IF(ENABLE_SHARED_LIBS)
+  set(TARGET_LIB_ICCPROFLIB IccProfLib2 CACHE INTERNAL "Link target for IccProfLib2")
+ELSE()
+  set(TARGET_LIB_ICCPROFLIB IccProfLib2-static CACHE INTERNAL "Link target for IccProfLib2")
+ENDIF()
 
 #
 # Optional external dependency: LibXML2
@@ -1055,6 +1069,10 @@ ENDIF()
 # Ensure IccXML headers are available globally
 include_directories(${TOP_SOURCE_DIR}/IccXML/IccLibXML/)
 
+# Ensure generated version headers are available globally
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccProfLib)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccXML)
+
 # Diagnostic: Output current linker flags
 
 message(STATUS "CMAKE_EXE_LINKER_FLAGS = ${CMAKE_EXE_LINKER_FLAGS}")
@@ -1062,8 +1080,7 @@ message(STATUS "CMAKE_SHARED_LINKER_FLAGS = ${CMAKE_SHARED_LINKER_FLAGS}")
 message(STATUS "CMAKE_MODULE_LINKER_FLAGS = ${CMAKE_MODULE_LINKER_FLAGS}")
 
 
-# Ensure nlohmann_json is found
-find_package(nlohmann_json REQUIRED)
+# nlohmann_json already found above
 message(STATUS "nlohmann_json library found: ${nlohmann_json_DIR}")
 
  # Function to add and log subdirectories
@@ -1116,9 +1133,8 @@ IF(ENABLE_TOOLS)
   ENDIF()
 
 
-# --- PNG ---
+# --- PNG (already found above) ---
 message(STATUS "Checking for PNG...")
-find_package(PNG REQUIRED)
 
 if(PNG_FOUND)
   message(STATUS "PNG Library            : ${PNG_LIBRARIES}")
@@ -1135,8 +1151,7 @@ ADD_SUBDIRECTORY(Tools/IccPngDump)
     ADD_SUBDIRECTORY(Tools/IccDEVCmm)
 
 
-  # Check for TIFF library
-  find_package(TIFF REQUIRED)
+  # TIFF already found above
   if (TIFF_FOUND)
     include_directories(${TIFF_INCLUDE_DIR})
     message(STATUS "TIFF library found: ${TIFF_LIBRARIES}")
@@ -1152,14 +1167,15 @@ ADD_SUBDIRECTORY(Tools/IccPngDump)
     message(FATAL_ERROR "TIFF library not found. Please install libtiff-dev.")
   endif()
 
-  # Configure wxWidgets
-  find_package(wxWidgets COMPONENTS core base REQUIRED)
-  if (wxWidgets_FOUND)
+  # wxWidgets GUI tool (optional)
+  find_package(wxWidgets QUIET COMPONENTS core base)
+  if(wxWidgets_FOUND)
     include(${wxWidgets_USE_FILE})
-      ADD_SUBDIRECTORY(Tools/wxProfileDump)
-    message(STATUS "wxWidgets found and configured")
+    message(STATUS "wxWidgets found: ${wxWidgets_LIBRARIES}")
+    message(STATUS "Adding Subdirectory wxProfileDump.")
+    ADD_SUBDIRECTORY(Tools/wxProfileDump)
   else()
-    message(FATAL_ERROR "wxWidgets not found. Please install it manually or via vcpkg.")
+    message(STATUS "wxWidgets not found - skipping wxProfileDump.")
   endif()
 
 ENDIF(ENABLE_TOOLS)

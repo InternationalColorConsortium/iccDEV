@@ -1,4 +1,6 @@
 @echo off
+:: Auto-call path.bat if present alongside this script (for standalone bundles)
+if exist "%~dp0path.bat" call "%~dp0path.bat"
 where iccFromXml
 if not "%1"=="clean" goto do_begin
 echo CLEANING!

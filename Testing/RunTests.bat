@@ -1,4 +1,6 @@
 @echo off
+:: Auto-call path.bat if present alongside this script (for standalone bundles)
+if exist "%~dp0path.bat" call "%~dp0path.bat"
 echo ===========================================================================
 echo Test CalcElement Operations return of zero's indicates that something bad happened
 iccApplyNamedCMM Calc\srgbCalcTest.txt 2 0 Calc\srgbCalcTest.icc 3 sRGB_v4_ICC_preference.icc 3

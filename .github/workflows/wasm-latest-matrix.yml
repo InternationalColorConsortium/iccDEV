@@ -1,14 +1,14 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
-##                 https://color.org
+# Copyright (©) 2025 International Color Consortium. 
+#                 All rights reserved. 
+#                 https://color.org
 #
 #
-## Intent: iccDEV wasm-latest-matrix
+# Intent: iccDEV wasm-latest-matrix
 #
-## Last Updated: 02-DEC-2025 2100Z by David Hoyt 
-##               Added user-controllable input (uci) checks
+# Last Updated: 2026-02-17 16:29:28 UTC by David Hoyt 
+#               Added user-controllable input (uci) checks
 #
 #
 #
@@ -39,7 +39,7 @@ jobs:
     steps:
 
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
     - name: Harden Bash Environment
       shell: bash
@@ -94,12 +94,14 @@ jobs:
         emmake make install
         cd ..
         curl -LO https://download.sourceforge.net/libpng/libpng-1.6.51.tar.gz
+        echo "ac25cafc2054cda3f6f0fe22ee9fc587024b99e01d03bd72b765824e48f39021  libpng-1.6.51.tar.gz" | sha256sum -c -
         tar -xzf libpng-1.6.51.tar.gz && mv libpng-1.6.51 libpng && cd libpng
         CPPFLAGS="-I$(pwd)/../zlib" LDFLAGS="-L$(pwd)/../zlib/out/lib" emconfigure ./configure --disable-shared --enable-static --prefix=$(pwd)/out
         emmake make -j"$(nproc)"
         emmake make install
         cd ..
         curl -LO https://ijg.org/files/jpegsrc.v9e.tar.gz
+        echo "4077d6a6a75aeb01884f708919d25934c93305e49f7e3f36db9129320e6f4f3d  jpegsrc.v9e.tar.gz" | sha256sum -c -
         tar -xzf jpegsrc.v9e.tar.gz && mv jpeg-9e libjpeg && cd libjpeg
         emconfigure ./configure --prefix=$(pwd)/out --disable-shared --enable-static
         emmake make -j"$(nproc)"
@@ -121,7 +123,8 @@ jobs:
         emmake make install
         cd ..
         mkdir -p nlohmann/json/include
-        curl -L https://github.com/nlohmann/json/releases/latest/download/json.hpp -o nlohmann/json/include/json.hpp
+        curl -L https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp -o nlohmann/json/include/json.hpp
+        echo "aaf127c04cb31c406e5b04a63f1ae89369fccde6d8fa7cdda1ed4f32dfc5de63  nlohmann/json/include/json.hpp" | sha256sum -c -
         cd ..
     - name: Configure and Build iccDEV-WASM
       shell: bash
@@ -173,12 +176,12 @@ jobs:
         emmake make -j"$(nproc)"
         find . -type f \( -name '*.js' -o -name '*.wasm' \) -ls
     - name: Upload WASM Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
       with:
         name: wasm-artifacts-${{ matrix.build_type }}
         path: |
             iccDEV/Build/Tools/*
             Build
             LICENSE.md
-            README.md            
+            README.md
             docs/**

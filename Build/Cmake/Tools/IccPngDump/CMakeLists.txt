@@ -1,20 +1,12 @@
 #################################################################################
-# iccPngDump Cmake Project Configuration| iccMAX Project
-# Copyright (©) 2024-2025 The International Color Consortium. 
+# iccPngDump Cmake Project Configuration| iccDEV Project
+# Copyright (©) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
-# 
-#
-# Last Updated: 13-AUGUST-2025 at 1200Z by David Hoyt
-#
-# Changes: 	Fixups for Windows PNG Header Includes
-#           Update Cmake Configs to reduce logging outputs
-#           
-#						
-# TODO: Refactor Debug, Release, Asan, subproject pathing issues
-#       Collapse 3-tier CMakeLists.txt, Housekeeping
-#       Refactor Base Configs & logging to .mk's 
 #
 #
+# Last Updated: 2026-02-17 16:35:43 UTC by David Hoyt
+#
+# Changes: Housekeeping
 #
 #
 #################################################################################
@@ -36,7 +28,7 @@ message(STATUS "PROJECT_ROOT_DIR resolved as: ${PROJECT_ROOT_DIR}")
 set(TARGET_NAME iccPngDump)
 message(STATUS "Added executable target: ${TARGET_NAME}")
 
-# Add executable 
+# Add executable
 add_executable(${TARGET_NAME} ${SOURCES})
 
 # Include directories
@@ -46,7 +38,7 @@ target_include_directories(${TARGET_NAME} PRIVATE
 )
 
 # Unix check
-if(UNIX)
+if(UNIX AND NOT EMSCRIPTEN)
   target_include_directories(${TARGET_NAME} PRIVATE /usr/include /usr/local/include)
 endif()
 
@@ -92,11 +84,6 @@ endif()
 
 message(STATUS "Libraries linked for ${TARGET_NAME}")
 
-# 
-# set_target_properties(${TARGET_NAME} PROPERTIES
-#    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${PROJECT_ROOT_DIR}/Testing/Release"
-#    RUNTIME_OUTPUT_DIRECTORY_DEBUG   "${PROJECT_ROOT_DIR}/Testing/Debug"
-# )
 message(STATUS "Output directories set for ${TARGET_NAME}")
 
 # RIM Install

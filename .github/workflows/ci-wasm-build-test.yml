@@ -1,0 +1,271 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                All rights reserved.
+#                https://color.org
+#
+# Intent: WASM build and validation matrix (Release, Debug, ASAN)
+#
+# Last Modified: 2026-02-17 16:26:02 UTC by David Hoyt
+#
+# Based on: wasm-latest-matrix.yml (known good pattern)
+# Adapted: For cfl/ integrated CMake build with hardened flags
+#
+# Pattern: Build third-party deps with emscripten, then build
+#          iccDEV libraries and tools as WASM, validate output
+#
+###############################################################
+
+name: WASM Build & Test Matrix
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ master, cfl ]
+
+concurrency:
+  group: wasm-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wasm-build:
+    name: "WASM • ${{ matrix.build_type }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        build_type: [Release, Debug, Asan]
+      fail-fast: false
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Emscripten SDK
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+
+      - name: Build third-party dependencies
+        run: |
+          set -euo pipefail
+          source emsdk/emsdk_env.sh
+
+          THIRD_PARTY="$PWD/third_party"
+          mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
+
+          # zlib
+          git clone --depth 1 https://github.com/madler/zlib.git && cd zlib
+          emconfigure ./configure --static --prefix="$THIRD_PARTY/zlib/out"
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libpng (checksum verified)
+          curl -sLO https://download.sourceforge.net/libpng/libpng-1.6.51.tar.gz
+          echo "ac25cafc2054cda3f6f0fe22ee9fc587024b99e01d03bd72b765824e48f39021  libpng-1.6.51.tar.gz" | sha256sum -c -
+          tar -xzf libpng-1.6.51.tar.gz && mv libpng-1.6.51 libpng && cd libpng
+          CPPFLAGS="-I$THIRD_PARTY/zlib" LDFLAGS="-L$THIRD_PARTY/zlib/out/lib" \
+            emconfigure ./configure --disable-shared --enable-static --prefix="$THIRD_PARTY/libpng/out"
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libjpeg (checksum verified)
+          curl -sLO https://ijg.org/files/jpegsrc.v9e.tar.gz
+          echo "4077d6a6a75aeb01884f708919d25934c93305e49f7e3f36db9129320e6f4f3d  jpegsrc.v9e.tar.gz" | sha256sum -c -
+          tar -xzf jpegsrc.v9e.tar.gz && mv jpeg-9e libjpeg && cd libjpeg
+          emconfigure ./configure --prefix="$THIRD_PARTY/libjpeg/out" --disable-shared --enable-static
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libtiff
+          git clone --depth 1 https://gitlab.com/libtiff/libtiff.git && cd libtiff
+          mkdir wasm && cd wasm
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$THIRD_PARTY/libtiff/out" \
+            -DZLIB_INCLUDE_DIR="$THIRD_PARTY/zlib" \
+            -DZLIB_LIBRARY="$THIRD_PARTY/zlib/out/lib/libz.a" \
+            -DJPEG_INCLUDE_DIR="$THIRD_PARTY/libjpeg/out/include" \
+            -DJPEG_LIBRARY="$THIRD_PARTY/libjpeg/out/lib/libjpeg.a"
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libxml2
+          git clone --depth 1 https://gitlab.gnome.org/GNOME/libxml2.git && cd libxml2
+          emconfigure ./autogen.sh --without-python --disable-shared --enable-static --prefix="$THIRD_PARTY/libxml2/out"
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # nlohmann-json (build with CMake for find_package support)
+          git clone --depth 1 https://github.com/nlohmann/json.git nlohmann-json && cd nlohmann-json
+          mkdir wasm && cd wasm
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$THIRD_PARTY/nlohmann-json/out" \
+            -DJSON_BuildTests=OFF \
+            -DJSON_Install=ON
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          echo "### Third-party dependencies built" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          ls -d "$THIRD_PARTY"/*/out 2>/dev/null >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Configure and build iccDEV WASM
+        run: |
+          set -euo pipefail
+          source emsdk/emsdk_env.sh
+
+          THIRD_PARTY="$PWD/third_party"
+
+          # Determine build type and extra flags
+          BUILD_FLAGS=""
+          BUILD_TYPE="${{ matrix.build_type }}"
+          if [[ "$BUILD_TYPE" == "Asan" ]]; then
+            BUILD_FLAGS="-fsanitize=address"
+            BUILD_TYPE="Debug"
+          fi
+
+          # wxWidgets not available for WASM — no action needed (not in top-level CMakeLists)
+          # Disable RELRO/NOW linker hardening (not supported by wasm-ld)
+          sed -i 's/-Wl,-z,relro,-z,now//' Build/Cmake/CMakeLists.txt
+
+          mkdir -p build-wasm && cd build-wasm
+          emcmake cmake ../Build/Cmake \
+            -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_STATIC_LIBS=ON \
+            -DENABLE_SHARED_LIBS=OFF \
+            -DENABLE_TESTS=OFF \
+            -DLIBXML2_INCLUDE_DIR="$THIRD_PARTY/libxml2/out/include/libxml2" \
+            -DLIBXML2_LIBRARY="$THIRD_PARTY/libxml2/out/lib/libxml2.a" \
+            -DTIFF_INCLUDE_DIR="$THIRD_PARTY/libtiff/out/include" \
+            -DTIFF_LIBRARY="$THIRD_PARTY/libtiff/out/lib/libtiff.a" \
+            -DJPEG_INCLUDE_DIR="$THIRD_PARTY/libjpeg/out/include" \
+            -DJPEG_LIBRARY="$THIRD_PARTY/libjpeg/out/lib/libjpeg.a" \
+            -DPNG_PNG_INCLUDE_DIR="$THIRD_PARTY/libpng/out/include" \
+            -DPNG_INCLUDE_DIR="$THIRD_PARTY/libpng/out/include" \
+            -DPNG_LIBRARY="$THIRD_PARTY/libpng/out/lib/libpng16.a" \
+            -DZLIB_INCLUDE_DIR="$THIRD_PARTY/zlib" \
+            -DZLIB_LIBRARY="$THIRD_PARTY/zlib/out/lib/libz.a" \
+            -Dnlohmann_json_DIR="$THIRD_PARTY/nlohmann-json/out/share/cmake/nlohmann_json" \
+            -DCMAKE_CXX_FLAGS=" \
+              $BUILD_FLAGS \
+              -I$THIRD_PARTY/libtiff/out/include \
+              -I$THIRD_PARTY/libjpeg/out/include \
+              -I$THIRD_PARTY/libpng/out/include \
+              -I$THIRD_PARTY/zlib \
+              -I$THIRD_PARTY/nlohmann-json/out/include" \
+            -DCMAKE_EXE_LINKER_FLAGS=" \
+              $THIRD_PARTY/libjpeg/out/lib/libjpeg.a \
+              $THIRD_PARTY/libpng/out/lib/libpng16.a \
+              $THIRD_PARTY/zlib/out/lib/libz.a \
+              -s INITIAL_MEMORY=128MB \
+              -s ALLOW_MEMORY_GROWTH=1 \
+              -s FORCE_FILESYSTEM=1 \
+              -s MODULARIZE=1 \
+              -s EXPORT_NAME=createModule \
+              -s EXPORTED_RUNTIME_METHODS=['FS','callMain']" \
+            -Wno-dev
+
+          emmake make -j$(nproc)
+
+          # Report results
+          JS_COUNT=$(find . -name '*.js' -not -path '*/CMakeFiles/*' | wc -l)
+          WASM_COUNT=$(find . -name '*.wasm' | wc -l)
+          LIB_COUNT=$(find . -name '*.a' | wc -l)
+
+          {
+            echo "### WASM Build: ${{ matrix.build_type }}"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| JS modules | $JS_COUNT |"
+            echo "| WASM binaries | $WASM_COUNT |"
+            echo "| Static libraries | $LIB_COUNT |"
+            echo ""
+            echo "#### JS Modules"
+            echo '```'
+            find . -name '*.js' -not -path '*/CMakeFiles/*' -exec ls -lh {} \;
+            echo '```'
+            echo "#### WASM Binaries"
+            echo '```'
+            find . -name '*.wasm' -exec ls -lh {} \;
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Validate WASM output
+        run: |
+          set -euo pipefail
+          source emsdk/emsdk_env.sh
+
+          cd build-wasm
+
+          # Verify .wasm files exist and are valid
+          WASM_FILES=$(find . -name '*.wasm' -type f)
+          if [ -z "$WASM_FILES" ]; then
+            echo "::error::No WASM files produced"
+            exit 1
+          fi
+
+          # Validate each .wasm file header (magic number: \0asm)
+          VALID=0
+          INVALID=0
+          for wf in $WASM_FILES; do
+            MAGIC=$(xxd -l 4 -p "$wf" 2>/dev/null)
+            if [ "$MAGIC" = "0061736d" ]; then
+              SIZE=$(stat -c%s "$wf")
+              echo "VALID: $(basename $wf) ($SIZE bytes)"
+              VALID=$((VALID + 1))
+            else
+              echo "INVALID: $(basename $wf) (magic: $MAGIC)"
+              INVALID=$((INVALID + 1))
+            fi
+          done
+
+          echo "### Validation: $VALID valid, $INVALID invalid" >> $GITHUB_STEP_SUMMARY
+
+          if [ $INVALID -gt 0 ]; then
+            echo "::error::$INVALID invalid WASM files found"
+            exit 1
+          fi
+
+          # Run a quick smoke test with node if iccDumpProfile exists
+          DUMP_JS=$(find . -name "iccDumpProfile.js" -not -path '*/CMakeFiles/*' | head -1)
+          if [ -n "$DUMP_JS" ] && [ -f "$DUMP_JS" ]; then
+            echo "Smoke test: iccDumpProfile --help"
+            set +e
+            node "$DUMP_JS" 2>&1 | head -5
+            echo "iccDumpProfile WASM smoke test complete"
+            set -e
+          fi
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: wasm-${{ matrix.build_type }}
+          path: |
+            build-wasm/Tools/**/*.js
+            build-wasm/Tools/**/*.wasm
+            build-wasm/IccProfLib/*.a
+            build-wasm/IccXML/*.a
+          retention-days: 7
+          if-no-files-found: warn

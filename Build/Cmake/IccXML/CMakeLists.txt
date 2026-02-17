@@ -3,9 +3,9 @@
 # Copyright (©) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 04-FEB-2026 at 0430Z by David Hoyt
+#  Last Updated: 2026-02-17 16:34:47 UTC by David Hoyt
 #
-#  Changes: Modify Version to contain Commit Hash
+#  Changes: Add WASM Toolchain, CFL & libFuzzer
 #
 #################################################################################
 
@@ -46,11 +46,15 @@ else()
     set(ICCLIBXML_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}")
 endif()
 
+# Generate version header into build directory (not source tree)
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML/IccLibXMLVer.h.in"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML/IccLibXMLVer.h"
+    "${CMAKE_CURRENT_BINARY_DIR}/IccLibXMLVer.h"
     @ONLY
 )
+
+# Ensure build directory is in include path for generated header
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 # message(STATUS "Starting CMake debug for target: ${TARGET_NAME}")
 # message(STATUS "CFILES = ${CFILES}")
@@ -124,6 +128,10 @@ IF(ENABLE_STATIC_LIBS)
         "$<TARGET_FILE:${TARGET_NAME}-static>"
         "$<TARGET_FILE_DIR:${TARGET_NAME}-static>/${TARGET_NAME}.lib"
       COMMENT "Aliasing ${TARGET_NAME}-static.lib to ${TARGET_NAME}.lib for MSVC compatibility")
+  ENDIF()
+  # If no shared library, create alias so IccXML2 always exists
+  IF(NOT ENABLE_SHARED_LIBS)
+    ADD_LIBRARY(${TARGET_NAME} ALIAS ${TARGET_NAME}-static)
   ENDIF()
 ENDIF()
 
