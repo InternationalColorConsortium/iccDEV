@@ -19,11 +19,10 @@ iccDEV requires C++17 or higher to compile.
 ```
 export CXX=clang++
 git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
-cd iccdev/Build
-sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libwxgtk3.2-dev libwxgtk-{media,webview}3.2-dev wx-common wx3.2-headers curl git make cmake clang{,-tools} libxml2{,-dev} nlohmann-json3-dev build-essential
-cmake Cmake
-make -j"$(nproc)"
-
+cd iccdev
+sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libwxgtk3.2-dev libwxgtk-{media,webview}3.2-dev wx-common wx3.2-headers curl git make cmake clang{,-tools} libxml2{,-dev} nlohmann-json3-dev build-essential ninja-build
+cmake --preset linux-clang -S Build/Cmake -B out/linux-clang
+cmake --build out/linux-clang -j"$(nproc)"
 ```
 
 ## macOS
@@ -33,9 +32,8 @@ export CXX=clang++
 brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo
 git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
 cd iccdev
-cmake -G "Xcode" Build/Cmake
-xcodebuild -project RefIccMAX.xcodeproj
-open RefIccMAX.xcodeproj
+cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode
+cmake --build out/macos-xcode --config Release -j"$(sysctl -n hw.ncpu)"
 ```
 
 ## Windows MSVC
@@ -45,8 +43,8 @@ git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
 cd iccdev
 vcpkg integrate install
 vcpkg install
-cmake --preset vs2022-x64 -B . -S Build/Cmake
-cmake --build . -- /m /maxcpucount
+cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
+cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
 
 ### Reporting Build Issues

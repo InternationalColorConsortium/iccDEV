@@ -11,8 +11,7 @@
       "hidden": true,
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
     {
@@ -21,7 +20,6 @@
       "displayName": "Windows MSVC (VS2022)",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/build/vs2022-x64",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$penv{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_MANIFEST_DIR": "${sourceDir}"
@@ -31,7 +29,6 @@
       "name": "mingw-x64",
       "inherits": "default-base",
       "displayName": "Windows MinGW x64",
-      "binaryDir": "${sourceDir}/build/mingw-x64",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "x86_64-w64-mingw32-gcc",
         "CMAKE_CXX_COMPILER": "x86_64-w64-mingw32-g++"
@@ -41,7 +38,6 @@
       "name": "linux-gcc",
       "inherits": "default-base",
       "displayName": "Linux GCC",
-      "binaryDir": "${sourceDir}/build/linux-gcc",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++"
@@ -51,7 +47,6 @@
       "name": "linux-clang",
       "inherits": "default-base",
       "displayName": "Linux Clang",
-      "binaryDir": "${sourceDir}/build/linux-clang",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++"
@@ -61,7 +56,6 @@
       "name": "linux-gcc-asan",
       "inherits": "linux-gcc",
       "displayName": "Linux GCC with AddressSanitizer",
-      "binaryDir": "${sourceDir}/build/linux-gcc-asan",
       "cacheVariables": {
         "ENABLE_SANITIZERS": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -71,7 +65,6 @@
       "name": "linux-clang-asan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with AddressSanitizer",
-      "binaryDir": "${sourceDir}/build/linux-clang-asan",
       "cacheVariables": {
         "ENABLE_SANITIZERS": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -81,7 +74,6 @@
       "name": "linux-clang-tsan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with ThreadSanitizer",
-      "binaryDir": "${sourceDir}/build/linux-clang-tsan",
       "cacheVariables": {
         "ENABLE_TSAN": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -91,7 +83,6 @@
       "name": "linux-clang-msan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with MemorySanitizer",
-      "binaryDir": "${sourceDir}/build/linux-clang-msan",
       "cacheVariables": {
         "ENABLE_MSAN": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -101,7 +92,6 @@
       "name": "linux-clang-ubsan",
       "inherits": "linux-clang",
       "displayName": "Linux Clang with UBSanitizer",
-      "binaryDir": "${sourceDir}/build/linux-clang-ubsan",
       "cacheVariables": {
         "ENABLE_UBSAN": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -111,26 +101,7 @@
       "name": "macos-xcode",
       "inherits": "default-base",
       "displayName": "macOS (Xcode)",
-      "generator": "Xcode",
-      "binaryDir": "${sourceDir}/build/macos-xcode"
-    }
-  ],
-  "buildPresets": [
-    {
-      "name": "build-release",
-      "configurePreset": "vs2022-x64",
-      "configuration": "Release"
-    },
-    {
-      "name": "build-debug",
-      "configurePreset": "vs2022-x64",
-      "configuration": "Debug"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "test-default",
-      "configurePreset": "vs2022-x64"
+      "generator": "Xcode"
     }
   ]
 }
