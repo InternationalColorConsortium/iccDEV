@@ -1,13 +1,13 @@
 ###############################################################
 #
-# Copyright (©) 2025-2026 International Color Consortium. 
-#                 All rights reserved. 
-#                 https://color.org
+## Copyright (©) 2025-2026 International Color Consortium. 
+##                 All rights reserved. 
+##                 https://color.org
 #
 #
-# Intent: ci-latest-release
+## Intent: ci-latest-release
 #
-# Last Updated: 2026-02-17 16:18:35 UTC by David Hoyt
+## Last Updated: 2026-02-17 18:05:19 UTC UTC by David Hoyt
 #                Clean .pdb files from Zip Bundle
 #                Change Build to Release per Developer Spec
 #                Note that Cmake Default Build = Release (now) 
@@ -31,7 +31,7 @@ jobs:
   linux:
     name: "Linux ${{ matrix.compiler }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -240,7 +240,7 @@ jobs:
           echo "Installing Homebrew dependencies..."
           brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo || echo "⚠️ Some dependencies might already be installed."
           echo "✔ Dependency installation complete."
-
+  
       - name: CMake Configure
         shell: bash --noprofile --norc {0}
         env:
@@ -264,7 +264,7 @@ jobs:
                 -DJPEG_INCLUDE_DIR=$(brew --prefix jpeg-turbo)/include \
                 -Wno-dev Cmake/
           echo "✔ CMake configuration complete."
-
+      
       - name: Build
         shell: bash --noprofile --norc {0}
         env:
@@ -283,11 +283,11 @@ jobs:
           echo "=== Updating PATH ==="
           for d in ../Build/Tools/*; do
           [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done
+          done 
           sh CreateAllProfiles.sh
           sh RunTests.sh
-          find . -iname "*.icc" | wc -l
-
+          find . -iname "*.icc" | wc -l 
+          
       - name: Stage bundle into Testing directory
         shell: bash --noprofile --norc {0}
         env:
@@ -402,19 +402,19 @@ jobs:
          Set-StrictMode -Version Latest
          $ErrorActionPreference = 'Stop'
          $ProgressPreference = 'SilentlyContinue'
-
+         
          # --- Disable telemetry sources (pwsh / dotnet / gh) ---
          $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
          $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
          $env:GH_NO_UPDATE_NOTIFIER = "1"
          $env:GH_PROMPT_DISABLED = "1"
          $env:NUGET_XMLDOC_MODE = "skip"
-
+         
          # --- Validate workspace path (defense-in-depth) ---
          if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
              throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
          }
-
+         
          # --- Remove tokens or uci that should not exist in PR CI ---
          foreach ($v in @(
              'GITHUB_TOKEN',
@@ -426,7 +426,7 @@ jobs:
                  Remove-Item "Env:$v" -ErrorAction SilentlyContinue
              }
          }
-
+         
          # --- Canonicalization then sanitize user controllable input ---
          function Canonicalize([string]$s) {
              if (-not $s) { return "" }
@@ -435,16 +435,16 @@ jobs:
              $s = -join ($s.ToCharArray() | Where-Object { [int]$_ -ge 32 })
              return $s
          }
-
+         
          # --- Canonicalize PR-controlled environment values ---
          $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
          $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
          $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
-
+         
          # --- Harden Git configuration ---
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-
+         
          # --- PATH hardening: limit to trusted tool locations ---
          $trustedPath = @(
              "$env:SystemRoot\system32",
@@ -453,7 +453,7 @@ jobs:
              "$env:ProgramFiles\PowerShell\7"
          ) -join ';'
          $env:PATH = $trustedPath
-
+         
           Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@767f00a3f09872d96a0cb9fcd5e6a4ff33311330
@@ -485,12 +485,15 @@ jobs:
           Write-Host "Copyright (©) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
           git branch
           git status
-          vcpkg integrate install
-          vcpkg install
+          Write-Host "========= Fetching Deps... ================`n"
+          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          Write-Host "========= Extracting Deps... ================`n"
+          tar -xf deps.zip
           cd Build/Cmake
-          cmake --preset vs2022-x64 -B build -S . -DCMAKE_EXPORT_COMPILE_COMMANDS=ON "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
-          cmake --build build -- /m /maxcpucount
-          cmake --build build -- /m /maxcpucount
+          Write-Host "========= Building... ================`n"  
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Release  -Wno-dev
+          cmake --build build --config Release -- /m /maxcpucount
+          cmake --build build --config Release -- /m /maxcpucount          
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
               Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
               ForEach-Object { Split-Path $_.FullName -Parent } |
@@ -525,18 +528,23 @@ jobs:
           # Collect .icc profile information
           $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
           $totalCount = $profiles.Count
+          
           # Group profiles by directory
           $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
+          
           # Generate Summary Report
           Write-Host "`n========================="
           Write-Host " ICC Profile Report"
           Write-Host "========================="
+          
           # Print count per subdirectory
           foreach ($group in $groupedProfiles) {
               Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
           }
+          
           Write-Host "`nTotal .icc profiles found: $totalCount"
           Write-Host "=========================`n"
+          
           Write-Host "All Done!"
       - name: Stage bundle into Testing directory
         shell: pwsh
@@ -549,14 +557,10 @@ jobs:
           # 1. Copy the entire Testing directory contents (exclude Fuzzing)
           Get-ChildItem -Path "Testing" -Exclude "Fuzzing" |
             Copy-Item -Destination $stage -Recurse -Force
-          # 2. Copy .exe files to bundle root, .dll and .lib to libs/ subdirectory
-          New-Item -ItemType Directory -Force -Path "$stage/libs" | Out-Null
-          Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.exe |
+          # 2. Copy .exe and library files from the build (no .pdb in Release)
+          Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.exe,*.dll,*.lib |
             Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
             ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
-          Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.dll,*.lib |
-            Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' } |
-            ForEach-Object { Copy-Item $_.FullName -Destination "$stage/libs" -Force }
           # 3. Copy Testing/Readme.md, LICENSE.md and docs/
           Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
@@ -567,8 +571,8 @@ jobs:
           setlocal EnableDelayedExpansion
           set "SCRIPT_DIR=%~dp0"
           if "!SCRIPT_DIR:~-1!"=="\" set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"
-          :: Add script dir, libs subdir, and all subdirs containing .exe to PATH
-          set "NEW_PATH=!SCRIPT_DIR!\libs;!SCRIPT_DIR!;!PATH!"
+          :: Build new PATH with script dir and all subdirs containing .exe
+          set "NEW_PATH=!SCRIPT_DIR!;!PATH!"
           for /R "!SCRIPT_DIR!" %%F in (*.exe) do (
               set "dir=%%~dpF"
               if "!dir:~-1!"=="\" set "dir=!dir:~0,-1!"
