@@ -41,29 +41,6 @@ cmake --build out/macos-xcode --config Release -j"$(sysctl -n hw.ncpu)"
 ```
 git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
 cd iccdev
-vcpkg integrate install
-vcpkg install
 cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
-
-### Reporting Build Issues
-
-Before submitting a PR for build failures:
-
-1. Test local environment:
-   - Build in a clean container/VM
-   - Open an Issue first
-   - Utilize Testing Scripts
-     - [Unix](https://github.com/InternationalColorConsortium/iccDEV/blob/research/contrib/HelperScripts/unix-issue-template.sh)
-       ```
-       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/InternationalColorConsortium/iccDEV/refs/heads/research/contrib/HelperScripts/unix-pr-review.sh)"
-       ```
-     - [Windows](https://raw.githubusercontent.com/InternationalColorConsortium/iccDEV/refs/heads/research/contrib/HelperScripts/windows-pr-review.ps1)
-       ```
-       iex (iwr -Uri "https://raw.githubusercontent.com/InternationalColorConsortium/iccDEV/refs/heads/research/contrib/HelperScripts/windows-issue-template.ps1").Content
-       ```
-
-2. Open or Update an Issue with the script output.
-
-3. [CI](https://github.com/InternationalColorConsortium/iccDEV/actions/workflows/ci-latest-release.yml) provides the latest builds for macOS, Windows & Linux.
