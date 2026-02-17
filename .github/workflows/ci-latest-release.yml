@@ -240,7 +240,7 @@ jobs:
           echo "Installing Homebrew dependencies..."
           brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo || echo "⚠️ Some dependencies might already be installed."
           echo "✔ Dependency installation complete."
-  
+
       - name: CMake Configure
         shell: bash --noprofile --norc {0}
         env:
@@ -264,7 +264,7 @@ jobs:
                 -DJPEG_INCLUDE_DIR=$(brew --prefix jpeg-turbo)/include \
                 -Wno-dev Cmake/
           echo "✔ CMake configuration complete."
-      
+
       - name: Build
         shell: bash --noprofile --norc {0}
         env:
@@ -283,11 +283,11 @@ jobs:
           echo "=== Updating PATH ==="
           for d in ../Build/Tools/*; do
           [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done 
+          done
           sh CreateAllProfiles.sh
           sh RunTests.sh
           find . -iname "*.icc" | wc -l 
-          
+
       - name: Stage bundle into Testing directory
         shell: bash --noprofile --norc {0}
         env:
@@ -402,7 +402,7 @@ jobs:
          Set-StrictMode -Version Latest
          $ErrorActionPreference = 'Stop'
          $ProgressPreference = 'SilentlyContinue'
-         
+
          # --- Disable telemetry sources (pwsh / dotnet / gh) ---
          $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
          $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
@@ -414,7 +414,7 @@ jobs:
          if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
              throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
          }
-         
+
          # --- Remove tokens or uci that should not exist in PR CI ---
          foreach ($v in @(
              'GITHUB_TOKEN',
@@ -426,7 +426,7 @@ jobs:
                  Remove-Item "Env:$v" -ErrorAction SilentlyContinue
              }
          }
-         
+
          # --- Canonicalization then sanitize user controllable input ---
          function Canonicalize([string]$s) {
              if (-not $s) { return "" }
@@ -435,7 +435,7 @@ jobs:
              $s = -join ($s.ToCharArray() | Where-Object { [int]$_ -ge 32 })
              return $s
          }
-         
+
          # --- Canonicalize PR-controlled environment values ---
          $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
          $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
@@ -444,7 +444,7 @@ jobs:
          # --- Harden Git configuration ---
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-         
+
          # --- PATH hardening: limit to trusted tool locations ---
          $trustedPath = @(
              "$env:SystemRoot\system32",
@@ -453,7 +453,7 @@ jobs:
              "$env:ProgramFiles\PowerShell\7"
          ) -join ';'
          $env:PATH = $trustedPath
-         
+
           Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@767f00a3f09872d96a0cb9fcd5e6a4ff33311330
@@ -528,23 +528,23 @@ jobs:
           # Collect .icc profile information
           $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
           $totalCount = $profiles.Count
-          
+
           # Group profiles by directory
           $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
-          
+
           # Generate Summary Report
           Write-Host "`n========================="
           Write-Host " ICC Profile Report"
           Write-Host "========================="
-          
+
           # Print count per subdirectory
           foreach ($group in $groupedProfiles) {
               Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
           }
-          
+
           Write-Host "`nTotal .icc profiles found: $totalCount"
           Write-Host "=========================`n"
-          
+
           Write-Host "All Done!"
       - name: Stage bundle into Testing directory
         shell: pwsh
