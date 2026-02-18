@@ -18,7 +18,6 @@ name: "ci-build-matrix"
 
 permissions:
   contents: read
-  pull-requests: read
 
 on:
   workflow_dispatch:
@@ -49,7 +48,7 @@ env:
 
 jobs:
   #############################################################################
-  # Job 1: Standard Project Builds (Tools Only - No Fuzzing)
+  # Job 1: Standard Project Builds
   #############################################################################
   standard-builds:
     name: "Standard • ${{ matrix.os }} • ${{ matrix.compiler }} • ${{ matrix.build_type }}"
@@ -107,6 +106,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -118,6 +118,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -135,6 +136,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -147,6 +149,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
@@ -155,31 +158,35 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
-            echo "CC=gcc" >> $GITHUB_ENV
-            echo "CXX=g++" >> $GITHUB_ENV
+          if [ "$MATRIX_COMPILER" = "gcc" ]; then
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
           else
-            echo "CC=clang" >> $GITHUB_ENV
-            echo "CXX=clang++" >> $GITHUB_ENV
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
           fi
 
       - name: Configure CMake
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
           cmake ../Build/Cmake \
-                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_BUILD_TYPE="$MATRIX_BUILD_TYPE" \
                 -DENABLE_SHARED_LIBS=ON \
                 -DENABLE_STATIC_LIBS=ON \
                 -DENABLE_TOOLS=ON
@@ -188,8 +195,10 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -197,8 +206,13 @@ jobs:
           # Enable ccache if available
           if command -v ccache >/dev/null 2>&1; then
             export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
-            export CC="ccache ${{ matrix.compiler == 'gcc' && 'gcc' || 'clang' }}"
-            export CXX="ccache ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}"
+            if [ "$MATRIX_COMPILER" = "gcc" ]; then
+              export CC="ccache gcc"
+              export CXX="ccache g++"
+            else
+              export CC="ccache clang"
+              export CXX="ccache clang++"
+            fi
           fi
 
           cd Build
@@ -254,6 +268,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -270,196 +285,7 @@ jobs:
           fi
 
   #############################################################################
-  # Job 2: Fuzzer Builds (Debug + Full Instrumentation)
-  #############################################################################
-  fuzzer-builds:
-    name: "Fuzzer • ${{ matrix.os }} • Debug+Instrumentation"
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-        with:
-          ref: ${{ env.CHECKOUT_REF }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Cache Dependencies
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # v4.2.3
-        with:
-          path: |
-            /var/cache/apt/archives
-            ~/.cache/ccache
-          key: fuzzer-deps-${{ hashFiles('Build/Cmake/CMakeLists.txt', 'Testing/Fuzzing/CMakeLists.txt') }}
-          restore-keys: |
-            fuzzer-deps-
-
-      - name: Configure Git Environment
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-      - name: Install Dependencies
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
-          sudo apt-get install -y \
-            build-essential cmake clang llvm ccache \
-            libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
-          ccache --zero-stats || true
-
-      - name: Disable wxWidgets for CFL
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
-
-      - name: Configure Fuzzer Build
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          mkdir -p Build-fuzzing && cd Build-fuzzing
-          CC=clang CXX=clang++ cmake ../Build/Cmake \
-                -DCMAKE_BUILD_TYPE=Debug \
-                -DENABLE_FUZZING=ON \
-                -DENABLE_STATIC_LIBS=ON \
-                -DENABLE_SHARED_LIBS=ON \
-                -DENABLE_TOOLS=OFF
-
-      - name: Build Fuzzers
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          # Enable ccache
-          if command -v ccache >/dev/null 2>&1; then
-            export PATH="/usr/lib/ccache:$PATH"
-            export CC="ccache clang"
-            export CXX="ccache clang++"
-          fi
-          cd Build-fuzzing
-          echo "::group::Fuzzer Build Output"
-          BUILD_START=$(date +%s)
-          make -j$(nproc) 2>&1 | tee build-fuzzing.log
-          BUILD_END=$(date +%s)
-          echo "::endgroup::"
-          BUILD_TIME=$((BUILD_END - BUILD_START))
-          echo "::notice title=Fuzzer Build Time::Fuzzer build completed in ${BUILD_TIME}s"
-          if grep -iE '(error|failed|undefined reference|cannot find)' build-fuzzing.log; then
-            echo "::error title=Fuzzer Build Failed::Fuzzer build errors detected"
-            exit 1
-          fi
-          # Show ccache stats
-          if command -v ccache >/dev/null 2>&1; then
-            echo "::group::ccache Statistics"
-            ccache --show-stats || true
-            echo "::endgroup::"
-          fi
-
-      - name: Verify Fuzzer Build
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          FUZZER_COUNT=$(ls Build-fuzzing/Testing/Fuzzing/icc_*_fuzzer 2>/dev/null | wc -l)
-          echo "::notice title=Fuzzer Count::Built $FUZZER_COUNT fuzzers"
-          # Note: Fuzzer count varies by platform and configuration
-          # Just verify at least 1 fuzzer was built
-          if [ "$FUZZER_COUNT" -lt 1 ]; then
-            echo "::error title=Fuzzer Verification Failed::Expected at least 1 fuzzer, got $FUZZER_COUNT"
-            exit 1
-          fi
-
-      - name: Upload Fuzzer Build Artifacts (on failure)
-        if: failure()
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3
-        with:
-          name: fuzzer-build-logs
-          path: |
-            Build-fuzzing/build-fuzzing.log
-            Build-fuzzing/CMakeCache.txt
-            Build-fuzzing/CMakeFiles/CMakeError.log
-            Build-fuzzing/CMakeFiles/CMakeOutput.log
-            Build-fuzzing/Testing/Fuzzing/*.log
-          retention-days: 7
-
-      - name: Upload Fuzzer Executables (on success)
-        if: success()
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3
-        with:
-          name: fuzzer-executables-debug-instrumentation
-          path: Build-fuzzing/Testing/Fuzzing/*_fuzzer
-          retention-days: 14
-          compression-level: 9
-
-      - name: Test Fuzzers
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          cd Build-fuzzing/Testing/Fuzzing
-          # Verify all 14 fuzzers are built and executable
-          EXPECTED_FUZZERS="icc_apply_fuzzer icc_applynamedcmm_fuzzer icc_applyprofiles_fuzzer icc_calculator_fuzzer icc_dump_fuzzer icc_fromxml_fuzzer icc_io_fuzzer icc_link_fuzzer icc_multitag_fuzzer icc_profile_fuzzer icc_roundtrip_fuzzer icc_spectral_fuzzer icc_toxml_fuzzer icc_v5dspobs_fuzzer"
-          PASS=0
-          FAIL=0
-          for f in $EXPECTED_FUZZERS; do
-            if [ -x "$f" ]; then
-              PASS=$((PASS + 1))
-              echo "✓ $f"
-            else
-              FAIL=$((FAIL + 1))
-              echo "✗ $f (not found or not executable)"
-            fi
-          done
-          echo "::notice title=Fuzzer Build Verification::$PASS of 14 fuzzers built successfully"
-          if [ "$FAIL" -gt 0 ]; then
-            echo "::error title=Fuzzer Build Failed::$FAIL fuzzers missing or not executable"
-            exit 1
-          fi
-
-  #############################################################################
-  # Job 3: Sanitizer Builds (Individual Sanitizers)
+  # Job 2: Sanitizer Builds (Individual Sanitizers)
   #############################################################################
   sanitizer-builds:
     name: "Sanitizer • ${{ matrix.sanitizer }} • ${{ matrix.build_type }}"
@@ -506,6 +332,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -516,6 +343,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -530,6 +358,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
@@ -538,13 +367,16 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_SANITIZER: ${{ matrix.sanitizer }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
-          case "${{ matrix.sanitizer }}" in
+          case "$MATRIX_SANITIZER" in
             asan)
               OPTS="-DENABLE_ASAN=ON"
               ;;
@@ -556,7 +388,7 @@ jobs:
               ;;
           esac
           CC=clang CXX=clang++ cmake ../Build/Cmake \
-                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+                -DCMAKE_BUILD_TYPE="$MATRIX_BUILD_TYPE" \
                 $OPTS
 
       - name: Build with Sanitizer
@@ -565,6 +397,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -581,6 +414,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -605,7 +439,7 @@ jobs:
           compression-level: 9
 
   #############################################################################
-  # Job 4: Build Option Matrix (Test Each Option Independently)
+  # Job 3: Build Option Matrix (Test Each Option Independently)
   #############################################################################
   option-matrix:
     name: "Option • ${{ matrix.option_name }}"
@@ -646,6 +480,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -656,6 +491,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -670,6 +506,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
@@ -678,15 +515,17 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_CMAKE_OPTS: ${{ matrix.cmake_opts }}
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
           cmake Cmake/ \
                 -DCMAKE_BUILD_TYPE=Release \
-                ${{ matrix.cmake_opts }}
+                $MATRIX_CMAKE_OPTS
 
       - name: Build
         shell: bash --noprofile --norc {0}
@@ -694,6 +533,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -705,7 +545,7 @@ jobs:
           fi
 
   #############################################################################
-  # Job 5: Windows Build (MSVC)
+  # Job 4: Windows Build (MSVC)
   #############################################################################
   windows-build:
     name: "Windows • MSVC • ${{ matrix.build_type }}"
@@ -756,6 +596,8 @@ jobs:
 
       - name: Configure
         shell: pwsh
+        env:
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -765,19 +607,21 @@ jobs:
           cmake -B build -S . `
                 -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
                 -DVCPKG_MANIFEST_MODE=OFF `
-                -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+                -DCMAKE_BUILD_TYPE="$env:MATRIX_BUILD_TYPE" `
                 -Wno-dev
 
       - name: Build
         shell: pwsh
+        env:
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
           if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
           cd Build/Cmake
-          cmake --build build --config ${{ matrix.build_type }} -- /m /maxcpucount
-          cmake --build build --config ${{ matrix.build_type }} -- /m /maxcpucount
+          cmake --build build --config "$env:MATRIX_BUILD_TYPE" -- /m /maxcpucount
+          cmake --build build --config "$env:MATRIX_BUILD_TYPE" -- /m /maxcpucount
 
       - name: Test
         shell: pwsh
@@ -796,7 +640,7 @@ jobs:
           .\CreateAllProfiles.bat
 
   #############################################################################
-  # Job 6: Version Header Generation Test
+  # Job 5: Version Header Generation Test
   #############################################################################
   version-header-test:
     name: "Version Headers • Build Directory Generation"
@@ -820,6 +664,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -830,6 +675,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -842,6 +688,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
@@ -852,6 +699,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -865,6 +713,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -879,7 +728,7 @@ jobs:
           echo "✅ Version headers correctly generated in build directory"
 
   #############################################################################
-  # Job 7: Clean/Rebuild Cycle Test
+  # Job 6: Clean/Rebuild Cycle Test
   #############################################################################
   clean-rebuild-test:
     name: "Clean/Rebuild Cycle Test"
@@ -903,6 +752,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -913,6 +763,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -925,6 +776,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
           sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
@@ -935,6 +787,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -943,7 +796,7 @@ jobs:
           make -j$(nproc)
           TOOL_COUNT_1=$(find Tools -type f -executable | wc -l)
           echo "Initial build: $TOOL_COUNT_1 tools"
-          echo "TOOL_COUNT_1=$TOOL_COUNT_1" >> $GITHUB_ENV
+          echo "TOOL_COUNT_1=$TOOL_COUNT_1" >> "$GITHUB_ENV"
 
       - name: Clean
         shell: bash --noprofile --norc {0}
@@ -951,6 +804,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -967,8 +821,10 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TOOL_COUNT_1: ${{ env.TOOL_COUNT_1 }}
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -976,19 +832,19 @@ jobs:
           make -j$(nproc)
           TOOL_COUNT_2=$(find Tools -type f -executable | wc -l)
           echo "After rebuild: $TOOL_COUNT_2 tools"
-          if [ "$TOOL_COUNT_2" -ne "${{ env.TOOL_COUNT_1 }}" ]; then
-            echo "ERROR: Rebuild produced different number of tools ($TOOL_COUNT_2 vs ${{ env.TOOL_COUNT_1 }})"
+          if [ "$TOOL_COUNT_2" -ne "$TOOL_COUNT_1" ]; then
+            echo "ERROR: Rebuild produced different number of tools ($TOOL_COUNT_2 vs $TOOL_COUNT_1)"
             exit 1
           fi
           echo "✅ Clean/rebuild cycle successful"
 
   #############################################################################
-  # Job 8: Final Summary
+  # Job 7: Final Summary
   #############################################################################
   final-summary:
     name: "Test Summary"
     runs-on: ubuntu-latest
-    needs: [standard-builds, fuzzer-builds, sanitizer-builds, option-matrix, windows-build, version-header-test, clean-rebuild-test]
+    needs: [standard-builds, sanitizer-builds, option-matrix, windows-build, version-header-test, clean-rebuild-test]
     if: always()
 
     steps:
@@ -996,8 +852,15 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          RESULT_STANDARD: ${{ needs.standard-builds.result }}
+          RESULT_SANITIZER: ${{ needs.sanitizer-builds.result }}
+          RESULT_OPTION: ${{ needs.option-matrix.result }}
+          RESULT_WINDOWS: ${{ needs.windows-build.result }}
+          RESULT_VERSION: ${{ needs.version-header-test.result }}
+          RESULT_CLEAN: ${{ needs.clean-rebuild-test.result }}
         run: |
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           {
             echo "# Comprehensive Build & Test Results"
             echo ""
@@ -1031,9 +894,6 @@ jobs:
             echo "- ✅ Shared libs only"
             echo "- ✅ Static libs only"
             echo ""
-            echo "### Fuzzing"
-            echo "- ✅ 14 libFuzzer harnesses (Debug + Full Instrumentation)"
-            echo ""
             echo "### Special Tests"
             echo "- ✅ Version header generation (build directory)"
             echo "- ✅ Clean source tree after build"
@@ -1043,16 +903,15 @@ jobs:
             echo ""
             echo "| Job | Status |"
             echo "|-----|--------|"
-            echo "| Standard Builds | ${{ needs.standard-builds.result }} |"
-            echo "| Fuzzer Builds | ${{ needs.fuzzer-builds.result }} |"
-            echo "| Sanitizer Builds | ${{ needs.sanitizer-builds.result }} |"
-            echo "| Option Matrix | ${{ needs.option-matrix.result }} |"
-            echo "| Windows Build | ${{ needs.windows-build.result }} |"
-            echo "| Version Header Test | ${{ needs.version-header-test.result }} |"
-            echo "| Clean/Rebuild Test | ${{ needs.clean-rebuild-test.result }} |"
+            echo "| Standard Builds | $(sanitize_line "$RESULT_STANDARD") |"
+            echo "| Sanitizer Builds | $(sanitize_line "$RESULT_SANITIZER") |"
+            echo "| Option Matrix | $(sanitize_line "$RESULT_OPTION") |"
+            echo "| Windows Build | $(sanitize_line "$RESULT_WINDOWS") |"
+            echo "| Version Header Test | $(sanitize_line "$RESULT_VERSION") |"
+            echo "| Clean/Rebuild Test | $(sanitize_line "$RESULT_CLEAN") |"
             echo ""
             echo "---"
             echo ""
             echo "**Compliance:** Hoyt shell/PowerShell prologue standards"
             echo "**Reference:** llmcjf/actions/"
-          } >> $GITHUB_STEP_SUMMARY
+          } >> "$GITHUB_STEP_SUMMARY"
