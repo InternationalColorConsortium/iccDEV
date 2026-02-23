@@ -67,14 +67,14 @@
 @ECHO Apply Overprint simulation to CMYKW image to get background previews
 @ECHO *****************************************************************
 
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevWW.tif 1 1 0 0 0 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevRW.tif 1 1 0 0 0 -ENV:bkgX 0.264 -ENV:bkgY 0.168 -ENV:bkgZ 0.033 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevGW.tif 1 1 0 0 0 -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevBW.tif 1 1 0 0 0 -ENV:bkgX 0.2099 -ENV:bkgY 0.182 -ENV:bkgZ 0.498 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevKW.tif 1 1 0 0 0 -ENV:bkgX 0 -ENV:bkgY 0 -ENV:bkgZ 0 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevWW.tif 1 1 0 0 0 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevRW.tif 1 1 0 0 0 -ENV:bkgX 0.264 -ENV:bkgY 0.168 -ENV:bkgZ 0.033 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevGW.tif 1 1 0 0 0 -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevBW.tif 1 1 0 0 0 -ENV:bkgX 0.2099 -ENV:bkgY 0.182 -ENV:bkgZ 0.498 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevKW.tif 1 1 0 0 0 -ENV:bkgX 0 -ENV:bkgY 0 -ENV:bkgZ 0 -embedded 10001 e:..\sRGB_v4_ICC_preference.icc 1
 
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevWS.tif 1 1 0 0 0 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevRS.tif 1 1 0 0 0 -ENV:bkgX 0.264 -ENV:bkgY 0.168 -ENV:bkgZ 0.033 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevGS.tif 1 1 0 0 0 -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevBS.tif 1 1 0 0 0 -ENV:bkgX 0.2099 -ENV:bkgY 0.182 -ENV:bkgZ 0.498 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
-iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevKS.tif 1 1 0 0 0 -ENV:bkgX 0 -ENV:bkgY 0 -ENV:bkgZ 0 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevWS.tif 1 1 0 0 0 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevRS.tif 1 1 0 0 0 -ENV:bkgX 0.264 -ENV:bkgY 0.168 -ENV:bkgZ 0.033 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevGS.tif 1 1 0 0 0 -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevBS.tif 1 1 0 0 0 -ENV:bkgX 0.2099 -ENV:bkgY 0.182 -ENV:bkgZ 0.498 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
+%TOOLDIR%iccapplyprofiles Data\TShirtDesignCMYKW.tif Results\TShirtDesignPrevKS.tif 1 1 0 0 0 -ENV:bkgX 0 -ENV:bkgY 0 -ENV:bkgZ 0 ICC\CMYK-S_Overprint_Profile.icc 10001 e:..\sRGB_v4_ICC_preference.icc 1
