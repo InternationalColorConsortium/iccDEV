@@ -1833,6 +1833,8 @@ bool CIccCLUT::Init(icUInt8Number nGridPoints, icUInt32Number nMaxSize, icUInt8N
   // m_GridPoints[] is a fixed length of 16
   if (m_nInput > 16)
     return false;
+  if (nGridPoints < 2)  // at least 2 required for interpolation to work
+    return false;
   memset(m_GridPoints, nGridPoints, m_nInput);
   return Init(&m_GridPoints[0], nMaxSize, nBytesPerPoint);
 }

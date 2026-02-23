@@ -71,6 +71,7 @@
 
 #include <cstdio>
 #include <string>
+#include <climits>
 #include "IccProfile.h"
 #include "IccTagBasic.h"
 #include "IccTagMPE.h"
@@ -144,7 +145,10 @@ public:
         return false;
       }
       else if (line.substr(0, 12) == "LUT_3D_SIZE ") {
-        m_sizeLut3D = atoi(line.c_str() + 12);
+        int64_t temp = atoll( line.c_str() + 12 );
+        if (temp >= INT_MAX || temp <= 0)
+            return false;
+        m_sizeLut3D = (int)temp;
       }
       else if (line.substr(0, 19) == "LUT_3D_INPUT_RANGE ") {
         m_fMinInput[0] = m_fMinInput[1] = m_fMinInput[2] = (icFloatNumber)atof(line.c_str() + 19);
@@ -215,10 +219,15 @@ public:
   int sizeLut3D() { return m_sizeLut3D; }
   bool parse3DTable(icFloatNumber* toLut, icUInt32Number nSizeLut)
   {
-    icUInt32Number num = m_sizeLut3D * m_sizeLut3D * m_sizeLut3D;
+    if (m_sizeLut3D < 2 || nSizeLut <= 0)
+        return false;
+    
+    uint64_t temp = (uint64_t)m_sizeLut3D * (uint64_t)m_sizeLut3D * (uint64_t)m_sizeLut3D;
+    if (temp > UINT_MAX)
+        return false;
+    icUInt32Number num = (icUInt32Number)temp;
 
-    //
-    if (!m_sizeLut3D || nSizeLut != num*3)
+    if (nSizeLut != num*3)
       return false;
 
     const char* next;
@@ -406,8 +415,17 @@ int main(int argc, char* argv[])
 
   CIccMpeCLUT* pMpeCLUT = new CIccMpeCLUT();
   CIccCLUT* pCLUT = new CIccCLUT(3, 3);
-  pCLUT->Init(cube.sizeLut3D());
+  
+  if (!pCLUT->Init(cube.sizeLut3D()) ) {
+    printf("Unable to create LUT from '%s'\n", argv[1]);
+    return -4;
+  }
+
   bool bSuccess = cube.parse3DTable(pCLUT->GetData(0), pCLUT->NumPoints()*3);
+  if (!bSuccess) {
+    printf("Unable to parse LUT from '%s'\n", argv[1]);
+    return (-4);
+  }
 
   pMpeCLUT->SetCLUT(pCLUT);
   pTag->Attach(pMpeCLUT);
@@ -415,11 +433,6 @@ int main(int argc, char* argv[])
   profile.AttachTag(icSigAToB0Tag, pTag);
 
   cube.close();
-
-  if (!bSuccess) {
-    printf("Unable to parse LUT from '%s'\n", argv[1]);
-    return (-4);
-  }
 
   //Add description Tag
   CIccTagMultiLocalizedUnicode* pTextTag = new CIccTagMultiLocalizedUnicode();
