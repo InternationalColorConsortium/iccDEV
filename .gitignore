@@ -60,6 +60,9 @@ Testing/private/**
 **/vc_msw*/**
 Developer Defs.props
 
+#build files
+out/*
+
 # CMake generated files
 CMakeCache.txt
 **/CMakeFiles

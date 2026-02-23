@@ -1470,7 +1470,7 @@ static inline bool compare_float(double x, double y, double eps=0.0000001f) {
 *  icValidateOK if valid, or other error status.
 *****************************************************************************
 */
-icValidateStatus CIccProfile::CheckHeader(std::string &sReport) const
+icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfile *pParentProfile) const
 {
   icValidateStatus rv = icValidateOK;
 
@@ -1519,7 +1519,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport) const
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
   }
-  else if (m_Header.mcs != icSigNoMCSData && m_Header.deviceClass != icSigInputClass) {
+  else if (m_Header.mcs != icSigNoMCSData && m_Header.deviceClass != icSigInputClass && !pParentProfile) {
     sReport += icMsgValidateNonCompliant;
     sReport += " - Invalid MCS designator for device class\n";
     rv = icMaxStatus(rv, icValidateNonCompliant);
@@ -2985,7 +2985,7 @@ icValidateStatus CIccProfile::Validate(std::string &sReport, std::string sSigPat
   icValidateStatus rv = icValidateOK;
 
   //Check header
-  rv = icMaxStatus(rv, CheckHeader(sReport));
+  rv = icMaxStatus(rv, CheckHeader(sReport, pParentProfile));
 
   // Check for duplicate tags
   if (!AreTagsUnique()) {

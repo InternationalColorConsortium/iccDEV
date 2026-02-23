@@ -8698,27 +8698,11 @@ icValidateStatus CIccTagColorantOrder::Validate(std::string sigPath, std::string
     return rv;
   }
 
-  if (sigPath==icGetSigPath(icSigColorantTableTag)) {
-    if (m_nCount != icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
-      sReport += icMsgValidateNonCompliant;
-      sReport += sSigPathName;
-      sReport += " - Incorrect number of colorants.\n";
-      rv = icMaxStatus(rv, icValidateNonCompliant);
-    }
-  }
-  else if (sigPath==icGetSigPath(icSigColorantTableOutTag)) {
-    if (m_nCount != icGetSpaceSamples(pProfile->m_Header.pcs)) {
-      sReport += icMsgValidateNonCompliant;
-      sReport += sSigPathName;
-      sReport += " - Incorrect number of colorants.\n";
-      rv = icMaxStatus(rv, icValidateNonCompliant);
-    }
-  }
-  else {
-    sReport += icMsgValidateWarning;
+  if (m_nCount != icGetSpaceSamples(pProfile->m_Header.colorSpace)) {
+    sReport += icMsgValidateNonCompliant;
     sReport += sSigPathName;
-    sReport += " - Unknown number of required colorants.\n";
-    rv = icMaxStatus(rv, icValidateWarning);
+    sReport += " - Incorrect number of colorants.\n";
+    rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
   return rv;

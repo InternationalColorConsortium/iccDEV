@@ -226,7 +226,7 @@ protected:
   // Profile Validation functions
   icValidateStatus CheckRequiredTags(std::string &sReport, const CIccProfile *pParentProfile = NULL) const;
   bool CheckTagExclusion(std::string &sReport) const;
-  icValidateStatus CheckHeader(std::string &sReport) const;
+  icValidateStatus CheckHeader(std::string &sReport, const CIccProfile *pParentProfile = NULL) const;
   icValidateStatus CheckTagTypes(std::string &sReport) const;
   bool IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
                    icStructSignature structSig=icSigUndefinedStruct,
