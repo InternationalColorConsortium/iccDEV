@@ -8309,16 +8309,17 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
       nIntent = icPerceptual;
   }
 
+  // this must check before creating the Xform, because that can delete the profile
+  if (pProfile->m_Header.deviceClass == icSigMaterialVisualizationClass) {
+    bInput = true;
+  }
+
   CIccXformPtr Xform;
   
   Xform.ptr = CIccXform::Create(pProfile, bInput, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
   if (!Xform.ptr) {
     return icCmmStatBadXform;
-  }
-
-  if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass) {
-    bInput = true;
   }
 
   m_nLastSpace = nDstSpace;
