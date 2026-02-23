@@ -2326,12 +2326,12 @@ const icChar *CIccTagTextDescription::operator=(const icChar *szText)
  */
 icChar *CIccTagTextDescription::GetBuffer(icUInt32Number nSize)
 {
-  if (m_nASCIISize < nSize) {
-    m_szText = (icChar*)icRealloc(m_szText, nSize+1);
+  if (m_nASCIISize < (nSize+1)) {
+    m_szText = (icChar*)icRealloc(m_szText, (nSize+1));
 
     m_szText[nSize] = '\0';
 
-    m_nASCIISize = nSize;
+    m_nASCIISize = (nSize+1); // include NULL termination!
   }
 
   return m_szText;
