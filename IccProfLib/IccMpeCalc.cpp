@@ -3658,10 +3658,12 @@ bool CIccCalculatorFunc::InitSelectOp(SIccCalcOp *ops, icUInt32Number nOps)
   if (ops->extra)
     return true;
 
-
   icUInt32Number i, n, pos;
-  for (n=0; n<nOps && ops[n+1].sig==icSigCaseOp; n++);
-  ops->extra=n;
+  for (n=0; n<(nOps-1) && ops[n+1].sig==icSigCaseOp; n++);
+  if (n >= (nOps-1))    // there are no operations after the cases, and we don't want a segfault
+    return false;
+
+  ops->extra = n;
   if (ops[n+1].sig==icSigDefaultOp) {
     n++;
   }
