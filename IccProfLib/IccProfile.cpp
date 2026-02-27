@@ -2475,7 +2475,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       else return true;
     }
 
-  case icSigMaterialTypeArrayTag:
+  case icSigMultiplexTypeArrayTag:
     {
       if (typeSig!=icSigTagArrayType || 
           arraySig!=icSigUtf8TextTypeArray)
@@ -2484,7 +2484,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
         return true;
     }
 
-  case icSigMaterialDefaultValuesTag:
+  case icSigMultiplexDefaultValuesTag:
     {
       if (typeSig!=icSigUInt8ArrayType &&
           typeSig!=icSigUInt16ArrayType &&
@@ -2887,7 +2887,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigMaterialIdentificationClass:
-        if (!GetTag(icSigAToM0Tag) && !GetTag(icSigMaterialTypeArrayTag)) {
+        if (!GetTag(icSigAToM0Tag) && !GetTag(icSigMultiplexTypeArrayTag)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -2895,7 +2895,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigMaterialVisualizationClass:
-        if (!GetTag(icSigMToB0Tag) && !GetTag(icSigMToS0Tag)&& !GetTag(icSigMaterialTypeArrayTag)) {
+        if (!GetTag(icSigMToB0Tag) && !GetTag(icSigMToS0Tag)&& !GetTag(icSigMultiplexTypeArrayTag)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);
@@ -2903,7 +2903,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         break;
 
       case icSigMaterialLinkClass:
-        if (!GetTag(icSigMToA0Tag)&& !GetTag(icSigMaterialTypeArrayTag)) {
+        if (!GetTag(icSigMToA0Tag)&& !GetTag(icSigMultiplexTypeArrayTag)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
           rv = icMaxStatus(rv, icValidateCriticalError);

@@ -1051,7 +1051,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           nMCS = icToMCS;
           pTag = pProfile->FindTag(icSigAToM0Tag);
         }
-        else if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass) {
+        else if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass || 
+                 pProfile->m_Header.deviceClass==icSigOutputClass) {
           bInput = true;
           nMCS = icFromMCS;
 
@@ -1958,8 +1959,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
     if (!pFromProfile || !pToProfile) {
       return icCmmStatBadSpaceLink;
     }
-    CIccTagArray *pFromChannels = (CIccTagArray*)(pFromProfile->FindTagOfType(icSigMaterialTypeArrayTag, icSigTagArrayType));
-    CIccTagArray *pToChannels = (CIccTagArray*)(pToProfile->FindTagOfType(icSigMaterialTypeArrayTag, icSigTagArrayType));
+    CIccTagArray *pFromChannels = (CIccTagArray*)(pFromProfile->FindTagOfType(icSigMultiplexTypeArrayTag, icSigTagArrayType));
+    CIccTagArray *pToChannels = (CIccTagArray*)(pToProfile->FindTagOfType(icSigMultiplexTypeArrayTag, icSigTagArrayType));
 
     if (!pFromChannels || !pToChannels) {
       return icCmmStatBadSpaceLink;
@@ -2004,7 +2005,7 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
           return icCmmStatBadMCSLink;
       }
     }
-    CIccTag *pTag = pToProfile->FindTag(icSigMaterialDefaultValuesTag);
+    CIccTag *pTag = pToProfile->FindTag(icSigMultiplexDefaultValuesTag);
     CIccTagNumArray *pDefaults = NULL;
     if (pTag && pTag->IsNumArrayType()) {
       pDefaults = (CIccTagNumArray *)pTag;
@@ -8257,7 +8258,8 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
         }
 
         nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.mcs;
-        if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass) {
+        if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass ||
+            pProfile->m_Header.deviceClass==icSigOutputClass) {
           if (bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS) {
             nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
           }
@@ -8317,7 +8319,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
     return icCmmStatBadXform;
   }
 
-  if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass) {
+  if (Xform.ptr->IsMCS() && Xform.ptr->IsInput()) {
     bInput = true;
   }
 

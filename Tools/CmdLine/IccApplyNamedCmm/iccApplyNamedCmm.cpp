@@ -277,8 +277,16 @@ int main(int argc, const char* argv[])
     }
   }
   else {
+    std::string exportFile;
+
     argv++;
     argc--;
+
+    if (argc > 2 && !stricmp(argv[0], "-exportcfg")) {
+      exportFile = argv[1];
+      argv += 2;
+      argc -= 2;
+    }
 
     if (argc > 1 && !stricmp(argv[0], "-debugcalc")) {
       cfgApply.m_debugCalc = true;
@@ -304,6 +312,29 @@ int main(int argc, const char* argv[])
     if (cfgApply.m_srcType != icCfgLegacy || !cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
       printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
       return -1;
+    }
+
+    if (!exportFile.empty()) {
+      FILE* f = fopen(exportFile.c_str(), "wt");
+      if (f) {
+        json cfgJson;
+        json applyJson, profilesJson;
+
+        cfgApply.toJson(applyJson);
+        cfgJson["dataFiles"] = applyJson;
+
+        cfgProfiles.toJson(profilesJson);
+        cfgJson["profileSequence"] = profilesJson;
+
+        //Note: dont put cfgData into cfgJson because we are referencing legacy data file
+
+        std::string jsonText = cfgJson.dump(1);
+        fwrite(jsonText.c_str(), 1, jsonText.size(), f);
+        fclose(f);
+      }
+      else {
+        printf("Unable to export config file '%s'\n", exportFile.c_str());
+      }
     }
   }
   LogDebuggerPtr pDebugger;

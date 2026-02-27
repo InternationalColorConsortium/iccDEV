@@ -176,8 +176,16 @@ int main(int argc, const char** argv)
     }
   }
   else {
+    std::string exportFile;
+
     argv++;
     argc--;
+
+    if (argc > 2 && !stricmp(argv[0], "-exportcfg")) {
+      exportFile = argv[1];
+      argv += 2;
+      argc -= 2;
+    }
 
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
@@ -193,6 +201,27 @@ int main(int argc, const char** argv)
       printf("Unable to parse profile sequence arguments\n");
       Usage();
       return -1;
+    }
+
+    if (!exportFile.empty()) {
+      FILE* f = fopen(exportFile.c_str(), "wt");
+      if (f) {
+        json cfgJson;
+        json applyJson, profilesJson;
+
+        cfgApply.toJson(applyJson);
+        cfgJson["imageFiles"] = applyJson;
+        
+        cfgProfiles.toJson(profilesJson);
+        cfgJson["profileSequence"] = profilesJson;
+
+        std::string jsonText = cfgJson.dump(1);
+        fwrite(jsonText.c_str(), 1, jsonText.size(), f);
+        fclose(f);
+      }
+      else {
+        printf("Unable to export config file '%s'\n", exportFile.c_str());
+      }
     }
   }
 

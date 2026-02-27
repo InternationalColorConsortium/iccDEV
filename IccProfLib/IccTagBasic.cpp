@@ -5972,7 +5972,7 @@ icValidateStatus CIccTagNum<T, Tsig>::Validate(std::string sigPath, std::string 
 {
   icValidateStatus rv = icValidateOK;
   //Check # of channels 
-  if (icGetFirstSigPathSig(sigPath) == icSigMaterialDefaultValuesTag && 
+  if (icGetFirstSigPathSig(sigPath) == icSigMultiplexDefaultValuesTag && 
       pProfile &&
       m_nSize != icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs)) {
     CIccInfo Info;
@@ -6660,7 +6660,7 @@ icValidateStatus CIccTagFloatNum<T, Tsig>::Validate(std::string sigPath, std::st
 {
   icValidateStatus rv = icValidateOK;
   //Check # of channels 
-  if (icGetFirstSigPathSig(sigPath) == icSigMaterialDefaultValuesTag && 
+  if (icGetFirstSigPathSig(sigPath) == icSigMultiplexDefaultValuesTag && 
     pProfile &&
     m_nSize != icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs)) {
       CIccInfo Info;

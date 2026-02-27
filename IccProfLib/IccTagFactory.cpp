@@ -85,10 +85,12 @@ static icTagSigToNameMap g_TagSigToNameMap;
 typedef std::map<std::string, icTagSignature> icTagNameToSigMap;
 static icTagNameToSigMap g_TagNameToSigMap;
 
-struct {
+typedef struct {
   icTagSignature sig;
   const icChar *szName;
-} g_icTagNameTable[] = {
+} icSigNamePair;
+
+icSigNamePair g_icTagNameTable[] = {
   {icSigAToB0Tag, "AToB0Tag"},
   {icSigAToB1Tag, "AToB1Tag"},
   {icSigAToB2Tag, "AToB2Tag"},
@@ -210,9 +212,15 @@ struct {
   {icSigColorEncodingParamsTag, "colorEncodingParamsTag"},
   {icSigColorSpaceNameTag, "colorSpaceNameTag"},
   {icSigReferenceNameTag, "referenceNameTag"},
-  {icSigMaterialTypeArrayTag, "materialTypeArrayTag"},
-  {icSigMaterialDefaultValuesTag, "materialDefaultValuesTag"},
+  {icSigMultiplexTypeArrayTag, "multiplexTypeArrayTag"},
+  {icSigMultiplexDefaultValuesTag, "multiplexDefaultValuesTag"},
   {icSigEmbeddedV5ProfileTag, "embeddedV5ProfileTag"},
+  {(icTagSignature)0,""},
+};
+
+icSigNamePair g_icAltTagNameTable[] = {
+  {icSigMultiplexTypeArrayTag, "materialTypeArrayTag"},
+  {icSigMultiplexDefaultValuesTag, "materialDefaultValuesTag"},
   {(icTagSignature)0,""},
 };
 
@@ -481,6 +489,8 @@ icTagSignature CIccSpecTagFactory::GetTagNameSig(const icChar *szName)
   if (g_TagSigToNameMap.empty()) {
     for (int i = 0; g_icTagNameTable[i].sig; i++)
       g_TagNameToSigMap[g_icTagNameTable[i].szName] = g_icTagNameTable[i].sig;
+    for (int i = 0; g_icAltTagNameTable[i].sig; i++)
+      g_TagNameToSigMap[g_icAltTagNameTable[i].szName] = g_icAltTagNameTable[i].sig;
   }
   icTagNameToSigMap::iterator sig = g_TagNameToSigMap.find(szName);
   if (sig != g_TagNameToSigMap.end())

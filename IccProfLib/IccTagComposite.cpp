@@ -1464,7 +1464,7 @@ icValidateStatus CIccTagArray::Validate(std::string sigPath, std::string &sRepor
   }
   else if (m_sigArrayType==icSigUtf8TextTypeArray) { //UTF8 text arrays are known
     //Check # of channels 
-    if (icGetFirstSigPathSig(sigPath) == icSigMaterialTypeArrayTag && 
+    if (icGetFirstSigPathSig(sigPath) == icSigMultiplexTypeArrayTag && 
         pProfile &&
         m_nSize != icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs)) {
       std::string sSigPathName = Info.GetSigPathName(sigPath);

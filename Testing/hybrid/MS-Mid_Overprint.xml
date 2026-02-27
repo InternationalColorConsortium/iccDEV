@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+	<Header>
+		<PreferredCMMType></PreferredCMMType>
+		<ProfileVersion>5.10</ProfileVersion>
+		<ProfileSubVersion>1.0</ProfileSubVersion>
+		<ProfileDeviceClass>mid </ProfileDeviceClass>
+		<ProfileSubClass>osel</ProfileSubClass>
+		<DataColourSpace>nc0002</DataColourSpace>
+		<PCS></PCS>
+		<CreationDateTime>now</CreationDateTime>
+		<ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+		<DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="negative" MediaColour="colour"/>
+		<RenderingIntent>Relative Colorimetric</RenderingIntent>
+		<PCSIlluminant>
+			<XYZNumber X="0" Y="0" Z="0"/>
+		</PCSIlluminant>
+		<ProfileCreator>DICC</ProfileCreator>
+		<MCS>mc0002</MCS>
+		<ProfileID>1</ProfileID>
+	</Header>
+	<Tags>
+		<profileDescriptionTag> <multiLocalizedUnicodeType>
+			<LocalizedText LanguageCountry="enUS"><![CDATA[2 channel MID Selector MS]]></LocalizedText>
+		</multiLocalizedUnicodeType> </profileDescriptionTag>
+
+		<AToM0Tag> <multiProcessElementType>
+			<MultiProcessElements InputChannels="2" OutputChannels="2">
+				<CurveSetElement InputChannels="2" OutputChannels="2">
+					<SingleSampledCurve Start="-infinity" End="+infinity" 
+						 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0">
+						 1.0 0.0
+				  </SingleSampledCurve>
+					<SingleSampledCurve Start="-infinity" End="+infinity" 
+						 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0">
+						 0.0 1.0
+					</SingleSampledCurve>
+				</CurveSetElement>
+			</MultiProcessElements>
+		</multiProcessElementType> </AToM0Tag>
+
+		<materialTypeArrayTag> <tagArrayType>
+			<UTF8TextArray> <ArrayTags>
+				<utf8TextType><TextData>Magenta</TextData></utf8TextType>
+				<utf8TextType><TextData>Under-Silver</TextData></utf8TextType>
+			</ArrayTags> </UTF8TextArray>
+		</tagArrayType> </materialTypeArrayTag>
+
+		<copyrightTag> <multiLocalizedUnicodeType>
+			<LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+		</multiLocalizedUnicodeType> </copyrightTag>
+		
+	</Tags>
+</IccProfile>

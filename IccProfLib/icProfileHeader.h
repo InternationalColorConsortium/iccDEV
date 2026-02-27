@@ -428,8 +428,8 @@ typedef enum {
     icSigGreenMatrixColumnTag              = 0x6758595A,  /* 'gXYZ' */
     icSigGreenTRCTag                       = 0x67545243,  /* 'gTRC' */
     icSigLuminanceTag                      = 0x6C756d69,  /* 'lumi' */
-    icSigMaterialDefaultValuesTag          = 0x6D647620,  /* 'mdv ' */
-    icSigMaterialTypeArrayTag              = 0x6d637461,  /* 'mcta' */
+    icSigMultiplexDefaultValuesTag         = 0x6D647620,  /* 'mdv ' */
+    icSigMultiplexTypeArrayTag             = 0x6d637461,  /* 'mcta' */
     icSigMToA0Tag                          = 0x4d324130,  /* 'M2A0' */
     icSigMToB0Tag                          = 0x4d324230,  /* 'M2B0' */
     icSigMToB1Tag                          = 0x4d324231,  /* 'M2B1' */

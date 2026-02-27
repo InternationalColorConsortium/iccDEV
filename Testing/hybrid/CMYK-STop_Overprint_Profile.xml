@@ -27016,7 +27016,7 @@
       </Header>
       <Tags>
         <profileDescriptionTag> <multiLocalizedUnicodeType>
-          <LocalizedText LanguageCountry="enUS"><![CDATA[CMYK over White Overprint Visualization]]></LocalizedText>
+          <LocalizedText LanguageCountry="enUS"><![CDATA[CMYK over Silver Overprint Visualization]]></LocalizedText>
         </multiLocalizedUnicodeType> </profileDescriptionTag>
 
         <AToB1Tag> <multiProcessElementType>
@@ -27026,13 +27026,13 @@
                 <!--Element 0 -->
                 <TintArrayElement InputChannels="1" OutputChannels="3">
                   <float32NumberType>
-                    <Data Filename="Spot-Overprint/UnderWhite-scaleXYZ.txt" Format="text"/>
+                    <Data Filename="Spot-Overprint/UnderSilver-scaleXYZ.txt" Format="text"/>
                   </float32NumberType>
                 </TintArrayElement>
                 <!--Element 1 -->
                 <TintArrayElement InputChannels="1" OutputChannels="3">
                   <float32NumberType>
-                    <Data Filename="Spot-Overprint/UnderWhite-offsetXYZ.txt" Format="text"/>
+                    <Data Filename="Spot-Overprint/UnderSilver-offsetXYZ.txt" Format="text"/>
                   </float32NumberType>
                 </TintArrayElement>
                 <!--Element 2 -->
@@ -27067,16 +27067,16 @@
 env(bkgX) not if {pop 0.9642}
 env(bkgY) not if {pop 1.000000}
 env(bkgZ) not if {pop 0.8249}
-1 in(4) sub tput(0)
-tget(0) 0 gt if {
-  tget(0) tint(0) mul(3)
-  tget(0) tint(1) add(3)
-}
 in(0,4) 
 curv(2) copy(4) tput(0,4)
 clut(3) mul(3)
 tget(0,4)
 clut(4) add(3) 
+1 in(4) sub tput(0)
+tget(0) 0 gt if {
+  tget(0) tint(0) mul(3)
+  tget(0) tint(1) add(3)
+}
 out(0,3)
 }
                   </MainFunction>
