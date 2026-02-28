@@ -4654,11 +4654,12 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
       if (!mtx.Reset(pMatrix, nBytesPerMatrix, icSparseMatrixFloatNum, true))
         return false;
 
-      size_t num_entries = mtx.GetNumEntries();
+      icUInt16Number num_entries = mtx.GetNumEntries();
       if (num_entries == 0)
         return false;
 
-      if (mtx.GetNumEntries()>mtx.MaxEntries(nChannels*sizeof(icFloatNumber), mtx.Rows(), sizeof(icFloatNumber)))
+      icUInt32Number maxEntries = mtx.MaxEntries(nChannels*sizeof(icFloatNumber), mtx.Rows(), sizeof(icFloatNumber));
+      if (num_entries > maxEntries)
         return false;
     
       n = (icUInt32Number) (num_entries*sizeof(icUInt16Number));
@@ -4739,6 +4740,13 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
       }
       nSizeLeft -= n;
       pos += n;
+
+      // validate column counts that will be used later (and could cause a crash)
+      for (j=0; j<(int)mtx.Rows(); j++) {
+        n = mtx.GetNumRowColumns(j);
+        if (n > mtx.Cols())
+          return false;
+      }
 
       nAligned = ((pos+3)/4)*4;
       if (nAligned != pos) {
