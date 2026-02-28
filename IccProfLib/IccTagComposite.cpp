@@ -358,13 +358,17 @@ bool CIccTagStruct::Read(icUInt32Number size, CIccIO *pIO)
   if (headerSize > size)
     return false;
 
-  if (!pIO) {
+  if (!pIO)
     return false;
-  }
 
   Cleanup();
 
   m_tagStart = (icUInt32Number) pIO->Tell();
+  
+  // Make sure the tag size is somewhat reasonable
+  // NOTE - ccox - it would be nice to cache the file length instead of calculating it per tag
+  if (size > pIO->GetLength())
+    return false;
 
   if (!pIO->Read32(&sig))
     return false;
@@ -400,15 +404,12 @@ bool CIccTagStruct::Read(icUInt32Number size, CIccIO *pIO)
     m_ElemEntries->push_back(TagEntry);
   }
 
-  TagEntryList::iterator entry;
-
-  for (entry=m_ElemEntries->begin(); entry!=m_ElemEntries->end(); entry++) {
-    if (!LoadElem((IccTagEntry*)&(entry->TagInfo), pIO)) {
+  for (auto entry : *m_ElemEntries ) {
+    if (!LoadElem(&entry, pIO)) {
       Cleanup();
       return false;
     }
   }
-
 
   return true;
 }
@@ -857,9 +858,11 @@ bool CIccTagStruct::LoadElem(IccTagEntry *pTagEntry, CIccIO *pIO)
     sizeof(icUInt32Number) + 
     sizeof(icUInt32Number);
 
-  if (pTagEntry->TagInfo.offset<headerSize ||
+  // make sure we avoid 32 bit overflow when calculating the size to be read
+  size_t temp = pTagEntry->TagInfo.offset + (size_t)pTagEntry->TagInfo.size;
+  if (pTagEntry->TagInfo.offset < headerSize ||
       !pTagEntry->TagInfo.size ||
-      pTagEntry->TagInfo.offset+pTagEntry->TagInfo.size > m_tagSize) {
+      temp > (size_t)m_tagSize) {
     return false;
   }
 
