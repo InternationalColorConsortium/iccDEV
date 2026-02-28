@@ -190,7 +190,7 @@ void Usage()
 
   printf("Usage 1: iccApplyNamedCmm -cfg config_file_path\n");
   printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplyNamedCmm {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
+  printf("Usage 2: iccApplyNamedCmm (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
   
   printf("  For final_data_encoding:\n");
   printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -278,12 +278,17 @@ int main(int argc, const char* argv[])
   }
   else {
     std::string exportFile;
+    bool bExportData = false;
 
     argv++;
     argc--;
 
-    if (argc > 2 && !stricmp(argv[0], "-exportcfg")) {
+    if (argc > 2 && 
+        (!stricmp(argv[0], "-exportcfg") ||
+         !stricmp(argv[0], "-exportcfganddata"))) {
       exportFile = argv[1];
+      if (!stricmp(argv[0], "-exportcfganddata"))
+        bExportData = true;
       argv += 2;
       argc -= 2;
     }
@@ -321,12 +326,20 @@ int main(int argc, const char* argv[])
         json applyJson, profilesJson;
 
         cfgApply.toJson(applyJson);
+
+        if (bExportData) {
+          json dataJson;
+          cfgData.toJson(dataJson);
+          cfgJson["colorData"] = dataJson;
+
+          applyJson["srcFile"] = nullptr;
+          applyJson["srcType"] = "colorData";
+        }
+
         cfgJson["dataFiles"] = applyJson;
 
         cfgProfiles.toJson(profilesJson);
         cfgJson["profileSequence"] = profilesJson;
-
-        //Note: dont put cfgData into cfgJson because we are referencing legacy data file
 
         std::string jsonText = cfgJson.dump(1);
         fwrite(jsonText.c_str(), 1, jsonText.size(), f);

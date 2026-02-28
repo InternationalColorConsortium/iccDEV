@@ -275,16 +275,20 @@ int main(int argc, const char* argv[])
   }
   else {
     std::string exportFile;
+    bool bExportData = false;
 
     argv++;
     argc--;
 
-    if (argc > 2 && !stricmp(argv[0], "-exportcfg")) {
+    if (argc > 2 &&
+      (!stricmp(argv[0], "-exportcfg") ||
+        !stricmp(argv[0], "-exportcfganddata"))) {
       exportFile = argv[1];
+      if (!stricmp(argv[0], "-exportcfganddata"))
+        bExportData = true;
       argv += 2;
       argc -= 2;
     }
-
 
     if (argc > 1 && !stricmp(argv[0], "-debugcalc")) {
       cfgApply.m_debugCalc = true;
@@ -319,12 +323,21 @@ int main(int argc, const char* argv[])
         json applyJson, profilesJson;
 
         cfgApply.toJson(applyJson);
+
+        if (bExportData) {
+          json dataJson;
+          cfgData.toJson(dataJson);
+          cfgJson["colorData"] = dataJson;
+
+          applyJson["srcFile"] = nullptr;
+          applyJson["srcType"] = "colorData";
+        }
+
         cfgJson["dataFiles"] = applyJson;
 
         cfgSearchApply.toJson(profilesJson);
         cfgJson["searchApply"] = profilesJson;
 
-        //Note: dont put cfgData into cfgJson because we are referencing legacy data file
 
         std::string jsonText = cfgJson.dump(1);
         fwrite(jsonText.c_str(), 1, jsonText.size(), f);

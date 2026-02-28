@@ -2,4 +2,5 @@ ICC/*.icc
 Results/*.icc
 Results/*.tif
 Results/cmykGrays*.txt
+config/*.json
 
