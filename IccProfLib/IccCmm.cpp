@@ -2994,10 +2994,24 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
         if (pElem->GetType()==icSigMatrixElemType) {
           CIccMpeMatrix *pMatElem = (CIccMpeMatrix*)pElem;
 
-          icFloatNumber *pMat = pMatElem->GetMatrix();
-          icFloatNumber *pOffset = pMatElem->GetConstants();
+          const icFloatNumber *pMat = pMatElem->GetMatrix();
+          const icFloatNumber *pOffset = pMatElem->GetConstants();
+          icUInt16Number inChannels = pMatElem->NumInputChannels();
+          icUInt16Number outChannels = pMatElem->NumOutputChannels();
+          
+          // make sure we don't overrun the offset array
+          bool offsetsZero = true;
+          if (pOffset) {
+            for (int i = 0; i < outChannels; ++i) {
+              if (pOffset[i] != 0.0) {
+                offsetsZero = false;
+                break;
+              }
+            }
+          }
 
-          if (pMat && (!pOffset || (pOffset[0]==0.0 && pOffset[1]==0.0 && pOffset[2]==0.0))) {
+          // make sure the matrix is the expected size and offsets are zero
+          if (pMat && (inChannels == 3) && (outChannels == 3) && (!pOffset || offsetsZero) ) {
             CIccPcsStepMatrix *pStepMtx = new CIccPcsStepMatrix(3, 3);
 
             if (pStepMtx ) {
