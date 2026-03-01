@@ -4721,7 +4721,8 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
         }
 
         for (xmlNode *tagSigNode = pNode->children; tagSigNode; tagSigNode = tagSigNode->next) {
-          if (tagSigNode->type == XML_ELEMENT_NODE && !icXmlStrCmp(tagSigNode->name, "TagSignature")) {
+          if (tagSigNode->type == XML_ELEMENT_NODE && !icXmlStrCmp(tagSigNode->name, "TagSignature")
+            && tagSigNode->children != NULL) {
             sigTag = (icTagSignature)icGetSigVal((const icChar*)tagSigNode->children->content);
             AttachElem(sigTag, pTag);
           }
