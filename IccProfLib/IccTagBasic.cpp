@@ -6074,17 +6074,20 @@ bool CIccTagNum<T, Tsig>::GetValues(icFloatNumber *DstVector, icUInt32Number nSt
 {
   if (nVectorSize+nStart >m_nSize)
     return false;
+    
+  if (nVectorSize > m_nSize)
+    return false;
 
   icUInt32Number i;
   
   switch (Tsig) {
     case icSigUInt8ArrayType:
-      for (i=0; i<m_nSize; i++) {
+      for (i=0; i<nVectorSize; i++) {
         DstVector[i] = icU8toF((icUInt8Number)(m_Num[i+nStart]));
       }
       break;
     case icSigUInt16ArrayType:
-      for (i=0; i<m_nSize; i++) {
+      for (i=0; i<nVectorSize; i++) {
         DstVector[i] = icU16toF((icUInt16Number)(m_Num[i+nStart]));
       }
       break;
