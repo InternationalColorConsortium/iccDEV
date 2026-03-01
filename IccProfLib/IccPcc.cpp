@@ -240,6 +240,10 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
 
   icSpectralRange observerRange;
   const icFloatNumber *observer = pView->getObserver(observerRange);
+  
+  // we can't do any calculations with this (non)observer
+  if (!observer || observerRange.steps == 0)
+    return NULL;
 
   if (!obs)
     obs = (icFloatNumber*)malloc(size*sizeof(icFloatNumber));
