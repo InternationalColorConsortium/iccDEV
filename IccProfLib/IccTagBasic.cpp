@@ -2962,6 +2962,10 @@ bool CIccTagNamedColor2::Read(icUInt32Number size, CIccIO *pIO)
       pIO->Read8(m_szSufix, sizeof(m_szSufix))!=sizeof(m_szSufix)) {
     return false;
   }
+  
+  // make sure the suffix and prefix are NULL terminated!
+  m_szPrefix[sizeof(m_szPrefix)-1] = 0;
+  m_szSufix[sizeof(m_szSufix)-1] = 0;
 
   size -= nTagHdrSize;
 
