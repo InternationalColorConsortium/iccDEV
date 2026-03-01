@@ -372,7 +372,7 @@ public:
   void Iterate(IIccCLUTExec* pExec);
   icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL)  const;
 
-  void SetClipFunc(icCLUTCLIPFUNC ClipFunc) { UnitClip = ClipFunc; }
+  void SetClipFunc(icCLUTCLIPFUNC ClipFunc) { m_UnitClipFunc = ClipFunc; }
 
   icUInt8Number GetPrecision() { return m_nPrecision; }
   void SetPrecision(icUInt8Number nPrecision) { m_nPrecision = nPrecision; }
@@ -381,7 +381,7 @@ protected:
   void Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy=false );
   void SubIterate(IIccCLUTExec* pExec, icUInt8Number nIndex, icUInt32Number nPos);
 
-  icCLUTCLIPFUNC UnitClip;
+  icCLUTCLIPFUNC m_UnitClipFunc;
 
   icUInt8Number m_nReserved2[3];
   
