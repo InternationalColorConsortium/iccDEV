@@ -5383,6 +5383,19 @@ static icFloatNumber NoClip(icFloatNumber v)
   return v;
 }
 
+// this isn't used yet, but want to have it ready
+static icFloatNumber RealUnitClip(icFloatNumber v)
+{
+  if (std::isnan(v))
+    return icFloatNumber(0);
+  if (std::isinf(v))
+    return icFloatNumber(1.0);
+  if (v < 0.0)
+    return 0.0;
+  if (v > 1.0)
+    return 1.0;
+  return v;
+}
 
 /**
  ******************************************************************************
