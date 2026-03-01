@@ -41,8 +41,8 @@
 
 		<multiplexTypeArrayTag> <tagArrayType>
 			<UTF8TextArray> <ArrayTags>
-				<utf8TextType><TextData>Magenta</TextData></utf8TextType>
-				<utf8TextType><TextData>Under-White</TextData></utf8TextType>
+				<utf8TextType><TextData>ProcessMagenta</TextData></utf8TextType>
+				<utf8TextType><TextData>White</TextData></utf8TextType>
 			</ArrayTags> </UTF8TextArray>
 		</tagArrayType> </multiplexTypeArrayTag>
 

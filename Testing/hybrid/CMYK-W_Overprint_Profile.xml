@@ -27021,22 +27021,26 @@
 
         <AToB1Tag> <multiProcessElementType>
           <MultiProcessElements InputChannels="5" OutputChannels="3">
-            <CalculatorElement InputChannels="5" OutputChannels="3">
+						<CalculatorElement InputChannels="5" OutputChannels="3" InputNames="ProcessCyan ProcessMagenta ProcessYellow ProcessBlack White">
+							<Variables>
+								<Declare Name="ShapedCMYK">C M Y K</Declare>
+								<Declare Name="InvWhite"/>
+							</Variables>
               <SubElements>
                 <!--Element 0 -->
-                <TintArrayElement InputChannels="1" OutputChannels="3">
+                <TintArrayElement Name="WhiteScaleXYZ" InputChannels="1" OutputChannels="3">
                   <float32NumberType>
                     <Data Filename="Spot-Overprint/UnderWhite-scaleXYZ.txt" Format="text"/>
                   </float32NumberType>
                 </TintArrayElement>
                 <!--Element 1 -->
-                <TintArrayElement InputChannels="1" OutputChannels="3">
+                <TintArrayElement Name="WhiteOffsetXYZ" InputChannels="1" OutputChannels="3">
                   <float32NumberType>
                     <Data Filename="Spot-Overprint/UnderWhite-offsetXYZ.txt" Format="text"/>
                   </float32NumberType>
                 </TintArrayElement>
                 <!--Element 2 -->
-                <CurveSetElement InputChannels="4" OutputChannels="4">
+                <CurveSetElement Name="CmykShaper" InputChannels="4" OutputChannels="4">
                   <SingleSampledCurve Start="-infinity" End="+infinity" 
                      FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0" 
                      Filename="Spot-Overprint/Shaper-Cyan.txt" Format="text"/>
@@ -27051,33 +27055,37 @@
                      Filename="Spot-Overprint/Shaper-Black.txt" Format="text"/>
                 </CurveSetElement>
                 <!--Element 3 -->
-                <ExtCLutElement InputChannels="4" OutputChannels="3" Flags="0" StorageType="1"> <!-- Map adjusted CMYK to scaled XYZ -->
+                <ExtCLutElement Name="CmykScaleXYZ" InputChannels="4" OutputChannels="3" Flags="0" StorageType="1"> <!-- Map adjusted CMYK to scaled XYZ -->
                   <GridPoints>17 17 17 17</GridPoints>
                   <TableData Filename="Spot-Overprint/CLUT-CMYK-scaleXYZ.txt" Format="text" FileEncoding="float"/>
                 </ExtCLutElement>
                 <!--Element 4 -->
-                <ExtCLutElement InputChannels="4" OutputChannels="3" Flags="0" StorageType="1"> <!-- Map adjusted CMYK to offset XYZ -->
+                <ExtCLutElement Name="CmykOffsetXYZ" InputChannels="4" OutputChannels="3" Flags="0" StorageType="1"> <!-- Map adjusted CMYK to offset XYZ -->
                   <GridPoints>17 17 17 17</GridPoints>
                   <TableData Filename="Spot-Overprint/CLUT-CMYK-offsetXYZ.txt" Format="text" FileEncoding="float"/>
                 </ExtCLutElement>
                   </SubElements>
               <MainFunction>
 {
-;default background is D50 for relative white point
+;default background XYZ is D50 for relative white point
 env(bkgX) not if {pop 0.9642}
 env(bkgY) not if {pop 1.000000}
 env(bkgZ) not if {pop 0.8249}
-1 in(4) sub tput(0)
-tget(0) 0 gt if {
-  tget(0) tint(0) mul(3)
-  tget(0) tint(1) add(3)
+
+1 in{White} sub tput{InvWhite} ;photoshop inverts spots
+tget{InvWhite} 0 gt if {
+	tget{InvWhite} tint{WhiteScaleXYZ} mul(3)
+	tget{InvWhite} tint{WhiteOffsetXYZ} add(3)
 }
-in(0,4) 
-curv(2) copy(4) tput(0,4)
-clut(3) mul(3)
-tget(0,4)
-clut(4) add(3) 
-out(0,3)
+
+in{ProcessCyan,4} 
+curv{CmykShaper} copy(4) tput{ShapedCMYK}
+
+clut{CmykScaleXYZ} mul(3)
+tget{ShapedCMYK}
+clut{CmykOffsetXYZ} add(3) 
+
+out(0,3) ; store XYZ results
 }
                   </MainFunction>
             </CalculatorElement>
@@ -27088,31 +27096,31 @@ out(0,3)
 
         <colorantTableTag> <colorantTableType>
           <ColorantTable>
-            <Colorant Name="Cyan" Channel1="0.161031760868729" Channel2="0.239114617541466" Channel3="0.573227297545916"/>
-            <Colorant Name="Magenta" Channel1="0.333210682709608" Channel2="0.167952733709043" Channel3="0.158264894099757"/>
-            <Colorant Name="Yellow" Channel1="0.020242885598290" Channel2="0.020993513610069" Channel3="0.017850788623958"/>
-            <Colorant Name="Black" Channel1="0.020242885598290" Channel2="0.020993513610069" Channel3="0.017850788623958"/>
-            <Colorant Name="Under-White" Channel1="0.852625151766900" Channel2="0.878875846310475" Channel3="0.796295466771609"/>
+            <Colorant Name="ProcessCyan" Channel1="0.161031760868729" Channel2="0.239114617541466" Channel3="0.573227297545916"/>
+            <Colorant Name="ProcessMagenta" Channel1="0.333210682709608" Channel2="0.167952733709043" Channel3="0.158264894099757"/>
+            <Colorant Name="ProcessYellow" Channel1="0.020242885598290" Channel2="0.020993513610069" Channel3="0.017850788623958"/>
+            <Colorant Name="ProcessBlack" Channel1="0.020242885598290" Channel2="0.020993513610069" Channel3="0.017850788623958"/>
+            <Colorant Name="White" Channel1="0.852625151766900" Channel2="0.878875846310475" Channel3="0.796295466771609"/>
           </ColorantTable>
         </colorantTableType> </colorantTableTag>
         
         <colorantOrderTag> <colorantOrderType>
           <ColorantOrder>
-            <n>Under-White</n>
-            <n>Black</n>
-            <n>Cyan</n>
-            <n>Magenta</n>
-            <n>Yellow</n>
+            <n>White</n>
+            <n>ProcessBlack</n>
+            <n>ProcessCyan</n>
+            <n>ProcessMagenta</n>
+            <n>ProcessYellow</n>
           </ColorantOrder>
         </colorantOrderType> </colorantOrderTag>
 
         <multiplexTypeArrayTag> <tagArrayType>
           <UTF8TextArray> <ArrayTags>
-            <utf8TextType><TextData>Cyan</TextData></utf8TextType>
-            <utf8TextType><TextData>Magenta</TextData></utf8TextType>
-            <utf8TextType><TextData>Yellow</TextData></utf8TextType>
-            <utf8TextType><TextData>Black</TextData></utf8TextType>
-            <utf8TextType><TextData>Under-White</TextData></utf8TextType>
+            <utf8TextType><TextData>ProcessCyan</TextData></utf8TextType>
+            <utf8TextType><TextData>ProcessMagenta</TextData></utf8TextType>
+            <utf8TextType><TextData>ProcessYellow</TextData></utf8TextType>
+            <utf8TextType><TextData>ProcessBlack</TextData></utf8TextType>
+            <utf8TextType><TextData>White</TextData></utf8TextType>
           </ArrayTags> </UTF8TextArray>
         </tagArrayType> </multiplexTypeArrayTag>
 
