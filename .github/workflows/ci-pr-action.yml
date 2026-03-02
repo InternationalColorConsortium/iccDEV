@@ -89,14 +89,17 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
 
           git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
 
-          base_sha="${{ github.event.pull_request.base.sha }}"
-          head_sha="${{ github.event.pull_request.head.sha }}"
+          base_sha="${PR_BASE_SHA}"
+          head_sha="${PR_HEAD_SHA}"
 
           # Validate that both SHAs look like exact Git commit OIDs (40 hex chars).
           validate_sha() {
@@ -117,7 +120,7 @@ jobs:
             exit 0
           fi
 
-          base_ref="${{ github.base_ref }}"
+          base_ref="${PR_BASE_REF}"
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in master)

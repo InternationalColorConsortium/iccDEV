@@ -116,29 +116,36 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PR_BASE_REF: ${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_EVENT_NAME: ${{ github.event_name }}
+          PR_BUILD_TYPE: ${{ matrix.build_type }}
+          PR_COMPILER: ${{ matrix.compiler }}
+          PR_OS: ${{ matrix.os }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          echo "Triggered by:  ${{ github.event_name }}"
-          echo "Base branch:   ${{ github.base_ref }}"
-          echo "Head branch:   ${{ github.head_ref }}"
-          echo "Commit SHA:    ${{ github.event.pull_request.head.sha }}"
-          echo "Build Type:    ${{ matrix.build_type }}"
-          echo "Compiler:      ${{ matrix.compiler }}"
-          echo "OS:            ${{ matrix.os }}"
+          echo "Triggered by:  ${PR_EVENT_NAME}"
+          echo "Base branch:   ${PR_BASE_REF}"
+          echo "Head branch:   ${PR_HEAD_REF}"
+          echo "Commit SHA:    ${PR_HEAD_SHA}"
+          echo "Build Type:    ${PR_BUILD_TYPE}"
+          echo "Compiler:      ${PR_COMPILER}"
+          echo "OS:            ${PR_OS}"
 
           {
             echo "### PR Branch Details"
             echo ""
-            echo "**Triggered by:**  ${{ github.event_name }}"
-            echo "**Base branch:**   ${{ github.base_ref }}"
-            echo "**Head branch:**   ${{ github.head_ref }}"
-            echo "**Commit SHA:**    ${{ github.event_pull_request.head.sha }}"
-            echo "**Build Type:**    ${{ matrix.build_type }}"
-            echo "**Compiler:**      ${{ matrix.compiler }}"
-            echo "**OS:**            ${{ matrix.os }}"
+            echo "**Triggered by:**  ${PR_EVENT_NAME}"
+            echo "**Base branch:**   ${PR_BASE_REF}"
+            echo "**Head branch:**   ${PR_HEAD_REF}"
+            echo "**Commit SHA:**    ${PR_HEAD_SHA}"
+            echo "**Build Type:**    ${PR_BUILD_TYPE}"
+            echo "**Compiler:**      ${PR_COMPILER}"
+            echo "**OS:**            ${PR_OS}"
           } >> $GITHUB_STEP_SUMMARY
       - name: Install Build Dependencies (Linux)
         if: runner.os == 'Linux'

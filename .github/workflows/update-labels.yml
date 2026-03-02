@@ -73,13 +73,15 @@ jobs:
         env:
           BASH_ENV: /dev/null
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_PR_NUMBER: ${{ github.event.inputs.pr_number }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
 
-          INPUT="${{ github.event.inputs.pr_number }}"
-          EVENT_PR="${{ github.event.pull_request.number }}"
+          INPUT="${INPUT_PR_NUMBER}"
+          EVENT_PR="${EVENT_PR_NUMBER}"
 
           if [[ "$INPUT" =~ ^[0-9]+$ ]] && [[ -n "$INPUT" ]]; then
             echo "prs=$INPUT" >> "$GITHUB_OUTPUT"

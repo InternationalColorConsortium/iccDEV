@@ -48,13 +48,14 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          INPUT_UBUNTU_VERSION: ${{ inputs.ubuntu-version }}
         run: |
           set -euo pipefail
-          case "${{ inputs.ubuntu-version }}" in
+          case "${INPUT_UBUNTU_VERSION}" in
             ubuntu-latest|ubuntu-22.04|ubuntu-24.04|"")
               ;;
             *)
-              echo "ERROR: Invalid runner: '${{ inputs.ubuntu-version }}' — blocked." >&2
+              echo "ERROR: Invalid runner — blocked." >&2
               exit 1
               ;;
           esac
@@ -106,14 +107,16 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PR_EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           git show --stat --pretty=format:"Commit: %H%nAuthor: %an%nDate: %ad%n" HEAD
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base_ref="${{ github.base_ref }}"
+          if [ "${PR_EVENT_NAME}" = "pull_request" ]; then
+            base_ref="${PR_BASE_REF}"
             case "$base_ref" in master) ;; *)
               echo "Ref blocked or unsupported: $base_ref" >&2
               echo "no_src_changes=true" >> "$GITHUB_OUTPUT"
