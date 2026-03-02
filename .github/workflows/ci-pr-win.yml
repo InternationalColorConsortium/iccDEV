@@ -52,6 +52,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Harden Environment and Validate Inputs
         shell: pwsh

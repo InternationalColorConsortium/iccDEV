@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout master
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
 
       - name: Install Dependencies
         shell: bash --noprofile --norc {0}
@@ -227,6 +229,8 @@ jobs:
     steps:
       - name: Checkout master
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
 
       - name: Clone repository and install dependencies
         shell: bash --noprofile --norc {0}
@@ -393,6 +397,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: UCI Gate 1 for Windows Powershell
         shell: pwsh

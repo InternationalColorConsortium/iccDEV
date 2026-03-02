@@ -5,7 +5,7 @@
 #
 # Contains:   Implementation of sanitizer for BASH Shell.
 #
-# Version:    V1
+# Version:    V2
 #
 # Copyright:  (c) see Software License
 #------------------------------------------------------------------------------

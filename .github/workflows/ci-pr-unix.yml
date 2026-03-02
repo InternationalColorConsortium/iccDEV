@@ -111,6 +111,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Print the PR Branch Details
         shell: bash --noprofile --norc {0}
