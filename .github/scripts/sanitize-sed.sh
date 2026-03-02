@@ -104,11 +104,9 @@ _strip_ctrl_keep_newlines() {
   local s="$1"
   # remove CRs explicitly
   s="${s//$'\r'/}"
-  # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), and bare ESC
-  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[^[]\?//g')"
+  # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), then any remaining bare ESC
+  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g')"
   # remove NUL and other C0 control chars except LF (0x0A), plus DEL (0x7F)
-  # tr with octal escapes: delete \000-\011 \013 \014 \016-\037 \177
-  # This keeps \n (LF) which is 012 octal.
   s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
   printf '%s' "$s"
 }
@@ -121,8 +119,8 @@ _strip_ctrl_remove_newlines() {
   # remove CRs and LFs
   s="${s//$'\r'/}"
   s="${s//$'\n'/ }"
-  # strip ANSI escape sequences before removing remaining control chars
-  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[^[]\?//g')"
+  # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), then any remaining bare ESC
+  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g')"
   # remove other control characters (NUL, etc.) plus DEL (0x7F)
   s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
   printf '%s' "$s"

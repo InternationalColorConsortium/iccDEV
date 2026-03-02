@@ -467,7 +467,7 @@ jobs:
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'

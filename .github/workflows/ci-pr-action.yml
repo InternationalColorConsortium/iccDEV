@@ -90,7 +90,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail

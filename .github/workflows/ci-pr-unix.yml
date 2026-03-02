@@ -119,7 +119,7 @@ jobs:
           BASH_ENV: /dev/null
           PR_BASE_REF: ${{ github.base_ref }}
           PR_HEAD_REF: ${{ github.head_ref }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_EVENT_NAME: ${{ github.event_name }}
           PR_BUILD_TYPE: ${{ matrix.build_type }}
           PR_COMPILER: ${{ matrix.compiler }}

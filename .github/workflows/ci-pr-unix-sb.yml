@@ -78,7 +78,7 @@ jobs:
           PR_EVENT_NAME: ${{ github.event_name }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PR_RUNNER_OS: ${{ runner.os }}
           PR_BUILD_TYPE: ${{ inputs.build-type }}
         run: |
