@@ -55,7 +55,7 @@ jobs:
             ubuntu-latest|ubuntu-22.04|ubuntu-24.04|"")
               ;;
             *)
-              echo "ERROR: Invalid runner — blocked." >&2
+              echo "ERROR: Invalid runner: '${INPUT_UBUNTU_VERSION}' — blocked." >&2
               exit 1
               ;;
           esac
