@@ -124,7 +124,8 @@ jobs:
               exit 0
               ;;
             esac
-            git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=50
+            # Use fully-qualified refspec (defense-in-depth: prevents ambiguous ref resolution)
+            git -c protocol.version=2 fetch --no-tags origin "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}" --depth=50
             git diff --name-only "origin/${base_ref}...HEAD" \
               | tr -cd '[:alnum:]./\-_\n' \
               | grep -E '\.(cpp|cxx|cc|h|hpp)$' \

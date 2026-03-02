@@ -133,7 +133,8 @@ jobs:
           esac
 
           # Fetch with increased depth to find merge base
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=50
+          # Use fully-qualified refspec (defense-in-depth: prevents ambiguous ref resolution)
+          git -c protocol.version=2 fetch --no-tags origin "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}" --depth=50
 
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then

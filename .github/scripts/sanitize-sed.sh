@@ -99,10 +99,13 @@ escape_html() {
 
 # _strip_ctrl_keep_newlines STRING
 # Remove control characters except newline (0x0A). Also remove NUL.
+# Strips ANSI escape sequences (CSI, OSC, etc.) to prevent log spoofing.
 _strip_ctrl_keep_newlines() {
   local s="$1"
   # remove CRs explicitly
   s="${s//$'\r'/}"
+  # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), and bare ESC
+  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[^[]\?//g')"
   # remove NUL and other C0 control chars except LF (0x0A), plus DEL (0x7F)
   # tr with octal escapes: delete \000-\011 \013 \014 \016-\037 \177
   # This keeps \n (LF) which is 012 octal.
@@ -112,11 +115,14 @@ _strip_ctrl_keep_newlines() {
 
 # _strip_ctrl_remove_newlines STRING
 # Remove control characters and newlines (useful for single-line outputs).
+# Strips ANSI escape sequences (CSI, OSC, etc.) to prevent log spoofing.
 _strip_ctrl_remove_newlines() {
   local s="$1"
   # remove CRs and LFs
   s="${s//$'\r'/}"
   s="${s//$'\n'/ }"
+  # strip ANSI escape sequences before removing remaining control chars
+  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b[^[]\?//g')"
   # remove other control characters (NUL, etc.) plus DEL (0x7F)
   s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
   printf '%s' "$s"
@@ -231,7 +237,7 @@ safe_echo_for_summary() {
 
 # Provide a minimal no-op marker so callers can check we're present
 sanitizer_version() {
-  printf 'iccDEV-sanitizer-v1\n'
+  printf 'iccDEV-sanitizer-v2\n'
 }
 
 # End of sanitize-sed.sh
