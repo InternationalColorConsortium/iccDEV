@@ -48,9 +48,35 @@ env:
 
 jobs:
   #############################################################################
+  # Job 0: Validate Inputs (defense-in-depth)
+  #############################################################################
+  validate-ref:
+    name: "Validate checkout ref"
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Validate CHECKOUT_REF pattern
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          CHECKOUT_REF: ${{ env.CHECKOUT_REF }}
+        run: |
+          set -euo pipefail
+          # Defense-in-depth: inputs.ref is type:choice (master|cfl),
+          # inputs.pr_number is type:number. Validate the derived ref.
+          case "${CHECKOUT_REF}" in
+            master|cfl|refs/pull/[0-9]*/head)
+              echo "✅ Valid ref: ${CHECKOUT_REF}" ;;
+            *)
+              echo "❌ Unexpected CHECKOUT_REF: blocked" >&2
+              exit 1 ;;
+          esac
+
+  #############################################################################
   # Job 1: Standard Project Builds
   #############################################################################
   standard-builds:
+    needs: [validate-ref]
     name: "Standard • ${{ matrix.os }} • ${{ matrix.compiler }} • ${{ matrix.build_type }}"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
@@ -288,6 +314,7 @@ jobs:
   # Job 2: Sanitizer Builds (Individual Sanitizers)
   #############################################################################
   sanitizer-builds:
+    needs: [validate-ref]
     name: "Sanitizer • ${{ matrix.sanitizer }} • ${{ matrix.build_type }}"
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -442,6 +469,7 @@ jobs:
   # Job 3: Build Option Matrix (Test Each Option Independently)
   #############################################################################
   option-matrix:
+    needs: [validate-ref]
     name: "Option • ${{ matrix.option_name }}"
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -548,6 +576,7 @@ jobs:
   # Job 4: Windows Build (MSVC)
   #############################################################################
   windows-build:
+    needs: [validate-ref]
     name: "Windows • MSVC • ${{ matrix.build_type }}"
     runs-on: windows-latest
     timeout-minutes: 30
@@ -643,6 +672,7 @@ jobs:
   # Job 5: Version Header Generation Test
   #############################################################################
   version-header-test:
+    needs: [validate-ref]
     name: "Version Headers • Build Directory Generation"
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -731,6 +761,7 @@ jobs:
   # Job 6: Clean/Rebuild Cycle Test
   #############################################################################
   clean-rebuild-test:
+    needs: [validate-ref]
     name: "Clean/Rebuild Cycle Test"
     runs-on: ubuntu-latest
     timeout-minutes: 20

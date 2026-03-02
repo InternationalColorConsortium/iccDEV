@@ -5,7 +5,7 @@
 #
 # Contains:   Implementation of sanitizer for BASH Shell.
 #
-# Version:    V2
+# Version:    V3
 #
 # Copyright:  (c) see Software License
 #------------------------------------------------------------------------------
@@ -237,7 +237,8 @@ sanitize_ref() {
   s="${s//$'\r'/}"
   s="${s//$'\n'/}"
   # replace any character not in the allowed set [A-Za-z0-9._/-] with '-'
-  s="$(printf '%s' "$s" | sed -E 's#[^A-Za-z0-9._/-]#-#g')"
+  # LC_ALL=C ensures byte-level matching (prevents overlong UTF-8 bypass)
+  s="$(printf '%s' "$s" | LC_ALL=C sed -E 's#[^A-Za-z0-9._/-]#-#g')"
   # collapse multiple hyphens
   s="$(printf '%s' "$s" | sed -E 's/-+/-/g')"
   # trim leading/trailing hyphen

