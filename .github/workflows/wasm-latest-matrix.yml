@@ -1,13 +1,13 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (©) 2025 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
 # Intent: iccDEV wasm-latest-matrix
 #
-# Last Updated: 2026-02-17 16:29:28 UTC by David Hoyt 
+# Last Updated: 2026-02-17 16:29:28 UTC by David Hoyt
 #               Added user-controllable input (uci) checks
 #
 #

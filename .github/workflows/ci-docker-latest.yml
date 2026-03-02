@@ -1,19 +1,19 @@
 ###############################################################
 #
-# Copyright (c) 2025-2026 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
 # Intent: ci-docker-latest
 #
-# Last Updated: 026-02-13 14:45:57 UTC by David Hoyt 
+# Last Updated: 026-02-13 14:45:57 UTC by David Hoyt
 #               Update Branch Info
 #               Test sbom + attest & Test
 #               Add: artifact-metadata: write
 #
 #
-#  
+#
 #
 ###############################################################
 # Intent: Build and publish iccDEV Docker container Release

@@ -1,7 +1,7 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (©) 2025 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
@@ -12,10 +12,10 @@
 #                Consider Copilot Review
 #                Review GitHub Best Practice & Security Guides
 #
-# Last Updated: 17-DEC-2025 0030Z by David Hoyt 
+# Last Updated: 17-DEC-2025 0030Z by David Hoyt
 #               Refactor workflow with sanitization
 #               Improved job names
-#    
+#
 #
 #
 #  Note: We continue to monitor the ci-pr- labels for issues
@@ -305,10 +305,10 @@ jobs:
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
         run: |
           set -euo pipefail
-      
+
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-      
+
           # load trusted canonical sanitizers
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if [[ -f "$TRUSTED_SANITIZER" ]]; then
@@ -327,7 +327,7 @@ jobs:
             sanitize_line() { escape_html "$1"; }
             sanitize_print() { escape_html "$1"; }
           fi
-      
+
           # Safe defaults.
           : "${GITHUB_EVENT_NAME:=<none>}"
           : "${GITHUB_REPOSITORY:=<none>}"
@@ -335,7 +335,7 @@ jobs:
           : "${GITHUB_SHA:=<none>}"
           : "${GITHUB_RUN_ID:=<none>}"
           : "${SRC_CHANGED:=false}"
-      
+
           # write step summary (all dynamic values passed through sanitize_line)
           {
             echo "## 🧭 PR Init Complete"
@@ -494,7 +494,7 @@ jobs:
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-  
+
           # load canonical sanitizers from trusted checkout
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if [[ -f "$TRUSTED_SANITIZER" ]]; then
@@ -513,13 +513,13 @@ jobs:
             sanitize_line() { escape_html "$1"; }
             sanitize_print() { escape_html "$1"; }
           fi
-  
+
           # --- normalize upstream job results (default to success if missing) ---
           UNIX_RESULT="${UNIX_RESULT:-success}"
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
-  
+
           # remove CRs, trim whitespace and lowercase each value
           trim_and_norm() {
             local v="$1"
@@ -531,12 +531,12 @@ jobs:
             v="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
             printf '%s' "$v"
           }
-  
+
           UNIX_RESULT="$(trim_and_norm "$UNIX_RESULT")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
-  
+
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
           for s in "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT"; do
@@ -547,7 +547,7 @@ jobs:
               break
             fi
           done
-  
+
           # --- write header ----------------------------------------------------
           {
             echo "<div align=\"center\">"
