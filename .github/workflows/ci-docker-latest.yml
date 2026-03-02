@@ -119,8 +119,12 @@ jobs:
           path: sbom.spdx.json
           retention-days: 90
 
-      - name: Build local test image
-        run: docker build -f Dockerfile -t iccdev-test:latest .
+      - name: Load test image
+        run: |
+          set -euo pipefail
+          # Pull the image we just pushed to GHCR (avoids building twice)
+          docker pull "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}"
+          docker tag  "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}" iccdev-test:latest
 
       - name: Verify tools
         env:
