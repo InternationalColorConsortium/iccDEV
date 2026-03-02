@@ -83,15 +83,18 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_OS: ${{ matrix.os }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          OS="${{ matrix.os }}"
-          COMP="${{ matrix.compiler }}"
-          BT="${{ matrix.build_type }}"
+          OS="${MATRIX_OS}"
+          COMP="${MATRIX_COMPILER}"
+          BT="${MATRIX_BUILD_TYPE}"
 
           case "$OS" in
             ubuntu-latest|macos-latest) ;;
@@ -198,6 +201,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -206,7 +210,7 @@ jobs:
           echo "Configuring CMake project..."
           mkdir -p Build
           cd Build
-          cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          cmake -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}" \
                 -DCMAKE_C_COMPILER=$CC \
                 -DCMAKE_CXX_COMPILER=$CXX \
                  Cmake
@@ -218,6 +222,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -226,7 +231,7 @@ jobs:
           echo "Start build..."
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
-          echo "CMake build type: ${{ matrix.build_type }}"
+          echo "CMake build type: ${MATRIX_BUILD_TYPE}"
           make -j$(nproc || sysctl -n hw.logicalcpu)
 
       - name: Create Profiles
@@ -254,6 +259,9 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_OS: ${{ matrix.os }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -265,9 +273,9 @@ jobs:
             exit 1
           fi
           source .github/scripts/sanitize-sed.sh
-          SANITIZED_OS=$(sanitize_line "${{ matrix.os }}")
-          SANITIZED_COMPILER=$(sanitize_line "${{ matrix.compiler }}")
-          SANITIZED_BUILD_TYPE=$(sanitize_line "${{ matrix.build_type }}")
+          SANITIZED_OS=$(sanitize_line "${MATRIX_OS}")
+          SANITIZED_COMPILER=$(sanitize_line "${MATRIX_COMPILER}")
+          SANITIZED_BUILD_TYPE=$(sanitize_line "${MATRIX_BUILD_TYPE}")
           echo "## 🧱 ci-pr-unix Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **OS:**         $SANITIZED_OS" >> $GITHUB_STEP_SUMMARY
           echo "- **Compiler:**   $SANITIZED_COMPILER" >> $GITHUB_STEP_SUMMARY

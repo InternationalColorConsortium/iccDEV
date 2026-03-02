@@ -63,6 +63,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -70,7 +71,7 @@ jobs:
           unset GITHUB_TOKEN || true
           cd Build
           cmake Cmake \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -Wno-dev
           echo "✅ compile_commands.json generated with $(jq length compile_commands.json) translation units"
