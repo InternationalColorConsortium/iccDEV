@@ -74,7 +74,7 @@ Copyright:  (c) see Software License
 //
 // HISTORY:
 //   - Initial implementation by David Hoyt on 01-MAR-2025 at 1800 EST.
-//
+//   - Fix UB found with libFuzzer 2026-03-06 03:17:14 UTC DHOYT
 //
 ////////////////////////////////////////////////////////////////////////
 
@@ -399,10 +399,10 @@ inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
   IccColorSpaceDescription desc;
   desc.name = ColorSpaceSignatureToStr(sig);
   desc.isKnown = IsValidColorSpaceSignature(sig);
-  desc.bytes[0] = (sig >> 24) & 0xFF;
-  desc.bytes[1] = (sig >> 16) & 0xFF;
-  desc.bytes[2] = (sig >> 8) & 0xFF;
-  desc.bytes[3] = sig & 0xFF;
+  desc.bytes[0] = static_cast<char>(static_cast<unsigned char>((sig >> 24) & 0xFF));
+  desc.bytes[1] = static_cast<char>(static_cast<unsigned char>((sig >> 16) & 0xFF));
+  desc.bytes[2] = static_cast<char>(static_cast<unsigned char>((sig >> 8) & 0xFF));
+  desc.bytes[3] = static_cast<char>(static_cast<unsigned char>(sig & 0xFF));
   desc.bytes[4] = '\0';
   return desc;
 }
