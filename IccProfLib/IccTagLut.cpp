@@ -2482,6 +2482,9 @@ void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   if (x < 0)
     x = 0.0;
 
+  if (x > mx)
+    x = mx;
+
   icUInt32Number ix = (icUInt32Number)x;
 
   icFloatNumber u = x - ix;
@@ -2529,10 +2532,16 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
   icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
   
+  // m_UnitClipFunc points to NoClip
   if (x < 0.0)
     x = 0.0;
   if (y < 0.0)
     y = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2595,13 +2604,20 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
   icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
   icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
   
-  // m_UnitClipFunc points to NoClip
+  // m_UnitClipFunc points to NoClip, so no actual clipping is done
   if (x < 0)
     x = 0.0;
   if (y < 0)
     y = 0.0;
   if (z < 0)
     z = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
+  if (z > mz)
+    z = mz;
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2689,13 +2705,20 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
   icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
   
-  // m_UnitClipFunc points to NoClip
+  // m_UnitClipFunc points to NoClip, so no actual clipping is done
   if (x < 0)
     x = 0.0;
   if (y < 0)
     y = 0.0;
   if (z < 0)
     z = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
+  if (z > mz)
+    z = mz;
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2778,6 +2801,15 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
     y = 0.0;
   if (z < 0)
     z = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
+  if (z > mz)
+    z = mz;
+  if (w > mx)
+    w = mw;
 
   icUInt32Number iw = (icUInt32Number)w;
   icUInt32Number ix = (icUInt32Number)x;
