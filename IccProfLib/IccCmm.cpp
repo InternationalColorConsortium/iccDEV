@@ -5658,6 +5658,13 @@ CIccXform3DLut::~CIccXform3DLut()
       m_pTag->InputChannels()!=3) {
     return icCmmStatInvalidLut;
   }
+  
+  // catch cases where the LUT does not match the colorspace given
+  // this avoids segfaults and stack overflows when applying the LUT
+  icUInt16Number csOutChannels = icGetSpaceSamples( m_pTag->GetCsOutput() );
+  if (csOutChannels != m_pTag->OutputChannels())
+    return icCmmStatInvalidLut;
+  
 
   m_ApplyCurvePtrA = NULL;
   m_ApplyCurvePtrB = NULL;
@@ -6023,6 +6030,12 @@ icStatusCMM CIccXform4DLut::Begin()
       m_pTag->InputChannels()!=4) {
     return icCmmStatInvalidLut;
   }
+  
+  // catch cases where the LUT does not match the colorspace given
+  // this avoids segfaults and stack overflows when applying the LUT
+  icUInt16Number csOutChannels = icGetSpaceSamples( m_pTag->GetCsOutput() );
+  if (csOutChannels != m_pTag->OutputChannels())
+    return icCmmStatInvalidLut;
 
   m_ApplyCurvePtrA = m_ApplyCurvePtrB = m_ApplyCurvePtrM = NULL;
 
@@ -6364,6 +6377,12 @@ icStatusCMM CIccXformNDLut::Begin()
   if (!m_pTag || (m_pTag->InputChannels()>2 && m_pTag->InputChannels()<5)) {
     return icCmmStatInvalidLut;
   }
+  
+  // catch cases where the LUT does not match the colorspace given
+  // this avoids segfaults and stack overflows when applying the LUT
+  icUInt16Number csOutChannels = icGetSpaceSamples( m_pTag->GetCsOutput() );
+  if (csOutChannels != m_pTag->OutputChannels())
+    return icCmmStatInvalidLut;
 
   m_nNumInput = m_pTag->m_nInput;
 
