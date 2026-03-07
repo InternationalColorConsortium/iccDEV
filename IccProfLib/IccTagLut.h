@@ -439,7 +439,7 @@ public:
   virtual bool UseLegacyPCS() const { return false; } //Treat Lab Encoding differently?
 
   bool IsInputB() const { return IsInputMatrix(); }
-  bool SwapMBCurves() { return m_bUseMCurvesAsBCurves; }
+  bool SwapMBCurves() const { return m_bUseMCurvesAsBCurves; }
 
   void Cleanup();
   void Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels);
@@ -451,8 +451,8 @@ public:
 
   virtual void SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSignature csOutput);
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
-  icColorSpaceSignature GetCsInput() { return m_csInput; }
-  icColorSpaceSignature GetCsOutput() { return m_csOutput; }
+  icColorSpaceSignature GetCsInput() const { return m_csInput; }
+  icColorSpaceSignature GetCsOutput() const { return m_csOutput; }
 
   LPIccCurve* NewCurvesA();
   CIccCLUT*   NewCLUT(icUInt8Number nGridPoints, icUInt8Number nPrecision=2);
