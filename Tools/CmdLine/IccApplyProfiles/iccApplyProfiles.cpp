@@ -82,9 +82,17 @@
 
 static icFloatNumber UnitClip(icFloatNumber v)
 {
-  if (v<0.0)
+  if (std::isnan(v))
     return 0.0;
-  if (v>1.0)
+  if (std::isinf(v)) {
+    if (v < 0.0)
+      return 0.0;
+    else
+      return 1.0;
+  }
+  if (v < 0.0)
+    return 0.0;
+  if (v > 1.0)
     return 1.0;
   return v;
 }
