@@ -3701,6 +3701,11 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
   os.pixel = pApply->GetInput();
   os.output = pApply->GetOutput();
   os.nOps = nOps;
+  
+  // Defensive measure - this happens only in overflow/underflow situations.
+  // But it can happen from multiple calling locations, and it isn't easy to check them all.
+  if (nOps > 0x80000000UL)
+    return false;
 
   for (os.idx=0; os.idx<os.nOps; os.idx++) {
     op = &ops[os.idx];
@@ -3715,24 +3720,35 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
       if (os.idx+1<nOps && ops[os.idx+1].sig==icSigElseOp) {
         os.idx++;
         if (a1>=0.5) {
-          if (os.idx+1 + op->data.size >= nOps)
+          icUInt32Number dataSize = op->data.size;
+          if (dataSize >= nOps)       // check first in case of overflow
+            return false;
+          if (os.idx+1 + dataSize >= nOps)
             return false;
 
-          if (!ApplySequence(pApply, op->data.size, &ops[os.idx+1]))
+          if (!ApplySequence(pApply, dataSize, &ops[os.idx+1]))
             return false;
         }
         else {
-          if (os.idx+1 + op->data.size + ops[os.idx].data.size > nOps)
+          icUInt32Number nNewOps = ops[os.idx].data.size;
+          icUInt32Number dataSize = op->data.size;
+          icUInt32Number newOpIndex = os.idx+1 + dataSize;
+          if (nNewOps > nOps || dataSize > nOps || newOpIndex > nOps)   // check first in case of overflow
+            return false;
+          if (newOpIndex + nNewOps > nOps)  // now add and test the real limit
             return false;
 
-          if (!ApplySequence(pApply, ops[os.idx].data.size, &ops[os.idx+1 + op->data.size]))
+          if (!ApplySequence(pApply, nNewOps, &ops[os.idx+1 + op->data.size]))
             return false;
         }
         os.idx += op->data.size + ops[os.idx].data.size;
       }
       else {
         if (a1>=0.5) {
-          if (os.idx+op->data.size >= nOps)
+          icUInt32Number dataSize = op->data.size;
+          if (dataSize >= nOps)       // check first in case of overflow
+            return false;
+          if (os.idx+dataSize >= nOps)
             return false;
 
           if (!ApplySequence(pApply, op->data.size, &ops[os.idx+1]))
@@ -3770,6 +3786,8 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
             return false;
 
           icUInt32Number dataSize = ops[nDefOff].data.size;
+          if (dataSize >= nOps)       // check first in case of overflow
+            return false;
           if ((nDefOff + dataSize) >= nOps)
             return false;
           
@@ -3784,6 +3802,8 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
           return false;
 
         icUInt32Number dataSize = ops[nOff].data.size;
+        if (dataSize >= nOps)       // check first in case of overflow
+          return false;
         if ((nOff + dataSize) >= nOps)
           return false;
 
@@ -3796,18 +3816,24 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
       }
 
       if (ops[nDefOff].sig==icSigDefaultOp) {
-        if (os.idx+1 + ops[nDefOff].extra + ops[nDefOff].data.size >nOps)
+        icUInt32Number dataSize = ops[nDefOff].data.size;
+        if (dataSize >= nOps)       // check first in case of overflow
+          return false;
+        if (os.idx+1 + ops[nDefOff].extra + dataSize > nOps)
           return false;
 
-        os.idx = (icUInt32Number)(os.idx + ops[nDefOff].extra + ops[nDefOff].data.size);
+        os.idx = (icUInt32Number)(os.idx + ops[nDefOff].extra + dataSize);
       }
       else if (op->extra) {
         unsigned long nOff = os.idx + op->extra;
 
-        if (os.idx+1 + ops[nOff].extra + ops[nOff].data.size > nOps)
+        icUInt32Number dataSize = ops[nOff].data.size;
+        if (dataSize >= nOps)       // check first in case of overflow
+          return false;
+        if (os.idx+1 + ops[nOff].extra + dataSize > nOps)
           return false;
 
-        os.idx = (icUInt32Number)(os.idx + ops[nOff].extra + ops[nOff].data.size);
+        os.idx = (icUInt32Number)(os.idx + ops[nOff].extra + dataSize);
       }
       else 
         return false;
