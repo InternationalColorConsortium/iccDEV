@@ -161,7 +161,10 @@ int main(int argc, char* argv[])
     return -2;
   }
 
-  pTagIn->Begin(icElemInterpLinear, dspIcc.get(), pccIcc.get());
+  if (!pTagIn->Begin(icElemInterpLinear, dspIcc.get(), pccIcc.get())) {
+    printf("bad tagIn in %s\n", argv[1]);
+    return -2;
+  }
 
   CICCApplyMPEPtr pApplyMpe( pTagIn->GetNewApply() );
 
@@ -171,7 +174,20 @@ int main(int argc, char* argv[])
   applyIter++;
   auto mtxApply = applyIter->ptr;
 
-  pTagC2S->Begin(icElemInterpLinear, pccIcc.get());
+  if (!pTagC2S->Begin(icElemInterpLinear, pccIcc.get())) {
+    printf("bad transform c2s in %s\n", argv[2]);
+    return -2;
+  }
+  
+  if (!curveMpe->Begin()) {
+    printf("bad transform curve in %s\n", argv[2]);
+    return -2;
+  }
+  
+  if (!matrixMpe->Begin()) {
+    printf("bad transform matrix in %s\n", argv[2]);
+    return -2;
+  }
   
   CICCApplyMPEPtr pAppyC2S( pTagC2S->GetNewApply() );
 
