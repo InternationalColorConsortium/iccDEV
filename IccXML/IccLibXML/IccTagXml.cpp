@@ -3886,6 +3886,14 @@ bool icMBBFromXml(CIccMBB *pMBB, xmlNode *pNode, icConvertType nType, std::strin
   int nIn = atoi(icXmlAttrValue(in));
   int nOut = atoi(icXmlAttrValue(out));
 
+  // must have at least 1 input and 1 output
+  if (nIn < 1 || nOut < 1)
+    return false;
+
+  // and the current limit is for 15 channels
+  if (nIn > 15 || nOut > 15)
+    return false;
+
   pMBB->Init(nIn, nOut);
 
   for (; pNode; pNode = pNode->next) {
