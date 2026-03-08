@@ -3,9 +3,9 @@
 # Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 2026-02-17 16:31:50 UTC by David Hoyt
+#  Last Updated: 2026-03-08 02:09:45 UTC by David Hoyt
 #
-#  Changes: Add WASM Toolchain, CFL & libFuzzer
+#  Changes: 25+ Bug Fizes over 30 Days, Bump Version String References: (#660)
 #
 #################################################################################
 
@@ -119,11 +119,11 @@ project(RefIccMAX LANGUAGES C CXX)
 set(PROJECT_UP_NAME "REFICCMAX")
 set(PROJECT_DOWN_NAME "reficcmax")
 
-# Version components (4-part version: 2.3.1.3)
+# Version components (4-part version: 2.3.1.5)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
-set(${PROJECT_UP_NAME}_PATCH_VERSION 4)
+set(${PROJECT_UP_NAME}_PATCH_VERSION 5)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
