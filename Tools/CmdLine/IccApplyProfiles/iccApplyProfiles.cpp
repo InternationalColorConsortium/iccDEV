@@ -458,8 +458,8 @@ int main(int argc, const char** argv)
     }
   }
 
-  //Allocate buffer for reading source image pixels
-  unsigned char *pSBuf = (unsigned char *)malloc(SrcImg.GetBytesPerLine());  
+  // Allocate single line buffer for reading source image pixels
+  unsigned char *pSBuf = (unsigned char *)malloc(SrcImg.GetBytesPerLine());
   if (!pSBuf) {
     printf("Out of Memory!\n");
     return -1;

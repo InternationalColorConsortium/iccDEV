@@ -71,6 +71,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
 #include "TiffImg.h"
 
 
@@ -311,7 +312,11 @@ bool CTiffImg::Open(const char *szFname)
     m_nStripSamples = 1;
     m_nBytesPerLine = (m_nWidth * m_nBitsPerSample * m_nSamples + 7)>>3;
   }
-
+  
+  // Just in case we had to recalc the strip byte count,
+  //   it is safer to have the buffer too large than too small.
+  m_nStripSize = std::max( m_nStripSize, m_nRowsPerStrip * m_nBytesPerLine );
+  
   m_pStripBuf = (unsigned char*)malloc(m_nStripSize*m_nStripSamples);
 
   if (!m_pStripBuf) {
