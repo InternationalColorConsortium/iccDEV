@@ -21,7 +21,7 @@
 	</Header>
 	<Tags>
 		<profileDescriptionTag> <multiLocalizedUnicodeType>
-			<LocalizedText LanguageCountry="enUS"><![CDATA[2 channel MID Selector MS]]></LocalizedText>
+			<LocalizedText LanguageCountry="enUS"><![CDATA[2 channel MID Selector SC]]></LocalizedText>
 		</multiLocalizedUnicodeType> </profileDescriptionTag>
 
 		<AToM0Tag> <multiProcessElementType>
@@ -29,7 +29,7 @@
 				<CurveSetElement InputChannels="2" OutputChannels="2">
 					<SingleSampledCurve Start="-infinity" End="+infinity" 
 						 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0">
-						 1.0 0.0
+						 0.0 1.0
 				  </SingleSampledCurve>
 					<SingleSampledCurve Start="-infinity" End="+infinity" 
 						 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0">
@@ -41,8 +41,8 @@
 
 		<materialTypeArrayTag> <tagArrayType>
 			<UTF8TextArray> <ArrayTags>
-				<utf8TextType><TextData>ProcessMagenta</TextData></utf8TextType>
 				<utf8TextType><TextData>Silver</TextData></utf8TextType>
+				<utf8TextType><TextData>ProcessCyan</TextData></utf8TextType>
 			</ArrayTags> </UTF8TextArray>
 		</tagArrayType> </materialTypeArrayTag>
 

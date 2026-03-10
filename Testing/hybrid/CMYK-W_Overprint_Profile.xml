@@ -27024,7 +27024,7 @@
 						<CalculatorElement InputChannels="5" OutputChannels="3" InputNames="ProcessCyan ProcessMagenta ProcessYellow ProcessBlack White">
 							<Variables>
 								<Declare Name="ShapedCMYK">C M Y K</Declare>
-								<Declare Name="InvWhite"/>
+								<Declare Name="WhiteInk"/>
 							</Variables>
               <SubElements>
                 <!--Element 0 -->
@@ -27072,10 +27072,10 @@ env(bkgX) not if {pop 0.9642}
 env(bkgY) not if {pop 1.000000}
 env(bkgZ) not if {pop 0.8249}
 
-1 in{White} sub tput{InvWhite} ;photoshop inverts spots
-tget{InvWhite} 0 gt if {
-	tget{InvWhite} tint{WhiteScaleXYZ} mul(3)
-	tget{InvWhite} tint{WhiteOffsetXYZ} add(3)
+in{White} env(0ni?) pop not if {1 flip sub} tput{WhiteInk} ;photoshop inverts spots
+tget{WhiteInk} 0 gt if {
+	tget{WhiteInk} tint{WhiteScaleXYZ} mul(3)
+	tget{WhiteInk} tint{WhiteOffsetXYZ} add(3)
 }
 
 in{ProcessCyan,4} 

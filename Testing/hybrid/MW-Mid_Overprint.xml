@@ -33,7 +33,7 @@
 				  </SingleSampledCurve>
 					<SingleSampledCurve Start="-infinity" End="+infinity" 
 						 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0">
-						 0.0 1.0
+						 1.0 0.0
 					</SingleSampledCurve>
 				</CurveSetElement>
 			</MultiProcessElements>

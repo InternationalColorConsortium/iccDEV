@@ -27024,7 +27024,7 @@
             <CalculatorElement InputChannels="5" OutputChannels="3" InputNames="ProcessCyan ProcessMagenta ProcessYellow ProcessBlack Silver">
 							<Variables>
 								<Declare Name="ShapedCMYK">C M Y K</Declare>
-								<Declare Name="InvSilver"/>
+								<Declare Name="SilverInk"/>
 							</Variables>
               <SubElements>
                 <!--Element 0 -->
@@ -27079,10 +27079,10 @@ clut{CmykScaleXYZ} mul(3)
 tget{ShapedCMYK}
 clut{CmykOffsetXYZ} add(3)
 
-1 in{Silver} sub tput{InvSilver} ;photoshop inverts spots
-tget{InvSilver} 0 gt if {
-	tget{InvSilver} tint{SilverScaleXYZ} mul(3)
-	tget{InvSilver} tint{SilverOffsetXYZ} add(3)
+in{Silver} env(0ni?) pop not if {1 flip sub} tput{SilverInk} ;photoshop inverts spots
+tget{SilverInk} 0 gt if {
+	tget{SilverInk} tint{SilverScaleXYZ} mul(3)
+	tget{SilverInk} tint{SilverOffsetXYZ} add(3)
 }
 
 out(0,3) ; store XYZ results
