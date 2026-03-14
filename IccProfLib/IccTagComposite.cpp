@@ -1422,22 +1422,32 @@ bool CIccTagArray::Write(CIccIO *pIO)
 bool CIccTagArray::SetSize(icUInt32Number nSize)
 {
   if (!m_nSize) {
-    m_TagVals = (IccTagPtr*)calloc(nSize, sizeof(IccTagPtr));
-    if (!m_TagVals) {
-      m_nSize =0;
-      return false;
-    }
-  }
-  else {
-    if (nSize<=m_nSize)
-      return true;
-
-    m_TagVals = (IccTagPtr*)icRealloc(m_TagVals, nSize*sizeof(IccTagPtr));
+    m_TagVals = new IccTagPtr[nSize];
     if (!m_TagVals) {
       m_nSize = 0;
       return false;
     }
-    memset(&m_TagVals[m_nSize], 0, (nSize-m_nSize)*sizeof(IccTagPtr));
+    memset(m_TagVals, 0, nSize*sizeof(IccTagPtr));
+  }
+  else {
+    if (nSize<=m_nSize)
+      return true;
+      
+    // We need to grow the array, and keep the existing values.
+    // This would be much easier with a std::vector
+    auto oldArray = m_TagVals;
+    m_TagVals = new IccTagPtr[nSize];
+    if (!m_TagVals) {
+      delete[] oldArray;
+      m_nSize = 0;
+      return false;
+    }
+    // copy old values
+    memcpy( m_TagVals, oldArray, m_nSize*sizeof(IccTagPtr) );
+    // zero newly added values
+    memset( &m_TagVals[m_nSize], 0, (nSize-m_nSize)*sizeof(IccTagPtr) );
+    // delete old array (does NOT delete values)
+    delete[] oldArray;
   }
   m_nSize = nSize;
   return true;
@@ -1520,7 +1530,7 @@ void CIccTagArray::Cleanup()
   }
 
   if (m_TagVals)
-    free(m_TagVals);
+    delete[] m_TagVals;
   m_TagVals = nullptr;
 
   if (m_pArray)
