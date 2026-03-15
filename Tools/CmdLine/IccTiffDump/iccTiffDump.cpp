@@ -235,7 +235,7 @@ int main(int argc, icChar* argv[])
       if (argc > 2) {
         pProfile->ReadTags(pProfile);
         if (SaveIccProfile(argv[2], pProfile)) {
-          printf("\nProfile extracted to: %s\n", argv[1]);
+          printf("\nProfile extracted to: %s\n", argv[2]);
         }
         else {
           printf("\nUnable to extract profile\n");
