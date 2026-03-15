@@ -1033,6 +1033,8 @@ CIccTagArray::CIccTagArray(icArraySignature sigArrayType/* =icSigUndefinedArray 
 ******************************************************************************/
 CIccTagArray::CIccTagArray(const CIccTagArray &tagAry)
 {
+  m_TagVals = NULL;
+  m_nSize = 0;
   if (tagAry.m_nSize) {
     m_TagVals = new IccTagPtr[tagAry.m_nSize];
 
@@ -1070,6 +1072,8 @@ CIccTagArray &CIccTagArray::operator=(const CIccTagArray &tagAry)
 
   Cleanup();
 
+  m_TagVals = NULL;
+  m_nSize = 0;
   if (tagAry.m_nSize) {
     m_TagVals = new IccTagPtr[tagAry.m_nSize];
 
@@ -1522,6 +1526,8 @@ void CIccTagArray::Cleanup()
   if (m_TagVals)
     free(m_TagVals);
   m_TagVals = nullptr;
+
+  m_nSize = 0;
 
   if (m_pArray)
     delete m_pArray;
