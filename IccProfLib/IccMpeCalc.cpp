@@ -4136,7 +4136,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
       return -2;
 
     if (op[i].sig == icSigIfOp) {
-      int incI = 0;
+      icUInt32Number incI = 0;
       if (i+1<nOps && op[i+1].sig==icSigElseOp) {
         p = i+2; 
         if (p > nOps)
@@ -4144,9 +4144,10 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
         nIfArgs = CheckUnderflowOverflow(&op[p], icIntMin(nOps-p, op[i].data.size), nArgs, bCheckUnderflow, sReport);
         if (nIfArgs<0)
           return -1;
-        incI =op[i].data.size;
-
-        p = i+2+op[i].data.size;
+        incI = op[i].data.size;
+        if (incI > nOps)
+          return -1;
+        p = i+2+incI;
         if (p > nOps)
           return -1;
         nElseArgs = CheckUnderflowOverflow(&op[p], icIntMin(nOps-p, op[i+1].data.size), nArgs, bCheckUnderflow, sReport);
@@ -4192,7 +4193,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
       icUInt32Number pos = i+1 + n;
       for (p=0; p<n; p++) {
         SIccCalcOp *sop = &op[i+1+p];
-        int len = sop->data.size;
+        icUInt32Number len = sop->data.size;
         if (pos>=nOps)
           return -1;
 
