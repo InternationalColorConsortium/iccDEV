@@ -632,10 +632,13 @@ typedef enum {
 /************************************************************************
  * CMM environment variable signatures
  ************************************************************************/
-typedef enum {
+typedef enum : uint32_t {
   //Floating point constant operation
   icSigTrueVar                       = 0x74727565,  /* 'true' */
   icSigNotDefVar                     = 0x6e646566,  /* 'ndef' */
+  
+/* Convenience Enum Definitions - Not defined in ICC specification */
+  icMaxCmmEnvVar                     = 0xFFFFFFFF,
 }icSigCmmEnvVar;
 
 
