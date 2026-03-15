@@ -205,7 +205,8 @@ int main(int argc, char* argv[]) {
   
   // use unique_ptr to automatically free the buffers
   std::unique_ptr<icUInt8Number> inbufffer( new icUInt8Number[ bytePerLine*nSamples ] );
-  std::unique_ptr<icUInt8Number> outbuffer( new icUInt8Number[ f->GetWidth() * bytesPerSample * nSamples ] );
+  size_t outSize = f->GetWidth() * bytesPerSample * nSamples;
+  std::unique_ptr<icUInt8Number> outbuffer( new icUInt8Number[ outSize ] );
   icUInt8Number *inbuf = inbufffer.get();
   icUInt8Number *outbuf = outbuffer.get();
 

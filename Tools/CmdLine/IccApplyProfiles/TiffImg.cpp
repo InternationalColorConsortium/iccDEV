@@ -204,6 +204,9 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
 
   m_nCurLine = 0;
   m_nCurStrip = 0;
+  
+  // we should always calculate this
+  m_nBytesPerSample = m_nBitsPerSample / 8;
 
   if (bSep && m_nSamples>1) {
     m_nStripSamples = m_nSamples;
@@ -211,7 +214,6 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
       Close();
       return false;
     }
-    m_nBytesPerSample = m_nBitsPerSample / 8;
 
     m_nStripSize = (unsigned int)TIFFStripSize(m_hTif);
     m_nBytesPerStripLine = m_nWidth * m_nBytesPerSample;
@@ -408,7 +410,7 @@ bool CTiffImg::WriteLine(unsigned char *pBuf)
         src += m_nStripSize;
       }
     }
-    else if (TIFFWriteEncodedStrip(m_hTif, m_nCurStrip, pBuf, m_nBytesPerLine) < 0)
+    else if (TIFFWriteEncodedStrip(m_hTif, m_nCurStrip, pBuf, m_nWidth*m_nBytesPerSample) < 0)
       return false;
 
     m_nCurStrip++;
