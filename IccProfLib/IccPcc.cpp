@@ -320,6 +320,12 @@ CIccCombinedConnectionConditions::CIccCombinedConnectionConditions(CIccProfile *
 {
   if (pAppliedPCC) {
       const CIccTagSpectralViewingConditions *pView = pAppliedPCC->getPccViewingConditions();
+      if (!pView) {
+        m_pPCC = NULL;
+        m_pViewingConditions = NULL;
+        m_bValidMediaXYZ = false;
+        return;
+      }
       if (bReflectance) {
           m_pPCC = pAppliedPCC;
           m_pViewingConditions = NULL;

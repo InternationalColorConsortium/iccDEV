@@ -7503,8 +7503,15 @@ void CIccXformMpe::SetAppliedCC(IIccProfileConnectionConditions *pPCC)
           m_bDeleteAppliedPCC = false;
         }
         else {
-          m_pAppliedPCC = new CIccCombinedConnectionConditions(m_pProfile, pPCC, bReflectance);
-          m_bDeleteAppliedPCC = true;
+          // check first, because we really shouldn't fail in a constructor
+          auto *pView = pPCC->getPccViewingConditions();
+          if (pView) {
+            m_pAppliedPCC = new CIccCombinedConnectionConditions(m_pProfile, pPCC, bReflectance);
+            m_bDeleteAppliedPCC = true;
+          } else {
+            m_pAppliedPCC = pPCC;
+            m_bDeleteAppliedPCC = false;
+          }
         }
       }
       else {
