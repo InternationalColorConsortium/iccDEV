@@ -347,13 +347,13 @@ void CIccTagUnknown::Describe(std::string &sDescription, int nVerboseness)
   icChar buf[bufSize];
 
   sDescription = "Unknown Tag Type of ";
-  snprintf(buf, bufSize, "%u Bytes.", m_nSize-4);
+  snprintf(buf, bufSize, "%u Bytes.", m_nSize);
   sDescription += buf;
 
   if (nVerboseness > 50) {
     sDescription += "\n\nData Follows:\n";
 
-    icMemDump(sDescription, m_pData+4, m_nSize-4);
+    icMemDump(sDescription, m_pData, m_nSize);
   }
 }
 
