@@ -300,7 +300,7 @@ void CIccCfgDataApply::toJson(json& j) const
     j["dstEncoding"] = icGetJsonColorEncoding(m_dstEncoding);
 
   if (m_dstDigits != 9)
-    j["dstDigits]"] = m_dstDigits;
+    j["dstDigits"] = m_dstDigits;
 
   if (m_dstPrecision != 4)
     j["dstPrecision"] = m_dstPrecision;
@@ -419,9 +419,9 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
 void CIccCfgImageApply::toJson(json& j) const
 {
   if (m_srcImgFile.size())
-    j["srcImgFile"] = m_srcImgFile;
+    j["srcImageFile"] = m_srcImgFile;
   if (m_dstImgFile.size())
-    j["dstImgFile"] = m_dstImgFile;
+    j["dstImageFile"] = m_dstImgFile;
 
   if (m_dstEncoding != icEncode8Bit)
     j["dstEncoding"] = icGetJsonFileEncoding(m_dstEncoding);
@@ -678,7 +678,7 @@ static bool jsonFromEnvMap(json& j, const icCmmEnvSigMap& map)
 void CIccCfgProfile::toJson(json& j) const
 {
   if (m_iccFile.size())
-    j["iccProfile"] = m_iccFile;
+    j["iccFile"] = m_iccFile;
   if (m_intent)
     j["intent"] = m_intent;
   json iccMap;
@@ -702,7 +702,7 @@ void CIccCfgProfile::toJson(json& j) const
     if (icInterpValues[i] == m_interpolation)
       break;
   if (icInterpValues[i] == icInterpLinear)
-    j["interpolation"] = icInterpNames;  
+    j["interpolation"] = icInterpNames[i];
 }
 
 CIccCfgProfileSequence::CIccCfgProfileSequence()
@@ -1089,7 +1089,7 @@ void CIccCfgSearchApply::toJsonInit(json &j) const
     if (icInterpValues[i] == m_interpolationInitial)
       break;
   if (icInterpValues[i] == icInterpLinear)
-    j["interpolation"] = icInterpNames;
+    j["interpolation"] = icInterpNames[i];
 
 }
 
