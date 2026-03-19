@@ -3,7 +3,7 @@ File:       IccSignatureUtils.h
 
 Contains:   Implementation of definitions and macros for ICC signature logging.
 
-Version:    V1
+Version:    V2
 
 Copyright:  (c) see Software License
 */
@@ -75,6 +75,9 @@ Copyright:  (c) see Software License
 // HISTORY:
 //   - Initial implementation by David Hoyt on 01-MAR-2025 at 1800 EST.
 //   - Fix UB found with libFuzzer 2026-03-06 03:17:14 UTC DHOYT
+//   - V2: Add v5/iccMAX N-channel + MCS support, gate debug output
+//     behind ICC_SIGNATURE_VERBOSE, add MCH A-F (10-15 channels).
+//     19-MAR-2026 DHOYT
 //
 ////////////////////////////////////////////////////////////////////////
 
@@ -146,8 +149,8 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
 // -----------------------------------------------------------------------------
 // CALLER BACKTRACE TRACING (LINUX ONLY)
 //
-// TRACE_CALLER()       – emits anonymous stack trace (max 10 frames)
-// TRACE_LOG(msg, ...)  – logs message and trace together
+// TRACE_CALLER()       - emits anonymous stack trace (max 10 frames)
+// TRACE_LOG(msg, ...)  - logs message and trace together
 // -----------------------------------------------------------------------------
 
 #ifdef __linux__
@@ -170,7 +173,7 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
 #endif
 
 // -----------------------------------------------------------------------------
-// INTERNAL RUNTIME CHECK – Soft Contract Enforcement
+// INTERNAL RUNTIME CHECK - Soft Contract Enforcement
 //
 // ICC_ASSERT(expr, desc)
 //   If 'expr' is false, logs description, file, line, backtrace (Linux), then traps.
@@ -192,7 +195,7 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
 #endif
 
 // -----------------------------------------------------------------------------
-// SAFE VALUE LOGGER – Guarded Memory Access Diagnostic
+// SAFE VALUE LOGGER - Guarded Memory Access Diagnostic
 //
 // ICC_LOG_SAFE_VAL(name, idx, basePtr, limit)
 //   Logs value only if idx is valid, else logs warning.
@@ -228,8 +231,9 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
 //   is unrecognized, returns "Unknown".
 //
 // NOTES:
-//   The switch-case mapping is derived from the ICC specification for color
-//   space signatures. Each case casts the constant to match the icUInt32Number.
+//   Supports v2/v4 classic signatures (XYZ through MCH9) plus MCH A-F
+//   (10-15 channels) and v5/iccMAX N-channel (0x6e63xxxx) and MCS
+//   (0x6d63xxxx) dynamic signatures.
 //
 // EXAMPLE:
 //   const char* name = ColorSpaceSignatureToStr(0x52474220); // returns "RGB"
@@ -252,8 +256,26 @@ inline const char* ColorSpaceSignatureToStr(icUInt32Number sig)
     case (icUInt32Number)icSigMCH7Data:   return "MCH7";
     case (icUInt32Number)icSigMCH8Data:   return "MCH8";
     case (icUInt32Number)icSigMCH9Data:   return "MCH9";
-    default:                              return "Unknown";
+    case (icUInt32Number)icSigMCHAData:   return "MCHA";
+    case (icUInt32Number)icSigMCHBData:   return "MCHB";
+    case (icUInt32Number)icSigMCHCData:   return "MCHC";
+    case (icUInt32Number)icSigMCHDData:   return "MCHD";
+    case (icUInt32Number)icSigMCHEData:   return "MCHE";
+    case (icUInt32Number)icSigMCHFData:   return "MCHF";
+    default: break;
   }
+
+  // v5/iccMAX: N-channel (0x6e63xxxx) — channels in low 16 bits
+  icUInt32Number csType = sig & 0xffff0000;
+  icUInt32Number nChan  = sig & 0x0000ffff;
+  if (csType == 0x6e630000 && nChan > 0 && nChan <= 0xFFFF)
+    return "NChannel";
+
+  // v5/iccMAX: MCS (0x6d63xxxx) — material channel set
+  if (csType == 0x6d630000 && nChan > 0 && nChan <= 0xFFFF)
+    return "MCS";
+
+  return "Unknown";
 }
 
 
@@ -262,30 +284,33 @@ inline const char* ColorSpaceSignatureToStr(icUInt32Number sig)
 //
 // PURPOSE:
 //   Validates whether the provided ICC color space signature is recognized
-//   per the ICC specification. Logs diagnostics for both valid and invalid
-//   inputs, including human-readable names.
+//   per the ICC specification.
 //
 // PARAMETERS:
 //   sig - A 32-bit ICC color space signature (icUInt32Number).
 //
 // RETURNS:
 //   true  - If the signature matches a known ICC color space.
-//   false - Otherwise; logs a warning with decoded signature value.
+//   false - Otherwise.
 //
 // DIAGNOSTIC:
-//   Includes debug logging of the raw signature and its decoded name.
-//   Invalid signatures trigger warnings with source/line context.
+//   Debug and warning output is gated behind ICC_SIGNATURE_VERBOSE.
+//   Callers that need silent validation (analyzers, fuzzers) should
+//   NOT define ICC_SIGNATURE_VERBOSE.
 //
 // EXAMPLE:
 //   if (!IsValidColorSpaceSignature(tag->m_ColorSpace)) { ... }
 //
 // HISTORY:
 //   Refactored and instrumented by David Hoyt on 01-MAR-2025.
+//   V2: Gate logging behind ICC_SIGNATURE_VERBOSE, add v5 N-channel +
+//   MCS support, add MCH A-F (10-15 channels). 19-MAR-2026 DHOYT.
 ///////////////////////////////////////////////////////////////////////////////
 inline bool IsValidColorSpaceSignature(icUInt32Number sig)
 {
-  // Log incoming value and its decoded name for debug traceability
+#ifdef ICC_SIGNATURE_VERBOSE
   ICC_LOG_DEBUG("IsValidColorSpaceSignature(): input = 0x%08x (%s)", sig, ColorSpaceSignatureToStr(sig));
+#endif
 
   switch (sig) {
     case (icUInt32Number)icSigXYZData:
@@ -303,14 +328,33 @@ inline bool IsValidColorSpaceSignature(icUInt32Number sig)
     case (icUInt32Number)icSigMCH7Data:
     case (icUInt32Number)icSigMCH8Data:
     case (icUInt32Number)icSigMCH9Data:
+    case (icUInt32Number)icSigMCHAData:
+    case (icUInt32Number)icSigMCHBData:
+    case (icUInt32Number)icSigMCHCData:
+    case (icUInt32Number)icSigMCHDData:
+    case (icUInt32Number)icSigMCHEData:
+    case (icUInt32Number)icSigMCHFData:
       return true;
 
     default:
-      // Emit structured warning with signature details
-      ICC_LOG_WARNING("IccSignatureUtils.h:️ ColorSpace signature: 0x%08x (%s)",
-                      sig, ColorSpaceSignatureToStr(sig));
-      return false;
+      break;
   }
+
+  // v5/iccMAX: N-channel dynamic signatures (0x6e63xxxx)
+  icUInt32Number csType = sig & 0xffff0000;
+  icUInt32Number nChan  = sig & 0x0000ffff;
+  if (csType == 0x6e630000 && nChan > 0 && nChan <= 0xFFFF)
+    return true;
+
+  // v5/iccMAX: MCS dynamic signatures (0x6d63xxxx)
+  if (csType == 0x6d630000 && nChan > 0 && nChan <= 0xFFFF)
+    return true;
+
+#ifdef ICC_SIGNATURE_VERBOSE
+  ICC_LOG_WARNING("ColorSpace signature: 0x%08x (%s)",
+                  sig, ColorSpaceSignatureToStr(sig));
+#endif
+  return false;
 }
 
 
@@ -326,11 +370,10 @@ inline bool IsValidColorSpaceSignature(icUInt32Number sig)
 //
 // RETURNS:
 //   true  - If the signature is part of the standard ICC technology enum.
-//   false - If the signature is unrecognized; logs a warning with its hex code.
+//   false - If the signature is unrecognized.
 //
 // DIAGNOSTIC:
-//   Includes debug logging of the incoming signature value.
-//   Adds structured warning output for unrecognized cases.
+//   Debug and warning output is gated behind ICC_SIGNATURE_VERBOSE.
 //
 // NOTE:
 //   This should be used to verify the `technology` field in `profileDescription`
@@ -338,10 +381,13 @@ inline bool IsValidColorSpaceSignature(icUInt32Number sig)
 //
 // HISTORY:
 //   Instrumented and standardized by David Hoyt on 01-MAR-2025.
+//   V2: Gate logging behind ICC_SIGNATURE_VERBOSE. 19-MAR-2026 DHOYT.
 ///////////////////////////////////////////////////////////////////////////////
 inline bool IsValidTechnologySignature(icUInt32Number sig)
 {
+#ifdef ICC_SIGNATURE_VERBOSE
   ICC_LOG_DEBUG("IsValidTechnologySignature(): input = 0x%08x", sig);
+#endif
 
   switch (sig) {
     case (icUInt32Number)icSigDigitalCamera:
@@ -369,7 +415,9 @@ inline bool IsValidTechnologySignature(icUInt32Number sig)
       return true;
 
     default:
-      ICC_LOG_WARNING("IccSignatureUtils.h:️ Invalid Technology signature: 0x%08x", sig);
+#ifdef ICC_SIGNATURE_VERBOSE
+      ICC_LOG_WARNING("Invalid Technology signature: 0x%08x", sig);
+#endif
       return false;
   }
 }
@@ -392,13 +440,50 @@ struct IccColorSpaceDescription {
 //
 // PURPOSE:
 //   Converts a signature into metadata: name, known/unknown, raw byte layout.
+//   Does NOT log — use DebugColorSpaceMeta() for diagnostic output.
 //
 ///////////////////////////////////////////////////////////////////////////////
 inline IccColorSpaceDescription DescribeColorSpaceSignature(icUInt32Number sig)
 {
   IccColorSpaceDescription desc;
   desc.name = ColorSpaceSignatureToStr(sig);
-  desc.isKnown = IsValidColorSpaceSignature(sig);
+
+  // Validate without triggering logs — inline the check directly
+  bool known = false;
+  switch (sig) {
+    case (icUInt32Number)icSigXYZData:
+    case (icUInt32Number)icSigLabData:
+    case (icUInt32Number)icSigRgbData:
+    case (icUInt32Number)icSigCmykData:
+    case (icUInt32Number)icSigGrayData:
+    case (icUInt32Number)icSigNamedData:
+    case (icUInt32Number)icSigMCH1Data:
+    case (icUInt32Number)icSigMCH2Data:
+    case (icUInt32Number)icSigMCH3Data:
+    case (icUInt32Number)icSigMCH4Data:
+    case (icUInt32Number)icSigMCH5Data:
+    case (icUInt32Number)icSigMCH6Data:
+    case (icUInt32Number)icSigMCH7Data:
+    case (icUInt32Number)icSigMCH8Data:
+    case (icUInt32Number)icSigMCH9Data:
+    case (icUInt32Number)icSigMCHAData:
+    case (icUInt32Number)icSigMCHBData:
+    case (icUInt32Number)icSigMCHCData:
+    case (icUInt32Number)icSigMCHDData:
+    case (icUInt32Number)icSigMCHEData:
+    case (icUInt32Number)icSigMCHFData:
+      known = true;
+      break;
+    default: {
+      icUInt32Number csType = sig & 0xffff0000;
+      icUInt32Number nChan  = sig & 0x0000ffff;
+      if ((csType == 0x6e630000 || csType == 0x6d630000) && nChan > 0)
+        known = true;
+      break;
+    }
+  }
+  desc.isKnown = known;
+
   desc.bytes[0] = static_cast<char>(static_cast<unsigned char>((sig >> 24) & 0xFF));
   desc.bytes[1] = static_cast<char>(static_cast<unsigned char>((sig >> 16) & 0xFF));
   desc.bytes[2] = static_cast<char>(static_cast<unsigned char>((sig >> 8) & 0xFF));
