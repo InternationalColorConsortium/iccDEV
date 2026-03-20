@@ -1,13 +1,13 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
+## Copyright (©) 2025 International Color Consortium.
+##                 All rights reserved.
 ##                 https://color.org
 #
 #
 ## Intent: Unix/Linux static analysis using Clang scan-build for PR validation
 #
-# Last Updated: 14-DEC-2025 1810Z by David Hoyt 
+# Last Updated: 14-DEC-2025 1810Z by David Hoyt
 #               Refactor workflow with sanitization
 #               Improved job names
 #
@@ -62,7 +62,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
-      
+
       - name: Checkout base commit (trusted sanitizers)
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
         with:
@@ -70,23 +70,29 @@ jobs:
           path: base
           fetch-depth: 1
           persist-credentials: false
-      
+
       - name: Verify Branch Context
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PR_EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_RUNNER_OS: ${{ runner.os }}
+          PR_BUILD_TYPE: ${{ inputs.build-type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "==== PR Context ===="
-          echo "Event Name: ${{ github.event_name }}"
-          echo "Base Branch: ${{ github.event.pull_request.base.ref }}"
-          echo "Head Branch: ${{ github.event.pull_request.head.ref }}"
-          echo "Commit SHA: ${{ github.event.pull_request.head.sha }}"
-          echo "OS: ${{ runner.os }}"
-          echo "Build Type: ${{ inputs.build-type }}"
+          echo "Event Name: ${PR_EVENT_NAME}"
+          echo "Base Branch: ${PR_BASE_REF}"
+          echo "Head Branch: ${PR_HEAD_REF}"
+          echo "Commit SHA: ${PR_HEAD_SHA}"
+          echo "OS: ${PR_RUNNER_OS}"
+          echo "Build Type: ${PR_BUILD_TYPE}"
           echo "Static Analysis: Enabled (scan-build)"
           echo "===================="
       - name: Install Dependencies
@@ -125,16 +131,25 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          INPUT_BUILD_TYPE: ${{ inputs.build-type || 'Release' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          # Validate build type to prevent cmake argument injection
+          case "${INPUT_BUILD_TYPE}" in
+            Release|Debug|RelWithDebInfo|MinSizeRel) ;;
+            *)
+              echo "ERROR: Invalid build type: '${INPUT_BUILD_TYPE}' — blocked." >&2
+              exit 1
+              ;;
+          esac
           cd Build
           echo "::group::CMake Configure (scan-build)"
           scan-build cmake \
             -DCMAKE_INSTALL_PREFIX=$HOME/.local \
-            -DCMAKE_BUILD_TYPE=${{ inputs.build-type || 'Release' }} \
+            -DCMAKE_BUILD_TYPE="${INPUT_BUILD_TYPE}" \
             Cmake
           echo "::endgroup::"
 
@@ -170,7 +185,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
         run: |
           set -euo pipefail
-          
+
           # Load trusted sanitizers
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if [[ -f "$TRUSTED_SANITIZER" ]]; then
@@ -189,12 +204,12 @@ jobs:
             }
             sanitize_line() { escape_html "$1"; }
           fi
-          
+
           # Sanitize all outputs
           safe_build_type=$(sanitize_line "$BUILD_TYPE")
           safe_run_url=$(sanitize_line "$RUN_URL")
           safe_status=$(sanitize_line "$JOB_STATUS")
-          
+
           echo "## 🧠 Clang Static Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **OS:** ubuntu-latest" >> $GITHUB_STEP_SUMMARY
           echo "- **Compiler:** clang" >> $GITHUB_STEP_SUMMARY

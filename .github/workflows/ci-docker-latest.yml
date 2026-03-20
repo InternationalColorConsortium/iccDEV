@@ -1,19 +1,19 @@
 ###############################################################
 #
-# Copyright (c) 2025-2026 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
 # Intent: ci-docker-latest
 #
-# Last Updated: 026-02-13 14:45:57 UTC by David Hoyt 
+# Last Updated: 026-02-13 14:45:57 UTC by David Hoyt
 #               Update Branch Info
 #               Test sbom + attest & Test
 #               Add: artifact-metadata: write
 #
 #
-#  
+#
 #
 ###############################################################
 # Intent: Build and publish iccDEV Docker container Release
@@ -47,6 +47,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Lowercase image name
         id: image
@@ -117,8 +119,12 @@ jobs:
           path: sbom.spdx.json
           retention-days: 90
 
-      - name: Build local test image
-        run: docker build -f Dockerfile -t iccdev-test:latest .
+      - name: Load test image
+        run: |
+          set -euo pipefail
+          # Pull the image we just pushed to GHCR (avoids building twice)
+          docker pull "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}"
+          docker tag  "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}" iccdev-test:latest
 
       - name: Verify tools
         env:

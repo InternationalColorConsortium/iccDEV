@@ -240,6 +240,10 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
 
   icSpectralRange observerRange;
   const icFloatNumber *observer = pView->getObserver(observerRange);
+  
+  // we can't do any calculations with this (non)observer
+  if (!observer || observerRange.steps == 0)
+    return NULL;
 
   if (!obs)
     obs = (icFloatNumber*)malloc(size*sizeof(icFloatNumber));
@@ -316,6 +320,12 @@ CIccCombinedConnectionConditions::CIccCombinedConnectionConditions(CIccProfile *
 {
   if (pAppliedPCC) {
       const CIccTagSpectralViewingConditions *pView = pAppliedPCC->getPccViewingConditions();
+      if (!pView) {
+        m_pPCC = NULL;
+        m_pViewingConditions = NULL;
+        m_bValidMediaXYZ = false;
+        return;
+      }
       if (bReflectance) {
           m_pPCC = pAppliedPCC;
           m_pViewingConditions = NULL;

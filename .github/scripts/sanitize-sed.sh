@@ -5,7 +5,7 @@
 #
 # Contains:   Implementation of sanitizer for BASH Shell.
 #
-# Version:    V1
+# Version:    V3
 #
 # Copyright:  (c) see Software License
 #------------------------------------------------------------------------------
@@ -58,7 +58,7 @@
 ###############################################################
 #                 https://srd.cx
 #
-# Last Updated: 02-JAN-2026 2100Z by David Hoyt
+# Last Updated: 02-MAR-2026 0045Z by David Hoyt
 #
 # Intent: Try Sanitizing User Controllable Inputs
 #
@@ -69,6 +69,7 @@
 #          - is a Moving Target
 #          - needs ongoing updates
 #          - needs additional unit tests
+#          - v3: Unicode control/bidi/ZWJ stripping
 #
 #
 #
@@ -97,26 +98,66 @@ escape_html() {
   printf '%s' "$s"
 }
 
+# _strip_unicode_control STRING
+# Remove Unicode control/formatting characters that enable Trojan Source,
+# invisible padding, and homoglyph attacks:
+#   - Bidi overrides/embeddings (U+202A-202E, U+2066-2069)
+#   - Zero-width chars (U+200B-200F, U+2060, U+FEFF)
+#   - Tag characters (U+E0001-E007F) — used in emoji but abusable
+# Uses perl for reliable multi-byte removal; falls back to sed byte patterns.
+_strip_unicode_control() {
+  local s="$1"
+  if command -v perl >/dev/null 2>&1; then
+    s="$(printf '%s' "$s" | perl -CS -pe '
+      s/[\x{200B}-\x{200F}]//g;
+      s/[\x{2028}-\x{202F}]//g;
+      s/[\x{2060}-\x{2069}]//g;
+      s/[\x{FEFF}]//g;
+      s/[\x{FFF9}-\x{FFFB}]//g;
+    ')"
+  else
+    # Fallback: strip known UTF-8 byte sequences for the most dangerous chars
+    s="$(printf '%s' "$s" | sed -E '
+      s/\xe2\x80[\x8b-\x8f]//g;
+      s/\xe2\x80[\xa8-\xaf]//g;
+      s/\xe2\x81[\xa0-\xa9]//g;
+      s/\xef\xbb\xbf//g;
+      s/\xef\xbf[\xb9-\xbb]//g;
+    ')"
+  fi
+  printf '%s' "$s"
+}
+
 # _strip_ctrl_keep_newlines STRING
 # Remove control characters except newline (0x0A). Also remove NUL.
+# Strips ANSI escape sequences (CSI, OSC, etc.) to prevent log spoofing.
+# Strips Unicode control/formatting characters to prevent Trojan Source attacks.
 _strip_ctrl_keep_newlines() {
   local s="$1"
   # remove CRs explicitly
   s="${s//$'\r'/}"
+  # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), then any remaining bare ESC
+  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g')"
+  # strip Unicode bidi overrides, zero-width chars, and formatting controls
+  s="$(_strip_unicode_control "$s")"
   # remove NUL and other C0 control chars except LF (0x0A), plus DEL (0x7F)
-  # tr with octal escapes: delete \000-\011 \013 \014 \016-\037 \177
-  # This keeps \n (LF) which is 012 octal.
   s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
   printf '%s' "$s"
 }
 
 # _strip_ctrl_remove_newlines STRING
 # Remove control characters and newlines (useful for single-line outputs).
+# Strips ANSI escape sequences (CSI, OSC, etc.) to prevent log spoofing.
+# Strips Unicode control/formatting characters to prevent Trojan Source attacks.
 _strip_ctrl_remove_newlines() {
   local s="$1"
   # remove CRs and LFs
   s="${s//$'\r'/}"
   s="${s//$'\n'/ }"
+  # strip ANSI escape sequences: CSI (\x1b[...m), OSC (\x1b]...\x07), then any remaining bare ESC
+  s="$(printf '%s' "$s" | sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/\x1b\][^\x07]*\x07//g; s/\x1b//g')"
+  # strip Unicode bidi overrides, zero-width chars, and formatting controls
+  s="$(_strip_unicode_control "$s")"
   # remove other control characters (NUL, etc.) plus DEL (0x7F)
   s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
   printf '%s' "$s"
@@ -196,7 +237,8 @@ sanitize_ref() {
   s="${s//$'\r'/}"
   s="${s//$'\n'/}"
   # replace any character not in the allowed set [A-Za-z0-9._/-] with '-'
-  s="$(printf '%s' "$s" | sed -E 's#[^A-Za-z0-9._/-]#-#g')"
+  # LC_ALL=C ensures byte-level matching (prevents overlong UTF-8 bypass)
+  s="$(printf '%s' "$s" | LC_ALL=C sed -E 's#[^A-Za-z0-9._/-]#-#g')"
   # collapse multiple hyphens
   s="$(printf '%s' "$s" | sed -E 's/-+/-/g')"
   # trim leading/trailing hyphen
@@ -231,7 +273,7 @@ safe_echo_for_summary() {
 
 # Provide a minimal no-op marker so callers can check we're present
 sanitizer_version() {
-  printf 'iccDEV-sanitizer-v1\n'
+  printf 'iccDEV-sanitizer-v3\n'
 }
 
 # End of sanitize-sed.sh

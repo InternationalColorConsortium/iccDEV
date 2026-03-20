@@ -2995,10 +2995,24 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
         if (pElem->GetType()==icSigMatrixElemType) {
           CIccMpeMatrix *pMatElem = (CIccMpeMatrix*)pElem;
 
-          icFloatNumber *pMat = pMatElem->GetMatrix();
-          icFloatNumber *pOffset = pMatElem->GetConstants();
+          const icFloatNumber *pMat = pMatElem->GetMatrix();
+          const icFloatNumber *pOffset = pMatElem->GetConstants();
+          icUInt16Number inChannels = pMatElem->NumInputChannels();
+          icUInt16Number outChannels = pMatElem->NumOutputChannels();
+          
+          // make sure we don't overrun the offset array
+          bool offsetsZero = true;
+          if (pOffset) {
+            for (int i = 0; i < outChannels; ++i) {
+              if (pOffset[i] != 0.0) {
+                offsetsZero = false;
+                break;
+              }
+            }
+          }
 
-          if (pMat && (!pOffset || (pOffset[0]==0.0 && pOffset[1]==0.0 && pOffset[2]==0.0))) {
+          // make sure the matrix is the expected size and offsets are zero
+          if (pMat && (inChannels == 3) && (outChannels == 3) && (!pOffset || offsetsZero) ) {
             CIccPcsStepMatrix *pStepMtx = new CIccPcsStepMatrix(3, 3);
 
             if (pStepMtx ) {
@@ -5645,6 +5659,13 @@ CIccXform3DLut::~CIccXform3DLut()
       m_pTag->InputChannels()!=3) {
     return icCmmStatInvalidLut;
   }
+  
+  // catch cases where the LUT does not match the colorspace given
+  // this avoids segfaults and stack overflows when applying the LUT
+  icUInt16Number csOutChannels = icGetSpaceSamples( m_pTag->GetCsOutput() );
+  if (csOutChannels != m_pTag->OutputChannels())
+    return icCmmStatInvalidLut;
+  
 
   m_ApplyCurvePtrA = NULL;
   m_ApplyCurvePtrB = NULL;
@@ -6010,6 +6031,12 @@ icStatusCMM CIccXform4DLut::Begin()
       m_pTag->InputChannels()!=4) {
     return icCmmStatInvalidLut;
   }
+  
+  // catch cases where the LUT does not match the colorspace given
+  // this avoids segfaults and stack overflows when applying the LUT
+  icUInt16Number csOutChannels = icGetSpaceSamples( m_pTag->GetCsOutput() );
+  if (csOutChannels != m_pTag->OutputChannels())
+    return icCmmStatInvalidLut;
 
   m_ApplyCurvePtrA = m_ApplyCurvePtrB = m_ApplyCurvePtrM = NULL;
 
@@ -6351,6 +6378,12 @@ icStatusCMM CIccXformNDLut::Begin()
   if (!m_pTag || (m_pTag->InputChannels()>2 && m_pTag->InputChannels()<5)) {
     return icCmmStatInvalidLut;
   }
+  
+  // catch cases where the LUT does not match the colorspace given
+  // this avoids segfaults and stack overflows when applying the LUT
+  icUInt16Number csOutChannels = icGetSpaceSamples( m_pTag->GetCsOutput() );
+  if (csOutChannels != m_pTag->OutputChannels())
+    return icCmmStatInvalidLut;
 
   m_nNumInput = m_pTag->m_nInput;
 
@@ -7471,8 +7504,15 @@ void CIccXformMpe::SetAppliedCC(IIccProfileConnectionConditions *pPCC)
           m_bDeleteAppliedPCC = false;
         }
         else {
-          m_pAppliedPCC = new CIccCombinedConnectionConditions(m_pProfile, pPCC, bReflectance);
-          m_bDeleteAppliedPCC = true;
+          // check first, because we really shouldn't fail in a constructor
+          auto *pView = pPCC->getPccViewingConditions();
+          if (pView) {
+            m_pAppliedPCC = new CIccCombinedConnectionConditions(m_pProfile, pPCC, bReflectance);
+            m_bDeleteAppliedPCC = true;
+          } else {
+            m_pAppliedPCC = pPCC;
+            m_bDeleteAppliedPCC = false;
+          }
         }
       }
       else {
@@ -8309,6 +8349,11 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
     }
     if (nIntent == icUnknownIntent)
       nIntent = icPerceptual;
+  }
+
+  // this must check before creating the Xform, because that can delete the profile
+  if (pProfile->m_Header.deviceClass == icSigMaterialVisualizationClass) {
+    bInput = true;
   }
 
   CIccXformPtr Xform;

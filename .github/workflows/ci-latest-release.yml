@@ -1,7 +1,7 @@
 ###############################################################
 #
-## Copyright (©) 2025-2026 International Color Consortium. 
-##                 All rights reserved. 
+## Copyright (©) 2025-2026 International Color Consortium.
+##                 All rights reserved.
 ##                 https://color.org
 #
 #
@@ -10,13 +10,13 @@
 ## Last Updated: 2026-02-17 18:05:19 UTC UTC by David Hoyt
 #                Clean .pdb files from Zip Bundle
 #                Change Build to Release per Developer Spec
-#                Note that Cmake Default Build = Release (now) 
+#                Note that Cmake Default Build = Release (now)
 #                Add bash & pwsh shell prologues
 #                Align Unix & Windows Bundle per Developer Spec
 #                Thank you Max & Phil for the Corrections!
 #
 #  TODO: Extract repetitive shell commands to reusable script
-#  
+#
 ###############################################################
 
 name: ci-latest-release
@@ -39,6 +39,8 @@ jobs:
     steps:
       - name: Checkout master
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
 
       - name: Install Dependencies
         shell: bash --noprofile --norc {0}
@@ -110,10 +112,10 @@ jobs:
           echo "=== Updating PATH ==="
           for d in ../Build/Tools/*; do
           [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done 
+          done
           sh CreateAllProfiles.sh
           sh RunTests.sh
-          find . -iname "*.icc" | wc -l 
+          find . -iname "*.icc" | wc -l
       - name: Verify CMake Cache
         shell: bash --noprofile --norc {0}
         env:
@@ -227,6 +229,8 @@ jobs:
     steps:
       - name: Checkout master
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
 
       - name: Clone repository and install dependencies
         shell: bash --noprofile --norc {0}
@@ -286,7 +290,7 @@ jobs:
           done
           sh CreateAllProfiles.sh
           sh RunTests.sh
-          find . -iname "*.icc" | wc -l 
+          find . -iname "*.icc" | wc -l
 
       - name: Stage bundle into Testing directory
         shell: bash --noprofile --norc {0}
@@ -393,6 +397,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: UCI Gate 1 for Windows Powershell
         shell: pwsh
@@ -409,7 +414,7 @@ jobs:
          $env:GH_NO_UPDATE_NOTIFIER = "1"
          $env:GH_PROMPT_DISABLED = "1"
          $env:NUGET_XMLDOC_MODE = "skip"
-         
+
          # --- Validate workspace path (defense-in-depth) ---
          if (-not (Test-Path $env:GITHUB_WORKSPACE)) {
              throw "Invalid GITHUB_WORKSPACE path: $env:GITHUB_WORKSPACE"
@@ -432,7 +437,16 @@ jobs:
              if (-not $s) { return "" }
              $s = $s.Trim()
              $s = $s.Replace("`r","").Replace("`n","")
-             $s = -join ($s.ToCharArray() | Where-Object { [int]$_ -ge 32 })
+             # Strip C0 controls, DEL, and Unicode bidi/zero-width/formatting chars
+             $s = -join ($s.ToCharArray() | Where-Object {
+                 $c = [int]$_
+                 $c -ge 32 -and $c -ne 127 -and
+                 -not ($c -ge 0x200B -and $c -le 0x200F) -and
+                 -not ($c -ge 0x2028 -and $c -le 0x202F) -and
+                 -not ($c -ge 0x2060 -and $c -le 0x2069) -and
+                 $c -ne 0xFEFF -and
+                 -not ($c -ge 0xFFF9 -and $c -le 0xFFFB)
+             })
              return $s
          }
 
@@ -440,7 +454,7 @@ jobs:
          $env:GITHUB_REF      = Canonicalize $env:GITHUB_REF
          $env:GITHUB_HEAD_REF = Canonicalize $env:GITHUB_HEAD_REF
          $env:GITHUB_BASE_REF = Canonicalize $env:GITHUB_BASE_REF
-         
+
          # --- Harden Git configuration ---
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
@@ -462,7 +476,7 @@ jobs:
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -490,10 +504,10 @@ jobs:
           Write-Host "========= Extracting Deps... ================`n"
           tar -xf deps.zip
           cd Build/Cmake
-          Write-Host "========= Building... ================`n"  
+          Write-Host "========= Building... ================`n"
           cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Release  -Wno-dev
           cmake --build build --config Release -- /m /maxcpucount
-          cmake --build build --config Release -- /m /maxcpucount          
+          cmake --build build --config Release -- /m /maxcpucount
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
               Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
               ForEach-Object { Split-Path $_.FullName -Parent } |

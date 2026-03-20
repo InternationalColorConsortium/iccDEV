@@ -65,6 +65,10 @@ ICC software is licensed under the BSD 3-Clause “New” or “Revised” Licen
 
 All new source files must begin with the ICC Copyright notice and include or reference the BSD 3-Clause "New" or "Revised" License.
 
+### INTELLECTUAL PROPERTY & PATENTS
+
+Participation in ICC's development activities is subject to [ICC's Patent Policy](https://www.color.org/iccip.xalter).
+
 ## Getting Started
 
 So you’ve broken the ice and chatted with us, and it turns out you’ve found a

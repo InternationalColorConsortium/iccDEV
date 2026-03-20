@@ -401,6 +401,9 @@ bool CIccMpeSpectralMatrix::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read16(&nOutputChannels))
     return false;
 
+  if (nInputChannels < 1 || nOutputChannels != 3)
+    return false;
+
   if (!pIO->Read16(&range.start))
     return false;
 
@@ -527,6 +530,16 @@ icValidateStatus CIccMpeSpectralMatrix::Validate(std::string sigPath, std::strin
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
     sReport += " - Cannot have zero spectral range steps!\n";
+    rv = icMaxStatus(rv, icValidateCriticalError);
+  }
+
+  if (m_nInputChannels < 1) {
+    CIccInfo Info;
+    std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
+
+    sReport += icMsgValidateCriticalError;
+    sReport += sSigPathName;
+    sReport += " - Cannot have zero Input Channels!\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
@@ -1019,6 +1032,9 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   if (!pIO->Read16(&m_nOutputChannels))
+    return false;
+
+  if (m_nInputChannels < 1 || m_nOutputChannels < 1)
     return false;
 
   if (!pIO->Read32(&m_flags))
@@ -1867,6 +1883,9 @@ bool CIccMpeSpectralObserver::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read16(&nOutputChannels))
     return false;
 
+  if (nInputChannels < 1 || nOutputChannels != 3)
+    return false;
+
   if (!pIO->Read16(&range.start))
     return false;
 
@@ -1995,6 +2014,16 @@ icValidateStatus CIccMpeSpectralObserver::Validate(std::string sigPath, std::str
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
     sReport += " - Cannot have zero spectral range steps!\n";
+    rv = icMaxStatus(rv, icValidateCriticalError);
+  }
+
+  if (m_nInputChannels < 1) {
+    CIccInfo Info;
+    std::string sSigPathName = Info.GetSigPathName(mpeSigPath);
+
+    sReport += icMsgValidateCriticalError;
+    sReport += sSigPathName;
+    sReport += " - Cannot have zero Input Channels!\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 

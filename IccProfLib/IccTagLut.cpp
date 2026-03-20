@@ -1718,7 +1718,7 @@ CIccCLUT::CIccCLUT(icUInt8Number nInputChannels, icUInt16Number nOutputChannels,
   m_csOutput = icSigUnknownData;
   memset(&m_nReserved2, 0 , sizeof(m_nReserved2));
 
-  UnitClip = ClutUnitClip;
+  m_UnitClipFunc = ClutUnitClip;
 }
 
 
@@ -1753,7 +1753,7 @@ CIccCLUT::CIccCLUT(const CIccCLUT &ICLUT)
   m_pData = new icFloatNumber[num];
   memcpy(m_pData, ICLUT.m_pData, num*sizeof(icFloatNumber));
 
-  UnitClip = ICLUT.UnitClip;
+  m_UnitClipFunc = ICLUT.m_UnitClipFunc;
 }
 
 
@@ -1792,7 +1792,7 @@ CIccCLUT &CIccCLUT::operator=(const CIccCLUT &CLUTTag)
   m_pData = new icFloatNumber[num];
   memcpy(m_pData, CLUTTag.m_pData, num*sizeof(icFloatNumber));
 
-  UnitClip = CLUTTag.UnitClip;
+  m_UnitClipFunc = CLUTTag.m_UnitClipFunc;
 
   return *this;
 }
@@ -2476,7 +2476,14 @@ void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
 {
   icUInt8Number mx = m_MaxGridPoint[0];
 
-  icFloatNumber x = UnitClip(srcPixel[0]) * mx;
+  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
+  
+  // m_UnitClipFunc points to NoClip
+  if (x < 0)
+    x = 0.0;
+
+  if (x > mx)
+    x = mx;
 
   icUInt32Number ix = (icUInt32Number)x;
 
@@ -2522,13 +2529,19 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number my = m_MaxGridPoint[1];
 
   // The UnitClip function pointer is calling "NoClip", but now removes NaN and Inf
-  icFloatNumber x = UnitClip(srcPixel[0]) * mx;
-  icFloatNumber y = UnitClip(srcPixel[1]) * my;
+  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
+  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
   
+  // m_UnitClipFunc points to NoClip
   if (x < 0.0)
     x = 0.0;
   if (y < 0.0)
     y = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2587,9 +2600,24 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
 
-  icFloatNumber x = UnitClip(srcPixel[0]) * mx;
-  icFloatNumber y = UnitClip(srcPixel[1]) * my;
-  icFloatNumber z = UnitClip(srcPixel[2]) * mz;
+  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
+  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
+  icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
+  
+  // m_UnitClipFunc points to NoClip, so no actual clipping is done
+  if (x < 0)
+    x = 0.0;
+  if (y < 0)
+    y = 0.0;
+  if (z < 0)
+    z = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
+  if (z > mz)
+    z = mz;
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2673,9 +2701,24 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
 
-  icFloatNumber x = UnitClip(srcPixel[0]) * mx;
-  icFloatNumber y = UnitClip(srcPixel[1]) * my;
-  icFloatNumber z = UnitClip(srcPixel[2]) * mz;
+  icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
+  icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
+  icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
+  
+  // m_UnitClipFunc points to NoClip, so no actual clipping is done
+  if (x < 0)
+    x = 0.0;
+  if (y < 0)
+    y = 0.0;
+  if (z < 0)
+    z = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
+  if (z > mz)
+    z = mz;
 
   icUInt32Number ix = (icUInt32Number)x;
   icUInt32Number iy = (icUInt32Number)y;
@@ -2744,10 +2787,29 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number my = m_MaxGridPoint[2];
   icUInt8Number mz = m_MaxGridPoint[3];
 
-  icFloatNumber w = UnitClip(srcPixel[0]) * mw;
-  icFloatNumber x = UnitClip(srcPixel[1]) * mx;
-  icFloatNumber y = UnitClip(srcPixel[2]) * my;
-  icFloatNumber z = UnitClip(srcPixel[3]) * mz;
+  icFloatNumber w = m_UnitClipFunc(srcPixel[0]) * mw;
+  icFloatNumber x = m_UnitClipFunc(srcPixel[1]) * mx;
+  icFloatNumber y = m_UnitClipFunc(srcPixel[2]) * my;
+  icFloatNumber z = m_UnitClipFunc(srcPixel[3]) * mz;
+  
+  // m_UnitClipFunc points to NoClip
+  if (w < 0)
+    w = 0.0;
+  if (x < 0)
+    x = 0.0;
+  if (y < 0)
+    y = 0.0;
+  if (z < 0)
+    z = 0.0;
+
+  if (x > mx)
+    x = mx;
+  if (y > my)
+    y = my;
+  if (z > mz)
+    z = mz;
+  if (w > mx)
+    w = mw;
 
   icUInt32Number iw = (icUInt32Number)w;
   icUInt32Number ix = (icUInt32Number)x;
@@ -2831,11 +2893,23 @@ void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number m3 = m_MaxGridPoint[3];
   icUInt8Number m4 = m_MaxGridPoint[4];
 
-  icFloatNumber g0 = UnitClip(srcPixel[0]) * m0;
-  icFloatNumber g1 = UnitClip(srcPixel[1]) * m1;
-  icFloatNumber g2 = UnitClip(srcPixel[2]) * m2;
-  icFloatNumber g3 = UnitClip(srcPixel[3]) * m3;
-  icFloatNumber g4 = UnitClip(srcPixel[4]) * m4;
+  icFloatNumber g0 = m_UnitClipFunc(srcPixel[0]) * m0;
+  icFloatNumber g1 = m_UnitClipFunc(srcPixel[1]) * m1;
+  icFloatNumber g2 = m_UnitClipFunc(srcPixel[2]) * m2;
+  icFloatNumber g3 = m_UnitClipFunc(srcPixel[3]) * m3;
+  icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
+  
+  // m_UnitClipFunc points to NoClip
+  if (g0 < 0)
+    g0 = 0.0;
+  if (g1 < 0)
+    g1 = 0.0;
+  if (g2 < 0)
+    g2 = 0.0;
+  if (g3 < 0)
+    g3 = 0.0;
+  if (g4 < 0)
+    g4 = 0.0;
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -2944,12 +3018,26 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icUInt8Number m4 = m_MaxGridPoint[4];
   icUInt8Number m5 = m_MaxGridPoint[5];
 
-  icFloatNumber g0 = UnitClip(srcPixel[0]) * m0;
-  icFloatNumber g1 = UnitClip(srcPixel[1]) * m1;
-  icFloatNumber g2 = UnitClip(srcPixel[2]) * m2;
-  icFloatNumber g3 = UnitClip(srcPixel[3]) * m3;
-  icFloatNumber g4 = UnitClip(srcPixel[4]) * m4;
-  icFloatNumber g5 = UnitClip(srcPixel[5]) * m5;
+  icFloatNumber g0 = m_UnitClipFunc(srcPixel[0]) * m0;
+  icFloatNumber g1 = m_UnitClipFunc(srcPixel[1]) * m1;
+  icFloatNumber g2 = m_UnitClipFunc(srcPixel[2]) * m2;
+  icFloatNumber g3 = m_UnitClipFunc(srcPixel[3]) * m3;
+  icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
+  icFloatNumber g5 = m_UnitClipFunc(srcPixel[5]) * m5;
+  
+  // m_UnitClipFunc points to NoClip
+  if (g0 < 0)
+    g0 = 0.0;
+  if (g1 < 0)
+    g1 = 0.0;
+  if (g2 < 0)
+    g2 = 0.0;
+  if (g3 < 0)
+    g3 = 0.0;
+  if (g4 < 0)
+    g4 = 0.0;
+  if (g5 < 0)
+    g5 = 0.0;
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -3096,7 +3184,9 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
   icUInt32Number* ig = pApply->m_ig;
 
   for (i=0; i<m_nInput; i++) {
-    g[i] = UnitClip(srcPixel[i]) * m_MaxGridPoint[i];
+    g[i] = m_UnitClipFunc(srcPixel[i]) * m_MaxGridPoint[i];
+    if (g[i] < 0)
+      g[i] = 0.0;
     ig[i] = (icUInt32Number)g[i];
     s[m_nInput-1-i] = g[i] - ig[i];
     if (ig[i]==m_MaxGridPoint[i]) {

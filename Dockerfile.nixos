@@ -76,55 +76,56 @@ ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/
 WORKDIR /workspace/iccDEV
 
 # Create welcome script in workspace
-RUN cat > /workspace/welcome.sh << 'EOF'
-#!/usr/bin/env sh
-echo ""
-echo "============================================================"
-echo "==== International Color Consortium | https://color.org ===="
-echo "==== iccDEV Build Container (NixOS) ========================"
-echo "============================================================"
-echo ""
-echo "All iccDEV tools are available on PATH:"
-echo ""
-echo "Command-line tools (14):"
-echo "  - iccApplyNamedCmm    - iccFromXml"
-echo "  - iccApplyProfiles    - iccJpegDump"
-echo "  - iccApplySearch      - iccPngDump"
-echo "  - iccApplyToLink      - iccRoundTrip"
-echo "  - iccDumpProfile      - iccSpecSepToTiff"
-echo "  - iccFromCube         - iccTiffDump"
-echo "  - iccToXml            - iccV5DspObsToV4Dsp"
-echo ""
-echo "GUI tool (1):"
-echo "  - iccDumpProfileGui"
-echo ""
-echo "iccDEV Libraries (in /workspace/iccDEV/Build):"
-echo ""
-echo "Shared Libraries (.so):"
-echo "  - IccProfLib/libIccProfLib2.so -> libIccProfLib2.so.<version>"
-echo "  - IccXML/libIccXML2.so -> libIccXML2.so.<version>"
-echo ""
-echo "Static Libraries (.a):"
-echo "  - IccProfLib/libIccProfLib2-static.a"
-echo "  - IccXML/libIccXML2-static.a"
-echo ""
-echo "Example usage:"
-echo "  iccDumpProfile Testing/sRGB_v4_ICC_preference.icc ALL"
-echo "  iccToXml Testing/sRGB_v4_ICC_preference.icc output.xml"
-echo ""
-echo "Testing directory: /workspace/iccDEV/Testing"
-echo "Build directory:   /workspace/iccDEV/Build"
-echo ""
-echo "To list all tools and libraries:"
-echo "  find Build/Tools -type f -executable -name 'icc*'"
-echo "  find Build -name 'libIcc*.so*' -o -name 'libIcc*.a'"
-echo ""
-echo "To run all tests:"
-echo "  cd Testing && sh CreateAllProfiles.sh"
-echo ""
-echo "================================================"
-echo ""
-EOF
+RUN printf '%s\n' \
+  '#!/usr/bin/env sh' \
+  '' \
+  'echo ""' \
+  'echo "============================================================"' \
+  'echo "==== International Color Consortium | https://color.org ===="' \
+  'echo "==== iccDEV Build Container (NixOS) ========================"' \
+  'echo "============================================================"' \
+  'echo ""' \
+  'echo "All iccDEV tools are available on PATH:"' \
+  'echo ""' \
+  'echo "Command-line tools (14):"' \
+  'echo "  - iccApplyNamedCmm    - iccFromXml"' \
+  'echo "  - iccApplyProfiles    - iccJpegDump"' \
+  'echo "  - iccApplySearch      - iccPngDump"' \
+  'echo "  - iccApplyToLink      - iccRoundTrip"' \
+  'echo "  - iccDumpProfile      - iccSpecSepToTiff"' \
+  'echo "  - iccFromCube         - iccTiffDump"' \
+  'echo "  - iccToXml            - iccV5DspObsToV4Dsp"' \
+  'echo ""' \
+  'echo "GUI tool (1):"' \
+  'echo "  - iccDumpProfileGui"' \
+  'echo ""' \
+  'echo "iccDEV Libraries (in /workspace/iccDEV/Build):"' \
+  'echo ""' \
+  'echo "Shared Libraries (.so):"' \
+  'echo "  - IccProfLib/libIccProfLib2.so -> libIccProfLib2.so.<version>"' \
+  'echo "  - IccXML/libIccXML2.so -> libIccXML2.so.<version>"' \
+  'echo ""' \
+  'echo "Static Libraries (.a):"' \
+  'echo "  - IccProfLib/libIccProfLib2-static.a"' \
+  'echo "  - IccXML/libIccXML2-static.a"' \
+  'echo ""' \
+  'echo "Example usage:"' \
+  'echo "  iccDumpProfile Testing/sRGB_v4_ICC_preference.icc ALL"' \
+  'echo "  iccToXml Testing/sRGB_v4_ICC_preference.icc output.xml"' \
+  'echo ""' \
+  'echo "Testing directory: /workspace/iccDEV/Testing"' \
+  'echo "Build directory:   /workspace/iccDEV/Build"' \
+  'echo ""' \
+  'echo "To list all tools and libraries:"' \
+  'echo "  find Build/Tools -type f -executable -name '"'"'icc*'"'"'"' \
+  'echo "  find Build -name '"'"'libIcc*.so*'"'"' -o -name '"'"'libIcc*.a'"'"'"' \
+  'echo ""' \
+  'echo "To run all tests:"' \
+  'echo "  cd Testing && sh CreateAllProfiles.sh"' \
+  'echo ""' \
+  'echo "================================================"' \
+  'echo ""' \
+  > /workspace/welcome.sh
 
 RUN chmod +x /workspace/welcome.sh
 

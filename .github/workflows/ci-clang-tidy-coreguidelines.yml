@@ -9,8 +9,8 @@
 #
 ## Last Updated: 2026-02-17 16:14:17 UTC by David Hoyt
 #                Housekeeping
-#                
-#                
+#
+#
 #
 ###############################################################
 
@@ -34,6 +34,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         shell: bash --noprofile --norc {0}
@@ -61,6 +63,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -68,7 +71,7 @@ jobs:
           unset GITHUB_TOKEN || true
           cd Build
           cmake Cmake \
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             -Wno-dev
           echo "✅ compile_commands.json generated with $(jq length compile_commands.json) translation units"

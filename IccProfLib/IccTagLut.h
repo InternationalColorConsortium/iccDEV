@@ -372,7 +372,7 @@ public:
   void Iterate(IIccCLUTExec* pExec);
   icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL)  const;
 
-  void SetClipFunc(icCLUTCLIPFUNC ClipFunc) { UnitClip = ClipFunc; }
+  void SetClipFunc(icCLUTCLIPFUNC ClipFunc) { m_UnitClipFunc = ClipFunc; }
 
   icUInt8Number GetPrecision() { return m_nPrecision; }
   void SetPrecision(icUInt8Number nPrecision) { m_nPrecision = nPrecision; }
@@ -381,7 +381,7 @@ protected:
   void Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy=false );
   void SubIterate(IIccCLUTExec* pExec, icUInt8Number nIndex, icUInt32Number nPos);
 
-  icCLUTCLIPFUNC UnitClip;
+  icCLUTCLIPFUNC m_UnitClipFunc;
 
   icUInt8Number m_nReserved2[3];
   
@@ -439,7 +439,7 @@ public:
   virtual bool UseLegacyPCS() const { return false; } //Treat Lab Encoding differently?
 
   bool IsInputB() const { return IsInputMatrix(); }
-  bool SwapMBCurves() { return m_bUseMCurvesAsBCurves; }
+  bool SwapMBCurves() const { return m_bUseMCurvesAsBCurves; }
 
   void Cleanup();
   void Init(icUInt8Number nInputChannels, icUInt8Number nOutputChannels);
@@ -451,8 +451,8 @@ public:
 
   virtual void SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSignature csOutput);
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
-  icColorSpaceSignature GetCsInput() { return m_csInput; }
-  icColorSpaceSignature GetCsOutput() { return m_csOutput; }
+  icColorSpaceSignature GetCsInput() const { return m_csInput; }
+  icColorSpaceSignature GetCsOutput() const { return m_csOutput; }
 
   LPIccCurve* NewCurvesA();
   CIccCLUT*   NewCLUT(icUInt8Number nGridPoints, icUInt8Number nPrecision=2);

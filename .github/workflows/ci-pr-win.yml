@@ -1,7 +1,7 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (©) 2025 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
@@ -52,6 +52,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Harden Environment and Validate Inputs
         shell: pwsh
@@ -87,7 +88,16 @@ jobs:
              if (-not $s) { return "" }
              $s = $s.Trim()
              $s = $s.Replace("`r","").Replace("`n","")
-             $s = -join ($s.ToCharArray() | Where-Object { [int]$_ -ge 32 })
+             # Strip C0 controls, DEL, and Unicode bidi/zero-width/formatting chars
+             $s = -join ($s.ToCharArray() | Where-Object {
+                 $c = [int]$_
+                 $c -ge 32 -and $c -ne 127 -and
+                 -not ($c -ge 0x200B -and $c -le 0x200F) -and
+                 -not ($c -ge 0x2028 -and $c -le 0x202F) -and
+                 -not ($c -ge 0x2060 -and $c -le 0x2069) -and
+                 $c -ne 0xFEFF -and
+                 -not ($c -ge 0xFFF9 -and $c -le 0xFFFB)
+             })
              return $s
          }
          # --- Canonicalize PR-controlled environment values ---
@@ -160,7 +170,7 @@ jobs:
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'

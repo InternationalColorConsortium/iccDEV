@@ -7,9 +7,9 @@
 #
 # Intent: Unix/Linux and macOS multi-compiler build & test
 #
-# Last Updated: 2026-02-17 16:24:41 UTC by David Hoyt 
+# Last Updated: 2026-02-17 16:24:41 UTC by David Hoyt
 #               PATH Changes
-#               
+#
 #
 #
 #
@@ -83,15 +83,18 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_OS: ${{ matrix.os }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          OS="${{ matrix.os }}"
-          COMP="${{ matrix.compiler }}"
-          BT="${{ matrix.build_type }}"
+          OS="${MATRIX_OS}"
+          COMP="${MATRIX_COMPILER}"
+          BT="${MATRIX_BUILD_TYPE}"
 
           case "$OS" in
             ubuntu-latest|macos-latest) ;;
@@ -111,34 +114,42 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Print the PR Branch Details
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PR_BASE_REF: ${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_EVENT_NAME: ${{ github.event_name }}
+          PR_BUILD_TYPE: ${{ matrix.build_type }}
+          PR_COMPILER: ${{ matrix.compiler }}
+          PR_OS: ${{ matrix.os }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          echo "Triggered by:  ${{ github.event_name }}"
-          echo "Base branch:   ${{ github.base_ref }}"
-          echo "Head branch:   ${{ github.head_ref }}"
-          echo "Commit SHA:    ${{ github.event.pull_request.head.sha }}"
-          echo "Build Type:    ${{ matrix.build_type }}"
-          echo "Compiler:      ${{ matrix.compiler }}"
-          echo "OS:            ${{ matrix.os }}"
+          echo "Triggered by:  ${PR_EVENT_NAME}"
+          echo "Base branch:   ${PR_BASE_REF}"
+          echo "Head branch:   ${PR_HEAD_REF}"
+          echo "Commit SHA:    ${PR_HEAD_SHA}"
+          echo "Build Type:    ${PR_BUILD_TYPE}"
+          echo "Compiler:      ${PR_COMPILER}"
+          echo "OS:            ${PR_OS}"
 
           {
             echo "### PR Branch Details"
             echo ""
-            echo "**Triggered by:**  ${{ github.event_name }}"
-            echo "**Base branch:**   ${{ github.base_ref }}"
-            echo "**Head branch:**   ${{ github.head_ref }}"
-            echo "**Commit SHA:**    ${{ github.event_pull_request.head.sha }}"
-            echo "**Build Type:**    ${{ matrix.build_type }}"
-            echo "**Compiler:**      ${{ matrix.compiler }}"
-            echo "**OS:**            ${{ matrix.os }}"
+            echo "**Triggered by:**  ${PR_EVENT_NAME}"
+            echo "**Base branch:**   ${PR_BASE_REF}"
+            echo "**Head branch:**   ${PR_HEAD_REF}"
+            echo "**Commit SHA:**    ${PR_HEAD_SHA}"
+            echo "**Build Type:**    ${PR_BUILD_TYPE}"
+            echo "**Compiler:**      ${PR_COMPILER}"
+            echo "**OS:**            ${PR_OS}"
           } >> $GITHUB_STEP_SUMMARY
       - name: Install Build Dependencies (Linux)
         if: runner.os == 'Linux'
@@ -190,6 +201,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -198,7 +210,7 @@ jobs:
           echo "Configuring CMake project..."
           mkdir -p Build
           cd Build
-          cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+          cmake -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}" \
                 -DCMAKE_C_COMPILER=$CC \
                 -DCMAKE_CXX_COMPILER=$CXX \
                  Cmake
@@ -210,6 +222,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -218,7 +231,7 @@ jobs:
           echo "Start build..."
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
-          echo "CMake build type: ${{ matrix.build_type }}"
+          echo "CMake build type: ${MATRIX_BUILD_TYPE}"
           make -j$(nproc || sysctl -n hw.logicalcpu)
 
       - name: Create Profiles
@@ -246,6 +259,9 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_OS: ${{ matrix.os }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -257,9 +273,9 @@ jobs:
             exit 1
           fi
           source .github/scripts/sanitize-sed.sh
-          SANITIZED_OS=$(sanitize_line "${{ matrix.os }}")
-          SANITIZED_COMPILER=$(sanitize_line "${{ matrix.compiler }}")
-          SANITIZED_BUILD_TYPE=$(sanitize_line "${{ matrix.build_type }}")
+          SANITIZED_OS=$(sanitize_line "${MATRIX_OS}")
+          SANITIZED_COMPILER=$(sanitize_line "${MATRIX_COMPILER}")
+          SANITIZED_BUILD_TYPE=$(sanitize_line "${MATRIX_BUILD_TYPE}")
           echo "## 🧱 ci-pr-unix Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **OS:**         $SANITIZED_OS" >> $GITHUB_STEP_SUMMARY
           echo "- **Compiler:**   $SANITIZED_COMPILER" >> $GITHUB_STEP_SUMMARY

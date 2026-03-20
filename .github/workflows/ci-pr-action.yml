@@ -1,7 +1,7 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (©) 2025 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
@@ -12,10 +12,10 @@
 #                Consider Copilot Review
 #                Review GitHub Best Practice & Security Guides
 #
-# Last Updated: 17-DEC-2025 0030Z by David Hoyt 
+# Last Updated: 17-DEC-2025 0030Z by David Hoyt
 #               Refactor workflow with sanitization
 #               Improved job names
-#    
+#
 #
 #
 #  Note: We continue to monitor the ci-pr- labels for issues
@@ -89,14 +89,17 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
 
           git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
 
-          base_sha="${{ github.event.pull_request.base.sha }}"
-          head_sha="${{ github.event.pull_request.head.sha }}"
+          base_sha="${PR_BASE_SHA}"
+          head_sha="${PR_HEAD_SHA}"
 
           # Validate that both SHAs look like exact Git commit OIDs (40 hex chars).
           validate_sha() {
@@ -117,7 +120,7 @@ jobs:
             exit 0
           fi
 
-          base_ref="${{ github.base_ref }}"
+          base_ref="${PR_BASE_REF}"
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
           case "$base_ref" in master)
@@ -130,7 +133,8 @@ jobs:
           esac
 
           # Fetch with increased depth to find merge base
-          git -c protocol.version=2 fetch --no-tags origin "${base_ref}" --depth=50
+          # Use fully-qualified refspec (defense-in-depth: prevents ambiguous ref resolution)
+          git -c protocol.version=2 fetch --no-tags origin "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}" --depth=50
 
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
@@ -301,10 +305,10 @@ jobs:
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
         run: |
           set -euo pipefail
-      
+
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-      
+
           # load trusted canonical sanitizers
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if [[ -f "$TRUSTED_SANITIZER" ]]; then
@@ -323,7 +327,7 @@ jobs:
             sanitize_line() { escape_html "$1"; }
             sanitize_print() { escape_html "$1"; }
           fi
-      
+
           # Safe defaults.
           : "${GITHUB_EVENT_NAME:=<none>}"
           : "${GITHUB_REPOSITORY:=<none>}"
@@ -331,7 +335,7 @@ jobs:
           : "${GITHUB_SHA:=<none>}"
           : "${GITHUB_RUN_ID:=<none>}"
           : "${SRC_CHANGED:=false}"
-      
+
           # write step summary (all dynamic values passed through sanitize_line)
           {
             echo "## 🧭 PR Init Complete"
@@ -476,6 +480,9 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_REF: ${{ github.ref }}
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
@@ -487,7 +494,7 @@ jobs:
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
-  
+
           # load canonical sanitizers from trusted checkout
           TRUSTED_SANITIZER="$GITHUB_WORKSPACE/base/.github/scripts/sanitize-sed.sh"
           if [[ -f "$TRUSTED_SANITIZER" ]]; then
@@ -506,13 +513,13 @@ jobs:
             sanitize_line() { escape_html "$1"; }
             sanitize_print() { escape_html "$1"; }
           fi
-  
+
           # --- normalize upstream job results (default to success if missing) ---
           UNIX_RESULT="${UNIX_RESULT:-success}"
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
-  
+
           # remove CRs, trim whitespace and lowercase each value
           trim_and_norm() {
             local v="$1"
@@ -524,12 +531,12 @@ jobs:
             v="$(echo "$v" | tr '[:upper:]' '[:lower:]')"
             printf '%s' "$v"
           }
-  
+
           UNIX_RESULT="$(trim_and_norm "$UNIX_RESULT")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
-  
+
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
           for s in "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT"; do
@@ -540,7 +547,7 @@ jobs:
               break
             fi
           done
-  
+
           # --- write header ----------------------------------------------------
           {
             echo "<div align=\"center\">"

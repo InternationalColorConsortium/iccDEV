@@ -356,6 +356,9 @@ bool CIccMatrixMath::SetRange(const icSpectralRange &srcRange, const icSpectralR
   if (m_nRows != dstRange.steps || m_nCols != srcRange.steps)
     return false;
 
+  if (srcRange.steps == 0)
+    return false;
+
   icUInt16Number d;
   icFloatNumber srcStart = icF16toF(srcRange.start);
   icFloatNumber srcEnd = icF16toF(srcRange.end);
@@ -367,7 +370,8 @@ bool CIccMatrixMath::SetRange(const icSpectralRange &srcRange, const icSpectralR
   icFloatNumber dstScale = (dstEnd - dstStart ) / (dstRange.steps - 1);
 
   icFloatNumber *data=entry(0);
-  memset(data, 0, dstRange.steps*srcRange.steps*sizeof(icFloatNumber));
+  size_t dataSize = dstRange.steps * srcRange.steps * sizeof(icFloatNumber);
+  memset(data, 0, dataSize);
 
   for (d=0; d<dstRange.steps; d++) {
     icFloatNumber *r = entry(d);

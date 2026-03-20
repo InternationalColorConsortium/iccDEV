@@ -347,13 +347,13 @@ void CIccTagUnknown::Describe(std::string &sDescription, int nVerboseness)
   icChar buf[bufSize];
 
   sDescription = "Unknown Tag Type of ";
-  snprintf(buf, bufSize, "%u Bytes.", m_nSize-4);
+  snprintf(buf, bufSize, "%u Bytes.", m_nSize);
   sDescription += buf;
 
   if (nVerboseness > 50) {
     sDescription += "\n\nData Follows:\n";
 
-    icMemDump(sDescription, m_pData+4, m_nSize-4);
+    icMemDump(sDescription, m_pData, m_nSize);
   }
 }
 
@@ -2962,6 +2962,10 @@ bool CIccTagNamedColor2::Read(icUInt32Number size, CIccIO *pIO)
       pIO->Read8(m_szSufix, sizeof(m_szSufix))!=sizeof(m_szSufix)) {
     return false;
   }
+  
+  // make sure the suffix and prefix are NULL terminated!
+  m_szPrefix[sizeof(m_szPrefix)-1] = 0;
+  m_szSufix[sizeof(m_szSufix)-1] = 0;
 
   size -= nTagHdrSize;
 
@@ -4654,11 +4658,12 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
       if (!mtx.Reset(pMatrix, nBytesPerMatrix, icSparseMatrixFloatNum, true))
         return false;
 
-      size_t num_entries = mtx.GetNumEntries();
+      icUInt16Number num_entries = mtx.GetNumEntries();
       if (num_entries == 0)
         return false;
 
-      if (mtx.GetNumEntries()>mtx.MaxEntries(nChannels*sizeof(icFloatNumber), mtx.Rows(), sizeof(icFloatNumber)))
+      icUInt32Number maxEntries = mtx.MaxEntries(nChannels*sizeof(icFloatNumber), mtx.Rows(), sizeof(icFloatNumber));
+      if (num_entries > maxEntries)
         return false;
     
       n = (icUInt32Number) (num_entries*sizeof(icUInt16Number));
@@ -4739,6 +4744,13 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
       }
       nSizeLeft -= n;
       pos += n;
+
+      // validate column counts that will be used later (and could cause a crash)
+      for (j=0; j<(int)mtx.Rows(); j++) {
+        n = mtx.GetNumRowColumns(j);
+        if (n > mtx.Cols())
+          return false;
+      }
 
       nAligned = ((pos+3)/4)*4;
       if (nAligned != pos) {
@@ -6062,17 +6074,20 @@ bool CIccTagNum<T, Tsig>::GetValues(icFloatNumber *DstVector, icUInt32Number nSt
 {
   if (nVectorSize+nStart >m_nSize)
     return false;
+    
+  if (nVectorSize > m_nSize)
+    return false;
 
   icUInt32Number i;
   
   switch (Tsig) {
     case icSigUInt8ArrayType:
-      for (i=0; i<m_nSize; i++) {
+      for (i=0; i<nVectorSize; i++) {
         DstVector[i] = icU8toF((icUInt8Number)(m_Num[i+nStart]));
       }
       break;
     case icSigUInt16ArrayType:
-      for (i=0; i<m_nSize; i++) {
+      for (i=0; i<nVectorSize; i++) {
         DstVector[i] = icU16toF((icUInt16Number)(m_Num[i+nStart]));
       }
       break;

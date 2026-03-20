@@ -358,13 +358,17 @@ bool CIccTagStruct::Read(icUInt32Number size, CIccIO *pIO)
   if (headerSize > size)
     return false;
 
-  if (!pIO) {
+  if (!pIO)
     return false;
-  }
 
   Cleanup();
 
   m_tagStart = (icUInt32Number) pIO->Tell();
+  
+  // Make sure the tag size is somewhat reasonable
+  // NOTE - ccox - it would be nice to cache the file length instead of calculating it per tag
+  if (size > pIO->GetLength())
+    return false;
 
   if (!pIO->Read32(&sig))
     return false;
@@ -400,15 +404,12 @@ bool CIccTagStruct::Read(icUInt32Number size, CIccIO *pIO)
     m_ElemEntries->push_back(TagEntry);
   }
 
-  TagEntryList::iterator entry;
-
-  for (entry=m_ElemEntries->begin(); entry!=m_ElemEntries->end(); entry++) {
-    if (!LoadElem((IccTagEntry*)&(entry->TagInfo), pIO)) {
+  for (auto entry : *m_ElemEntries ) {
+    if (!LoadElem(&entry, pIO)) {
       Cleanup();
       return false;
     }
   }
-
 
   return true;
 }
@@ -857,9 +858,11 @@ bool CIccTagStruct::LoadElem(IccTagEntry *pTagEntry, CIccIO *pIO)
     sizeof(icUInt32Number) + 
     sizeof(icUInt32Number);
 
-  if (pTagEntry->TagInfo.offset<headerSize ||
+  // make sure we avoid 32 bit overflow when calculating the size to be read
+  size_t temp = pTagEntry->TagInfo.offset + (size_t)pTagEntry->TagInfo.size;
+  if (pTagEntry->TagInfo.offset < headerSize ||
       !pTagEntry->TagInfo.size ||
-      pTagEntry->TagInfo.offset+pTagEntry->TagInfo.size > m_tagSize) {
+      temp > (size_t)m_tagSize) {
     return false;
   }
 
@@ -1030,6 +1033,8 @@ CIccTagArray::CIccTagArray(icArraySignature sigArrayType/* =icSigUndefinedArray 
 ******************************************************************************/
 CIccTagArray::CIccTagArray(const CIccTagArray &tagAry)
 {
+  m_TagVals = NULL;
+  m_nSize = 0;
   if (tagAry.m_nSize) {
     m_TagVals = new IccTagPtr[tagAry.m_nSize];
 
@@ -1067,6 +1072,8 @@ CIccTagArray &CIccTagArray::operator=(const CIccTagArray &tagAry)
 
   Cleanup();
 
+  m_TagVals = NULL;
+  m_nSize = 0;
   if (tagAry.m_nSize) {
     m_TagVals = new IccTagPtr[tagAry.m_nSize];
 
@@ -1419,22 +1426,32 @@ bool CIccTagArray::Write(CIccIO *pIO)
 bool CIccTagArray::SetSize(icUInt32Number nSize)
 {
   if (!m_nSize) {
-    m_TagVals = (IccTagPtr*)calloc(nSize, sizeof(IccTagPtr));
-    if (!m_TagVals) {
-      m_nSize =0;
-      return false;
-    }
-  }
-  else {
-    if (nSize<=m_nSize)
-      return true;
-
-    m_TagVals = (IccTagPtr*)icRealloc(m_TagVals, nSize*sizeof(IccTagPtr));
+    m_TagVals = new IccTagPtr[nSize];
     if (!m_TagVals) {
       m_nSize = 0;
       return false;
     }
-    memset(&m_TagVals[m_nSize], 0, (nSize-m_nSize)*sizeof(IccTagPtr));
+    memset(m_TagVals, 0, nSize*sizeof(IccTagPtr));
+  }
+  else {
+    if (nSize<=m_nSize)
+      return true;
+      
+    // We need to grow the array, and keep the existing values.
+    // This would be much easier with a std::vector
+    auto oldArray = m_TagVals;
+    m_TagVals = new IccTagPtr[nSize];
+    if (!m_TagVals) {
+      delete[] oldArray;
+      m_nSize = 0;
+      return false;
+    }
+    // copy old values
+    memcpy( m_TagVals, oldArray, m_nSize*sizeof(IccTagPtr) );
+    // zero newly added values
+    memset( &m_TagVals[m_nSize], 0, (nSize-m_nSize)*sizeof(IccTagPtr) );
+    // delete old array (does NOT delete values)
+    delete[] oldArray;
   }
   m_nSize = nSize;
   return true;
@@ -1517,8 +1534,10 @@ void CIccTagArray::Cleanup()
   }
 
   if (m_TagVals)
-    free(m_TagVals);
+    delete[] m_TagVals;
   m_TagVals = nullptr;
+
+  m_nSize = 0;
 
   if (m_pArray)
     delete m_pArray;

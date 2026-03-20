@@ -3658,10 +3658,12 @@ bool CIccCalculatorFunc::InitSelectOp(SIccCalcOp *ops, icUInt32Number nOps)
   if (ops->extra)
     return true;
 
-
   icUInt32Number i, n, pos;
-  for (n=0; n<nOps && ops[n+1].sig==icSigCaseOp; n++);
-  ops->extra=n;
+  for (n=0; n<(nOps-1) && ops[n+1].sig==icSigCaseOp; n++);
+  if (n >= (nOps-1))    // there are no operations after the cases, and we don't want a segfault
+    return false;
+
+  ops->extra = n;
   if (ops[n+1].sig==icSigDefaultOp) {
     n++;
   }
@@ -3699,6 +3701,11 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
   os.pixel = pApply->GetInput();
   os.output = pApply->GetOutput();
   os.nOps = nOps;
+  
+  // Defensive measure - this happens only in overflow/underflow situations.
+  // But it can happen from multiple calling locations, and it isn't easy to check them all.
+  if (nOps > 0x80000000UL)
+    return false;
 
   for (os.idx=0; os.idx<os.nOps; os.idx++) {
     op = &ops[os.idx];
@@ -3713,24 +3720,35 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
       if (os.idx+1<nOps && ops[os.idx+1].sig==icSigElseOp) {
         os.idx++;
         if (a1>=0.5) {
-          if (os.idx+1 + op->data.size >= nOps)
+          icUInt32Number dataSize = op->data.size;
+          if (dataSize >= nOps)       // check first in case of overflow
+            return false;
+          if (os.idx+1 + dataSize >= nOps)
             return false;
 
-          if (!ApplySequence(pApply, op->data.size, &ops[os.idx+1]))
+          if (!ApplySequence(pApply, dataSize, &ops[os.idx+1]))
             return false;
         }
         else {
-          if (os.idx+1 + op->data.size + ops[os.idx].data.size > nOps)
+          icUInt32Number nNewOps = ops[os.idx].data.size;
+          icUInt32Number dataSize = op->data.size;
+          icUInt32Number newOpIndex = os.idx+1 + dataSize;
+          if (nNewOps > nOps || dataSize > nOps || newOpIndex > nOps)   // check first in case of overflow
+            return false;
+          if (newOpIndex + nNewOps > nOps)  // now add and test the real limit
             return false;
 
-          if (!ApplySequence(pApply, ops[os.idx].data.size, &ops[os.idx+1 + op->data.size]))
+          if (!ApplySequence(pApply, nNewOps, &ops[os.idx+1 + op->data.size]))
             return false;
         }
         os.idx += op->data.size + ops[os.idx].data.size;
       }
       else {
         if (a1>=0.5) {
-          if (os.idx+op->data.size >= nOps)
+          icUInt32Number dataSize = op->data.size;
+          if (dataSize >= nOps)       // check first in case of overflow
+            return false;
+          if (os.idx+dataSize >= nOps)
             return false;
 
           if (!ApplySequence(pApply, op->data.size, &ops[os.idx+1]))
@@ -3763,10 +3781,17 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
       if (nSel<0 || (icUInt32Number)nSel>=op->extra) {
 
         if (ops[nDefOff].sig==icSigDefaultOp) {
-          if (os.idx+1 + ops[nDefOff].extra >= nOps)
+          size_t offset = (size_t)os.idx + 1 + ops[nDefOff].extra;
+          if (offset >= nOps)
             return false;
 
-          if (!ApplySequence(pApply, ops[nDefOff].data.size, &ops[os.idx+1 + ops[nDefOff].extra]))
+          icUInt32Number dataSize = ops[nDefOff].data.size;
+          if (dataSize >= nOps)       // check first in case of overflow
+            return false;
+          if ((nDefOff + dataSize) >= nOps)
+            return false;
+          
+          if (!ApplySequence(pApply, dataSize, &ops[offset]))
             break;
         }
       }
@@ -3776,23 +3801,39 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         if (nOff >= nOps) 
           return false;
 
-        if (!ApplySequence(pApply, ops[nOff].data.size, &ops[os.idx+1 + ops[nOff].extra]))
+        icUInt32Number dataSize = ops[nOff].data.size;
+        if (dataSize >= nOps)       // check first in case of overflow
+          return false;
+        if ((nOff + dataSize) >= nOps)
+          return false;
+
+        size_t offset = (size_t)os.idx + 1 + ops[nOff].extra;
+        if (offset >= nOps)
+          return false;
+        
+        if (!ApplySequence(pApply, dataSize, &ops[offset]))
           break;
       }
 
       if (ops[nDefOff].sig==icSigDefaultOp) {
-        if (os.idx+1 + ops[nDefOff].extra + ops[nDefOff].data.size >nOps)
+        icUInt32Number dataSize = ops[nDefOff].data.size;
+        if (dataSize >= nOps)       // check first in case of overflow
+          return false;
+        if (os.idx+1 + ops[nDefOff].extra + dataSize > nOps)
           return false;
 
-        os.idx = (icUInt32Number)(os.idx + ops[nDefOff].extra + ops[nDefOff].data.size);
+        os.idx = (icUInt32Number)(os.idx + ops[nDefOff].extra + dataSize);
       }
       else if (op->extra) {
         unsigned long nOff = os.idx + op->extra;
 
-        if (os.idx+1 + ops[nOff].extra + ops[nOff].data.size > nOps)
+        icUInt32Number dataSize = ops[nOff].data.size;
+        if (dataSize >= nOps)       // check first in case of overflow
+          return false;
+        if (os.idx+1 + ops[nOff].extra + dataSize > nOps)
           return false;
 
-        os.idx = (icUInt32Number)(os.idx + ops[nOff].extra + ops[nOff].data.size);
+        os.idx = (icUInt32Number)(os.idx + ops[nOff].extra + dataSize);
       }
       else 
         return false;
@@ -4095,7 +4136,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
       return -2;
 
     if (op[i].sig == icSigIfOp) {
-      int incI = 0;
+      icUInt32Number incI = 0;
       if (i+1<nOps && op[i+1].sig==icSigElseOp) {
         p = i+2; 
         if (p > nOps)
@@ -4103,9 +4144,10 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
         nIfArgs = CheckUnderflowOverflow(&op[p], icIntMin(nOps-p, op[i].data.size), nArgs, bCheckUnderflow, sReport);
         if (nIfArgs<0)
           return -1;
-        incI =op[i].data.size;
-
-        p = i+2+op[i].data.size;
+        incI = op[i].data.size;
+        if (incI > nOps)
+          return -1;
+        p = i+2+incI;
         if (p > nOps)
           return -1;
         nElseArgs = CheckUnderflowOverflow(&op[p], icIntMin(nOps-p, op[i+1].data.size), nArgs, bCheckUnderflow, sReport);
@@ -4151,7 +4193,7 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
       icUInt32Number pos = i+1 + n;
       for (p=0; p<n; p++) {
         SIccCalcOp *sop = &op[i+1+p];
-        int len = sop->data.size;
+        icUInt32Number len = sop->data.size;
         if (pos>=nOps)
           return -1;
 

@@ -95,8 +95,13 @@ class IIccOpDef;
 /************************************************************************
  * Channel Function signature
  ************************************************************************/
-typedef enum {
+typedef enum : uint32_t {
+  icSigChannelNullDataOp            = 0x00000000,  /* not valid, used for data range */
+  
   icSigChannelFunction              = 0x66756e63,  /* 'func' */
+  
+  // useful value that is not defined by the spec.
+  icSigChannelRangeOp               = 0xffffffff,  /* not valid, used for data range */
 } icChannelFuncSignature;
 
 

@@ -2355,6 +2355,10 @@ bool CIccSampledCalculatorCurve::Begin(icElemInterp nInterp, CIccTagMultiProcess
   if (m_nDesiredSize < 2 || !m_pCalc || !m_pCalc->Begin(nInterp, pMPE))
     return false;
   
+  // if these fail, then we would overrun the src and dest stack variables below
+  if (m_pCalc->NumOutputChannels() != 1 || m_pCalc->NumInputChannels() != 1)
+    return false;
+  
   icUInt32Number nSize = m_nDesiredSize;
   if (nSize < 2)
     nSize = 2;
@@ -2377,7 +2381,7 @@ bool CIccSampledCalculatorCurve::Begin(icElemInterp nInterp, CIccTagMultiProcess
     icFloatNumber src, dst;
     src = (icFloatNumber)i / m_last * m_range + m_firstEntry;
 
-    m_pCalc->Apply(pApply, &dst, &src);
+    m_pCalc->Apply(pApply, &dst, &src);     // m_pCalc must be 1 input, 1 output!
     m_pSamples[i] = dst;
   }
 
@@ -5383,6 +5387,19 @@ static icFloatNumber NoClip(icFloatNumber v)
   return v;
 }
 
+// this isn't used yet, but want to have it ready
+static icFloatNumber RealUnitClip(icFloatNumber v)
+{
+  if (std::isnan(v))
+    return icFloatNumber(0);
+  if (std::isinf(v))
+    return icFloatNumber(1.0);
+  if (v < 0.0)
+    return 0.0;
+  if (v > 1.0)
+    return 1.0;
+  return v;
+}
 
 /**
  ******************************************************************************

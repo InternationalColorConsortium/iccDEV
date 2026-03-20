@@ -3886,6 +3886,14 @@ bool icMBBFromXml(CIccMBB *pMBB, xmlNode *pNode, icConvertType nType, std::strin
   int nIn = atoi(icXmlAttrValue(in));
   int nOut = atoi(icXmlAttrValue(out));
 
+  // must have at least 1 input and 1 output
+  if (nIn < 1 || nOut < 1)
+    return false;
+
+  // and the current limit is for 15 channels
+  if (nIn > 15 || nOut > 15)
+    return false;
+
   pMBB->Init(nIn, nOut);
 
   for (; pNode; pNode = pNode->next) {
@@ -4721,7 +4729,8 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
         }
 
         for (xmlNode *tagSigNode = pNode->children; tagSigNode; tagSigNode = tagSigNode->next) {
-          if (tagSigNode->type == XML_ELEMENT_NODE && !icXmlStrCmp(tagSigNode->name, "TagSignature")) {
+          if (tagSigNode->type == XML_ELEMENT_NODE && !icXmlStrCmp(tagSigNode->name, "TagSignature")
+            && tagSigNode->children != NULL) {
             sigTag = (icTagSignature)icGetSigVal((const icChar*)tagSigNode->children->content);
             AttachElem(sigTag, pTag);
           }

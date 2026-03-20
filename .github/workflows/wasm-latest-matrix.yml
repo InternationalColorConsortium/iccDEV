@@ -1,13 +1,13 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (©) 2025 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
 #
 # Intent: iccDEV wasm-latest-matrix
 #
-# Last Updated: 2026-02-17 16:29:28 UTC by David Hoyt 
+# Last Updated: 2026-02-17 16:29:28 UTC by David Hoyt
 #               Added user-controllable input (uci) checks
 #
 #
@@ -40,6 +40,8 @@ jobs:
 
     - name: Checkout Repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      with:
+        persist-credentials: false
 
     - name: Harden Bash Environment
       shell: bash
@@ -76,6 +78,7 @@ jobs:
       shell: bash
       env:
         BASH_ENV: /dev/null
+        BUILD_TYPE: ${{ matrix.build_type }}
       run: |
         set -euo pipefail
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -109,7 +112,7 @@ jobs:
         cd ..
         git clone https://gitlab.com/libtiff/libtiff.git && cd libtiff
         mkdir wasm && cd wasm
-        emcmake cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_INSTALL_PREFIX=../out \
+        emcmake cmake .. -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DCMAKE_INSTALL_PREFIX=../out \
           -DZLIB_INCLUDE_DIR=$(realpath ../../zlib) \
           -DZLIB_LIBRARY=$(realpath ../../zlib/out/lib/libz.a) \
           -DJPEG_INCLUDE_DIR=$(realpath ../../libjpeg/out/include) \
@@ -130,6 +133,7 @@ jobs:
       shell: bash
       env:
         BASH_ENV: /dev/null
+        MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
       run: |
         set -euo pipefail
         git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -138,11 +142,11 @@ jobs:
         source emsdk/emsdk_env.sh
         cd iccDEV/Build
         BUILD_FLAGS=""
-        if [[ "${{ matrix.build_type }}" == "Asan" ]]; then
+        if [[ "${MATRIX_BUILD_TYPE}" == "Asan" ]]; then
           BUILD_FLAGS="-fsanitize=address"
           BUILD_TYPE="Debug"
         else
-          BUILD_TYPE="${{ matrix.build_type }}"
+          BUILD_TYPE="${MATRIX_BUILD_TYPE}"
         fi
         emcmake cmake Cmake \
           -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
