@@ -7,13 +7,8 @@
 #
 # Intent: ci-docker-latest
 #
-# Last Updated: 026-02-13 14:45:57 UTC by David Hoyt
+# Last Updated: 2026-03-24 22:56:55 UTC by David Hoyt
 #               Update Branch Info
-#               Test sbom + attest & Test
-#               Add: artifact-metadata: write
-#
-#
-#
 #
 ###############################################################
 # Intent: Build and publish iccDEV Docker container Release
@@ -31,7 +26,7 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [master, dockerfiles]
+    branches: [master]
     paths:
       - 'Dockerfile'
       - '.github/workflows/ci-docker-latest.yml'
@@ -131,7 +126,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -166,7 +161,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -191,7 +186,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true

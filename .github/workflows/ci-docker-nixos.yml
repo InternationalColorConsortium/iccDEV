@@ -128,7 +128,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -155,7 +155,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -181,7 +181,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
