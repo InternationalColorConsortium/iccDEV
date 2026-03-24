@@ -3,9 +3,15 @@
 # Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 2026-03-08 02:09:45 UTC by David Hoyt
+#  Last Updated: 2026-03-24 20:49:38 UTC by David Hoyt
 #
-#  Changes: 25+ Bug Fizes over 30 Days, Bump Version String References: (#660)
+# CMake Configuration:
+# - PUBLIC target_include_directories for IccProfLib2 and IccXML2
+#   (build-dir-first so generated version header with git hash wins)
+# - EXPORT RefIccMAXTargets for build-tree and install-tree consumers
+# - New FindRefIccMAX.cmake module for standalone find_package()
+# - Modern RefIccMAXConfig.cmake.in using target-based imports
+# - Tool CMakeLists: target_include_directories(PRIVATE) replaces global
 #
 #################################################################################
 
@@ -63,7 +69,7 @@ message(STATUS "")
 # Verbose Makefile Output (for Make/Ninja generators)
 # ----------------------------------------------------------------------
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 # ----------------------------------------------------------------------
 # Define Default Configurations (for MSVC/Xcode generators)
@@ -263,23 +269,25 @@ message(STATUS "### Environment Diagnostics ###")
 # Detect path separator
 set(PATH_SEPARATOR $<IF:$<BOOL:${WIN32}>,";",":">)
 
-# Pretty-print the PATH variable (numbered entries)
-string(REPLACE "${PATH_SEPARATOR}" ";" PATH_LIST "$ENV{PATH}")
-list(LENGTH PATH_LIST PATH_LENGTH)
+# Pretty-print the PATH variable (numbered entries) — only with VERBOSE_CONFIG
+if(VERBOSE_CONFIG)
+  string(REPLACE "${PATH_SEPARATOR}" ";" PATH_LIST "$ENV{PATH}")
+  list(LENGTH PATH_LIST PATH_LENGTH)
 
-message(STATUS "PATH Entries:")
-foreach(INDEX RANGE 0 ${PATH_LENGTH})
-  math(EXPR IDX "${INDEX} - 1")
-  if(IDX GREATER_EQUAL 0)
-    list(GET PATH_LIST ${IDX} PATH_ENTRY)
-    message(STATUS "  [${IDX}] ${PATH_ENTRY}")
-  endif()
-endforeach()
+  message(STATUS "PATH Entries:")
+  foreach(INDEX RANGE 0 ${PATH_LENGTH})
+    math(EXPR IDX "${INDEX} - 1")
+    if(IDX GREATER_EQUAL 0)
+      list(GET PATH_LIST ${IDX} PATH_ENTRY)
+      message(STATUS "  [${IDX}] ${PATH_ENTRY}")
+    endif()
+  endforeach()
 
-# Core CMake Environment Variables
-message(STATUS "CMAKE_PREFIX_PATH        : ${CMAKE_PREFIX_PATH}")
-message(STATUS "CMAKE_INSTALL_PREFIX     : ${CMAKE_INSTALL_PREFIX}")
-message(STATUS "CMAKE_MODULE_PATH        : ${CMAKE_MODULE_PATH}")
+  # Core CMake Environment Variables
+  message(STATUS "CMAKE_PREFIX_PATH        : ${CMAKE_PREFIX_PATH}")
+  message(STATUS "CMAKE_INSTALL_PREFIX     : ${CMAKE_INSTALL_PREFIX}")
+  message(STATUS "CMAKE_MODULE_PATH        : ${CMAKE_MODULE_PATH}")
+endif()
 
 # ----------------------------------------------------------------------
 # Compiler and Toolchain Diagnostics
@@ -905,6 +913,24 @@ if(APPLE)
 
   message(STATUS "Final macOS architectures: ${CMAKE_OSX_ARCHITECTURES}")
 
+  # macOS hardening flags (parity with Linux)
+  add_compile_options(
+    -Wall
+    -Wextra
+    -Wformat
+    -Wformat-security
+    -Wimplicit-fallthrough
+    -Wsign-compare
+    -fstack-protector-strong
+  )
+
+  # Fortify source for optimized builds (requires -O1 or higher)
+  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    add_compile_definitions(_FORTIFY_SOURCE=2)
+  endif()
+
+  message(STATUS "macOS build: Warning flags and security hardening applied.")
+
 elseif(UNIX AND NOT APPLE)
   message(STATUS "Detected platform: Linux")
 
@@ -915,11 +941,7 @@ elseif(UNIX AND NOT APPLE)
     -Wformat
     -Wformat-security
     -Wimplicit-fallthrough
-    -Wno-overloaded-virtual
-    -Wno-switch
-    -Wno-unused-parameter
-    -Wno-unused-variable
-    -Wno-missing-field-initializers
+    -Wsign-compare
     -fstack-protector-strong
     -fstack-clash-protection
   )
@@ -938,8 +960,16 @@ elseif(WIN32)
   message(STATUS "Detected platform: Windows")
 
   # Windows + MSVC flags
-  add_compile_options(/std:c++17 /D_WINDOWS /EHsc)
-  message(STATUS "Windows build: Compiler flags set for MSVC with C++17 and exceptions enabled.")
+  add_compile_options(/std:c++17 /D_WINDOWS /EHsc /GS)
+
+  # ASLR + DEP + CET shadow stacks
+  add_link_options(/DYNAMICBASE /NXCOMPAT)
+  # CET (Control-flow Enforcement Technology) — requires VS 2019 16.7+
+  if(MSVC_VERSION GREATER_EQUAL 1927)
+    add_link_options(/CETCOMPAT)
+  endif()
+
+  message(STATUS "Windows build: Compiler flags set for MSVC with C++17, buffer security, and ASLR/DEP.")
 
 else()
   message(FATAL_ERROR "Unsupported or unknown platform. Aborting build configuration.")
@@ -950,17 +980,6 @@ unset(IccProfLib2_LIBRARIES CACHE)
 unset(IccProfLib2_LIBRARY CACHE)
 unset(IccProfLib2_LIB CACHE)
 unset(IccProfLib2 CACHE)
-
-# ----------------------------------------------------------------------
-# Third-Party Dependencies (already found above — verify availability)
-# ----------------------------------------------------------------------
-message(STATUS "")
-message(STATUS "## Third Party Dependencies ##")
-message(STATUS "  LibXml2:        ${LIBXML2_LIBRARIES}")
-message(STATUS "  nlohmann_json:  found")
-message(STATUS "  TIFF:           ${TIFF_LIBRARIES}")
-message(STATUS "  PNG:            ${PNG_LIBRARIES}")
-message(STATUS "  JPEG:           ${JPEG_LIBRARIES}")
 
 message(STATUS "")
 #
@@ -999,16 +1018,15 @@ SET (CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/Modules
 
 
 SET( TOP_SOURCE_DIR ../.. )
-INCLUDE_DIRECTORIES ( ${TOP_SOURCE_DIR}/IccProfLib/ )
-
-# external dependencies
-FIND_PROGRAM(CMAKE_AR_TMP NAMES ar)
+# NOTE: IccProfLib include now propagated via target_include_directories(PUBLIC) on IccProfLib2
 
 #
 # Core library
 #
-message(STATUS "## Project Configuration ##")
-message(STATUS "Adding subdirectory for IccProfLib.")
+if(VERBOSE_CONFIG)
+  message(STATUS "## Project Configuration ##")
+  message(STATUS "Adding subdirectory for IccProfLib.")
+endif()
 add_subdirectory(IccProfLib)
 
 # Set default link target for IccProfLib (matches build configuration)
@@ -1023,25 +1041,20 @@ ENDIF()
 # Optional external dependency: LibXML2
 #
 if(ENABLE_ICCXML)
-  message(STATUS "ICCXML support enabled")
-
-  if(USE_SYSTEM_LIBXML2)
-    find_package(LibXml2 REQUIRED)
-  else()
-    find_package(LibXml2 QUIET)
+  if(VERBOSE_CONFIG)
+    message(STATUS "ICCXML support enabled")
   endif()
 
+  # LibXml2 already found unconditionally above — resolve target vs legacy variables
   if(LibXml2_FOUND)
-    message(STATUS "Found LibXml2 via system or toolchain integration")
+    if(VERBOSE_CONFIG)
+      message(STATUS "Found LibXml2 via system or toolchain integration")
+    endif()
     set(HAVE_LIBXML2 TRUE)
 
     # Use imported CMake target if available
     if(TARGET LibXml2::LibXml2)
       set(LIBXML2_LIBRARIES LibXml2::LibXml2)
-    else()
-      # Legacy fallback (non-target based CMake find)
-      include_directories(${LIBXML2_INCLUDE_DIR})
-      set(LIBXML2_LIBRARIES ${LIBXML2_LIBRARIES})
     endif()
   else()
     message(WARNING "LibXml2 not found; falling back to internal IccXML/libxml2")
@@ -1056,7 +1069,9 @@ endif()
 #
 # XML library
 #
-message(STATUS "Adding subdirectory for IccXML.")
+if(VERBOSE_CONFIG)
+  message(STATUS "Adding subdirectory for IccXML.")
+endif()
 add_subdirectory(IccXML)
 
 # Set default link target for IccXML (matches build configuration)
@@ -1066,22 +1081,21 @@ ELSE()
   set(TARGET_LIB_ICCXML IccXML2-static CACHE INTERNAL "Link target for IccXML2")
 ENDIF()
 
-# Ensure IccXML headers are available globally
-include_directories(${TOP_SOURCE_DIR}/IccXML/IccLibXML/)
-
-# Ensure generated version headers are available globally
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccProfLib)
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccXML)
+# NOTE: IccXML and generated-header includes now propagated via
+# target_include_directories(PUBLIC) on IccProfLib2 and IccXML2 targets
 
 # Diagnostic: Output current linker flags
-
-message(STATUS "CMAKE_EXE_LINKER_FLAGS = ${CMAKE_EXE_LINKER_FLAGS}")
-message(STATUS "CMAKE_SHARED_LINKER_FLAGS = ${CMAKE_SHARED_LINKER_FLAGS}")
-message(STATUS "CMAKE_MODULE_LINKER_FLAGS = ${CMAKE_MODULE_LINKER_FLAGS}")
+if(VERBOSE_CONFIG)
+  message(STATUS "CMAKE_EXE_LINKER_FLAGS = ${CMAKE_EXE_LINKER_FLAGS}")
+  message(STATUS "CMAKE_SHARED_LINKER_FLAGS = ${CMAKE_SHARED_LINKER_FLAGS}")
+  message(STATUS "CMAKE_MODULE_LINKER_FLAGS = ${CMAKE_MODULE_LINKER_FLAGS}")
+endif()
 
 
 # nlohmann_json already found above
-message(STATUS "nlohmann_json library found: ${nlohmann_json_DIR}")
+if(VERBOSE_CONFIG)
+  message(STATUS "nlohmann_json library found: ${nlohmann_json_DIR}")
+endif()
 
  # Function to add and log subdirectories
 function(add_tool_subdirectory TOOL_SUBDIRECTORY)
@@ -1093,35 +1107,26 @@ endfunction()
 IF(ENABLE_TOOLS)
   # Verify nlohmann_json is configured properly
   IF(nlohmann_json_DIR)
-    MESSAGE(STATUS "Found nlohmann JSON library at: ${nlohmann_json_DIR}")
-
-    # Use nlohmann_json include directory
-    include_directories(${nlohmann_json_DIR})
+    IF(VERBOSE_CONFIG)
+      MESSAGE(STATUS "Found nlohmann JSON library at: ${nlohmann_json_DIR}")
+    ENDIF()
+    # nlohmann_json is header-only — use via target_link_libraries(PRIVATE nlohmann_json::nlohmann_json)
+    # in individual tool CMakeLists (NOT via include_directories)
   ELSE()
     MESSAGE(WARNING "nlohmann JSON library not found. Skipping..")
     RETURN() # Exit script for tools if dependency is not found
   ENDIF()
 
   # Add XML-related tools
-  message(STATUS "Adding Subdirectory IccFromXml.")
   ADD_SUBDIRECTORY(Tools/IccFromXml)
-  message(STATUS "Adding Subdirectory IccToXml.")
   ADD_SUBDIRECTORY(Tools/IccToXml)
-  message(STATUS "Adding Subdirectory IccJpegDump.")
   ADD_SUBDIRECTORY(Tools/IccJpegDump)
-  message(STATUS "Adding Subdirectory IccApplyNamedCmm.")
   ADD_SUBDIRECTORY(Tools/IccApplyNamedCmm)
-  message(STATUS "Adding Subdirectory IccDumpProfile.")
   ADD_SUBDIRECTORY(Tools/IccDumpProfile)
-  message(STATUS "Adding Subdirectory IccDumpRoundTrip.")
   ADD_SUBDIRECTORY(Tools/IccRoundTrip)
-  message(STATUS "Adding Subdirectory IccFromCube.")
   ADD_SUBDIRECTORY(Tools/IccFromCube)
-  message(STATUS "Adding Subdirectory IccV5DspObsToV4Dsp.")
   ADD_SUBDIRECTORY(Tools/IccV5DspObsToV4Dsp)
-  message(STATUS "Adding Subdirectory IccApplyToLink.")
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
-  message(STATUS "Adding Subdirectory IccApplySearch.")
   ADD_SUBDIRECTORY(Tools/IccApplySearch)
 
   # Ensure IccXML-dependent tools are built after IccXML library (safety net)
@@ -1133,35 +1138,38 @@ IF(ENABLE_TOOLS)
   ENDIF()
 
 
-# --- PNG (already found above) ---
-message(STATUS "Checking for PNG...")
-
-if(PNG_FOUND)
-  message(STATUS "PNG Library            : ${PNG_LIBRARIES}")
-  message(STATUS "PNG Include Directory  : ${PNG_INCLUDE_DIRS}")
-  message(STATUS "PNG Version            : ${PNG_VERSION}")
-else()
-  message(FATAL_ERROR " PNG not found. Please install libpng-dev or install via vcpkg.")
+# PNG already found above — just add the tool
+if(NOT PNG_FOUND)
+  message(FATAL_ERROR "PNG not found. Please install libpng-dev or install via vcpkg.")
 endif()
-message(STATUS "Adding Subdirectory IccPngDump.")
+if(VERBOSE_CONFIG)
+  message(STATUS "Adding Subdirectory IccPngDump.")
+endif()
 ADD_SUBDIRECTORY(Tools/IccPngDump)
 
 
-    message(STATUS "Adding Subdirectory IccDEVCmm.")
+    if(VERBOSE_CONFIG)
+      message(STATUS "Adding Subdirectory IccDEVCmm.")
+    endif()
     ADD_SUBDIRECTORY(Tools/IccDEVCmm)
 
 
-  # TIFF already found above
+  # TIFF already found above — scope includes to targets, not globally
   if (TIFF_FOUND)
-    include_directories(${TIFF_INCLUDE_DIR})
-    message(STATUS "TIFF library found: ${TIFF_LIBRARIES}")
+    # TIFF includes are now scoped to each tool via target_include_directories
 
     # Add TIFF-dependent tools
-    message(STATUS "Adding Subdirectory IccApplyProfiles.")
+    if(VERBOSE_CONFIG)
+      message(STATUS "Adding Subdirectory IccApplyProfiles.")
+    endif()
     ADD_SUBDIRECTORY(Tools/IccApplyProfiles)
-    message(STATUS "Adding subdirectory IccSpecSepToTiff.")
+    if(VERBOSE_CONFIG)
+      message(STATUS "Adding subdirectory IccSpecSepToTiff.")
+    endif()
     ADD_SUBDIRECTORY(Tools/IccSpecSepToTiff)
-    message(STATUS "Adding Subdirectory IccTiffDump.")
+    if(VERBOSE_CONFIG)
+      message(STATUS "Adding Subdirectory IccTiffDump.")
+    endif()
     ADD_SUBDIRECTORY(Tools/IccTiffDump)
   else()
     message(FATAL_ERROR "TIFF library not found. Please install libtiff-dev.")
@@ -1250,15 +1258,37 @@ ADD_CUSTOM_TARGET( dist-bin2
 #
 
 #cmake settings for use by find_package
+include(CMakePackageConfigHelpers)
+
 CONFIGURE_FILE (
                 "${CMAKE_CURRENT_SOURCE_DIR}/${PROJECT_NAME}Config.cmake.in"
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
                 @ONLY
         )
 
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
+  VERSION "${REFICCMAX_MAJOR_VERSION}.${REFICCMAX_MINOR_VERSION}.${REFICCMAX_MICRO_VERSION}"
+  COMPATIBILITY SameMajorVersion
+)
+
 IF(ENABLE_INSTALL_RIM)
   INSTALL ( FILES
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+                "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
                 DESTINATION ${CMAKE_MODULES_INSTALL_DIR} COMPONENT dev
         )
+
+  # Install exported targets file alongside the Config
+  INSTALL( EXPORT RefIccMAXTargets
+           NAMESPACE RefIccMAX::
+           DESTINATION ${CMAKE_MODULES_INSTALL_DIR}
+           COMPONENT dev
+  )
 ENDIF(ENABLE_INSTALL_RIM)
+
+# Build-tree export — allows find_package() from build dir without install
+export( EXPORT RefIccMAXTargets
+        NAMESPACE RefIccMAX::
+        FILE "${CMAKE_CURRENT_BINARY_DIR}/RefIccMAXTargets.cmake"
+)

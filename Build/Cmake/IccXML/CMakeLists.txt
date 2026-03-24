@@ -1,11 +1,17 @@
 #################################################################################
 # IccXML Cmake Project Configuration| iccMAX Project
-# Copyright (©) 2024-2026 The International Color Consortium.
+# Copyright (c) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 2026-02-17 16:34:47 UTC by David Hoyt
+#  Last Updated: 2026-03-24 20:49:38 UTC by David Hoyt
 #
-#  Changes: Add WASM Toolchain, CFL & libFuzzer
+# CMake Configuration:
+# - PUBLIC target_include_directories for IccProfLib2 and IccXML2
+#   (build-dir-first so generated version header with git hash wins)
+# - EXPORT RefIccMAXTargets for build-tree and install-tree consumers
+# - New FindRefIccMAX.cmake module for standalone find_package()
+# - Modern RefIccMAXConfig.cmake.in using target-based imports
+# - Tool CMakeLists: target_include_directories(PRIVATE) replaces global
 #
 #################################################################################
 
@@ -22,18 +28,20 @@ SET( CFILES
         ${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.cpp
   )
 
+# Public headers — defined unconditionally for target properties
+SET( HEADERS_PUBLIC
+      ${SRC_PATH}/IccXML/IccLibXML/IccIoXml.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccLibXMLVer.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccMpeXml.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccProfileXml.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccTagXmlFactory.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccTagXml.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.h
+      ${SRC_PATH}/IccXML/IccLibXML/IccXmlConfig.h
+)
+
 IF(ENABLE_INSTALL_RIM)
-  SET( HEADERS_PUBLIC
-        ${SRC_PATH}/IccXML/IccLibXML/IccIoXml.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccLibXMLVer.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccMpeXml.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccProfileXml.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccTagXmlFactory.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccTagXml.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.h
-        ${SRC_PATH}/IccXML/IccLibXML/IccXmlConfig.h
-  )
   INSTALL( FILES
              ${HEADERS_PUBLIC}
              DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
@@ -53,8 +61,7 @@ configure_file(
     @ONLY
 )
 
-# Ensure build directory is in include path for generated header
-include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+# Generated header dir — propagated via target_include_directories(PUBLIC) below
 
 # message(STATUS "Starting CMake debug for target: ${TARGET_NAME}")
 # message(STATUS "CFILES = ${CFILES}")
@@ -67,14 +74,11 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 SET(SOURCES ${CFILES})
 
 IF(APPLE)
-  message(STATUS "Configuring for Apple platform")
-  INCLUDE_DIRECTORIES(/Developer/Headers/FlatCarbon)
   FIND_LIBRARY(CARBON_LIBRARY Carbon)
   FIND_LIBRARY(IOKIT_LIBRARY IOKit)
   MARK_AS_ADVANCED(CARBON_LIBRARY)
   MARK_AS_ADVANCED(IOKIT_LIBRARY)
   SET(EXTRA_LIBS_CS ${CARBON_LIBRARY} ${IOKIT_LIBRARY})
-  message(STATUS "Apple libs: CARBON = ${CARBON_LIBRARY}, IOKIT = ${IOKIT_LIBRARY}")
 ENDIF()
 
 SET(EXTRA_LIBS ${EXTRA_LIBS} ${LIBXML2_LIBRARIES})
@@ -92,11 +96,21 @@ set_target_properties(${TARGET_NAME}
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
 
-  TARGET_LINK_LIBRARIES(${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
+  # PUBLIC include dirs — propagate to consumers via target_link_libraries()
+  # PUBLIC include dirs — build dir FIRST for generated version header
+  target_include_directories(${TARGET_NAME} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}>
+  )
+
+  # PUBLIC linkage — consumers transitively get IccProfLib2 headers + libxml2
+  TARGET_LINK_LIBRARIES(${TARGET_NAME} PUBLIC ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
 #    message(STATUS "Installing SHARED library")
     INSTALL(TARGETS ${TARGET_NAME}
+            EXPORT  RefIccMAXTargets
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -111,11 +125,21 @@ IF(ENABLE_STATIC_LIBS)
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
 
-  TARGET_LINK_LIBRARIES(${TARGET_NAME}-static ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
+  # PUBLIC include dirs — same as shared target
+  # PUBLIC include dirs — build dir FIRST for generated version header
+  target_include_directories(${TARGET_NAME}-static PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}>
+  )
+
+  # PUBLIC linkage — consumers transitively get IccProfLib2 headers + libxml2
+  TARGET_LINK_LIBRARIES(${TARGET_NAME}-static PUBLIC ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
 #    message(STATUS "Installing STATIC library")
     INSTALL(TARGETS ${TARGET_NAME}-static
+            EXPORT  RefIccMAXTargets
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -143,12 +167,3 @@ ELSE()
 ENDIF()
 
 SET(TARGET_LIB ${TARGET_LIB} PARENT_SCOPE)
-# message(STATUS "Final TARGET_LIB = ${TARGET_LIB}")
-
-# Debug logging for output paths
-GET_TARGET_PROPERTY(SHARED_OUTPUT_NAME ${TARGET_NAME} OUTPUT_NAME)
-GET_TARGET_PROPERTY(SHARED_OUTPUT_DIR ${TARGET_NAME} LIBRARY_OUTPUT_DIRECTORY)
-GET_TARGET_PROPERTY(SHARED_ARCHIVE_DIR ${TARGET_NAME} ARCHIVE_OUTPUT_DIRECTORY)
-# message(STATUS "SHARED lib output name: ${SHARED_OUTPUT_NAME}")
-# message(STATUS "SHARED lib output dir: ${SHARED_OUTPUT_DIR}")
-# message(STATUS "SHARED archive dir: ${SHARED_ARCHIVE_DIR}")

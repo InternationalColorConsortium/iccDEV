@@ -44,7 +44,7 @@ env:
   GH_NO_UPDATE_NOTIFIER: 1
   GH_PROMPT_DISABLED: 1
   RUN_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
-  CHECKOUT_REF: ${{ github.event.inputs.pr_number && format('refs/pull/{0}/head', github.event.inputs.pr_number) || github.event.inputs.ref || 'master' }}
+  CHECKOUT_REF: ${{ github.event.inputs.pr_number && format('refs/pull/{0}/head', github.event.inputs.pr_number) || github.event.inputs.ref || github.ref_name || 'master' }}
 
 jobs:
   #############################################################################
@@ -65,7 +65,7 @@ jobs:
           # Defense-in-depth: inputs.ref is type:choice (master|cfl),
           # inputs.pr_number is type:number. Validate the derived ref.
           case "${CHECKOUT_REF}" in
-            master|cfl|refs/pull/[0-9]*/head)
+            master|cfl|issue-711|refs/pull/[0-9]*/head)
               echo "✅ Valid ref: ${CHECKOUT_REF}" ;;
             *)
               echo "❌ Unexpected CHECKOUT_REF: blocked" >&2
@@ -870,12 +870,230 @@ jobs:
           echo "✅ Clean/rebuild cycle successful"
 
   #############################################################################
-  # Job 7: Final Summary
+  # Job 7: Example Consumer Project (cross-platform)
+  #############################################################################
+  example-project:
+    needs: [validate-ref]
+    name: "Example • ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # ── Linux dependencies ──
+      - name: Install Dependencies (Linux)
+        if: runner.os == 'Linux'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential cmake libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
+
+      # ── macOS dependencies ──
+      - name: Install Dependencies (macOS)
+        if: runner.os == 'macOS'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          brew install cmake libpng libtiff libxml2 nlohmann-json
+
+      # ── Windows dependencies ──
+      - name: Install Dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
+          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          tar -xf deps.zip
+
+      - name: Setup MSBuild (Windows)
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce  # v2.0.0
+
+      # ── Disable wxWidgets (not needed, avoids dep issues) ──
+      - name: Disable wxWidgets (Unix)
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
+
+      - name: Disable wxWidgets (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
+          $file = "Build\Cmake\CMakeLists.txt"
+          $content = Get-Content $file -Raw
+          $content = $content -replace '(?m)^  find_package\(wxWidgets COMPONENTS core base REQUIRED\)', '  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled'
+          $content = $content -replace '(?m)^      ADD_SUBDIRECTORY\(Tools/wxProfileDump\)', '      # ADD_SUBDIRECTORY(Tools/wxProfileDump) # Disabled'
+          $content = $content -replace '(?m)^    message\(FATAL_ERROR "wxWidgets not found', '    # message(FATAL_ERROR "wxWidgets not found'
+          Set-Content $file -Value $content -NoNewline
+
+      # ── Step 1: Build iccDEV libraries (Unix) ──
+      - name: Build iccDEV Libraries (Unix)
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd Build/Cmake
+          cmake -B build -DCMAKE_BUILD_TYPE=Release \
+                -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON -DENABLE_TOOLS=ON
+          cmake --build build --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+
+      # ── Step 1: Build iccDEV libraries (Windows) ──
+      - name: Build iccDEV Libraries (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
+          cd Build\Cmake
+          cmake -B build -S . `
+                -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
+                -DVCPKG_MANIFEST_MODE=OFF `
+                -DCMAKE_BUILD_TYPE=Release `
+                -Wno-dev
+          cmake --build build --config Release -- /m /maxcpucount
+
+      # ── Step 2: Build example project (Unix — Path 2: build-tree export) ──
+      - name: Build Example Project (Unix)
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd examples/hello-iccdev
+          cmake -B build \
+                -DICCDEV_BUILD_DIR="$GITHUB_WORKSPACE/Build/Cmake/build" \
+                -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+
+      # ── Step 2: Build example project (Windows — Path 2: build-tree export) ──
+      - name: Build Example Project (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
+          cd examples\hello-iccdev
+          cmake -B build `
+                -DICCDEV_BUILD_DIR="$env:GITHUB_WORKSPACE\Build\Cmake\build" `
+                -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\scripts\buildsystems\vcpkg.cmake" `
+                -DVCPKG_MANIFEST_MODE=OFF `
+                -DCMAKE_BUILD_TYPE=Release `
+                -Wno-dev
+          cmake --build build --config Release
+
+      # ── Step 3: Run example and verify output (Unix) ──
+      - name: Run Example (Unix)
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          unset GITHUB_TOKEN || true
+
+          # Set library path for shared libs
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/Build/Cmake/build/IccProfLib:$GITHUB_WORKSPACE/Build/Cmake/build/IccXML:${LD_LIBRARY_PATH:-}"
+          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/Build/Cmake/build/IccProfLib:$GITHUB_WORKSPACE/Build/Cmake/build/IccXML:${DYLD_LIBRARY_PATH:-}"
+
+          OUTPUT=$(./examples/hello-iccdev/build/hello-iccdev 2>&1)
+          echo "$OUTPUT"
+
+          # Verify key output markers
+          echo "$OUTPUT" | grep -q "IccProfLib version:" || { echo "❌ Missing IccProfLib version"; exit 1; }
+          echo "$OUTPUT" | grep -q "IccLibXML  version:" || { echo "❌ Missing IccLibXML version"; exit 1; }
+          echo "$OUTPUT" | grep -q "Hello, iccDEV!" || { echo "❌ Missing Hello marker"; exit 1; }
+          echo "✅ Example project works correctly"
+
+      # ── Step 3: Run example and verify output (Windows) ──
+      - name: Run Example (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
+
+          # Copy DLLs to example build directory
+          $exeDir = "examples\hello-iccdev\build\Release"
+          if (-not (Test-Path $exeDir)) { $exeDir = "examples\hello-iccdev\build" }
+          Get-ChildItem -Recurse -Path "Build\Cmake\build" -Include "*.dll" |
+              Where-Object { $_.Name -match "Icc" } |
+              ForEach-Object { Copy-Item $_.FullName -Destination $exeDir -Force }
+
+          $exe = Get-ChildItem -Recurse -Path "examples\hello-iccdev\build" -Include "hello-iccdev.exe" |
+              Select-Object -First 1
+          if (-not $exe) { Write-Error "❌ hello-iccdev.exe not found"; exit 1 }
+
+          $output = & $exe.FullName 2>&1 | Out-String
+          Write-Host $output
+
+          if ($output -notmatch "IccProfLib version:") { Write-Error "❌ Missing IccProfLib version"; exit 1 }
+          if ($output -notmatch "IccLibXML  version:") { Write-Error "❌ Missing IccLibXML version"; exit 1 }
+          if ($output -notmatch "Hello, iccDEV!") { Write-Error "❌ Missing Hello marker"; exit 1 }
+          Write-Host "✅ Example project works correctly"
+
+  #############################################################################
+  # Job 8: Final Summary
   #############################################################################
   final-summary:
     name: "Test Summary"
     runs-on: ubuntu-latest
-    needs: [standard-builds, sanitizer-builds, option-matrix, windows-build, version-header-test, clean-rebuild-test]
+    needs: [standard-builds, sanitizer-builds, option-matrix, windows-build, version-header-test, clean-rebuild-test, example-project]
     if: always()
 
     steps:
@@ -889,6 +1107,7 @@ jobs:
           RESULT_WINDOWS: ${{ needs.windows-build.result }}
           RESULT_VERSION: ${{ needs.version-header-test.result }}
           RESULT_CLEAN: ${{ needs.clean-rebuild-test.result }}
+          RESULT_EXAMPLE: ${{ needs.example-project.result }}
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh 2>/dev/null || true
@@ -929,6 +1148,7 @@ jobs:
             echo "- ✅ Version header generation (build directory)"
             echo "- ✅ Clean source tree after build"
             echo "- ✅ Clean/rebuild cycle"
+            echo "- ✅ Example consumer project (Linux, macOS, Windows)"
             echo ""
             echo "## Job Results"
             echo ""
@@ -940,6 +1160,7 @@ jobs:
             echo "| Windows Build | $(sanitize_line "$RESULT_WINDOWS") |"
             echo "| Version Header Test | $(sanitize_line "$RESULT_VERSION") |"
             echo "| Clean/Rebuild Test | $(sanitize_line "$RESULT_CLEAN") |"
+            echo "| Example Project | $(sanitize_line "$RESULT_EXAMPLE") |"
             echo ""
             echo "---"
             echo ""
