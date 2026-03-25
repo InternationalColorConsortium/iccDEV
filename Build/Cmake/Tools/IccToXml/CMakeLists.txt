@@ -21,8 +21,12 @@ SET( TARGET_NAME iccToXml )
 
 ADD_EXECUTABLE( ${TARGET_NAME} ${SOURCES} )
 
-# Ensure IccXML2 is built before linking (fixes race condition)
-IF(ENABLE_SHARED_LIBS)
+# Ensure IccXML2 libraries are built before linking
+# When both shared+static are enabled, depend on BOTH targets so the
+# static-lib POST_BUILD alias (.lib copy) completes before tool link phase.
+IF(ENABLE_SHARED_LIBS AND ENABLE_STATIC_LIBS)
+  ADD_DEPENDENCIES( ${TARGET_NAME} IccXML2 IccXML2-static )
+ELSEIF(ENABLE_SHARED_LIBS)
   ADD_DEPENDENCIES( ${TARGET_NAME} IccXML2 )
 ELSE()
   ADD_DEPENDENCIES( ${TARGET_NAME} IccXML2-static )

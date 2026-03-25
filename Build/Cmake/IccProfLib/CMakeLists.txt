@@ -142,6 +142,7 @@ set_target_properties(${TARGET_NAME}
   PROPERTIES
             VERSION   "${${PROJECT_UP_NAME}_VERSION}"
             SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
+            WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 
   # Enforce C++17 standard per-target
