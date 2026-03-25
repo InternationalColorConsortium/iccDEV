@@ -21,13 +21,10 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Branch to build (default: master)'
+        description: 'Branch to build (leave empty to use --ref branch)'
         required: false
-        default: 'master'
-        type: choice
-        options:
-          - 'master'
-          - 'fix-cmake-lto'
+        default: ''
+        type: string
       pr_number:
         description: 'Pull request number to build (overrides branch)'
         required: false
