@@ -27,6 +27,7 @@ on:
         type: choice
         options:
           - 'master'
+          - 'fix-cmake-lto'
       pr_number:
         description: 'Pull request number to build (overrides branch)'
         required: false
@@ -59,14 +60,21 @@ jobs:
           CHECKOUT_REF: ${{ env.CHECKOUT_REF }}
         run: |
           set -euo pipefail
-          # Defense-in-depth: inputs.ref is type:choice (master|cfl),
+          # Defense-in-depth: inputs.ref is type:choice,
           # inputs.pr_number is type:number. Validate the derived ref.
+          # Accept: master, PR refs, and valid branch names (alphanumeric, hyphens, dots, slashes, underscores).
           case "${CHECKOUT_REF}" in
             master|refs/pull/[0-9]*/head)
               echo "✅ Valid ref: ${CHECKOUT_REF}" ;;
             *)
-              echo "❌ Unexpected CHECKOUT_REF: blocked" >&2
-              exit 1 ;;
+              # Validate branch name: only safe characters, no '..' path traversal
+              if [[ "${CHECKOUT_REF}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._/-]*$ ]] && \
+                 [[ ! "${CHECKOUT_REF}" =~ \.\. ]]; then
+                echo "✅ Valid branch ref: ${CHECKOUT_REF}"
+              else
+                echo "❌ Unexpected CHECKOUT_REF pattern: blocked" >&2
+                exit 1
+              fi ;;
           esac
 
   #############################################################################
@@ -246,7 +254,7 @@ jobs:
           echo "::endgroup::"
           BUILD_TIME=$((BUILD_END - BUILD_START))
           echo "::notice title=Build Time::Build completed in ${BUILD_TIME}s"
-          if grep -iE '(error|failed|undefined reference|cannot find)' build.log; then
+          if grep -iE '(^.*error:|undefined reference|cannot find -l)' build.log | grep -v 'error\.h\|Error handling\|error_category'; then
             echo "::error title=Build Failed::Build errors detected in log"
             exit 1
           fi
@@ -383,9 +391,9 @@ jobs:
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Configure with Sanitizer
         shell: bash --noprofile --norc {0}
@@ -490,6 +498,45 @@ jobs:
             cmake_opts: "-DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=OFF"
           - option_name: "STATIC_ONLY"
             cmake_opts: "-DENABLE_SHARED_LIBS=OFF -DENABLE_STATIC_LIBS=ON"
+          # -------------------------------------------------------------------
+          # LTO/IPO Validation Matrix (PR #716)
+          # Tests all branches of the LTO configuration logic in CMakeLists.txt
+          # -------------------------------------------------------------------
+          - option_name: "LTO=OFF (user override)"
+            cmake_opts: "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF"
+            lto_expected: "OFF"
+            lto_message: "user override"
+          - option_name: "LTO=ON (user override)"
+            cmake_opts: "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
+            lto_expected: "ON"
+            lto_message: "user override"
+          - option_name: "LTO auto Release (should enable)"
+            cmake_opts: ""
+            build_type_override: "Release"
+            lto_expected: "ON"
+            lto_message: "enabled for Release"
+          - option_name: "LTO auto Debug (should disable)"
+            cmake_opts: ""
+            build_type_override: "Debug"
+            lto_expected: "OFF"
+            lto_message: "disabled: build type"
+          - option_name: "LTO auto RelWithDebInfo (should disable)"
+            cmake_opts: ""
+            build_type_override: "RelWithDebInfo"
+            lto_expected: "OFF"
+            lto_message: "disabled: build type"
+          - option_name: "LTO + ASAN (should auto-disable)"
+            cmake_opts: "-DENABLE_ASAN=ON"
+            lto_expected: "OFF"
+            lto_message: "sanitizers are enabled"
+          - option_name: "LTO + Coverage (should auto-disable)"
+            cmake_opts: "-DENABLE_COVERAGE=ON"
+            lto_expected: "OFF"
+            lto_message: "ENABLE_COVERAGE is ON"
+          - option_name: "LTO=ON override + ASAN (user wins)"
+            cmake_opts: "-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON -DENABLE_ASAN=ON"
+            lto_expected: "ON"
+            lto_message: "user override"
 
     steps:
       - name: Checkout
@@ -532,15 +579,16 @@ jobs:
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Configure with Option
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
           MATRIX_CMAKE_OPTS: ${{ matrix.cmake_opts }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type_override || 'Release' }}
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
@@ -549,8 +597,65 @@ jobs:
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
           cmake Cmake/ \
-                -DCMAKE_BUILD_TYPE=Release \
-                $MATRIX_CMAKE_OPTS
+                -DCMAKE_BUILD_TYPE="$MATRIX_BUILD_TYPE" \
+                $MATRIX_CMAKE_OPTS 2>&1 | tee cmake-configure.log
+
+      - name: Validate LTO Configuration
+        if: ${{ matrix.lto_expected }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          LTO_EXPECTED: ${{ matrix.lto_expected }}
+          LTO_MESSAGE: ${{ matrix.lto_message }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh
+          echo "::group::LTO Validation"
+          echo "Expected LTO status: ${LTO_EXPECTED}"
+          echo "Expected message fragment: ${LTO_MESSAGE}"
+
+          # Check cmake configure output for the LTO status message
+          if [ ! -f Build/cmake-configure.log ]; then
+            echo "::error::cmake-configure.log not found"
+            exit 1
+          fi
+
+          echo "--- LTO-related cmake output ---"
+          grep -i 'Link-Time Optimization\|INTERPROCEDURAL' Build/cmake-configure.log || true
+          echo "--- end ---"
+
+          # Validate the expected LTO message appears
+          if ! grep -q "${LTO_MESSAGE}" Build/cmake-configure.log; then
+            echo "::error::Expected LTO message '${LTO_MESSAGE}' not found in cmake output"
+            echo "Full cmake output:"
+            cat Build/cmake-configure.log
+            exit 1
+          fi
+
+          # Validate LTO status in CMakeCache
+          CACHE_VALUE=$(grep -E '^CMAKE_INTERPROCEDURAL_OPTIMIZATION' Build/CMakeCache.txt | head -1 | cut -d= -f2 || echo "NOT_SET")
+          echo "CMakeCache LTO value: ${CACHE_VALUE}"
+
+          if [ "${LTO_EXPECTED}" = "ON" ]; then
+            if [ "${CACHE_VALUE}" != "ON" ] && [ "${CACHE_VALUE}" != "TRUE" ]; then
+              # Multi-config generators use CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE
+              RELEASE_VALUE=$(grep -E '^CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE' Build/CMakeCache.txt | head -1 | cut -d= -f2 || echo "NOT_SET")
+              if [ "${RELEASE_VALUE}" != "ON" ] && [ "${RELEASE_VALUE}" != "TRUE" ]; then
+                echo "::error::LTO expected ON but CMakeCache shows: ${CACHE_VALUE} (Release: ${RELEASE_VALUE})"
+                exit 1
+              fi
+              echo "✅ LTO correctly enabled for Release config (multi-config)"
+            else
+              echo "✅ LTO correctly enabled: ${CACHE_VALUE}"
+            fi
+          elif [ "${LTO_EXPECTED}" = "OFF" ]; then
+            if [ "${CACHE_VALUE}" = "ON" ] || [ "${CACHE_VALUE}" = "TRUE" ]; then
+              echo "::error::LTO expected OFF but CMakeCache shows: ${CACHE_VALUE}"
+              exit 1
+            fi
+            echo "✅ LTO correctly disabled: ${CACHE_VALUE}"
+          fi
+          echo "::endgroup::"
 
       - name: Build
         shell: bash --noprofile --norc {0}
@@ -647,7 +752,6 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
           cd Build/Cmake
           cmake --build build --config "$env:MATRIX_BUILD_TYPE" -- /m /maxcpucount
-          cmake --build build --config "$env:MATRIX_BUILD_TYPE" -- /m /maxcpucount
 
       - name: Test
         shell: pwsh
@@ -716,9 +820,9 @@ jobs:
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Build
         shell: bash --noprofile --norc {0}
@@ -805,9 +909,9 @@ jobs:
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/# find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/# ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Initial Build
         shell: bash --noprofile --norc {0}
@@ -1115,44 +1219,66 @@ jobs:
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
+
+          # Helper: map job result to emoji
+          result_icon() {
+            case "${1:-skipped}" in
+              success)  echo "✅" ;;
+              failure)  echo "❌" ;;
+              cancelled) echo "⏹️" ;;
+              skipped)  echo "⏭️" ;;
+              *)        echo "❓" ;;
+            esac
+          }
+
           {
             echo "# Comprehensive Build & Test Results"
             echo ""
             echo "## Test Coverage"
             echo ""
             echo "### Platforms"
-            echo "- ✅ Ubuntu (latest)"
-            echo "- ✅ macOS (latest)"
-            echo "- ✅ Windows (latest)"
+            echo "- $(result_icon "$RESULT_STANDARD") Ubuntu (latest)"
+            echo "- $(result_icon "$RESULT_STANDARD") macOS (latest)"
+            echo "- $(result_icon "$RESULT_WINDOWS") Windows (latest)"
             echo ""
             echo "### Compilers"
-            echo "- ✅ GCC (Ubuntu)"
-            echo "- ✅ Clang (Ubuntu, macOS)"
-            echo "- ✅ MSVC (Windows)"
+            echo "- $(result_icon "$RESULT_STANDARD") GCC (Ubuntu)"
+            echo "- $(result_icon "$RESULT_STANDARD") Clang (Ubuntu, macOS)"
+            echo "- $(result_icon "$RESULT_WINDOWS") MSVC (Windows)"
             echo ""
             echo "### Build Types"
-            echo "- ✅ Release (default)"
-            echo "- ✅ Debug"
-            echo "- ✅ RelWithDebInfo"
+            echo "- $(result_icon "$RESULT_STANDARD") Release (default)"
+            echo "- $(result_icon "$RESULT_STANDARD") Debug"
+            echo "- $(result_icon "$RESULT_STANDARD") RelWithDebInfo"
             echo ""
             echo "### Sanitizers"
-            echo "- ✅ AddressSanitizer (ASAN)"
-            echo "- ✅ UndefinedBehaviorSanitizer (UBSAN)"
-            echo "- ✅ Combined ASAN+UBSAN"
+            echo "- $(result_icon "$RESULT_SANITIZER") AddressSanitizer (ASAN)"
+            echo "- $(result_icon "$RESULT_SANITIZER") UndefinedBehaviorSanitizer (UBSAN)"
+            echo "- $(result_icon "$RESULT_SANITIZER") Combined ASAN+UBSAN"
             echo ""
             echo "### Build Options"
-            echo "- ✅ VERBOSE_CONFIG"
-            echo "- ✅ ENABLE_COVERAGE"
-            echo "- ✅ ICC_ENABLE_ASSERTS"
-            echo "- ✅ ICC_TRACE_NAN_ENABLED"
-            echo "- ✅ Shared libs only"
-            echo "- ✅ Static libs only"
+            echo "- $(result_icon "$RESULT_OPTION") VERBOSE_CONFIG"
+            echo "- $(result_icon "$RESULT_OPTION") ENABLE_COVERAGE"
+            echo "- $(result_icon "$RESULT_OPTION") ICC_ENABLE_ASSERTS"
+            echo "- $(result_icon "$RESULT_OPTION") ICC_TRACE_NAN_ENABLED"
+            echo "- $(result_icon "$RESULT_OPTION") Shared libs only"
+            echo "- $(result_icon "$RESULT_OPTION") Static libs only"
+            echo ""
+            echo "### LTO/IPO Validation (PR #716)"
+            echo "- $(result_icon "$RESULT_OPTION") LTO=OFF user override"
+            echo "- $(result_icon "$RESULT_OPTION") LTO=ON user override"
+            echo "- $(result_icon "$RESULT_OPTION") LTO auto-enable for Release"
+            echo "- $(result_icon "$RESULT_OPTION") LTO auto-disable for Debug"
+            echo "- $(result_icon "$RESULT_OPTION") LTO auto-disable for RelWithDebInfo"
+            echo "- $(result_icon "$RESULT_OPTION") LTO auto-disable with ASAN"
+            echo "- $(result_icon "$RESULT_OPTION") LTO auto-disable with Coverage"
+            echo "- $(result_icon "$RESULT_OPTION") LTO=ON override wins over ASAN"
             echo ""
             echo "### Special Tests"
-            echo "- ✅ Version header generation (build directory)"
-            echo "- ✅ Clean source tree after build"
-            echo "- ✅ Clean/rebuild cycle"
-            echo "- ✅ Example consumer project (Linux, macOS, Windows)"
+            echo "- $(result_icon "$RESULT_VERSION") Version header generation (build directory)"
+            echo "- $(result_icon "$RESULT_CLEAN") Clean source tree after build"
+            echo "- $(result_icon "$RESULT_CLEAN") Clean/rebuild cycle"
+            echo "- $(result_icon "$RESULT_EXAMPLE") Example consumer project (Linux, macOS, Windows)"
             echo ""
             echo "## Job Results"
             echo ""
