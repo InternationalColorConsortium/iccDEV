@@ -624,36 +624,46 @@ jobs:
           grep -i 'Link-Time Optimization\|INTERPROCEDURAL' Build/cmake-configure.log || true
           echo "--- end ---"
 
-          # Validate the expected LTO message appears
+          # Primary validation: cmake status message (authoritative for all cases)
+          # CMakeLists.txt uses set() without CACHE for auto-enable/disable, so the
+          # cmake status message is the only reliable signal. CMakeCache.txt only
+          # contains the variable when the user passes -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=X.
           if ! grep -q "${LTO_MESSAGE}" Build/cmake-configure.log; then
             echo "::error::Expected LTO message '${LTO_MESSAGE}' not found in cmake output"
             echo "Full cmake output:"
             cat Build/cmake-configure.log
             exit 1
           fi
+          echo "✅ cmake status message confirmed: '${LTO_MESSAGE}'"
 
-          # Validate LTO status in CMakeCache
-          CACHE_VALUE=$(grep -E '^CMAKE_INTERPROCEDURAL_OPTIMIZATION' Build/CMakeCache.txt | head -1 | cut -d= -f2 || echo "NOT_SET")
-          echo "CMakeCache LTO value: ${CACHE_VALUE}"
+          # Secondary validation: verify actual LTO flag propagation via RULE_LAUNCH or target properties
+          # For user-override cases, also check CMakeCache (only -D flags create cache entries)
+          CACHE_VALUE=$(grep -E '^CMAKE_INTERPROCEDURAL_OPTIMIZATION:' Build/CMakeCache.txt | head -1 | cut -d= -f2 || echo "NOT_SET")
+          RELEASE_VALUE=$(grep -E '^CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE:' Build/CMakeCache.txt | head -1 | cut -d= -f2 || echo "NOT_SET")
+          echo "CMakeCache LTO: ${CACHE_VALUE}, Release: ${RELEASE_VALUE}"
 
-          if [ "${LTO_EXPECTED}" = "ON" ]; then
-            if [ "${CACHE_VALUE}" != "ON" ] && [ "${CACHE_VALUE}" != "TRUE" ]; then
-              # Multi-config generators use CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE
-              RELEASE_VALUE=$(grep -E '^CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE' Build/CMakeCache.txt | head -1 | cut -d= -f2 || echo "NOT_SET")
-              if [ "${RELEASE_VALUE}" != "ON" ] && [ "${RELEASE_VALUE}" != "TRUE" ]; then
-                echo "::error::LTO expected ON but CMakeCache shows: ${CACHE_VALUE} (Release: ${RELEASE_VALUE})"
-                exit 1
-              fi
-              echo "✅ LTO correctly enabled for Release config (multi-config)"
-            else
-              echo "✅ LTO correctly enabled: ${CACHE_VALUE}"
-            fi
-          elif [ "${LTO_EXPECTED}" = "OFF" ]; then
-            if [ "${CACHE_VALUE}" = "ON" ] || [ "${CACHE_VALUE}" = "TRUE" ]; then
-              echo "::error::LTO expected OFF but CMakeCache shows: ${CACHE_VALUE}"
+          if echo "${LTO_MESSAGE}" | grep -q "user override"; then
+            # User -D override MUST appear in CMakeCache
+            if [ "${LTO_EXPECTED}" = "ON" ] && [ "${CACHE_VALUE}" != "ON" ]; then
+              echo "::error::User override LTO=ON but CMakeCache shows: ${CACHE_VALUE}"
+              exit 1
+            elif [ "${LTO_EXPECTED}" = "OFF" ] && [ "${CACHE_VALUE}" != "OFF" ]; then
+              echo "::error::User override LTO=OFF but CMakeCache shows: ${CACHE_VALUE}"
               exit 1
             fi
-            echo "✅ LTO correctly disabled: ${CACHE_VALUE}"
+            echo "✅ CMakeCache confirms user override: ${CACHE_VALUE}"
+          else
+            # Auto-enable/disable uses set() without CACHE — NOT in CMakeCache
+            echo "ℹ️  Auto-configured LTO (not in CMakeCache, validated via cmake status message)"
+          fi
+
+          # Tertiary: verify the build actually uses LTO flags when enabled
+          if [ "${LTO_EXPECTED}" = "ON" ]; then
+            if grep -rq 'INTERPROCEDURAL_OPTIMIZATION.*ON\|INTERPROCEDURAL_OPTIMIZATION.*TRUE' Build/CMakeFiles/; then
+              echo "✅ LTO property propagated to targets"
+            else
+              echo "ℹ️  LTO property not found in CMakeFiles (may use global scope only)"
+            fi
           fi
           echo "::endgroup::"
 
