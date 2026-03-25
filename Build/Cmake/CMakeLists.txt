@@ -3,15 +3,10 @@
 # Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 2026-03-24 20:49:38 UTC by David Hoyt
+#  Last Updated: 2026-03-25 13:56:11 UTC by David Hoyt
 #
 # CMake Configuration:
-# - PUBLIC target_include_directories for IccProfLib2 and IccXML2
-#   (build-dir-first so generated version header with git hash wins)
-# - EXPORT RefIccMAXTargets for build-tree and install-tree consumers
-# - New FindRefIccMAX.cmake module for standalone find_package()
-# - Modern RefIccMAXConfig.cmake.in using target-based imports
-# - Tool CMakeLists: target_include_directories(PRIVATE) replaces global
+# - Fix: CMake LTO override and build type matching
 #
 #################################################################################
 
@@ -747,15 +742,23 @@ endif()
 # ----------------------------------------------------------------------
 # Link-Time Optimization (LTO/IPO)
 # ----------------------------------------------------------------------
+#
+# LTO is enabled by default for Release builds when the compiler supports it
+# and no coverage/profiling/sanitizer instrumentation is active.
+#
+# Users can override this by passing -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+# on the cmake command line.  This is useful when consuming static archives
+# (.a files) with a linker that does not support LLVM bitcode (e.g. /usr/bin/ld).
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
 
-if(ipo_supported)
-  if(CMAKE_BUILD_TYPE MATCHES "Release" AND NOT ENABLE_COVERAGE AND NOT ENABLE_PROFILING AND NOT SANITIZER_FLAGS)
-    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-    message(STATUS ">>> Link-Time Optimization (LTO) enabled for Release builds")
-  elseif(CMAKE_BUILD_TYPE MATCHES "Release")
+if(DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
+  # User explicitly set LTO preference via -D flag — respect it unconditionally
+  message(STATUS ">>> Link-Time Optimization (LTO): ${CMAKE_INTERPROCEDURAL_OPTIMIZATION} (user override)")
+elseif(ipo_supported)
+  if(SANITIZER_FLAGS OR ENABLE_COVERAGE OR ENABLE_PROFILING)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
     set(_lto_reason "")
     if(ENABLE_COVERAGE)
       set(_lto_reason "ENABLE_COVERAGE is ON")
@@ -765,6 +768,15 @@ if(ipo_supported)
       set(_lto_reason "sanitizers are enabled")
     endif()
     message(STATUS ">>> Link-Time Optimization (LTO) disabled: ${_lto_reason}")
+  elseif(CMAKE_CONFIGURATION_TYPES)
+    # Multi-config generator (Visual Studio, Xcode): enable LTO for Release only
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+    message(STATUS ">>> Link-Time Optimization (LTO) enabled for Release configuration (multi-config)")
+  elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    message(STATUS ">>> Link-Time Optimization (LTO) enabled for Release builds")
+  else()
+    message(STATUS ">>> Link-Time Optimization (LTO) disabled: build type is '${CMAKE_BUILD_TYPE}'")
   endif()
 else()
   message(STATUS ">>> Link-Time Optimization (LTO) not supported: ${ipo_output}")
