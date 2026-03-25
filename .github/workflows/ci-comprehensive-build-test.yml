@@ -762,6 +762,7 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
           cd Build/Cmake
           cmake --build build --config "$env:MATRIX_BUILD_TYPE" -- /m /maxcpucount
+          cmake --build build --config "$env:MATRIX_BUILD_TYPE" -- /m /maxcpucount
 
       - name: Test
         shell: pwsh
