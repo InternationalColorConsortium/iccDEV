@@ -139,6 +139,12 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   m_fYRes = fYRes;
   m_nPlanar = bSep ? PLANARCONFIG_SEPARATE : PLANARCONFIG_CONTIG;
   m_nCompress = bCompress ? COMPRESSION_LZW : COMPRESSION_NONE;
+  
+  // fix up some common errors from malformed TIFF files (which could cause errors down the line)
+  if (m_fXRes <= 0.0)
+    m_fXRes = 96.0;
+  if (m_fYRes <= 0.0)
+    m_fYRes = 96.0;
 
   switch(nPhoto) {
   case PHOTO_RGB:
@@ -287,6 +293,12 @@ bool CTiffImg::Open(const char *szFname)
     Close();
     return false;
   }
+  
+  // fix up some common errors from malformed TIFF files (which could cause errors down the line)
+  if (m_fXRes <= 0.0)
+    m_fXRes = 96.0;
+  if (m_fYRes <= 0.0)
+    m_fYRes = 96.0;
   
   m_nCurStrip=(unsigned int)-1;
   m_nCurLine = 0;
