@@ -1536,7 +1536,8 @@ const std::string icGetHeaderFlagsName(icUInt32Number flags, bool bUsesMCS)
     xml += line;
   }
 
-  icUInt32Number otherFlags = ~(icEmbeddedProfileTrue | icUseWithEmbeddedDataOnly | icExtendedRangePCS);
+  // these #defines really should be const icUint32Number
+  icUInt32Number otherFlags = (icUInt32Number)( ~(icEmbeddedProfileTrue | icUseWithEmbeddedDataOnly | icExtendedRangePCS) );
 
   if (bUsesMCS) {
     if (flags & icMCSNeedsSubsetTrue)
