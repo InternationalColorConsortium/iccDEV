@@ -6513,7 +6513,7 @@ CIccApplyXform* CIccXformNDLut::GetNewApply(icStatusCMM& status)
   CIccCLUT* pCLUT = m_pTag->GetCLUT();
   CIccApplyCLUT* pApply = NULL;
 
-  if (pCLUT && m_nNumInput > 6) {
+  if (pCLUT) {      // was && m_nNumInput > 6, but this gets called for 1,2,5,6 as well, and withput pApply, it crashes
     pApply = pCLUT->GetNewApply();
     if (!pApply) {
       status = icCmmStatAllocErr;

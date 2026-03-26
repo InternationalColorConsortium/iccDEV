@@ -1678,16 +1678,16 @@ CIccApplyCLUT::~CIccApplyCLUT()
 */
 bool CIccApplyCLUT::Init(icUInt8Number nSrcChannels, icUInt32Number nNodes)
 {
-  if (nSrcChannels > 6) {
+// was if (nSrcChannels > 6), but without the pointers it will crash for 1,2,5,6 channels
 
-    m_df = (icFloatNumber*)malloc(nNodes * sizeof(icFloatNumber));
-    m_s = (icFloatNumber*)malloc(nSrcChannels * sizeof(icFloatNumber));
-    m_g = (icFloatNumber*)malloc(nSrcChannels * sizeof(icFloatNumber));
-    m_ig = (icUInt32Number*)malloc(nSrcChannels * sizeof(icUInt32Number));
+  m_df = (icFloatNumber*)malloc(nNodes * sizeof(icFloatNumber));
+  m_s = (icFloatNumber*)malloc(nSrcChannels * sizeof(icFloatNumber));
+  m_g = (icFloatNumber*)malloc(nSrcChannels * sizeof(icFloatNumber));
+  m_ig = (icUInt32Number*)malloc(nSrcChannels * sizeof(icUInt32Number));
 
-    if (!m_df || !m_s || !m_g || !m_ig)
-      return false;
-  }
+  if (!m_df || !m_s || !m_g || !m_ig)
+    return false;
+
   return true;
 }
 
@@ -2273,6 +2273,11 @@ void CIccCLUT::Begin()
   }
   m_nNodes = (1<<m_nInput);
 
+  // always init values so we don't crash
+  for (int count=0; count<m_nInput; count++) {
+    m_nPower[count] = (1<<(m_nInput-1-count));
+  }
+
   if (m_nOffset)
     delete [] m_nOffset;
 
@@ -2423,10 +2428,6 @@ void CIccCLUT::Begin()
     icUInt32Number nPower[2];
     nPower[0] = 0;
     nPower[1] = 1;
-
-    for (count=0; count<m_nInput; count++) {
-      m_nPower[count] = (1<<(m_nInput-1-count));
-    }
 
     count = 0;
     nFlag = 1;
