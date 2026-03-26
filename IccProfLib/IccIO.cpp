@@ -566,7 +566,7 @@ CIccEmbedIO::CIccEmbedIO() : CIccIO()
 {
   m_pIO = NULL;
   m_nStartPos = 0;
-  m_nSize = -1;
+  m_nSize = (size_t)(-1);
   m_bOwnIO = false;
 }
 
