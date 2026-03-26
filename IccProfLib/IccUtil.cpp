@@ -1079,13 +1079,12 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
   // 126 is ~, and 127 is DEL, over 127 is undefined and depends on local code page
   // isprint() lies about values > 127 on MacOS and Linux, haven't tested Windows
   for (i=1; i<5; i++) {
-    c=(icUInt8Number)(sig>>24);
+    c=(icUInt8Number)(sig>>(32-i*8));
     if (!isprint(c) || c > 126) {
       c='?';
       bGetHexVal = true;
     }
     pBuf[i]=c;
-    sig <<=8;
   }
 
   if (bGetHexVal)
@@ -1162,8 +1161,7 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
 
       pBuf[0]='\"';
       pBuf[1] = (icUInt8Number)(sig>>24);
-      sig<<=8;
-      pBuf[2] = (icUInt8Number)(sig>>24);
+      pBuf[2] = (icUInt8Number)(sig>>16);
       snprintf(pBuf+3, bufSize-3, "%04X\"", icNumColorSpaceChannels(nSig));
       return pBuf;
     
@@ -1176,13 +1174,12 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
 
       pBuf[0] = '\'';
       for (i=1; i<5; i++) {
-        c=(icUInt8Number)(sig>>24);
+        c=(icUInt8Number)(sig>>(32-i*8));
         if (!isprint(c) || c > 126) {
           c = '?';
           bNeedHexVal = true;
         }
         pBuf[i]=c;
-        sig <<=8;
       }
 
       if (bGetHexVal)
@@ -1223,8 +1220,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
     case icSigSparseMatrixReflectanceData:
 
       pBuf[0] = (icUInt8Number)(sig>>24);
-      sig<<=8;
-      pBuf[1] = (icUInt8Number)(sig>>24);
+      pBuf[1] = (icUInt8Number)(sig>>16);
       snprintf(pBuf+2, bufSize-2, "%04X", icNumColorSpaceChannels(nSig));
       return pBuf;
 
@@ -1236,7 +1232,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
         bool bGetHexVal = false;
 
         for (i=0; i<4; i++) {
-          c=(icUInt8Number)(sig>>24);
+          c=(icUInt8Number)(sig>>(24-i*8));
           if (!c) {
             j=i;
           }
@@ -1248,7 +1244,6 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
             bGetHexVal = true;
           }
           pBuf[i]=c;
-          sig <<=8;
         }
 
         if (bGetHexVal)
