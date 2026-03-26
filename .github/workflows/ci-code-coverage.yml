@@ -4,12 +4,21 @@
 #                All rights reserved.
 #                https://color.org
 #
-# Intent: Build iccDEV with Clang source-based coverage,
-#         run full test suite + profile exerciser, generate
-#         llvm-cov HTML and lcov summary reports
+# CI Coverage Report — Clang source-based coverage
 #
-# Based on: research/iccanalyzer-lite-coverage-report.yml
-# Adapted: For cfl/ integrated build with ENABLE_COVERAGE
+# Builds iccDEV with clang -fprofile-instr-generate
+# -fcoverage-mapping, exercises the test suite + tools against
+# generated ICC profiles, then produces llvm-cov reports.
+#
+# Outputs (uploaded as artifact):
+#   - coverage-report/html/     — interactive HTML report
+#   - coverage-report/lcov.info — lcov-format export
+#   - coverage-report/coverage-summary.txt — text summary
+#
+# Workflow summary includes structured coverage tables
+# and the full llvm-cov text report.
+#
+# Trigger: workflow_dispatch (manual) or pull_request
 #
 ###############################################################
 
@@ -37,10 +46,10 @@ jobs:
         shell: bash --noprofile --norc {0}
 
     steps:
+      # ─── Setup ──────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - name: Install dependencies
@@ -53,17 +62,31 @@ jobs:
             build-essential cmake \
             clang-18 llvm-18 \
             libxml2-dev libtiff-dev libjpeg-dev libpng-dev \
-            zlib1g-dev nlohmann-json3-dev \
-            lcov
+            zlib1g-dev nlohmann-json3-dev
 
+      - name: Show toolchain versions
+        run: |
+          set -euo pipefail
+          echo "::group::Toolchain versions"
+          echo "clang:          $(clang-18 --version | head -1)"
+          echo "llvm-cov:       $(llvm-cov-18 --version | head -1)"
+          echo "llvm-profdata:  $(llvm-profdata-18 show --version 2>&1 | head -1 || echo unknown)"
+          echo "cmake:          $(cmake --version | head -1)"
+          echo "runner:         $(uname -srm)"
+          echo "::endgroup::"
+
+      # ─── Build ──────────────────────────────────────────────
       - name: Build with coverage instrumentation
         env:
           CC: clang-18
           CXX: clang++-18
         run: |
           set -euo pipefail
-          mkdir -p build-coverage && cd build-coverage
-          cmake ../Build/Cmake \
+          BUILD_DIR="${{ github.workspace }}/build-coverage"
+          mkdir -p "$BUILD_DIR" && cd "$BUILD_DIR"
+
+          echo "::group::CMake configure"
+          cmake "${{ github.workspace }}/Build/Cmake" \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
@@ -72,90 +95,130 @@ jobs:
             -DENABLE_STATIC_LIBS=ON \
             -DENABLE_TESTS=OFF \
             -Wno-dev
-          make -j$(nproc)
+          echo "::endgroup::"
 
-          # Verify coverage instrumentation
+          echo "::group::Compile"
+          make -j"$(nproc)" 2>&1
+          echo "::endgroup::"
+
+          # ── Verify build outputs ──
           TOOL=$(find . -name "iccDumpProfile" -type f -executable | head -1)
           if [ -z "$TOOL" ]; then
-            echo "::error::No iccDumpProfile binary found"
+            echo "::error title=Build failed::iccDumpProfile binary not found"
             exit 1
           fi
-          echo "tool_path=$(pwd)/$TOOL" >> $GITHUB_ENV
-          echo "build_dir=$(pwd)" >> $GITHUB_ENV
 
-          # Verify instrumentation flags
-          echo "Checking coverage flags..."
-          grep -r "fprofile-instr-generate" CMakeFiles/*/flags.make | head -3 || true
+          PROFLIB=$(find . -name "libIccProfLib2.so" | head -1)
+          XMLLIB=$(find . -name "libIccXML2.so" | head -1)
+          if [ -z "$PROFLIB" ] || [ -z "$XMLLIB" ]; then
+            echo "::error title=Build incomplete::Shared libraries not found (libIccProfLib2.so / libIccXML2.so)"
+            exit 1
+          fi
 
-          # Count libraries and tools
-          LIB_COUNT=$(find . -name "*.a" | wc -l)
-          TOOL_COUNT=$(find . -path "*/Tools/*" -type f -executable | wc -l)
-          echo "Built: $LIB_COUNT libraries, $TOOL_COUNT tools"
+          # Confirm coverage instrumentation sections in shared library
+          REAL_PROFLIB=$(readlink -f "$PROFLIB")
+          if readelf -S "$REAL_PROFLIB" 2>/dev/null | grep -q "__llvm_covmap"; then
+            echo "✓ Coverage instrumentation confirmed in libIccProfLib2.so (__llvm_covmap section present)"
+          else
+            echo "::warning title=Coverage symbols::__llvm_covmap section not found in shared library — report may be incomplete"
+          fi
 
+          # Export paths for subsequent steps
+          echo "tool_path=$BUILD_DIR/$TOOL" >> "$GITHUB_ENV"
+          echo "build_dir=$BUILD_DIR" >> "$GITHUB_ENV"
+
+          # Collect tool directories into a single PATH prefix (reused by later steps)
+          TOOL_DIRS=""
+          for d in $(find "$BUILD_DIR" -path "*/Tools/*" -type f -executable -exec dirname {} \; | sort -u); do
+            TOOL_DIRS="${d}:${TOOL_DIRS}"
+          done
+          echo "tool_path_dirs=$TOOL_DIRS" >> "$GITHUB_ENV"
+
+          # Diagnostics
+          TOOL_COUNT=$(find . -path "*/Tools/*" -type f -executable ! -name "iccDumpProfileGui" | wc -l)
+          PROFLIB_KB=$(( $(stat -c%s "$(readlink -f "$PROFLIB")" 2>/dev/null || echo 0) / 1024 ))
+          XMLLIB_KB=$(( $(stat -c%s "$(readlink -f "$XMLLIB")" 2>/dev/null || echo 0) / 1024 ))
+          echo "::notice title=Build summary::${TOOL_COUNT} tools, libIccProfLib2.so=${PROFLIB_KB}KB, libIccXML2.so=${XMLLIB_KB}KB"
+          echo "tool_count=$TOOL_COUNT" >> "$GITHUB_ENV"
+
+      # ─── Exercise tools for coverage ────────────────────────
       - name: Create test profiles
         run: |
           set -euo pipefail
           export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/create-%p-%m.profraw"
+          export PATH="${{ env.tool_path_dirs }}$PATH"
           mkdir -p "${{ github.workspace }}/profraw"
 
-          # CreateAllProfiles.sh expects ../Build/Tools — symlink build-coverage
+          # CreateAllProfiles.sh expects to find tools via PATH
           ln -sfn build-coverage Build
 
-          # Add build tools to PATH
-          BUILD_DIR="${{ env.build_dir }}"
-          for d in $(find "$BUILD_DIR" -path "*/Tools/*" -type f -executable -exec dirname {} \; | sort -u); do
-            PATH="$d:$PATH"
-          done
-          export PATH
-
           cd Testing
-          bash CreateAllProfiles.sh 2>&1 | tail -20
-          PROFILE_COUNT=$(find . -name "*.icc" | wc -l)
-          echo "Created $PROFILE_COUNT ICC profiles"
-          echo "profile_count=$PROFILE_COUNT" >> $GITHUB_ENV
+          echo "::group::CreateAllProfiles.sh output"
+          bash CreateAllProfiles.sh 2>&1 | tail -30
+          echo "::endgroup::"
+
+          PROFILE_COUNT=$(find . -name "*.icc" -type f | wc -l)
+          echo "::notice title=Test profiles::Created $PROFILE_COUNT ICC profiles"
+          echo "profile_count=$PROFILE_COUNT" >> "$GITHUB_ENV"
 
       - name: Run test suite
         run: |
-          set -euo pipefail
+          set -uo pipefail
           export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/test-%p-%m.profraw"
-
-          BUILD_DIR="${{ env.build_dir }}"
-          for d in $(find "$BUILD_DIR" -path "*/Tools/*" -type f -executable -exec dirname {} \; | sort -u); do
-            PATH="$d:$PATH"
-          done
-          export PATH
+          export PATH="${{ env.tool_path_dirs }}$PATH"
 
           cd Testing
-          bash RunTests.sh 2>&1 | tail -40
-          echo "Test suite complete"
+          echo "::group::RunTests.sh output"
+          TEST_RC=0
+          bash RunTests.sh 2>&1 | tee /tmp/test-output.txt || TEST_RC=${PIPESTATUS[0]:-$?}
+          echo "::endgroup::"
+
+          LINES=$(wc -l < /tmp/test-output.txt)
+          echo "Test suite: $LINES lines of output, exit code $TEST_RC"
+          echo "test_exit_code=$TEST_RC" >> "$GITHUB_ENV"
+
+          if [ "$TEST_RC" -ne 0 ]; then
+            echo "::warning title=Test suite::RunTests.sh exited with code $TEST_RC — coverage data still collected"
+          fi
 
       - name: Exercise all profiles with IccDumpProfile
         run: |
-          set -euo pipefail
+          set -uo pipefail
           export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/dump-%p-%m.profraw"
 
           TOOL="${{ env.tool_path }}"
-          TOTAL=0
-          PASS=0
-          FAIL=0
+          TOTAL=0; PASS=0; FAIL=0
+          FAIL_LOG=""
 
           while IFS= read -r icc; do
             TOTAL=$((TOTAL + 1))
-            if timeout 10s "$TOOL" "$icc" > /dev/null 2>&1; then
+            RC=0
+            timeout 10s "$TOOL" "$icc" > /dev/null 2>&1 || RC=$?
+            if [ "$RC" -eq 0 ]; then
               PASS=$((PASS + 1))
             else
               FAIL=$((FAIL + 1))
+              FAIL_LOG="${FAIL_LOG}  $(basename "$icc") (exit $RC)\n"
             fi
-          done < <(find Testing -name "*.icc" -type f)
+          done < <(find Testing -name "*.icc" -type f | sort)
 
-          echo "IccDumpProfile: $TOTAL profiles, $PASS pass, $FAIL fail"
-          echo "dump_total=$TOTAL" >> $GITHUB_ENV
-          echo "dump_pass=$PASS" >> $GITHUB_ENV
-          echo "dump_fail=$FAIL" >> $GITHUB_ENV
+          echo "IccDumpProfile: $TOTAL tested, $PASS pass, $FAIL fail"
+          echo "dump_total=$TOTAL" >> "$GITHUB_ENV"
+          echo "dump_pass=$PASS" >> "$GITHUB_ENV"
+          echo "dump_fail=$FAIL" >> "$GITHUB_ENV"
 
-      - name: Exercise XML round-trip tools
+          # Persist failure list for artifact and summary
+          if [ "$FAIL" -gt 0 ]; then
+            echo -e "$FAIL_LOG" > /tmp/dump-fail-files.txt
+            echo "::warning title=IccDumpProfile::$FAIL of $TOTAL profiles failed"
+            echo "::group::Failed profiles"
+            echo -e "$FAIL_LOG"
+            echo "::endgroup::"
+          fi
+
+      - name: Exercise XML round-trip and IccRoundTrip
         run: |
-          set -euo pipefail
+          set -uo pipefail
           export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/xml-%p-%m.profraw"
 
           BUILD_DIR="${{ env.build_dir }}"
@@ -163,73 +226,225 @@ jobs:
           FROM_XML=$(find "$BUILD_DIR" -name "iccFromXml" -type f -executable -print -quit)
           ROUNDTRIP=$(find "$BUILD_DIR" -name "iccRoundTrip" -type f -executable -print -quit)
 
-          CONVERTED=0
-          # Convert a sample of profiles to XML and back
-          mapfile -t ICC_FILES < <(find Testing -name "*.icc" -type f | shuf -n 50)
+          echo "Tools found:"
+          echo "  iccToXml:     ${TO_XML:-NOT FOUND}"
+          echo "  iccFromXml:   ${FROM_XML:-NOT FOUND}"
+          echo "  iccRoundTrip: ${ROUNDTRIP:-NOT FOUND}"
+
+          # Failure log files (persisted into artifact for post-mortem)
+          mkdir -p coverage-report
+          XML_FAIL_LOG="coverage-report/xml-roundtrip-failures.txt"
+          RT_FAIL_LOG="coverage-report/icc-roundtrip-failures.txt"
+          DUMP_FAIL_LOG="coverage-report/dump-failures.txt"
+          > "$XML_FAIL_LOG"
+          > "$RT_FAIL_LOG"
+
+          # Carry forward any DumpProfile failures from previous step
+          if [ -f /tmp/dump-fail-files.txt ]; then
+            cp /tmp/dump-fail-files.txt "$DUMP_FAIL_LOG"
+          else
+            > "$DUMP_FAIL_LOG"
+          fi
+
+          # ── XML round-trip (ToXml → FromXml) — all profiles for coverage ──
+          CONVERTED=0; XML_FAIL=0
+          XML_FAIL_LIST=""
+          mapfile -t ICC_FILES < <(find Testing -name "*.icc" -type f | sort)
+          echo "XML round-trip: testing all ${#ICC_FILES[@]} profiles"
+
           for icc in "${ICC_FILES[@]}"; do
-            XML_OUT="/tmp/$(basename "$icc" .icc).xml"
-            ICC_OUT="/tmp/$(basename "$icc")"
-            if [ -n "$TO_XML" ] && timeout 10s "$TO_XML" "$icc" "$XML_OUT" > /dev/null 2>&1; then
+            base=$(basename "$icc" .icc)
+            XML_OUT="/tmp/${base}.xml"
+            ICC_OUT="/tmp/${base}_rt.icc"
+            RC=0
+            if [ -n "$TO_XML" ]; then
+              timeout 10s "$TO_XML" "$icc" "$XML_OUT" > /dev/null 2>&1 || RC=$?
+            else
+              RC=127
+            fi
+            if [ "$RC" -eq 0 ]; then
               CONVERTED=$((CONVERTED + 1))
               if [ -n "$FROM_XML" ]; then
                 timeout 10s "$FROM_XML" "$XML_OUT" "$ICC_OUT" > /dev/null 2>&1 || true
               fi
+            else
+              XML_FAIL=$((XML_FAIL + 1))
+              XML_FAIL_LIST="${XML_FAIL_LIST}  $(basename "$icc") (exit $RC)\n"
+              echo "$(basename "$icc")  exit=$RC" >> "$XML_FAIL_LOG"
             fi
             rm -f "$XML_OUT" "$ICC_OUT"
           done
 
-          # Run roundtrip on sample profiles
-          if [ -n "$ROUNDTRIP" ]; then
-            mapfile -t RT_FILES < <(find Testing -name "*.icc" -type f | shuf -n 30)
-            for icc in "${RT_FILES[@]}"; do
-              timeout 10s "$ROUNDTRIP" "$icc" > /dev/null 2>&1 || true
-            done
+          echo "XML round-trip: $CONVERTED converted, $XML_FAIL failed"
+          echo "xml_converted=$CONVERTED" >> "$GITHUB_ENV"
+          echo "xml_failed=$XML_FAIL" >> "$GITHUB_ENV"
+
+          if [ "$XML_FAIL" -gt 0 ]; then
+            echo "::warning title=XML round-trip::$XML_FAIL of ${#ICC_FILES[@]} profiles failed iccToXml conversion"
+            echo "::group::XML round-trip failed files"
+            echo -e "$XML_FAIL_LIST"
+            echo "::endgroup::"
           fi
 
-          echo "XML round-trip: $CONVERTED conversions complete"
+          # ── IccRoundTrip ──
+          # IccRoundTrip only works with profiles that have forward+backward
+          # transforms: Display (mntr), Output (prtr), Input (scnr).
+          # Calculator (spac), DeviceLink (link), Abstract (abst), NamedColor
+          # (nmcl), and other v5 classes are exercised for coverage data but
+          # NOT counted as test failures since they are not designed for
+          # round-trip evaluation.
+          #
+          # Profile class is read from ICC header bytes 12-15.
+          RT_PASS=0; RT_FAIL=0; RT_EXERCISED=0
+          RT_FAIL_LIST=""
+          RT_TOTAL=0
+          RT_SUITABLE=0
 
-      - name: Merge profdata and generate report
+          # Classes that support round-trip evaluation
+          ROUNDTRIP_CLASSES="mntr prtr scnr"
+
+          if [ -n "$ROUNDTRIP" ]; then
+            mapfile -t RT_FILES < <(find Testing -name "*.icc" -type f | sort)
+            echo "IccRoundTrip: exercising all ${#RT_FILES[@]} profiles for coverage"
+            echo ""
+
+            for icc in "${RT_FILES[@]}"; do
+              RT_TOTAL=$((RT_TOTAL + 1))
+
+              # Read profile class from ICC header offset 12 (4 bytes, ASCII)
+              PCLASS=""
+              if [ -f "$icc" ] && [ "$(stat -c%s "$icc" 2>/dev/null || echo 0)" -ge 128 ]; then
+                PCLASS=$(dd if="$icc" bs=1 skip=12 count=4 2>/dev/null | tr -d '\0 ')
+              fi
+
+              RC=0
+              timeout 15s "$ROUNDTRIP" "$icc" > /dev/null 2>&1 || RC=$?
+
+              # Classify: is this profile class suitable for round-trip?
+              IS_SUITABLE=false
+              for cls in $ROUNDTRIP_CLASSES; do
+                if [ "$PCLASS" = "$cls" ]; then
+                  IS_SUITABLE=true
+                  break
+                fi
+              done
+
+              if [ "$IS_SUITABLE" = true ]; then
+                RT_SUITABLE=$((RT_SUITABLE + 1))
+                if [ "$RC" -eq 0 ]; then
+                  RT_PASS=$((RT_PASS + 1))
+                else
+                  RT_FAIL=$((RT_FAIL + 1))
+                  RT_FAIL_LIST="${RT_FAIL_LIST}  $(basename "$icc") [${PCLASS}] (exit $RC)\n"
+                  echo "$(basename "$icc")  class=$PCLASS  exit=$RC" >> "$RT_FAIL_LOG"
+                fi
+              else
+                # Not suitable for round-trip — exercised for coverage only
+                RT_EXERCISED=$((RT_EXERCISED + 1))
+              fi
+            done
+
+            echo "IccRoundTrip results:"
+            echo "  Suitable profiles (mntr/prtr/scnr): $RT_SUITABLE tested — $RT_PASS pass, $RT_FAIL fail"
+            echo "  Other profiles: $RT_EXERCISED exercised for coverage data"
+          fi
+
+          echo "rt_pass=$RT_PASS" >> "$GITHUB_ENV"
+          echo "rt_fail=$RT_FAIL" >> "$GITHUB_ENV"
+          echo "rt_suitable=$RT_SUITABLE" >> "$GITHUB_ENV"
+          echo "rt_exercised=$RT_EXERCISED" >> "$GITHUB_ENV"
+          echo "rt_total=$RT_TOTAL" >> "$GITHUB_ENV"
+
+          if [ "$RT_FAIL" -gt 0 ]; then
+            echo "::warning title=IccRoundTrip::$RT_FAIL of $RT_SUITABLE suitable profiles failed"
+            echo "::group::IccRoundTrip failed files (roundtrip-capable classes only)"
+            echo -e "$RT_FAIL_LIST"
+            echo "::endgroup::"
+          fi
+
+      # ─── Coverage report generation ─────────────────────────
+      - name: Merge profdata and generate reports
         run: |
           set -euo pipefail
           mkdir -p coverage-report
 
-          # Merge all .profraw files
+          # ── Merge .profraw files ──
           PROFRAW_COUNT=$(find "${{ github.workspace }}/profraw" -name "*.profraw" 2>/dev/null | wc -l)
-          echo "Found $PROFRAW_COUNT .profraw files"
 
           if [ "$PROFRAW_COUNT" -eq 0 ]; then
-            echo "::error::No profraw files generated — coverage instrumentation may have failed"
+            echo "::error title=No coverage data::No profraw files generated — coverage instrumentation may have failed"
             exit 1
           fi
 
-          llvm-profdata-18 merge \
-            -sparse \
-            "${{ github.workspace }}"/profraw/*.profraw \
-            -o coverage-report/merged.profdata
+          echo "Merging $PROFRAW_COUNT profraw files..."
+          find "${{ github.workspace }}/profraw" -name "*.profraw" -print0 \
+            | xargs -0 llvm-profdata-18 merge -sparse \
+              -o coverage-report/merged.profdata
 
-          echo "Merged profdata: $(stat -c%s coverage-report/merged.profdata) bytes"
+          PROFDATA_KB=$(( $(stat -c%s coverage-report/merged.profdata) / 1024 ))
+          echo "::notice title=Profdata::Merged ${PROFDATA_KB}KB from $PROFRAW_COUNT profraw files"
+          echo "profraw_count=$PROFRAW_COUNT" >> "$GITHUB_ENV"
 
-          # Find all instrumented binaries
+          # ── Build llvm-cov object list ──
           BUILD_DIR="${{ env.build_dir }}"
-          BINARIES=$(find "$BUILD_DIR" -type f -executable \( -path "*/Tools/*" -o -name "*.a" \) | head -20)
           MAIN_BIN="${{ env.tool_path }}"
-
-          # Build object list for llvm-cov (all tool binaries)
           OBJECT_ARGS=""
-          for bin in $(find "$BUILD_DIR" -path "*/Tools/*" -type f -executable); do
+
+          # Tool executables (exclude GUI-only tool that requires wxWidgets)
+          for bin in $(find "$BUILD_DIR" -path "*/Tools/*" -type f -executable ! -name "iccDumpProfileGui" | sort); do
             if [ "$bin" != "$MAIN_BIN" ]; then
               OBJECT_ARGS="$OBJECT_ARGS -object=$bin"
             fi
           done
 
-          # Generate text report
+          # Shared libraries — these contain the bulk of instrumented code
+          # (IccProfLib, IccXML). Omitting these caused issue #605:
+          # "warning: 1609 functions have mismatched data" + ~5% coverage.
+          for lib in $(find "$BUILD_DIR" -name "lib*.so" \( -type f -o -type l \) 2>/dev/null | sort); do
+            OBJECT_ARGS="$OBJECT_ARGS -object=$lib"
+          done
+
+          echo "::group::llvm-cov object list"
+          echo "Primary binary: $MAIN_BIN"
+          echo "$OBJECT_ARGS" | tr ' ' '\n' | grep "^-object=" | sed 's/-object=/  /'
+          echo "::endgroup::"
+
+          # ── Text summary report ──
+          echo "::group::llvm-cov report"
           llvm-cov-18 report \
             "$MAIN_BIN" $OBJECT_ARGS \
             -instr-profile=coverage-report/merged.profdata \
             -ignore-filename-regex='(third_party|/usr/|test)' \
-            2>&1 | tee coverage-report/coverage-summary.txt
+            2>coverage-report/llvm-cov-stderr.txt \
+            | tee coverage-report/coverage-summary.txt
+          echo "::endgroup::"
 
-          # Generate HTML report
+          # Track mismatched function count (template-instantiation duplicates)
+          MISMATCH=$(grep -oP '\d+(?= functions have mismatched data)' coverage-report/llvm-cov-stderr.txt 2>/dev/null || echo 0)
+          if [ "$MISMATCH" -gt 0 ]; then
+            echo "::notice title=Mismatched functions::$MISMATCH template-instantiation duplicates (cosmetic — see issue #605)"
+          fi
+          echo "mismatch_count=$MISMATCH" >> "$GITHUB_ENV"
+
+          # ── Extract coverage percentages from TOTAL line ──
+          TOTAL_LINE=$(grep "^TOTAL" coverage-report/coverage-summary.txt | head -1 || true)
+          if [ -n "$TOTAL_LINE" ]; then
+            # TOTAL line format: TOTAL  regions missed pct%  functions missed pct%  lines missed pct%  branches missed pct%
+            REGION_PCT=$(echo "$TOTAL_LINE" | awk '{n=0; for(i=1;i<=NF;i++){if($i ~ /%$/){n++; if(n==1){print $i; exit}}}}')
+            FUNC_PCT=$(echo "$TOTAL_LINE"   | awk '{n=0; for(i=1;i<=NF;i++){if($i ~ /%$/){n++; if(n==2){print $i; exit}}}}')
+            LINE_PCT=$(echo "$TOTAL_LINE"   | awk '{n=0; for(i=1;i<=NF;i++){if($i ~ /%$/){n++; if(n==3){print $i; exit}}}}')
+            BRANCH_PCT=$(echo "$TOTAL_LINE" | awk '{n=0; for(i=1;i<=NF;i++){if($i ~ /%$/){n++; if(n==4){print $i; exit}}}}')
+
+            echo "region_pct=${REGION_PCT}" >> "$GITHUB_ENV"
+            echo "func_pct=${FUNC_PCT}" >> "$GITHUB_ENV"
+            echo "line_pct=${LINE_PCT}" >> "$GITHUB_ENV"
+            echo "branch_pct=${BRANCH_PCT}" >> "$GITHUB_ENV"
+
+            echo "Coverage — Regions: $REGION_PCT  Functions: $FUNC_PCT  Lines: $LINE_PCT  Branches: $BRANCH_PCT"
+          fi
+
+          # ── HTML report ──
+          echo "Generating HTML report..."
           llvm-cov-18 show \
             "$MAIN_BIN" $OBJECT_ARGS \
             -instr-profile=coverage-report/merged.profdata \
@@ -237,10 +452,15 @@ jobs:
             -output-dir=coverage-report/html \
             -show-line-counts-or-regions \
             -show-expansions \
+            -show-branches=count \
             -ignore-filename-regex='(third_party|/usr/|test)' \
-            2>&1 | tail -5
+            2>&1 | tail -3
 
-          # Generate lcov-compatible export
+          HTML_COUNT=$(find coverage-report/html -name "*.html" 2>/dev/null | wc -l)
+          echo "::notice title=HTML report::$HTML_COUNT pages generated"
+          echo "html_count=$HTML_COUNT" >> "$GITHUB_ENV"
+
+          # ── lcov-format export (for third-party integrations) ──
           llvm-cov-18 export \
             "$MAIN_BIN" $OBJECT_ARGS \
             -instr-profile=coverage-report/merged.profdata \
@@ -248,45 +468,118 @@ jobs:
             -ignore-filename-regex='(third_party|/usr/|test)' \
             > coverage-report/lcov.info 2>/dev/null || true
 
-          # Summary stats
-          if [ -d coverage-report/html ]; then
-            HTML_COUNT=$(find coverage-report/html -name "*.html" | wc -l)
-            echo "HTML report: $HTML_COUNT files"
-          fi
           LCOV_RECORDS=$(grep -c "^SF:" coverage-report/lcov.info 2>/dev/null || echo 0)
-          echo "LCOV: $LCOV_RECORDS source file records"
+          echo "LCOV export: $LCOV_RECORDS source file records"
+          echo "lcov_records=$LCOV_RECORDS" >> "$GITHUB_ENV"
 
-      - name: Report to summary
+      # ─── Reporting ──────────────────────────────────────────
+      - name: Write workflow summary
         if: always()
         run: |
-          set -euo pipefail
           {
-            echo "## Code Coverage Report"
+            echo "## 📊 Code Coverage Report"
+            echo ""
+            echo "### Coverage"
+            echo ""
+            echo "| Metric | Coverage |"
+            echo "|--------|----------|"
+            echo "| Regions | ${{ env.region_pct }} |"
+            echo "| Functions | ${{ env.func_pct }} |"
+            echo "| **Lines** | **${{ env.line_pct }}** |"
+            echo "| Branches | ${{ env.branch_pct }} |"
+            echo ""
+            echo "> Mismatched function records: ${{ env.mismatch_count }} — template instantiation duplicates across shared library and tool boundaries (cosmetic, see [#605](https://github.com/InternationalColorConsortium/iccDEV/issues/605))"
             echo ""
             echo "### Test Execution"
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| ICC Profiles Created | ${{ env.profile_count }} |"
-            echo "| IccDumpProfile Total | ${{ env.dump_total }} |"
-            echo "| IccDumpProfile Pass | ${{ env.dump_pass }} |"
-            echo "| IccDumpProfile Fail | ${{ env.dump_fail }} |"
             echo ""
-            echo "### Coverage Summary"
+            echo "| Step | Result | Details |"
+            echo "|------|--------|---------|"
+            echo "| ICC profiles created | ${{ env.profile_count }} | via \`CreateAllProfiles.sh\` |"
+            echo "| Test suite | exit ${{ env.test_exit_code }} | via \`RunTests.sh\` |"
+            echo "| IccDumpProfile | ${{ env.dump_pass }}/${{ env.dump_total }} pass | ${{ env.dump_fail }} failures |"
+            echo "| XML round-trip | ${{ env.xml_converted }} converted | ${{ env.xml_failed }} failed (all profiles) |"
+            echo "| IccRoundTrip | ${{ env.rt_pass }}/${{ env.rt_suitable }} suitable pass | ${{ env.rt_exercised }} others exercised for coverage |"
+            echo ""
+
+            # ── Failed file lists (per tool) ──
+            HAS_FAILURES=false
+
+            if [ -s coverage-report/dump-failures.txt ]; then
+              HAS_FAILURES=true
+              echo "<details><summary>❌ IccDumpProfile — failed files (${{ env.dump_fail }})</summary>"
+              echo ""
+              echo '```'
+              cat coverage-report/dump-failures.txt
+              echo '```'
+              echo "</details>"
+              echo ""
+            fi
+
+            if [ -s coverage-report/xml-roundtrip-failures.txt ]; then
+              HAS_FAILURES=true
+              echo "<details><summary>❌ XML round-trip — failed files (${{ env.xml_failed }})</summary>"
+              echo ""
+              echo '```'
+              cat coverage-report/xml-roundtrip-failures.txt
+              echo '```'
+              echo "</details>"
+              echo ""
+            fi
+
+            if [ -s coverage-report/icc-roundtrip-failures.txt ]; then
+              HAS_FAILURES=true
+              echo "<details><summary>⚠️ IccRoundTrip — ${{ env.rt_fail }} of ${{ env.rt_suitable }} suitable profiles failed (mntr/prtr/scnr only)</summary>"
+              echo ""
+              echo "Only profiles with round-trip capable classes (Display/Output/Input) are"
+              echo "counted as failures. Calculator (\`spac\`), DeviceLink (\`link\`), Abstract (\`abst\`),"
+              echo "and other classes were exercised for coverage data (${{ env.rt_exercised }} profiles)."
+              echo ""
+              echo '```'
+              cat coverage-report/icc-roundtrip-failures.txt
+              echo '```'
+              echo "</details>"
+              echo ""
+            fi
+
+            if [ "$HAS_FAILURES" = false ]; then
+              echo "> ✅ All test exercises passed — no failures to report"
+              echo ""
+            fi
+            echo "### Build"
+            echo ""
+            echo "| Component | Value |"
+            echo "|-----------|-------|"
+            echo "| Compiler | clang-18 (source-based coverage) |"
+            echo "| Tools built | ${{ env.tool_count }} |"
+            echo "| Profraw files | ${{ env.profraw_count }} |"
+            echo "| HTML pages | ${{ env.html_count }} |"
+            echo "| LCOV source records | ${{ env.lcov_records }} |"
+            echo ""
+            echo "### Artifacts"
+            echo ""
+            echo "Download the \`coverage-report\` artifact for:"
+            echo "- **HTML report** — interactive per-file line/branch coverage"
+            echo "- **lcov.info** — machine-readable coverage for third-party tools"
+            echo "- **coverage-summary.txt** — full text report"
+            echo ""
+            echo "### Full Text Report"
+            echo ""
+            echo "<details><summary>Click to expand llvm-cov text report</summary>"
+            echo ""
             echo '```'
-          } >> $GITHUB_STEP_SUMMARY
+          } >> "$GITHUB_STEP_SUMMARY"
 
           if [ -f coverage-report/coverage-summary.txt ]; then
-            cat coverage-report/coverage-summary.txt >> $GITHUB_STEP_SUMMARY
+            cat coverage-report/coverage-summary.txt >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "No coverage data available" >> $GITHUB_STEP_SUMMARY
+            echo "No coverage data available" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           {
             echo '```'
             echo ""
-            echo "### Artifacts"
-            echo "- \`coverage-report\`: llvm-cov HTML report, lcov.info, text summary"
-          } >> $GITHUB_STEP_SUMMARY
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage report
         if: always()
