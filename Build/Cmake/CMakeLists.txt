@@ -943,7 +943,7 @@ if(APPLE)
 
   message(STATUS "macOS build: Warning flags and security hardening applied.")
 
-elseif(UNIX AND NOT APPLE)
+elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
   message(STATUS "Detected platform: Linux")
 
   # Recommended flags for Linux/Clang or GCC

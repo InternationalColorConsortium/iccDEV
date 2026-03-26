@@ -1,14 +1,19 @@
 ###############################################################
 #
-# Copyright (c) 2026 International Color Consortium.
+# Copyright (©) 2026 International Color Consortium.
 #                All rights reserved.
 #                https://color.org
 #
 # Intent: WASM build and validation matrix (Release, Debug, ASAN)
 #
-# Last Modified: 2026-03-24 23:22:34 UTC by David Hoyt
+# Last Modified: 2026-03-28 by David Hoyt
+#                - Added retry logic for GitLab clones (libxml2, libtiff)
 #                - Removed On Push Trigger
-#                - Shortened Options List 
+#                - Shortened Options List
+#                - Governance hardening: Hoyt shell prologue on every
+#                  step, sanitize-sed.sh for GITHUB_STEP_SUMMARY,
+#                  matrix values via env: block (never ${{ }} in run:),
+#                  credential isolation per-step
 #
 ###############################################################
 
@@ -44,17 +49,34 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install Emscripten SDK
+      - name: Harden Bash Environment
+        env:
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+      - name: Install Emscripten SDK
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           git clone --depth 1 https://github.com/emscripten-core/emsdk.git
           cd emsdk
           ./emsdk install latest
           ./emsdk activate latest
 
       - name: Build third-party dependencies
+        env:
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source emsdk/emsdk_env.sh
 
           THIRD_PARTY="$PWD/third_party"
@@ -86,8 +108,20 @@ jobs:
           emmake make install
           cd "$THIRD_PARTY"
 
-          # libtiff
-          git clone --depth 1 https://gitlab.com/libtiff/libtiff.git && cd libtiff
+          # libtiff (with retry for GitLab)
+          for attempt in 1 2 3; do
+            if git clone --depth 1 https://gitlab.com/libtiff/libtiff.git; then
+              break
+            fi
+            echo "::warning::libtiff clone attempt $attempt failed, retrying in 10s..."
+            rm -rf libtiff
+            sleep 10
+          done
+          if [[ ! -d libtiff ]]; then
+            echo "::error::Failed to clone libtiff after 3 attempts"
+            exit 1
+          fi
+          cd libtiff
           mkdir wasm && cd wasm
           emcmake cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
@@ -100,8 +134,20 @@ jobs:
           emmake make install
           cd "$THIRD_PARTY"
 
-          # libxml2
-          git clone --depth 1 https://gitlab.gnome.org/GNOME/libxml2.git && cd libxml2
+          # libxml2 (with retry for GitLab)
+          for attempt in 1 2 3; do
+            if git clone --depth 1 https://gitlab.gnome.org/GNOME/libxml2.git; then
+              break
+            fi
+            echo "::warning::libxml2 clone attempt $attempt failed, retrying in 10s..."
+            rm -rf libxml2
+            sleep 10
+          done
+          if [[ ! -d libxml2 ]]; then
+            echo "::error::Failed to clone libxml2 after 3 attempts"
+            exit 1
+          fi
+          cd libxml2
           emconfigure ./autogen.sh --without-python --disable-shared --enable-static --prefix="$THIRD_PARTY/libxml2/out"
           emmake make -j$(nproc)
           emmake make install
@@ -119,29 +165,65 @@ jobs:
           emmake make install
           cd "$THIRD_PARTY"
 
-          echo "### Third-party dependencies built" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          ls -d "$THIRD_PARTY"/*/out 2>/dev/null >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          # --- Sanitized step summary ---
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          {
+            echo "### Third-party dependencies built"
+            echo '```'
+            ls -d "$THIRD_PARTY"/*/out 2>/dev/null | while IFS= read -r dep; do
+              sanitize_line "$dep"
+              echo ""
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Configure and build iccDEV WASM
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source emsdk/emsdk_env.sh
 
           THIRD_PARTY="$PWD/third_party"
 
-          # Determine build type and extra flags
+          # --- Load sanitizer for step summary ---
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          # Determine build type and extra flags (from env block, not direct interpolation)
           BUILD_FLAGS=""
-          BUILD_TYPE="${{ matrix.build_type }}"
+          BUILD_TYPE="${MATRIX_BUILD_TYPE}"
           if [[ "$BUILD_TYPE" == "Asan" ]]; then
             BUILD_FLAGS="-fsanitize=address"
             BUILD_TYPE="Debug"
           fi
-
-          # wxWidgets not available for WASM — no action needed (not in top-level CMakeLists)
-          # Disable RELRO/NOW linker hardening (not supported by wasm-ld)
-          sed -i 's/-Wl,-z,relro,-z,now//' Build/Cmake/CMakeLists.txt
 
           mkdir -p build-wasm && cd build-wasm
           emcmake cmake ../Build/Cmake \
@@ -157,7 +239,6 @@ jobs:
             -DJPEG_INCLUDE_DIR="$THIRD_PARTY/libjpeg/out/include" \
             -DJPEG_LIBRARY="$THIRD_PARTY/libjpeg/out/lib/libjpeg.a" \
             -DPNG_PNG_INCLUDE_DIR="$THIRD_PARTY/libpng/out/include" \
-            -DPNG_INCLUDE_DIR="$THIRD_PARTY/libpng/out/include" \
             -DPNG_LIBRARY="$THIRD_PARTY/libpng/out/lib/libpng16.a" \
             -DZLIB_INCLUDE_DIR="$THIRD_PARTY/zlib" \
             -DZLIB_LIBRARY="$THIRD_PARTY/zlib/out/lib/libz.a" \
@@ -183,33 +264,58 @@ jobs:
 
           emmake make -j$(nproc)
 
-          # Report results
+          # Report results (sanitized, 1 file per line)
           JS_COUNT=$(find . -name '*.js' -not -path '*/CMakeFiles/*' | wc -l)
           WASM_COUNT=$(find . -name '*.wasm' | wc -l)
           LIB_COUNT=$(find . -name '*.a' | wc -l)
 
           {
-            echo "### WASM Build: ${{ matrix.build_type }}"
+            echo "### WASM Build: $(sanitize_line "${MATRIX_BUILD_TYPE}")"
             echo "| Metric | Value |"
             echo "|--------|-------|"
-            echo "| JS modules | $JS_COUNT |"
-            echo "| WASM binaries | $WASM_COUNT |"
-            echo "| Static libraries | $LIB_COUNT |"
+            echo "| JS modules | $(sanitize_line "$JS_COUNT") |"
+            echo "| WASM binaries | $(sanitize_line "$WASM_COUNT") |"
+            echo "| Static libraries | $(sanitize_line "$LIB_COUNT") |"
             echo ""
             echo "#### JS Modules"
             echo '```'
-            find . -name '*.js' -not -path '*/CMakeFiles/*' -exec ls -lh {} \;
+            find . -name '*.js' -not -path '*/CMakeFiles/*' -exec ls -lh {} \; | while IFS= read -r line; do
+              sanitize_line "$line"
+              echo ""
+            done
             echo '```'
             echo "#### WASM Binaries"
             echo '```'
-            find . -name '*.wasm' -exec ls -lh {} \;
+            find . -name '*.wasm' -exec ls -lh {} \; | while IFS= read -r line; do
+              sanitize_line "$line"
+              echo ""
+            done
             echo '```'
-          } >> $GITHUB_STEP_SUMMARY
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Validate WASM output
+        env:
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           source emsdk/emsdk_env.sh
+
+          # --- Load sanitizer ---
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
 
           cd build-wasm
 
@@ -227,15 +333,15 @@ jobs:
             MAGIC=$(xxd -l 4 -p "$wf" 2>/dev/null)
             if [ "$MAGIC" = "0061736d" ]; then
               SIZE=$(stat -c%s "$wf")
-              echo "VALID: $(basename $wf) ($SIZE bytes)"
+              echo "VALID: $(basename "$wf") ($SIZE bytes)"
               VALID=$((VALID + 1))
             else
-              echo "INVALID: $(basename $wf) (magic: $MAGIC)"
+              echo "INVALID: $(basename "$wf") (magic: $MAGIC)"
               INVALID=$((INVALID + 1))
             fi
           done
 
-          echo "### Validation: $VALID valid, $INVALID invalid" >> $GITHUB_STEP_SUMMARY
+          { sanitize_line "### Validation: $VALID valid, $INVALID invalid"; echo ""; } >> "$GITHUB_STEP_SUMMARY"
 
           if [ $INVALID -gt 0 ]; then
             echo "::error::$INVALID invalid WASM files found"
