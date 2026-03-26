@@ -1100,7 +1100,6 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 {
   int i, j=-1;
   icUInt32Number sig=nSig;
-  icUInt8Number c;
   bool bGetHexVal = false;
 
   if (!nSig) {
@@ -1115,7 +1114,7 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
   }
 
   for (i=0; i<4; i++) {
-    c=(icUInt8Number)(sig>>24);
+    icUInt8Number c = (icUInt8Number)(sig >> (24-(i*8)));
     if (!c) {
       j=i;
     }
@@ -1127,7 +1126,6 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
       bGetHexVal = true;
     }
     pBuf[i]=c;
-    sig <<=8;
   }
 
   if (bGetHexVal)
