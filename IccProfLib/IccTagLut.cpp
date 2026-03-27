@@ -449,9 +449,6 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
 */
 bool CIccTagCurve::SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt/*=icInitZero*/)
 {
-  if (nSize == 0)
-    return false;
-
   if (nSize==m_nSize)
     return true;
 

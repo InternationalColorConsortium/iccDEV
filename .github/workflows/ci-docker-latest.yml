@@ -26,9 +26,11 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [master, ci-fix-docker]
     paths:
       - 'Dockerfile'
+      - 'IccProfLib/**'
+      - 'IccXML/**'
       - '.github/workflows/ci-docker-latest.yml'
 
 jobs:

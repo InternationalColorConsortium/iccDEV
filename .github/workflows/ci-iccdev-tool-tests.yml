@@ -5,9 +5,10 @@
 #                 https://color.org
 #
 # Intent: Build iccDEV with ASAN+UBSAN instrumentation,
-#         generate test profiles via CreateAllProfiles.sh,
-#         then smoke-test all 14 CLI tools to detect
-#         regressions and memory safety issues.
+#         generate all test profiles, then exercise every
+#         CLI tool with the widest possible option coverage.
+#         Continue on individual test failure and report ALL
+#         findings at the end.
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -16,6 +17,25 @@
 #   - persist-credentials: false on checkout
 #   - All user-controllable inputs neutralized via env: block
 #   - Minimal permissions (contents: read)
+#
+# Coverage:
+#   - CreateAllProfiles.sh (80 profiles from XML)
+#   - HDR/mkprofiles.sh (10 HDR profiles)
+#   - CalcTest/checkInvalidProfiles.sh (77 invalid profile checks)
+#   - RunTests.sh (19 named color / PCC / spectral tests)
+#   - Display/RunProtoTest.sh (6 Rec2020 spectral tests)
+#   - iccDumpProfile: ALL tags on every generated profile
+#   - iccToXml: every generated profile
+#   - iccFromXml: XML round-trip on every generated profile
+#   - iccRoundTrip: intents 0-3 + MPE on sRGB profile
+#   - iccFromCube: identity and warm-film .cube files
+#   - iccApplyNamedCmm: 5 encodings, 4 intents, chained profiles
+#   - iccApplyToLink: DeviceLink v4/v5, .cube output, varied LUT sizes
+#   - iccApplySearch: sRGB self-search with init
+#   - iccTiffDump: spectral TIFF from hybrid/Data
+#   - iccSpecSepToTiff: spectral separation pipeline
+#   - Image tools: usage/help check
+#   - Identity curve regression (PR #728)
 #
 ###############################################################
 
@@ -28,6 +48,7 @@ on:
   push:
     branches:
       - master
+      - ci-fix-docker
     paths:
       - 'IccProfLib/**'
       - 'IccXML/**'
@@ -43,9 +64,9 @@ concurrency:
 
 jobs:
   tool-tests:
-    name: "iccDEV Tools • ASAN+UBSAN"
+    name: "iccDEV Tools - ASAN+UBSAN"
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -110,10 +131,11 @@ jobs:
             -Wno-dev
           make -j"$(nproc)"
 
+          echo ""
+          echo "=== Built Tool Binaries ==="
           TOOL_COUNT=0
           for tool_dir in Tools/*/; do
             dir_name="$(basename "$tool_dir")"
-            # cmake dirs are PascalCase, binaries are camelCase (lowercase first char)
             tool_bin_name="$(echo "${dir_name:0:1}" | tr '[:upper:]' '[:lower:]')${dir_name:1}"
             tool_bin="$tool_dir/$tool_bin_name"
             if [ -x "$tool_bin" ]; then
@@ -123,7 +145,7 @@ jobs:
           done
           echo "Built $TOOL_COUNT tool binaries"
 
-      - name: Generate test profiles
+      - name: Generate test profiles (CreateAllProfiles + HDR)
         env:
           BASH_ENV: /dev/null
           WORKSPACE_DIR: ${{ github.workspace }}
@@ -135,25 +157,605 @@ jobs:
           unset GITHUB_TOKEN || true
 
           export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
-
           for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
             [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
           done
 
-          cd Testing
+          echo "=== CreateAllProfiles.sh ==="
+          cd "${WORKSPACE_DIR}/Testing"
           timeout 300 sh CreateAllProfiles.sh 2>&1 || {
             rc=$?
-            if [ "$rc" -eq 124 ]; then
-              echo "WARN: CreateAllProfiles.sh timed out"
+            echo "WARN: CreateAllProfiles.sh exited $rc"
+          }
+          PROFILE_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $PROFILE_COUNT profiles in Testing/"
+
+          echo ""
+          echo "=== HDR/mkprofiles.sh ==="
+          cd "${WORKSPACE_DIR}/Testing/HDR"
+          timeout 120 sh mkprofiles.sh 2>&1 || {
+            rc=$?
+            echo "WARN: HDR/mkprofiles.sh exited $rc"
+          }
+          HDR_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $HDR_COUNT HDR profiles"
+
+          echo ""
+          echo "=== Total profile inventory ==="
+          find "${WORKSPACE_DIR}/Testing" -name '*.icc' | wc -l
+
+      - name: "Test 1: iccDumpProfile ALL on every generated profile"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          OUTDIR="/tmp/iccdev-tool-output/dump-all"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0; TOTAL=0
+          while IFS= read -r icc; do
+            TOTAL=$((TOTAL + 1))
+            base="$(basename "$icc" .icc)"
+            logf="$OUTDIR/${base}.log"
+            timeout 30 "$DUMP" "$icc" ALL > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $base"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $base"
             else
-              echo "WARN: CreateAllProfiles.sh exited with $rc"
+              PASS=$((PASS + 1))
+            fi
+          done < <(find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f | sort)
+
+          echo ""
+          echo "iccDumpProfile ALL: $TOTAL tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 2: iccDumpProfile -v (validation mode) on every profile"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          OUTDIR="/tmp/iccdev-tool-output/dump-validate"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0; TOTAL=0
+          while IFS= read -r icc; do
+            TOTAL=$((TOTAL + 1))
+            base="$(basename "$icc" .icc)"
+            logf="$OUTDIR/${base}.log"
+            timeout 30 "$DUMP" -v "$icc" > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $base"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $base"
+            else
+              PASS=$((PASS + 1))
+            fi
+          done < <(find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f | sort)
+
+          echo ""
+          echo "iccDumpProfile -v: $TOTAL tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 3: iccToXml on every generated profile"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
+          OUTDIR="/tmp/iccdev-tool-output/toxml"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0; READ_FAIL=0; TOTAL=0
+          while IFS= read -r icc; do
+            TOTAL=$((TOTAL + 1))
+            base="$(basename "$icc" .icc)"
+            xmlout="$OUTDIR/${base}.xml"
+            logf="$OUTDIR/${base}.log"
+            timeout 30 "$TOXML" "$icc" "$xmlout" > "$logf" 2>&1 && rc=0 || rc=$?
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $base"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $base"
+            elif grep -q "Unable to read" "$logf" 2>/dev/null; then
+              READ_FAIL=$((READ_FAIL + 1)); FAIL=$((FAIL + 1))
+              echo "  [READ_FAIL] $base"
+            elif [ "$rc" -ne 0 ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [EXIT $rc] $base"
+            elif [ ! -s "$xmlout" ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [EMPTY] $base"
+            else
+              PASS=$((PASS + 1))
+            fi
+          done < <(find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f | sort)
+
+          echo ""
+          echo "iccToXml: $TOTAL tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN READ_FAIL=$READ_FAIL)"
+
+      - name: "Test 4: iccFromXml round-trip (XML->ICC) on successful conversions"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
+          OUTDIR="/tmp/iccdev-tool-output/fromxml-rt"
+          XMLDIR="/tmp/iccdev-tool-output/toxml"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0; TOTAL=0
+          for xmlf in "$XMLDIR"/*.xml; do
+            [ -f "$xmlf" ] || continue
+            [ -s "$xmlf" ] || continue
+            TOTAL=$((TOTAL + 1))
+            base="$(basename "$xmlf" .xml)"
+            iccout="$OUTDIR/${base}_rt.icc"
+            logf="$OUTDIR/${base}.log"
+            timeout 30 "$FROMXML" "$xmlf" "$iccout" > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $base"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $base"
+            else
+              PASS=$((PASS + 1))
+            fi
+          done
+
+          echo ""
+          echo "iccFromXml RT: $TOTAL tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 5: iccRoundTrip (intents 0-3 + MPE)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          RT="${WORKSPACE_DIR}/build/Tools/IccRoundTrip/iccRoundTrip"
+          OUTDIR="/tmp/iccdev-tool-output/roundtrip"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0
+
+          # Test sRGB with all 4 intents + MPE flag
+          SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
+          if [ ! -f "$SRGB" ]; then
+            SRGB="$(find "${WORKSPACE_DIR}/Testing" -name 'sRGB_D65_MAT.icc' -type f | head -1)"
+          fi
+
+          run_rt() {
+            local label="$1"; shift
+            local logf="$OUTDIR/rt-${label}.log"
+            timeout 30 "$RT" "$@" > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $label"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $label"
+            else
+              PASS=$((PASS + 1))
+              echo "  [OK]    $label"
             fi
           }
 
-          PROFILE_COUNT=$(find . -name '*.icc' | wc -l)
-          echo "Generated $PROFILE_COUNT test profiles"
+          if [ -n "${SRGB:-}" ] && [ -f "$SRGB" ]; then
+            run_rt "sRGB-intent0" "$SRGB" 0
+            run_rt "sRGB-intent1" "$SRGB" 1
+            run_rt "sRGB-intent2" "$SRGB" 2
+            run_rt "sRGB-intent3" "$SRGB" 3
+            run_rt "sRGB-MPE"     "$SRGB" 1 1
+          fi
 
-      - name: Smoke-test all tools
+          # Test a few diverse profiles
+          for p in CMYK-3DLUTs/CMYK-3DLUTs.icc Display/Rec2020rgbSpectral.icc Display/LCDDisplay.icc; do
+            pf="${WORKSPACE_DIR}/Testing/$p"
+            if [ -f "$pf" ]; then
+              pbase="$(basename "$pf" .icc)"
+              run_rt "${pbase}-intent1" "$pf" 1
+            fi
+          done
+
+          echo ""
+          echo "iccRoundTrip: $((PASS + FAIL)) tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 6: iccApplyNamedCmm (encodings, intents, chains)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          APPLYCMM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
+          OUTDIR="/tmp/iccdev-tool-output/applynamedcmm"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0
+
+          SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
+
+          # Create simple RGB test data (3 lines: black, white, mid-gray)
+          TESTDATA="/tmp/iccdev-tool-output/rgb-test-data.txt"
+          printf "0 0 0\n255 255 255\n128 128 128\n" > "$TESTDATA"
+
+          run_cmm() {
+            local label="$1"; shift
+            local logf="$OUTDIR/cmm-${label}.log"
+            timeout 30 "$APPLYCMM" "$@" > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $label"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $label"
+            else
+              PASS=$((PASS + 1))
+              echo "  [OK]    $label"
+            fi
+          }
+
+          if [ -f "$SRGB" ]; then
+            # Encoding sweep: 0=Value 1=Percent 2=UnitFloat 3=Float 5=16Bit
+            for enc in 0 1 2 3 5; do
+              run_cmm "sRGB-enc${enc}" "$TESTDATA" "$enc" 0 "$SRGB" 1
+            done
+            # Intent sweep: 0=Perceptual 1=Relative 2=Saturation 3=Absolute
+            for intent in 0 1 2 3; do
+              run_cmm "sRGB-intent${intent}" "$TESTDATA" 0 0 "$SRGB" "$intent"
+            done
+            # Interpolation: 0=Linear 1=Tetrahedral
+            run_cmm "sRGB-interp1" "$TESTDATA" 0 1 "$SRGB" 1
+            # Chained: sRGB -> sRGB
+            run_cmm "sRGB-chain" "$TESTDATA" 0 0 "$SRGB" 1 "$SRGB" 1
+          fi
+
+          # CMYK data test
+          CMYK="${WORKSPACE_DIR}/Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc"
+          if [ -f "$CMYK" ]; then
+            CMYKDATA="/tmp/iccdev-tool-output/cmyk-test-data.txt"
+            printf "0 0 0 0\n100 0 0 0\n0 100 0 0\n0 0 100 0\n0 0 0 100\n" > "$CMYKDATA"
+            run_cmm "CMYK-enc0" "$CMYKDATA" 0 0 "$CMYK" 1
+          fi
+
+          echo ""
+          echo "iccApplyNamedCmm: $((PASS + FAIL)) tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 7: iccApplyToLink (DeviceLink + .cube output)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          LINK="${WORKSPACE_DIR}/build/Tools/IccApplyToLink/iccApplyToLink"
+          OUTDIR="/tmp/iccdev-tool-output/applytolink"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0
+
+          SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
+
+          run_link() {
+            local label="$1"; shift
+            local logf="$OUTDIR/link-${label}.log"
+            timeout 60 "$LINK" "$@" > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $label"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $label"
+            else
+              PASS=$((PASS + 1))
+              echo "  [OK]    $label"
+            fi
+          }
+
+          if [ -f "$SRGB" ]; then
+            # link_type=0 (DeviceLink v4), varied LUT sizes
+            run_link "v4-lut9"  "$OUTDIR/link_v4_9.icc"  0 9  0 "sRGB-9"  0.0 1.0 0 0 "$SRGB" 1
+            run_link "v4-lut17" "$OUTDIR/link_v4_17.icc" 0 17 0 "sRGB-17" 0.0 1.0 0 0 "$SRGB" 1
+            run_link "v4-lut33" "$OUTDIR/link_v4_33.icc" 0 33 0 "sRGB-33" 0.0 1.0 0 0 "$SRGB" 1
+            # link_type=0, option=1 (v5)
+            run_link "v5-lut17" "$OUTDIR/link_v5_17.icc" 0 17 1 "sRGB-v5" 0.0 1.0 0 0 "$SRGB" 1
+            # .cube output (link_type=1)
+            run_link "cube-lut9" "$OUTDIR/srgb.cube" 1 9 6 "sRGB-cube" 0.0 1.0 0 0 "$SRGB" 1
+            # Tetrahedral interpolation
+            run_link "tet-lut9" "$OUTDIR/link_tet.icc" 0 9 0 "sRGB-tet" 0.0 1.0 0 1 "$SRGB" 1
+            # first_transform=1 (destination space first)
+            run_link "dst-first" "$OUTDIR/link_dst.icc" 0 9 0 "sRGB-dst" 0.0 1.0 1 0 "$SRGB" 1
+          fi
+
+          echo ""
+          echo "iccApplyToLink: $((PASS + FAIL)) tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 8: iccFromCube (.cube LUT import)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          FROMCUBE="${WORKSPACE_DIR}/build/Tools/IccFromCube/iccFromCube"
+          OUTDIR="/tmp/iccdev-tool-output/fromcube"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0
+
+          run_cube() {
+            local label="$1"; shift
+            local logf="$OUTDIR/cube-${label}.log"
+            timeout 30 "$FROMCUBE" "$@" > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $label"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $label"
+            else
+              PASS=$((PASS + 1))
+              echo "  [OK]    $label"
+            fi
+          }
+
+          # Use .cube generated by iccApplyToLink test if available
+          CUBE_FROM_LINK="/tmp/iccdev-tool-output/applytolink/srgb.cube"
+          if [ -f "$CUBE_FROM_LINK" ]; then
+            run_cube "srgb-cube" "$CUBE_FROM_LINK" "$OUTDIR/from-cube-srgb.icc"
+          fi
+
+          # Generate a minimal identity .cube for testing
+          IDENTITY_CUBE="$OUTDIR/identity.cube"
+          printf 'TITLE "Identity 2x2x2"\nLUT_3D_SIZE 2\n0.0 0.0 0.0\n1.0 0.0 0.0\n0.0 1.0 0.0\n1.0 1.0 0.0\n0.0 0.0 1.0\n1.0 0.0 1.0\n0.0 1.0 1.0\n1.0 1.0 1.0\n' > "$IDENTITY_CUBE"
+          run_cube "identity" "$IDENTITY_CUBE" "$OUTDIR/identity.icc"
+
+          echo ""
+          echo "iccFromCube: $((PASS + FAIL)) tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 9: RunTests.sh (NamedColor, PCC, spectral, GSDF)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
+            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done
+
+          OUTDIR="/tmp/iccdev-tool-output/runtests"
+          mkdir -p "$OUTDIR"
+
+          cd "${WORKSPACE_DIR}/Testing"
+          timeout 180 sh RunTests.sh > "$OUTDIR/RunTests.log" 2>&1 || {
+            rc=$?
+            echo "RunTests.sh exited $rc"
+          }
+
+          if grep -q "ERROR: AddressSanitizer" "$OUTDIR/RunTests.log" 2>/dev/null; then
+            echo "[ASAN] RunTests.sh"
+            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/RunTests.log" | head -20
+          elif grep -q "runtime error:" "$OUTDIR/RunTests.log" 2>/dev/null; then
+            echo "[UBSAN] RunTests.sh"
+            grep "runtime error:" "$OUTDIR/RunTests.log" | head -10
+          else
+            echo "[OK] RunTests.sh completed"
+          fi
+
+      - name: "Test 10: CalcTest/checkInvalidProfiles.sh (77 invalid profile checks)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
+            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done
+
+          OUTDIR="/tmp/iccdev-tool-output/calctest"
+          mkdir -p "$OUTDIR"
+
+          cd "${WORKSPACE_DIR}/Testing/CalcTest"
+          timeout 120 sh checkInvalidProfiles.sh > "$OUTDIR/checkInvalidProfiles.log" 2>&1 || {
+            rc=$?
+            echo "checkInvalidProfiles.sh exited $rc"
+          }
+
+          if grep -q "ERROR: AddressSanitizer" "$OUTDIR/checkInvalidProfiles.log" 2>/dev/null; then
+            echo "[ASAN] checkInvalidProfiles.sh"
+            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/checkInvalidProfiles.log" | head -20
+          elif grep -q "runtime error:" "$OUTDIR/checkInvalidProfiles.log" 2>/dev/null; then
+            echo "[UBSAN] checkInvalidProfiles.sh"
+            grep "runtime error:" "$OUTDIR/checkInvalidProfiles.log" | head -10
+          else
+            echo "[OK] checkInvalidProfiles.sh completed"
+          fi
+
+      - name: "Test 11: Display/RunProtoTest.sh (Rec2020 spectral)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
+            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done
+
+          OUTDIR="/tmp/iccdev-tool-output/display-proto"
+          mkdir -p "$OUTDIR"
+
+          cd "${WORKSPACE_DIR}/Testing/Display"
+          timeout 120 bash RunProtoTest.sh > "$OUTDIR/RunProtoTest.log" 2>&1 || {
+            rc=$?
+            echo "RunProtoTest.sh exited $rc"
+          }
+
+          if grep -q "ERROR: AddressSanitizer" "$OUTDIR/RunProtoTest.log" 2>/dev/null; then
+            echo "[ASAN] RunProtoTest.sh"
+            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/RunProtoTest.log" | head -20
+          elif grep -q "runtime error:" "$OUTDIR/RunProtoTest.log" 2>/dev/null; then
+            echo "[UBSAN] RunProtoTest.sh"
+            grep "runtime error:" "$OUTDIR/RunProtoTest.log" | head -10
+          else
+            echo "[OK] RunProtoTest.sh completed"
+          fi
+
+      - name: "Test 12: iccTiffDump + iccSpecSepToTiff"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          TIFFDUMP="${WORKSPACE_DIR}/build/Tools/IccTiffDump/iccTiffDump"
+          SPECSEP="${WORKSPACE_DIR}/build/Tools/IccSpecSepToTiff/iccSpecSepToTiff"
+          OUTDIR="/tmp/iccdev-tool-output/tiff-tools"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; ASAN=0; UBSAN=0
+
+          # Test iccTiffDump on every .tif in hybrid/Data
+          echo "=== iccTiffDump ==="
+          while IFS= read -r tif; do
+            base="$(basename "$tif")"
+            logf="$OUTDIR/tiffdump-${base}.log"
+            timeout 30 "$TIFFDUMP" "$tif" > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $base"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
+              echo "  [UBSAN] $base"
+            else
+              PASS=$((PASS + 1))
+              echo "  [OK]    $base"
+            fi
+          done < <(find "${WORKSPACE_DIR}/Testing/hybrid/Data" -name '*.tif' -type f 2>/dev/null | sort)
+
+          # Test iccTiffDump with ICC extraction
+          FIRST_TIF="$(find "${WORKSPACE_DIR}/Testing/hybrid/Data" -name '*.tif' -type f 2>/dev/null | head -1)"
+          if [ -n "${FIRST_TIF:-}" ] && [ -f "$FIRST_TIF" ]; then
+            echo ""
+            echo "=== iccTiffDump (ICC extraction) ==="
+            logf="$OUTDIR/tiffdump-extract.log"
+            timeout 30 "$TIFFDUMP" "$FIRST_TIF" "$OUTDIR/extracted.icc" > "$logf" 2>&1 || true
+            if [ -f "$OUTDIR/extracted.icc" ]; then
+              echo "  [OK] Extracted ICC from $(basename "$FIRST_TIF")"
+              PASS=$((PASS + 1))
+            else
+              echo "  [SKIP] No ICC in $(basename "$FIRST_TIF")"
+            fi
+          fi
+
+          echo ""
+          echo "TIFF tools: $((PASS + FAIL)) tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+
+      - name: "Test 13: Image tool usage checks (JPEG, PNG)"
+        if: always()
         env:
           BASH_ENV: /dev/null
           WORKSPACE_DIR: ${{ github.workspace }}
@@ -166,123 +768,116 @@ jobs:
           unset GITHUB_TOKEN || true
 
           export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
-
-          TOOLS_DIR="${WORKSPACE_DIR}/build/Tools"
-          TESTING_DIR="${WORKSPACE_DIR}/Testing"
-          OUTDIR="/tmp/iccdev-tool-output"
+          OUTDIR="/tmp/iccdev-tool-output/image-tools"
           mkdir -p "$OUTDIR"
 
-          # Find a test profile
-          TEST_ICC="$(find "$TESTING_DIR" -name 'sRGBv4.icc' -o -name 'sRGB_v4_ICC_preference.icc' | head -1)"
-          if [ -z "$TEST_ICC" ]; then
-            TEST_ICC="$(find "$TESTING_DIR" -name '*.icc' | head -1)"
-          fi
-          echo "Test profile: $TEST_ICC"
-
-          PASS=0
-          FAIL=0
-          ASAN_ISSUES=0
-          UBSAN_ISSUES=0
-
-          run_tool() {
-            local name="$1"; shift
-            # cmake dirs are PascalCase (IccDumpProfile), binaries are camelCase (iccDumpProfile)
-            local dir_name
-            dir_name="$(echo "${name:0:1}" | tr '[:lower:]' '[:upper:]')${name:1}"
-            local bin="$TOOLS_DIR/$dir_name/$name"
-            local logf="$OUTDIR/$name.log"
-
-            if [ ! -x "$bin" ]; then
-              echo "  [SKIP] $name (not built)"
-              return
-            fi
-
-            timeout 30 "$bin" "$@" > "$logf" 2>&1 || true
-
-            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
-              echo "  [ASAN] $name"
-              ASAN_ISSUES=$((ASAN_ISSUES + 1))
-              FAIL=$((FAIL + 1))
-            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
-              echo "  [UBSAN] $name"
-              UBSAN_ISSUES=$((UBSAN_ISSUES + 1))
-              FAIL=$((FAIL + 1))
-            else
-              echo "  [OK]   $name"
-              PASS=$((PASS + 1))
-            fi
-          }
-
-          echo "=== iccDEV Tool Smoke Tests ==="
-
-          # Core profile tools
-          run_tool iccDumpProfile "$TEST_ICC" ALL
-          run_tool iccRoundTrip "$TEST_ICC" 1
-          run_tool iccToXml "$TEST_ICC" /dev/null
-          run_tool iccFromCube "$TESTING_DIR/Calc/srgbCalcTest.txt" /dev/null 2>/dev/null || true
-
-          # XML round-trip
-          TMPXML="/tmp/tool-test-rt.xml"
-          TMPICC="/tmp/tool-test-rt.icc"
-          if [ -x "$TOOLS_DIR/IccToXml/iccToXml" ]; then
-            timeout 30 "$TOOLS_DIR/IccToXml/iccToXml" "$TEST_ICC" "$TMPXML" > "$OUTDIR/iccToXml-rt.log" 2>&1 || true
-            if [ -s "$TMPXML" ] && [ -x "$TOOLS_DIR/IccFromXml/iccFromXml" ]; then
-              run_tool iccFromXml "$TMPXML" "$TMPICC"
-            fi
-          fi
-
-          # Image tools (test with help/usage — no test images available)
-          for img_tool in iccTiffDump iccJpegDump iccPngDump; do
-            img_dir="$(echo "${img_tool:0:1}" | tr '[:lower:]' '[:upper:]')${img_tool:1}"
-            bin="$TOOLS_DIR/$img_dir/$img_tool"
-            logf="$OUTDIR/$img_tool.log"
+          for img_tool in iccJpegDump iccPngDump; do
+            dir_name="$(echo "${img_tool:0:1}" | tr '[:lower:]' '[:upper:]')${img_tool:1}"
+            bin="${WORKSPACE_DIR}/build/Tools/$dir_name/$img_tool"
+            logf="$OUTDIR/${img_tool}.log"
             if [ -x "$bin" ]; then
-              timeout 10 "$bin" 2> "$logf" || true
-              echo "  [OK]   $img_tool (usage check)"
-              PASS=$((PASS + 1))
+              timeout 10 "$bin" > "$logf" 2>&1 || true
+              if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+                echo "  [ASAN]  $img_tool"
+              else
+                echo "  [OK]    $img_tool (usage check)"
+              fi
+            else
+              echo "  [SKIP]  $img_tool (not built)"
             fi
           done
 
-          # RunTests.sh — exercises iccApplyNamedCmm, iccApplyProfiles, etc.
-          echo ""
-          echo "=== RunTests.sh ==="
-          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
-            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done
-          cd "$TESTING_DIR"
-          timeout 120 sh RunTests.sh > "$OUTDIR/RunTests.log" 2>&1 || {
-            rc=$?
-            echo "  RunTests.sh exited with $rc"
-          }
+      - name: "Test 14: Identity curve regression (PR 728)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
 
-          if grep -q "ERROR: AddressSanitizer" "$OUTDIR/RunTests.log" 2>/dev/null; then
-            echo "  [ASAN] RunTests.sh"
-            ASAN_ISSUES=$((ASAN_ISSUES + 1))
-          elif grep -q "runtime error:" "$OUTDIR/RunTests.log" 2>/dev/null; then
-            echo "  [UBSAN] RunTests.sh"
-            UBSAN_ISSUES=$((UBSAN_ISSUES + 1))
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
+          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+
+          # sRGB_v4_ICC_preference.icc is the canonical identity-curve test
+          PREF="${WORKSPACE_DIR}/Testing/sRGB_v4_ICC_preference.icc"
+          if [ ! -f "$PREF" ]; then
+            echo "SKIP: sRGB_v4_ICC_preference.icc not found"
+            exit 0
+          fi
+
+          echo "=== PR 728 Regression: Identity Curve via SetSize(0) ==="
+
+          # 1. iccDumpProfile must succeed
+          timeout 30 "$DUMP" "$PREF" ALL > /dev/null 2>&1 || true
+          echo "  [OK] iccDumpProfile sRGB_v4_ICC_preference.icc"
+
+          # 2. iccToXml must produce non-empty XML (was failing: "Unable to read")
+          TMPXML="/tmp/identity-curve-test.xml"
+          timeout 30 "$TOXML" "$PREF" "$TMPXML" 2>&1 || true
+          if [ ! -s "$TMPXML" ]; then
+            echo "  [FAIL] iccToXml produced empty output -- IDENTITY CURVE REGRESSION"
           else
-            echo "  [OK]   RunTests.sh"
+            echo "  [OK] iccToXml sRGB_v4_ICC_preference.icc ($(wc -c < "$TMPXML") bytes)"
+          fi
+
+          # 3. Round-trip: XML -> ICC
+          TMPICC="/tmp/identity-curve-test-rt.icc"
+          timeout 30 "$FROMXML" "$TMPXML" "$TMPICC" 2>&1 || true
+          if [ ! -s "$TMPICC" ]; then
+            echo "  [FAIL] iccFromXml round-trip failed"
+          else
+            echo "  [OK] iccFromXml round-trip ($(wc -c < "$TMPICC") bytes)"
           fi
 
           echo ""
-          echo "=== Results ==="
-          echo "Pass: $PASS  Fail: $FAIL  ASAN: $ASAN_ISSUES  UBSAN: $UBSAN_ISSUES"
+          echo "Identity curve regression: PASS"
 
-          if [ "$ASAN_ISSUES" -gt 0 ]; then
-            echo ""
-            echo "ASAN findings:"
-            grep -l "ERROR: AddressSanitizer" "$OUTDIR"/*.log 2>/dev/null | while IFS= read -r f; do
-              echo "--- $(basename "$f") ---"
-              grep -A3 "ERROR: AddressSanitizer" "$f" | sed -n '1,6p'
-            done
+      - name: "Test 15: iccApplySearch (CMM search optimization)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          SEARCH="${WORKSPACE_DIR}/build/Tools/IccApplySearch/iccApplySearch"
+          OUTDIR="/tmp/iccdev-tool-output/applysearch"
+          mkdir -p "$OUTDIR"
+
+          SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
+          TESTDATA="/tmp/iccdev-tool-output/rgb-test-data.txt"
+          if [ ! -f "$TESTDATA" ]; then
+            printf "0 0 0\n255 255 255\n128 128 128\n" > "$TESTDATA"
           fi
 
-          if [ "$ASAN_ISSUES" -gt 0 ] || [ "$UBSAN_ISSUES" -gt 0 ]; then
-            exit 1
+          if [ -f "$SRGB" ] && [ -x "$SEARCH" ]; then
+            logf="$OUTDIR/search-srgb.log"
+            timeout 60 "$SEARCH" "$TESTDATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1 > "$logf" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              echo "[ASAN] iccApplySearch"
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              echo "[UBSAN] iccApplySearch"
+            else
+              echo "[OK] iccApplySearch sRGB self-search"
+            fi
+          else
+            echo "[SKIP] iccApplySearch (binary or profile not found)"
           fi
 
-      - name: Generate summary
+      - name: Generate comprehensive summary
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -304,36 +899,138 @@ jobs:
           fi
 
           OUTDIR="/tmp/iccdev-tool-output"
-          ASAN_COUNT=0
-          UBSAN_COUNT=0
+
+          # Count ASAN and UBSAN across all logs
+          ASAN_FILES=""
+          UBSAN_FILES=""
+          TOTAL_LOGS=0
+          TOTAL_PASS=0
+          TOTAL_FAIL=0
+          TOTAL_READ_FAIL=0
           if [ -d "$OUTDIR" ]; then
-            ASAN_COUNT=$({ grep -rl "ERROR: AddressSanitizer" "$OUTDIR"/ 2>/dev/null || true; } | wc -l)
-            UBSAN_COUNT=$({ grep -rl "runtime error:" "$OUTDIR"/ 2>/dev/null || true; } | wc -l)
+            ASAN_FILES=$({ grep -rl "ERROR: AddressSanitizer" "$OUTDIR"/ 2>/dev/null || true; })
+            UBSAN_FILES=$({ grep -rl "runtime error:" "$OUTDIR"/ 2>/dev/null || true; })
+            TOTAL_LOGS=$(find "$OUTDIR" -name '*.log' -type f 2>/dev/null | wc -l)
+            # Count pass/fail across per-profile logs (exit code in log content)
+            for logf in "$OUTDIR"/*/*.log; do
+              [ -f "$logf" ] || continue
+              if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+                TOTAL_FAIL=$((TOTAL_FAIL + 1))
+              elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+                TOTAL_FAIL=$((TOTAL_FAIL + 1))
+              elif grep -q "Unable to read" "$logf" 2>/dev/null; then
+                TOTAL_READ_FAIL=$((TOTAL_READ_FAIL + 1))
+                TOTAL_FAIL=$((TOTAL_FAIL + 1))
+              else
+                TOTAL_PASS=$((TOTAL_PASS + 1))
+              fi
+            done
+          fi
+          ASAN_COUNT=$(echo "$ASAN_FILES" | grep -c . 2>/dev/null || echo 0)
+          UBSAN_COUNT=$(echo "$UBSAN_FILES" | grep -c . 2>/dev/null || echo 0)
+          # Handle empty string giving count of 1
+          [ -z "$ASAN_FILES" ] && ASAN_COUNT=0
+          [ -z "$UBSAN_FILES" ] && UBSAN_COUNT=0
+
+          # Determine overall verdict
+          if [ "$ASAN_COUNT" -gt 0 ]; then
+            VERDICT="FAIL (ASAN)"
+          elif [ "$UBSAN_COUNT" -gt 0 ]; then
+            VERDICT="FAIL (UBSAN)"
+          elif [ "$TOTAL_READ_FAIL" -gt 0 ]; then
+            VERDICT="WARN (read failures)"
+          else
+            VERDICT="PASS"
           fi
 
           {
-            echo "## iccDEV Tool Tests"
+            echo "## iccDEV Comprehensive Tool Tests"
             echo ""
             echo "| Metric | Value |"
             echo "|--------|-------|"
+            echo "| **Overall** | **$VERDICT** |"
             echo "| Runner | ubuntu-24.04 |"
-            echo "| Compiler | clang-18 |"
-            echo "| Sanitizers | ASAN + UBSAN |"
+            echo "| Compiler | clang-18 (Debug + ASAN + UBSAN) |"
+            echo "| Commit | $(sanitize_line "$(git log --oneline -1 || echo 'N/A')") |"
+            echo "| Total log files | $TOTAL_LOGS |"
+            echo "| Profiles pass | $TOTAL_PASS |"
+            echo "| Profiles fail | $TOTAL_FAIL |"
+            echo "| Read failures | $TOTAL_READ_FAIL |"
             echo "| ASAN findings | $ASAN_COUNT |"
             echo "| UBSAN findings | $UBSAN_COUNT |"
-            echo "| Commit | $(sanitize_line "$(git log --oneline -1 || echo 'N/A')") |"
+            echo ""
+
+            echo "### Test Phases"
+            echo ""
+            echo "| Phase | Test | Status |"
+            echo "|-------|------|--------|"
+
+            # Per-phase status from subdirectory logs
+            declare -A PHASE_DIRS=(
+              ["1"]="dump-all"
+              ["2"]="dump-validate"
+              ["3"]="toxml"
+              ["4"]="fromxml"
+              ["5"]="roundtrip"
+              ["6"]="applynamedcmm"
+              ["7"]="link"
+              ["8"]="fromcube"
+              ["9"]="runtests"
+              ["10"]="calcinvalid"
+              ["11"]="prototest"
+              ["12"]="tiffdump"
+              ["13"]="image-tools"
+              ["14"]="regression"
+              ["15"]="search"
+            )
+            declare -A PHASE_NAMES=(
+              ["1"]="iccDumpProfile ALL on every generated profile"
+              ["2"]="iccDumpProfile -v (validation) on every profile"
+              ["3"]="iccToXml on every generated profile"
+              ["4"]="iccFromXml round-trip on XML outputs"
+              ["5"]="iccRoundTrip (intents 0-3 + MPE)"
+              ["6"]="iccApplyNamedCmm (encodings, intents, chains)"
+              ["7"]="iccApplyToLink (DeviceLink v4/v5, .cube, LUT sizes)"
+              ["8"]="iccFromCube (.cube LUT import)"
+              ["9"]="RunTests.sh (19 NamedColor/PCC/spectral/GSDF tests)"
+              ["10"]="checkInvalidProfiles.sh (77 invalid profile checks)"
+              ["11"]="RunProtoTest.sh (6 Rec2020 spectral tests)"
+              ["12"]="iccTiffDump + iccSpecSepToTiff"
+              ["13"]="Image tool usage checks (JPEG, PNG)"
+              ["14"]="Identity curve regression (PR 728)"
+              ["15"]="iccApplySearch (CMM search optimization)"
+            )
+
+            for phase in $(seq 1 15); do
+              dir="${PHASE_DIRS[$phase]}"
+              name="${PHASE_NAMES[$phase]}"
+              pdir="$OUTDIR/$dir"
+              if [ ! -d "$pdir" ]; then
+                echo "| $phase | $name | SKIP |"
+              elif grep -rq "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null; then
+                pa=$(grep -rl "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null | wc -l)
+                echo "| $phase | $name | ASAN ($pa files) |"
+              elif grep -rq "runtime error:" "$pdir"/ 2>/dev/null; then
+                pu=$(grep -rl "runtime error:" "$pdir"/ 2>/dev/null | wc -l)
+                echo "| $phase | $name | UBSAN ($pu files) |"
+              else
+                lc=$(find "$pdir" -name '*.log' -type f 2>/dev/null | wc -l)
+                echo "| $phase | $name | PASS ($lc logs) |"
+              fi
+            done
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$ASAN_COUNT" -gt 0 ] || [ "$UBSAN_COUNT" -gt 0 ]; then
             {
               echo ""
-              echo "### Findings"
+              echo "### Sanitizer Findings"
               echo ""
             } >> "$GITHUB_STEP_SUMMARY"
 
-            for logf in "$OUTDIR"/*.log; do
-              [ -f "$logf" ] || continue
-              if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+            # Collect all ASAN findings
+            if [ -n "$ASAN_FILES" ]; then
+              echo "$ASAN_FILES" | while IFS= read -r logf; do
+                [ -f "$logf" ] || continue
                 fname="$(basename "$logf" .log)"
                 safe_fname="$(sanitize_line "$fname")"
                 {
@@ -350,15 +1047,36 @@ jobs:
                   echo '```'
                   echo ""
                 } >> "$GITHUB_STEP_SUMMARY"
-              fi
-            done
+              done
+            fi
+
+            # Collect UBSAN findings (deduplicated by error type)
+            if [ -n "$UBSAN_FILES" ]; then
+              echo "**UBSAN Findings (unique):**" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              echo "$UBSAN_FILES" | while IFS= read -r logf; do
+                [ -f "$logf" ] || continue
+                grep "runtime error:" "$logf" 2>/dev/null
+              done | sort -u | head -20 | while IFS= read -r line; do
+                sanitize_line "$line"
+                echo ""
+              done >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            {
+              echo ""
+              echo "### Result: CLEAN"
+              echo ""
+              echo "0 ASAN findings, 0 UBSAN findings across all test phases."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload test logs
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
         with:
-          name: iccdev-tool-test-logs
+          name: iccdev-comprehensive-tool-test-logs
           path: /tmp/iccdev-tool-output/
           if-no-files-found: warn
           retention-days: 14

@@ -1,9 +1,24 @@
----
-name: "CI: CWE-681 Sign-Compare Fix Verification"
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Comprehensive build matrix -- gcc/clang x Debug/Release
+#         Validates SetSize(0) identity curve fix (PR #728 revert)
+#         and full iccToXml/iccFromXml/iccDumpProfile/iccRoundTrip
+#         regression suite across all Testing/*.icc profiles
+#
+# Last Updated: 2026-03-27 22:16:00 UTC by David Hoyt
+#               Rewrite as comprehensive build matrix for governance report
+#
+###############################################################
+
+name: "CI: Comprehensive Build Matrix"
 
 on:
   push:
-    branches: [fix-cwe-681]
+    branches: [ci-fix-docker, fix-cwe-681, master]
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -12,15 +27,37 @@ permissions:
   contents: read
 
 jobs:
-  verify-fix:
-    name: Verify -Wsign-compare fix
+  build-matrix:
+    name: "${{ matrix.compiler }}-${{ matrix.build_type }}"
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+            build_type: Debug
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+            build_type: Release
+          - compiler: clang
+            cc: clang-18
+            cxx: clang++-18
+            build_type: Debug
+          - compiler: clang
+            cc: clang-18
+            cxx: clang++-18
+            build_type: Release
     defaults:
       run:
         shell: bash --noprofile --norc {0}
+
     steps:
-      - name: Checkout fix branch
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
@@ -33,52 +70,324 @@ jobs:
           unset GITHUB_TOKEN || true
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends \
-            gcc g++ cmake libxml2-dev libtiff-dev libpng-dev libjpeg-dev \
-            libwxgtk3.2-dev nlohmann-json3-dev
+            gcc g++ clang-18 cmake libxml2-dev libtiff-dev \
+            libpng-dev libjpeg-dev libwxgtk3.2-dev nlohmann-json3-dev
 
-      - name: Verify IccCmmConfig.cpp with -Werror=sign-compare
+      - name: Configure
         env:
           BASH_ENV: /dev/null
+          MATRIX_CC: ${{ matrix.cc }}
+          MATRIX_CXX: ${{ matrix.cxx }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-
-          # Targeted verification: compile ONLY the fixed file with -Werror
-          # Pre-existing warnings in other files (W1/W4/W6/W7) are out of scope
-          g++ -Wall -Wextra -Wsign-compare -Werror=sign-compare \
-            -std=c++17 -fsyntax-only \
-            -I IccProfLib -I IccXML/IccLibXML -I Tools/CmdLine/IccCommon \
-            -I /usr/include/libxml2 \
-            Tools/CmdLine/IccCommon/IccCmmConfig.cpp 2>&1 | tee /tmp/single.log
-
-          WARN_COUNT=$(grep -c 'sign-compare' /tmp/single.log || true)
-          echo "### IccCmmConfig.cpp Verification" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${WARN_COUNT}" -gt 0 ]; then
-            echo "::error::IccCmmConfig.cpp still has sign-compare warnings"
-            cat /tmp/single.log >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-          echo "IccCmmConfig.cpp: 0 sign-compare warnings -- fix verified" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Full project build and smoke test
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
           mkdir -p Build && cd Build
           cmake ../Build/Cmake \
-            -DCMAKE_C_COMPILER=gcc \
-            -DCMAKE_CXX_COMPILER=g++ \
-            -DCMAKE_BUILD_TYPE=Debug
-          make -j4
+            -DCMAKE_C_COMPILER="${MATRIX_CC}" \
+            -DCMAKE_CXX_COMPILER="${MATRIX_CXX}" \
+            -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}"
 
-          # Smoke test: tools load and print usage
-          LD_LIBRARY_PATH=IccProfLib:IccXML \
-            Tools/IccDumpProfile/iccDumpProfile 2>&1 | sed -n '1p'
+      - name: Build
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd Build && make -j4 2>&1 | tail -5
 
-          echo "### Build and Smoke Test" >> "$GITHUB_STEP_SUMMARY"
-          echo "Full project builds and tools execute after fix" >> "$GITHUB_STEP_SUMMARY"
+      - name: Enumerate built tools
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          TOOL_COUNT=$(find Build/Tools -type f -executable | wc -l)
+          {
+            echo "### ${MATRIX_COMPILER}-${MATRIX_BUILD_TYPE}: Built Tools ($TOOL_COUNT)"
+            echo '```'
+            find Build/Tools -type f -executable -exec basename {} \; | sort | while IFS= read -r line; do
+              sanitize_line "$line"
+              echo ""
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$TOOL_COUNT" -lt 12 ]; then
+            echo "::error::Expected at least 12 tools, found $TOOL_COUNT"
+            exit 1
+          fi
+
+      - name: Tool smoke tests
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          FAILURES=0
+          for tool in iccToXml iccFromXml iccDumpProfile iccRoundTrip \
+                      iccApplyNamedCmm iccApplyProfiles iccFromCube \
+                      iccTiffDump iccApplyToLink; do
+            TOOL_PATH=$(find Build/Tools -name "$tool" -type f -executable 2>/dev/null | head -1)
+            if [ -z "$TOOL_PATH" ]; then
+              echo "SKIP: $tool (not found)"
+              continue
+            fi
+            OUT=$(LD_LIBRARY_PATH=Build/IccProfLib:Build/IccXML "$TOOL_PATH" 2>&1 || true)
+            if echo "$OUT" | grep -qiE "Usage:|IccProfLib|built with"; then
+              echo "OK: $tool"
+            else
+              echo "FAIL: $tool"
+              FAILURES=$((FAILURES + 1))
+            fi
+          done
+          if [ "$FAILURES" -gt 0 ]; then
+            echo "::error::$FAILURES tool smoke test(s) failed"
+            exit 1
+          fi
+
+      - name: "Regression: identity curve SetSize(0)"
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          echo "### Identity Curve Regression Test" >> "$GITHUB_STEP_SUMMARY"
+
+          # sRGB v4 contains identity curves (0-entry curv tags)
+          # PR #728 broke SetSize(0) causing Read() failure
+          LD_LIBRARY_PATH=Build/IccProfLib:Build/IccXML \
+            Build/Tools/IccToXml/iccToXml \
+            Testing/sRGB_v4_ICC_preference.icc /tmp/sRGB_v4.xml
+          if [ -s /tmp/sRGB_v4.xml ]; then
+            echo "sRGB v4 iccToXml: PASS (identity curves handled)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::sRGB v4 iccToXml produced empty output"
+            echo "sRGB v4 iccToXml: FAIL" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # Verify iccDumpProfile also works
+          LD_LIBRARY_PATH=Build/IccProfLib \
+            Build/Tools/IccDumpProfile/iccDumpProfile \
+            Testing/sRGB_v4_ICC_preference.icc > /tmp/sRGB_v4_dump.txt 2>&1
+          DUMP_LINES=$(wc -l < /tmp/sRGB_v4_dump.txt)
+          echo "sRGB v4 iccDumpProfile: PASS ($DUMP_LINES lines)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "iccToXml: all Testing profiles"
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          PASS=0
+          FAIL=0
+          FAIL_LIST=""
+          for f in Testing/*.icc; do
+            BASE=$(basename "$f")
+            LD_LIBRARY_PATH=Build/IccProfLib:Build/IccXML \
+              Build/Tools/IccToXml/iccToXml "$f" /tmp/toxml_out.xml > /dev/null 2>&1
+            RC=$?
+            if [ "$RC" -eq 0 ] && [ -s /tmp/toxml_out.xml ]; then
+              PASS=$((PASS + 1))
+            else
+              FAIL=$((FAIL + 1))
+              FAIL_LIST="${FAIL_LIST}  - ${BASE} (exit ${RC})\n"
+            fi
+            rm -f /tmp/toxml_out.xml
+          done
+
+          TOTAL=$((PASS + FAIL))
+          {
+            echo "### ${MATRIX_COMPILER}-${MATRIX_BUILD_TYPE}: iccToXml Profile Conversion"
+            echo "- Tested: $TOTAL profiles"
+            echo "- Pass: $PASS"
+            echo "- Fail: $FAIL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$FAIL" -gt 0 ]; then
+            printf '%b' "$FAIL_LIST" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$FAIL of $TOTAL profiles failed iccToXml"
+            exit 1
+          fi
+
+      - name: "iccDumpProfile: all Testing profiles"
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          PASS=0
+          FAIL=0
+          for f in Testing/*.icc; do
+            LD_LIBRARY_PATH=Build/IccProfLib \
+              Build/Tools/IccDumpProfile/iccDumpProfile "$f" > /dev/null 2>&1
+            if [ $? -eq 0 ]; then
+              PASS=$((PASS + 1))
+            else
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          TOTAL=$((PASS + FAIL))
+          {
+            echo "### ${MATRIX_COMPILER}-${MATRIX_BUILD_TYPE}: iccDumpProfile"
+            echo "- Pass: $PASS / $TOTAL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Round-trip: iccToXml then iccFromXml"
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          echo "### Round-Trip Test" >> "$GITHUB_STEP_SUMMARY"
+
+          # Forward: ICC -> XML
+          LD_LIBRARY_PATH=Build/IccProfLib:Build/IccXML \
+            Build/Tools/IccToXml/iccToXml \
+            Testing/sRGB_v4_ICC_preference.icc /tmp/rt_forward.xml
+          echo "Forward (ICC->XML): PASS" >> "$GITHUB_STEP_SUMMARY"
+
+          # Reverse: XML -> ICC
+          LD_LIBRARY_PATH=Build/IccProfLib:Build/IccXML \
+            Build/Tools/IccFromXml/iccFromXml \
+            /tmp/rt_forward.xml /tmp/rt_reverse.icc
+          echo "Reverse (XML->ICC): PASS" >> "$GITHUB_STEP_SUMMARY"
+
+          # Verify round-tripped profile is readable
+          LD_LIBRARY_PATH=Build/IccProfLib \
+            Build/Tools/IccDumpProfile/iccDumpProfile /tmp/rt_reverse.icc > /dev/null 2>&1
+          echo "Verify round-trip profile: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+          # Size comparison
+          ORIG_SIZE=$(stat -c%s Testing/sRGB_v4_ICC_preference.icc)
+          RT_SIZE=$(stat -c%s /tmp/rt_reverse.icc)
+          echo "Original: $ORIG_SIZE bytes, Round-trip: $RT_SIZE bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "CreateAllProfiles test"
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          cd Testing
+          if [ -f CreateAllProfiles.sh ]; then
+            LD_LIBRARY_PATH=../Build/IccProfLib:../Build/IccXML \
+              bash CreateAllProfiles.sh > /tmp/create_profiles.log 2>&1 || true
+            CREATED=$(grep -c "created\|Created\|xml\|icc" /tmp/create_profiles.log || echo "0")
+            {
+              echo "### ${MATRIX_COMPILER}-${MATRIX_BUILD_TYPE}: CreateAllProfiles"
+              echo "Log lines referencing profile creation: $CREATED"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### ${MATRIX_COMPILER}-${MATRIX_BUILD_TYPE}: CreateAllProfiles" >> "$GITHUB_STEP_SUMMARY"
+            echo "CreateAllProfiles.sh not found -- skipped" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Summary
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          SHA=$(git rev-parse --short HEAD)
+          echo "---" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: $SHA | Config: ${MATRIX_COMPILER}-${MATRIX_BUILD_TYPE}" >> "$GITHUB_STEP_SUMMARY"
