@@ -892,8 +892,8 @@ bool CIccCfgPccWeight::fromJson(json j, bool /*bReset*/)
   if (!j.is_object())
     return false;
 
-  jsonToValue(j["pccFile"], m_dWeight);
-  jsonToValue(j["weight"], m_pccPath);
+  jsonToValue(j["pccFile"], m_pccPath);
+  jsonToValue(j["weight"], m_dWeight);
   
   return true;
 }
@@ -1114,10 +1114,15 @@ void CIccCfgSearchApply::toJsonInit(json &j) const
   if (m_useV5SubProfileInitial)
     j["useV5SubProfile"] = m_useV5SubProfileInitial;
   int i;
+  for (i = 0; icTranNames[i]; i++)
+    if (icTranValues[i] == m_transformInitial)
+      break;
+  if (icTranNames[i])
+    j["transform"] = icTranNames[i];
   for (i = 0; icInterpNames[i]; i++)
     if (icInterpValues[i] == m_interpolationInitial)
       break;
-  if (icInterpValues[i] == icInterpLinear)
+  if (icInterpNames[i])
     j["interpolation"] = icInterpNames[i];
 
 }
