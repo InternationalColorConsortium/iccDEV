@@ -121,11 +121,13 @@ jobs:
 
           TOOL_COUNT=0
           for tool_dir in Tools/*/; do
-            tool_name="$(basename "$tool_dir")"
-            tool_bin="$tool_dir/$tool_name"
+            dir_name="$(basename "$tool_dir")"
+            # cmake dirs are PascalCase, binaries are camelCase (lowercase first char)
+            tool_bin_name="$(echo "${dir_name:0:1}" | tr '[:upper:]' '[:lower:]')${dir_name:1}"
+            tool_bin="$tool_dir/$tool_bin_name"
             if [ -x "$tool_bin" ]; then
               TOOL_COUNT=$((TOOL_COUNT + 1))
-              echo "  [OK] $tool_name"
+              echo "  [OK] $tool_bin_name"
             fi
           done
           echo "Built $TOOL_COUNT tool binaries"
@@ -143,7 +145,7 @@ jobs:
 
           export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
 
-          for d in build/Tools/*/; do
+          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
             [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
           done
 
@@ -193,7 +195,10 @@ jobs:
 
           run_tool() {
             local name="$1"; shift
-            local bin="$TOOLS_DIR/$name/$name"
+            # cmake dirs are PascalCase (IccDumpProfile), binaries are camelCase (iccDumpProfile)
+            local dir_name
+            dir_name="$(echo "${name:0:1}" | tr '[:lower:]' '[:upper:]')${name:1}"
+            local bin="$TOOLS_DIR/$dir_name/$name"
             local logf="$OUTDIR/$name.log"
 
             if [ ! -x "$bin" ]; then
@@ -228,16 +233,17 @@ jobs:
           # XML round-trip
           TMPXML="/tmp/tool-test-rt.xml"
           TMPICC="/tmp/tool-test-rt.icc"
-          if [ -x "$TOOLS_DIR/iccToXml/iccToXml" ]; then
-            timeout 30 "$TOOLS_DIR/iccToXml/iccToXml" "$TEST_ICC" "$TMPXML" > "$OUTDIR/iccToXml-rt.log" 2>&1 || true
-            if [ -s "$TMPXML" ] && [ -x "$TOOLS_DIR/iccFromXml/iccFromXml" ]; then
+          if [ -x "$TOOLS_DIR/IccToXml/iccToXml" ]; then
+            timeout 30 "$TOOLS_DIR/IccToXml/iccToXml" "$TEST_ICC" "$TMPXML" > "$OUTDIR/iccToXml-rt.log" 2>&1 || true
+            if [ -s "$TMPXML" ] && [ -x "$TOOLS_DIR/IccFromXml/iccFromXml" ]; then
               run_tool iccFromXml "$TMPXML" "$TMPICC"
             fi
           fi
 
           # Image tools (test with help/usage — no test images available)
           for img_tool in iccTiffDump iccJpegDump iccPngDump; do
-            bin="$TOOLS_DIR/$img_tool/$img_tool"
+            img_dir="$(echo "${img_tool:0:1}" | tr '[:lower:]' '[:upper:]')${img_tool:1}"
+            bin="$TOOLS_DIR/$img_dir/$img_tool"
             logf="$OUTDIR/$img_tool.log"
             if [ -x "$bin" ]; then
               timeout 10 "$bin" 2> "$logf" || true
@@ -249,7 +255,7 @@ jobs:
           # RunTests.sh — exercises iccApplyNamedCmm, iccApplyProfiles, etc.
           echo ""
           echo "=== RunTests.sh ==="
-          for d in build/Tools/*/; do
+          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
             [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
           done
           cd "$TESTING_DIR"
