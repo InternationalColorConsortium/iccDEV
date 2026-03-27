@@ -745,7 +745,8 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
   icXformInterp interpolation = icInterpTetrahedral;
 
   if (nArg > 1) {
-    interpolation = (icXformInterp)atoi(args[0]);
+    int nInterpVal = atoi(args[0]);
+    interpolation = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
     args++;
     nArg--;
     nUsed++;
@@ -923,7 +924,8 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
   icXformInterp interpolation = icInterpTetrahedral;
 
   if (nArg > 1) {
-    interpolation = (icXformInterp)atoi(args[0]);
+    int nInterpVal = atoi(args[0]);
+    interpolation = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
     args++;
     nArg--;
     nUsed++;

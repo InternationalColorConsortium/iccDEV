@@ -689,7 +689,8 @@ int main(int argc, icChar* argv[])
 
   //Retrieve command line arguments
   bool bFirstTransform = atoi(argv[8]) != 0;
-  icXformInterp nInterp = (icXformInterp)atoi(argv[9]);
+  int nInterpVal = atoi(argv[9]);
+  icXformInterp nInterp = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
 
   int nIntent, nType, nLuminance;
 

@@ -5516,12 +5516,12 @@ bool CIccTagFixedNum<T, Tsig>::GetValues(icFloatNumber *DstVector, icUInt32Numbe
 
   switch (Tsig) {
     case icSigS15Fixed16ArrayType:
-      for (i=0; i<m_nSize; i++) {
+      for (i=0; i<nVectorSize; i++) {
         DstVector[i] = (icFloatNumber)icFtoD(m_Num[i+nStart]);
       }
       break;
     case icSigU16Fixed16ArrayType:
-      for (i=0; i<m_nSize; i++) {
+      for (i=0; i<nVectorSize; i++) {
         DstVector[i] = (icFloatNumber)icUFtoD(m_Num[i+nStart]);
       }
       break;
@@ -5594,18 +5594,18 @@ bool CIccTagFixedNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumb
     case icSigS15Fixed16ArrayType:
       if (!lo) {
         if (zeroVals) {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = (icFloatNumber)(zeroVals[i] * (1.0f - x) + icFtoD(hi[i]) * x);
           }
         }
         else {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = (icFloatNumber)(icFtoD(hi[i]) * x);
           }
         }
       }
       else {
-        for (i=0; i<m_nSize; i++) {
+        for (i=0; i<nVectorSize; i++) {
           DstVector[i] = (icFloatNumber)(icFtoD(lo[i])*(1.0-x) + icFtoD(hi[i])*x);
         }
       }
@@ -5613,18 +5613,18 @@ bool CIccTagFixedNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumb
     case icSigU16Fixed16ArrayType:
       if (!lo) {
         if (zeroVals) {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = (icFloatNumber)(zeroVals[i] * (1.0 - x) + icUFtoD(hi[i]) * x);
           }
         }
         else {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = (icFloatNumber)(icUFtoD(hi[i]) * x);
           }
         }
       }
       else {
-        for (i=0; i<m_nSize; i++) {
+        for (i=0; i<nVectorSize; i++) {
           DstVector[i] = (icFloatNumber)(icUFtoD(lo[i])*(1.0-x) + icUFtoD(hi[i])*x);
         }
       }
@@ -6173,18 +6173,18 @@ bool CIccTagNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumber po
     case icSigUInt8ArrayType:
       if (!lo) {
         if (zeroVals) {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = zeroVals[i] * (1.0f - x) + icU8toF((icUInt8Number)hi[i]) * x;
           }
         }
         else {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = icU8toF((icUInt8Number)hi[i]) * x;
           }
         }
       }
       else {
-        for (i=0; i<m_nSize; i++) {
+        for (i=0; i<nVectorSize; i++) {
           DstVector[i] = icU8toF((icUInt8Number)lo[i])*(1.0f-x) + icU8toF((icUInt8Number)hi[i])*x;
         }
       }
@@ -6192,18 +6192,18 @@ bool CIccTagNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumber po
     case icSigUInt16ArrayType:
       if (!lo) {
         if (zeroVals) {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = zeroVals[i] * (1.0f - x) + icU16toF((icUInt16Number)hi[i]) * x;
           }
         }
         else {
-          for (i = 0; i < m_nSize; i++) {
+          for (i = 0; i < nVectorSize; i++) {
             DstVector[i] = icU16toF((icUInt16Number)hi[i]) * x;
           }
         }
       }
       else {
-        for (i=0; i<m_nSize; i++) {
+        for (i=0; i<nVectorSize; i++) {
           DstVector[i] = icU16toF((icUInt16Number)lo[i])*(1.0f-x) + icU16toF((icUInt16Number)hi[i])*x;
         }
       }

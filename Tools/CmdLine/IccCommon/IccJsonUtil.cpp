@@ -436,7 +436,9 @@ bool loadJsonFrom(json& j, const char* szFname)
   FILE* f = fopen(szFname, "rb");
   if (f) {
     fseek(f, 0, SEEK_END);
-    unsigned long flen = ftell(f);
+    long pos = ftell(f);
+    if (pos <= 0) { fclose(f); return false; }
+    unsigned long flen = (unsigned long)pos;
     fseek(f, 0, SEEK_SET);
     char* buf = (char*)malloc(flen+1);
 
