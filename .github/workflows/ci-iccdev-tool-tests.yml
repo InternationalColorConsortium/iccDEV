@@ -316,8 +316,8 @@ jobs:
           ASAN_COUNT=0
           UBSAN_COUNT=0
           if [ -d "$OUTDIR" ]; then
-            ASAN_COUNT=$(grep -rl "ERROR: AddressSanitizer" "$OUTDIR"/ 2>/dev/null | wc -l)
-            UBSAN_COUNT=$(grep -rl "runtime error:" "$OUTDIR"/ 2>/dev/null | wc -l)
+            ASAN_COUNT=$({ grep -rl "ERROR: AddressSanitizer" "$OUTDIR"/ 2>/dev/null || true; } | wc -l)
+            UBSAN_COUNT=$({ grep -rl "runtime error:" "$OUTDIR"/ 2>/dev/null || true; } | wc -l)
           fi
 
           {
