@@ -27,7 +27,7 @@
 ## Project Overview
 
 RefIccMAX (iccDEV) — ICC color profile libraries and tools.
-**Version**: 2.3.1.5 · **C++17** · **CMake ≥ 3.21** · **BSD 3-Clause**
+**Version**: 2.3.1.6 · **C++17** · **CMake ≥ 3.21** · **BSD 3-Clause**
 
 ## Code Style
 

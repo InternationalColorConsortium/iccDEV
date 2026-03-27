@@ -120,11 +120,11 @@ project(RefIccMAX LANGUAGES C CXX)
 set(PROJECT_UP_NAME "REFICCMAX")
 set(PROJECT_DOWN_NAME "reficcmax")
 
-# Version components (4-part version: 2.3.1.5)
+# Version components (4-part version: 2.3.1.6)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 1)
-set(${PROJECT_UP_NAME}_PATCH_VERSION 5)
+set(${PROJECT_UP_NAME}_PATCH_VERSION 6)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION

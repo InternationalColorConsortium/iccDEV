@@ -7,7 +7,7 @@ applyTo: "Build/**"
 ## CMake Structure
 
 Primary build file: `Build/Cmake/CMakeLists.txt`
-- **Project**: RefIccMAX v2.3.1.5
+- **Project**: RefIccMAX v2.3.1.6
 - **Minimum CMake**: 3.21
 - **C++ Standard**: C++17 (required)
 - **Dependencies**: libpng, libjpeg-turbo, libtiff, libxml2, wxwidgets, nlohmann-json
