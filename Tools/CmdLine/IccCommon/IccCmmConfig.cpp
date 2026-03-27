@@ -592,7 +592,7 @@ static bool icGetJsonRenderingIntent(const json& j, int& v)
 
 static const char* icGetRenderingIntentName(int nIntent)
 {
-  if (nIntent >= icPerceptual && nIntent <= icAbsolute)
+  if (nIntent >= (int)icPerceptual && nIntent <= (int)icAbsolute)
     return icIntentNames[nIntent];
 
   return "unknown";

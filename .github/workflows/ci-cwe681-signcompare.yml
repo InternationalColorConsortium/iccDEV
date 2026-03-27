@@ -1,0 +1,84 @@
+---
+name: "CI: CWE-681 Sign-Compare Fix Verification"
+
+on:
+  push:
+    branches: [fix-cwe-681]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-fix:
+    name: Verify -Wsign-compare fix
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - name: Checkout fix branch
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            gcc g++ cmake libxml2-dev libtiff-dev libpng-dev libjpeg-dev \
+            libwxgtk3.2-dev nlohmann-json3-dev
+
+      - name: Verify IccCmmConfig.cpp with -Werror=sign-compare
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # Targeted verification: compile ONLY the fixed file with -Werror
+          # Pre-existing warnings in other files (W1/W4/W6/W7) are out of scope
+          g++ -Wall -Wextra -Wsign-compare -Werror=sign-compare \
+            -std=c++17 -fsyntax-only \
+            -I IccProfLib -I IccXML/IccLibXML -I Tools/CmdLine/IccCommon \
+            -I /usr/include/libxml2 \
+            Tools/CmdLine/IccCommon/IccCmmConfig.cpp 2>&1 | tee /tmp/single.log
+
+          WARN_COUNT=$(grep -c 'sign-compare' /tmp/single.log || true)
+          echo "### IccCmmConfig.cpp Verification" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${WARN_COUNT}" -gt 0 ]; then
+            echo "::error::IccCmmConfig.cpp still has sign-compare warnings"
+            cat /tmp/single.log >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "IccCmmConfig.cpp: 0 sign-compare warnings -- fix verified" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Full project build and smoke test
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          mkdir -p Build && cd Build
+          cmake ../Build/Cmake \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_BUILD_TYPE=Debug
+          make -j4
+
+          # Smoke test: tools load and print usage
+          LD_LIBRARY_PATH=IccProfLib:IccXML \
+            Tools/IccDumpProfile/iccDumpProfile 2>&1 | sed -n '1p'
+
+          echo "### Build and Smoke Test" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full project builds and tools execute after fix" >> "$GITHUB_STEP_SUMMARY"
