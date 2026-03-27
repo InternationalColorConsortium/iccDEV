@@ -8859,6 +8859,7 @@ bool CIccTagColorantTable::Read(icUInt32Number size, CIccIO *pIO)
   for (icUInt32Number i=0; i<nCount; i++) {
     if (pIO->Read8(&m_pData[i].name[0], nNum8) != nNum8)
       return false;
+    m_pData[i].name[nNum8-1] = '\0';  // CFL-001: Ensure null-termination (CWE-170)
 
     if (pIO->Read16(&m_pData[i].data[0], nNum16) != nNum16)
       return false;

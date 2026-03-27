@@ -391,7 +391,13 @@ const char *icAnsiToUtf8(std::string &buf, const char *szSrc)
   free(szBuf);
   free(szUnicodeBuf);
 #else
-  buf = szSrc;
+  // CFL-001: Use bounded copy to prevent strlen overread (CWE-126)
+  if (szSrc) {
+    size_t srcLen = strnlen(szSrc, 256);
+    buf.assign(szSrc, srcLen);
+  } else {
+    buf.clear();
+  }
 #endif
   return buf.c_str();
 }
@@ -416,7 +422,13 @@ const char *icUtf8ToAnsi(std::string &buf, const char *szSrc)
   free(szBuf);
   free(szUnicodeBuf);
 #else
-  buf = szSrc;
+  // CFL-001: Use bounded copy to prevent strlen overread (CWE-126)
+  if (szSrc) {
+    size_t srcLen = strnlen(szSrc, 256);
+    buf.assign(szSrc, srcLen);
+  } else {
+    buf.clear();
+  }
 #endif
   return buf.c_str();
 }

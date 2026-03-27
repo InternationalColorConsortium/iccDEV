@@ -443,6 +443,12 @@ jobs:
     with:
       build-type: 'Release'
 
+  tool-tests:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🧪 Tool Smoke Tests (ASAN+UBSAN)
+    needs: [setup, detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-iccdev-tool-tests.yml
+
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: 🧱 Windows Build & Test Profiles
@@ -457,6 +463,7 @@ jobs:
       - unix-ci
       - lint
       - scan-build
+      - tool-tests
       - win-ci
     if: always()
     steps:
@@ -489,6 +496,7 @@ jobs:
           UNIX_RESULT: ${{ needs.unix-ci.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           SCAN_RESULT: ${{ needs['scan-build'].result }}
+          TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
         run: |
           set -euo pipefail
@@ -577,6 +585,7 @@ jobs:
             printf "| unix-ci            | %s |\n" "$(sanitize_line "$UNIX_RESULT")"
             printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
+            printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
