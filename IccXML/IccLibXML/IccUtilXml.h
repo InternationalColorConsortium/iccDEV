@@ -166,8 +166,6 @@ protected:
   T *m_pBuf;
 };
 
-#define icSigFloatArrayType ((icTagTypeSignature)0x66637420)  /* 'flt ' */
-
 typedef CIccXmlArrayType<icUInt8Number, icSigUInt8ArrayType> CIccUInt8Array;
 typedef CIccXmlArrayType<icUInt16Number, icSigUInt16ArrayType> CIccUInt16Array;
 typedef CIccXmlArrayType<icUInt32Number, icSigUInt32ArrayType> CIccUInt32Array;

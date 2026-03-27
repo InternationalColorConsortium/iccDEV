@@ -914,7 +914,7 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
         break;
     }
     xml += str;
-    if (i%nColumns == nColumns-1) {
+    if (i%nColumns == (icUInt32Number)(nColumns-1)) {
       xml += "\n";
     }
   }

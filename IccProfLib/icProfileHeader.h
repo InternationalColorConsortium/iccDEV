@@ -541,6 +541,7 @@ typedef enum {
     icSigDeviceSettingsType             = 0x64657673,  /* 'devs' Removed in V4 */
     icSigEmbeddedHeightImageType        = 0x6568696D,  /* 'ehim' */
     icSigEmbeddedNormalImageType        = 0x656e696d,  /* 'enim' */
+    icSigFloatArrayType                 = 0x66637420,  /* 'fct ' */
     icSigFloat16ArrayType               = 0x666c3136,  /* 'fl16' */
     icSigFloat32ArrayType               = 0x666c3332,  /* 'fl32' */
     icSigFloat64ArrayType               = 0x666c3634,  /* 'fl64' */
