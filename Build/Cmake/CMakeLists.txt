@@ -968,6 +968,22 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
 
   message(STATUS "Linux build: Warning flags and security hardening applied.")
 
+elseif(EMSCRIPTEN)
+  message(STATUS "Detected platform: Emscripten (WebAssembly)")
+
+  # Emscripten uses its own toolchain -- no ELF hardening, no stack-protector.
+  # Warning flags only; linker/runtime flags are set by emcmake/emcc.
+  add_compile_options(
+    -Wall
+    -Wextra
+    -Wformat
+    -Wformat-security
+    -Wimplicit-fallthrough
+    -Wsign-compare
+  )
+
+  message(STATUS "Emscripten build: Warning flags applied (no ELF hardening).")
+
 elseif(WIN32)
   message(STATUS "Detected platform: Windows")
 
