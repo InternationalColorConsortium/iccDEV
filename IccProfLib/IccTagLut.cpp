@@ -5,14 +5,14 @@
 
     Version:    V1
 
-    Copyright:  � see ICC Software License
+    Copyright:  (c) see ICC Software License
 */
 
 /*
  * The ICC Software License, Version 0.2
  *
  *
- * Copyright (c) 2003-2012 The International Color Consortium. All rights 
+ * Copyright (c) 2003-2026 The International Color Consortium. All rights 
  * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,9 +64,9 @@
 ////////////////////////////////////////////////////////////////////// 
 // HISTORY:
 //
-// -Initial implementation by Max Derhak 5-15-2003
-//
-// -Moved LUT tags to separate file 4-30-2005
+// Latest: See Issues 704 & 705
+// Last: xsscx
+// Date: 2026-03-27 03:54:59 UTC
 //
 //////////////////////////////////////////////////////////////////////
 
@@ -2063,7 +2063,7 @@ void CIccCLUT::Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32
     int i;
     for (i=0; i<m_GridPoints[nIndex]; i++) {
       m_GridAdr[nIndex] = i;
-      Iterate(sDescription, nIndex+1, nPos, bUseLegacy);
+      Iterate(sDescription, nIndex+1, nPos, bufSize, bUseLegacy);
       nPos += m_DimSize[nIndex];
     }
   }
@@ -2254,6 +2254,10 @@ void CIccCLUT::DumpLut(std::string  &sDescription, const icChar *szName,
       memset(m_GridAdr, 0, 16);
 
       Iterate(sDescription, 0, 0, outSize, bUseLegacy);
+
+      // Reset member pointers to avoid dangling references to stack arrays
+      m_pOutText = NULL;
+      m_pVal = NULL;
     }
   }
 }
@@ -3645,7 +3649,7 @@ void CIccMBB::Describe(std::string &sDescription, int nVerboseness)
     }
 
     if (m_CLUT)
-      m_CLUT->DumpLut(sDescription, "CLUT", m_csInput, m_csOutput, nVerboseness);
+      m_CLUT->DumpLut(sDescription, "CLUT", m_csInput, m_csOutput, nVerboseness, GetType()==icSigLut16Type);
 
     if (m_CurvesM && this->GetType()!=icSigLut8Type) {
       for (i=0; i<m_nOutput; i++) {
