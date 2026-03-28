@@ -108,19 +108,20 @@ jobs:
             exit 1
           fi
 
-          PROFLIB=$(find . -name "libIccProfLib2.so" | head -1)
-          XMLLIB=$(find . -name "libIccXML2.so" | head -1)
+          # Accept both libIccProfLib2.so (Release) and libIccProfLib2d.so (Debug with CMAKE_DEBUG_POSTFIX)
+          PROFLIB=$(find . -name "libIccProfLib2*.so" ! -name "*.so.*" | head -1)
+          XMLLIB=$(find . -name "libIccXML2*.so" ! -name "*.so.*" | head -1)
           if [ -z "$PROFLIB" ] || [ -z "$XMLLIB" ]; then
-            echo "::error title=Build incomplete::Shared libraries not found (libIccProfLib2.so / libIccXML2.so)"
+            echo "::error title=Build incomplete::Shared libraries not found (libIccProfLib2[d].so / libIccXML2[d].so)"
             exit 1
           fi
 
           # Confirm coverage instrumentation sections in shared library
           REAL_PROFLIB=$(readlink -f "$PROFLIB")
           if readelf -S "$REAL_PROFLIB" 2>/dev/null | grep -q "__llvm_covmap"; then
-            echo "✓ Coverage instrumentation confirmed in libIccProfLib2.so (__llvm_covmap section present)"
+            echo "Coverage instrumentation confirmed in $(basename "$PROFLIB") (__llvm_covmap section present)"
           else
-            echo "::warning title=Coverage symbols::__llvm_covmap section not found in shared library — report may be incomplete"
+            echo "::warning title=Coverage symbols::__llvm_covmap section not found in shared library -- report may be incomplete"
           fi
 
           # Export paths for subsequent steps

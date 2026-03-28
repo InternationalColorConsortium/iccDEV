@@ -197,12 +197,13 @@ IF(ENABLE_STATIC_LIBS)
   ENDIF()
 
   # Provide alias to resolve MSVC LNK1104: expected IccProfLib2.lib
+  # Use TARGET_LINKER_FILE_NAME to honor CMAKE_DEBUG_POSTFIX (e.g. IccProfLib2d.lib)
   IF(WIN32 AND ENABLE_SHARED_LIBS)
 ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}-static POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "$<TARGET_FILE:${TARGET_NAME}-static>"
-    "$<TARGET_FILE_DIR:${TARGET_NAME}-static>/${TARGET_NAME}.lib"
-  COMMENT "Aliasing ${TARGET_NAME}-static.lib to ${TARGET_NAME}.lib for MSVC compatibility")
+    "$<TARGET_FILE_DIR:${TARGET_NAME}-static>/$<TARGET_LINKER_FILE_NAME:${TARGET_NAME}>"
+  COMMENT "Aliasing ${TARGET_NAME}-static to $<TARGET_LINKER_FILE_NAME:${TARGET_NAME}> for MSVC compatibility")
   ENDIF()
 ENDIF()
 
