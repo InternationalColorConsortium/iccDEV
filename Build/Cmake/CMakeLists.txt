@@ -167,6 +167,15 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # ----------------------------------------------------------------------
+# Debug Library Postfix (disambiguate Debug vs Release install)
+# ----------------------------------------------------------------------
+# Appends "d" to Debug library names (e.g., libIccProfLib2d.so) so that
+# Debug and Release libraries can coexist in the same install prefix.
+# This is especially important for multi-config generators (Visual Studio, Xcode).
+
+set(CMAKE_DEBUG_POSTFIX "d")
+
+# ----------------------------------------------------------------------
 # Verbose Configuration Toggle
 # ----------------------------------------------------------------------
 
