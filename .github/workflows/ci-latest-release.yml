@@ -7,13 +7,11 @@
 #
 ## Intent: ci-latest-release
 #
-## Last Updated: 2026-02-17 18:05:19 UTC UTC by David Hoyt
-#                Clean .pdb files from Zip Bundle
-#                Change Build to Release per Developer Spec
-#                Note that Cmake Default Build = Release (now)
-#                Add bash & pwsh shell prologues
-#                Align Unix & Windows Bundle per Developer Spec
-#                Thank you Max & Phil for the Corrections!
+## Last Updated: 2026-03-26 by David Hoyt / Copilot
+#                Add push-to-master trigger
+#                Add release job: zip + publish to GitHub Releases (rolling 'latest')
+#                Pin softprops/action-gh-release@v2 and actions/download-artifact@v4
+#                Elevate permissions to contents: write for release creation
 #
 #  TODO: Extract repetitive shell commands to reusable script
 #
@@ -25,6 +23,8 @@ permissions:
   contents: read
 
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -654,3 +654,119 @@ jobs:
           "- Build Directory: Build/" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "- Artifacts Uploaded: iccdev-windows-msvc" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "- Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+  release:
+    name: "Publish Latest Release"
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: artifacts
+
+      - name: Package release archives
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          mkdir -p release-assets
+          short_sha="${GITHUB_SHA:0:7}"
+
+          for dir in artifacts/iccdev-*; do
+            [ -d "$dir" ] || continue
+            name="$(basename "$dir")"
+            echo "--- Packaging $name ---"
+            (cd "$dir" && zip -r "../../release-assets/${name}.zip" .)
+            echo "  Created ${name}.zip ($(du -h "release-assets/${name}.zip" | cut -f1))"
+          done
+
+          echo ""
+          echo "=== Release assets ==="
+          ls -lh release-assets/
+
+      - name: Delete existing latest tag
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+
+          # Delete existing 'latest' release and tag if they exist
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create latest release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
+        with:
+          tag_name: latest
+          name: "Latest Build"
+          body: |
+            ## Rolling Latest Build
+
+            **Commit:** ${{ github.sha }}
+            **Branch:** ${{ github.ref_name }}
+            **Date:** ${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
+
+            ### Downloads
+
+            | Platform | Archive |
+            |----------|---------|
+            | Linux (GCC) | `iccdev-linux-gcc.zip` |
+            | Linux (Clang) | `iccdev-linux-clang.zip` |
+            | macOS (Clang) | `iccdev-macos-clang.zip` |
+            | Windows (MSVC) | `iccdev-windows-msvc.zip` |
+
+            ### Install via Package Managers
+
+            | Method | Command |
+            |--------|---------|
+            | **Homebrew** | `brew install iccdev` |
+            | **NPM** | `npm install iccdev` |
+            | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
+            | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
+
+            ---
+            *Auto-published by ci-latest-release on push to master.*
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: release-assets/*.zip
+
+      - name: Summary Report
+        if: always()
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          {
+            echo "### Release Summary"
+            echo ""
+            echo "- Tag: \`latest\`"
+            echo "- Commit: \`${GITHUB_SHA:0:7}\`"
+            echo "- Assets uploaded: $(ls release-assets/*.zip 2>/dev/null | wc -l) zip files"
+            echo ""
+            for f in release-assets/*.zip; do
+              [ -f "$f" ] || continue
+              echo "  - \`$(basename "$f")\` ($(du -h "$f" | cut -f1))"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

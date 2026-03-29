@@ -787,7 +787,7 @@ icUInt8Number icABtoU8(icFloatNumber num)
   icFloatNumber v = num + 128.0f;
   
   if (std::isnan(num))
-    num = 0;
+    v = 128.0f;
   else if (v<0)
     v=0;
   else if (v>255)

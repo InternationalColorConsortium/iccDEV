@@ -55,14 +55,15 @@ jobs:
           persist-credentials: false
 
       - name: Harden Environment and Validate Inputs
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
         run: |
          Set-StrictMode -Version Latest
          $ErrorActionPreference = 'Stop'
+         $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
          $ProgressPreference = 'SilentlyContinue'
-         # --- Disable telemetry sources (pwsh / dotnet / gh) ---
          $env:POWERSHELL_TELEMETRY_OPTOUT = "1"
          $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
          $env:GH_NO_UPDATE_NOTIFIER = "1"
@@ -118,12 +119,14 @@ jobs:
          Write-Host "Finished Harden Environment and Validate Inputs" -ForegroundColor Green
 
       - name: Test Sanitization Functions
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
           Write-Host "========================================" -ForegroundColor Cyan
           Write-Host "Testing Sanitization Functions" -ForegroundColor Cyan
@@ -167,13 +170,15 @@ jobs:
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce  # v2.0.0
 
       - name: Print PR Information
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
 
           Write-Host "Triggered by:  $env:GITHUB_EVENT_NAME"
@@ -183,12 +188,14 @@ jobs:
           Write-Host "OS:            $env:RUNNER_OS"
 
       - name: Install dependencies
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
             if (Test-Path Env:GITHUB_TOKEN) {
               Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
@@ -201,12 +208,14 @@ jobs:
           Write-Host "========= Extracting Dependencies ...    ================`n"
           tar -xf deps.zip
       - name: CMake Configure
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
             if (Test-Path Env:GITHUB_TOKEN) {
               Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
@@ -217,12 +226,14 @@ jobs:
           cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
 
       - name: Build iccDEV
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
             if (Test-Path Env:GITHUB_TOKEN) {
               Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
@@ -235,12 +246,14 @@ jobs:
 
       - name: Create Profiles
         continue-on-error: true
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
             if (Test-Path Env:GITHUB_TOKEN) {
               Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
@@ -297,9 +310,10 @@ jobs:
           Write-Host "All Done!"
       - name: GitHub Summary
         if: always()
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
           GH_REPOSITORY: ${{ github.repository }}
           GH_RUN_URL: ${{ env.RUN_URL }}
           GH_EVENT_NAME: ${{ github.event_name }}
@@ -310,6 +324,7 @@ jobs:
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
           # Use canonical sanitization from .github/scripts/sanitize.ps1
           # PowerShell dot-sourcing: loads the script into the current scope

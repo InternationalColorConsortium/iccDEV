@@ -418,12 +418,18 @@ int main(int argc, char* argv[])
   
   if (!pCLUT->Init(cube.sizeLut3D()) ) {
     printf("Unable to create LUT from '%s'\n", argv[1]);
+    delete pCLUT;
+    delete pMpeCLUT;
+    delete pTag;
     return -4;
   }
 
   bool bSuccess = cube.parse3DTable(pCLUT->GetData(0), pCLUT->NumPoints()*3);
   if (!bSuccess) {
     printf("Unable to parse LUT from '%s'\n", argv[1]);
+    delete pCLUT;
+    delete pMpeCLUT;
+    delete pTag;
     return (-4);
   }
 

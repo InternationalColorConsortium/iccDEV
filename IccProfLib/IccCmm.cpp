@@ -11254,8 +11254,11 @@ bool CIccMruCache<T>::Apply(T *DstPixel, const T *SrcPixel)
     if (prev)
       prev->pNext = NULL;
 
-    // Static analysis gets a false positive here, because it doesn't understand the relation between count and pointers in the list
-    // assert avoids the static analysis warning, and should never fire
+    // Static analysis false positive: last is never NULL here because
+    // m_nCacheSize >= 1 guarantees at least one loop iteration sets last = ptr
+    assert( last != NULL );
+    if (!last)
+      return false;
     assert( m_pFirst != NULL );
     last->pNext = m_pFirst;
 

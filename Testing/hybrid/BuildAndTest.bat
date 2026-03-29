@@ -1,6 +1,10 @@
 @REM setup directory to the tools used in this script
 @if exist ..\iccFromXml.exe (SET TOOLDIR=..\) else (SET TOOLDIR=)
 
+@if not exist ICC mkdir ICC
+@if not exist Results mkdir Results
+@if not exist config mkdir config
+
 @ECHO First lets build some useful ICC profiles 
 
 %TOOLDIR%iccFromXml.exe MultSpectralRGB.xml ICC\MultSpectralRGB.icc

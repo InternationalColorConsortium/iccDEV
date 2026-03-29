@@ -919,6 +919,9 @@ CIccSampledCurveSegment &CIccSampledCurveSegment::operator=(const CIccSampledCur
   m_endPoint = curve.m_endPoint;
   m_nCount = curve.m_nCount;
 
+  m_range = m_endPoint - m_startPoint;
+  m_last = curve.m_last;
+
   if (m_nCount) {
     m_pSamples = (icFloatNumber*)malloc(m_nCount * sizeof(icFloatNumber));
     if (m_pSamples)
@@ -1325,6 +1328,7 @@ CIccSingleSampledCurve::CIccSingleSampledCurve(const CIccSingleSampledCurve &cur
   m_loSlope = curve.m_loSlope;
   m_hiIntercept = curve.m_hiIntercept;
   m_hiSlope = curve.m_hiSlope;
+  m_last = curve.m_last;
 }
 
 /**
@@ -1361,11 +1365,13 @@ CIccSingleSampledCurve &CIccSingleSampledCurve::operator=(const CIccSingleSample
 
   m_firstEntry = curve.m_firstEntry;
   m_lastEntry = curve.m_lastEntry;
+  m_range = m_lastEntry - m_firstEntry;
 
   m_loIntercept = curve.m_loIntercept;
   m_loSlope = curve.m_loSlope;
   m_hiIntercept = curve.m_hiIntercept;
   m_hiSlope = curve.m_hiSlope;
+  m_last = curve.m_last;
   return (*this);
 }
 
@@ -1901,7 +1907,9 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(icFloatNumber first, icFl
 
   m_nCount = 0;
   m_pSamples = 0;
+  m_nDesiredSize = 0;
 
+  m_storageType = icValueTypeFloat32;
   m_extensionType = icClipSingleSampledCurve;
 
   if (first < last) {
@@ -1912,6 +1920,9 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(icFloatNumber first, icFl
     m_firstEntry = last;
     m_lastEntry = first;
   }
+
+  m_range = m_lastEntry - m_firstEntry;
+  m_last = 0;
 
   m_loIntercept = 0;
   m_loSlope = 0;
@@ -1936,12 +1947,15 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(const CIccSampledCalculat
 
   m_nCount = curve.m_nCount;
 
+  m_storageType = curve.m_storageType;
   m_extensionType = curve.m_extensionType;
 
   m_nDesiredSize = curve.m_nDesiredSize;
 
   if (curve.m_pCalc)
     m_pCalc = curve.m_pCalc->NewCopy();
+  else
+    m_pCalc = NULL;
 
   if (m_nCount) {
     m_pSamples = (icFloatNumber*)malloc(m_nCount * sizeof(icFloatNumber));
@@ -1956,6 +1970,8 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(const CIccSampledCalculat
 
   m_firstEntry = curve.m_firstEntry;
   m_lastEntry = curve.m_lastEntry;
+  m_range = m_lastEntry - m_firstEntry;
+  m_last = curve.m_last;
 
   m_loIntercept = curve.m_loIntercept;
   m_loSlope = curve.m_loSlope;
@@ -1991,10 +2007,13 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
 
   m_nDesiredSize = curve.m_nDesiredSize;
 
+  m_storageType = curve.m_storageType;
   m_extensionType = curve.m_extensionType;
 
   if (curve.m_pCalc)
     m_pCalc = curve.m_pCalc->NewCopy();
+  else
+    m_pCalc = NULL;
 
   if (m_nCount) {
     m_pSamples = (icFloatNumber*)malloc(m_nCount * sizeof(icFloatNumber));
@@ -2009,6 +2028,8 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
 
   m_firstEntry = curve.m_firstEntry;
   m_lastEntry = curve.m_lastEntry;
+  m_range = m_lastEntry - m_firstEntry;
+  m_last = curve.m_last;
 
   m_loIntercept = curve.m_loIntercept;
   m_loSlope = curve.m_loSlope;
@@ -3056,7 +3077,7 @@ CIccMpeCurveSet::CIccMpeCurveSet(const CIccMpeCurveSet &curveSet)
  ******************************************************************************/
 CIccMpeCurveSet &CIccMpeCurveSet::operator=(const CIccMpeCurveSet &curveSet)
 {
-  m_nReserved = m_nReserved;
+  m_nReserved = curveSet.m_nReserved;
 
   if (m_curve) {
     free(m_curve);
@@ -4860,6 +4881,8 @@ CIccMpeMatrix::CIccMpeMatrix()
   m_size = 0;
   m_pMatrix = NULL;
   m_pConstants = NULL;
+  m_type = icOtherMatrix;
+  m_bApplyConstants = false;
 }
 
 
@@ -4897,7 +4920,8 @@ CIccMpeMatrix::CIccMpeMatrix(const CIccMpeMatrix &matrix)
   else
     m_pConstants = NULL;
 
-  m_bApplyConstants = true;
+  m_bApplyConstants = matrix.m_bApplyConstants;
+  m_type = matrix.m_type;
 }
 
 /**
@@ -4912,6 +4936,9 @@ CIccMpeMatrix::CIccMpeMatrix(const CIccMpeMatrix &matrix)
  ******************************************************************************/
 CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
 {
+  if (this == &matrix)
+    return *this;
+
   m_nReserved = matrix.m_nReserved;
 
   m_nInputChannels = matrix.m_nInputChannels;
@@ -5388,18 +5415,17 @@ static icFloatNumber NoClip(icFloatNumber v)
 }
 
 // this isn't used yet, but want to have it ready
-static icFloatNumber RealUnitClip(icFloatNumber v)
-{
-  if (std::isnan(v))
-    return icFloatNumber(0);
-  if (std::isinf(v))
-    return icFloatNumber(1.0);
-  if (v < 0.0)
-    return 0.0;
-  if (v > 1.0)
-    return 1.0;
-  return v;
-}
+// static icFloatNumber RealUnitClip(icFloatNumber v)
+// {
+//   if (std::isnan(v))
+//     return icFloatNumber(0);
+//   if (std::isinf(v))
+//     return icFloatNumber(1.0);
+//   if (v < 0.0)
+//     return 0.0;
+//   if (v > 1.0)
+//   return v;
+// }
 
 /**
  ******************************************************************************
@@ -6359,6 +6385,9 @@ CIccMpeJabToXYZ::CIccMpeJabToXYZ(const CIccMpeJabToXYZ &cam)
 
 CIccMpeJabToXYZ &CIccMpeJabToXYZ::operator=(const CIccMpeJabToXYZ &cam)
 {
+  if (this == &cam)
+    return *this;
+
   if (cam.m_pCAM) {
     if (m_pCAM)
       delete m_pCAM;
@@ -6414,6 +6443,9 @@ CIccMpeXYZToJab::CIccMpeXYZToJab(const CIccMpeXYZToJab &cam)
 
 CIccMpeXYZToJab &CIccMpeXYZToJab::operator=(const CIccMpeXYZToJab &cam)
 {
+  if (this == &cam)
+    return *this;
+
   if (cam.m_pCAM) {
     if (m_pCAM)
       delete m_pCAM;

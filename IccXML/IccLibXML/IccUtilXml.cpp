@@ -1012,10 +1012,23 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseTextCount(const char *szText)
 template<typename T, typename F>
 T clipTypeRange( const F &input )
 {
-  if (input > std::numeric_limits<T>::max())
-    return std::numeric_limits<T>::max();
-  if (input < std::numeric_limits<T>::lowest()) // not min, which is a positive small number for floating point
-    return std::numeric_limits<T>::lowest();
+  if constexpr (std::numeric_limits<T>::is_integer && !std::numeric_limits<F>::is_integer) {
+    using limit_type = long double;
+    const auto value = static_cast<limit_type>(input);
+    const auto upper = static_cast<limit_type>(std::numeric_limits<T>::max());
+    const auto lower = static_cast<limit_type>(std::numeric_limits<T>::lowest());
+
+    if (value > upper)
+      return std::numeric_limits<T>::max();
+    if (value < lower) // not min, which is a positive small number for floating point
+      return std::numeric_limits<T>::lowest();
+  }
+  else {
+    if (input > std::numeric_limits<T>::max())
+      return std::numeric_limits<T>::max();
+    if (input < std::numeric_limits<T>::lowest()) // not min, which is a positive small number for floating point
+      return std::numeric_limits<T>::lowest();
+  }
   if ( !std::numeric_limits<F>::is_integer && std::isnan(input) )
     return T(0);    // flush NaN to zero
   return T(input);  // passed all the checks, just cast it
@@ -1386,7 +1399,7 @@ icDateTimeNumber icGetDateTimeValue(const icChar* str)
     seconds = timeinfo->tm_sec;
   }
   else {
-  	sscanf(str, "%d-%02d-%02dT%02d:%02d:%02d", &year, &month, &day, &hours, &minutes, &seconds);
+  	sscanf(str, "%u-%02u-%02uT%02u:%02u:%02u", &year, &month, &day, &hours, &minutes, &seconds);
   }
 
 	dateTime.year = year;
@@ -1583,4 +1596,3 @@ const std::string icGetPadSpace(double value)
 
    return space;
 }
-
