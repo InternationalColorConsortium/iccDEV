@@ -234,6 +234,7 @@ jobs:
           cmake --build build -- /m /maxcpucount
 
       - name: Create Profiles
+        continue-on-error: true
         shell: pwsh
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
