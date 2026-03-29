@@ -1,19 +1,14 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium.
-# All rights reserved.
-# https://color.org
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
 #
 #
 # Intent: Unix/Linux and macOS multi-compiler build & test
 #
-# Last Updated: 2026-02-17 16:24:41 UTC by David Hoyt
-#               PATH Changes
-#
-#
-#
-#
-#
+# Last Updated: 2026-03-29 06:53:23 UTC by David Hoyt
+#               Fix: CI Scripts & Bisect (#739)
 #
 #
 #
@@ -251,6 +246,19 @@ jobs:
           done
           sh CreateAllProfiles.sh
           sh RunTests.sh
+          cd HDR
+          sh mkprofiles.sh
+          cd ..
+          cd hybrid
+          sh BuildAndTest.sh
+          cd ..
+          cd CalcTest
+          sh checkInvalidProfiles.sh
+          cd ..
+          cd mcs
+          sh updateprev.sh
+          sh updateprevWithBkgd.sh
+          cd ..
           find . -iname "*.icc" | wc -l
           echo "Build complete."
 

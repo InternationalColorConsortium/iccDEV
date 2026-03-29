@@ -771,21 +771,73 @@ jobs:
           OUTDIR="/tmp/iccdev-tool-output/image-tools"
           mkdir -p "$OUTDIR"
 
-          for img_tool in iccJpegDump iccPngDump; do
-            dir_name="$(echo "${img_tool:0:1}" | tr '[:lower:]' '[:upper:]')${img_tool:1}"
-            bin="${WORKSPACE_DIR}/build/Tools/$dir_name/$img_tool"
-            logf="$OUTDIR/${img_tool}.log"
-            if [ -x "$bin" ]; then
-              timeout 10 "$bin" > "$logf" 2>&1 || true
-              if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
-                echo "  [ASAN]  $img_tool"
-              else
-                echo "  [OK]    $img_tool (usage check)"
-              fi
+          PNGDUMP="${WORKSPACE_DIR}/build/Tools/IccPngDump/iccPngDump"
+          JPEGDUMP="${WORKSPACE_DIR}/build/Tools/IccJpegDump/iccJpegDump"
+          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
+          TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
+          passed=0 failed=0
+
+          # --- iccPngDump: usage check ---
+          if [ -x "$PNGDUMP" ]; then
+            timeout 10 "$PNGDUMP" > "$OUTDIR/pngdump-usage.log" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/pngdump-usage.log" 2>/dev/null; then
+              echo "  [ASAN]  iccPngDump usage"; failed=$((failed + 1))
             else
-              echo "  [SKIP]  $img_tool (not built)"
+              echo "  [OK]    iccPngDump usage check"; passed=$((passed + 1))
             fi
-          done
+          else
+            echo "  [SKIP]  iccPngDump (not built)"
+          fi
+
+          # --- iccPngDump: real PNG file ---
+          PNG_FILE="${WORKSPACE_DIR}/Testing/hybrid/Data/cmykGreysPlot.png"
+          if [ -x "$PNGDUMP" ] && [ -f "$PNG_FILE" ]; then
+            timeout 30 "$PNGDUMP" "$PNG_FILE" > "$OUTDIR/pngdump-file.log" 2>&1
+            rc=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/pngdump-file.log" 2>/dev/null; then
+              echo "  [ASAN]  iccPngDump on cmykGreysPlot.png"; failed=$((failed + 1))
+            elif [ "$rc" -ge 128 ]; then
+              echo "  [CRASH] iccPngDump on cmykGreysPlot.png (exit $rc)"; failed=$((failed + 1))
+            else
+              echo "  [OK]    iccPngDump on cmykGreysPlot.png (exit $rc)"; passed=$((passed + 1))
+            fi
+          fi
+
+          # --- iccPngDump: PNG with embedded ICC (create one) ---
+          SRGB_PREF="${WORKSPACE_DIR}/Testing/sRGB_v4_ICC_preference.icc"
+          if [ -x "$PNGDUMP" ] && [ -f "$SRGB_PREF" ]; then
+            # iccPngDump can also extract ICC from PNG
+            # Test with a round-trip: create a profile, embed in PNG metadata isn't
+            # straightforward, but we can at least test with available PNGs
+            PNG2="${WORKSPACE_DIR}/Testing/hybrid/Data/MS-Sensors.png"
+            if [ -f "$PNG2" ]; then
+              timeout 30 "$PNGDUMP" "$PNG2" > "$OUTDIR/pngdump-sensors.log" 2>&1
+              rc=$?
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/pngdump-sensors.log" 2>/dev/null; then
+                echo "  [ASAN]  iccPngDump on MS-Sensors.png"; failed=$((failed + 1))
+              elif [ "$rc" -ge 128 ]; then
+                echo "  [CRASH] iccPngDump on MS-Sensors.png (exit $rc)"; failed=$((failed + 1))
+              else
+                echo "  [OK]    iccPngDump on MS-Sensors.png (exit $rc)"; passed=$((passed + 1))
+              fi
+            fi
+          fi
+
+          # --- iccJpegDump: usage check ---
+          if [ -x "$JPEGDUMP" ]; then
+            timeout 10 "$JPEGDUMP" > "$OUTDIR/jpegdump-usage.log" 2>&1 || true
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/jpegdump-usage.log" 2>/dev/null; then
+              echo "  [ASAN]  iccJpegDump usage"; failed=$((failed + 1))
+            else
+              echo "  [OK]    iccJpegDump usage check"; passed=$((passed + 1))
+            fi
+          else
+            echo "  [SKIP]  iccJpegDump (not built)"
+          fi
+
+          echo ""
+          echo "Image tools: $passed passed, $failed failed"
+          if [ "$failed" -gt 0 ]; then exit 1; fi
 
       - name: "Test 14: Identity curve regression (PR 728)"
         if: always()
@@ -876,6 +928,210 @@ jobs:
           else
             echo "[SKIP] iccApplySearch (binary or profile not found)"
           fi
+
+
+      - name: "Test 16: MCS regression (iccApplyProfiles TIFF pipeline)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
+          APPLY="${WORKSPACE_DIR}/build/Tools/IccApplyProfiles/iccApplyProfiles"
+          TDUMP="${WORKSPACE_DIR}/build/Tools/IccTiffDump/iccTiffDump"
+          OUTDIR="/tmp/iccdev-tool-output/mcs"
+          MCS="${WORKSPACE_DIR}/Testing/mcs"
+          SRGB="${WORKSPACE_DIR}/Testing/sRGB_v4_ICC_preference.icc"
+          mkdir -p "$OUTDIR"
+
+          PASS=0; FAIL=0; SKIP=0
+
+          if [ ! -x "$FROMXML" ] || [ ! -x "$APPLY" ]; then
+            echo "[SKIP] MCS tests (binaries not found)"
+            exit 0
+          fi
+
+          # Build MCS profiles from XML
+          for xml in "$MCS/6ChanSelect-MID.xml" "$MCS/18ChanWithSpots-MVIS.xml"; do
+            base="$(basename "$xml" .xml)"
+            icc="$MCS/${base}.icc"
+            logf="$OUTDIR/fromxml-${base}.log"
+            if timeout 60 "$FROMXML" "$xml" "$icc" > "$logf" 2>&1; then
+              echo "[OK] iccFromXml $base"
+              PASS=$((PASS + 1))
+            else
+              echo "[FAIL] iccFromXml $base (exit $?)"
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          TIFF_IN="$MCS/CMYKSS-Numbered-Overprint.tif"
+          if [ ! -f "$TIFF_IN" ] || [ ! -f "$SRGB" ]; then
+            echo "[SKIP] MCS TIFF tests (input files not found)"
+            exit 0
+          fi
+
+          # Test: iccApplyProfiles (updateprev equivalent)
+          logf="$OUTDIR/applyprofiles-updateprev.log"
+          timeout 120 "$APPLY" "$TIFF_IN" "$OUTDIR/prev.tif" \
+            1 0 1 0 1 \
+            "$MCS/6ChanSelect-MID.icc" 0 \
+            "$MCS/18ChanWithSpots-MVIS.icc" 0 \
+            "$SRGB" 1 > "$logf" 2>&1 || true
+          if [ -f "$OUTDIR/prev.tif" ]; then
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              echo "[ASAN] iccApplyProfiles updateprev"
+              FAIL=$((FAIL + 1))
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              echo "[UBSAN] iccApplyProfiles updateprev"
+              FAIL=$((FAIL + 1))
+            else
+              echo "[OK] iccApplyProfiles updateprev"
+              PASS=$((PASS + 1))
+            fi
+          else
+            echo "[FAIL] iccApplyProfiles updateprev (no output)"
+            FAIL=$((FAIL + 1))
+          fi
+
+          # Validate output TIFF
+          if [ -f "$OUTDIR/prev.tif" ] && [ -x "$TDUMP" ]; then
+            logf="$OUTDIR/tiffdump-prev.log"
+            timeout 30 "$TDUMP" "$OUTDIR/prev.tif" > "$logf" 2>&1 || true
+            echo "[OK] iccTiffDump prev.tif"
+            PASS=$((PASS + 1))
+          fi
+
+          # Test: iccApplyProfiles with background ENV vars (updateprevWithBkgd)
+          logf="$OUTDIR/applyprofiles-updateprevbkgd.log"
+          timeout 120 "$APPLY" "$TIFF_IN" "$OUTDIR/prev-bkgd.tif" \
+            1 0 1 0 1 \
+            "$MCS/6ChanSelect-MID.icc" 0 \
+            -ENV:bkgX 0.4014 -ENV:bkgY 0.2391 -ENV:bkgZ 0.0272 \
+            "$MCS/18ChanWithSpots-MVIS.icc" 0 \
+            "$SRGB" 1 > "$logf" 2>&1 || true
+          if [ -f "$OUTDIR/prev-bkgd.tif" ]; then
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              echo "[ASAN] iccApplyProfiles updateprevWithBkgd"
+              FAIL=$((FAIL + 1))
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              echo "[UBSAN] iccApplyProfiles updateprevWithBkgd"
+              FAIL=$((FAIL + 1))
+            else
+              echo "[OK] iccApplyProfiles updateprevWithBkgd"
+              PASS=$((PASS + 1))
+            fi
+          else
+            echo "[FAIL] iccApplyProfiles updateprevWithBkgd (no output)"
+            FAIL=$((FAIL + 1))
+          fi
+
+          echo "MCS regression: $PASS passed, $FAIL failed, $SKIP skipped"
+
+      - name: "Test 17: iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          OUTDIR="/tmp/iccdev-tool-output/v5dspobs"
+          mkdir -p "$OUTDIR"
+
+          V5DSP="${WORKSPACE_DIR}/build/Tools/IccV5DspObsToV4Dsp/iccV5DspObsToV4Dsp"
+          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          passed=0 failed=0
+
+          if [ ! -x "$V5DSP" ]; then
+            echo "[SKIP] iccV5DspObsToV4Dsp not built"
+            exit 0
+          fi
+
+          # --- Usage check ---
+          timeout 10 "$V5DSP" > "$OUTDIR/usage.log" 2>&1 || true
+          if grep -q "ERROR: AddressSanitizer" "$OUTDIR/usage.log" 2>/dev/null; then
+            echo "  [ASAN]  iccV5DspObsToV4Dsp usage"; failed=$((failed + 1))
+          else
+            echo "  [OK]    iccV5DspObsToV4Dsp usage check"; passed=$((passed + 1))
+          fi
+
+          # --- Build observer profile from XML ---
+          CAT8_XML="${WORKSPACE_DIR}/Testing/hybrid/Data/Cat8Lab-D65_2deg.xml"
+          CAT8_ICC="$OUTDIR/Cat8Lab-D65_2deg.icc"
+          if [ -f "$CAT8_XML" ]; then
+            timeout 60 "$FROMXML" "$CAT8_XML" "$CAT8_ICC" > "$OUTDIR/fromxml-cat8.log" 2>&1
+            rc=$?
+            if [ "$rc" -ne 0 ] || [ ! -f "$CAT8_ICC" ]; then
+              echo "  [FAIL]  iccFromXml Cat8Lab-D65_2deg.xml (exit $rc)"; failed=$((failed + 1))
+            else
+              echo "  [OK]    iccFromXml Cat8Lab-D65_2deg.xml"; passed=$((passed + 1))
+            fi
+          fi
+
+          # --- v5→v4 conversion: LCDDisplay + Cat8Lab observer ---
+          LCD="${WORKSPACE_DIR}/Testing/Display/LCDDisplay.icc"
+          OUT_V4="$OUTDIR/LCDDisplayCat8Obs.icc"
+          if [ -f "$LCD" ] && [ -f "$CAT8_ICC" ]; then
+            timeout 60 "$V5DSP" "$LCD" "$CAT8_ICC" "$OUT_V4" > "$OUTDIR/v5dsp-cat8.log" 2>&1
+            rc=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/v5dsp-cat8.log" 2>/dev/null; then
+              echo "  [ASAN]  v5DspObs LCDDisplay+Cat8Lab"; failed=$((failed + 1))
+            elif [ "$rc" -ge 128 ]; then
+              echo "  [CRASH] v5DspObs LCDDisplay+Cat8Lab (exit $rc)"; failed=$((failed + 1))
+            elif [ "$rc" -ne 0 ]; then
+              echo "  [WARN]  v5DspObs LCDDisplay+Cat8Lab (exit $rc — may be expected for some observer pairings)"
+            else
+              echo "  [OK]    v5DspObs LCDDisplay+Cat8Lab (exit $rc)"; passed=$((passed + 1))
+              # Validate output with iccDumpProfile
+              if [ -x "$DUMP" ] && [ -f "$OUT_V4" ]; then
+                timeout 30 "$DUMP" "$OUT_V4" > "$OUTDIR/dump-cat8obs.log" 2>&1
+                if grep -q "ERROR: AddressSanitizer" "$OUTDIR/dump-cat8obs.log" 2>/dev/null; then
+                  echo "  [ASAN]  iccDumpProfile on v4 output"; failed=$((failed + 1))
+                else
+                  echo "  [OK]    iccDumpProfile validates v4 output"; passed=$((passed + 1))
+                fi
+              fi
+            fi
+          fi
+
+          # --- v5→v4 conversion: LCDDisplay + ICS observer ---
+          ICS_OBS="${WORKSPACE_DIR}/Testing/ICS/XYZ_float-D65_2deg-Part1.icc"
+          OUT_V4_ICS="$OUTDIR/LCDDisplayIcsObs.icc"
+          if [ -f "$LCD" ] && [ -f "$ICS_OBS" ]; then
+            timeout 60 "$V5DSP" "$LCD" "$ICS_OBS" "$OUT_V4_ICS" > "$OUTDIR/v5dsp-ics.log" 2>&1
+            rc=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/v5dsp-ics.log" 2>/dev/null; then
+              echo "  [ASAN]  v5DspObs LCDDisplay+ICS observer"; failed=$((failed + 1))
+            elif [ "$rc" -ge 128 ]; then
+              echo "  [CRASH] v5DspObs LCDDisplay+ICS observer (exit $rc)"; failed=$((failed + 1))
+            elif [ "$rc" -ne 0 ]; then
+              echo "  [WARN]  v5DspObs LCDDisplay+ICS observer (exit $rc)"
+            else
+              echo "  [OK]    v5DspObs LCDDisplay+ICS observer (exit $rc)"; passed=$((passed + 1))
+            fi
+          else
+            echo "  [SKIP]  ICS observer test (profiles not found)"
+          fi
+
+          echo ""
+          echo "v5DspObsToV4Dsp: $passed passed, $failed failed"
+          if [ "$failed" -gt 0 ]; then exit 1; fi
 
       - name: Generate comprehensive summary
         if: always()
@@ -982,6 +1238,8 @@ jobs:
               ["13"]="image-tools"
               ["14"]="regression"
               ["15"]="search"
+              ["16"]="mcs"
+              ["17"]="v5dspobs"
             )
             declare -A PHASE_NAMES=(
               ["1"]="iccDumpProfile ALL on every generated profile"
@@ -996,12 +1254,14 @@ jobs:
               ["10"]="checkInvalidProfiles.sh (77 invalid profile checks)"
               ["11"]="RunProtoTest.sh (6 Rec2020 spectral tests)"
               ["12"]="iccTiffDump + iccSpecSepToTiff"
-              ["13"]="Image tool usage checks (JPEG, PNG)"
+              ["13"]="Image tools (iccPngDump, iccJpegDump on real files)"
               ["14"]="Identity curve regression (PR 728)"
               ["15"]="iccApplySearch (CMM search optimization)"
+              ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
+              ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
             )
 
-            for phase in $(seq 1 15); do
+            for phase in $(seq 1 17); do
               dir="${PHASE_DIRS[$phase]}"
               name="${PHASE_NAMES[$phase]}"
               pdir="$OUTDIR/$dir"

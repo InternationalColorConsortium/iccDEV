@@ -8530,7 +8530,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
   CIccProfile *pProfile = new CIccProfile(Profile);
 
   // CFL-045: Guard against null PCS causing vptr corruption in copy (CWE-843)
-  if (pProfile && (icUInt32Number)pProfile->m_Header.pcs == 0) {
+  if (pProfile && (icUInt32Number)pProfile->m_Header.pcs == 0 && (icUInt32Number)pProfile->m_Header.spectralPCS == 0) {
     delete pProfile;
     return icCmmStatInvalidProfile;
   }

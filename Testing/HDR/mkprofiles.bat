@@ -9,5 +9,5 @@ iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
 iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
 iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
 
-iccFromXML BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
-iccFromXML BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
+iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
+iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
