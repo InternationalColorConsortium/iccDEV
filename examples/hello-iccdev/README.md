@@ -49,12 +49,27 @@ The CMakeLists.txt tries three discovery paths in order:
 
 ### Path 1 — Installed Package
 
-If iccDEV has been installed (via `cmake --install`), the example finds it
+If iccDEV has been installed (via `cmake --install`) or via the
+[vcpkg overlay port](../../docs/vcpkg.md), the example finds it
 automatically through `find_package(RefIccMAX CONFIG)`:
 
 ```bash
 cd examples/hello-iccdev
 cmake -B build -DCMAKE_PREFIX_PATH="/usr/local"
+cmake --build build
+```
+
+Using vcpkg:
+
+```bash
+# Install iccDEV via vcpkg overlay (see docs/vcpkg.md)
+vcpkg install iccdev --overlay-ports=../../ports --triplet x64-linux --classic
+
+# Build example with vcpkg toolchain
+cd examples/hello-iccdev
+cmake -B build \
+  -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_OVERLAY_PORTS=../../ports
 cmake --build build
 ```
 

@@ -81,6 +81,28 @@ Testing/RunTests.sh
 | `-DENABLE_FUZZING=ON` | LibFuzzer harnesses |
 | `-DENABLE_ICCXML=ON` | IccXML library |
 
+## vcpkg Port Build
+
+Build and install the core libraries + tools via vcpkg overlay:
+
+```bash
+# Set local source mode (avoids GitHub API download)
+export VCPKG_ICCDEV_SOURCE=$(pwd)
+export VCPKG_KEEP_ENV_VARS=VCPKG_ICCDEV_SOURCE
+
+# Install
+vcpkg install iccdev \
+  --overlay-ports=ports \
+  --triplet x64-linux \
+  --classic
+
+# Verify
+vcpkg list | grep iccdev
+```
+
+This builds: IccProfLib2-static, IccXML2-static, 9 CLI tools, CMake config.
+See `ports/iccdev/portfile.cmake` for the full build configuration.
+
 ## Coverage Report
 
 ```bash

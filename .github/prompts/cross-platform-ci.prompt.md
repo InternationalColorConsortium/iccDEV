@@ -26,6 +26,7 @@ gh run view <RUN_ID> --repo InternationalColorConsortium/iccDEV --log-failed
 | `ci-wasm-build-test.yml` | ubuntu-24.04 | emcc | Emscripten, no system libs |
 | `wasm-latest-matrix.yml` | ubuntu-24.04 | emcc | Debug/Release/RelWithDebInfo |
 | `ci-docker-latest.yml` | ubuntu-24.04 | gcc | Docker build + test |
+| `ci-vcpkg-ports.yml` | win/ubuntu/macos | varies | vcpkg overlay port install + verify |
 
 ### 3. Common Failure Categories
 
@@ -74,6 +75,17 @@ target_compile_options(target PRIVATE
 - PowerShell sanitizer: .github/scripts/sanitize.ps1
 - Line endings: CRLF in bat scripts, LF in sh scripts
 - Path separators: backslash in build output
+```
+
+#### vcpkg Port-Specific
+```
+# vcpkg overlay port issues:
+- Source patches (vcpkg_replace_string) fail if upstream CMakeLists.txt changes
+- VCPKG_ICCDEV_SOURCE env var stripped by vcpkg sandbox — need VCPKG_KEEP_ENV_VARS
+- GitHub API 403 on macOS runners when using --head (rate limiting)
+- VS-bundled vcpkg doesn't support --classic mode — use standalone clone
+- Static-only build (no __declspec(dllexport)) — ENABLE_SHARED_LIBS=OFF
+- IccDEVCmm PCH fails under Ninja — must be patched out
 ```
 
 #### Dependency Failures

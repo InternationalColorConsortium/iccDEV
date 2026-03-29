@@ -44,3 +44,31 @@ cd iccdev
 cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
+
+## vcpkg Port (Core Libraries & Tools)
+
+A vcpkg overlay port is provided in `ports/iccdev/` for consuming iccDEV as a
+static library dependency across Windows, Linux, and macOS.
+
+For full documentation — install commands, feature flags, CMake integration,
+local source mode, platform notes, and troubleshooting — see
+**[docs/vcpkg.md](vcpkg.md)**.
+
+### Quick Install
+
+```bash
+git clone https://github.com/microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+
+vcpkg install iccdev \
+  --overlay-ports=path/to/iccDEV/ports \
+  --triplet x64-linux \
+  --classic
+```
+
+### CMake Usage
+
+```cmake
+find_package(RefIccMAX CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE RefIccMAX::IccProfLib2-static)
+```

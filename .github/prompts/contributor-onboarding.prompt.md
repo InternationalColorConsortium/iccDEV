@@ -39,6 +39,7 @@ iccDEV/
 │
 ├── Build/Cmake/           — CMakeLists.txt + CMakePresets.json
 ├── Testing/               — 14 test profile directories + scripts
+├── ports/iccdev/          — vcpkg overlay port (portfile.cmake, vcpkg.json)
 ├── docs/                  — index.md, build.md, install.md
 ├── .github/
 │   ├── workflows/         — 17 CI workflows
@@ -155,6 +156,7 @@ Common pitfalls:
 | Build instructions | `docs/build.md` |
 | Installation methods | `docs/install.md` |
 | Project overview (all tools) | `docs/index.md` |
+| vcpkg port reference | `.github/instructions/vcpkg-port.instructions.md` |
 | ICC specification reference | `.github/instructions/icc-specification.instructions.md` |
 | CMake options | `.github/copilot-instructions.md` → CMake Options table |
 | Workflow governance | `.github/instructions/workflow-governance.instructions.md` |

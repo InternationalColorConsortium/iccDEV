@@ -136,4 +136,6 @@ Add the same to `Testing/RunTests.bat` for Windows.
 - [ ] 0 ASan/UBSan findings on test profiles
 - [ ] Added to Testing/RunTests.sh and .bat
 - [ ] docs/index.md updated
+- [ ] If core tool: added to `_core_tools` in `ports/iccdev/portfile.cmake`
+- [ ] If core tool: added to verify step in `.github/workflows/ci-vcpkg-ports.yml`
 - [ ] PR description includes: purpose, build/test commands, sample output

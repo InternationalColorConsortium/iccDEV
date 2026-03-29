@@ -59,3 +59,18 @@ bitcode — consumers linking with non-LTO-aware linkers must pass
 3. Add to parent `Tools/CmdLine/CMakeLists.txt` via `add_subdirectory(NewTool)`
 4. Tool should link `IccXML2` if XML features are needed
 5. Ensure `if(EMSCRIPTEN)` guard skips GUI-only tools
+6. If the tool should be in the vcpkg port, add it to the `_core_tools` list
+   in `ports/iccdev/portfile.cmake` and update the verify step in
+   `ci-vcpkg-ports.yml`
+
+## vcpkg Port Integration
+
+The `ports/iccdev/` overlay port builds a subset of the project (static
+libraries + core CLI tools). When modifying `Build/Cmake/CMakeLists.txt`:
+
+- The portfile applies 9 `vcpkg_replace_string` patches that do exact
+  string matching. Changing patched lines will break the port build.
+- Patched areas: `find_package(TIFF/PNG/JPEG)`, `add_subdirectory(IccXML)`,
+  IccDEVCmm, IccJpegDump, IccPngDump, and FATAL_ERROR messages.
+- After modifying CMakeLists.txt, run `ci-vcpkg-ports.yml` to verify.
+- See `.github/instructions/vcpkg-port.instructions.md` for full details.

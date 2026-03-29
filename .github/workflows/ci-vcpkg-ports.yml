@@ -1,0 +1,491 @@
+###############################################################
+#
+# ci-vcpkg-ports.yml — Cross-platform vcpkg port overlay test
+#
+# Validates that the ports/iccdev overlay installs correctly
+# on Windows, Linux, and macOS via vcpkg.
+#
+# Governance: aligned with workflow-governance.instructions.md
+#   - Pinned action SHAs (no mutable tags)
+#   - persist-credentials: false
+#   - Shell hardening:
+#       bash:  --noprofile --norc, BASH_ENV=/dev/null, set -euo pipefail
+#       pwsh:  -NoProfile -NoLogo -NonInteractive -Command {0}
+#   - POWERSHELL_TELEMETRY_OPTOUT / POWERSHELL_UPDATECHECK in all pwsh steps
+#   - GITHUB_TOKEN cleared + credential.helper "" in every step
+#   - git safe.directory set in every step
+#   - All GITHUB_STEP_SUMMARY writes sanitized
+#   - Matrix vars passed via env: (never inline ${{ }} in run:)
+#
+###############################################################
+
+name: CI – vcpkg Ports
+
+on:
+  push:
+    branches: [ ci-vcpkg-ports ]
+    paths:
+      - 'ports/**'
+      - '.github/workflows/ci-vcpkg-ports.yml'
+  pull_request:
+    branches: [ master, ci-vcpkg-ports ]
+    paths:
+      - 'ports/**'
+      - '.github/workflows/ci-vcpkg-ports.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "ci-vcpkg-ports-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  vcpkg-overlay-test:
+    name: "vcpkg overlay – ${{ matrix.os }}"
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-24.04, macos-14 ]
+
+    steps:
+      # ── Checkout (pinned SHA, no credentials) ──────────────
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # ── Bootstrap vcpkg ────────────────────────────────────
+      - name: Bootstrap vcpkg (Unix)
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
+
+      - name: Bootstrap vcpkg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
+          & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
+          echo "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg" >> $env:GITHUB_ENV
+
+      # ── Install port via overlay ───────────────────────────
+      - name: Install iccdev port (Unix)
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          RUNNER_OS: ${{ runner.os }}
+          VCPKG_ICCDEV_SOURCE: ${{ github.workspace }}
+          VCPKG_KEEP_ENV_VARS: VCPKG_ICCDEV_SOURCE
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          TRIPLET="$([ "$RUNNER_OS" = "macOS" ] && echo "arm64-osx" || echo "x64-linux")"
+
+          echo "::group::vcpkg install iccdev"
+          "$VCPKG_ROOT/vcpkg" install iccdev \
+            --overlay-ports="$GITHUB_WORKSPACE/ports" \
+            --triplet "$TRIPLET" \
+            --x-install-root="$RUNNER_TEMP/vcpkg-installed" \
+            --classic \
+            2>&1
+          echo "::endgroup::"
+
+      - name: Install iccdev port (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          VCPKG_ICCDEV_SOURCE: ${{ github.workspace }}
+          VCPKG_KEEP_ENV_VARS: VCPKG_ICCDEV_SOURCE
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          Write-Host "::group::vcpkg install iccdev"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install iccdev `
+            --overlay-ports="$env:GITHUB_WORKSPACE\ports" `
+            --triplet x64-windows `
+            --x-install-root="$env:RUNNER_TEMP\vcpkg-installed" `
+            --classic
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed with exit code $LASTEXITCODE" }
+          Write-Host "::endgroup::"
+
+      # ── Verify installed artifacts ─────────────────────────
+      - name: Verify installed artifacts (Unix)
+        if: runner.os != 'Windows'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          RUNNER_OS: ${{ runner.os }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # Load sanitizers (prefer script, inline fallback for shallow clones)
+          if [ -f .github/scripts/sanitize-sed.sh ]; then
+            source .github/scripts/sanitize-sed.sh
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          TRIPLET="$([ "$RUNNER_OS" = "macOS" ] && echo "arm64-osx" || echo "x64-linux")"
+          PREFIX="$RUNNER_TEMP/vcpkg-installed/$TRIPLET"
+
+          errors=0
+
+          # Check headers
+          if [ -d "$PREFIX/include/RefIccMAX/IccProfLib2" ]; then
+            hdr_count=$(find "$PREFIX/include/RefIccMAX/IccProfLib2" -name '*.h' | wc -l)
+            echo "✅ IccProfLib2 headers: $hdr_count files"
+          else
+            echo "❌ IccProfLib2 headers NOT found"
+            errors=$((errors + 1))
+          fi
+
+          # Check libraries
+          for lib in libIccProfLib2 libIccXML2; do
+            if ls "$PREFIX/lib/"${lib}* 1>/dev/null 2>&1; then
+              echo "✅ $lib found"
+            else
+              echo "❌ $lib NOT found"
+              errors=$((errors + 1))
+            fi
+          done
+
+          # Check cmake config
+          if [ -f "$PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake" ] || \
+             [ -f "$PREFIX/share/reficcmax/RefIccMAXConfig.cmake" ]; then
+            echo "✅ CMake config found"
+          else
+            echo "❌ CMake config NOT found"
+            errors=$((errors + 1))
+          fi
+
+          # Check tools
+          for tool in iccDumpProfile iccRoundTrip iccFromXml iccToXml; do
+            if [ -x "$PREFIX/tools/iccdev/$tool" ]; then
+              echo "✅ Tool $tool found"
+            else
+              echo "❌ Tool $tool NOT found"
+              errors=$((errors + 1))
+            fi
+          done
+
+          # Summary
+          {
+            echo "## vcpkg Port Verification — $(sanitize_line "$RUNNER_OS")"
+            echo ""
+            echo "| Check | Result |"
+            echo "|-------|--------|"
+            echo "| Headers | $([ -d "$PREFIX/include/RefIccMAX/IccProfLib2" ] && echo '✅' || echo '❌') |"
+            echo "| Libraries | $(ls "$PREFIX/lib/"libIccProfLib2* >/dev/null 2>&1 && echo '✅' || echo '❌') |"
+            echo "| CMake config | $([ -f "$PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake" ] || [ -f "$PREFIX/share/reficcmax/RefIccMAXConfig.cmake" ] && echo '✅' || echo '❌') |"
+            echo "| Tools | $([ -x "$PREFIX/tools/iccdev/iccDumpProfile" ] && echo '✅' || echo '❌') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::$errors verification checks failed"
+            exit 1
+          fi
+          echo "All verification checks passed ✅"
+
+      - name: Verify installed artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          # Load sanitizer (prefer script, inline fallback for shallow clones)
+          if (Test-Path ".github/scripts/sanitize.ps1") {
+            . .github/scripts/sanitize.ps1
+          } else {
+            function Sanitize-Line([string]$s) {
+              $s = $s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;'
+              return $s
+            }
+          }
+
+          $prefix = "$env:RUNNER_TEMP\vcpkg-installed\x64-windows"
+          $errors = 0
+
+          # Check headers
+          $hdrDir = "$prefix\include\RefIccMAX\IccProfLib2"
+          if (Test-Path $hdrDir) {
+            $count = (Get-ChildItem $hdrDir -Filter *.h).Count
+            Write-Host "✅ IccProfLib2 headers: $count files"
+          } else {
+            Write-Host "❌ IccProfLib2 headers NOT found"
+            $errors++
+          }
+
+          # Check libraries
+          foreach ($lib in @('IccProfLib2-static.lib','IccXML2-static.lib')) {
+            if (Test-Path "$prefix\lib\$lib") {
+              Write-Host "✅ $lib found"
+            } else {
+              Write-Host "❌ $lib NOT found"
+              $errors++
+            }
+          }
+
+          # Check cmake config
+          $cmakeFound = (Test-Path "$prefix\share\RefIccMAX\RefIccMAXConfig.cmake") -or
+                        (Test-Path "$prefix\share\reficcmax\RefIccMAXConfig.cmake")
+          if ($cmakeFound) {
+            Write-Host "✅ CMake config found"
+          } else {
+            Write-Host "❌ CMake config NOT found"
+            $errors++
+          }
+
+          # Check tools
+          foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccFromXml.exe','iccToXml.exe')) {
+            if (Test-Path "$prefix\tools\iccdev\$tool") {
+              Write-Host "✅ Tool $tool found"
+            } else {
+              Write-Host "❌ Tool $tool NOT found"
+              $errors++
+            }
+          }
+
+          # Summary
+          $os = Sanitize-Line "Windows"
+          @"
+          ## vcpkg Port Verification — $os
+
+          | Check | Result |
+          |-------|--------|
+          | Headers | $(if (Test-Path $hdrDir) {'✅'} else {'❌'}) |
+          | Libraries | $(if (Test-Path "$prefix\lib\IccProfLib2-static.lib") {'✅'} else {'❌'}) |
+          | CMake config | $(if ($cmakeFound) {'✅'} else {'❌'}) |
+          | Tools | $(if (Test-Path "$prefix\tools\iccdev\iccDumpProfile.exe") {'✅'} else {'❌'}) |
+          "@ >> $env:GITHUB_STEP_SUMMARY
+
+          if ($errors -gt 0) {
+            Write-Error "$errors verification checks failed"
+            exit 1
+          }
+          Write-Host "All verification checks passed ✅"
+
+  # ── Manifest mode test (VS-bundled vcpkg) ───────────────
+  vcpkg-manifest-test:
+    name: "vcpkg manifest – windows-latest"
+    runs-on: windows-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Create manifest test project
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $testDir = "$env:RUNNER_TEMP\manifest-test"
+          New-Item -ItemType Directory -Path $testDir -Force | Out-Null
+
+          # Find the VS-bundled vcpkg baseline
+          $bundleJson = Get-Content "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\vcpkg\vcpkg-bundle.json" -Raw -ErrorAction SilentlyContinue
+          if (-not $bundleJson) {
+            $bundleJson = Get-Content "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg\vcpkg-bundle.json" -Raw -ErrorAction SilentlyContinue
+          }
+          if ($bundleJson) {
+            $baseline = ($bundleJson | ConvertFrom-Json).embeddedsha
+            Write-Host "Using VS-bundled vcpkg baseline: $baseline"
+          } else {
+            Write-Host "::warning::VS-bundled vcpkg not found, using fallback baseline"
+            $baseline = "3af1d1e60af2b2abf55760538cd607829029b07a"
+          }
+
+          # vcpkg.json manifest
+          @"
+          {
+            "name": "iccdev-manifest-test",
+            "version-string": "1.0.0",
+            "builtin-baseline": "$baseline",
+            "dependencies": [ "iccdev" ],
+            "overrides": [
+              { "name": "iccdev", "version": "2.3.1.6" }
+            ]
+          }
+          "@ | Set-Content "$testDir\vcpkg.json" -Encoding UTF8
+
+          # CMakeLists.txt
+          @"
+          cmake_minimum_required(VERSION 3.21)
+          project(iccdev-manifest-test LANGUAGES CXX)
+          set(CMAKE_CXX_STANDARD 17)
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+          find_package(RefIccMAX CONFIG REQUIRED)
+          add_executable(test-iccdev test.cpp)
+          target_link_libraries(test-iccdev PRIVATE
+              RefIccMAX::IccProfLib2-static
+              RefIccMAX::IccXML2-static
+          )
+          "@ | Set-Content "$testDir\CMakeLists.txt" -Encoding UTF8
+
+          # Minimal test source
+          @"
+          #include <cstdio>
+          #include "IccProfile.h"
+          #include "IccProfLibVer.h"
+          #include "IccProfileXml.h"
+          #include "IccLibXMLVer.h"
+          int main() {
+              std::printf("IccProfLib: %s\n", ICCPROFLIBVER);
+              std::printf("IccLibXML:  %s\n", ICCLIBXMLVER);
+              CIccProfile p; p.InitHeader();
+              std::printf("OK\n");
+              return 0;
+          }
+          "@ | Set-Content "$testDir\test.cpp" -Encoding UTF8
+
+          Write-Host "Test project created at $testDir"
+
+      - name: CMake configure (manifest mode)
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          VCPKG_ICCDEV_SOURCE: ${{ github.workspace }}
+          VCPKG_KEEP_ENV_VARS: VCPKG_ICCDEV_SOURCE
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $testDir = "$env:RUNNER_TEMP\manifest-test"
+
+          # Find VS-bundled vcpkg toolchain
+          $toolchain = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\vcpkg\scripts\buildsystems\vcpkg.cmake"
+          if (-not (Test-Path $toolchain)) {
+            $toolchain = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg\scripts\buildsystems\vcpkg.cmake"
+          }
+          Write-Host "Toolchain: $toolchain"
+
+          cmake -B "$testDir\build" -S $testDir `
+            -DCMAKE_TOOLCHAIN_FILE="$toolchain" `
+            -DVCPKG_OVERLAY_PORTS="$env:GITHUB_WORKSPACE\ports" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -G "Visual Studio 17 2022" -A x64
+
+          if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
+
+      - name: Build test project
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          cmake --build "$env:RUNNER_TEMP\manifest-test\build" --config Release
+          if ($LASTEXITCODE -ne 0) { throw "Build failed" }
+
+      - name: Run test executable
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $exe = "$env:RUNNER_TEMP\manifest-test\build\Release\test-iccdev.exe"
+          if (-not (Test-Path $exe)) { throw "test-iccdev.exe not found" }
+
+          $output = (& $exe 2>&1) -join "`n"
+          Write-Host $output
+          if ($LASTEXITCODE -ne 0) { throw "Test executable failed" }
+
+          if ($output -notmatch "IccProfLib") { throw "Missing IccProfLib version output" }
+          if ($output -notmatch "OK") { throw "Missing OK output" }
+          Write-Host "✅ Manifest mode test passed"
+
+          # Load sanitizer for summary output
+          if (Test-Path ".github/scripts/sanitize.ps1") {
+            . .github/scripts/sanitize.ps1
+          }
+
+          # Summary
+          @"
+          ## vcpkg Manifest Mode — Windows
+          | Check | Result |
+          |-------|--------|
+          | CMake configure | ✅ |
+          | Build | ✅ |
+          | Run | ✅ |
+          "@ >> $env:GITHUB_STEP_SUMMARY

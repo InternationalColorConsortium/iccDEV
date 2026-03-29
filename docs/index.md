@@ -182,4 +182,13 @@ brew install iccdev
 npm install iccdev
 ```
 
-[Build on Windows, macOS, Linux](BUILD.md)
+[Build on Windows, macOS, Linux](build.md) ·
+[vcpkg Port (cross-platform)](vcpkg.md)
+
+## Examples
+
+The [`examples/hello-iccdev/`](../examples/hello-iccdev/) directory contains a
+minimal standalone example that links IccProfLib2 and IccXML2, prints library
+versions, and round-trips an ICC profile header to XML. It supports three
+discovery paths: installed package (including vcpkg), build-tree export, and
+manual discovery.

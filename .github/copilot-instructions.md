@@ -10,6 +10,7 @@
 | `IccProfLib/**`, `IccXML/**`, `Tools/**` | `instructions/icc-library-code.instructions.md` | Input validation, sanitizer compat |
 | `Testing/**` | `instructions/testing.instructions.md` | Test scripts, profile dirs, validation flow |
 | `IccProfLib/icProfileHeader.h` | `instructions/icc-specification.instructions.md` | ICC header, tags, color spaces, version encoding |
+| `ports/**` | `instructions/vcpkg-port.instructions.md` | vcpkg portfile, features, local source mode, CI |
 
 ## Reusable Prompts
 
@@ -23,6 +24,8 @@
 | Debug cross-platform CI | `prompts/cross-platform-ci.prompt.md` |
 | New contributor onboarding | `prompts/contributor-onboarding.prompt.md` |
 | File a security issue | `prompts/file-security-issue.prompt.md` |
+| Version bump with ports | `prompts/version-bump.prompt.md` |
+| Debug vcpkg port CI | `prompts/vcpkg-port-debug.prompt.md` |
 
 ## Project Overview
 
@@ -47,7 +50,8 @@ RefIccMAX (iccDEV) — ICC color profile libraries and tools.
 | `Tools/CmdLine/` | 13 CLI tools (DumpProfile, RoundTrip, ApplyProfiles, …) |
 | `Build/Cmake/` | CMake build system |
 | `Testing/` | Test scripts and profile generators |
-| `.github/workflows/` | 17 CI workflows (PR, sanitizer, WASM, Docker, release) |
+| `ports/iccdev/` | vcpkg overlay port (portfile.cmake, vcpkg.json) |
+| `.github/workflows/` | 18 CI workflows (PR, sanitizer, WASM, Docker, vcpkg, release) |
 | `.github/scripts/` | `sanitize-sed.sh` (bash) and `sanitize.ps1` (PowerShell) |
 
 ## Build
@@ -89,6 +93,38 @@ cmake --build . -- /m /maxcpucount
 | `ENABLE_FUZZING` | OFF | LibFuzzer harnesses (Clang only) |
 | `ENABLE_ICCXML` | ON | IccXML library support |
 
+## vcpkg Port
+
+A vcpkg overlay port is provided in `ports/iccdev/` for consuming iccDEV as a
+static library dependency. See `docs/build.md` for full usage instructions.
+
+### Quick Install
+```bash
+vcpkg install iccdev --overlay-ports=ports --triplet x64-linux --classic
+```
+
+### CMake Integration
+```cmake
+find_package(RefIccMAX CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE RefIccMAX::IccProfLib2-static)
+```
+
+### Port Features
+- `tools` (default): 7 core CLI tools + 2 XML tools
+- `xml` (default): IccXML2 library (adds libxml2 dependency)
+
+### Local Source Mode (CI)
+Set `VCPKG_ICCDEV_SOURCE` + `VCPKG_KEEP_ENV_VARS=VCPKG_ICCDEV_SOURCE` to build
+from a local checkout instead of downloading from GitHub. Required in CI to
+avoid GitHub API rate limits.
+
+### Known Limitations
+- Static-only (no `__declspec(dllexport)` in IccProfLib/IccXML)
+- Image tools excluded (TIFF/PNG/JPEG deps cause static link issues)
+- wxProfileDump GUI excluded
+
+CI workflow: `ci-vcpkg-ports.yml` validates the port on Windows, Ubuntu, macOS.
+
 ## Testing
 
 ```bash
@@ -97,7 +133,7 @@ Testing/RunTests.sh            # Validate all profiles (Unix)
 Testing/RunTests.bat           # Validate all profiles (Windows)
 ```
 
-## CI Workflows (17)
+## CI Workflows (18)
 
 | Category | Workflows |
 |----------|-----------|
@@ -107,6 +143,7 @@ Testing/RunTests.bat           # Validate all profiles (Windows)
 | Docker | `ci-docker-latest.yml`, `ci-docker-nixos.yml` |
 | Release | `ci-latest-release.yml` |
 | Analysis | `ci-clang-tidy-coreguidelines.yml`, `ScanBuild.yml` |
+| vcpkg | `ci-vcpkg-ports.yml` (Windows, Ubuntu, macOS overlay port test) |
 | Ops | `label.yml`, `update-labels.yml` |
 
 ### Workflow Governance
