@@ -166,6 +166,9 @@ vcpkg_cmake_configure(
         -DENABLE_SHARED_LIBS=OFF
         -DENABLE_STATIC_LIBS=ON
         -DENABLE_WXWIDGETS=OFF
+        # Keep static archives linkable from non-Clang consumers by disabling
+        # Release IPO/LTO in the packaged build.
+        -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
         ${FEATURE_OPTIONS}
 )
 

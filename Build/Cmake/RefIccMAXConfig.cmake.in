@@ -63,6 +63,21 @@ find_package_handle_standard_args(RefIccMAX
 if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
   set(REFICCMAX_FOUND TRUE)
 
+  # Static-only installs export -static targets; provide generic names so
+  # consumers do not need to special-case package layout.
+  if(NOT TARGET RefIccMAX::IccProfLib2 AND TARGET RefIccMAX::IccProfLib2-static)
+    add_library(RefIccMAX::IccProfLib2 INTERFACE IMPORTED)
+    set_target_properties(RefIccMAX::IccProfLib2 PROPERTIES
+      INTERFACE_LINK_LIBRARIES "RefIccMAX::IccProfLib2-static"
+    )
+  endif()
+  if(NOT TARGET RefIccMAX::IccXML2 AND TARGET RefIccMAX::IccXML2-static)
+    add_library(RefIccMAX::IccXML2 INTERFACE IMPORTED)
+    set_target_properties(RefIccMAX::IccXML2 PROPERTIES
+      INTERFACE_LINK_LIBRARIES "RefIccMAX::IccXML2-static"
+    )
+  endif()
+
   # Build legacy include/library lists from the exported targets
   set(REFICCMAX_INCLUDE_DIRS "")
   set(REFICCMAX_LIBRARIES "")

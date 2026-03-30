@@ -786,6 +786,12 @@ check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
 if(DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
   # User explicitly set LTO preference via -D flag; respect it unconditionally
   message(STATUS ">>> Link-Time Optimization (LTO): ${CMAKE_INTERPROCEDURAL_OPTIMIZATION} (user override)")
+elseif(DEFINED VCPKG_TARGET_TRIPLET AND ENABLE_STATIC_LIBS AND NOT ENABLE_SHARED_LIBS)
+  # Packaged static vcpkg builds are consumed by non-Clang toolchains and linkers.
+  # Keep these archives free of LLVM bitcode even when the port forgets to pass
+  # -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF.
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+  message(STATUS ">>> Link-Time Optimization (LTO) disabled: vcpkg static package build")
 elseif(ipo_supported)
   if(SANITIZER_FLAGS OR ENABLE_COVERAGE OR ENABLE_PROFILING)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)

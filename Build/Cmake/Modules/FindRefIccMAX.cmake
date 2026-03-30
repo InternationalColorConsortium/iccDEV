@@ -180,6 +180,20 @@ if(RefIccMAX_FOUND)
     )
   endif()
 
+  # Static-only installs still need generic target names for consumers.
+  if(NOT TARGET RefIccMAX::IccProfLib2 AND TARGET RefIccMAX::IccProfLib2-static)
+    add_library(RefIccMAX::IccProfLib2 INTERFACE IMPORTED)
+    set_target_properties(RefIccMAX::IccProfLib2 PROPERTIES
+      INTERFACE_LINK_LIBRARIES "RefIccMAX::IccProfLib2-static"
+    )
+  endif()
+  if(NOT TARGET RefIccMAX::IccXML2 AND TARGET RefIccMAX::IccXML2-static)
+    add_library(RefIccMAX::IccXML2 INTERFACE IMPORTED)
+    set_target_properties(RefIccMAX::IccXML2 PROPERTIES
+      INTERFACE_LINK_LIBRARIES "RefIccMAX::IccXML2-static"
+    )
+  endif()
+
   # Non-namespaced aliases for convenience
   if(TARGET RefIccMAX::IccProfLib2 AND NOT TARGET IccProfLib2)
     add_library(IccProfLib2 ALIAS RefIccMAX::IccProfLib2)

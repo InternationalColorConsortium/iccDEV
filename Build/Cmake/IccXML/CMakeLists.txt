@@ -44,7 +44,8 @@ SET( HEADERS_PUBLIC
 IF(ENABLE_INSTALL_RIM)
   INSTALL( FILES
              ${HEADERS_PUBLIC}
-             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
+             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
+             COMPONENT shared-proof )
 ENDIF(ENABLE_INSTALL_RIM)
 
 # Generate version header with git commit hash
@@ -93,6 +94,10 @@ set_target_properties(${TARGET_NAME}
         SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
 )
 
+  if(WIN32)
+    set_target_properties(${TARGET_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+  endif()
+
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
 
@@ -113,9 +118,9 @@ set_target_properties(${TARGET_NAME}
 #    message(STATUS "Installing SHARED library")
     INSTALL(TARGETS ${TARGET_NAME}
             EXPORT  RefIccMAXTargets
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT shared-proof
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
   ENDIF()
 ENDIF()
 
@@ -144,20 +149,9 @@ IF(ENABLE_STATIC_LIBS)
 #    message(STATUS "Installing STATIC library")
     INSTALL(TARGETS ${TARGET_NAME}-static
             EXPORT  RefIccMAXTargets
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
   ENDIF()
 
-  # Provide alias for MSVC .lib linking fallback
-  # Use TARGET_LINKER_FILE_NAME to honor CMAKE_DEBUG_POSTFIX (e.g. IccXML2d.lib)
-  IF(WIN32 AND ENABLE_SHARED_LIBS)
-    ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}-static POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:${TARGET_NAME}-static>"
-        "$<TARGET_FILE_DIR:${TARGET_NAME}-static>/$<TARGET_LINKER_FILE_NAME:${TARGET_NAME}>"
-      COMMENT "Aliasing ${TARGET_NAME}-static to $<TARGET_LINKER_FILE_NAME:${TARGET_NAME}> for MSVC compatibility")
-  ENDIF()
   # If no shared library, create alias so IccXML2 always exists
   IF(NOT ENABLE_SHARED_LIBS)
     ADD_LIBRARY(${TARGET_NAME} ALIAS ${TARGET_NAME}-static)
