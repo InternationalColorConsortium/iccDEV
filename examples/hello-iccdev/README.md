@@ -15,147 +15,63 @@ Minimal standalone example that links **IccProfLib2** and **IccXML2** from the
 
 | Requirement | Minimum Version |
 |-------------|-----------------|
-| CMake       | 3.16            |
 | C++ compiler | C++17 support  |
-| libxml2     | any recent      |
 
-On Debian/Ubuntu:
-
-```bash
-sudo apt-get install cmake g++ libxml2-dev
-```
-
-On macOS (Homebrew):
-
-```bash
-brew install cmake libxml2
-```
-
-On Windows, libxml2 is fetched automatically via vcpkg when building iccDEV.
-
-## Build iccDEV First
-
-Before building the example, build the iccDEV libraries:
-
-```bash
-cd <iccDEV-root>/Build/Cmake
-cmake -B build
-cmake --build build
-```
-
-## Build the Example
-
-The CMakeLists.txt tries three discovery paths in order:
-
-### Path 1 — Installed Package
-
-If iccDEV has been installed (via `cmake --install`) or via the
-[vcpkg overlay port](../../docs/vcpkg.md), the example finds it
-automatically through `find_package(RefIccMAX CONFIG)`:
-
-```bash
-cd examples/hello-iccdev
-cmake -B build -DCMAKE_PREFIX_PATH="/usr/local"
-cmake --build build
-```
-
-Using vcpkg:
-
-```bash
-# Install iccDEV via vcpkg overlay (see docs/vcpkg.md)
-vcpkg install iccdev --overlay-ports=../../ports --triplet x64-linux --classic
-
-# Build example with vcpkg toolchain
-cd examples/hello-iccdev
-cmake -B build \
-  -DCMAKE_TOOLCHAIN_FILE=path/to/vcpkg/scripts/buildsystems/vcpkg.cmake \
-  -DVCPKG_OVERLAY_PORTS=../../ports
-cmake --build build
-```
-
-### Path 2 — Build-Tree Export (Recommended for Development)
-
-Point at the iccDEV build directory. The CMake config is loaded directly from
-the build tree — no install step required:
-
-```bash
-cd examples/hello-iccdev
-cmake -B build -DICCDEV_BUILD_DIR=../../Build/Cmake/build
-cmake --build build
-```
-
-### Path 3 — Manual Discovery (Legacy / Custom Layouts)
-
-For non-standard directory layouts, specify both the source root and build
-directory:
-
-```bash
-cd examples/hello-iccdev
-cmake -B build \
-  -DICCDEV_ROOT=/path/to/iccDEV \
-  -DICCDEV_BUILD_DIR=/path/to/iccDEV/Build/Cmake/build
-cmake --build build
-```
-
-## Run
-
-```bash
-./build/hello-iccdev
-```
-
-Expected output:
+## Windows vcpkg
 
 ```
-IccProfLib version: 2.3.1
-IccLibXML  version: 2.3.1
-Profile spec ver:  V5.1.0
+git clone https://github.com/InternationalColorConsortium/iccdev.git
+cd iccdev\examples\hello-iccdev 
+git checkout ci-vcpkg-ports
+vcpkg install --overlay-ports=../../ports/iccdev
+cmake -S . -B build-vcpkg-verify -G "Visual Studio 17 2022" -A x64 "-DCMAKE_TOOLCHAIN_FILE=C:/Program Files/Microsoft Visual Studio/2022/Community/VC/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DICCDEV_BUILD_DIR=..\..\Release"
+cmake --build .\build-vcpkg-verify\ --config Release
+build-vcpkg-verify\Release\hello-iccdev.exe
+```
 
-XML round-trip OK (282 bytes)
+## Unix vcpkg
+
+```
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+./bootstrap-vcpkg.sh --disableMetrics
+./vcpkg integrate install
+cd ..
+git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
+cd iccdev/examples/hello-iccdev
+../../../vcpkg/vcpkg install --overlay-ports=../../ports/iccdev
+cmake -S . -B build-vcpkg-verify "-DCMAKE_TOOLCHAIN_FILE=-DCMAKE_TOOLCHAIN_FILE=..\..\..\vcpkg\scripts\buildsystems\vcpkg.cmake" -G Ninja" -G "Visual Studio 17 2022" -A x64
+cmake --build build-vcpkg-verify --config Release
+./build-vcpkg-verify/Release/hello-iccdev
+```
+
+### CMake
+
+```
+git clone https://github.com/InternationalColorConsortium/iccdev.git
+cd iccdev 
+cmake -B unix -S Build/Cmake/
+cmake --build unix
+cd examples/hello-iccdev 
+cmake -B unix   -DICCDEV_ROOT=$HOME/head/iccDEV   -DICCDEV_BUILD_DIR=$HOME/head/iccDEV/unix
+cmake --build unix
+./unix/hello-iccdev
+```
+
+### Output
+
+```
+IccProfLib version: 2.3.1.6+e280b0a
+IccLibXML  version: 2.3.1.6+e280b0a
+Profile spec ver:  4.00
+
+XML round-trip OK (786 bytes)
 <?xml version="1.0" encoding="UTF-8"?>
 <IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.00</ProfileVersion>
   ... (truncated)
 
 Hello, iccDEV!
 ```
-
-## Platform Notes
-
-### Linux / macOS
-
-Shared libraries (`libIccProfLib2.so` / `.dylib`) must be on the library search
-path. When using Path 2, set `LD_LIBRARY_PATH` (Linux) or `DYLD_LIBRARY_PATH`
-(macOS) to include the build directory:
-
-```bash
-export LD_LIBRARY_PATH=../../Build/Cmake/build/IccProfLib:../../Build/Cmake/build/IccXML:$LD_LIBRARY_PATH
-./build/hello-iccdev
-```
-
-### Windows (MSVC)
-
-The CMakeLists.txt automatically copies DLLs from the build directory next to
-the executable via a post-build step — no manual `PATH` modification needed.
-
-## CI Integration
-
-This example is tested automatically in the
-[ci-comprehensive-build-test](../../.github/workflows/ci-comprehensive-build-test.yml)
-workflow. The CI job:
-
-1. Builds iccDEV with CMake
-2. Configures hello-iccdev with `-DICCDEV_BUILD_DIR` (Path 2)
-3. Builds and runs the example
-4. Verifies the output contains `IccProfLib version:`, `IccLibXML version:`,
-   and `Hello, iccDEV!`
-
-## Files
-
-| File | Description |
-|------|-------------|
-| `CMakeLists.txt` | Build configuration with 3-path library discovery |
-| `hello-iccdev.cpp` | Example source — versions, profile creation, XML round-trip |
-| `README.md` | This file |
-
-## License
-
-Copyright © 2026 The International Color Consortium. All rights reserved.

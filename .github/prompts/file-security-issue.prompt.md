@@ -1,5 +1,8 @@
 # File a Security Issue on iccDEV
 
+## Examples
+- https://github.com/InternationalColorConsortium/iccDEV/issues/696 https://github.com/InternationalColorConsortium/iccDEV/issues/700 https://github.com/InternationalColorConsortium/iccDEV/issues/734 https://github.com/InternationalColorConsortium/iccDEV/issues/753
+
 ## When to Use
 
 You have found a bug via sanitizer output (ASAN, UBSAN), fuzzer crash, or manual

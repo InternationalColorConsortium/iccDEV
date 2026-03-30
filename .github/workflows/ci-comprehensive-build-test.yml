@@ -5,8 +5,12 @@
 #         Tests all build configurations, sanitizers, and options
 #         This workflow will replace ci-pr-actions in time
 #
-# Last Updated: 2026-03-24 23:10:51 UTC by David Hoyt
+# Last Updated: 2026-04-02 14:35:21 UTC by David Hoyt
 #               - Shorten Options Listing
+#               - QA Cross Platform arm64 & x64
+#
+#  Ensure the expected outcome on Windows. 
+#  This is the CMake XML Bug TODO at Line 1111
 #
 # All PR _must_ PASS this workflow
 #
@@ -1111,6 +1115,8 @@ jobs:
                 -DCMAKE_BUILD_TYPE=Release `
                 -Wno-dev
           cmake --build build --config Release -- /m /maxcpucount
+          ## Ensure the expected outcome on Windows. This is the CMake XML Bug TODO
+          cmake --build build --config Release -- /m /maxcpucount
 
       # ── Step 2: Build example project (Unix — Path 2: build-tree export) ──
       - name: Build Example Project (Unix)
@@ -1146,6 +1152,7 @@ jobs:
                 -DVCPKG_MANIFEST_MODE=OFF `
                 -DCMAKE_BUILD_TYPE=Release `
                 -Wno-dev
+          cmake --build build --config Release
           cmake --build build --config Release
 
       # ── Step 3: Run example and verify output (Unix) ──

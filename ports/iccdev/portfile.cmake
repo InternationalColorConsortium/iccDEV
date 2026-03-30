@@ -4,11 +4,16 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# portfile.cmake — vcpkg port for iccDEV (RefIccMAX)
+# Last Updated: 2026-04-02 01:27:42 UTC by David Hoyt
+#               Add SHA Pin
+#               Fixups following BeyondRGB PR-418
+# Remark:       vcpkg testing macOS, WSL-2 & Win11              
+#
+# portfile.cmake - vcpkg port for iccDEV (RefIccMAX)
 #
 # Builds IccProfLib2, IccXML2, and core CLI tools from source.
 # Image-dependent tools (tiff/png/jpeg) and wxProfileDump GUI
-# are excluded — this port focuses on the ICC profile library
+# are excluded; this port focuses on the ICC profile library
 # and core command-line utilities.
 #
 ###############################################################
@@ -20,19 +25,28 @@ if(DEFINED ENV{VCPKG_ICCDEV_SOURCE} AND EXISTS "$ENV{VCPKG_ICCDEV_SOURCE}/Build/
     set(SOURCE_PATH "${CURRENT_BUILDTREES_DIR}/src/local")
     file(REMOVE_RECURSE "${SOURCE_PATH}")
     file(COPY "$ENV{VCPKG_ICCDEV_SOURCE}/" DESTINATION "${SOURCE_PATH}"
-         PATTERN ".git" EXCLUDE)
+         PATTERN ".git" EXCLUDE
+         REGEX "/\\.vs($|/)" EXCLUDE
+         REGEX "/out($|/)" EXCLUDE
+         REGEX "/deps-extract($|/)" EXCLUDE
+         REGEX "/deps\\.zip$" EXCLUDE
+         REGEX "/iccDEV-sdk-[^/]+($|/)" EXCLUDE
+         REGEX "/Build/Cmake/build[^/]*($|/)" EXCLUDE
+         REGEX "/examples/hello-iccdev/build[^/]*($|/)" EXCLUDE
+         REGEX "/examples/hello-iccdev/vcpkg_installed($|/)" EXCLUDE
+         REGEX "/vcpkg_installed($|/)" EXCLUDE)
     message(STATUS "Using local source from $ENV{VCPKG_ICCDEV_SOURCE}")
 else()
     vcpkg_from_github(
         OUT_SOURCE_PATH SOURCE_PATH
         REPO InternationalColorConsortium/iccDEV
         REF "v${VERSION}"
-        SHA512 0  # Placeholder — update after tagging release
-        HEAD_REF ci-vcpkg-ports
+        SHA512 040c039df898e79ad8da74bdd6f944ffd96f828d6df260481af44d8417d5fac4926554f43ffaa1907a2ae4653edc749008edc40d4c9314181a5191c1772135bf
+        HEAD_REF master
     )
 endif()
 
-# ── Source patches ────────────────────────────────────────────
+# -- Source patches ------------------------------------------------
 
 # 1. Guard IccXML subdirectory behind ENABLE_ICCXML
 #    (upstream adds it unconditionally).
@@ -72,7 +86,7 @@ vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "${_iccxml_old}" "${_iccxml_new}"
 )
 
-# 2. Disable IccDEVCmm (Windows CMM DLL — PCH issues under Ninja)
+# 2. Disable IccDEVCmm (Windows CMM DLL; PCH issues under Ninja)
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "ADD_SUBDIRECTORY(Tools/IccDEVCmm)"
     "# IccDEVCmm disabled in vcpkg port (Windows CMM DLL, not a library)"
@@ -98,16 +112,16 @@ vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "# IccJpegDump disabled in vcpkg port (requires JPEG, image tools excluded)"
 )
 
-# 5. Disable TIFF block FATAL_ERROR → skip
+# 5. Disable TIFF block FATAL_ERROR -> skip
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(FATAL_ERROR "TIFF library not found. Please install libtiff-dev.")]=]
-    [=[message(STATUS "TIFF not found — skipping TIFF-dependent tools (vcpkg port: image tools excluded)")]=]
+    [=[message(STATUS "TIFF not found; skipping TIFF-dependent tools (vcpkg port: image tools excluded)")]=]
 )
 
 # 6. Disable PNG block FATAL_ERROR (line ~439 in deps section)
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(FATAL_ERROR " PNG not found. Please install libpng-dev or install via vcpkg.")]=]
-    [=[message(STATUS "PNG not found — skipping (vcpkg port: image tools excluded)")]=]
+    [=[message(STATUS "PNG not found; skipping (vcpkg port: image tools excluded)")]=]
 )
 
 # 7. Disable IccPngDump subdirectory and its FATAL_ERROR guard
@@ -117,16 +131,24 @@ vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
 )
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(FATAL_ERROR "PNG not found. Please install libpng-dev or install via vcpkg.")]=]
-    [=[message(STATUS "PNG not found — skipping IccPngDump (vcpkg port)")]=]
+    [=[message(STATUS "PNG not found; skipping IccPngDump (vcpkg port)")]=]
 )
 
 # 8. Disable JPEG FATAL_ERROR
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(FATAL_ERROR " JPEG not found. Please install libjpeg-dev or install via vcpkg.")]=]
-    [=[message(STATUS "JPEG not found — skipping (vcpkg port: image tools excluded)")]=]
+    [=[message(STATUS "JPEG not found; skipping (vcpkg port: image tools excluded)")]=]
 )
 
-# Feature flags → CMake options
+# 9. Make LibXml2 conditional on ENABLE_ICCXML (upstream has it unconditional)
+vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
+    [=[find_package(LibXml2 REQUIRED)]=]
+    [=[if(ENABLE_ICCXML)
+  find_package(LibXml2 REQUIRED)
+endif()]=]
+)
+
+# Feature flags -> CMake options
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     FEATURES
         tools   ENABLE_TOOLS
@@ -149,6 +171,12 @@ vcpkg_cmake_configure(
 
 vcpkg_cmake_build()
 vcpkg_cmake_install()
+
+# Create IccProfLib/ compatibility include directory
+# Upstream installs headers under include/RefIccMAX/IccProfLib2/. Consumers using
+# submodule-style includes (#include <IccProfLib/IccProfile.h>) need this alias.
+file(GLOB _proflib_headers "${CURRENT_PACKAGES_DIR}/include/RefIccMAX/IccProfLib2/*.h")
+file(COPY ${_proflib_headers} DESTINATION "${CURRENT_PACKAGES_DIR}/include/IccProfLib")
 
 # Fix up CMake config files location
 # Upstream installs to lib/cmake/reficcmax (lowercase)

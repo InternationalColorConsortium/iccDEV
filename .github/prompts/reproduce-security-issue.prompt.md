@@ -3,6 +3,9 @@
 Use this prompt when triaging an iccDEV security advisory (GHSA/CVE) or
 investigating a crash reported against an ICC profile or image file.
 
+## Examples
+- https://github.com/InternationalColorConsortium/iccDEV/issues/696 https://github.com/InternationalColorConsortium/iccDEV/issues/700 https://github.com/InternationalColorConsortium/iccDEV/issues/734 https://github.com/InternationalColorConsortium/iccDEV/issues/753
+
 ## Step 1: Identify the Advisory
 
 ```bash

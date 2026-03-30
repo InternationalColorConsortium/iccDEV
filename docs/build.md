@@ -52,18 +52,18 @@ static library dependency across Windows, Linux, and macOS.
 
 For full documentation — install commands, feature flags, CMake integration,
 local source mode, platform notes, and troubleshooting — see
-**[docs/vcpkg.md](vcpkg.md)**.
+**[examples/hello-iccdev](Readme.md)**.
 
-### Quick Install
+### Example Project vcpkg
 
-```bash
-git clone https://github.com/microsoft/vcpkg.git
-./vcpkg/bootstrap-vcpkg.sh
-
-vcpkg install iccdev \
-  --overlay-ports=path/to/iccDEV/ports \
-  --triplet x64-linux \
-  --classic
+```
+git clone https://github.com/InternationalColorConsortium/iccdev.git
+cd iccdev\examples\hello-iccdev 
+git checkout ci-vcpkg-ports
+vcpkg install --overlay-ports=../../ports/iccdev
+cmake -S . -B build-vcpkg-verify -G "Visual Studio 17 2022" -A x64 "-DCMAKE_TOOLCHAIN_FILE=C:/Program Files/Microsoft Visual Studio/2022/Community/VC/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DICCDEV_BUILD_DIR=..\..\Release"
+cmake --build .\build-vcpkg-verify\ --config Release
+build-vcpkg-verify\Release\hello-iccdev.exe
 ```
 
 ### CMake Usage

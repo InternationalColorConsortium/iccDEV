@@ -1,12 +1,13 @@
 #################################################################################
 # Cmake Project Configuration| iccDEV Project
-# Copyright (C) 2024-2026 The International Color Consortium.
+# Copyright (c) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 2026-03-25 13:56:11 UTC by David Hoyt
+#  Last Updated: 2026-04-02 02:20:35 UTC by David Hoyt
 #
 # CMake Configuration:
-# - Fix: CMake LTO override and build type matching
+# - Fix: Change IccApplyNamedCmm to iccApplyNamedCmm
+#
 #
 #################################################################################
 
@@ -273,7 +274,7 @@ message(STATUS "### Environment Diagnostics ###")
 # Detect path separator
 set(PATH_SEPARATOR $<IF:$<BOOL:${WIN32}>,";",":">)
 
-# Pretty-print the PATH variable (numbered entries) — only with VERBOSE_CONFIG
+# Pretty-print the PATH variable (numbered entries) only with VERBOSE_CONFIG
 if(VERBOSE_CONFIG)
   string(REPLACE "${PATH_SEPARATOR}" ";" PATH_LIST "$ENV{PATH}")
   list(LENGTH PATH_LIST PATH_LENGTH)
@@ -783,7 +784,7 @@ include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
 
 if(DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
-  # User explicitly set LTO preference via -D flag — respect it unconditionally
+  # User explicitly set LTO preference via -D flag; respect it unconditionally
   message(STATUS ">>> Link-Time Optimization (LTO): ${CMAKE_INTERPROCEDURAL_OPTIMIZATION} (user override)")
 elseif(ipo_supported)
   if(SANITIZER_FLAGS OR ENABLE_COVERAGE OR ENABLE_PROFILING)
@@ -1021,7 +1022,7 @@ elseif(WIN32)
 
   # ASLR + DEP + CET shadow stacks
   add_link_options(/DYNAMICBASE /NXCOMPAT)
-  # CET (Control-flow Enforcement Technology) — requires VS 2019 16.7+
+  # CET (Control-flow Enforcement Technology) requires VS 2019 16.7+
   if(MSVC_VERSION GREATER_EQUAL 1927)
     add_link_options(/CETCOMPAT)
   endif()
@@ -1102,7 +1103,7 @@ if(ENABLE_ICCXML)
     message(STATUS "ICCXML support enabled")
   endif()
 
-  # LibXml2 already found unconditionally above — resolve target vs legacy variables
+  # LibXml2 already found unconditionally above; resolve target vs legacy variables
   if(LibXml2_FOUND)
     if(VERBOSE_CONFIG)
       message(STATUS "Found LibXml2 via system or toolchain integration")
@@ -1161,13 +1162,22 @@ function(add_tool_subdirectory TOOL_SUBDIRECTORY)
     message(STATUS "Successfully added Subdirectory: ${TOOL_SUBDIRECTORY}")
 endfunction()
 
+function(iccdev_fixup_msvc_compile_pdb TARGET_NAME)
+  if(MSVC AND TARGET "${TARGET_NAME}")
+    set_target_properties(${TARGET_NAME} PROPERTIES
+      COMPILE_PDB_NAME "${TARGET_NAME}"
+      COMPILE_PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/compile-pdb/$<CONFIG>"
+    )
+  endif()
+endfunction()
+
 IF(ENABLE_TOOLS)
   # Verify nlohmann_json is configured properly
   IF(nlohmann_json_DIR)
     IF(VERBOSE_CONFIG)
       MESSAGE(STATUS "Found nlohmann JSON library at: ${nlohmann_json_DIR}")
     ENDIF()
-    # nlohmann_json is header-only — use via target_link_libraries(PRIVATE nlohmann_json::nlohmann_json)
+    # nlohmann_json is header-only; use via target_link_libraries(PRIVATE nlohmann_json::nlohmann_json)
     # in individual tool CMakeLists (NOT via include_directories)
   ELSE()
     MESSAGE(WARNING "nlohmann JSON library not found. Skipping..")
@@ -1195,7 +1205,7 @@ IF(ENABLE_TOOLS)
   ENDIF()
 
 
-# PNG already found above — just add the tool
+# PNG already found above; just add the tool
 if(NOT PNG_FOUND)
   message(FATAL_ERROR "PNG not found. Please install libpng-dev or install via vcpkg.")
 endif()
@@ -1211,7 +1221,7 @@ ADD_SUBDIRECTORY(Tools/IccPngDump)
     ADD_SUBDIRECTORY(Tools/IccDEVCmm)
 
 
-  # TIFF already found above — scope includes to targets, not globally
+  # TIFF already found above; scope includes to targets, not globally
   if (TIFF_FOUND)
     # TIFF includes are now scoped to each tool via target_include_directories
 
@@ -1246,6 +1256,26 @@ ADD_SUBDIRECTORY(Tools/IccPngDump)
   else()
     message(STATUS "wxWidgets disabled by ENABLE_WXWIDGETS=OFF - skipping wxProfileDump.")
   endif()
+
+  foreach(_iccdev_tool_target
+      iccFromXml
+      iccToXml
+      iccJpegDump
+      iccApplyNamedCmm
+      iccDumpProfile
+      iccRoundTrip
+      iccFromCube
+      iccV5DspObsToV4Dsp
+      iccApplyToLink
+      iccApplySearch
+      iccPngDump
+      iccApplyProfiles
+      iccSpecSepToTiff
+      iccTiffDump
+      iccDumpProfileGui
+  )
+    iccdev_fixup_msvc_compile_pdb(${_iccdev_tool_target})
+  endforeach()
 
 ENDIF(ENABLE_TOOLS)
 
@@ -1291,7 +1321,7 @@ ADD_CUSTOM_TARGET( dist-bin
 ADD_CUSTOM_TARGET( dist-bin2
     DEPENDS check
     COMMAND mkdir -p ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/IccApplyNamedCmm ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
+    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyNamedCmm ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyProfiles ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplySearch ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyToLink ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
@@ -1348,7 +1378,7 @@ IF(ENABLE_INSTALL_RIM)
   )
 ENDIF(ENABLE_INSTALL_RIM)
 
-# Build-tree export — allows find_package() from build dir without install
+# Build-tree export; allows find_package() from build dir without install
 export( EXPORT RefIccMAXTargets
         NAMESPACE RefIccMAX::
         FILE "${CMAKE_CURRENT_BINARY_DIR}/RefIccMAXTargets.cmake"

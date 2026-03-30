@@ -14,16 +14,16 @@
 # - Tool CMakeLists: target_include_directories(PRIVATE) replaces global
 # 
 ################################################################################
-# hello-iccdev — Standalone example consuming IccProfLib2 + IccXML2
+# hello-iccdev - Standalone example consuming IccProfLib2 + IccXML2
 #
 # Three discovery paths (tried in order):
 #
-# ── Path 1: Installed RefIccMAX package ──────────────────────────────────────
+# -- Path 1: Installed RefIccMAX package -------------------------------------
 #
 #   cmake -B build -DCMAKE_PREFIX_PATH="/usr/local" ..
 #   cmake --build build
 #
-# ── Path 2: Build-tree export (in-source-tree development) ───────────────────
+# -- Path 2: Build-tree export (in-source-tree development) -------------------
 #
 #   # Build iccDEV first:
 #   cd <iccDEV>/Build/Cmake && cmake -B build && cmake --build build
@@ -33,7 +33,7 @@
 #   cmake -B build -DICCDEV_BUILD_DIR=../../Build/Cmake/build
 #   cmake --build build
 #
-# ── Path 3: Manual library discovery (legacy / custom layouts) ───────────────
+# -- Path 3: Manual library discovery (legacy / custom layouts) ---------------
 #
 #   cmake -B build -DICCDEV_ROOT=/path/to/iccDEV \
 #         -DICCDEV_BUILD_DIR=/path/to/iccDEV/build
@@ -50,7 +50,7 @@ project(hello-iccdev
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ── Resolve iccDEV root and build dir defaults ──────────────────────────────
+# -- Resolve iccDEV root and build dir defaults ------------------------------
 if(NOT DEFINED ICCDEV_ROOT)
     get_filename_component(ICCDEV_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 else()
@@ -64,19 +64,48 @@ else()
 endif()
 
 set(_FOUND_VIA "")
+set(_REFICCMAX_PREFIX_HINTS "")
+set(_REFICCMAX_CONFIG_HINTS "")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Path 1: Installed package — find_package(RefIccMAX CONFIG)
-# ═══════════════════════════════════════════════════════════════════════════════
-find_package(RefIccMAX QUIET CONFIG)
+if(DEFINED VCPKG_TARGET_TRIPLET)
+    if(DEFINED VCPKG_INSTALLED_DIR)
+        list(APPEND _REFICCMAX_PREFIX_HINTS
+            "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}"
+        )
+    endif()
+
+    list(APPEND _REFICCMAX_PREFIX_HINTS
+        "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}"
+    )
+endif()
+
+# =============================================================================
+# Path 1: Installed package - find_package(RefIccMAX CONFIG)
+# =============================================================================
+foreach(_REFICCMAX_PREFIX_HINT IN LISTS _REFICCMAX_PREFIX_HINTS)
+    if(EXISTS "${_REFICCMAX_PREFIX_HINT}/share/RefIccMAX/RefIccMAXConfig.cmake")
+        list(APPEND _REFICCMAX_CONFIG_HINTS "${_REFICCMAX_PREFIX_HINT}")
+    endif()
+endforeach()
+
+if(_REFICCMAX_CONFIG_HINTS)
+    find_package(RefIccMAX QUIET CONFIG
+        PATHS ${_REFICCMAX_CONFIG_HINTS}
+        NO_DEFAULT_PATH
+    )
+endif()
+
+if(NOT RefIccMAX_FOUND)
+    find_package(RefIccMAX QUIET CONFIG)
+endif()
 
 if(RefIccMAX_FOUND)
     set(_FOUND_VIA "installed RefIccMAX package (v${REFICCMAX_VERSION})")
 endif()
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Path 2: Build-tree export — load RefIccMAXConfig.cmake from build dir
-# ═══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# Path 2: Build-tree export - load RefIccMAXConfig.cmake from build dir
+# =============================================================================
 if(NOT RefIccMAX_FOUND AND EXISTS "${ICCDEV_BUILD_DIR}/RefIccMAXConfig.cmake")
     message(STATUS "Loading build-tree config from: ${ICCDEV_BUILD_DIR}")
     set(RefIccMAX_DIR "${ICCDEV_BUILD_DIR}")
@@ -89,9 +118,9 @@ if(NOT RefIccMAX_FOUND AND EXISTS "${ICCDEV_BUILD_DIR}/RefIccMAXConfig.cmake")
     endif()
 endif()
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Path 3: Manual fallback — find_library + target_include_directories
-# ═══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
+# Path 3: Manual fallback - find_library + target_include_directories
+# =============================================================================
 if(NOT RefIccMAX_FOUND)
     message(STATUS "RefIccMAX package not found, trying manual discovery...")
     message(STATUS "  ICCDEV_ROOT:      ${ICCDEV_ROOT}")
@@ -123,7 +152,7 @@ if(NOT RefIccMAX_FOUND)
         )
     endif()
     if(NOT ICCXML2_LIB)
-        message(FATAL_ERROR "Could not find IccXML2 — see IccProfLib2 error above for options.")
+        message(FATAL_ERROR "Could not find IccXML2; see IccProfLib2 error above for options.")
     endif()
 
     message(STATUS "  IccProfLib2: ${ICCPROFLIB2_LIB}")
@@ -146,18 +175,74 @@ if(NOT RefIccMAX_FOUND)
     set(_FOUND_VIA "manual discovery (${ICCDEV_BUILD_DIR})")
 endif()
 
-# ═══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 # Build the example
-# ═══════════════════════════════════════════════════════════════════════════════
+# =============================================================================
 message(STATUS "hello-iccdev: using ${_FOUND_VIA}")
+
+set(_ICCDEV_PROFLIB_TARGET "")
+if(TARGET RefIccMAX::IccProfLib2)
+    set(_ICCDEV_PROFLIB_TARGET RefIccMAX::IccProfLib2)
+elseif(TARGET RefIccMAX::IccProfLib2-static)
+    set(_ICCDEV_PROFLIB_TARGET RefIccMAX::IccProfLib2-static)
+endif()
+
+set(_ICCDEV_XML_TARGET "")
+if(TARGET RefIccMAX::IccXML2)
+    set(_ICCDEV_XML_TARGET RefIccMAX::IccXML2)
+elseif(TARGET RefIccMAX::IccXML2-static)
+    set(_ICCDEV_XML_TARGET RefIccMAX::IccXML2-static)
+endif()
+
+if(NOT _ICCDEV_PROFLIB_TARGET OR NOT _ICCDEV_XML_TARGET)
+    set(_REFICCMAX_BAD_DIR "${RefIccMAX_DIR}")
+    unset(RefIccMAX_DIR CACHE)
+    set(RefIccMAX_FOUND FALSE)
+    set(REFICCMAX_FOUND FALSE)
+    set(_FOUND_VIA "")
+
+    if(EXISTS "${ICCDEV_BUILD_DIR}/RefIccMAXConfig.cmake")
+        message(STATUS
+            "Ignoring incomplete RefIccMAX package at ${_REFICCMAX_BAD_DIR} "
+            "and retrying build-tree discovery."
+        )
+        set(RefIccMAX_DIR "${ICCDEV_BUILD_DIR}")
+        find_package(RefIccMAX QUIET CONFIG
+            PATHS "${ICCDEV_BUILD_DIR}"
+            NO_DEFAULT_PATH
+        )
+        if(RefIccMAX_FOUND)
+            set(_FOUND_VIA "build-tree export (${ICCDEV_BUILD_DIR})")
+            set(_ICCDEV_PROFLIB_TARGET "")
+            set(_ICCDEV_XML_TARGET "")
+            if(TARGET RefIccMAX::IccProfLib2)
+                set(_ICCDEV_PROFLIB_TARGET RefIccMAX::IccProfLib2)
+            elseif(TARGET RefIccMAX::IccProfLib2-static)
+                set(_ICCDEV_PROFLIB_TARGET RefIccMAX::IccProfLib2-static)
+            endif()
+            if(TARGET RefIccMAX::IccXML2)
+                set(_ICCDEV_XML_TARGET RefIccMAX::IccXML2)
+            elseif(TARGET RefIccMAX::IccXML2-static)
+                set(_ICCDEV_XML_TARGET RefIccMAX::IccXML2-static)
+            endif()
+        endif()
+    endif()
+
+    if(NOT _ICCDEV_PROFLIB_TARGET OR NOT _ICCDEV_XML_TARGET)
+        message(FATAL_ERROR
+            "RefIccMAX package found at ${_REFICCMAX_BAD_DIR}, but required targets "
+            "were not exported. Expected IccProfLib2/IccXML2 or their -static variants."
+        )
+    endif()
+endif()
 
 add_executable(hello-iccdev hello-iccdev.cpp)
 target_link_libraries(hello-iccdev PRIVATE
-    RefIccMAX::IccProfLib2
-    RefIccMAX::IccXML2
+    ${_ICCDEV_PROFLIB_TARGET}
+    ${_ICCDEV_XML_TARGET}
 )
 
-# ── Windows: copy DLLs next to executable ────────────────────────────────────
+# -- Windows: copy DLLs next to executable -----------------------------------
 if(WIN32 AND ICCDEV_BUILD_DIR)
     file(GLOB _ICCDEV_DLLS
         "${ICCDEV_BUILD_DIR}/IccProfLib/Release/*.dll"

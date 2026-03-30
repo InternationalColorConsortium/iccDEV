@@ -1,0 +1,13 @@
+{
+  "name": "hello-iccdev",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "iccdev"
+  ],
+  "overrides": [
+    {
+      "name": "iccdev",
+      "version": "2.3.1.6"
+    }
+  ]
+}
