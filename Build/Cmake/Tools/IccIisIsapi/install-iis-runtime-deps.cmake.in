@@ -1,0 +1,24 @@
+set(_icc_iis_bin_dest "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/@CMAKE_INSTALL_BINDIR@")
+file(MAKE_DIRECTORY "${_icc_iis_bin_dest}")
+
+set(_icc_iis_vcpkg_root "@VCPKG_INSTALLED_DIR@/@VCPKG_TARGET_TRIPLET@")
+if(CMAKE_INSTALL_CONFIG_NAME STREQUAL "Debug")
+  set(_icc_iis_runtime_dir "${_icc_iis_vcpkg_root}/debug/bin")
+else()
+  set(_icc_iis_runtime_dir "${_icc_iis_vcpkg_root}/bin")
+endif()
+
+if(EXISTS "${_icc_iis_runtime_dir}")
+  file(GLOB _icc_iis_runtime_files "${_icc_iis_runtime_dir}/*.dll")
+else()
+  set(_icc_iis_runtime_files)
+endif()
+
+foreach(_icc_iis_runtime_file IN LISTS _icc_iis_runtime_files)
+  if(EXISTS "${_icc_iis_runtime_file}")
+    file(INSTALL
+      DESTINATION "${_icc_iis_bin_dest}"
+      TYPE SHARED_LIBRARY
+      FILES "${_icc_iis_runtime_file}")
+  endif()
+endforeach()

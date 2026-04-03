@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iccDEV IIS Tool Workspaces</title>
+  <link rel="stylesheet" href="../site.css">
+</head>
+<body>
+  <div id="PageBodyContainer">
+    <div id="HeaderContainer">
+      <div id="HeaderTitleContainer">
+        <div id="HeaderTitle">
+          <a href="../index.html"><img src="../assets/ICC_logo_text.gif" width="368" height="27" alt="International Color Consortium"></a>
+        </div>
+        <div id="TopMenuContainer">
+          <div class="TopMenuItem"><a href="../index.html" title="Home"><img src="../assets/tm_about.gif" width="68" height="20" alt="Home"></a></div>
+          <div class="TopMenuItem"><a href="../endpoints.html" title="Endpoint Console"><img src="../assets/tm_resources.gif" width="71" height="20" alt="Endpoint Console"></a></div>
+          <div class="TopMenuItem"><a href="../integration.html" title="Integration Guide"><img src="../assets/tm_information.gif" width="85" height="20" alt="Integration Guide"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/" title="ICC Website"><img src="../assets/tm_members.gif" width="63" height="20" alt="ICC Website"></a></div>
+          <div class="TopMenuItem"><a href="../integration.html#quick-start" title="Quick Start"><img src="../assets/tm_getting_started.gif" width="103" height="20" alt="Quick Start"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/v4spec.xalter" title="ICC v4"><img src="../assets/tm_v4.gif" width="42" height="20" alt="ICC v4"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/iccmax/" title="iccMAX"><img src="../assets/iccmax-top3.jpg" width="41" height="20" alt="iccMAX"></a></div>
+        </div>
+        <div class="clear"></div>
+      </div>
+      <div id="HeaderLogoContainer">
+        <div id="HeaderLogo"><img src="../assets/ICC_logo_top.gif" width="143" height="65" alt="ICC logo"></div>
+        <div id="HeaderBannerContainer"><img src="../assets/hd_images.jpg" width="657" height="46" alt="Making color seamless between devices and documents"></div>
+        <div class="clear"></div>
+      </div>
+      <div class="clear"></div>
+    </div>
+
+    <div id="LeftContainer">
+      <div id="LeftContainerLogo"><img src="../assets/ICC_logo_btm.gif" width="133" height="22" alt=""></div>
+      <div id="ICCEventsContainer">
+        <div><img src="../assets/hd-icc-events.png" width="150" height="29" alt="ICC Events"></div>
+        <ul>
+          <li><a href="../endpoints.html">Run the upload console</a></li>
+          <li><a href="../iccIisIsapi.dll">Open summary endpoint</a></li>
+          <li><a href="../iccIisIsapi.dll?mode=health">Open health endpoint</a></li>
+          <li><a href="../iccIisIsapi.dll?format=xml">Open XML endpoint</a></li>
+        </ul>
+      </div>
+      <div class="LeftMenuItem"><a href="../integration.html"><img src="../assets/icc_specs_off.gif" width="150" height="23" alt="Integration Guide"></a></div>
+      <div class="LeftMenuItem"><a href="../integration.html#ops-checklist"><img src="../assets/icc_technotes_off.gif" width="150" height="23" alt="Operator Checklist"></a></div>
+      <div class="LeftMenuItem"><a href="../endpoints.html"><img src="../assets/icc_resourcecenter_off.gif" width="150" height="23" alt="Endpoint Console"></a></div>
+      <div class="LeftMenuItem"><a href="../index.html"><img src="../assets/icc_slide_off.gif" width="150" height="23" alt="Landing Page"></a></div>
+      <div class="LeftMenuItem"><a href="../iccIisIsapi.dll?format=xml"><img src="../assets/icc_profiles_off.gif" width="150" height="23" alt="XML Endpoint"></a></div>
+      <div class="LeftMenuEnd"><a href="../index.html"><img src="../assets/icc_home_off.gif" width="150" height="23" alt="Home"></a></div>
+    </div>
+
+    <div id="RightContainer">
+      <div id="EnquiryContainer">
+        <div id="EnquiryTextArea">Use this workspace root to jump back to the IIS tool console and inspect per-request files.</div>
+        <div id="EnquiryImage"><img src="../assets/phil.jpg" width="40" height="38" alt=""></div>
+        <div class="clear"></div>
+        <div id="EnquiryEntry"><a href="../endpoints.html">Open upload console...</a></div>
+      </div>
+      <div id="LiveTopicsContainer">
+        <div><img src="../assets/hd-icc-live-topics.png" width="151" height="29" alt="ICC Live Topics"></div>
+        <ul class="LiveTopics">
+          <li><a href="../endpoints.html">Create new workspaces from the browser console</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="../integration.html">Review deployment and handler setup</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="../iccIisIsapi.dll?mode=health">Keep the health endpoint available for smoke checks</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="MainContentContainer">
+      <div id="MainContent">
+        <p class="page-title">Tool Workspaces</p>
+        <p class="page-lead">
+          This root avoids <code>HTTP 403.14</code> for <code>/_tool-work/</code> and gives operators a stable navigation page.
+          Individual job folders under this directory contain uploaded ICC or XML files, generated artifacts, and tool logs.
+        </p>
+
+        <div class="content-grid">
+          <div class="content-box">
+            <h2>Primary links</h2>
+            <ul class="summary-list">
+              <li><a href="../index.html">Landing page</a></li>
+              <li><a href="../endpoints.html">Endpoint Console</a></li>
+              <li><a href="../integration.html">Integration Guide</a></li>
+              <li><a href="../iccIisIsapi.dll">Summary endpoint</a></li>
+              <li><a href="../iccIisIsapi.dll?mode=health">Health endpoint</a></li>
+              <li><a href="../iccIisIsapi.dll?format=xml">XML endpoint</a></li>
+            </ul>
+          </div>
+          <div class="note-box">
+            <h2>How to use it</h2>
+            <ul class="checklist">
+              <li>Open <a href="../endpoints.html">Endpoint Console</a>.</li>
+              <li>Upload an ICC profile or XML file.</li>
+              <li>Follow the returned workspace and artifact links from the browser results.</li>
+              <li>Use this root page any time you need a stable entry instead of IIS directory-level `403.14`.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="content-box">
+          <h2>Tool endpoint</h2>
+          <p>
+            The upload console runs <code>iccToXml</code>, <code>iccFromXml</code>, <code>iccDumpProfile</code>, and
+            <code>iccRoundTrip</code> through <code>POST /iccIisIsapi.dll?mode=tools</code>. Each completed request leaves behind a
+            per-request job directory under <code>/_tool-work/</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="clear"></div>
+
+    <div class="site-footer-rule"><img src="../assets/bg_content_base.gif" width="800" height="27" alt=""></div>
+    <div id="FooterContainer">
+      <div id="FooterSubContainer"><img src="../assets/icc_footer.gif" width="781" height="62" alt=""></div>
+      <p class="footer-note">Root navigation page for IIS tool workspaces.</p>
+      <div id="FooterBase"><img src="../assets/footer_corner_right.gif" width="10" height="10" alt=""></div>
+    </div>
+  </div>
+</body>
+</html>

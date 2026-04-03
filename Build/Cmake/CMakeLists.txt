@@ -804,6 +804,13 @@ elseif(ipo_supported)
       set(_lto_reason "sanitizers are enabled")
     endif()
     message(STATUS ">>> Link-Time Optimization (LTO) disabled: ${_lto_reason}")
+  elseif(WIN32 AND ENABLE_SHARED_LIBS)
+    # WINDOWS_EXPORT_ALL_SYMBOLS requires standard COFF objects at link time.
+    # MSVC /GL (whole-program optimization) produces LTCG bytecode objects that
+    # bypass the WEAS symbol scanner, resulting in missing DLL exports and
+    # LNK2001 unresolved externals when consumers link the import library.
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+    message(STATUS ">>> Link-Time Optimization (LTO) disabled: WINDOWS_EXPORT_ALL_SYMBOLS requires COFF objects")
   elseif(CMAKE_CONFIGURATION_TYPES)
     # Multi-config generator (Visual Studio, Xcode): enable LTO for Release only
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
@@ -1225,6 +1232,12 @@ ADD_SUBDIRECTORY(Tools/IccPngDump)
       message(STATUS "Adding Subdirectory IccDEVCmm.")
     endif()
     ADD_SUBDIRECTORY(Tools/IccDEVCmm)
+    if(WIN32)
+      if(VERBOSE_CONFIG)
+        message(STATUS "Adding Subdirectory IccIisIsapi.")
+      endif()
+      ADD_SUBDIRECTORY(Tools/IccIisIsapi)
+    endif()
 
 
   # TIFF already found above; scope includes to targets, not globally
@@ -1275,6 +1288,8 @@ ADD_SUBDIRECTORY(Tools/IccPngDump)
       iccApplyToLink
       iccApplySearch
       iccPngDump
+      iccIisIsapi
+      iccIisIsapiSmoke
       iccApplyProfiles
       iccSpecSepToTiff
       iccTiffDump

@@ -6,6 +6,13 @@ and application of ICC based color management profiles based on the
 [ICC profile specification](http://www.color.org/icc_specs2.xalter) and 
 [iccMAX profile specification](http://www.color.org/iccmax.xalter).
 
+## Documentation
+
+- [Build](build.md)
+- [Install](install.md)
+- [API Reference](api.md)
+- [OpenAPI Starter](iis-isapi.openapi.yaml)
+
 ## Features Overview
 
 Within the project are several libraries and tools as follows:

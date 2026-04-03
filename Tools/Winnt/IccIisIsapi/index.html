@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iccDEV IIS Shared Library Demo</title>
+  <style>
+    :root {
+      --bg: #f6f3eb;
+      --panel: rgba(255, 253, 248, 0.88);
+      --ink: #18262e;
+      --muted: #59676f;
+      --line: rgba(24, 38, 46, 0.14);
+      --accent: #0b7f7a;
+      --accent-strong: #085956;
+      --warm: #f3b562;
+      --shadow: 0 18px 48px rgba(24, 38, 46, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(243, 181, 98, 0.34), transparent 32%),
+        radial-gradient(circle at top right, rgba(11, 127, 122, 0.18), transparent 28%),
+        linear-gradient(180deg, #fcfaf4 0%, var(--bg) 52%, #efe8dc 100%);
+      min-height: 100vh;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 20px 56px;
+    }
+
+    .hero,
+    .grid > section,
+    .result-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      padding: 28px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -60px -60px auto;
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, rgba(11, 127, 122, 0.18), transparent 70%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(11, 127, 122, 0.08);
+      color: var(--accent-strong);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2 {
+      font-family: Georgia, "Times New Roman", serif;
+      line-height: 1.05;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 4.8rem);
+      margin-top: 14px;
+      max-width: 11ch;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    button,
+    .link-button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    }
+
+    button:hover,
+    .link-button:hover {
+      transform: translateY(-1px);
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(11, 127, 122, 0.24);
+    }
+
+    .secondary {
+      background: rgba(24, 38, 46, 0.06);
+      color: var(--ink);
+    }
+
+    .grid {
+      display: grid;
+      gap: 18px;
+      margin-top: 22px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .grid > section,
+    .result-card {
+      padding: 22px;
+    }
+
+    h2 {
+      font-size: 1.6rem;
+      margin-bottom: 12px;
+    }
+
+    p,
+    li {
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    code,
+    pre {
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    .endpoint {
+      display: block;
+      margin-top: 10px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(24, 38, 46, 0.04);
+      color: var(--ink);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+
+    .result-card {
+      margin-top: 22px;
+    }
+
+    .result-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      font-size: 0.95rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    #result-body {
+      margin: 0;
+      padding: 18px;
+      border-radius: 18px;
+      background: #10181d;
+      color: #eef7f7;
+      min-height: 220px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .command-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .command-list code {
+      display: block;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(24, 38, 46, 0.04);
+      color: var(--ink);
+      overflow-x: auto;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(24, 38, 46, 0.05);
+      color: var(--ink);
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--warm);
+      box-shadow: 0 0 0 6px rgba(243, 181, 98, 0.18);
+    }
+
+    .status.ok .dot {
+      background: #29a76e;
+      box-shadow: 0 0 0 6px rgba(41, 167, 110, 0.18);
+    }
+
+    .status.fail .dot {
+      background: #d65353;
+      box-shadow: 0 0 0 6px rgba(214, 83, 83, 0.18);
+    }
+
+    @media (max-width: 720px) {
+      main {
+        padding-top: 24px;
+      }
+
+      .hero,
+      .grid > section,
+      .result-card {
+        border-radius: 20px;
+      }
+
+      h1 {
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <span class="eyebrow">iccDEV + IIS + ISAPI</span>
+      <h1>iccDEV IIS Server.</h1>
+      <div class="hero-actions">
+        <button class="primary" id="load-summary">Load Summary</button>
+        <button class="secondary" id="load-health">Check Health</button>
+        <button class="secondary" id="load-xml">Fetch XML</button>
+        <a class="link-button secondary" href="./endpoints.html">Open Tool Console</a>
+        <a class="link-button secondary" href="./iccIisIsapi.dll" target="_blank" rel="noreferrer">Open DLL Endpoint</a>
+      </div>
+      <div class="status" id="live-status" aria-live="polite">
+        <span class="dot"></span>
+        <span>Waiting for the first request.</span>
+      </div>
+    </section>
+
+    <section class="result-card">
+      <h2>Live response</h2>
+      <div class="result-meta">
+        <span id="result-url">URL: not requested yet</span>
+        <span id="result-code">Status: n/a</span>
+        <span id="result-type">Content-Type: n/a</span>
+      </div>
+      <pre id="result-body">Choose a request above to fetch live output from the IIS ISAPI sample.</pre>
+    </section>
+
+    <div class="grid">
+      <section>
+        <h2>Interactive endpoints</h2>
+        <p>These links hit the IIS-hosted native DLL directly. The upload console lives on <code>endpoints.html</code>.</p>
+        <a class="endpoint" href="./iccIisIsapi.dll?mode=health" target="_blank" rel="noreferrer">./iccIisIsapi.dll?mode=health</a>
+        <a class="endpoint" href="./iccIisIsapi.dll" target="_blank" rel="noreferrer">./iccIisIsapi.dll</a>
+        <a class="endpoint" href="./iccIisIsapi.dll?format=xml" target="_blank" rel="noreferrer">./iccIisIsapi.dll?format=xml</a>
+        <a class="endpoint" href="./endpoints.html">./endpoints.html</a>
+      </section>
+
+      <section>
+        <h2>Integration posture</h2>
+        <ul>
+          <li>The IIS site root can stay locked down. Directory browsing remains off.</li>
+          <li><code>index.html</code> becomes the default document, which avoids <code>HTTP 403.14</code> at the site root.</li>
+          <li>The native endpoint still lives at <code>iccIisIsapi.dll</code>, so existing monitoring and smoke checks stay simple.</li>
+          <li>The browser tool console can upload ICC or XML input and run <code>iccToXml</code>, <code>iccFromXml</code>, <code>iccDumpProfile</code>, and <code>iccRoundTrip</code> on the server.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Quick tests</h2>
+        <div class="command-list">
+          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?mode=health</code>
+          <code>curl.exe http://localhost:18081/iccIisIsapi.dll</code>
+          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?format=xml</code>
+          <code>Open http://localhost:18081/endpoints.html to upload an ICC or XML file.</code>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const resultUrl = document.getElementById("result-url");
+    const resultCode = document.getElementById("result-code");
+    const resultType = document.getElementById("result-type");
+    const resultBody = document.getElementById("result-body");
+    const liveStatus = document.getElementById("live-status");
+
+    async function loadEndpoint(relativeUrl) {
+      const absoluteUrl = new URL(relativeUrl, window.location.href).toString();
+      resultUrl.textContent = "URL: " + absoluteUrl;
+      resultCode.textContent = "Status: loading";
+      resultType.textContent = "Content-Type: pending";
+      resultBody.textContent = "Loading " + absoluteUrl + " ...";
+      liveStatus.className = "status";
+      liveStatus.lastElementChild.textContent = "Request in flight.";
+
+      try {
+        const response = await fetch(relativeUrl, {
+          headers: {
+            "Accept": "text/plain, application/xml, text/xml;q=0.9, */*;q=0.8"
+          }
+        });
+        const body = await response.text();
+        resultCode.textContent = "Status: " + response.status + " " + response.statusText;
+        resultType.textContent = "Content-Type: " + (response.headers.get("content-type") || "n/a");
+        resultBody.textContent = body;
+        liveStatus.className = response.ok ? "status ok" : "status fail";
+        liveStatus.lastElementChild.textContent = response.ok
+          ? "Request completed successfully."
+          : "Request returned an error.";
+      } catch (error) {
+        resultCode.textContent = "Status: fetch failed";
+        resultType.textContent = "Content-Type: n/a";
+        resultBody.textContent = String(error);
+        liveStatus.className = "status fail";
+        liveStatus.lastElementChild.textContent = "Browser fetch failed.";
+      }
+    }
+
+    document.getElementById("load-summary").addEventListener("click", () => loadEndpoint("./iccIisIsapi.dll"));
+    document.getElementById("load-health").addEventListener("click", () => loadEndpoint("./iccIisIsapi.dll?mode=health"));
+    document.getElementById("load-xml").addEventListener("click", () => loadEndpoint("./iccIisIsapi.dll?format=xml"));
+
+    loadEndpoint("./iccIisIsapi.dll");
+  </script>
+</body>
+</html>

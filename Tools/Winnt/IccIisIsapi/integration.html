@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iccDEV IIS Server - Integration Guide</title>
+  <link rel="stylesheet" href="./site.css">
+  <script defer src="./site.js"></script>
+</head>
+<body data-page="integration">
+  <div id="PageBodyContainer">
+    <div id="HeaderContainer">
+      <div id="HeaderTitleContainer">
+        <div id="HeaderTitle">
+          <a href="./index.html"><img src="./assets/ICC_logo_text.gif" width="368" height="27" alt="International Color Consortium"></a>
+        </div>
+        <div id="TopMenuContainer">
+          <div class="TopMenuItem"><a href="./index.html" title="Home"><img src="./assets/tm_about.gif" width="68" height="20" alt="Home"></a></div>
+          <div class="TopMenuItem"><a href="./endpoints.html" title="Endpoint Console"><img src="./assets/tm_resources.gif" width="71" height="20" alt="Endpoint Console"></a></div>
+          <div class="TopMenuItem"><a href="./integration.html" title="Integration Guide"><img src="./assets/tm_information.gif" width="85" height="20" alt="Integration Guide"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/" title="ICC Website"><img src="./assets/tm_members.gif" width="63" height="20" alt="ICC Website"></a></div>
+          <div class="TopMenuItem"><a href="#quick-start" title="Quick Start"><img src="./assets/tm_getting_started.gif" width="103" height="20" alt="Quick Start"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/v4spec.xalter" title="ICC v4"><img src="./assets/tm_v4.gif" width="42" height="20" alt="ICC v4"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/iccmax/" title="iccMAX"><img src="./assets/iccmax-top3.jpg" width="41" height="20" alt="iccMAX"></a></div>
+        </div>
+        <div class="clear"></div>
+      </div>
+      <div id="HeaderLogoContainer">
+        <div id="HeaderLogo"><img src="./assets/ICC_logo_top.gif" width="143" height="65" alt="ICC logo"></div>
+        <div id="HeaderBannerContainer"><img src="./assets/hd_images.jpg" width="657" height="46" alt="Making color seamless between devices and documents"></div>
+        <div class="clear"></div>
+      </div>
+      <div class="clear"></div>
+    </div>
+
+    <div id="LeftContainer">
+      <div id="LeftContainerLogo"><img src="./assets/ICC_logo_btm.gif" width="133" height="22" alt=""></div>
+      <div id="ICCEventsContainer">
+        <div><img src="./assets/hd-icc-events.png" width="150" height="29" alt="ICC Events"></div>
+        <ul>
+          <li><a href="#quick-start">Quick start</a></li>
+          <li><a href="#shared-libs">Shared-library deployment</a></li>
+          <li><a href="#forbidden">Why 403.14 happens</a></li>
+          <li><a href="#ops-checklist">Operator checklist</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="LeftMenuItem"><a href="./integration.html"><img src="./assets/icc_specs_off.gif" width="150" height="23" alt="Integration Guide"></a></div>
+      <div class="LeftMenuItem"><a href="#ops-checklist"><img src="./assets/icc_technotes_off.gif" width="150" height="23" alt="Operator Checklist"></a></div>
+      <div class="LeftMenuItem"><a href="./endpoints.html"><img src="./assets/icc_resourcecenter_off.gif" width="150" height="23" alt="Endpoint Console"></a></div>
+      <div class="LeftMenuItem"><a href="./index.html#demo-flow"><img src="./assets/icc_slide_off.gif" width="150" height="23" alt="Demo Flow"></a></div>
+      <div class="LeftMenuItem"><a href="#shared-libs"><img src="./assets/icc_whitepapers_off.gif" width="150" height="23" alt="Shared Libraries"></a></div>
+      <div class="LeftMenuEnd"><a href="./index.html"><img src="./assets/icc_home_off.gif" width="150" height="23" alt="Home"></a></div>
+    </div>
+
+    <div id="RightContainer">
+      <div id="EnquiryContainer">
+        <div id="EnquiryTextArea">Need a quick live proof while reading the instructions?</div>
+        <div id="EnquiryImage"><img src="./assets/phil.jpg" width="40" height="38" alt=""></div>
+        <div class="clear"></div>
+        <div id="EnquiryEntry"><a href="./endpoints.html">Open endpoint console...</a></div>
+      </div>
+      <div id="LiveTopicsContainer">
+        <div><img src="./assets/hd-icc-live-topics.png" width="151" height="29" alt="ICC Live Topics"></div>
+        <ul class="LiveTopics">
+          <li><a href="#forbidden">Root URL fixed without enabling directory browsing</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="#shared-libs">Transitive DLLs deployed into the site root</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="#ops-checklist">App pool must match build architecture</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="MainContentContainer">
+      <div id="MainContent">
+        <p class="page-title">IIS Integration Guide</p>
+        <p class="page-lead">
+          This page turns the operator notes into a website-style runbook. It is the same guidance captured in
+          <code>isapi-instructions.md</code>, repackaged for browser use inside the deployed IIS sample.
+        </p>
+
+        <div id="quick-start" class="content-grid">
+          <div class="content-box">
+            <h2>Quick start</h2>
+            <ol class="checklist">
+              <li>Build and install the IIS sample into <code>out\iis-shared-install\bin</code>.</li>
+              <li>Point an IIS site at that `bin` directory.</li>
+              <li>Allow <code>iccIisIsapi.dll</code> in ISAPI restrictions and map it as a handler.</li>
+              <li>Open `./` for the landing page, then confirm the DLL endpoints return `200`.</li>
+            </ol>
+          </div>
+          <div class="note-box">
+            <h2>Expected routes</h2>
+            <dl class="table-grid">
+              <dt>`/`</dt>
+              <dd>Landing page, served by <code>index.html</code>.</dd>
+              <dt>`/iccIisIsapi.dll`</dt>
+              <dd>Version summary.</dd>
+              <dt>`?mode=health`</dt>
+              <dd>Plain-text health response.</dd>
+              <dt>`?format=xml`</dt>
+              <dd>Minimal ICC XML.</dd>
+              <dt>`POST ?mode=tools&amp;input=icc|xml`</dt>
+              <dd>Runs the four native tools and returns JSON for the browser console.</dd>
+            </dl>
+          </div>
+        </div>
+
+        <div id="shared-libs" class="content-box">
+          <h2>Shared-library deployment</h2>
+          <p>The site folder must contain the handler DLL plus the runtime DLL set that IIS needs to load it successfully.</p>
+          <ul class="summary-list">
+            <li><code>iccIisIsapi.dll</code></li>
+            <li><code>IccProfLib2.dll</code></li>
+            <li><code>IccXML2.dll</code></li>
+            <li><code>iconv-2.dll</code></li>
+            <li><code>libxml2.dll</code></li>
+            <li><code>zlib1.dll</code></li>
+            <li><code>iccDumpProfile.exe</code>, <code>iccToXml.exe</code>, <code>iccFromXml.exe</code>, <code>iccRoundTrip.exe</code> for the browser tool console</li>
+            <li>This website shell: <code>index.html</code>, <code>endpoints.html</code>, <code>integration.html</code>, <code>site.css</code>, <code>site.js</code>, <code>assets\*</code></li>
+          </ul>
+          <p>
+            The installed <code>web.config</code> also maps <code>.icc</code> and <code>.icm</code> to
+            <code>application/octet-stream</code> so uploaded profiles and regenerated profiles can be downloaded directly from
+            the per-request workspace URLs.
+          </p>
+        </div>
+
+        <div class="content-box">
+          <h2>Browser tool suite</h2>
+          <p>
+            The endpoint console now supports raw file upload from the browser. Upload an ICC profile or ICC XML file on
+            <a href="./endpoints.html">Endpoint Console</a> and IIS will run <code>iccToXml</code>, <code>iccFromXml</code>,
+            <code>iccDumpProfile</code>, and <code>iccRoundTrip</code> inside the worker process environment.
+          </p>
+          <p>
+            The response is JSON and the page renders the real exit code, console output, generated XML preview, and any
+            tool-specific warnings. Each request also leaves behind a per-request workspace under
+            <code>_tool-work\&lt;job&gt;</code> so the uploaded input, generated XML or ICC, and tool logs can be fetched directly
+            over HTTP. Round-trip failures are surfaced per tool rather than being treated as an HTTP failure.
+          </p>
+        </div>
+
+        <div id="forbidden" class="content-box">
+          <h2>Why HTTP 403.14 happens</h2>
+          <p>
+            `403.14 - Forbidden` at the site root means IIS is serving a directory path while directory browsing is disabled
+            and no default document is configured for that path.
+          </p>
+          <p>
+            The fix for this sample is to keep directory browsing off, leave <code>web.config</code> in the site root, and serve
+            <code>index.html</code> as the default document. That is why this local site now opens cleanly at `/`.
+          </p>
+        </div>
+
+        <div id="ops-checklist" class="content-grid">
+          <div class="content-box">
+            <h2>Operator checklist</h2>
+            <ul class="checklist">
+              <li>IIS `ISAPI Extensions` feature is enabled.</li>
+              <li>The app pool architecture matches the build architecture.</li>
+              <li>The site physical path points at the installed `bin` directory.</li>
+              <li>The ISAPI restriction entry explicitly allows <code>iccIisIsapi.dll</code>.</li>
+              <li>The site handler list includes a mapping for <code>iccIisIsapi.dll</code> using `IsapiModule` and allows <code>POST</code> as well as <code>GET</code>/<code>HEAD</code>.</li>
+              <li>The runtime DLLs are present next to the handler.</li>
+              <li>The four IIS-exposed tools are present next to the handler.</li>
+            </ul>
+          </div>
+          <div class="note-box">
+            <h2>Useful local commands</h2>
+            <pre class="code-block">curl.exe http://localhost:18081/iccIisIsapi.dll?mode=health
+curl.exe http://localhost:18081/iccIisIsapi.dll
+curl.exe http://localhost:18081/iccIisIsapi.dll?format=xml
+curl.exe -H "Accept: application/json" -H "Content-Type: application/octet-stream" ^
+  --data-binary "@sample.icc" ^
+  "http://localhost:18081/iccIisIsapi.dll?mode=tools&amp;input=icc&amp;filename=sample.icc"</pre>
+          </div>
+        </div>
+
+        <div class="content-box">
+          <h2>Representative build and install flow</h2>
+          <pre class="code-block">cmake -S Build\Cmake -B out\iis-shared-vcpkg-toolchain ^
+  -G "Visual Studio 17 2022" ^
+  -A x64 ^
+  -DCMAKE_TOOLCHAIN_FILE=E:\tmp\beyondrgb\backend\vcpkg\scripts\buildsystems\vcpkg.cmake ^
+  -DVCPKG_TARGET_TRIPLET=x64-windows ^
+  -DENABLE_TESTS=OFF ^
+  -DENABLE_TOOLS=ON ^
+  -DENABLE_WXWIDGETS=OFF ^
+  -DENABLE_SHARED_LIBS=ON ^
+  -DENABLE_STATIC_LIBS=ON ^
+  -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF ^
+  -Wno-dev
+
+cmake --build out\iis-shared-vcpkg-toolchain --config Release --target install -- /m /maxcpucount
+cmake --install out\iis-shared-vcpkg-toolchain --config Release --prefix out\iis-shared-install</pre>
+        </div>
+
+        <div id="faq" class="content-grid">
+          <div class="content-box">
+            <h2>FAQ</h2>
+            <ul class="checklist">
+              <li><strong>Do I need directory browsing?</strong> No. The correct fix is a default document.</li>
+              <li><strong>Can I test without IIS?</strong> Yes. Use <code>iccIisIsapiSmoke.exe</code> for a local DLL load test.</li>
+              <li><strong>Where do I check live behavior?</strong> Use the <a href="./endpoints.html">Endpoint Console</a> for both GET checks and file uploads.</li>
+            </ul>
+          </div>
+          <div class="note-box">
+            <h2>Source references</h2>
+            <ul class="summary-list">
+              <li><code>Build\Cmake\Tools\IccIisIsapi\CMakeLists.txt</code></li>
+              <li><code>Tools\Winnt\IccIisIsapi\iccIisIsapi.cpp</code></li>
+              <li><code>isapi-instructions.md</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="clear"></div>
+
+    <div class="site-footer-rule"><img src="./assets/bg_content_base.gif" width="800" height="27" alt=""></div>
+    <div id="FooterContainer">
+      <div id="FooterSubContainer"><img src="./assets/icc_footer.gif" width="781" height="62" alt=""></div>
+      <p class="footer-note">
+        Integration and operator runbook for the local ICC-styled IIS sample.
+        <span id="footer-year"></span>
+      </p>
+      <div id="FooterBase"><img src="./assets/footer_corner_right.gif" width="10" height="10" alt=""></div>
+    </div>
+  </div>
+</body>
+</html>

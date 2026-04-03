@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: iccDEV IIS ISAPI Sample API
+  version: 0.1.0
+  description: |
+    Starter OpenAPI document for the Windows IIS sample implemented by
+    iccIisIsapi.dll. This captures the current HTTP surface, including the
+    persisted _tool-work artifact model.
+servers:
+  - url: http://localhost:18081
+paths:
+  /iccIisIsapi.dll:
+    get:
+      summary: Query the health, summary, or XML response
+      description: |
+        Without query parameters this returns the plain-text summary response.
+        With mode=health it returns plain-text `ok`.
+        With format=xml it returns a minimal ICC XML document.
+      parameters:
+        - in: query
+          name: mode
+          required: false
+          schema:
+            type: string
+            enum: [health]
+          description: Use `health` for the liveness response.
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [xml]
+          description: Use `xml` for the generated XML response.
+      responses:
+        '200':
+          description: Successful summary, health, or XML response.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                health:
+                  summary: Health mode
+                  value: "ok\r\n"
+                summary:
+                  summary: Default summary
+                  value: |
+                    IccProfLib version: 2.3.1.6+0cbfc46
+                    IccLibXML version: 2.3.1.6+0cbfc46
+                    Profile spec ver: 4.00
+                    XML payload bytes: 786
+                    Hello from iccDEV IIS ISAPI!
+            application/xml:
+              schema:
+                type: string
+              examples:
+                xml:
+                  summary: Minimal XML payload
+                  value: |
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <IccProfile />
+    post:
+      summary: Upload ICC or XML input and run the top four IIS-exposed tools
+      description: |
+        Runs iccToXml, iccFromXml, iccDumpProfile, and iccRoundTrip. The request
+        succeeds at the HTTP level when the upload is accepted and processed,
+        even if one or more wrapped tools fail.
+      parameters:
+        - in: query
+          name: mode
+          required: true
+          schema:
+            type: string
+            enum: [tools]
+        - in: query
+          name: input
+          required: true
+          schema:
+            type: string
+            enum: [icc, xml]
+        - in: query
+          name: filename
+          required: false
+          schema:
+            type: string
+          description: Optional client-supplied filename used for persisted metadata.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+          application/xml:
+            schema:
+              type: string
+          text/xml:
+            schema:
+              type: string
+      responses:
+        '200':
+          description: Tool suite completed and returned per-tool results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolSuiteResponse'
+        '400':
+          description: Request rejected before tool execution completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unhandled extension failure.
+          content:
+            text/plain:
+              schema:
+                type: string
+  /_tool-work/:
+    get:
+      summary: Tool workspace root landing page
+      responses:
+        '200':
+          description: HTML landing page for the workspace root.
+          content:
+            text/html:
+              schema:
+                type: string
+  /_tool-work/{jobId}/:
+    get:
+      summary: Per-request workspace manifest page
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: HTML page for a persisted tool run workspace.
+          content:
+            text/html:
+              schema:
+                type: string
+  /_tool-work/{jobId}/{artifactName}:
+    get:
+      summary: Download a persisted upload, generated artifact, or log
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: artifactName
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Persisted artifact content.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+            text/xml:
+              schema:
+                type: string
+            text/html:
+              schema:
+                type: string
+components:
+  schemas:
+    ToolSuiteResponse:
+      type: object
+      required:
+        - mode
+        - input
+        - workspace_url
+        - tools
+      properties:
+        mode:
+          type: string
+          enum: [tools]
+        input:
+          $ref: '#/components/schemas/ToolInput'
+        workspace_url:
+          type: string
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolResult'
+    ToolInput:
+      type: object
+      required:
+        - kind
+        - filename
+        - bytes
+        - url
+      properties:
+        kind:
+          type: string
+          enum: [icc, xml]
+        filename:
+          type: string
+        bytes:
+          type: integer
+          minimum: 0
+        url:
+          type: string
+    ToolResult:
+      type: object
+      required:
+        - name
+        - command
+        - exit_code
+        - ok
+        - skipped
+        - note
+        - output
+        - log_name
+        - log_bytes
+        - log_url
+        - artifact_name
+        - artifact_bytes
+        - artifact_url
+        - artifact_preview
+      properties:
+        name:
+          type: string
+        command:
+          type: string
+        exit_code:
+          type: integer
+        ok:
+          type: boolean
+        skipped:
+          type: boolean
+        note:
+          type: string
+        output:
+          type: string
+        log_name:
+          type: string
+        log_bytes:
+          type: integer
+          minimum: 0
+        log_url:
+          type: string
+        artifact_name:
+          type: string
+        artifact_bytes:
+          type: integer
+          minimum: 0
+        artifact_url:
+          type: string
+        artifact_preview:
+          type: string
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
