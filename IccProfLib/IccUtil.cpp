@@ -662,7 +662,7 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
         nummnt <<= 1;
       } while (!(nummnt & 0x0400)); // Shift until leading bit overflows into exponent bit
       rvsgn = ((icUInt32Number) numsgn) << 16;
-      tmpexp = ((icUInt32Number) (numexp >> 10)) - 15 + 127 - exp;
+      tmpexp = ((icInt32Number)(numexp >> 10)) - 15 + 127 - exp;
       rvexp = (icUInt32Number) (tmpexp << 23);
       rvmnt = ((icUInt32Number) (nummnt & 0x03FFu)) << 13;
       rv = (rvsgn | rvexp | rvmnt);
@@ -674,7 +674,7 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
       }
     } else {
       rvsgn = ((icUInt32Number) numsgn) << 16;
-      tmpexp = ((icUInt32Number) (numexp >> 10)) - 15 + 127;
+      tmpexp = ((icInt32Number)(numexp >> 10)) - 15 + 127;
       rvexp = (icUInt32Number) (tmpexp << 23);
       rvmnt = ((icUInt32Number) nummnt) << 13;
       rv = (rvsgn | rvexp | rvmnt);
