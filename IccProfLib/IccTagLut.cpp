@@ -5714,7 +5714,7 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
   if (sizeof(icTagTypeSignature) + 
       sizeof(icUInt32Number)*3 +
       sizeof(icUInt16Number)*2 + 
-      (icUInt64Number)m_NumberOfVertices*3*sizeof(icUInt32Number) +
+      (icUInt64Number)m_NumberOfTriangles*3*sizeof(icUInt32Number) +
       (icUInt64Number)m_NumberOfVertices*m_nPCSChannels*sizeof(icFloat32Number) +
       (icUInt64Number)m_NumberOfVertices*m_nDeviceChannels*sizeof(icFloat32Number) > size)
     return false;
@@ -5742,10 +5742,13 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
 	{
 		m_DeviceValues = NULL;
 	}
+	if ((icUInt64Number)m_NumberOfTriangles * sizeof(icGamutBoundaryTriangle) > size)
+		return false;
+
 	m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
-	
-	icUInt32Number nNum32 = (icUInt32Number)m_NumberOfTriangles*3;
-	
+
+	icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
+
 	if (pIO->Read32(m_Triangles, nNum32)!=nNum32)
 		return false;		
 	
@@ -5801,7 +5804,7 @@ bool CIccTagGamutBoundaryDesc::Write(CIccIO *pIO)
 		!pIO->Write32(&m_NumberOfTriangles))
 		return false;	
 	
-	icUInt32Number nNum32 = (icUInt32Number)m_NumberOfTriangles*3;
+	icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
 	
 	if (pIO->Write32(m_Triangles, nNum32)!=nNum32)
 		return false;	
