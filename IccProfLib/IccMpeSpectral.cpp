@@ -1064,12 +1064,12 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   m_pCLUT->SetClipFunc(NoClip);
-  icUInt32Number nBytesPerPoint = icGetStorageTypeBytes(m_nStorageType) * m_Range.steps;
+  icUInt32Number nBytesPerSample = icGetStorageTypeBytes(m_nStorageType);
   
-  if (!nBytesPerPoint)
+  if (!nBytesPerSample)
     return false;
 
-  m_pCLUT->Init(gridPoints, size - headerSize, (icUInt8Number)nBytesPerPoint);
+  m_pCLUT->Init(gridPoints, size - headerSize, nBytesPerSample);
 
   icFloatNumber *pData = m_pCLUT->GetData(0);
 
@@ -1103,7 +1103,7 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
       return false;
   }
 
-  if (m_Range.steps *nBytesPerPoint > size - headerSize - nPoints*nBytesPerPoint)
+  if (m_Range.steps *nBytesPerSample > size - headerSize - nPoints*nBytesPerSample)
     return false;
 
   m_pWhite = (icFloatNumber *)malloc((int)m_Range.steps*sizeof(icFloatNumber));
