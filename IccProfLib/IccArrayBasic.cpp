@@ -527,7 +527,7 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
-             if (pTint && pTint->GetNumValues()!=n) {
+             if (pTint && pTint->GetNumValues()!=sampleCount) {
                snprintf(str, strSize, "Number of device samples doesn't match tint values in NamedColor[%d]\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
@@ -548,7 +548,7 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
-             if (pTint && pTint->GetNumValues()!=n) {
+             if (pTint && pTint->GetNumValues()!=sampleCount) {
                snprintf(str, strSize, "Number of PCS samples doesn't match tint values in NamedColor[%d]\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
@@ -579,7 +579,7 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
                  sReport += str;
                  rv = icMaxStatus(rv, icValidateCriticalError);
                }
-               if (pTint && pTint->GetNumValues()!=n) {
+               if (pTint && pTint->GetNumValues()!=sampleCount) {
                  snprintf(str, strSize, "Number of SpectralPCS samples doesn't match tint values in NamedColor[%d]\n", i);
                  sReport += str;
                  rv = icMaxStatus(rv, icValidateCriticalError);
