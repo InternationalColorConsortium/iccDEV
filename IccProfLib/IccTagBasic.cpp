@@ -4605,9 +4605,9 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
   // But this math must match GetBytesPerMatrix()
   icUInt64Number nBytesPerMatrix = nChannels * sizeof(icFloatNumber);
 
-  icUInt64Number nNeededSize = nBytesPerMatrix * nNumMatrices;
-  if (nNeededSize > (icUInt64Number)nSizeLeft)
-    return false;
+  // NOTE: nBytesPerMatrix * nNumMatrices is the BUFFER allocation size, NOT the file data size.
+  // Sparse matrices store only non-zero entries, so file data is much smaller than the buffer.
+  // Per-read bounds checks in the loop below validate actual file data consumption.
 
   // this sets the sizes, and allocates a huge chunk of memory for matrix storage in m_RawData
   Reset(nNumMatrices, nChannels);
