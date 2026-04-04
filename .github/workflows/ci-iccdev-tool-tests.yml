@@ -102,18 +102,24 @@ jobs:
           BASH_ENV: /dev/null
           CC: clang-18
           CXX: clang++-18
+          UBSAN_IGNORELIST: .github/ci/ubsan-ignorelist.txt
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+
+          IGNORELIST_FLAG=""
+          if [[ -f "${UBSAN_IGNORELIST}" ]]; then
+            IGNORELIST_FLAG="-fsanitize-ignorelist=$(pwd)/${UBSAN_IGNORELIST}"
+          fi
 
           mkdir -p build && cd build
           cmake ../Build/Cmake \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
-            -DCMAKE_C_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3" \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3 -std=c++17" \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3 ${IGNORELIST_FLAG}" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3 -std=c++17 ${IGNORELIST_FLAG}" \
             -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
             -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
             -DENABLE_TOOLS=ON \
