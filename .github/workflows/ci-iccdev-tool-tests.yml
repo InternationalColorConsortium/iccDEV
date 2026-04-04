@@ -1133,6 +1133,250 @@ jobs:
           echo "v5DspObsToV4Dsp: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
 
+      - name: "Test 18: Regression checks (bisect fixes)"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          OUTDIR="/tmp/iccdev-tool-output/regression-bisect"
+          mkdir -p "$OUTDIR"
+
+          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
+          TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          passed=0 failed=0
+
+          check_asan() {
+            local logfile="$1" label="$2"
+            if grep -q "ERROR: AddressSanitizer" "$logfile" 2>/dev/null; then
+              echo "  [ASAN]  $label"; return 1
+            fi
+            return 0
+          }
+
+          echo "=== Regression Test 18: Bisect Fixes ==="
+          echo ""
+
+          # --- R1: NamedColor.xml sampleCount regression (b1722f9) ---
+          echo "--- R1: NamedColor.xml sampleCount (#b1722f9) ---"
+          NAMED_XML="${WORKSPACE_DIR}/Testing/Named/NamedColor.xml"
+          NAMED_OUT="$OUTDIR/NamedColor.icc"
+          if [ -f "$NAMED_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/Named"
+            timeout 30 "$FROMXML" NamedColor.xml "$NAMED_OUT" > "$OUTDIR/r1-namedcolor.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if grep -q "doesn't match tint values" "$OUTDIR/r1-namedcolor.log" 2>/dev/null; then
+              echo "  [FAIL] NamedColor.xml still has tint value mismatch"; failed=$((failed + 1))
+            elif ! check_asan "$OUTDIR/r1-namedcolor.log" "NamedColor.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$NAMED_OUT" ]; then
+              echo "  [OK]   NamedColor.xml parsed without tint mismatch"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] NamedColor.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] NamedColor.xml not found"
+          fi
+
+          # --- R2: CMYK-3DLUTs.xml case-sensitive filenames (4aa5857) ---
+          echo "--- R2: CMYK-3DLUTs.xml case-sensitive filenames (#4aa5857) ---"
+          CMYK_XML="${WORKSPACE_DIR}/Testing/CMYK-3DLUTs/CMYK-3DLUTs.xml"
+          CMYK_OUT="$OUTDIR/CMYK-3DLUTs.icc"
+          if [ -f "$CMYK_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/CMYK-3DLUTs"
+            timeout 60 "$FROMXML" CMYK-3DLUTs.xml "$CMYK_OUT" > "$OUTDIR/r2-cmyk3dluts.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if grep -q "Unable to parse" "$OUTDIR/r2-cmyk3dluts.log" 2>/dev/null; then
+              echo "  [FAIL] CMYK-3DLUTs.xml has parse errors"; failed=$((failed + 1))
+            elif ! check_asan "$OUTDIR/r2-cmyk3dluts.log" "CMYK-3DLUTs.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$CMYK_OUT" ]; then
+              echo "  [OK]   CMYK-3DLUTs.xml parsed successfully"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] CMYK-3DLUTs.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] CMYK-3DLUTs.xml not found"
+          fi
+
+          # --- R3: LaserProjector.xml EmissionCLUT (ba81cd9 / #768) ---
+          echo "--- R3: LaserProjector.xml EmissionCLUT (#768) ---"
+          LASER_XML="${WORKSPACE_DIR}/Testing/Display/LaserProjector.xml"
+          LASER_OUT="$OUTDIR/LaserProjector.icc"
+          if [ -f "$LASER_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/Display"
+            timeout 120 "$FROMXML" LaserProjector.xml "$LASER_OUT" > "$OUTDIR/r3-laserprojector.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if grep -q "Error in setting the size of GridPoints" "$OUTDIR/r3-laserprojector.log" 2>/dev/null; then
+              echo "  [FAIL] LaserProjector.xml EmissionCLUT GridPoints error"; failed=$((failed + 1))
+            elif ! check_asan "$OUTDIR/r3-laserprojector.log" "LaserProjector.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$LASER_OUT" ]; then
+              echo "  [OK]   LaserProjector.xml parsed (spectral EmissionCLUT ok)"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] LaserProjector.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] LaserProjector.xml not found"
+          fi
+
+          # --- R4: SparseMatrixNamedColor.xml (#751) ---
+          echo "--- R4: SparseMatrixNamedColor.xml (#751) ---"
+          SPARSE_XML="${WORKSPACE_DIR}/Testing/Named/SparseMatrixNamedColor.xml"
+          SPARSE_OUT="$OUTDIR/SparseMatrixNamedColor.icc"
+          if [ -f "$SPARSE_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/Named"
+            timeout 30 "$FROMXML" SparseMatrixNamedColor.xml "$SPARSE_OUT" > "$OUTDIR/r4-sparse.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if ! check_asan "$OUTDIR/r4-sparse.log" "SparseMatrixNamedColor.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$SPARSE_OUT" ]; then
+              echo "  [OK]   SparseMatrixNamedColor.xml parsed successfully"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] SparseMatrixNamedColor.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] SparseMatrixNamedColor.xml not found"
+          fi
+
+          # --- R5: Observer name round-trip (#736) ---
+          echo "--- R5: Observer name round-trip (#736) ---"
+          OBS_XML="${WORKSPACE_DIR}/Testing/PCC/CustomObserverLab_int-D65_2deg.xml"
+          OBS_ICC="$OUTDIR/observer-roundtrip.icc"
+          OBS_XML2="$OUTDIR/observer-roundtrip.xml"
+          if [ -f "$OBS_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/PCC"
+            timeout 30 "$FROMXML" "CustomObserverLab_int-D65_2deg.xml" "$OBS_ICC" > "$OUTDIR/r5-obs-fromxml.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if [ -f "$OBS_ICC" ]; then
+              timeout 30 "$TOXML" "$OBS_ICC" "$OBS_XML2" > "$OUTDIR/r5-obs-toxml.log" 2>&1 || true
+              if [ -f "$OBS_XML2" ]; then
+                timeout 30 "$FROMXML" "$OBS_XML2" "$OUTDIR/observer-roundtrip2.icc" > "$OUTDIR/r5-obs-rt.log" 2>&1 || true
+                if [ -f "$OUTDIR/observer-roundtrip2.icc" ]; then
+                  echo "  [OK]   Observer name round-trip: XML->ICC->XML->ICC succeeded"; passed=$((passed + 1))
+                else
+                  echo "  [FAIL] Observer round-trip failed on second fromXml"; failed=$((failed + 1))
+                fi
+              else
+                echo "  [FAIL] Observer round-trip failed on toXml"; failed=$((failed + 1))
+              fi
+            else
+              echo "  [FAIL] Observer round-trip failed on first fromXml"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] CustomObserverLab_int-D65_2deg.xml not found"
+          fi
+
+          # --- R6: ColorantOrder Validate regression (#752) ---
+          echo "--- R6: ColorantOrder Validate (#752) ---"
+          SRGB_XML="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT-300lx.xml"
+          SRGB_OUT="$OUTDIR/srgb-validate.icc"
+          if [ -f "$SRGB_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/Display"
+            timeout 30 "$FROMXML" "sRGB_D65_MAT-300lx.xml" "$SRGB_OUT" > "$OUTDIR/r6-srgb-fromxml.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if [ -f "$SRGB_OUT" ]; then
+              timeout 30 "$DUMP" -v "$SRGB_OUT" > "$OUTDIR/r6-validate.log" 2>&1 || true
+              if ! check_asan "$OUTDIR/r6-validate.log" "sRGB validation"; then
+                failed=$((failed + 1))
+              else
+                echo "  [OK]   sRGB validation completed without sanitizer errors"; passed=$((passed + 1))
+              fi
+            else
+              echo "  [FAIL] sRGB fromXml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] sRGB_D65_MAT-300lx.xml not found"
+          fi
+
+          # --- R7: PoC #599 GBD signed-integer-overflow ---
+          echo "--- R7: PoC #599 GBD signed-integer-overflow ---"
+          POC_599="${WORKSPACE_DIR}/Testing/poc-599-gbd-sio.icc"
+          if [ -f "$POC_599" ]; then
+            timeout 30 "$DUMP" "$POC_599" > "$OUTDIR/r7-poc599.log" 2>&1 || true
+            rc=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r7-poc599.log" 2>/dev/null; then
+              echo "  [ASAN]  PoC #599 triggered ASAN"; failed=$((failed + 1))
+            elif [ "$rc" -ge 128 ]; then
+              echo "  [CRASH] PoC #599 crashed (exit $rc)"; failed=$((failed + 1))
+            else
+              echo "  [OK]    PoC #599 handled without ASAN (exit $rc)"; passed=$((passed + 1))
+            fi
+          else
+            echo "  [SKIP] poc-599-gbd-sio.icc not found"
+          fi
+
+          # --- R8: PoC #744 ToneMapFunc HBO ---
+          echo "--- R8: PoC #744 ToneMapFunc HBO ---"
+          POC_744="${WORKSPACE_DIR}/Testing/CIccToneMapFunc-Describe-heap-oob-IccMpeBasic_cpp.icc"
+          if [ -f "$POC_744" ]; then
+            timeout 30 "$DUMP" "$POC_744" ALL > "$OUTDIR/r8-poc744.log" 2>&1 || true
+            rc=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r8-poc744.log" 2>/dev/null; then
+              echo "  [ASAN]  PoC #744 triggered ASAN"; failed=$((failed + 1))
+            elif [ "$rc" -ge 128 ]; then
+              echo "  [CRASH] PoC #744 crashed (exit $rc)"; failed=$((failed + 1))
+            else
+              echo "  [OK]    PoC #744 handled without ASAN (exit $rc)"; passed=$((passed + 1))
+            fi
+          else
+            echo "  [SKIP] PoC #744 not found"
+          fi
+
+          # --- R9: PoC #763 cenc HUAF ---
+          echo "--- R9: PoC #763 cenc profile HUAF ---"
+          POC_763="${WORKSPACE_DIR}/Testing/poc-763-cenc-huaf.icc"
+          APPLYNAMEDCMM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
+          if [ -f "$POC_763" ] && [ -x "$APPLYNAMEDCMM" ]; then
+            timeout 30 "$DUMP" "$POC_763" > "$OUTDIR/r9-poc763-dump.log" 2>&1 || true
+            rc=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-poc763-dump.log" 2>/dev/null; then
+              echo "  [ASAN]  PoC #763 triggered ASAN on dump"; failed=$((failed + 1))
+            elif [ "$rc" -ge 128 ]; then
+              echo "  [CRASH] PoC #763 crashed on dump (exit $rc)"; failed=$((failed + 1))
+            else
+              echo "  [OK]    PoC #763 dump handled cleanly (exit $rc)"; passed=$((passed + 1))
+            fi
+          else
+            echo "  [SKIP] PoC #763 or iccApplyNamedCmm not found"
+          fi
+
+          # --- R10: hybrid/BuildAndTest.sh spectral CLUT (#736 sub-c) ---
+          echo "--- R10: hybrid/BuildAndTest.sh (spectral CLUT #736) ---"
+          HYBRID_DIR="${WORKSPACE_DIR}/Testing/hybrid"
+          if [ -f "$HYBRID_DIR/BuildAndTest.sh" ]; then
+            export PATH
+            for d in "${WORKSPACE_DIR}"/build/Tools/*/; do PATH="$d:$PATH"; done
+            cd "$HYBRID_DIR"
+            timeout 120 bash BuildAndTest.sh > "$OUTDIR/r10-hybrid.log" 2>&1
+            rc=$?
+            cd "${WORKSPACE_DIR}"
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r10-hybrid.log" 2>/dev/null; then
+              echo "  [ASAN]  hybrid/BuildAndTest.sh ASAN finding"; failed=$((failed + 1))
+            elif [ "$rc" -ge 128 ]; then
+              echo "  [CRASH] hybrid/BuildAndTest.sh crashed (exit $rc)"; failed=$((failed + 1))
+            elif [ "$rc" -ne 0 ]; then
+              echo "  [WARN]  hybrid/BuildAndTest.sh non-zero exit ($rc)"; passed=$((passed + 1))
+            else
+              echo "  [OK]    hybrid/BuildAndTest.sh passed (exit 0)"; passed=$((passed + 1))
+            fi
+          else
+            echo "  [SKIP] hybrid/BuildAndTest.sh not found"
+          fi
+
+          echo ""
+          echo "Regression checks: $passed passed, $failed failed"
+          if [ "$failed" -gt 0 ]; then exit 1; fi
+
       - name: Generate comprehensive summary
         if: always()
         env:
@@ -1240,6 +1484,7 @@ jobs:
               ["15"]="search"
               ["16"]="mcs"
               ["17"]="v5dspobs"
+              ["18"]="regression-bisect"
             )
             declare -A PHASE_NAMES=(
               ["1"]="iccDumpProfile ALL on every generated profile"
@@ -1259,9 +1504,10 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763)"
             )
 
-            for phase in $(seq 1 17); do
+            for phase in $(seq 1 18); do
               dir="${PHASE_DIRS[$phase]}"
               name="${PHASE_NAMES[$phase]}"
               pdir="$OUTDIR/$dir"
