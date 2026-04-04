@@ -332,8 +332,11 @@ jobs:
           - asan
           - ubsan
           - asan-ubsan
+          - asan-ubsan-integer
         exclude:
           - sanitizer: asan-ubsan
+            build_type: RelWithDebInfo
+          - sanitizer: asan-ubsan-integer
             build_type: RelWithDebInfo
 
     steps:
@@ -414,6 +417,9 @@ jobs:
               ;;
             asan-ubsan)
               OPTS="-DENABLE_ASAN=ON -DENABLE_UBSAN=ON"
+              ;;
+            asan-ubsan-integer)
+              OPTS="-DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON"
               ;;
           esac
           CC=clang CXX=clang++ cmake ../Build/Cmake \

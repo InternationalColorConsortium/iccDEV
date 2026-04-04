@@ -63,14 +63,14 @@ see http://www.color.org/.
 # Intent: Try Sanitizing User Controllable Inputs
 #
 # File: .github/scripts/sanitize.ps1
-# 
 #
-# Comment: Sanitizing User Controllable Input 
+#
+# Comment: Sanitizing User Controllable Input
 #          - is a Moving Target
 #          - needs ongoing updates
 #          - needs additional unit tests
 #
-# 
+#
 #
 ###############################################################
 
@@ -99,7 +99,7 @@ function Escape-Html {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString
     $result = $result.Replace("&", "&amp;")
     $result = $result.Replace("<", "&lt;")
@@ -126,10 +126,10 @@ function Strip-CtrlKeepNewlines {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString
     $result = $result -replace "`r", ""
-    
+
     $cleanChars = @()
     foreach ($char in $result.ToCharArray()) {
         $codePoint = [int]$char
@@ -157,11 +157,11 @@ function Strip-CtrlRemoveNewlines {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString
     $result = $result -replace "`r", ""
     $result = $result -replace "`n", " "
-    
+
     $cleanChars = @()
     foreach ($char in $result.ToCharArray()) {
         $codePoint = [int]$char
@@ -186,7 +186,7 @@ function Trim-Whitespace {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     return $InputString.Trim()
 }
 
@@ -206,11 +206,11 @@ function Truncate-String {
         [Parameter(Mandatory=$false)]
         [AllowEmptyString()]
         [string]$InputString = "",
-        
+
         [Parameter(Mandatory=$true)]
         [int]$MaxLen
     )
-    
+
     if ($InputString.Length -le $MaxLen) {
         return $InputString
     }
@@ -243,7 +243,7 @@ function Sanitize-Line {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = Strip-CtrlRemoveNewlines -InputString $InputString
     $result = Trim-Whitespace -InputString $result
     $result = Escape-Html -InputString $result
@@ -276,7 +276,7 @@ function Sanitize-Print {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = Strip-CtrlKeepNewlines -InputString $InputString
     $result = $result -replace "(`n){4,}", "`n`n`n"
     $result = Escape-Html -InputString $result
@@ -307,7 +307,7 @@ function Sanitize-Ref {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString -replace "`0", ""
     $result = $result -replace "`r", ""
     $result = $result -replace "`n", ""
@@ -315,11 +315,11 @@ function Sanitize-Ref {
     $result = $result -replace "-+", "-"
     $result = $result -replace "^-+", ""
     $result = $result -replace "-+$", ""
-    
+
     if ([string]::IsNullOrEmpty($result)) {
         $result = "ref-unknown"
     }
-    
+
     return $result
 }
 
@@ -344,7 +344,7 @@ function Sanitize-Filename {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = Sanitize-Ref -InputString $InputString
     $result = $result.Replace("/", "_")
     return $result
@@ -371,7 +371,7 @@ function Safe-EchoForSummary {
         [AllowEmptyString()]
         [string[]]$InputString = @()
     )
-    
+
     $joined = $InputString -join " "
     $sanitized = Sanitize-Print -InputString $joined
     Write-Output $sanitized

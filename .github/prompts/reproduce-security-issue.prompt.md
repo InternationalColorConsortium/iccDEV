@@ -17,14 +17,20 @@ gh api "repos/InternationalColorConsortium/iccDEV/security-advisories/GHSA-xxxx-
 ## Step 2: Build with Sanitizers
 
 ```bash
-cd Build
-cmake Cmake \
-  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DENABLE_SANITIZERS=ON \
-  -DENABLE_COVERAGE=ON
+cd Build && rm -rf CMakeCache.txt CMakeFiles/
+CC=clang CXX=clang++ \
+  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
+  LDFLAGS="-fsanitize=address,undefined,integer" \
+  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
 make -j"$(nproc)"
+
+# CRITICAL: Verify ASAN is linked (must be > 0)
+nm Tools/IccDumpProfile/iccDumpProfile | grep -c __asan
 ```
+
+**Note**: `-fsanitize=integer` detects unsigned integer overflow (wrapping),
+which is well-defined per C/C++ standard and NOT caught by `undefined` alone.
+Issue #769 required this flag. MSVC does not support it.
 
 ## Step 3: Reproduce
 
@@ -52,7 +58,7 @@ Tools/IccApplyNamedCmm/iccApplyNamedCmm -cfg config.json
 
 ## Step 4: Classify the Finding
 
-Read the ASAN/UBSAN stack trace — frames #2-#3 identify the bug location:
+Read the ASAN/UBSAN stack trace -- frames #2-#3 identify the bug location:
 
 | ASAN Error Type | CWE | Severity |
 |-----------------|-----|----------|
@@ -62,6 +68,7 @@ Read the ASAN/UBSAN stack trace — frames #2-#3 identify the bug location:
 | alloc-dealloc-mismatch | CWE-762 | HIGH |
 | null-pointer-deref (SEGV) | CWE-476 | HIGH |
 | runtime error: signed integer overflow | CWE-190 | HIGH |
+| runtime error: unsigned integer overflow | CWE-190 | HIGH |
 | runtime error: outside range of representable values | CWE-681 | HIGH |
 | runtime error: member access within null pointer | CWE-476 | HIGH |
 
@@ -95,7 +102,7 @@ cfl/bin/icc_dump_fuzzer -minimize_crash=1 -exact_artifact_path=minimized.icc cra
 Create an issue with:
 1. Clear title: `[CWE-NNN] Type: Location in File.cpp:LineN`
 2. ASAN/UBSAN output (verbatim)
-3. Minimal PoC file attached (rename `.icc` → `.icc.txt` for GitHub)
+3. Minimal PoC file attached (rename `.icc` -> `.icc.txt` for GitHub)
 4. One-liner reproduction command
 5. Suggested fix (if known)
 

@@ -29,26 +29,26 @@ $script:TestsFailed = 0
 # Simple sanitize functions for testing (PowerShell versions)
 function Sanitize-Line {
   param([string]$Input)
-  
+
   # Remove control characters
   $result = $Input -replace "`r", "" -replace "`n", " "
   $result = $result -replace "[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", ""
-  
+
   # Trim whitespace
   $result = $result.Trim()
-  
+
   # Escape HTML entities
   $result = $result -replace "&", "&amp;"
   $result = $result -replace "<", "&lt;"
   $result = $result -replace ">", "&gt;"
   $result = $result -replace '"', "&quot;"
   $result = $result -replace "'", "&#39;"
-  
+
   # Truncate if too long
   if ($result.Length -gt 1000) {
     $result = $result.Substring(0, 997) + "..."
   }
-  
+
   return $result
 }
 
@@ -60,49 +60,49 @@ function Run-Test {
     [string]$FunctionName,
     [string]$ExpectedBehavior
   )
-  
+
   $script:TestsRun++
-  
+
   # Run sanitization
   $actual = switch ($FunctionName) {
     'sanitize_line' { Sanitize-Line $Input }
     default { throw "Unknown function: $FunctionName" }
   }
-  
+
   # Check that dangerous patterns are escaped/removed
   $safe = $true
   $issues = @()
-  
+
   # Check for unescaped HTML tags
   if ($actual -match '<[a-zA-Z]') {
     $safe = $false
     $issues += 'unescaped-tags'
   }
-  
+
   # Check for unescaped script patterns
   if ($actual -match '(?i)(<script|javascript:|onerror=|onload=)') {
     $safe = $false
     $issues += 'script-pattern'
   }
-  
+
   # Check for unescaped event handlers
   if ($actual -match 'on[a-z]+=') {
     $safe = $false
     $issues += 'event-handler'
   }
-  
+
   # Check for dangerous control characters
   if ($actual -match '[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]') {
     $safe = $false
     $issues += 'control-chars'
   }
-  
+
   # Check for bash function injection patterns
   if ($actual -match '\(\).*\{.*\}') {
     $safe = $false
     $issues += 'bash-function'
   }
-  
+
   if ($safe) {
     $script:TestsPassed++
     Write-Host "PASS [$script:TestsRun]: $TestName - $ExpectedBehavior" -ForegroundColor Green

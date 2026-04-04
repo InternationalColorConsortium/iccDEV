@@ -72,6 +72,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <climits>
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
@@ -302,7 +303,8 @@ int main(int argc, char* argv[])
 
     int n, closest, pad;
     TagEntryList::iterator i, j;
-    
+    // Safe cast of profile size for comparisons (cap at INT_MAX for malformed profiles)
+    int safeProfileSize = (pHdr->size <= (icUInt32Number)INT_MAX) ? (int)pHdr->size : INT_MAX;
 
     // Create a list of sorted offsets, to calculate padding for each tag in O(logN) time instead of O(N)
     // We use this in two places below
@@ -322,14 +324,18 @@ int main(int argc, char* argv[])
         // use upper_bound to allow for duplicate tags (pointing to the same offset)
         offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
         if (match == sortedTagOffsets.cend())
-            closest = (int)pHdr->size;
+            closest = safeProfileSize;
         else
-            closest = *match;
-        closest = std::min( closest, (int)pHdr->size );
+            closest = (*match <= (icUInt32Number)INT_MAX) ? (int)*match : INT_MAX;
+        closest = std::min( closest, safeProfileSize );
 
         // Number of actual padding bytes between this tag and closest neighbour (or EOF)
         // Should be 0-3 if compliant. Negative number if tags overlap!
-        pad = closest - i->TagInfo.offset - i->TagInfo.size;
+        // Guard against unsigned integer overflow in subtraction
+        if (i->TagInfo.offset + (icUInt64Number)i->TagInfo.size > (icUInt64Number)closest)
+            pad = -((int)((icUInt64Number)i->TagInfo.offset + i->TagInfo.size - closest));
+        else
+            pad = closest - i->TagInfo.offset - i->TagInfo.size;
 
         printf("%28s  %s  %8d\t%8d\t%8d\n", Fmt.GetTagSigName(i->TagInfo.sig),
             icGetSig(buf, bufSize, i->TagInfo.sig, false), i->TagInfo.offset, i->TagInfo.size, pad);
@@ -385,7 +391,7 @@ int main(int argc, char* argv[])
         //pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
 
         // Is the Tag offset + Tag Size beyond EOF?
-        if (i->TagInfo.offset + i->TagInfo.size > pHdr->size) {
+        if (i->TagInfo.size > pHdr->size || i->TagInfo.offset > pHdr->size - i->TagInfo.size) {
             sReport += icMsgValidateNonCompliant;
             snprintf(str, strSize, "Tag %s (offset %d, size %d) ends beyond EOF.\n",
                     Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size);
@@ -402,13 +408,13 @@ int main(int argc, char* argv[])
         // use upper_bound to allow for duplicate tags (pointing to the same offset)
         offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
         if (match == sortedTagOffsets.cend())
-            closest = (int)pHdr->size;
+            closest = safeProfileSize;
         else
-            closest = *match;
-        closest = std::min( closest, (int)pHdr->size );
+            closest = (*match <= (icUInt32Number)INT_MAX) ? (int)*match : INT_MAX;
+        closest = std::min( closest, safeProfileSize );
 
         // Check if closest tag after this tag is less than offset+size - in which case it overlaps! Ignore last tag.
-        if ((closest < (int)i->TagInfo.offset + (int)i->TagInfo.size) && (closest < (int)pHdr->size)) {
+        if ((closest < (int)((icUInt64Number)i->TagInfo.offset + i->TagInfo.size)) && (closest < safeProfileSize)) {
             sReport += icMsgValidateWarning;
             snprintf(str, strSize, "Tag %s (offset %d, size %d) overlaps with following tag data starting at offset %d.\n",
                 Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size, closest);
@@ -417,10 +423,11 @@ int main(int argc, char* argv[])
         }
 
         // Check for gaps between tag data (accounting for 4-byte alignment)
-        if (closest > (int)i->TagInfo.offset + rndup) {
+        if (closest > (int)((icUInt64Number)i->TagInfo.offset + rndup)) {
+          int gapBytes = closest - (int)((icUInt64Number)i->TagInfo.offset + rndup);
           sReport += icMsgValidateWarning;
           snprintf(str, strSize, "Tag %s (size %d) is followed by %d unnecessary additional bytes (from offset %d).\n",
-                Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, closest-(i->TagInfo.offset+rndup), (i->TagInfo.offset+rndup));
+                Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, gapBytes, (i->TagInfo.offset+rndup));
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateWarning);
         }

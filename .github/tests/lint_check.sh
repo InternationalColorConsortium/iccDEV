@@ -43,7 +43,7 @@ if [ -z "${files}" ]; then
       # Sanitize base_ref before validation to prevent potential injection risks
       # and ensure safe usage even if pattern matching is added to the case statement later
       base_ref="$(sanitize_ref "$GITHUB_BASE_REF")"
-      
+
       # Validate base_ref against allowlist (e.g., only allow 'master' and 'main')
       case "${base_ref}" in
         master|main)

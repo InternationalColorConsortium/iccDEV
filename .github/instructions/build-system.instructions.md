@@ -39,11 +39,38 @@ CMakeLists.txt has `if(EMSCRIPTEN)` guards that:
 - Add Emscripten-specific flags (`-sMODULARIZE=1`, `-sINVOKE_RUN=0`)
 - Disable GUI tools (IccDumpProfileGui)
 
-## Sanitizer Mutual Exclusivity
+## Sanitizer Options
+
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `ENABLE_SANITIZERS` | OFF | ASan + UBSan + IntegerSan combined |
+| `ENABLE_ASAN` | OFF | AddressSanitizer only |
+| `ENABLE_UBSAN` | OFF | UndefinedBehaviorSanitizer only |
+| `ENABLE_INTEGER_SANITIZER` | OFF | IntegerSanitizer (unsigned overflow) |
+| `ENABLE_TSAN` | OFF | ThreadSanitizer |
+| `ENABLE_MSAN` | OFF | MemorySanitizer (Clang only) |
+| `ENABLE_LSAN` | OFF | LeakSanitizer standalone |
+
+**CRITICAL**: `-fsanitize=undefined` does NOT catch unsigned integer overflow.
+Use `ENABLE_INTEGER_SANITIZER=ON` or `ENABLE_SANITIZERS=ON` (which now includes
+integer). Issue #769 was only detectable with `-fsanitize=integer`.
+
+### Full-coverage build (recommended for bug hunting)
+```bash
+cd Build && rm -rf CMakeCache.txt CMakeFiles/
+CC=clang CXX=clang++ \
+  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
+  LDFLAGS="-fsanitize=address,undefined,integer" \
+  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
+make -j$(nproc)
+```
+
+### Sanitizer Mutual Exclusivity
 
 TSan conflicts with: ASan, LSan, Fuzzing, ENABLE_SANITIZERS
 MSan conflicts with: ASan, TSan, LSan, Fuzzing, ENABLE_SANITIZERS
 CMake will `FATAL_ERROR` if incompatible sanitizers are combined.
+IntegerSanitizer is Clang-only; MSVC builds skip it automatically.
 
 ## LTO Behavior
 

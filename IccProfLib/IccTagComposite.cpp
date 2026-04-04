@@ -1290,7 +1290,7 @@ bool CIccTagArray::Read(icUInt32Number size, CIccIO *pIO)
         m_TagVals[i].ptr = m_TagVals[j].ptr;
       }
       else {
-        if (tagPos[i].offset + tagPos[i].size > size) {
+        if (tagPos[i].size > size || tagPos[i].offset > size - tagPos[i].size) {
           delete [] tagPos;
           return false;
         }

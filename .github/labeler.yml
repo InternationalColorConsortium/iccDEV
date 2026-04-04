@@ -1,15 +1,15 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium. 
-##                 All rights reserved. 
+## Copyright (©) 2025 International Color Consortium.
+##                 All rights reserved.
 ##                 https://color.org
 #
 #
 ## Intent: iccDEV labeler.yml
 #
-## Last Updated: 28-NOV-2025 2300Z by David Hoyt 
+## Last Updated: 28-NOV-2025 2300Z by David Hoyt
 ##               Added user-controllable input (uci) checks
-## TODO: Push binary releases, tags etc.. 
+## TODO: Push binary releases, tags etc..
 #
 ## Comment: Known good and working from PatchIccMax
 #

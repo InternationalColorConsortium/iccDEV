@@ -19,10 +19,10 @@ ASAN findings, or UBSAN findings that were not present before.
 ```bash
 cd Build
 rm -f CMakeCache.txt
-cmake Cmake \
-  -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DENABLE_SANITIZERS=ON -DENABLE_COVERAGE=ON
+CC=clang CXX=clang++ \
+  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
+  LDFLAGS="-fsanitize=address,undefined,integer" \
+  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
 make -j"$(nproc)"
 
 # CRITICAL: Verify ASAN is linked (must be > 0)
@@ -81,6 +81,7 @@ git log --oneline --since="2025-01-01" | tail -1
 | Reader/writer string mismatch | `icGet*Name()` output differs from `icGet*Value()` parser |
 | Missing parser flag | `xmlReadFile()` without `XML_PARSE_HUGE` for large files |
 | Unsigned underflow | `(icUInt32Number)(x) - bias` wraps when `x < bias` |
+| Unsigned overflow in bounds check | `offset + size` wraps past `profileSize` -- use `size > limit \|\| offset > limit - size` |
 | Parameter semantic mismatch | Caller computes `steps * bytesPerSample`, callee also multiplies |
 
 ## Fix Conventions

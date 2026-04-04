@@ -84,9 +84,10 @@ cmake --build . -- /m /maxcpucount
 |--------|---------|---------|
 | `ENABLE_TESTS` | ON | Build test targets (requires static libs) |
 | `ENABLE_TOOLS` | ON | Build CLI + GUI tools |
-| `ENABLE_SANITIZERS` | OFF | ASan + UBSan combined |
+| `ENABLE_SANITIZERS` | OFF | ASan + UBSan + IntegerSan combined |
 | `ENABLE_ASAN` | OFF | AddressSanitizer only |
 | `ENABLE_UBSAN` | OFF | UndefinedBehaviorSanitizer only |
+| `ENABLE_INTEGER_SANITIZER` | OFF | IntegerSanitizer (unsigned overflow, Clang only) |
 | `ENABLE_TSAN` | OFF | ThreadSanitizer (conflicts with ASan) |
 | `ENABLE_MSAN` | OFF | MemorySanitizer (Clang only) |
 | `ENABLE_LSAN` | OFF | LeakSanitizer standalone |

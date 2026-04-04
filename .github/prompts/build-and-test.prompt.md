@@ -13,14 +13,20 @@ make -j"$(nproc)"
 ## Sanitizer Build
 
 ```bash
-cd Build
-cmake Cmake \
-  -DCMAKE_CXX_COMPILER=clang++ \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DENABLE_SANITIZERS=ON \
-  -DENABLE_COVERAGE=ON
+cd Build && rm -rf CMakeCache.txt CMakeFiles/
+CC=clang CXX=clang++ \
+  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
+  LDFLAGS="-fsanitize=address,undefined,integer" \
+  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
 make -j"$(nproc)"
 ```
+
+**Why `-fsanitize=integer`**: Unsigned integer overflow is well-defined
+(wrapping) per C/C++ standard. UBSAN's `undefined` group does NOT detect it.
+The `integer` group adds: `unsigned-integer-overflow`,
+`implicit-unsigned-integer-truncation`, `implicit-signed-integer-truncation`,
+`implicit-integer-sign-change`. Issue #769 is ONLY detectable with this flag.
+MSVC does not support `-fsanitize=integer` -- Clang only.
 
 Run with sanitizers:
 ```bash
@@ -73,9 +79,10 @@ Testing/RunTests.sh
 | Option | Purpose |
 |--------|---------|
 | `-DENABLE_TESTS=ON` | Build test targets |
-| `-DENABLE_SANITIZERS=ON` | ASan + UBSan |
+| `-DENABLE_SANITIZERS=ON` | ASan + UBSan + IntSan |
 | `-DENABLE_ASAN=ON` | AddressSanitizer only |
 | `-DENABLE_UBSAN=ON` | UBSan only |
+| `-DENABLE_INTEGER_SANITIZER=ON` | IntegerSanitizer (unsigned overflow, Clang only) |
 | `-DENABLE_TSAN=ON` | ThreadSanitizer (conflicts with ASan) |
 | `-DENABLE_COVERAGE=ON` | LLVM source-based coverage |
 | `-DENABLE_FUZZING=ON` | LibFuzzer harnesses |

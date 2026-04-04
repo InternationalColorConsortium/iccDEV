@@ -18,6 +18,7 @@ testing and need to open an issue on `InternationalColorConsortium/iccDEV`.
 | `HBO` | heap-buffer-overflow | `HBO in CIccApplyCmmSearch::costFunc() at IccCmmSearch.cpp:112` |
 | `SBO` | stack-buffer-overflow | `SBO in icFixXml() at IccUtilXml.cpp:314` |
 | `NPD` | null-pointer-dereference | `NPD in CIccTagLut16::Write() at IccTagLut.cpp:5361` |
+| `UIO` | unsigned-integer-overflow | `UIO in CIccTagMultiProcessElement::Read() at IccTagMPE.cpp:1042` |
 | `UB` | undefined-behavior | `UB at IccUtilXml.cpp:1539` |
 | `UAF` | use-after-free | `UAF in CIccTagArray::Cleanup() at IccTagComposite.cpp:1523` |
 | `SEGV` | SIGSEGV | `SEGV in CIccCLUT::Interp3d() at IccTagLut.cpp:2400` |
@@ -47,6 +48,22 @@ Every issue MUST contain these sections in order. The gold standard is
 Use the UTC timestamp of when you confirmed the reproduction. This establishes
 a forensic timeline.
 
+### Section 1b: Structured Metadata
+
+```markdown
+## Metadata
+
+- CWE: CWE-{N}
+- File: {file}:{line}
+- Function: {class}::{method}()
+- Sanitizer: {ASAN|UBSAN|IntSan} ({error type})
+- Bisect: {SHA} ({date})
+```
+
+**Why**: Agents extract CWE, file:line, sanitizer type without parsing prose.
+CI workflows can auto-label issues. CodeQL triage maps directly to query results.
+Machine ingestion priority: CWE, file:line, sanitizer type, bisect SHA.
+
 ### Section 2: Git State
 
 ```markdown
@@ -55,7 +72,7 @@ a forensic timeline.
 {commit_hash} (HEAD -> {branch}, origin/{branch})
 ```
 
-Pin the **exact commit** you tested against. This is mandatory — the bug may
+Pin the **exact commit** you tested against. This is mandatory -- the bug may
 already be fixed on a newer commit, or a regression introduced between versions.
 Get it from `git --no-pager log --oneline -1`.
 
@@ -75,9 +92,9 @@ Step 2. ASAN_OPTIONS=print_scariness=1:halt_on_error=0:detect_leaks=0 {tool} {po
 - Every PoC file MUST be downloadable via `wget` or `curl` (hosted on GitHub or CDN)
 - Use `ASAN_OPTIONS=print_scariness=1:halt_on_error=0:detect_leaks=0` for crash reproduction
 - Use `ASAN_OPTIONS=print_scariness=1` for single-crash analysis
-- Include exact tool name and arguments — no ambiguity
+- Include exact tool name and arguments -- no ambiguity
 - If the tool requires building from a specific branch (e.g., `cfl`), include the full
-  `git clone → cmake → make → run` sequence (see Gold Standard below)
+  `git clone -> cmake -> make -> run` sequence (see Gold Standard below)
 - If multiple prerequisite patches are needed, list them as numbered sub-steps with diffs
 
 ### Section 4: PoC Output
@@ -91,11 +108,15 @@ Step 2. ASAN_OPTIONS=print_scariness=1:halt_on_error=0:detect_leaks=0 {tool} {po
 ```
 
 **Rules for PoC Output**:
-- Include the **complete** sanitizer output — never summarize or truncate
-- The `SUMMARY:` line must be present (it names the crash type and location)
-- Include the shadow byte legend if ASAN provides it
+- Include the `SUMMARY:` line (names the crash type and location)
+- Include stack frames #0-#4 (identifies the call chain)
 - Include `SCARINESS:` score when present (ASAN `print_scariness=1`)
-- Do NOT strip frame numbers or stack traces
+- **CUT shadow byte legend** (17 lines of noise -- 33% of body in some issues)
+- **CUT shadow byte dump** unless the finding is UAF or double-free (where shadow
+  bytes show alloc/free timing)
+- **CUT allocation stack trace** unless UAF/double-free (where it shows the original
+  allocation site)
+- Do NOT strip frame numbers from stack traces
 
 ### Section 5 (Gold Standard): Patch
 
@@ -126,7 +147,7 @@ Prove the fix works:
 ## Patched Output
 
 \```
-{clean tool output after applying the patch — exit 0, no ASAN/UBSAN}
+{clean tool output after applying the patch -- exit 0, no ASAN/UBSAN}
 \```
 ```
 
@@ -144,7 +165,7 @@ Cite the specification that makes the behavior correct/expected.
 
 ## Complete Examples by Severity
 
-### Critical — Write Overflow (SCARINESS ≥ 40)
+### Critical -- Write Overflow (SCARINESS >= 40)
 
 **Reference**: [#624](https://github.com/InternationalColorConsortium/iccDEV/issues/624)
 
@@ -174,7 +195,7 @@ Step 2. ASAN_OPTIONS=print_scariness=1 iccToXml sbo-icFixXml-IccUtilXml_cpp-Line
 
 Labels: `Bug`, `libFuzzer`, `Triaged`
 
-### Moderate — Read Overflow (SCARINESS 20–39)
+### Moderate -- Read Overflow (SCARINESS 20-39)
 
 **Reference**: [#651](https://github.com/InternationalColorConsortium/iccDEV/issues/651)
 
@@ -202,7 +223,7 @@ Step 2. ASAN_OPTIONS=print_scariness=1:halt_on_error=0 iccFromXml hbo-icCurvesFr
 
 Labels: `Bug`, `libFuzzer`, `Triaged`
 
-### Low — UB / Benign
+### Low -- UB / Benign
 
 **Reference**: [#722](https://github.com/InternationalColorConsortium/iccDEV/issues/722)
 
@@ -230,7 +251,7 @@ Step 3. iccToXml BeyondRGB_CM_1774467526.tiff.icc foo.bar
 
 Labels: `Triaged`
 
-### Won't Fix — Spec-Defined Behavior
+### Won't Fix -- Spec-Defined Behavior
 
 **Reference**: [#729](https://github.com/InternationalColorConsortium/iccDEV/issues/729)
 
@@ -258,17 +279,17 @@ Labels: `Triaged`
 
 Labels: `wontfix`, `OOS`
 
-### Gold Standard — Full Patch Cycle
+### Gold Standard -- Full Patch Cycle
 
 **Reference**: [#700](https://github.com/InternationalColorConsortium/iccDEV/issues/700)
 
 Includes everything above PLUS:
 1. Prerequisite patches listed as numbered diffs (if the fix depends on prior patches)
-2. Full `git clone → build → reproduce` command block (self-contained)
+2. Full `git clone -> build -> reproduce` command block (self-contained)
 3. `## Patch` with unified diff
 4. `## Patched Output` proving clean exit after applying the fix
 
-This is the target quality for every issue. At minimum, provide sections 1–4.
+This is the target quality for every issue. At minimum, provide sections 1-4.
 
 ## SCARINESS Score Reference
 
@@ -277,9 +298,10 @@ ASAN assigns a `SCARINESS` score reflecting exploitability:
 | Score Range | Severity | Typical Cause |
 |-------------|----------|---------------|
 | 40+ | **Critical** | Write overflow (stack or heap), use-after-free write |
-| 20–39 | **Moderate** | Read overflow, large read OOB, container overflow |
-| 10–19 | **Low** | Small read OOB, partially addressable access |
+| 20-39 | **Moderate** | Read overflow, large read OOB, container overflow |
+| 10-19 | **Low** | Small read OOB, partially addressable access |
 | N/A (UBSAN) | **Varies** | Unsigned overflow may be benign; signed overflow is UB |
+| N/A (IntSan) | **High** | `offset + size` wrapping bypasses bounds checks (requires `-fsanitize=integer`) |
 
 Enable with `ASAN_OPTIONS=print_scariness=1`.
 
@@ -319,16 +341,16 @@ GitHub does not allow `.icc` file attachments. Options:
 
 ## Agent Checklist Before Filing
 
-1. [ ] **Reproduced 3× deterministically** — not a flaky crash
-2. [ ] **Tested against latest master** — `git pull && rebuild`
-3. [ ] **Title follows convention** — `{Type} in {Function}() at {File}:{Line}`
+1. [ ] **Reproduced 3x deterministically** -- not a flaky crash
+2. [ ] **Tested against latest master** -- `git pull && rebuild`
+3. [ ] **Title follows convention** -- `{Type} in {Function}() at {File}:{Line}`
 4. [ ] **UTC timestamp present** in Maintainer Repro
-5. [ ] **Git commit hash present** — exact source state pinned
-6. [ ] **PoC file downloadable** — `wget`/`curl` URL verified
-7. [ ] **Reproduction command is copy-paste ready** — includes ASAN_OPTIONS
-8. [ ] **Sanitizer output is verbatim** — not summarized, not truncated
+5. [ ] **Git commit hash present** -- exact source state pinned
+6. [ ] **PoC file downloadable** -- `wget`/`curl` URL verified
+7. [ ] **Reproduction command is copy-paste ready** -- includes ASAN_OPTIONS
+8. [ ] **Sanitizer output is verbatim** -- not summarized, not truncated
 9. [ ] **SUMMARY line present** in output block
-10. [ ] **Labels assigned** — at minimum `Bug` + `Triaged`
+10. [ ] **Labels assigned** -- at minimum `Bug` + `Triaged`
 11. [ ] **Assignee set** if known (typically `ChrisCoxArt` for library bugs)
 
 ## Common Mistakes
@@ -343,6 +365,9 @@ GitHub does not allow `.icc` file attachments. Options:
 | Using tool from `cfl/` (patched) instead of upstream | Masks real upstream behavior | Always use `iccDEV/Build/Tools/` |
 | Filing exit code 1 as a crash | Exit 1 = graceful rejection, not a bug | Only file exit 128+ as crashes |
 | Truncating shadow byte legend | Loses exploitability context | Include full ASAN output |
+| Bundling multiple bugs in one issue | Hurts parsability, blocks per-bug tracking | One bug per issue |
+| Missing `-fsanitize=integer` | UIO bugs invisible with `undefined` alone | Add `integer` to flags |
+| Shadow byte legend in non-UAF issues | 17 lines of noise (33% of body) | Cut legend; keep SUMMARY + frames |
 
 ## Build Command for Reproduction
 
@@ -350,11 +375,11 @@ Standard ASAN+UBSAN build for issue reproduction:
 
 ```bash
 git clone https://github.com/InternationalColorConsortium/iccDEV.git
-cd iccDEV/Build
-cmake Cmake -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_CXX_COMPILER=clang++ \
-  -DCMAKE_CXX_FLAGS="-g -fsanitize=address,undefined -fno-omit-frame-pointer" \
-  -DENABLE_TOOLS=ON -DENABLE_ICCXML=ON
+cd iccDEV/Build && rm -rf CMakeCache.txt CMakeFiles/
+CC=clang CXX=clang++ \
+  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
+  LDFLAGS="-fsanitize=address,undefined,integer" \
+  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
 make -j"$(nproc)"
 cd ..
 
@@ -363,12 +388,48 @@ for d in Build/Tools/*; do [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"; 
 export LD_LIBRARY_PATH="Build/IccProfLib:Build/IccXML/IccLibXML"
 
 # Reproduce
-ASAN_OPTIONS=print_scariness=1:halt_on_error=0:detect_leaks=0 \
+ASAN_OPTIONS=halt_on_error=0,detect_leaks=0 \
+UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1 \
   {tool} {poc_file} {args}
 ```
 
+**Note**: `-fsanitize=integer` is required to detect unsigned integer overflow
+(wrapping). The `undefined` group does NOT include it. Issue #769 was only
+detectable with this flag. MSVC does not support it (Clang only).
+
+## Signal Optimization (from 80-issue analysis, April 2026)
+
+**Gold standard issues**: #753, #769, #766, #743 (5/5 signal rating)
+
+### Noise to Cut
+
+| Source | Lines Wasted | When to Keep |
+|--------|-------------|-------------|
+| ASAN shadow byte legend | 17 lines | UAF / double-free only |
+| ASAN shadow byte dump | 11 lines | UAF / double-free only |
+| Allocation stack trace | 5-10 lines | UAF / double-free only |
+| Duplicate build blocks | 10-20 lines | Write ONCE with {SHA} placeholder |
+| curl/wget progress | 3-5 lines | Never (use `-sS` or `-q`) |
+| vptr UBSAN dumps | 5-15 lines | Never (suppress with UBSAN_OPTIONS) |
+
+### Signal to Add
+
+| Element | Impact | Notes |
+|---------|--------|-------|
+| Structured `## Metadata` block | HIGH | Machine-parseable CWE, file:line, sanitizer |
+| One bug per issue | HIGH | Enables per-bug tracking, labeling, linking |
+| Bisect SHA + date | HIGH | Identifies regression source |
+| Explicit verify command | MEDIUM | Proves fix works reproducibly |
+| `-fsanitize=integer` in build | HIGH | Catches unsigned wrapping (issue #769 class) |
+
+### Score Distribution (80 issues rated)
+
+- 5/5 (4 issues): Clean bisect, metadata, minimal body
+- 4/5 (44 issues): Good structure, minor noise
+- 3/5 (32 issues): Shadow bytes, multi-bug, body >5000 chars
+
 ## See Also
 
-- `prompts/reproduce-security-issue.prompt.md` — Triage workflow for existing advisories
-- `instructions/icc-library-code.instructions.md` — Input validation patterns
-- [GHSA advisories](https://github.com/InternationalColorConsortium/iccDEV/security/advisories) — Published advisories
+- `prompts/reproduce-security-issue.prompt.md` -- Triage workflow for existing advisories
+- `instructions/icc-library-code.instructions.md` -- Input validation patterns
+- [GHSA advisories](https://github.com/InternationalColorConsortium/iccDEV/security/advisories) -- Published advisories

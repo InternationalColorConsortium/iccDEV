@@ -15,6 +15,22 @@ Two shell scripts drive all iccDEV testing:
 | `Testing/CreateAllProfiles.bat` | Windows equivalent | tools in PATH |
 | `Testing/RunTests.bat` | Windows equivalent | tools in PATH |
 
+## CI Regression Tests
+
+PoC profiles for automated regression testing live in `.github/ci/regression/`:
+
+| File | Issue | Bug |
+|------|-------|----|
+| `poc-599-gbd-sio.icc` | #599 | GBD vertex/triangle signed integer overflow |
+| `poc-744-tonemap-hbo.icc` | #744 | ToneMapFunc Describe heap-buffer-overflow |
+| `poc-763-cenc-huaf.icc` | #763 | cenc profile UAF in AddXform |
+| `poc-769-*.icc` (4 files) | #769 | Unsigned integer overflow in offset+size bounds |
+
+Naming convention: `poc-{issue#}-{component}-{type}.icc`
+
+CI workflow `ci-iccdev-tool-tests.yml` Test 18 runs R1-R11 sub-tests against
+these files. When adding new PoC files, also add a corresponding R-sub-test.
+
 Both scripts auto-source `Testing/path.sh` if present (sets `PATH` and
 `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH` to the build output directory).
 

@@ -4742,7 +4742,7 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
       // No, you may not make circular references in the tag,
       // reference back into the tag header,
       // or try to load more data than we have available.
-      if ( (pos->offset < headerSize) || ((pos->offset + pos->size) > size) ) {
+      if ( (pos->offset < headerSize) || (pos->size > size) || (pos->offset > size - pos->size) ) {
         free(posvals);
         return false;
       }
@@ -4774,7 +4774,7 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
   pos = posvals;
   
   // overreading, references into the header, or not having a calc func would be bad
-  if ( !m_calcFunc || (pos->offset < headerSize) || ((pos->offset + pos->size) > size) ) {
+  if ( !m_calcFunc || (pos->offset < headerSize) || (pos->size > size) || (pos->offset > size - pos->size) ) {
     free(posvals);
     return false;
   }

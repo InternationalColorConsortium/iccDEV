@@ -36,15 +36,15 @@ run_test() {
   local input="$2"
   local expected="$3"
   local func="${4:-sanitize_line}"
-  
+
   echo "Test $((pass + fail + 1)): $test_name"
   echo "  Input:    $input"
   echo "  Expected: $expected"
-  
+
   local result
   result=$("$func" "$input")
   echo "  Result:   $result"
-  
+
   if [ "$result" = "$expected" ]; then
     echo "  ✅ PASS"
     pass=$((pass + 1))

@@ -445,7 +445,7 @@ jobs:
 
   tool-tests:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🧪 Tool Smoke Tests (ASAN+UBSAN)
+    name: Tool Smoke Tests (ASAN+UBSAN)
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
 

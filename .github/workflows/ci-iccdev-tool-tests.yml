@@ -45,16 +45,6 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches:
-      - master
-      - ci-fix-docker
-    paths:
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - 'Tools/**'
-      - 'Testing/**'
-      - '.github/workflows/ci-iccdev-tool-tests.yml'
   workflow_call:
   workflow_dispatch:
 
@@ -122,10 +112,10 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
-            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O0 -g3" \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O0 -g3 -std=c++17" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3 -std=c++17" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
             -DENABLE_TOOLS=ON \
             -DENABLE_SHARED_LIBS=ON \
             -Wno-dev
@@ -373,7 +363,7 @@ jobs:
           # Test sRGB with all 4 intents + MPE flag
           SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
           if [ ! -f "$SRGB" ]; then
-            SRGB="$(find "${WORKSPACE_DIR}/Testing" -name 'sRGB_D65_MAT.icc' -type f | head -1)"
+            SRGB="$(find "${WORKSPACE_DIR}/Testing" -name 'sRGB_D65_MAT.icc' -type f | sed -n '1,1p')"
           fi
 
           run_rt() {
@@ -615,10 +605,10 @@ jobs:
 
           if grep -q "ERROR: AddressSanitizer" "$OUTDIR/RunTests.log" 2>/dev/null; then
             echo "[ASAN] RunTests.sh"
-            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/RunTests.log" | head -20
+            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/RunTests.log" | sed -n '1,20p'
           elif grep -q "runtime error:" "$OUTDIR/RunTests.log" 2>/dev/null; then
             echo "[UBSAN] RunTests.sh"
-            grep "runtime error:" "$OUTDIR/RunTests.log" | head -10
+            grep "runtime error:" "$OUTDIR/RunTests.log" | sed -n '1,10p'
           else
             echo "[OK] RunTests.sh completed"
           fi
@@ -652,10 +642,10 @@ jobs:
 
           if grep -q "ERROR: AddressSanitizer" "$OUTDIR/checkInvalidProfiles.log" 2>/dev/null; then
             echo "[ASAN] checkInvalidProfiles.sh"
-            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/checkInvalidProfiles.log" | head -20
+            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/checkInvalidProfiles.log" | sed -n '1,20p'
           elif grep -q "runtime error:" "$OUTDIR/checkInvalidProfiles.log" 2>/dev/null; then
             echo "[UBSAN] checkInvalidProfiles.sh"
-            grep "runtime error:" "$OUTDIR/checkInvalidProfiles.log" | head -10
+            grep "runtime error:" "$OUTDIR/checkInvalidProfiles.log" | sed -n '1,10p'
           else
             echo "[OK] checkInvalidProfiles.sh completed"
           fi
@@ -689,10 +679,10 @@ jobs:
 
           if grep -q "ERROR: AddressSanitizer" "$OUTDIR/RunProtoTest.log" 2>/dev/null; then
             echo "[ASAN] RunProtoTest.sh"
-            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/RunProtoTest.log" | head -20
+            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/RunProtoTest.log" | sed -n '1,20p'
           elif grep -q "runtime error:" "$OUTDIR/RunProtoTest.log" 2>/dev/null; then
             echo "[UBSAN] RunProtoTest.sh"
-            grep "runtime error:" "$OUTDIR/RunProtoTest.log" | head -10
+            grep "runtime error:" "$OUTDIR/RunProtoTest.log" | sed -n '1,10p'
           else
             echo "[OK] RunProtoTest.sh completed"
           fi
@@ -737,7 +727,7 @@ jobs:
           done < <(find "${WORKSPACE_DIR}/Testing/hybrid/Data" -name '*.tif' -type f 2>/dev/null | sort)
 
           # Test iccTiffDump with ICC extraction
-          FIRST_TIF="$(find "${WORKSPACE_DIR}/Testing/hybrid/Data" -name '*.tif' -type f 2>/dev/null | head -1)"
+          FIRST_TIF="$(find "${WORKSPACE_DIR}/Testing/hybrid/Data" -name '*.tif' -type f 2>/dev/null | sed -n '1,1p')"
           if [ -n "${FIRST_TIF:-}" ] && [ -f "$FIRST_TIF" ]; then
             echo ""
             echo "=== iccTiffDump (ICC extraction) ==="
@@ -1300,7 +1290,7 @@ jobs:
 
           # --- R7: PoC #599 GBD signed-integer-overflow ---
           echo "--- R7: PoC #599 GBD signed-integer-overflow ---"
-          POC_599="${WORKSPACE_DIR}/Testing/poc-599-gbd-sio.icc"
+          POC_599="${WORKSPACE_DIR}/.github/ci/regression/poc-599-gbd-sio.icc"
           if [ -f "$POC_599" ]; then
             timeout 30 "$DUMP" "$POC_599" > "$OUTDIR/r7-poc599.log" 2>&1 || true
             rc=$?
@@ -1317,7 +1307,7 @@ jobs:
 
           # --- R8: PoC #744 ToneMapFunc HBO ---
           echo "--- R8: PoC #744 ToneMapFunc HBO ---"
-          POC_744="${WORKSPACE_DIR}/Testing/CIccToneMapFunc-Describe-heap-oob-IccMpeBasic_cpp.icc"
+          POC_744="${WORKSPACE_DIR}/.github/ci/regression/poc-744-tonemap-hbo.icc"
           if [ -f "$POC_744" ]; then
             timeout 30 "$DUMP" "$POC_744" ALL > "$OUTDIR/r8-poc744.log" 2>&1 || true
             rc=$?
@@ -1334,7 +1324,7 @@ jobs:
 
           # --- R9: PoC #763 cenc HUAF ---
           echo "--- R9: PoC #763 cenc profile HUAF ---"
-          POC_763="${WORKSPACE_DIR}/Testing/poc-763-cenc-huaf.icc"
+          POC_763="${WORKSPACE_DIR}/.github/ci/regression/poc-763-cenc-huaf.icc"
           APPLYNAMEDCMM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
           if [ -f "$POC_763" ] && [ -x "$APPLYNAMEDCMM" ]; then
             timeout 30 "$DUMP" "$POC_763" > "$OUTDIR/r9-poc763-dump.log" 2>&1 || true
@@ -1350,8 +1340,40 @@ jobs:
             echo "  [SKIP] PoC #763 or iccApplyNamedCmm not found"
           fi
 
-          # --- R10: hybrid/BuildAndTest.sh spectral CLUT (#736 sub-c) ---
-          echo "--- R10: hybrid/BuildAndTest.sh (spectral CLUT #736) ---"
+          # --- R10: PoC #769 unsigned integer overflow (offset+size) ---
+          echo "--- R10: PoC #769 UIO offset+size bounds checks ---"
+          POC_769_DIR="${WORKSPACE_DIR}/.github/ci/regression"
+          POC_769_FILES=(
+            "poc-769-IccProfile-1311-uio.icc"
+            "poc-769-IccMpeCalc-4745-uio.icc"
+            "poc-769-IccTagDict-633-uio.icc"
+            "poc-769-iccDumpProfile-332-uio.icc"
+          )
+          poc769_pass=0 poc769_fail=0
+          for poc in "${POC_769_FILES[@]}"; do
+            poc_path="${POC_769_DIR}/${poc}"
+            if [ -f "$poc_path" ]; then
+              timeout 30 "$DUMP" "$poc_path" ALL > "$OUTDIR/r10-${poc}.log" 2>&1 || true
+              rc=$?
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r10-${poc}.log" 2>/dev/null; then
+                echo "  [ASAN]  ${poc}"; poc769_fail=$((poc769_fail + 1))
+              elif grep -q "runtime error.*unsigned integer overflow" "$OUTDIR/r10-${poc}.log" 2>/dev/null; then
+                echo "  [UIO]   ${poc} (unsigned overflow still present)"; poc769_fail=$((poc769_fail + 1))
+              elif [ "$rc" -ge 128 ]; then
+                echo "  [CRASH] ${poc} (exit $rc)"; poc769_fail=$((poc769_fail + 1))
+              else
+                echo "  [OK]    ${poc} (exit $rc)"; poc769_pass=$((poc769_pass + 1))
+              fi
+            else
+              echo "  [SKIP]  ${poc} not found"
+            fi
+          done
+          echo "  #769 UIO: $poc769_pass passed, $poc769_fail failed"
+          passed=$((passed + poc769_pass))
+          failed=$((failed + poc769_fail))
+
+          # --- R11: hybrid/BuildAndTest.sh spectral CLUT (#736 sub-c) ---
+          echo "--- R11: hybrid/BuildAndTest.sh (spectral CLUT #736) ---"
           HYBRID_DIR="${WORKSPACE_DIR}/Testing/hybrid"
           if [ -f "$HYBRID_DIR/BuildAndTest.sh" ]; then
             export PATH
@@ -1504,7 +1526,7 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
-              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769)"
             )
 
             for phase in $(seq 1 18); do
@@ -1542,11 +1564,11 @@ jobs:
                 {
                   echo "**${safe_fname}** (ASAN)"
                   echo '```'
-                  grep "ERROR: AddressSanitizer" "$logf" | head -1 | while IFS= read -r line; do
+                  grep "ERROR: AddressSanitizer" "$logf" | sed -n '1,1p' | while IFS= read -r line; do
                     sanitize_line "$line"
                     echo ""
                   done
-                  grep -E '^\s+#[0-3]' "$logf" | head -4 | while IFS= read -r line; do
+                  grep -E '^\s+#[0-3]' "$logf" | sed -n '1,4p' | while IFS= read -r line; do
                     sanitize_line "$line"
                     echo ""
                   done
@@ -1563,7 +1585,7 @@ jobs:
               echo "$UBSAN_FILES" | while IFS= read -r logf; do
                 [ -f "$logf" ] || continue
                 grep "runtime error:" "$logf" 2>/dev/null
-              done | sort -u | head -20 | while IFS= read -r line; do
+              done | sort -u | sed -n '1,20p' | while IFS= read -r line; do
                 sanitize_line "$line"
                 echo ""
               done >> "$GITHUB_STEP_SUMMARY"
