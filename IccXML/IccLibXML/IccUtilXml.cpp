@@ -1245,13 +1245,15 @@ icTagSignature icGetTagNameSig(const icChar *szName)
 
 icStandardObserver icGetNamedStandardObserverValue(const icChar* str)
 {
-  if (!strcmp(str, "Unknown observer"))
+  if (!strcmp(str, "Unknown observer") || !strcmp(str, "Unknown Observer"))
 	  return icStdObsUnknown;
 
-  if (!strcmp(str, "CIE 1931 (two degree) standard observer"))
+  if (!strcmp(str, "CIE 1931 (two degree) standard observer") ||
+      !strcmp(str, "CIE 1931 standard colorimetric observer"))
 	  return icStdObs1931TwoDegrees;
 
-  if (!strcmp(str, "CIE 1964 (ten degree) standard observer"))
+  if (!strcmp(str, "CIE 1964 (ten degree) standard observer") ||
+      !strcmp(str, "CIE 1964 standard colorimetric observer"))
 	  return icStdObs1964TenDegrees;   
 
   return icStdObsCustom;
@@ -1367,16 +1369,16 @@ const icChar* icGetStandardObserverName(icStandardObserver str)
 {
   switch (str) {
   case icStdObsUnknown:
-    return "Unknown Observer";
+    return "Unknown observer";
 
   case icStdObs1931TwoDegrees:
-    return "CIE 1931 standard colorimetric observer";
+    return "CIE 1931 (two degree) standard observer";
 
   case icStdObs1964TenDegrees:
-    return "CIE 1964 standard colorimetric observer";
+    return "CIE 1964 (ten degree) standard observer";
 
   default:    
-    return "Unknown Observer";
+    return "Unknown observer";
   }
 }
 
