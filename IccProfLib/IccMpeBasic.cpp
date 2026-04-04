@@ -4060,6 +4060,17 @@ bool CIccToneMapFunc::Read(icUInt32Number size, CIccIO* pIO)
 
   m_nParameters = (icUInt8Number)((size - headerSize)/sizeof(icFloatNumber));
 
+  // CFL-004: Validate parameter count against function type requirements.
+  // NumArgs() returns the required count for the function type (e.g., 3 for type 0x0000).
+  // Describe() accesses m_params[0..NumArgs()-1] unconditionally for known types,
+  // so m_nParameters < NumArgs() causes heap-buffer-overflow (CWE-122).
+  int nRequired = NumArgs();
+  if (nRequired > 0 && m_nParameters < (icUInt8Number)nRequired) {
+    m_params = NULL;
+    m_nParameters = 0;
+    return false;
+  }
+
   if (m_nParameters) {
 
     m_params = (icFloatNumber*)malloc(m_nParameters * sizeof(icFloatNumber));
