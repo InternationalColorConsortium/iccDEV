@@ -8083,9 +8083,13 @@ icStatusCMM CIccCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
+  // CFL-078: Save deviceClass before AddXform — CIccXform::Create() deletes
+  // cenc profiles internally (line 546), so caller must NOT double-delete.
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
-  if (rv != icCmmStatOk)
+  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return rv;
@@ -8139,9 +8143,12 @@ icStatusCMM CIccCmm::AddXform(icUInt8Number *pProfileMem,
     return icCmmStatCantOpenProfile;
   }
 
+  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
-  if (rv != icCmmStatOk)
+  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return rv;
@@ -8541,12 +8548,16 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
   //borrow the caller's AttachIO to perform the AddXform
   pProfile->CopyAttach(&Profile);
 
+  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
   //Now that we have added the xform disconnect from the callers AttachIO
-  pProfile->CopyAttach(nullptr);
+  if (savedClass != icSigColorEncodingClass)
+    pProfile->CopyAttach(nullptr);
 
-  if (stat != icCmmStatOk)
+  if (stat != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return stat;
@@ -10558,9 +10569,12 @@ icStatusCMM CIccNamedColorCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
+  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer (CWE-416)
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
-  if (rv != icCmmStatOk)
+  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return rv;
