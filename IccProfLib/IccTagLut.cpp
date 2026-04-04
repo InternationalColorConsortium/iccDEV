@@ -1858,10 +1858,6 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
   if (m_nInput < 1 || m_nOutput < 1)
     return false;
 
-  // and the current limit is for 15 channels
-  if (m_nInput > 15 || m_nOutput > 15)
-    return false;
-
   icUInt64Number nNumPoints;
   memset(m_nReserved2, 0, sizeof(m_nReserved2));
   if (pGridPoints!=&m_GridPoints[0]) {
