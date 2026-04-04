@@ -26,6 +26,7 @@
 | File a security issue | `prompts/file-security-issue.prompt.md` |
 | Version bump with ports | `prompts/version-bump.prompt.md` |
 | Debug vcpkg port CI | `prompts/vcpkg-port-debug.prompt.md` |
+| Bisect and fix regressions | `prompts/bisect-regression.prompt.md` |
 
 ## Project Overview
 

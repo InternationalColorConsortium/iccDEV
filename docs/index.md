@@ -183,7 +183,8 @@ npm install iccdev
 ```
 
 [Build on Windows, macOS, Linux](build.md) ·
-[vcpkg Port (cross-platform)](vcpkg.md)
+[vcpkg Port (cross-platform)](vcpkg.md) ·
+[Bisecting Regressions](bisect.md)
 
 ## Examples
 

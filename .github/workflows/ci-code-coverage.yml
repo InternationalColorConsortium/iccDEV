@@ -41,6 +41,8 @@ jobs:
     name: Coverage Report
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      BASH_ENV: /dev/null
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -57,6 +59,8 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \

@@ -17,7 +17,7 @@
 
 ```
 Usage: iccDumpProfile {-v} {int} profile {tagId to dump/"ALL"}
-Built with IccProfLib version 2.3.1.1
+Built with IccProfLib version 2.3.1.6
 
 The -v option causes profile validation to be performed.
 The optional integer parameter specifies verboseness of output (1-100, default=100).
@@ -26,7 +26,7 @@ The optional integer parameter specifies verboseness of output (1-100, default=1
 `iccFromXml`
 
 ```
-IccFromXml built with IccProfLib Version 2.3.1.1, IccLibXML Version 2.3.1.1
+IccFromXml built with IccProfLib Version 2.3.1.6, IccLibXML Version 2.3.1.6
 
 Usage: IccFromXml xml_file saved_profile_file {-noid -v{=[relax_ng_schema_file - optional]}}
 ```
@@ -34,7 +34,7 @@ Usage: IccFromXml xml_file saved_profile_file {-noid -v{=[relax_ng_schema_file -
 `iccToXml`
 
 ```
-IccToXml built with IccProfLib Version 2.3.1.1, IccLibXML Version 2.3.1.1
+IccToXml built with IccProfLib Version 2.3.1.6, IccLibXML Version 2.3.1.6
 
 Usage: IccToXml src_icc_profile dest_xml_file
 ```
@@ -43,7 +43,7 @@ Usage: IccToXml src_icc_profile dest_xml_file
 
 ```
 Usage: iccRoundTrip profile {rendering_intent=1 {use_mpe=0}}
-Built with IccProfLib version 2.3.1.1
+Built with IccProfLib version 2.3.1.6
   where rendering_intent is (0=perceptual, 1=relative, 2=saturation, 3=absolute)
 ```
 
@@ -87,11 +87,11 @@ Built with IccProfLib version 2.3.1.1
 /workspace/iccDEV/Build/IccProfLib/libIccProfLib2-static.a
 /workspace/iccDEV/Build/IccProfLib/libIccProfLib2.so
 /workspace/iccDEV/Build/IccProfLib/libIccProfLib2.so.2
-/workspace/iccDEV/Build/IccProfLib/libIccProfLib2.so.2.3.1.4
+/workspace/iccDEV/Build/IccProfLib/libIccProfLib2.so.2.3.1.6
 /workspace/iccDEV/Build/IccXML/libIccXML2-static.a
 /workspace/iccDEV/Build/IccXML/libIccXML2.so
 /workspace/iccDEV/Build/IccXML/libIccXML2.so.2
-/workspace/iccDEV/Build/IccXML/libIccXML2.so.2.3.1.4
+/workspace/iccDEV/Build/IccXML/libIccXML2.so.2.3.1.6
 ```
 
 #### Run iccRoundTrip
@@ -138,7 +138,7 @@ Command: `docker run --rm ghcr.io/internationalcolorconsortium/iccdev-nixos:late
 #### Expected Output
 
 ```
-Built with IccProfLib version 2.3.1.4+260b499
+Built with IccProfLib version 2.3.1.6+260b499
 
 Profile:            'Testing/sRGB_v4_ICC_preference.icc'
 Profile ID:         34562abf994ccd066d2c5721d0d68c5d

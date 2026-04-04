@@ -42,7 +42,7 @@ jobs:
     timeout-minutes: 20
     defaults:
       run:
-        shell: powershell
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
     strategy:
       fail-fast: false
 
