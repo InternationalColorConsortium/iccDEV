@@ -462,6 +462,47 @@ jobs:
             fi
           } > "$report"
 
+          # ── Symbol count assertions ──
+          echo "::group::Symbol count assertions"
+          if [[ "$RUNNER_OS" = "Linux" ]]; then
+            proflib_syms="$(nm -D --defined-only "$proflib" | wc -l)"
+            xmllib_syms="$(nm -D --defined-only "$xmllib" | wc -l)"
+          else
+            proflib_syms="$(nm -gU "$proflib" | wc -l)"
+            xmllib_syms="$(nm -gU "$xmllib" | wc -l)"
+          fi
+          echo "IccProfLib2 exported symbols: $proflib_syms"
+          echo "IccXML2     exported symbols: $xmllib_syms"
+          if [[ "$proflib_syms" -lt 2000 ]]; then
+            echo "::error::IccProfLib2 symbol count too low: $(sanitize_line "$proflib_syms") (expected >= 2000)"
+            exit 1
+          fi
+          if [[ "$xmllib_syms" -lt 500 ]]; then
+            echo "::error::IccXML2 symbol count too low: $(sanitize_line "$xmllib_syms") (expected >= 500)"
+            exit 1
+          fi
+          echo "[OK] Symbol counts within expected range"
+          echo "::endgroup::"
+
+          # ── SONAME validation (Linux only) ──
+          if [[ "$RUNNER_OS" = "Linux" ]]; then
+            echo "::group::SONAME validation"
+            proflib_soname="$(readelf -d "$proflib" | grep SONAME | sed 's/.*\[//' | sed 's/\]//')"
+            xmllib_soname="$(readelf -d "$xmllib" | grep SONAME | sed 's/.*\[//' | sed 's/\]//')"
+            echo "IccProfLib2 SONAME: $proflib_soname"
+            echo "IccXML2     SONAME: $xmllib_soname"
+            if ! echo "$proflib_soname" | grep -qE '^libIccProfLib2d?\.so\.[0-9]+$'; then
+              echo "::error::IccProfLib2 SONAME does not match expected pattern: $(sanitize_line "$proflib_soname")"
+              exit 1
+            fi
+            if ! echo "$xmllib_soname" | grep -qE '^libIccXML2d?\.so\.[0-9]+$'; then
+              echo "::error::IccXML2 SONAME does not match expected pattern: $(sanitize_line "$xmllib_soname")"
+              exit 1
+            fi
+            echo "[OK] SONAME values match expected pattern"
+            echo "::endgroup::"
+          fi
+
           echo "::notice title=Shared Library Consumer Smoke::hello-iccdev linked and ran against build-tree shared libraries"
 
       - name: Upload Build Artifacts (on failure)
@@ -1797,6 +1838,21 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
           TOOL="$PREFIX/bin/iccApplySearch"
           case "$RUNNER_OS" in
             Linux)
@@ -1858,6 +1914,85 @@ jobs:
               echo "::endgroup::"
               ;;
           esac
+
+          # ── Symlink chain verification (Linux only) ──
+          if [[ "$RUNNER_OS" = "Linux" ]]; then
+            echo "::group::Symlink chain verification"
+            FAIL=0
+            for base_name in IccProfLib2 IccXML2; do
+              so_link="$PREFIX/lib/lib${base_name}.so"
+              if [[ ! -L "$so_link" ]]; then
+                echo "::error::Missing .so symlink: $(sanitize_line "$so_link")"
+                FAIL=1
+                continue
+              fi
+              so_target="$(readlink "$so_link")"
+              if ! echo "$so_target" | grep -qE "^lib${base_name}\.so\.[0-9]+$"; then
+                echo "::error::.so symlink target unexpected: $(sanitize_line "$so_link") -> $(sanitize_line "$so_target")"
+                FAIL=1
+              fi
+              soversion_link="$PREFIX/lib/$so_target"
+              if [[ ! -L "$soversion_link" ]]; then
+                echo "::error::Missing SOVERSION symlink: $(sanitize_line "$soversion_link")"
+                FAIL=1
+                continue
+              fi
+              full_target="$(readlink "$soversion_link")"
+              if ! echo "$full_target" | grep -qE "^lib${base_name}\.so\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$"; then
+                echo "::error::SOVERSION symlink target unexpected: $(sanitize_line "$soversion_link") -> $(sanitize_line "$full_target")"
+                FAIL=1
+              fi
+              real_lib="$PREFIX/lib/$full_target"
+              if [[ ! -f "$real_lib" ]]; then
+                echo "::error::Real library file missing: $(sanitize_line "$real_lib")"
+                FAIL=1
+              fi
+              echo "[OK] $base_name: .so -> $(sanitize_line "$so_target") -> $(sanitize_line "$full_target")"
+            done
+            if [[ "$FAIL" -ne 0 ]]; then
+              exit 1
+            fi
+            echo "::endgroup::"
+          fi
+
+          # ── RPATH absence in installed binaries (Linux only) ──
+          if [[ "$RUNNER_OS" = "Linux" ]]; then
+            echo "::group::RPATH absence check"
+            FAIL=0
+            for bin in "$PREFIX"/bin/icc*; do
+              if [[ ! -f "$bin" ]]; then continue; fi
+              rpath_line="$(readelf -d "$bin" 2>/dev/null | grep -E 'RPATH|RUNPATH' || true)"
+              if [[ -n "$rpath_line" ]]; then
+                echo "::warning::Installed binary has RPATH/RUNPATH: $(sanitize_line "$(basename "$bin")"): $(sanitize_line "$rpath_line")"
+                FAIL=1
+              fi
+            done
+            if [[ "$FAIL" -ne 0 ]]; then
+              echo "::error::Installed binaries should not have hardcoded RPATH"
+              exit 1
+            fi
+            echo "[OK] No installed binaries have hardcoded RPATH/RUNPATH"
+            echo "::endgroup::"
+          fi
+
+          # ── SONAME validation (Linux only) ──
+          if [[ "$RUNNER_OS" = "Linux" ]]; then
+            echo "::group::SONAME validation"
+            proflib_soname="$(readelf -d "$CORE_LIB" | grep SONAME | sed 's/.*\[//' | sed 's/\]//')"
+            xmllib_soname="$(readelf -d "$XML_LIB" | grep SONAME | sed 's/.*\[//' | sed 's/\]//')"
+            echo "IccProfLib2 SONAME: $(sanitize_line "$proflib_soname")"
+            echo "IccXML2     SONAME: $(sanitize_line "$xmllib_soname")"
+            if ! echo "$proflib_soname" | grep -qE '^libIccProfLib2d?\.so\.[0-9]+$'; then
+              echo "::error::IccProfLib2 SONAME pattern mismatch: $(sanitize_line "$proflib_soname")"
+              exit 1
+            fi
+            if ! echo "$xmllib_soname" | grep -qE '^libIccXML2d?\.so\.[0-9]+$'; then
+              echo "::error::IccXML2 SONAME pattern mismatch: $(sanitize_line "$xmllib_soname")"
+              exit 1
+            fi
+            echo "[OK] SONAME values match expected pattern"
+            echo "::endgroup::"
+          fi
 
   linux-housekeeping:
     name: "Housekeeping - Linux - ${{ matrix.build_type }}"
