@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
 
   push:
-    branches: [workflow-sanity-checks, master, research]
+    branches: [master]
     paths:
       - '.github/scripts/sanitize-sed.sh'
       - '.github/tests/**'

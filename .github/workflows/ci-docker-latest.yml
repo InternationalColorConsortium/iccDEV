@@ -26,7 +26,7 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [master, ci-fix-docker]
+    branches: [master]
     paths:
       - 'Dockerfile'
       - 'IccProfLib/**'

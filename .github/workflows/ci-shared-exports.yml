@@ -27,21 +27,20 @@ permissions:
 on:
   push:
     branches:
-      - 'ci-shared-exports'
-      - 'ci-shared-exports/**'
+      - master
     paths:
       - '.github/workflows/ci-shared-exports.yml'
   workflow_dispatch:
     inputs:
       iccdev_repo:
-        description: 'Repository to clone for validation (owner/name)'
+        description: 'Repository to checkout (owner/name)'
         required: false
         default: 'InternationalColorConsortium/iccDEV'
         type: string
       iccdev_ref:
-        description: 'Branch, tag, or SHA to validate from the source repository'
+        description: 'Branch, tag, or SHA to checkout'
         required: false
-        default: 'ci-shared-exports'
+        default: 'master'
         type: string
 
 concurrency:

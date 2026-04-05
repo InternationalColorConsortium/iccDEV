@@ -27,7 +27,7 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [master, dockerfiles, ci-fix-docker]
+    branches: [master]
     paths:
       - 'Dockerfile.nixos'
       - 'IccProfLib/**'
