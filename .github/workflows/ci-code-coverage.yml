@@ -30,7 +30,7 @@ permissions:
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ master, cfl ]
+    branches: [ master ]
 
 concurrency:
   group: coverage-${{ github.ref }}
@@ -56,6 +56,7 @@ jobs:
 
       - name: Install dependencies
         env:
+          BASH_ENV: /dev/null
           DEBIAN_FRONTEND: noninteractive
         run: |
           set -euo pipefail
@@ -70,6 +71,8 @@ jobs:
 
       - name: Show toolchain versions
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           echo "::group::Toolchain versions"
           echo "clang:          $(clang-18 --version | head -1)"
@@ -82,15 +85,18 @@ jobs:
       # ─── Build ──────────────────────────────────────────────
       - name: Build with coverage instrumentation
         env:
+          BASH_ENV: /dev/null
           CC: clang-18
           CXX: clang++-18
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
-          BUILD_DIR="${{ github.workspace }}/build-coverage"
+          BUILD_DIR="$GITHUB_WORKSPACE/build-coverage"
           mkdir -p "$BUILD_DIR" && cd "$BUILD_DIR"
 
           echo "::group::CMake configure"
-          cmake "${{ github.workspace }}/Build/Cmake" \
+          cmake "$GITHUB_WORKSPACE/Build/Cmake" \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
@@ -149,10 +155,12 @@ jobs:
       # ─── Exercise tools for coverage ────────────────────────
       - name: Create test profiles
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
-          export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/create-%p-%m.profraw"
-          export PATH="${{ env.tool_path_dirs }}$PATH"
-          mkdir -p "${{ github.workspace }}/profraw"
+          export LLVM_PROFILE_FILE="$GITHUB_WORKSPACE/profraw/create-%p-%m.profraw"
+          export PATH="${tool_path_dirs}$PATH"
+          mkdir -p "$GITHUB_WORKSPACE/profraw"
 
           # CreateAllProfiles.sh expects to find tools via PATH
           ln -sfn build-coverage Build
@@ -168,9 +176,12 @@ jobs:
 
       - name: Run test suite
         run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -uo pipefail
-          export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/test-%p-%m.profraw"
-          export PATH="${{ env.tool_path_dirs }}$PATH"
+          export LLVM_PROFILE_FILE="$GITHUB_WORKSPACE/profraw/test-%p-%m.profraw"
+          export PATH="${tool_path_dirs}$PATH"
 
           cd Testing
           echo "::group::RunTests.sh output"
@@ -188,10 +199,13 @@ jobs:
 
       - name: Exercise all profiles with IccDumpProfile
         run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -uo pipefail
-          export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/dump-%p-%m.profraw"
+          export LLVM_PROFILE_FILE="$GITHUB_WORKSPACE/profraw/dump-%p-%m.profraw"
 
-          TOOL="${{ env.tool_path }}"
+          TOOL="${tool_path}"
           TOTAL=0; PASS=0; FAIL=0
           FAIL_LOG=""
 
@@ -223,10 +237,13 @@ jobs:
 
       - name: Exercise XML round-trip and IccRoundTrip
         run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -uo pipefail
-          export LLVM_PROFILE_FILE="${{ github.workspace }}/profraw/xml-%p-%m.profraw"
+          export LLVM_PROFILE_FILE="$GITHUB_WORKSPACE/profraw/xml-%p-%m.profraw"
 
-          BUILD_DIR="${{ env.build_dir }}"
+          BUILD_DIR="${build_dir}"
           TO_XML=$(find "$BUILD_DIR" -name "iccToXml" -type f -executable -print -quit)
           FROM_XML=$(find "$BUILD_DIR" -name "iccFromXml" -type f -executable -print -quit)
           ROUNDTRIP=$(find "$BUILD_DIR" -name "iccRoundTrip" -type f -executable -print -quit)
@@ -370,11 +387,13 @@ jobs:
       # ─── Coverage report generation ─────────────────────────
       - name: Merge profdata and generate reports
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           mkdir -p coverage-report
 
           # ── Merge .profraw files ──
-          PROFRAW_COUNT=$(find "${{ github.workspace }}/profraw" -name "*.profraw" 2>/dev/null | wc -l)
+          PROFRAW_COUNT=$(find "$GITHUB_WORKSPACE/profraw" -name "*.profraw" 2>/dev/null | wc -l)
 
           if [ "$PROFRAW_COUNT" -eq 0 ]; then
             echo "::error title=No coverage data::No profraw files generated — coverage instrumentation may have failed"
@@ -382,7 +401,7 @@ jobs:
           fi
 
           echo "Merging $PROFRAW_COUNT profraw files..."
-          find "${{ github.workspace }}/profraw" -name "*.profraw" -print0 \
+          find "$GITHUB_WORKSPACE/profraw" -name "*.profraw" -print0 \
             | xargs -0 llvm-profdata-18 merge -sparse \
               -o coverage-report/merged.profdata
 
@@ -391,8 +410,8 @@ jobs:
           echo "profraw_count=$PROFRAW_COUNT" >> "$GITHUB_ENV"
 
           # ── Build llvm-cov object list ──
-          BUILD_DIR="${{ env.build_dir }}"
-          MAIN_BIN="${{ env.tool_path }}"
+          BUILD_DIR="${build_dir}"
+          MAIN_BIN="${tool_path}"
           OBJECT_ARGS=""
 
           # Tool executables (exclude GUI-only tool that requires wxWidgets)
@@ -481,6 +500,9 @@ jobs:
       - name: Write workflow summary
         if: always()
         run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           {
             echo "## 📊 Code Coverage Report"
             echo ""
@@ -488,22 +510,22 @@ jobs:
             echo ""
             echo "| Metric | Coverage |"
             echo "|--------|----------|"
-            echo "| Regions | ${{ env.region_pct }} |"
-            echo "| Functions | ${{ env.func_pct }} |"
-            echo "| **Lines** | **${{ env.line_pct }}** |"
-            echo "| Branches | ${{ env.branch_pct }} |"
+            echo "| Regions | ${region_pct} |"
+            echo "| Functions | ${func_pct} |"
+            echo "| **Lines** | **${line_pct}** |"
+            echo "| Branches | ${branch_pct} |"
             echo ""
-            echo "> Mismatched function records: ${{ env.mismatch_count }} — template instantiation duplicates across shared library and tool boundaries (cosmetic, see [#605](https://github.com/InternationalColorConsortium/iccDEV/issues/605))"
+            echo "> Mismatched function records: ${mismatch_count} — template instantiation duplicates across shared library and tool boundaries (cosmetic, see [#605](https://github.com/InternationalColorConsortium/iccDEV/issues/605))"
             echo ""
             echo "### Test Execution"
             echo ""
             echo "| Step | Result | Details |"
             echo "|------|--------|---------|"
-            echo "| ICC profiles created | ${{ env.profile_count }} | via \`CreateAllProfiles.sh\` |"
-            echo "| Test suite | exit ${{ env.test_exit_code }} | via \`RunTests.sh\` |"
-            echo "| IccDumpProfile | ${{ env.dump_pass }}/${{ env.dump_total }} pass | ${{ env.dump_fail }} failures |"
-            echo "| XML round-trip | ${{ env.xml_converted }} converted | ${{ env.xml_failed }} failed (all profiles) |"
-            echo "| IccRoundTrip | ${{ env.rt_pass }}/${{ env.rt_suitable }} suitable pass | ${{ env.rt_exercised }} others exercised for coverage |"
+            echo "| ICC profiles created | ${profile_count} | via \`CreateAllProfiles.sh\` |"
+            echo "| Test suite | exit ${test_exit_code} | via \`RunTests.sh\` |"
+            echo "| IccDumpProfile | ${dump_pass}/${dump_total} pass | ${dump_fail} failures |"
+            echo "| XML round-trip | ${xml_converted} converted | ${xml_failed} failed (all profiles) |"
+            echo "| IccRoundTrip | ${rt_pass}/${rt_suitable} suitable pass | ${rt_exercised} others exercised for coverage |"
             echo ""
 
             # ── Failed file lists (per tool) ──
@@ -511,7 +533,7 @@ jobs:
 
             if [ -s coverage-report/dump-failures.txt ]; then
               HAS_FAILURES=true
-              echo "<details><summary>❌ IccDumpProfile — failed files (${{ env.dump_fail }})</summary>"
+              echo "<details><summary>❌ IccDumpProfile — failed files (${dump_fail})</summary>"
               echo ""
               echo '```'
               cat coverage-report/dump-failures.txt
@@ -522,7 +544,7 @@ jobs:
 
             if [ -s coverage-report/xml-roundtrip-failures.txt ]; then
               HAS_FAILURES=true
-              echo "<details><summary>❌ XML round-trip — failed files (${{ env.xml_failed }})</summary>"
+              echo "<details><summary>❌ XML round-trip — failed files (${xml_failed})</summary>"
               echo ""
               echo '```'
               cat coverage-report/xml-roundtrip-failures.txt
@@ -533,11 +555,11 @@ jobs:
 
             if [ -s coverage-report/icc-roundtrip-failures.txt ]; then
               HAS_FAILURES=true
-              echo "<details><summary>⚠️ IccRoundTrip — ${{ env.rt_fail }} of ${{ env.rt_suitable }} suitable profiles failed (mntr/prtr/scnr only)</summary>"
+              echo "<details><summary>⚠️ IccRoundTrip — ${rt_fail} of ${rt_suitable} suitable profiles failed (mntr/prtr/scnr only)</summary>"
               echo ""
               echo "Only profiles with round-trip capable classes (Display/Output/Input) are"
               echo "counted as failures. Calculator (\`spac\`), DeviceLink (\`link\`), Abstract (\`abst\`),"
-              echo "and other classes were exercised for coverage data (${{ env.rt_exercised }} profiles)."
+              echo "and other classes were exercised for coverage data (${rt_exercised} profiles)."
               echo ""
               echo '```'
               cat coverage-report/icc-roundtrip-failures.txt
@@ -555,10 +577,10 @@ jobs:
             echo "| Component | Value |"
             echo "|-----------|-------|"
             echo "| Compiler | clang-18 (source-based coverage) |"
-            echo "| Tools built | ${{ env.tool_count }} |"
-            echo "| Profraw files | ${{ env.profraw_count }} |"
-            echo "| HTML pages | ${{ env.html_count }} |"
-            echo "| LCOV source records | ${{ env.lcov_records }} |"
+            echo "| Tools built | ${tool_count} |"
+            echo "| Profraw files | ${profraw_count} |"
+            echo "| HTML pages | ${html_count} |"
+            echo "| LCOV source records | ${lcov_records} |"
             echo ""
             echo "### Artifacts"
             echo ""

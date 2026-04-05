@@ -60,6 +60,8 @@ jobs:
           BASH_ENV: /dev/null
           CHECKOUT_REF: ${{ env.CHECKOUT_REF }}
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           # Defense-in-depth: inputs.ref is type:choice,
           # inputs.pr_number is type:number. Validate the derived ref.
@@ -175,15 +177,17 @@ jobs:
           brew install cmake llvm libpng libtiff libxml2 nlohmann-json ccache
           ccache --zero-stats || true
 
-      - name: Disable wxWidgets for CFL
+      - name: Disable wxWidgets (headless CI)
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) /g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) /g' Build/Cmake/CMakeLists.txt
           sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Set Compiler
@@ -388,15 +392,17 @@ jobs:
             build-essential cmake clang llvm \
             libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
-      - name: Disable wxWidgets for CFL
+      - name: Disable wxWidgets (headless CI)
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) /g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) /g' Build/Cmake/CMakeLists.txt
           sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Configure with Sanitizer
@@ -579,15 +585,17 @@ jobs:
             build-essential cmake clang \
             libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
-      - name: Disable wxWidgets for CFL
+      - name: Disable wxWidgets (headless CI)
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) /g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) /g' Build/Cmake/CMakeLists.txt
           sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Configure with Option
@@ -615,6 +623,8 @@ jobs:
           LTO_EXPECTED: ${{ matrix.lto_expected }}
           LTO_MESSAGE: ${{ matrix.lto_message }}
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
           echo "::group::LTO Validation"
@@ -734,6 +744,8 @@ jobs:
       - name: Install Dependencies
         shell: pwsh
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -747,6 +759,8 @@ jobs:
         env:
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -763,6 +777,8 @@ jobs:
         env:
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -774,6 +790,8 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -831,15 +849,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y build-essential cmake libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
-      - name: Disable wxWidgets for CFL
+      - name: Disable wxWidgets (headless CI)
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) /g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) /g' Build/Cmake/CMakeLists.txt
           sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Build
@@ -920,15 +940,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y build-essential cmake libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
-      - name: Disable wxWidgets for CFL
+      - name: Disable wxWidgets (headless CI)
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
-          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
-          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) # Disabled for CFL/g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) /g' Build/Cmake/CMakeLists.txt
+          sed -i.bak 's/^      ADD_SUBDIRECTORY(Tools\/wxProfileDump)/      # ADD_SUBDIRECTORY(Tools\/wxProfileDump) /g' Build/Cmake/CMakeLists.txt
           sed -i.bak 's/^    message(FATAL_ERROR "wxWidgets not found/    # message(FATAL_ERROR "wxWidgets not found/g' Build/Cmake/CMakeLists.txt
 
       - name: Initial Build
@@ -1044,6 +1066,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          git config --global credential.helper ""
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -1062,6 +1085,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
           sed -i.bak 's/^  find_package(wxWidgets COMPONENTS core base REQUIRED)/  # find_package(wxWidgets COMPONENTS core base REQUIRED) # Disabled/g' Build/Cmake/CMakeLists.txt
@@ -1072,6 +1097,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           if (Test-Path Env:GITHUB_TOKEN) { Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue }
@@ -1104,6 +1131,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -1141,6 +1170,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -1162,6 +1193,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          git config --global credential.helper ""
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -1185,6 +1217,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -1238,6 +1272,8 @@ jobs:
           RESULT_CLEAN: ${{ needs.clean-rebuild-test.result }}
           RESULT_EXAMPLE: ${{ needs.example-project.result }}
         run: |
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
 
