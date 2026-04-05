@@ -40,6 +40,22 @@ For EVERY `run:` step in the workflow, verify:
 
 ## Running the Audit
 
+### Automated (preferred)
+
+Trigger the 10-check governance scanner:
+
+```bash
+gh workflow run ci-pr-risk-security-analysis.yml \
+  --ref ci-governance-audit \
+  -f analysis_target='Current branch workflows'
+```
+
+The scanner checks: SHA pinning, dangerous triggers, credential hygiene,
+shell hardening, matrix injection, output sanitization, permissions,
+supply-chain score, trivy indicators, and workflow inventory.
+
+### Manual Grep
+
 ```bash
 # Quick grep for common violations
 FILE=".github/workflows/target.yml"

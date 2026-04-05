@@ -1,19 +1,18 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium.
-##                 All rights reserved.
-##                 https://color.org
+# Copyright (©) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
 #
 #
-## Intent: PR Status Labeler - Labels PRs based on CI results
+# Intent: PR Status Labeler - Labels PRs based on CI results
 #
-## Last Updated: 2026-02-17 16:30:55 UTC by David Hoyt
-#                Batch schedule over all open PRs, ensure labels
-#                exist, concurrency, sanitizer, checks:read perm.
+# Last Updated: 2026-04-05 23:48:22 UTC by David Hoyt
+#
 #
 ###############################################################
 
-name: PR Status Labeler
+name: ci-status-label
 
 on:
   workflow_dispatch:
@@ -112,6 +111,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_LIST: ${{ steps.pr_list.outputs.prs }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -141,12 +142,12 @@ jobs:
 
             # Query commit statuses API
             local state
-            state=$(gh api "repos/${{ github.repository }}/commits/$head/status" \
+            state=$(gh api "repos/${GH_REPO}/commits/$head/status" \
               --jq '.state' 2>/dev/null || echo "unknown")
 
             # Query Check Runs API (Actions uses this, not statuses)
             local check_conclusion
-            check_conclusion=$(gh api "repos/${{ github.repository }}/commits/$head/check-runs" \
+            check_conclusion=$(gh api "repos/${GH_REPO}/commits/$head/check-runs" \
               --jq '
                 if (.total_count == 0) then "none"
                 else
@@ -198,7 +199,7 @@ jobs:
             fi
           }
 
-          for pr in ${{ steps.pr_list.outputs.prs }}; do
+          for pr in ${PR_LIST}; do
             echo "── PR #$pr ──"
             evaluate_pr "$pr"
             PROCESSED=$((PROCESSED + 1))
@@ -214,6 +215,11 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          GH_REPO: ${{ github.repository }}
+          PR_MODE: ${{ steps.pr_list.outputs.mode }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+          PRS_PROCESSED: ${{ steps.process.outputs.processed || '0' }}
+          PRS_LABELED: ${{ steps.process.outputs.labeled || '0' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -237,17 +243,17 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          MODE="${{ steps.pr_list.outputs.mode }}"
+          MODE="${PR_MODE}"
 
           {
             echo "### 🏷️ PR Status Labeler Summary"
             echo ""
             echo "| Field | Value |"
             echo "|-------|-------|"
-            echo "| Trigger | \`${{ github.event_name }}\` |"
+            echo "| Trigger | \`${GH_EVENT_NAME}\` |"
             echo "| Mode | $MODE |"
-            echo "| PRs Processed | ${{ steps.process.outputs.processed || '0' }} |"
-            echo "| Labels Applied | ${{ steps.process.outputs.labeled || '0' }} |"
+            echo "| PRs Processed | ${PRS_PROCESSED} |"
+            echo "| Labels Applied | ${PRS_LABELED} |"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -262,7 +268,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             while IFS='|' read -r pr status details; do
               safe_details=$(sanitize_line "$details")
-              echo "| [#${pr}](https://github.com/${{ github.repository }}/pull/${pr}) | \`${status}\` | ${safe_details} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| [#${pr}](https://github.com/${GH_REPO}/pull/${pr}) | \`${status}\` | ${safe_details} |" >> "$GITHUB_STEP_SUMMARY"
             done < "${GITHUB_WORKSPACE}/pr_results.txt"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi

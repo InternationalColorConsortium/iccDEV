@@ -49,6 +49,36 @@ set(REFICCMAX_VERSION @REFICCMAX_VERSION@)
 # with all include directories, link dependencies, and compile features pre-configured.
 include("${CMAKE_CURRENT_LIST_DIR}/RefIccMAXTargets.cmake")
 
+# CMP0111: Map missing per-configuration properties to the first available
+# configuration so that multi-config generators (Visual Studio, Xcode) do not
+# warn about IMPORTED_IMPLIB / IMPORTED_LOCATION being absent for configs that
+# were not part of the original build (e.g. building only Debug but the
+# generator also creates Release, RelWithDebInfo, MinSizeRel placeholders).
+foreach(_rim_target
+    RefIccMAX::IccProfLib2
+    RefIccMAX::IccXML2
+    RefIccMAX::IccProfLib2-static
+    RefIccMAX::IccXML2-static)
+  if(TARGET ${_rim_target})
+    get_target_property(_rim_configs ${_rim_target} IMPORTED_CONFIGURATIONS)
+    if(_rim_configs)
+      list(GET _rim_configs 0 _rim_fallback)
+      foreach(_rim_cfg Debug Release RelWithDebInfo MinSizeRel)
+        string(TOUPPER "${_rim_cfg}" _rim_cfg_upper)
+        if(NOT "${_rim_cfg_upper}" IN_LIST _rim_configs)
+          set_property(TARGET ${_rim_target} PROPERTY
+              MAP_IMPORTED_CONFIG_${_rim_cfg_upper} ${_rim_fallback})
+        endif()
+      endforeach()
+    endif()
+  endif()
+endforeach()
+unset(_rim_target)
+unset(_rim_configs)
+unset(_rim_fallback)
+unset(_rim_cfg)
+unset(_rim_cfg_upper)
+
 # IccXML2 requires libxml2 — find it so the transitive dependency resolves
 find_package(LibXml2 QUIET)
 

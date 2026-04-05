@@ -194,7 +194,7 @@ jobs:
             echo ""
             echo "| Layer | Mechanism | What It Stops |"
             echo "|-------|-----------|---------------|"
-            echo "| 1. env: block | All \\\${{ github.head_ref }} etc. in env:, not run: | Shell interpretation of hidden chars |"
+            echo "| 1. env: block | All context expressions (github.head_ref etc.) in env:, not run: | Shell interpretation of hidden chars |"
             echo "| 2. sanitize_ref() | ASCII allowlist \`[A-Za-z0-9._/-]\` | All non-ASCII including emoji surrogates |"
             echo "| 3. sanitize_line() | Strips U+200B-200F, U+202A-202F, U+2060-2069, U+FEFF | Bidi overrides, zero-width chars, BOM |"
             echo "| 4. Canonicalize() | PowerShell: same Unicode ranges filtered | Windows workflow protection |"
@@ -212,8 +212,12 @@ jobs:
           persist-credentials: false
 
       - name: Verify PowerShell Canonicalize function
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
+          $ErrorActionPreference = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
           # Define Canonicalize inline (matches ci-pr-win.yml)
           function Canonicalize([string]$s) {
               if (-not $s) { return "" }

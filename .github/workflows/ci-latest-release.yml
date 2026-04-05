@@ -23,8 +23,6 @@ permissions:
   contents: read
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -61,12 +59,13 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          if [ "${MATRIX_COMPILER}" = "gcc" ]; then
             echo "CC=gcc" >> $GITHUB_ENV
             echo "CXX=g++" >> $GITHUB_ENV
           else
@@ -205,15 +204,16 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          echo "### Linux Build Summary (${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
-          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded: iccdev-linux-${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+          echo "### Linux Build Summary (${MATRIX_COMPILER})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build Directory: Build/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifacts Uploaded: iccdev-linux-${MATRIX_COMPILER}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: Success" >> "$GITHUB_STEP_SUMMARY"
   macos:
     name: "macOS Clang"
     runs-on: macos-latest
@@ -369,9 +369,10 @@ jobs:
     timeout-minutes: 45
     env:
       POWERSHELL_TELEMETRY_OPTOUT: "1"
+      POWERSHELL_UPDATECHECK: "Off"
     defaults:
       run:
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
     strategy:
       fail-fast: false
     steps:
@@ -383,10 +384,11 @@ jobs:
           persist-credentials: false
 
       - name: UCI Gate 1 for Windows Powershell
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
         run: |
+         git config --global credential.helper ""
          Set-StrictMode -Version Latest
          $ErrorActionPreference = 'Stop'
          $ProgressPreference = 'SilentlyContinue'
@@ -453,10 +455,10 @@ jobs:
 
           Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@767f00a3f09872d96a0cb9fcd5e6a4ff33311330
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -470,14 +472,15 @@ jobs:
           Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
           Write-Host "OS:            $env:RUNNER_OS"
       - name: Install dependencies and build
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
+          git config --global credential.helper ""
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-            if (Test-Path Env:GITHUB_TOKEN) {
-              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-            }
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
           Write-Host "============================= Starting Build =============================" -ForegroundColor Green
           Write-Host "Copyright (©) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
           git branch
@@ -501,8 +504,10 @@ jobs:
           $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
           $env:PATH -split ';'
       - name: Stage bundle into Testing directory
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -567,13 +572,16 @@ jobs:
           path: staging
           if-no-files-found: warn
       - name: Host System Info
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
+          $ErrorActionPreference = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           systeminfo
           Get-CimInstance -ClassName Win32_Processor
       - name: Summary Report
         if: always()
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           GH_REPOSITORY: ${{ github.repository }}

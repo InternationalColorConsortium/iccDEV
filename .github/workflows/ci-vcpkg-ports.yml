@@ -5,21 +5,11 @@
 # Validates that the ports/iccdev overlay installs correctly
 # on Windows, Linux, and macOS via vcpkg.
 #
-# Governance: aligned with workflow-governance.instructions.md
-#   - Pinned action SHAs (no mutable tags)
-#   - persist-credentials: false
-#   - Shell hardening:
-#       bash:  --noprofile --norc, BASH_ENV=/dev/null, set -euo pipefail
-#       pwsh:  -NoProfile -NoLogo -NonInteractive -Command {0}
-#   - POWERSHELL_TELEMETRY_OPTOUT / POWERSHELL_UPDATECHECK in all pwsh steps
-#   - GITHUB_TOKEN cleared + credential.helper "" in every step
-#   - git safe.directory set in every step
-#   - All GITHUB_STEP_SUMMARY writes sanitized
-#   - Matrix vars passed via env: (never inline ${{ }} in run:)
+# Last Updated 2026-04-05 23:48:42 UTC by David Hoyt
 #
 ###############################################################
 
-name: CI – vcpkg Ports
+name: ci-vcpkg-ports
 
 on:
   push:

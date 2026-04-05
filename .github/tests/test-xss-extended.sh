@@ -140,7 +140,7 @@ echo "${BLUE}Test Suite 8: SVG-based XSS Attacks${NC}"
 echo "${BLUE}=========================================${NC}"
 echo ""
 
-SVG_DIR="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/svg"
+SVG_DIR="${SCRIPT_DIR}/data/svg"
 
 if [[ -d "$SVG_DIR" ]]; then
   test_info "Testing SVG XSS vectors from $SVG_DIR"
@@ -206,7 +206,7 @@ echo "${BLUE}Test Suite 9: Encoding Bypass Attempts${NC}"
 echo "${BLUE}=========================================${NC}"
 echo ""
 
-ENCODING_FILE="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/random/all-encodings-of-lt.fuzz.txt"
+ENCODING_FILE="${SCRIPT_DIR}/data/random/all-encodings-of-lt.fuzz.txt"
 
 if [[ -f "$ENCODING_FILE" ]]; then
   test_info "Testing various encodings of '<' character"
@@ -263,7 +263,7 @@ echo "${BLUE}Test Suite 10: Shell Injection Signatures${NC}"
 echo "${BLUE}=========================================${NC}"
 echo ""
 
-BASH_FILE="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/unix/bash-bug-injection-signatures.txt"
+BASH_FILE="${SCRIPT_DIR}/data/unix/bash-bug-injection-signatures.txt"
 
 if [[ -f "$BASH_FILE" ]]; then
   test_info "Testing Bash injection signatures (Shellshock, etc.)"

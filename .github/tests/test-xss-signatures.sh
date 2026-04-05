@@ -352,7 +352,7 @@ echo "========================================="
 echo ""
 
 # Load some signatures from the file if it exists
-SIGNATURE_FILE="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/no-experience-required-xss-signatures-only-fools-dont-use.txt"
+SIGNATURE_FILE="${SCRIPT_DIR}/sanitizer-test-file.txt"
 
 if [[ -f "$SIGNATURE_FILE" ]]; then
   echo "Loading signatures from file..."

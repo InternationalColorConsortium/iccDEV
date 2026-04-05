@@ -6,7 +6,7 @@
 #
 #
 # Intent: Static code analysis and linting
-# Last Updated: 2026-02-17 16:21:47 UTC by David Hoyt
+# Last Updated: 2026-04-05 23:37:53 UTC by David Hoyt
 #
 #               Matrix: cppcheck and clang-tidy run as parallel
 #               jobs, each with -j$(nproc). Build is shared via
@@ -73,7 +73,13 @@ jobs:
           persist-credentials: false
 
       - name: Set up Git anonymous identity
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
         run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           git config --global user.email "github-actions@github.com"
           git config --global user.name "GitHub Actions"
       - name: Install Linux dependencies
@@ -229,19 +235,22 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPONENT: ${{ matrix.component }}
         run: |
           set -euo pipefail
           # Filter changed_files.txt to only this component's files
           xargs -0 -n1 < changed_files.txt \
-            | { grep "^${{ matrix.component }}/" || true; } \
+            | { grep "^${MATRIX_COMPONENT}/" || true; } \
             | tr '\n' '\0' > component_files.txt
           FILE_COUNT=$(xargs -0 -n1 < component_files.txt 2>/dev/null | wc -l)
-          echo "Component ${{ matrix.component }}: $FILE_COUNT files to analyze"
+          echo "Component ${MATRIX_COMPONENT}: $FILE_COUNT files to analyze"
           echo "file_count=$FILE_COUNT" >> "$GITHUB_ENV"
       - name: Run ${{ matrix.name }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_TOOL: ${{ matrix.tool }}
+          MATRIX_COMPONENT: ${{ matrix.component }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -249,19 +258,19 @@ jobs:
           unset GITHUB_TOKEN || true
           NPROC=$(nproc)
           mkdir -p lint_reports
-          if [ "${{ matrix.tool }}" = "cppcheck" ]; then
+          if [ "${MATRIX_TOOL}" = "cppcheck" ]; then
             if [ "${file_count:-0}" -eq 0 ]; then
-              echo "No ${{ matrix.component }} files to check — skipping"
-              : > lint_reports/cppcheck_${{ matrix.component }}.txt
+              echo "No ${MATRIX_COMPONENT} files to check -- skipping"
+              : > "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt"
             else
-              echo "Running cppcheck on ${{ matrix.component }} with $NPROC parallel jobs"
+              echo "Running cppcheck on ${MATRIX_COMPONENT} with $NPROC parallel jobs"
               xargs -0 cppcheck \
                 -j "$NPROC" \
                 --enable=warning,performance,portability,style \
                 --std=c++17 \
                 --suppress=missingIncludeSystem \
-                < component_files.txt 2> lint_reports/cppcheck_${{ matrix.component }}.txt || true
-              echo "✓ cppcheck ${{ matrix.component }}: $(wc -l < lint_reports/cppcheck_${{ matrix.component }}.txt) lines"
+                < component_files.txt 2> "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt" || true
+              echo "cppcheck ${MATRIX_COMPONENT}: $(wc -l < "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt") lines"
             fi
           else
             echo "Running clang-tidy with $NPROC parallel jobs"
@@ -271,7 +280,7 @@ jobs:
               -checks='modernize-*,readability-*,cppcoreguidelines-*,clang-analyzer-core.*,clang-analyzer-security.*,clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*' \
               < changed_files.txt \
               > lint_reports/clang_tidy.txt 2>&1 || true
-            echo "✓ clang-tidy: $(wc -l < lint_reports/clang_tidy.txt) lines"
+            echo "clang-tidy: $(wc -l < lint_reports/clang_tidy.txt) lines"
           fi
       - name: Upload results
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
@@ -346,6 +355,8 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          LINT_SCOPE: ${{ needs.build.outputs.scope || 'unknown' }}
+          NO_SRC_CHANGES: ${{ needs.build.outputs.no_src_changes }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -369,9 +380,9 @@ jobs:
           fi
           echo "## 🧹 Lint Report Summary" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "**Scope:** ${{ needs.build.outputs.scope || 'unknown' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Scope:** ${LINT_SCOPE}" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ needs.build.outputs.no_src_changes }}" = "true" ]; then
+          if [ "${NO_SRC_CHANGES}" = "true" ]; then
             echo "🟦 Skipped — no modified source files detected." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi

@@ -1,25 +1,13 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium.
+# Copyright (©) 2025-2026 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
 #
 ## Intent: iccDEV ci-pr-action
 #
-## Last Updated: 02-JAN-2026 2100Z by David Hoyt
-##               Fix "no merge base" error in diffcheck step
-#                Consider Copilot Review
-#                Review GitHub Best Practice & Security Guides
-#
-# Last Updated: 17-DEC-2025 0030Z by David Hoyt
-#               Refactor workflow with sanitization
-#               Improved job names
-#
-#
-#
-#  Note: We continue to monitor the ci-pr- labels for issues
-#        Add TODO Issues with Comments, Suggestions & Feedback
+## Last Updated: 2026-04-05 23:40:35 UTC by David Hoyt
 #
 #
 #

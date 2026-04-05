@@ -10,36 +10,11 @@
 #         Continue on individual test failure and report ALL
 #         findings at the end.
 #
-# Hardening:
-#   - sanitize-sed.sh sourced in every step
-#   - BASH_ENV=/dev/null to block .bashrc injection
-#   - Pinned action SHAs (no floating tags)
-#   - persist-credentials: false on checkout
-#   - All user-controllable inputs neutralized via env: block
-#   - Minimal permissions (contents: read)
-#
-# Coverage:
-#   - CreateAllProfiles.sh (80 profiles from XML)
-#   - HDR/mkprofiles.sh (10 HDR profiles)
-#   - CalcTest/checkInvalidProfiles.sh (77 invalid profile checks)
-#   - RunTests.sh (19 named color / PCC / spectral tests)
-#   - Display/RunProtoTest.sh (6 Rec2020 spectral tests)
-#   - iccDumpProfile: ALL tags on every generated profile
-#   - iccToXml: every generated profile
-#   - iccFromXml: XML round-trip on every generated profile
-#   - iccRoundTrip: intents 0-3 + MPE on sRGB profile
-#   - iccFromCube: identity and warm-film .cube files
-#   - iccApplyNamedCmm: 5 encodings, 4 intents, chained profiles
-#   - iccApplyToLink: DeviceLink v4/v5, .cube output, varied LUT sizes
-#   - iccApplySearch: sRGB self-search with init
-#   - iccTiffDump: spectral TIFF from hybrid/Data
-#   - iccSpecSepToTiff: spectral separation pipeline
-#   - Image tools: usage/help check
-#   - Identity curve regression (PR #728)
+# ci-regression-checks
 #
 ###############################################################
 
-name: iccDEV Tool Tests
+name: ci-regression-checks
 
 permissions:
   contents: read

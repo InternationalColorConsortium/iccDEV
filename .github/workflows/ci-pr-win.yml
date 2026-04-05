@@ -7,8 +7,8 @@
 #
 # Intent: Windows MSVC build and test pipeline for PR validation
 #
-# Last Updated: 2026-02-17 16:22:35 UTC by David Hoyt
-#               Add More Sanity Checks
+# Last Updated: 2026-04-05 23:41:13 UTC by David Hoyt
+#               Review Permissions
 #
 #
 #
@@ -167,7 +167,7 @@ jobs:
           Write-Host ""
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce  # v2.0.0
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       - name: Print PR Information
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}

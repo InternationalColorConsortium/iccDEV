@@ -7,15 +7,7 @@
 #
 ## Intent: Unix/Linux static analysis using Clang scan-build for PR validation
 #
-# Last Updated: 14-DEC-2025 1810Z by David Hoyt
-#               Refactor workflow with sanitization
-#               Improved job names
-#
-#
-#
-#
-#
-#
+# Last Updated: 2026-04-05 23:37:53 UTC by David Hoyt
 #
 ###############################################################
 

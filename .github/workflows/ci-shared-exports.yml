@@ -1,10 +1,10 @@
 ###############################################################
-# ci-comprehensive-cross-platform.yml
+# ci-shared-exports.yml
 #
 #         Tests all build configurations, sanitizers, and options
 #         This workflow will replace ci-pr-actions in time
 #
-# Last Updated: 2026-04-03 23:17:06 UTC UTC by David Hoyt
+# Last Updated: 2026-04-05 23:35:58 UTC by David Hoyt
 #               - Support Shared Libs
 #
 # All PR _must_ PASS this workflow
@@ -28,8 +28,6 @@ on:
   push:
     branches:
       - master
-    paths:
-      - '.github/workflows/ci-shared-exports.yml'
   workflow_dispatch:
     inputs:
       iccdev_repo:
@@ -421,11 +419,11 @@ jobs:
             xmllib_soname="$(readelf -d "$xmllib" | grep SONAME | sed 's/.*\[//' | sed 's/\]//')"
             echo "IccProfLib2 SONAME: $proflib_soname"
             echo "IccXML2     SONAME: $xmllib_soname"
-            if ! echo "$proflib_soname" | grep -qE '^libIccProfLib2d?\.so\.[0-9]+$'; then
+            if ! grep -qE '^libIccProfLib2d?\.so\.[0-9]+$' <<< "$proflib_soname"; then
               echo "::error::IccProfLib2 SONAME does not match expected pattern: $(sanitize_line "$proflib_soname")"
               exit 1
             fi
-            if ! echo "$xmllib_soname" | grep -qE '^libIccXML2d?\.so\.[0-9]+$'; then
+            if ! grep -qE '^libIccXML2d?\.so\.[0-9]+$' <<< "$xmllib_soname"; then
               echo "::error::IccXML2 SONAME does not match expected pattern: $(sanitize_line "$xmllib_soname")"
               exit 1
             fi
@@ -771,8 +769,6 @@ jobs:
 
       - name: Configure Git Environment
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -781,12 +777,10 @@ jobs:
           git config --global credential.helper ""
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce  # v2
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       - name: Install Dependencies
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -806,8 +800,6 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -830,8 +822,6 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -845,8 +835,6 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -1074,8 +1062,6 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -1211,8 +1197,6 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -1624,9 +1608,9 @@ jobs:
           esac
           OUTPUT="$("$EXAMPLE_BUILD/hello-iccdev" 2>&1)"
           printf '%s\n' "$OUTPUT"
-          printf '%s\n' "$OUTPUT" | grep -q "IccProfLib version:"
-          printf '%s\n' "$OUTPUT" | grep -q "IccLibXML  version:"
-          printf '%s\n' "$OUTPUT" | grep -q "Hello, iccDEV!"
+          grep -q "IccProfLib version:" <<< "$OUTPUT"
+          grep -q "IccLibXML  version:" <<< "$OUTPUT"
+          grep -q "Hello, iccDEV!" <<< "$OUTPUT"
 
       - name: Inspect installed shared library artifacts
         if: matrix.build_type == 'Release'
@@ -1723,7 +1707,7 @@ jobs:
                 continue
               fi
               so_target="$(readlink "$so_link")"
-              if ! echo "$so_target" | grep -qE "^lib${base_name}\.so\.[0-9]+$"; then
+              if ! grep -qE "^lib${base_name}\.so\.[0-9]+$" <<< "$so_target"; then
                 echo "::error::.so symlink target unexpected: $(sanitize_line "$so_link") -> $(sanitize_line "$so_target")"
                 FAIL=1
               fi
@@ -1734,7 +1718,7 @@ jobs:
                 continue
               fi
               full_target="$(readlink "$soversion_link")"
-              if ! echo "$full_target" | grep -qE "^lib${base_name}\.so\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$"; then
+              if ! grep -qE "^lib${base_name}\.so\.[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$" <<< "$full_target"; then
                 echo "::error::SOVERSION symlink target unexpected: $(sanitize_line "$soversion_link") -> $(sanitize_line "$full_target")"
                 FAIL=1
               fi
@@ -1778,11 +1762,11 @@ jobs:
             xmllib_soname="$(readelf -d "$XML_LIB" | grep SONAME | sed 's/.*\[//' | sed 's/\]//')"
             echo "IccProfLib2 SONAME: $(sanitize_line "$proflib_soname")"
             echo "IccXML2     SONAME: $(sanitize_line "$xmllib_soname")"
-            if ! echo "$proflib_soname" | grep -qE '^libIccProfLib2d?\.so\.[0-9]+$'; then
+            if ! grep -qE '^libIccProfLib2d?\.so\.[0-9]+$' <<< "$proflib_soname"; then
               echo "::error::IccProfLib2 SONAME pattern mismatch: $(sanitize_line "$proflib_soname")"
               exit 1
             fi
-            if ! echo "$xmllib_soname" | grep -qE '^libIccXML2d?\.so\.[0-9]+$'; then
+            if ! grep -qE '^libIccXML2d?\.so\.[0-9]+$' <<< "$xmllib_soname"; then
               echo "::error::IccXML2 SONAME pattern mismatch: $(sanitize_line "$xmllib_soname")"
               exit 1
             fi
@@ -1856,6 +1840,12 @@ jobs:
     name: "Windows Shared Smoke - ${{ matrix.build_type }}"
     runs-on: windows-latest
     timeout-minutes: 40
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: "1"
+      POWERSHELL_UPDATECHECK: "Off"
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
     strategy:
       fail-fast: false
       matrix:
@@ -1869,8 +1859,6 @@ jobs:
 
       - name: Configure git environment
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
@@ -1878,13 +1866,12 @@ jobs:
           git config --global credential.helper ""
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       - name: Install exported dependencies
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $archive = Join-Path $env:RUNNER_TEMP 'vcpkg-exported-deps.zip'
@@ -1902,9 +1889,8 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $prefix = Join-Path $env:RUNNER_TEMP ("prefix-" + $env:BUILD_TYPE)
@@ -1941,9 +1927,8 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           cd "Build\Cmake"
@@ -2011,9 +1996,8 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -2147,9 +2131,8 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -2231,9 +2214,8 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -2286,9 +2268,8 @@ jobs:
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $bundleDir = Join-Path $env:RUNNER_TEMP ("windows-shared-smoke-" + $env:BUILD_TYPE)
@@ -2467,7 +2448,7 @@ jobs:
             )
             FILE_OUT="$(file "$TMP_AR_DIR/$FIRST_MEMBER")"
             printf '%s\n' "$FILE_OUT"
-            if printf '%s\n' "$FILE_OUT" | grep -qi 'LLVM IR bitcode'; then
+            if grep -qi 'LLVM IR bitcode' <<< "$FILE_OUT"; then
               echo "Unexpected LLVM bitcode in packaged archive member: $STATIC_LIB"
               exit 1
             fi
@@ -2482,14 +2463,20 @@ jobs:
           esac
           OUTPUT="$("$EXAMPLE_BUILD/hello-iccdev" 2>&1)"
           printf '%s\n' "$OUTPUT"
-          printf '%s\n' "$OUTPUT" | grep -q "IccProfLib version:"
-          printf '%s\n' "$OUTPUT" | grep -q "IccLibXML  version:"
-          printf '%s\n' "$OUTPUT" | grep -q "Hello, iccDEV!"
+          grep -q "IccProfLib version:" <<< "$OUTPUT"
+          grep -q "IccLibXML  version:" <<< "$OUTPUT"
+          grep -q "Hello, iccDEV!" <<< "$OUTPUT"
 
   vcpkg-consumer-windows:
     name: "vcpkg Consumer - windows-latest"
     runs-on: windows-latest
     timeout-minutes: 45
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: "1"
+      POWERSHELL_UPDATECHECK: "Off"
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
 
     steps:
       - name: Checkout
@@ -2499,8 +2486,6 @@ jobs:
 
       - name: Configure git environment
         run: |
-          set -euo pipefail
-          unset GITHUB_TOKEN || true
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
@@ -2508,15 +2493,14 @@ jobs:
           git config --global credential.helper ""
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       - name: Bootstrap vcpkg and install iccdev
         env:
           VCPKG_DISABLE_METRICS: 1
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $vcpkgRoot = Join-Path $env:RUNNER_TEMP 'vcpkg'
@@ -2545,9 +2529,8 @@ jobs:
 
       - name: Build and run packaged hello-iccdev
         run: |
-          set -euo pipefail
           git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $ErrorActionPreference = 'Stop'
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $exampleBuild = Join-Path $env:RUNNER_TEMP 'hello-vcpkg-windows'

@@ -25,13 +25,6 @@ permissions:
 
 on:
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - 'Dockerfile'
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - '.github/workflows/ci-docker-latest.yml'
 
 jobs:
   build:
@@ -117,11 +110,16 @@ jobs:
           retention-days: 90
 
       - name: Load test image
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           # Pull the image we just pushed to GHCR (avoids building twice)
-          docker pull "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}"
-          docker tag  "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}" iccdev-test:latest
+          docker pull "${IMAGE_REF}"
+          docker tag  "${IMAGE_REF}" iccdev-test:latest
 
       - name: Verify tools
         env:
@@ -171,7 +169,7 @@ jobs:
           echo "### Tool Tests" >> "$GITHUB_STEP_SUMMARY"
           for tool in iccToXml iccFromXml iccDumpProfile iccRoundTrip; do
             OUT=$(docker run --rm iccdev-test:latest "$tool" 2>&1 || true)
-            if echo "$OUT" | grep -qiE "Usage:|IccProfLib"; then
+            if grep -qiE "Usage:|IccProfLib" <<< "$OUT"; then
               echo "✅ $tool" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "::error::Tool test failed: $tool"

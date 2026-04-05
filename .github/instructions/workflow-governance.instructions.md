@@ -6,6 +6,7 @@ applyTo: ".github/workflows/**"
 
 These rules apply to ALL GitHub Actions workflow files in this repository.
 Reference implementation: `ci-pr-action.yml` (bash) · `ci-pr-win.yml` (PowerShell).
+Based on [xsscx/governance/actions](https://github.com/xsscx/governance/tree/main/actions).
 
 ## Shell Hardening (MANDATORY — every `run:` block)
 
@@ -43,24 +44,54 @@ run: |
   . .github/scripts/sanitize.ps1
 ```
 
-## Expression Injection Prevention
+## Expression Injection Prevention (CRITICAL)
 
 **CRITICAL**: Never place `${{ }}` expressions directly in `run:` blocks.
 GitHub Actions evaluates expressions BEFORE the shell — an attacker-controlled
 value (branch name, PR title, matrix variable) becomes arbitrary shell code.
 
 ```yaml
-# ❌ WRONG — injectable
+# WRONG — injectable
 run: echo "Building ${{ matrix.build_type }}"
 
-# ✅ CORRECT — pass through env
+# CORRECT — pass through env
 env:
   BUILD_TYPE: ${{ matrix.build_type }}
 run: echo "Building ${BUILD_TYPE}"
 ```
 
 **Also applies to**: `github.event.pull_request.title`, `github.event.issue.title`,
-`github.head_ref`, `github.event.comment.body`, and ALL user-controllable contexts.
+`github.head_ref`, `github.event.comment.body`, `github.event.inputs.*`,
+and ALL user-controllable contexts.
+
+Expressions in `name:`, `with:`, `key:`, and `if:` fields are evaluated by the
+GitHub Actions YAML parser (not shell), so they are safe from shell injection.
+
+## SIGPIPE / Broken Pipe Avoidance (MANDATORY)
+
+**Rule**: NEVER use `echo "$variable" | grep -q "pattern"` in any `run:` block
+that has `set -o pipefail` (which is ALL steps per governance).
+
+When `grep -q` finds a match, it immediately exits and closes stdin. If the
+variable is large, `echo` gets SIGPIPE trying to write remaining data.
+Under `pipefail`, the non-zero exit propagates as pipeline failure.
+
+```bash
+# BEST — here-string (no pipe, no subshell)
+if grep -qE 'pattern' <<< "$variable"; then ...
+
+# GOOD — grep reads file directly
+if grep -q 'pattern' "$filepath"; then ...
+
+# OK — bash pattern matching (no external command)
+if [[ "$variable" =~ pattern ]]; then ...
+```
+
+**WRONG** (causes SIGPIPE under pipefail):
+```bash
+if echo "$variable" | grep -q 'pattern'; then ...
+if printf '%s' "$variable" | grep -q 'pattern'; then ...
+```
 
 ## Output Sanitization
 
@@ -79,10 +110,10 @@ Every write to `GITHUB_STEP_SUMMARY` or `GITHUB_OUTPUT` MUST use sanitizer funct
 `sanitize_line` outputs NO trailing newline. For multiline content, iterate:
 
 ```bash
-# ❌ WRONG — collapses to single line
+# WRONG — collapses to single line
 sanitize_line "$MULTILINE_VAR"
 
-# ✅ CORRECT — preserves line-per-line formatting
+# CORRECT — preserves line-per-line formatting
 echo "$MULTILINE_VAR" | while IFS= read -r line; do
   sanitize_line "$line"
   echo ""
@@ -126,3 +157,29 @@ concurrency:
 - GitHub evaluates ALL `${{ }}` in YAML string values before bash sees them
 - YAML-level comments (outside `run:` blocks) are stripped first and are safe
 - `defaults.run.env` does NOT exist — use per-step or job-level `env:`
+
+## Automated Scanner
+
+`ci-pr-risk-security-analysis.yml` performs 10 automated governance checks on
+every workflow in this repository. Trigger manually via `workflow_dispatch`.
+
+| # | Check | Severity |
+|---|-------|----------|
+| 1 | Action SHA Pinning | CRITICAL (unpinned) / MEDIUM (tag-only) |
+| 2 | Dangerous Trigger Detection | CRITICAL (`pull_request_target`) |
+| 3 | Credential Hygiene | HIGH |
+| 4 | Shell Hardening Rate | HIGH |
+| 5 | Matrix Expression Injection | CRITICAL |
+| 6 | Output Sanitization Rate | HIGH |
+| 7 | Permissions Minimization | MEDIUM |
+| 8 | Supply-Chain Risk Score | Composite (0-100+) |
+| 9 | Trivy-Specific Indicators | CRITICAL |
+| 10 | Workflow Inventory | Informational |
+
+## See Also
+
+- `ci-pr-action.yml` — Reference compliant workflow (bash)
+- `ci-pr-win.yml` — Reference compliant workflow (PowerShell)
+- `.github/scripts/sanitize-sed.sh` — Bash sanitizer (V3)
+- `.github/scripts/sanitize.ps1` — PowerShell sanitizer (V1)
+- [xsscx/governance](https://github.com/xsscx/governance/tree/main/actions) — Upstream standards

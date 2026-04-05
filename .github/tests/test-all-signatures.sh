@@ -26,7 +26,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source the sanitizer
-source "${SCRIPT_DIR}/../scripts/newest-sanitizer.sh"
+source "${SCRIPT_DIR}/../scripts/sanitize-sed.sh"
 
 # Colors
 if [[ -t 1 ]]; then
@@ -52,23 +52,21 @@ FAILED_TESTS=0
 SKIPPED_FILES=0
 TESTED_FILES=0
 
-# Signature repository path
-SIG_REPO="${SCRIPT_DIR}/../../Commodity-Injection-Signatures"
+# Local signature data directory
+SIG_REPO="${SCRIPT_DIR}/data"
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║  Comprehensive Signature Test Suite                         ║${NC}"
-echo -e "${BLUE}║  Testing ALL Commodity-Injection-Signatures                  ║${NC}"
+echo -e "${BLUE}║  Testing Injection Signatures (local data)                  ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Check if signature repository exists
 if [[ ! -d "$SIG_REPO" ]]; then
-  echo -e "${RED}✗ ERROR: Commodity-Injection-Signatures not found at: $SIG_REPO${NC}"
-  echo "Please clone: git clone https://github.com/xsscx/Commodity-Injection-Signatures.git"
+  echo -e "${RED}Error: Signature data directory not found at: $SIG_REPO${NC}"
   exit 1
 fi
 
-echo -e "${CYAN}Signature Repository: $SIG_REPO${NC}"
+echo -e "${CYAN}Signature Data: $SIG_REPO${NC}"
 echo ""
 
 # Test a signature file
@@ -85,13 +83,13 @@ test_signature_file() {
   local file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null)
   if [[ $file_size -gt 1048576 ]]; then
     echo -e "  ${YELLOW}⊘ SKIP: File too large ($(numfmt --to=iec-i --suffix=B $file_size))${NC}"
-    ((SKIPPED_FILES++))
+    ((SKIPPED_FILES++)) || true
     return 0
   fi
 
   # Read and test signatures from file
   while IFS= read -r line || [[ -n "$line" ]]; do
-    ((line_count++))
+    ((line_count++)) || true
 
     # Skip empty lines and comments
     [[ -z "$line" ]] && continue
@@ -102,21 +100,19 @@ test_signature_file() {
     local result
     result=$(sanitize_line "$line" 2>/dev/null)
 
-    # Verify HTML is escaped (basic check)
-    if [[ "$line" =~ \< ]] && [[ ! "$result" =~ "&lt;" ]]; then
-      # Has < but not escaped
-      echo -e "  ${RED}✗ FAIL: Line $line_count not escaped${NC}"
-      ((file_failed++))
-    elif [[ "$line" =~ \> ]] && [[ ! "$result" =~ "&gt;" ]]; then
-      # Has > but not escaped
-      echo -e "  ${RED}✗ FAIL: Line $line_count not escaped${NC}"
-      ((file_failed++))
+    # Verify HTML is escaped: no raw < or > should survive in sanitized output
+    if grep -qP '[<>]' <<< "$result"; then
+      echo -e "  ${RED}FAIL: Line $line_count has unescaped HTML in output${NC}"
+      ((file_failed++)) || true
+    elif [[ -z "$result" ]] && [[ -n "$line" ]]; then
+      echo -e "  ${RED}FAIL: Line $line_count produced empty output${NC}"
+      ((file_failed++)) || true
     else
-      ((file_passed++))
+      ((file_passed++)) || true
     fi
 
-    ((file_tests++))
-    ((TOTAL_TESTS++))
+    ((file_tests++)) || true
+    ((TOTAL_TESTS++)) || true
 
     # Limit tests per file
     [[ $file_tests -ge $max_tests ]] && break
@@ -125,13 +121,13 @@ test_signature_file() {
 
   if [[ $file_tests -eq 0 ]]; then
     echo -e "  ${YELLOW}⊘ SKIP: No valid signatures found${NC}"
-    ((SKIPPED_FILES++))
+    ((SKIPPED_FILES++)) || true
     return 0
   fi
 
-  ((TESTED_FILES++))
-  ((PASSED_TESTS+=file_passed))
-  ((FAILED_TESTS+=file_failed))
+  ((TESTED_FILES++)) || true
+  ((PASSED_TESTS+=file_passed)) || true
+  ((FAILED_TESTS+=file_failed)) || true
 
   if [[ $file_failed -eq 0 ]]; then
     echo -e "  ${GREEN}✓ PASS: $file_passed/$file_tests tests${NC}"
@@ -154,12 +150,12 @@ process_directory() {
 
   # Find all .txt, .fuzz, and .svg files
   while IFS= read -r file; do
-    ((file_count++))
+    ((file_count++)) || true
     local basename=$(basename "$file")
     echo -e "${CYAN}[$file_count] Testing: $basename${NC}"
     test_signature_file "$file" "$category"
     echo ""
-  done < <(find "$dir" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.fuzz" -o -name "*.svg" \) 2>/dev/null | sort)
+  done < <(find "$dir" -maxdepth 1 -type f \( -name "*.txt" -o -name "*.fuzz" -o -name "*.svg" -o -name "*.html" -o -name "*.eml" -o -name "*.hta" \) 2>/dev/null | sort)
 
   if [[ $file_count -eq 0 ]]; then
     echo -e "${YELLOW}  No signature files found in this category${NC}"
@@ -190,7 +186,7 @@ process_directory "$SIG_REPO/referer" "Referer Injection"
 process_directory "$SIG_REPO/soap" "SOAP Injection"
 process_directory "$SIG_REPO/ssi" "SSI Injection"
 process_directory "$SIG_REPO/lfi-local-file-system-harvesting" "LFI/Path Traversal"
-process_directory "$SIG_REPO/shell" "Shell Injection"
+process_directory "$SIG_REPO/unix" "Shell Injection"
 process_directory "$SIG_REPO/angular" "Angular Template Injection"
 process_directory "$SIG_REPO/python" "Python Injection"
 process_directory "$SIG_REPO/java" "Java Injection"
@@ -201,7 +197,6 @@ process_directory "$SIG_REPO/ascii" "ASCII/Unicode Attacks"
 process_directory "$SIG_REPO/calc" "Calculator/Expression Injection"
 process_directory "$SIG_REPO/ua" "User-Agent Injection"
 process_directory "$SIG_REPO/rbl" "RBL/DNS Attacks"
-process_directory "$SIG_REPO/graphics" "Graphics-based Attacks"
 
 # Test root-level files
 echo -e "${YELLOW}═══════════════════════════════════════════════════════${NC}"
@@ -209,8 +204,8 @@ echo -e "${YELLOW}Category: Root Level Signatures${NC}"
 echo -e "${YELLOW}═══════════════════════════════════════════════════════${NC}"
 echo ""
 
-echo -e "${CYAN}[1] Testing: no-experience-required-xss-signatures-only-fools-dont-use.txt${NC}"
-test_signature_file "$SIG_REPO/no-experience-required-xss-signatures-only-fools-dont-use.txt" "Root XSS" 100
+echo -e "${CYAN}[1] Testing: sanitizer-test-file.txt${NC}"
+test_signature_file "${SCRIPT_DIR}/sanitizer-test-file.txt" "Root XSS" 100
 echo ""
 
 # Note: Skip full-unicode.txt as it's 5.5MB

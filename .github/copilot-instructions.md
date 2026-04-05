@@ -135,7 +135,7 @@ Testing/RunTests.sh            # Validate all profiles (Unix)
 Testing/RunTests.bat           # Validate all profiles (Windows)
 ```
 
-## CI Workflows (18)
+## CI Workflows (21)
 
 | Category | Workflows |
 |----------|-----------|
@@ -144,7 +144,8 @@ Testing/RunTests.bat           # Validate all profiles (Windows)
 | WASM | `ci-wasm-build-test.yml`, `wasm-latest-matrix.yml` |
 | Docker | `ci-docker-latest.yml`, `ci-docker-nixos.yml` |
 | Release | `ci-latest-release.yml` |
-| Analysis | `ci-clang-tidy-coreguidelines.yml`, `ScanBuild.yml` |
+| Analysis | `ci-pr-risk-security-analysis.yml` |
+| Shared | `ci-shared-exports.yml` |
 | vcpkg | `ci-vcpkg-ports.yml` (Windows, Ubuntu, macOS overlay port test) |
 | Ops | `label.yml`, `update-labels.yml` |
 

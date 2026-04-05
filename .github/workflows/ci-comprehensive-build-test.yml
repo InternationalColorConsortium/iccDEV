@@ -659,7 +659,7 @@ jobs:
           RELEASE_VALUE=$(grep -E '^CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE:' Build/CMakeCache.txt | head -1 | cut -d= -f2 || echo "NOT_SET")
           echo "CMakeCache LTO: ${CACHE_VALUE}, Release: ${RELEASE_VALUE}"
 
-          if echo "${LTO_MESSAGE}" | grep -q "user override"; then
+          if grep -q "user override" <<< "${LTO_MESSAGE}"; then
             # User -D override MUST appear in CMakeCache
             if [ "${LTO_EXPECTED}" = "ON" ] && [ "${CACHE_VALUE}" != "ON" ]; then
               echo "::error::User override LTO=ON but CMakeCache shows: ${CACHE_VALUE}"
@@ -711,10 +711,10 @@ jobs:
     timeout-minutes: 30
     env:
       POWERSHELL_TELEMETRY_OPTOUT: "1"
+      POWERSHELL_UPDATECHECK: "Off"
     defaults:
       run:
-        shell: pwsh
-
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
     strategy:
       fail-fast: false
       matrix:
@@ -729,7 +729,7 @@ jobs:
           persist-credentials: false
 
       - name: Configure Git Environment
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -739,10 +739,10 @@ jobs:
           git config --global credential.helper ""
 
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce  # v2.0.0
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       - name: Install Dependencies
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
@@ -755,7 +755,7 @@ jobs:
           tar -xf deps.zip
 
       - name: Configure
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
@@ -773,7 +773,7 @@ jobs:
                 -Wno-dev
 
       - name: Build
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
@@ -788,7 +788,7 @@ jobs:
           cmake --build build --config "$env:MATRIX_BUILD_TYPE" -- /m /maxcpucount
 
       - name: Test
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
@@ -1064,7 +1064,7 @@ jobs:
       # ── Windows dependencies ──
       - name: Install Dependencies (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
           Set-StrictMode -Version Latest
@@ -1076,7 +1076,7 @@ jobs:
 
       - name: Setup MSBuild (Windows)
         if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce  # v2.0.0
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       # ── Disable wxWidgets (not needed, avoids dep issues) ──
       - name: Disable wxWidgets (Unix)
@@ -1095,7 +1095,7 @@ jobs:
 
       - name: Disable wxWidgets (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
@@ -1129,7 +1129,7 @@ jobs:
       # ── Step 1: Build iccDEV libraries (Windows) ──
       - name: Build iccDEV Libraries (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
@@ -1168,7 +1168,7 @@ jobs:
       # ── Step 2: Build example project (Windows — Path 2: build-tree export) ──
       - name: Build Example Project (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
@@ -1207,15 +1207,15 @@ jobs:
           echo "$OUTPUT"
 
           # Verify key output markers
-          echo "$OUTPUT" | grep -q "IccProfLib version:" || { echo "❌ Missing IccProfLib version"; exit 1; }
-          echo "$OUTPUT" | grep -q "IccLibXML  version:" || { echo "❌ Missing IccLibXML version"; exit 1; }
-          echo "$OUTPUT" | grep -q "Hello, iccDEV!" || { echo "❌ Missing Hello marker"; exit 1; }
-          echo "✅ Example project works correctly"
+          grep -q "IccProfLib version:" <<< "$OUTPUT" || { echo "Missing IccProfLib version"; exit 1; }
+          grep -q "IccLibXML  version:" <<< "$OUTPUT" || { echo "Missing IccLibXML version"; exit 1; }
+          grep -q "Hello, iccDEV!" <<< "$OUTPUT" || { echo "Missing Hello marker"; exit 1; }
+          echo "Example project works correctly"
 
       # ── Step 3: Run example and verify output (Windows) ──
       - name: Run Example (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
