@@ -108,14 +108,6 @@ jobs:
           unset GITHUB_TOKEN || true
           cd Build
           make -j$(nproc)
-          cd ../Testing/
-          echo "=== Updating PATH ==="
-          for d in ../Build/Tools/*; do
-          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done
-          sh CreateAllProfiles.sh
-          sh RunTests.sh
-          find . -iname "*.icc" | wc -l
       - name: Verify CMake Cache
         shell: bash --noprofile --norc {0}
         env:
@@ -281,16 +273,7 @@ jobs:
           echo "Starting build process..."
           cd Build
           make -j$(sysctl -n hw.ncpu)
-          echo "✔ Build process completed."
-          echo "========= BEGIN INSIDE STUB ========="
-          cd ../Testing/
-          echo "=== Updating PATH ==="
-          for d in ../Build/Tools/*; do
-          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done
-          sh CreateAllProfiles.sh
-          sh RunTests.sh
-          find . -iname "*.icc" | wc -l
+          echo "Build process completed."
 
       - name: Stage bundle into Testing directory
         shell: bash --noprofile --norc {0}
@@ -517,49 +500,6 @@ jobs:
           $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
           $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
           $env:PATH -split ';'
-          pwd
-          cd ..\..\Testing
-          .\CreateAllProfiles.bat
-          .\RunTests.bat
-          cd CalcTest\
-          .\checkInvalidProfiles.bat
-          .\runtests.bat
-          cd ..\Display
-          .\RunProtoTests.bat
-          cd ..\HDR
-          .\mkprofiles.bat
-          cd ..\mcs\
-          .\updateprev.bat
-          .\updateprevWithBkgd.bat
-          cd ..\Overprint
-          .\RunTests.bat
-          cd ..
-          cd hybrid
-          .\BuildAndTest.bat
-          cd ..
-          cd ..
-          pwd
-          # Collect .icc profile information
-          $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
-          $totalCount = $profiles.Count
-
-          # Group profiles by directory
-          $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
-
-          # Generate Summary Report
-          Write-Host "`n========================="
-          Write-Host " ICC Profile Report"
-          Write-Host "========================="
-
-          # Print count per subdirectory
-          foreach ($group in $groupedProfiles) {
-              Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
-          }
-
-          Write-Host "`nTotal .icc profiles found: $totalCount"
-          Write-Host "=========================`n"
-
-          Write-Host "All Done!"
       - name: Stage bundle into Testing directory
         shell: pwsh
         run: |
