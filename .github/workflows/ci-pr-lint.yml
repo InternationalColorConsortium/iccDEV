@@ -59,13 +59,13 @@ jobs:
               exit 1
               ;;
           esac
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           ref: ${{ github.event.pull_request.base.sha || github.sha }}
           path: base
@@ -198,7 +198,7 @@ jobs:
             component: all
     steps:
 
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -291,7 +291,7 @@ jobs:
     timeout-minutes: 5
     steps:
 
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           sparse-checkout: .github/scripts
           persist-credentials: false

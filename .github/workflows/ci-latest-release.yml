@@ -38,7 +38,7 @@ jobs:
         compiler: [gcc, clang]
     steps:
       - name: Checkout master
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           persist-credentials: false
 
@@ -220,7 +220,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout master
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           persist-credentials: false
 
@@ -376,7 +376,7 @@ jobs:
       fail-fast: false
     steps:
       - name: Checkout PR source
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
@@ -604,7 +604,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           persist-credentials: false
 

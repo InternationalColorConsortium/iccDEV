@@ -58,7 +58,7 @@ jobs:
       src_changed: ${{ steps.diffcheck.outputs.src_changed }}
 
     steps:
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           fetch-depth: 50  # Increased from 2 to allow merge-base detection
           # Disable unsafe fetch options
@@ -67,7 +67,7 @@ jobs:
       # Checkout the trusted base commit into a separate path so we do not
       # source code from the PR workspace (untrusted).
       - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           # Use the base commit SHA to ensure we fetch the exact trusted version.
           ref: ${{ github.event.pull_request.base.sha }}
@@ -229,13 +229,13 @@ jobs:
       pull-requests: read
     steps:
       - name: Checkout repository (for shared sanitize helpers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           fetch-depth: 1
           persist-credentials: false
 
       - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
@@ -467,13 +467,13 @@ jobs:
       - win-ci
     if: always()
     steps:
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           fetch-depth: 2
           persist-credentials: false
 
       - name: Checkout base commit (trusted sanitizers)
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base

@@ -1721,7 +1721,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -2008,7 +2008,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -2065,7 +2065,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -2520,7 +2520,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -2555,7 +2555,9 @@ jobs:
           set -euo pipefail
           VCPKG_ROOT="$RUNNER_TEMP/vcpkg"
           VCPKG_ICCDEV_SOURCE="$GITHUB_WORKSPACE"
+          # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          git -C "$VCPKG_ROOT" checkout 1940ee77e81573713c0d364c42f5990172198be1
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
           if [ ! -f "$VCPKG_ICCDEV_SOURCE/Build/Cmake/CMakeLists.txt" ]; then
             echo "vcpkg local source is missing Build/Cmake/CMakeLists.txt: $VCPKG_ICCDEV_SOURCE"
@@ -2666,7 +2668,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -2689,7 +2691,9 @@ jobs:
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $vcpkgRoot = Join-Path $env:RUNNER_TEMP 'vcpkg'
           $vcpkgIccdevSource = (Resolve-Path .).Path
+          # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          git -C $vcpkgRoot checkout 1940ee77e81573713c0d364c42f5990172198be1
           & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
           if (-not (Test-Path (Join-Path $vcpkgIccdevSource 'Build\Cmake\CMakeLists.txt'))) {
             throw "vcpkg local source is missing Build\\Cmake\\CMakeLists.txt: $vcpkgIccdevSource"
