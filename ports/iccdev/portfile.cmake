@@ -92,7 +92,13 @@ vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "# IccDEVCmm disabled in vcpkg port (Windows CMM DLL, not a library)"
 )
 
-# 3. Make TIFF/PNG/JPEG optional (only needed for image tools, excluded here)
+# 3. Disable IccIisIsapi (Windows IIS ISAPI DLL; requires IIS SDK, not a library)
+vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
+    "ADD_SUBDIRECTORY(Tools/IccIisIsapi)"
+    "# IccIisIsapi disabled in vcpkg port (Windows IIS ISAPI DLL, not a library)"
+)
+
+# 4. Make TIFF/PNG/JPEG optional (only needed for image tools, excluded here)
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "find_package(TIFF REQUIRED)"
     "find_package(TIFF QUIET)"
@@ -106,25 +112,25 @@ vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "find_package(JPEG QUIET)"
 )
 
-# 4. Disable IccJpegDump (image tool mixed in with core tools)
+# 5. Disable IccJpegDump (image tool mixed in with core tools)
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "ADD_SUBDIRECTORY(Tools/IccJpegDump)"
     "# IccJpegDump disabled in vcpkg port (requires JPEG, image tools excluded)"
 )
 
-# 5. Disable TIFF block FATAL_ERROR -> skip
+# 6. Disable TIFF block FATAL_ERROR -> skip
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(FATAL_ERROR "TIFF library not found. Please install libtiff-dev.")]=]
     [=[message(STATUS "TIFF not found; skipping TIFF-dependent tools (vcpkg port: image tools excluded)")]=]
 )
 
-# 6. Disable PNG block FATAL_ERROR (line ~439 in deps section)
+# 7. Disable PNG block FATAL_ERROR (line ~439 in deps section)
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(FATAL_ERROR " PNG not found. Please install libpng-dev or install via vcpkg.")]=]
     [=[message(STATUS "PNG not found; skipping (vcpkg port: image tools excluded)")]=]
 )
 
-# 7. Disable IccPngDump subdirectory and its FATAL_ERROR guard
+# 8. Disable IccPngDump subdirectory and its FATAL_ERROR guard
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     "ADD_SUBDIRECTORY(Tools/IccPngDump)"
     "# IccPngDump disabled in vcpkg port (requires PNG, image tools excluded)"
@@ -134,13 +140,13 @@ vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(STATUS "PNG not found; skipping IccPngDump (vcpkg port)")]=]
 )
 
-# 8. Disable JPEG FATAL_ERROR
+# 9. Disable JPEG FATAL_ERROR
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[message(FATAL_ERROR " JPEG not found. Please install libjpeg-dev or install via vcpkg.")]=]
     [=[message(STATUS "JPEG not found; skipping (vcpkg port: image tools excluded)")]=]
 )
 
-# 9. Make LibXml2 conditional on ENABLE_ICCXML (upstream has it unconditional)
+# 10. Make LibXml2 conditional on ENABLE_ICCXML (upstream has it unconditional)
 vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
     [=[find_package(LibXml2 REQUIRED)]=]
     [=[if(ENABLE_ICCXML)
@@ -217,6 +223,25 @@ file(REMOVE_RECURSE
     "${CURRENT_PACKAGES_DIR}/debug/include"
     "${CURRENT_PACKAGES_DIR}/debug/share"
 )
+
+# Remove stray dependency DLLs that cmake installs alongside tools.
+# These are already provided by their own vcpkg ports (libiconv, libxml2, zlib).
+file(GLOB _stray_dlls
+    "${CURRENT_PACKAGES_DIR}/bin/*.dll"
+    "${CURRENT_PACKAGES_DIR}/debug/bin/*.dll"
+)
+if(_stray_dlls)
+    file(REMOVE ${_stray_dlls})
+endif()
+# Remove empty bin directories left after DLL cleanup
+foreach(_bindir "${CURRENT_PACKAGES_DIR}/bin" "${CURRENT_PACKAGES_DIR}/debug/bin")
+    if(IS_DIRECTORY "${_bindir}")
+        file(GLOB _remaining "${_bindir}/*")
+        if(NOT _remaining)
+            file(REMOVE_RECURSE "${_bindir}")
+        endif()
+    endif()
+endforeach()
 
 # Install license
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE.md")
