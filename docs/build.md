@@ -52,7 +52,7 @@ static library dependency across Windows, Linux, and macOS.
 
 For full documentation — install commands, feature flags, CMake integration,
 local source mode, platform notes, and troubleshooting — see
-**[examples/hello-iccdev](Readme.md)**.
+**[examples/hello-iccdev](../examples/hello-iccdev/README.md)**.
 
 ### Example Project vcpkg
 

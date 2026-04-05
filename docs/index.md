@@ -10,8 +10,6 @@ and application of ICC based color management profiles based on the
 
 - [Build](build.md)
 - [Install](install.md)
-- [API Reference](api.md)
-- [OpenAPI Starter](iis-isapi.openapi.yaml)
 
 ## Features Overview
 
@@ -182,15 +180,9 @@ abridged spectral encoding is provided.
 
 ## Installation
 
-Install iccDEV using the Homebrew or NPM:
-
-```
-brew install iccdev
-npm install iccdev
-```
+See [Install](install.md) for Docker, Homebrew, NPM, and NixOS quickstart.
 
 [Build on Windows, macOS, Linux](build.md) ·
-[vcpkg Port (cross-platform)](vcpkg.md) ·
 [Bisecting Regressions](bisect.md)
 
 ## Examples

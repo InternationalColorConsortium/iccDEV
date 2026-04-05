@@ -12,8 +12,8 @@
 
 ## Documentation
 
-- repo-level API reference: [`docs/api.md`](../../../docs/api.md)
-- machine-readable starter spec: [`docs/iis-isapi.openapi.yaml`](../../../docs/iis-isapi.openapi.yaml)
+- API reference: [`api.md`](api.md)
+- machine-readable starter spec: [`iis-isapi.openapi.yaml`](iis-isapi.openapi.yaml)
 
 ## Build
 

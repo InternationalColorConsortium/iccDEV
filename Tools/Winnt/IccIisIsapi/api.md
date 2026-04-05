@@ -11,7 +11,7 @@ operators, reviewers, and web consumers can exercise today.
 
 Machine-readable starter spec:
 
-- [docs/iis-isapi.openapi.yaml](iis-isapi.openapi.yaml)
+- [iis-isapi.openapi.yaml](iis-isapi.openapi.yaml)
 
 ## Scope
 
