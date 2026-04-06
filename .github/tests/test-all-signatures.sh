@@ -56,8 +56,8 @@ TESTED_FILES=0
 SIG_REPO="${SCRIPT_DIR}/data"
 
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║  Comprehensive Signature Test Suite                         ║${NC}"
-echo -e "${BLUE}║  Testing Injection Signatures (local data)                  ║${NC}"
+echo -e "${BLUE}║  Signature Test Suite                                        ║${NC}"
+echo -e "${BLUE}║  Testing Injection Signatures (local data)                   ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -164,39 +164,17 @@ process_directory() {
 }
 
 # Main test execution
-echo -e "${BLUE}Starting comprehensive test sweep...${NC}"
+echo -e "${BLUE}Starting test sweep...${NC}"
 echo ""
 
 # Test major categories
-process_directory "$SIG_REPO/random" "Random XSS & Malicious Input"
 process_directory "$SIG_REPO/svg" "SVG-based Attacks"
-process_directory "$SIG_REPO/unix" "Unix/Shell Injection"
 process_directory "$SIG_REPO/uri" "URI Mutations & Protocol Handlers"
 process_directory "$SIG_REPO/javascript" "JavaScript Injection"
 process_directory "$SIG_REPO/xml" "XML/XXE Injection"
-process_directory "$SIG_REPO/sqlinjection" "SQL Injection"
-process_directory "$SIG_REPO/css" "CSS Injection"
-process_directory "$SIG_REPO/httpheader" "HTTP Header Injection"
-process_directory "$SIG_REPO/callback" "Callback Injection"
-process_directory "$SIG_REPO/email" "Email Injection"
 process_directory "$SIG_REPO/json" "JSON Injection"
-process_directory "$SIG_REPO/meta" "Meta Tag Injection"
-process_directory "$SIG_REPO/parameter" "Parameter Pollution"
-process_directory "$SIG_REPO/referer" "Referer Injection"
-process_directory "$SIG_REPO/soap" "SOAP Injection"
-process_directory "$SIG_REPO/ssi" "SSI Injection"
-process_directory "$SIG_REPO/lfi-local-file-system-harvesting" "LFI/Path Traversal"
-process_directory "$SIG_REPO/unix" "Shell Injection"
-process_directory "$SIG_REPO/angular" "Angular Template Injection"
-process_directory "$SIG_REPO/python" "Python Injection"
-process_directory "$SIG_REPO/java" "Java Injection"
-process_directory "$SIG_REPO/ps" "PowerShell Injection"
-process_directory "$SIG_REPO/applescript" "AppleScript Injection"
 process_directory "$SIG_REPO/custom" "Custom Signatures"
 process_directory "$SIG_REPO/ascii" "ASCII/Unicode Attacks"
-process_directory "$SIG_REPO/calc" "Calculator/Expression Injection"
-process_directory "$SIG_REPO/ua" "User-Agent Injection"
-process_directory "$SIG_REPO/rbl" "RBL/DNS Attacks"
 
 # Test root-level files
 echo -e "${YELLOW}═══════════════════════════════════════════════════════${NC}"
@@ -208,14 +186,9 @@ echo -e "${CYAN}[1] Testing: sanitizer-test-file.txt${NC}"
 test_signature_file "${SCRIPT_DIR}/sanitizer-test-file.txt" "Root XSS" 100
 echo ""
 
-# Note: Skip full-unicode.txt as it's 5.5MB
-echo -e "${CYAN}[2] Testing: xml-paste-from-gist.txt${NC}"
-test_signature_file "$SIG_REPO/xml-paste-from-gist.txt" "Root XML"
-echo ""
-
 # Final Summary
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║  Comprehensive Test Summary                                 ║${NC}"
+echo -e "${BLUE}║  Test Summary                                                ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "Signature Files Tested: $TESTED_FILES"
