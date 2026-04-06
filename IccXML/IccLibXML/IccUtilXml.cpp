@@ -1573,7 +1573,7 @@ const std::string icGetHeaderFlagsName(icUInt32Number flags, bool bUsesMCS)
       snprintf(line, lineSize, " MCSNeedsSubset=\"false\"");
     xml += line;
 
-    otherFlags &= ~icMCSNeedsSubsetTrue;
+    otherFlags &= ~(icUInt32Number)icMCSNeedsSubsetTrue;
   }
 
   if (flags & otherFlags) {
