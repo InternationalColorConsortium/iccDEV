@@ -721,7 +721,7 @@ jobs:
               # Detect ANY write permission: write-all, contents:write, packages:write,
               # pull-requests:write, id-token:write, attestations:write, etc.
               write_scopes=$(grep -E '^\s+[-a-zA-Z]+:\s*write' "$wf" 2>/dev/null \
-                | sed 's/^\s*//' | sort -u)
+                | sed 's/^\s*//' | sort -u || true)
               has_write_all=""
               if grep -qE '^permissions:\s*write-all' "$wf"; then
                 has_write_all="yes"
