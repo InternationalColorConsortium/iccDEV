@@ -182,10 +182,16 @@ curl.exe -H "Accept: application/json" -H "Content-Type: application/octet-strea
 
         <div class="content-box">
           <h2>Representative build and install flow</h2>
-          <pre class="code-block">cmake -S Build\Cmake -B out\iis-shared-vcpkg-toolchain ^
+          <pre class="code-block">if not defined VCPKG_ROOT echo Set VCPKG_ROOT first and exit /b 1
+
+set "PREFIX=%CD%\out\iis-shared-install"
+set "TOOLCHAIN=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
+
+cmake -S Build\Cmake -B out\iis-shared-vcpkg-toolchain ^
   -G "Visual Studio 17 2022" ^
   -A x64 ^
-  -DCMAKE_TOOLCHAIN_FILE=E:\tmp\beyondrgb\backend\vcpkg\scripts\buildsystems\vcpkg.cmake ^
+  -DCMAKE_TOOLCHAIN_FILE="%TOOLCHAIN%" ^
+  -DCMAKE_INSTALL_PREFIX="%PREFIX%" ^
   -DVCPKG_TARGET_TRIPLET=x64-windows ^
   -DENABLE_TESTS=OFF ^
   -DENABLE_TOOLS=ON ^
@@ -195,8 +201,13 @@ curl.exe -H "Accept: application/json" -H "Content-Type: application/octet-strea
   -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF ^
   -Wno-dev
 
-cmake --build out\iis-shared-vcpkg-toolchain --config Release --target install -- /m /maxcpucount
-cmake --install out\iis-shared-vcpkg-toolchain --config Release --prefix out\iis-shared-install</pre>
+cmake --build out\iis-shared-vcpkg-toolchain --config Release ^
+  --target iccIisIsapi iccIisIsapiSmoke -- /m /maxcpucount
+cmake --install out\iis-shared-vcpkg-toolchain --config Release
+
+powershell -ExecutionPolicy Bypass -File Tools\Winnt\IccIisIsapi\Install-IccIisIsapiSite.ps1 ^
+  -SiteName "Codex-iccIisIsapiInstall" ^
+  -Port 18081</pre>
         </div>
 
         <div id="faq" class="content-grid">

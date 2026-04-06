@@ -18,13 +18,30 @@
 ## Build
 
 ```powershell
-cmake -B build -S . `
+if (-not $env:VCPKG_ROOT) {
+  throw "Set VCPKG_ROOT to your vcpkg checkout first."
+}
+
+$prefix = Join-Path (Resolve-Path .) 'out\iis-shared-install'
+$toolchain = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
+
+cmake -S Build\Cmake -B out\iis-shared-vcpkg-toolchain `
   -G "Visual Studio 17 2022" `
   -A x64 `
+  "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
+  "-DCMAKE_INSTALL_PREFIX=$prefix" `
+  -DVCPKG_TARGET_TRIPLET=x64-windows `
+  -DENABLE_TESTS=OFF `
   -DENABLE_TOOLS=ON `
+  -DENABLE_WXWIDGETS=OFF `
   -DENABLE_SHARED_LIBS=ON `
-  -DENABLE_STATIC_LIBS=ON
-cmake --build build --config Release --target iccIisIsapi iccIisIsapiSmoke
+  -DENABLE_STATIC_LIBS=ON `
+  -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF `
+  -Wno-dev
+
+cmake --build out\iis-shared-vcpkg-toolchain --config Release `
+  --target iccIisIsapi iccIisIsapiSmoke -- /m /maxcpucount
+cmake --install out\iis-shared-vcpkg-toolchain --config Release
 ```
 
 ## Deployment notes
@@ -35,9 +52,31 @@ cmake --build build --config Release --target iccIisIsapi iccIisIsapiSmoke
 - Use an x64 app pool for the x64 build.
 - The IIS sample target now copies runtime DLL dependencies next to the build
   artifact and into the install `bin` directory on Windows.
+- `Tools\Winnt\IccIisIsapi\Install-IccIisIsapiSite.ps1` can create or update
+  an IIS site against the install bundle automatically.
 
 ## Local proof
 
 `iccIisIsapiSmoke.exe` loads the extension with `LoadLibrary`, calls
 `GetExtensionVersion`, and runs a mock `HttpExtensionProc` request without
 requiring IIS to be installed.
+
+```powershell
+$prefix = (Resolve-Path '.\out\iis-shared-install').Path
+$oldPath = $env:PATH
+try {
+  $env:PATH = "$prefix\bin;$oldPath"
+  & "$prefix\bin\iccIisIsapiSmoke.exe" "$prefix\bin\iccIisIsapi.dll"
+}
+finally {
+  $env:PATH = $oldPath
+}
+```
+
+## IIS setup
+
+```powershell
+.\Tools\Winnt\IccIisIsapi\Install-IccIisIsapiSite.ps1 `
+  -SiteName "Codex-iccIisIsapiInstall" `
+  -Port 18081
+```

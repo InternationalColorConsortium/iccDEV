@@ -79,10 +79,18 @@ dism /online /Enable-Feature /FeatureName:IIS-ISAPIExtensions /All /NoRestart
 2. Build and install the sample.
 
 ```powershell
+if (-not $env:VCPKG_ROOT) {
+  throw "Set VCPKG_ROOT to your vcpkg checkout first."
+}
+
+$prefix = Join-Path (Resolve-Path .) 'out\iis-shared-install'
+$toolchain = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
+
 cmake -S Build\Cmake -B out\iis-shared-vcpkg-toolchain `
   -G "Visual Studio 17 2022" `
   -A x64 `
-  -DCMAKE_TOOLCHAIN_FILE=E:\tmp\beyondrgb\backend\vcpkg\scripts\buildsystems\vcpkg.cmake `
+  "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
+  "-DCMAKE_INSTALL_PREFIX=$prefix" `
   -DVCPKG_TARGET_TRIPLET=x64-windows `
   -DENABLE_TESTS=OFF `
   -DENABLE_TOOLS=ON `
@@ -92,39 +100,32 @@ cmake -S Build\Cmake -B out\iis-shared-vcpkg-toolchain `
   -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF `
   -Wno-dev
 
-cmake --build out\iis-shared-vcpkg-toolchain --config Release --target install -- /m /maxcpucount
-cmake --install out\iis-shared-vcpkg-toolchain --config Release --prefix out\iis-shared-install
+cmake --build out\iis-shared-vcpkg-toolchain --config Release `
+  --target iccIisIsapi iccIisIsapiSmoke -- /m /maxcpucount
+cmake --install out\iis-shared-vcpkg-toolchain --config Release
 ```
 
 3. Point an IIS site at the installed `bin` directory.
 
 ```text
-E:\codex\iccDEV-ci-shared-exports-fresh\out\iis-shared-install\bin
+<repo>\out\iis-shared-install\bin
 ```
 
 4. Use an x64 app pool if the sample was built for x64.
 
-5. Allow the specific ISAPI DLL in IIS and map it as a handler for
-   `iccIisIsapi.dll`.
-
-Example `appcmd` sequence:
+5. Create or update the IIS site with the helper script in the sample source
+   directory. The script configures the app pool, site root, handler mapping,
+   ISAPI restriction entry, and verification probes automatically.
 
 ```powershell
-$siteName = "Codex-iccIisIsapiInstall"
-$poolName = "Codex-iccIisIsapiInstallPool"
-$siteRoot = "E:\codex\iccDEV-ci-shared-exports-fresh\out\iis-shared-install\bin"
-$dllPath = Join-Path $siteRoot "iccIisIsapi.dll"
-$appcmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
-
-& $appcmd add apppool /name:$poolName /managedRuntimeVersion:"" /managedPipelineMode:Integrated
-& $appcmd set apppool $poolName /enable32BitAppOnWin64:false
-& $appcmd add site /name:$siteName /bindings:http/*:18081: /physicalPath:$siteRoot
-& $appcmd set app "$siteName/" /applicationPool:$poolName
-& $appcmd set config $siteName -section:system.webServer/serverRuntime /appConcurrentRequestLimit:5000 /commit:apphost
-& $appcmd set config $siteName -section:system.webServer/handlers /accessPolicy:"Read,Script,Execute" /commit:apphost
-& $appcmd set config /section:isapiCgiRestriction /+"[path='$dllPath',allowed='True',description='iccDEV IIS ISAPI sample']" /commit:apphost
-& $appcmd set config $siteName -section:system.webServer/handlers /+"[name='iccIisIsapi',path='iccIisIsapi.dll',verb='GET,HEAD,POST',modules='IsapiModule',scriptProcessor='$dllPath',resourceType='File',requireAccess='Execute',allowPathInfo='True']" /commit:apphost
+.\Tools\Winnt\IccIisIsapi\Install-IccIisIsapiSite.ps1 `
+  -SiteName "Codex-iccIisIsapiInstall" `
+  -Port 18081
 ```
+
+The script defaults `-SiteRoot` to `<repo>\out\iis-shared-install\bin`. Use
+`-SiteRoot` to point IIS at a different install bundle, or `-Layout Build` with
+`-Configuration Release` for a build-tree proof.
 
 ## Smoke and browser checks
 
@@ -151,6 +152,18 @@ Browser checks:
 The build target also copies `index.html` and `web.config` next to the built
 DLL in the build output directory, so you can point IIS at the build tree for a
 fast local proof before installing.
+
+```powershell
+$buildOut = (Resolve-Path '.\out\iis-shared-vcpkg-toolchain\Tools\IccIisIsapi\Release').Path
+$oldPath = $env:PATH
+try {
+  $env:PATH = "$buildOut;$oldPath"
+  & "$buildOut\iccIisIsapiSmoke.exe" "$buildOut\iccIisIsapi.dll"
+}
+finally {
+  $env:PATH = $oldPath
+}
+```
 
 ## Relevant source files
 

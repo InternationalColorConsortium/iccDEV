@@ -1968,10 +1968,19 @@ jobs:
             '_tool-work\index.html'
             'assets\ICC_logo_text.gif'
           )
+          $expectedShareArtifacts = @(
+            'iccdev\Install-IccIisIsapiSite.ps1'
+          )
           foreach ($artifact in $expectedBinArtifacts) {
             $artifactPath = Join-Path $env:INSTALL_PREFIX ("bin\" + $artifact)
             if (-not (Test-Path $artifactPath)) {
               throw "Expected installed bin artifact missing: $artifactPath"
+            }
+          }
+          foreach ($artifact in $expectedShareArtifacts) {
+            $artifactPath = Join-Path $env:INSTALL_PREFIX ("share\" + $artifact)
+            if (-not (Test-Path $artifactPath)) {
+              throw "Expected installed share artifact missing: $artifactPath"
             }
           }
           foreach ($artifact in $expectedLibArtifacts) {

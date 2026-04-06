@@ -16,8 +16,6 @@ set(IIS_SAMPLE_SITE_FILES
 )
 set(IIS_SAMPLE_TOOL_WORK_INDEX "${WINNT_ROOT}/tool-work-index.html")
 set(IIS_SAMPLE_ASSET_DIR "${WINNT_ROOT}/assets")
-set(IIS_SAMPLE_COPY_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/copy-files-if-present.cmake")
-
 if(NOT WIN32)
   return()
 endif()
@@ -56,10 +54,9 @@ if(WIN32)
     COMMAND ${CMAKE_COMMAND} -E copy_directory
       "${IIS_SAMPLE_ASSET_DIR}"
       "$<TARGET_FILE_DIR:iccIisIsapi>/assets"
-    COMMAND ${CMAKE_COMMAND}
-      "-DFILES_TO_COPY=$<JOIN:$<TARGET_RUNTIME_DLLS:iccIisIsapi>,;>"
-      "-DDEST_DIR=$<TARGET_FILE_DIR:iccIisIsapi>"
-      -P "${IIS_SAMPLE_COPY_SCRIPT}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_RUNTIME_DLLS:iccIisIsapi>
+      $<TARGET_FILE_DIR:iccIisIsapi>
     COMMAND_EXPAND_LISTS)
 endif()
 
@@ -78,6 +75,9 @@ if(ENABLE_INSTALL_RIM)
   install(DIRECTORY "${IIS_SAMPLE_ASSET_DIR}/"
     DESTINATION "${CMAKE_INSTALL_BINDIR}/assets"
     COMPONENT shared-proof)
+  install(FILES "${WINNT_ROOT}/Install-IccIisIsapiSite.ps1"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/iccdev
+    COMPONENT shared-proof)
   if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
     install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/install-iis-runtime-deps.cmake" COMPONENT shared-proof)
   endif()
@@ -95,10 +95,10 @@ set_target_properties(iccIisIsapiSmoke PROPERTIES
 
 if(WIN32)
   add_custom_command(TARGET iccIisIsapiSmoke POST_BUILD
-    COMMAND ${CMAKE_COMMAND}
-      "-DFILES_TO_COPY=$<TARGET_FILE:iccIisIsapi>;$<JOIN:$<TARGET_RUNTIME_DLLS:iccIisIsapi>,;>"
-      "-DDEST_DIR=$<TARGET_FILE_DIR:iccIisIsapiSmoke>"
-      -P "${IIS_SAMPLE_COPY_SCRIPT}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      $<TARGET_FILE:iccIisIsapi>
+      $<TARGET_RUNTIME_DLLS:iccIisIsapi>
+      $<TARGET_FILE_DIR:iccIisIsapiSmoke>
     COMMAND_EXPAND_LISTS)
 endif()
 

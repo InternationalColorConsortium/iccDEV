@@ -524,7 +524,12 @@ jobs:
           Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
           Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
-          # 4. Generate path.bat helper script
+          # 4. Copy IIS installer script
+          $iisInstaller = "Tools/Winnt/IccIisIsapi/Install-IccIisIsapiSite.ps1"
+          if (Test-Path $iisInstaller) {
+            Copy-Item -Path $iisInstaller -Destination $stage -Force
+          }
+          # 5. Generate path.bat helper script
           @'
           @echo off
           setlocal EnableDelayedExpansion
