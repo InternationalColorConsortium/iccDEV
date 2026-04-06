@@ -718,9 +718,24 @@ jobs:
 
             if grep -qE '^permissions:' "$wf"; then
               WF_WITH_PERMS=$((WF_WITH_PERMS + 1))
-              if grep -qE 'permissions:\s*write-all|contents:\s*write' "$wf"; then
+              # Detect ANY write permission: write-all, contents:write, packages:write,
+              # pull-requests:write, id-token:write, attestations:write, etc.
+              write_scopes=$(grep -E '^\s+[-a-zA-Z]+:\s*write' "$wf" 2>/dev/null \
+                | sed 's/^\s*//' | sort -u)
+              has_write_all=""
+              if grep -qE '^permissions:\s*write-all' "$wf"; then
+                has_write_all="yes"
+              fi
+              if [[ -n "$write_scopes" || -n "$has_write_all" ]]; then
                 WF_WITH_WRITE_ALL=$((WF_WITH_WRITE_ALL + 1))
-                WRITE_ALL+=("$wf_base")
+                # Build detail string: workflow name + specific write scopes
+                scope_list=""
+                if [[ -n "$has_write_all" ]]; then
+                  scope_list="write-all"
+                elif [[ -n "$write_scopes" ]]; then
+                  scope_list=$(echo "$write_scopes" | sed 's/: write//' | tr '\n' ',' | sed 's/,$//')
+                fi
+                WRITE_ALL+=("${wf_base} (${scope_list})")
               fi
             else
               WF_NO_PERMS=$((WF_NO_PERMS + 1))
@@ -733,7 +748,7 @@ jobs:
           echo "| Total workflows | $(sanitize_line "$TOTAL_WF") |" >> "$GITHUB_STEP_SUMMARY"
           echo "| With explicit permissions | $(sanitize_line "$WF_WITH_PERMS") |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Missing permissions block | $(sanitize_line "$WF_NO_PERMS") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| With write/write-all | $(sanitize_line "$WF_WITH_WRITE_ALL") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| With any write permission | $(sanitize_line "$WF_WITH_WRITE_ALL") |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           if [[ ${#NO_PERMS[@]} -gt 0 ]]; then
@@ -983,7 +998,107 @@ jobs:
           fi
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: "10. Workflow Inventory & Final Report"
+      - name: "10. Ref Name Security Validation"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            echo "[FAIL] Sanitizer not found" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          {
+            echo "## 10. Ref Name Security Validation"
+            echo ""
+            echo "Validates branch/ref names for hidden Unicode characters"
+            echo "(BOM, bidi overrides, zero-width chars) that enable Trojan Source"
+            echo "and ref confusion attacks. Achieves parity with GitHub UI warning:"
+            echo "_The head ref may contain hidden characters._"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          REF_FINDINGS=0
+
+          # Check HEAD_REF (PR source branch)
+          if [[ -n "${PR_HEAD_REF:-}" ]]; then
+            if detect_hidden_chars "$PR_HEAD_REF" "github.head_ref"; then
+              REF_FINDINGS=$((REF_FINDINGS + 1))
+              {
+                echo "### [CRITICAL] Hidden characters in HEAD ref"
+                echo ""
+                echo "| Field | Value |"
+                echo "|-------|-------|"
+                echo "| Raw ref | \`$(sanitize_line "$PR_HEAD_REF")\` |"
+                echo "| Sanitized | \`$(sanitize_ref "$PR_HEAD_REF")\` |"
+                echo "| Severity | CRITICAL |"
+                echo ""
+                echo "> This ref name contains invisible Unicode characters that"
+                echo "> could enable ref confusion, Trojan Source, or supply-chain"
+                echo "> attacks. The branch should be renamed to remove hidden chars."
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- HEAD ref \`$(sanitize_line "$PR_HEAD_REF")\`: [OK] clean" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          # Check BASE_REF (PR target branch)
+          if [[ -n "${PR_BASE_REF:-}" ]]; then
+            if detect_hidden_chars "$PR_BASE_REF" "github.base_ref"; then
+              REF_FINDINGS=$((REF_FINDINGS + 1))
+              {
+                echo "### [CRITICAL] Hidden characters in BASE ref"
+                echo ""
+                echo "| Field | Value |"
+                echo "|-------|-------|"
+                echo "| Raw ref | \`$(sanitize_line "$PR_BASE_REF")\` |"
+                echo "| Sanitized | \`$(sanitize_ref "$PR_BASE_REF")\` |"
+                echo "| Severity | CRITICAL |"
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- BASE ref \`$(sanitize_line "$PR_BASE_REF")\`: [OK] clean" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          # Check GITHUB_REF_NAME (current ref)
+          if [[ -n "${GITHUB_REF_NAME:-}" ]]; then
+            if detect_hidden_chars "$GITHUB_REF_NAME" "GITHUB_REF_NAME"; then
+              REF_FINDINGS=$((REF_FINDINGS + 1))
+              {
+                echo "### [CRITICAL] Hidden characters in GITHUB_REF_NAME"
+                echo ""
+                echo "| Field | Value |"
+                echo "|-------|-------|"
+                echo "| Raw ref | \`$(sanitize_line "$GITHUB_REF_NAME")\` |"
+                echo "| Sanitized | \`$(sanitize_ref "$GITHUB_REF_NAME")\` |"
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          {
+            echo ""
+            if [[ $REF_FINDINGS -gt 0 ]]; then
+              echo "**[CRITICAL] $REF_FINDINGS ref name(s) contain hidden Unicode characters**"
+            else
+              echo "[OK] All ref names are clean ASCII"
+            fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "11. Workflow Inventory & Final Report"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -1009,7 +1124,7 @@ jobs:
           {
             echo "---"
             echo ""
-            echo "## 10. Workflow Inventory"
+            echo "## 11. Workflow Inventory"
             echo ""
             echo "| Workflow | Triggers | Permissions | SHA-Pinned |"
             echo "|----------|----------|-------------|------------|"
@@ -1641,13 +1756,29 @@ jobs:
 
           $withPerms = 0
           $withoutPerms = 0
+          $withWrite = 0
           $missingList = @()
+          $writeList = @()
 
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
             if ($content -match '(?m)^permissions:') {
               $withPerms++
+              # Detect ANY write permission: write-all, contents:write, packages:write,
+              # pull-requests:write, id-token:write, attestations:write, etc.
+              $hasWriteAll = $content -match '(?m)^permissions:\s*write-all'
+              $writeScopes = [regex]::Matches($content, '(?m)^\s+([-a-zA-Z]+):\s*write\s*$') |
+                ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
+              if ($hasWriteAll -or $writeScopes.Count -gt 0) {
+                $withWrite++
+                if ($hasWriteAll) {
+                  $scopeDetail = "write-all"
+                } else {
+                  $scopeDetail = ($writeScopes -join ",")
+                }
+                $writeList += "$($wf.Name) ($scopeDetail)"
+              }
             } else {
               $withoutPerms++
               $missingList += $wf.Name
@@ -1661,6 +1792,7 @@ jobs:
           $report += "|--------|-------|"
           $report += "| With permissions: block | $(Sanitize-Line "$withPerms") |"
           $report += "| Without permissions: block | $(Sanitize-Line "$withoutPerms") |"
+          $report += "| With any write permission | $(Sanitize-Line "$withWrite") |"
           $report += ""
           if ($missingList.Count -gt 0) {
             $report += "**Missing permissions: block:**"
@@ -1669,8 +1801,13 @@ jobs:
             $report += "[OK] All workflows have explicit permissions"
           }
           $report += ""
+          if ($writeList.Count -gt 0) {
+            $report += "**Workflows with write access ($($writeList.Count)):**"
+            foreach ($w in $writeList) { $report += "- ``$(Sanitize-Line $w)``" }
+          }
+          $report += ""
           $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
-          Write-Host "[OK] Permissions audit complete (Windows): $withPerms with, $withoutPerms without"
+          Write-Host "[OK] Permissions audit complete (Windows): $withPerms with perms, $withoutPerms without, $withWrite with write"
 
       - name: "8. Supply-Chain Risk Score (Windows)"
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -1861,7 +1998,100 @@ jobs:
           $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Trivy indicator check complete (Windows): $($findings.Count) indicators"
 
-      - name: "10. Inventory & Cross-Platform Summary"
+      - name: "10. Ref Name Security Validation (Windows)"
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BASE_REF: ${{ github.base_ref }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          if (Test-Path $sanitizerPath) { . $sanitizerPath }
+          else {
+            function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
+            function Sanitize-Ref { param([string]$InputString = "") return ($InputString -replace '[^\x20-\x7E]','-' -replace '-+','-' -replace '^-|-$','') }
+            function Detect-HiddenChars { param([string]$InputString, [string]$Label="input")
+              foreach ($c in $InputString.ToCharArray()) { if ([int]$c -gt 127) { Write-Host "[CRITICAL] Non-ASCII in $Label"; return $true } }
+              return $false
+            }
+          }
+
+          $report = @()
+          $report += "## 10. Ref Name Security Validation (Windows Validation)"
+          $report += ""
+          $report += "Validates branch/ref names for hidden Unicode characters."
+          $report += ""
+
+          $refFindings = 0
+
+          # Check HEAD ref
+          $headRef = $env:PR_HEAD_REF
+          if (-not [string]::IsNullOrEmpty($headRef)) {
+            if (Detect-HiddenChars -InputString $headRef -Label "github.head_ref") {
+              $refFindings++
+              $sanitized = Sanitize-Ref -InputString $headRef
+              $report += "### [CRITICAL] Hidden characters in HEAD ref"
+              $report += ""
+              $report += "| Field | Value |"
+              $report += "|-------|-------|"
+              $report += "| Raw ref | ``$(Sanitize-Line $headRef)`` |"
+              $report += "| Sanitized | ``$(Sanitize-Line $sanitized)`` |"
+              $report += "| Severity | CRITICAL |"
+              $report += ""
+            } else {
+              $report += "- HEAD ref ``$(Sanitize-Line $headRef)``: [OK] clean"
+            }
+          }
+
+          # Check BASE ref
+          $baseRef = $env:PR_BASE_REF
+          if (-not [string]::IsNullOrEmpty($baseRef)) {
+            if (Detect-HiddenChars -InputString $baseRef -Label "github.base_ref") {
+              $refFindings++
+              $sanitized = Sanitize-Ref -InputString $baseRef
+              $report += "### [CRITICAL] Hidden characters in BASE ref"
+              $report += ""
+              $report += "| Field | Value |"
+              $report += "|-------|-------|"
+              $report += "| Raw ref | ``$(Sanitize-Line $baseRef)`` |"
+              $report += "| Sanitized | ``$(Sanitize-Line $sanitized)`` |"
+              $report += ""
+            } else {
+              $report += "- BASE ref ``$(Sanitize-Line $baseRef)``: [OK] clean"
+            }
+          }
+
+          # Check GITHUB_REF_NAME
+          $refName = $env:GITHUB_REF_NAME
+          if (-not [string]::IsNullOrEmpty($refName)) {
+            if (Detect-HiddenChars -InputString $refName -Label "GITHUB_REF_NAME") {
+              $refFindings++
+              $sanitized = Sanitize-Ref -InputString $refName
+              $report += "### [CRITICAL] Hidden characters in GITHUB_REF_NAME"
+              $report += ""
+              $report += "| Field | Value |"
+              $report += "|-------|-------|"
+              $report += "| Raw ref | ``$(Sanitize-Line $refName)`` |"
+              $report += "| Sanitized | ``$(Sanitize-Line $sanitized)`` |"
+              $report += ""
+            }
+          }
+
+          $report += ""
+          if ($refFindings -gt 0) {
+            $report += "**[CRITICAL] $refFindings ref name(s) contain hidden Unicode characters**"
+          } else {
+            $report += "[OK] All ref names are clean ASCII"
+          }
+          $report += ""
+          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Write-Host "[OK] Ref name security validation complete (Windows): $refFindings findings"
+
+      - name: "11. Inventory & Cross-Platform Summary"
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1877,7 +2107,7 @@ jobs:
           }
 
           $report = @()
-          $report += "## 10. Workflow Inventory (Windows Validation)"
+          $report += "## 11. Workflow Inventory (Windows Validation)"
           $report += ""
           $report += "| Workflow | Triggers | Permissions | Pinning |"
           $report += "|----------|----------|-------------|---------|"
