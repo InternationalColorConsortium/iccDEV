@@ -2,7 +2,7 @@
 
 ## When to Use
 
-Use this prompt when bumping the iccDEV version number (e.g., 2.3.1.5 -> 2.3.1.6).
+Use this prompt when bumping the iccDEV version number (e.g., 2.3.1.6 -> 2.3.1.7).
 
 ## Version Location Map (6 locations, 5 files)
 

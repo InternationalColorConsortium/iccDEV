@@ -59,8 +59,8 @@ Response:
 Example:
 
 ```text
-IccProfLib version: 2.3.1.6+0cbfc46
-IccLibXML version: 2.3.1.6+0cbfc46
+IccProfLib version: 2.3.1.7+0cbfc46
+IccLibXML version: 2.3.1.7+0cbfc46
 Profile spec ver: 4.00
 XML payload bytes: 786
 Hello from iccDEV IIS ISAPI!

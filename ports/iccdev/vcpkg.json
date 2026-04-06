@@ -1,6 +1,6 @@
 {
   "name": "iccdev",
-  "version": "2.3.1.6",
+  "version": "2.3.1.7",
   "description": "ICC color profile libraries and tools (RefIccMAX / iccDEV)",
   "homepage": "https://github.com/InternationalColorConsortium/iccDEV",
   "license": "BSD-3-Clause",
