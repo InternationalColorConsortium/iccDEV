@@ -209,3 +209,56 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker rmi iccdev-test:latest || true
+
+  prune:
+    name: "Prune old container versions"
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    permissions:
+      packages: write
+    steps:
+      - name: Delete old package versions
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+
+          ORG="InternationalColorConsortium"
+          PACKAGE="iccdev"
+          CUTOFF=$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          echo "Pruning ${PACKAGE} versions older than ${CUTOFF}"
+
+          gh api --paginate \
+            "/orgs/${ORG}/packages/container/${PACKAGE}/versions" |
+          jq -r --arg cutoff "${CUTOFF}" '
+            .[] | select(
+              (.created_at < $cutoff) and
+              ((.metadata.container.tags | index("latest")) == null)
+            ) | .id
+          ' > /tmp/prune-ids.txt
+
+          TOTAL=$(wc -l < /tmp/prune-ids.txt | tr -d ' ')
+          if [ "${TOTAL}" -eq 0 ]; then
+            echo "No versions to prune"
+            exit 0
+          fi
+
+          echo "Found ${TOTAL} versions to prune"
+          DELETED=0
+          FAILED=0
+          while IFS= read -r vid; do
+            if gh api --method DELETE \
+              "/orgs/${ORG}/packages/container/${PACKAGE}/versions/${vid}" \
+              2>/dev/null; then
+              DELETED=$((DELETED + 1))
+            else
+              FAILED=$((FAILED + 1))
+            fi
+          done < /tmp/prune-ids.txt
+
+          echo "Pruned ${DELETED}/${TOTAL} old versions (${FAILED} failed)"
+          rm -f /tmp/prune-ids.txt
