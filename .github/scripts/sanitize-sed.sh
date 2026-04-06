@@ -271,9 +271,117 @@ safe_echo_for_summary() {
   printf '\n'
 }
 
+# --- Detection functions (detect-and-alert, not strip-and-pass) -------------
+
+# detect_hidden_chars STRING [LABEL]
+# Detect hidden Unicode characters in STRING. Returns 0 if hidden chars found
+# (DANGEROUS), 1 if clean. Emits [CRITICAL] diagnostics to stderr.
+# LABEL is an optional context label (e.g., "GITHUB_HEAD_REF").
+#
+# Detects:
+#   - BOM / Zero-Width No-Break Space (U+FEFF)
+#   - Bidi overrides/embeddings (U+202A-202E, U+2066-2069)
+#   - Zero-width chars (U+200B-200F, U+2060)
+#   - Line/paragraph separators (U+2028-2029)
+#   - Interlinear annotation (U+FFF9-U+FFFB)
+#   - Any non-ASCII byte in a ref name context
+#
+# Design: This function is a DETECTION system (like GitHub UI warnings),
+# not a sanitization filter. It reports findings without modifying the input.
+# Use sanitize_ref() or sanitize_line() separately for safe output.
+detect_hidden_chars() {
+  local input="$1"
+  local label="${2:-input}"
+  local found=1  # 1 = clean (shell convention: 0=true/found, 1=false/clean)
+  local details=""
+
+  # Skip empty input
+  if [[ -z "$input" ]]; then
+    return 1
+  fi
+
+  # Check for BOM (U+FEFF = EF BB BF in UTF-8)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '\xef\xbb\xbf' 2>/dev/null; then
+    details="${details}  - U+FEFF (BOM / Zero-Width No-Break Space)\n"
+    found=0
+  fi
+
+  # Check for bidi overrides (U+202A-202E = E2 80 AA-AE)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '[\xe2][\x80][\xaa-\xae]' 2>/dev/null; then
+    details="${details}  - U+202A-202E (Bidi Override/Embedding)\n"
+    found=0
+  fi
+
+  # Check for bidi isolates (U+2066-2069 = E2 81 A6-A9)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '[\xe2][\x81][\xa6-\xa9]' 2>/dev/null; then
+    details="${details}  - U+2066-2069 (Bidi Isolate)\n"
+    found=0
+  fi
+
+  # Check for zero-width chars (U+200B-200F = E2 80 8B-8F)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '[\xe2][\x80][\x8b-\x8f]' 2>/dev/null; then
+    details="${details}  - U+200B-200F (Zero-Width Space/Joiner/Mark)\n"
+    found=0
+  fi
+
+  # Check for word joiner (U+2060 = E2 81 A0)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '\xe2\x81\xa0' 2>/dev/null; then
+    details="${details}  - U+2060 (Word Joiner)\n"
+    found=0
+  fi
+
+  # Check for line/paragraph separators (U+2028-2029 = E2 80 A8-A9)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '[\xe2][\x80][\xa8-\xa9]' 2>/dev/null; then
+    details="${details}  - U+2028-2029 (Line/Paragraph Separator)\n"
+    found=0
+  fi
+
+  # Check for interlinear annotation (U+FFF9-FFFB = EF BF B9-BB)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '[\xef][\xbf][\xb9-\xbb]' 2>/dev/null; then
+    details="${details}  - U+FFF9-FFFB (Interlinear Annotation)\n"
+    found=0
+  fi
+
+  # Broad check: any non-ASCII byte (catches novel attacks)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '[^\x20-\x7E]' 2>/dev/null; then
+    if [[ $found -ne 0 ]]; then
+      # Only flag if we haven't already identified specific chars above
+      details="${details}  - Non-ASCII byte(s) detected (unknown category)\n"
+      found=0
+    fi
+  fi
+
+  # Report findings
+  if [[ $found -eq 0 ]]; then
+    {
+      printf '[CRITICAL] Hidden Unicode characters detected in %s\n' "$label"
+      printf '%b' "$details"
+      printf '  Raw bytes: '
+      printf '%s' "$input" | xxd -p | head -c 120
+      printf '\n'
+      printf '  Sanitized: %s\n' "$(sanitize_ref "$input")"
+      printf '  GitHub UI parity: this finding matches GitHub warning\n'
+      printf '    "The head ref may contain hidden characters"\n'
+    } >&2
+  fi
+
+  return $found
+}
+
+# validate_ref STRING [LABEL]
+# Wrapper: detect hidden chars + sanitize. Returns sanitized ref on stdout.
+# Emits [CRITICAL] to stderr if hidden chars found (non-zero exit suppressed
+# so callers can continue after logging the finding).
+validate_ref() {
+  local input="$1"
+  local label="${2:-ref}"
+  detect_hidden_chars "$input" "$label" || true
+  sanitize_ref "$input"
+}
+
 # Provide a minimal no-op marker so callers can check we're present
 sanitizer_version() {
-  printf 'iccDEV-sanitizer-v3\n'
+  printf 'iccDEV-sanitizer-v4\n'
 }
 
 # End of sanitize-sed.sh

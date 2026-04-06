@@ -555,12 +555,40 @@ jobs:
             echo "## 🧩 PR Summary"
             echo "  <strong>PRs Are Typically Reviewed Within 14 Days</strong><br>"
             echo ""
-            echo "## 📌 PR / Branch Context"
+            echo "## PR / Branch Context"
             echo '```text'
             printf "HEAD_REF:   %s\n" "$(sanitize_line "${GITHUB_HEAD_REF:-<none>}")"
             printf "BASE_REF:   %s\n" "$(sanitize_line "${GITHUB_BASE_REF:-<none>}")"
             printf "GITHUB_REF: %s\n" "$(sanitize_line "${GITHUB_REF:-<none>}")"
             echo '```'
+            echo ""
+
+            # --- Ref Name Security Validation ---
+            echo "### Ref Name Security Check"
+            _ref_findings=0
+            if [ -n "${GITHUB_HEAD_REF:-}" ]; then
+              if detect_hidden_chars "${GITHUB_HEAD_REF}" "github.head_ref" 2>/dev/null; then
+                _ref_findings=$((_ref_findings + 1))
+                _clean_ref="$(validate_ref "${GITHUB_HEAD_REF}" "HEAD_REF" 2>/dev/null)"
+                echo "[CRITICAL] Hidden Unicode characters detected in HEAD ref"
+                echo "  Sanitized: ${_clean_ref}"
+                echo ""
+              fi
+            fi
+            if [ -n "${GITHUB_BASE_REF:-}" ]; then
+              if detect_hidden_chars "${GITHUB_BASE_REF}" "github.base_ref" 2>/dev/null; then
+                _ref_findings=$((_ref_findings + 1))
+                _clean_ref="$(validate_ref "${GITHUB_BASE_REF}" "BASE_REF" 2>/dev/null)"
+                echo "[CRITICAL] Hidden Unicode characters detected in BASE ref"
+                echo "  Sanitized: ${_clean_ref}"
+                echo ""
+              fi
+            fi
+            if [ "${_ref_findings}" -eq 0 ]; then
+              echo "[OK] All ref names are clean ASCII"
+            else
+              echo "[CRITICAL] ${_ref_findings} ref name(s) contain hidden Unicode characters"
+            fi
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
