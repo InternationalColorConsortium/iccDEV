@@ -11,6 +11,7 @@
 | `Testing/**` | `instructions/testing.instructions.md` | Test scripts, profile dirs, validation flow |
 | `IccProfLib/icProfileHeader.h` | `instructions/icc-specification.instructions.md` | ICC header, tags, color spaces, version encoding |
 | `ports/**` | `instructions/vcpkg-port.instructions.md` | vcpkg portfile, features, local source mode, CI |
+| `Tools/Winnt/IccIisIsapi/**` | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS ISAPI setup, security hardening, deployment |
 
 ## Reusable Prompts
 
@@ -49,6 +50,7 @@ RefIccMAX (iccDEV) — ICC color profile libraries and tools.
 | `IccProfLib/` | Core ICC profile library (C++) |
 | `IccXML/` | XML serialization (libxml2) |
 | `Tools/CmdLine/` | 13 CLI tools (DumpProfile, RoundTrip, ApplyProfiles, …) |
+| `Tools/Winnt/IccIisIsapi/` | IIS ISAPI extension (Windows), security-hardened HTTP API |
 | `Build/Cmake/` | CMake build system |
 | `Testing/` | Test scripts and profile generators |
 | `ports/iccdev/` | vcpkg overlay port (portfile.cmake, vcpkg.json) |
@@ -188,6 +190,7 @@ through `env:` to prevent shell injection.
 - Report vulnerabilities via [GitHub Security Advisory](https://github.com/InternationalColorConsortium/iccDEV/security/advisories)
 - Validate all inputs — especially file-controlled sizes, offsets, and loop bounds
 - Two sanitizer scripts for CI output: `sanitize-sed.sh` (bash V3) and `sanitize.ps1` (PowerShell V1)
+- IIS ISAPI DLL hardened with `IccIsapiSanitize` (server-side) and `sanitize.js` (client-side DOM-XSS)
 - Reference workflow: `ci-pr-action.yml` (bash) · `ci-pr-win.yml` (PowerShell)
 
 ## Pull Request Process

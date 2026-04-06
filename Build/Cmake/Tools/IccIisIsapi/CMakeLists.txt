@@ -12,6 +12,7 @@ set(IIS_SAMPLE_SITE_FILES
   "${WINNT_ROOT}/integration.html"
   "${WINNT_ROOT}/site.css"
   "${WINNT_ROOT}/site.js"
+  "${WINNT_ROOT}/sanitize.js"
   "${WINNT_ROOT}/web.config"
 )
 set(IIS_SAMPLE_TOOL_WORK_INDEX "${WINNT_ROOT}/tool-work-index.html")
@@ -31,8 +32,11 @@ endif()
 add_library(iccIisIsapi SHARED
   "${WINNT_ROOT}/iccIisIsapi.cpp"
   "${WINNT_ROOT}/iccIisIsapi.def"
+  "${WINNT_ROOT}/IccIsapiSanitize.cpp"
+  "${WINNT_ROOT}/IccIsapiHttp.cpp"
 )
 target_compile_features(iccIisIsapi PRIVATE cxx_std_17)
+target_include_directories(iccIisIsapi PRIVATE "${WINNT_ROOT}")
 target_link_libraries(iccIisIsapi PRIVATE IccProfLib2 IccXML2)
 set_target_properties(iccIisIsapi PROPERTIES
   OUTPUT_NAME "iccIisIsapi"
@@ -77,6 +81,21 @@ if(ENABLE_INSTALL_RIM)
     COMPONENT shared-proof)
   install(FILES "${WINNT_ROOT}/Install-IccIisIsapiSite.ps1"
     DESTINATION ${CMAKE_INSTALL_DATADIR}/iccdev
+    COMPONENT shared-proof)
+  install(FILES "${WINNT_ROOT}/Uninstall-IccIisIsapiSite.ps1"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/iccdev
+    COMPONENT shared-proof)
+  install(FILES
+      "${WINNT_ROOT}/Export-IccIisIsapiSite.ps1"
+      "${WINNT_ROOT}/Import-IccIisIsapiSite.ps1"
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/iccdev
+    COMPONENT shared-proof)
+  install(FILES
+      "${WINNT_ROOT}/Readme.md"
+      "${WINNT_ROOT}/api.md"
+      "${WINNT_ROOT}/isapi-instructions.md"
+      "${WINNT_ROOT}/iis-isapi.openapi.yaml"
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}/iccdev
     COMPONENT shared-proof)
   if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
     install(SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/install-iis-runtime-deps.cmake" COMPONENT shared-proof)

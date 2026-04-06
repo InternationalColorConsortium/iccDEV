@@ -55,7 +55,7 @@ see http://www.color.org/.
 
 [CmdletBinding()]
 param(
-  [string]$SiteName = 'Codex-iccIisIsapiInstall',
+  [string]$SiteName = 'iccDLL Server',
   [string]$PoolName,
   [int]$Port = 18081,
   [string]$HostHeader = '',

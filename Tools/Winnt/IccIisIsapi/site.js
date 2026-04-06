@@ -18,7 +18,18 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const absoluteUrl = new URL(relativeUrl, window.location.href).toString();
+    // Sanitize the URL: strip fragment (#), reject non-http(s) schemes.
+    // Defense against DOM-XSS via attacker-controlled endpoint attributes
+    // or future code that reads location.hash / location.search.
+    const safeUrl = typeof iccSanitize !== "undefined"
+      ? iccSanitize.sanitizeUri(relativeUrl)
+      : relativeUrl;
+    if (!safeUrl) {
+      if (resultBody) resultBody.textContent = "Blocked: unsafe URL";
+      return;
+    }
+
+    const absoluteUrl = new URL(safeUrl, window.location.href).toString();
     if (resultUrl) {
       resultUrl.textContent = absoluteUrl;
     }
@@ -88,10 +99,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function createToolLink(href, label) {
     const link = document.createElement("a");
-    link.href = href;
+    // Sanitize href from server JSON — block javascript:/data: schemes
+    // and strip fragment payloads that could enable DOM-XSS.
+    const safeHref = typeof iccSanitize !== "undefined"
+      ? iccSanitize.sanitizeUri(href)
+      : href;
+    link.href = safeHref || "#";
     link.textContent = label;
     link.target = "_blank";
-    link.rel = "noreferrer";
+    link.rel = "noreferrer noopener";
     link.className = "tool-link";
     return link;
   }
@@ -265,6 +281,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const autoEndpoint = document.body.dataset.autoEndpoint;
   if (autoEndpoint && resultBody) {
-    loadEndpoint(autoEndpoint);
+    // Sanitize data attribute value before using as fetch URL.
+    const safeAutoUrl = typeof iccSanitize !== "undefined"
+      ? iccSanitize.sanitizeUri(autoEndpoint)
+      : autoEndpoint;
+    if (safeAutoUrl) {
+      loadEndpoint(safeAutoUrl);
+    }
   }
 });

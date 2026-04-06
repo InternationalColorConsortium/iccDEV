@@ -9,7 +9,6 @@
 #endif
 
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -19,12 +18,30 @@
 #include <string>
 #include <vector>
 
+#include "IccIsapiHttp.h"
+#include "IccIsapiSanitize.h"
+
 #include "IccDefs.h"
 #include "IccLibXMLVer.h"
 #include "IccProfLibVer.h"
 #include "IccProfile.h"
 #include "IccProfileXml.h"
 #include "IccUtil.h"
+
+using iccIsapi::GetLastErrorString;
+using iccIsapi::HtmlEscape;
+using iccIsapi::IsMethod;
+using iccIsapi::JsonEscape;
+using iccIsapi::ReadRequestBody;
+using iccIsapi::SanitizeFilename;
+using iccIsapi::SanitizeErrorMessage;
+using iccIsapi::Send400;
+using iccIsapi::Send405;
+using iccIsapi::Send500;
+using iccIsapi::SendResponse;
+using iccIsapi::TruncateForBrowser;
+using iccIsapi::QueryHasValue;
+using iccIsapi::GetQueryValue;
 
 namespace {
 
@@ -57,300 +74,6 @@ struct ProcessResult {
   std::string output;
   std::filesystem::path logPath;
 };
-
-std::string JsonEscape(const std::string& value)
-{
-  std::string escaped;
-  escaped.reserve(value.size() + 16);
-
-  for (unsigned char ch : value) {
-    switch (ch) {
-    case '\"':
-      escaped += "\\\"";
-      break;
-    case '\\':
-      escaped += "\\\\";
-      break;
-    case '\b':
-      escaped += "\\b";
-      break;
-    case '\f':
-      escaped += "\\f";
-      break;
-    case '\n':
-      escaped += "\\n";
-      break;
-    case '\r':
-      escaped += "\\r";
-      break;
-    case '\t':
-      escaped += "\\t";
-      break;
-    default:
-      if (ch < 0x20) {
-        char buffer[8]{};
-        std::snprintf(buffer, sizeof(buffer), "\\u%04x", ch);
-        escaped += buffer;
-      }
-      else {
-        escaped.push_back(static_cast<char>(ch));
-      }
-      break;
-    }
-  }
-
-  return escaped;
-}
-
-std::string HtmlEscape(const std::string& value)
-{
-  std::string escaped;
-  escaped.reserve(value.size() + 16);
-
-  for (unsigned char ch : value) {
-    switch (ch) {
-    case '&':
-      escaped += "&amp;";
-      break;
-    case '<':
-      escaped += "&lt;";
-      break;
-    case '>':
-      escaped += "&gt;";
-      break;
-    case '\"':
-      escaped += "&quot;";
-      break;
-    default:
-      escaped.push_back(static_cast<char>(ch));
-      break;
-    }
-  }
-
-  return escaped;
-}
-
-std::string UrlDecode(const std::string& value)
-{
-  std::string decoded;
-  decoded.reserve(value.size());
-
-  for (size_t i = 0; i < value.size(); ++i) {
-    if (value[i] == '%' && i + 2 < value.size()) {
-      const char hi = value[i + 1];
-      const char lo = value[i + 2];
-      if (std::isxdigit(static_cast<unsigned char>(hi)) &&
-          std::isxdigit(static_cast<unsigned char>(lo))) {
-        const int hex = std::stoi(value.substr(i + 1, 2), nullptr, 16);
-        decoded.push_back(static_cast<char>(hex));
-        i += 2;
-        continue;
-      }
-    }
-
-    decoded.push_back(value[i] == '+' ? ' ' : value[i]);
-  }
-
-  return decoded;
-}
-
-std::string GetQueryValue(const char* query, const char* key)
-{
-  if (!query || !*query || !key || !*key) {
-    return std::string();
-  }
-
-  const std::string target(key);
-  const char* cursor = query;
-
-  while (*cursor) {
-    while (*cursor == '&') {
-      ++cursor;
-    }
-
-    const char* tokenEnd = std::strchr(cursor, '&');
-    const size_t tokenLen = tokenEnd ? static_cast<size_t>(tokenEnd - cursor) : std::strlen(cursor);
-    const std::string token(cursor, tokenLen);
-    const size_t equalsPos = token.find('=');
-    const std::string currentKey = token.substr(0, equalsPos);
-
-    if (currentKey == target) {
-      if (equalsPos == std::string::npos) {
-        return std::string();
-      }
-      return UrlDecode(token.substr(equalsPos + 1));
-    }
-
-    if (!tokenEnd) {
-      break;
-    }
-    cursor = tokenEnd + 1;
-  }
-
-  return std::string();
-}
-
-bool QueryHasValue(const char* query, const char* key, const char* value)
-{
-  if (!query || !*query || !key || !*key || !value) {
-    return false;
-  }
-
-  std::string needle(key);
-  needle += '=';
-  needle += value;
-
-  const char* cursor = query;
-  while (*cursor) {
-    while (*cursor == '&') {
-      ++cursor;
-    }
-
-    const char* tokenEnd = std::strchr(cursor, '&');
-    const size_t tokenLen = tokenEnd ? static_cast<size_t>(tokenEnd - cursor) : std::strlen(cursor);
-    if (tokenLen == needle.size() && std::strncmp(cursor, needle.c_str(), tokenLen) == 0) {
-      return true;
-    }
-
-    if (!tokenEnd) {
-      break;
-    }
-    cursor = tokenEnd + 1;
-  }
-
-  return false;
-}
-
-bool SendResponse(LPEXTENSION_CONTROL_BLOCK ecb,
-                  LPCSTR status,
-                  LPCSTR contentType,
-                  const std::string& body)
-{
-  if (!ecb || !ecb->ServerSupportFunction || !ecb->WriteClient) {
-    return false;
-  }
-
-  std::string headers("Content-Type: ");
-  headers += contentType;
-  headers += "\r\nCache-Control: no-store\r\n\r\n";
-
-  HSE_SEND_HEADER_EX_INFO headerInfo{};
-  headerInfo.pszStatus = const_cast<LPSTR>(status);
-  headerInfo.cchStatus = static_cast<DWORD>(std::strlen(status));
-  headerInfo.pszHeader = const_cast<LPSTR>(headers.c_str());
-  headerInfo.cchHeader = static_cast<DWORD>(headers.size());
-  headerInfo.fKeepConn = FALSE;
-
-  if (!ecb->ServerSupportFunction(ecb->ConnID,
-                                  HSE_REQ_SEND_RESPONSE_HEADER_EX,
-                                  &headerInfo,
-                                  nullptr,
-                                  nullptr)) {
-    return false;
-  }
-
-  DWORD bytes = static_cast<DWORD>(body.size());
-  return ecb->WriteClient(ecb->ConnID,
-                          const_cast<char*>(body.data()),
-                          &bytes,
-                          0) != FALSE;
-}
-
-std::string GetLastErrorString(DWORD error)
-{
-  LPSTR message = nullptr;
-  const DWORD flags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
-  const DWORD length = FormatMessageA(flags,
-                                      nullptr,
-                                      error,
-                                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                      reinterpret_cast<LPSTR>(&message),
-                                      0,
-                                      nullptr);
-  std::string text;
-  if (length && message) {
-    text.assign(message, length);
-  }
-  else {
-    text = "Win32 error ";
-    text += std::to_string(error);
-  }
-
-  if (message) {
-    LocalFree(message);
-  }
-
-  while (!text.empty() && (text.back() == '\r' || text.back() == '\n')) {
-    text.pop_back();
-  }
-
-  return text;
-}
-
-std::string TruncateForBrowser(const std::string& text, size_t maxBytes = kMaxPreviewBytes)
-{
-  if (text.size() <= maxBytes) {
-    return text;
-  }
-
-  std::string truncated = text.substr(0, maxBytes);
-  truncated += "\n\n[truncated ";
-  truncated += std::to_string(text.size() - maxBytes);
-  truncated += " bytes]";
-  return truncated;
-}
-
-std::string SanitizeFilename(const std::string& filename, const char* fallback)
-{
-  std::string safe = filename;
-  if (safe.empty()) {
-    safe = fallback;
-  }
-
-  std::replace_if(safe.begin(),
-                  safe.end(),
-                  [](unsigned char ch) {
-                    return !(std::isalnum(ch) || ch == '.' || ch == '-' || ch == '_');
-                  },
-                  '_');
-
-  while (!safe.empty() && (safe.front() == '.' || safe.front() == ' ')) {
-    safe.erase(safe.begin());
-  }
-
-  if (safe.empty()) {
-    safe = fallback;
-  }
-
-  return safe;
-}
-
-std::vector<unsigned char> ReadRequestBody(LPEXTENSION_CONTROL_BLOCK ecb)
-{
-  const DWORD totalBytes = std::max(ecb ? ecb->cbTotalBytes : 0U, ecb ? ecb->cbAvailable : 0U);
-  std::vector<unsigned char> body(totalBytes);
-  DWORD copied = 0;
-
-  if (!ecb || totalBytes == 0) {
-    return body;
-  }
-
-  if (ecb->cbAvailable && ecb->lpbData) {
-    copied = std::min(ecb->cbAvailable, totalBytes);
-    std::memcpy(body.data(), ecb->lpbData, copied);
-  }
-
-  while (copied < totalBytes) {
-    DWORD chunk = totalBytes - copied;
-    if (!ecb->ReadClient || !ecb->ReadClient(ecb->ConnID, body.data() + copied, &chunk) || chunk == 0) {
-      body.resize(copied);
-      return body;
-    }
-    copied += chunk;
-  }
-
-  return body;
-}
 
 std::filesystem::path GetModuleDirectory()
 {
@@ -469,7 +192,17 @@ ProcessResult RunProcess(const std::filesystem::path& exePath,
 
   std::string command = "\"" + exePath.string() + "\"";
   for (const std::string& arg : args) {
-    command += " \"" + arg + "\"";
+    std::string escaped;
+    escaped.reserve(arg.size());
+    for (char ch : arg) {
+      if (ch == '"') {
+        escaped += "\\\"";
+      }
+      else {
+        escaped.push_back(ch);
+      }
+    }
+    command += " \"" + escaped + "\"";
   }
 
   std::vector<char> commandLine(command.begin(), command.end());
@@ -581,6 +314,10 @@ std::string BuildToolJson(const std::string& inputKind,
   return json.str();
 }
 
+/// Run the 4 core ICC tools (iccDumpProfile, iccToXml, iccFromXml, iccRoundTrip)
+/// against an uploaded file.  Each tool is executed as a child process with a
+/// timeout of kToolTimeoutMs.  Returns a vector of ToolResult with exit codes,
+/// captured stdout, log paths, and generated artifact metadata.
 std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
                                     const std::string& inputKind,
                                     const std::string& filename,
@@ -937,34 +674,35 @@ std::string BuildToolSuiteResponse(LPEXTENSION_CONTROL_BLOCK ecb)
     throw std::runtime_error("Missing extension control block.");
   }
 
-  if (!ecb->lpszMethod || std::strcmp(ecb->lpszMethod, "POST") != 0) {
-    throw std::runtime_error("Tool mode requires an HTTP POST request.");
-  }
-
   const std::string inputKind = [&]() {
     const std::string value = GetQueryValue(ecb->lpszQueryString, "input");
     return value == "xml" ? std::string("xml") : std::string("icc");
   }();
 
   const std::string filename = GetQueryValue(ecb->lpszQueryString, "filename");
-  const std::vector<unsigned char> body = ReadRequestBody(ecb);
+  const std::vector<unsigned char> body = ReadRequestBody(ecb, kMaxUploadBytes);
   if (body.empty()) {
-    throw std::runtime_error("No upload body was provided.");
-  }
-  if (body.size() > kMaxUploadBytes) {
-    throw std::runtime_error("Upload exceeds the 16 MB IIS sample limit.");
+    throw std::runtime_error("No upload body or upload exceeds the 16 MB limit.");
   }
 
   const std::filesystem::path tempDir = CreateTempDirectory();
-  const std::string safeFilename = SanitizeFilename(filename, inputKind == "xml" ? "upload.xml" : "upload.icc");
-  const std::vector<ToolResult> tools = RunTopTools(tempDir, inputKind, filename, body);
-  WriteWorkspaceIndex(tempDir, inputKind, safeFilename, body.size(), tools);
-  return BuildToolJson(inputKind,
-                       safeFilename,
-                       body.size(),
-                       BuildPublicUrl(tempDir / safeFilename),
-                       BuildPublicUrl(tempDir, true),
-                       tools);
+  try {
+    const std::string safeFilename = SanitizeFilename(filename, inputKind == "xml" ? "upload.xml" : "upload.icc");
+    const std::vector<ToolResult> tools = RunTopTools(tempDir, inputKind, filename, body);
+    WriteWorkspaceIndex(tempDir, inputKind, safeFilename, body.size(), tools);
+    return BuildToolJson(inputKind,
+                         safeFilename,
+                         body.size(),
+                         BuildPublicUrl(tempDir / safeFilename),
+                         BuildPublicUrl(tempDir, true),
+                         tools);
+  }
+  catch (...) {
+    // Clean up workspace on failure to prevent disk exhaustion (CWE-789).
+    std::error_code ec;
+    std::filesystem::remove_all(tempDir, ec);
+    throw;
+  }
 }
 
 std::string BuildPlainTextBody()
@@ -985,20 +723,45 @@ std::string BuildPlainTextBody()
   std::string xml;
   xmlProfile.ToXml(xml);
 
-  char buffer[256]{};
-  std::snprintf(buffer,
-                sizeof(buffer),
-                "IccProfLib version: %s\r\n"
-                "IccLibXML version: %s\r\n"
-                "Profile spec ver: %s\r\n"
-                "XML payload bytes: %zu\r\n"
-                "Hello from iccDEV IIS ISAPI!\r\n",
-                ICCPROFLIBVER,
-                ICCLIBXMLVER,
-                info.GetVersionName(profile.m_Header.version),
-                xml.size());
+  std::ostringstream oss;
+  oss << "IccProfLib version: " << ICCPROFLIBVER << "\r\n"
+      << "IccLibXML version: " << ICCLIBXMLVER << "\r\n"
+      << "Profile spec ver: " << info.GetVersionName(profile.m_Header.version) << "\r\n"
+      << "XML payload bytes: " << xml.size() << "\r\n"
+      << "Hello from iccDEV IIS ISAPI!\r\n";
 
-  return std::string(buffer);
+  return oss.str();
+}
+
+std::string BuildJsonBody()
+{
+  using iccIsapi::JsonEscape;
+
+  CIccProfile profile;
+  profile.InitHeader();
+  profile.m_Header.colorSpace = icSigRgbData;
+  profile.m_Header.pcs = icSigLabData;
+  profile.m_Header.deviceClass = icSigDisplayClass;
+
+  CIccInfo info;
+  CIccProfileXml xmlProfile;
+  xmlProfile.InitHeader();
+  xmlProfile.m_Header.colorSpace = icSigRgbData;
+  xmlProfile.m_Header.pcs = icSigLabData;
+  xmlProfile.m_Header.deviceClass = icSigDisplayClass;
+
+  std::string xml;
+  xmlProfile.ToXml(xml);
+
+  std::ostringstream js;
+  js << "{";
+  js << "\"iccProfLib_version\":\"" << JsonEscape(ICCPROFLIBVER) << "\",";
+  js << "\"iccLibXML_version\":\"" << JsonEscape(ICCLIBXMLVER) << "\",";
+  js << "\"profile_spec_version\":\"" << JsonEscape(info.GetVersionName(profile.m_Header.version)) << "\",";
+  js << "\"xml_payload_bytes\":" << xml.size() << ",";
+  js << "\"status\":\"ok\"";
+  js << "}";
+  return js.str();
 }
 
 std::string BuildXmlBody()
@@ -1041,12 +804,26 @@ DWORD WINAPI HttpExtensionProc(LPEXTENSION_CONTROL_BLOCK ecb)
     return HSE_STATUS_ERROR;
   }
 
+  const bool isGet = ecb->lpszMethod && std::strcmp(ecb->lpszMethod, "GET") == 0;
+  const bool isPost = ecb->lpszMethod && std::strcmp(ecb->lpszMethod, "POST") == 0;
+
   try {
     if (QueryHasValue(ecb->lpszQueryString, "mode", "tools")) {
+      if (!isPost) {
+        return Send405(ecb, "POST", "Tool mode requires HTTP POST.")
+          ? HSE_STATUS_SUCCESS
+          : HSE_STATUS_ERROR;
+      }
       return SendResponse(ecb,
                           "200 OK",
                           "application/json; charset=utf-8",
                           BuildToolSuiteResponse(ecb))
+        ? HSE_STATUS_SUCCESS
+        : HSE_STATUS_ERROR;
+    }
+
+    if (!isGet) {
+      return Send405(ecb, "GET", "This endpoint accepts GET only.")
         ? HSE_STATUS_SUCCESS
         : HSE_STATUS_ERROR;
     }
@@ -1063,23 +840,23 @@ DWORD WINAPI HttpExtensionProc(LPEXTENSION_CONTROL_BLOCK ecb)
         : HSE_STATUS_ERROR;
     }
 
+    if (QueryHasValue(ecb->lpszQueryString, "format", "json")) {
+      return SendResponse(ecb, "200 OK", "application/json; charset=utf-8", BuildJsonBody())
+        ? HSE_STATUS_SUCCESS
+        : HSE_STATUS_ERROR;
+    }
+
     return SendResponse(ecb, "200 OK", "text/plain; charset=utf-8", BuildPlainTextBody())
       ? HSE_STATUS_SUCCESS
       : HSE_STATUS_ERROR;
   }
   catch (const std::exception& ex) {
-    SendResponse(ecb,
-                 "400 Bad Request",
-                 "application/json; charset=utf-8",
-                 std::string("{\"error\":\"") + JsonEscape(ex.what()) + "\"}");
+    Send400(ecb, SanitizeErrorMessage(ex.what()));
     SetLastError(ERROR_INVALID_DATA);
     return HSE_STATUS_ERROR;
   }
   catch (...) {
-    SendResponse(ecb,
-                 "500 Internal Server Error",
-                 "text/plain; charset=utf-8",
-                 std::string("iccDEV IIS ISAPI error\r\n"));
+    Send500(ecb);
     SetLastError(ERROR_GEN_FAILURE);
     return HSE_STATUS_ERROR;
   }

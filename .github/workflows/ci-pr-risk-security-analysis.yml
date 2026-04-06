@@ -718,7 +718,7 @@ jobs:
 
             if grep -qE '^permissions:' "$wf"; then
               WF_WITH_PERMS=$((WF_WITH_PERMS + 1))
-              if grep -qE 'permissions:\s*write-all|contents:\s*write' "$wf"; then
+              if grep -qE 'permissions:\s*write-all|contents:\s*write|packages:\s*write|pull-requests:\s*write|issues:\s*write|actions:\s*write|security-events:\s*write' "$wf"; then
                 WF_WITH_WRITE_ALL=$((WF_WITH_WRITE_ALL + 1))
                 WRITE_ALL+=("$wf_base")
               fi
@@ -1641,13 +1641,19 @@ jobs:
 
           $withPerms = 0
           $withoutPerms = 0
+          $withWrite = 0
           $missingList = @()
+          $writeList = @()
 
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
             if ($content -match '(?m)^permissions:') {
               $withPerms++
+              if ($content -match 'permissions:\s*write-all|contents:\s*write|packages:\s*write|pull-requests:\s*write|issues:\s*write|actions:\s*write|security-events:\s*write') {
+                $withWrite++
+                $writeList += $wf.Name
+              }
             } else {
               $withoutPerms++
               $missingList += $wf.Name
@@ -1661,16 +1667,23 @@ jobs:
           $report += "|--------|-------|"
           $report += "| With permissions: block | $(Sanitize-Line "$withPerms") |"
           $report += "| Without permissions: block | $(Sanitize-Line "$withoutPerms") |"
+          $report += "| With write access | $(Sanitize-Line "$withWrite") |"
           $report += ""
           if ($missingList.Count -gt 0) {
             $report += "**Missing permissions: block:**"
             foreach ($m in $missingList) { $report += "- ``$(Sanitize-Line $m)``" }
-          } else {
-            $report += "[OK] All workflows have explicit permissions"
+          }
+          if ($writeList.Count -gt 0) {
+            $report += ""
+            $report += "**[MEDIUM] Workflows with write access ($($writeList.Count)):**"
+            foreach ($w in $writeList) { $report += "- ``$(Sanitize-Line $w)``" }
+          }
+          if ($missingList.Count -eq 0 -and $writeList.Count -eq 0) {
+            $report += "[OK] All workflows have explicit read-only permissions"
           }
           $report += ""
           $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
-          Write-Host "[OK] Permissions audit complete (Windows): $withPerms with, $withoutPerms without"
+          Write-Host "[OK] Permissions audit complete (Windows): $withPerms with, $withoutPerms without, $withWrite write"
 
       - name: "8. Supply-Chain Risk Score (Windows)"
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}

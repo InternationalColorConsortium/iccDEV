@@ -77,6 +77,21 @@ finally {
 
 ```powershell
 .\Tools\Winnt\IccIisIsapi\Install-IccIisIsapiSite.ps1 `
-  -SiteName "Codex-iccIisIsapiInstall" `
+  -SiteName "iccDLL Server" `
   -Port 18081
+```
+
+## IIS export / import (deploy without rebuilding)
+
+```powershell
+# Export a ready-to-deploy package from a build tree or install prefix
+.\Tools\Winnt\IccIisIsapi\Export-IccIisIsapiSite.ps1 `
+  -SourceRoot out\debug\Tools\IccIisIsapi\Debug `
+  -OutputZip  iccDLL-Server-package.zip
+
+# Import on a target machine (no build tools required)
+.\Tools\Winnt\IccIisIsapi\Import-IccIisIsapiSite.ps1 `
+  -PackageZip iccDLL-Server-package.zip `
+  -SiteName   "iccDLL Server" `
+  -Port       18081
 ```

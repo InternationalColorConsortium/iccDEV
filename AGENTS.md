@@ -17,6 +17,7 @@ Version 2.3.1.6, C++17, CMake 3.21+, BSD 3-Clause.
 | Workflow governance | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, sanitizer, injection prevention |
 | Sanitizer scripts | `.github/instructions/sanitizer-scripts.instructions.md` | sanitize-sed.sh and sanitize.ps1 API |
 | vcpkg port | `.github/instructions/vcpkg-port.instructions.md` | Portfile, features, local source mode |
+| IIS ISAPI DLL | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS setup, deployment, security hardening |
 
 ## Prompts
 
@@ -33,6 +34,59 @@ Version 2.3.1.6, C++17, CMake 3.21+, BSD 3-Clause.
 | New contributor onboarding | `.github/prompts/contributor-onboarding.prompt.md` |
 | Version bump with ports | `.github/prompts/version-bump.prompt.md` |
 | Debug vcpkg port CI | `.github/prompts/vcpkg-port-debug.prompt.md` |
+
+## IIS ISAPI DLL (Windows)
+
+The `Tools/Winnt/IccIisIsapi/` directory contains a Windows IIS ISAPI extension
+that serves ICC profile tools over HTTP. Key components:
+
+| Component | Path | Purpose |
+|-----------|------|---------|
+| ISAPI DLL | `Tools/Winnt/IccIisIsapi/iccIisIsapi.cpp` | Main entry point, tool orchestration |
+| Sanitization | `Tools/Winnt/IccIisIsapi/IccIsapiSanitize.h/.cpp` | XSS prevention, URL decode, URI sanitize |
+| HTTP layer | `Tools/Winnt/IccIisIsapi/IccIsapiHttp.h/.cpp` | Response helpers with 6 security headers |
+| Client JS | `Tools/Winnt/IccIisIsapi/sanitize.js` | DOM-XSS prevention (mirrors server-side) |
+| Fuzz test | `Tools/Winnt/IccIisIsapi/IccIsapiFuzzTest.cpp` | Tests sanitizer invariants against fuzz corpus |
+| Stress test | `Tools/Winnt/IccIisIsapi/Stress-IccIisIsapi.ps1` | 10-phase concurrent load test |
+| API docs | `Tools/Winnt/IccIisIsapi/api.md` | HTTP endpoint reference |
+| OpenAPI | `Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml` | Machine-readable API spec |
+
+### HTTP Endpoints
+
+- `GET /iccIisIsapi.dll` — version summary (JSON)
+- `GET /iccIisIsapi.dll?mode=health` — health check
+- `GET /iccIisIsapi.dll?format=xml` — minimal ICC XML
+- `POST /iccIisIsapi.dll?mode=tools&input=icc|xml` — run tool suite, return JSON
+
+### Security Hardening
+
+- **CWE-79**: HtmlEscape all 5 entities, strip C0 control chars
+- **CWE-116**: JsonEscape with solidus, SanitizeUri blocks dangerous schemes
+- **CWE-170**: UrlDecode rejects null bytes (%00 and raw 0x00)
+- **CWE-789**: Upload size checked before allocation (16 MB cap)
+- **CWE-601**: SanitizeUri strips fragments, rejects javascript:/data:/vbscript:
+- **6 security headers**: CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cache-Control, X-XSS-Protection
+
+### Deployment
+
+```powershell
+# Build + install
+cmake -S Build\Cmake -B out\build -G "Visual Studio 17 2022" -A x64 ...
+cmake --build out\build --config Debug -- /m /maxcpucount
+
+# Deploy to IIS
+.\Tools\Winnt\IccIisIsapi\Install-IccIisIsapiSite.ps1 -SiteName "iccDLL Server" -Port 18081
+
+# Package for deployment without build tools
+.\Tools\Winnt\IccIisIsapi\Export-IccIisIsapiSite.ps1 -SourceRoot out\build\... -OutputZip pkg.zip
+.\Tools\Winnt\IccIisIsapi\Import-IccIisIsapiSite.ps1 -PackageZip pkg.zip -SiteName "iccDLL Server"
+```
+
+### CRITICAL: Windows Build Flag
+
+When overriding `CMAKE_CXX_FLAGS` on MSVC, always include `/DWIN32 /D_WINDOWS /EHsc`.
+Without `WIN32` defined, `CIccFileIO::Open()` skips binary mode `'b'` in `fopen()`,
+causing text-mode EOF (`0x1A`) in ICC binary data to truncate reads.
 
 ## Build
 

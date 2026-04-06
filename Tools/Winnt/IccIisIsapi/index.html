@@ -316,6 +316,7 @@
     </div>
   </main>
 
+  <script src="./sanitize.js"></script>
   <script>
     const resultUrl = document.getElementById("result-url");
     const resultCode = document.getElementById("result-code");
@@ -324,7 +325,15 @@
     const liveStatus = document.getElementById("live-status");
 
     async function loadEndpoint(relativeUrl) {
-      const absoluteUrl = new URL(relativeUrl, window.location.href).toString();
+      // Sanitize URL: strip fragment, reject non-http(s) schemes (DOM-XSS defense)
+      const safeUrl = typeof iccSanitize !== "undefined"
+        ? iccSanitize.sanitizeUri(relativeUrl)
+        : relativeUrl;
+      if (!safeUrl) {
+        resultBody.textContent = "Blocked: unsafe URL";
+        return;
+      }
+      const absoluteUrl = new URL(safeUrl, window.location.href).toString();
       resultUrl.textContent = "URL: " + absoluteUrl;
       resultCode.textContent = "Status: loading";
       resultType.textContent = "Content-Type: pending";
