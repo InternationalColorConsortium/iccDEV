@@ -74,8 +74,8 @@ namespace iccDEV {
 #endif
 
 class ICCPROFLIB_API CIccProfile;
-class ICCPROFLIB_API CIccTagSpectralViewingConditions;
-class ICCPROFLIB_API CIccTagMultiProcessElement;
+class CIccTagSpectralViewingConditions;
+class CIccTagMultiProcessElement;
 class ICCPROFLIB_API CIccMatrixMath;
 
 /**

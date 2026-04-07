@@ -84,8 +84,8 @@ namespace iccDEV {
 class CIccMpeCurveSet;
 class CIccMpeMatrix;
 class CIccMpeCLUT;
-class CIccMpeCalculator;
-class CIccApplyMpeCalculator;
+class ICCPROFLIB_API CIccMpeCalculator;
+class ICCPROFLIB_API CIccApplyMpeCalculator;
 class IIccOpDef;
 
 #define icMaxDataStackSize 65535
@@ -358,7 +358,7 @@ protected:
   bool m_bUseRefs;
 };
 
-class CIccApplyMpeCalculator;
+class ICCPROFLIB_API CIccApplyMpeCalculator;
 
 /**
 ****************************************************************************
@@ -508,7 +508,7 @@ protected:
 * Purpose: The Calculator process element apply data
 *****************************************************************************
 */
-class CIccApplyMpeCalculator : public CIccApplyMpe
+class ICCPROFLIB_API CIccApplyMpeCalculator : public CIccApplyMpe
 {
   friend class CIccMpeCalculator;
 public:

@@ -1,7 +1,7 @@
 # File a Security Issue on iccDEV
 
 ## Examples
-- https://github.com/InternationalColorConsortium/iccDEV/issues/696 https://github.com/InternationalColorConsortium/iccDEV/issues/700 https://github.com/InternationalColorConsortium/iccDEV/issues/734 https://github.com/InternationalColorConsortium/iccDEV/issues/753
+- https://github.com/InternationalColorConsortium/iccDEV/issues/696 https://github.com/InternationalColorConsortium/iccDEV/issues/700 https://github.com/InternationalColorConsortium/iccDEV/issues/734 https://github.com/InternationalColorConsortium/iccDEV/issues/753 https://github.com/InternationalColorConsortium/iccDEV/issues/794
 
 ## When to Use
 
@@ -34,11 +34,26 @@ testing and need to open an issue on `InternationalColorConsortium/iccDEV`.
 - Include the line number when ASAN/UBSAN provides one
 - For UB, `at {File}:{Line}` is acceptable without a function name
 - Keep titles under 80 characters
+- **Golfed format** (bisect issues): `Bisect: {sha-prefix} {type}` (e.g., `Bisect: 1f0a9dd dbz`)
+
+### Golfed Issue Title Convention (Bisect Issues)
+
+When filing a bisected regression with a fix, use the compact title:
+```
+Bisect: {sha-prefix} {type}
+```
+
+Where `{sha-prefix}` is the 7-char prefix of the culprit commit and
+`{type}` is a short bug type abbreviation (e.g., `dbz`, `hbo`, `uio`).
+Labels: `Triaged`, `Bisect`, `ML`, `SCAP`
 
 ## Required Body Structure
 
-Every issue MUST contain these sections in order. The gold standard is
-[#700](https://github.com/InternationalColorConsortium/iccDEV/issues/700).
+Every issue MUST contain these sections in order.
+
+**Gold standards**:
+- [#700](https://github.com/InternationalColorConsortium/iccDEV/issues/700) -- Bug chain with enriched Vuln blocks (3 prereqs + HBO)
+- [#794](https://github.com/InternationalColorConsortium/iccDEV/issues/794) -- Golfed bisect with patch
 
 ### Section 1: Maintainer Repro Header
 
@@ -66,6 +81,57 @@ a forensic timeline.
 **Why**: Agents extract CWE, file:line, sanitizer type without parsing prose.
 CI workflows can auto-label issues. CodeQL triage maps directly to query results.
 Machine ingestion priority: CWE, file:line, sanitizer type, bisect SHA.
+
+### Section 1c: Enriched Vuln Block
+
+```markdown
+## Vuln
+
+CWE-{NNN} | {TOOL}:{finding-type} | {File.cpp}:{line} | {Class::Method()}
+CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:{c}/I:{i}/A:{a} = {score}
+CPE: cpe:2.3:a:icc:reficcmax:*:*:*:*:*:*:*:*
+Introduced: {sha7} ({YYYY-MM-DD}) | Affected: <={version}
+Vector: {1-line attack narrative}
+```
+
+**5 lines, ~323 chars.** Machine-parseable with 4 regex patterns.
+Targets: NVD/NIST, SCAP scanners, exploit developers, LLM agents.
+
+**Fields**:
+
+| Line | Content | Audience |
+|------|---------|----------|
+| 1 | CWE \| tool:type \| file:line \| function | NVD, SCAP, devs, LLMs |
+| 2 | CVSS:3.1 vector = score | NVD, SCAP, severity triage |
+| 3 | CPE string | NVD, vulnerability scanners |
+| 4 | Introduced SHA + affected range | Bisect, version queries |
+| 5 | Attack vector narrative (1 line) | Exploit devs, NVD description |
+
+**CVSS Quick Reference** (iccDEV -- all share AV:L/AC:L/PR:N/UI:R/S:U):
+
+| Bug Type | C/I/A | Score |
+|----------|-------|-------|
+| div-by-zero (NaN propagation) | N/L/N | 3.3 |
+| HBO read / UIO | L/N/H | 6.1 |
+| HBO write | N/H/H | 7.1 |
+| UAF / double-free | H/H/H | 7.8 |
+| Stack overflow / null deref / OOM | N/N/H | 5.5 |
+
+**Bug chains**: Use one `## Vuln` block per vulnerability in the chain:
+
+```markdown
+## Vuln (prerequisite 1)
+CWE-843 | code-review:type-confusion | File.cpp:line | Function()
+...
+
+## Vuln (primary)
+CWE-122 | ASAN:heap-buffer-overflow | File.cpp:line | Function()
+SCARINESS: 23 (8-byte-read-heap-buffer-overflow)
+...
+```
+
+See [#700](https://github.com/InternationalColorConsortium/iccDEV/issues/700)
+for the gold standard bug chain with 3 prerequisite Vuln blocks.
 
 ### Section 2: Git State
 
@@ -112,13 +178,12 @@ Step 2. ASAN_OPTIONS=print_scariness=1:halt_on_error=0:detect_leaks=0 {tool} {po
 
 **Rules for PoC Output**:
 - Include the `SUMMARY:` line (names the crash type and location)
-- Include stack frames #0-#4 (identifies the call chain)
+- Include stack frames #0-#4 max (identifies the call chain)
 - Include `SCARINESS:` score when present (ASAN `print_scariness=1`)
-- **CUT shadow byte legend** (17 lines of noise -- 33% of body in some issues)
-- **CUT shadow byte dump** unless the finding is UAF or double-free (where shadow
-  bytes show alloc/free timing)
-- **CUT allocation stack trace** unless UAF/double-free (where it shows the original
-  allocation site)
+- **CUT shadow byte legend** (17 lines of noise -- keep only for UAF/double-free)
+- **CUT shadow byte dump** unless UAF or double-free
+- **CUT allocation stack trace** unless UAF/double-free
+- **CUT libc frames** (`_start`, `__libc_start_main`, `__sanitizer::*`)
 - Do NOT strip frame numbers from stack traces
 
 ### Section 5 (Gold Standard): Patch
@@ -294,6 +359,79 @@ Includes everything above PLUS:
 
 This is the target quality for every issue. At minimum, provide sections 1-4.
 
+### Golfed Format -- Bisected Regression with Fix
+
+**Reference**: [#794](https://github.com/InternationalColorConsortium/iccDEV/issues/794)
+
+The most compact issue format. Used when a bisect identifies the culprit
+commit and a patch is included. Zero prose -- the sanitizer output IS the
+description.
+
+**Title**: `Bisect: 1f0a9dd dbz`
+**Labels**: `Triaged`, `Bisect`, `ML`, `SCAP`
+
+**Sections** (in order):
+
+```markdown
+## Maintainer Repro
+{YYYY-MM-DD}
+
+## Bisect
+Bad: {sha7} ({YYYY-MM-DD})
+
+## Vuln
+CWE-{NNN} | {TOOL}:{type} | {File.cpp}:{line} | {Class::Method()}
+CVSS:3.1/AV:L/AC:L/PR:N/UI:R/S:U/C:{c}/I:{i}/A:{a} = {score}
+CPE: cpe:2.3:a:icc:reficcmax:*:*:*:*:*:*:*:*
+Introduced: {sha7} ({YYYY-MM-DD}) | Affected: <={version}
+Vector: {1-line attack narrative}
+
+## Build
+\```bash
+git clone https://github.com/InternationalColorConsortium/iccDEV.git && cd iccDEV/Build && git checkout {branch} && CC=clang CXX=clang++ CXXFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow -g" LDFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow" cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON && make -j$(nproc) && cd .. && for d in Build/Tools/*; do [ -d "$d" ] && export PATH="$(realpath $d):$PATH"; done && export LD_LIBRARY_PATH=Build/IccProfLib:Build/IccXML/IccLibXML && wget -q https://github.com/xsscx/fuzz/raw/refs/heads/master/graphics/icc/{poc}.icc && iccRoundTrip {poc}.icc
+\```
+
+## Bad
+\```
+{2-line UBSAN/ASAN output -- SUMMARY + key line only}
+\```
+
+## Patch
+\```diff
+{unified diff}
+\```
+
+## Good
+\```bash
+iccRoundTrip {poc}.icc 2>&1 | grep runtime
+# (empty = no runtime errors)
+\```
+
+## References
+- {spec citation or CWE}
+```
+
+**Key differences from verbose format**:
+- Title uses `Bisect: {sha} {type}` instead of `{Type} in {Function}() at {File}:{Line}`
+- Vuln block provides CWE, CVSS, CPE, version range, attack vector (~323 chars)
+- Build section is a single copy-paste code block (clone+build+wget+test)
+- Bad section shows only 2-4 lines of sanitizer output (SCARINESS + frames #3-#4)
+- Good section uses `grep runtime` to prove absence of errors
+- No separate Metadata block -- Vuln block supersedes it
+
+**Character budgets**:
+
+| Format | Chars | Coverage |
+|--------|-------|----------|
+| Golfed (#794) | ~1,200 | Repro + patch |
+| Enriched golfed | ~1,523 | + CWE, CVSS, CPE, range, vector |
+| Bug chain (#700) | ~3,000 | 3 prereqs + trimmed ASAN |
+| Multi-file (#769) | ~3,500 | Multi-file patch justified |
+
+**When to use golfed vs verbose**:
+- **Golfed**: bisected regression with fix, minimal body, labels carry context
+- **Verbose**: new discovery without bisect, needs full ASAN trace for triage
+
 ## SCARINESS Score Reference
 
 ASAN assigns a `SCARINESS` score reflecting exploitability:
@@ -368,6 +506,8 @@ GitHub does not allow `.icc` file attachments. Options:
 | Using tool from `cfl/` (patched) instead of upstream | Masks real upstream behavior | Always use `iccDEV/Build/Tools/` |
 | Filing exit code 1 as a crash | Exit 1 = graceful rejection, not a bug | Only file exit 128+ as crashes |
 | Truncating shadow byte legend | Loses exploitability context | Include full ASAN output |
+| Including shadow bytes for non-UAF | 17 lines of noise, 33% body bloat | Cut for HBO/UIO/div-by-zero |
+| Missing Vuln block | No machine-parseable CWE/CVSS/CPE | Add 5-line Vuln block (+323 chars) |
 | Bundling multiple bugs in one issue | Hurts parsability, blocks per-bug tracking | One bug per issue |
 | Missing `-fsanitize=integer` | UIO bugs invisible with `undefined` alone | Add `integer` to flags |
 | Shadow byte legend in non-UAF issues | 17 lines of noise (33% of body) | Cut legend; keep SUMMARY + frames |
@@ -399,6 +539,11 @@ UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1 \
 **Note**: `-fsanitize=integer` is required to detect unsigned integer overflow
 (wrapping). The `undefined` group does NOT include it. Issue #769 was only
 detectable with this flag. MSVC does not support it (Clang only).
+
+**Note**: `-fsanitize=float-divide-by-zero` is NOT in the `undefined` group.
+IEEE 754 defines float/0 as NaN, so clang skips it. Add explicitly to catch
+div-by-zero in `Apply()` paths (issue #794). Similarly, `float-cast-overflow`
+catches NaN-to-integer casts.
 
 ## Signal Optimization (from 80-issue analysis, April 2026)
 

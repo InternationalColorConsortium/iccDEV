@@ -924,7 +924,10 @@ public:
       return false;
     icFloatNumber *s = &(*os.pStack)[ss-tn];
     for (j=0; j<n; j++) {
-      s[j] /= s[j+n];
+      if (s[j+n] != 0.0f)
+        s[j] /= s[j+n];
+      else
+        s[j] = 0.0f;
     }
     OsShrinkArgs(n);
     return true;
@@ -1049,8 +1052,15 @@ public:
       return false;
     icFloatNumber *s = &(*os.pStack)[ss-tn];
     icFloatNumber p = s[n];
-    for (j=0; j<n; j++) {
-      s[j] = s[j] / p;
+    if (p != 0.0f) {
+      for (j=0; j<n; j++) {
+        s[j] = s[j] / p;
+      }
+    }
+    else {
+      for (j=0; j<n; j++) {
+        s[j] = 0.0f;
+      }
     }
     OsShrinkArgs(1);
     return true;

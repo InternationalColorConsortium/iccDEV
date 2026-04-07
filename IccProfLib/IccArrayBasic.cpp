@@ -133,7 +133,7 @@ icValidateStatus CIccArrayUnknown::Validate(std::string sigPath, std::string &sR
         rv = icMaxStatus(rv, icValidateWarning);
         const size_t bufSize = 80;
         char buf[bufSize];
-        snprintf(buf, bufSize, "Tag at index %d is NULL\n", i);
+        snprintf(buf, bufSize, "Tag at index %u is NULL\n", i);
         sReport += buf;
       }
       else {
@@ -191,7 +191,7 @@ icValidateStatus CIccArrayColorantInfo::Validate(std::string sigPath, std::strin
         rv = icMaxStatus(rv, icValidateWarning);
         const size_t bufSize = 80;
         char buf[bufSize];
-        snprintf(buf, bufSize, "Tag at index %d is NULL\n", i);
+        snprintf(buf, bufSize, "Tag at index %u is NULL\n", i);
         sReport += buf;
       }
       else {
@@ -199,7 +199,7 @@ icValidateStatus CIccArrayColorantInfo::Validate(std::string sigPath, std::strin
           rv = icMaxStatus(rv, icValidateCriticalError);
             const size_t bufSize = 80;
             char buf[bufSize];
-          snprintf(buf, bufSize, "Tag at index %d is not a colorantInfoStruct\n", i);
+          snprintf(buf, bufSize, "Tag at index %u is not a colorantInfoStruct\n", i);
           sReport += buf;
         }
         rv = icMaxStatus(rv, pTag->Validate(sigPath + icGetSigPath(pTag->GetType()), sReport, pProfile));
@@ -518,17 +518,17 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
              icUInt32Number sampleCount = pArray->GetNumValues()/m_nDeviceSamples;
 
              if (sampleCount<1) {
-               snprintf(str, strSize, "Insufficient device samples in NamedColor[%d]\n", i);
+               snprintf(str, strSize, "Insufficient device samples in NamedColor[%u]\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
              else if (pArray->GetNumValues() != sampleCount*m_nDeviceSamples) {
-               snprintf(str, strSize, "Number of Device samples isn't an even multiple of Device samples in NamedColor[%d]!\n", i);
+               snprintf(str, strSize, "Number of Device samples isn't an even multiple of Device samples in NamedColor[%u]!\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
              if (pTint && pTint->GetNumValues()!=sampleCount) {
-               snprintf(str, strSize, "Number of device samples doesn't match tint values in NamedColor[%d]\n", i);
+               snprintf(str, strSize, "Number of device samples doesn't match tint values in NamedColor[%u]\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
@@ -539,17 +539,17 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
              icUInt32Number sampleCount = pArray->GetNumValues()/m_nPcsSamples;
 
              if (sampleCount<1) {
-               snprintf(str, strSize, "Insufficient PCS samples in NamedColor[%d]\n", i);
+               snprintf(str, strSize, "Insufficient PCS samples in NamedColor[%u]\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
              else if (pArray->GetNumValues() != sampleCount*m_nPcsSamples) {
-               snprintf(str, strSize, "Number of PCS samples isn't an even multiple of PCS samples in NamedColor[%d]!\n", i);
+               snprintf(str, strSize, "Number of PCS samples isn't an even multiple of PCS samples in NamedColor[%u]!\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
              if (pTint && pTint->GetNumValues()!=sampleCount) {
-               snprintf(str, strSize, "Number of PCS samples doesn't match tint values in NamedColor[%d]\n", i);
+               snprintf(str, strSize, "Number of PCS samples doesn't match tint values in NamedColor[%u]\n", i);
                sReport += str;
                rv = icMaxStatus(rv, icValidateCriticalError);
              }
@@ -561,7 +561,7 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
                CIccTagSparseMatrixArray *pArrayTag = (CIccTagSparseMatrixArray *) pArray;
 
                if (pArrayTag->GetChannelsPerMatrix()!= m_nSpectralSamples) {
-                 snprintf(str, strSize, "Incompatible SpectralPcs samples in NamedColor[%d]\n", i);
+                 snprintf(str, strSize, "Incompatible SpectralPcs samples in NamedColor[%u]\n", i);
                  sReport += str;
                  rv = icMaxStatus(rv, icValidateCriticalError);
                }
@@ -570,17 +570,17 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
                icUInt32Number sampleCount = pArray->GetNumValues()/m_nSpectralSamples;
 
                if (sampleCount<1) {
-                 snprintf(str, strSize, "Insufficient SpectralPcs samples in NamedColor[%d]\n", i);
+                 snprintf(str, strSize, "Insufficient SpectralPcs samples in NamedColor[%u]\n", i);
                  sReport += str;
                  rv = icMaxStatus(rv, icValidateCriticalError);
                }
                else if (pArray->GetNumValues() != sampleCount*m_nSpectralSamples) {
-                 snprintf(str, strSize, "Number of spectral samples isn't an even multiple of spectral PCS samples in Namedcolor[%d]!\n", i);
+                 snprintf(str, strSize, "Number of spectral samples isn't an even multiple of spectral PCS samples in Namedcolor[%u]!\n", i);
                  sReport += str;
                  rv = icMaxStatus(rv, icValidateCriticalError);
                }
                if (pTint && pTint->GetNumValues()!=sampleCount) {
-                 snprintf(str, strSize, "Number of SpectralPCS samples doesn't match tint values in NamedColor[%d]\n", i);
+                 snprintf(str, strSize, "Number of SpectralPCS samples doesn't match tint values in NamedColor[%u]\n", i);
                  sReport += str;
                  rv = icMaxStatus(rv, icValidateCriticalError);
                }

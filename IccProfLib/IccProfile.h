@@ -78,9 +78,9 @@ namespace iccDEV {
 
 #ifdef __cplusplus
 
-class ICCPROFLIB_API CIccTag;
-class ICCPROFLIB_API CIccIO;
-class ICCPROFLIB_API CIccMemIO;
+class CIccTag;
+class CIccIO;
+class CIccMemIO;
 
 /**
  **************************************************************************
@@ -249,14 +249,14 @@ protected:
   icColorSpaceSignature m_parentColorSpace = icSigNoColorData;
 };
 
-CIccProfile ICCPROFLIB_API *ReadIccProfile(const icChar *szFilename, bool bUseSubProfile=false);
-CIccProfile ICCPROFLIB_API *ReadIccProfile(const icUInt8Number *pMem, icUInt32Number nSize, bool bUseSubProfile=false);
-CIccProfile ICCPROFLIB_API *OpenIccProfile(const icChar *szFilename, bool bUseSubProfile=false);
-CIccProfile ICCPROFLIB_API *OpenIccProfile(const icUInt8Number *pMem, icUInt32Number nSize, bool bUseSubProfile=false);  //pMem must be available for entire life of returned CIccProfile Object
+ICCPROFLIB_API CIccProfile *ReadIccProfile(const icChar *szFilename, bool bUseSubProfile=false);
+ICCPROFLIB_API CIccProfile *ReadIccProfile(const icUInt8Number *pMem, icUInt32Number nSize, bool bUseSubProfile=false);
+ICCPROFLIB_API CIccProfile *OpenIccProfile(const icChar *szFilename, bool bUseSubProfile=false);
+ICCPROFLIB_API CIccProfile *OpenIccProfile(const icUInt8Number *pMem, icUInt32Number nSize, bool bUseSubProfile=false);  //pMem must be available for entire life of returned CIccProfile Object
 
-CIccProfile ICCPROFLIB_API *ValidateIccProfile(CIccIO *pIO, std::string &sReport, icValidateStatus &nStatus);
-CIccProfile ICCPROFLIB_API *ValidateIccProfile(const icChar *szFilename, std::string &sReport, icValidateStatus &nStatus);
-CIccProfile ICCPROFLIB_API* ValidateIccProfile(const icUInt8Number* pMem, icUInt32Number nSize, std::string& sReport, icValidateStatus& nStatus);
+ICCPROFLIB_API CIccProfile *ValidateIccProfile(CIccIO *pIO, std::string &sReport, icValidateStatus &nStatus);
+ICCPROFLIB_API CIccProfile *ValidateIccProfile(const icChar *szFilename, std::string &sReport, icValidateStatus &nStatus);
+ICCPROFLIB_API CIccProfile *ValidateIccProfile(const icUInt8Number* pMem, icUInt32Number nSize, std::string& sReport, icValidateStatus& nStatus);
 
 bool ICCPROFLIB_API SaveIccProfile(const icChar *szFilename, CIccProfile *pIcc, icProfileIDSaveMethod nWriteId=icVersionBasedID);
 bool ICCPROFLIB_API SaveIccProfile(FILE *f, CIccProfile *pIcc, icProfileIDSaveMethod nWriteId = icVersionBasedID);
@@ -265,9 +265,9 @@ void ICCPROFLIB_API CalcProfileID(CIccIO *pIO, icProfileID *profileID);
 bool ICCPROFLIB_API CalcProfileID(const icChar *szFilename, icProfileID *profileID);
 
 #ifdef WIN32
-CIccProfile ICCPROFLIB_API *ReadIccProfile(const icWChar *szFilename, bool bUseSubProfile=false);
-CIccProfile ICCPROFLIB_API *OpenIccProfile(const icWChar *szFilename, bool bUseSubProfile=false);
-CIccProfile ICCPROFLIB_API *ValidateIccProfile(const icWChar *szFilename, std::string &sReport, icValidateStatus &nStatus);
+ICCPROFLIB_API CIccProfile *ReadIccProfile(const icWChar *szFilename, bool bUseSubProfile=false);
+ICCPROFLIB_API CIccProfile *OpenIccProfile(const icWChar *szFilename, bool bUseSubProfile=false);
+ICCPROFLIB_API CIccProfile *ValidateIccProfile(const icWChar *szFilename, std::string &sReport, icValidateStatus &nStatus);
 bool ICCPROFLIB_API SaveIccProfile(const icWChar *szFilename, CIccProfile *pIcc, icProfileIDSaveMethod nWriteId=icVersionBasedID);
 bool ICCPROFLIB_API CalcProfileID(const icWChar *szFilename, icProfileID *profileID);
 #endif

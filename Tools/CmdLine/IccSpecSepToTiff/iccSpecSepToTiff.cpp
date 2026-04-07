@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
     char filename[ max_path_length ];
     
     int channelNum = i*step + start;
-    snprintf(filename, max_path_length, argv[4], channelNum);
+    snprintf(filename, max_path_length, "%s%d", argv[4], channelNum);
     if (!infile[i].Open(filename)) {
       printf("Cannot open input %s\n", filename);
       return -1;

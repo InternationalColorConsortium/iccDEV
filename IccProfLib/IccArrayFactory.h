@@ -156,7 +156,7 @@ typedef std::list<IIccArrayFactory*> CIccArrayFactoryList;
  * creates a CIccBasicElemFactory.
  ***********************************************************************
  */
-class CIccBasicArrayFactory : public IIccArrayFactory
+class ICCPROFLIB_API CIccBasicArrayFactory : public IIccArrayFactory
 {
 public:
   /**

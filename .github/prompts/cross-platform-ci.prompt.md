@@ -25,7 +25,7 @@ gh run view <RUN_ID> --repo InternationalColorConsortium/iccDEV --log-failed
 | `ci-sanitizer-tests.yml` | ubuntu-24.04 | clang | ASan, UBSan, TSan, MSan matrix |
 | `ci-wasm-build-test.yml` | ubuntu-24.04 | emcc | Emscripten, no system libs |
 | `wasm-latest-matrix.yml` | ubuntu-24.04 | emcc | Debug/Release/RelWithDebInfo |
-| `ci-docker-latest.yml` | ubuntu-24.04 | gcc | Docker build + test |
+| `ci-docker.yml` | ubuntu-24.04 | gcc | Docker build + test (Ubuntu + NixOS matrix) |
 | `ci-vcpkg-ports.yml` | win/ubuntu/macos | varies | vcpkg overlay port install + verify |
 
 ### 3. Common Failure Categories

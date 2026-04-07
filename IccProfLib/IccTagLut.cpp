@@ -1046,6 +1046,8 @@ icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
       a=m_dParam[1];
       b=m_dParam[2];
 
+      if (a == 0.0)
+        return 0;
       if (X >= -b/a) {
         return (icFloatNumber)pow((double)a*X + b, (double)m_dParam[0]);
       }
@@ -1057,6 +1059,8 @@ icFloatNumber CIccTagParametricCurve::Apply(icFloatNumber X) const
       a=m_dParam[1];
       b=m_dParam[2];
 
+      if (a == 0.0)
+        return (icFloatNumber)m_dParam[3];
       if (X >= -b/a) {
         return (icFloatNumber)pow((double)a*X + b, (double)m_dParam[0]) + m_dParam[3];
       }
@@ -3265,7 +3269,7 @@ icValidateStatus CIccCLUT::Validate(std::string sigPath, std::string &sReport, c
       if (m_GridPoints[i]<2) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        snprintf(temp, tempSize, " - CLUT: At least 2 grid points should be present in dimension %u.\n",i );
+        snprintf(temp, tempSize, " - CLUT: At least 2 grid points should be present in dimension %d.\n",i );
         sReport += temp;
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
@@ -5594,9 +5598,9 @@ CIccTagGamutBoundaryDesc::CIccTagGamutBoundaryDesc(const CIccTagGamutBoundaryDes
 	}
 	m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
 	
-	memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,m_nPCSChannels*m_NumberOfVertices*sizeof(icFloatNumber));
+	memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,(size_t)m_nPCSChannels*m_NumberOfVertices*sizeof(icFloatNumber));
 	if (m_DeviceValues)
-		memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,m_nDeviceChannels*m_NumberOfVertices*sizeof(icFloatNumber));
+		memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,(size_t)m_nDeviceChannels*m_NumberOfVertices*sizeof(icFloatNumber));
 	memcpy(m_Triangles,InGamutBoundaryTag.m_Triangles,m_NumberOfTriangles*sizeof(icGamutBoundaryTriangle));
 }
 
@@ -5633,9 +5637,9 @@ CIccTagGamutBoundaryDesc &CIccTagGamutBoundaryDesc::operator=(const CIccTagGamut
 	}
 	m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
 	
-	memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,m_nPCSChannels*m_NumberOfVertices*sizeof(icFloatNumber));
+	memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,(size_t)m_nPCSChannels*m_NumberOfVertices*sizeof(icFloatNumber));
 	if (m_DeviceValues)
-		memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,m_nDeviceChannels*m_NumberOfVertices*sizeof(icFloatNumber));
+		memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,(size_t)m_nDeviceChannels*m_NumberOfVertices*sizeof(icFloatNumber));
 	memcpy(m_Triangles,InGamutBoundaryTag.m_Triangles,m_NumberOfTriangles*sizeof(icGamutBoundaryTriangle));	
 	
 	return *this;

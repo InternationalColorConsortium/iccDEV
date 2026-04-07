@@ -228,7 +228,14 @@ jobs:
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
           echo "CMake build type: ${MATRIX_BUILD_TYPE}"
-          make -j$(nproc || sysctl -n hw.logicalcpu)
+          make -j$(nproc || sysctl -n hw.logicalcpu) 2>&1 | tee build.log
+          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          if [ "$WARNING_COUNT" -gt 0 ]; then
+            echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
+            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+          else
+            echo "[OK] Zero compiler warnings"
+          fi
 
       - name: Create Profiles
         shell: bash --noprofile --norc {0}

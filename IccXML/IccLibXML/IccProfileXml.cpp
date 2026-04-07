@@ -471,7 +471,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
 
       attr = icXmlFindAttr(pNode, "VendorFlags");
       if (attr) {
-        icUInt32Number vendor;
+        icUInt32Number vendor = 0;
         sscanf(icXmlAttrValue(attr), "%x", &vendor);
         m_Header.flags |= vendor;
       }
@@ -675,7 +675,7 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
       icTagTypeSignature sigType = icGetTypeNameTagSig((const icChar*)pTypeNode->name);
 
       if (sigType == icSigUnknownType) {
-        xmlAttr *attr = icXmlFindAttr(pTypeNode, "type");
+        attr = icXmlFindAttr(pTypeNode, "type");
         sigType = (icTagTypeSignature)icGetSigVal((icChar*)icXmlAttrValue(attr));
       }
 
@@ -729,7 +729,7 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
     icTagTypeSignature sigType = icGetTypeNameTagSig(nodeName.c_str());
 
     if (sigType == icSigUnknownType) {
-      xmlAttr *attr = icXmlFindAttr(pNode, "type");
+      attr = icXmlFindAttr(pNode, "type");
       sigType = (icTagTypeSignature)icGetSigVal((icChar*)icXmlAttrValue(attr));
     }
 

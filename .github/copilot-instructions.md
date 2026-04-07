@@ -25,6 +25,7 @@
 | Debug cross-platform CI | `prompts/cross-platform-ci.prompt.md` |
 | New contributor onboarding | `prompts/contributor-onboarding.prompt.md` |
 | File a security issue | `prompts/file-security-issue.prompt.md` |
+| Code review bug hunting | `prompts/code-review-hunting.prompt.md` |
 | Version bump with ports | `prompts/version-bump.prompt.md` |
 | Debug vcpkg port CI | `prompts/vcpkg-port-debug.prompt.md` |
 | Bisect and fix regressions | `prompts/bisect-regression.prompt.md` |
@@ -97,6 +98,14 @@ cmake --build . -- /m /maxcpucount
 | `ENABLE_FUZZING` | OFF | LibFuzzer harnesses (Clang only) |
 | `ENABLE_ICCXML` | ON | IccXML library support |
 
+**Sanitizer coverage gaps**: `ENABLE_SANITIZERS` enables `address,undefined,integer`
+but does NOT include `float-divide-by-zero` or `float-cast-overflow` (IEEE 754 defines
+float/0 as NaN, not UB). For full bug hunting coverage, add these explicitly:
+```bash
+CXXFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow"
+```
+Issue #769 required `-fsanitize=integer`. Issue #794 required `-fsanitize=float-divide-by-zero`.
+
 ## vcpkg Port
 
 A vcpkg overlay port is provided in `ports/iccdev/` for consuming iccDEV as a
@@ -144,7 +153,7 @@ Testing/RunTests.bat           # Validate all profiles (Windows)
 | PR gates | `ci-pr-action.yml`, `ci-pr-lint.yml`, `ci-pr-unix.yml`, `ci-pr-unix-sb.yml`, `ci-pr-win.yml` |
 | Build/test | `ci-comprehensive-build-test.yml`, `ci-sanitizer-tests.yml`, `ci-code-coverage.yml` |
 | WASM | `ci-wasm-build-test.yml`, `wasm-latest-matrix.yml` |
-| Docker | `ci-docker-latest.yml`, `ci-docker-nixos.yml` |
+| Docker | `ci-docker.yml` (Ubuntu + NixOS matrix) |
 | Release | `ci-latest-release.yml` |
 | Analysis | `ci-pr-risk-security-analysis.yml` |
 | Shared | `ci-shared-exports.yml` |

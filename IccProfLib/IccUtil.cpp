@@ -646,7 +646,8 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
   icUInt32Number rv = 0;    // because static analysis isn't perfect
   icUInt32Number rvsgn, rvexp, rvmnt;
   icInt32Number tmpexp;
-  icFloatNumber * rvfp, rvf;
+  icFloatNumber *rvfp = nullptr;
+  icFloatNumber rvf = 0.0f;
   int exp;
 
   if (!(num & 0x7FFF)) {
@@ -1326,7 +1327,7 @@ icSignature icGetSecondSigPathSig(std::string sigPath)
 
 icUInt32Number icGetSigVal(const icChar *pBuf)
 {
-  icUInt32Number v;
+  icUInt32Number v = 0;
   
   if (!pBuf)    // can't return an error, so do something sane to avoid a segfault
     return 0;
@@ -2191,7 +2192,7 @@ const icChar *CIccInfo::GetRenderingIntentName(icRenderingIntent val, bool bIsV5
       return "Absolute Colorimetric";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Intent '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Intent '%d'", val);
     return m_szStr;
   }
 }
@@ -2224,7 +2225,7 @@ const icChar *CIccInfo::GetSpotShapeName(icSpotShape val)
     return "Spot Shape Cross";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Spot Shape '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Spot Shape '%d'", val);
     return m_szStr;
   }
 }
@@ -2242,7 +2243,7 @@ const icChar *CIccInfo::GetStandardObserverName(icStandardObserver val)
     return "CIE 1964 (ten degree) standard observer";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Observer '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Observer '%d'", val);
     return m_szStr;
   }
 }
@@ -2320,7 +2321,7 @@ const icChar *CIccInfo::GetIlluminantName(icIlluminant val)
     return "Illuminant F12";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Illuminant '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Illuminant '%d'", val);
     return m_szStr;
   }
 }

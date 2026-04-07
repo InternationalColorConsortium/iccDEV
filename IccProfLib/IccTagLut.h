@@ -204,7 +204,7 @@ protected:
   icFloatNumber      *m_dParam;
 };
 
-class CIccSegmentedCurve;
+class ICCPROFLIB_API CIccSegmentedCurve;
 
 /**
 ****************************************************************************

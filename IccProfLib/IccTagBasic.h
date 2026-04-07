@@ -78,7 +78,7 @@ namespace iccDEV {
 
 class CIccIO;
 
-class ICCPROFLIB_API CIccProfile;
+class CIccProfile;
 
 class CIccSparseMatrix;
 

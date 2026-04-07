@@ -230,7 +230,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     }
     m_nBytesPerLine = m_nWidth * m_nBytesPerSample * m_nSamples;
 
-    m_pStripBuf = (unsigned char*)malloc(m_nStripSize*m_nStripSamples);
+    m_pStripBuf = (unsigned char*)malloc((size_t)m_nStripSize*m_nStripSamples);
 
     if (!m_pStripBuf) {
       Close();
@@ -331,7 +331,7 @@ bool CTiffImg::Open(const char *szFname)
   //   it is safer to have the buffer too large than too small.
   m_nStripSize = std::max( m_nStripSize, m_nRowsPerStrip * m_nBytesPerLine );
   
-  m_pStripBuf = (unsigned char*)malloc(m_nStripSize*m_nStripSamples);
+  m_pStripBuf = (unsigned char*)malloc((size_t)m_nStripSize*m_nStripSamples);
 
   if (!m_pStripBuf) {
     Close();
@@ -422,7 +422,7 @@ bool CTiffImg::WriteLine(unsigned char *pBuf)
         src += m_nStripSize;
       }
     }
-    else if (TIFFWriteEncodedStrip(m_hTif, m_nCurStrip, pBuf, m_nWidth*m_nBytesPerSample) < 0)
+    else if (TIFFWriteEncodedStrip(m_hTif, m_nCurStrip, pBuf, (size_t)m_nWidth*m_nBytesPerSample) < 0)
       return false;
 
     m_nCurStrip++;

@@ -83,24 +83,29 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          IGNORELIST_FLAG=""
-          if [[ -f "${UBSAN_IGNORELIST}" ]]; then
-            IGNORELIST_FLAG="-fsanitize-ignorelist=$(pwd)/${UBSAN_IGNORELIST}"
-          fi
-
           mkdir -p build && cd build
           cmake ../Build/Cmake \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
-            -DCMAKE_C_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3 ${IGNORELIST_FLAG}" \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -O0 -g3 -std=c++17 ${IGNORELIST_FLAG}" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+            -DCMAKE_C_FLAGS="-O0 -g3" \
+            -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
+            -DENABLE_ASAN=ON \
+            -DENABLE_UBSAN=ON \
+            -DENABLE_INTEGER_SANITIZER=ON \
+            -DSANITIZER_RECOVER=ON \
+            -DUBSAN_IGNORELIST="${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}" \
             -DENABLE_TOOLS=ON \
             -DENABLE_SHARED_LIBS=ON \
             -Wno-dev
-          make -j"$(nproc)"
+          make -j"$(nproc)" 2>&1 | tee build.log
+          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          if [ "$WARNING_COUNT" -gt 0 ]; then
+            echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
+            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+          else
+            echo "[OK] Zero compiler warnings"
+          fi
 
           echo ""
           echo "=== Built Tool Binaries ==="

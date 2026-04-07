@@ -2606,7 +2606,6 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
           pSubCalc->m_sImport = importPath;
         }
 
-        xmlAttr *attr;
         IIccExtensionMpe *pExt = pMpe->GetExtension();
 
         if (pExt) {

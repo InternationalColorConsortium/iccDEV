@@ -79,7 +79,7 @@ namespace iccDEV {
 * specification.  The CIccTagCreator always creates a CIccSpecTagFactory.
 ***********************************************************************
 */
-class CIccTagXmlFactory : public IIccTagFactory
+class ICCPROFLIB_API CIccTagXmlFactory : public IIccTagFactory
 {
 public:
   /**

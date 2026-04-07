@@ -67,7 +67,7 @@ Copyright:  (c) see Software License
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-class CIccTagXml : public IIccExtensionTag
+class ICCPROFLIB_API CIccTagXml : public IIccExtensionTag
 {
 public:
   virtual ~CIccTagXml(void) {}
@@ -79,7 +79,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr) = 0;
 };
 
-class CIccTagXmlUnknown : public CIccTagUnknown, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlUnknown : public CIccTagUnknown, public CIccTagXml
 {
 public:
   CIccTagXmlUnknown(icTagTypeSignature nType) { m_nType = nType; }
@@ -93,7 +93,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlText : public CIccTagText, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlText : public CIccTagText, public CIccTagXml
 {
 public:
   CIccTagXmlText() : CIccTagText() {}
@@ -110,7 +110,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlUtf8Text : public CIccTagUtf8Text, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlUtf8Text : public CIccTagUtf8Text, public CIccTagXml
 {
 public:
   CIccTagXmlUtf8Text() : CIccTagUtf8Text() {}
@@ -127,7 +127,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlZipUtf8Text : public CIccTagZipUtf8Text, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlZipUtf8Text : public CIccTagZipUtf8Text, public CIccTagXml
 {
 public:
   CIccTagXmlZipUtf8Text() : CIccTagZipUtf8Text() {}
@@ -144,7 +144,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlZipXml : public CIccTagZipXml, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlZipXml : public CIccTagZipXml, public CIccTagXml
 {
 public:
   CIccTagXmlZipXml() : CIccTagZipXml() {}
@@ -161,7 +161,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlUtf16Text : public CIccTagUtf16Text, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlUtf16Text : public CIccTagUtf16Text, public CIccTagXml
 {
 public:
   CIccTagXmlUtf16Text() : CIccTagUtf16Text() {}
@@ -179,7 +179,7 @@ public:
 };
 
 
-class CIccTagXmlTextDescription : public CIccTagTextDescription, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlTextDescription : public CIccTagTextDescription, public CIccTagXml
 {
 public:
   CIccTagXmlTextDescription() : CIccTagTextDescription() {}
@@ -196,7 +196,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlSignature : public CIccTagSignature, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlSignature : public CIccTagSignature, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlSignature() {}
@@ -209,7 +209,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlNamedColor2 : public CIccTagNamedColor2, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlNamedColor2 : public CIccTagNamedColor2, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlNamedColor2() {}
@@ -222,7 +222,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlXYZ : public CIccTagXYZ, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlXYZ : public CIccTagXYZ, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlXYZ() {}
@@ -235,7 +235,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlChromaticity : public CIccTagChromaticity, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlChromaticity : public CIccTagChromaticity, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlChromaticity() {}
@@ -248,7 +248,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlCicp : public CIccTagCicp, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlCicp : public CIccTagCicp, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlCicp() {}
@@ -262,7 +262,7 @@ public:
 };
 
 
-class CIccTagXmlSparseMatrixArray : public CIccTagSparseMatrixArray, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlSparseMatrixArray : public CIccTagSparseMatrixArray, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlSparseMatrixArray() {}
@@ -276,7 +276,7 @@ public:
 };
 
 template <class T, icTagTypeSignature Tsig>
-class CIccTagXmlFixedNum : public CIccTagFixedNum<T, Tsig>, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlFixedNum : public CIccTagFixedNum<T, Tsig>, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlFixedNum() {}
@@ -294,7 +294,7 @@ typedef CIccTagFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType> CIccTagXml
 
 
 template <class T, class A, icTagTypeSignature Tsig>
-class CIccTagXmlNum : public CIccTagNum<T, Tsig>, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlNum : public CIccTagNum<T, Tsig>, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlNum() {}
@@ -316,7 +316,7 @@ typedef CIccTagXmlNum<icUInt32Number, CIccXmlArrayType<icUInt32Number, icSigUInt
 typedef CIccTagXmlNum<icUInt64Number, CIccXmlArrayType<icUInt64Number, icSigUInt64ArrayType>, icSigUInt64ArrayType> CIccTagXmlUInt64;
 
 template <class T, class A, icTagTypeSignature Tsig>
-class CIccTagXmlFloatNum : public CIccTagFloatNum<T, Tsig>, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlFloatNum : public CIccTagFloatNum<T, Tsig>, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlFloatNum() {}
@@ -333,7 +333,7 @@ typedef CIccTagXmlFloatNum<icFloat32Number, CIccXmlArrayType<icFloat32Number, ic
 typedef CIccTagXmlFloatNum<icFloat32Number, CIccXmlArrayType<icFloat32Number, icSigFloat32ArrayType>, icSigFloat32ArrayType> CIccTagXmlFloat32;
 typedef CIccTagXmlFloatNum<icFloat64Number, CIccXmlArrayType<icFloat64Number, icSigFloat64ArrayType>, icSigFloat64ArrayType> CIccTagXmlFloat64;
 
-class CIccTagXmlMeasurement : public CIccTagMeasurement, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlMeasurement : public CIccTagMeasurement, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlMeasurement() {}
@@ -346,7 +346,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlMultiLocalizedUnicode : public CIccTagMultiLocalizedUnicode, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlMultiLocalizedUnicode : public CIccTagMultiLocalizedUnicode, public CIccTagXml
 {
 public:
   CIccTagXmlMultiLocalizedUnicode() : CIccTagMultiLocalizedUnicode() {}
@@ -363,7 +363,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlTagData : public CIccTagData, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlTagData : public CIccTagData, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlTagData() {}
@@ -376,7 +376,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlDateTime : public CIccTagDateTime, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlDateTime : public CIccTagDateTime, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlDateTime() {}
@@ -389,7 +389,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlColorantOrder : public CIccTagColorantOrder, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlColorantOrder : public CIccTagColorantOrder, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlColorantOrder() {}
@@ -402,7 +402,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlColorantTable : public CIccTagColorantTable, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlColorantTable : public CIccTagColorantTable, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlColorantTable() {}
@@ -415,7 +415,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlViewingConditions : public CIccTagViewingConditions, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlViewingConditions : public CIccTagViewingConditions, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlViewingConditions() {}
@@ -428,7 +428,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlSpectralDataInfo : public CIccTagSpectralDataInfo, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlSpectralDataInfo : public CIccTagSpectralDataInfo, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlSpectralDataInfo() {}
@@ -441,7 +441,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlSpectralViewingConditions : public CIccTagSpectralViewingConditions, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlSpectralViewingConditions : public CIccTagSpectralViewingConditions, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlSpectralViewingConditions() {}
@@ -454,7 +454,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlProfileSeqDesc : public CIccTagProfileSeqDesc, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlProfileSeqDesc : public CIccTagProfileSeqDesc, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlProfileSeqDesc() {}
@@ -467,7 +467,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlResponseCurveSet16 : public CIccTagResponseCurveSet16, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlResponseCurveSet16 : public CIccTagResponseCurveSet16, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlResponseCurveSet16() {}
@@ -480,7 +480,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
- class CIccCurveXml : public CIccTagXml
+ class ICCPROFLIB_API CIccCurveXml : public CIccTagXml
  {
  public:
    virtual ~CIccCurveXml() {}
@@ -494,7 +494,7 @@ public:
    virtual bool ParseXml(xmlNode *pNode, icConvertType nType, std::string &parseStr) = 0;
  };
  
-class CIccTagXmlCurve : public CIccTagCurve, public CIccCurveXml
+class ICCPROFLIB_API CIccTagXmlCurve : public CIccTagCurve, public CIccCurveXml
 {
 public:
   virtual ~CIccTagXmlCurve() {}
@@ -509,7 +509,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, icConvertType nType, std::string &parseStr);
 };
 
-class CIccTagXmlParametricCurve : public CIccTagParametricCurve, public CIccCurveXml
+class ICCPROFLIB_API CIccTagXmlParametricCurve : public CIccTagParametricCurve, public CIccCurveXml
 {
 public:
   virtual ~CIccTagXmlParametricCurve() {}
@@ -524,7 +524,7 @@ public:
    virtual bool ParseXml(xmlNode *pNode, icConvertType nType, std::string &parseStr);
 };
 
-class CIccTagXmlSegmentedCurve : public CIccTagSegmentedCurve, public CIccCurveXml
+class ICCPROFLIB_API CIccTagXmlSegmentedCurve : public CIccTagSegmentedCurve, public CIccCurveXml
 {
 public:
   virtual ~CIccTagXmlSegmentedCurve() {}
@@ -539,7 +539,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, icConvertType nType, std::string &parseStr);
 };
 
-class CIccTagXmlLutAtoB : public CIccTagLutAtoB, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlLutAtoB : public CIccTagLutAtoB, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlLutAtoB() {}
@@ -552,7 +552,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlLutBtoA : public CIccTagLutBtoA, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlLutBtoA : public CIccTagLutBtoA, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlLutBtoA() {}
@@ -565,7 +565,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlLut8 : public CIccTagLut8, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlLut8 : public CIccTagLut8, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlLut8() {}
@@ -578,7 +578,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlLut16 : public CIccTagLut16, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlLut16 : public CIccTagLut16, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlLut16() {}
@@ -591,7 +591,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlMultiProcessElement : public CIccTagMultiProcessElement, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlMultiProcessElement : public CIccTagMultiProcessElement, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlMultiProcessElement() {}
@@ -610,7 +610,7 @@ protected:
 
 };
 
-class CIccTagXmlProfileSequenceId : public CIccTagProfileSequenceId, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlProfileSequenceId : public CIccTagProfileSequenceId, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlProfileSequenceId() {}
@@ -623,7 +623,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlDict : public CIccTagDict, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlDict : public CIccTagDict, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlDict() {}
@@ -637,7 +637,7 @@ public:
 };
 
 
-class CIccTagXmlStruct : public CIccTagStruct, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlStruct : public CIccTagStruct, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlStruct() {}
@@ -653,7 +653,7 @@ protected:
   bool ParseTag(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlArray : public CIccTagArray, public CIccTagXml
+class ICCPROFLIB_API CIccTagXmlArray : public CIccTagArray, public CIccTagXml
 {
 public:
   virtual ~CIccTagXmlArray() {}
@@ -666,7 +666,7 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
-class CIccTagXmlGamutBoundaryDesc : public CIccTagGamutBoundaryDesc, CIccTagXml
+class ICCPROFLIB_API CIccTagXmlGamutBoundaryDesc : public CIccTagGamutBoundaryDesc, CIccTagXml
 {
 public:
   virtual ~CIccTagXmlGamutBoundaryDesc() {}
@@ -680,7 +680,7 @@ public:
 };
 
 
-class CIccTagXmlEmbeddedHeightImage : public CIccTagEmbeddedHeightImage, CIccTagXml
+class ICCPROFLIB_API CIccTagXmlEmbeddedHeightImage : public CIccTagEmbeddedHeightImage, CIccTagXml
 {
 public:
   virtual ~CIccTagXmlEmbeddedHeightImage() {}
@@ -694,7 +694,7 @@ public:
 };
 
 
-class CIccTagXmlEmbeddedNormalImage : public CIccTagEmbeddedNormalImage, CIccTagXml
+class ICCPROFLIB_API CIccTagXmlEmbeddedNormalImage : public CIccTagEmbeddedNormalImage, CIccTagXml
 {
 public:
   virtual ~CIccTagXmlEmbeddedNormalImage() {}
@@ -709,7 +709,7 @@ public:
 
 
 //Private class to embed a profile within a profile
-class CIccTagXmlEmbeddedProfile : public CIccTagEmbeddedProfile, CIccTagXml
+class ICCPROFLIB_API CIccTagXmlEmbeddedProfile : public CIccTagEmbeddedProfile, CIccTagXml
 {
 public:
   virtual ~CIccTagXmlEmbeddedProfile() {}

@@ -1078,7 +1078,7 @@ CIccTagArray &CIccTagArray::operator=(const CIccTagArray &tagAry)
     m_TagVals = new IccTagPtr[tagAry.m_nSize];
 
     icUInt32Number i;
-    for (i=0; i<m_nSize; i++) {
+    for (i=0; i<tagAry.m_nSize; i++) {
       if (tagAry.m_TagVals[i].ptr)
         m_TagVals[i].ptr = tagAry.m_TagVals[i].ptr->NewCopy();
       else
@@ -1192,13 +1192,13 @@ void CIccTagArray::Describe(std::string &sDescription, int nVerboseness)
   for (i=0; i<m_nSize; i++) {
     if (i)
       sDescription += "\n";
-    snprintf(buf, bufSize, "BEGIN INDEX[%d]\n", i);
+    snprintf(buf, bufSize, "BEGIN INDEX[%u]\n", i);
     sDescription +=  buf;
     
     if (m_TagVals[i].ptr) {
       m_TagVals[i].ptr->Describe(sDescription, nVerboseness);
     }
-    snprintf(buf, bufSize, "END INDEX[%d]\n", i);
+    snprintf(buf, bufSize, "END INDEX[%u]\n", i);
     sDescription += buf;
   }
 
@@ -1297,7 +1297,10 @@ bool CIccTagArray::Read(icUInt32Number size, CIccIO *pIO)
         pIO->Seek(nTagStart + tagPos[i].offset, icSeekSet);
 
         icTagTypeSignature tagSig;
-        pIO->Read32(&tagSig);
+        if (!pIO->Read32(&tagSig)) {
+          delete [] tagPos;
+          return false;
+        }
         pIO->Seek(nTagStart + tagPos[i].offset, icSeekSet);
 
         CIccTag *pTag = CIccTagCreator::CreateTag(tagSig);
@@ -1377,7 +1380,7 @@ bool CIccTagArray::Write(CIccIO *pIO)
 
         if (j<i) {
           tagPos[i].offset = tagPos[j].offset;
-          tagPos[i].size = tagPos[j].offset;
+          tagPos[i].size = tagPos[j].size;
         }
         else {
           tagPos[i].offset = (icUInt32Number)(pIO->Tell() - nTagStart);

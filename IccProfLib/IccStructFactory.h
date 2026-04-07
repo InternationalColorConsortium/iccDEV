@@ -157,7 +157,7 @@ typedef std::list<IIccStructFactory*> CIccStructFactoryList;
  * creates a CIccBasicElemFactory.
  ***********************************************************************
  */
-class CIccBasicStructFactory : public IIccStructFactory
+class ICCPROFLIB_API CIccBasicStructFactory : public IIccStructFactory
 {
 public:
   /**

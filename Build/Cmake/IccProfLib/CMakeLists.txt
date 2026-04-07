@@ -139,11 +139,20 @@ ENDIF()
 IF(ENABLE_SHARED_LIBS)
   ADD_LIBRARY(${TARGET_NAME} SHARED ${SOURCES})
 
-set_target_properties(${TARGET_NAME}
-  PROPERTIES
-            VERSION   "${${PROJECT_UP_NAME}_VERSION}"
-            SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
-)
+  set_target_properties(${TARGET_NAME}
+    PROPERTIES
+      VERSION   "${${PROJECT_UP_NAME}_VERSION}"
+      SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
+  )
+
+  # Shared library symbol visibility:
+  # - On Linux/macOS: ICCPROFLIBDLL_EXPORTS activates visibility("default")
+  #   on classes/functions marked ICCPROFLIB_API (see IccProfLibConf.h)
+  # - On Windows: WINDOWS_EXPORT_ALL_SYMBOLS handles exports; do NOT define
+  #   ICCPROFLIBDLL_EXPORTS (several headers have __declspec placement issues)
+  if(NOT WIN32)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
+  endif()
 
   if(WIN32)
     set_target_properties(${TARGET_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)

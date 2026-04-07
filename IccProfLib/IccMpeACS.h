@@ -84,7 +84,7 @@ namespace iccDEV {
 * Purpose: The alternate connection space base class element
 *****************************************************************************
 */
-class CIccMpeAcs : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeAcs : public CIccMultiProcessElement
 {
 public:
   virtual ~CIccMpeAcs();
@@ -123,7 +123,7 @@ protected:
 * Purpose: The bACS element
 *****************************************************************************
 */
-class CIccMpeBAcs : public CIccMpeAcs
+class ICCPROFLIB_API CIccMpeBAcs : public CIccMpeAcs
 {
 public:
   CIccMpeBAcs(icUInt16Number nChannels=0, icAcsSignature sig = 0);
@@ -147,7 +147,7 @@ public:
 * Purpose: The eAcs element
 *****************************************************************************
 */
-class CIccMpeEAcs : public CIccMpeAcs
+class ICCPROFLIB_API CIccMpeEAcs : public CIccMpeAcs
 {
 public:
   CIccMpeEAcs(icUInt16Number nChannels=0, icAcsSignature sig = 0);

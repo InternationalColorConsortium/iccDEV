@@ -134,10 +134,26 @@ std::string fixJsonString(const char* v)
 {
   std::string rv;
   for (; *v; v++) {
-    if (*v == '\\')
-      rv += "\\\\";
-    else
-      rv += *v;
+    switch (*v) {
+      case '\\': rv += "\\\\"; break;
+      case '"':  rv += "\\\""; break;
+      case '\b': rv += "\\b";  break;
+      case '\f': rv += "\\f";  break;
+      case '\n': rv += "\\n";  break;
+      case '\r': rv += "\\r";  break;
+      case '\t': rv += "\\t";  break;
+      default:
+        if (static_cast<unsigned char>(*v) < 0x20) {
+          char buf[8];
+          snprintf(buf, sizeof(buf), "\\u%04x",
+                   static_cast<unsigned int>(static_cast<unsigned char>(*v)));
+          rv += buf;
+        }
+        else {
+          rv += *v;
+        }
+        break;
+    }
   }
 
   return rv;
@@ -439,6 +455,7 @@ bool loadJsonFrom(json& j, const char* szFname)
     long pos = ftell(f);
     if (pos <= 0) { fclose(f); return false; }
     unsigned long flen = (unsigned long)pos;
+    if (flen > 100 * 1024 * 1024) { fclose(f); return false; }
     fseek(f, 0, SEEK_SET);
     char* buf = (char*)malloc(flen+1);
 
@@ -449,7 +466,11 @@ bool loadJsonFrom(json& j, const char* szFname)
           j = json::parse(buf);
           rv = true;
         }
+        catch (const std::exception& e) {
+          fprintf(stderr, "JSON parse error in '%s': %s\n", szFname, e.what());
+        }
         catch (...) {
+          fprintf(stderr, "JSON parse error in '%s': unknown exception\n", szFname);
         }
       }
       free(buf);

@@ -2898,7 +2898,7 @@ void CIccPcsXform::pushScale(icUInt16Number n, const icFloatNumber *vals)
 void CIccPcsXform::pushMatrix(icUInt16Number nRows, icUInt16Number nCols, const icFloatNumber *vals)
 {
   CIccPcsStepMatrix *mtx = new CIccPcsStepMatrix(nRows, nCols);
-  memcpy(mtx->entry(0), vals, nRows*nCols*sizeof(icFloatNumber));
+  memcpy(mtx->entry(0), vals, (size_t)nRows*nCols*sizeof(icFloatNumber));
 
   CIccPcsStepPtr ptr;
   ptr.ptr = mtx;
@@ -11194,7 +11194,7 @@ bool CIccMruCache<T>::Init(icUInt16Number nSrcSamples, icUInt16Number nDstSample
   if (!m_cache)
     return false;
 
-  m_pixelData = (T*)malloc((int)nCacheSize * m_nTotalSamples * sizeof(T));
+  m_pixelData = (T*)malloc((size_t)nCacheSize * m_nTotalSamples * sizeof(T));
 
   if (!m_pixelData)
     return false;

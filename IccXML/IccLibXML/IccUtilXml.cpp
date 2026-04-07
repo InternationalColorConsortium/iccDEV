@@ -1128,7 +1128,7 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
           !icXmlStrCmp(pNode->name, "f") &&
           pNode->children &&
           pNode->children->content) {
-            float f;
+            float f = 0.0f;
             sscanf((const char *)(pNode->children->content), "%f", &f);
             pBuf[i] = (T)f;
             i++;
@@ -1439,7 +1439,7 @@ icUInt64Number icGetDeviceAttrValue(xmlNode *pNode)
 	
   attr = icXmlFindAttr(pNode, "VendorSpecific");
   if (attr) {
-    icUInt64Number vendor;
+    icUInt64Number vendor = 0;
     sscanf(icXmlAttrValue(attr), "%llx", &vendor);
     devAttr |= vendor;
   }

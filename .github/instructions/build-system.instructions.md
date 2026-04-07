@@ -55,12 +55,19 @@ CMakeLists.txt has `if(EMSCRIPTEN)` guards that:
 Use `ENABLE_INTEGER_SANITIZER=ON` or `ENABLE_SANITIZERS=ON` (which now includes
 integer). Issue #769 was only detectable with `-fsanitize=integer`.
 
+**CRITICAL**: `-fsanitize=undefined` also does NOT catch float division by zero.
+IEEE 754 defines float/0 as NaN (not UB), so clang skips it. Must add
+`-fsanitize=float-divide-by-zero` explicitly. Issue #794 was only detectable
+with this flag -- without it, PoCs produce silent NaN corruption (DeltaE=0)
+instead of UBSAN output. Also add `-fsanitize=float-cast-overflow` to catch
+NaN/Inf-to-integer casts.
+
 ### Full-coverage build (recommended for bug hunting)
 ```bash
 cd Build && rm -rf CMakeCache.txt CMakeFiles/
 CC=clang CXX=clang++ \
-  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
-  LDFLAGS="-fsanitize=address,undefined,integer" \
+  CXXFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow -fno-omit-frame-pointer -g -O1" \
+  LDFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow" \
   cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
 make -j$(nproc)
 ```

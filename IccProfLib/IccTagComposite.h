@@ -79,8 +79,8 @@ Copyright:  (c) see Software License
 namespace iccDEV {
 #endif
 
-class CIccTagStruct;
-class CIccTagArray;
+class ICCPROFLIB_API CIccTagStruct;
+class ICCPROFLIB_API CIccTagArray;
 
 /**
 ****************************************************************************

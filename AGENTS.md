@@ -28,6 +28,7 @@ Version 2.3.1.7, C++17, CMake 3.21+, BSD 3-Clause.
 | Reproduce security issue | `.github/prompts/reproduce-security-issue.prompt.md` |
 | Bisect and fix regressions | `.github/prompts/bisect-regression.prompt.md` |
 | File a security issue | `.github/prompts/file-security-issue.prompt.md` |
+| Code review bug hunting | `.github/prompts/code-review-hunting.prompt.md` |
 | Add a new CLI tool | `.github/prompts/add-new-tool.prompt.md` |
 | Debug WASM build | `.github/prompts/debug-wasm-build.prompt.md` |
 | Cross-platform CI debug | `.github/prompts/cross-platform-ci.prompt.md` |
@@ -97,14 +98,16 @@ cd Build && cmake Cmake -DCMAKE_CXX_COMPILER=clang++ && make -j$(nproc)
 # Full sanitizer coverage (recommended for bug hunting)
 cd Build && rm -rf CMakeCache.txt CMakeFiles/
 CC=clang CXX=clang++ \
-  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
-  LDFLAGS="-fsanitize=address,undefined,integer" \
+  CXXFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow -fno-omit-frame-pointer -g -O1" \
+  LDFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow" \
   cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
 make -j$(nproc)
 ```
 
-CRITICAL: `-fsanitize=undefined` does NOT catch unsigned integer overflow.
-`-fsanitize=integer` is required. Always delete CMakeCache.txt before reconfigure.
+CRITICAL: `-fsanitize=undefined` does NOT catch unsigned integer overflow
+(`-fsanitize=integer` required) or float division by zero
+(`-fsanitize=float-divide-by-zero` required, IEEE 754 defines float/0 as NaN).
+Always delete CMakeCache.txt before reconfigure.
 
 ## Test
 

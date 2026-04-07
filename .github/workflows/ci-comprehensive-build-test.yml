@@ -263,6 +263,13 @@ jobs:
             echo "::error title=Build Failed::Build errors detected in log"
             exit 1
           fi
+          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          if [ "$WARNING_COUNT" -gt 0 ]; then
+            echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected in build"
+            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+          else
+            echo "[OK] Zero compiler warnings"
+          fi
           # Show ccache stats if available
           if command -v ccache >/dev/null 2>&1; then
             echo "::group::ccache Statistics"
@@ -451,6 +458,13 @@ jobs:
           if grep -iE 'error:' build.log; then
             echo "ERROR: Build failed"
             exit 1
+          fi
+          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          if [ "$WARNING_COUNT" -gt 0 ]; then
+            echo "::warning title=Compiler Warnings (Sanitizer Build)::${WARNING_COUNT} warning(s) detected"
+            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+          else
+            echo "[OK] Zero compiler warnings (sanitizer build)"
           fi
 
       - name: Test with Sanitizer
@@ -699,6 +713,13 @@ jobs:
           if grep -iE 'error:' build.log; then
             echo "ERROR: Build failed"
             exit 1
+          fi
+          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          if [ "$WARNING_COUNT" -gt 0 ]; then
+            echo "::warning title=Compiler Warnings (LTO Build)::${WARNING_COUNT} warning(s) detected"
+            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+          else
+            echo "[OK] Zero compiler warnings (LTO build)"
           fi
 
   #############################################################################

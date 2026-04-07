@@ -140,8 +140,13 @@ namespace iccDEV {
     #endif
   #endif
 
-  #define ICCPROFLIB_API
-  #define ICCPROFLIB_EXTERN
+  #if defined(ICCPROFLIBDLL_EXPORTS)
+    #define ICCPROFLIB_API __attribute__((visibility("default")))
+    #define ICCPROFLIB_EXTERN
+  #else
+    #define ICCPROFLIB_API
+    #define ICCPROFLIB_EXTERN extern
+  #endif
   #define stricmp strcasecmp
   #define strnicmp strncasecmp
 
