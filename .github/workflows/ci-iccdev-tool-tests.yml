@@ -116,7 +116,7 @@ jobs:
           done
           echo "Built $TOOL_COUNT tool binaries"
 
-      - name: Generate test profiles (CreateAllProfiles + HDR)
+      - name: Generate test profiles (CreateAllProfiles + HDR + hybrid + mcs)
         env:
           BASH_ENV: /dev/null
           WORKSPACE_DIR: ${{ github.workspace }}
@@ -150,6 +150,33 @@ jobs:
           }
           HDR_COUNT=$(find . -name '*.icc' | wc -l)
           echo "Generated $HDR_COUNT HDR profiles"
+
+          echo ""
+          echo "=== hybrid/BuildAndTest.sh ==="
+          cd "${WORKSPACE_DIR}/Testing/hybrid"
+          timeout 120 sh BuildAndTest.sh 2>&1 || {
+            rc=$?
+            echo "WARN: hybrid/BuildAndTest.sh exited $rc"
+          }
+          HYBRID_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $HYBRID_COUNT hybrid profiles"
+
+          echo ""
+          echo "=== mcs/updateprev.sh ==="
+          cd "${WORKSPACE_DIR}/Testing/mcs"
+          timeout 120 sh updateprev.sh 2>&1 || {
+            rc=$?
+            echo "WARN: mcs/updateprev.sh exited $rc"
+          }
+
+          echo ""
+          echo "=== mcs/updateprevWithBkgd.sh ==="
+          timeout 120 sh updateprevWithBkgd.sh 2>&1 || {
+            rc=$?
+            echo "WARN: mcs/updateprevWithBkgd.sh exited $rc"
+          }
+          MCS_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $MCS_COUNT mcs profiles"
 
           echo ""
           echo "=== Total profile inventory ==="
