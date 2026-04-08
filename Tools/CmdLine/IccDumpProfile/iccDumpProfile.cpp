@@ -1,9 +1,9 @@
 /*
-    File:       CmdDumpProfile.cpp
+    File:       iccDumpProfile.cpp
 
     Contains:   Console app to parse and display profile contents
 
-    Version:    V1
+    Version:    V2
 
     Copyright:  (c) see below
 */
@@ -66,15 +66,18 @@
 //
 // -Initial implementation by Max Derhak 5-15-2003
 // -Validation improvements by Peter Wyatt 2021
+// -V5 Reporting & Improvements by Maintainers 08-APR-2026
 //
 //////////////////////////////////////////////////////////////////////
-
 
 #include <cstdio>
 #include <cstring>
 #include <climits>
+#include <cstdlib>
+#include <cerrno>
 #include <vector>
 #include <unordered_map>
+#include <sys/stat.h>
 #include <algorithm>
 #include "IccProfile.h"
 #include "IccTag.h"
@@ -90,7 +93,26 @@
 #include <mcheck.h>
 #endif
 
-// core function to dump tag data
+// Diagnostic mode global -- set by --diag flag
+static bool g_bDiagMode = false;
+
+// Diagnostic logging macros
+#define DIAG(...) do { if (g_bDiagMode) { fprintf(stderr, "[DIAG] "); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } } while(0)
+
+static const char* GetLateBindingNote(icElemTypeSignature sig)
+{
+  switch (sig) {
+    case icSigEmissionMatrixElemType:
+    case icSigInvEmissionMatrixElemType:
+    case icSigEmissionObserverElemType:
+    case icSigReflectanceObserverElemType:
+      return " [LATE-BINDING SPECTRAL]";
+    default:
+      return "";
+  }
+}
+
+// adds MPE element type detail for v5 profiles
 void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
 {
   const size_t bufSize = 64;
@@ -106,11 +128,38 @@ void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
       printf("Array of ");
     }
     printf("%s (%s)\n", Fmt.GetTagTypeSigName(pTag->GetType()), icGetSig(buf, bufSize, pTag->GetType()));
+
+    DIAG("Tag '%s' type=0x%08X loaded successfully", icGetSig(buf, bufSize, sig), pTag->GetType());
+
+    // Get multiProcessElementType tags then show element chain
+    if (pTag->GetType() == icSigMultiProcessElementType) {
+      CIccTagMultiProcessElement *pMpe = static_cast<CIccTagMultiProcessElement*>(pTag);
+      icUInt32Number nElements = pMpe->NumElements();
+      printf("\n  === MPE Element Chain: %u elements, %u->%u channels ===\n",
+             nElements, pMpe->NumInputChannels(), pMpe->NumOutputChannels());
+
+      for (icUInt32Number j = 0; j < nElements; j++) {
+        CIccMultiProcessElement *pElem = pMpe->GetElement(j);
+        if (pElem) {
+          icElemTypeSignature elemSig = pElem->GetType();
+          printf("  [%u] %s (%s) %u->%u%s\n",
+                 j + 1,
+                 Fmt.GetElementTypeSigName(elemSig),
+                 icGetSig(buf, bufSize, elemSig),
+                 pElem->NumInputChannels(),
+                 pElem->NumOutputChannels(),
+                 GetLateBindingNote(elemSig));
+        }
+      }
+      printf("  ===\n");
+    }
+
     pTag->Describe(contents, nVerboseness);
     fwrite(contents.c_str(), contents.length(), 1, stdout);
   }
   else {
     printf("Tag (%s) not found in profile\n", icGetSig(buf, bufSize, sig));
+    DIAG("Tag '%s' -- FindTag returned NULL (LoadTag failure or tag not present)", icGetSig(buf, bufSize, sig));
   }
 }
 
@@ -130,12 +179,107 @@ void DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
 
 void printUsage(void)
 {
-    printf("Usage: iccDumpProfile {-v} {int} profile {tagId to dump/\"ALL\"}\n");
+    printf("Usage: iccDumpProfile {-v} {int} {--diag} {--read} profile {tagId to dump/\"ALL\"}\n");
     printf("\nThe -v option causes profile validation to be performed.\n"
-           "The optional integer parameter specifies verboseness of output (1-100, default=100).\n");
+           "The optional integer parameter specifies verboseness of output (1-100, default=100).\n"
+           "  --diag   Enable diagnostic mode (size checks, load tracing to stderr)\n"
+           "  --read   Use ReadIccProfile (eager load) instead of OpenIccProfile (lazy)\n");
     printf("iccDumpProfile built with IccProfLib version " ICCPROFLIBVER "\n\n");
 }
 
+
+
+// v5 profile summary: spectral, BRDF, MCS tags
+void DumpV5Summary(CIccProfile *pIcc)
+{
+  icHeader *pHdr = &pIcc->m_Header;
+  if (pHdr->version < icVersionNumberV5)
+    return;
+
+  CIccInfo Fmt;
+
+  printf("\nVersion 5 / iccMAX Profile Summary\n");
+  printf("----------------------------------\n");
+
+  // Spectral tags
+  static const icTagSignature spectralTags[] = {
+    icSigSpectralViewingConditionsTag,
+    icSigSpectralDataInfoTag,
+    icSigSpectralWhitePointTag,
+    icSigCustomToStandardPccTag,
+    icSigStandardToCustomPccTag,
+  };
+  static const char *spectralNames[] = {
+    "Spectral Viewing Conditions (svcn)",
+    "Spectral Data Info (sdin)",
+    "Spectral White Point (swpt)",
+    "Custom-to-Standard PCC (c2sp)",
+    "Standard-to-Custom PCC (s2cp)",
+  };
+
+  printf("\n  Spectral Tags:\n");
+  for (int i = 0; i < 5; i++) {
+    CIccTag *pTag = pIcc->FindTag(spectralTags[i]);
+    printf("    %-38s %s\n", spectralNames[i], pTag ? "PRESENT" : "---");
+  }
+
+  // BRDF tags
+  static const icTagSignature brdfTags[] = {
+    icSigBRDFAToB0Tag, icSigBRDFAToB1Tag, icSigBRDFAToB2Tag, icSigBRDFAToB3Tag,
+    icSigBRDFDToB0Tag, icSigBRDFDToB1Tag, icSigBRDFDToB2Tag, icSigBRDFDToB3Tag,
+    icSigBRDFMToB0Tag, icSigBRDFMToB1Tag, icSigBRDFMToB2Tag, icSigBRDFMToB3Tag,
+    icSigBRDFMToS0Tag, icSigBRDFMToS1Tag, icSigBRDFMToS2Tag, icSigBRDFMToS3Tag,
+  };
+  int brdfCount = 0;
+  for (int i = 0; i < 16; i++) {
+    if (pIcc->FindTag(brdfTags[i]))
+      brdfCount++;
+  }
+  printf("\n  BRDF Tags:                  %d of 16 present\n", brdfCount);
+
+  // Gamut boundary
+  CIccTag *gbd0 = pIcc->FindTag(icSigGamutBoundaryDescription0Tag);
+  CIccTag *gbd1 = pIcc->FindTag(icSigGamutBoundaryDescription1Tag);
+  printf("  Gamut Boundary Desc:        gbd0=%s gbd1=%s\n",
+         gbd0 ? "PRESENT" : "---", gbd1 ? "PRESENT" : "---");
+
+  // MCS
+  if (pHdr->mcs) {
+    printf("  MCS Color Space:            %s\n", Fmt.GetColorSpaceSigName((icColorSpaceSignature)pHdr->mcs));
+  }
+
+  // Count MPE tags
+  int mpeCount = 0;
+  int lateBindCount = 0;
+  TagEntryList::iterator it;
+  for (it = pIcc->m_Tags.begin(); it != pIcc->m_Tags.end(); ++it) {
+    CIccTag *pTag = pIcc->FindTag(*it);
+    if (pTag && pTag->GetType() == icSigMultiProcessElementType) {
+      CIccTagMultiProcessElement *pMpe = static_cast<CIccTagMultiProcessElement*>(pTag);
+      mpeCount++;
+      for (icUInt32Number j = 0; j < pMpe->NumElements(); j++) {
+        CIccMultiProcessElement *pElem = pMpe->GetElement(j);
+        if (pElem) {
+          icElemTypeSignature eSig = pElem->GetType();
+          if (eSig == icSigEmissionMatrixElemType ||
+              eSig == icSigInvEmissionMatrixElemType ||
+              eSig == icSigEmissionObserverElemType ||
+              eSig == icSigReflectanceObserverElemType) {
+            lateBindCount++;
+          }
+        }
+      }
+    }
+  }
+  printf("\n  MPE Tags:                   %d (multiProcessElementType)\n", mpeCount);
+  printf("  Late-Binding Elements:      %d (spectral observer/emission)\n", lateBindCount);
+  if (lateBindCount > 0) {
+    printf("    NOTE: Late-binding elements require Profile Connection Conditions (PCC)\n");
+    printf("          with spectralViewingConditionsTag (svcn) for proper rendering.\n");
+  }
+
+  printf("\n");
+}
 
 int main(int argc, char* argv[])
 {
@@ -169,6 +313,31 @@ int main(int argc, char* argv[])
   std::string sReport;
   icValidateStatus nStatus = icValidateOK;
   bool bDumpValidation = false;
+  bool bUseRead = false;
+
+  // Consume --diag and --read flags from anywhere in argv
+  for (int k = 1; k < argc; k++) {
+    if (strcmp(argv[k], "--diag") == 0) {
+      g_bDiagMode = true;
+      // Shift remaining args left
+      for (int m = k; m < argc - 1; m++)
+        argv[m] = argv[m + 1];
+      argc--;
+      k--;  // re-check this position
+    }
+    else if (strcmp(argv[k], "--read") == 0) {
+      bUseRead = true;
+      for (int m = k; m < argc - 1; m++)
+        argv[m] = argv[m + 1];
+      argc--;
+      k--;
+    }
+  }
+
+  if (argc <= 1) {
+    printUsage();
+    return 0;
+  }
 
   if (!strncmp(argv[1], "-V", 2) || !strncmp(argv[1], "-v", 2)) {
     nArg++;
@@ -216,7 +385,7 @@ int main(int argc, char* argv[])
       }
     }
 
-    pIcc = OpenIccProfile(argv[nArg]);
+    pIcc = bUseRead ? ReadIccProfile(argv[nArg]) : OpenIccProfile(argv[nArg]);
   }
 
   CIccInfo Fmt;
@@ -240,6 +409,27 @@ int main(int argc, char* argv[])
       printf("Profile ID:         Profile ID not calculated.\n");
     printf("Size:               %d (0x%x) bytes\n", pHdr->size, pHdr->size);
 
+    // Diagnostic: compare header size vs file stat size
+    if (g_bDiagMode) {
+      struct stat st;
+      if (stat(argv[nArg], &st) == 0) {
+        if ((icUInt32Number)st.st_size != pHdr->size) {
+          fprintf(stderr, "[DIAG] *** SIZE MISMATCH: header says %u, file stat says %lld ***\n",
+                  pHdr->size, (long long)st.st_size);
+          if ((icUInt32Number)st.st_size < pHdr->size)
+            fprintf(stderr, "[DIAG] File is TRUNCATED (%lld bytes short)\n",
+                    (long long)pHdr->size - (long long)st.st_size);
+          else
+            fprintf(stderr, "[DIAG] File has %lld bytes BEYOND header-declared size\n",
+                    (long long)st.st_size - (long long)pHdr->size);
+        } else {
+          fprintf(stderr, "[DIAG] Header size matches file stat: %u bytes\n", pHdr->size);
+        }
+      }
+      fprintf(stderr, "[DIAG] Load mode: %s | Validation: %s | Verbosity: %d\n",
+              bUseRead ? "ReadIccProfile (eager)" : "OpenIccProfile (lazy)",
+              bDumpValidation ? "ON" : "OFF", verbosity);
+    }
     printf("\nHeader\n");
     printf(  "------\n");
     printf("Attributes:         %s\n", Fmt.GetDeviceAttrName(pHdr->attributes));
@@ -358,13 +548,13 @@ int main(int argc, char* argv[])
             tag_lookup[i->TagInfo.sig] = n;
         }
     }
-
+    DumpV5Summary(pIcc);
 
     // Check additional details if doing detailed validation:
     // - First tag data offset is immediately after the Tag Table
     // - Tag data offsets are all 4-byte aligned
     // - Tag data should be tightly abutted with adjacent tags (or the end of the Tag Table)
-    //   (note that tag data can be reused by multiple tags and tags do NOT have to be order)
+    //   (note that tag data can be reused by multiple tags and tags do NOT have to be in order)
     // - Last tag also has to be padded and thus file size is always a multiple of 4. See clause
     //   7.2.1, bullet (c) of ICC.1:2010 and ICC.2:2019 specs.
     // - Tag offset + Tag Size should never go beyond EOF
@@ -375,59 +565,57 @@ int main(int argc, char* argv[])
     if (bDumpValidation) {
       const size_t strSize = 256;
       char str[strSize];
-      int  rndup, smallest_offset = pHdr->size;
+      int rndup, smallest_offset = pHdr->size;
 
       // File size is required to be a multiple of 4 bytes according to clause 7.2.1 bullet (c):
       // "all tagged element data, including the last, shall be padded by no more than three
       //  following pad bytes to reach a 4 - byte boundary"
       if ((pHdr->version >= icVersionNumberV4_2) && (pHdr->size % 4 != 0)) {
-          sReport += icMsgValidateNonCompliant;
-          sReport += "File size is not a multiple of 4 bytes (last tag needs padding?).\n";
-          nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
+        sReport += icMsgValidateNonCompliant;
+        sReport += "File size is not a multiple of 4 bytes (last tag needs padding?).\n";
+        nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
       }
 
-      for (i=pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i) {
+      for (i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i) {
         rndup = 4 * ((i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
-        //pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
 
         // Is the Tag offset + Tag Size beyond EOF?
-        if (i->TagInfo.size > pHdr->size || i->TagInfo.offset > pHdr->size - i->TagInfo.size) {
-            sReport += icMsgValidateNonCompliant;
-            snprintf(str, strSize, "Tag %s (offset %d, size %d) ends beyond EOF.\n",
-                    Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size);
-            sReport += str;
-            nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
+        if (i->TagInfo.offset + i->TagInfo.size > pHdr->size) {
+          sReport += icMsgValidateNonCompliant;
+          snprintf(str, strSize, "Tag %s (offset %d, size %d) ends beyond EOF.\n",
+                  Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size);
+          sReport += str;
+          nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
         }
 
         // Is it the first tag data in the file?
         if ((int)i->TagInfo.offset < smallest_offset) {
-            smallest_offset = (int)i->TagInfo.offset;
+          smallest_offset = (int)i->TagInfo.offset;
         }
 
         // Find closest tag after this tag, by checking offsets of other tags
         // use upper_bound to allow for duplicate tags (pointing to the same offset)
-        offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
+        offsetVector::const_iterator match = std::upper_bound(sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset);
         if (match == sortedTagOffsets.cend())
-            closest = safeProfileSize;
+          closest = (int)pHdr->size;
         else
-            closest = (*match <= (icUInt32Number)INT_MAX) ? (int)*match : INT_MAX;
-        closest = std::min( closest, safeProfileSize );
+          closest = *match;
+        closest = std::min(closest, (int)pHdr->size);
 
-        // Check if closest tag after this tag is less than offset+size - in which case it overlaps! Ignore last tag.
-        if ((closest < (int)((icUInt64Number)i->TagInfo.offset + i->TagInfo.size)) && (closest < safeProfileSize)) {
-            sReport += icMsgValidateWarning;
-            snprintf(str, strSize, "Tag %s (offset %d, size %d) overlaps with following tag data starting at offset %d.\n",
-                Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size, closest);
-            sReport += str;
-            nStatus = icMaxStatus(nStatus, icValidateWarning);
+        // Check if closest tag after this tag is less than offset+size - in which case it overlaps!
+        if ((closest < (int)i->TagInfo.offset + (int)i->TagInfo.size) && (closest < (int)pHdr->size)) {
+          sReport += icMsgValidateWarning;
+          snprintf(str, strSize, "Tag %s (offset %d, size %d) overlaps with following tag data starting at offset %d.\n",
+              Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size, closest);
+          sReport += str;
+          nStatus = icMaxStatus(nStatus, icValidateWarning);
         }
 
         // Check for gaps between tag data (accounting for 4-byte alignment)
-        if (closest > (int)((icUInt64Number)i->TagInfo.offset + rndup)) {
-          int gapBytes = closest - (int)((icUInt64Number)i->TagInfo.offset + rndup);
+        if (closest > (int)i->TagInfo.offset + rndup) {
           sReport += icMsgValidateWarning;
           snprintf(str, strSize, "Tag %s (size %d) is followed by %d unnecessary additional bytes (from offset %d).\n",
-                Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, gapBytes, (i->TagInfo.offset+rndup));
+              Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, closest - (i->TagInfo.offset + rndup), (i->TagInfo.offset + rndup));
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateWarning);
         }
@@ -444,14 +632,29 @@ int main(int argc, char* argv[])
       }
     }
 
-    if (argc>nArg+1) {
-      if (!stricmp(argv[nArg+1], "ALL")) {
-        for (i = pIcc->m_Tags.begin(); i!=pIcc->m_Tags.end(); ++i) {
+    if (argc > nArg + 1) {
+      if (!stricmp(argv[nArg + 1], "ALL")) {
+        int tagIdx = 0;
+        int tagLoadFail = 0;
+        for (i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i, tagIdx++) {
+          DIAG("Loading tag %d/%d: %s (offset=%u, size=%u)",
+               tagIdx + 1, (int)pIcc->m_Tags.size(),
+               Fmt.GetTagSigName(i->TagInfo.sig),
+               i->TagInfo.offset, i->TagInfo.size);
+          CIccTag *pCheck = pIcc->FindTag(*i);
+          if (!pCheck) {
+            tagLoadFail++;
+            DIAG("*** Tag %s: FindTag/LoadTag FAILED ***", Fmt.GetTagSigName(i->TagInfo.sig));
+          }
           DumpTagEntry(pIcc, *i, verbosity);
+        }
+        if (g_bDiagMode && tagLoadFail > 0) {
+          fprintf(stderr, "[DIAG] === %d of %d tags failed to load ===\n",
+                  tagLoadFail, (int)pIcc->m_Tags.size());
         }
       }
       else {
-        DumpTagSig(pIcc, (icTagSignature)icGetSigVal(argv[nArg+1]), verbosity);
+        DumpTagSig(pIcc, (icTagSignature)icGetSigVal(argv[nArg + 1]), verbosity);
       }
     }
   }
@@ -499,6 +702,6 @@ int main(int argc, char* argv[])
 #if defined(_DEBUG) || defined(DEBUG)
   printf("EXIT %d\n", nValid);
 #endif
+
   return nValid;
 }
-
