@@ -87,7 +87,7 @@ class CIccMathMatrix;
 * Purpose: The Observed Emission Matrix Element
 *****************************************************************************
 */
-class CIccMpeSpectralMatrix : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeSpectralMatrix : public CIccMultiProcessElement
 {
 public:
   CIccMpeSpectralMatrix();
@@ -140,7 +140,7 @@ protected:
 * Purpose: The Observed Emission Matrix Element
 *****************************************************************************
 */
-class CIccMpeEmissionMatrix : public CIccMpeSpectralMatrix
+class ICCPROFLIB_API CIccMpeEmissionMatrix : public CIccMpeSpectralMatrix
 {
 public:
   CIccMpeEmissionMatrix() : CIccMpeSpectralMatrix() {}
@@ -167,7 +167,7 @@ protected:
 * Purpose: The Inverse Observed Emission Matrix Element
 *****************************************************************************
 */
-class CIccMpeInvEmissionMatrix : public CIccMpeSpectralMatrix
+class ICCPROFLIB_API CIccMpeInvEmissionMatrix : public CIccMpeSpectralMatrix
 {
 public:
   CIccMpeInvEmissionMatrix() : CIccMpeSpectralMatrix() {}
@@ -196,7 +196,7 @@ protected:
 * Purpose: The float Color LookUp Table tag
 *****************************************************************************
 */
-class CIccMpeSpectralCLUT : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeSpectralCLUT : public CIccMultiProcessElement
 {
 public:
   CIccMpeSpectralCLUT();
@@ -246,7 +246,7 @@ protected:
 *Purpose : The SpectralCLUT element apply data
 *****************************************************************************
 */
-class CIccApplyMpeSpectralCLUT : public CIccApplyMpe
+class ICCPROFLIB_API CIccApplyMpeSpectralCLUT : public CIccApplyMpe
 {
   friend class CIccMpeSpectralCLUT;
 public:
@@ -270,7 +270,7 @@ protected:
 * Purpose: The Emission CLUT Element
 *****************************************************************************
 */
-class CIccMpeEmissionCLUT : public CIccMpeSpectralCLUT
+class ICCPROFLIB_API CIccMpeEmissionCLUT : public CIccMpeSpectralCLUT
 {
 public:
   CIccMpeEmissionCLUT() : CIccMpeSpectralCLUT() {}
@@ -296,7 +296,7 @@ protected:
 * Purpose: The Reflectance CLUT Element
 *****************************************************************************
 */
-class CIccMpeReflectanceCLUT : public CIccMpeSpectralCLUT
+class ICCPROFLIB_API CIccMpeReflectanceCLUT : public CIccMpeSpectralCLUT
 {
 public:
   CIccMpeReflectanceCLUT() : CIccMpeSpectralCLUT() {}
@@ -324,7 +324,7 @@ protected:
 * Purpose: The Spectral Observer Element
 *****************************************************************************
 */
-class CIccMpeSpectralObserver : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeSpectralObserver : public CIccMultiProcessElement
 {
 public:
   CIccMpeSpectralObserver();
@@ -371,7 +371,7 @@ protected:
 * Purpose: The Emission Observer Element
 *****************************************************************************
 */
-class CIccMpeEmissionObserver : public CIccMpeSpectralObserver
+class ICCPROFLIB_API CIccMpeEmissionObserver : public CIccMpeSpectralObserver
 {
 public:
   CIccMpeEmissionObserver() : CIccMpeSpectralObserver() {}
@@ -397,7 +397,7 @@ protected:
 * Purpose: The Reflectance Observer Element
 *****************************************************************************
 */
-class CIccMpeReflectanceObserver : public CIccMpeSpectralObserver
+class ICCPROFLIB_API CIccMpeReflectanceObserver : public CIccMpeSpectralObserver
 {
 public:
   CIccMpeReflectanceObserver() : CIccMpeSpectralObserver() {}

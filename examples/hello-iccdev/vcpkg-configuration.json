@@ -1,0 +1,9 @@
+{
+  "default-registry": {
+    "kind": "builtin",
+    "baseline": "1940ee77e81573713c0d364c42f5990172198be1"
+  },
+  "overlay-ports": [
+    "../../ports/iccdev"
+  ]
+}

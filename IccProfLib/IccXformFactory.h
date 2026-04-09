@@ -128,7 +128,7 @@ typedef std::list<IIccXformFactory*> CIccXformFactoryList;
  * CIccXformCreator always creates a CIccSpecXformFactory.
  ***********************************************************************
  */
-class CIccBaseXformFactory : public IIccXformFactory
+class ICCPROFLIB_API CIccBaseXformFactory : public IIccXformFactory
 {
 public:
   /**

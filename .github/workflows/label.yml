@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Apply PR labels
-        uses: actions/labeler@25abb3cad4f14b7ac27968a495c37798860a5a1a
+        uses: actions/labeler@25abb3cad4f14b7ac27968a495c37798860a5a1a  # v5+
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
           configuration-path: .github/labeler.yml

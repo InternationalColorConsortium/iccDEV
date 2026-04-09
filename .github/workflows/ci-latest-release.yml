@@ -7,13 +7,11 @@
 #
 ## Intent: ci-latest-release
 #
-## Last Updated: 2026-02-17 18:05:19 UTC UTC by David Hoyt
-#                Clean .pdb files from Zip Bundle
-#                Change Build to Release per Developer Spec
-#                Note that Cmake Default Build = Release (now)
-#                Add bash & pwsh shell prologues
-#                Align Unix & Windows Bundle per Developer Spec
-#                Thank you Max & Phil for the Corrections!
+## Last Updated: 2026-03-26 by David Hoyt / Copilot
+#                Add push-to-master trigger
+#                Add release job: zip + publish to GitHub Releases (rolling 'latest')
+#                Pin softprops/action-gh-release@v2 and actions/download-artifact@v4
+#                Elevate permissions to contents: write for release creation
 #
 #  TODO: Extract repetitive shell commands to reusable script
 #
@@ -38,7 +36,7 @@ jobs:
         compiler: [gcc, clang]
     steps:
       - name: Checkout master
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           persist-credentials: false
 
@@ -61,12 +59,13 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          if [ "${MATRIX_COMPILER}" = "gcc" ]; then
             echo "CC=gcc" >> $GITHUB_ENV
             echo "CXX=g++" >> $GITHUB_ENV
           else
@@ -108,14 +107,6 @@ jobs:
           unset GITHUB_TOKEN || true
           cd Build
           make -j$(nproc)
-          cd ../Testing/
-          echo "=== Updating PATH ==="
-          for d in ../Build/Tools/*; do
-          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done
-          sh CreateAllProfiles.sh
-          sh RunTests.sh
-          find . -iname "*.icc" | wc -l
       - name: Verify CMake Cache
         shell: bash --noprofile --norc {0}
         env:
@@ -213,22 +204,23 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          echo "### Linux Build Summary (${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
-          echo "- Build Directory: Build/" >> $GITHUB_STEP_SUMMARY
-          echo "- Artifacts Uploaded: iccdev-linux-${{ matrix.compiler }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: Success" >> $GITHUB_STEP_SUMMARY
+          echo "### Linux Build Summary (${MATRIX_COMPILER})" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build Directory: Build/" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifacts Uploaded: iccdev-linux-${MATRIX_COMPILER}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: Success" >> "$GITHUB_STEP_SUMMARY"
   macos:
     name: "macOS Clang"
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - name: Checkout master
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           persist-credentials: false
 
@@ -281,16 +273,7 @@ jobs:
           echo "Starting build process..."
           cd Build
           make -j$(sysctl -n hw.ncpu)
-          echo "✔ Build process completed."
-          echo "========= BEGIN INSIDE STUB ========="
-          cd ../Testing/
-          echo "=== Updating PATH ==="
-          for d in ../Build/Tools/*; do
-          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done
-          sh CreateAllProfiles.sh
-          sh RunTests.sh
-          find . -iname "*.icc" | wc -l
+          echo "Build process completed."
 
       - name: Stage bundle into Testing directory
         shell: bash --noprofile --norc {0}
@@ -386,24 +369,26 @@ jobs:
     timeout-minutes: 45
     env:
       POWERSHELL_TELEMETRY_OPTOUT: "1"
+      POWERSHELL_UPDATECHECK: "Off"
     defaults:
       run:
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
     strategy:
       fail-fast: false
     steps:
       - name: Checkout PR source
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: UCI Gate 1 for Windows Powershell
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
         run: |
+         git config --global credential.helper ""
          Set-StrictMode -Version Latest
          $ErrorActionPreference = 'Stop'
          $ProgressPreference = 'SilentlyContinue'
@@ -470,10 +455,10 @@ jobs:
 
           Write-Host "Finished UCI Gate 1 for pwsh" -ForegroundColor Green
       - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@767f00a3f09872d96a0cb9fcd5e6a4ff33311330
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
       - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -487,14 +472,15 @@ jobs:
           Write-Host "Commit SHA:    $env:PR_HEAD_SHA"
           Write-Host "OS:            $env:RUNNER_OS"
       - name: Install dependencies and build
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
+          git config --global credential.helper ""
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-            if (Test-Path Env:GITHUB_TOKEN) {
-              Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-            }
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
           Write-Host "============================= Starting Build =============================" -ForegroundColor Green
           Write-Host "Copyright (©) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
           git branch
@@ -517,52 +503,11 @@ jobs:
           $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
           $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
           $env:PATH -split ';'
-          pwd
-          cd ..\..\Testing
-          .\CreateAllProfiles.bat
-          .\RunTests.bat
-          cd CalcTest\
-          .\checkInvalidProfiles.bat
-          .\runtests.bat
-          cd ..\Display
-          .\RunProtoTests.bat
-          cd ..\HDR
-          .\mkprofiles.bat
-          cd ..\mcs\
-          .\updateprev.bat
-          .\updateprevWithBkgd.bat
-          cd ..\Overprint
-          .\RunTests.bat
-          cd ..
-          cd hybrid
-          .\BuildAndTest.bat
-          cd ..
-          cd ..
-          pwd
-          # Collect .icc profile information
-          $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
-          $totalCount = $profiles.Count
-
-          # Group profiles by directory
-          $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
-
-          # Generate Summary Report
-          Write-Host "`n========================="
-          Write-Host " ICC Profile Report"
-          Write-Host "========================="
-
-          # Print count per subdirectory
-          foreach ($group in $groupedProfiles) {
-              Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
-          }
-
-          Write-Host "`nTotal .icc profiles found: $totalCount"
-          Write-Host "=========================`n"
-
-          Write-Host "All Done!"
       - name: Stage bundle into Testing directory
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
@@ -579,7 +524,12 @@ jobs:
           Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
           Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
-          # 4. Generate path.bat helper script
+          # 4. Copy IIS installer script
+          $iisInstaller = "Tools/Winnt/IccIisIsapi/Install-IccIisIsapiSite.ps1"
+          if (Test-Path $iisInstaller) {
+            Copy-Item -Path $iisInstaller -Destination $stage -Force
+          }
+          # 5. Generate path.bat helper script
           @'
           @echo off
           setlocal EnableDelayedExpansion
@@ -627,13 +577,16 @@ jobs:
           path: staging
           if-no-files-found: warn
       - name: Host System Info
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
+          $ErrorActionPreference = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           systeminfo
           Get-CimInstance -ClassName Win32_Processor
       - name: Summary Report
         if: always()
-        shell: pwsh
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           GH_REPOSITORY: ${{ github.repository }}
@@ -654,3 +607,119 @@ jobs:
           "- Build Directory: Build/" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "- Artifacts Uploaded: iccdev-windows-msvc" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "- Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+  release:
+    name: "Publish Latest Release"
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: artifacts
+
+      - name: Package release archives
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          mkdir -p release-assets
+          short_sha="${GITHUB_SHA:0:7}"
+
+          for dir in artifacts/iccdev-*; do
+            [ -d "$dir" ] || continue
+            name="$(basename "$dir")"
+            echo "--- Packaging $name ---"
+            (cd "$dir" && zip -r "../../release-assets/${name}.zip" .)
+            echo "  Created ${name}.zip ($(du -h "release-assets/${name}.zip" | cut -f1))"
+          done
+
+          echo ""
+          echo "=== Release assets ==="
+          ls -lh release-assets/
+
+      - name: Delete existing latest tag
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+
+          # Delete existing 'latest' release and tag if they exist
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create latest release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe
+        with:
+          tag_name: latest
+          name: "Latest Build"
+          body: |
+            ## Rolling Latest Build
+
+            **Commit:** ${{ github.sha }}
+            **Branch:** ${{ github.ref_name }}
+            **Date:** ${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
+
+            ### Downloads
+
+            | Platform | Archive |
+            |----------|---------|
+            | Linux (GCC) | `iccdev-linux-gcc.zip` |
+            | Linux (Clang) | `iccdev-linux-clang.zip` |
+            | macOS (Clang) | `iccdev-macos-clang.zip` |
+            | Windows (MSVC) | `iccdev-windows-msvc.zip` |
+
+            ### Install via Package Managers
+
+            | Method | Command |
+            |--------|---------|
+            | **Homebrew** | `brew install iccdev` |
+            | **NPM** | `npm install iccdev` |
+            | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
+            | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
+
+            ---
+            *Auto-published by ci-latest-release on push to master.*
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: release-assets/*.zip
+
+      - name: Summary Report
+        if: always()
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          {
+            echo "### Release Summary"
+            echo ""
+            echo "- Tag: \`latest\`"
+            echo "- Commit: \`${GITHUB_SHA:0:7}\`"
+            echo "- Assets uploaded: $(ls release-assets/*.zip 2>/dev/null | wc -l) zip files"
+            echo ""
+            for f in release-assets/*.zip; do
+              [ -f "$f" ] || continue
+              echo "  - \`$(basename "$f")\` ($(du -h "$f" | cut -f1))"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

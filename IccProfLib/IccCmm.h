@@ -803,8 +803,8 @@ protected:
 
 };
 
-class CIccPcsStepMatrix;
-class CIccMpeMatrix;
+class ICCPROFLIB_API CIccPcsStepMatrix;
+class ICCPROFLIB_API CIccMpeMatrix;
 
 class ICCPROFLIB_API CIccPcsStepScale : public CIccPcsStep
 {
@@ -1347,7 +1347,7 @@ typedef enum {
 } icApplyInterface;
 
 //Forward reference for CIccXformNamedColor
-class CIccArrayNamedColor;
+class ICCPROFLIB_API CIccArrayNamedColor;
 
 /**
  **************************************************************************
@@ -1764,7 +1764,7 @@ protected:
 };
 
 //Forward Class for CIccApplyNamedColorCmm
-class CIccNamedColorCmm;
+class ICCPROFLIB_API CIccNamedColorCmm;
 /**
 **************************************************************************
 * Type: Class 
@@ -1912,7 +1912,7 @@ typedef CIccMruCache<icUInt8Number> CIccMruCache8;
 typedef CIccMruCache<icUInt16Number> CIccMruCache16;
 
 // forward class CIccMruCmm used by CIccApplyMruCmm
-class CIccMruCmm;
+class ICCPROFLIB_API CIccMruCmm;
 /**
 **************************************************************************
 * Type: Class 

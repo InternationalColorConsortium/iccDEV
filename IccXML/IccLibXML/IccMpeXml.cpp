@@ -2397,7 +2397,7 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
             }
 
             /*parse the file and get the DOM */
-            doc = xmlReadFile(file.c_str(), NULL, 0);
+            doc = xmlReadFile(file.c_str(), NULL, XML_PARSE_HUGE);
 
             if (doc == NULL) {
               parseStr += "Unable to import '";
@@ -2606,7 +2606,6 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
           pSubCalc->m_sImport = importPath;
         }
 
-        xmlAttr *attr;
         IIccExtensionMpe *pExt = pMpe->GetExtension();
 
         if (pExt) {

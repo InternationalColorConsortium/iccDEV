@@ -44,3 +44,31 @@ cd iccdev
 cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
+
+## vcpkg Port (Core Libraries & Tools)
+
+A vcpkg overlay port is provided in `ports/iccdev/` for consuming iccDEV as a
+static library dependency across Windows, Linux, and macOS.
+
+For full documentation — install commands, feature flags, CMake integration,
+local source mode, platform notes, and troubleshooting — see
+**[examples/hello-iccdev](../examples/hello-iccdev/README.md)**.
+
+### Example Project vcpkg
+
+```
+git clone https://github.com/InternationalColorConsortium/iccdev.git
+cd iccdev\examples\hello-iccdev 
+git checkout ci-vcpkg-ports
+vcpkg install --overlay-ports=../../ports/iccdev
+cmake -S . -B build-vcpkg-verify -G "Visual Studio 17 2022" -A x64 "-DCMAKE_TOOLCHAIN_FILE=C:/Program Files/Microsoft Visual Studio/2022/Community/VC/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DICCDEV_BUILD_DIR=..\..\Release"
+cmake --build .\build-vcpkg-verify\ --config Release
+build-vcpkg-verify\Release\hello-iccdev.exe
+```
+
+### CMake Usage
+
+```cmake
+find_package(RefIccMAX CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE RefIccMAX::IccProfLib2-static)
+```

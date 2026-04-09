@@ -67,49 +67,49 @@ test_failed() {
 assert_safe_html() {
   local test_name="$1"
   local output="$2"
-  
+
   # The key insight: if < and > are properly escaped to &lt; and &gt;,
   # then the content is safe even if it contains strings like "onerror="
   # because the browser won't interpret it as HTML.
   #
   # We check for UNESCAPED tags - actual < and > characters that would
   # allow browser interpretation.
-  
+
   # Check for unescaped < followed by tag names
   if echo "$output" | grep -q '<script' || echo "$output" | grep -q '</script'; then
     test_failed "$test_name" "Contains unescaped <script> tag"
     return 1
   fi
-  
+
   if echo "$output" | grep -q '<img '; then
     test_failed "$test_name" "Contains unescaped <img> tag"
     return 1
   fi
-  
+
   if echo "$output" | grep -q '<iframe '; then
     test_failed "$test_name" "Contains unescaped <iframe> tag"
     return 1
   fi
-  
+
   if echo "$output" | grep -q '<svg '; then
     test_failed "$test_name" "Contains unescaped <svg> tag"
     return 1
   fi
-  
+
   # Check for javascript: protocol in an actual href attribute (unescaped)
   # If it's escaped as &lt;...&gt; then it's safe
   if echo "$output" | grep -Eq '<[^>]*href=['\''"]?javascript:'; then
     test_failed "$test_name" "Contains unescaped javascript: in href"
     return 1
   fi
-  
+
   # Check for unescaped event handlers in actual tag attributes
   # Pattern: < tag ... on[event]= ... >
   if echo "$output" | grep -Eq '<[^>]*on[a-z]+=['\''"]?[a-zA-Z(]'; then
     test_failed "$test_name" "Contains unescaped event handler in tag"
     return 1
   fi
-  
+
   test_passed "$test_name"
   return 0
 }
@@ -119,25 +119,25 @@ assert_html_escaped() {
   local test_name="$1"
   local input="$2"
   local output="$3"
-  
+
   # If input contains <, output should contain &lt;
   if [[ "$input" == *"<"* ]] && [[ "$output" != *"&lt;"* ]]; then
     test_failed "$test_name" "< not escaped to &lt;"
     return 1
   fi
-  
+
   # If input contains >, output should contain &gt;
   if [[ "$input" == *">"* ]] && [[ "$output" != *"&gt;"* ]]; then
     test_failed "$test_name" "> not escaped to &gt;"
     return 1
   fi
-  
+
   # If input contains &, output should escape it
   if [[ "$input" == *"&"* ]] && [[ "$output" != *"&amp;"* ]]; then
     test_failed "$test_name" "& not escaped to &amp;"
     return 1
   fi
-  
+
   test_passed "$test_name"
   return 0
 }
@@ -352,32 +352,32 @@ echo "========================================="
 echo ""
 
 # Load some signatures from the file if it exists
-SIGNATURE_FILE="${SCRIPT_DIR}/../../Commodity-Injection-Signatures/no-experience-required-xss-signatures-only-fools-dont-use.txt"
+SIGNATURE_FILE="${SCRIPT_DIR}/sanitizer-test-file.txt"
 
 if [[ -f "$SIGNATURE_FILE" ]]; then
   echo "Loading signatures from file..."
-  
+
   # Test first 50 signatures from file
   line_num=0
   while IFS= read -r line && [[ $line_num -lt 50 ]]; do
     ((line_num++))
-    
+
     # Skip empty lines and comments
     [[ -z "$line" ]] && continue
     [[ "$line" =~ ^# ]] && continue
-    
+
     # Extract the XSS payload (remove line numbers like "1. ")
     payload=$(echo "$line" | sed -E 's/^[0-9]+\.[[:space:]]*//')
-    
+
     # Skip if still empty
     [[ -z "$payload" ]] && continue
-    
+
     # Test with sanitize_line
     output=$(sanitize_line "$payload")
     assert_safe_html "Signature #$line_num (line)" "$output"
-    
+
   done < "$SIGNATURE_FILE"
-  
+
   echo "Tested $line_num signatures from file"
 else
   echo "${YELLOW}Warning${NC}: Signature file not found at $SIGNATURE_FILE"

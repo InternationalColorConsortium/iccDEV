@@ -78,6 +78,8 @@ CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCm
   m_nApply = pCmm->m_pcc.size();
   if (!m_nApply)
     m_nApply = 1;
+  if (m_nApply > pCmm->m_dst_to_mid.size())
+    m_nApply = (size_t)pCmm->m_dst_to_mid.size();
 
   m_nSamples = pCmm->m_dst_to_mid[0]->GetDestSamples();
   icUInt16Number nSrcSamples = pCmm->m_dst_to_mid[0]->GetSourceSamples();

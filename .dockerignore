@@ -1,0 +1,12 @@
+# Prevent local build artifacts from breaking Docker builds
+Build/CMakeCache.txt
+Build/CMakeFiles/
+Build/IccProfLib/
+Build/IccXML/
+Build/Tools/
+Build/Makefile
+Build/cmake_install.cmake
+Build/IccProfLib2Config.cmake
+Build/CTestTestfile.cmake
+Build/Testing/
+.git

@@ -6,6 +6,11 @@ and application of ICC based color management profiles based on the
 [ICC profile specification](http://www.color.org/icc_specs2.xalter) and 
 [iccMAX profile specification](http://www.color.org/iccmax.xalter).
 
+## Documentation
+
+- [Build](build.md)
+- [Install](install.md)
+
 ## Features Overview
 
 Within the project are several libraries and tools as follows:
@@ -175,11 +180,15 @@ abridged spectral encoding is provided.
 
 ## Installation
 
-Install iccDEV using the Homebrew or NPM:
+See [Install](install.md) for Docker, Homebrew, NPM, and NixOS quickstart.
 
-```
-brew install iccdev
-npm install iccdev
-```
+[Build on Windows, macOS, Linux](build.md) ·
+[Bisecting Regressions](bisect.md)
 
-[Build on Windows, macOS, Linux](BUILD.md)
+## Examples
+
+The [`examples/hello-iccdev/`](../examples/hello-iccdev/) directory contains a
+minimal standalone example that links IccProfLib2 and IccXML2, prints library
+versions, and round-trips an ICC profile header to XML. It supports three
+discovery paths: installed package (including vcpkg), build-tree export, and
+manual discovery.

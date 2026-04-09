@@ -131,7 +131,7 @@ void ICCPROFLIB_API IccSetMatrixSolver(IIccMatrixSolver *pSolver);
 *  determine the matrix solver object.  
 *****************************************************************************
 */
-IIccMatrixSolver ICCPROFLIB_API *IccGetDefaultMatrixSolver();
+ICCPROFLIB_API IIccMatrixSolver *IccGetDefaultMatrixSolver();
 
 /**
 ****************************************************************************
@@ -191,7 +191,7 @@ void ICCPROFLIB_API IccSetMatrixInverter(IIccMatrixInverter *pInverter);
 *  determine the matrix solver object.
 *****************************************************************************
 */
-IIccMatrixInverter ICCPROFLIB_API *IccGetDefaultMatrixInverter();
+ICCPROFLIB_API IIccMatrixInverter *IccGetDefaultMatrixInverter();
 
 #endif //_ICCSOLVE_H
 

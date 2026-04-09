@@ -1219,7 +1219,7 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
 
               CIccFloatArray data;
               data.ParseTextArray(pChild);
-              if (data.GetSize()==nRows*nCols) {
+              if (data.GetSize()==(icUInt32Number)nRows*nCols) {
                 if (!mtx.FillFromFullMatrix(data.GetBuf()))
                   parseStr += "Exceeded maximum number of sparse matrix entries\n";
               }
@@ -2588,7 +2588,7 @@ bool CIccTagXmlCurve::ToXml(std::string &xml, icConvertType nType, std::string b
         xml += "\n";
         xml += blanks;  
       }
-      snprintf(buf, bufSize, " %3u", (int)(m_Curve[i] * 255.0 + 0.5));
+      snprintf(buf, bufSize, " %3d", (int)(m_Curve[i] * 255.0 + 0.5));
       xml += buf;
     }
     xml += "\n";
@@ -2601,7 +2601,7 @@ bool CIccTagXmlCurve::ToXml(std::string &xml, icConvertType nType, std::string b
         xml += "\n";
         xml += blanks + " ";
       }
-      snprintf(buf, bufSize, " %5u", (int)(m_Curve[i] * 65535.0 + 0.5));
+      snprintf(buf, bufSize, " %5d", (int)(m_Curve[i] * 65535.0 + 0.5));
       xml += buf;
     }
     xml += "\n";
@@ -3545,7 +3545,7 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
             return NULL;
           }
 
-          if (data.GetSize()!=pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {     
+          if (data.GetSize()!=(size_t)pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {     
             parseStr += "Error! - Number of entries in file '";
             parseStr += filename;
             parseStr += "'is not equal to the size of the CLUT Table.\n";  
@@ -3666,7 +3666,7 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
           size_t num = file->GetLength();
           icUInt8Number value;
           // if number of entries in file is not equal to size of CLUT table, flag as error
-          if (num!=pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {
+          if (num!=(size_t)pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {
             parseStr += "Error! - Number of entries in file '";
             parseStr += filename;
             parseStr += "'is not equal to the size of the CLUT Table.\n";  
@@ -3696,7 +3696,7 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
           icUInt16Number value;
           icUInt8Number *ptr = (icUInt8Number*)&value;
 
-          if (num<pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {
+          if (num<(size_t)pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {
             parseStr += "Error! - Number of entries in file '";
             parseStr += filename;
             parseStr += "'is not equal to the size of the CLUT Table.\n";
@@ -3736,7 +3736,7 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
           icFloat32Number value;
           icUInt8Number *ptr = (icUInt8Number*)&value;
 
-          if (num<pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {
+          if (num<(size_t)pCLUT->NumPoints()*pCLUT->GetOutputChannels()) {
             parseStr += "Error! - Number of entries in file '";
             parseStr += filename;
             parseStr += "'is not equal to the size of the CLUT Table.\n";  
@@ -4412,9 +4412,9 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           for (pText = pChild->children; pText && pText->type != XML_TEXT_NODE && pText->type != XML_CDATA_SECTION_NODE; pText = pText->next);
 
           if (pText) {
-            CIccUTF16String str((const char*)pText->content);
+            CIccUTF16String localStr((const char*)pText->content);
 
-            pTag->SetText(str.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
+            pTag->SetText(localStr.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
           }
           else {
             pTag->SetText("");
@@ -4435,8 +4435,8 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           for (pText = pChild->children; pText && pText->type != XML_TEXT_NODE && pText->type != XML_CDATA_SECTION_NODE; pText = pText->next);
 
           if (pText) {
-            CIccUTF16String str((const char*)pText->content);
-            pTag->SetText(str.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
+            CIccUTF16String localStr((const char*)pText->content);
+            pTag->SetText(localStr.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
           }
           else {
             pTag->SetText("");
@@ -5078,7 +5078,7 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
     if (!m_PCSValues)
       return false;
 
-    memcpy(m_PCSValues, vals.GetBuf(), m_NumberOfVertices * m_nPCSChannels*sizeof(icFloatNumber));
+    memcpy(m_PCSValues, vals.GetBuf(), (size_t)m_NumberOfVertices * m_nPCSChannels*sizeof(icFloatNumber));
   }
   else {
     parseStr += "Cannot find PCSValues\n";
@@ -5113,7 +5113,7 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
     if (!m_DeviceValues)
       return false;
 
-    memcpy(m_DeviceValues, vals.GetBuf(), m_NumberOfVertices * m_nDeviceChannels * sizeof(icFloatNumber));
+    memcpy(m_DeviceValues, vals.GetBuf(), (size_t)m_NumberOfVertices * m_nDeviceChannels * sizeof(icFloatNumber));
   }
   else if (!m_PCSValues)
     m_NumberOfVertices = 0;

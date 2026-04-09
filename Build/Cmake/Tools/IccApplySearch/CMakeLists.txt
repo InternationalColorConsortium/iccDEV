@@ -43,3 +43,8 @@ target_link_libraries(iccApplySearch PRIVATE
 
 # Compiler options
 target_compile_options(iccApplySearch PRIVATE)
+
+# Install
+IF(ENABLE_INSTALL_RIM)
+  INSTALL(TARGETS iccApplySearch DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT shared-proof)
+ENDIF(ENABLE_INSTALL_RIM)

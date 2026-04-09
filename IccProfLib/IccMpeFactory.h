@@ -146,7 +146,7 @@ typedef std::list<IIccMpeFactory*> CIccMpeFactoryList;
  * creates a CIccBasicElemFactory.
  ***********************************************************************
  */
-class CIccBasicMpeFactory : public IIccMpeFactory
+class ICCPROFLIB_API CIccBasicMpeFactory : public IIccMpeFactory
 {
 public:
   /**

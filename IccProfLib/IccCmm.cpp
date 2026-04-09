@@ -2898,7 +2898,7 @@ void CIccPcsXform::pushScale(icUInt16Number n, const icFloatNumber *vals)
 void CIccPcsXform::pushMatrix(icUInt16Number nRows, icUInt16Number nCols, const icFloatNumber *vals)
 {
   CIccPcsStepMatrix *mtx = new CIccPcsStepMatrix(nRows, nCols);
-  memcpy(mtx->entry(0), vals, nRows*nCols*sizeof(icFloatNumber));
+  memcpy(mtx->entry(0), vals, (size_t)nRows*nCols*sizeof(icFloatNumber));
 
   CIccPcsStepPtr ptr;
   ptr.ptr = mtx;
@@ -6513,7 +6513,7 @@ CIccApplyXform* CIccXformNDLut::GetNewApply(icStatusCMM& status)
   CIccCLUT* pCLUT = m_pTag->GetCLUT();
   CIccApplyCLUT* pApply = NULL;
 
-  if (pCLUT && m_nNumInput > 6) {
+  if (pCLUT) {      // was && m_nNumInput > 6, but this gets called for 1,2,5,6 as well, and withput pApply, it crashes
     pApply = pCLUT->GetNewApply();
     if (!pApply) {
       status = icCmmStatAllocErr;
@@ -8083,9 +8083,13 @@ icStatusCMM CIccCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
+  // CFL-078: Save deviceClass before AddXform — CIccXform::Create() deletes
+  // cenc profiles internally (line 546), so caller must NOT double-delete.
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
-  if (rv != icCmmStatOk)
+  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return rv;
@@ -8139,9 +8143,12 @@ icStatusCMM CIccCmm::AddXform(icUInt8Number *pProfileMem,
     return icCmmStatCantOpenProfile;
   }
 
+  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
-  if (rv != icCmmStatOk)
+  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return rv;
@@ -8529,18 +8536,28 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
 {
   CIccProfile *pProfile = new CIccProfile(Profile);
 
+  // CFL-045: Guard against null PCS causing vptr corruption in copy (CWE-843)
+  if (pProfile && (icUInt32Number)pProfile->m_Header.pcs == 0 && (icUInt32Number)pProfile->m_Header.spectralPCS == 0) {
+    delete pProfile;
+    return icCmmStatInvalidProfile;
+  }
+
   if (!pProfile) 
     return icCmmStatAllocErr;
 
   //borrow the caller's AttachIO to perform the AddXform
   pProfile->CopyAttach(&Profile);
 
+  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
   //Now that we have added the xform disconnect from the callers AttachIO
-  pProfile->CopyAttach(nullptr);
+  if (savedClass != icSigColorEncodingClass)
+    pProfile->CopyAttach(nullptr);
 
-  if (stat != icCmmStatOk)
+  if (stat != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return stat;
@@ -10552,9 +10569,12 @@ icStatusCMM CIccNamedColorCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
+  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer (CWE-416)
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
+
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
-  if (rv != icCmmStatOk)
+  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
     delete pProfile;
 
   return rv;
@@ -11174,7 +11194,7 @@ bool CIccMruCache<T>::Init(icUInt16Number nSrcSamples, icUInt16Number nDstSample
   if (!m_cache)
     return false;
 
-  m_pixelData = (T*)malloc((int)nCacheSize * m_nTotalSamples * sizeof(T));
+  m_pixelData = (T*)malloc((size_t)nCacheSize * m_nTotalSamples * sizeof(T));
 
   if (!m_pixelData)
     return false;
@@ -11248,8 +11268,11 @@ bool CIccMruCache<T>::Apply(T *DstPixel, const T *SrcPixel)
     if (prev)
       prev->pNext = NULL;
 
-    // Static analysis gets a false positive here, because it doesn't understand the relation between count and pointers in the list
-    // assert avoids the static analysis warning, and should never fire
+    // Static analysis false positive: last is never NULL here because
+    // m_nCacheSize >= 1 guarantees at least one loop iteration sets last = ptr
+    assert( last != NULL );
+    if (!last)
+      return false;
     assert( m_pFirst != NULL );
     last->pNext = m_pFirst;
 

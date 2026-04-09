@@ -358,7 +358,7 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
     else
       sDescription += "Profile ID:         Profile ID not calculated.\n";
     sDescription += "Size:               ";
-    snprintf(buf, bufSize, "%d(0x%x) bytes\n", pHdr->size, pHdr->size);
+    snprintf(buf, bufSize, "%u(0x%x) bytes\n", pHdr->size, pHdr->size);
     sDescription += buf;
     sDescription += "\nHeader\n";
     sDescription += "------\n";
@@ -446,7 +446,7 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
       // Find closest tag after this tag, by scanning all offsets of other tags 
       closest = pHdr->size;
       for (j = m_pProfile->m_Tags.begin(); j != m_pProfile->m_Tags.end(); j++) {
-        if ((i != j) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && ((int)j->TagInfo.offset <= closest)) {
+        if ((i != j) && (i->TagInfo.size <= (0xFFFFFFFF - i->TagInfo.offset)) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && ((int)j->TagInfo.offset <= closest)) {
           closest = j->TagInfo.offset;
         }
       }
@@ -458,7 +458,7 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
       char sOffset[tempSize], sSize[tempSize], sPad[tempSize];
       snprintf(sOffset, tempSize, "%u", i->TagInfo.offset);
       snprintf(sSize, tempSize, "%u", i->TagInfo.size);
-      snprintf(sPad, tempSize, "%u", pad);
+      snprintf(sPad, tempSize, "%d", pad);
       sDescription += fillColumns(Fmt.GetTagSigName(i->TagInfo.sig), icGetSig(sigbuf, bufSize, i->TagInfo.sig, false), sOffset, sSize, sPad) + "\n";
     }
   }

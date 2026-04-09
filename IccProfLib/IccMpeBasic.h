@@ -125,7 +125,7 @@ protected:
 * Purpose: The parametric curve segment
 *****************************************************************************
 */
-class CIccFormulaCurveSegment : public CIccCurveSegment
+class ICCPROFLIB_API CIccFormulaCurveSegment : public CIccCurveSegment
 {
 public:
   CIccFormulaCurveSegment(icFloatNumber start, icFloatNumber end);
@@ -164,7 +164,7 @@ protected:
 * Purpose: The sampled curve segment
 *****************************************************************************
 */
-class CIccSampledCurveSegment : public CIccCurveSegment
+class ICCPROFLIB_API CIccSampledCurveSegment : public CIccCurveSegment
 {
 public:
   CIccSampledCurveSegment(icFloatNumber start, icFloatNumber end);
@@ -241,7 +241,7 @@ typedef std::list<CIccCurveSegment*> CIccCurveSegmentList;
 * Purpose: The Curve Set Segmented Curve Type
 *****************************************************************************
 */
-class CIccSegmentedCurve : public CIccCurveSetCurve
+class ICCPROFLIB_API CIccSegmentedCurve : public CIccCurveSetCurve
 {
 public:
   CIccSegmentedCurve();
@@ -279,7 +279,7 @@ protected:
 * Purpose: The single sampled curve class
 *****************************************************************************
 */
-class CIccSingleSampledCurve : public CIccCurveSetCurve
+class ICCPROFLIB_API CIccSingleSampledCurve : public CIccCurveSetCurve
 {
 public:
   CIccSingleSampledCurve(icFloatNumber first=0.0, icFloatNumber last=1.0);
@@ -335,7 +335,7 @@ protected:
 };
 
 //forward class
-class CIccMpeCalculator;
+class ICCPROFLIB_API CIccMpeCalculator;
 
 #define ICC_MAXCALCCURVESIZE 16384
 
@@ -346,7 +346,7 @@ class CIccMpeCalculator;
 * Purpose: The sampled calculator curve class
 *****************************************************************************
 */
-class CIccSampledCalculatorCurve : public CIccCurveSetCurve
+class ICCPROFLIB_API CIccSampledCalculatorCurve : public CIccCurveSetCurve
 {
 public:
   CIccSampledCalculatorCurve(icFloatNumber first = 0.0, icFloatNumber last = 1.0);
@@ -417,7 +417,7 @@ protected:
 * Purpose: The curve set process element
 *****************************************************************************
 */
-class CIccMpeCurveSet : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeCurveSet : public CIccMultiProcessElement
 {
 public:
   CIccMpeCurveSet(int nSize=0);
@@ -457,7 +457,7 @@ protected:
 * Purpose: The curve set process element
 *****************************************************************************
 */
-class CIccMpeTintArray : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeTintArray : public CIccMultiProcessElement
 {
 public:
   CIccMpeTintArray(int nVectorSize=1);
@@ -538,7 +538,7 @@ protected:
 * Purpose: The curve set process element
 *****************************************************************************
 */
-class CIccMpeToneMap : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeToneMap : public CIccMultiProcessElement
 {
 public:
   CIccMpeToneMap(icUInt16Number nOutputChannels = 1);
@@ -592,7 +592,7 @@ typedef enum {
 * Purpose: The Matrix element with constant offset
 *****************************************************************************
 */
-class CIccMpeMatrix : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeMatrix : public CIccMultiProcessElement
 {
 public:
   CIccMpeMatrix();
@@ -648,7 +648,7 @@ typedef enum {
 * Purpose: The float Color LookUp Table tag
 *****************************************************************************
 */
-class CIccMpeCLUT : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeCLUT : public CIccMultiProcessElement
 {
 public:
   CIccMpeCLUT();
@@ -687,7 +687,7 @@ protected:
 * Purpose: The Calculator process element apply data
 *****************************************************************************
 */
-class CIccApplyMpeCLUT : public CIccApplyMpe
+class ICCPROFLIB_API CIccApplyMpeCLUT : public CIccApplyMpe
 {
   friend class CIccMpeCLUT;
 public:
@@ -712,7 +712,7 @@ protected:
 * Purpose: The extended Color LookUp Table tag
 *****************************************************************************
 */
-class CIccMpeExtCLUT : public CIccMpeCLUT
+class ICCPROFLIB_API CIccMpeExtCLUT : public CIccMpeCLUT
 {
 public:
   CIccMpeExtCLUT();
@@ -748,7 +748,7 @@ class CIccCamConverter;
 * Purpose: The float Color LookUp Table tag
 *****************************************************************************
 */
-class CIccMpeCAM : public CIccMultiProcessElement
+class ICCPROFLIB_API CIccMpeCAM : public CIccMultiProcessElement
 {
 public:
   virtual ~CIccMpeCAM();
@@ -785,7 +785,7 @@ protected:
 * Purpose: Converts XYZ to Jab using color appearance model
 *****************************************************************************
 */
-class CIccMpeXYZToJab : public CIccMpeCAM
+class ICCPROFLIB_API CIccMpeXYZToJab : public CIccMpeCAM
 {
 public:
   CIccMpeXYZToJab();
@@ -809,7 +809,7 @@ public:
 * Purpose: Converts Jab to XYZ using color appearance model
 *****************************************************************************
 */
-class CIccMpeJabToXYZ : public CIccMpeCAM
+class ICCPROFLIB_API CIccMpeJabToXYZ : public CIccMpeCAM
 {
 public:
   CIccMpeJabToXYZ();

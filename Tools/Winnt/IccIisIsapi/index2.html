@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iccDEV IIS Server</title>
+  <link rel="stylesheet" href="./site.css">
+  <script defer src="./sanitize.js"></script>
+  <script defer src="./site.js"></script>
+</head>
+<body data-page="home" data-auto-endpoint="./iccIisIsapi.dll">
+  <div id="PageBodyContainer">
+    <div id="HeaderContainer">
+      <div id="HeaderTitleContainer">
+        <div id="HeaderTitle">
+          <a href="./index.html"><img src="./assets/ICC_logo_text.gif" width="368" height="27" alt="International Color Consortium"></a>
+        </div>
+        <div id="TopMenuContainer">
+          <div class="TopMenuItem"><a href="./index.html" title="Home"><img src="./assets/tm_about.gif" width="68" height="20" alt="Home"></a></div>
+          <div class="TopMenuItem"><a href="./endpoints.html" title="Endpoint Console"><img src="./assets/tm_resources.gif" width="71" height="20" alt="Endpoint Console"></a></div>
+          <div class="TopMenuItem"><a href="./integration.html" title="Integration Guide"><img src="./assets/tm_information.gif" width="85" height="20" alt="Integration Guide"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/" title="ICC Website"><img src="./assets/tm_members.gif" width="63" height="20" alt="ICC Website"></a></div>
+          <div class="TopMenuItem"><a href="./integration.html#quick-start" title="Quick Start"><img src="./assets/tm_getting_started.gif" width="103" height="20" alt="Quick Start"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/v4spec.xalter" title="ICC v4"><img src="./assets/tm_v4.gif" width="42" height="20" alt="ICC v4"></a></div>
+          <div class="TopMenuItem"><a href="https://www.color.org/iccmax/" title="iccMAX"><img src="./assets/iccmax-top3.jpg" width="41" height="20" alt="iccMAX"></a></div>
+        </div>
+        <div class="clear"></div>
+      </div>
+      <div id="HeaderLogoContainer">
+        <div id="HeaderLogo"><img src="./assets/ICC_logo_top.gif" width="143" height="65" alt="ICC logo"></div>
+        <div id="HeaderBannerContainer"><img src="./assets/hd_images.jpg" width="657" height="46" alt="Making color seamless between devices and documents"></div>
+        <div class="clear"></div>
+      </div>
+      <div class="clear"></div>
+    </div>
+
+    <div id="LeftContainer">
+      <div id="LeftContainerLogo"><img src="./assets/ICC_logo_btm.gif" width="133" height="22" alt=""></div>
+      <div id="ICCEventsContainer">
+        <div><img src="./assets/hd-icc-events.png" width="150" height="29" alt="ICC Events"></div>
+        <ul>
+          <li><a href="./index.html">Local IIS landing page</a></li>
+          <li><a href="./iccIisIsapi.dll?mode=health">Health endpoint</a></li>
+          <li><a href="./iccIisIsapi.dll">Version summary</a></li>
+          <li><a href="./iccIisIsapi.dll?format=xml">XML payload</a></li>
+          <li><a href="./endpoints.html">Endpoint console page</a></li>
+          <li><a href="./integration.html">Integration guide page</a></li>
+        </ul>
+      </div>
+      <div class="LeftMenuItem"><a href="./integration.html"><img src="./assets/icc_specs_off.gif" width="150" height="23" alt="Integration Guide"></a></div>
+      <div class="LeftMenuItem"><a href="./integration.html#ops-checklist"><img src="./assets/icc_technotes_off.gif" width="150" height="23" alt="Operator Checklist"></a></div>
+      <div class="LeftMenuItem"><a href="./endpoints.html"><img src="./assets/icc_resourcecenter_off.gif" width="150" height="23" alt="Endpoint Console"></a></div>
+      <div class="LeftMenuItem"><a href="./index.html#demo-flow"><img src="./assets/icc_slide_off.gif" width="150" height="23" alt="Demo Flow"></a></div>
+      <div class="LeftMenuItem"><a href="https://www.color.org/icclogos.xalter"><img src="./assets/icc_logos_off.gif" width="150" height="23" alt="ICC Logos"></a></div>
+      <div class="LeftMenuItem"><a href="./endpoints.html#xml-mode"><img src="./assets/icc_profiles_off.gif" width="150" height="23" alt="XML Mode"></a></div>
+      <div class="LeftMenuItem"><a href="./integration.html#shared-libs"><img src="./assets/icc_whitepapers_off.gif" width="150" height="23" alt="Shared Libraries"></a></div>
+      <div class="LeftMenuItem"><a href="./endpoints.html#quick-tests"><img src="./assets/icc_colormanage_off.gif" width="150" height="23" alt="Quick Tests"></a></div>
+      <div class="LeftMenuItem"><a href="https://www.color.org/iccmembers.xalter"><img src="./assets/icc_memberlist_off.gif" width="150" height="23" alt="Member List"></a></div>
+      <div class="LeftMenuItem"><a href="https://www.color.org/groups1.xalter"><img src="./assets/icc_workinggroups_off.gif" width="150" height="23" alt="Working Groups"></a></div>
+      <div class="LeftMenuItem"><a href="./integration.html#faq"><img src="./assets/icc_faq_off.gif" width="150" height="23" alt="FAQ"></a></div>
+      <div class="LeftMenuItem"><a href="mailto:technicalsecretary@color.org"><img src="./assets/icc_forum_off.gif" width="150" height="23" alt="Contact"></a></div>
+      <div class="LeftMenuEnd"><a href="./index.html"><img src="./assets/icc_home_off.gif" width="150" height="23" alt="Home"></a></div>
+    </div>
+
+    <div id="RightContainer">
+      <div id="EnquiryContainer">
+        <div id="EnquiryTextArea">Need the exact build, handler, or deployment steps for this IIS sample?</div>
+        <div id="EnquiryImage"><img src="./assets/phil.jpg" width="40" height="38" alt=""></div>
+        <div class="clear"></div>
+        <div id="EnquiryEntry"><a href="./integration.html">Open integration guide...</a></div>
+      </div>
+      <div id="LiveTopicsContainer">
+        <div><img src="./assets/hd-icc-live-topics.png" width="151" height="29" alt="ICC Live Topics"></div>
+        <ul class="LiveTopics">
+          <li><a href="./index.html">Root URL resolves without 403.14</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="./endpoints.html">Interactive endpoint console</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="./iccIisIsapi.dll?mode=health">Health mode returns plain text</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="./iccIisIsapi.dll?format=xml">XML mode returns application/xml</a></li>
+        </ul>
+        <ul class="LiveTopics">
+          <li><a href="./integration.html#shared-libs">Shared DLL deployment notes</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="MainContentContainer">
+      <div id="MainContent">
+        <p class="page-title">iccDEV IIS Server</p>
+        <p class="page-lead">
+          This local sample site adopts the preserved ICC website chrome while staying focused on the IIS
+          proof: <code>iccIisIsapi.dll</code> loads <code>IccProfLib2.dll</code> and <code>IccXML2.dll</code>
+          inside the IIS worker process and exposes three simple request modes.
+        </p>
+
+        <div class="content-grid">
+          <div class="feature-block">
+            <p class="eyebrow">Current deployment</p>
+            <h2>What this site proves</h2>
+            <ul class="summary-list">
+              <li>The site root serves a default document instead of returning HTTP 403.14.</li>
+              <li>The native ISAPI handler is callable directly from the browser or from `curl.exe`.</li>
+              <li>The install folder contains the transitive runtime DLLs required by IIS.</li>
+            </ul>
+            <div class="badge-row">
+              <span class="badge">IIS</span>
+              <span class="badge">ISAPI</span>
+              <span class="badge">IccProfLib2</span>
+              <span class="badge">IccXML2</span>
+            </div>
+          </div>
+          <div class="feature-block">
+            <p class="eyebrow">Navigation</p>
+            <h2>Quick path</h2>
+            <ul class="summary-list">
+              <li>Use this page for the overview and the primary live call.</li>
+              <li>Use <a href="./endpoints.html">Endpoint Console</a> for repeated endpoint testing.</li>
+              <li>Use <a href="./integration.html">Integration Guide</a> for IIS setup, handler mapping, and deployment checks.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div id="demo-flow" class="content-box">
+          <h2>Live request controls</h2>
+          <p>These buttons call the IIS-hosted DLL directly from the browser.</p>
+          <div class="action-row">
+            <button class="tool-button" type="button" data-endpoint-url="./iccIisIsapi.dll">Load summary</button>
+            <button class="tool-button secondary" type="button" data-endpoint-url="./iccIisIsapi.dll?mode=health">Check health</button>
+            <button class="tool-button secondary" type="button" data-endpoint-url="./iccIisIsapi.dll?format=xml">Fetch XML</button>
+            <a class="tool-button secondary" href="./endpoints.html">Open endpoint console</a>
+          </div>
+          <div id="live-status" class="status-chip">Waiting for the first request</div>
+        </div>
+
+        <div class="response-block">
+          <h2>Live response</h2>
+          <div class="response-meta">
+            <div><strong>URL:</strong> <span id="result-url">not requested yet</span></div>
+            <div><strong>Status:</strong> <span id="result-code">n/a</span></div>
+            <div><strong>Content-Type:</strong> <span id="result-type">n/a</span></div>
+          </div>
+          <pre id="result-body" class="response-view">Choose a request above to fetch live output from the IIS ISAPI sample.</pre>
+        </div>
+
+        <div class="highlight-card">
+          <img src="./assets/CIC33.jpg" width="420" height="300" alt="ICC conference">
+          <div>
+            <h2>Reference ICC visual language</h2>
+            <p>
+              The site shell now borrows the preserved ICC logos, banners, menu graphics, and page framing from the
+              reference snapshot in <code>E:\codex\iis</code>. That keeps the local IIS sample visually consistent
+              with the ICC web presence while leaving the endpoint behavior and deployment proof intact.
+            </p>
+            <div class="page-links">
+              <a href="./endpoints.html">Go to Endpoint Console</a>
+              <a href="./integration.html">Go to Integration Guide</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="content-grid">
+          <div class="content-box">
+            <h2>Available routes</h2>
+            <dl class="table-grid">
+              <dt><a href="./">`/`</a></dt>
+              <dd>Default document and landing page.</dd>
+              <dt><a href="./iccIisIsapi.dll">`/iccIisIsapi.dll`</a></dt>
+              <dd>Version summary and XML byte count.</dd>
+              <dt><a href="./iccIisIsapi.dll?mode=health">`?mode=health`</a></dt>
+              <dd>Plain-text readiness check.</dd>
+              <dt><a href="./iccIisIsapi.dll?format=xml">`?format=xml`</a></dt>
+              <dd>Minimal ICC XML response.</dd>
+            </dl>
+          </div>
+          <div class="note-box">
+            <h2>Operator note</h2>
+            <p>
+              The IIS worker process must be able to resolve <code>IccProfLib2.dll</code>,
+              <code>IccXML2.dll</code>, and the transitive runtime DLLs copied into this site folder.
+            </p>
+            <p>
+              If you need the deployment details or want to rebind a site to the install tree, use
+              <a href="./integration.html">Integration Guide</a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="clear"></div>
+
+    <div class="site-footer-rule"><img src="./assets/bg_content_base.gif" width="800" height="27" alt=""></div>
+    <div id="FooterContainer">
+      <div id="FooterSubContainer"><img src="./assets/icc_footer.gif" width="781" height="62" alt=""></div>
+      <p class="footer-note">
+        Local ICC-style IIS sample for <code>iccIisIsapi.dll</code>. Verified under IIS on this workstation.
+        <span id="footer-year"></span>
+      </p>
+      <div id="FooterBase"><img src="./assets/footer_corner_right.gif" width="10" height="10" alt=""></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -656,6 +656,8 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
 
   case 0x0005:
     //Y = e * exp((d * X^g - c) / a) + b  : g a b c d e
+    if (m_params[1] == 0.0)
+      return (icFloatNumber)m_params[2];
     if (m_nShortcutType != 1)
       return (icFloatNumber)(m_params[5] * exp((m_params[4] * pow(v, m_params[0]) - m_params[3]) / m_params[1]) + m_params[2]);
     else
@@ -664,23 +666,35 @@ icFloatNumber CIccFormulaCurveSegment::Apply(icFloatNumber v) const
   case 0x0006:
     //Y = d * (max(e * X^g - a, 0)/(b - c * X^g))^w  : w g a b c d e
     if (m_nShortcutType!=1) {
+      icFloatNumber denom6 = (icFloatNumber)(m_params[3] - m_params[4] * pow(v, m_params[1]));
+      if (denom6 == 0.0f)
+        return 0;
       return (icFloatNumber)(m_params[5] * pow(icMax((icFloatNumber)(m_params[6] * pow(v, m_params[1]) - m_params[2]), 0.0f) /
-                                               (m_params[3] - m_params[4] * pow(v, m_params[1])), m_params[0]));
+                                               denom6, m_params[0]));
     }
     else { //m_nShortcutType == 1
+      icFloatNumber denom6s = (icFloatNumber)(m_params[3] - m_params[4] * v);
+      if (denom6s == 0.0f)
+        return 0;
       return (icFloatNumber)(m_params[5] * pow(icMax((icFloatNumber)(m_params[6] * v - m_params[2]), 0.0f) /
-                                               (m_params[3] - m_params[4] * v), m_params[0]));
+                                               denom6s, m_params[0]));
     }
 
   case 0x0007:
     //Y = d * ((a + b * X^g)/(1 + c * X^g)) ^ w     : w g a b c d
     if (m_nShortcutType != 1) {
+      icFloatNumber denom7 = (icFloatNumber)(1.0 + m_params[4] * pow(v, m_params[1]));
+      if (denom7 == 0.0f)
+        return 0;
       return (icFloatNumber)(m_params[5] * pow((m_params[2] + m_params[3] * pow(v, m_params[1])) /
-                                               (1.0 + m_params[4] * pow(v, m_params[1])), m_params[0]));
+                                               denom7, m_params[0]));
     }
     else { //m_nShortcutType == 1
+      icFloatNumber denom7s = (icFloatNumber)(1.0 + m_params[4] * v);
+      if (denom7s == 0.0f)
+        return 0;
       return (icFloatNumber)(m_params[5] * pow((m_params[2] + m_params[3] * v) /
-                                               (1.0 + m_params[4] * v), m_params[0]));
+                                               denom7s, m_params[0]));
     }
   }
 
@@ -803,13 +817,13 @@ icValidateStatus CIccFormulaCurveSegment::Validate(std::string sigPath, std::str
     break;
 
   case 0x0006:
-    if (!m_params || m_nParameters < 6) {
+    if (!m_params || m_nParameters < 7) {
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
       sReport += " formula curve has Invalid formulaCurveSegment parameters.\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
-    else if (m_nParameters > 6) {
+    else if (m_nParameters > 7) {
       sReport += icMsgValidateWarning;
       sReport += sSigPathName;
       sReport += " formula curve has too many formulaCurveSegment parameters.\n";
@@ -918,6 +932,9 @@ CIccSampledCurveSegment &CIccSampledCurveSegment::operator=(const CIccSampledCur
   m_startPoint = curve.m_startPoint;
   m_endPoint = curve.m_endPoint;
   m_nCount = curve.m_nCount;
+
+  m_range = m_endPoint - m_startPoint;
+  m_last = curve.m_last;
 
   if (m_nCount) {
     m_pSamples = (icFloatNumber*)malloc(m_nCount * sizeof(icFloatNumber));
@@ -1325,6 +1342,7 @@ CIccSingleSampledCurve::CIccSingleSampledCurve(const CIccSingleSampledCurve &cur
   m_loSlope = curve.m_loSlope;
   m_hiIntercept = curve.m_hiIntercept;
   m_hiSlope = curve.m_hiSlope;
+  m_last = curve.m_last;
 }
 
 /**
@@ -1361,11 +1379,13 @@ CIccSingleSampledCurve &CIccSingleSampledCurve::operator=(const CIccSingleSample
 
   m_firstEntry = curve.m_firstEntry;
   m_lastEntry = curve.m_lastEntry;
+  m_range = m_lastEntry - m_firstEntry;
 
   m_loIntercept = curve.m_loIntercept;
   m_loSlope = curve.m_loSlope;
   m_hiIntercept = curve.m_hiIntercept;
   m_hiSlope = curve.m_hiSlope;
+  m_last = curve.m_last;
   return (*this);
 }
 
@@ -1901,7 +1921,9 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(icFloatNumber first, icFl
 
   m_nCount = 0;
   m_pSamples = 0;
+  m_nDesiredSize = 0;
 
+  m_storageType = icValueTypeFloat32;
   m_extensionType = icClipSingleSampledCurve;
 
   if (first < last) {
@@ -1912,6 +1934,9 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(icFloatNumber first, icFl
     m_firstEntry = last;
     m_lastEntry = first;
   }
+
+  m_range = m_lastEntry - m_firstEntry;
+  m_last = 0;
 
   m_loIntercept = 0;
   m_loSlope = 0;
@@ -1936,12 +1961,15 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(const CIccSampledCalculat
 
   m_nCount = curve.m_nCount;
 
+  m_storageType = curve.m_storageType;
   m_extensionType = curve.m_extensionType;
 
   m_nDesiredSize = curve.m_nDesiredSize;
 
   if (curve.m_pCalc)
     m_pCalc = curve.m_pCalc->NewCopy();
+  else
+    m_pCalc = NULL;
 
   if (m_nCount) {
     m_pSamples = (icFloatNumber*)malloc(m_nCount * sizeof(icFloatNumber));
@@ -1956,6 +1984,8 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(const CIccSampledCalculat
 
   m_firstEntry = curve.m_firstEntry;
   m_lastEntry = curve.m_lastEntry;
+  m_range = m_lastEntry - m_firstEntry;
+  m_last = curve.m_last;
 
   m_loIntercept = curve.m_loIntercept;
   m_loSlope = curve.m_loSlope;
@@ -1991,10 +2021,13 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
 
   m_nDesiredSize = curve.m_nDesiredSize;
 
+  m_storageType = curve.m_storageType;
   m_extensionType = curve.m_extensionType;
 
   if (curve.m_pCalc)
     m_pCalc = curve.m_pCalc->NewCopy();
+  else
+    m_pCalc = NULL;
 
   if (m_nCount) {
     m_pSamples = (icFloatNumber*)malloc(m_nCount * sizeof(icFloatNumber));
@@ -2009,6 +2042,8 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
 
   m_firstEntry = curve.m_firstEntry;
   m_lastEntry = curve.m_lastEntry;
+  m_range = m_lastEntry - m_firstEntry;
+  m_last = curve.m_last;
 
   m_loIntercept = curve.m_loIntercept;
   m_loSlope = curve.m_loSlope;
@@ -2199,7 +2234,7 @@ void CIccSampledCalculatorCurve::Describe(std::string &sDescription, int nVerbos
     snprintf(buf, bufSize, "%.8f,", m_lastEntry);
     sDescription += buf;
 
-    snprintf(buf, bufSize, "%d", m_nDesiredSize);
+    snprintf(buf, bufSize, "%u", m_nDesiredSize);
     sDescription += buf;
 
     snprintf(buf, bufSize, "]\r\n");
@@ -2214,7 +2249,7 @@ void CIccSampledCalculatorCurve::Describe(std::string &sDescription, int nVerbos
     snprintf(buf, bufSize, "%.8f,", m_lastEntry);
     sDescription += buf;
 
-    snprintf(buf, bufSize, "%d", m_nDesiredSize);
+    snprintf(buf, bufSize, "%u", m_nDesiredSize);
     sDescription += buf;
 
     snprintf(buf, bufSize, "]\r\n");
@@ -2686,7 +2721,7 @@ bool CIccSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
 
   Reset();
 
-  int64_t pos = pIO->Tell();
+  size_t pos = (size_t)pIO->Tell();
   icCurveSegSignature segSig;
   CIccCurveSegment *pSeg;
 
@@ -2731,8 +2766,8 @@ bool CIccSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
         free(breakpoints);
         return false;
       }
-      if (pIO->Seek(pos, icSeekSet) != pos)
-        return false;;
+      if ((size_t)pIO->Seek(pos, icSeekSet) != pos)
+        return false;
 
       if (!i)
         pSeg = CIccCurveSegment::Create(segSig, icMinFloat32Number, breakpoints[i]);
@@ -3056,7 +3091,7 @@ CIccMpeCurveSet::CIccMpeCurveSet(const CIccMpeCurveSet &curveSet)
  ******************************************************************************/
 CIccMpeCurveSet &CIccMpeCurveSet::operator=(const CIccMpeCurveSet &curveSet)
 {
-  m_nReserved = m_nReserved;
+  m_nReserved = curveSet.m_nReserved;
 
   if (m_curve) {
     free(m_curve);
@@ -4039,6 +4074,17 @@ bool CIccToneMapFunc::Read(icUInt32Number size, CIccIO* pIO)
 
   m_nParameters = (icUInt8Number)((size - headerSize)/sizeof(icFloatNumber));
 
+  // CFL-004: Validate parameter count against function type requirements.
+  // NumArgs() returns the required count for the function type (e.g., 3 for type 0x0000).
+  // Describe() accesses m_params[0..NumArgs()-1] unconditionally for known types,
+  // so m_nParameters < NumArgs() causes heap-buffer-overflow (CWE-122).
+  int nRequired = NumArgs();
+  if (nRequired > 0 && m_nParameters < (icUInt8Number)nRequired) {
+    m_params = NULL;
+    m_nParameters = 0;
+    return false;
+  }
+
   if (m_nParameters) {
 
     m_params = (icFloatNumber*)malloc(m_nParameters * sizeof(icFloatNumber));
@@ -4190,6 +4236,7 @@ CIccMpeToneMap::CIccMpeToneMap(const CIccMpeToneMap& toneMap)
   m_nInputChannels = toneMap.m_nInputChannels;
   m_nOutputChannels = toneMap.m_nOutputChannels;
 
+  m_pLumCurve = NULL;
   if (toneMap.m_pLumCurve)
     m_pLumCurve = toneMap.m_pLumCurve->NewCopy();
 
@@ -4860,6 +4907,8 @@ CIccMpeMatrix::CIccMpeMatrix()
   m_size = 0;
   m_pMatrix = NULL;
   m_pConstants = NULL;
+  m_type = icOtherMatrix;
+  m_bApplyConstants = false;
 }
 
 
@@ -4897,7 +4946,8 @@ CIccMpeMatrix::CIccMpeMatrix(const CIccMpeMatrix &matrix)
   else
     m_pConstants = NULL;
 
-  m_bApplyConstants = true;
+  m_bApplyConstants = matrix.m_bApplyConstants;
+  m_type = matrix.m_type;
 }
 
 /**
@@ -4912,6 +4962,9 @@ CIccMpeMatrix::CIccMpeMatrix(const CIccMpeMatrix &matrix)
  ******************************************************************************/
 CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
 {
+  if (this == &matrix)
+    return *this;
+
   m_nReserved = matrix.m_nReserved;
 
   m_nInputChannels = matrix.m_nInputChannels;
@@ -5388,18 +5441,17 @@ static icFloatNumber NoClip(icFloatNumber v)
 }
 
 // this isn't used yet, but want to have it ready
-static icFloatNumber RealUnitClip(icFloatNumber v)
-{
-  if (std::isnan(v))
-    return icFloatNumber(0);
-  if (std::isinf(v))
-    return icFloatNumber(1.0);
-  if (v < 0.0)
-    return 0.0;
-  if (v > 1.0)
-    return 1.0;
-  return v;
-}
+// static icFloatNumber RealUnitClip(icFloatNumber v)
+// {
+//   if (std::isnan(v))
+//     return icFloatNumber(0);
+//   if (std::isinf(v))
+//     return icFloatNumber(1.0);
+//   if (v < 0.0)
+//     return 0.0;
+//   if (v > 1.0)
+//   return v;
+// }
 
 /**
  ******************************************************************************
@@ -5595,7 +5647,7 @@ bool CIccMpeCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (!pData)
     return false;
 
-  nPoints = m_pCLUT->NumPoints()*m_nOutputChannels;
+  nPoints = (size_t)m_pCLUT->NumPoints()*m_nOutputChannels;
 
     // ERROR - comparison of values with different signs!
   if (pIO->ReadFloat32Float(pData,nPoints)!= nPoints)
@@ -5644,7 +5696,7 @@ bool CIccMpeCLUT::Write(CIccIO *pIO)
       return false;
 
     icFloatNumber *pData = m_pCLUT->GetData(0);
-    size_t nPoints = m_pCLUT->NumPoints()*m_nOutputChannels;
+    size_t nPoints = (size_t)m_pCLUT->NumPoints()*m_nOutputChannels;
 
     if (pIO->WriteFloat32Float(pData, nPoints) != nPoints) 
       return false;
@@ -6097,7 +6149,7 @@ bool CIccMpeExtCLUT::Write(CIccIO *pIO)
       return false;
 
     icFloatNumber *pData = m_pCLUT->GetData(0);
-    size_t nPoints = m_pCLUT->NumPoints()*m_nOutputChannels;
+    size_t nPoints = (size_t)m_pCLUT->NumPoints()*m_nOutputChannels;
 
     switch(m_storageType) {
     case icValueTypeUInt8:
@@ -6359,6 +6411,9 @@ CIccMpeJabToXYZ::CIccMpeJabToXYZ(const CIccMpeJabToXYZ &cam)
 
 CIccMpeJabToXYZ &CIccMpeJabToXYZ::operator=(const CIccMpeJabToXYZ &cam)
 {
+  if (this == &cam)
+    return *this;
+
   if (cam.m_pCAM) {
     if (m_pCAM)
       delete m_pCAM;
@@ -6414,6 +6469,9 @@ CIccMpeXYZToJab::CIccMpeXYZToJab(const CIccMpeXYZToJab &cam)
 
 CIccMpeXYZToJab &CIccMpeXYZToJab::operator=(const CIccMpeXYZToJab &cam)
 {
+  if (this == &cam)
+    return *this;
+
   if (cam.m_pCAM) {
     if (m_pCAM)
       delete m_pCAM;

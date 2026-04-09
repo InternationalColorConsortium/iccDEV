@@ -204,7 +204,7 @@ protected:
   icFloatNumber      *m_dParam;
 };
 
-class CIccSegmentedCurve;
+class ICCPROFLIB_API CIccSegmentedCurve;
 
 /**
 ****************************************************************************
@@ -640,12 +640,12 @@ public:
     return m_NumberOfTriangles;
   }	
 
-  icInt16Number getNumPCSChannels() 
+  icUInt16Number getNumPCSChannels() 
   {
     return m_nPCSChannels;
   }
 
-  icInt16Number getNumDeviceChannels() 
+  icUInt16Number getNumDeviceChannels() 
   {
     return m_nDeviceChannels;
   }		
@@ -653,8 +653,8 @@ public:
 protected:
   icInt32Number m_NumberOfVertices;
   icInt32Number m_NumberOfTriangles;
-  icInt16Number m_nPCSChannels;
-  icInt16Number m_nDeviceChannels;
+  icUInt16Number m_nPCSChannels;
+  icUInt16Number m_nDeviceChannels;
   icFloatNumber* m_PCSValues;
   icFloatNumber* m_DeviceValues;
   icGamutBoundaryTriangle* m_Triangles;

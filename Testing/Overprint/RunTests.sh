@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 #################################################################################
 # Overprint/RunTests.sh | iccDEV Project
 # Copyright (C) 2024-2026 The International Color Consortium. 
@@ -21,11 +21,11 @@
 
 echo "====================== Entering Overprint/RunTests.sh =========================="
 
-# Properly handle newline-separated paths as a list
-find ../../Build/Tools -type f -perm -111 -exec dirname {} \; | sort -u | while read -r d; do
+# Add tool directories to PATH (process substitution avoids subshell)
+while IFS= read -r d; do
   abs_path=$(cd "$d" && pwd)
   PATH="$abs_path:$PATH"
-done
+done < <(find ../../Build/Tools -type f -perm -111 -exec dirname {} \; | sort -u)
 
 export PATH
 

@@ -104,8 +104,8 @@ public:
   virtual CIccIO* OpenFile(const icChar *szFilename, const char *szAttr);
 };
 
-void ICCPROFLIB_API IccSetOpenFileIO(IIccOpenFileIO *pOpenIO);
-CIccIO* ICCPROFLIB_API IccOpenFileIO(const icChar *szFilename, const char *szAttr);
+ICCPROFLIB_API void IccSetOpenFileIO(IIccOpenFileIO *pOpenIO);
+ICCPROFLIB_API CIccIO* IccOpenFileIO(const icChar *szFilename, const char *szAttr);
 
 #ifdef USEICCDEVNAMESPACE
 } //namespace iccDEV

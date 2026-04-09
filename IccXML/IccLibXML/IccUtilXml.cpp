@@ -391,7 +391,13 @@ const char *icAnsiToUtf8(std::string &buf, const char *szSrc)
   free(szBuf);
   free(szUnicodeBuf);
 #else
-  buf = szSrc;
+  // CFL-001: Use bounded copy to prevent strlen overread (CWE-126)
+  if (szSrc) {
+    size_t srcLen = strnlen(szSrc, 256);
+    buf.assign(szSrc, srcLen);
+  } else {
+    buf.clear();
+  }
 #endif
   return buf.c_str();
 }
@@ -416,7 +422,13 @@ const char *icUtf8ToAnsi(std::string &buf, const char *szSrc)
   free(szBuf);
   free(szUnicodeBuf);
 #else
-  buf = szSrc;
+  // CFL-001: Use bounded copy to prevent strlen overread (CWE-126)
+  if (szSrc) {
+    size_t srcLen = strnlen(szSrc, 256);
+    buf.assign(szSrc, srcLen);
+  } else {
+    buf.clear();
+  }
 #endif
   return buf.c_str();
 }
@@ -902,7 +914,7 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
         break;
     }
     xml += str;
-    if (i%nColumns == nColumns-1) {
+    if (i%nColumns == (icUInt32Number)(nColumns-1)) {
       xml += "\n";
     }
   }
@@ -1000,10 +1012,23 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseTextCount(const char *szText)
 template<typename T, typename F>
 T clipTypeRange( const F &input )
 {
-  if (input > std::numeric_limits<T>::max())
-    return std::numeric_limits<T>::max();
-  if (input < std::numeric_limits<T>::lowest()) // not min, which is a positive small number for floating point
-    return std::numeric_limits<T>::lowest();
+  if constexpr (std::numeric_limits<T>::is_integer && !std::numeric_limits<F>::is_integer) {
+    using limit_type = long double;
+    const auto value = static_cast<limit_type>(input);
+    const auto upper = static_cast<limit_type>(std::numeric_limits<T>::max());
+    const auto lower = static_cast<limit_type>(std::numeric_limits<T>::lowest());
+
+    if (value > upper)
+      return std::numeric_limits<T>::max();
+    if (value < lower) // not min, which is a positive small number for floating point
+      return std::numeric_limits<T>::lowest();
+  }
+  else {
+    if (input > std::numeric_limits<T>::max())
+      return std::numeric_limits<T>::max();
+    if (input < std::numeric_limits<T>::lowest()) // not min, which is a positive small number for floating point
+      return std::numeric_limits<T>::lowest();
+  }
   if ( !std::numeric_limits<F>::is_integer && std::isnan(input) )
     return T(0);    // flush NaN to zero
   return T(input);  // passed all the checks, just cast it
@@ -1103,7 +1128,7 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
           !icXmlStrCmp(pNode->name, "f") &&
           pNode->children &&
           pNode->children->content) {
-            float f;
+            float f = 0.0f;
             sscanf((const char *)(pNode->children->content), "%f", &f);
             pBuf[i] = (T)f;
             i++;
@@ -1220,13 +1245,15 @@ icTagSignature icGetTagNameSig(const icChar *szName)
 
 icStandardObserver icGetNamedStandardObserverValue(const icChar* str)
 {
-  if (!strcmp(str, "Unknown observer"))
+  if (!strcmp(str, "Unknown observer") || !strcmp(str, "Unknown Observer"))
 	  return icStdObsUnknown;
 
-  if (!strcmp(str, "CIE 1931 (two degree) standard observer"))
+  if (!strcmp(str, "CIE 1931 (two degree) standard observer") ||
+      !strcmp(str, "CIE 1931 standard colorimetric observer"))
 	  return icStdObs1931TwoDegrees;
 
-  if (!strcmp(str, "CIE 1964 (ten degree) standard observer"))
+  if (!strcmp(str, "CIE 1964 (ten degree) standard observer") ||
+      !strcmp(str, "CIE 1964 standard colorimetric observer"))
 	  return icStdObs1964TenDegrees;   
 
   return icStdObsCustom;
@@ -1342,16 +1369,16 @@ const icChar* icGetStandardObserverName(icStandardObserver str)
 {
   switch (str) {
   case icStdObsUnknown:
-    return "Unknown Observer";
+    return "Unknown observer";
 
   case icStdObs1931TwoDegrees:
-    return "CIE 1931 standard colorimetric observer";
+    return "CIE 1931 (two degree) standard observer";
 
   case icStdObs1964TenDegrees:
-    return "CIE 1964 standard colorimetric observer";
+    return "CIE 1964 (ten degree) standard observer";
 
   default:    
-    return "Unknown Observer";
+    return "Unknown observer";
   }
 }
 
@@ -1374,7 +1401,7 @@ icDateTimeNumber icGetDateTimeValue(const icChar* str)
     seconds = timeinfo->tm_sec;
   }
   else {
-  	sscanf(str, "%d-%02d-%02dT%02d:%02d:%02d", &year, &month, &day, &hours, &minutes, &seconds);
+  	sscanf(str, "%u-%02u-%02uT%02u:%02u:%02u", &year, &month, &day, &hours, &minutes, &seconds);
   }
 
 	dateTime.year = year;
@@ -1412,7 +1439,7 @@ icUInt64Number icGetDeviceAttrValue(xmlNode *pNode)
 	
   attr = icXmlFindAttr(pNode, "VendorSpecific");
   if (attr) {
-    icUInt64Number vendor;
+    icUInt64Number vendor = 0;
     sscanf(icXmlAttrValue(attr), "%llx", &vendor);
     devAttr |= vendor;
   }
@@ -1536,7 +1563,8 @@ const std::string icGetHeaderFlagsName(icUInt32Number flags, bool bUsesMCS)
     xml += line;
   }
 
-  icUInt32Number otherFlags = ~(icEmbeddedProfileTrue | icUseWithEmbeddedDataOnly | icExtendedRangePCS);
+  // these #defines really should be const icUint32Number
+  icUInt32Number otherFlags = (icUInt32Number)( ~(icEmbeddedProfileTrue | icUseWithEmbeddedDataOnly | icExtendedRangePCS) );
 
   if (bUsesMCS) {
     if (flags & icMCSNeedsSubsetTrue)
@@ -1545,7 +1573,7 @@ const std::string icGetHeaderFlagsName(icUInt32Number flags, bool bUsesMCS)
       snprintf(line, lineSize, " MCSNeedsSubset=\"false\"");
     xml += line;
 
-    otherFlags &= ~icMCSNeedsSubsetTrue;
+    otherFlags &= ~(icUInt32Number)icMCSNeedsSubsetTrue;
   }
 
   if (flags & otherFlags) {
@@ -1570,4 +1598,3 @@ const std::string icGetPadSpace(double value)
 
    return space;
 }
-

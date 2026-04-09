@@ -177,7 +177,7 @@ typedef std::list<IIccTagFactory*> CIccTagFactoryList;
  * specification.  The CIccTagCreator always creates a CIccSpecTagFactory.
  ***********************************************************************
  */
-class CIccSpecTagFactory : public IIccTagFactory
+class ICCPROFLIB_API CIccSpecTagFactory : public IIccTagFactory
 {
 public:
   /**

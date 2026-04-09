@@ -1,130 +1,211 @@
 # Copilot Instructions for iccDEV
 
+## Path-Specific Instructions (auto-loaded by file pattern)
+
+| Pattern | File | Content |
+|---------|------|---------|
+| `.github/workflows/**` | `instructions/workflow-governance.instructions.md` | Shell hardening, sanitizer, injection prevention |
+| `.github/scripts/**` | `instructions/sanitizer-scripts.instructions.md` | sanitize-sed.sh and sanitize.ps1 API reference |
+| `Build/**` | `instructions/build-system.instructions.md` | CMake options, platform notes, WASM/LTO |
+| `IccProfLib/**`, `IccXML/**`, `Tools/**` | `instructions/icc-library-code.instructions.md` | Input validation, sanitizer compat |
+| `Testing/**` | `instructions/testing.instructions.md` | Test scripts, profile dirs, validation flow |
+| `IccProfLib/icProfileHeader.h` | `instructions/icc-specification.instructions.md` | ICC header, tags, color spaces, version encoding |
+| `ports/**` | `instructions/vcpkg-port.instructions.md` | vcpkg portfile, features, local source mode, CI |
+| `Tools/Winnt/IccIisIsapi/**` | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS ISAPI setup, security hardening, deployment |
+
+## Reusable Prompts
+
+| Task | Prompt |
+|------|--------|
+| Audit workflow governance | `prompts/audit-workflow-governance.prompt.md` |
+| Debug WASM build failures | `prompts/debug-wasm-build.prompt.md` |
+| Build, test, coverage | `prompts/build-and-test.prompt.md` |
+| Reproduce security advisory | `prompts/reproduce-security-issue.prompt.md` |
+| Add a new CLI tool | `prompts/add-new-tool.prompt.md` |
+| Debug cross-platform CI | `prompts/cross-platform-ci.prompt.md` |
+| New contributor onboarding | `prompts/contributor-onboarding.prompt.md` |
+| File a security issue | `prompts/file-security-issue.prompt.md` |
+| Code review bug hunting | `prompts/code-review-hunting.prompt.md` |
+| Version bump with ports | `prompts/version-bump.prompt.md` |
+| Debug vcpkg port CI | `prompts/vcpkg-port-debug.prompt.md` |
+| Bisect and fix regressions | `prompts/bisect-regression.prompt.md` |
+
 ## Project Overview
-iccDEV is an open source set of libraries and tools for interaction, manipulation, and application of ICC-based color management profiles. The project is maintained by the International Color Consortium (ICC) and uses the BSD 3-Clause License.
 
-## Code Style Guidelines
+RefIccMAX (iccDEV) — ICC color profile libraries and tools.
+**Version**: 2.3.1.7 · **C++17** · **CMake ≥ 3.21** · **BSD 3-Clause**
 
-### Indentation and Formatting
-- Use **2 space indentation**, no tabs
-- Use **K&R brace style**
-- Aim for zero compiler warnings and static analysis warnings across all platforms
+## Code Style
 
-### Naming Conventions
-- Prefix class/struct members with `m_` (e.g., `m_variableName`)
-- No uniform convention for general variables - match nearby code
-- Use descriptive names
+- **2-space indent**, no tabs, K&R braces
+- Member prefix `m_` (e.g., `m_variableName`)
+- Error handling via return values — **no exceptions**
+- Match existing patterns; consistency over perfection
+- All new files must include the ICC copyright + BSD 3-Clause header
+- Aim for zero compiler warnings across all platforms
 
-### Code Organization
-- Multiple classes per file, grouped by functionality
-- Use header guards in all header files
-- Minimize pollution of the `std` namespace
-- Const correctness: make inputs const when possible, class functions const when appropriate
+## Project Structure
 
-### Language Features
-- **Error handling**: Use manual return values, NOT exceptions (this is the existing pattern)
-- **Containers**: Prefer STL containers, but the codebase historically uses raw pointers
-- **Templates**: Currently minimal use. Ensure new templates are readable
-- **Namespaces**: Not currently using namespaces (work in progress)
-- **C++ Standard**: Requires C++17 or higher
+| Directory | Purpose |
+|-----------|---------|
+| `IccProfLib/` | Core ICC profile library (C++) |
+| `IccXML/` | XML serialization (libxml2) |
+| `Tools/CmdLine/` | 13 CLI tools (DumpProfile, RoundTrip, ApplyProfiles, …) |
+| `Tools/Winnt/IccIisIsapi/` | IIS ISAPI extension (Windows), security-hardened HTTP API |
+| `Build/Cmake/` | CMake build system |
+| `Testing/` | Test scripts and profile generators |
+| `ports/iccdev/` | vcpkg overlay port (portfile.cmake, vcpkg.json) |
+| `.github/workflows/` | 18 CI workflows (PR, sanitizer, WASM, Docker, vcpkg, release) |
+| `.github/scripts/` | `sanitize-sed.sh` (bash) and `sanitize.ps1` (PowerShell) |
 
-### Comments
-- No consistent style exists - match nearby code
-- Don't over-comment obvious code
+## Build
 
-## Build System
-
-### Primary Build Tool
-- CMake-based build system located in `Build/Cmake/`
-- Supports multiple platforms: Linux, macOS, Windows
-
-## Required libraries
-
-| Platform          | Libraries                                                                 |
-|-------------------|---------------------------------------------------------------------------|
-| **macOS**         | libpng, jpeg, libtiff, libxml2, wxwidgets, nlohmann-json                  |
-| **Windows**       | libpng, libjpeg-turbo, libtiff, libxml2, wxwidgets, nlohmann-json         |
-| **Linux (Ubuntu)** | libpng-dev, libjpeg-dev, libtiff-dev, libxml2-dev, wxwidgets*, nlohmann-json |
-
-\* **Note:** On Ubuntu, `wxwidgets` is installed via distribution-specific development packages  
-(e.g. `libwxgtk3.2-dev`). Refer to the `apt install` command below for the exact package names.
-
-### Build Commands
-#### Ubuntu
-
-```
-export CXX=clang++
-git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
-cd iccdev/Build
-sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libwxgtk3.2-dev libwxgtk-{media,webview}3.2-dev wx-common wx3.2-headers curl git make cmake clang{,-tools} libxml2{,-dev} nlohmann-json3-dev build-essential
-cmake Cmake
-make -j"$(nproc)"
-
+### Ubuntu
+```bash
+sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libxml2-dev \
+  libwxgtk3.2-dev libwxgtk-{media,webview}3.2-dev wx-common wx3.2-headers \
+  nlohmann-json3-dev cmake clang clang-tools build-essential
+cd Build && cmake Cmake -DCMAKE_CXX_COMPILER=clang++ && make -j"$(nproc)"
 ```
 
-#### macOS
-
-```
-export CXX=clang++
+### macOS
+```bash
 brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg
-git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
-cd iccdev
-cmake -G "Xcode" Build/Cmake
-xcodebuild -project RefIccMAX.xcodeproj
-open RefIccMAX.xcodeproj
+cmake -G "Xcode" Build/Cmake && xcodebuild -project RefIccMAX.xcodeproj
 ```
 
-#### Windows MSVC
-
-```
-git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
-cd iccdev
-vcpkg integrate install
-vcpkg install
+### Windows (MSVC + vcpkg)
+```cmd
+vcpkg integrate install && vcpkg install
 cmake --preset vs2022-x64 -B . -S Build/Cmake
 cmake --build . -- /m /maxcpucount
 ```
 
+### CMake Options
+
+| Option | Default | Purpose |
+|--------|---------|---------|
+| `ENABLE_TESTS` | ON | Build test targets (requires static libs) |
+| `ENABLE_TOOLS` | ON | Build CLI + GUI tools |
+| `ENABLE_SANITIZERS` | OFF | ASan + UBSan + IntegerSan combined |
+| `ENABLE_ASAN` | OFF | AddressSanitizer only |
+| `ENABLE_UBSAN` | OFF | UndefinedBehaviorSanitizer only |
+| `ENABLE_INTEGER_SANITIZER` | OFF | IntegerSanitizer (unsigned overflow, Clang only) |
+| `ENABLE_TSAN` | OFF | ThreadSanitizer (conflicts with ASan) |
+| `ENABLE_MSAN` | OFF | MemorySanitizer (Clang only) |
+| `ENABLE_LSAN` | OFF | LeakSanitizer standalone |
+| `ENABLE_COVERAGE` | OFF | LLVM source-based coverage |
+| `ENABLE_FUZZING` | OFF | LibFuzzer harnesses (Clang only) |
+| `ENABLE_ICCXML` | ON | IccXML library support |
+
+**Sanitizer coverage gaps**: `ENABLE_SANITIZERS` enables `address,undefined,integer`
+but does NOT include `float-divide-by-zero` or `float-cast-overflow` (IEEE 754 defines
+float/0 as NaN, not UB). For full bug hunting coverage, add these explicitly:
+```bash
+CXXFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow"
+```
+Issue #769 required `-fsanitize=integer`. Issue #794 required `-fsanitize=float-divide-by-zero`.
+
+## vcpkg Port
+
+A vcpkg overlay port is provided in `ports/iccdev/` for consuming iccDEV as a
+static library dependency. See `docs/build.md` for full usage instructions.
+
+### Quick Install
+```bash
+vcpkg install iccdev --overlay-ports=ports --triplet x64-linux --classic
+```
+
+### CMake Integration
+```cmake
+find_package(RefIccMAX CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE RefIccMAX::IccProfLib2-static)
+```
+
+### Port Features
+- `tools` (default): 7 core CLI tools + 2 XML tools
+- `xml` (default): IccXML2 library (adds libxml2 dependency)
+
+### Local Source Mode (CI)
+Set `VCPKG_ICCDEV_SOURCE` + `VCPKG_KEEP_ENV_VARS=VCPKG_ICCDEV_SOURCE` to build
+from a local checkout instead of downloading from GitHub. Required in CI to
+avoid GitHub API rate limits.
+
+### Known Limitations
+- Static-only (no `__declspec(dllexport)` in IccProfLib/IccXML)
+- Image tools excluded (TIFF/PNG/JPEG deps cause static link issues)
+- wxProfileDump GUI excluded
+
+CI workflow: `ci-vcpkg-ports.yml` validates the port on Windows, Ubuntu, macOS.
+
 ## Testing
-- Test scripts located in `Testing/` directory
-- Run tests using `Testing/RunTests.sh` (Unix) or `Testing/RunTests.bat` (Windows)
-- Profile creation: `Testing/CreateAllProfiles.sh` (Unix) or `Testing/CreateAllProfiles.bat` (Windows)
-- Test various ICC profile operations and transformations
 
-## Security Practices
-- Report security issues via GitHub Security Advisory
-- All new source files must begin with ICC Copyright notice and BSD 3-Clause License
-- Follow secure coding practices
-- Validate all inputs, especially when processing ICC profiles
+```bash
+Testing/CreateAllProfiles.sh   # Generate ~80 test profiles
+Testing/RunTests.sh            # Validate all profiles (Unix)
+Testing/RunTests.bat           # Validate all profiles (Windows)
+```
 
-## Legal and Licensing
+## CI Workflows (21)
 
-### Copyright Notice
-All new source files must begin with the ICC Copyright notice and include or reference the BSD 3-Clause "New" or "Revised" License.
+| Category | Workflows |
+|----------|-----------|
+| PR gates | `ci-pr-action.yml`, `ci-pr-lint.yml`, `ci-pr-unix.yml`, `ci-pr-unix-sb.yml`, `ci-pr-win.yml` |
+| Build/test | `ci-comprehensive-build-test.yml`, `ci-sanitizer-tests.yml`, `ci-code-coverage.yml` |
+| WASM | `ci-wasm-build-test.yml`, `wasm-latest-matrix.yml` |
+| Docker | `ci-docker.yml` (Ubuntu + NixOS matrix) |
+| Release | `ci-latest-release.yml` |
+| Analysis | `ci-pr-risk-security-analysis.yml` |
+| Shared | `ci-shared-exports.yml` |
+| vcpkg | `ci-vcpkg-ports.yml` (Windows, Ubuntu, macOS overlay port test) |
+| Ops | `label.yml`, `update-labels.yml` |
 
-### Contributor License Agreement
-Contributors must sign the ICC Contributor License Agreement (CLA) before code can be merged.
+### Workflow Governance
+
+All `run:` steps MUST follow the shell-hardening prologue per
+[xsscx/governance](https://github.com/xsscx/governance/tree/main/actions):
+
+**Bash steps** — every `run:` block:
+```yaml
+shell: bash --noprofile --norc {0}
+env:
+  BASH_ENV: /dev/null
+run: |
+  set -euo pipefail
+  git config --global credential.helper ""
+  unset GITHUB_TOKEN || true
+  source .github/scripts/sanitize-sed.sh  # or inline fallback
+```
+
+**PowerShell steps** — every `run:` block:
+```yaml
+shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+env:
+  POWERSHELL_TELEMETRY_OPTOUT: 1
+  POWERSHELL_UPDATECHECK: Off
+run: |
+  $ErrorActionPreference = 'Stop'
+  git config --global credential.helper ""
+  if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+  . .github/scripts/sanitize.ps1
+```
+
+**Mandatory**: All `GITHUB_STEP_SUMMARY` writes must use `sanitize_line`/`Sanitize-Line`.
+Never place `${{ matrix.* }}` or other expressions directly in `run:` blocks — pass
+through `env:` to prevent shell injection.
+
+## Security
+
+- Report vulnerabilities via [GitHub Security Advisory](https://github.com/InternationalColorConsortium/iccDEV/security/advisories)
+- Validate all inputs — especially file-controlled sizes, offsets, and loop bounds
+- Two sanitizer scripts for CI output: `sanitize-sed.sh` (bash V3) and `sanitize.ps1` (PowerShell V1)
+- IIS ISAPI DLL hardened with `IccIsapiSanitize` (server-side) and `sanitize.js` (client-side DOM-XSS)
+- Reference workflow: `ci-pr-action.yml` (bash) · `ci-pr-win.yml` (PowerShell)
 
 ## Pull Request Process
-1. Create a topic branch: `feature/<your-feature>` or `bugfix/<your-fix>`
-2. Make focused changes related to the topic
-3. Ensure code compiles and tests pass
-4. Follow existing code style and conventions
-5. Create pull request with clear description
-6. Address review feedback
-7. Requires Committer approval before merge
 
-## Project Structure
-- `IccProfLib/` - Core ICC profile library
-- `IccXML/` - XML handling for ICC profiles
-- `Tools/` - Command-line tools for profile manipulation
-- `Build/` - Build system files (CMake, Xcode)
-- `Testing/` - Test files and scripts
-- `docs/` - Documentation
-
-## Key Considerations
-- This is an older codebase - consistency is valued over perfection
-- Match existing patterns when adding new code
-- Focus on cross-platform compatibility (Linux, macOS, Windows)
-- Performance matters for profile processing
-- Maintain compatibility with ICC specifications
+1. Branch from `master`: `feature/<name>` or `bugfix/<name>`
+2. Ensure builds + tests pass on all platforms
+3. Follow existing code style
+4. Clear PR description; address review feedback
+5. Requires Committer approval; CLA must be signed

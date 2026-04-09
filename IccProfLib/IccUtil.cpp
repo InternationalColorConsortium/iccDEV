@@ -646,7 +646,8 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
   icUInt32Number rv = 0;    // because static analysis isn't perfect
   icUInt32Number rvsgn, rvexp, rvmnt;
   icInt32Number tmpexp;
-  icFloatNumber * rvfp, rvf;
+  icFloatNumber *rvfp = nullptr;
+  icFloatNumber rvf = 0.0f;
   int exp;
 
   if (!(num & 0x7FFF)) {
@@ -662,7 +663,7 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
         nummnt <<= 1;
       } while (!(nummnt & 0x0400)); // Shift until leading bit overflows into exponent bit
       rvsgn = ((icUInt32Number) numsgn) << 16;
-      tmpexp = ((icUInt32Number) (numexp >> 10)) - 15 + 127 - exp;
+      tmpexp = ((icInt32Number)(numexp >> 10)) - 15 + 127 - exp;
       rvexp = (icUInt32Number) (tmpexp << 23);
       rvmnt = ((icUInt32Number) (nummnt & 0x03FFu)) << 13;
       rv = (rvsgn | rvexp | rvmnt);
@@ -674,7 +675,7 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
       }
     } else {
       rvsgn = ((icUInt32Number) numsgn) << 16;
-      tmpexp = ((icUInt32Number) (numexp >> 10)) - 15 + 127;
+      tmpexp = ((icInt32Number)(numexp >> 10)) - 15 + 127;
       rvexp = (icUInt32Number) (tmpexp << 23);
       rvmnt = ((icUInt32Number) nummnt) << 13;
       rv = (rvsgn | rvexp | rvmnt);
@@ -787,7 +788,7 @@ icUInt8Number icABtoU8(icFloatNumber num)
   icFloatNumber v = num + 128.0f;
   
   if (std::isnan(num))
-    num = 0;
+    v = 128.0f;
   else if (v<0)
     v=0;
   else if (v>255)
@@ -1079,13 +1080,12 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
   // 126 is ~, and 127 is DEL, over 127 is undefined and depends on local code page
   // isprint() lies about values > 127 on MacOS and Linux, haven't tested Windows
   for (i=1; i<5; i++) {
-    c=(icUInt8Number)(sig>>24);
+    c=(icUInt8Number)(sig>>(32-i*8));
     if (!isprint(c) || c > 126) {
       c='?';
       bGetHexVal = true;
     }
     pBuf[i]=c;
-    sig <<=8;
   }
 
   if (bGetHexVal)
@@ -1100,7 +1100,6 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
 {
   int i, j=-1;
   icUInt32Number sig=nSig;
-  icUInt8Number c;
   bool bGetHexVal = false;
 
   if (!nSig) {
@@ -1115,7 +1114,7 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
   }
 
   for (i=0; i<4; i++) {
-    c=(icUInt8Number)(sig>>24);
+    icUInt8Number c = (icUInt8Number)(sig >> (24-(i*8)));
     if (!c) {
       j=i;
     }
@@ -1127,7 +1126,6 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
       bGetHexVal = true;
     }
     pBuf[i]=c;
-    sig <<=8;
   }
 
   if (bGetHexVal)
@@ -1164,8 +1162,7 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
 
       pBuf[0]='\"';
       pBuf[1] = (icUInt8Number)(sig>>24);
-      sig<<=8;
-      pBuf[2] = (icUInt8Number)(sig>>24);
+      pBuf[2] = (icUInt8Number)(sig>>16);
       snprintf(pBuf+3, bufSize-3, "%04X\"", icNumColorSpaceChannels(nSig));
       return pBuf;
     
@@ -1178,13 +1175,12 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
 
       pBuf[0] = '\'';
       for (i=1; i<5; i++) {
-        c=(icUInt8Number)(sig>>24);
+        c=(icUInt8Number)(sig>>(32-i*8));
         if (!isprint(c) || c > 126) {
           c = '?';
           bNeedHexVal = true;
         }
         pBuf[i]=c;
-        sig <<=8;
       }
 
       if (bGetHexVal)
@@ -1225,8 +1221,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
     case icSigSparseMatrixReflectanceData:
 
       pBuf[0] = (icUInt8Number)(sig>>24);
-      sig<<=8;
-      pBuf[1] = (icUInt8Number)(sig>>24);
+      pBuf[1] = (icUInt8Number)(sig>>16);
       snprintf(pBuf+2, bufSize-2, "%04X", icNumColorSpaceChannels(nSig));
       return pBuf;
 
@@ -1238,7 +1233,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
         bool bGetHexVal = false;
 
         for (i=0; i<4; i++) {
-          c=(icUInt8Number)(sig>>24);
+          c=(icUInt8Number)(sig>>(24-i*8));
           if (!c) {
             j=i;
           }
@@ -1250,7 +1245,6 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
             bGetHexVal = true;
           }
           pBuf[i]=c;
-          sig <<=8;
         }
 
         if (bGetHexVal)
@@ -1333,7 +1327,7 @@ icSignature icGetSecondSigPathSig(std::string sigPath)
 
 icUInt32Number icGetSigVal(const icChar *pBuf)
 {
-  icUInt32Number v;
+  icUInt32Number v = 0;
   
   if (!pBuf)    // can't return an error, so do something sane to avoid a segfault
     return 0;
@@ -2198,7 +2192,7 @@ const icChar *CIccInfo::GetRenderingIntentName(icRenderingIntent val, bool bIsV5
       return "Absolute Colorimetric";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Intent '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Intent '%d'", val);
     return m_szStr;
   }
 }
@@ -2231,7 +2225,7 @@ const icChar *CIccInfo::GetSpotShapeName(icSpotShape val)
     return "Spot Shape Cross";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Spot Shape '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Spot Shape '%d'", val);
     return m_szStr;
   }
 }
@@ -2249,7 +2243,7 @@ const icChar *CIccInfo::GetStandardObserverName(icStandardObserver val)
     return "CIE 1964 (ten degree) standard observer";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Observer '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Observer '%d'", val);
     return m_szStr;
   }
 }
@@ -2327,7 +2321,7 @@ const icChar *CIccInfo::GetIlluminantName(icIlluminant val)
     return "Illuminant F12";
 
   default:
-    snprintf(m_szStr, m_bufSize, "Unknown Illuminant '%d", val);
+    snprintf(m_szStr, m_bufSize, "Unknown Illuminant '%d'", val);
     return m_szStr;
   }
 }

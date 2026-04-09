@@ -41,6 +41,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Tools/IccDEVCmm/x64/$<CO
 # Source Files
 set(SOURCES
     "${OS_SPECIFIC_SOURCES}/IccDEVCmm.cpp"
+    "${OS_SPECIFIC_SOURCES}/IccDEVCmm.def"
     "${OS_SPECIFIC_SOURCES}/IccDEVCmm.rc"
     "${OS_SPECIFIC_SOURCES}/resource.h"
     "${OS_SPECIFIC_SOURCES}/IccDEVCmm.h"
@@ -84,7 +85,8 @@ target_link_libraries(${TARGET_NAME} PRIVATE ${LINK_LIBS})
 
 # ---- Name & PDB via properties (no /OUT or /PDB overrides) -------------------
 set_target_properties(${TARGET_NAME} PROPERTIES
-    OUTPUT_NAME "RefIccMAX"                               # DLL name → RefIccMAX.dll
+    OUTPUT_NAME "IccDEVCmm"                               # DLL name aligns with Winnt DEF/RC metadata
+    DEBUG_POSTFIX ""
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}"

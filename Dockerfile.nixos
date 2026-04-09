@@ -1,139 +1,64 @@
 ###############################################################
-# Copyright (c) 2025-2026 International Color Consortium. 
-#                 All rights reserved. 
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
 #                 https://color.org
 #
-# Dockerfile for iccDEV Build Container using NixOS
-# Based on nixos/nix Docker image
+# Intent: iccDEV NixOS Docker build
 #
-# Last Updated: 2026-02-09 23:50:57 UTC by David Hoyt
-#
-# Build command:
-#   docker build -f Dockerfile.nixos -t iccdev-nixos:latest .
-#
-# Run command:
-#   docker run -it --rm iccdev-nixos:latest
-#
-# Testing with volume mount:
-#   docker run -it --rm -v /path/to/icc/files:/data iccdev-nixos:latest
+# Last Updated: 2026-04-08 by David Hoyt
 #
 ###############################################################
 
-# Use official NixOS Docker image
 FROM nixos/nix:2.33.2@sha256:c6ebd12d96b3374ee15e3986c15aa43f5e49310634f17afcaaf4dafe4f6732b2
 
 LABEL org.opencontainers.image.title="iccDEV Build Container (NixOS)" \
       org.opencontainers.image.description="iccDEV built with Nix package manager" \
       org.opencontainers.image.licenses="BSD-3-Clause" \
       org.opencontainers.image.vendor="International Color Consortium" \
-      org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV" \
-      org.opencontainers.image.url="https://github.com/InternationalColorConsortium/iccDEV" \
-      org.opencontainers.image.documentation="https://github.com/InternationalColorConsortium/iccDEV/tree/master/docs"
+      org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
-# Set working directory
-WORKDIR /workspace
-
-# Copy source and build using nix-shell
-# Build from checked-out source with all dependencies including wxWidgets
 COPY . /workspace/iccDEV
-RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib wxGTK32 --run ' \
+RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run ' \
     export NIX_LDFLAGS="-ltiff $NIX_LDFLAGS" && \
     cd /workspace/iccDEV && \
-    echo "=== Building iccDEV ===" && \
+    sed -i "/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /" Build/Cmake/CMakeLists.txt && \
     cd Build && \
+    rm -f CMakeCache.txt && rm -rf CMakeFiles && \
     cmake -DCMAKE_BUILD_TYPE=Release Cmake && \
     make -j$(nproc) && \
-    echo "=== Build Complete ===" && \
-    echo "Built tools:" && \
-    find ./Tools -name "icc*" -type f -executable | wc -l && \
-    echo "Built libraries:" && \
-    find . -name "*.so*" -o -name "*.a" | grep -E "IccProf|IccXML" | wc -l \
-    ' \
- && rm -rf /workspace/iccDEV/.git
+    echo "=== Libraries ===" && \
+    ls -lh /workspace/iccDEV/Build/IccProfLib/libIccProfLib2* && \
+    ls -lh /workspace/iccDEV/Build/IccXML/libIccXML2* && \
+    echo "=== Tools ===" && \
+    find /workspace/iccDEV/Build/Tools -type f -executable | sort' \
+ && rm -rf /workspace/iccDEV/.git \
+ && echo 'iccdev:x:1000:' >> /etc/group \
+ && echo 'iccdev:x:1000:1000:iccdev:/workspace:/bin/sh' >> /etc/passwd \
+ && nix-env -iA nixpkgs.coreutils nixpkgs.findutils nixpkgs.gnugrep nixpkgs.gnused \
+      nixpkgs.libtiff nixpkgs.libxml2 nixpkgs.libjpeg nixpkgs.libpng nixpkgs.zlib \
+ && chown -R 1000:1000 /workspace \
+ && nix-collect-garbage -d \
+ && nix store optimise 2>/dev/null || true
 
-# Set PATH to include all built tools
-ENV PATH="/workspace/iccDEV/Build/Tools/IccApplyNamedCmm:\
+ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
+/workspace/iccDEV/Build/Tools/IccFromXml:\
+/workspace/iccDEV/Build/Tools/IccDumpProfile:\
+/workspace/iccDEV/Build/Tools/IccApplyNamedCmm:\
+/workspace/iccDEV/Build/Tools/IccRoundTrip:\
+/workspace/iccDEV/Build/Tools/IccFromCube:\
 /workspace/iccDEV/Build/Tools/IccApplyProfiles:\
 /workspace/iccDEV/Build/Tools/IccApplySearch:\
 /workspace/iccDEV/Build/Tools/IccApplyToLink:\
-/workspace/iccDEV/Build/Tools/IccDumpProfile:\
-/workspace/iccDEV/Build/Tools/IccFromCube:\
-/workspace/iccDEV/Build/Tools/IccFromXml:\
 /workspace/iccDEV/Build/Tools/IccJpegDump:\
 /workspace/iccDEV/Build/Tools/IccPngDump:\
-/workspace/iccDEV/Build/Tools/IccRoundTrip:\
 /workspace/iccDEV/Build/Tools/IccSpecSepToTiff:\
 /workspace/iccDEV/Build/Tools/IccTiffDump:\
-/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccV5DspObsToV4Dsp:\
-/workspace/iccDEV/Build/Tools/wxProfileDump:\
 ${PATH}"
 
-# Set library path
 ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML"
 
-# Set working directory to iccDEV
 WORKDIR /workspace/iccDEV
-
-# Create welcome script in workspace
-RUN printf '%s\n' \
-  '#!/usr/bin/env sh' \
-  '' \
-  'echo ""' \
-  'echo "============================================================"' \
-  'echo "==== International Color Consortium | https://color.org ===="' \
-  'echo "==== iccDEV Build Container (NixOS) ========================"' \
-  'echo "============================================================"' \
-  'echo ""' \
-  'echo "All iccDEV tools are available on PATH:"' \
-  'echo ""' \
-  'echo "Command-line tools (14):"' \
-  'echo "  - iccApplyNamedCmm    - iccFromXml"' \
-  'echo "  - iccApplyProfiles    - iccJpegDump"' \
-  'echo "  - iccApplySearch      - iccPngDump"' \
-  'echo "  - iccApplyToLink      - iccRoundTrip"' \
-  'echo "  - iccDumpProfile      - iccSpecSepToTiff"' \
-  'echo "  - iccFromCube         - iccTiffDump"' \
-  'echo "  - iccToXml            - iccV5DspObsToV4Dsp"' \
-  'echo ""' \
-  'echo "GUI tool (1):"' \
-  'echo "  - iccDumpProfileGui"' \
-  'echo ""' \
-  'echo "iccDEV Libraries (in /workspace/iccDEV/Build):"' \
-  'echo ""' \
-  'echo "Shared Libraries (.so):"' \
-  'echo "  - IccProfLib/libIccProfLib2.so -> libIccProfLib2.so.<version>"' \
-  'echo "  - IccXML/libIccXML2.so -> libIccXML2.so.<version>"' \
-  'echo ""' \
-  'echo "Static Libraries (.a):"' \
-  'echo "  - IccProfLib/libIccProfLib2-static.a"' \
-  'echo "  - IccXML/libIccXML2-static.a"' \
-  'echo ""' \
-  'echo "Example usage:"' \
-  'echo "  iccDumpProfile Testing/sRGB_v4_ICC_preference.icc ALL"' \
-  'echo "  iccToXml Testing/sRGB_v4_ICC_preference.icc output.xml"' \
-  'echo ""' \
-  'echo "Testing directory: /workspace/iccDEV/Testing"' \
-  'echo "Build directory:   /workspace/iccDEV/Build"' \
-  'echo ""' \
-  'echo "To list all tools and libraries:"' \
-  'echo "  find Build/Tools -type f -executable -name '"'"'icc*'"'"'"' \
-  'echo "  find Build -name '"'"'libIcc*.so*'"'"' -o -name '"'"'libIcc*.a'"'"'"' \
-  'echo ""' \
-  'echo "To run all tests:"' \
-  'echo "  cd Testing && sh CreateAllProfiles.sh"' \
-  'echo ""' \
-  'echo "================================================"' \
-  'echo ""' \
-  > /workspace/welcome.sh
-
-RUN chmod +x /workspace/welcome.sh
-
-# Run as non-root user (NixOS manages /etc via symlinks, write entries directly)
-RUN echo 'iccdev:x:1000:' >> /etc/group \
- && echo 'iccdev:x:1000:1000:iccdev:/workspace:/bin/sh' >> /etc/passwd \
- && chown -R 1000:1000 /workspace
 USER iccdev
 
-# Default command: show welcome and start interactive shell
-CMD ["sh", "-c", "/workspace/welcome.sh && exec sh"]
+CMD ["sh"]

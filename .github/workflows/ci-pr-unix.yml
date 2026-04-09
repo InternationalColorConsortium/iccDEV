@@ -1,19 +1,14 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium.
-# All rights reserved.
-# https://color.org
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
 #
 #
 # Intent: Unix/Linux and macOS multi-compiler build & test
 #
-# Last Updated: 2026-02-17 16:24:41 UTC by David Hoyt
-#               PATH Changes
-#
-#
-#
-#
-#
+# Last Updated: 2026-03-29 06:53:23 UTC by David Hoyt
+#               Fix: CI Scripts & Bisect (#739)
 #
 #
 #
@@ -110,7 +105,7 @@ jobs:
           esac
 
       - name: Check out Repository
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
@@ -184,12 +179,13 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          if [ "$MATRIX_COMPILER" = "gcc" ]; then
             echo "CC=gcc" >> $GITHUB_ENV
             echo "CXX=g++" >> $GITHUB_ENV
           else
@@ -232,7 +228,14 @@ jobs:
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
           echo "CMake build type: ${MATRIX_BUILD_TYPE}"
-          make -j$(nproc || sysctl -n hw.logicalcpu)
+          make -j$(nproc || sysctl -n hw.logicalcpu) 2>&1 | tee build.log
+          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          if [ "$WARNING_COUNT" -gt 0 ]; then
+            echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
+            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+          else
+            echo "[OK] Zero compiler warnings"
+          fi
 
       - name: Create Profiles
         shell: bash --noprofile --norc {0}
@@ -251,6 +254,19 @@ jobs:
           done
           sh CreateAllProfiles.sh
           sh RunTests.sh
+          cd HDR
+          sh mkprofiles.sh
+          cd ..
+          cd hybrid
+          sh BuildAndTest.sh
+          cd ..
+          cd CalcTest
+          sh checkInvalidProfiles.sh
+          cd ..
+          cd mcs
+          sh updateprev.sh
+          sh updateprevWithBkgd.sh
+          cd ..
           find . -iname "*.icc" | wc -l
           echo "Build complete."
 

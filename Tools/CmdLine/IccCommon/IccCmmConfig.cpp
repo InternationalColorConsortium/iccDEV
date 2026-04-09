@@ -540,6 +540,7 @@ void CIccCfgCreateLink::toJson(json& j) const
   j["linkTitle"] = m_linkTitle;
   j["linkMinRange"] = m_linkMinRange;
   j["linkMaxRange"] = m_linkMaxRange;
+  j["linkGridSize"] = m_linkGridSize;
   j["useSourceTransform"] = m_useSourceTransform;
 }
 
@@ -592,7 +593,7 @@ static bool icGetJsonRenderingIntent(const json& j, int& v)
 
 static const char* icGetRenderingIntentName(int nIntent)
 {
-  if (nIntent >= icPerceptual && nIntent <= icAbsolute)
+  if (nIntent >= (int)icPerceptual && nIntent <= (int)icAbsolute)
     return icIntentNames[nIntent];
 
   return "unknown";
@@ -745,7 +746,8 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
   icXformInterp interpolation = icInterpTetrahedral;
 
   if (nArg > 1) {
-    interpolation = (icXformInterp)atoi(args[0]);
+    int nInterpVal = atoi(args[0]);
+    interpolation = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
     args++;
     nArg--;
     nUsed++;
@@ -892,8 +894,8 @@ bool CIccCfgPccWeight::fromJson(json j, bool /*bReset*/)
   if (!j.is_object())
     return false;
 
-  jsonToValue(j["pccFile"], m_dWeight);
-  jsonToValue(j["weight"], m_pccPath);
+  jsonToValue(j["pccFile"], m_pccPath);
+  jsonToValue(j["weight"], m_dWeight);
   
   return true;
 }
@@ -923,7 +925,8 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
   icXformInterp interpolation = icInterpTetrahedral;
 
   if (nArg > 1) {
-    interpolation = (icXformInterp)atoi(args[0]);
+    int nInterpVal = atoi(args[0]);
+    interpolation = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
     args++;
     nArg--;
     nUsed++;
@@ -1114,10 +1117,15 @@ void CIccCfgSearchApply::toJsonInit(json &j) const
   if (m_useV5SubProfileInitial)
     j["useV5SubProfile"] = m_useV5SubProfileInitial;
   int i;
+  for (i = 0; icTranNames[i]; i++)
+    if (icTranValues[i] == m_transformInitial)
+      break;
+  if (icTranNames[i])
+    j["transform"] = icTranNames[i];
   for (i = 0; icInterpNames[i]; i++)
     if (icInterpValues[i] == m_interpolationInitial)
       break;
-  if (icInterpValues[i] == icInterpLinear)
+  if (icInterpNames[i])
     j["interpolation"] = icInterpNames[i];
 
 }
@@ -1140,19 +1148,21 @@ bool CIccCfgSearchApply::fromJsonInit(json j)
       if (str == icTranNames[i])
         break;
     }
-    m_transformInitial = (icXformLutType)icTranValues[i];
+    if (icTranNames[i])
+      m_transformInitial = (icXformLutType)icTranValues[i];
   }
 
   jsonToValue(j["adjustPcsLuminance"], m_adjustPcsLuminanceInitial);
   jsonToValue(j["useV5SubProfile"], m_useV5SubProfileInitial);
 
-  if (jsonToValue(j["transform"], str)) {
+  if (jsonToValue(j["interpolation"], str)) {
     int i;
     for (i = 0; icInterpNames[i]; i++) {
       if (str == icInterpNames[i])
         break;
     }
-    m_interpolationInitial = icInterpValues[i];
+    if (icInterpNames[i])
+      m_interpolationInitial = icInterpValues[i];
   }
 
   return true;
@@ -1367,7 +1377,12 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
   }
 
   InputData.getline(tempBuf, tempBufSize);
-  sscanf(tempBuf, "%s", tempBuf);
+  {
+    char encodeBuf[20000];
+    sscanf(tempBuf, "%19999s", encodeBuf);
+    strncpy(tempBuf, encodeBuf, tempBufSize - 1);
+    tempBuf[tempBufSize - 1] = '\0';
+  }
 
   //Setup source encoding
   m_encoding = CIccCmm::GetFloatColorEncoding(tempBuf);
@@ -1560,10 +1575,10 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       }
       else {
       int nColor = -1;
-      if ( (sscanf(szFmt, "%uCOLOR_", &nColor) == 1) && nColor >= 1) {  // sscanf can also return EOF(-1)
+      if ( (sscanf(szFmt, "%dCOLOR_", &nColor) == 1) && nColor >= 1) {  // sscanf can also return EOF(-1)
         const size_t bufSize = 30;
         char buf[bufSize];
-        snprintf(buf, bufSize, "%uCOLOR", nColor);
+        snprintf(buf, bufSize, "%dCOLOR", nColor);
         space += buf;
 
         if (space != lastSpace) {
@@ -1759,6 +1774,8 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
   const size_t tempSize = 256;
   char tempBuf[tempSize];
   char tempBuf2[tempSize];
+  if (nDigits > 20) nDigits = 20;
+  if (nPrecision > 20) nPrecision = 20;
   const size_t fmtSize = 20;
   char fmt[fmtSize];
   if (!nDigits)
@@ -1956,6 +1973,8 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     return false;
 
   FILE* f;
+  if (nDigits > 20) nDigits = 20;
+  if (nPrecision > 20) nPrecision = 20;
   const size_t fmtSize = 64;
   char fmt[fmtSize];
   if (!nDigits)
@@ -2039,7 +2058,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   fprintf(f, "BEGIN_DATA_FORMAT\n");
   fprintf(f, "%s\n", dataFormat.c_str());
   fprintf(f, "END_DATA_FORMAT\n");
-  fprintf(f, "NUMBER_OF_SETS\t%u\n", (int)m_data.size());
+  fprintf(f, "NUMBER_OF_SETS\t%d\n", (int)m_data.size());
 
   CIccCfgDataEntry blank;
   const size_t bufSize = 256;

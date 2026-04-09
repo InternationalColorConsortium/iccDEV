@@ -63,14 +63,14 @@ see http://www.color.org/.
 # Intent: Try Sanitizing User Controllable Inputs
 #
 # File: .github/scripts/sanitize.ps1
-# 
 #
-# Comment: Sanitizing User Controllable Input 
+#
+# Comment: Sanitizing User Controllable Input
 #          - is a Moving Target
 #          - needs ongoing updates
 #          - needs additional unit tests
 #
-# 
+#
 #
 ###############################################################
 
@@ -99,7 +99,7 @@ function Escape-Html {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString
     $result = $result.Replace("&", "&amp;")
     $result = $result.Replace("<", "&lt;")
@@ -126,10 +126,10 @@ function Strip-CtrlKeepNewlines {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString
     $result = $result -replace "`r", ""
-    
+
     $cleanChars = @()
     foreach ($char in $result.ToCharArray()) {
         $codePoint = [int]$char
@@ -157,11 +157,11 @@ function Strip-CtrlRemoveNewlines {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString
     $result = $result -replace "`r", ""
     $result = $result -replace "`n", " "
-    
+
     $cleanChars = @()
     foreach ($char in $result.ToCharArray()) {
         $codePoint = [int]$char
@@ -186,7 +186,7 @@ function Trim-Whitespace {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     return $InputString.Trim()
 }
 
@@ -206,11 +206,11 @@ function Truncate-String {
         [Parameter(Mandatory=$false)]
         [AllowEmptyString()]
         [string]$InputString = "",
-        
+
         [Parameter(Mandatory=$true)]
         [int]$MaxLen
     )
-    
+
     if ($InputString.Length -le $MaxLen) {
         return $InputString
     }
@@ -243,7 +243,7 @@ function Sanitize-Line {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = Strip-CtrlRemoveNewlines -InputString $InputString
     $result = Trim-Whitespace -InputString $result
     $result = Escape-Html -InputString $result
@@ -276,7 +276,7 @@ function Sanitize-Print {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = Strip-CtrlKeepNewlines -InputString $InputString
     $result = $result -replace "(`n){4,}", "`n`n`n"
     $result = Escape-Html -InputString $result
@@ -307,7 +307,7 @@ function Sanitize-Ref {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = $InputString -replace "`0", ""
     $result = $result -replace "`r", ""
     $result = $result -replace "`n", ""
@@ -315,11 +315,11 @@ function Sanitize-Ref {
     $result = $result -replace "-+", "-"
     $result = $result -replace "^-+", ""
     $result = $result -replace "-+$", ""
-    
+
     if ([string]::IsNullOrEmpty($result)) {
         $result = "ref-unknown"
     }
-    
+
     return $result
 }
 
@@ -344,7 +344,7 @@ function Sanitize-Filename {
         [AllowEmptyString()]
         [string]$InputString = ""
     )
-    
+
     $result = Sanitize-Ref -InputString $InputString
     $result = $result.Replace("/", "_")
     return $result
@@ -371,10 +371,172 @@ function Safe-EchoForSummary {
         [AllowEmptyString()]
         [string[]]$InputString = @()
     )
-    
+
     $joined = $InputString -join " "
     $sanitized = Sanitize-Print -InputString $joined
     Write-Output $sanitized
+}
+
+<#
+.SYNOPSIS
+    Detect hidden Unicode characters in a string (detection system, not filter).
+
+.DESCRIPTION
+    Returns $true if hidden characters are found (DANGEROUS).
+    Returns $false if the string is clean.
+    Emits [CRITICAL] diagnostics to stderr when hidden chars detected.
+    Achieves parity with GitHub UI warning:
+    "The head ref may contain hidden characters"
+
+    Detects: BOM (U+FEFF), Bidi overrides (U+202A-202E, U+2066-2069),
+    Zero-width chars (U+200B-200F, U+2060), Line/Paragraph separators
+    (U+2028-2029), Interlinear annotation (U+FFF9-FFFB).
+
+.PARAMETER InputString
+    The string to check for hidden characters.
+
+.PARAMETER Label
+    Optional context label for diagnostic output (e.g., "GITHUB_HEAD_REF").
+
+.EXAMPLE
+    if (Detect-HiddenChars -InputString $env:GITHUB_HEAD_REF -Label "HEAD_REF") {
+        Write-Host "[CRITICAL] Hidden chars in branch name"
+    }
+#>
+function Detect-HiddenChars {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string]$InputString,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Label = "input"
+    )
+
+    if ([string]::IsNullOrEmpty($InputString)) {
+        return $false
+    }
+
+    $found = $false
+    $details = @()
+
+    # BOM / Zero-Width No-Break Space (U+FEFF)
+    if ($InputString.Contains([char]0xFEFF)) {
+        $details += "  - U+FEFF (BOM / Zero-Width No-Break Space)"
+        $found = $true
+    }
+
+    # Bidi overrides (U+202A-202E)
+    foreach ($cp in 0x202A..0x202E) {
+        if ($InputString.Contains([char]$cp)) {
+            $details += "  - U+202A-202E (Bidi Override/Embedding)"
+            $found = $true
+            break
+        }
+    }
+
+    # Bidi isolates (U+2066-2069)
+    foreach ($cp in 0x2066..0x2069) {
+        if ($InputString.Contains([char]$cp)) {
+            $details += "  - U+2066-2069 (Bidi Isolate)"
+            $found = $true
+            break
+        }
+    }
+
+    # Zero-width chars (U+200B-200F)
+    foreach ($cp in 0x200B..0x200F) {
+        if ($InputString.Contains([char]$cp)) {
+            $details += "  - U+200B-200F (Zero-Width Space/Joiner/Mark)"
+            $found = $true
+            break
+        }
+    }
+
+    # Word joiner (U+2060)
+    if ($InputString.Contains([char]0x2060)) {
+        $details += "  - U+2060 (Word Joiner)"
+        $found = $true
+    }
+
+    # Line/Paragraph separators (U+2028-2029)
+    foreach ($cp in 0x2028..0x2029) {
+        if ($InputString.Contains([char]$cp)) {
+            $details += "  - U+2028-2029 (Line/Paragraph Separator)"
+            $found = $true
+            break
+        }
+    }
+
+    # Interlinear annotation (U+FFF9-FFFB)
+    foreach ($cp in 0xFFF9..0xFFFB) {
+        if ($InputString.Contains([char]$cp)) {
+            $details += "  - U+FFF9-FFFB (Interlinear Annotation)"
+            $found = $true
+            break
+        }
+    }
+
+    # Broad check: any non-ASCII non-printable
+    if (-not $found) {
+        foreach ($c in $InputString.ToCharArray()) {
+            $cp = [int]$c
+            if ($cp -gt 127 -or ($cp -lt 32 -and $cp -ne 10 -and $cp -ne 13)) {
+                $details += "  - Non-ASCII/control character(s) detected (U+$($cp.ToString('X4')))"
+                $found = $true
+                break
+            }
+        }
+    }
+
+    if ($found) {
+        $hexBytes = [System.BitConverter]::ToString(
+            [System.Text.Encoding]::UTF8.GetBytes($InputString)
+        ).Replace("-","").ToLower()
+        $sanitized = Sanitize-Ref -InputString $InputString
+
+        Write-Host "[CRITICAL] Hidden Unicode characters detected in $Label" -ForegroundColor Red
+        foreach ($d in $details) { Write-Host $d -ForegroundColor Yellow }
+        Write-Host "  Raw bytes: $($hexBytes.Substring(0, [Math]::Min($hexBytes.Length, 120)))"
+        Write-Host "  Sanitized: $sanitized"
+        Write-Host '  GitHub UI parity: this finding matches GitHub warning'
+        Write-Host '    "The head ref may contain hidden characters"'
+    }
+
+    return $found
+}
+
+<#
+.SYNOPSIS
+    Validate a ref name: detect hidden chars + return sanitized version.
+
+.DESCRIPTION
+    Wrapper that combines detection (alert to stderr) with sanitization
+    (clean output on stdout). Always returns a safe string.
+
+.PARAMETER InputString
+    The ref name to validate.
+
+.PARAMETER Label
+    Optional context label for diagnostic output.
+
+.EXAMPLE
+    $cleanRef = Validate-Ref -InputString $env:GITHUB_HEAD_REF -Label "HEAD_REF"
+#>
+function Validate-Ref {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyString()]
+        [string]$InputString,
+
+        [Parameter(Mandatory=$false)]
+        [string]$Label = "ref"
+    )
+
+    $null = Detect-HiddenChars -InputString $InputString -Label $Label
+    return (Sanitize-Ref -InputString $InputString)
 }
 
 <#
@@ -386,10 +548,10 @@ function Safe-EchoForSummary {
 
 .EXAMPLE
     Sanitizer-Version
-    Returns "iccDEV-sanitizer-v1"
+    Returns "iccDEV-sanitizer-v4"
 #>
 function Sanitizer-Version {
-    return "iccDEV-sanitizer-v1"
+    return "iccDEV-sanitizer-v4"
 }
 
 # Functions are automatically available when dot-sourced

@@ -23,6 +23,8 @@ COPY . /opt/iccdev
 RUN cd /opt/iccdev \
  && sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt \
  && cd Build \
+ && rm -f CMakeCache.txt \
+ && rm -rf CMakeFiles \
  && cmake -DCMAKE_BUILD_TYPE=Release Cmake \
  && make -j"$(nproc)" \
  && rm -rf /opt/iccdev/.git
@@ -43,7 +45,7 @@ LABEL org.opencontainers.image.title="iccDEV Build Container" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libxml2-16 libtiff6 libjpeg8 libpng16-16t64 zlib1g \
+    libc6 libxml2-16 libtiff6 libjpeg8 libpng16-16t64 zlib1g \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/iccdev /opt/iccdev

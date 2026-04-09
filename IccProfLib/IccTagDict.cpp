@@ -630,7 +630,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
         ptr.ptr->SetValue(str);
       }
       else {
-        if (pos[i].posName.offset + pos[i].posName.size >size ||
+        if (pos[i].posName.size > size || pos[i].posName.offset > size - pos[i].posName.size ||
             !pos[i].posName.size) {
           free(pos);
           free(buf);
@@ -675,7 +675,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
         ptr.ptr->SetValue(str);
       }
       else {
-        if (pos[i].posValue.offset + pos[i].posValue.size >size ||
+        if (pos[i].posValue.size > size || pos[i].posValue.offset > size - pos[i].posValue.size ||
             (pos[i].posValue.size&1)) {
             free(pos);
             free(buf);
@@ -715,7 +715,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
 
     //Get NameLocalized
     if (pos[i].posNameLocalized.offset) {
-      if (pos[i].posNameLocalized.offset + pos[i].posNameLocalized.size > size ||
+      if (pos[i].posNameLocalized.size > size || pos[i].posNameLocalized.offset > size - pos[i].posNameLocalized.size ||
           pos[i].posNameLocalized.size < sizeof(icSignature)) {
         free(pos);
         free(buf);
@@ -766,7 +766,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
 
     //Get ValueLocalized
     if (pos[i].posValueLocalized.offset) {
-      if (pos[i].posValueLocalized.offset + pos[i].posValueLocalized.size > size ||
+      if (pos[i].posValueLocalized.size > size || pos[i].posValueLocalized.offset > size - pos[i].posValueLocalized.size ||
         pos[i].posValueLocalized.size < sizeof(icSignature)) {
           free(pos);
           free(buf);

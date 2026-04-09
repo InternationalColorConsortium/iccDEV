@@ -1308,7 +1308,7 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
   
   // if the tag claims to be longer than the actual file, return an error
   // NOTE - ccox - it would be nice to cache the file length instead of calculating it per tag
-  if ( (pTagEntry->TagInfo.offset + pTagEntry->TagInfo.size) > pIO->GetLength())
+  if ( pTagEntry->TagInfo.size > pIO->GetLength() || pTagEntry->TagInfo.offset > pIO->GetLength() - pTagEntry->TagInfo.size)
     return false;
 
   icTagTypeSignature sigType;

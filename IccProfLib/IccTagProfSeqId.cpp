@@ -512,7 +512,7 @@ bool CIccTagProfileSequenceId::Read(icUInt32Number size, CIccIO *pIO)
   CIccProfileIdDesc pid;
 
   for (i=0; i<count; i++) {
-    if (pos[i].offset + pos[i].size > size) {
+    if (pos[i].size > size || pos[i].offset > size - pos[i].size) {
       delete [] pos;
       return false;
     }

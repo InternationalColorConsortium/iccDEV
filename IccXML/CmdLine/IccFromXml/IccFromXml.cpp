@@ -78,8 +78,6 @@ int main(int argc, char* argv[])
   std::string valid_report;
 
   if (profile.Validate(valid_report)<=icValidateWarning) {
-    int i;
-
     for (i=0; i<16; i++) {
       if (profile.m_Header.profileID.ID8[i])
         break;
@@ -93,8 +91,6 @@ int main(int argc, char* argv[])
     }
   }
   else {
-    int i;
-
     for (i=0; i<16; i++) {
       if (profile.m_Header.profileID.ID8[i])
         break;

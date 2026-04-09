@@ -125,7 +125,7 @@ public:
 };
 
 
-class CIccStructNamedColor;
+class ICCPROFLIB_API CIccStructNamedColor;
 
 typedef std::map<std::string, CIccStructNamedColor*> icNamedColorStructList;
 

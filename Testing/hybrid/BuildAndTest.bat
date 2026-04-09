@@ -1,6 +1,10 @@
 @REM setup directory to the tools used in this script
 @if exist ..\iccFromXml.exe (SET TOOLDIR=..\) else (SET TOOLDIR=)
 
+@if not exist ICC mkdir ICC
+@if not exist Results mkdir Results
+@if not exist config mkdir config
+
 @ECHO First lets build some useful ICC profiles 
 
 %TOOLDIR%iccFromXml.exe MultSpectralRGB.xml ICC\MultSpectralRGB.icc
@@ -9,18 +13,18 @@
 %TOOLDIR%iccFromXml.exe CMYK-W_Overprint_Profile.xml ICC\CMYK-W_Overprint_Profile.icc
 %TOOLDIR%iccFromXml.exe CMYK-S_Overprint_Profile.xml ICC\CMYK-S_Overprint_Profile.icc
 %TOOLDIR%iccFromXml.exe CMYK-STop_Overprint_Profile.xml ICC\CMYK-STop_Overprint_Profile.icc
-%TOOLDIR%iccFromXML.exe MW-Mid_Overprint.xml ICC\MW-Mid_Overprint.icc
-%TOOLDIR%iccFromXML.exe MS-Mid_Overprint.xml ICC\MS-Mid_Overprint.icc
-%TOOLDIR%iccFromXML.exe SC-Mid_Overprint.xml ICC\SC-Mid_Overprint.icc
+%TOOLDIR%iccFromXml.exe MW-Mid_Overprint.xml ICC\MW-Mid_Overprint.icc
+%TOOLDIR%iccFromXml.exe MS-Mid_Overprint.xml ICC\MS-Mid_Overprint.icc
+%TOOLDIR%iccFromXml.exe SC-Mid_Overprint.xml ICC\SC-Mid_Overprint.icc
 
 %TOOLDIR%iccFromXml.exe Data\Lab_float-D50_2deg.xml ICC\Lab_float-D50_2deg.icc
 %TOOLDIR%iccFromXml.exe Data\Lab_float-D93_2deg-MAT.xml ICC\Lab_float-D93_2deg-MAT.icc
 %TOOLDIR%iccFromXml.exe Data\Lab_float-F11_2deg-MAT.xml ICC\Lab_float-F11_2deg-MAT.icc
-%TOOLDIR%iccFromXml.exe Data\Lab_float-illumA_2deg-MAT.xml ICC\Lab_float-illumA_2deg-MAT.icc
+%TOOLDIR%iccFromXml.exe Data\Lab_float-IllumA_2deg-MAT.xml ICC\Lab_float-IllumA_2deg-MAT.icc
 %TOOLDIR%iccFromXml.exe Data\Cat8Lab-D65_2deg.xml ICC\Cat8Lab-D65_2deg.icc
 
 %TOOLDIR%iccFromXml.exe Data\Spec400_10_700-D50_2deg.xml ICC\Spec400_10_700-D50_2deg.icc
-%TOOLDIR%iccFromXml.exe Data\Spec400_10_700-illumA_2deg-Abs.xml ICC\Spec400_10_700-illumA_2deg-Abs.icc
+%TOOLDIR%iccFromXml.exe Data\Spec400_10_700-IllumA_2deg-Abs.xml ICC\Spec400_10_700-IllumA_2deg-Abs.icc
 %TOOLDIR%iccFromXml.exe Data\Spec400_10_700-F11_2deg-Abs.xml ICC\Spec400_10_700-F11_2deg-Abs.icc
 %TOOLDIR%iccFromXml.exe Data\Spec380_10_730-D50_2deg.xml ICC\Spec380_10_730-D50_2deg.icc
 
@@ -47,11 +51,11 @@
 @ECHO Apply custom observer
 @ECHO *****************************************************************
 
-%TOOLDIR%iccDumpProfile ICC\LCDDisplay.icc
+%TOOLDIR%iccDumpProfile.exe ICC\LCDDisplay.icc
 
 %TOOLDIR%iccV5DspObsToV4Dsp.exe ICC\LCDDisplay.icc ICC\Cat8Lab-D65_2deg.icc Results\LCDDisplayCat8Obs.icc
 
-%TOOLDIR%iccDumpProfile Results\LCDDisplayCat8Obs.icc
+%TOOLDIR%iccDumpProfile.exe Results\LCDDisplayCat8Obs.icc
 
 @ECHO *****************************************************************
 @ECHO Do some spectral color management from an hybrid print profile

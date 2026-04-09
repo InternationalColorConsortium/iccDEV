@@ -48,14 +48,14 @@ function Run-Test {
         [string]$Expected,
         [string]$Function = "Sanitize-Line"
     )
-    
+
     $testNum = $script:pass + $script:fail + 1
     Write-Host "Test ${testNum}: $TestName"
     $inputLine = "  Input:    " + $Input
     $expectedLine = "  Expected: " + $Expected
     Write-Host $inputLine
     Write-Host $expectedLine
-    
+
     $result = switch ($Function) {
         "Sanitize-Line" { Sanitize-Line -InputString $Input }
         "Sanitize-Print" { Sanitize-Print -InputString $Input }
@@ -64,10 +64,10 @@ function Run-Test {
         "Escape-Html" { Escape-Html -InputString $Input }
         default { Sanitize-Line -InputString $Input }
     }
-    
+
     $resultLine = "  Result:   " + $result
     Write-Host $resultLine
-    
+
     if ($result -eq $Expected) {
         Write-Host "  ✅ PASS" -ForegroundColor Green
         $script:pass++

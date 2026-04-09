@@ -86,10 +86,10 @@ public:
 };
 
 template <class T>
-class CIccSparseMatrixEntry : public IIccSparseMatrixEntry
+class ICCPROFLIB_API CIccSparseMatrixEntry : public IIccSparseMatrixEntry
 {
 public:
-  CIccSparseMatrixEntry<T>() {m_pData = 0;}
+  CIccSparseMatrixEntry() {m_pData = 0;}
   void init(void *pData) {m_pData = (T*)pData;}
 
   virtual icUInt8Number size() const { return sizeof(T); }
@@ -99,7 +99,7 @@ protected:
   T *m_pData;
 };
 
-class CIccSparseMatrixUInt8 : public CIccSparseMatrixEntry<icUInt8Number>
+class ICCPROFLIB_API CIccSparseMatrixUInt8 : public CIccSparseMatrixEntry<icUInt8Number>
 {
 public:
   CIccSparseMatrixUInt8() {}
@@ -109,7 +109,7 @@ public:
 
 };
 
-class CIccSparseMatrixUInt16 : public CIccSparseMatrixEntry<icUInt16Number>
+class ICCPROFLIB_API CIccSparseMatrixUInt16 : public CIccSparseMatrixEntry<icUInt16Number>
 {
 public:
   CIccSparseMatrixUInt16() {}
@@ -119,7 +119,7 @@ public:
 
 };
 
-class CIccSparseMatrixFloat16 : public CIccSparseMatrixEntry<icFloat16Number>
+class ICCPROFLIB_API CIccSparseMatrixFloat16 : public CIccSparseMatrixEntry<icFloat16Number>
 {
 public:
   CIccSparseMatrixFloat16() {}
@@ -128,7 +128,7 @@ public:
   virtual void set(int index, icFloatNumber value) {m_pData[index] = icFtoF16(value);}
 };
 
-class CIccSparseMatrixFloat32 : public CIccSparseMatrixEntry<icFloat32Number>
+class ICCPROFLIB_API CIccSparseMatrixFloat32 : public CIccSparseMatrixEntry<icFloat32Number>
 {
 public:
   CIccSparseMatrixFloat32() {}
@@ -137,7 +137,7 @@ public:
   virtual void set(int index, icFloatNumber value) {m_pData[index] = (icFloat32Number)value;}
 };
 
-class CIccSparseMatrixFloatNum : public CIccSparseMatrixEntry<icFloatNumber>
+class ICCPROFLIB_API CIccSparseMatrixFloatNum : public CIccSparseMatrixEntry<icFloatNumber>
 {
 public:
   CIccSparseMatrixFloatNum() {}

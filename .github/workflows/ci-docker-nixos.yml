@@ -7,9 +7,7 @@
 #
 # Intent: ci-docker-nixos
 #
-# Last Updated: 2026-02-13 13:58:11 UTC by David Hoyt
-#               Initial workflow with SBOM + attestations
-#               Test Updated Scoping
+# Last Updated: 2026-04-05 23:37:53 UTC by David Hoyt
 #
 ###############################################################
 # Intent: Build and publish iccDEV NixOS Docker container
@@ -26,17 +24,12 @@ permissions:
 
 on:
   workflow_dispatch:
-  push:
-    branches: [master, dockerfiles]
-    paths:
-      - 'Dockerfile.nixos'
-      - '.github/workflows/ci-docker-nixos.yml'
 
 jobs:
   build:
     name: "Build iccDEV NixOS Docker"
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -117,18 +110,23 @@ jobs:
           retention-days: 90
 
       - name: Load test image
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
           # Pull the image we just pushed to GHCR (avoids building twice)
-          docker pull "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}"
-          docker tag  "${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}" iccdev-nixos-test:latest
+          docker pull "${IMAGE_REF}"
+          docker tag  "${IMAGE_REF}" iccdev-nixos-test:latest
 
       - name: Verify tools
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -155,7 +153,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -163,7 +161,7 @@ jobs:
           echo "### Tool Tests" >> "$GITHUB_STEP_SUMMARY"
           for tool in iccToXml iccFromXml iccDumpProfile iccRoundTrip; do
             OUT=$(docker run --rm iccdev-nixos-test:latest "$tool" 2>&1 || true)
-            if echo "$OUT" | grep -qiE "Usage:|IccProfLib"; then
+            if grep -qiE "Usage:|IccProfLib" <<< "$OUT"; then
               echo "✅ $tool" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "::error::Tool test failed: $tool"
@@ -181,7 +179,7 @@ jobs:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
+          source .github/scripts/sanitize-sed.sh
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -205,3 +203,56 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker rmi iccdev-nixos-test:latest || true
+
+  prune:
+    name: "Prune old container versions"
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    permissions:
+      packages: write
+    steps:
+      - name: Delete old package versions
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+
+          ORG="InternationalColorConsortium"
+          PACKAGE="iccdev-nixos"
+          CUTOFF=$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          echo "Pruning ${PACKAGE} versions older than ${CUTOFF}"
+
+          gh api --paginate \
+            "/orgs/${ORG}/packages/container/${PACKAGE}/versions" |
+          jq -r --arg cutoff "${CUTOFF}" '
+            .[] | select(
+              (.created_at < $cutoff) and
+              ((.metadata.container.tags | index("latest")) == null)
+            ) | .id
+          ' > /tmp/prune-ids.txt
+
+          TOTAL=$(wc -l < /tmp/prune-ids.txt | tr -d ' ')
+          if [ "${TOTAL}" -eq 0 ]; then
+            echo "No versions to prune"
+            exit 0
+          fi
+
+          echo "Found ${TOTAL} versions to prune"
+          DELETED=0
+          FAILED=0
+          while IFS= read -r vid; do
+            if gh api --method DELETE \
+              "/orgs/${ORG}/packages/container/${PACKAGE}/versions/${vid}" \
+              2>/dev/null; then
+              DELETED=$((DELETED + 1))
+            else
+              FAILED=$((FAILED + 1))
+            fi
+          done < /tmp/prune-ids.txt
+
+          echo "Pruned ${DELETED}/${TOTAL} old versions (${FAILED} failed)"
+          rm -f /tmp/prune-ids.txt

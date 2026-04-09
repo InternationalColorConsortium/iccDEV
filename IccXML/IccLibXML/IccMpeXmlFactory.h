@@ -98,7 +98,7 @@ namespace iccDEV {
  * creates a CIccBasicElemFactory.
  ***********************************************************************
  */
-class CIccMpeXmlFactory : public IIccMpeFactory
+class ICCPROFLIB_API CIccMpeXmlFactory : public IIccMpeFactory
 {
 public:
   /**

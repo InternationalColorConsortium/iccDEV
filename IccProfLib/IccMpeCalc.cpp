@@ -924,7 +924,10 @@ public:
       return false;
     icFloatNumber *s = &(*os.pStack)[ss-tn];
     for (j=0; j<n; j++) {
-      s[j] /= s[j+n];
+      if (s[j+n] != 0.0f)
+        s[j] /= s[j+n];
+      else
+        s[j] = 0.0f;
     }
     OsShrinkArgs(n);
     return true;
@@ -1049,8 +1052,15 @@ public:
       return false;
     icFloatNumber *s = &(*os.pStack)[ss-tn];
     icFloatNumber p = s[n];
-    for (j=0; j<n; j++) {
-      s[j] = s[j] / p;
+    if (p != 0.0f) {
+      for (j=0; j<n; j++) {
+        s[j] = s[j] / p;
+      }
+    }
+    else {
+      for (j=0; j<n; j++) {
+        s[j] = 0.0f;
+      }
     }
     OsShrinkArgs(1);
     return true;
@@ -4742,7 +4752,7 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
       // No, you may not make circular references in the tag,
       // reference back into the tag header,
       // or try to load more data than we have available.
-      if ( (pos->offset < headerSize) || ((pos->offset + pos->size) > size) ) {
+      if ( (pos->offset < headerSize) || (pos->size > size) || (pos->offset > size - pos->size) ) {
         free(posvals);
         return false;
       }
@@ -4774,7 +4784,7 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
   pos = posvals;
   
   // overreading, references into the header, or not having a calc func would be bad
-  if ( !m_calcFunc || (pos->offset < headerSize) || ((pos->offset + pos->size) > size) ) {
+  if ( !m_calcFunc || (pos->offset < headerSize) || (pos->size > size) || (pos->offset > size - pos->size) ) {
     free(posvals);
     return false;
   }

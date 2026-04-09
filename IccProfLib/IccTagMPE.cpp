@@ -1039,7 +1039,7 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
   icElemTypeSignature sigElem;
 
   for (i=0; i<m_nProcElements; i++) {
-    if (m_position[i].offset+m_position[i].size > size) {
+    if (m_position[i].size > size || m_position[i].offset > size - m_position[i].size) {
       return false;
     }
 

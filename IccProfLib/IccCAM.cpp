@@ -259,11 +259,34 @@ CIccCamConverter::CalcCoefficients ()
 	La5 = 5.0f * m_La;
 	m_Fl = (icFloatNumber)(0.2 * k * La5 + 0.1 * (1 - k) * (1 - k) * pow ((double)La5, 0.333333));
 
+	// CFL-077: Guard against division by zero when m_WhitePoint[1] == 0
+	if (m_WhitePoint[1] == 0.0f) {
+		m_n = 0.0f;
+		m_factor = 0.0f;
+		m_Nbb = 0.0f;
+		m_z = 0.0f;
+		m_x0 = 0.0f;
+		m_cc = 0.0f;
+		m_AWhite = 0.0f;
+		return;
+	}
+
 	m_n = m_Yb / m_WhitePoint[1];
 
 	m_factor = (icFloatNumber) pow (1.64 - pow (0.29, (double) m_n), 0.73);
 
-	m_Nbb = (icFloatNumber)(0.725 / pow ((double)(m_n), 0.2));
+	// CFL-077: Guard against division by zero when m_n == 0 (pow(0,0.2)==0)
+	double n_pow = pow ((double)(m_n), 0.2);
+	if (n_pow == 0.0) {
+		m_Nbb = 0.0f;
+		m_z = 0.0f;
+		m_x0 = 0.0f;
+		m_cc = 0.0f;
+		m_AWhite = 0.0f;
+		return;
+	}
+
+	m_Nbb = (icFloatNumber)(0.725 / n_pow);
 
 	m_z = (icFloatNumber)(1.48 + sqrt (m_n));
 
@@ -280,7 +303,14 @@ CIccCamConverter::CalcCoefficients ()
 //	m_x0 = (icFloatNumber) (m_Fl * 0.25 / 255.0);
 // m_x0 = (icFloatNumber) (m_Fl * 1.00 / 255.0)
 	m_x0 = (icFloatNumber) (m_Fl * 4.00 / 255.0);
-	m_cc = ((1 + m_alfa) * H_Function (m_x0) / H_Function (m_Fl) - m_alfa) * F_Function (m_Fl) / m_x0;
+
+	// CFL-077: Guard against division by zero when m_Fl==0 or m_x0==0
+	double h_fl = H_Function (m_Fl);
+	if (m_x0 == 0.0f || h_fl == 0.0) {
+		m_cc = 0.0f;
+	} else {
+		m_cc = ((1 + m_alfa) * H_Function (m_x0) / h_fl - m_alfa) * F_Function (m_Fl) / m_x0;
+	}
 
 	rgbP[0] = Hyperbolic (m_Fl * rgbP[0] / 100) + 0.1f;
 	rgbP[1] = Hyperbolic (m_Fl * rgbP[1] / 100) + 0.1f;

@@ -1,21 +1,17 @@
 #################################################################################
 # iccJpegDump Cmake Project Configuration| iccMAX Project
-# Copyright (©) 2024-2025 The International Color Consortium. 
+# Copyright (c) 2024-2025 The International Color Consortium. 
 #                                        All rights reserved.
 # 
+#  Last Updated: 2026-03-24 20:49:38 UTC by David Hoyt
 #
-# Last Updated: 18-APRIL-2025 1200 EDT by David Hoyt
-#
-# Changes: 	Modified output target to fix a few subproject pathing issues
-#           Added to CMakelists.txt: IccJpegDump
-#           Adjusted Cross Platform Build Args
-#						
-# TODO: Refactor Debug, Release, Asan, subproject pathing issues
-#       Collapse 3-tier CMakeLists.txt, Housekeeping
-#       Refactor Base Configs & logging to .mk's 
-#
-#
-#
+# CMake Configuration:
+# - PUBLIC target_include_directories for IccProfLib2 and IccXML2
+#   (build-dir-first so generated version header with git hash wins)
+# - EXPORT RefIccMAXTargets for build-tree and install-tree consumers
+# - New FindRefIccMAX.cmake module for standalone find_package()
+# - Modern RefIccMAXConfig.cmake.in using target-based imports
+# - Tool CMakeLists: target_include_directories(PRIVATE) replaces global
 #
 #################################################################################
 
@@ -60,39 +56,32 @@ set(SOURCES
 
 # Resolve project root directory
 get_filename_component(PROJECT_ROOT_DIR "${CMAKE_SOURCE_DIR}/../.." ABSOLUTE)
-message(STATUS "PROJECT_ROOT_DIR resolved as: ${PROJECT_ROOT_DIR}")
 
 # Set the target name
 set(TARGET_NAME iccJpegDump)
-message(STATUS "Added executable target: ${TARGET_NAME}")
 
-# Include directories
-include_directories(
-    ${SRC_PATH}/Tools/CmdLine/IccJpegDump/
-    ${SRC_PATH}/Libraries/IccProfLib/
-)
-
-# Platform-specific configuration
+# Platform-specific JPEG configuration
 if(WIN32)
     find_path(JPEG_INCLUDE_DIR jpeglib.h PATH_SUFFIXES include)
     find_library(JPEG_LIBRARY NAMES jpeg turbojpeg PATH_SUFFIXES lib)
-
-    if(JPEG_INCLUDE_DIR)
-        include_directories(${JPEG_INCLUDE_DIR})
-        message(STATUS "JPEG include directory: ${JPEG_INCLUDE_DIR}")
-    else()
+    if(NOT JPEG_INCLUDE_DIR)
         message(FATAL_ERROR "JPEG include directory not found on Windows")
     endif()
-
     set(PLATFORM_LIBS ws2_32)
 else()
     find_package(JPEG REQUIRED)
-    include_directories(${JPEG_INCLUDE_DIR})
     set(JPEG_LIBRARY ${JPEG_LIBRARIES})
 endif()
 
 # Add executable
 add_executable(${TARGET_NAME} ${SOURCES})
+
+# Include directories — target-scoped
+target_include_directories(${TARGET_NAME} PRIVATE
+    ${SRC_PATH}/Tools/CmdLine/IccJpegDump/
+    ${SRC_PATH}/Libraries/IccProfLib/
+    ${JPEG_INCLUDE_DIR}
+)
 
 # Link libraries
 target_link_libraries(${TARGET_NAME}
@@ -100,9 +89,6 @@ target_link_libraries(${TARGET_NAME}
     ${JPEG_LIBRARY}
     ${PLATFORM_LIBS}
 )
-
-message(STATUS "Linked with JPEG library: ${JPEG_LIBRARY}")
-message(STATUS "Linked with platform-specific libraries: ${PLATFORM_LIBS}")
 
 # Optional installation rule
 if(ENABLE_INSTALL_RIM)

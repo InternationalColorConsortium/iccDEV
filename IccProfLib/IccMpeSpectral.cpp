@@ -1064,19 +1064,19 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   m_pCLUT->SetClipFunc(NoClip);
-  icUInt32Number nBytesPerPoint = icGetStorageTypeBytes(m_nStorageType) * m_Range.steps;
+  icUInt32Number nBytesPerSample = icGetStorageTypeBytes(m_nStorageType);
   
-  if (!nBytesPerPoint)
+  if (!nBytesPerSample)
     return false;
 
-  m_pCLUT->Init(gridPoints, size - headerSize, (icUInt8Number)nBytesPerPoint);
+  m_pCLUT->Init(gridPoints, size - headerSize, nBytesPerSample);
 
   icFloatNumber *pData = m_pCLUT->GetData(0);
 
   if (!pData)
     return false;
 
-  size_t nPoints = m_pCLUT->NumPoints()*(int)m_Range.steps;
+  size_t nPoints = (size_t)m_pCLUT->NumPoints()*(int)m_Range.steps;
 
   switch(m_nStorageType) {
     case icValueTypeUInt8:
@@ -1103,7 +1103,7 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
       return false;
   }
 
-  if (m_Range.steps *nBytesPerPoint > size - headerSize - nPoints*nBytesPerPoint)
+  if (m_Range.steps *nBytesPerSample > size - headerSize - nPoints*nBytesPerSample)
     return false;
 
   m_pWhite = (icFloatNumber *)malloc((int)m_Range.steps*sizeof(icFloatNumber));
@@ -1194,7 +1194,7 @@ bool CIccMpeSpectralCLUT::Write(CIccIO *pIO)
       return false;
 
     icFloatNumber *pData = m_pCLUT->GetData(0);
-    size_t nPoints = m_pCLUT->NumPoints()*(int)m_Range.steps;
+    size_t nPoints = (size_t)m_pCLUT->NumPoints()*(int)m_Range.steps;
 
     switch(m_nStorageType) {
     case icValueTypeUInt8:
@@ -1628,9 +1628,9 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
 
   icFloatNumber xyzscale[3];
   if (!bUseAbsolute) {
-    xyzscale[0] = xyzi[0] / xyzW[0];
-    xyzscale[1] = xyzi[1] / xyzW[1];
-    xyzscale[2] = xyzi[2] / xyzW[2];
+    xyzscale[0] = xyzW[0] != 0.0f ? xyzi[0] / xyzW[0] : 0.0f;
+    xyzscale[1] = xyzW[1] != 0.0f ? xyzi[1] / xyzW[1] : 0.0f;
+    xyzscale[2] = xyzW[2] != 0.0f ? xyzi[2] / xyzW[2] : 0.0f;
   }
 
   for (i=0; i<(int)m_pCLUT->NumPoints(); i++) {
@@ -2161,9 +2161,9 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
   //bool bLab = (m_flags & icLabSpectralData) != 0;
 
   if (!bUseAbsolute) {
-    m_xyzscale[0] = m_xyzw[0] / xyzm[0];
-    m_xyzscale[1] = m_xyzw[1] / xyzm[1];
-    m_xyzscale[2] = m_xyzw[2] / xyzm[2];
+    m_xyzscale[0] = xyzm[0] != 0.0f ? m_xyzw[0] / xyzm[0] : 0.0f;
+    m_xyzscale[1] = xyzm[1] != 0.0f ? m_xyzw[1] / xyzm[1] : 0.0f;
+    m_xyzscale[2] = xyzm[2] != 0.0f ? m_xyzw[2] / xyzm[2] : 0.0f;
   }
 
   return true;

@@ -72,7 +72,7 @@
 								 Filename="A0-M.txt" Format="text"/>
 							<SingleSampledCurve Start="-infinity" End="+infinity" 
 								 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0" 
-								 Filename="A0-k.txt" Format="text"/>
+								 Filename="A0-K.txt" Format="text"/>
 						</CurveSetElement>
 						<!--Element 4 -->
 						<CLutElement InputChannels="3" OutputChannels="3">
@@ -196,7 +196,7 @@ out(0,3)
 								 Filename="A1-M.txt" Format="text"/>
 							<SingleSampledCurve Start="-infinity" End="+infinity" 
 								 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0" 
-								 Filename="A1-k.txt" Format="text"/>
+								 Filename="A1-K.txt" Format="text"/>
 						</CurveSetElement>
 						<!--Element 4 -->
 						<CLutElement InputChannels="3" OutputChannels="3">
@@ -320,7 +320,7 @@ out(0,3)
 								 Filename="A2-M.txt" Format="text"/>
 							<SingleSampledCurve Start="-infinity" End="+infinity" 
 								 FirstEntry="0.0" LastEntry="1.0" StorageType="2" ExtensionType="0" 
-								 Filename="A2-k.txt" Format="text"/>
+								 Filename="A2-K.txt" Format="text"/>
 						</CurveSetElement>
 						<!--Element 4 -->
 						<CLutElement InputChannels="3" OutputChannels="3">

@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iccDEV IIS Server - Endpoint Console</title>
+  <style>
+    :root {
+      --bg: #f6f3eb;
+      --panel: rgba(255, 253, 248, 0.88);
+      --ink: #18262e;
+      --muted: #59676f;
+      --line: rgba(24, 38, 46, 0.14);
+      --accent: #0b7f7a;
+      --accent-strong: #085956;
+      --warm: #f3b562;
+      --shadow: 0 18px 48px rgba(24, 38, 46, 0.12);
+      --danger: #d65353;
+      --ok: #29a76e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(243, 181, 98, 0.34), transparent 32%),
+        radial-gradient(circle at top right, rgba(11, 127, 122, 0.18), transparent 28%),
+        linear-gradient(180deg, #fcfaf4 0%, var(--bg) 52%, #efe8dc 100%);
+      min-height: 100vh;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 20px 56px;
+    }
+
+    .hero,
+    .panel,
+    .grid > section,
+    .tool-summary,
+    .tool-result {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .hero,
+    .panel,
+    .grid > section,
+    .tool-summary,
+    .tool-result {
+      padding: 22px;
+      min-width: 0;
+    }
+
+    .hero {
+      padding: 28px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -60px -60px auto;
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, rgba(11, 127, 122, 0.18), transparent 70%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(11, 127, 122, 0.08);
+      color: var(--accent-strong);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-family: Georgia, "Times New Roman", serif;
+      line-height: 1.05;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 4.6rem);
+      margin-top: 14px;
+      max-width: 12ch;
+    }
+
+    h2 {
+      font-size: 1.6rem;
+      margin-bottom: 12px;
+    }
+
+    h3 {
+      font-size: 1.18rem;
+      margin-bottom: 10px;
+    }
+
+    p,
+    li,
+    dd {
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    code,
+    pre,
+    dt {
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    .hero-lead {
+      max-width: 72ch;
+      margin-top: 14px;
+      font-size: 1.02rem;
+    }
+
+    .hero-actions,
+    .action-row,
+    .page-links,
+    .tool-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .hero-actions,
+    .action-row,
+    .page-links {
+      margin-top: 22px;
+    }
+
+    .tool-links {
+      margin: 12px 0 0;
+    }
+
+    .tool-button,
+    .link-button,
+    .tool-link {
+      appearance: none;
+      display: inline-block;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    }
+
+    .tool-button:hover,
+    .tool-button:focus,
+    .link-button:hover,
+    .link-button:focus,
+    .tool-link:hover,
+    .tool-link:focus {
+      transform: translateY(-1px);
+      text-decoration: none;
+    }
+
+    .tool-button,
+    .link-button.primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(11, 127, 122, 0.24);
+    }
+
+    .tool-button.secondary,
+    .link-button.secondary,
+    .tool-link {
+      background: rgba(24, 38, 46, 0.06);
+      color: var(--ink);
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(24, 38, 46, 0.05);
+      color: var(--ink);
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .status-chip::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--warm);
+      box-shadow: 0 0 0 6px rgba(243, 181, 98, 0.18);
+      flex: 0 0 auto;
+    }
+
+    .status-chip.ok::before {
+      background: var(--ok);
+      box-shadow: 0 0 0 6px rgba(41, 167, 110, 0.18);
+    }
+
+    .status-chip.fail::before {
+      background: var(--danger);
+      box-shadow: 0 0 0 6px rgba(214, 83, 83, 0.18);
+    }
+
+    .panel {
+      margin-top: 22px;
+    }
+
+    .result-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      font-size: 0.95rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .response-view,
+    .code-block {
+      margin: 0;
+      padding: 18px;
+      border-radius: 18px;
+      background: #10181d;
+      color: #eef7f7;
+      min-height: 220px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .code-block {
+      min-height: 0;
+    }
+
+    .grid,
+    .content-grid {
+      display: grid;
+      gap: 18px;
+      margin-top: 22px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .table-grid,
+    .tool-meta {
+      display: grid;
+      grid-template-columns: minmax(120px, 34%) minmax(0, 1fr);
+      gap: 8px 14px;
+      align-items: start;
+      margin: 14px 0 0;
+    }
+
+    .table-grid dt,
+    .tool-meta dt {
+      color: var(--ink);
+      font-weight: 700;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .table-grid dd,
+    .tool-meta dd {
+      margin: 0;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .table-grid code {
+      overflow-wrap: anywhere;
+    }
+
+    .command-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .command-list code {
+      display: block;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(24, 38, 46, 0.04);
+      color: var(--ink);
+      overflow-x: auto;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .tool-suite-box {
+      margin-top: 22px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 180px auto;
+      gap: 12px;
+      align-items: end;
+      margin: 14px 0 10px;
+    }
+
+    .form-field label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .form-field input,
+    .form-field select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    .tool-help {
+      margin-top: 10px;
+    }
+
+    .tool-results {
+      display: grid;
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .tool-result.ok {
+      border-left: 5px solid var(--ok);
+    }
+
+    .tool-result.fail {
+      border-left: 5px solid var(--danger);
+    }
+
+    .tool-result.skipped {
+      border-left: 5px solid #7c848b;
+    }
+
+    .tool-empty {
+      margin: 0;
+    }
+
+    .footer-note {
+      margin: 22px 0 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    @media (max-width: 780px) {
+      main {
+        padding-top: 24px;
+      }
+
+      .hero,
+      .panel,
+      .grid > section,
+      .tool-summary,
+      .tool-result {
+        border-radius: 20px;
+      }
+
+      h1 {
+        max-width: none;
+      }
+
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+  <script defer src="./sanitize.js"></script>
+  <script defer src="./site.js"></script>
+</head>
+<body data-page="endpoints" data-auto-endpoint="./iccIisIsapi.dll">
+  <main>
+    <section class="hero">
+      <span class="eyebrow">iccDEV + IIS + Tool Console</span>
+      <h1>Endpoint Console.</h1>
+      <p class="hero-lead">
+        This page uses the same visual system as the preferred landing page and keeps the operator workflow in one place:
+        smoke the native IIS endpoint, upload ICC or XML input, inspect JSON results, and jump directly into persisted
+        `_tool-work` artifacts.
+      </p>
+      <div class="hero-actions">
+        <button class="tool-button" type="button" data-endpoint-url="./iccIisIsapi.dll">Load Summary</button>
+        <button class="tool-button secondary" type="button" data-endpoint-url="./iccIisIsapi.dll?mode=health">Check Health</button>
+        <button class="tool-button secondary" type="button" data-endpoint-url="./iccIisIsapi.dll?format=xml">Fetch XML</button>
+        <a class="link-button secondary" href="./index.html">Back to Landing</a>
+        <a class="link-button secondary" href="./_tool-work/">Open Workspaces</a>
+        <a class="link-button secondary" href="./integration.html">Integration Guide</a>
+      </div>
+      <div id="live-status" class="status-chip">Waiting for the first request</div>
+    </section>
+
+    <section class="panel">
+      <h2>Live Response</h2>
+      <div class="result-meta">
+        <span><strong>URL:</strong> <span id="result-url">not requested yet</span></span>
+        <span><strong>Status:</strong> <span id="result-code">n/a</span></span>
+        <span><strong>Content-Type:</strong> <span id="result-type">n/a</span></span>
+      </div>
+      <pre id="result-body" class="response-view">Choose a request above to fetch live output from the IIS ISAPI sample.</pre>
+    </section>
+
+    <div class="grid">
+      <section>
+        <h2>Request Modes</h2>
+        <dl class="table-grid">
+          <dt><code>./iccIisIsapi.dll</code></dt>
+          <dd>Version summary with profile spec version and XML byte count.</dd>
+          <dt><code>?mode=health</code></dt>
+          <dd>Plain-text <code>ok</code> response for liveness checks.</dd>
+          <dt><code>?format=xml</code></dt>
+          <dd>Minimal ICC XML payload with <code>application/xml</code> content type.</dd>
+          <dt><code>POST ?mode=tools&amp;input=icc|xml</code></dt>
+          <dd>Runs <code>iccToXml</code>, <code>iccFromXml</code>, <code>iccDumpProfile</code>, and <code>iccRoundTrip</code>, then returns JSON with exit codes, logs, artifacts, and workspace links.</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Quick Tests</h2>
+        <div class="command-list">
+          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?mode=health</code>
+          <code>curl.exe http://localhost:18081/iccIisIsapi.dll</code>
+          <code>curl.exe http://localhost:18081/iccIisIsapi.dll?format=xml</code>
+          <code>curl.exe -H "Accept: application/json" -H "Content-Type: application/octet-stream" ^
+  --data-binary "@sample.icc" ^
+  "http://localhost:18081/iccIisIsapi.dll?mode=tools&amp;input=icc&amp;filename=sample.icc"</code>
+        </div>
+      </section>
+
+      <section>
+        <h2>Operator Notes</h2>
+        <ul>
+          <li>The endpoint surface stays rooted at <code>iccIisIsapi.dll</code>, so existing smoke checks remain simple.</li>
+          <li>The upload workflow persists uploads, generated files, and logs into <code>/_tool-work/</code>.</li>
+          <li>The workspace root now has its own landing page, so it avoids IIS directory-level <code>403.14</code>.</li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="panel tool-suite-box">
+      <h2>Run The Top 4 Tools In The Browser</h2>
+      <p>
+        Upload an ICC profile or ICC XML file and the IIS endpoint will run the tool suite on the server:
+        <code>iccToXml</code>, <code>iccFromXml</code>, <code>iccDumpProfile</code>, and <code>iccRoundTrip</code>.
+      </p>
+      <form id="tool-upload-form">
+        <div class="form-row">
+          <div class="form-field">
+            <label for="tool-upload-file">Upload file</label>
+            <input id="tool-upload-file" type="file" accept=".icc,.icm,.xml,application/octet-stream,application/xml,text/xml">
+          </div>
+          <div class="form-field">
+            <label for="tool-upload-kind">Input kind</label>
+            <select id="tool-upload-kind">
+              <option value="icc">ICC profile</option>
+              <option value="xml">ICC XML</option>
+            </select>
+          </div>
+          <div>
+            <button class="tool-button" type="submit">Run Top 4 Tools</button>
+          </div>
+        </div>
+      </form>
+      <p class="tool-help">
+        ICC upload flow: <code>iccToXml</code> -> <code>iccFromXml</code> -> <code>iccDumpProfile</code> -> <code>iccRoundTrip</code>.
+        XML upload flow starts with <code>iccFromXml</code> and then runs the remaining tools on the regenerated ICC profile.
+      </p>
+      <p class="tool-help">
+        Each request also gets a persisted workspace page under <code>./_tool-work/&lt;job&gt;/</code>, with direct links to the uploaded
+        input, logs, and generated artifacts.
+      </p>
+      <div id="tool-run-status" class="status-chip">Waiting for an upload</div>
+      <div id="tool-results" class="tool-results">
+        <p class="tool-empty">Upload a file to run the tool suite.</p>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section>
+        <h2>Response Expectations</h2>
+        <ul>
+          <li><code>health</code> should return <code>ok</code> with <code>text/plain; charset=utf-8</code>.</li>
+          <li><code>summary</code> should include both <code>IccProfLib</code> and <code>IccLibXML</code> version strings.</li>
+          <li><code>xml</code> should return <code>application/xml; charset=utf-8</code> and begin with an XML declaration.</li>
+          <li><code>tools</code> should return <code>application/json; charset=utf-8</code> and one result card per wrapped tool.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Next Step</h2>
+        <p>
+          If the responses are not what you expect, switch to <a href="./integration.html">Integration Guide</a> and re-check the site
+          root, handler verbs, runtime DLL set, and persisted workspace behavior.
+        </p>
+      </section>
+    </div>
+
+    <p class="footer-note">
+      Endpoint test surface for the local IIS-hosted <code>iccIisIsapi.dll</code>.
+      <span id="footer-year"></span>
+    </p>
+  </main>
+</body>
+</html>
