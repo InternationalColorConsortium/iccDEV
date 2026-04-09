@@ -32,14 +32,14 @@
 
 ## Project Overview
 
-RefIccMAX (iccDEV) — ICC color profile libraries and tools.
-**Version**: 2.3.1.7 · **C++17** · **CMake ≥ 3.21** · **BSD 3-Clause**
+RefIccMAX (iccDEV)  --  ICC color profile libraries and tools.
+**Version**: 2.3.1.7  .  **C++17**  .  **CMake >= 3.21**  .  **BSD 3-Clause**
 
 ## Code Style
 
 - **2-space indent**, no tabs, K&R braces
 - Member prefix `m_` (e.g., `m_variableName`)
-- Error handling via return values — **no exceptions**
+- Error handling via return values  --  **no exceptions**
 - Match existing patterns; consistency over perfection
 - All new files must include the ICC copyright + BSD 3-Clause header
 - Aim for zero compiler warnings across all platforms
@@ -50,7 +50,7 @@ RefIccMAX (iccDEV) — ICC color profile libraries and tools.
 |-----------|---------|
 | `IccProfLib/` | Core ICC profile library (C++) |
 | `IccXML/` | XML serialization (libxml2) |
-| `Tools/CmdLine/` | 13 CLI tools (DumpProfile, RoundTrip, ApplyProfiles, …) |
+| `Tools/CmdLine/` | 13 CLI tools (DumpProfile, RoundTrip, ApplyProfiles, ...) |
 | `Tools/Winnt/IccIisIsapi/` | IIS ISAPI extension (Windows), security-hardened HTTP API |
 | `Build/Cmake/` | CMake build system |
 | `Testing/` | Test scripts and profile generators |
@@ -141,7 +141,7 @@ CI workflow: `ci-vcpkg-ports.yml` validates the port on Windows, Ubuntu, macOS.
 ## Testing
 
 ```bash
-Testing/CreateAllProfiles.sh   # Generate ~80 test profiles
+Testing/CreateAllProfiles.sh   # Generate ~230 test profiles
 Testing/RunTests.sh            # Validate all profiles (Unix)
 Testing/RunTests.bat           # Validate all profiles (Windows)
 ```
@@ -165,7 +165,7 @@ Testing/RunTests.bat           # Validate all profiles (Windows)
 All `run:` steps MUST follow the shell-hardening prologue per
 [xsscx/governance](https://github.com/xsscx/governance/tree/main/actions):
 
-**Bash steps** — every `run:` block:
+**Bash steps**  --  every `run:` block:
 ```yaml
 shell: bash --noprofile --norc {0}
 env:
@@ -177,7 +177,7 @@ run: |
   source .github/scripts/sanitize-sed.sh  # or inline fallback
 ```
 
-**PowerShell steps** — every `run:` block:
+**PowerShell steps**  --  every `run:` block:
 ```yaml
 shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
 env:
@@ -191,16 +191,16 @@ run: |
 ```
 
 **Mandatory**: All `GITHUB_STEP_SUMMARY` writes must use `sanitize_line`/`Sanitize-Line`.
-Never place `${{ matrix.* }}` or other expressions directly in `run:` blocks — pass
+Never place `${{ matrix.* }}` or other expressions directly in `run:` blocks  --  pass
 through `env:` to prevent shell injection.
 
 ## Security
 
 - Report vulnerabilities via [GitHub Security Advisory](https://github.com/InternationalColorConsortium/iccDEV/security/advisories)
-- Validate all inputs — especially file-controlled sizes, offsets, and loop bounds
+- Validate all inputs  --  especially file-controlled sizes, offsets, and loop bounds
 - Two sanitizer scripts for CI output: `sanitize-sed.sh` (bash V3) and `sanitize.ps1` (PowerShell V1)
 - IIS ISAPI DLL hardened with `IccIsapiSanitize` (server-side) and `sanitize.js` (client-side DOM-XSS)
-- Reference workflow: `ci-pr-action.yml` (bash) · `ci-pr-win.yml` (PowerShell)
+- Reference workflow: `ci-pr-action.yml` (bash)  .  `ci-pr-win.yml` (PowerShell)
 
 ## Pull Request Process
 

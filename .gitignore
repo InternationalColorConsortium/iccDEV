@@ -88,3 +88,4 @@ Build-AFL/
 **/RefIccMAXConfigVersion.cmake
 **/RefIccMAXTargets.cmake
 **/compile_commands.json
+codeql-results/

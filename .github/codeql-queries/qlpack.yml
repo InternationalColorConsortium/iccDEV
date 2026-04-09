@@ -1,0 +1,5 @@
+name: iccdev/security-queries
+version: 1.0.0
+library: false
+dependencies:
+  codeql/cpp-all: "*"

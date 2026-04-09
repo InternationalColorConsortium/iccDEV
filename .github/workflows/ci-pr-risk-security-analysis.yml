@@ -37,7 +37,7 @@ on:
         type: string
         default: 'master'
       severity_threshold:
-        description: 'Minimum severity to report'
+        description: 'Minimum severity to report (display-only; filtering planned)'
         required: false
         type: choice
         options:
@@ -49,7 +49,7 @@ on:
         default: 'INFO'
 
 concurrency:
-  group: pr-risk-${{ github.workflow }}-${{ github.run_id }}
+  group: pr-risk-${{ github.workflow }}
   cancel-in-progress: true
 
 env:
@@ -99,11 +99,15 @@ jobs:
           SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             echo "Sanitizer found at $SANITIZER"
+            echo "SANITIZER_AVAILABLE=true" >> "$GITHUB_ENV"
+            echo "SANITIZER_PATH=$SANITIZER" >> "$GITHUB_ENV"
           else
             echo "WARNING: sanitize-sed.sh not found, using inline fallback"
+            echo "SANITIZER_AVAILABLE=false" >> "$GITHUB_ENV"
           fi
 
       - name: "1. Action SHA Pinning Audit"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -203,6 +207,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
       - name: "2. Dangerous Trigger Detection"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -268,6 +273,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
       - name: "3. Credential Hygiene Audit"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -385,6 +391,7 @@ jobs:
           fi
 
       - name: "4. Shell Hardening Audit"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -503,6 +510,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
       - name: "5. Matrix Expression Injection Scan"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -576,6 +584,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
       - name: "6. Output Sanitization Audit"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -699,6 +708,7 @@ jobs:
           fi
 
       - name: "7. Permissions Minimization Audit"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -791,6 +801,7 @@ jobs:
           fi
 
       - name: "8. Supply-Chain Risk Score"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -891,7 +902,7 @@ jobs:
           fi
 
           # Check 6: secrets in env blocks
-          SECRETS_COUNT=$({ grep -rn 'secrets\.' .github/workflows/ 2>/dev/null || true; } | { grep -v '#' || true; } | wc -l)
+          SECRETS_COUNT=$({ grep -rn 'secrets\.' .github/workflows/ 2>/dev/null || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
           if [[ $SECRETS_COUNT -gt 0 ]]; then
             RISK_ITEMS+=("$SECRETS_COUNT secret reference(s) found (informational)")
           fi
@@ -929,6 +940,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
       - name: "9. Trivy-Specific Indicator Check"
+        if: always()
         env:
           BASH_ENV: /dev/null
         run: |
@@ -957,10 +969,10 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           TRIVY_INDICATORS=0
-          SELF_WF="ci-pr-risk-security-analysis.yml"
+          SELF_WF=$(basename "${GITHUB_WORKFLOW_REF%%@*}" 2>/dev/null || echo "ci-pr-risk-security-analysis.yml")
 
           # Pattern 1: curl/wget piped to shell in workflows (exclude self)
-          EXT_CALLS=$({ grep -rnE 'curl.*\|\s*(ba)?sh|wget.*\|\s*(ba)?sh' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -v '#' || true; } | wc -l)
+          EXT_CALLS=$({ grep -rnE 'curl.*\|\s*(ba)?sh|wget.*\|\s*(ba)?sh' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
           if [[ $EXT_CALLS -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[CRITICAL] $(sanitize_line "$EXT_CALLS") curl/wget|bash pipe(s) in workflows (remote code execution vector)" >> "$GITHUB_STEP_SUMMARY"
@@ -968,7 +980,7 @@ jobs:
           fi
 
           # Pattern 2: Base64 encoding (common obfuscation, exclude self)
-          B64_CALLS=$({ grep -rnE 'base64|b64encode|btoa' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -v '#' || true; } | wc -l)
+          B64_CALLS=$({ grep -rnE 'base64|b64encode|btoa' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
           if [[ $B64_CALLS -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[WARN] $(sanitize_line "$B64_CALLS") base64 encoding reference(s) detected (check for credential obfuscation)" >> "$GITHUB_STEP_SUMMARY"
@@ -976,7 +988,7 @@ jobs:
           fi
 
           # Pattern 3: Environment variable dumping (exclude self)
-          ENV_DUMP=$({ grep -rnE 'printenv|echo.*SECRET|echo.*TOKEN' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -v '#' || true; } | { grep -v 'BASH_ENV' || true; } | { grep -v 'GITHUB_ENV' || true; } | wc -l)
+          ENV_DUMP=$({ grep -rnE 'printenv|echo.*SECRET|echo.*TOKEN' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | { grep -v 'BASH_ENV' || true; } | { grep -v 'GITHUB_ENV' || true; } | wc -l)
           if [[ $ENV_DUMP -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[WARN] $(sanitize_line "$ENV_DUMP") environment dump pattern(s) detected" >> "$GITHUB_STEP_SUMMARY"
@@ -984,7 +996,7 @@ jobs:
           fi
 
           # Pattern 4: git push / git tag force in workflows (exclude self)
-          GIT_PUSH=$({ grep -rnE 'git (push|tag -f|tag -d)' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -v '#' || true; } | wc -l)
+          GIT_PUSH=$({ grep -rnE 'git (push|tag -f|tag -d)' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
           if [[ $GIT_PUSH -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[HIGH] $(sanitize_line "$GIT_PUSH") git push/tag-force pattern(s) detected (tag rewriting vector)" >> "$GITHUB_STEP_SUMMARY"
@@ -1230,14 +1242,14 @@ jobs:
             echo ""
             echo "| Field | Value |"
             echo "|-------|-------|"
-            echo "| Analysis target | $ANALYSIS_TARGET |"
+            echo "| Analysis target | $(sanitize_line "$ANALYSIS_TARGET") |"
             if [[ "$ANALYSIS_TARGET" == "Specific PR number" && -n "$PR_NUMBER" ]]; then
-              echo "| PR number | #$PR_NUMBER |"
+              echo "| PR number | #$(sanitize_line "$PR_NUMBER") |"
             fi
             if [[ "$ANALYSIS_TARGET" == "Specific git ref" && -n "$GIT_REF" ]]; then
-              echo "| Git ref | $GIT_REF |"
+              echo "| Git ref | $(sanitize_line "$GIT_REF") |"
             fi
-            echo "| Severity threshold | $SEVERITY_THRESHOLD |"
+            echo "| Severity threshold | $(sanitize_line "$SEVERITY_THRESHOLD") |"
             echo "| Repository | $(sanitize_line "$GITHUB_REPOSITORY") |"
             echo "| Run ID | $GITHUB_RUN_ID |"
             echo "| Commit | $(git rev-parse --short HEAD 2>/dev/null || echo unknown) |"
@@ -1307,6 +1319,7 @@ jobs:
           }
 
       - name: "1. Action SHA Pinning Audit (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1389,6 +1402,7 @@ jobs:
           Write-Host "[OK] SHA pinning audit complete (Windows): $pinnedActions/$totalActions pinned"
 
       - name: "2. Dangerous Trigger Detection (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1443,6 +1457,7 @@ jobs:
           Write-Host "[OK] Dangerous trigger detection complete (Windows): $($findings.Count) findings"
 
       - name: "3. Credential Hygiene Audit (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1522,6 +1537,7 @@ jobs:
           Write-Host "[OK] Credential hygiene audit complete (Windows)"
 
       - name: "4. Shell Hardening Audit (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1619,6 +1635,7 @@ jobs:
           Write-Host "[OK] Shell hardening audit complete (Windows): $combinedHardened/$totalBlocks hardened (bash=$hardenedBlocks, pwsh=$pwshHardenedBlocks)"
 
       - name: "5. Expression Injection Scan (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1689,6 +1706,7 @@ jobs:
           Write-Host "[OK] Expression injection scan complete (Windows): $($findings.Count) findings"
 
       - name: "6. Output Sanitization Audit (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1792,6 +1810,7 @@ jobs:
           Write-Host "[OK] Output sanitization audit complete (Windows): $sanitizedWrites/$totalSummaryWrites sanitized"
 
       - name: "7. Permissions Audit (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1862,6 +1881,7 @@ jobs:
           Write-Host "[OK] Permissions audit complete (Windows): $withPerms with perms, $withoutPerms without, $withWrite with write"
 
       - name: "8. Supply-Chain Risk Score (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1979,6 +1999,7 @@ jobs:
           Write-Host "[OK] Supply-chain risk score (Windows): $score/100 ($grade)"
 
       - name: "9. Trivy-Specific Indicator Check (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -2051,6 +2072,7 @@ jobs:
           Write-Host "[OK] Trivy indicator check complete (Windows): $($findings.Count) indicators"
 
       - name: "10. Ref Name Security Validation (Windows)"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -2144,6 +2166,7 @@ jobs:
           Write-Host "[OK] Ref name security validation complete (Windows): $refFindings findings"
 
       - name: "11. Inventory & Cross-Platform Summary"
+        if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1

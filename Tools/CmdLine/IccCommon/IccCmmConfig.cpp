@@ -1288,7 +1288,7 @@ static bool ParseNumbers(icFloatNumber* pData, icChar* pString, icUInt32Number n
       nNumbersRead++;
     else
       break;
-    while (*ptr && *ptr != ' ' && *ptr != '\t' && *ptr != 'n' && *ptr != '\r')
+    while (*ptr && *ptr != ' ' && *ptr != '\t' && *ptr != '\n' && *ptr != '\r')
       ptr++;
   }
 

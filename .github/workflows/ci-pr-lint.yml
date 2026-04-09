@@ -230,6 +230,30 @@ jobs:
         with:
           name: lint-build-context
 
+      - name: Recreate build directory for clang-tidy
+        if: matrix.tool == 'clang-tidy'
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # clang-tidy needs the Build subdirectories to exist because
+          # compile_commands.json entries have "directory" fields pointing
+          # to Build/IccProfLib, Build/IccXML, etc.  The build job only
+          # uploads compile_commands.json, so those directories are missing
+          # and clang-tidy crashes with SIGABRT on every file.
+          # Running cmake configure (without make) recreates the directory
+          # structure and generates headers like IccProfLibVer.h.
+          # See: https://github.com/InternationalColorConsortium/iccDEV/issues/799
+          mkdir -p Build
+          cd Build
+          cmake Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -Wno-dev 2>&1 | tail -3
+          dir_count=$(find . -type d | wc -l)
+          echo "Build directory structure recreated: $dir_count directories"
+
       - name: Filter files for component
         if: matrix.tool == 'cppcheck'
         shell: bash --noprofile --norc {0}
@@ -421,7 +445,7 @@ jobs:
             echo "#### Top cppcheck Files" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             { grep -oP '^[^:]+\.(cpp|h)' lint_reports/cppcheck.txt 2>/dev/null || true; } \
-              | sort | uniq -c | sort -rn | head -10 \
+              | sort | uniq -c | sort -rn | sed -n '1,10p' \
               | while read -r cnt fname; do
                   echo "- **$cnt** — $fname" >> "$GITHUB_STEP_SUMMARY"
                 done
@@ -477,7 +501,7 @@ jobs:
             echo "| Count | Check |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
             { grep -oh '\[[-a-zA-Z.]*\]' lint_reports/clang_tidy.txt 2>/dev/null || true; } \
-              | sort | uniq -c | sort -rn | head -15 \
+              | sort | uniq -c | sort -rn | sed -n '1,15p' \
               | while read -r cnt chk; do
                   echo "| $cnt | $chk |" >> "$GITHUB_STEP_SUMMARY"
                 done
@@ -488,7 +512,7 @@ jobs:
               echo "#### ⚠️ Security Findings ($sec_count)" >> "$GITHUB_STEP_SUMMARY"
               echo "" >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
-              { grep 'clang-analyzer-security\|clang-analyzer-alpha.security' lint_reports/clang_tidy.txt || true; } | head -20 >> "$GITHUB_STEP_SUMMARY"
+              { grep 'clang-analyzer-security\|clang-analyzer-alpha.security' lint_reports/clang_tidy.txt || true; } | sed -n '1,20p' >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
               echo "" >> "$GITHUB_STEP_SUMMARY"
             fi
@@ -497,7 +521,7 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             { grep 'warning:' lint_reports/clang_tidy.txt 2>/dev/null || true; } \
               | { grep -oP '[^ ]+\.(cpp|h)' || true; } \
-              | sort | uniq -c | sort -rn | head -10 \
+              | sort | uniq -c | sort -rn | sed -n '1,10p' \
               | while read -r cnt fname; do
                   echo "- **$cnt** — $fname" >> "$GITHUB_STEP_SUMMARY"
                 done

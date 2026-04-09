@@ -1,0 +1,867 @@
+###############################################################
+# iccDEV Tool Tests -- ASAN+UBSAN Coverage Baseline
+#
+# Migrated from xsscx/research iccdev-tool-tests.yml for
+# upstream iccDEV CI. Builds with full ASAN+UBSAN, generates
+# test profiles via CreateAllProfiles.sh, then runs 259 tests
+# across 3 external test suites plus regression PoC checks.
+#
+# Test Suites:
+#   1. Coverage baseline (103 tests) -- all 14 CLI tools
+#   2. JSON -cfg tests (31 tests) -- config mode validation
+#   3. JSON CLI exercise (125 tests) -- all CLI option combos
+#   4. Regression checks -- bisect fix PoCs
+#
+# Hardening:
+#   - sanitize-sed.sh sourced in every step
+#   - BASH_ENV=/dev/null to block .bashrc injection
+#   - Pinned action SHAs (no floating tags)
+#   - persist-credentials: false on checkout
+#   - No shell=true subprocess calls
+#   - Minimal permissions (contents: read)
+#
+# Reference:
+#   .github/scripts/iccdev-tool-coverage-baseline.sh
+#   .github/scripts/iccdev-json-cfg-tests.sh
+#   .github/scripts/json-cli-exercise.sh
+#
+###############################################################
+
+name: iccDEV Tool Tests
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - 'fix-bisect-*'
+    paths:
+      - '.github/workflows/ci-tool-tests.yml'
+      - '.github/scripts/iccdev-tool-coverage-baseline.sh'
+      - '.github/scripts/iccdev-json-cfg-tests.sh'
+      - '.github/scripts/json-cli-exercise.sh'
+      - '.github/ci/test-data/**'
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'Tools/**'
+      - 'Build/Cmake/**'
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: iccdev-tool-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: "iccDEV Tools -- ASAN+UBSAN -- 259+ tests"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    env:
+      BASH_ENV: /dev/null
+
+    steps:
+      # -------------------------------------------------------------------
+      # Checkout
+      # -------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # -------------------------------------------------------------------
+      # Harden Bash environment
+      # -------------------------------------------------------------------
+      - name: Harden Bash environment
+        env:
+          BASH_ENV: /dev/null
+          WORKFLOW_REF: ${{ github.ref }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          echo "Workflow:    ${WORKFLOW_NAME}"
+          echo "Ref:         ${WORKFLOW_REF}"
+          echo "Commit:      ${WORKFLOW_SHA}"
+
+      # -------------------------------------------------------------------
+      # Verify sanitize-sed.sh exists and is functional
+      # -------------------------------------------------------------------
+      - name: Verify sanitize-sed.sh
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          if [ ! -r .github/scripts/sanitize-sed.sh ]; then
+            echo "ERROR: sanitize-sed.sh not found" >&2
+            exit 1
+          fi
+          source .github/scripts/sanitize-sed.sh
+          echo "Sanitizer loaded"
+
+      # -------------------------------------------------------------------
+      # Install build dependencies
+      # -------------------------------------------------------------------
+      - name: Install build dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake clang-18 clang++-18 \
+            libxml2-dev libtiff-dev libpng-dev libjpeg-dev \
+            nlohmann-json3-dev liblzma-dev libwxgtk3.2-dev \
+            wx-common libssl-dev libclang-rt-18-dev
+
+      # -------------------------------------------------------------------
+      # Build iccDEV (Debug + ASAN + UBSAN + all tools)
+      # -------------------------------------------------------------------
+      - name: Build iccDEV (Debug + ASAN + UBSAN + Tools)
+        env:
+          BASH_ENV: /dev/null
+          CC: clang-18
+          CXX: clang++-18
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          mkdir -p build && cd build
+
+          echo "::group::CMake Configure"
+          sed -i 's/set(CMAKE_DEBUG_POSTFIX "d")/set(CMAKE_DEBUG_POSTFIX "")/' \
+            ../Build/Cmake/CMakeLists.txt
+          cmake ../Build/Cmake \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0 -g3 -fstack-protector-strong" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0 -g3 -fstack-protector-strong -std=c++17" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_SHARED_LIBS=ON \
+            -DENABLE_STATIC_LIBS=ON \
+            -Wno-dev
+          echo "::endgroup::"
+
+          echo "::group::Build"
+          make -j"$(nproc)" 2>&1 | tee /tmp/iccdev-build.log
+          echo "::endgroup::"
+
+          mapfile -t TOOL_BINS < <(find Tools -mindepth 2 -maxdepth 2 -type f -executable | sort)
+          TOOL_COUNT="${#TOOL_BINS[@]}"
+          echo "Built $TOOL_COUNT tool binaries"
+          if [ "$TOOL_COUNT" -lt 14 ]; then
+            echo "WARNING: Expected 14+ tools, got $TOOL_COUNT"
+          fi
+          for tool_bin in "${TOOL_BINS[@]}"; do
+            echo "  - $tool_bin"
+          done
+
+          ls -lh IccProfLib/libIccProfLib2.so* || echo "WARN: shared lib missing"
+          ls -lh IccXML/libIccXML2.so* || echo "WARN: XML shared lib missing"
+
+          {
+            echo "### iccDEV Build"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---------|-------|"
+            echo "| Compiler | clang-18 |"
+            echo "| Build type | Debug |"
+            echo "| Sanitizers | ASAN + UBSAN |"
+            echo "| Tools built | $TOOL_COUNT |"
+            echo "| Commit | $(cd "${WORKSPACE_DIR}" && git log --oneline -1 | tr -cd '[:print:]') |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # Generate test profiles (CreateAllProfiles.sh)
+      # -------------------------------------------------------------------
+      - name: Generate test profiles (CreateAllProfiles.sh)
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          ASAN_OPTIONS: "detect_leaks=0,halt_on_error=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
+            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+          done
+
+          cd "${WORKSPACE_DIR}/Testing"
+          echo "::group::CreateAllProfiles.sh"
+          timeout 300 sh CreateAllProfiles.sh 2>&1 || {
+            rc=$?
+            if [ "$rc" -eq 124 ]; then
+              echo "WARN: CreateAllProfiles.sh timed out (acceptable for sanitizer builds)"
+            else
+              echo "WARN: CreateAllProfiles.sh exited with $rc"
+            fi
+          }
+          echo "::endgroup::"
+
+          PROFILE_COUNT=$(find . -name '*.icc' -o -name '*.txt' | wc -l)
+          echo "Generated $PROFILE_COUNT test artifacts"
+
+          {
+            echo ""
+            echo "### Test Profile Generation"
+            echo ""
+            echo "**CreateAllProfiles.sh** generated **$PROFILE_COUNT** test artifacts"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # Run 103-test coverage baseline
+      # -------------------------------------------------------------------
+      - name: Run iccDEV tool coverage baseline (103 tests)
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          ICCDEV_TOOLS_DIR: "${{ github.workspace }}/build/Tools"
+          ICCDEV_TESTING_DIR: "${{ github.workspace }}/Testing"
+          ICCDEV_TEST_OUTDIR: "/tmp/iccdev-tool-output"
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          chmod +x .github/scripts/iccdev-tool-coverage-baseline.sh
+
+          echo "::group::Coverage Baseline Output"
+          .github/scripts/iccdev-tool-coverage-baseline.sh --asan 2>&1 || {
+            rc=$?
+            echo "::endgroup::"
+            echo ""
+            echo "Baseline script exited with code $rc"
+            echo "Review ASAN/UBSAN findings in test logs"
+            exit "$rc"
+          }
+          echo "::endgroup::"
+
+      # -------------------------------------------------------------------
+      # Run JSON configuration (-cfg) tests (31 tests)
+      # -------------------------------------------------------------------
+      - name: Run JSON -cfg configuration tests (31 tests)
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          ICCDEV_TOOLS_DIR: "${{ github.workspace }}/build/Tools"
+          ICCDEV_TESTING_DIR: "${{ github.workspace }}/Testing"
+          ICCDEV_TEST_OUTDIR: "/tmp/iccdev-tool-output"
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          chmod +x .github/scripts/iccdev-json-cfg-tests.sh
+
+          echo "::group::JSON Configuration Tests Output"
+          .github/scripts/iccdev-json-cfg-tests.sh 2>&1 || {
+            rc=$?
+            echo "::endgroup::"
+            echo ""
+            if [ "$rc" -eq 2 ]; then
+              echo "::error::JSON tests found ASAN/UBSAN issues"
+            else
+              echo "JSON tests had $rc test failures (non-sanitizer)"
+            fi
+            exit "$rc"
+          }
+          echo "::endgroup::"
+
+          {
+            echo ""
+            echo "### JSON Configuration Tests"
+            echo ""
+            echo "**31 tests** covering \`-cfg\` mode for iccApplyNamedCmm, iccApplySearch, iccApplyProfiles"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # JSON CLI Exercise Tests (125 tests)
+      # -------------------------------------------------------------------
+      - name: JSON CLI Exercise Tests (125 tests)
+        if: success() || failure()
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          chmod +x .github/scripts/json-cli-exercise.sh
+
+          echo "::group::JSON CLI Exercise Output"
+          .github/scripts/json-cli-exercise.sh 2>&1 || {
+            rc=$?
+            echo "::endgroup::"
+            echo "::error::JSON CLI exercise failed with exit code $rc"
+            exit "$rc"
+          }
+          echo "::endgroup::"
+
+          {
+            echo ""
+            echo "### JSON CLI Exercise Tests"
+            echo ""
+            echo "**125 tests** across 26 groups covering all JSON CLI options"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # Regression checks (bisect fix PoCs)
+      # -------------------------------------------------------------------
+      - name: Regression checks (bisect fixes)
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          OUTDIR="/tmp/iccdev-tool-output/regression-bisect"
+          mkdir -p "$OUTDIR"
+
+          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
+          TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          passed=0 failed=0
+
+          check_asan() {
+            local logfile="$1" label="$2"
+            if grep -q "ERROR: AddressSanitizer" "$logfile" 2>/dev/null; then
+              echo "  [ASAN]  $label"; return 1
+            fi
+            return 0
+          }
+
+          echo "=== Regression Checks: Bisect Fixes ==="
+          echo ""
+
+          # --- R1: NamedColor.xml sampleCount regression (b1722f9) ---
+          echo "--- R1: NamedColor.xml sampleCount (#b1722f9) ---"
+          NAMED_XML="${WORKSPACE_DIR}/Testing/Named/NamedColor.xml"
+          NAMED_OUT="$OUTDIR/NamedColor.icc"
+          if [ -f "$NAMED_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/Named"
+            timeout 30 "$FROMXML" NamedColor.xml "$NAMED_OUT" > "$OUTDIR/r1-namedcolor.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if grep -q "doesn't match tint values" "$OUTDIR/r1-namedcolor.log" 2>/dev/null; then
+              echo "  [FAIL] NamedColor.xml still has tint value mismatch"; failed=$((failed + 1))
+            elif ! check_asan "$OUTDIR/r1-namedcolor.log" "NamedColor.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$NAMED_OUT" ]; then
+              echo "  [OK]   NamedColor.xml parsed without tint mismatch"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] NamedColor.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] NamedColor.xml not found"
+          fi
+
+          # --- R2: CMYK-3DLUTs.xml case-sensitive filenames (4aa5857) ---
+          echo "--- R2: CMYK-3DLUTs.xml case-sensitive filenames (#4aa5857) ---"
+          CMYK_XML="${WORKSPACE_DIR}/Testing/CMYK-3DLUTs/CMYK-3DLUTs.xml"
+          CMYK_OUT="$OUTDIR/CMYK-3DLUTs.icc"
+          if [ -f "$CMYK_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/CMYK-3DLUTs"
+            timeout 60 "$FROMXML" CMYK-3DLUTs.xml "$CMYK_OUT" > "$OUTDIR/r2-cmyk3dluts.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if grep -q "Unable to parse" "$OUTDIR/r2-cmyk3dluts.log" 2>/dev/null; then
+              echo "  [FAIL] CMYK-3DLUTs.xml has parse errors"; failed=$((failed + 1))
+            elif ! check_asan "$OUTDIR/r2-cmyk3dluts.log" "CMYK-3DLUTs.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$CMYK_OUT" ]; then
+              echo "  [OK]   CMYK-3DLUTs.xml parsed successfully"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] CMYK-3DLUTs.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] CMYK-3DLUTs.xml not found"
+          fi
+
+          # --- R3: LaserProjector.xml EmissionCLUT (ba81cd9 / #768) ---
+          echo "--- R3: LaserProjector.xml EmissionCLUT (#768) ---"
+          LASER_XML="${WORKSPACE_DIR}/Testing/Display/LaserProjector.xml"
+          LASER_OUT="$OUTDIR/LaserProjector.icc"
+          if [ -f "$LASER_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/Display"
+            timeout 120 "$FROMXML" LaserProjector.xml "$LASER_OUT" > "$OUTDIR/r3-laserprojector.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if grep -q "Error in setting the size of GridPoints" "$OUTDIR/r3-laserprojector.log" 2>/dev/null; then
+              echo "  [FAIL] LaserProjector.xml EmissionCLUT GridPoints error"; failed=$((failed + 1))
+            elif ! check_asan "$OUTDIR/r3-laserprojector.log" "LaserProjector.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$LASER_OUT" ]; then
+              echo "  [OK]   LaserProjector.xml parsed (spectral EmissionCLUT ok)"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] LaserProjector.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] LaserProjector.xml not found"
+          fi
+
+          # --- R4: SparseMatrixNamedColor.xml (#751) ---
+          echo "--- R4: SparseMatrixNamedColor.xml (#751) ---"
+          SPARSE_XML="${WORKSPACE_DIR}/Testing/Named/SparseMatrixNamedColor.xml"
+          SPARSE_OUT="$OUTDIR/SparseMatrixNamedColor.icc"
+          if [ -f "$SPARSE_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/Named"
+            timeout 30 "$FROMXML" SparseMatrixNamedColor.xml "$SPARSE_OUT" > "$OUTDIR/r4-sparse.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if ! check_asan "$OUTDIR/r4-sparse.log" "SparseMatrixNamedColor.xml fromXml"; then
+              failed=$((failed + 1))
+            elif [ -f "$SPARSE_OUT" ]; then
+              echo "  [OK]   SparseMatrixNamedColor.xml parsed successfully"; passed=$((passed + 1))
+            else
+              echo "  [FAIL] SparseMatrixNamedColor.xml did not produce output"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] SparseMatrixNamedColor.xml not found"
+          fi
+
+          # --- R5: Observer name round-trip (#736) ---
+          echo "--- R5: Observer name round-trip (#736) ---"
+          OBS_XML="${WORKSPACE_DIR}/Testing/PCC/CustomObserverLab_int-D65_2deg.xml"
+          OBS_ICC="$OUTDIR/observer-roundtrip.icc"
+          OBS_XML2="$OUTDIR/observer-roundtrip.xml"
+          if [ -f "$OBS_XML" ]; then
+            cd "${WORKSPACE_DIR}/Testing/PCC"
+            timeout 30 "$FROMXML" "CustomObserverLab_int-D65_2deg.xml" "$OBS_ICC" > "$OUTDIR/r5-obs-fromxml.log" 2>&1 || true
+            cd "${WORKSPACE_DIR}"
+            if [ -f "$OBS_ICC" ]; then
+              timeout 30 "$TOXML" "$OBS_ICC" "$OBS_XML2" > "$OUTDIR/r5-obs-toxml.log" 2>&1 || true
+              if [ -f "$OBS_XML2" ]; then
+                timeout 30 "$FROMXML" "$OBS_XML2" "$OUTDIR/observer-roundtrip2.icc" > "$OUTDIR/r5-obs-rt.log" 2>&1 || true
+                if [ -f "$OUTDIR/observer-roundtrip2.icc" ]; then
+                  echo "  [OK]   Observer name round-trip: XML->ICC->XML->ICC succeeded"; passed=$((passed + 1))
+                else
+                  echo "  [FAIL] Observer round-trip failed on second fromXml"; failed=$((failed + 1))
+                fi
+              else
+                echo "  [FAIL] Observer round-trip failed on toXml"; failed=$((failed + 1))
+              fi
+            else
+              echo "  [FAIL] Observer round-trip failed on first fromXml"; failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] CustomObserverLab_int-D65_2deg.xml not found"
+          fi
+
+          # --- R6: PoC files from .github/ci/regression/ ---
+          echo "--- R6: PoC regression files ---"
+          POC_DIR="${WORKSPACE_DIR}/.github/ci/regression"
+          if [ -d "$POC_DIR" ]; then
+            for poc in "$POC_DIR"/poc-*.icc; do
+              [ -f "$poc" ] || continue
+              poc_name="$(basename "$poc" .icc)"
+              timeout 30 "$DUMP" "$poc" ALL > "$OUTDIR/poc-${poc_name}.log" 2>&1 || true
+              rc=$?
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/poc-${poc_name}.log" 2>/dev/null; then
+                echo "  [ASAN]  $poc_name"; failed=$((failed + 1))
+              elif [ "$rc" -ge 128 ]; then
+                echo "  [CRASH] $poc_name (exit $rc)"; failed=$((failed + 1))
+              else
+                echo "  [OK]    $poc_name (exit $rc)"; passed=$((passed + 1))
+              fi
+            done
+          else
+            echo "  [SKIP] .github/ci/regression/ not found"
+          fi
+
+          echo ""
+          echo "Regression checks: $passed passed, $failed failed"
+          if [ "$failed" -gt 0 ]; then exit 1; fi
+
+      # -------------------------------------------------------------------
+      # Generate LUT visualizations (SVG + TIFF)
+      # -------------------------------------------------------------------
+      - name: Generate LUT visualizations (SVG + TIFF)
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          OUTDIR="/tmp/iccdev-lut-viz"
+          mkdir -p "$OUTDIR"
+
+          if [ ! -x "$DUMP" ]; then
+            echo "WARN: iccDumpProfile not found, skipping LUT visualization"
+            exit 0
+          fi
+
+          find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f 2>/dev/null | sort | while read -r profile; do
+            name="$(basename "$profile" .icc)"
+            dir="$(dirname "$profile")"
+            echo "  LUTS: $profile"
+            timeout 30 "$DUMP" "$profile" LUTS 2>/dev/null || true
+            if [ -f "$dir/${name}_luts.svg" ]; then
+              cp "$dir/${name}_luts.svg" "$OUTDIR/"
+            fi
+            for tif in "$dir"/${name}_*.tif; do
+              [ -f "$tif" ] || continue
+              cp "$tif" "$OUTDIR/"
+            done
+          done
+
+          SVG_COUNT=$(find "$OUTDIR" -name '*.svg' 2>/dev/null | wc -l)
+          TIF_COUNT=$(find "$OUTDIR" -name '*.tif' 2>/dev/null | wc -l)
+          echo "Generated $SVG_COUNT SVG + $TIF_COUNT TIFF files"
+
+          {
+            echo ""
+            echo "### LUT Visualizations"
+            echo ""
+            echo "**$SVG_COUNT** SVG + **$TIF_COUNT** TIFF via \`iccDumpProfile LUTS\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # Upload LUT visualizations
+      # -------------------------------------------------------------------
+      - name: Upload LUT visualizations
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: iccdev-lut-visualizations
+          path: /tmp/iccdev-lut-viz/
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 6
+
+      # -------------------------------------------------------------------
+      # Generate LUT text exports (TXTS)
+      # -------------------------------------------------------------------
+      - name: Generate LUT text exports (TXTS)
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          OUTDIR="/tmp/iccdev-lut-txt"
+          mkdir -p "$OUTDIR"
+
+          if [ ! -x "$DUMP" ]; then
+            echo "WARN: iccDumpProfile not found, skipping LUT text export"
+            exit 0
+          fi
+
+          find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f 2>/dev/null | sort | while read -r profile; do
+            name="$(basename "$profile" .icc)"
+            dir="$(dirname "$profile")"
+            echo "  TXTS: $profile"
+            timeout 30 "$DUMP" "$profile" TXTS 2>/dev/null || true
+            for txt in "$dir"/${name}_*.txt; do
+              [ -f "$txt" ] || continue
+              cp "$txt" "$OUTDIR/"
+            done
+          done
+
+          TXT_COUNT=$(find "$OUTDIR" -name '*.txt' 2>/dev/null | wc -l)
+          echo "Generated $TXT_COUNT LUT text export files"
+
+          {
+            echo ""
+            echo "### LUT Text Exports"
+            echo ""
+            echo "**$TXT_COUNT** TSV files via \`iccDumpProfile TXTS\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # -------------------------------------------------------------------
+      # Upload LUT text exports
+      # -------------------------------------------------------------------
+      - name: Upload LUT text exports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: iccdev-lut-text-exports
+          path: /tmp/iccdev-lut-txt/
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 6
+
+      # -------------------------------------------------------------------
+      # Upload test output logs
+      # -------------------------------------------------------------------
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: iccdev-tool-test-logs
+          path: /tmp/iccdev-tool-output/
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+
+      # -------------------------------------------------------------------
+      # ASAN finding detail report (on failure)
+      # -------------------------------------------------------------------
+      - name: Report ASAN findings
+        if: failure()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          OUTDIR="/tmp/iccdev-tool-output"
+          if [ ! -d "$OUTDIR" ]; then
+            echo "No output directory found"
+            exit 0
+          fi
+
+          {
+            echo ""
+            echo "## ASAN/UBSAN Finding Details"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for logf in "$OUTDIR"/*.log "$OUTDIR"/*/*.log; do
+            [ -f "$logf" ] || continue
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              test_name="$(sanitize_line "$(basename "$logf" .log)")"
+              error_type="$(grep 'ERROR: AddressSanitizer' "$logf" | sed -n '1,1p')"
+              safe_error="$(sanitize_line "$error_type")"
+              {
+                echo "### \`$test_name\`"
+                echo ""
+                echo '```'
+                echo "$safe_error"
+                grep -E '^\s+#[0-5]' "$logf" | sed -n '1,6p' | while IFS= read -r frame; do
+                  sanitize_line "$frame"
+                  echo ""
+                done
+                echo '```'
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+          for logf in "$OUTDIR"/*.log "$OUTDIR"/*/*.log; do
+            [ -f "$logf" ] || continue
+            if grep -q "runtime error:" "$logf" 2>/dev/null; then
+              test_name="$(sanitize_line "$(basename "$logf" .log)")"
+              ub_line="$(grep 'runtime error:' "$logf" | sed -n '1,1p')"
+              safe_ub="$(sanitize_line "$ub_line")"
+              {
+                echo "### \`$test_name\` (UBSAN)"
+                echo ""
+                echo '```'
+                echo "$safe_ub"
+                echo '```'
+                echo ""
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+      # -------------------------------------------------------------------
+      # Final summary
+      # -------------------------------------------------------------------
+      - name: Generate summary
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          SANITIZER=".github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "### Environment"
+            echo ""
+            echo "| Component | Version |"
+            echo "|-----------|---------|"
+            echo "| Runner | ubuntu-24.04 |"
+            echo "| Compiler | $(sanitize_line "$(clang-18 --version 2>/dev/null | sed -n '1,1p')") |"
+            echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
+            echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
+            echo "| Sanitizers | ASAN + UBSAN |"
+            echo ""
+            echo "---"
+            echo ""
+            echo "### Manual Reproduction"
+            echo ""
+            echo '```bash'
+            echo "git clone https://github.com/InternationalColorConsortium/iccDEV.git"
+            echo "cd iccDEV && mkdir -p build && cd build"
+            echo "cmake ../Build/Cmake -DCMAKE_BUILD_TYPE=Debug \\"
+            echo "  -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \\"
+            echo "  -DCMAKE_C_FLAGS=\"-g -O0 -fsanitize=address,undefined\" \\"
+            echo "  -DCMAKE_CXX_FLAGS=\"-g -O0 -fsanitize=address,undefined\" \\"
+            echo "  -DCMAKE_EXE_LINKER_FLAGS=\"-fsanitize=address,undefined\" \\"
+            echo "  -DCMAKE_SHARED_LINKER_FLAGS=\"-fsanitize=address,undefined\" \\"
+            echo "  -DENABLE_TOOLS=ON && make -j\$(nproc)"
+            echo "cd ../Testing && ./CreateAllProfiles.sh"
+            echo "ICCDEV_TOOLS_DIR=build/Tools ICCDEV_TESTING_DIR=Testing \\"
+            echo "  LD_LIBRARY_PATH=build/IccProfLib:build/IccXML \\"
+            echo "  .github/scripts/iccdev-tool-coverage-baseline.sh --asan"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

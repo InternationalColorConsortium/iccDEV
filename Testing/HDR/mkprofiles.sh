@@ -1,23 +1,20 @@
 #!/bin/sh
+set -eu
 #################################################################################
 # mkprofiles.sh | iccDEV Project
-# Copyright (C) 2024-2026 The International Color Consortium. 
+# Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
-# 
 #
-#  Last Updated: 2026-02-11 16:41:15 UTC by David Hoyt
-#                Remove PATH
-#
-#
-#
-#
+#  Last Updated: 2026-04-09
 #
 # Intent: iccDEV CICD
-#
-#
-#
-#
 #################################################################################
+
+# Auto-source path.sh if present (sets PATH and LD_LIBRARY_PATH/DYLD_LIBRARY_PATH)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/../path.sh" ]; then
+	. "$SCRIPT_DIR/../path.sh"
+fi
 
 echo "====================== Entering HDR/mkprofiles.sh =========================="
 

@@ -54,7 +54,7 @@ then
 	iccFromXml srgbCalc++Test.xml srgbCalc++Test.icc
 	# calcImport.xml is not a standalone XML file
 	# calcVars.xml is not a standalone XML file
-	set -
+	set +x
 fi
 
 echo "====================== CalcTest =========================="
@@ -66,7 +66,7 @@ then
 	# cannot delete *.icc as many are non-XML test files
 	iccFromXml calcCheckInit.xml   calcCheckInit.icc
 	iccFromXml calcExercizeOps.xml calcExercizeOps.icc
-	set -
+	set +x
 fi
 
 echo "====================== CMYK-3DLUTs =========================="
@@ -78,7 +78,7 @@ then
 	set -x
 	iccFromXml CMYK-3DLUTs.xml  CMYK-3DLUTs.icc
 	iccFromXml CMYK-3DLUTs2.xml CMYK-3DLUTs2.icc
-	set -
+	set +x
 fi
 
 echo "====================== Display =========================="
@@ -100,7 +100,7 @@ then
 	iccFromXml sRGB_D65_MAT-500lx.xml sRGB_D65_MAT-500lx.icc
 	iccFromXml sRGB_D65_MAT.xml       sRGB_D65_MAT.icc
 	iccFromXml sRGB_D65_colorimetric.xml sRGB_D65_colorimetric.icc
-	set -
+	set +x
 fi
 
 echo "====================== Encoding =========================="
@@ -114,7 +114,7 @@ then
 	iccFromXml ISO22028-Encoded-bg-sRGB.xml ISO22028-Encoded-bg-sRGB.icc
 	iccFromXml sRgbEncoding.xml sRgbEncoding.icc
 	iccFromXml sRgbEncodingOverrides.xml sRgbEncodingOverrides.icc
-	set -
+	set +x
 fi
 
 echo "====================== ICS =========================="
@@ -137,7 +137,7 @@ then
 	iccFromXml XYZ_float-IllumA_2deg-Part2.xml XYZ_float-IllumA_2deg-Part2.icc
 	iccFromXml XYZ_int-D65_2deg-Part1.xml      XYZ_int-D65_2deg-Part1.icc
 	iccFromXml XYZ_int-IllumA_2deg-Part2.xml   XYZ_int-IllumA_2deg-Part2.icc
-	set -
+	set +x
 fi
 
 echo "====================== Named =========================="
@@ -150,7 +150,7 @@ then
 	iccFromXml FluorescentNamedColor.xml FluorescentNamedColor.icc
 	iccFromXml NamedColor.xml NamedColor.icc
 	iccFromXml SparseMatrixNamedColor.xml SparseMatrixNamedColor.icc
-	set -
+	set +x
 fi
 
 echo "====================== Overprint =========================="
@@ -161,7 +161,7 @@ if [ "$1" != "clean" ]
 then
 	set -x
 	iccFromXml 17ChanPart1.xml 17ChanPart1.icc
-	set -
+	set +x
 fi
 
 echo "====================== mcs =========================="
@@ -174,7 +174,7 @@ then
 	iccFromXml 17ChanWithSpots-MVIS.xml 17ChanWithSpots-MVIS.icc
 	iccFromXml 18ChanWithSpots-MVIS.xml 18ChanWithSpots-MVIS.icc
 	iccFromXml 6ChanSelect-MID.xml 6ChanSelect-MID.icc
-	set -
+	set +x
 fi
 
 echo "====================== Flexo-CMYKOGP =========================="
@@ -191,7 +191,7 @@ then
 	iccFromXml CMYK-SelectMID.xml  CMYK-SelectMID.icc
 	iccFromXml CMYKOGP-MVIS-Smooth.xml CMYKOGP-MVIS-Smooth.icc
 	iccFromXml OMYK-SelectMID.xml  OMYK-SelectMID.icc
-	set -
+	set +x
 fi
 cd ..
 
@@ -271,7 +271,7 @@ then
 	iccFromXml XYZ_int-D50_2deg.xml XYZ_int-D50_2deg.icc
 	iccFromXml XYZ_int-D65_2deg-MAT-Lvl2.xml XYZ_int-D65_2deg-MAT-Lvl2.icc
 	iccFromXml XYZ_int-D65_2deg-MAT.xml XYZ_int-D65_2deg-MAT.icc
-	set -
+	set +x
 fi
 
 echo "====================== SpecRef =========================="
@@ -289,7 +289,7 @@ then
 	iccFromXml RefDecH.xml RefDecH.icc
 	iccFromXml RefIncW.xml RefIncW.icc
 	# RefEstimationImport.xml is not a standalone XML file
-	set -
+	set +x
 fi
 cd ..
 

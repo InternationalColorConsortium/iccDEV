@@ -54,10 +54,10 @@ that serves ICC profile tools over HTTP. Key components:
 
 ### HTTP Endpoints
 
-- `GET /iccIisIsapi.dll` — version summary (JSON)
-- `GET /iccIisIsapi.dll?mode=health` — health check
-- `GET /iccIisIsapi.dll?format=xml` — minimal ICC XML
-- `POST /iccIisIsapi.dll?mode=tools&input=icc|xml` — run tool suite, return JSON
+- `GET /iccIisIsapi.dll`  --  version summary (JSON)
+- `GET /iccIisIsapi.dll?mode=health`  --  health check
+- `GET /iccIisIsapi.dll?format=xml`  --  minimal ICC XML
+- `POST /iccIisIsapi.dll?mode=tools&input=icc|xml`  --  run tool suite, return JSON
 
 ### Security Hardening
 
@@ -112,7 +112,7 @@ Always delete CMakeCache.txt before reconfigure.
 ## Test
 
 ```bash
-Testing/CreateAllProfiles.sh   # Generate ~210 test profiles
+Testing/CreateAllProfiles.sh   # Generate ~230 test profiles
 Testing/RunTests.sh            # Validate all profiles
 ```
 

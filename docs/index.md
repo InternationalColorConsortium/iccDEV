@@ -10,6 +10,7 @@ and application of ICC based color management profiles based on the
 
 - [Build](build.md)
 - [Install](install.md)
+- [CodeQL Security Analysis](codeql.md)
 
 ## Features Overview
 
@@ -182,7 +183,7 @@ abridged spectral encoding is provided.
 
 See [Install](install.md) for Docker, Homebrew, NPM, and NixOS quickstart.
 
-[Build on Windows, macOS, Linux](build.md) ·
+[Build on Windows, macOS, Linux](build.md)  . 
 [Bisecting Regressions](bisect.md)
 
 ## Examples

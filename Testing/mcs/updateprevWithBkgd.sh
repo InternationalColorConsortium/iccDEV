@@ -1,22 +1,13 @@
 #!/bin/sh
+set -eu
 #################################################################################
 # updateprevWithBkgd.sh | iccDEV Project
-# Copyright (C) 2024-2026 The International Color Consortium. 
+# Copyright (C) 2024-2026 The International Color Consortium.
 #                                        All rights reserved.
-# 
 #
-#  Last Updated: 2026-02-11 16:41:15 UTC by David Hoyt
-#                Remove PATH
-#
-#
-#
-#
+#  Last Updated: 2026-04-09
 #
 # Intent: iccDEV CICD
-#
-#
-#
-#
 #################################################################################
 
 echo "====================== Entering mcs/updateprevWithBkgd.sh =========================="

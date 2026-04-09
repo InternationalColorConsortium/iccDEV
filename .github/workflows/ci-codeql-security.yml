@@ -1,0 +1,165 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+## Intent: CodeQL security analysis with custom iccDEV queries
+##         Generates local SARIF report as artifact (no upload)
+#
+## Last Updated: 2026-04-09 by David Hoyt
+#
+###############################################################
+
+name: "ci-codeql-security"
+
+permissions:
+  contents: read
+  actions: read
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'Tools/**'
+      - 'examples/**'
+      - '.github/codeql-queries/**'
+      - '.github/codeql-config.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'Tools/**'
+      - 'examples/**'
+      - '.github/codeql-queries/**'
+      - '.github/codeql-config.yml'
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: "codeql-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install build dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            cmake clang \
+            libxml2-dev libtiff-dev libpng-dev libjpeg-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev 2>/dev/null
+
+      - name: Install CodeQL CLI
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if ! command -v codeql >/dev/null 2>&1; then
+            CODEQL_VER="2.20.6"
+            curl -sL "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz" \
+              | tar xz -C /opt
+            echo "/opt/codeql" >> "$GITHUB_PATH"
+          fi
+
+      - name: Install CodeQL pack dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          codeql pack install .github/codeql-queries/
+
+      - name: Configure iccDEV
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd Build
+          cmake Cmake \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_TOOLS=ON \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++
+
+      - name: Create CodeQL database
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          NJOBS="$(nproc)"
+          codeql database create /tmp/codeql-db \
+            --language=cpp \
+            --overwrite \
+            --command="cmake --build Build -j ${NJOBS}" \
+            --source-root="."
+
+      - name: Run CodeQL analysis
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          mkdir -p codeql-results
+
+          # Standard security + quality suite
+          codeql database analyze /tmp/codeql-db \
+            --format=sarif-latest \
+            --output=codeql-results/cpp-security-and-quality.sarif \
+            --threads=0 \
+            codeql/cpp-queries:codeql-suites/cpp-security-and-quality.qls
+
+          # Custom iccDEV security queries
+          codeql database analyze /tmp/codeql-db \
+            --format=sarif-latest \
+            --output=codeql-results/iccdev-security.sarif \
+            --threads=0 \
+            .github/codeql-queries/iccdev-security-suite.qls
+
+      - name: Generate report
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          .github/scripts/codeql-report.sh \
+            codeql-results/cpp-security-and-quality.sarif \
+            codeql-results/iccdev-security.sarif \
+            > codeql-results/report.txt
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: codeql-security-report
+          path: codeql-results/
+          retention-days: 30

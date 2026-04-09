@@ -561,11 +561,12 @@ int main(int argc, char* argv[])
     // - Multiple tags can reuse data and this is NOT reported as it is perfectly valid and
     //   occurs in real-world ICC profiles
     // - Tags with overlapping tag data are considered highly suspect (but officially valid)
-    // - 1-3 padding bytes after each tag's data need to be all zero *** NOT DONE - TODO ***
+    // - 1-3 padding bytes after each tag's data need to be all zero
     if (bDumpValidation) {
       const size_t strSize = 256;
       char str[strSize];
       int rndup, smallest_offset = pHdr->size;
+      FILE *fpRaw = fopen(argv[nArg], "rb");
 
       // File size is required to be a multiple of 4 bytes according to clause 7.2.1 bullet (c):
       // "all tagged element data, including the last, shall be padded by no more than three
@@ -597,13 +598,13 @@ int main(int argc, char* argv[])
         // use upper_bound to allow for duplicate tags (pointing to the same offset)
         offsetVector::const_iterator match = std::upper_bound(sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset);
         if (match == sortedTagOffsets.cend())
-          closest = (int)pHdr->size;
+          closest = safeProfileSize;
         else
-          closest = *match;
-        closest = std::min(closest, (int)pHdr->size);
+          closest = (*match <= (icUInt32Number)INT_MAX) ? (int)*match : INT_MAX;
+        closest = std::min(closest, safeProfileSize);
 
         // Check if closest tag after this tag is less than offset+size - in which case it overlaps!
-        if ((closest < (int)i->TagInfo.offset + (int)i->TagInfo.size) && (closest < (int)pHdr->size)) {
+        if (((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)closest) && (closest < safeProfileSize)) {
           sReport += icMsgValidateWarning;
           snprintf(str, strSize, "Tag %s (offset %d, size %d) overlaps with following tag data starting at offset %d.\n",
               Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size, closest);
@@ -612,14 +613,42 @@ int main(int argc, char* argv[])
         }
 
         // Check for gaps between tag data (accounting for 4-byte alignment)
-        if (closest > (int)i->TagInfo.offset + rndup) {
+        if ((icUInt64Number)closest > (icUInt64Number)i->TagInfo.offset + rndup) {
+          int gapStart = (i->TagInfo.offset + rndup <= (icUInt32Number)INT_MAX) ? (int)(i->TagInfo.offset + rndup) : INT_MAX;
           sReport += icMsgValidateWarning;
           snprintf(str, strSize, "Tag %s (size %d) is followed by %d unnecessary additional bytes (from offset %d).\n",
-              Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, closest - (i->TagInfo.offset + rndup), (i->TagInfo.offset + rndup));
+              Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, closest - gapStart, gapStart);
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateWarning);
         }
+
+        // Validate padding bytes are all zero (ICC.1:2022-05 clause 7.2.1)
+        int padBytes = rndup - (int)i->TagInfo.size;
+        icUInt64Number padOffset = (icUInt64Number)i->TagInfo.offset + i->TagInfo.size;
+        if (padBytes > 0 && padBytes <= 3 && fpRaw &&
+            padOffset < pHdr->size && padOffset <= (icUInt64Number)LONG_MAX &&
+            fseek(fpRaw, (long)padOffset, SEEK_SET) == 0) {
+          bool nonZeroPad = false;
+          for (int p = 0; p < padBytes; p++) {
+            int ch = fgetc(fpRaw);
+            if (ch != 0 && ch != EOF) {
+              nonZeroPad = true;
+              break;
+            }
+          }
+          if (nonZeroPad) {
+            sReport += icMsgValidateNonCompliant;
+            snprintf(str, strSize, "Tag %s padding bytes (offset %u, %d bytes) are not all zero.\n",
+                    Fmt.GetTagSigName(i->TagInfo.sig),
+                    (unsigned)(padOffset), padBytes);
+            sReport += str;
+            nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
+          }
+        }
       }
+
+      if (fpRaw)
+        fclose(fpRaw);
 
       // Clause 7.2.1, bullet (b): "the first set of tagged element data shall immediately follow the tag table"
       // 1st tag offset should be = Header (128) + Tag Count (4) + Tag Table (n*12)
