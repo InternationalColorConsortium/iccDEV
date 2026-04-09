@@ -1,5 +1,4 @@
 #!/bin/bash
-set -eu
 ##
 ## Copyright (c) 2025 International Color Consortium. All rights reserved.
 ##

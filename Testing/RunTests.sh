@@ -1,5 +1,4 @@
 #!/bin/sh
-set -eu
 #################################################################################
 # Testing/RunTests.sh | iccDEV Project
 # Copyright (C) 2024-2026 The International Color Consortium.

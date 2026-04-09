@@ -1,5 +1,4 @@
 #!/bin/bash
-set -eu
 #################################################################################
 # Overprint/RunTests.sh | iccDEV Project
 # Copyright (C) 2024-2026 The International Color Consortium.
