@@ -1755,7 +1755,7 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
 
     case icSigMToA0Tag:
       {
-        nInput = icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs);
+        nInput = icGetMultiplexColorSpaceSamples(pProfile->m_Header.mcs);
         if (m_nInputChannels != nInput) {
           sReport += icMsgValidateCriticalError;
           sReport += sSigPathName;
@@ -1784,7 +1784,7 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
           rv = icMaxStatus(rv, icValidateCriticalError);
         }
 
-        nOutput = icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs);
+        nOutput = icGetMultiplexColorSpaceSamples(pProfile->m_Header.mcs);
         if (m_nOutputChannels != nOutput) {
           sReport += icMsgValidateCriticalError;
           sReport += sSigPathName;
@@ -1800,7 +1800,7 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
     case icSigMToB2Tag:
     case icSigMToB3Tag:
     {
-        nInput = icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs);
+        nInput = icGetMultiplexColorSpaceSamples(pProfile->m_Header.mcs);
         if (m_nInputChannels != nInput) {
           sReport += icMsgValidateCriticalError;
           sReport += sSigPathName;
@@ -1824,7 +1824,7 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
     case icSigMToS2Tag:
     case icSigMToS3Tag:
     {
-        nInput = icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs);
+        nInput = icGetMultiplexColorSpaceSamples(pProfile->m_Header.mcs);
         if (m_nInputChannels != nInput) {
           sReport += icMsgValidateCriticalError;
           sReport += sSigPathName;

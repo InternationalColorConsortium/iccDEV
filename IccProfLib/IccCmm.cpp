@@ -959,7 +959,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
     case icXformLutBRDFMcsParam:
     {
       CIccTag *pTag = NULL;
-      if (pProfile->m_Header.deviceClass == icSigMaterialVisualizationClass) {
+      if (pProfile->m_Header.deviceClass == icSigMultiplexVisualizationClass) {
         bInput = true;
         nMCS = icFromMCS;
 
@@ -1045,13 +1045,13 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
     case icXformLutMCS:
       {
         CIccTag *pTag = NULL;
-        if (pProfile->m_Header.deviceClass==icSigMaterialIdentificationClass ||
+        if (pProfile->m_Header.deviceClass==icSigMultiplexIdentificationClass ||
             pProfile->m_Header.deviceClass==icSigInputClass) {
           bInput = true;
           nMCS = icToMCS;
           pTag = pProfile->FindTag(icSigAToM0Tag);
         }
-        else if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass || 
+        else if (pProfile->m_Header.deviceClass==icSigMultiplexVisualizationClass || 
                  pProfile->m_Header.deviceClass==icSigOutputClass) {
           bInput = true;
           nMCS = icFromMCS;
@@ -1124,7 +1124,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           if (pTag && !pTag->IsSupported())
             pTag = NULL;
         }
-        else if (pProfile->m_Header.deviceClass==icSigMaterialLinkClass) {
+        else if (pProfile->m_Header.deviceClass==icSigMultiplexLinkClass) {
           bInput = false;
           nMCS = icFromMCS;
           pTag = pProfile->FindTag(icSigMToA0Tag);
@@ -8189,9 +8189,9 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
     return icCmmStatInvalidProfile;
 
   switch(pProfile->m_Header.deviceClass) {
-    case icSigMaterialIdentificationClass:
-    case icSigMaterialVisualizationClass:
-    case icSigMaterialLinkClass:
+    case icSigMultiplexIdentificationClass:
+    case icSigMultiplexVisualizationClass:
+    case icSigMultiplexLinkClass:
       nIntent = icPerceptual;
       nLutType = icXformLutMCS;
       break;
@@ -8305,7 +8305,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
         }
 
         nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.mcs;
-        if (pProfile->m_Header.deviceClass==icSigMaterialVisualizationClass ||
+        if (pProfile->m_Header.deviceClass==icSigMultiplexVisualizationClass ||
             pProfile->m_Header.deviceClass==icSigOutputClass) {
           if (bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS) {
             nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
@@ -8314,7 +8314,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
             nDstSpace = pProfile->m_Header.pcs;
           }
         }
-        else if (pProfile->m_Header.deviceClass==icSigMaterialLinkClass) {
+        else if (pProfile->m_Header.deviceClass==icSigMultiplexLinkClass) {
           nDstSpace = pProfile->m_Header.colorSpace;
           nParentSpace = pProfile->GetParentColorSpace();
         }
@@ -8359,7 +8359,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   }
 
   // this must check before creating the Xform, because that can delete the profile
-  if (pProfile->m_Header.deviceClass == icSigMaterialVisualizationClass) {
+  if (pProfile->m_Header.deviceClass == icSigMultiplexVisualizationClass) {
     bInput = true;
   }
 
@@ -8419,9 +8419,9 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
     return icCmmStatInvalidProfile;
 
   switch (pProfile->m_Header.deviceClass) {
-  case icSigMaterialIdentificationClass:
-  case icSigMaterialVisualizationClass:
-  case icSigMaterialLinkClass:
+  case icSigMultiplexIdentificationClass:
+  case icSigMultiplexVisualizationClass:
+  case icSigMultiplexLinkClass:
     return icCmmStatBadLutType;
 
   default:
@@ -10613,13 +10613,13 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   icXformLutType nUseLutType = nLutType;
 
   switch(pProfile->m_Header.deviceClass) {
-    case icSigMaterialIdentificationClass:
-    case icSigMaterialLinkClass:
+    case icSigMultiplexIdentificationClass:
+    case icSigMultiplexLinkClass:
       nIntent = icPerceptual;
       nLutType = icXformLutMCS;
       break;
 
-    case icSigMaterialVisualizationClass:
+    case icSigMultiplexVisualizationClass:
       nLutType = icXformLutMCS;
       break;
 
@@ -10758,11 +10758,11 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
       switch(pProfile->m_Header.deviceClass)
       {
         case icSigInputClass:
-        case icSigMaterialIdentificationClass:
+        case icSigMultiplexIdentificationClass:
           nSrcSpace = pProfile->m_Header.colorSpace;
           nDstSpace = (icColorSpaceSignature)pProfile->m_Header.mcs;
           break;
-        case icSigMaterialVisualizationClass:
+        case icSigMultiplexVisualizationClass:
           nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.mcs;
           if (bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS) {
             nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
@@ -10773,7 +10773,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
           bInput = true;
           break;
 
-        case icSigMaterialLinkClass:
+        case icSigMultiplexLinkClass:
           nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.mcs;
           nDstSpace = pProfile->m_Header.colorSpace;
           break;

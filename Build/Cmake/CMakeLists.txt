@@ -530,6 +530,7 @@ option(ENABLE_WXWIDGETS           "Build wxProfileDump GUI tool (requires wxWidg
 option(ENABLE_SHARED_LIBS         "Build dynamic link libraries"                        ON)
 option(ENABLE_STATIC_LIBS         "Build static libraries"                              ON)
 option(ENABLE_ICCXML              "Build IccXML library support"                        ON)
+option(ENABLE_ICCJSON             "Build IccJSON library support"                       ON)
 option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"           OFF)
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
@@ -1155,6 +1156,29 @@ ENDIF()
 # NOTE: IccXML and generated-header includes now propagated via
 # target_include_directories(PUBLIC) on IccProfLib2 and IccXML2 targets
 
+# Ensure generated version headers are available globally
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccProfLib)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccXML)
+
+#
+# JSON library (parallel to IccXML, uses nlohmann/json)
+#
+IF(ENABLE_ICCJSON)
+  message(STATUS "Adding subdirectory for IccJSON.")
+  add_subdirectory(IccJSON)
+
+  # Set default link target for IccJSON (matches build configuration)
+  IF(ENABLE_SHARED_LIBS)
+    set(TARGET_LIB_ICCJSON IccJSON2 CACHE INTERNAL "Link target for IccJSON2")
+  ELSE()
+    set(TARGET_LIB_ICCJSON IccJSON2-static CACHE INTERNAL "Link target for IccJSON2")
+  ENDIF()
+
+  # Ensure IccJSON headers are available globally
+  include_directories(${TOP_SOURCE_DIR}/IccJSON/IccLibJSON/)
+  include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccJSON)
+ENDIF(ENABLE_ICCJSON)
+
 # Diagnostic: Output current linker flags
 if(VERBOSE_CONFIG)
   message(STATUS "CMAKE_EXE_LINKER_FLAGS = ${CMAKE_EXE_LINKER_FLAGS}")
@@ -1200,6 +1224,15 @@ IF(ENABLE_TOOLS)
   # Add XML-related tools
   ADD_SUBDIRECTORY(Tools/IccFromXml)
   ADD_SUBDIRECTORY(Tools/IccToXml)
+
+  # Add JSON-related tools
+  IF(ENABLE_ICCJSON AND TARGET_LIB_ICCJSON)
+    message(STATUS "Adding Subdirectory IccFromJson.")
+    ADD_SUBDIRECTORY(Tools/IccFromJson)
+    message(STATUS "Adding Subdirectory IccToJson.")
+    ADD_SUBDIRECTORY(Tools/IccToJson)
+  ENDIF()
+  message(STATUS "Adding Subdirectory IccJpegDump.")
   ADD_SUBDIRECTORY(Tools/IccJpegDump)
   ADD_SUBDIRECTORY(Tools/IccApplyNamedCmm)
   ADD_SUBDIRECTORY(Tools/IccDumpProfile)
@@ -1217,10 +1250,26 @@ IF(ENABLE_TOOLS)
     ADD_DEPENDENCIES(iccToXml ${TARGET_LIB_ICCXML})
   ENDIF()
 
+  # Ensure IccJSON-dependent tools are built after IccJSON library (safety net)
+  IF(ENABLE_ICCJSON)
+    IF(TARGET iccFromJson AND TARGET ${TARGET_LIB_ICCJSON})
+      ADD_DEPENDENCIES(iccFromJson ${TARGET_LIB_ICCJSON})
+    ENDIF()
+    IF(TARGET iccToJson AND TARGET ${TARGET_LIB_ICCJSON})
+      ADD_DEPENDENCIES(iccToJson ${TARGET_LIB_ICCJSON})
+    ENDIF()
+  ENDIF()
 
-# PNG already found above; just add the tool
-if(NOT PNG_FOUND)
-  message(FATAL_ERROR "PNG not found. Please install libpng-dev or install via vcpkg.")
+
+# --- PNG (already found above) ---
+message(STATUS "Checking for PNG...")
+
+if(PNG_FOUND)
+  message(STATUS "PNG Library            : ${PNG_LIBRARIES}")
+  message(STATUS "PNG Include Directory  : ${PNG_INCLUDE_DIRS}")
+  message(STATUS "PNG Version            : ${PNG_VERSION}")
+else()
+  message(FATAL_ERROR " PNG not found. Please install libpng-dev or install via vcpkg.")
 endif()
 if(VERBOSE_CONFIG)
   message(STATUS "Adding Subdirectory IccPngDump.")

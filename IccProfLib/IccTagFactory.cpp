@@ -219,6 +219,7 @@ icSigNamePair g_icTagNameTable[] = {
 };
 
 icSigNamePair g_icAltTagNameTable[] = {
+  // Legacy names for backward compatibility with older XML/JSON files
   {icSigMultiplexTypeArrayTag, "materialTypeArrayTag"},
   {icSigMultiplexDefaultValuesTag, "materialDefaultValuesTag"},
   {(icTagSignature)0,""},

@@ -1483,12 +1483,12 @@ icValidateStatus CIccTagArray::Validate(std::string sigPath, std::string &sRepor
     //Check # of channels 
     if (icGetFirstSigPathSig(sigPath) == icSigMultiplexTypeArrayTag && 
         pProfile &&
-        m_nSize != icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs)) {
+        m_nSize != icGetMultiplexColorSpaceSamples(pProfile->m_Header.mcs)) {
       std::string sSigPathName = Info.GetSigPathName(sigPath);
 
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
-      sReport += " - Number of material channel names does not match MCS in header.\n";
+      sReport += " - Number of multiplex channel names does not match MCS in header.\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
     icUInt32Number i;

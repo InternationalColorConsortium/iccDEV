@@ -1489,9 +1489,9 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     break;
 
   case icSigColorEncodingClass:
-  case icSigMaterialIdentificationClass:
-  case icSigMaterialVisualizationClass:
-  case icSigMaterialLinkClass:
+  case icSigMultiplexIdentificationClass:
+  case icSigMultiplexVisualizationClass:
+  case icSigMultiplexLinkClass:
     if (m_Header.version<icVersionNumberV5) {
       CIccInfo classInfo;
       sReport += icMsgValidateCriticalError;
@@ -1510,9 +1510,9 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   }
 
 
-  if (m_Header.deviceClass==icSigMaterialIdentificationClass ||
-      m_Header.deviceClass==icSigMaterialLinkClass ||
-      m_Header.deviceClass==icSigMaterialVisualizationClass) {
+  if (m_Header.deviceClass==icSigMultiplexIdentificationClass ||
+      m_Header.deviceClass==icSigMultiplexLinkClass ||
+      m_Header.deviceClass==icSigMultiplexVisualizationClass) {
     if (icGetColorSpaceType(m_Header.mcs)!=icSigSrcMCSChannelData) {
       sReport += icMsgValidateCriticalError;
       sReport += " - Invalid MCS designator\n";
@@ -1528,8 +1528,8 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   if (m_Header.colorSpace!=icSigNoColorData ||
         m_Header.version<icVersionNumberV5 || 
         (m_Header.deviceClass!=icSigNamedColorClass &&
-         m_Header.deviceClass!=icSigMaterialIdentificationClass &&
-         m_Header.deviceClass!=icSigMaterialVisualizationClass)) {
+         m_Header.deviceClass!=icSigMultiplexIdentificationClass &&
+         m_Header.deviceClass!=icSigMultiplexVisualizationClass)) {
     if (!Info.IsValidSpace(m_Header.colorSpace)) {
       if (!(m_Header.version>=icVersionNumberV5 && m_Header.deviceClass==icSigAbstractClass && Info.IsValidSpectralSpace(m_Header.colorSpace) && IsTagPresent(icSigDToB0Tag))) {
         sReport += icMsgValidateCriticalError;
@@ -1540,8 +1540,8 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     }
   }
 
-  if (m_Header.deviceClass==icSigMaterialIdentificationClass ||
-      m_Header.deviceClass==icSigMaterialLinkClass) {
+  if (m_Header.deviceClass==icSigMultiplexIdentificationClass ||
+      m_Header.deviceClass==icSigMultiplexLinkClass) {
     if (m_Header.pcs!=icSigNoColorData) {
       sReport += icMsgValidateNonCompliant;
       snprintf(buf, bufSize, "Invalid PCS designator for %s\n", Info.GetProfileClassSigName(m_Header.deviceClass));
@@ -1934,9 +1934,9 @@ bool CIccProfile::CheckTagExclusion(std::string &sReport) const
       break;
     }
 
-  case icSigMaterialIdentificationClass:
-  case icSigMaterialLinkClass:
-  case icSigMaterialVisualizationClass:
+  case icSigMultiplexIdentificationClass:
+  case icSigMultiplexLinkClass:
+  case icSigMultiplexVisualizationClass:
     {
       if (GetTag(icSigAToB0Tag) || GetTag(icSigAToB1Tag) || GetTag(icSigAToB2Tag) ||
         GetTag(icSigBToA0Tag) || GetTag(icSigBToA1Tag) || GetTag(icSigBToA2Tag) ||
@@ -2550,7 +2550,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
          rv = icMaxStatus(rv, icValidateNonCompliant);
     }
 
-    if (sig != icSigLinkClass && sig != icSigMaterialIdentificationClass && sig != icSigMaterialLinkClass) {
+    if (sig != icSigLinkClass && sig != icSigMultiplexIdentificationClass && sig != icSigMultiplexLinkClass) {
       if ((m_Header.version<icVersionNumberV5 || m_Header.pcs != 0) && !GetTag(icSigMediaWhitePointTag, pParentProfile)) {
         sReport += icMsgValidateCriticalError;
         sReport += "Media white point tag missing.\n";
@@ -2886,7 +2886,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         }
         break;
 
-      case icSigMaterialIdentificationClass:
+      case icSigMultiplexIdentificationClass:
         if (!GetTag(icSigAToM0Tag) && !GetTag(icSigMultiplexTypeArrayTag)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag missing.\n";
@@ -2894,7 +2894,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         }
         break;
 
-      case icSigMaterialVisualizationClass:
+      case icSigMultiplexVisualizationClass:
         if (!GetTag(icSigMToB0Tag) && !GetTag(icSigMToS0Tag)&& !GetTag(icSigMultiplexTypeArrayTag)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";
@@ -2902,7 +2902,7 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
         }
         break;
 
-      case icSigMaterialLinkClass:
+      case icSigMultiplexLinkClass:
         if (!GetTag(icSigMToA0Tag)&& !GetTag(icSigMultiplexTypeArrayTag)) {
           sReport += icMsgValidateCriticalError;
           sReport += "Critical tag(s) missing.\n";

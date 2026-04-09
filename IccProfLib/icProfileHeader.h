@@ -957,7 +957,7 @@ typedef enum : icUInt32Number {
   icSigMCSDataEnd                = 0x6d63FFFF,   // provide clues to UBSan
 
   icSigMCSMaxEnumData            = 0xFFFFFFFF,
-} icMaterialColorSignature;
+} icMultiplexColorSignature;
 
 #define icGetColorSpaceType(sig) ((icColorSpaceSignature)(((icUInt32Number)sig)&0xffff0000))
 #define icIsSameColorSpaceType(sig, type) ((((icUInt32Number)sig)&0xffff0000)==((icUInt32Number)(type)))
@@ -987,9 +987,9 @@ typedef enum {
     icSigColorSpaceClass                = 0x73706163,  /* 'spac' */
     icSigNamedColorClass                = 0x6e6d636c,  /* 'nmcl' */
     icSigColorEncodingClass             = 0x63656e63,  /* 'cenc' */
-    icSigMaterialIdentificationClass    = 0x6D696420,  /* 'mid ' */
-    icSigMaterialLinkClass              = 0x6d6c6e6b,  /* 'mlnk' */
-    icSigMaterialVisualizationClass     = 0x6d766973,  /* 'mvis' */
+    icSigMultiplexIdentificationClass   = 0x6D696420,  /* 'mid ' */
+    icSigMultiplexLinkClass             = 0x6d6c6e6b,  /* 'mlnk' */
+    icSigMultiplexVisualizationClass    = 0x6d766973,  /* 'mvis' */
     
 /* Convenience Enum Definition - Not defined in ICC specification */
     icMaxEnumClass                      = 0xFFFFFFFF,
@@ -2096,7 +2096,7 @@ typedef struct {
     icColorSpaceSignature       spectralPCS;      /* Spectral colour space signature */
     icSpectralRange             spectralRange;    /* Start, end, and steps for spectral PCS */
     icSpectralRange             biSpectralRange;  /* Start, end, and steps for bi-spectral PCS */
-    icMaterialColorSignature    mcs;              /* Material Connection Space */
+    icMultiplexColorSignature   mcs;              /* Multiplex Connection Space */
     icSignature                 deviceSubClass;   /* Refinement on type of profile */
 
     icInt8Number                reserved[4];    /* Reserved for future use */

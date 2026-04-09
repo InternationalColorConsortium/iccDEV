@@ -1,0 +1,1038 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "icc-profile.schema.json",
+  "title": "ICC Profile JSON",
+  "description": "JSON representation of an ICC color profile as produced and consumed by the IccJSON library (IccJSON/IccLibJSON). The outermost wrapper key is 'IccProfile'.",
+
+  "type": "object",
+  "required": ["IccProfile"],
+  "properties": {
+    "IccProfile": { "$ref": "#/$defs/Profile" }
+  },
+
+  "$defs": {
+
+    "Signature": {
+      "type": "string",
+      "description": "ICC signature in one of four forms: empty string (zero/unset), 4 printable ASCII characters (e.g. 'RGB ', 'XYZ '), 6 characters where the first 2 are any character followed by 4 hex digits (e.g. 'nc1234'), or 8 hex digits (e.g. '00FF0102').",
+      "pattern": "^(|.{4}|.{2}[0-9a-fA-F]{4}|[0-9a-fA-F]{8})$"
+    },
+
+    "HexString": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]*$",
+      "description": "Even-length lowercase hex string encoding binary data"
+    },
+
+    "DateTime": {
+      "type": "string",
+      "description": "ISO-8601 date/time: YYYY-MM-DDTHH:MM:SS"
+    },
+
+    "XYZTriplet": {
+      "type": "array",
+      "description": "CIE XYZ tristimulus values [X, Y, Z]",
+      "items": { "type": "number" },
+      "minItems": 3,
+      "maxItems": 3
+    },
+
+    "SpectralRange": {
+      "type": "object",
+      "description": "Spectral wavelength range. Used in the profile header (SpectralRange, BiSpectralRange) and inside MPE spectral elements (wavelengths).",
+      "required": ["start", "end", "steps"],
+      "properties": {
+        "start": { "type": "number", "description": "Start wavelength in nm" },
+        "end":   { "type": "number", "description": "End wavelength in nm" },
+        "steps": { "type": "integer", "minimum": 1, "description": "Number of wavelength steps" }
+      }
+    },
+
+    "Profile": {
+      "type": "object",
+      "description": "ICC profile object containing a header and a tag list",
+      "required": ["Header", "Tags"],
+      "properties": {
+        "Header": { "$ref": "#/$defs/Header" },
+        "Tags":   { "$ref": "#/$defs/TagsArray" }
+      },
+      "additionalProperties": false
+    },
+
+    "Header": {
+      "type": "object",
+      "description": "ICC profile header fields",
+      "required": ["ProfileVersion", "ProfileDeviceClass", "DataColourSpace", "PCS",
+                   "CreationDateTime", "ProfileFileSignature", "PrimaryPlatform",
+                   "RenderingIntent", "PCSIlluminant"],
+      "properties": {
+        "PreferredCMMType":       { "$ref": "#/$defs/Signature" },
+        "ProfileVersion":        { "type": "string", "description": "Version string (e.g. '4.4', '5.0')" },
+        "ProfileSubClassVersion":{ "type": "string", "description": "Sub-class version string (omitted when zero)" },
+        "ProfileDeviceClass":    { "$ref": "#/$defs/Signature", "description": "'scnr', 'prtr', 'mntr', 'link', 'spac', 'abst', 'nmcl'" },
+        "ProfileDeviceSubClass": { "$ref": "#/$defs/Signature" },
+        "DataColourSpace":       { "$ref": "#/$defs/Signature", "description": "Color space signature (e.g. 'RGB ', 'CMYK', 'Lab ')" },
+        "PCS":                   { "$ref": "#/$defs/Signature", "description": "Profile connection space: 'XYZ ' or 'Lab '" },
+        "CreationDateTime":      { "$ref": "#/$defs/DateTime" },
+        "ProfileFileSignature":  { "type": "string", "const": "acsp" },
+        "PrimaryPlatform":       { "$ref": "#/$defs/Signature", "description": "'APPL', 'MSFT', 'SGI ', 'SUNW'" },
+        "CMMFlags":              { "$ref": "#/$defs/CMMFlags" },
+        "DeviceManufacturer":    { "$ref": "#/$defs/Signature" },
+        "DeviceModel":           { "$ref": "#/$defs/Signature" },
+        "DeviceAttributes":      { "$ref": "#/$defs/DeviceAttributes" },
+        "RenderingIntent":       { "type": "string", "description": "Rendering intent name (e.g. 'Perceptual', 'Relative Colorimetric')" },
+        "PCSIlluminant":             { "$ref": "#/$defs/XYZTriplet" },
+        "ProfileCreator":        { "$ref": "#/$defs/Signature" },
+        "ProfileID":             { "$ref": "#/$defs/HexString", "minLength": 32, "maxLength": 32, "description": "MD5 profile ID as 32 hex chars (omitted if all-zero)" },
+        "SpectralPCS":           { "$ref": "#/$defs/Signature", "description": "Spectral PCS signature (ICC v5)" },
+        "SpectralRange":         { "$ref": "#/$defs/SpectralRange" },
+        "BiSpectralRange":       { "$ref": "#/$defs/SpectralRange" },
+        "MCS":                   { "$ref": "#/$defs/Signature", "description": "Multiplex connection space (ICC v5)" },
+        "ProfileSubClass":       { "$ref": "#/$defs/Signature" }
+      }
+    },
+
+    "CMMFlags": {
+      "type": "object",
+      "description": "CMM flags decomposed into named bits",
+      "properties": {
+        "EmbeddedInFile":          { "type": "boolean" },
+        "UseWithEmbeddedDataOnly": { "type": "boolean" },
+        "ExtendedRangePCS":        { "type": "boolean" },
+        "MCSNeedsSubset":          { "type": "boolean" },
+        "VendorFlags":             { "$ref": "#/$defs/HexString", "description": "Remaining vendor-specific flag bits as 8 hex chars" }
+      }
+    },
+
+    "DeviceAttributes": {
+      "type": "object",
+      "description": "Device attribute flags decomposed into named fields",
+      "properties": {
+        "ReflectiveOrTransparency": { "type": "string", "enum": ["reflective", "transparency"] },
+        "GlossyOrMatte":            { "type": "string", "enum": ["glossy", "matte"] },
+        "MediaPolarity":            { "type": "string", "enum": ["positive", "negative"] },
+        "MediaColour":              { "type": "string", "enum": ["colour", "blackAndWhite"] },
+        "VendorSpecific":           { "$ref": "#/$defs/HexString", "description": "Remaining vendor-specific bits as 16 hex chars" }
+      }
+    },
+
+    "TagsArray": {
+      "type": "array",
+      "description": "Ordered list of profile tags. Each element is a single-key object { tagName: tagValue }. Known tags use their ICC name (e.g. 'redMatrixColumnTag'). Private tags use 'PrivateTag_N' with a 'sig' field.",
+      "items": { "$ref": "#/$defs/TagEntry" }
+    },
+
+    "TagEntry": {
+      "type": "object",
+      "description": "Single-key object mapping a tag name to its value",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/TagValue" }
+    },
+
+    "TagValue": {
+      "type": "object",
+      "description": "Tag wrapper containing type data, optional Reserved word, and optional alias pointer",
+      "properties": {
+        "sig":      { "$ref": "#/$defs/Signature", "description": "Raw signature (private tags only)" },
+        "Reserved": { "type": "integer", "minimum": 0, "description": "Tag reserved word (emitted only when non-zero)" },
+        "sameAs":   { "type": "string", "description": "Name of the tag that owns the shared tag object (aliased tags)" },
+        "data":     { "$ref": "#/$defs/TagTypeData" }
+      }
+    },
+
+    "TagTypeData": {
+      "type": "object",
+      "description": "Flat tag data object. Contains a 'type' discriminator field set to the ICC tag type name (from g_icTagTypeNameTable), followed by type-specific fields at the same level.",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "description": "ICC tag type name" }
+      },
+      "oneOf": [
+        { "allOf": [{ "properties": { "type": { "const": "signatureType"                } } }, { "$ref": "#/$defs/SignatureTypeContent"                 }] },
+        { "allOf": [{ "properties": { "type": { "const": "textType"                     } } }, { "$ref": "#/$defs/TextTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "utf8Type"                     } } }, { "$ref": "#/$defs/TextTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "utf16Type"                    } } }, { "$ref": "#/$defs/TextTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "utf8ZipType"                  } } }, { "$ref": "#/$defs/TextTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "zipXmlType"                   } } }, { "$ref": "#/$defs/TextTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "textDescriptionType"          } } }, { "$ref": "#/$defs/TextDescriptionTypeContent"           }] },
+        { "allOf": [{ "properties": { "type": { "const": "curveType"                    } } }, { "$ref": "#/$defs/CurveTypeContent"                     }] },
+        { "allOf": [{ "properties": { "type": { "const": "parametricCurveType"          } } }, { "$ref": "#/$defs/ParametricCurveTypeContent"           }] },
+        { "allOf": [{ "properties": { "type": { "const": "segmentedCurveType"           } } }, { "$ref": "#/$defs/SegmentedCurveObject"                 }] },
+        { "allOf": [{ "properties": { "type": { "const": "XYZArrayType"                 } } }, { "$ref": "#/$defs/XYZArrayTypeContent"                  }] },
+        { "allOf": [{ "properties": { "type": { "const": "s15Fixed16ArrayType"          } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "u16Fixed16ArrayType"          } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "uInt8ArrayType"               } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "uInt16ArrayType"              } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "uInt32ArrayType"              } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "uInt64ArrayType"              } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "float16ArrayType"             } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "float32ArrayType"             } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "float64ArrayType"             } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "sparseMatrixArrayType"        } } }, { "$ref": "#/$defs/NumericArrayTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "chromaticityType"             } } }, { "$ref": "#/$defs/ChromaticityTypeContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "cicpType"                     } } }, { "$ref": "#/$defs/CicpTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "colorantOrderType"            } } }, { "$ref": "#/$defs/ColorantOrderTypeContent"             }] },
+        { "allOf": [{ "properties": { "type": { "const": "colorantTableType"            } } }, { "$ref": "#/$defs/ColorantTableTypeContent"             }] },
+        { "allOf": [{ "properties": { "type": { "const": "dataType"                     } } }, { "$ref": "#/$defs/DataTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "dateTimeType"                 } } }, { "$ref": "#/$defs/DateTimeTypeContent"                  }] },
+        { "allOf": [{ "properties": { "type": { "const": "measurementType"              } } }, { "$ref": "#/$defs/MeasurementTypeContent"               }] },
+        { "allOf": [{ "properties": { "type": { "const": "viewingConditionsType"        } } }, { "$ref": "#/$defs/ViewingConditionsTypeContent"         }] },
+        { "allOf": [{ "properties": { "type": { "const": "spectralDataInfoType"         } } }, { "$ref": "#/$defs/SpectralDataInfoTypeContent"          }] },
+        { "allOf": [{ "properties": { "type": { "const": "spectralViewingConditionsType"} } }, { "$ref": "#/$defs/SpectralViewingConditionsTypeContent" }] },
+        { "allOf": [{ "properties": { "type": { "const": "multiLocalizedUnicodeType"    } } }, { "$ref": "#/$defs/MultiLocalizedUnicodeTypeContent"     }] },
+        { "allOf": [{ "properties": { "type": { "const": "namedColor2Type"              } } }, { "$ref": "#/$defs/NamedColor2TypeContent"               }] },
+        { "allOf": [{ "properties": { "type": { "const": "profileSequenceDescType"      } } }, { "$ref": "#/$defs/ProfileSequenceDescTypeContent"       }] },
+        { "allOf": [{ "properties": { "type": { "const": "profileSequenceIdentifierType"} } }, { "$ref": "#/$defs/ProfileSequenceIdentifierTypeContent" }] },
+        { "allOf": [{ "properties": { "type": { "const": "responseCurveSet16Type"       } } }, { "$ref": "#/$defs/ResponseCurveSet16TypeContent"        }] },
+        { "allOf": [{ "properties": { "type": { "const": "lut8Type"                     } } }, { "$ref": "#/$defs/LutMBBTypeContent"                    }] },
+        { "allOf": [{ "properties": { "type": { "const": "lut16Type"                    } } }, { "$ref": "#/$defs/LutMBBTypeContent"                    }] },
+        { "allOf": [{ "properties": { "type": { "const": "lutAtoBType"                  } } }, { "$ref": "#/$defs/LutMBBTypeContent"                    }] },
+        { "allOf": [{ "properties": { "type": { "const": "lutBtoAType"                  } } }, { "$ref": "#/$defs/LutMBBTypeContent"                    }] },
+        { "allOf": [{ "properties": { "type": { "const": "multiProcessElementType"      } } }, { "$ref": "#/$defs/MultiProcessElementTypeContent"       }] },
+        { "allOf": [{ "properties": { "type": { "const": "dictType"                     } } }, { "$ref": "#/$defs/DictTypeContent"                      }] },
+        { "allOf": [{ "properties": { "type": { "const": "tagStructType"                } } }, { "$ref": "#/$defs/TagStructTypeContent"                 }] },
+        { "allOf": [{ "properties": { "type": { "const": "tagArrayType"                 } } }, { "$ref": "#/$defs/TagArrayTypeContent"                  }] },
+        { "allOf": [{ "properties": { "type": { "const": "embeddedHeightImageType"      } } }, { "$ref": "#/$defs/EmbeddedHeightImageTypeContent"       }] },
+        { "allOf": [{ "properties": { "type": { "const": "embeddedNormalImageType"      } } }, { "$ref": "#/$defs/EmbeddedNormalImageTypeContent"       }] },
+        { "allOf": [{ "properties": { "type": { "const": "embeddedProfileType"          } } }, { "$ref": "#/$defs/EmbeddedProfileTypeContent"           }] },
+        { "allOf": [{ "properties": { "type": { "const": "gamutBoundaryDescType"        } } }, { "$ref": "#/$defs/GamutBoundaryDescTypeContent"         }] },
+        { "allOf": [{ "properties": { "type": { "const": "PrivateType"                  } } }, { "$ref": "#/$defs/PrivateTypeContent"                   }] }
+      ]
+    },
+
+    "SignatureTypeContent": {
+      "type": "object",
+      "description": "signatureType — stores a 4-char ICC signature",
+      "properties": {
+        "signature": { "$ref": "#/$defs/Signature" }
+      },
+      "required": ["signature"]
+    },
+
+    "TextTypeContent": {
+      "type": "object",
+      "description": "textType / utf8Type / utf16Type / utf8ZipType / zipXmlType",
+      "properties": {
+        "text": { "type": "string" }
+      },
+      "required": ["text"]
+    },
+
+    "TextDescriptionTypeContent": {
+      "type": "object",
+      "description": "textDescriptionType (legacy ICC v2)",
+      "properties": {
+        "description": { "type": "string" }
+      },
+      "required": ["description"]
+    },
+
+    "CurveTypeContent": {
+      "type": "object",
+      "description": "curveType — identity, gamma, or table",
+      "required": ["curveType"],
+      "properties": {
+        "curveType": { "type": "string", "enum": ["identity", "gamma", "table"] },
+        "gamma":     { "type": "number", "description": "Gamma exponent (when curveType is 'gamma')" },
+        "precision": { "type": "integer", "enum": [1, 2], "description": "Table encoding: 1 = 8-bit integers (0–255), 2 = 16-bit integers (0–65535). Omitted for floating-point." },
+        "table":     { "type": "array", "items": { "type": "number" }, "description": "Curve samples (when curveType is 'table'). Integers when precision is present, floats otherwise." }
+      }
+    },
+
+    "ParametricCurveTypeContent": {
+      "type": "object",
+      "description": "parametricCurveType",
+      "required": ["functionType", "params"],
+      "properties": {
+        "functionType": { "type": "integer", "minimum": 0, "maximum": 4, "description": "ICC parametric curve function type (0–4)" },
+        "params":       { "type": "array", "items": { "type": "number" }, "description": "Function parameters (count depends on functionType: 0→1, 1→3, 2→4, 3→5, 4→7)" }
+      }
+    },
+
+    "SegmentedCurveObject": {
+      "type": "object",
+      "description": "A segmented curve containing one or more segments covering the real line",
+      "required": ["segments"],
+      "properties": {
+        "segments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CurveSegment" },
+          "minItems": 1
+        }
+      }
+    },
+
+    "CurveSegment": {
+      "type": "object",
+      "description": "One segment of a segmented curve. start/end may be a number or the strings '+infinity'/'-infinity'.",
+      "required": ["start", "end", "type"],
+      "properties": {
+        "start": { "oneOf": [{ "type": "number" }, { "type": "string", "enum": ["-infinity", "+infinity"] }] },
+        "end":   { "oneOf": [{ "type": "number" }, { "type": "string", "enum": ["-infinity", "+infinity"] }] },
+        "type":  { "type": "string", "enum": ["FormulaSegment", "SampledSegment"] },
+        "functionType": { "type": "integer", "description": "Formula function type (0–7); FormulaSegment only" },
+        "parameters":   { "type": "array", "items": { "type": "number" }, "description": "Formula parameters; FormulaSegment only" },
+        "reserved":     { "type": "integer", "minimum": 0, "description": "Segment reserved word (FormulaSegment only, omitted when zero)" },
+        "reserved2":    { "type": "integer", "minimum": 0, "description": "Segment reserved2 field (FormulaSegment only, omitted when zero)" },
+        "samples":      { "type": "array", "items": { "type": "number" }, "description": "Sample values; SampledSegment only" }
+      }
+    },
+
+    "XYZArrayTypeContent": {
+      "type": "object",
+      "description": "XYZArrayType — one or more XYZ tristimulus values",
+      "required": ["XYZ"],
+      "properties": {
+        "XYZ": { "type": "array", "items": { "$ref": "#/$defs/XYZTriplet" } }
+      }
+    },
+
+    "NumericArrayTypeContent": {
+      "type": "object",
+      "description": "Numeric array types (uInt8ArrayType, uInt16ArrayType, uInt32ArrayType, uInt64ArrayType, float16/32/64ArrayType, s15Fixed16ArrayType, u16Fixed16ArrayType, sparseMatrixArrayType)",
+      "required": ["values"],
+      "properties": {
+        "values": { "type": "array", "items": { "type": "number" } }
+      }
+    },
+
+    "ChromaticityTypeContent": {
+      "type": "object",
+      "description": "chromaticityType",
+      "required": ["colorantType", "channels"],
+      "properties": {
+        "colorantType": { "type": "integer" },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+
+    "CicpTypeContent": {
+      "type": "object",
+      "description": "cicpType (ITU-T H.273 coding-independent code points)",
+      "required": ["colourPrimaries", "transferCharacteristics", "matrixCoefficients", "videoFullRangeFlag"],
+      "properties": {
+        "colourPrimaries":         { "type": "integer" },
+        "transferCharacteristics": { "type": "integer" },
+        "matrixCoefficients":      { "type": "integer" },
+        "videoFullRangeFlag":      { "type": "integer", "minimum": 0, "maximum": 1 }
+      }
+    },
+
+    "ColorantOrderTypeContent": {
+      "type": "object",
+      "description": "colorantOrderType",
+      "required": ["colorantOrder"],
+      "properties": {
+        "colorantOrder": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+      }
+    },
+
+    "ColorantTableTypeContent": {
+      "type": "object",
+      "description": "colorantTableType",
+      "required": ["colorantTable"],
+      "properties": {
+        "colorantTable": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "pcs"],
+            "properties": {
+              "name": { "type": "string" },
+              "pcs":  { "$ref": "#/$defs/XYZTriplet" }
+            }
+          }
+        }
+      }
+    },
+
+    "DataTypeContent": {
+      "type": "object",
+      "description": "dataType — raw binary or ASCII data",
+      "required": ["dataFlag", "data"],
+      "properties": {
+        "dataFlag": { "type": "integer", "description": "0=binary, 1=ASCII" },
+        "data":     { "$ref": "#/$defs/HexString" }
+      }
+    },
+
+    "DateTimeTypeContent": {
+      "type": "object",
+      "description": "dateTimeType",
+      "required": ["dateTime"],
+      "properties": {
+        "dateTime": { "$ref": "#/$defs/DateTime" }
+      }
+    },
+
+    "MeasurementTypeContent": {
+      "type": "object",
+      "description": "measurementType",
+      "required": ["standardObserver", "backing", "geometry", "flare", "illuminant"],
+      "properties": {
+        "standardObserver": { "type": "integer" },
+        "backing":          { "$ref": "#/$defs/XYZTriplet" },
+        "geometry":         { "type": "integer" },
+        "flare":            { "type": "number" },
+        "illuminant":       { "type": "integer" }
+      }
+    },
+
+    "ViewingConditionsTypeContent": {
+      "type": "object",
+      "description": "viewingConditionsType",
+      "required": ["illuminant", "surround", "illuminantType"],
+      "properties": {
+        "illuminant":     { "$ref": "#/$defs/XYZTriplet" },
+        "surround":       { "$ref": "#/$defs/XYZTriplet" },
+        "illuminantType": { "type": "integer" }
+      }
+    },
+
+    "SpectralDataInfoTypeContent": {
+      "type": "object",
+      "description": "spectralDataInfoType",
+      "required": ["spectralColorSig", "spectralRange"],
+      "properties": {
+        "spectralColorSig": { "$ref": "#/$defs/Signature" },
+        "spectralRange":    { "$ref": "#/$defs/SpectralRange" },
+        "biSpectralRange":  { "$ref": "#/$defs/SpectralRange" }
+      }
+    },
+
+    "SpectralDataArray": {
+      "type": "object",
+      "description": "Spectral function data with wavelength range and sample values",
+      "required": ["start", "end", "steps", "data"],
+      "properties": {
+        "start":    { "type": "number" },
+        "end":      { "type": "number" },
+        "steps":    { "type": "integer", "minimum": 1 },
+        "Reserved": { "type": "integer", "minimum": 0 },
+        "data":     { "type": "array", "items": { "type": "number" } }
+      }
+    },
+
+    "SpectralViewingConditionsTypeContent": {
+      "type": "object",
+      "description": "spectralViewingConditionsType",
+      "required": ["StdObserver", "IlluminantXYZ", "StdIlluminant", "ColorTemperature", "SurroundXYZ"],
+      "properties": {
+        "StdObserver":      { "$ref": "#/$defs/Signature" },
+        "IlluminantXYZ":    { "$ref": "#/$defs/XYZTriplet" },
+        "ObserverFuncs":    { "type": "array", "items": { "$ref": "#/$defs/SpectralDataArray" } },
+        "StdIlluminant":    { "$ref": "#/$defs/Signature" },
+        "ColorTemperature": { "type": "number" },
+        "IlluminantSPD":    { "type": "array", "items": { "$ref": "#/$defs/SpectralDataArray" } },
+        "SurroundXYZ":      { "$ref": "#/$defs/XYZTriplet" }
+      }
+    },
+
+    "LocalizedString": {
+      "type": "object",
+      "description": "Language/country code pair with localized text",
+      "required": ["language", "country", "text"],
+      "properties": {
+        "language": { "type": "string", "minLength": 2, "maxLength": 2 },
+        "country":  { "type": "string", "minLength": 2, "maxLength": 2 },
+        "text":     { "type": "string" }
+      }
+    },
+
+    "MultiLocalizedUnicodeTypeContent": {
+      "type": "object",
+      "description": "multiLocalizedUnicodeType",
+      "required": ["localizedStrings"],
+      "properties": {
+        "localizedStrings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LocalizedString" }
+        }
+      }
+    },
+
+    "NamedColor2TypeContent": {
+      "type": "object",
+      "description": "namedColor2Type",
+      "required": ["countOfDeviceCoords", "colorantPrefix", "colorantSuffix", "colors"],
+      "properties": {
+        "vendorFlag":           { "type": "integer" },
+        "countOfDeviceCoords":  { "type": "integer", "minimum": 0 },
+        "colorantPrefix":       { "type": "string" },
+        "colorantSuffix":       { "type": "string" },
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "pcsCoords"],
+            "properties": {
+              "name":       { "type": "string" },
+              "pcsCoords":    { "$ref": "#/$defs/XYZTriplet" },
+              "deviceCoords": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 65535 }, "description": "Device colour coordinates as 16-bit integers (0–65535)" }
+            }
+          }
+        }
+      }
+    },
+
+    "ProfileSequenceDescTypeContent": {
+      "type": "object",
+      "description": "profileSequenceDescType",
+      "required": ["profileSequence"],
+      "properties": {
+        "profileSequence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ProfileDescEntry" }
+        }
+      }
+    },
+
+    "ProfileDescEntry": {
+      "type": "object",
+      "description": "Per-profile description entry within a profileSequenceDescType",
+      "properties": {
+        "deviceManufacturerSignature": { "$ref": "#/$defs/Signature" },
+        "deviceModelSignature":        { "$ref": "#/$defs/Signature" },
+        "deviceAttributes":            { "type": "object" },
+        "technology":                  { "$ref": "#/$defs/Signature" },
+        "deviceManufacturer":          { "$ref": "#/$defs/TagTypeData", "description": "Flat tag with 'type' field (textDescriptionType, utf8TextType, etc.)" },
+        "deviceModel":                 { "$ref": "#/$defs/TagTypeData", "description": "Flat tag with 'type' field (textDescriptionType, utf8TextType, etc.)" }
+      }
+    },
+
+    "ProfileSequenceIdentifierTypeContent": {
+      "type": "object",
+      "description": "profileSequenceIdentifierType",
+      "required": ["profileSequenceId"],
+      "properties": {
+        "profileSequenceId": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "description": "Per-profile ID and description entry",
+            "properties": {
+              "profileId":        { "type": "string", "description": "32-character uppercase hex string (16-byte profile ID)" },
+              "localizedStrings": { "type": "array", "items": { "$ref": "#/$defs/LocalizedString" } }
+            }
+          }
+        }
+      }
+    },
+
+    "ResponseCurveSet16TypeContent": {
+      "type": "object",
+      "description": "responseCurveSet16Type",
+      "required": ["CountOfChannels", "ResponseCurves"],
+      "properties": {
+        "CountOfChannels": { "type": "integer", "minimum": 1 },
+        "ResponseCurves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "MeasurementUnit": { "type": "string" },
+              "XYZ":             { "$ref": "#/$defs/XYZTriplet" },
+              "MeasValues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "DeviceCode": { "type": "integer" },
+                    "MeasValue":  { "type": "number" },
+                    "Reserved":   { "type": "integer" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "MBBCurve": {
+      "type": "object",
+      "description": "A single curve in an MBB LUT tag curve array. Discriminated by 'type'.",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["Curve", "ParametricCurve", "SegmentedCurve"] },
+        "curveType":      { "type": "string", "enum": ["identity", "gamma", "table"] },
+        "gamma":          { "type": "number" },
+        "precision":      { "type": "integer", "enum": [1, 2], "description": "Table encoding: 1 = 8-bit (0–255), 2 = 16-bit (0–65535). Omitted for float curves." },
+        "table":          { "type": "array", "items": { "type": "number" }, "description": "Integers when precision present, floats otherwise." },
+        "functionType":   { "type": "integer" },
+        "params":         { "type": "array", "items": { "type": "number" } },
+        "segmentedCurve": { "$ref": "#/$defs/SegmentedCurveObject" }
+      }
+    },
+
+    "CLUTObject": {
+      "type": "object",
+      "description": "Color lookup table data. Data values are integers when precision is 1 (0–255) or 2 (0–65535), or floating-point numbers for float CLUTs (no precision field).",
+      "required": ["data"],
+      "properties": {
+        "gridPoints": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 2 },
+          "description": "Grid point count per input dimension (one entry per input channel)"
+        },
+        "precision": {
+          "type": "integer",
+          "enum": [1, 2],
+          "description": "Storage precision: 1 = 8-bit (values 0–255), 2 = 16-bit (values 0–65535). Omitted for floating-point CLUTs."
+        },
+        "data": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Flattened output values in row-major order. Integers when precision is present, floats otherwise."
+        }
+      }
+    },
+
+    "MatrixObject": {
+      "type": "object",
+      "description": "3×3 or 3×4 matrix (with optional translation constants)",
+      "required": ["e"],
+      "properties": {
+        "e": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 9,
+          "maxItems": 12,
+          "description": "Matrix coefficients in row-major order. 9 values = no constants; 12 values = with translation constants."
+        }
+      }
+    },
+
+    "LutMBBTypeContent": {
+      "type": "object",
+      "description": "lut8Type / lut16Type / lutAtoBType / lutBtoAType — MBB LUT structure",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "inputChannels":  { "type": "integer", "minimum": 1, "maximum": 15 },
+        "outputChannels": { "type": "integer", "minimum": 1, "maximum": 15 },
+        "bCurves": { "type": "array", "items": { "$ref": "#/$defs/MBBCurve" }, "description": "B-side curves (input or output depending on tag type)" },
+        "mCurves": { "type": "array", "items": { "$ref": "#/$defs/MBBCurve" }, "description": "M-side curves (between matrix and CLUT)" },
+        "aCurves": { "type": "array", "items": { "$ref": "#/$defs/MBBCurve" }, "description": "A-side curves (the other side from B)" },
+        "matrix":  { "$ref": "#/$defs/MatrixObject" },
+        "clut":    { "$ref": "#/$defs/CLUTObject" }
+      }
+    },
+
+    "MultiProcessElementTypeContent": {
+      "type": "object",
+      "description": "multiProcessElementType — a sequence of MPE processing elements",
+      "required": ["inputChannels", "outputChannels", "elements"],
+      "properties": {
+        "inputChannels":  { "type": "integer", "minimum": 1 },
+        "outputChannels": { "type": "integer", "minimum": 1 },
+        "elements": {
+          "type": "array",
+          "description": "Ordered list of MPE elements. Each item is a flat object with a 'type' discriminator field.",
+          "items": { "$ref": "#/$defs/MPEElementEntry" }
+        }
+      }
+    },
+
+    "MPEElementEntry": {
+      "type": "object",
+      "description": "Flat MPE element object with 'type' discriminator field. Always contains inputChannels, outputChannels, and type-specific properties at the top level.",
+      "required": ["type", "inputChannels", "outputChannels"],
+      "properties": {
+        "type":           { "type": "string" },
+        "inputChannels":  { "type": "integer", "minimum": 1 },
+        "outputChannels": { "type": "integer", "minimum": 1 },
+        "Reserved":       { "type": "integer", "minimum": 0, "description": "Element-level reserved word (omitted when zero)" }
+      },
+      "oneOf": [
+        { "allOf": [{ "properties": { "type": { "const": "CurveSetElement"            } } }, { "$ref": "#/$defs/CurveSetElementContent"         }] },
+        { "allOf": [{ "properties": { "type": { "const": "MatrixElement"              } } }, { "$ref": "#/$defs/MatrixElementContent"            }] },
+        { "allOf": [{ "properties": { "type": { "const": "CLutElement"                } } }, { "$ref": "#/$defs/CLutElementContent"              }] },
+        { "allOf": [{ "properties": { "type": { "const": "ExtCLutElement"             } } }, { "$ref": "#/$defs/ExtCLutElementContent"           }] },
+        { "allOf": [{ "properties": { "type": { "const": "BAcsElement"                } } }, { "$ref": "#/$defs/AcsElementContent"               }] },
+        { "allOf": [{ "properties": { "type": { "const": "EAcsElement"                } } }, { "$ref": "#/$defs/AcsElementContent"               }] },
+        { "allOf": [{ "properties": { "type": { "const": "CalculatorElement"          } } }, { "$ref": "#/$defs/CalculatorElementContent"        }] },
+        { "allOf": [{ "properties": { "type": { "const": "XYZToJabElement"            } } }, { "$ref": "#/$defs/JabElementContent"               }] },
+        { "allOf": [{ "properties": { "type": { "const": "JabToXYZElement"            } } }, { "$ref": "#/$defs/JabElementContent"               }] },
+        { "allOf": [{ "properties": { "type": { "const": "TintArrayElement"           } } }, { "$ref": "#/$defs/TintArrayElementContent"         }] },
+        { "allOf": [{ "properties": { "type": { "const": "ToneMapElement"             } } }, { "$ref": "#/$defs/ToneMapElementContent"           }] },
+        { "allOf": [{ "properties": { "type": { "const": "EmissionMatrixElement"      } } }, { "$ref": "#/$defs/SpectralMatrixElementContent"    }] },
+        { "allOf": [{ "properties": { "type": { "const": "InvEmissionMatrixElement"   } } }, { "$ref": "#/$defs/SpectralMatrixElementContent"    }] },
+        { "allOf": [{ "properties": { "type": { "const": "EmissionCLutElement"        } } }, { "$ref": "#/$defs/SpectralCLutElementContent"      }] },
+        { "allOf": [{ "properties": { "type": { "const": "ReflectanceCLutElement"     } } }, { "$ref": "#/$defs/SpectralCLutElementContent"      }] },
+        { "allOf": [{ "properties": { "type": { "const": "EmissionObserverElement"    } } }, { "$ref": "#/$defs/SpectralObserverElementContent"  }] },
+        { "allOf": [{ "properties": { "type": { "const": "ReflectanceObserverElement" } } }, { "$ref": "#/$defs/SpectralObserverElementContent"  }] },
+        { "allOf": [{ "properties": { "type": { "const": "SparseMatrixElement"        } } }, { "$ref": "#/$defs/MPEBaseContent"                  }] },
+        { "allOf": [{ "properties": { "type": { "const": "UnknownElement"             } } }, { "$ref": "#/$defs/MPEBaseContent"                  }] }
+      ]
+    },
+
+    "MPEBaseContent": {
+      "type": "object",
+      "description": "Common fields present in every MPE element content object",
+      "properties": {
+        "inputChannels":  { "type": "integer", "minimum": 1 },
+        "outputChannels": { "type": "integer", "minimum": 1 },
+        "Reserved":       { "type": "integer", "minimum": 0, "description": "Element-level reserved word (omitted when zero)" }
+      }
+    },
+
+    "CurveSetElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "CurveSetElement — one independent processing curve per channel",
+      "required": ["inputChannels", "outputChannels", "curves"],
+      "properties": {
+        "curves": {
+          "type": "array",
+          "description": "One curve entry per channel",
+          "items": { "$ref": "#/$defs/CurveSetCurve" }
+        }
+      }
+    },
+
+    "CurveSetCurve": {
+      "type": "object",
+      "description": "A single curve within a CurveSetElement. Discriminated by 'type'.",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["SegmentedCurve", "SingleSampledCurve", "SampledCalculatorCurve", "DuplicateCurve"] },
+        "index": { "type": "integer", "minimum": 0, "description": "Source curve index (DuplicateCurve only)" },
+        "segments": { "type": "array", "items": { "$ref": "#/$defs/CurveSegment" }, "description": "Segment list (SegmentedCurve only)" },
+        "firstEntry":    { "type": "number" },
+        "lastEntry":     { "type": "number" },
+        "storageType":   { "type": "integer", "description": "Storage type code (SingleSampledCurve only)" },
+        "extensionType": { "type": "integer", "description": "Extension behaviour beyond range (0=clip, 1=linear)" },
+        "reserved":      { "type": "integer", "minimum": 0, "description": "Reserved field (omitted when zero)" },
+        "samples":       { "type": "array", "items": { "type": "number" }, "description": "Sampled values (SingleSampledCurve only)" },
+        "desiredSize":   { "type": "integer", "minimum": 0, "description": "Desired number of sample points (SampledCalculatorCurve only)" },
+        "reserved2":     { "type": "integer", "minimum": 0, "description": "Reserved2 field (SampledCalculatorCurve only, omitted when zero)" },
+        "calculator":    { "$ref": "#/$defs/CalculatorElementContent", "description": "Embedded calculator (SampledCalculatorCurve only)" }
+      }
+    },
+
+    "MatrixElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "MatrixElement — linear transform with optional constants",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "matrix":       { "type": "array", "items": { "type": "number" }, "description": "Flattened matrix coefficients" },
+        "constants":    { "type": "array", "items": { "type": "number" }, "description": "Additive constants (one per output channel)" },
+        "invertMatrix": { "type": "boolean" }
+      }
+    },
+
+    "CLutElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "CLutElement — N-D color lookup table",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "clut": { "$ref": "#/$defs/CLUTObject" }
+      }
+    },
+
+    "ExtCLutElementContent": {
+      "allOf": [{ "$ref": "#/$defs/CLutElementContent" }],
+      "description": "ExtCLutElement — extended CLUT with explicit storage type",
+      "properties": {
+        "storageType": { "type": "integer" },
+        "reserved2":   { "type": "integer", "minimum": 0 }
+      }
+    },
+
+    "AcsElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "BAcsElement / EAcsElement — auxiliary color space conversion bookend",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "signature": { "$ref": "#/$defs/Signature" },
+        "data":      { "$ref": "#/$defs/HexString" }
+      }
+    },
+
+    "CalculatorElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "CalculatorElement — programmable calculator with named channels, variables, macros, and sub-elements",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "inputNames":  { "type": "string", "description": "Named input channel specification (space-separated names)" },
+        "outputNames": { "type": "string", "description": "Named output channel specification (space-separated names)" },
+        "imports": {
+          "type": "array",
+          "description": "Files to import variable/macro/element definitions from",
+          "items": {
+            "type": "object",
+            "required": ["file"],
+            "properties": {
+              "file": { "type": "string" }
+            }
+          }
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name":     { "type": "string" },
+              "position": { "type": "integer", "minimum": 0, "description": "Fixed allocation offset (optional)" },
+              "size":     { "type": "integer", "minimum": 1 },
+              "members":  { "type": "string", "description": "Member name specification string" }
+            }
+          }
+        },
+        "macros": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "body"],
+            "properties": {
+              "name":   { "type": "string" },
+              "body":   { "type": "string", "description": "Macro function token string" },
+              "locals": { "type": "string", "description": "Local variable specification" }
+            }
+          }
+        },
+        "subElements": {
+          "type": "array",
+          "description": "Named embedded MPE elements referenced from mainFunction",
+          "items": {
+            "type": "object",
+            "description": "Flat object with 'name' (element name), 'type' (MPE element type), plus type-specific fields",
+            "required": ["name", "type"],
+            "properties": {
+              "name": { "type": "string", "description": "Element name used in mainFunction references" }
+            },
+            "allOf": [{ "$ref": "#/$defs/MPEElementEntry" }]
+          }
+        },
+        "mainFunction": { "type": "string", "description": "Compiled calculator function token string" }
+      }
+    },
+
+    "JabElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "XYZToJabElement / JabToXYZElement — CIECAM02 color appearance model conversion",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "colorAppearanceParams": {
+          "type": "object",
+          "properties": {
+            "whitePoint":       { "$ref": "#/$defs/XYZTriplet" },
+            "surroundFraction": { "type": "number" },
+            "adaptationFactor": { "type": "number" }
+          }
+        }
+      }
+    },
+
+    "TintArrayElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "TintArrayElement — spectral tinting via a tag array",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "arrayType": { "type": "string", "description": "Tag type name of the embedded array" },
+        "values":    { "type": "array", "items": { "type": "number" } },
+        "file":      { "type": "string", "description": "External file path (alternative to inline values)" },
+        "format":    { "type": "string", "enum": ["text", "binary"] }
+      }
+    },
+
+    "ToneMapElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "ToneMapElement",
+      "required": ["inputChannels", "outputChannels"],
+      "properties": {
+        "luminanceCurve":    { "$ref": "#/$defs/SegmentedCurveObject" },
+        "toneMapFunctions":  { "type": "array", "items": { "type": "object" } }
+      }
+    },
+
+    "SpectralMatrixElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "EmissionMatrixElement / InvEmissionMatrixElement — spectral-to-colorimetric matrix",
+      "required": ["inputChannels", "outputChannels", "wavelengths"],
+      "properties": {
+        "wavelengths":  { "$ref": "#/$defs/SpectralRange" },
+        "whiteData":    { "type": "array", "items": { "type": "number" }, "description": "White spectral data (one value per wavelength step)" },
+        "matrixData":   { "type": "array", "items": { "type": "number" }, "description": "Flattened matrix (outputChannels × steps)" },
+        "offsetData":   { "type": "array", "items": { "type": "number" }, "description": "Matrix offset vector (one value per output channel)" }
+      }
+    },
+
+    "SpectralCLutElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "EmissionCLutElement / ReflectanceCLutElement — spectral CLUT",
+      "required": ["inputChannels", "outputChannels", "flags", "storageType", "wavelengths"],
+      "properties": {
+        "flags":        { "type": "integer" },
+        "storageType":  { "type": "integer" },
+        "wavelengths":  { "$ref": "#/$defs/SpectralRange" },
+        "whiteData":    { "type": "array", "items": { "type": "number" } },
+        "clut":         { "$ref": "#/$defs/CLUTObject" }
+      }
+    },
+
+    "SpectralObserverElementContent": {
+      "allOf": [{ "$ref": "#/$defs/MPEBaseContent" }],
+      "description": "EmissionObserverElement / ReflectanceObserverElement — observer spectral weighting",
+      "required": ["inputChannels", "outputChannels", "flags", "wavelengths"],
+      "properties": {
+        "flags":      { "type": "integer" },
+        "wavelengths":{ "$ref": "#/$defs/SpectralRange" },
+        "whiteData":  { "type": "array", "items": { "type": "number" } }
+      }
+    },
+
+    "DictTypeContent": {
+      "type": "object",
+      "description": "dictType — name/value pairs with optional localization",
+      "required": ["entries"],
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name":           { "type": "string" },
+              "value":          { "type": "string" },
+              "localizedNames": { "type": "array", "items": { "$ref": "#/$defs/LocalizedString" } },
+              "localizedValues":{ "type": "array", "items": { "$ref": "#/$defs/LocalizedString" } }
+            }
+          }
+        }
+      }
+    },
+
+    "TagStructTypeContent": {
+      "type": "object",
+      "description": "tagStructType — named structure containing member tags",
+      "required": ["structureType"],
+      "properties": {
+        "structureType":      { "type": "string", "description": "Named structure type or 'privateStruct'" },
+        "structureSignature": { "$ref": "#/$defs/Signature", "description": "Signature when structureType is 'privateStruct'" },
+        "memberTags": {
+          "type": "array",
+          "description": "Each item is a single-key object { elemName: { type, ...fields } }",
+          "items": {
+            "type": "object",
+            "description": "Single-key object mapping element name to its flat tag content",
+            "minProperties": 1,
+            "maxProperties": 1,
+            "additionalProperties": { "$ref": "#/$defs/StructMemberTagContent" }
+          }
+        }
+      }
+    },
+
+    "StructMemberTagContent": {
+      "type": "object",
+      "description": "Content of a struct member tag. Either a 'sameAs' alias, or a flat tag with 'type' field.",
+      "properties": {
+        "sig":      { "$ref": "#/$defs/Signature", "description": "Element signature (private sub-tags only)" },
+        "sameAs":   { "type": "string", "description": "Name of element that owns the shared tag (aliased members)" },
+        "typeSig":  { "$ref": "#/$defs/Signature", "description": "Raw type signature (PrivateType only)" },
+        "Reserved": { "type": "integer", "minimum": 0 }
+      },
+      "oneOf": [
+        { "required": ["sameAs"] },
+        { "required": ["type"], "properties": { "type": { "type": "string" } } }
+      ]
+    },
+
+    "TagArrayTypeContent": {
+      "type": "object",
+      "description": "tagArrayType — typed array of tags",
+      "required": ["arrayType"],
+      "properties": {
+        "arrayType":      { "type": "string", "description": "Named array type or 'privateArray'" },
+        "arraySignature": { "$ref": "#/$defs/Signature", "description": "Signature when arrayType is 'privateArray'" },
+        "arrayTags": {
+          "type": "array",
+          "description": "Each item is a flat object with 'type' discriminator plus type-specific fields",
+          "items": { "$ref": "#/$defs/TagTypeData" }
+        }
+      }
+    },
+
+    "EmbeddedHeightImageTypeContent": {
+      "type": "object",
+      "description": "embeddedHeightImageType",
+      "required": ["SeamlessIndicator", "EncodingFormat", "MetersMinPixelValue", "MetersMaxPixelValue"],
+      "properties": {
+        "SeamlessIndicator":   { "type": "integer" },
+        "EncodingFormat":      { "type": "integer" },
+        "MetersMinPixelValue": { "type": "number" },
+        "MetersMaxPixelValue": { "type": "number" },
+        "ImageData":           { "$ref": "#/$defs/HexString" }
+      }
+    },
+
+    "EmbeddedNormalImageTypeContent": {
+      "type": "object",
+      "description": "embeddedNormalImageType",
+      "required": ["SeamlessIndicator", "EncodingFormat"],
+      "properties": {
+        "SeamlessIndicator": { "type": "integer" },
+        "EncodingFormat":    { "type": "integer" },
+        "ImageData":         { "$ref": "#/$defs/HexString" }
+      }
+    },
+
+    "EmbeddedProfileTypeContent": {
+      "type": "object",
+      "description": "embeddedProfileType — contains a nested ICC profile",
+      "required": ["IccProfile"],
+      "properties": {
+        "IccProfile": { "$ref": "#/$defs/Profile" }
+      }
+    },
+
+    "GamutBoundaryDescTypeContent": {
+      "type": "object",
+      "description": "gamutBoundaryDescType — mesh of PCS (and optional device) vertices with triangle connectivity",
+      "required": ["Vertices", "Triangles"],
+      "properties": {
+        "Vertices": {
+          "type": "object",
+          "required": ["PCSChannels", "PCSValues"],
+          "properties": {
+            "PCSChannels":    { "type": "integer" },
+            "PCSValues":      { "type": "array", "items": { "type": "number" } },
+            "DeviceChannels": { "type": "integer" },
+            "DeviceValues":   { "type": "array", "items": { "type": "number" } }
+          }
+        },
+        "Triangles": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 0 },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        }
+      }
+    },
+
+    "PrivateTypeContent": {
+      "type": "object",
+      "description": "PrivateType — unknown tag type stored as raw hex",
+      "properties": {
+        "sig":  { "$ref": "#/$defs/Signature" },
+        "data": { "$ref": "#/$defs/HexString" }
+      }
+    }
+
+  }
+}

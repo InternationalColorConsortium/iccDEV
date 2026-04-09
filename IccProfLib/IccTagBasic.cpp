@@ -5986,13 +5986,13 @@ icValidateStatus CIccTagNum<T, Tsig>::Validate(std::string sigPath, std::string 
   //Check # of channels 
   if (icGetFirstSigPathSig(sigPath) == icSigMultiplexDefaultValuesTag && 
       pProfile &&
-      m_nSize != icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs)) {
+      m_nSize != icGetMultiplexColorSpaceSamples(pProfile->m_Header.mcs)) {
     CIccInfo Info;
     std::string sSigPathName = Info.GetSigPathName(sigPath);
 
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
-    sReport += " - Number of material default values does not match MCS in header.\n";
+    sReport += " - Number of multiplex default values does not match MCS in header.\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
@@ -6677,13 +6677,13 @@ icValidateStatus CIccTagFloatNum<T, Tsig>::Validate(std::string sigPath, std::st
   //Check # of channels 
   if (icGetFirstSigPathSig(sigPath) == icSigMultiplexDefaultValuesTag && 
     pProfile &&
-    m_nSize != icGetMaterialColorSpaceSamples(pProfile->m_Header.mcs)) {
+    m_nSize != icGetMultiplexColorSpaceSamples(pProfile->m_Header.mcs)) {
       CIccInfo Info;
       std::string sSigPathName = Info.GetSigPathName(sigPath);
 
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
-      sReport += " - Number of material default values does not match MCS in header.\n";
+      sReport += " - Number of multiplex default values does not match MCS in header.\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
@@ -9414,7 +9414,7 @@ bool CIccProfileDescText::SetType(icTagTypeSignature nType)
 
   if (nType == icSigMultiLocalizedUnicodeType ||
       nType == icSigTextDescriptionType)
-    m_pTag = CIccTag::Create(nType);
+    m_pTag = CIccTagCreator::CreateTag(nType);
   else
     m_pTag = NULL;
 

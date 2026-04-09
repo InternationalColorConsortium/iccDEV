@@ -206,7 +206,8 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  m_nReserved2 = atoi(icXmlAttrValue(pNode, "Reserved2"));
+  m_nReserved  = atoi(icXmlAttrValue(pNode, "Reserved",  "0"));
+  m_nReserved2 = atoi(icXmlAttrValue(pNode, "Reserved2", "0"));
   m_nFunctionType = atoi(icXmlAttrValue(funcType));
 
 
@@ -542,13 +543,18 @@ bool CIccSampledCalculatorCurveXml::ToXml(std::string &xml, std::string blanks)
   snprintf(line, lineSize, " ExtensionType=\"%u\"", m_extensionType);
   xml += line;
 
-  snprintf(line, lineSize, " DesiredSize=\"%u\">\n", m_nDesiredSize);
+  snprintf(line, lineSize, " DesiredSize=\"%u\"", m_nDesiredSize);
   xml += line;
 
-  if (m_nReserved2) {
-    snprintf(line, lineSize, " Reservered2=\"%u\">\n", m_nReserved2);
+  if (m_nReserved) {
+    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
     xml += line;
   }
+  if (m_nReserved2) {
+    snprintf(line, lineSize, " Reserved2=\"%u\"", m_nReserved2);
+    xml += line;
+  }
+  xml += ">\n";
 
   if (m_pCalc && !strcmp(m_pCalc->GetClassName(), "CIccMpeXmlCalculator")) {
     CIccMpeXmlCalculator *pXmlCalc = (CIccMpeXmlCalculator*)m_pCalc;
@@ -593,6 +599,9 @@ bool CIccSampledCalculatorCurveXml::ParseXml(xmlNode *pNode, std::string &parseS
   }
 
   m_nDesiredSize = (icUInt32Number)atoi(icXmlAttrValue(attr));
+
+  m_nReserved  = (icUInt32Number)atoi(icXmlAttrValue(pNode, "Reserved",  "0"));
+  m_nReserved2 = (icUInt16Number)atoi(icXmlAttrValue(pNode, "Reserved2", "0"));
 
   xmlNode *pCalcNode = icXmlFindNode(pNode->children, "CalculatorElement");
   if (pCalcNode) {
@@ -639,8 +648,14 @@ bool CIccSingleSampledCurveXml::ToXml(std::string &xml, std::string blanks)
   snprintf(line, lineSize, " StorageType=\"%u\"", m_storageType);
   xml += line;
 
-  snprintf(line, lineSize, " ExtensionType=\"%u\">\n", m_extensionType);
+  snprintf(line, lineSize, " ExtensionType=\"%u\"", m_extensionType);
   xml += line;
+
+  if (m_nReserved) {
+    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
+    xml += line;
+  }
+  xml += ">\n";
 
   CIccFloatArray::DumpArray(xml, blanks + "  ", m_pSamples, m_nCount, icConvertFloat, 8);
 
@@ -681,6 +696,8 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (attr) {
     m_extensionType = (icUInt16Number)atoi(icXmlAttrValue(attr));
   }
+
+  m_nReserved = (icUInt32Number)atoi(icXmlAttrValue(pNode, "Reserved", "0"));
 
   const char *filename = icXmlAttrValue(pNode, "Filename");
 

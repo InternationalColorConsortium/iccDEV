@@ -271,7 +271,7 @@ inline const char* ColorSpaceSignatureToStr(icUInt32Number sig)
   if (csType == 0x6e630000 && nChan > 0 && nChan <= 0xFFFF)
     return "NChannel";
 
-  // v5/iccMAX: MCS (0x6d63xxxx) — material channel set
+  // v5/iccMAX: MCS (0x6d63xxxx) — multiplex channel set
   if (csType == 0x6d630000 && nChan > 0 && nChan <= 0xFFFF)
     return "MCS";
 

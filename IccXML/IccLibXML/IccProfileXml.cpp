@@ -551,7 +551,7 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       }
     }
     else if (!icXmlStrCmp(pNode->name, "MCS")) {
-      m_Header.mcs = (icMaterialColorSignature)icXmlGetChildSigVal(pNode);
+      m_Header.mcs = (icMultiplexColorSignature)icXmlGetChildSigVal(pNode);
     }
     else if (!icXmlStrCmp(pNode->name, "ProfileDeviceSubClass")) {
       m_Header.deviceSubClass = (icProfileClassSignature)icXmlGetChildSigVal(pNode);

@@ -45,6 +45,16 @@ Within the project are several libraries and tools as follows:
     IccFromXML tool provides a simple direct method to create and manipulate
     ICC and iccMAX profiles.
 
+  * IccToJson is a cross platform command line tool that converts a binary ICC or iccMAX
+    profile to a JSON representation. The resulting JSON file can be inspected or edited
+    and then converted back to a binary profile using IccFromJson.
+
+  * IccFromJson is a cross platform command line tool that creates a binary ICC or iccMAX
+    profile from a JSON file. A [JSON Schema](icc-profile.schema.json) is provided that
+    describes the format and enables inline validation in supporting editors.
+    See the [IccJSON guide](iccjson.md) for full documentation on the JSON format and
+    worked examples.
+
   * IccApplyNamedCmm is a cross platform command line tool that allows a
     sequence of ICC profile formats and/or iccMAX profile formats to be applied to colors
     defined in a text based input profile outputting the results to the console, and can

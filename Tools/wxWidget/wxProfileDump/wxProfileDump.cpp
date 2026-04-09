@@ -491,7 +491,7 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
     sizerBox->Add(CreateSizerWithText(_("Spectral PCS:"), &m_textSpectralPCS), wxSizerFlags().Expand().Border(wxALL, 0));
     sizerBox->Add(CreateSizerWithText(_("Spectral PCS Range:"), &m_textSpectralWavelengths), wxSizerFlags().Expand().Border(wxALL, 0));
     sizerBox->Add(CreateSizerWithText(_("BiSpectral PCS Range:"), &m_textBiSpectralWavelengths), wxSizerFlags().Expand().Border(wxALL, 0));
-    sizerBox->Add(CreateSizerWithText(_("MCS Color Space:"), &m_textMaterialColorSpace), wxSizerFlags().Expand().Border(wxALL, 0));
+    sizerBox->Add(CreateSizerWithText(_("MCS Color Space:"), &m_textMultiplexColorSpace), wxSizerFlags().Expand().Border(wxALL, 0));
 
 	sizerTop->Add(sizerBox, wxSizerFlags().Expand().Border(wxALL, 5));
 
@@ -593,10 +593,10 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
         }
 
         if (pHdr->mcs) {
-            m_textMaterialColorSpace->SetLabel(Fmt.GetColorSpaceSigName((icColorSpaceSignature)pHdr->mcs));
+            m_textMultiplexColorSpace->SetLabel(Fmt.GetColorSpaceSigName((icColorSpaceSignature)pHdr->mcs));
         }
         else {
-            m_textMaterialColorSpace->SetLabel(_T("Not Defined"));
+            m_textMultiplexColorSpace->SetLabel(_T("Not Defined"));
         }
 
         TagEntryList::iterator i, j;

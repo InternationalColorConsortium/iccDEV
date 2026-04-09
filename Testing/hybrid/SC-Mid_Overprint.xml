@@ -39,12 +39,12 @@
 			</MultiProcessElements>
 		</multiProcessElementType> </AToM0Tag>
 
-		<materialTypeArrayTag> <tagArrayType>
+		<multiplexTypeArrayTag> <tagArrayType>
 			<UTF8TextArray> <ArrayTags>
 				<utf8TextType><TextData>Silver</TextData></utf8TextType>
 				<utf8TextType><TextData>ProcessCyan</TextData></utf8TextType>
 			</ArrayTags> </UTF8TextArray>
-		</tagArrayType> </materialTypeArrayTag>
+		</tagArrayType> </multiplexTypeArrayTag>
 
 		<copyrightTag> <multiLocalizedUnicodeType>
 			<LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
