@@ -1,3 +1,11 @@
+> **Changelog moved**
+>
+> We now publish release notes on **GitHub Releases** instead of maintaining this file.
+> For the latest changes visit:
+>
+> https://github.com/InternationalColorConsortium/iccDEV/releases
+
+
 2026-JAN-04 David Hoyt
 * Update IccProfLib and IccXml to version v2.3.1.2
 * Security Patches
