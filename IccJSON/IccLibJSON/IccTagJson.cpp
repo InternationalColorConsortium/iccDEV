@@ -893,8 +893,8 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccTagJsonFixedNum<T, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
-  for (icUInt32Number i = 0; i < m_nSize; i++)
-    arr.push_back(icFtoD(m_Num[i]));
+  for (icUInt32Number i = 0; i < this->m_nSize; i++)
+    arr.push_back(icFtoD(this->m_Num[i]));
   j["values"] = arr;
   return true;
 }
@@ -904,9 +904,9 @@ bool CIccTagJsonFixedNum<T, Tsig>::ParseJson(const IccJson &j, std::string & /*p
 {
   if (jsonExistsField(j, "values") && j["values"].is_array()) {
     const IccJson &arr = j["values"];
-    if (!SetSize((icUInt32Number)arr.size())) return false;
+    if (!this->SetSize((icUInt32Number)arr.size())) return false;
     for (size_t i = 0; i < arr.size(); i++)
-      m_Num[i] = icDtoF(arr[i].get<double>());
+      this->m_Num[i] = icDtoF(arr[i].get<double>());
   }
   return true;
 }
@@ -930,8 +930,8 @@ template <class T, class A, icTagTypeSignature Tsig>
 bool CIccTagJsonNum<T, A, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
-  for (icUInt32Number i = 0; i < m_nSize; i++)
-    arr.push_back(m_Num[i]);
+  for (icUInt32Number i = 0; i < this->m_nSize; i++)
+    arr.push_back(this->m_Num[i]);
   j["values"] = arr;
   return true;
 }
@@ -941,9 +941,9 @@ bool CIccTagJsonNum<T, A, Tsig>::ParseJson(const IccJson &j, std::string & /*par
 {
   if (jsonExistsField(j, "values") && j["values"].is_array()) {
     const IccJson &arr = j["values"];
-    if (!SetSize((icUInt32Number)arr.size())) return false;
+    if (!this->SetSize((icUInt32Number)arr.size())) return false;
     for (size_t i = 0; i < arr.size(); i++)
-      m_Num[i] = arr[i].get<T>();
+      this->m_Num[i] = arr[i].get<T>();
   }
   return true;
 }
@@ -969,8 +969,8 @@ template <class T, class A, icTagTypeSignature Tsig>
 bool CIccTagJsonFloatNum<T, A, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
-  for (icUInt32Number i = 0; i < m_nSize; i++)
-    arr.push_back((double)m_Num[i]);
+  for (icUInt32Number i = 0; i < this->m_nSize; i++)
+    arr.push_back((double)this->m_Num[i]);
   j["values"] = arr;
   return true;
 }
@@ -980,9 +980,9 @@ bool CIccTagJsonFloatNum<T, A, Tsig>::ParseJson(const IccJson &j, std::string & 
 {
   if (jsonExistsField(j, "values") && j["values"].is_array()) {
     const IccJson &arr = j["values"];
-    if (!SetSize((icUInt32Number)arr.size())) return false;
+    if (!this->SetSize((icUInt32Number)arr.size())) return false;
     for (size_t i = 0; i < arr.size(); i++)
-      m_Num[i] = (T)arr[i].get<double>();
+      this->m_Num[i] = (T)arr[i].get<double>();
   }
   return true;
 }

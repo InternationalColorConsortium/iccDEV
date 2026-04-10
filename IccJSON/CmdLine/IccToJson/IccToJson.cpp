@@ -42,8 +42,14 @@ int main(int argc, char* argv[])
   }
 
   std::string jsonStr;
-  if (!profile.ToJson(jsonStr, indent)) {
-    printf("Unable to convert '%s' to JSON\n", argv[1]);
+  try {
+    if (!profile.ToJson(jsonStr, indent)) {
+      printf("Unable to convert '%s' to JSON\n", argv[1]);
+      return -1;
+    }
+  }
+  catch (const std::exception &e) {
+    printf("JSON serialization error for '%s': %s\n", argv[1], e.what());
     return -1;
   }
 

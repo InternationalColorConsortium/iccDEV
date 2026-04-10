@@ -2701,6 +2701,9 @@ CIccUTF16String::CIccUTF16String()
   m_alloc = 64;
   m_len = 0;
   m_str = (icUInt16Number*)calloc(m_alloc, sizeof(icUInt16Number));
+  if (!m_str) {
+    m_alloc = 0;
+  }
 }
 
 CIccUTF16String::CIccUTF16String(const icUInt16Number *uzStr)
@@ -2708,6 +2711,11 @@ CIccUTF16String::CIccUTF16String(const icUInt16Number *uzStr)
   m_len = WStrlen(uzStr);
   m_alloc = AllocSize(m_len);
   m_str = (icUInt16Number*)malloc(m_alloc * sizeof(icUInt16Number));
+  if (!m_str) {
+    m_alloc = 0;
+    m_len = 0;
+    return;
+  }
   memcpy(m_str, uzStr, (m_len + 1) * sizeof(icUInt16Number));
 }
 
@@ -2717,6 +2725,11 @@ CIccUTF16String::CIccUTF16String(const char *szStr)
   if (sizeSrc) {
     m_alloc = AllocSize(sizeSrc * 2);
     m_str = (UTF16*)calloc(m_alloc, sizeof(icUInt16Number));
+    if (!m_str) {
+      m_alloc = 0;
+      m_len = 0;
+      return;
+    }
     UTF16 *szDest = m_str;
     icConvertUTF8toUTF16((const UTF8**)&szStr, (const UTF8*)&szStr[sizeSrc], &szDest, &szDest[m_alloc], lenientConversion);
     if (m_str[0] == 0xfeff) {
@@ -2729,6 +2742,9 @@ CIccUTF16String::CIccUTF16String(const char *szStr)
     m_alloc = 64;
     m_len = 0;
     m_str = (icUInt16Number*)calloc(m_alloc, sizeof(icUInt16Number));
+    if (!m_str) {
+      m_alloc = 0;
+    }
   }
 }
 
@@ -2737,6 +2753,11 @@ CIccUTF16String::CIccUTF16String(const CIccUTF16String &str)
   m_alloc = str.m_alloc;
   m_len = str.m_len;
   m_str = (icUInt16Number*)malloc(m_alloc * sizeof(icUInt16Number));
+  if (!m_str) {
+    m_alloc = 0;
+    m_len = 0;
+    return;
+  }
   memcpy(m_str, str.m_str, m_alloc * sizeof(icUInt16Number));
 }
 
@@ -2914,11 +2935,15 @@ icRenderingIntent icGetRenderingIntentValue(const icChar *szRenderingIntent)
 {
   if (!strcmp(szRenderingIntent, "Perceptual"))
     return icPerceptual;
-  if (!strcmp(szRenderingIntent, "Media-relative colorimetric"))
+  if (!strcmp(szRenderingIntent, "Media-relative colorimetric") ||
+      !strcmp(szRenderingIntent, "Relative") ||
+      !strcmp(szRenderingIntent, "Relative Colorimetric"))
     return icRelativeColorimetric;
   if (!strcmp(szRenderingIntent, "Saturation"))
     return icSaturation;
-  if (!strcmp(szRenderingIntent, "ICC-absolute colorimetric"))
+  if (!strcmp(szRenderingIntent, "ICC-absolute colorimetric") ||
+      !strcmp(szRenderingIntent, "Absolute") ||
+      !strcmp(szRenderingIntent, "Absolute Colorimetric"))
     return icAbsoluteColorimetric;
   return icPerceptual;
 }

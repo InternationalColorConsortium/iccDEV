@@ -83,14 +83,16 @@ icUInt32Number icJsonGetHexData(void *pBuf, const char *szText, icUInt32Number n
   icUInt32Number rv = 0;
   while (rv < nBufSize && *szText) {
     int c1 = hexVal(szText[0]);
-    int c2 = hexVal(szText[1]);
-    if (c1 >= 0 && c2 >= 0) {
-      *pDest++ = (unsigned char)(c1 * 16 + c2);
-      szText += 2;
-      rv++;
-    } else {
-      szText++;
+    if (c1 >= 0 && szText[1]) {
+      int c2 = hexVal(szText[1]);
+      if (c2 >= 0) {
+        *pDest++ = (unsigned char)(c1 * 16 + c2);
+        szText += 2;
+        rv++;
+        continue;
+      }
     }
+    szText++;
   }
   return rv;
 }
@@ -99,7 +101,7 @@ icUInt32Number icJsonGetHexDataSize(const char *szText)
 {
   icUInt32Number rv = 0;
   while (*szText) {
-    if (hexVal(szText[0]) >= 0 && hexVal(szText[1]) >= 0) {
+    if (hexVal(szText[0]) >= 0 && szText[1] && hexVal(szText[1]) >= 0) {
       szText += 2;
       rv++;
     } else {
@@ -368,8 +370,9 @@ bool jGetArray(const IccJson &j, const char *field, T *vals, int n)
 }
 
 // Explicit instantiations
+// Note: icUInt32Number is unsigned int on all supported platforms,
+// so we instantiate only with icUInt32Number to avoid duplicate errors.
 template bool jsonToValue<int>(const IccJson&, int&);
-template bool jsonToValue<unsigned int>(const IccJson&, unsigned int&);
 template bool jsonToValue<icUInt8Number>(const IccJson&, icUInt8Number&);
 template bool jsonToValue<icUInt16Number>(const IccJson&, icUInt16Number&);
 template bool jsonToValue<icUInt32Number>(const IccJson&, icUInt32Number&);
@@ -386,7 +389,6 @@ template bool jsonToArray<double>(const IccJson&, std::vector<double>&);
 template bool jsonToArray<float>(const IccJson&, std::vector<float>&);
 
 template bool jGetValue<int>(const IccJson&, const char*, int&);
-template bool jGetValue<unsigned int>(const IccJson&, const char*, unsigned int&);
 template bool jGetValue<icUInt8Number>(const IccJson&, const char*, icUInt8Number&);
 template bool jGetValue<icUInt16Number>(const IccJson&, const char*, icUInt16Number&);
 template bool jGetValue<icUInt32Number>(const IccJson&, const char*, icUInt32Number&);
