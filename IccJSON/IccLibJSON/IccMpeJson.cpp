@@ -69,6 +69,17 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <new>
+
+static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
+{
+  if (n > 0xFFFFFFFFUL) {
+    if (overflow) *overflow = true;
+    return 0;
+  }
+  if (overflow) *overflow = false;
+  return (icUInt32Number)n;
+}
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -94,9 +105,10 @@ bool CIccMpeJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
   if (j.contains("unknownData") && j["unknownData"].is_string()) {
     std::string hex = j["unknownData"].get<std::string>();
     m_nSize = icJsonGetHexDataSize(hex.c_str());
-    if (m_pData) { delete[] m_pData; m_pData = NULL; }
+    if (m_pData) { free(m_pData); m_pData = nullptr; }
     if (m_nSize) {
-      m_pData = new icUInt8Number[m_nSize];
+      m_pData = (icUInt8Number*)malloc(m_nSize);
+      if (!m_pData) { m_nSize = 0; return false; }
       icJsonGetHexData(m_pData, hex.c_str(), m_nSize);
     }
   }
@@ -104,10 +116,10 @@ bool CIccMpeJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 }
 
 // ===========================================================================
-// Segment position helpers (JSON has no native infinity — use strings)
+// Segment position helpers (JSON has no native infinity -- use strings)
 // ===========================================================================
 
-// Emit pos as a JSON number for finite values, or a string for ±infinity.
+// Emit pos as a JSON number for finite values, or a string for +/-infinity.
 static void icJsonSetSegPos(IccJson &j, const char *field, icFloatNumber pos)
 {
   if (pos == icMinFloat32Number)
@@ -224,9 +236,9 @@ public:
       return false;
     }
     const IccJson &arr = j["samples"];
-    if (!SetSize((icUInt32Number)arr.size()))
+    if (!SetSize(icJsonSafeU32(arr.size())))
       return false;
-    for (icUInt32Number i = 0; i < (icUInt32Number)arr.size(); i++)
+    for (icUInt32Number i = 0; i < icJsonSafeU32(arr.size()); i++)
       m_pSamples[i] = (icFloatNumber)arr[i].get<double>();
     return true;
   }
@@ -277,12 +289,14 @@ bool CIccSegmentedCurveJson::ParseJson(const IccJson &j, std::string &parseStr)
     icFloatNumber end   = jSeg.contains("end")   ? icJsonSegPosFromJson(jSeg["end"])   : 0.0f;
 
     if (type == "FormulaSegment") {
-      CIccFormulaCurveSegmentJson *pSeg = new CIccFormulaCurveSegmentJson(start, end);
+      CIccFormulaCurveSegmentJson *pSeg = new(std::nothrow) CIccFormulaCurveSegmentJson(start, end);
+      if (!pSeg) { parseStr += "Allocation failed\n"; return false; }
       if (!pSeg->ParseJson(jSeg, parseStr)) { delete pSeg; return false; }
       m_list->push_back(pSeg);
     }
     else if (type == "SampledSegment") {
-      CIccSampledCurveSegmentJson *pSeg = new CIccSampledCurveSegmentJson(start, end);
+      CIccSampledCurveSegmentJson *pSeg = new(std::nothrow) CIccSampledCurveSegmentJson(start, end);
+      if (!pSeg) { parseStr += "Allocation failed\n"; return false; }
       if (!pSeg->ParseJson(jSeg, parseStr)) { delete pSeg; return false; }
       m_list->push_back(pSeg);
     }
@@ -341,9 +355,9 @@ public:
       return false;
     }
     const IccJson &arr = j["samples"];
-    if (!SetSize((icUInt32Number)arr.size()))
+    if (!SetSize(icJsonSafeU32(arr.size())))
       return false;
-    for (icUInt32Number i = 0; i < (icUInt32Number)arr.size(); i++)
+    for (icUInt32Number i = 0; i < icJsonSafeU32(arr.size()); i++)
       m_pSamples[i] = (icFloatNumber)arr[i].get<double>();
     return true;
   }
@@ -396,7 +410,8 @@ public:
     m_nReserved2 = (icUInt16Number)reserved2;
 
     if (j.contains("calculator") && j["calculator"].is_object()) {
-      CIccMpeJsonCalculator *pCalc = new CIccMpeJsonCalculator();
+      CIccMpeJsonCalculator *pCalc = new(std::nothrow) CIccMpeJsonCalculator();
+      if (!pCalc) { parseStr += "Allocation failed\n"; return false; }
       if (!pCalc->ParseJson(j["calculator"], parseStr)) {
         delete pCalc;
         return false;
@@ -441,19 +456,22 @@ static icCurveSetCurvePtr icFromJsonCurve(const IccJson &jCurve, std::string &pa
   jGetString(jCurve, "type", type);
 
   if (type == "SegmentedCurve") {
-    CIccSegmentedCurveJson *pCurve = new CIccSegmentedCurveJson();
+    CIccSegmentedCurveJson *pCurve = new(std::nothrow) CIccSegmentedCurveJson();
+    if (!pCurve) return nullptr;
     if (pCurve->ParseJson(jCurve, parseStr))
       return pCurve;
     delete pCurve;
   }
   else if (type == "SingleSampledCurve") {
-    CIccSingleSampledCurveJson *pCurve = new CIccSingleSampledCurveJson();
+    CIccSingleSampledCurveJson *pCurve = new(std::nothrow) CIccSingleSampledCurveJson();
+    if (!pCurve) return nullptr;
     if (pCurve->ParseJson(jCurve, parseStr))
       return pCurve;
     delete pCurve;
   }
   else if (type == "SampledCalculatorCurve") {
-    CIccSampledCalculatorCurveJson *pCurve = new CIccSampledCalculatorCurveJson();
+    CIccSampledCalculatorCurveJson *pCurve = new(std::nothrow) CIccSampledCalculatorCurveJson();
+    if (!pCurve) return nullptr;
     if (pCurve->ParseJson(jCurve, parseStr))
       return pCurve;
     delete pCurve;
@@ -625,7 +643,8 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
 
     if (format == "text") {
       size_t fileLen = pIO->GetLength();
-      char *buf = new char[fileLen + 1];
+      char *buf = new(std::nothrow) char[fileLen + 1];
+      if (!buf) { delete pIO; parseStr += "Out of memory\n"; delete pTag; return false; }
       icUInt32Number nRead = pIO->Read8(buf, (icUInt32Number)fileLen);
       buf[nRead] = '\0';
       delete pIO;
@@ -831,7 +850,8 @@ bool CIccMpeJsonToneMap::ParseJson(const IccJson &j, std::string &parseStr)
       m_pToneFuncs[m_nFunc++] = m_pToneFuncs[dupIdx];
     }
     else {
-      CIccJsonToneMapFunc *pFunc = new CIccJsonToneMapFunc();
+      CIccJsonToneMapFunc *pFunc = new(std::nothrow) CIccJsonToneMapFunc();
+      if (!pFunc) { parseStr += "Allocation failed\n"; return false; }
       if (!pFunc->ParseJson(jFunc, parseStr)) { delete pFunc; return false; }
       if (!Insert(pFunc)) { delete pFunc; return false; }
     }
@@ -849,7 +869,9 @@ bool CIccMpeJsonMatrix::ToJson(IccJson &j)
 {
   if (m_pMatrix) {
     IccJson matrix = IccJson::array();
-    icUInt32Number nEntries = m_nInputChannels * m_nOutputChannels;
+    icUInt64Number nEntries64 = (icUInt64Number)m_nInputChannels * m_nOutputChannels;
+    if (nEntries64 > 0xFFFFFFFFUL) return false;
+    icUInt32Number nEntries = (icUInt32Number)nEntries64;
     for (icUInt32Number i = 0; i < nEntries; i++)
       matrix.push_back((double)m_pMatrix[i]);
     j["matrix"] = matrix;
@@ -1001,9 +1023,10 @@ bool CIccMpeJsonBAcs::ParseJson(const IccJson &j, std::string & /*parseStr*/)
   if (!sig.empty())
     m_signature = (icAcsSignature)icGetSigVal(sig.c_str());
   m_nDataSize = icJsonGetHexDataSize(hex.c_str());
-  if (m_pData) { delete[] m_pData; m_pData = NULL; }
+  if (m_pData) { free(m_pData); m_pData = nullptr; }
   if (m_nDataSize) {
-    m_pData = new icUInt8Number[m_nDataSize];
+    m_pData = (icUInt8Number*)malloc(m_nDataSize);
+    if (!m_pData) { m_nDataSize = 0; return false; }
     icJsonGetHexData(m_pData, hex.c_str(), m_nDataSize);
   }
   return true;
@@ -1025,9 +1048,10 @@ bool CIccMpeJsonEAcs::ParseJson(const IccJson &j, std::string & /*parseStr*/)
   if (!sig.empty())
     m_signature = (icAcsSignature)icGetSigVal(sig.c_str());
   m_nDataSize = icJsonGetHexDataSize(hex.c_str());
-  if (m_pData) { delete[] m_pData; m_pData = NULL; }
+  if (m_pData) { free(m_pData); m_pData = nullptr; }
   if (m_nDataSize) {
-    m_pData = new icUInt8Number[m_nDataSize];
+    m_pData = (icUInt8Number*)malloc(m_nDataSize);
+    if (!m_pData) { m_nDataSize = 0; return false; }
     icJsonGetHexData(m_pData, hex.c_str(), m_nDataSize);
   }
   return true;
@@ -1117,7 +1141,8 @@ bool CIccMpeJsonJabToXYZ::ParseJson(const IccJson &j, std::string &parseStr)
 {
   m_nInputChannels = m_nOutputChannels = 3;
 
-  CIccCamConverter *pCAM = new CIccCamConverter();
+  CIccCamConverter *pCAM = new(std::nothrow) CIccCamConverter();
+  if (!pCAM) return false;
   if (!icCAMParamsFromJson(j, parseStr, pCAM)) {
     delete pCAM;
     return false;
@@ -1137,7 +1162,8 @@ bool CIccMpeJsonXYZToJab::ParseJson(const IccJson &j, std::string &parseStr)
 {
   m_nInputChannels = m_nOutputChannels = 3;
 
-  CIccCamConverter *pCAM = new CIccCamConverter();
+  CIccCamConverter *pCAM = new(std::nothrow) CIccCamConverter();
+  if (!pCAM) return false;
   if (!icCAMParamsFromJson(j, parseStr, pCAM)) {
     delete pCAM;
     return false;
@@ -1281,20 +1307,13 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
                                      const char *szFunc, std::string &parseStr,
                                      icUInt32Number nLocalsOffset)
 {
-  auto FindNextMacro = [](const char *text) -> const char* {
-    const char *a = strstr(text, "call{");
-    const char *b = strchr(text, '#');
-    if (b && (!a || b < a)) return b;
-    return a;
-  };
-
   CIccFuncTokenizer parse(szFunc, true);
 
   while (parse.GetNext()) {
     std::string token = parse.GetLast();
     const char *tok = token.c_str();
 
-    // ── Macro call ────────────────────────────────────────────────────────
+    // -- Macro call --------------------------------------------------------
     if (!strncmp(tok, "call{", 5) || tok[0] == '#') {
       std::string nameIter, name;
       if (tok[0] == '#')
@@ -1319,7 +1338,7 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
         return false;
     }
 
-    // ── Input/output channel references ───────────────────────────────────
+    // -- Input/output channel references -----------------------------------
     else if (!strncmp(tok, "in{", 3) || !strncmp(tok, "out{", 4)) {
       std::string op  = parse.GetName();
       std::string ref = parse.GetReference();
@@ -1361,7 +1380,7 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
       flatStr += op + index + " ";
     }
 
-    // ── Temporary variable operations ─────────────────────────────────────
+    // -- Temporary variable operations -------------------------------------
     else if (!strncmp(tok, "tget{", 5) || !strncmp(tok, "tput{", 5) ||
              !strncmp(tok, "tsav{", 5)) {
       std::string op  = parse.GetName();
@@ -1480,7 +1499,7 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
       }
     }
 
-    // ── Sub-element references ─────────────────────────────────────────────
+    // -- Sub-element references ---------------------------------------------
     else if (!strncmp(tok, "elem{", 5) || !strncmp(tok, "curv{", 5) ||
              !strncmp(tok, "clut{", 5) || !strncmp(tok, "mtx{",  4) ||
              !strncmp(tok, "fJab{", 5) || !strncmp(tok, "tJab{", 5) ||
@@ -1509,7 +1528,7 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
       flatStr += op + idx + " ";
     }
 
-    // ── Pass through any other token ──────────────────────────────────────
+    // -- Pass through any other token --------------------------------------
     else {
       flatStr += tok;
       flatStr += " ";
@@ -1554,7 +1573,7 @@ bool CIccMpeJsonCalculator::UpdateLocals(std::string &func, std::string sFunc,
 }
 
 // ---------------------------------------------------------------------------
-// ParseImport – recursively load variables, macros, and sub-elements from
+// ParseImport -- recursively load variables, macros, and sub-elements from
 // either the top-level JSON (importPath=="*") or an imported JSON file.
 // ---------------------------------------------------------------------------
 bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath,
@@ -1571,7 +1590,7 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
       }
       std::string look = "*" + file + "*";
       if (strstr(importPath.c_str(), look.c_str()))
-        continue;  // Already imported – skip
+        continue;  // Already imported -- skip
 
       std::ifstream ifs(file);
       if (!ifs.is_open()) {
@@ -1895,7 +1914,7 @@ bool CIccMpeJsonCalculator::ParseJson(const IccJson &j, std::string &parseStr)
 }
 
 // ===========================================================================
-// Spectral elements – shared helpers
+// Spectral elements -- shared helpers
 // ===========================================================================
 
 static IccJson icSpectralRangeToJson(const icSpectralRange &range)
@@ -1957,7 +1976,7 @@ static bool icFloatArrayFromJson(const IccJson &j, const char *field,
 // CIccMpeJsonEmissionMatrix / CIccMpeJsonInvEmissionMatrix
 // ===========================================================================
 
-// numVectors() is protected — helpers take it as an explicit parameter
+// numVectors() is protected -- helpers take it as an explicit parameter
 static bool icSpectralMatrixToJson(IccJson &j, CIccMpeSpectralMatrix *pMtx, int nVectors)
 {
   j["inputChannels"]  = (int)pMtx->NumInputChannels();
@@ -1997,7 +2016,7 @@ static bool icSpectralMatrixFromJson(const IccJson &j, CIccMpeSpectralMatrix *pM
     return false;
   if (!icFloatArrayFromJson(j, "matrixData", pMtx->GetMatrix(), nVectors * range.steps, parseStr))
     return false;
-  // offsetData optional — zero-fill if absent
+  // offsetData optional -- zero-fill if absent
   if (j.contains("offsetData") && j["offsetData"].is_array()) {
     icFloatArrayFromJson(j, "offsetData", pMtx->GetOffset(), range.steps, parseStr, false);
   }
@@ -2035,7 +2054,7 @@ bool CIccMpeJsonInvEmissionMatrix::ParseJson(const IccJson &j, std::string &pars
 
 // ===========================================================================
 // CIccMpeJsonEmissionCLUT / CIccMpeJsonReflectanceCLUT
-// (m_flags, m_nStorageType, m_Range are protected — accessed from derived member functions)
+// (m_flags, m_nStorageType, m_Range are protected -- accessed from derived member functions)
 // ===========================================================================
 
 // Shared parse helper: fills out-params; caller owns pWhite and pCLUT on success.
@@ -2150,7 +2169,7 @@ bool CIccMpeJsonReflectanceCLUT::ParseJson(const IccJson &j, std::string &parseS
 
 // ===========================================================================
 // CIccMpeJsonEmissionObserver / CIccMpeJsonReflectanceObserver
-// (m_flags and m_Range are protected — accessed from derived member functions)
+// (m_flags and m_Range are protected -- accessed from derived member functions)
 // ===========================================================================
 
 bool CIccMpeJsonEmissionObserver::ToJson(IccJson &j)

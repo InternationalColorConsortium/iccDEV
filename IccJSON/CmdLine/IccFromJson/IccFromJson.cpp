@@ -11,6 +11,13 @@
 #include "IccLibJSONVer.h"
 #include <cstring>
 
+#ifdef _WIN32
+  #define ICC_STRICMP _stricmp
+#else
+  #include <strings.h>
+  #define ICC_STRICMP strcasecmp
+#endif
+
 int main(int argc, char* argv[])
 {
   if (argc <= 2) {
@@ -19,15 +26,15 @@ int main(int argc, char* argv[])
     return 0;
   }
 
-  CIccTagCreator::PushFactory(new CIccTagJsonFactory());
-  CIccMpeCreator::PushFactory(new CIccMpeJsonFactory());
+  CIccTagCreator::PushFactory(new(std::nothrow) CIccTagJsonFactory());
+  CIccMpeCreator::PushFactory(new(std::nothrow) CIccMpeJsonFactory());
 
   CIccProfileJson profile;
   std::string reason;
 
   bool bNoId = false;
   for (int i = 3; i < argc; i++) {
-    if (!stricmp(argv[i], "-noid"))
+    if (!ICC_STRICMP(argv[i], "-noid"))
       bNoId = true;
   }
 

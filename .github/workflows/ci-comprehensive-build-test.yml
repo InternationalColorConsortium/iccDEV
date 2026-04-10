@@ -301,6 +301,7 @@ jobs:
             Build/Tools/IccToXml/**/IccToXml
             Build/IccProfLib/libIccProfLib2*
             Build/IccXML/libIccXML2*
+            Build/IccJSON/libIccJSON2*
           if-no-files-found: warn
           retention-days: 14
           compression-level: 9
@@ -1221,8 +1222,8 @@ jobs:
           unset GITHUB_TOKEN || true
 
           # Set library path for shared libs
-          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/Build/Cmake/build/IccProfLib:$GITHUB_WORKSPACE/Build/Cmake/build/IccXML:${LD_LIBRARY_PATH:-}"
-          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/Build/Cmake/build/IccProfLib:$GITHUB_WORKSPACE/Build/Cmake/build/IccXML:${DYLD_LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/Build/Cmake/build/IccProfLib:$GITHUB_WORKSPACE/Build/Cmake/build/IccXML:$GITHUB_WORKSPACE/Build/Cmake/build/IccJSON:${LD_LIBRARY_PATH:-}"
+          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/Build/Cmake/build/IccProfLib:$GITHUB_WORKSPACE/Build/Cmake/build/IccXML:$GITHUB_WORKSPACE/Build/Cmake/build/IccJSON:${DYLD_LIBRARY_PATH:-}"
 
           OUTPUT=$(./examples/hello-iccdev/build/hello-iccdev 2>&1)
           echo "$OUTPUT"

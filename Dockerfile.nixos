@@ -24,11 +24,13 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
     sed -i "/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /" Build/Cmake/CMakeLists.txt && \
     cd Build && \
     rm -f CMakeCache.txt && rm -rf CMakeFiles && \
+    rm -f Cmake/CMakeCache.txt && rm -rf Cmake/CMakeFiles && \
     cmake -DCMAKE_BUILD_TYPE=Release Cmake && \
     make -j$(nproc) && \
     echo "=== Libraries ===" && \
     ls -lh /workspace/iccDEV/Build/IccProfLib/libIccProfLib2* && \
     ls -lh /workspace/iccDEV/Build/IccXML/libIccXML2* && \
+    (ls -lh /workspace/iccDEV/Build/IccJSON/libIccJSON2* 2>/dev/null || echo "IccJSON: not built") && \
     echo "=== Tools ===" && \
     find /workspace/iccDEV/Build/Tools -type f -executable | sort' \
  && rm -rf /workspace/iccDEV/.git \
@@ -54,9 +56,11 @@ ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccSpecSepToTiff:\
 /workspace/iccDEV/Build/Tools/IccTiffDump:\
 /workspace/iccDEV/Build/Tools/IccV5DspObsToV4Dsp:\
+/workspace/iccDEV/Build/Tools/IccToJson:\
+/workspace/iccDEV/Build/Tools/IccFromJson:\
 ${PATH}"
 
-ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML"
+ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML:/workspace/iccDEV/Build/IccJSON"
 
 WORKDIR /workspace/iccDEV
 USER iccdev

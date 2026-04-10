@@ -70,7 +70,11 @@ Copyright:  (c) see Software License
 #include <list>
 #include <string>
 
+#ifdef ICC_JSON_ORDERED
+using IccJson = nlohmann::ordered_json;
+#else
 using IccJson = nlohmann::json;
+#endif
 
 // ---------------------------------------------------------------------------
 // Base extension interface
@@ -145,7 +149,13 @@ public:
 class CIccJsonToneMapFunc : public CIccToneMapFunc
 {
 public:
+  CIccJsonToneMapFunc() = default;
+  CIccJsonToneMapFunc(const CIccJsonToneMapFunc &other) : CIccToneMapFunc(other) {}
   virtual ~CIccJsonToneMapFunc() {}
+  CIccJsonToneMapFunc& operator=(const CIccJsonToneMapFunc &other) {
+    CIccToneMapFunc::operator=(other);
+    return *this;
+  }
   virtual CIccToneMapFunc *NewCopy() const;
   virtual const char *GetClassName() const { return "CIccJsonToneMapFunc"; }
 
@@ -243,7 +253,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Calculator element – helper types (parallel to IccMpeXml.h)
+// Calculator element -- helper types (parallel to IccMpeXml.h)
 // ---------------------------------------------------------------------------
 class CIccMpePtr
 {

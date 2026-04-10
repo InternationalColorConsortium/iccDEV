@@ -2414,7 +2414,7 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
             }
 
             /*parse the file and get the DOM */
-            doc = xmlReadFile(file.c_str(), NULL, XML_PARSE_HUGE);
+            doc = xmlReadFile(file.c_str(), NULL, XML_PARSE_HUGE | XML_PARSE_NONET);
 
             if (doc == NULL) {
               parseStr += "Unable to import '";

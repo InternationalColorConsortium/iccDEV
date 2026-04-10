@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Regression test for issue #735: XML_PARSE_NONET defense-in-depth.
+
+  This XML references an external DTD at TEST-NET-1 (RFC 5737, 192.0.2.0/24).
+  With XML_PARSE_NONET, libxml2 skips the network fetch entirely and
+  iccFromXml completes in under 2 seconds.  Without the flag, the parser
+  would attempt a TCP connection to a non-routable address and block until
+  the OS timeout (typically 30-120 seconds).
+
+  The test asserts wall-clock < 5 seconds as the pass criterion.
+
+  See: https://github.com/InternationalColorConsortium/iccDEV/issues/735
+-->
+<!DOCTYPE IccProfile SYSTEM "http://192.0.2.1:9999/nonexistent.dtd">
+<IccProfile>
+  <Header>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>5.0</ProfileVersion>
+    <ProfileDeviceClass>prtr</ProfileDeviceClass>
+    <DataColourSpace>RGB</DataColourSpace>
+    <PCS>Lab</PCS>
+    <CreationDateTime>2025-01-01T00:00:00</CreationDateTime>
+    <PrimaryPlatform>*nix</PrimaryPlatform>
+    <ProfileFlags>NotEmbedded NotIndependent</ProfileFlags>
+    <DeviceManufacturer></DeviceManufacturer>
+    <DeviceModel></DeviceModel>
+    <DeviceAttributes>Reflective Glossy Positive Colour</DeviceAttributes>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>0.9642 1.0000 0.8249</PCSIlluminant>
+    <ProfileCreator></ProfileCreator>
+    <ProfileID></ProfileID>
+  </Header>
+</IccProfile>

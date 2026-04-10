@@ -262,6 +262,28 @@ jobs:
               echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`workflow_run\` trigger" >> "$GITHUB_STEP_SUMMARY"
               echo "" >> "$GITHUB_STEP_SUMMARY"
             fi
+
+            # C-2: Additional dangerous triggers
+            if grep -qw 'repository_dispatch' <<< "$on_section"; then
+              DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses \`repository_dispatch\` trigger" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "> External event source that can execute arbitrary workflow code." >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
+
+            for evt in create delete; do
+              if grep -qE "^\s+${evt}:" <<< "$on_section"; then
+                DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
+                echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`$evt\` trigger" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            done
+
+            if grep -qw 'workflow_call' <<< "$on_section"; then
+              echo "[INFO] \`$(sanitize_line "$wf_base")\` accepts \`workflow_call\` (reusable workflow -- safe)" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
 
           if [[ $DANGEROUS_COUNT -eq 0 ]]; then
@@ -495,6 +517,23 @@ jobs:
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
 
           COMBINED_HARDENED=$((HARDENED_STEPS + PWSH_HARDENED))
+
+          # H-2: Detect shell: sh usage (should use bash for proper hardening)
+          SH_COUNT=$({ grep -rn -E '^\s+shell:\s+sh\s*$' .github/workflows/ 2>/dev/null || true; } | wc -l)
+
+          # H-7: Detect defaults.run.shell at job level
+          DEFAULTS_SHELL=0
+          while IFS= read -r wf; do
+            cnt=$(awk '
+              /^\s+defaults:/ { in_def=1; next }
+              in_def && /^\s+run:/ { in_run=1; next }
+              in_def && in_run && /shell:/ { c++; in_def=0; in_run=0 }
+              /^[^ ]/ { in_def=0; in_run=0 }
+              END { print c+0 }
+            ' "$wf")
+            DEFAULTS_SHELL=$((DEFAULTS_SHELL + cnt))
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+
           if [[ $TOTAL_STEPS -gt 0 ]]; then
             COMBINED_PCT=$((COMBINED_HARDENED * 100 / TOTAL_STEPS))
             echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
@@ -504,8 +543,16 @@ jobs:
             echo "| PowerShell: ErrorActionPreference | $(sanitize_line "$PWSH_HARDENED") |" >> "$GITHUB_STEP_SUMMARY"
             echo "| Combined hardened | $(sanitize_line "$COMBINED_HARDENED") ($(sanitize_line "$COMBINED_PCT")%) |" >> "$GITHUB_STEP_SUMMARY"
             echo "| Missing hardening | $(sanitize_line "$UNHARDENED") |" >> "$GITHUB_STEP_SUMMARY"
+            if [[ $DEFAULTS_SHELL -gt 0 ]]; then
+              echo "| Job-level defaults.run.shell | $(sanitize_line "$DEFAULTS_SHELL") |" >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
             echo "No run: blocks found" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [[ $SH_COUNT -gt 0 ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[WARN] $(sanitize_line "$SH_COUNT") step(s) use \`shell: sh\` -- prefer \`bash --noprofile --norc {0}\` for proper hardening" >> "$GITHUB_STEP_SUMMARY"
           fi
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
@@ -559,7 +606,7 @@ jobs:
                 if ($0 !~ /^[[:space:]]*$/ && cur <= run_indent) { in_run = 0 }
               }
               in_run && /\$\{\{/ {
-                if (/\$\{\{[^}]* matrix\./ || /\$\{\{ *matrix\./ || /github\.event\.(issue|pull_request)\.(title|body)/ || /github\.head_ref/ || /inputs\./) {
+                if (/\$\{\{[^}]* matrix\./ || /\$\{\{ *matrix\./ || /github\.event\.(issue|pull_request|discussion)\.(title|body)/ || /github\.event\.(comment|review|review_comment)\.body/ || /github\.event\.pages/ || /github\.event\.commits/ || /github\.head_ref/ || /inputs\./) {
                   # Exclude safe contexts: needs.*.result contains "matrix." as substring
                   if (/needs\.[a-zA-Z0-9_-]*\.result/) next
                   gsub(/^[[:space:]]+/, "")
@@ -790,7 +837,7 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          if [[ ${#WRITE_ALL[@]} -gt 0 ]]; then
+           if [[ ${#WRITE_ALL[@]} -gt 0 ]]; then
             echo "<details><summary>[MEDIUM] Workflows with write access ($(sanitize_line "${#WRITE_ALL[@]}"))</summary>" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             for item in "${WRITE_ALL[@]}"; do
@@ -799,6 +846,36 @@ jobs:
             echo "</details>" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+          # H-4: id-token: write audit (cross-reference with dangerous triggers)
+          ID_TOKEN_WRITE=0
+          while IFS= read -r wf; do
+            wf_base=$(basename "$wf")
+            if grep -qE '^\s+id-token:\s*write' "$wf"; then
+              ID_TOKEN_WRITE=$((ID_TOKEN_WRITE + 1))
+              on_section=$(awk '/^on:/{f=1;print;next} /^[a-zA-Z]/{f=0} f{print}' "$wf")
+              if grep -qE 'pull_request_target|workflow_run|repository_dispatch' <<< "$on_section"; then
+                echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` has \`id-token: write\` with dangerous trigger" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $ID_TOKEN_WRITE -gt 0 ]]; then
+            echo "**id-token: write found in $(sanitize_line "$ID_TOKEN_WRITE") workflow(s)**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # H-6: CODEOWNERS coverage check for workflow directory
+          if [[ -f .github/CODEOWNERS ]]; then
+            if grep -qE '\.github/(workflows|actions|\*\*)' .github/CODEOWNERS; then
+              echo "[OK] CODEOWNERS covers .github/workflows/ directory" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "[WARN] CODEOWNERS exists but does not cover .github/workflows/" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            echo "[WARN] No .github/CODEOWNERS file -- workflow changes are unprotected" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
       - name: "8. Supply-Chain Risk Score"
         if: always()
@@ -872,7 +949,8 @@ jobs:
 
           # Check 4: shell=true or shell: bash (without noprofile)
           # Exclude comments and the scanner file itself
-          NOPROFILE_MISSING=$({ grep -rn 'shell: bash$' .github/workflows/ 2>/dev/null \
+          # Match only YAML shell: key (not matrix vars like run_shell:)
+          NOPROFILE_MISSING=$({ grep -rn -E '^\s+shell:\s+bash\s*$' .github/workflows/ 2>/dev/null \
             | grep -v '#.*shell: bash' \
             | grep -v 'ci-pr-risk-security-analysis' \
             || true; } | cut -d: -f1 | sort -u | wc -l)
@@ -905,6 +983,71 @@ jobs:
           SECRETS_COUNT=$({ grep -rn 'secrets\.' .github/workflows/ 2>/dev/null || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
           if [[ $SECRETS_COUNT -gt 0 ]]; then
             RISK_ITEMS+=("$SECRETS_COUNT secret reference(s) found (informational)")
+          fi
+
+          # Check 7: Expression injection in run: blocks (H-1, +10 each)
+          EXPR_INJECT=0
+          while IFS= read -r f; do
+            f_base=$(basename "$f")
+            [[ "$f_base" == *"ci-pr-risk-security-analysis"* ]] && continue
+            cnt=$(awk '
+              /^[[:space:]]*run:[[:space:]]*\|/ { in_run=1; match($0,/^[[:space:]]*/); ri=RLENGTH; next }
+              in_run { match($0,/^[[:space:]]*/); if ($0 !~ /^[[:space:]]*$/ && RLENGTH <= ri) in_run=0 }
+              in_run && /\$\{\{/ {
+                if (/matrix\./ || /github\.event\.(issue|pull_request|discussion)\.(title|body)/ || /github\.event\.(comment|review|review_comment)\.body/ || /github\.event\.pages/ || /github\.event\.commits/ || /github\.head_ref/ || /inputs\./) {
+                  c++
+                }
+              }
+              END { print c+0 }
+            ' "$f")
+            EXPR_INJECT=$((EXPR_INJECT + cnt))
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $EXPR_INJECT -gt 0 ]]; then
+            RISK_SCORE=$((RISK_SCORE + EXPR_INJECT * 10))
+            RISK_ITEMS+=("$EXPR_INJECT expression injection(s) in run: blocks (+$((EXPR_INJECT * 10)))")
+          fi
+
+          # Check 8: Artifact poisoning -- workflow_run + download-artifact (M-5, +15)
+          ARTIFACT_POISON=0
+          while IFS= read -r f; do
+            f_base=$(basename "$f")
+            [[ "$f_base" == *"ci-pr-risk-security-analysis"* ]] && continue
+            on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$f")
+            if grep -q 'workflow_run' <<< "$on_section"; then
+              if grep -q 'download-artifact' "$f" 2>/dev/null; then
+                ARTIFACT_POISON=$((ARTIFACT_POISON + 1))
+              fi
+            fi
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $ARTIFACT_POISON -gt 0 ]]; then
+            RISK_SCORE=$((RISK_SCORE + ARTIFACT_POISON * 15))
+            RISK_ITEMS+=("$ARTIFACT_POISON workflow_run + download-artifact pattern(s) (+$((ARTIFACT_POISON * 15)))")
+          fi
+
+          # Check 9: Cache key injection -- only flag attacker-controllable github.head_ref (+10)
+          CACHE_INJECT=0
+          while IFS= read -r f; do
+            f_base=$(basename "$f")
+            [[ "$f_base" == *"ci-pr-risk-security-analysis"* ]] && continue
+            if grep -qE 'key:.*\$\{\{.*github\.head_ref' "$f" 2>/dev/null; then
+              CACHE_INJECT=$((CACHE_INJECT + 1))
+            fi
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $CACHE_INJECT -gt 0 ]]; then
+            RISK_SCORE=$((RISK_SCORE + CACHE_INJECT * 10))
+            RISK_ITEMS+=("$CACHE_INJECT cache key injection pattern(s) (+$((CACHE_INJECT * 10)))")
+          fi
+
+          # Check 10: Dependabot configuration (C-5, +5 if missing)
+          if [[ ! -f .github/dependabot.yml && ! -f .github/dependabot.yaml ]]; then
+            RISK_SCORE=$((RISK_SCORE + 5))
+            RISK_ITEMS+=("No .github/dependabot.yml found (+5)")
+          else
+            if ! grep -q 'github-actions' .github/dependabot.yml 2>/dev/null && \
+               ! grep -q 'github-actions' .github/dependabot.yaml 2>/dev/null; then
+              RISK_SCORE=$((RISK_SCORE + 3))
+              RISK_ITEMS+=("Dependabot does not cover github-actions ecosystem (+3)")
+            fi
           fi
 
           # Risk level classification
@@ -995,11 +1138,18 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          # Pattern 4: git push / git tag force in workflows (exclude self)
-          GIT_PUSH=$({ grep -rnE 'git (push|tag -f|tag -d)' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
-          if [[ $GIT_PUSH -gt 0 ]]; then
+          # Pattern 4a: git force-push / tag rewriting (actual Trivy attack vector)
+          GIT_FORCE=$({ grep -rnE 'git\s+(push\s+--force|push\s+-f|tag\s+-f|tag\s+-d)' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+          if [[ $GIT_FORCE -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[HIGH] $(sanitize_line "$GIT_PUSH") git push/tag-force pattern(s) detected (tag rewriting vector)" >> "$GITHUB_STEP_SUMMARY"
+            echo "[HIGH] $(sanitize_line "$GIT_FORCE") git force-push/tag-rewrite pattern(s) detected" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Pattern 4b: Regular git push (auto-commit pattern, informational)
+          GIT_PUSH=$({ grep -rnE 'git\s+push' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | { grep -vE '\-\-force|\s-f\b' || true; } | wc -l)
+          if [[ $GIT_PUSH -gt 0 ]]; then
+            echo "[INFO] $(sanitize_line "$GIT_PUSH") git push pattern(s) detected (auto-commit, verify workflow_dispatch-only triggers)" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -1018,6 +1168,63 @@ jobs:
           if [[ $PR_CHECKOUT -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[CRITICAL] $(sanitize_line "$PR_CHECKOUT") workflow(s) checkout PR head code with elevated permissions" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # C-3: Artifact poisoning -- workflow_run + download-artifact (Nx attack pattern)
+          ART_POISON=0
+          while IFS= read -r f; do
+            f_base=$(basename "$f")
+            [[ "$f_base" == "$SELF_WF" ]] && continue
+            on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$f")
+            if grep -q 'workflow_run' <<< "$on_section"; then
+              if grep -q 'download-artifact' "$f" 2>/dev/null; then
+                ART_POISON=$((ART_POISON + 1))
+                echo "[HIGH] \`$(sanitize_line "$f_base")\` uses workflow_run + download-artifact (artifact poisoning vector)" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $ART_POISON -gt 0 ]]; then
+            TRIVY_INDICATORS=$((TRIVY_INDICATORS + ART_POISON))
+          fi
+
+          # C-3b: Artifact name injection (attacker-controllable artifact names)
+          # Only flag github.head_ref and PR/issue title/body (attacker-controlled)
+          # Exclude inputs.* (reusable workflow / workflow_dispatch -- collaborator-controlled)
+          ART_NAME_INJECT=$({ grep -rnE 'name:.*\$\{\{.*(github\.head_ref|github\.event\.(issue|pull_request)\.(title|body))' .github/workflows/ 2>/dev/null || true; } \
+            | { grep -v "$SELF_WF" || true; } \
+            | { grep -i 'artifact' || true; } | wc -l)
+          if [[ $ART_NAME_INJECT -gt 0 ]]; then
+            TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
+            echo "[MEDIUM] $(sanitize_line "$ART_NAME_INJECT") artifact name(s) use attacker-controllable expressions" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # C-4: Cache key injection (attacker-controllable cache keys)
+          # github.head_ref is PR-author-controlled (real injection risk)
+          CACHE_KEY_HIGH=$({ grep -rnE 'key:.*\$\{\{.*github\.head_ref' .github/workflows/ 2>/dev/null || true; } \
+            | { grep -v "$SELF_WF" || true; } \
+            | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+          if [[ $CACHE_KEY_HIGH -gt 0 ]]; then
+            TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
+            echo "[MEDIUM] $(sanitize_line "$CACHE_KEY_HIGH") cache key(s) use attacker-controllable github.head_ref" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # github.event.inputs.* and inputs.* require repo write access (informational)
+          CACHE_KEY_INFO=$({ grep -rnE 'key:.*\$\{\{.*(github\.event\.inputs|inputs\.)' .github/workflows/ 2>/dev/null || true; } \
+            | { grep -v "$SELF_WF" || true; } \
+            | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+          if [[ $CACHE_KEY_INFO -gt 0 ]]; then
+            echo "[INFO] $(sanitize_line "$CACHE_KEY_INFO") cache key(s) use workflow input expressions (collaborator-controlled)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # C-5: Dependabot configuration audit
+          if [[ ! -f .github/dependabot.yml && ! -f .github/dependabot.yaml ]]; then
+            TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
+            echo "[MEDIUM] No .github/dependabot.yml -- automated dependency updates not configured" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -1260,6 +1467,10 @@ jobs:
             echo "### Governance References"
             echo ""
             echo "- [Trivy Supply-Chain Compromise (March 2026)](https://snyk.io/articles/trivy-github-actions-supply-chain-compromise/)"
+            echo "- [tj-actions/changed-files Compromise (March 2025)](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3)"
+            echo "- [Nx Supply-Chain Attack (Feb 2025)](https://nx.dev/blog/security-incident-feb-2025)"
+            echo "- [OpenSSF Scorecard](https://securityscorecards.dev/)"
+            echo "- [GitHub Actions Security Hardening](https://docs.github.com/en/actions/reference/security/secure-use)"
             echo "- [xsscx/governance/actions](https://github.com/xsscx/governance/tree/main/actions)"
             echo "- \`.github/instructions/workflow-governance\`"
             echo "- \`.github/scripts/sanitize-sed.sh\` (V3)"
@@ -1417,8 +1628,16 @@ jobs:
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
           }
 
-          $dangerousTriggers = @('pull_request_target', 'issue_comment', 'workflow_run')
+          $dangerousTriggers = @(
+            'pull_request_target',
+            'issue_comment',
+            'workflow_run',
+            'repository_dispatch'
+          )
+          $mediumTriggers = @('create', 'delete')
+          $infoTriggers = @('workflow_call')
           $findings = @()
+          $infoFindings = @()
 
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
           foreach ($wf in $workflows) {
@@ -1437,6 +1656,18 @@ jobs:
                 $findings += "$($wf.Name): $trigger"
               }
             }
+            # C-2: Medium-severity triggers
+            foreach ($evt in $mediumTriggers) {
+              if ($onText -match "^\s+${evt}:") {
+                $findings += "$($wf.Name): $evt (MEDIUM)"
+              }
+            }
+            # workflow_call is safe (reusable workflow) -- INFO only
+            foreach ($evt in $infoTriggers) {
+              if ($onText -match $evt) {
+                $infoFindings += "$($wf.Name): $evt (INFO -- reusable workflow, safe)"
+              }
+            }
           }
 
           $report = @()
@@ -1450,6 +1681,15 @@ jobs:
             foreach ($f in $findings) {
               $parts = $f -split ": ", 2
               $report += "| ``$(Sanitize-Line $parts[0])`` | ``$(Sanitize-Line $parts[1])`` |"
+            }
+          }
+          if ($infoFindings.Count -gt 0) {
+            $report += ""
+            $report += "**Informational** (not counted as dangerous):"
+            $report += ""
+            foreach ($f in $infoFindings) {
+              $parts = $f -split ": ", 2
+              $report += "- ``$(Sanitize-Line $parts[0])``: $(Sanitize-Line $parts[1])"
             }
           }
           $report += ""
@@ -1617,6 +1857,24 @@ jobs:
 
           $combinedHardened = $hardenedBlocks + $pwshHardenedBlocks
 
+          # H-2: shell: sh detection
+          $shellShCount = 0
+          foreach ($wf in $workflows) {
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content -match '(?m)^\s+shell:\s+sh\s*$') {
+              $shellShCount++
+            }
+          }
+
+          # H-7: defaults.run.shell detection
+          $defaultsShellCount = 0
+          foreach ($wf in $workflows) {
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content -match '(?m)^\s+defaults:.*?shell:') {
+              $defaultsShellCount++
+            }
+          }
+
           $report = @()
           $report += "## 4. Shell Hardening Audit (Windows Validation)"
           $report += ""
@@ -1629,6 +1887,14 @@ jobs:
           if ($totalBlocks -gt 0) {
             $combinedPct = [math]::Round(($combinedHardened / $totalBlocks) * 100, 1)
             $report += "| Combined hardening rate | $(Sanitize-Line "$combinedPct")% |"
+          }
+          if ($shellShCount -gt 0) {
+            $report += "| shell: sh usage | $(Sanitize-Line "$shellShCount") |"
+            $report += ""
+            $report += "[WARN] $shellShCount workflow(s) use ``shell: sh`` -- upgrade to ``bash --noprofile --norc``"
+          }
+          if ($defaultsShellCount -gt 0) {
+            $report += "| defaults.run.shell | $(Sanitize-Line "$defaultsShellCount") |"
           }
           $report += ""
           $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
@@ -1652,7 +1918,10 @@ jobs:
 
           $unsafePatterns = @(
             'matrix\.',
-            'github\.event\.(issue|pull_request)\.(title|body)',
+            'github\.event\.(issue|pull_request|discussion)\.(title|body)',
+            'github\.event\.(comment|review|review_comment)\.body',
+            'github\.event\.pages',
+            'github\.event\.commits',
             'github\.head_ref',
             'inputs\.'
           )
@@ -1877,6 +2146,41 @@ jobs:
             foreach ($w in $writeList) { $report += "- ``$(Sanitize-Line $w)``" }
           }
           $report += ""
+
+          # H-4: id-token: write audit
+          $idTokenWrite = 0
+          foreach ($wf in $workflows) {
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content -match '(?m)^\s+id-token:\s*write') {
+              $idTokenWrite++
+              $onSection = ""
+              $inOn = $false
+              foreach ($ln in (Get-Content $wf.FullName)) {
+                if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
+                if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
+                if ($inOn) { $onSection += "$ln`n" }
+              }
+              if ($onSection -match 'pull_request_target|workflow_run|repository_dispatch') {
+                $report += "[CRITICAL] ``$(Sanitize-Line $wf.Name)`` has ``id-token: write`` with dangerous trigger"
+              }
+            }
+          }
+          if ($idTokenWrite -gt 0) {
+            $report += "**id-token: write found in $(Sanitize-Line "$idTokenWrite") workflow(s)**"
+          }
+
+          # H-6: CODEOWNERS coverage
+          if (Test-Path ".github/CODEOWNERS") {
+            $coContent = Get-Content ".github/CODEOWNERS" -Raw -ErrorAction SilentlyContinue
+            if ($coContent -match '\.github/(workflows|actions|\*\*)') {
+              $report += "[OK] CODEOWNERS covers .github/workflows/ directory"
+            } else {
+              $report += "[WARN] CODEOWNERS exists but does not cover .github/workflows/"
+            }
+          } else {
+            $report += "[WARN] No .github/CODEOWNERS file -- workflow changes are unprotected"
+          }
+          $report += ""
           $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Permissions audit complete (Windows): $withPerms with perms, $withoutPerms without, $withWrite with write"
 
@@ -1923,7 +2227,7 @@ jobs:
                   $inRunBlock = $false
                 }
               }
-              if (-not $inRunBlock -and $ln -match 'uses:') {
+              if (-not $inRunBlock -and $ln -match '^\s*-?\s*uses:\s' -and $ln -notmatch '^\s*#' -and $ln -notmatch 'docker://' -and $ln -notmatch '\./\.github/workflows/') {
                 $totalUses++
                 if ($ln -match '@[0-9a-f]{40}') { $pinnedUses++ }
               }
@@ -1973,6 +2277,105 @@ jobs:
             $deductions += "Missing permissions blocks: $($wfCount - $permsCount) workflows (-$deduct)"
           }
 
+          # H-2: shell: bash without --noprofile
+          $bareBashCount = 0
+          foreach ($wf in $workflows) {
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            $matches2 = [regex]::Matches($content, '(?m)^\s+shell:\s+bash\s*$')
+            $bareBashCount += $matches2.Count
+          }
+          if ($bareBashCount -gt 0) {
+            $deduct = [math]::Min(10, $bareBashCount * 2)
+            $score -= $deduct
+            $deductions += "$bareBashCount workflow(s) use shell: bash without --noprofile (-$deduct)"
+          }
+
+          # Check GITHUB_TOKEN in env blocks
+          $envTokenCount = ([regex]::Matches($allContent, '(?m)GITHUB_TOKEN:\s*\$')).Count
+          if ($envTokenCount -gt 0) {
+            $deduct = [math]::Min(10, $envTokenCount * 2)
+            $score -= $deduct
+            $deductions += "$envTokenCount GITHUB_TOKEN env reference(s) (-$deduct)"
+          }
+
+          # H-1: Expression injection in run: blocks
+          $exprInject = 0
+          foreach ($wf in $workflows) {
+            if ($wf.Name -eq "ci-pr-risk-security-analysis.yml") { continue }
+            $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
+            $inRun = $false
+            $runInd = 0
+            foreach ($ln in $lines) {
+              if ($ln -match '^(\s*)run:\s*\|') { $inRun = $true; $runInd = $matches[1].Length; continue }
+              if ($inRun -and $ln -match '^\S') { $inRun = $false }
+              if ($inRun -and $ln -match '\S') {
+                $ci = ($ln -replace '\S.*','').Length
+                if ($ci -le $runInd) { $inRun = $false; continue }
+              }
+              if ($inRun -and $ln -match '\$\{\{') {
+                if ($ln -match 'matrix\.|github\.event\.(issue|pull_request|discussion)\.(title|body)|github\.event\.(comment|review|review_comment)\.body|github\.head_ref|inputs\.') {
+                  $exprInject++
+                }
+              }
+            }
+          }
+          if ($exprInject -gt 0) {
+            $deduct = [math]::Min(30, $exprInject * 10)
+            $score -= $deduct
+            $deductions += "$exprInject expression injection(s) in run: blocks (-$deduct)"
+          }
+
+          # C-3/M-5: Artifact poisoning
+          $artPoison = 0
+          foreach ($wf in $workflows) {
+            if ($wf.Name -eq "ci-pr-risk-security-analysis.yml") { continue }
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            $onSection = ""
+            $inOn = $false
+            foreach ($ln in (Get-Content $wf.FullName)) {
+              if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
+              if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
+              if ($inOn) { $onSection += "$ln`n" }
+            }
+            if ($onSection -match 'workflow_run' -and $content -match 'download-artifact') {
+              $artPoison++
+            }
+          }
+          if ($artPoison -gt 0) {
+            $deduct = $artPoison * 15
+            $score -= $deduct
+            $deductions += "$artPoison workflow_run + download-artifact pattern(s) (-$deduct)"
+          }
+
+          # C-4: Cache key injection -- only flag attacker-controllable github.head_ref
+          $cacheInject = 0
+          foreach ($wf in $workflows) {
+            if ($wf.Name -eq "ci-pr-risk-security-analysis.yml") { continue }
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            if ($content -match 'key:.*\$\{\{.*github\.head_ref') {
+              $cacheInject++
+            }
+          }
+          if ($cacheInject -gt 0) {
+            $deduct = $cacheInject * 10
+            $score -= $deduct
+            $deductions += "$cacheInject cache key injection pattern(s) (-$deduct)"
+          }
+
+          # C-5: Dependabot
+          if (-not (Test-Path ".github/dependabot.yml") -and -not (Test-Path ".github/dependabot.yaml")) {
+            $score -= 5
+            $deductions += "No .github/dependabot.yml (-5)"
+          } else {
+            $depContent = ""
+            if (Test-Path ".github/dependabot.yml") { $depContent = Get-Content ".github/dependabot.yml" -Raw -ErrorAction SilentlyContinue }
+            elseif (Test-Path ".github/dependabot.yaml") { $depContent = Get-Content ".github/dependabot.yaml" -Raw -ErrorAction SilentlyContinue }
+            if ($depContent -notmatch 'github-actions') {
+              $score -= 3
+              $deductions += "Dependabot does not cover github-actions (-3)"
+            }
+          }
+
           $score = [math]::Max(0, $score)
           if ($score -ge 90) { $grade = "A" }
           elseif ($score -ge 80) { $grade = "B" }
@@ -2020,7 +2423,9 @@ jobs:
             @{Name='Tag-only action refs (not SHA-pinned)'; Pattern='uses:.*@v\d'; Severity='HIGH'},
             @{Name='curl|bash pipe (remote script exec)'; Pattern='curl.*\|\s*(ba)?sh'; Severity='CRITICAL'},
             @{Name='wget|bash pipe (remote script exec)'; Pattern='wget.*\|\s*(ba)?sh'; Severity='CRITICAL'},
-            @{Name='Invoke-WebRequest|IEX (remote exec)'; Pattern='Invoke-WebRequest.*Invoke-Expression|iwr.*iex'; Severity='CRITICAL'}
+            @{Name='Invoke-WebRequest|IEX (remote exec)'; Pattern='Invoke-WebRequest.*Invoke-Expression|iwr.*iex'; Severity='CRITICAL'},
+            @{Name='Artifact name injection'; Pattern='name:.*\$\{\{.*(github\.head_ref|github\.event\.(issue|pull_request)\.(title|body))'; Severity='MEDIUM'},
+            @{Name='Cache key injection (github.head_ref)'; Pattern='key:.*\$\{\{.*github\.head_ref'; Severity='MEDIUM'}
           )
 
           $findings = @()
@@ -2053,6 +2458,27 @@ jobs:
             if ($onText -match 'issue_comment') {
               $findings += @{Workflow=$wf.Name; Indicator='issue_comment trigger'; Severity='MEDIUM'}
             }
+          }
+
+          # C-3: Artifact poisoning (workflow_run + download-artifact)
+          foreach ($wf in $workflows) {
+            if ($wf.Name -eq $selfWf) { continue }
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            $onSection = ""
+            $inOn = $false
+            foreach ($ln in (Get-Content $wf.FullName)) {
+              if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
+              if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
+              if ($inOn) { $onSection += "$ln`n" }
+            }
+            if ($onSection -match 'workflow_run' -and $content -match 'download-artifact') {
+              $findings += @{Workflow=$wf.Name; Indicator='workflow_run + download-artifact (artifact poisoning)'; Severity='HIGH'}
+            }
+          }
+
+          # C-5: Dependabot configuration audit
+          if (-not (Test-Path ".github/dependabot.yml") -and -not (Test-Path ".github/dependabot.yaml")) {
+            $findings += @{Workflow='(repo)'; Indicator='No .github/dependabot.yml found'; Severity='MEDIUM'}
           }
 
           $report = @()
@@ -2260,6 +2686,10 @@ jobs:
           $report += "### Governance References"
           $report += ""
           $report += "- [Trivy Supply-Chain Compromise (March 2026)](https://snyk.io/articles/trivy-github-actions-supply-chain-compromise/)"
+          $report += "- [tj-actions/changed-files Compromise (March 2025)](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3)"
+          $report += "- [Nx Supply-Chain Attack (Feb 2025)](https://nx.dev/blog/security-incident-feb-2025)"
+          $report += "- [OpenSSF Scorecard](https://securityscorecards.dev/)"
+          $report += "- [GitHub Actions Security Hardening](https://docs.github.com/en/actions/reference/security/secure-use)"
           $report += "- [xsscx/governance/actions](https://github.com/xsscx/governance/tree/main/actions)"
           $report += "- ``.github/instructions/workflow-governance``"
           $report += "- ``.github/scripts/sanitize.ps1`` (PowerShell sanitizer)"

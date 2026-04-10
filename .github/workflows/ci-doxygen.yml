@@ -1,0 +1,203 @@
+###############################################################################
+# ci-doxygen.yml -- iccDEV API documentation generation
+#
+# Generates Doxygen HTML docs for IccJSON (focused) and the full iccDEV
+# project (IccProfLib + IccXML + IccJSON + Tools). Both sets are uploaded
+# as separate workflow artifacts. Documentation is NEVER committed.
+#
+# Copyright (c) 2024-2026 The International Color Consortium.
+###############################################################################
+
+name: iccDEV Doxygen Docs
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'IccJSON/**'
+      - 'Tools/**'
+      - 'examples/**'
+      - 'Doxyfile'
+      - 'Doxyfile.full'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'IccJSON/**'
+      - 'Tools/**'
+      - 'examples/**'
+      - 'Doxyfile'
+      - 'Doxyfile.full'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doxygen-iccjson:
+    name: IccJSON Docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Doxygen and Graphviz
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq doxygen graphviz
+
+      - name: Generate IccJSON Documentation
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          doxygen Doxyfile
+          echo "IccJSON Doxygen generation complete"
+          ls -la docs/generated/html/ | sed -n '1,5p'
+
+      - name: Report IccJSON Summary
+        if: success()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          html_dir="docs/generated/html"
+          total_files=$(find "$html_dir" -type f | wc -l)
+          svg_files=$(find "$html_dir" -name '*.svg' | wc -l)
+          html_files=$(find "$html_dir" -name '*.html' | wc -l)
+          total_size=$(du -sh "$html_dir" | cut -f1)
+
+          {
+            echo "### IccLibJSON Doxygen Documentation"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Total files | ${total_files} |"
+            echo "| HTML pages | ${html_files} |"
+            echo "| SVG graphs | ${svg_files} |"
+            echo "| Total size | ${total_size} |"
+            echo ""
+            echo "**Visual aids**: Interactive SVG (pan/zoom), class hierarchy browser,"
+            echo "call/caller graphs, collaboration diagrams, UML class diagrams,"
+            echo "include dependency graphs, treeview navigation, client-side search."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload IccJSON Documentation
+        if: success()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
+        with:
+          name: iccjson-doxygen-html
+          path: docs/generated/html/
+          retention-days: 30
+
+  doxygen-full:
+    name: Full Project Docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Doxygen and Graphviz
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq doxygen graphviz
+
+      - name: Generate Full Project Documentation
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          doxygen Doxyfile.full
+          echo "Full iccDEV Doxygen generation complete"
+          ls -la docs/generated-full/html/ | sed -n '1,5p'
+
+      - name: Report Full Project Summary
+        if: success()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          html_dir="docs/generated-full/html"
+          total_files=$(find "$html_dir" -type f | wc -l)
+          svg_files=$(find "$html_dir" -name '*.svg' | wc -l)
+          html_files=$(find "$html_dir" -name '*.html' | wc -l)
+          class_count=$(find "$html_dir" -name 'class*.html' | wc -l)
+          total_size=$(du -sh "$html_dir" | cut -f1)
+
+          {
+            echo "### Full iccDEV Doxygen Documentation"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Total files | $(sanitize_line "${total_files}") |"
+            echo "| HTML pages | $(sanitize_line "${html_files}") |"
+            echo "| Class pages | $(sanitize_line "${class_count}") |"
+            echo "| SVG graphs | $(sanitize_line "${svg_files}") |"
+            echo "| Total size | $(sanitize_line "${total_size}") |"
+            echo ""
+            echo "**Coverage**: IccProfLib, IccLibXML, IccLibJSON, 17 CLI Tools"
+            echo ""
+            echo "**Visual aids**: Interactive SVG (pan/zoom), class hierarchy browser,"
+            echo "call/caller graphs, collaboration diagrams, UML class diagrams,"
+            echo "include dependency graphs, directory graphs, treeview navigation,"
+            echo "client-side search, cross-referenced source browser."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Full Project Documentation
+        if: success()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
+        with:
+          name: iccdev-full-doxygen-html
+          path: docs/generated-full/html/
+          retention-days: 30

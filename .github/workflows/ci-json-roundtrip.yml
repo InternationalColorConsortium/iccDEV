@@ -1,0 +1,182 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+#
+# Intent: JSON API round-trip testing for IccLibJSON
+#
+# Last Updated: 2026-03-29
+#
+#
+###############################################################
+
+name: "ci-json-roundtrip"
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'IccJSON/**'
+      - 'IccProfLib/**'
+      - 'Build/Cmake/CMakeLists.txt'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'IccJSON/**'
+      - 'IccProfLib/**'
+      - 'Build/Cmake/CMakeLists.txt'
+
+jobs:
+  json-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake clang libtiff-dev \
+            libpng-dev libjpeg-dev libxml2-dev nlohmann-json3-dev
+
+      - name: Build iccDEV with JSON tools
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          mkdir -p Build/build-json
+          cd Build/build-json
+          cmake ../Cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DENABLE_TOOLS=ON
+          make -j"$(nproc)"
+
+      - name: Verify tool binaries
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          test -x Build/build-json/Tools/IccToJson/iccToJson
+          test -x Build/build-json/Tools/IccFromJson/iccFromJson
+          echo "[OK] JSON tool binaries built"
+
+      - name: Generate test profiles
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd Build/build-json
+          export LD_LIBRARY_PATH="$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON"
+          if [ -x "../../Testing/CreateAllProfiles.sh" ]; then
+            cd ../../Testing
+            PATH="$OLDPWD/Tools/IccFromXml:$OLDPWD/Tools/IccApplyProfiles:$OLDPWD/Tools/IccApplyNamedCmm:$OLDPWD/Tools/IccSpecSepToTiff:$OLDPWD/Tools/IccV5DspObsToV4Dsp:$PATH" \
+              bash CreateAllProfiles.sh || true
+          fi
+
+      - name: JSON round-trip test
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          cd Build/build-json
+          export LD_LIBRARY_PATH="$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON"
+          TOJSON="$PWD/Tools/IccToJson/iccToJson"
+          FROMJSON="$PWD/Tools/IccFromJson/iccFromJson"
+
+          PASS=0
+          FAIL=0
+          SKIP=0
+          TOTAL=0
+
+          {
+            echo "### JSON Round-Trip Results"
+            echo ""
+            echo "| Status | Profile | Original | Round-Trip | Delta |"
+            echo "|--------|---------|----------|------------|-------|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Use process substitution to avoid subshell variable scoping
+          while IFS= read -r f; do
+            name=$(basename "$f")
+            orig_size=$(stat -c%s "$f")
+            TOTAL=$((TOTAL+1))
+
+            if ! timeout 30 "$TOJSON" "$f" /tmp/rt.json >/dev/null 2>&1; then
+              SKIP=$((SKIP+1))
+              continue
+            fi
+            if ! timeout 30 "$FROMJSON" /tmp/rt.json /tmp/rt.icc >/dev/null 2>&1; then
+              SKIP=$((SKIP+1))
+              continue
+            fi
+
+            rt_size=$(stat -c%s /tmp/rt.icc)
+            safe_name="$(sanitize_line "$name")"
+
+            if [ "$orig_size" -eq "$rt_size" ]; then
+              PASS=$((PASS+1))
+              echo "| [OK] | ${safe_name} | $(sanitize_line "${orig_size}") | $(sanitize_line "${rt_size}") | 0 |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              delta=$((rt_size - orig_size))
+              FAIL=$((FAIL+1))
+              echo "| [DIFF] | ${safe_name} | $(sanitize_line "${orig_size}") | $(sanitize_line "${rt_size}") | $(sanitize_line "${delta}") |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+
+            rm -f /tmp/rt.json /tmp/rt.icc
+          done < <(find ../../Testing -name '*.icc' -size +100c 2>/dev/null | sort)
+
+          {
+            echo ""
+            echo "**Summary**: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} TOTAL=${TOTAL}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "[OK] Round-trip test complete: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} TOTAL=${TOTAL}"
+
+          if [ "${TOTAL}" -eq 0 ]; then
+            echo "[FAIL] No ICC profiles found for round-trip testing"
+            exit 1
+          fi

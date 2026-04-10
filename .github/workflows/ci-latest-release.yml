@@ -148,6 +148,10 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccXML -type l -name '*.so*' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccJSON -type f -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccJSON -type l -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
           # 3. Copy Testing/Readme.md, LICENSE.md and docs/
           cp Testing/Readme.md  "$stage/"
           cp LICENSE.md "$stage/"
@@ -300,6 +304,10 @@ jobs:
           find Build/IccXML -type f -name '*.dylib' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccXML -type l -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccJSON -type f -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccJSON -type l -name '*.dylib' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           # 3. Copy Testing/Readme.md, LICENSE.md and docs/
           cp Testing/Readme.md  "$stage/"
@@ -933,6 +941,7 @@ jobs:
             build-wasm/Tools/**/*.wasm
             build-wasm/IccProfLib/*.a
             build-wasm/IccXML/*.a
+            build-wasm/IccJSON/*.a
           if-no-files-found: warn
 
       - name: WASM Summary Report

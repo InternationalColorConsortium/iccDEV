@@ -66,7 +66,11 @@ Copyright:  (c) see Software License
 #include "IccJsonConfig.h"
 #include <nlohmann/json.hpp>
 
+#ifdef ICC_JSON_ORDERED
+using IccJson = nlohmann::ordered_json;
+#else
 using IccJson = nlohmann::json;
+#endif
 
 // ---------------------------------------------------------------------------
 // Base extension interface
@@ -467,7 +471,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// Curve tags – base interface with convert-type overloads (mirrors CIccCurveXml)
+// Curve tags -- base interface with convert-type overloads (mirrors CIccCurveXml)
 // ---------------------------------------------------------------------------
 class CIccCurveJson : public CIccTagJson
 {

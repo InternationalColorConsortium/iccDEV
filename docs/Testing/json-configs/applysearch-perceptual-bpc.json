@@ -1,0 +1,37 @@
+{
+  "dataFiles": {
+    "srcType": "colorData",
+    "dstType": "colorData",
+    "dstEncoding": "float"
+  },
+  "searchApply": {
+    "profileSequence": [
+      {
+        "iccFile": "Testing/Display/sRGB_D65_MAT.icc",
+        "intent": "perceptual",
+        "useBPC": true
+      },
+      {
+        "iccFile": "Testing/Display/sRGB_D65_MAT.icc",
+        "intent": "perceptual",
+        "useBPC": true
+      }
+    ],
+    "initial": {
+      "intent": "relative"
+    },
+    "pccWeights": []
+  },
+  "colorData": {
+    "space": "'RGB'",
+    "encoding": "float",
+    "srcSpace": "'RGB'",
+    "srcEncoding": "float",
+    "data": [
+      {"sv": [0.5, 0.3, 0.2]},
+      {"sv": [1.0, 0.0, 0.0]},
+      {"sv": [0.0, 1.0, 0.0]},
+      {"sv": [0.0, 0.0, 1.0]}
+    ]
+  }
+}

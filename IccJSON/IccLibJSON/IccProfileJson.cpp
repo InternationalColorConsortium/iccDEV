@@ -112,7 +112,7 @@ static icUInt32Number icJsonParseHeaderFlags(const IccJson &j)
 // icJsonGetDeviceAttr and icJsonParseDeviceAttr are now in IccUtilJson
 
 // ---------------------------------------------------------------------------
-// Serialization: profile → JSON object
+// Serialization: profile -> JSON object
 // ---------------------------------------------------------------------------
 
 bool CIccProfileJson::ToJson(IccJson &root)
@@ -184,7 +184,7 @@ bool CIccProfileJson::ToJson(IccJson &root)
 
   root["Header"] = header;
 
-  // Tags — stored as a JSON array to preserve tag order.
+  // Tags -- stored as a JSON array to preserve tag order.
   // Each element is a single-member object: { "<tagName>": { ... } }
   // Known tags use their ICC name (e.g. "redMatrixColumnTag").
   // Private/unknown tags use "PrivateTag_N" with a "sig" member for the raw 4-char signature.
@@ -268,7 +268,7 @@ bool CIccProfileJson::ToJson(std::string &jsonString, int indent)
 }
 
 // ---------------------------------------------------------------------------
-// Parsing: JSON object → profile
+// Parsing: JSON object -> profile
 // ---------------------------------------------------------------------------
 
 static icUInt32Number icJsonParseBCDByte(const char *s)
@@ -288,7 +288,7 @@ static icUInt32Number icJsonParseBCDVersionStr(const char *szVer)
   return (hi << 8) | lo;
 }
 
-bool CIccProfileJson::ParseBasic(const IccJson &header, std::string &parseStr)
+bool CIccProfileJson::ParseBasic(const IccJson &header, std::string & /*parseStr*/)
 {
   CIccInfo info;
 
@@ -385,7 +385,7 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
   // Determine tag signature from the key name
   icTagSignature sig = CIccTagCreator::GetTagNameSig(key.c_str());
   if (sig == icSigUnknownTag) {
-    // Private tag — raw sig stored in "sig" member
+    // Private tag -- raw sig stored in "sig" member
     if (!tagValue.contains("sig")) {
       parseStr += "Private tag '" + key + "' missing 'sig'\n";
       return false;

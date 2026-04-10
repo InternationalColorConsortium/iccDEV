@@ -2,6 +2,8 @@
 
 `iccIisIsapi` is a Windows-only IIS ISAPI extension sample that proves
 `IccProfLib2.dll` and `IccXML2.dll` can be loaded from an IIS-hosted native DLL.
+When IccJSON is built (`ENABLE_ICCJSON=ON`), the extension also loads
+`IccJSON2.dll` and runs `iccToJson`/`iccFromJson` as part of the tool pipeline.
 
 ## Request modes
 

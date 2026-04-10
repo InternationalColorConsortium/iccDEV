@@ -68,10 +68,16 @@ message(STATUS "")
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 # ----------------------------------------------------------------------
-# Define Default Configurations (for MSVC/Xcode generators)
+# Define Default Configurations (for MSVC/Xcode/Ninja Multi-Config generators)
 # ----------------------------------------------------------------------
+# CMAKE_CONFIGURATION_TYPES is only meaningful for multi-config generators.
+# Setting it on single-config generators (Make, Ninja) causes downstream
+# logic to misidentify the generator as multi-config, leading to incorrect
+# LTO configuration and static libraries containing LLVM bitcode instead
+# of native object code.  (See GitHub issue #814.)
 
-if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+get_property(_is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+if(_is_multi_config AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_CONFIGURATION_TYPES "Debug;Release;RelWithDebInfo;MinSizeRel" CACHE STRING "Available configurations" FORCE)
   set_property(GLOBAL PROPERTY DEBUG_CONFIGURATIONS Debug)
   set_property(GLOBAL PROPERTY RELEASE_CONFIGURATIONS Release RelWithDebInfo MinSizeRel)
@@ -411,11 +417,7 @@ if(VERBOSE_CONFIG)
   message(STATUS "LibXml2                : ${LIBXML2_LIBRARIES} (version: ${LIBXML2_VERSION})")
 endif()
 
-# --- nlohmann_json ---
-find_package(nlohmann_json REQUIRED)
-if(VERBOSE_CONFIG)
-  message(STATUS "nlohmann_json          : ${nlohmann_json_DIR} (version: ${nlohmann_json_VERSION})")
-endif()
+# --- nlohmann_json (found later, guarded by ENABLE_ICCJSON) ---
 
 # --- TIFF ---
 find_package(TIFF REQUIRED)
@@ -531,6 +533,7 @@ option(ENABLE_SHARED_LIBS         "Build dynamic link libraries"                
 option(ENABLE_STATIC_LIBS         "Build static libraries"                              ON)
 option(ENABLE_ICCXML              "Build IccXML library support"                        ON)
 option(ENABLE_ICCJSON             "Build IccJSON library support"                       ON)
+option(ICC_JSON_ORDERED           "Use ordered_json for deterministic key order (slower)" OFF)
 option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"           OFF)
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
@@ -856,8 +859,9 @@ elseif(ipo_supported)
     # LNK2001 unresolved externals when consumers link the import library.
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
     message(STATUS ">>> Link-Time Optimization (LTO) disabled: WINDOWS_EXPORT_ALL_SYMBOLS requires COFF objects")
-  elseif(CMAKE_CONFIGURATION_TYPES)
-    # Multi-config generator (Visual Studio, Xcode): enable LTO for Release only
+  elseif(_is_multi_config)
+    # Multi-config generator (Visual Studio, Xcode, Ninja Multi-Config):
+    # enable LTO for Release only
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
     message(STATUS ">>> Link-Time Optimization (LTO) enabled for Release configuration (multi-config)")
   elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -1208,6 +1212,20 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccXML)
 # JSON library (parallel to IccXML, uses nlohmann/json)
 #
 IF(ENABLE_ICCJSON)
+  find_package(nlohmann_json REQUIRED)
+  if(VERBOSE_CONFIG)
+    message(STATUS "nlohmann_json          : ${nlohmann_json_DIR} (version: ${nlohmann_json_VERSION})")
+  endif()
+
+  # ICC_JSON_ORDERED: use nlohmann::ordered_json for deterministic key order.
+  # Default OFF (unordered is faster). Enable for reproducible output / CI logs.
+  IF(ICC_JSON_ORDERED)
+    add_definitions(-DICC_JSON_ORDERED=1)
+    message(STATUS "IccJSON key order      : ordered (deterministic)")
+  ELSE()
+    message(STATUS "IccJSON key order      : unordered (faster)")
+  ENDIF()
+
   message(STATUS "Adding subdirectory for IccJSON.")
   add_subdirectory(IccJSON)
 
@@ -1231,11 +1249,6 @@ if(VERBOSE_CONFIG)
 endif()
 
 
-# nlohmann_json already found above
-if(VERBOSE_CONFIG)
-  message(STATUS "nlohmann_json library found: ${nlohmann_json_DIR}")
-endif()
-
  # Function to add and log subdirectories
 function(add_tool_subdirectory TOOL_SUBDIRECTORY)
     message(STATUS "Adding Subdirectory: ${TOOL_SUBDIRECTORY}...")
@@ -1253,16 +1266,11 @@ function(iccdev_fixup_msvc_compile_pdb TARGET_NAME)
 endfunction()
 
 IF(ENABLE_TOOLS)
-  # Verify nlohmann_json is configured properly
-  IF(nlohmann_json_DIR)
-    IF(VERBOSE_CONFIG)
-      MESSAGE(STATUS "Found nlohmann JSON library at: ${nlohmann_json_DIR}")
+  # Verify nlohmann_json is configured properly (required for JSON tools)
+  IF(ENABLE_ICCJSON)
+    IF(NOT nlohmann_json_DIR)
+      MESSAGE(WARNING "nlohmann JSON library not found but ENABLE_ICCJSON is ON. JSON tools will be skipped.")
     ENDIF()
-    # nlohmann_json is header-only; use via target_link_libraries(PRIVATE nlohmann_json::nlohmann_json)
-    # in individual tool CMakeLists (NOT via include_directories)
-  ELSE()
-    MESSAGE(WARNING "nlohmann JSON library not found. Skipping..")
-    RETURN() # Exit script for tools if dependency is not found
   ENDIF()
 
   # Add XML-related tools

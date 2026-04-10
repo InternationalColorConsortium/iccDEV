@@ -194,6 +194,48 @@ elseif(TARGET RefIccMAX::IccXML2-static)
     set(_ICCDEV_XML_TARGET RefIccMAX::IccXML2-static)
 endif()
 
+# -- Optional IccJSON2 discovery ---------------------------------------------
+# IccJSON headers require <nlohmann/json.hpp>, so both the IccJSON2 library
+# AND nlohmann_json must be available for the JSON demo to compile.
+set(_ICCDEV_JSON_TARGET "")
+find_package(nlohmann_json QUIET)
+
+if(nlohmann_json_FOUND)
+    if(TARGET RefIccMAX::IccJSON2)
+        set(_ICCDEV_JSON_TARGET RefIccMAX::IccJSON2)
+        message(STATUS "hello-iccdev: IccJSON2 found (shared)")
+    elseif(TARGET RefIccMAX::IccJSON2-static)
+        set(_ICCDEV_JSON_TARGET RefIccMAX::IccJSON2-static)
+        message(STATUS "hello-iccdev: IccJSON2 found (static)")
+    else()
+        # Manual fallback: look for IccJSON2 library in the build tree
+        if(ICCDEV_BUILD_DIR)
+            find_library(_ICCJSON2_LIB NAMES IccJSON2
+                PATHS "${ICCDEV_BUILD_DIR}/IccJSON/Release"
+                      "${ICCDEV_BUILD_DIR}/IccJSON/Debug"
+                      "${ICCDEV_BUILD_DIR}/IccJSON"
+                NO_DEFAULT_PATH
+            )
+            if(_ICCJSON2_LIB)
+                add_library(RefIccMAX::IccJSON2 UNKNOWN IMPORTED)
+                set_target_properties(RefIccMAX::IccJSON2 PROPERTIES
+                    IMPORTED_LOCATION "${_ICCJSON2_LIB}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${ICCDEV_ROOT}/IccJSON/IccLibJSON;${ICCDEV_BUILD_DIR}/IccJSON"
+                    INTERFACE_LINK_LIBRARIES "RefIccMAX::IccProfLib2;nlohmann_json::nlohmann_json"
+                )
+                set(_ICCDEV_JSON_TARGET RefIccMAX::IccJSON2)
+                message(STATUS "hello-iccdev: IccJSON2 found (manual: ${_ICCJSON2_LIB})")
+            endif()
+        endif()
+    endif()
+else()
+    message(STATUS "hello-iccdev: nlohmann_json not found (JSON demo disabled)")
+endif()
+
+if(NOT _ICCDEV_JSON_TARGET)
+    message(STATUS "hello-iccdev: IccJSON2 not available (JSON demo disabled)")
+endif()
+
 if(NOT _ICCDEV_PROFLIB_TARGET OR NOT _ICCDEV_XML_TARGET)
     set(_REFICCMAX_BAD_DIR "${RefIccMAX_DIR}")
     unset(RefIccMAX_DIR CACHE)
@@ -242,13 +284,20 @@ target_link_libraries(hello-iccdev PRIVATE
     ${_ICCDEV_XML_TARGET}
 )
 
+if(_ICCDEV_JSON_TARGET)
+    target_link_libraries(hello-iccdev PRIVATE ${_ICCDEV_JSON_TARGET})
+    target_compile_definitions(hello-iccdev PRIVATE USE_ICCJSON=1)
+endif()
+
 # -- Windows: copy DLLs next to executable -----------------------------------
 if(WIN32 AND ICCDEV_BUILD_DIR)
     file(GLOB _ICCDEV_DLLS
         "${ICCDEV_BUILD_DIR}/IccProfLib/Release/*.dll"
         "${ICCDEV_BUILD_DIR}/IccXML/Release/*.dll"
+        "${ICCDEV_BUILD_DIR}/IccJSON/Release/*.dll"
         "${ICCDEV_BUILD_DIR}/IccProfLib/Debug/*.dll"
         "${ICCDEV_BUILD_DIR}/IccXML/Debug/*.dll"
+        "${ICCDEV_BUILD_DIR}/IccJSON/Debug/*.dll"
     )
     foreach(_DLL ${_ICCDEV_DLLS})
         add_custom_command(TARGET hello-iccdev POST_BUILD

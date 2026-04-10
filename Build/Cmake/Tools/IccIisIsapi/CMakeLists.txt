@@ -38,6 +38,10 @@ add_library(iccIisIsapi SHARED
 target_compile_features(iccIisIsapi PRIVATE cxx_std_17)
 target_include_directories(iccIisIsapi PRIVATE "${WINNT_ROOT}")
 target_link_libraries(iccIisIsapi PRIVATE IccProfLib2 IccXML2)
+if(TARGET IccJSON2)
+  target_link_libraries(iccIisIsapi PRIVATE IccJSON2)
+  target_compile_definitions(iccIisIsapi PRIVATE USE_ICCJSON=1)
+endif()
 set_target_properties(iccIisIsapi PROPERTIES
   OUTPUT_NAME "iccIisIsapi"
   DEBUG_POSTFIX ""

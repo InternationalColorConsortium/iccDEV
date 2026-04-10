@@ -4683,7 +4683,15 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
           if ((attr = icXmlFindAttr(pTypeNode, "reserved"))) {
             sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
           }
-          AttachElem(sigTag, pTag);
+          if (!AttachElem(sigTag, pTag)) {
+            parseStr += "Unable to Attach \"";
+            parseStr += (const char*)pTypeNode->name;
+            parseStr += "\" (";
+            parseStr += nodeName;
+            parseStr += ") Tag\n";
+            delete pTag;
+            return false;
+          }
         }
         else {
           parseStr += "Unable to Parse \"";
@@ -4691,6 +4699,7 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
           parseStr += "\" (";
           parseStr += nodeName;
           parseStr += ") Tag\n";
+          delete pTag;
           return false;
         }
       }
@@ -4700,6 +4709,7 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
         parseStr += "\" (";
         parseStr += nodeName;
         parseStr += ") Tag\n";
+        delete pTag;
         return false;
       }
     }
@@ -4728,12 +4738,17 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
           sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
         }
 
+        bool bAttached = false;
         for (xmlNode *tagSigNode = pNode->children; tagSigNode; tagSigNode = tagSigNode->next) {
           if (tagSigNode->type == XML_ELEMENT_NODE && !icXmlStrCmp(tagSigNode->name, "TagSignature")
             && tagSigNode->children != NULL) {
             sigTag = (icTagSignature)icGetSigVal((const icChar*)tagSigNode->children->content);
-            AttachElem(sigTag, pTag);
+            if (AttachElem(sigTag, pTag))
+              bAttached = true;
           }
+        }
+        if (!bAttached) {
+          delete pTag;
         }
       }
       else {
@@ -4742,6 +4757,7 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
         parseStr += "\" (";
         parseStr += nodeName;
         parseStr += ") Tag\n";
+        delete pTag;
         return false;
       }
     }
@@ -4751,6 +4767,7 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
       parseStr += "\" (";
       parseStr += nodeName;
       parseStr += ") Tag\n";
+      delete pTag;
       return false;
     }
   }
@@ -4973,6 +4990,7 @@ bool CIccTagXmlArray::ParseXml(xmlNode *pNode, std::string &parseStr)
             parseStr += "Tag Array Index ";
             parseStr += n;
             parseStr += " already filled!\n";
+            delete pTag;
             return false;
           }
         }
@@ -4980,8 +4998,12 @@ bool CIccTagXmlArray::ParseXml(xmlNode *pNode, std::string &parseStr)
           parseStr += "Unable to Parse xml node named  \"";
           parseStr += (icChar*)tagNode->name;
           parseStr += "\"\n";
+          delete pTag;
           return false;
         }
+      }
+      else {
+        delete pTag;
       }
       n++;
     }

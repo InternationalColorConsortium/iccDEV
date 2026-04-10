@@ -1,7 +1,7 @@
 /** @file
     File:       IccMpeJsonFactory.h
 
-    Contains:   Header for implementation of CIccMpeJsonFactory class –
+    Contains:   Header for implementation of CIccMpeJsonFactory class --
                 an extension factory providing ICC JSON format capabilities
                 for multi-process elements.
 

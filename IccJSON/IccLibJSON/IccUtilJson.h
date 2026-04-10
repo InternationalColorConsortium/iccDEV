@@ -67,7 +67,11 @@
 #include <string>
 #include <vector>
 
+#ifdef ICC_JSON_ORDERED
+using IccJson = nlohmann::ordered_json;
+#else
 using IccJson = nlohmann::json;
+#endif
 
 // ---------------------------------------------------------------------------
 // Hex data helpers (binary blobs stored as hex strings in JSON)

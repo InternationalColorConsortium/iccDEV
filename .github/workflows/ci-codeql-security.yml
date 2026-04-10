@@ -24,6 +24,7 @@ on:
     paths:
       - 'IccProfLib/**'
       - 'IccXML/**'
+      - 'IccJSON/**'
       - 'Tools/**'
       - 'examples/**'
       - '.github/codeql-queries/**'
@@ -34,6 +35,7 @@ on:
     paths:
       - 'IccProfLib/**'
       - 'IccXML/**'
+      - 'IccJSON/**'
       - 'Tools/**'
       - 'examples/**'
       - '.github/codeql-queries/**'

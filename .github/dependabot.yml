@@ -1,0 +1,22 @@
+###############################################################
+#
+# Dependabot Configuration
+# https://docs.github.com/en/code-security/dependabot
+#
+# Keeps GitHub Actions and other dependencies up to date.
+#
+###############################################################
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+    open-pull-requests-limit: 5

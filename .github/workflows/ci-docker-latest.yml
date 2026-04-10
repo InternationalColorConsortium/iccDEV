@@ -167,7 +167,7 @@ jobs:
           unset GITHUB_TOKEN || true
           FAILURES=0
           echo "### Tool Tests" >> "$GITHUB_STEP_SUMMARY"
-          for tool in iccToXml iccFromXml iccDumpProfile iccRoundTrip; do
+          for tool in iccToXml iccFromXml iccToJson iccFromJson iccDumpProfile iccRoundTrip; do
             OUT=$(docker run --rm iccdev-test:latest "$tool" 2>&1 || true)
             if grep -qiE "Usage:|IccProfLib" <<< "$OUT"; then
               echo "✅ $tool" >> "$GITHUB_STEP_SUMMARY"

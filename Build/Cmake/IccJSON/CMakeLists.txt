@@ -38,9 +38,11 @@ ENDIF(ENABLE_INSTALL_RIM)
 
 # Generate version header with git commit hash (reuses the project version string)
 if(GIT_COMMIT_HASH)
-    set(ICCLIBXML_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}+${GIT_COMMIT_HASH}")
+    set(ICCLIBJSON_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}+${GIT_COMMIT_HASH}")
+    set(ICCPROFLIBJSON_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}+${GIT_COMMIT_HASH}")
 else()
-    set(ICCLIBXML_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}")
+    set(ICCLIBJSON_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}")
+    set(ICCPROFLIBJSON_VERSION_STRING "${${PROJECT_UP_NAME}_VERSION}")
 endif()
 
 configure_file(
@@ -62,7 +64,7 @@ IF(APPLE)
   SET(EXTRA_LIBS_CS ${CARBON_LIBRARY} ${IOKIT_LIBRARY})
 ENDIF()
 
-# IccJSON has no IccXML dependency – all utilities are in IccProfLib
+# IccJSON has no IccXML dependency -- all utilities are in IccProfLib
 
 IF(ENABLE_SHARED_LIBS)
   ADD_LIBRARY(${TARGET_NAME} SHARED ${SOURCES})
@@ -99,6 +101,10 @@ ENDIF()
 IF(ENABLE_STATIC_LIBS)
   ADD_LIBRARY(${TARGET_NAME}-static STATIC ${SOURCES})
   SET_TARGET_PROPERTIES(${TARGET_NAME}-static PROPERTIES OUTPUT_NAME "${TARGET_NAME}-static")
+
+  # Static archives must contain native object code, not LLVM IR bitcode.
+  # Disable LTO per-target as defense-in-depth.  (See GitHub issue #814.)
+  set_target_properties(${TARGET_NAME}-static PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
 
   target_include_directories(${TARGET_NAME}-static PUBLIC

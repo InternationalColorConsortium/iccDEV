@@ -1,12 +1,14 @@
 # Prevent local build artifacts from breaking Docker builds
-Build/CMakeCache.txt
-Build/CMakeFiles/
-Build/IccProfLib/
-Build/IccXML/
-Build/Tools/
-Build/Makefile
-Build/cmake_install.cmake
-Build/IccProfLib2Config.cmake
-Build/CTestTestfile.cmake
-Build/Testing/
+# Only exclude generated cmake outputs, not cmake source configuration
+Build/Cmake/CMakeCache.txt
+Build/Cmake/CMakeFiles/
+Build/Cmake/Makefile
+Build/Cmake/cmake_install.cmake
+# Exclude built libraries and binaries (will be rebuilt in Docker)
+Build/Cmake/IccProfLib/*.so*
+Build/Cmake/IccProfLib/*.a
+Build/Cmake/IccXML/*.so*
+Build/Cmake/IccXML/*.a
+Build/Cmake/IccJSON/*.so*
+Build/Cmake/IccJSON/*.a
 .git

@@ -443,6 +443,80 @@ jobs:
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
 
+  #############################################################################
+  # Example Consumer Project -- verifies build-tree export works
+  #############################################################################
+  example-project:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: Example Project
+    needs: [detect-src]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Dependencies
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential cmake \
+            libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
+
+      - name: Build iccDEV
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd Build/Cmake
+          cmake -B build -S . \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DENABLE_TOOLS=ON \
+                -Wno-dev
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Build Example Project
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          cd examples/hello-iccdev
+          cmake -B build \
+                -DICCDEV_BUILD_DIR="$GITHUB_WORKSPACE/Build/Cmake/build" \
+                -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Run Example Project
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/Build/Cmake/build/IccProfLib:${{ github.workspace }}/Build/Cmake/build/IccXML:${{ github.workspace }}/Build/Cmake/build/IccJSON"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          OUTPUT=$(./examples/hello-iccdev/build/hello-iccdev 2>&1)
+          echo "$OUTPUT"
+          if grep -qE 'IccProfLib|Successfully opened' <<< "$OUTPUT"; then
+            echo "[OK] Example project works correctly"
+          else
+            echo "[FAIL] Example project output unexpected"
+            exit 1
+          fi
+
   finalize:
     name: 🧾 PR Summary
     runs-on: ubuntu-latest
@@ -453,6 +527,7 @@ jobs:
       - scan-build
       - tool-tests
       - win-ci
+      - example-project
     if: always()
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -486,6 +561,7 @@ jobs:
           SCAN_RESULT: ${{ needs['scan-build'].result }}
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
+          EXAMPLE_RESULT: ${{ needs['example-project'].result }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -515,6 +591,7 @@ jobs:
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
+          EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
 
           # remove CRs, trim whitespace and lowercase each value
           trim_and_norm() {
@@ -532,10 +609,11 @@ jobs:
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
+          EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT"; do
+          for s in "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT" "$EXAMPLE_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -603,6 +681,7 @@ jobs:
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
+            printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
             echo ""

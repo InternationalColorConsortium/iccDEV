@@ -1,7 +1,7 @@
 /** @file
     File:       IccMpeJsonFactory.cpp
 
-    Contains:   Implementation of CIccMpeJsonFactory –
+    Contains:   Implementation of CIccMpeJsonFactory --
                 creates JSON-aware multi-process element objects.
 
     Version:    V1

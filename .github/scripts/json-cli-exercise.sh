@@ -11,7 +11,7 @@ elif [ -d "$SCRIPT_DIR/../../../IccProfLib" ]; then
 else
   REPO_ROOT="$(pwd)"
 fi
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit 1
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-build/IccProfLib:build/IccXML}"
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
 export UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1

@@ -2,14 +2,18 @@
 
 Minimal standalone example that links **IccProfLib2** and **IccXML2** from the
 [iccDEV](https://github.com/InternationalColorConsortium/iccDEV) project
-(RefIccMAX — the ICC reference implementation).
+(RefIccMAX -- the ICC reference implementation).
+
+When **IccJSON2** (and nlohmann-json) is available, the example also
+demonstrates JSON round-tripping via `CIccProfileJson::ToJson()`.
 
 ## What It Does
 
-1. Prints the IccProfLib and IccLibXML library version strings
+1. Prints the IccProfLib, IccLibXML, and IccLibJSON library version strings
 2. Creates a minimal ICC display profile (sRGB, Lab PCS)
 3. Round-trips the profile header to XML via `CIccProfileXml::ToXml()`
-4. Prints a greeting: **Hello, iccDEV!**
+4. Round-trips the profile header to JSON via `CIccProfileJson::ToJson()` (when IccJSON2 is linked)
+5. Prints a greeting: **Hello, iccDEV!**
 
 ## Prerequisites
 

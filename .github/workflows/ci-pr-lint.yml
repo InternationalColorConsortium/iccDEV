@@ -148,7 +148,7 @@ jobs:
           else
             echo "no_src_changes=false" >> "$GITHUB_OUTPUT"
             echo "scope=full" >> "$GITHUB_OUTPUT"
-            find IccProfLib IccXML Tools -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.cxx' -o -name '*.cc' -o -name '*.hpp' \) -print0 > changed_files.txt
+            find IccProfLib IccXML IccJSON Tools -type f \( -name '*.cpp' -o -name '*.h' -o -name '*.cxx' -o -name '*.cc' -o -name '*.hpp' \) -print0 > changed_files.txt
             file_count="$(xargs -0 -n1 < changed_files.txt | wc -l)"
             echo "Full-tree analysis: $file_count source files"
           fi
@@ -199,6 +199,9 @@ jobs:
           - name: "cppcheck • Tools"
             tool: cppcheck
             component: Tools
+          - name: "cppcheck • IccJSON"
+            tool: cppcheck
+            component: IccJSON
           - name: "clang-tidy"
             tool: clang-tidy
             component: all
@@ -353,6 +356,14 @@ jobs:
           path: lint_reports/parts/
         continue-on-error: true
 
+      - name: Download cppcheck IccJSON results
+        if: needs.lint.result == 'success' || needs.lint.result == 'failure'
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        with:
+          name: lint-cppcheck-IccJSON
+          path: lint_reports/parts/
+        continue-on-error: true
+
       - name: Download clang-tidy results
         if: needs.lint.result == 'success' || needs.lint.result == 'failure'
         uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
@@ -432,7 +443,7 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "| Component | Findings |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-----------|----------|" >> "$GITHUB_STEP_SUMMARY"
-            for comp in IccProfLib IccXML Tools; do
+            for comp in IccProfLib IccXML IccJSON Tools; do
               f="lint_reports/parts/cppcheck_${comp}.txt"
               if [ -f "$f" ] && [ -s "$f" ]; then
                 cnt=$(wc -l < "$f" | tr -d ' ')
@@ -490,7 +501,7 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "| Component | Warnings |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-----------|----------|" >> "$GITHUB_STEP_SUMMARY"
-            for component in IccProfLib IccXML Tools; do
+            for component in IccProfLib IccXML IccJSON Tools; do
               cnt=$({ grep "warning:.*\[" lint_reports/clang_tidy.txt 2>/dev/null || true; } | { grep "/${component}/" || true; } | wc -l | tr -d ' ')
               echo "| $component | $cnt |" >> "$GITHUB_STEP_SUMMARY"
             done

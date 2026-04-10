@@ -27,6 +27,13 @@ Within the project are several libraries and tools as follows:
     objects defined by IccProfLib using an XML representation thus allowing ICC
     profiles to be expressed as or created from text based XML files.
 
+  * IccLibJSON - The IccLibJSON library provides native JSON serialization for
+    ICC and iccMAX profiles. It extends IccProfLib with the ability to convert
+    profiles to and from a human-readable JSON representation, enabling
+    inspection and editing with any JSON-capable tooling. A
+    [JSON Schema](icc-profile.schema.json) is provided for inline validation.
+    See [IccJSON guide](iccjson.md) for full documentation.
+
 
 ### Tools based upon these libraries
 
@@ -200,6 +207,8 @@ See [Install](install.md) for Docker, Homebrew, NPM, and NixOS quickstart.
 
 The [`examples/hello-iccdev/`](../examples/hello-iccdev/) directory contains a
 minimal standalone example that links IccProfLib2 and IccXML2, prints library
-versions, and round-trips an ICC profile header to XML. It supports three
-discovery paths: installed package (including vcpkg), build-tree export, and
-manual discovery.
+versions, and round-trips an ICC profile header to XML. When IccJSON2 (and
+nlohmann-json) is available, the example also demonstrates JSON round-tripping
+via `CIccProfileJson::ToJson()` and `ParseJson()`. It supports three discovery
+paths: installed package (including vcpkg), build-tree export, and manual
+discovery.

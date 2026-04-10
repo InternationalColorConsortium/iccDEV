@@ -875,7 +875,7 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
   xmlNode *root_element = NULL;
 
   /*parse the file and get the DOM */
-  doc = xmlReadFile(szFilename, NULL, XML_PARSE_HUGE);
+  doc = xmlReadFile(szFilename, NULL, XML_PARSE_HUGE | XML_PARSE_NONET);
 
   if (doc == NULL) 
     return false;

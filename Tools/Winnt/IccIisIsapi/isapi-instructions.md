@@ -65,9 +65,11 @@ The sample install directory should contain at least:
 - `index.html`, `index2.html`, `endpoints.html`, `integration.html`
 - `site.css`, `site.js`, `sanitize.js`
 - `web.config`
-- `assets/` — ICC branding images
-- `_tool-work/index.html` — workspace landing page
+- `assets/` -- ICC branding images
+- `_tool-work/index.html` -- workspace landing page
 - Tool executables: `iccToXml.exe`, `iccFromXml.exe`, `iccDumpProfile.exe`, `iccRoundTrip.exe`
+- JSON tool executables (optional, if IccJSON is built): `iccToJson.exe`, `iccFromJson.exe`
+- JSON support DLL (optional): `IccJSON2.dll` (or `IccJSON2d.dll` for Debug)
 
 If the transitive runtime DLLs are missing, the IIS worker process can fail to
 load the extension even when the handler mapping is correct.
@@ -172,18 +174,18 @@ finally {
 ## Relevant source files
 
 - `Build/Cmake/Tools/IccIisIsapi/CMakeLists.txt`
-- `Tools/Winnt/IccIisIsapi/iccIisIsapi.cpp` — ISAPI DLL entry point
-- `Tools/Winnt/IccIisIsapi/IccIsapiSanitize.h/.cpp` — Sanitization primitives (CWE-79, CWE-116, CWE-170, CWE-20)
-- `Tools/Winnt/IccIisIsapi/IccIsapiHttp.h/.cpp` — HTTP response helpers with security headers
-- `Tools/Winnt/IccIisIsapi/sanitize.js` — Client-side DOM-XSS prevention
-- `Tools/Winnt/IccIisIsapi/IccIsapiFuzzTest.cpp` — Fuzz test harness
-- `Tools/Winnt/IccIisIsapi/Stress-IccIisIsapi.ps1` — 10-phase concurrent stress test
-- `Tools/Winnt/IccIisIsapi/Install-IccIisIsapiSite.ps1` — IIS site installer
-- `Tools/Winnt/IccIisIsapi/Uninstall-IccIisIsapiSite.ps1` — IIS site uninstaller
-- `Tools/Winnt/IccIisIsapi/Export-IccIisIsapiSite.ps1` — Package site for deployment
-- `Tools/Winnt/IccIisIsapi/Import-IccIisIsapiSite.ps1` — Deploy package to IIS
-- `Tools/Winnt/IccIisIsapi/index.html` — Landing page
-- `Tools/Winnt/IccIisIsapi/endpoints.html` — Browser tool console
-- `Tools/Winnt/IccIisIsapi/web.config` — IIS configuration
-- `Tools/Winnt/IccIisIsapi/api.md` — HTTP API reference
-- `Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml` — OpenAPI 3.1 spec
+- `Tools/Winnt/IccIisIsapi/iccIisIsapi.cpp` -- ISAPI DLL entry point
+- `Tools/Winnt/IccIisIsapi/IccIsapiSanitize.h/.cpp` -- Sanitization primitives (CWE-79, CWE-116, CWE-170, CWE-20)
+- `Tools/Winnt/IccIisIsapi/IccIsapiHttp.h/.cpp` -- HTTP response helpers with security headers
+- `Tools/Winnt/IccIisIsapi/sanitize.js` -- Client-side DOM-XSS prevention
+- `Tools/Winnt/IccIisIsapi/IccIsapiFuzzTest.cpp` -- Fuzz test harness
+- `Tools/Winnt/IccIisIsapi/Stress-IccIisIsapi.ps1` -- 10-phase concurrent stress test
+- `Tools/Winnt/IccIisIsapi/Install-IccIisIsapiSite.ps1` -- IIS site installer
+- `Tools/Winnt/IccIisIsapi/Uninstall-IccIisIsapiSite.ps1` -- IIS site uninstaller
+- `Tools/Winnt/IccIisIsapi/Export-IccIisIsapiSite.ps1` -- Package site for deployment
+- `Tools/Winnt/IccIisIsapi/Import-IccIisIsapiSite.ps1` -- Deploy package to IIS
+- `Tools/Winnt/IccIisIsapi/index.html` -- Landing page
+- `Tools/Winnt/IccIisIsapi/endpoints.html` -- Browser tool console
+- `Tools/Winnt/IccIisIsapi/web.config` -- IIS configuration
+- `Tools/Winnt/IccIisIsapi/api.md` -- HTTP API reference
+- `Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml` -- OpenAPI 3.1 spec

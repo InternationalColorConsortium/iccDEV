@@ -44,6 +44,7 @@ on:
       - '.github/ci/test-data/**'
       - 'IccProfLib/**'
       - 'IccXML/**'
+      - 'IccJSON/**'
       - 'Tools/**'
       - 'Build/Cmake/**'
   workflow_dispatch:
@@ -190,6 +191,7 @@ jobs:
 
           ls -lh IccProfLib/libIccProfLib2.so* || echo "WARN: shared lib missing"
           ls -lh IccXML/libIccXML2.so* || echo "WARN: XML shared lib missing"
+          ls -lh IccJSON/libIccJSON2.so* || echo "WARN: JSON shared lib missing"
 
           {
             echo "### iccDEV Build"
@@ -209,7 +211,7 @@ jobs:
       - name: Generate test profiles (CreateAllProfiles.sh)
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "detect_leaks=0,halt_on_error=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           WORKSPACE_DIR: ${{ github.workspace }}
@@ -264,7 +266,7 @@ jobs:
       - name: Run iccDEV tool coverage baseline (103 tests)
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
@@ -309,7 +311,7 @@ jobs:
       - name: Run JSON -cfg configuration tests (31 tests)
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
@@ -365,7 +367,7 @@ jobs:
         if: success() || failure()
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
@@ -413,7 +415,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           WORKSPACE_DIR: ${{ github.workspace }}
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
@@ -572,6 +574,46 @@ jobs:
             echo "  [SKIP] .github/ci/regression/ not found"
           fi
 
+          # --- R7: XML_PARSE_NONET defense-in-depth (#735) ---
+          echo "--- R7: XML_PARSE_NONET defense-in-depth (#735) ---"
+
+          # R7a: Source-level check -- XML_PARSE_NONET must be present
+          nonet_ok=true
+          for src in IccXML/IccLibXML/IccProfileXml.cpp IccXML/IccLibXML/IccMpeXml.cpp; do
+            src_path="${WORKSPACE_DIR}/${src}"
+            if [ ! -f "$src_path" ]; then
+              echo "  [SKIP] $src not found"; continue
+            fi
+            if grep -q 'XML_PARSE_NONET' "$src_path"; then
+              echo "  [OK]   $src contains XML_PARSE_NONET"
+              passed=$((passed + 1))
+            else
+              echo "  [FAIL] $src missing XML_PARSE_NONET flag"
+              failed=$((failed + 1)); nonet_ok=false
+            fi
+          done
+
+          # R7b: Runtime check -- iccFromXml must not attempt network fetch
+          # Uses external DTD at TEST-NET-1 (RFC 5737, 192.0.2.0/24).
+          # With NONET: completes in <2s.  Without: blocks 30-120s.
+          XXE_XML="${WORKSPACE_DIR}/.github/ci/test-data/xxe-nonet-regression-735.xml"
+          if [ -f "$XXE_XML" ] && [ -x "$FROMXML" ]; then
+            START_NS=$(date +%s%N)
+            timeout 5 "$FROMXML" "$XXE_XML" "$OUTDIR/xxe-nonet.icc" \
+              > "$OUTDIR/r7-xxe-nonet.log" 2>&1 || true
+            END_NS=$(date +%s%N)
+            ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
+            if [ "$ELAPSED_MS" -lt 4000 ]; then
+              echo "  [OK]   iccFromXml+NONET completed in ${ELAPSED_MS}ms (no network fetch)"
+              passed=$((passed + 1))
+            else
+              echo "  [FAIL] iccFromXml took ${ELAPSED_MS}ms -- XML_PARSE_NONET may be missing"
+              failed=$((failed + 1))
+            fi
+          else
+            echo "  [SKIP] xxe-nonet-regression-735.xml or iccFromXml not found"
+          fi
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
@@ -583,7 +625,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
@@ -658,7 +700,7 @@ jobs:
         if: always()
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
@@ -861,7 +903,7 @@ jobs:
             echo "  -DENABLE_TOOLS=ON && make -j\$(nproc)"
             echo "cd ../Testing && ./CreateAllProfiles.sh"
             echo "ICCDEV_TOOLS_DIR=build/Tools ICCDEV_TESTING_DIR=Testing \\"
-            echo "  LD_LIBRARY_PATH=build/IccProfLib:build/IccXML \\"
+            echo "  LD_LIBRARY_PATH=build/IccProfLib:build/IccXML:build/IccJSON \\"
             echo "  .github/scripts/iccdev-tool-coverage-baseline.sh --asan"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

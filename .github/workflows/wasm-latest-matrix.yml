@@ -380,5 +380,6 @@ jobs:
             build-wasm/Tools/**/*.wasm
             build-wasm/IccProfLib/*.a
             build-wasm/IccXML/*.a
+            build-wasm/IccJSON/*.a
           retention-days: 7
           if-no-files-found: warn

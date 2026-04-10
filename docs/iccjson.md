@@ -1,6 +1,6 @@
 # Working with ICC Profiles Using IccJSON
 
-IccJSON provides two command-line tools — **IccToJson** and **IccFromJson** — that let you
+IccJSON provides two command-line tools -- **IccToJson** and **IccFromJson** -- that let you
 convert ICC profiles to and from a human-readable JSON representation. This makes it
 straightforward to inspect, create, and edit ICC and iccMAX profiles using a text editor
 or any JSON-capable tooling.
@@ -20,7 +20,7 @@ Converts a binary ICC profile to a JSON file.
 IccToJson  src_profile.icc  dest_profile.json  [-indent=N]
 ```
 
-- `-indent=N` — pretty-print with N spaces of indentation (default: 2)
+- `-indent=N` -- pretty-print with N spaces of indentation (default: 2)
 
 ### IccFromJson
 
@@ -30,7 +30,7 @@ Converts a JSON file back to a binary ICC profile.
 IccFromJson  src_profile.json  dest_profile.icc  [-noid]
 ```
 
-- `-noid` — suppress writing the profile ID (MD5 hash) into the saved file
+- `-noid` -- suppress writing the profile ID (MD5 hash) into the saved file
 
 If the profile fails validation the binary file is still saved, but the validation
 report is printed so you can identify and fix issues before use.
@@ -57,7 +57,7 @@ grep --text -A 3 "^Validation Report" output.txt
 # Inspect an existing profile
 IccToJson  input.icc  input.json
 
-# Edit input.json in a text editor …
+# Edit input.json in a text editor ...
 
 # Rebuild the binary profile
 IccFromJson  input.json  output.icc
@@ -131,11 +131,11 @@ For iccMAX spectral profiles, add:
 ```json
 "SpectralPCS":   "rs0024",
 "SpectralRange": { "start": 380.0, "end": 730.0, "steps": 36 }
-...
+```
 
-For iccMAX bisspectral profiles, add:
+For iccMAX bispectral profiles, add:
 
-..
+```json
 "BiSpectralRange": { "start": 300.0, "end": 730.0, "steps": 44 }
 ```
 
@@ -180,7 +180,7 @@ with the raw four-character signature:
 
 ### Text Tags
 
-#### `multiLocalizedUnicodeType` — localised Unicode text
+#### `multiLocalizedUnicodeType` -- localised Unicode text
 
 Used for `profileDescriptionTag` (desc), `copyrightTag`, and similar tags.
 
@@ -197,7 +197,7 @@ Used for `profileDescriptionTag` (desc), `copyrightTag`, and similar tags.
 }
 ```
 
-#### `utf8TextType` — simple UTF-8 string
+#### `utf8TextType` -- simple UTF-8 string
 
 ```json
 {
@@ -210,7 +210,7 @@ Used for `profileDescriptionTag` (desc), `copyrightTag`, and similar tags.
 }
 ```
 
-#### `textType` — ASCII text (ICC v2/v4)
+#### `textType` -- ASCII text (ICC v2/v4)
 
 ```json
 {
@@ -225,7 +225,7 @@ Used for `profileDescriptionTag` (desc), `copyrightTag`, and similar tags.
 
 ### Numeric Tags
 
-#### `XYZType` — one or more XYZ tristimulus values
+#### `XYZType` -- one or more XYZ tristimulus values
 
 Each XYZ value is a JSON array `[X, Y, Z]`. The `"XYZ"` field is an array of such triplets.
 
@@ -240,7 +240,7 @@ Each XYZ value is a JSON array `[X, Y, Z]`. The `"XYZ"` field is an array of suc
 }
 ```
 
-#### `s15Fixed16ArrayType` / `u16Fixed16ArrayType` — numeric arrays
+#### `s15Fixed16ArrayType` / `u16Fixed16ArrayType` -- numeric arrays
 
 ```json
 {
@@ -257,7 +257,7 @@ Each XYZ value is a JSON array `[X, Y, Z]`. The `"XYZ"` field is an array of suc
 
 ### Curve Tags
 
-#### `curveType` — tone-reproduction curve (TRC)
+#### `curveType` -- tone-reproduction curve (TRC)
 
 The `"curveType"` field selects one of three subtypes: `"identity"`, `"gamma"`, or `"table"`.
 
@@ -303,7 +303,7 @@ Sampled table:
 }
 ```
 
-#### `parametricCurveType` — parametric TRC
+#### `parametricCurveType` -- parametric TRC
 
 ```json
 {
@@ -321,13 +321,13 @@ Sampled table:
 
 | `functionType` | Formula                        | `params` count |
 |----------------|--------------------------------|----------------|
-| `0`            | `Y = X^γ`                     | 1              |
-| `1`            | `Y = (aX + b)^γ`              | 3              |
-| `2`            | `Y = (aX + b)^γ + c`          | 4              |
+| `0`            | `Y = X^gamma`                     | 1              |
+| `1`            | `Y = (aX + b)^gamma`              | 3              |
+| `2`            | `Y = (aX + b)^gamma + c`          | 4              |
 | `3`            | sRGB-style (two-segment)       | 5              |
 | `4`            | Full CIE 122-1996 (seven-param)| 7              |
 
-#### `segmentedCurveType` — piecewise segmented curve (iccMAX)
+#### `segmentedCurveType` -- piecewise segmented curve (iccMAX)
 
 Segments cover the real line with `"-infinity"` / `"+infinity"` at the outermost boundaries.
 Segment types are `"FormulaSegment"` or `"SampledSegment"`.
@@ -413,7 +413,7 @@ Because `ToJson`/`ParseJson` have no access to the profile header, the encoding 
 
 ### LUT Tags
 
-#### `lutAtoBType` / `lutBtoAType` — multi-stage LUT
+#### `lutAtoBType` / `lutBtoAType` -- multi-stage LUT
 
 MBB (Multidimensional Black Box) LUT curve arrays (`bCurves`, `mCurves`, `aCurves`) use curve objects with
 `"type"` set to `"Curve"`, `"ParametricCurve"`, or `"SegmentedCurve"`.
@@ -423,11 +423,11 @@ to indicate integer encoding, matching the behaviour of iccXML:
 
 | `"precision"` | Data value range | Storage |
 |---------------|-----------------|---------|
-| `1`           | 0 – 255         | 8-bit   |
-| `2`           | 0 – 65535       | 16-bit  |
+| `1`           | 0 - 255         | 8-bit   |
+| `2`           | 0 - 65535       | 16-bit  |
 | *(absent)*    | floating-point  | float   |
 
-Named colour device coordinates (`"deviceCoords"`) are always 16-bit integers (0–65535).
+Named colour device coordinates (`"deviceCoords"`) are always 16-bit integers (0-65535).
 
 ```json
 {
@@ -537,7 +537,7 @@ Each entry in `"curves"` is a curve object with a `"type"` field:
 | `SegmentedCurve`        | `segments` array (same format as `segmentedCurveType`) |
 | `SingleSampledCurve`    | `firstEntry`, `lastEntry`, `samples`, `extensionType`  |
 | `SampledCalculatorCurve`| `firstEntry`, `lastEntry`, `desiredSize`, `calculator` |
-| `DuplicateCurve`        | `index` — source channel index (integer)               |
+| `DuplicateCurve`        | `index` -- source channel index (integer)               |
 
 ```json
 "curves": [
@@ -664,7 +664,7 @@ Encoding profiles declare a colour space encoding without transformation data.
 }
 ```
 
-### iccMAX MPE Profile (RGB → XYZ)
+### iccMAX MPE Profile (RGB -> XYZ)
 
 ```json
 {
@@ -821,24 +821,47 @@ header. Four formats are accepted:
 
 ## Tips and Common Mistakes
 
-- **Always include the `"IccProfile"` wrapper** — the top-level key is `"IccProfile"`,
+- **Always include the `"IccProfile"` wrapper** -- the top-level key is `"IccProfile"`,
   not `"Header"` or `"Tags"` directly.
-- **XYZ values are arrays, not objects** — write `[0.95, 1.0, 1.09]` not
+- **XYZ values are arrays, not objects** -- write `[0.95, 1.0, 1.09]` not
   `{ "X": 0.95, "Y": 1.0, "Z": 1.09 }`.
 - **`"type"` is always required** on `data` objects, MPE elements, curve-set curves,
   MBB curves, and struct member tags. Missing `"type"` is the most common parse error.
-- **`curveType` tag needs the subtype** — a curveType tag requires both `"type": "curveType"`
+- **`curveType` tag needs the subtype** -- a curveType tag requires both `"type": "curveType"`
   (the ICC tag type) and `"curveType": "gamma"` (the subtype selector).
-- **MBB curve types are `"Curve"`, `"ParametricCurve"`, `"SegmentedCurve"`** — not
+- **MBB curve types are `"Curve"`, `"ParametricCurve"`, `"SegmentedCurve"`** -- not
   `"curveType"` / `"parametricCurveType"` / `"segmentedCurveType"`.
-- **Segment types are PascalCase** — `"FormulaSegment"` and `"SampledSegment"`,
+- **Segment types are PascalCase** -- `"FormulaSegment"` and `"SampledSegment"`,
   not `"formulaSegment"` / `"sampledSegment"`.
-- **`parametricCurveType` uses `"params"`** — not `"Parameters"` or `"parameters"`.
-- **Segment boundaries must be contiguous** — segments must form a non-overlapping
+- **`parametricCurveType` uses `"params"`** -- not `"Parameters"` or `"parameters"`.
+- **Segment boundaries must be contiguous** -- segments must form a non-overlapping
   cover of the real line. Use `"-infinity"` / `"+infinity"` for the outermost ends.
-- **`sameAs` must come after the original** — the referenced tag key must appear
+- **`sameAs` must come after the original** -- the referenced tag key must appear
   earlier in the `Tags` array.
-- **Validation before use** — always run `IccDumpProfile` after building a profile
+- **Validation before use** -- always run `IccDumpProfile` after building a profile
   with `IccFromJson` to catch structural issues before the profile is deployed.
-- **Round-trip inspection** — convert an existing reference profile with `IccToJson`
+- **Round-trip inspection** -- convert an existing reference profile with `IccToJson`
   first to see the expected JSON structure for a given profile class.
+
+---
+
+## Integration examples
+
+### Standalone C++ example
+
+The [`examples/hello-iccdev/`](../examples/hello-iccdev/) directory contains a
+minimal standalone project that links IccProfLib2, IccXML2, and IccJSON2. When
+built with `USE_ICCJSON=1` it demonstrates JSON round-tripping via the
+`CIccProfileJson::ToJson()` and `ParseJson()` APIs, factory registration, and
+library version reporting. See
+[`examples/hello-iccdev/README.md`](../examples/hello-iccdev/README.md) for
+build instructions.
+
+### IIS ISAPI server-side integration
+
+The Windows IIS ISAPI sample at
+[`Tools/Winnt/IccIisIsapi/`](../Tools/Winnt/IccIisIsapi/) conditionally invokes
+`iccToJson` and `iccFromJson` as part of its tool pipeline when IccJSON is built.
+Uploaded ICC profiles are converted to JSON for inspection, and XML-originated
+profiles are also exported to JSON. See
+[`api.md`](../Tools/Winnt/IccIisIsapi/api.md) for the HTTP endpoint reference.

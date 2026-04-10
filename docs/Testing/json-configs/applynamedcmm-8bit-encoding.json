@@ -1,0 +1,18 @@
+{
+  "applynamedcmm": {
+    "data_encoding": 4,
+    "interpolation": 1,
+    "profiles": [
+      {
+        "profile_file": "test-profiles/sRGB_D65_MAT.icc",
+        "intent": 1
+      }
+    ],
+    "data": [
+      [128, 77, 51],
+      [255, 0, 0],
+      [0, 255, 0],
+      [0, 0, 255]
+    ]
+  }
+}

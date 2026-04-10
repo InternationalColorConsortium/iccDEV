@@ -132,7 +132,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
             [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
           done
@@ -200,7 +200,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
           OUTDIR="/tmp/iccdev-tool-output/dump-all"
           mkdir -p "$OUTDIR"
@@ -238,7 +238,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
           OUTDIR="/tmp/iccdev-tool-output/dump-validate"
           mkdir -p "$OUTDIR"
@@ -276,7 +276,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
           OUTDIR="/tmp/iccdev-tool-output/toxml"
           mkdir -p "$OUTDIR"
@@ -324,7 +324,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
           OUTDIR="/tmp/iccdev-tool-output/fromxml-rt"
           XMLDIR="/tmp/iccdev-tool-output/toxml"
@@ -366,7 +366,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           RT="${WORKSPACE_DIR}/build/Tools/IccRoundTrip/iccRoundTrip"
           OUTDIR="/tmp/iccdev-tool-output/roundtrip"
           mkdir -p "$OUTDIR"
@@ -428,7 +428,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           APPLYCMM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
           OUTDIR="/tmp/iccdev-tool-output/applynamedcmm"
           mkdir -p "$OUTDIR"
@@ -496,7 +496,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           LINK="${WORKSPACE_DIR}/build/Tools/IccApplyToLink/iccApplyToLink"
           OUTDIR="/tmp/iccdev-tool-output/applytolink"
           mkdir -p "$OUTDIR"
@@ -552,7 +552,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           FROMCUBE="${WORKSPACE_DIR}/build/Tools/IccFromCube/iccFromCube"
           OUTDIR="/tmp/iccdev-tool-output/fromcube"
           mkdir -p "$OUTDIR"
@@ -602,7 +602,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
             [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
           done
@@ -639,7 +639,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
             [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
           done
@@ -676,7 +676,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
             [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
           done
@@ -713,7 +713,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           TIFFDUMP="${WORKSPACE_DIR}/build/Tools/IccTiffDump/iccTiffDump"
           SPECSEP="${WORKSPACE_DIR}/build/Tools/IccSpecSepToTiff/iccSpecSepToTiff"
           OUTDIR="/tmp/iccdev-tool-output/tiff-tools"
@@ -770,7 +770,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           OUTDIR="/tmp/iccdev-tool-output/image-tools"
           mkdir -p "$OUTDIR"
 
@@ -855,7 +855,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
           FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
           DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
@@ -907,7 +907,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           SEARCH="${WORKSPACE_DIR}/build/Tools/IccApplySearch/iccApplySearch"
           OUTDIR="/tmp/iccdev-tool-output/applysearch"
           mkdir -p "$OUTDIR"
@@ -946,7 +946,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
           APPLY="${WORKSPACE_DIR}/build/Tools/IccApplyProfiles/iccApplyProfiles"
           TDUMP="${WORKSPACE_DIR}/build/Tools/IccTiffDump/iccTiffDump"
@@ -1052,7 +1052,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           OUTDIR="/tmp/iccdev-tool-output/v5dspobs"
           mkdir -p "$OUTDIR"
 
@@ -1149,7 +1149,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML"
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/build/IccProfLib:${WORKSPACE_DIR}/build/IccXML:${WORKSPACE_DIR}/build/IccJSON"
           OUTDIR="/tmp/iccdev-tool-output/regression-bisect"
           mkdir -p "$OUTDIR"
 

@@ -237,6 +237,41 @@ jobs:
             echo "[OK] Zero compiler warnings"
           fi
 
+      - name: Verify Static Libraries Contain Native Objects
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          BITCODE_FOUND=0
+          for lib in Build/IccProfLib/libIccProfLib2-static.a \
+                     Build/IccXML/libIccXML2-static.a \
+                     Build/IccJSON/libIccJSON2-static.a; do
+            if [ ! -f "$lib" ]; then
+              echo "[SKIP] $lib not found"
+              continue
+            fi
+            TMP_DIR="$(mktemp -d)"
+            (cd "$TMP_DIR" && ar x "$GITHUB_WORKSPACE/$lib")
+            for obj in "$TMP_DIR"/*.o; do
+              [ -f "$obj" ] || continue
+              FILE_OUT="$(file "$obj")"
+              if grep -qi 'LLVM IR bitcode\|LLVM bitcode' <<< "$FILE_OUT"; then
+                echo "[FAIL] LLVM bitcode in $lib: $(basename "$obj")"
+                BITCODE_FOUND=1
+              fi
+            done
+            OBJ_COUNT="$(find "$TMP_DIR" -name '*.o' | wc -l | tr -d ' ')"
+            echo "[OK] $lib: $OBJ_COUNT native objects"
+            rm -rf "$TMP_DIR"
+          done
+          if [ "$BITCODE_FOUND" -ne 0 ]; then
+            echo "::error title=Static Library Bitcode::One or more static libraries contain LLVM IR bitcode instead of native objects (see issue 814)"
+            exit 1
+          fi
+
       - name: Create Profiles
         shell: bash --noprofile --norc {0}
         env:

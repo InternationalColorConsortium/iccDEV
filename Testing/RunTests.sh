@@ -114,4 +114,20 @@ echo "==========================================================================
 echo "CalcElement based aRGB profile test"
 iccApplyNamedCmm -debugcalc Calc/srgbCalcTest.txt 3 0 Calc/argbCalc.icc 1
 
+echo "==========================================================================="
+echo "Test JSON round-trip (iccToJson / iccFromJson)"
+if command -v iccToJson > /dev/null && command -v iccFromJson > /dev/null
+then
+	iccToJson sRGB_v4_ICC_preference.icc sRGB_v4_ICC_preference.json
+	iccFromJson sRGB_v4_ICC_preference.json sRGB_v4_ICC_preference_rt.icc
+	if [ -f sRGB_v4_ICC_preference_rt.icc ]; then
+		echo "JSON round-trip: PASS"
+		rm -f sRGB_v4_ICC_preference.json sRGB_v4_ICC_preference_rt.icc
+	else
+		echo "JSON round-trip: FAIL"
+	fi
+else
+	echo "iccToJson/iccFromJson not found -- skipping JSON tests"
+fi
+
 echo "====================== Exiting Testing/RunTests.sh =========================="

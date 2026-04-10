@@ -28,6 +28,7 @@ Not yet documented here:
 
 - the complete public C++ class surface of `IccProfLib`
 - the complete public C++ class surface of `IccLibXML`
+- the complete public C++ class surface of `IccLibJSON`
 - every CLI tool option outside the IIS-wrapped tool flow
 
 ## Base assumptions
@@ -121,6 +122,8 @@ Processing rules:
     - `iccFromXml`
     - `iccDumpProfile`
     - `iccRoundTrip`
+    - `iccToJson` (if IccJSON is built)
+    - `iccFromJson` (if IccJSON is built and iccToJson produced output)
 - `input=xml`
   - writes the uploaded XML into a per-request workspace
   - runs:
@@ -128,6 +131,7 @@ Processing rules:
     - `iccDumpProfile`
     - `iccToXml`
     - `iccRoundTrip`
+    - `iccToJson` (if IccJSON is built and iccFromXml produced an ICC file)
 
 Response:
 

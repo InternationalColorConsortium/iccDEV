@@ -28,6 +28,10 @@
 #include "IccProfileXml.h"
 #include "IccUtil.h"
 
+#ifdef USE_ICCJSON
+#include "IccLibJSONVer.h"
+#endif
+
 using iccIsapi::GetLastErrorString;
 using iccIsapi::HtmlEscape;
 using iccIsapi::IsMethod;
@@ -314,10 +318,11 @@ std::string BuildToolJson(const std::string& inputKind,
   return json.str();
 }
 
-/// Run the 4 core ICC tools (iccDumpProfile, iccToXml, iccFromXml, iccRoundTrip)
-/// against an uploaded file.  Each tool is executed as a child process with a
-/// timeout of kToolTimeoutMs.  Returns a vector of ToolResult with exit codes,
-/// captured stdout, log paths, and generated artifact metadata.
+/// Run the core ICC tools (iccDumpProfile, iccToXml, iccFromXml, iccRoundTrip,
+/// and optionally iccToJson/iccFromJson) against an uploaded file.  Each tool
+/// is executed as a child process with a timeout of kToolTimeoutMs.  Returns a
+/// vector of ToolResult with exit codes, captured stdout, log paths, and
+/// generated artifact metadata.
 std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
                                     const std::string& inputKind,
                                     const std::string& filename,
@@ -328,6 +333,8 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
   const std::filesystem::path toXmlExe = binDir / "iccToXml.exe";
   const std::filesystem::path fromXmlExe = binDir / "iccFromXml.exe";
   const std::filesystem::path roundTripExe = binDir / "iccRoundTrip.exe";
+  const std::filesystem::path toJsonExe = binDir / "iccToJson.exe";
+  const std::filesystem::path fromJsonExe = binDir / "iccFromJson.exe";
 
   const bool inputIsXml = inputKind == "xml";
   const std::string safeFilename = SanitizeFilename(filename,
@@ -409,6 +416,54 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     roundTrip.output = TruncateForBrowser(roundTripProcess.output.empty() ? "No console output." : roundTripProcess.output);
     AttachProcessLog(roundTrip, roundTripProcess);
     results.push_back(roundTrip);
+
+    // -- JSON tools (conditional on binary presence) ----------------------
+    if (std::filesystem::exists(toJsonExe)) {
+      const std::filesystem::path generatedJson = workspace / "generated-from-upload.json";
+      ToolResult toJson;
+      toJson.name = "iccToJson";
+      toJson.command = "iccToJson \"" + uploadedPath.filename().string() + "\" \"" + generatedJson.filename().string() + "\"";
+      const ProcessResult toJsonProcess = RunProcess(toJsonExe,
+                                                     { uploadedPath.string(), generatedJson.string() },
+                                                     workspace);
+      toJson.exitCode = static_cast<int>(toJsonProcess.exitCode);
+      toJson.ok = toJsonProcess.launched && !toJsonProcess.timedOut && toJson.exitCode == 0;
+      toJson.note = toJsonProcess.timedOut ? "Timed out while generating JSON." : std::string();
+      toJson.output = TruncateForBrowser(toJsonProcess.output.empty() ? "No console output." : toJsonProcess.output);
+      AttachProcessLog(toJson, toJsonProcess);
+      if (std::filesystem::exists(generatedJson)) {
+        toJson.artifactName = generatedJson.filename().string();
+        toJson.artifactBytes = std::filesystem::file_size(generatedJson);
+        toJson.artifactUrl = BuildPublicUrl(generatedJson);
+        toJson.artifactPreview = TruncateForBrowser(ReadTextFile(generatedJson));
+      }
+      results.push_back(toJson);
+
+      if (std::filesystem::exists(generatedJson)) {
+        const std::filesystem::path generatedFromJson = workspace / "generated-from-json.icc";
+        ToolResult fromJson;
+        fromJson.name = "iccFromJson";
+        fromJson.command = "iccFromJson \"" + generatedJson.filename().string() + "\" \"" + generatedFromJson.filename().string() + "\"";
+        const ProcessResult fromJsonProcess = RunProcess(fromJsonExe,
+                                                         { generatedJson.string(), generatedFromJson.string() },
+                                                         workspace);
+        fromJson.exitCode = static_cast<int>(fromJsonProcess.exitCode);
+        fromJson.ok = fromJsonProcess.launched && !fromJsonProcess.timedOut && fromJson.exitCode == 0;
+        fromJson.note = fromJsonProcess.timedOut ? "Timed out while regenerating ICC from JSON." : std::string();
+        fromJson.output = TruncateForBrowser(fromJsonProcess.output.empty() ? "No console output." : fromJsonProcess.output);
+        AttachProcessLog(fromJson, fromJsonProcess);
+        if (std::filesystem::exists(generatedFromJson)) {
+          fromJson.artifactName = generatedFromJson.filename().string();
+          fromJson.artifactBytes = std::filesystem::file_size(generatedFromJson);
+          fromJson.artifactUrl = BuildPublicUrl(generatedFromJson);
+        }
+        results.push_back(fromJson);
+      }
+      else {
+        results.push_back(MakeSkippedTool("iccFromJson",
+                                          "Skipped because iccToJson did not produce a JSON file."));
+      }
+    }
   }
   else {
     ToolResult fromXml;
@@ -480,6 +535,29 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     roundTrip.output = TruncateForBrowser(roundTripProcess.output.empty() ? "No console output." : roundTripProcess.output);
     AttachProcessLog(roundTrip, roundTripProcess);
     results.push_back(roundTrip);
+
+    // -- JSON tools (conditional on binary presence) ----------------------
+    if (std::filesystem::exists(toJsonExe) && std::filesystem::exists(generatedIcc)) {
+      const std::filesystem::path generatedJson = workspace / "generated-from-xml-icc.json";
+      ToolResult toJson;
+      toJson.name = "iccToJson";
+      toJson.command = "iccToJson \"" + generatedIcc.filename().string() + "\" \"" + generatedJson.filename().string() + "\"";
+      const ProcessResult toJsonProcess = RunProcess(toJsonExe,
+                                                     { generatedIcc.string(), generatedJson.string() },
+                                                     workspace);
+      toJson.exitCode = static_cast<int>(toJsonProcess.exitCode);
+      toJson.ok = toJsonProcess.launched && !toJsonProcess.timedOut && toJson.exitCode == 0;
+      toJson.note = toJsonProcess.timedOut ? "Timed out while generating JSON." : std::string();
+      toJson.output = TruncateForBrowser(toJsonProcess.output.empty() ? "No console output." : toJsonProcess.output);
+      AttachProcessLog(toJson, toJsonProcess);
+      if (std::filesystem::exists(generatedJson)) {
+        toJson.artifactName = generatedJson.filename().string();
+        toJson.artifactBytes = std::filesystem::file_size(generatedJson);
+        toJson.artifactUrl = BuildPublicUrl(generatedJson);
+        toJson.artifactPreview = TruncateForBrowser(ReadTextFile(generatedJson));
+      }
+      results.push_back(toJson);
+    }
   }
 
   return results;
@@ -726,6 +804,9 @@ std::string BuildPlainTextBody()
   std::ostringstream oss;
   oss << "IccProfLib version: " << ICCPROFLIBVER << "\r\n"
       << "IccLibXML version: " << ICCLIBXMLVER << "\r\n"
+#ifdef USE_ICCJSON
+      << "IccLibJSON version: " << ICCLIBJSONVER << "\r\n"
+#endif
       << "Profile spec ver: " << info.GetVersionName(profile.m_Header.version) << "\r\n"
       << "XML payload bytes: " << xml.size() << "\r\n"
       << "Hello from iccDEV IIS ISAPI!\r\n";
@@ -757,6 +838,9 @@ std::string BuildJsonBody()
   js << "{";
   js << "\"iccProfLib_version\":\"" << JsonEscape(ICCPROFLIBVER) << "\",";
   js << "\"iccLibXML_version\":\"" << JsonEscape(ICCLIBXMLVER) << "\",";
+#ifdef USE_ICCJSON
+  js << "\"iccLibJSON_version\":\"" << JsonEscape(ICCLIBJSONVER) << "\",";
+#endif
   js << "\"profile_spec_version\":\"" << JsonEscape(info.GetVersionName(profile.m_Header.version)) << "\",";
   js << "\"xml_payload_bytes\":" << xml.size() << ",";
   js << "\"status\":\"ok\"";

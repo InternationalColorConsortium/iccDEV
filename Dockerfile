@@ -25,6 +25,8 @@ RUN cd /opt/iccdev \
  && cd Build \
  && rm -f CMakeCache.txt \
  && rm -rf CMakeFiles \
+ && rm -f Cmake/CMakeCache.txt \
+ && rm -rf Cmake/CMakeFiles \
  && cmake -DCMAKE_BUILD_TYPE=Release Cmake \
  && make -j"$(nproc)" \
  && rm -rf /opt/iccdev/.git
@@ -32,6 +34,7 @@ RUN cd /opt/iccdev \
 RUN echo "=== Libraries ===" \
  && ls -lh /opt/iccdev/Build/IccProfLib/libIccProfLib2* \
  && ls -lh /opt/iccdev/Build/IccXML/libIccXML2* \
+ && (ls -lh /opt/iccdev/Build/IccJSON/libIccJSON2* 2>/dev/null || echo "IccJSON: not built (nlohmann-json may be missing)") \
  && echo "=== Tools ===" \
  && find /opt/iccdev/Build/Tools -type f -executable | sort
 
@@ -54,7 +57,8 @@ RUN groupadd -r iccdev \
  && useradd -r -g iccdev -d /opt/iccdev -s /bin/bash iccdev \
  && chown -R iccdev:iccdev /opt/iccdev
 
-ENV PATH="/opt/iccdev/Build/Tools/IccToXml:/opt/iccdev/Build/Tools/IccFromXml:/opt/iccdev/Build/Tools/IccDumpProfile:/opt/iccdev/Build/Tools/IccApplyNamedCmm:/opt/iccdev/Build/Tools/IccRoundTrip:/opt/iccdev/Build/Tools/IccFromCube:/opt/iccdev/Build/Tools/IccApplyProfiles:/opt/iccdev/Build/Tools/IccApplySearch:/opt/iccdev/Build/Tools/IccApplyToLink:/opt/iccdev/Build/Tools/IccJpegDump:/opt/iccdev/Build/Tools/IccPngDump:/opt/iccdev/Build/Tools/IccSpecSepToTiff:/opt/iccdev/Build/Tools/IccTiffDump:/opt/iccdev/Build/Tools/IccV5DspObsToV4Dsp:${PATH}"
+ENV PATH="/opt/iccdev/Build/Tools/IccToXml:/opt/iccdev/Build/Tools/IccFromXml:/opt/iccdev/Build/Tools/IccDumpProfile:/opt/iccdev/Build/Tools/IccApplyNamedCmm:/opt/iccdev/Build/Tools/IccRoundTrip:/opt/iccdev/Build/Tools/IccFromCube:/opt/iccdev/Build/Tools/IccApplyProfiles:/opt/iccdev/Build/Tools/IccApplySearch:/opt/iccdev/Build/Tools/IccApplyToLink:/opt/iccdev/Build/Tools/IccJpegDump:/opt/iccdev/Build/Tools/IccPngDump:/opt/iccdev/Build/Tools/IccSpecSepToTiff:/opt/iccdev/Build/Tools/IccTiffDump:/opt/iccdev/Build/Tools/IccV5DspObsToV4Dsp:/opt/iccdev/Build/Tools/IccToJson:/opt/iccdev/Build/Tools/IccFromJson:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/iccdev/Build/IccProfLib:/opt/iccdev/Build/IccXML:/opt/iccdev/Build/IccJSON"
 
 USER iccdev
 WORKDIR /opt/iccdev

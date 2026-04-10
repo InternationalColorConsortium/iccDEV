@@ -136,6 +136,10 @@ IF(ENABLE_STATIC_LIBS)
   ADD_LIBRARY(${TARGET_NAME}-static STATIC ${SOURCES})
   SET_TARGET_PROPERTIES(${TARGET_NAME}-static PROPERTIES OUTPUT_NAME "${TARGET_NAME}-static")
 
+  # Static archives must contain native object code, not LLVM IR bitcode.
+  # Disable LTO per-target as defense-in-depth.  (See GitHub issue #814.)
+  set_target_properties(${TARGET_NAME}-static PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
+
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
 

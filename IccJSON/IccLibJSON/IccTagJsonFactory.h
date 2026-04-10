@@ -1,7 +1,7 @@
 /** @file
 File:       IccTagJsonFactory.h
 
-Contains:   Header for implementation of a CIccTagJsonFactory class –
+Contains:   Header for implementation of a CIccTagJsonFactory class --
             an extension factory providing ICC JSON format capabilities.
 
 Version:    V1

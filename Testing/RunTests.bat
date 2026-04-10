@@ -58,7 +58,7 @@ echo ===========================================================================
 echo Test Fluorescent Color under D93
 iccApplyNamedCmm Named\FluorescentNamedColorTest.txt 2 0 Named\FluorescentNamedColor.icc 3 -pcc PCC\Spec400_10_700-D93_2deg-Abs.icc SpecRef\SixChanCameraRef.icc 1
 
-echo =========================================
+echo ===========================================================================
 echo Test Fluorescent Color under D65
 iccApplyNamedCmm Named\FluorescentNamedColorTest.txt 2 0 Named\FluorescentNamedColor.icc 3 -pcc PCC\Spec400_10_700-D65_2deg-Abs.icc SpecRef\SixChanCameraRef.icc 1
 
@@ -84,12 +84,30 @@ iccApplyNamedCmm SpecRef\sixChanTest.txt 3 0 SpecRef\SixChanCameraRef.icc 3 -pcc
 
 echo ===========================================================================
 echo Test 380_5_780 Reflectance under D50 to XYZ
-iccApplyNamedCmm.exe ApplyDataFiles\cc_ref-380_5_780.txt 1 0 PCC\Spec380_5_780-D50_2deg.icc 3 PCC\XYZ_float-D50_2deg.icc 3
+iccApplyNamedCmm ApplyDataFiles\cc_ref-380_5_780.txt 1 0 PCC\Spec380_5_780-D50_2deg.icc 3 PCC\XYZ_float-D50_2deg.icc 3
 
 echo ===========================================================================
 echo Test 380_10_730 Reflectance under D50 to XYZ
-iccApplyNamedCmm.exe ApplyDataFiles\cc_ref-380_10_730.txt 1 0 PCC\Spec380_10_730-D50_2deg.icc 3 PCC\XYZ_float-D50_2deg.icc 3
+iccApplyNamedCmm ApplyDataFiles\cc_ref-380_10_730.txt 1 0 PCC\Spec380_10_730-D50_2deg.icc 3 PCC\XYZ_float-D50_2deg.icc 3
 
 echo ===========================================================================
 echo CalcElement based aRGB profile test
 iccApplyNamedCmm -debugcalc Calc\srgbCalcTest.txt 3 0 Calc\argbCalc.icc 1
+
+echo ===========================================================================
+echo Test JSON round-trip (iccToJson / iccFromJson)
+where iccToJson >nul 2>nul
+if ERRORLEVEL 1 (
+	echo iccToJson/iccFromJson not found -- skipping JSON tests
+	goto end
+)
+iccToJson sRGB_v4_ICC_preference.icc sRGB_v4_ICC_preference.json
+iccFromJson sRGB_v4_ICC_preference.json sRGB_v4_ICC_preference_rt.icc
+if exist sRGB_v4_ICC_preference_rt.icc (
+	echo JSON round-trip: PASS
+	del /q sRGB_v4_ICC_preference.json sRGB_v4_ICC_preference_rt.icc
+) else (
+	echo JSON round-trip: FAIL
+)
+
+:end

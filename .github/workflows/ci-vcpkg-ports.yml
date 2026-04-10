@@ -186,7 +186,7 @@ jobs:
             errors=$((errors + 1))
           fi
           # Check libraries
-          for lib in libIccProfLib2 libIccXML2; do
+          for lib in libIccProfLib2 libIccXML2 libIccJSON2; do
             if ls "$PREFIX/lib/"${lib}* 1>/dev/null 2>&1; then
               echo "✅ $lib found"
             else
@@ -260,7 +260,7 @@ jobs:
             $errors++
           }
           # Check libraries
-          foreach ($lib in @('IccProfLib2-static.lib','IccXML2-static.lib')) {
+          foreach ($lib in @('IccProfLib2-static.lib','IccXML2-static.lib','IccJSON2-static.lib')) {
             if (Test-Path "$prefix\lib\$lib") {
               Write-Host "✅ $lib found"
             } else {

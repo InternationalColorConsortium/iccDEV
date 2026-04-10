@@ -1,7 +1,7 @@
 /** @file
 File:       IccTagJsonFactory.cpp
 
-Contains:   Implementation of the CIccTagJsonFactory class –
+Contains:   Implementation of the CIccTagJsonFactory class --
             creates JSON-aware tag objects for all ICC-specified types.
 
 Version:    V1

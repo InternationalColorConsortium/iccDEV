@@ -333,9 +333,9 @@ jobs:
           fi
 
           if [[ "$RUNNER_OS" = "Linux" ]]; then
-            export LD_LIBRARY_PATH="$PWD/Build/build/IccProfLib:$PWD/Build/build/IccXML:${LD_LIBRARY_PATH:-}"
+            export LD_LIBRARY_PATH="$PWD/Build/build/IccProfLib:$PWD/Build/build/IccXML:$PWD/Build/build/IccJSON:${LD_LIBRARY_PATH:-}"
           else
-            export DYLD_LIBRARY_PATH="$PWD/Build/build/IccProfLib:$PWD/Build/build/IccXML:${DYLD_LIBRARY_PATH:-}"
+            export DYLD_LIBRARY_PATH="$PWD/Build/build/IccProfLib:$PWD/Build/build/IccXML:$PWD/Build/build/IccJSON:${DYLD_LIBRARY_PATH:-}"
           fi
 
           demangle() {
@@ -1638,10 +1638,12 @@ jobs:
             Linux)
               CORE_LIB="$(find -L "$PREFIX/lib" -maxdepth 1 -name 'libIccProfLib2.so*' | sort | head -n 1)"
               XML_LIB="$(find -L "$PREFIX/lib" -maxdepth 1 -name 'libIccXML2.so*' | sort | head -n 1)"
+              JSON_LIB="$(find -L "$PREFIX/lib" -maxdepth 1 -name 'libIccJSON2.so*' | sort | head -n 1)"
               ;;
             macOS)
               CORE_LIB="$(find -L "$PREFIX/lib" -maxdepth 1 -name 'libIccProfLib2*.dylib' | sort | head -n 1)"
               XML_LIB="$(find -L "$PREFIX/lib" -maxdepth 1 -name 'libIccXML2*.dylib' | sort | head -n 1)"
+              JSON_LIB="$(find -L "$PREFIX/lib" -maxdepth 1 -name 'libIccJSON2*.dylib' | sort | head -n 1)"
               ;;
             *)
               echo "Unsupported runner OS: $RUNNER_OS"
@@ -1650,12 +1652,19 @@ jobs:
           esac
           test -n "$CORE_LIB"
           test -n "$XML_LIB"
+          if [ -n "$JSON_LIB" ]; then
+            echo "IccJSON library found: $JSON_LIB"
+          else
+            echo "::warning::IccJSON library not found (ENABLE_ICCJSON may be OFF)"
+          fi
           test -f "$TOOL"
           echo "::group::Installed prefix inventory"
-          find -L "$PREFIX" -maxdepth 2 \( -name 'iccApplySearch' -o -name 'libIccProfLib2*' -o -name 'libIccXML2*' -o -name 'RefIccMAXConfig.cmake' \) | sort
+          find -L "$PREFIX" -maxdepth 2 \( -name 'iccApplySearch' -o -name 'libIccProfLib2*' -o -name 'libIccXML2*' -o -name 'libIccJSON2*' -o -name 'RefIccMAXConfig.cmake' \) | sort
           echo "::endgroup::"
           echo "::group::Artifact metadata"
-          for artifact in "$CORE_LIB" "$XML_LIB" "$TOOL" "$PREFIX/lib/cmake/reficcmax/RefIccMAXConfig.cmake"; do
+          ARTIFACTS=("$CORE_LIB" "$XML_LIB" "$TOOL" "$PREFIX/lib/cmake/reficcmax/RefIccMAXConfig.cmake")
+          if [ -n "$JSON_LIB" ]; then ARTIFACTS+=("$JSON_LIB"); fi
+          for artifact in "${ARTIFACTS[@]}"; do
             ls -l "$artifact"
             file "$artifact"
           done
@@ -1665,6 +1674,7 @@ jobs:
               echo "::group::readelf"
               readelf -d "$CORE_LIB" | grep -E 'SONAME|NEEDED'
               readelf -d "$XML_LIB" | grep -E 'SONAME|NEEDED'
+              if [ -n "$JSON_LIB" ]; then readelf -d "$JSON_LIB" | grep -E 'SONAME|NEEDED'; fi
               echo "::endgroup::"
               echo "::group::nm"
               core_nm_log="$RUNNER_TEMP/$(basename "$CORE_LIB").nm.txt"
@@ -1673,6 +1683,11 @@ jobs:
               nm -D --defined-only "$XML_LIB" > "$xml_nm_log"
               sed -n '1,25p' "$core_nm_log"
               sed -n '1,25p' "$xml_nm_log"
+              if [ -n "$JSON_LIB" ]; then
+                json_nm_log="$RUNNER_TEMP/$(basename "$JSON_LIB").nm.txt"
+                nm -D --defined-only "$JSON_LIB" > "$json_nm_log"
+                sed -n '1,25p' "$json_nm_log"
+              fi
               echo "::endgroup::"
               echo "::group::ldd"
               ldd "$TOOL"
@@ -1682,6 +1697,7 @@ jobs:
               echo "::group::otool"
               otool -L "$CORE_LIB"
               otool -L "$XML_LIB"
+              if [ -n "$JSON_LIB" ]; then otool -L "$JSON_LIB"; fi
               otool -L "$TOOL"
               echo "::endgroup::"
               echo "::group::nm"
@@ -1691,6 +1707,11 @@ jobs:
               nm -gU "$XML_LIB" > "$xml_nm_log"
               sed -n '1,25p' "$core_nm_log"
               sed -n '1,25p' "$xml_nm_log"
+              if [ -n "$JSON_LIB" ]; then
+                json_nm_log="$RUNNER_TEMP/$(basename "$JSON_LIB").nm.txt"
+                nm -gU "$JSON_LIB" > "$json_nm_log"
+                sed -n '1,25p' "$json_nm_log"
+              fi
               echo "::endgroup::"
               ;;
           esac
@@ -1699,7 +1720,7 @@ jobs:
           if [[ "$RUNNER_OS" = "Linux" ]]; then
             echo "::group::Symlink chain verification"
             FAIL=0
-            for base_name in IccProfLib2 IccXML2; do
+            for base_name in IccProfLib2 IccXML2 IccJSON2; do
               so_link="$PREFIX/lib/lib${base_name}.so"
               if [[ ! -L "$so_link" ]]; then
                 echo "::error::Missing .so symlink: $(sanitize_line "$so_link")"
@@ -1769,6 +1790,14 @@ jobs:
             if ! grep -qE '^libIccXML2d?\.so\.[0-9]+$' <<< "$xmllib_soname"; then
               echo "::error::IccXML2 SONAME pattern mismatch: $(sanitize_line "$xmllib_soname")"
               exit 1
+            fi
+            if [ -n "$JSON_LIB" ]; then
+              jsonlib_soname="$(readelf -d "$JSON_LIB" | grep SONAME | sed 's/.*\[//' | sed 's/\]//')"
+              echo "IccJSON2    SONAME: $(sanitize_line "$jsonlib_soname")"
+              if ! grep -qE '^libIccJSON2d?\.so\.[0-9]+$' <<< "$jsonlib_soname"; then
+                echo "::error::IccJSON2 SONAME pattern mismatch: $(sanitize_line "$jsonlib_soname")"
+                exit 1
+              fi
             fi
             echo "[OK] SONAME values match expected pattern"
             echo "::endgroup::"
@@ -2187,7 +2216,7 @@ jobs:
               throw "iccIisIsapi.dll missing export: $symbol"
             }
           }
-          foreach ($dependency in @(('IccProfLib2' + $configSuffix + '.dll'), ('IccXML2' + $configSuffix + '.dll'))) {
+          foreach ($dependency in @(('IccProfLib2' + $configSuffix + '.dll'), ('IccXML2' + $configSuffix + '.dll'), ('IccJSON2' + $configSuffix + '.dll'))) {
             if (-not (Select-String -Path $iisDepsLog -Pattern $dependency -SimpleMatch -Quiet)) {
               throw "iccIisIsapi.dll is missing dependency: $dependency"
             }
@@ -2263,7 +2292,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "hello-iccdev dependents check failed with exit code $LASTEXITCODE"
           }
-          foreach ($symbol in @('IccProfLib2d.dll', 'IccXML2d.dll')) {
+          foreach ($symbol in @('IccProfLib2d.dll', 'IccXML2d.dll', 'IccJSON2d.dll')) {
             if (-not (Select-String -Path $helloDepsLog -Pattern $symbol -SimpleMatch -Quiet)) {
               throw "hello-iccdev is missing dependency: $symbol"
             }
@@ -2421,7 +2450,7 @@ jobs:
             -DVCPKG_MANIFEST_MODE=OFF \
             -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET"
           cmake --build "$EXAMPLE_BUILD" --parallel "$JOBS"
-          for lib_base in IccProfLib2 IccXML2; do
+          for lib_base in IccProfLib2 IccXML2 IccJSON2; do
             STATIC_LIB="$VCPKG_ROOT/installed/$VCPKG_TRIPLET/lib/lib${lib_base}-static.a"
             if [ ! -f "$STATIC_LIB" ]; then
               STATIC_LIB="$VCPKG_ROOT/installed/$VCPKG_TRIPLET/lib/lib${lib_base}.a"
@@ -2432,35 +2461,26 @@ jobs:
             fi
             echo "=== file $STATIC_LIB ==="
             file "$STATIC_LIB"
-            FIRST_MEMBER=""
-            while IFS= read -r member; do
-              case "$member" in
-                ""|"/"|__.SYMDEF|__.SYMDEF\ SORTED)
-                  continue
-                  ;;
-                *)
-                  FIRST_MEMBER="$member"
-                  break
-                  ;;
-              esac
-            done < <(ar t "$STATIC_LIB")
-            if [ -z "$FIRST_MEMBER" ]; then
-              echo "No extractable archive member found in $STATIC_LIB"
-              exit 1
-            fi
             TMP_AR_DIR="$RUNNER_TEMP/archive-check-$lib_base"
             rm -rf "$TMP_AR_DIR"
             mkdir -p "$TMP_AR_DIR"
-            (
-              cd "$TMP_AR_DIR"
-              ar x "$STATIC_LIB" "$FIRST_MEMBER"
-            )
-            FILE_OUT="$(file "$TMP_AR_DIR/$FIRST_MEMBER")"
-            printf '%s\n' "$FILE_OUT"
-            if grep -qi 'LLVM IR bitcode' <<< "$FILE_OUT"; then
-              echo "Unexpected LLVM bitcode in packaged archive member: $STATIC_LIB"
+            (cd "$TMP_AR_DIR" && ar x "$STATIC_LIB")
+            BITCODE_HIT=0
+            for obj in "$TMP_AR_DIR"/*.o; do
+              [ -f "$obj" ] || continue
+              FILE_OUT="$(file "$obj")"
+              if grep -qi 'LLVM IR bitcode\|LLVM bitcode' <<< "$FILE_OUT"; then
+                printf '[FAIL] LLVM bitcode: %s\n' "$(basename "$obj")"
+                BITCODE_HIT=1
+              fi
+            done
+            OBJ_COUNT="$(find "$TMP_AR_DIR" -name '*.o' | wc -l | tr -d ' ')"
+            if [ "$BITCODE_HIT" -ne 0 ]; then
+              echo "Unexpected LLVM bitcode in packaged archive: $STATIC_LIB"
               exit 1
             fi
+            printf '[OK] %s: %s native objects\n' "$lib_base" "$OBJ_COUNT"
+            rm -rf "$TMP_AR_DIR"
           done
           case "$RUNNER_OS" in
             Linux)
