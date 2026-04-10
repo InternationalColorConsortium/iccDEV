@@ -370,8 +370,9 @@ bool jGetArray(const IccJson &j, const char *field, T *vals, int n)
 }
 
 // Explicit instantiations
-// Note: icUInt32Number is unsigned int on all supported platforms,
-// so we instantiate only with icUInt32Number to avoid duplicate errors.
+// On Linux/macOS icUInt32Number is uint32_t (same as unsigned int), but on
+// Windows/MSVC it is unsigned long. Instantiate unsigned int only on MSVC
+// to avoid duplicate-symbol errors on other platforms.
 template bool jsonToValue<int>(const IccJson&, int&);
 template bool jsonToValue<icUInt8Number>(const IccJson&, icUInt8Number&);
 template bool jsonToValue<icUInt16Number>(const IccJson&, icUInt16Number&);
@@ -379,6 +380,9 @@ template bool jsonToValue<icUInt32Number>(const IccJson&, icUInt32Number&);
 template bool jsonToValue<icInt16Number>(const IccJson&, icInt16Number&);
 template bool jsonToValue<icFloat32Number>(const IccJson&, icFloat32Number&);
 template bool jsonToValue<icFloat64Number>(const IccJson&, icFloat64Number&);
+#ifdef _MSC_VER
+template bool jsonToValue<unsigned int>(const IccJson&, unsigned int&);
+#endif
 
 template bool jsonToArray<double>(const IccJson&, double*, int);
 template bool jsonToArray<float>(const IccJson&, float*, int);
@@ -396,6 +400,9 @@ template bool jGetValue<icInt16Number>(const IccJson&, const char*, icInt16Numbe
 template bool jGetValue<icFloat32Number>(const IccJson&, const char*, icFloat32Number&);
 template bool jGetValue<icFloat64Number>(const IccJson&, const char*, icFloat64Number&);
 template bool jGetValue<bool>(const IccJson&, const char*, bool&);
+#ifdef _MSC_VER
+template bool jGetValue<unsigned int>(const IccJson&, const char*, unsigned int&);
+#endif
 
 template bool jGetArray<double>(const IccJson&, const char*, double*, int);
 template bool jGetArray<float>(const IccJson&, const char*, float*, int);
