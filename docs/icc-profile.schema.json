@@ -234,6 +234,7 @@
       "required": ["curveType"],
       "properties": {
         "curveType": { "type": "string", "enum": ["identity", "gamma", "table"] },
+        "size":      { "type": "integer", "minimum": 2, "description": "Number of samples in a sampled-identity curve (when curveType is 'identity' and the curve has 2 or more entries). Omitted for the 0-entry ICC identity." },
         "gamma":     { "type": "number", "description": "Gamma exponent (when curveType is 'gamma')" },
         "precision": { "type": "integer", "enum": [1, 2], "description": "Table encoding: 1 = 8-bit integers (0–255), 2 = 16-bit integers (0–65535). Omitted for floating-point." },
         "table":     { "type": "array", "items": { "type": "number" }, "description": "Curve samples (when curveType is 'table'). Integers when precision is present, floats otherwise." }
@@ -343,6 +344,11 @@
       "description": "colorantTableType",
       "required": ["colorantTable"],
       "properties": {
+        "pcsEncoding": {
+          "type": "string",
+          "enum": ["Lab", "XYZ", "16bit"],
+          "description": "Encoding used for the 'pcs' arrays. 'Lab': L* (0–100), a*, b* (−128–127). 'XYZ': X, Y, Z floats (0–2 range). '16bit': raw ICC U16 integers. ToJson always writes 'Lab'; ParseJson defaults to 'Lab' when absent."
+        },
         "colorantTable": {
           "type": "array",
           "items": {
@@ -350,7 +356,13 @@
             "required": ["name", "pcs"],
             "properties": {
               "name": { "type": "string" },
-              "pcs":  { "$ref": "#/$defs/XYZTriplet" }
+              "pcs":  {
+                "type": "array",
+                "description": "PCS colorant coordinates. Interpretation depends on pcsEncoding.",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3
+              }
             }
           }
         }
@@ -567,6 +579,7 @@
       "properties": {
         "type": { "type": "string", "enum": ["Curve", "ParametricCurve", "SegmentedCurve"] },
         "curveType":      { "type": "string", "enum": ["identity", "gamma", "table"] },
+        "size":           { "type": "integer", "minimum": 2, "description": "Number of samples for a sampled-identity curve (when curveType is 'identity' and size >= 2)." },
         "gamma":          { "type": "number" },
         "precision":      { "type": "integer", "enum": [1, 2], "description": "Table encoding: 1 = 8-bit (0–255), 2 = 16-bit (0–65535). Omitted for float curves." },
         "table":          { "type": "array", "items": { "type": "number" }, "description": "Integers when precision present, floats otherwise." },

@@ -261,7 +261,7 @@ Each XYZ value is a JSON array `[X, Y, Z]`. The `"XYZ"` field is an array of suc
 
 The `"curveType"` field selects one of three subtypes: `"identity"`, `"gamma"`, or `"table"`.
 
-Identity (no-op):
+Identity (0-entry ICC no-op):
 ```json
 {
   "redTRCTag": {
@@ -269,6 +269,17 @@ Identity (no-op):
   }
 }
 ```
+
+Sampled identity (linear ramp with a specific number of entries — emitted instead of a full table when all entries match the ramp `i/(n-1)` within 16-bit quantisation tolerance):
+```json
+{
+  "redTRCTag": {
+    "data": { "type": "curveType", "curveType": "identity", "size": 256 }
+  }
+}
+```
+
+When parsing, a `"size"` of 2 or more reconstructs the linear ramp `m_Curve[i] = i/(size-1)`. When `"size"` is absent the 0-entry ICC identity is used.
 
 Gamma:
 ```json
@@ -354,6 +365,37 @@ Segment types:
 | `FormulaSegment`  | `functionType`, `parameters`  |
 | `SampledSegment`  | `samples`                     |
 
+### Colorant Tags
+
+#### `colorantTableType` — colorant names and PCS coordinates
+
+Because `ToJson`/`ParseJson` have no access to the profile header, the encoding of the `"pcs"` arrays is declared explicitly via a `"pcsEncoding"` field:
+
+| `pcsEncoding` | `pcs` array contents |
+|---------------|----------------------|
+| `"Lab"` (default) | L\* (0–100), a\*, b\* (−128–127) — human-readable CIE Lab |
+| `"XYZ"` | X, Y, Z floats (0–2 range) |
+| `"16bit"` | Raw ICC U16 integers (0–65535) |
+
+`ToJson` always writes `"pcsEncoding": "Lab"`. `ParseJson` defaults to `"Lab"` when the field is absent (backward compatible with files written before this field was added).
+
+```json
+{
+  "colorantTableTag": {
+    "data": {
+      "type": "colorantTableType",
+      "pcsEncoding": "Lab",
+      "colorantTable": [
+        { "name": "Cyan",    "pcs": [55.11, -37.40,  -5.18] },
+        { "name": "Magenta", "pcs": [48.24,  74.12, -49.52] },
+        { "name": "Yellow",  "pcs": [89.02,  -5.68,  93.14] },
+        { "name": "Black",   "pcs": [ 0.00,   0.00,   0.00] }
+      ]
+    }
+  }
+}
+```
+
 ### Signature Tags
 
 #### `signatureType`
@@ -428,7 +470,7 @@ MBB curve type values:
 
 | `type`           | Subtype fields                              |
 |------------------|---------------------------------------------|
-| `Curve`          | `curveType` (`"identity"`, `"gamma"`, `"table"`), `gamma`, `table` |
+| `Curve`          | `curveType` (`"identity"`, `"gamma"`, `"table"`), `size` (identity with entries), `gamma`, `table` |
 | `ParametricCurve`| `functionType`, `params`                    |
 | `SegmentedCurve` | `segments` array                            |
 

@@ -727,11 +727,17 @@ bool CIccTagJsonColorantOrder::ParseJson(const IccJson &j, std::string & /*parse
 
 bool CIccTagJsonColorantTable::ToJson(IccJson &j)
 {
+  j["pcsEncoding"] = "Lab";
   IccJson arr = IccJson::array();
   for (icUInt32Number i = 0; i < m_nCount; i++) {
+    icFloatNumber pcs[3];
+    pcs[0] = icU16toF(m_pData[i].data[0]);
+    pcs[1] = icU16toF(m_pData[i].data[1]);
+    pcs[2] = icU16toF(m_pData[i].data[2]);
+    icLabFromPcs(pcs);
     IccJson c;
     c["name"] = m_pData[i].name;
-    c["pcs"]  = IccJson::array({ m_pData[i].data[0], m_pData[i].data[1], m_pData[i].data[2] });
+    c["pcs"]  = IccJson::array({ pcs[0], pcs[1], pcs[2] });
     arr.push_back(c);
   }
   j["colorantTable"] = arr;
@@ -740,6 +746,9 @@ bool CIccTagJsonColorantTable::ToJson(IccJson &j)
 
 bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 {
+  std::string pcsEncoding = "Lab";
+  jGetString(j, "pcsEncoding", pcsEncoding);
+
   if (jsonExistsField(j, "colorantTable") && j["colorantTable"].is_array()) {
     const IccJson &arr = j["colorantTable"];
     if (!SetSize((icUInt32Number)arr.size())) return false;
@@ -748,8 +757,21 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string & /*parse
       std::string name;
       if (jGetString(c, "name", name))
         strncpy(m_pData[i].name, name.c_str(), sizeof(m_pData[i].name)-1);
-      if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() >= 3)
-        jGetArray(c, "pcs", m_pData[i].data, 3);
+      if (jsonExistsField(c, "pcs") && c["pcs"].is_array() && c["pcs"].size() >= 3) {
+        if (pcsEncoding == "16bit") {
+          jGetArray(c, "pcs", m_pData[i].data, 3);
+        } else {
+          icFloatNumber pcs[3];
+          jGetArray(c, "pcs", pcs, 3);
+          if (pcsEncoding == "XYZ")
+            icXyzToPcs(pcs);
+          else  // "Lab" (default)
+            icLabToPcs(pcs);
+          m_pData[i].data[0] = icFtoU16(pcs[0]);
+          m_pData[i].data[1] = icFtoU16(pcs[1]);
+          m_pData[i].data[2] = icFtoU16(pcs[2]);
+        }
+      }
     }
   }
   return true;
@@ -1386,24 +1408,38 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
     j["curveType"] = "gamma";
     j["gamma"] = (double)m_Curve[0];
   } else {
-    j["curveType"] = "table";
-    IccJson arr = IccJson::array();
-    for (icUInt32Number i = 0; i < m_nSize; i++) {
-      switch (nType) {
-        case icConvert8Bit:
-          arr.push_back((int)(m_Curve[i] * 255.0f + 0.5f)); break;
-        case icConvert16Bit:
-        case icConvertVariable:
-          arr.push_back((int)(m_Curve[i] * 65535.0f + 0.5f)); break;
-        default:
-          arr.push_back((double)m_Curve[i]); break;
-      }
+    // Check whether the table is a sampled identity (linear ramp 0..1).
+    // Tolerance of 0.5/65535 covers 16-bit quantisation rounding.
+    bool isIdentity = true;
+    const icFloatNumber tol = 0.5f / 65535.0f;
+    for (icUInt32Number i = 0; i < m_nSize && isIdentity; i++) {
+      icFloatNumber expected = (icFloatNumber)i / (icFloatNumber)(m_nSize - 1);
+      if (fabsf(m_Curve[i] - expected) > tol)
+        isIdentity = false;
     }
-    if (nType == icConvert8Bit)
-      j["precision"] = 1;
-    else if (nType == icConvert16Bit || nType == icConvertVariable)
-      j["precision"] = 2;
-    j["table"] = arr;
+    if (isIdentity) {
+      j["curveType"] = "identity";
+      j["size"] = (int)m_nSize;
+    } else {
+      j["curveType"] = "table";
+      IccJson arr = IccJson::array();
+      for (icUInt32Number i = 0; i < m_nSize; i++) {
+        switch (nType) {
+          case icConvert8Bit:
+            arr.push_back((int)(m_Curve[i] * 255.0f + 0.5f)); break;
+          case icConvert16Bit:
+          case icConvertVariable:
+            arr.push_back((int)(m_Curve[i] * 65535.0f + 0.5f)); break;
+          default:
+            arr.push_back((double)m_Curve[i]); break;
+        }
+      }
+      if (nType == icConvert8Bit)
+        j["precision"] = 1;
+      else if (nType == icConvert16Bit || nType == icConvertVariable)
+        j["precision"] = 2;
+      j["table"] = arr;
+    }
   }
   return true;
 }
@@ -1418,7 +1454,15 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std:
   std::string curveType;
   if (!jGetString(j, "curveType", curveType)) return false;
   if (curveType == "identity") {
-    SetSize(0);
+    int size = 0;
+    jGetValue(j, "size", size);
+    if (size >= 2) {
+      if (!SetSize((icUInt32Number)size)) return false;
+      for (int i = 0; i < size; i++)
+        m_Curve[i] = (icFloatNumber)i / (icFloatNumber)(size - 1);
+    } else {
+      SetSize(0);
+    }
   } else if (curveType == "gamma") {
     SetSize(1);
     double gamma = 1.0;

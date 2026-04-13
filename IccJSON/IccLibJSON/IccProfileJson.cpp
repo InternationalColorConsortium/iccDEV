@@ -82,8 +82,8 @@ static IccJson icJsonGetHeaderFlags(icUInt32Number flags)
   j["UseWithEmbeddedDataOnly"] = (bool)(flags & icUseWithEmbeddedDataOnly);
   if (flags & icExtendedRangePCS) j["ExtendedRangePCS"] = true;
   if (flags & icMCSNeedsSubsetTrue) j["MCSNeedsSubset"] = true;
-  icUInt32Number other = flags & ~(icEmbeddedProfileTrue | icUseWithEmbeddedDataOnly |
-                                    icExtendedRangePCS | icMCSNeedsSubsetTrue);
+  icUInt32Number other = flags & ~(icUInt32Number)(icEmbeddedProfileTrue | icUseWithEmbeddedDataOnly |
+                                                   icExtendedRangePCS | icMCSNeedsSubsetTrue);
   if (other) {
     char buf[16]; snprintf(buf, sizeof(buf), "%08x", other);
     j["VendorFlags"] = buf;
