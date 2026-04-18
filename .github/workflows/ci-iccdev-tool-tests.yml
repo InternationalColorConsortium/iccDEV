@@ -1443,6 +1443,94 @@ jobs:
           passed=$((passed + r12_pass))
           failed=$((failed + r12_fail))
 
+          # --- R13: JSON gamma serialization regression (PR #808) ---
+          # Validates iccToJson output for curveType and parametricCurveType gamma.
+          # Bug #2: curveType ToJson wrote raw normalized float (~0.00862) instead of gamma (2.207).
+          # Bug #3: parametric ToJson used icFtoD() double-conversion (2.4 -> 0.0000305).
+          echo "--- R13: JSON gamma serialization (PR #808) ---"
+          TOJSON="${WORKSPACE_DIR}/build/Tools/IccToJson/iccToJson"
+          FROMJSON="${WORKSPACE_DIR}/build/Tools/IccFromJson/iccFromJson"
+          r13_pass=0 r13_fail=0
+
+          # Write JSON gamma checker to temp script (avoids YAML block-scalar breakage)
+          {
+            echo 'import json, sys'
+            echo 'json_path, tag_name, field_name, expected_str = sys.argv[1:5]'
+            echo 'expected = float(expected_str)'
+            echo 'd = json.load(open(json_path))'
+            echo 'for t in d["IccProfile"]["Tags"]:'
+            echo '    if tag_name in t:'
+            echo '        data = t[tag_name]["data"]'
+            echo '        actual = data["gamma"] if field_name == "gamma" else data["params"][0]'
+            echo '        if abs(actual - expected) < 0.01:'
+            echo '            sys.exit(0)'
+            echo '        else:'
+            echo '            print(f"{field_name}={actual}, expected ~{expected}", file=sys.stderr)'
+            echo '            sys.exit(1)'
+            echo 'print(f"tag {tag_name} not found", file=sys.stderr)'
+            echo 'sys.exit(2)'
+          } > "$OUTDIR/r13-check-gamma.py"
+
+          if [ -x "$TOJSON" ]; then
+            # Test 1: curveType gamma (u8Fixed8 raw 565 = 2.20703125)
+            CURVE_ICC="${WORKSPACE_DIR}/.github/ci/regression/gamma-2.20703125.icc"
+            if [ -f "$CURVE_ICC" ]; then
+              timeout 30 "$TOJSON" "$CURVE_ICC" "$OUTDIR/r13-curve.json" > "$OUTDIR/r13-curve.log" 2>&1 || true
+              if ! check_asan "$OUTDIR/r13-curve.log" "json curveType gamma"; then
+                r13_fail=$((r13_fail + 1))
+              elif python3 "$OUTDIR/r13-check-gamma.py" "$OUTDIR/r13-curve.json" "redTRCTag" "gamma" "2.20703125" 2>"$OUTDIR/r13-curve-err.log"; then
+                echo "  [OK]    curveType JSON gamma ~2.207"; r13_pass=$((r13_pass + 1))
+              else
+                echo "  [FAIL]  curveType JSON gamma: $(cat "$OUTDIR/r13-curve-err.log")"
+                r13_fail=$((r13_fail + 1))
+              fi
+            else
+              echo "  [SKIP]  gamma-2.20703125.icc not found"
+            fi
+
+            # Test 2: parametricCurveType gamma (s15Fixed16 = 2.399993896484375)
+            PARA_ICC="${WORKSPACE_DIR}/.github/ci/regression/para-gamma-2.4.icc"
+            if [ -f "$PARA_ICC" ]; then
+              timeout 30 "$TOJSON" "$PARA_ICC" "$OUTDIR/r13-para.json" > "$OUTDIR/r13-para.log" 2>&1 || true
+              if ! check_asan "$OUTDIR/r13-para.log" "json parametric gamma"; then
+                r13_fail=$((r13_fail + 1))
+              elif python3 "$OUTDIR/r13-check-gamma.py" "$OUTDIR/r13-para.json" "redTRCTag" "params" "2.4" 2>"$OUTDIR/r13-para-err.log"; then
+                echo "  [OK]    parametric JSON gamma ~2.4"; r13_pass=$((r13_pass + 1))
+              else
+                echo "  [FAIL]  parametric JSON gamma: $(cat "$OUTDIR/r13-para-err.log")"
+                r13_fail=$((r13_fail + 1))
+              fi
+            else
+              echo "  [SKIP]  para-gamma-2.4.icc not found"
+            fi
+
+            # Test 3: JSON round-trip preserves curveType gamma
+            if [ -f "$OUTDIR/r13-curve.json" ] && [ -x "$FROMJSON" ]; then
+              timeout 30 "$FROMJSON" "$OUTDIR/r13-curve.json" "$OUTDIR/r13-curve-rt.icc" > "$OUTDIR/r13-rt.log" 2>&1 || true
+              if ! check_asan "$OUTDIR/r13-rt.log" "json roundtrip"; then
+                r13_fail=$((r13_fail + 1))
+              elif [ -f "$OUTDIR/r13-curve-rt.icc" ]; then
+                timeout 30 "$DUMP" "$OUTDIR/r13-curve-rt.icc" ALL > "$OUTDIR/r13-rt-dump.log" 2>&1 || true
+                if grep -q "Y = X ^ 2.2070312500" "$OUTDIR/r13-rt-dump.log" 2>/dev/null; then
+                  echo "  [OK]    JSON round-trip preserves gamma 2.2070312500"; r13_pass=$((r13_pass + 1))
+                else
+                  actual=$(grep -oP 'Y = X \^ [\d.]+' "$OUTDIR/r13-rt-dump.log" | head -1)
+                  echo "  [FAIL]  JSON round-trip: expected 2.2070312500, got ${actual:-<none>}"
+                  r13_fail=$((r13_fail + 1))
+                fi
+              else
+                echo "  [FAIL]  JSON round-trip: iccFromJson produced no output"
+                r13_fail=$((r13_fail + 1))
+              fi
+            fi
+          else
+            echo "  [SKIP]  iccToJson not available"
+          fi
+
+          echo "  JSON gamma: $r13_pass passed, $r13_fail failed"
+          passed=$((passed + r13_pass))
+          failed=$((failed + r13_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi

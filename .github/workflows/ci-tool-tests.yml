@@ -646,6 +646,91 @@ jobs:
           passed=$((passed + r8_pass))
           failed=$((failed + r8_fail))
 
+          # --- R9: JSON gamma serialization regression (PR #808) ---
+          echo "--- R9: JSON gamma serialization (PR #808) ---"
+          TOJSON="${WORKSPACE_DIR}/build/Tools/IccToJson/iccToJson"
+          FROMJSON="${WORKSPACE_DIR}/build/Tools/IccFromJson/iccFromJson"
+          r9_pass=0 r9_fail=0
+
+          # Write JSON gamma checker to temp script (avoids YAML block-scalar breakage)
+          {
+            echo 'import json, sys'
+            echo 'json_path, tag_name, field_name, expected_str = sys.argv[1:5]'
+            echo 'expected = float(expected_str)'
+            echo 'd = json.load(open(json_path))'
+            echo 'for t in d["IccProfile"]["Tags"]:'
+            echo '    if tag_name in t:'
+            echo '        data = t[tag_name]["data"]'
+            echo '        actual = data["gamma"] if field_name == "gamma" else data["params"][0]'
+            echo '        if abs(actual - expected) < 0.01:'
+            echo '            sys.exit(0)'
+            echo '        else:'
+            echo '            print(f"{field_name}={actual}, expected ~{expected}", file=sys.stderr)'
+            echo '            sys.exit(1)'
+            echo 'print(f"tag {tag_name} not found", file=sys.stderr)'
+            echo 'sys.exit(2)'
+          } > "$OUTDIR/r9-check-gamma.py"
+
+          if [ -x "$TOJSON" ]; then
+            # Test 1: curveType gamma (u8Fixed8 raw 565 = 2.20703125)
+            CURVE_ICC="${WORKSPACE_DIR}/.github/ci/regression/gamma-2.20703125.icc"
+            if [ -f "$CURVE_ICC" ]; then
+              timeout 30 "$TOJSON" "$CURVE_ICC" "$OUTDIR/r9-curve.json" > "$OUTDIR/r9-curve.log" 2>&1 || true
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-curve.log" 2>/dev/null; then
+                echo "  [ASAN]  json curveType gamma"; r9_fail=$((r9_fail + 1))
+              elif python3 "$OUTDIR/r9-check-gamma.py" "$OUTDIR/r9-curve.json" "redTRCTag" "gamma" "2.20703125" 2>"$OUTDIR/r9-curve-err.log"; then
+                echo "  [OK]    curveType JSON gamma ~2.207"; r9_pass=$((r9_pass + 1))
+              else
+                echo "  [FAIL]  curveType JSON gamma: $(cat "$OUTDIR/r9-curve-err.log")"
+                r9_fail=$((r9_fail + 1))
+              fi
+            else
+              echo "  [SKIP]  gamma-2.20703125.icc not found"
+            fi
+
+            # Test 2: parametricCurveType gamma (s15Fixed16 = 2.399993896484375)
+            PARA_ICC="${WORKSPACE_DIR}/.github/ci/regression/para-gamma-2.4.icc"
+            if [ -f "$PARA_ICC" ]; then
+              timeout 30 "$TOJSON" "$PARA_ICC" "$OUTDIR/r9-para.json" > "$OUTDIR/r9-para.log" 2>&1 || true
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-para.log" 2>/dev/null; then
+                echo "  [ASAN]  json parametric gamma"; r9_fail=$((r9_fail + 1))
+              elif python3 "$OUTDIR/r9-check-gamma.py" "$OUTDIR/r9-para.json" "redTRCTag" "params" "2.4" 2>"$OUTDIR/r9-para-err.log"; then
+                echo "  [OK]    parametric JSON gamma ~2.4"; r9_pass=$((r9_pass + 1))
+              else
+                echo "  [FAIL]  parametric JSON gamma: $(cat "$OUTDIR/r9-para-err.log")"
+                r9_fail=$((r9_fail + 1))
+              fi
+            else
+              echo "  [SKIP]  para-gamma-2.4.icc not found"
+            fi
+
+            # Test 3: JSON round-trip preserves curveType gamma
+            if [ -f "$OUTDIR/r9-curve.json" ] && [ -x "$FROMJSON" ]; then
+              timeout 30 "$FROMJSON" "$OUTDIR/r9-curve.json" "$OUTDIR/r9-curve-rt.icc" > "$OUTDIR/r9-rt.log" 2>&1 || true
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-rt.log" 2>/dev/null; then
+                echo "  [ASAN]  json roundtrip"; r9_fail=$((r9_fail + 1))
+              elif [ -f "$OUTDIR/r9-curve-rt.icc" ]; then
+                timeout 30 "$DUMP" "$OUTDIR/r9-curve-rt.icc" ALL > "$OUTDIR/r9-rt-dump.log" 2>&1 || true
+                if grep -q "Y = X ^ 2.2070312500" "$OUTDIR/r9-rt-dump.log" 2>/dev/null; then
+                  echo "  [OK]    JSON round-trip preserves gamma 2.2070312500"; r9_pass=$((r9_pass + 1))
+                else
+                  actual=$(grep -oP 'Y = X \^ [\d.]+' "$OUTDIR/r9-rt-dump.log" | head -1)
+                  echo "  [FAIL]  JSON round-trip: expected 2.2070312500, got ${actual:-<none>}"
+                  r9_fail=$((r9_fail + 1))
+                fi
+              else
+                echo "  [FAIL]  JSON round-trip: iccFromJson produced no output"
+                r9_fail=$((r9_fail + 1))
+              fi
+            fi
+          else
+            echo "  [SKIP]  iccToJson not available"
+          fi
+
+          echo "  JSON gamma: $r9_pass passed, $r9_fail failed"
+          passed=$((passed + r9_pass))
+          failed=$((failed + r9_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
