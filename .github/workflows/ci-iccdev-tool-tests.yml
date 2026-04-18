@@ -1408,6 +1408,41 @@ jobs:
             echo "  [SKIP] hybrid/BuildAndTest.sh not found"
           fi
 
+          # --- R12: Gamma precision regression (PR #808) ---
+          # u8Fixed8Number gamma must display as raw/256 exactly.
+          # Before fix: Describe() used m_Curve[0]*256 giving 2.2071 (wrong).
+          # After fix: Describe() uses m_Curve[0]*65535/256 giving 2.2070312500.
+          echo "--- R12: Gamma u8Fixed8 precision (PR #808) ---"
+          GAMMA_DIR="${WORKSPACE_DIR}/.github/ci/regression"
+          r12_pass=0 r12_fail=0
+          declare -A GAMMA_TESTS=(
+            ["gamma-2.20703125.icc"]="2.2070312500"
+            ["gamma-1.796875.icc"]="1.7968750000"
+            ["gamma-2.3984375.icc"]="2.3984375000"
+            ["gamma-1.0000000000.icc"]="1.0000000000"
+          )
+          for poc in "${!GAMMA_TESTS[@]}"; do
+            expected="${GAMMA_TESTS[$poc]}"
+            poc_path="${GAMMA_DIR}/${poc}"
+            if [ -f "$poc_path" ]; then
+              timeout 30 "$DUMP" "$poc_path" ALL > "$OUTDIR/r12-${poc}.log" 2>&1 || true
+              if ! check_asan "$OUTDIR/r12-${poc}.log" "gamma ${poc}"; then
+                r12_fail=$((r12_fail + 1))
+              elif grep -q "Y = X ^ ${expected}" "$OUTDIR/r12-${poc}.log" 2>/dev/null; then
+                echo "  [OK]    ${poc}: Y = X ^ ${expected}"; r12_pass=$((r12_pass + 1))
+              else
+                actual=$(grep -oP 'Y = X \^ [\d.]+' "$OUTDIR/r12-${poc}.log" | head -1)
+                echo "  [FAIL]  ${poc}: expected ${expected}, got ${actual:-<none>}"
+                r12_fail=$((r12_fail + 1))
+              fi
+            else
+              echo "  [SKIP]  ${poc} not found"
+            fi
+          done
+          echo "  Gamma precision: $r12_pass passed, $r12_fail failed"
+          passed=$((passed + r12_pass))
+          failed=$((failed + r12_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi

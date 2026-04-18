@@ -614,6 +614,38 @@ jobs:
             echo "  [SKIP] xxe-nonet-regression-735.xml or iccFromXml not found"
           fi
 
+          # --- R8: Gamma u8Fixed8 precision regression (PR #808) ---
+          echo "--- R8: Gamma u8Fixed8 precision (PR #808) ---"
+          GAMMA_DIR="${WORKSPACE_DIR}/.github/ci/regression"
+          r8_pass=0 r8_fail=0
+          declare -A GAMMA_TESTS=(
+            ["gamma-2.20703125.icc"]="2.2070312500"
+            ["gamma-1.796875.icc"]="1.7968750000"
+            ["gamma-2.3984375.icc"]="2.3984375000"
+            ["gamma-1.0000000000.icc"]="1.0000000000"
+          )
+          for poc in "${!GAMMA_TESTS[@]}"; do
+            expected="${GAMMA_TESTS[$poc]}"
+            poc_path="${GAMMA_DIR}/${poc}"
+            if [ -f "$poc_path" ]; then
+              timeout 30 "$DUMP" "$poc_path" ALL > "$OUTDIR/r8-${poc}.log" 2>&1 || true
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r8-${poc}.log" 2>/dev/null; then
+                echo "  [ASAN]  gamma ${poc}"; r8_fail=$((r8_fail + 1))
+              elif grep -q "Y = X ^ ${expected}" "$OUTDIR/r8-${poc}.log" 2>/dev/null; then
+                echo "  [OK]    ${poc}: Y = X ^ ${expected}"; r8_pass=$((r8_pass + 1))
+              else
+                actual=$(grep -oP 'Y = X \^ [\d.]+' "$OUTDIR/r8-${poc}.log" | head -1)
+                echo "  [FAIL]  ${poc}: expected ${expected}, got ${actual:-<none>}"
+                r8_fail=$((r8_fail + 1))
+              fi
+            else
+              echo "  [SKIP]  ${poc} not found"
+            fi
+          done
+          echo "  Gamma precision: $r8_pass passed, $r8_fail failed"
+          passed=$((passed + r8_pass))
+          failed=$((failed + r8_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
