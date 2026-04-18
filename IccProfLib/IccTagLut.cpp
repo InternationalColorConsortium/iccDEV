@@ -334,10 +334,10 @@ void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
     sDescription += "Y = X\n";
   }
   else if (m_nSize==1) {
-    icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 256.0);
+    icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0);
     snprintf(buf, bufSize, "BEGIN_CURVE In_Out\n");
     sDescription += buf;
-    snprintf(buf, bufSize, "Y = X ^ %.4lf\n", dGamma);
+    snprintf(buf, bufSize, "Y = X ^ %.10lf\n", dGamma);
     sDescription += buf;
   }
   else {
@@ -396,10 +396,10 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
     sDescription += "Y = X\n";
   }
   else if (m_nSize==1) {
-    icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 256.0);
+    icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0);
     snprintf(buf, bufSize, "BEGIN_CURVE %s\n", szName);
     sDescription += buf;
-    snprintf(buf, bufSize, "Y = X ^ %.4lf\n", dGamma);
+    snprintf(buf, bufSize, "Y = X ^ %.10lf\n", dGamma);
     sDescription += buf;
   }
   else {
