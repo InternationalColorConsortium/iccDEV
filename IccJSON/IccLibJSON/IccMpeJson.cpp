@@ -899,7 +899,7 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   if (j.contains("matrix") && j["matrix"].is_array()) {
     const IccJson &mat = j["matrix"];
     icUInt32Number nEntries = nIn * nOut;
-    for (icUInt32Number i = 0; i < nEntries && i < (icUInt32Number)mat.size(); i++)
+    for (icUInt32Number i = 0; i < nEntries && i < icJsonSafeU32(mat.size()); i++)
       m_pMatrix[i] = (icFloatNumber)mat[i].get<double>();
 
     bool bInvert = j.contains("invertMatrix") && j["invertMatrix"].is_boolean()
@@ -918,7 +918,7 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   }
   if (bHasConstants) {
     const IccJson &con = j["constants"];
-    for (icUInt16Number i = 0; i < nOut && i < (icUInt16Number)con.size(); i++)
+    for (icUInt16Number i = 0; i < nOut && i < con.size(); i++)
       m_pConstants[i] = (icFloatNumber)con[i].get<double>();
   }
   return true;

@@ -87,6 +87,14 @@ static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
   return (icUInt32Number)n;
 }
 
+// Safely narrow size_t to icUInt16Number; returns 0 on truncation
+static inline icUInt16Number icJsonSafeU16(size_t n)
+{
+  if (n > (size_t)0xFFFF)
+    return 0;
+  return (icUInt16Number)n;
+}
+
 typedef std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 
 // Forward declarations for helpers defined later in this file
@@ -361,8 +369,10 @@ bool CIccTagJsonChromaticity::ParseJson(const IccJson &j, std::string & /*parseS
   m_nColorantType = (icColorantEncoding)colorantType;
   if (jsonExistsField(j, "channels") && j["channels"].is_array()) {
     const IccJson &ch = j["channels"];
-    if (!SetSize((icUInt16Number)icJsonSafeU32(ch.size()))) return false;
-    for (size_t i = 0; i < ch.size(); i++) {
+    icUInt16Number nCh = icJsonSafeU16(ch.size());
+    if (!nCh && ch.size()) return false;
+    if (!SetSize(nCh)) return false;
+    for (icUInt16Number i = 0; i < nCh; i++) {
       if (ch[i].is_array() && ch[i].size() >= 2) {
         double xy[2] = {0, 0};
         jsonToArray(ch[i], xy, 2);
@@ -587,7 +597,7 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     if (jsonExistsField(obs, "data") && obs["data"].is_array()) {
       const IccJson &data = obs["data"];
       icUInt32Number nExpected = (icUInt32Number)steps * 3;
-      if ((icUInt32Number)data.size() != nExpected) {
+      if (icJsonSafeU32(data.size()) != nExpected) {
         parseStr += "ObserverFuncs data size mismatch\n";
         return false;
       }
@@ -683,7 +693,7 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
   icUInt32Number nDevCoords = 0;
   jGetValue(j, "countOfDeviceCoords", nDevCoords);
   icUInt32Number nColors = (jsonExistsField(j, "colors") && j["colors"].is_array())
-                           ? (icUInt32Number)j["colors"].size() : 0;
+                           ? icJsonSafeU32(j["colors"].size()) : 0;
 
   if (!SetSize(nColors, nDevCoords)) return false;
 
@@ -696,7 +706,7 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
 
   if (jsonExistsField(j, "colors") && j["colors"].is_array()) {
     const IccJson &colors = j["colors"];
-    for (icUInt32Number i = 0; i < nColors && i < (icUInt32Number)colors.size(); i++) {
+    for (icUInt32Number i = 0; i < nColors && i < icJsonSafeU32(colors.size()); i++) {
       const IccJson &c = colors[i];
       std::string name;
       if (jGetString(c, "name", name))
@@ -705,7 +715,7 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
         jGetArray(c, "pcsCoords", m_NamedColor[i].pcsCoords, 3);
       }
       if (jsonExistsField(c, "deviceCoords") && c["deviceCoords"].is_array()) {
-        for (icUInt32Number d = 0; d < nDevCoords && d < (icUInt32Number)c["deviceCoords"].size(); d++)
+        for (icUInt32Number d = 0; d < nDevCoords && d < icJsonSafeU32(c["deviceCoords"].size()); d++)
           m_NamedColor[i].deviceCoords[d] = (icFloatNumber)c["deviceCoords"][d].get<int>() / 65535.0f;
       }
     }
@@ -853,7 +863,7 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
     return false;
   }
 
-  icUInt32Number n = (icUInt32Number)jMats.size();
+  icUInt32Number n = icJsonSafeU32(jMats.size());
   if (!Reset(n, nChannels)) {
     parseStr += "Failed to reset SparseMatrixArray\n";
     return false;
@@ -895,7 +905,7 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
         return false;
       }
 
-      icUInt32Number cnt = (icUInt32Number)jIdx.size();
+      icUInt32Number cnt = icJsonSafeU32(jIdx.size());
       if (pos + cnt > nMaxEntries) {
         parseStr += "Exceeded maximum number of sparse matrix entries\n";
         return false;
@@ -1881,7 +1891,7 @@ CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
     delete pCLUT; return nullptr;
   }
   const IccJson &data = j["data"];
-  for (icUInt32Number k = 0; k < nTotal && k < (icUInt32Number)data.size(); k++) {
+  for (icUInt32Number k = 0; k < nTotal && k < icJsonSafeU32(data.size()); k++) {
     double v = data[k].get<double>();
     switch (nType) {
       case icConvert8Bit:  pData[k] = (icFloatNumber)(v / 255.0);   break;
@@ -2532,7 +2542,7 @@ bool CIccTagJsonArray::ParseJson(const IccJson &j, std::string &parseStr)
     return false;
   }
   const IccJson &elems = j["arrayTags"];
-  icUInt32Number nSize = (icUInt32Number)elems.size();
+  icUInt32Number nSize = icJsonSafeU32(elems.size());
   if (!SetSize(nSize)) {
     parseStr += "Unable to allocate array of size " + std::to_string(nSize) + "\n";
     return false;

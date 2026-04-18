@@ -65,6 +65,12 @@
 #include <sstream>
 #include <iomanip>
 
+// Safely narrow size_t to icUInt32Number; returns 0 on truncation
+static inline icUInt32Number icJsonSafeU32(size_t n)
+{
+  return (n > (size_t)UINT32_MAX) ? 0 : (icUInt32Number)n;
+}
+
 // ---------------------------------------------------------------------------
 // Hex data helpers (self-contained, no IccXML dependency)
 // ---------------------------------------------------------------------------
@@ -454,7 +460,7 @@ bool CIccJsonArrayType<T, Tsig>::ParseArray(T *buf, icUInt32Number nBufSize,
                                              const IccJson &j)
 {
   if (!j.is_array()) return false;
-  icUInt32Number n = (icUInt32Number)j.size();
+  icUInt32Number n = icJsonSafeU32(j.size());
   if (n > nBufSize) n = nBufSize;
   for (icUInt32Number i = 0; i < n; i++)
     buf[i] = j[i].get<T>();
@@ -465,7 +471,8 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccJsonArrayType<T, Tsig>::ParseArray(const IccJson &j)
 {
   if (!j.is_array()) return false;
-  icUInt32Number n = (icUInt32Number)j.size();
+  icUInt32Number n = icJsonSafeU32(j.size());
+  if (!n && j.size()) return false;
   if (!SetSize(n)) return false;
   for (icUInt32Number i = 0; i < n; i++)
     m_pBuf[i] = j[i].get<T>();
