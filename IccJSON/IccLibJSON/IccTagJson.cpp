@@ -1422,7 +1422,7 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
     j["curveType"] = "identity";
   } else if (m_nSize == 1) {
     j["curveType"] = "gamma";
-    j["gamma"] = (double)m_Curve[0];
+    j["gamma"] = (double)(m_Curve[0] * 65535.0 / 256.0);
   } else {
     // Check whether the table is a sampled identity (linear ramp 0..1).
     // Tolerance of 0.5/65535 covers 16-bit quantisation rounding.
@@ -1483,7 +1483,7 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std:
     SetSize(1);
     double gamma = 1.0;
     jGetValue(j, "gamma", gamma);
-    m_Curve[0] = (icFloatNumber)gamma;
+    SetGamma((icFloatNumber)gamma);
   } else {
     if (!jsonExistsField(j, "table") || !j["table"].is_array()) return false;
     const IccJson &arr = j["table"];
@@ -1514,7 +1514,7 @@ bool CIccTagJsonParametricCurve::ToJson(IccJson &j, icConvertType /*nType*/)
   j["functionType"] = (int)m_nFunctionType;
   IccJson params = IccJson::array();
   for (icUInt16Number i = 0; i < m_nNumParam; i++)
-    params.push_back(icFtoD(m_dParam[i]));
+    params.push_back((double)m_dParam[i]);
   j["params"] = params;
   return true;
 }
@@ -1535,7 +1535,7 @@ bool CIccTagJsonParametricCurve::ParseJson(const IccJson &j, icConvertType /*nTy
   if (jsonExistsField(j, "params") && j["params"].is_array()) {
     const IccJson &params = j["params"];
     for (icUInt8Number i = 0; i < nParam && i < (icUInt8Number)params.size(); i++)
-      m_dParam[i] = icDtoF(params[i].get<double>());
+      m_dParam[i] = (icFloatNumber)params[i].get<double>();
   }
   return true;
 }
