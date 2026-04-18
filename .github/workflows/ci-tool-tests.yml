@@ -731,6 +731,98 @@ jobs:
           passed=$((passed + r9_pass))
           failed=$((failed + r9_fail))
 
+          # --- R10: JSON size_t-to-u16 truncation overflow regression (PR #808) ---
+          # Validates icJsonSafeU16() rejects chromaticity channels > 65535.
+          # Bug: (icUInt16Number)size_t silently truncated 65537 -> 1, causing massive heap-buffer-overflow.
+          # Fix: icJsonSafeU16() returns 0 for out-of-range; ParseJson rejects and skips allocation.
+          echo "--- R10: JSON size-overflow rejection (PR #808) ---"
+          FROMJSON="${WORKSPACE_DIR}/build/Tools/IccFromJson/iccFromJson"
+          r10_pass=0 r10_fail=0
+
+          if [ -x "$FROMJSON" ]; then
+            # Generate PoC JSON with 65537 chromaticity channels (overflows icUInt16Number)
+            {
+              echo 'import json'
+              echo 'profile = {'
+              echo '    "IccProfile": {'
+              echo '        "Header": {'
+              echo '            "preferredCMMType": "none",'
+              echo '            "profileVersion": "4.4.0.0",'
+              echo '            "deviceClass": "mntr",'
+              echo '            "colorSpace": "RGB",'
+              echo '            "pcs": "XYZ",'
+              echo '            "platform": "APPL",'
+              echo '            "flags": "00000000",'
+              echo '            "manufacturer": "none",'
+              echo '            "model": "none",'
+              echo '            "attributes": "0000000000000000",'
+              echo '            "renderingIntent": "Perceptual",'
+              echo '            "illuminant": {"X": 0.9642, "Y": 1.0, "Z": 0.8249},'
+              echo '            "creator": "test",'
+              echo '            "profileID": "00000000000000000000000000000000",'
+              echo '            "spectralPCS": "none",'
+              echo '            "spectralRange": None,'
+              echo '            "biSpectralRange": None,'
+              echo '            "MCS": "none",'
+              echo '            "SubClass": "none",'
+              echo '            "SubClassVersion": "0.0.0.0"'
+              echo '        },'
+              echo '        "Tags": ['
+              echo '            {'
+              echo '                "chromaticityTag": {'
+              echo '                    "type": "chromaticityType",'
+              echo '                    "data": {'
+              echo '                        "colorantType": "Unknown",'
+              echo '                        "channels": [[0.1, 0.2]] * 65537'
+              echo '                    }'
+              echo '                }'
+              echo '            }'
+              echo '        ]'
+              echo '    }'
+              echo '}'
+              echo 'json.dump(profile, open("'"$OUTDIR"'/r10-poc-overflow.json", "w"))'
+            } > "$OUTDIR/r10-gen-poc.py"
+            python3 "$OUTDIR/r10-gen-poc.py"
+
+            if [ -f "$OUTDIR/r10-poc-overflow.json" ]; then
+              # Test 1: iccFromJson must NOT crash on oversized chromaticity
+              timeout 30 "$FROMJSON" "$OUTDIR/r10-poc-overflow.json" "$OUTDIR/r10-out.icc" > "$OUTDIR/r10.log" 2>&1
+              r10_ec=$?
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r10.log" 2>/dev/null; then
+                echo "  [ASAN]  json size-overflow PoC"; r10_fail=$((r10_fail + 1))
+              elif [ "$r10_ec" -ge 128 ]; then
+                echo "  [FAIL]  iccFromJson crashed (signal $((r10_ec - 128))) on overflow PoC"
+                r10_fail=$((r10_fail + 1))
+              else
+                echo "  [OK]    iccFromJson handled 65537-channel PoC without crash (exit $r10_ec)"
+                r10_pass=$((r10_pass + 1))
+              fi
+
+              # Test 2: output profile must be small (channels were rejected, not allocated)
+              if [ -f "$OUTDIR/r10-out.icc" ]; then
+                r10_size=$(stat -c%s "$OUTDIR/r10-out.icc" 2>/dev/null || echo 0)
+                if [ "$r10_size" -lt 1024 ]; then
+                  echo "  [OK]    output profile is $r10_size bytes (overflow channels rejected)"
+                  r10_pass=$((r10_pass + 1))
+                else
+                  echo "  [FAIL]  output profile is $r10_size bytes (expected <1024 -- channels not rejected?)"
+                  r10_fail=$((r10_fail + 1))
+                fi
+              else
+                echo "  [OK]    no output profile (overflow rejected entirely)"
+                r10_pass=$((r10_pass + 1))
+              fi
+            else
+              echo "  [SKIP]  PoC generation failed"
+            fi
+          else
+            echo "  [SKIP]  iccFromJson not available"
+          fi
+
+          echo "  JSON size-overflow: $r10_pass passed, $r10_fail failed"
+          passed=$((passed + r10_pass))
+          failed=$((failed + r10_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
