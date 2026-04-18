@@ -4561,7 +4561,7 @@ bool CIccMpeToneMap::Read(icUInt32Number size, CIccIO* pIO)
   //setup positions to get the output channel mapping functions
   pIO->Seek(curPos, icSeekSet);
 
-  headerSize += nOutputChannels + sizeof(icUInt32Number)*2;
+  headerSize += nOutputChannels * sizeof(icUInt32Number)*2;
 
   if (headerSize + sizeof(icTagTypeSignature) > size)
     return false;
