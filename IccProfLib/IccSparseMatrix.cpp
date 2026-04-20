@@ -28,6 +28,7 @@ CIccSparseMatrix::CIccSparseMatrix(const CIccSparseMatrix &mtx)
   m_pMatrix = mtx.m_pMatrix;
   m_nRawSize = mtx.m_nRawSize;
   m_nType = mtx.m_nType;
+  m_Data = NULL;
 
   if (mtx.m_Data) {
     switch (m_nType) {
