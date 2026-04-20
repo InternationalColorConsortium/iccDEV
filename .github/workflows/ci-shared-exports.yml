@@ -2601,7 +2601,7 @@ jobs:
       - name: Download Windows ABI Reports
         if: always()
         continue-on-error: true
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131  # v7.0.0 (node24)
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v7.0.0 (node24)
         with:
           pattern: abi-windows-*
           path: windows-abi-reports
