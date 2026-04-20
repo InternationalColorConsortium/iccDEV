@@ -124,6 +124,15 @@ configure_file(
     @ONLY
 )
 
+# Issue #823: install the generated header (with VERSION+GIT_COMMIT_HASH) so
+# downstream find_package(RefIccMAX) consumers see commit info, not just version.
+IF(ENABLE_INSTALL_RIM)
+  INSTALL( FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/IccProfLibVer.h"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
+    COMPONENT shared-proof )
+ENDIF(ENABLE_INSTALL_RIM)
+
 # Generated header dir — propagated via target_include_directories(PUBLIC) below
 
 SET(SOURCES ${CFILES})

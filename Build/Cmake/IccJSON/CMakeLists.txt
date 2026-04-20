@@ -53,6 +53,15 @@ configure_file(
     @ONLY
 )
 
+# Issue #823: install the generated header (with VERSION+GIT_COMMIT_HASH) so
+# downstream find_package(RefIccMAX) consumers see commit info, not just version.
+IF(ENABLE_INSTALL_RIM)
+  INSTALL( FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/IccLibJSONVer.h"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
+    COMPONENT shared-proof )
+ENDIF(ENABLE_INSTALL_RIM)
+
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 SET(SOURCES ${CFILES})
