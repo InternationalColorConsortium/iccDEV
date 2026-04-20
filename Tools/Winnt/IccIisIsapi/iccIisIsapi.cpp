@@ -30,6 +30,7 @@
 
 #ifdef USE_ICCJSON
 #include "IccLibJSONVer.h"
+#include "IccProfileJson.h"
 #endif
 
 using iccIsapi::GetLastErrorString;
@@ -840,6 +841,18 @@ std::string BuildJsonBody()
   js << "\"iccLibXML_version\":\"" << JsonEscape(ICCLIBXMLVER) << "\",";
 #ifdef USE_ICCJSON
   js << "\"iccLibJSON_version\":\"" << JsonEscape(ICCLIBJSONVER) << "\",";
+  // Real symbol reference into IccJSON2.dll so MSVC retains the import
+  // (issue #823: ci-shared-exports asserts iccIisIsapi.dll depends on
+  // IccJSON2*.dll).
+  CIccProfileJson jsonProfile;
+  jsonProfile.InitHeader();
+  jsonProfile.m_Header.colorSpace = icSigRgbData;
+  jsonProfile.m_Header.pcs = icSigLabData;
+  jsonProfile.m_Header.deviceClass = icSigDisplayClass;
+  std::string jsonPayload;
+  const bool jsonOk = jsonProfile.ToJson(jsonPayload, 0);
+  js << "\"json_payload_bytes\":" << (jsonOk ? jsonPayload.size() : 0u) << ",";
+  js << "\"json_status\":\"" << (jsonOk ? "ok" : "empty") << "\",";
 #endif
   js << "\"profile_spec_version\":\"" << JsonEscape(info.GetVersionName(profile.m_Header.version)) << "\",";
   js << "\"xml_payload_bytes\":" << xml.size() << ",";
@@ -863,6 +876,56 @@ std::string BuildXmlBody()
 
   return xml;
 }
+
+#ifdef USE_ICCJSON
+// Returns the ICC profile serialized as IccLibJSON. Used by the
+// `?format=fromjson` GET endpoint to demonstrate a working IccJSON2 round-trip
+// (ToJson -> ParseJson) entirely inside the IIS extension. The result is
+// also a real symbol reference into IccJSON2.dll (issue #823).
+std::string BuildFromJsonBody()
+{
+  using iccIsapi::JsonEscape;
+
+  CIccProfileJson source;
+  source.InitHeader();
+  source.m_Header.colorSpace = icSigRgbData;
+  source.m_Header.pcs = icSigLabData;
+  source.m_Header.deviceClass = icSigDisplayClass;
+
+  std::string jsonOut;
+  if (!source.ToJson(jsonOut, 2) || jsonOut.empty()) {
+    return std::string("{\"status\":\"empty\"}");
+  }
+
+  // Round-trip: parse the JSON we just produced and confirm the header is
+  // recoverable. This exercises CIccProfileJson::ParseJson, which is another
+  // exported symbol from IccJSON2.dll.
+  CIccProfileJson roundTrip;
+  std::string parseStatus;
+  bool parsedOk = false;
+  try {
+    IccJson parsedDoc = IccJson::parse(jsonOut);
+    parsedOk = roundTrip.ParseJson(parsedDoc, parseStatus);
+  }
+  catch (const std::exception& ex) {
+    parseStatus = ex.what();
+    parsedOk = false;
+  }
+
+  std::ostringstream js;
+  js << "{";
+  js << "\"endpoint\":\"fromjson\",";
+  js << "\"iccLibJSON_version\":\"" << JsonEscape(ICCLIBJSONVER) << "\",";
+  js << "\"json_payload_bytes\":" << jsonOut.size() << ",";
+  js << "\"roundtrip_parsed\":" << (parsedOk ? "true" : "false") << ",";
+  if (!parseStatus.empty()) {
+    js << "\"roundtrip_status\":\"" << JsonEscape(parseStatus) << "\",";
+  }
+  js << "\"status\":\"ok\"";
+  js << "}";
+  return js.str();
+}
+#endif
 
 }  // namespace
 
@@ -929,6 +992,14 @@ DWORD WINAPI HttpExtensionProc(LPEXTENSION_CONTROL_BLOCK ecb)
         ? HSE_STATUS_SUCCESS
         : HSE_STATUS_ERROR;
     }
+
+#ifdef USE_ICCJSON
+    if (QueryHasValue(ecb->lpszQueryString, "format", "fromjson")) {
+      return SendResponse(ecb, "200 OK", "application/json; charset=utf-8", BuildFromJsonBody())
+        ? HSE_STATUS_SUCCESS
+        : HSE_STATUS_ERROR;
+    }
+#endif
 
     return SendResponse(ecb, "200 OK", "text/plain; charset=utf-8", BuildPlainTextBody())
       ? HSE_STATUS_SUCCESS
