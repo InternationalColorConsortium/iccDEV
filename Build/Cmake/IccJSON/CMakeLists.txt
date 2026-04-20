@@ -24,6 +24,7 @@ IF(ENABLE_INSTALL_RIM)
   SET( HEADERS_PUBLIC
         ${SRC_PATH}/IccJSON/IccLibJSON/IccIoJson.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccJsonConfig.h
+        ${SRC_PATH}/IccJSON/IccLibJSON/IccLibJSONVer.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccMpeJson.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccMpeJsonFactory.h
         ${SRC_PATH}/IccJSON/IccLibJSON/IccProfileJson.h
@@ -33,7 +34,8 @@ IF(ENABLE_INSTALL_RIM)
   )
   INSTALL( FILES
              ${HEADERS_PUBLIC}
-             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME} )
+             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
+             COMPONENT shared-proof )
 ENDIF(ENABLE_INSTALL_RIM)
 
 # Generate version header with git commit hash (reuses the project version string)
