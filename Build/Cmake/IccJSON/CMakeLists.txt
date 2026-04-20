@@ -124,7 +124,13 @@ IF(ENABLE_STATIC_LIBS)
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
   ENDIF()
 
-  IF(WIN32 AND ENABLE_SHARED_LIBS)
+  # Issue #823: When ENABLE_SHARED_LIBS is also ON, the SHARED build already
+  # produces ${TARGET_NAME}.lib as its import library in the same directory.
+  # Aliasing the static archive to that name overwrites the import library,
+  # which causes consumers (iccIisIsapi, hello-iccdev) to silently statically
+  # link IccJSON2 and lose the IccJSON2.dll runtime dependency. Only create
+  # the convenience alias when the shared import library is NOT being built.
+  IF(WIN32 AND NOT ENABLE_SHARED_LIBS)
     ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}-static POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:${TARGET_NAME}-static>"
