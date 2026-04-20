@@ -295,10 +295,10 @@ bool CIccTagJsonSignature::ParseJson(const IccJson &j, std::string & /*parseStr*
 
 bool CIccTagJsonDateTime::ToJson(IccJson &j)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d-%02d-%02dT%02d:%02d:%02d",
-           m_DateTime.year, m_DateTime.month,   m_DateTime.day,
-           m_DateTime.hours, m_DateTime.minutes, m_DateTime.seconds);
+  char buf[40];
+  snprintf(buf, sizeof(buf), "%04u-%02u-%02uT%02u:%02u:%02u",
+           (unsigned)m_DateTime.year,  (unsigned)m_DateTime.month,   (unsigned)m_DateTime.day,
+           (unsigned)m_DateTime.hours, (unsigned)m_DateTime.minutes, (unsigned)m_DateTime.seconds);
   j["dateTime"] = buf;
   return true;
 }

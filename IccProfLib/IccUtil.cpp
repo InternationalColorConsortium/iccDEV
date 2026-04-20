@@ -647,7 +647,6 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
   icUInt32Number rv = 0;    // because static analysis isn't perfect
   icUInt32Number rvsgn, rvexp, rvmnt;
   icInt32Number tmpexp;
-  icFloatNumber *rvfp = nullptr;
   icFloatNumber rvf = 0.0f;
   int exp;
 
@@ -682,8 +681,8 @@ icFloatNumber ICCPROFLIB_API icF16toF(icFloat16Number num)
       rv = (rvsgn | rvexp | rvmnt);
     }
   }
-  rvfp = (icFloatNumber*)&rv;
-  rvf = *rvfp;
+  static_assert(sizeof(rvf) == sizeof(rv), "icFloatNumber must match icUInt32Number width for icF16toF");
+  memcpy(&rvf, &rv, sizeof(rvf));
   return rvf;
 }
 

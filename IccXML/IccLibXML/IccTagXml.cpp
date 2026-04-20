@@ -1914,7 +1914,7 @@ bool CIccTagXmlColorantTable::ParseXml(xmlNode *pNode, std::string & /*parseStr*
             xmlAttr *b = icXmlFindAttr(pNode, "Channel3");
 
             if (name && L && a && b) {
-              strncpy(m_pData[i].name, icUtf8ToAnsi(str, name), sizeof(m_pData[i].name));
+              strncpy(m_pData[i].name, icUtf8ToAnsi(str, name), sizeof(m_pData[i].name)-1);
               m_pData[i].name[sizeof(m_pData[i].name)-1]=0;
 
               icFloatNumber lab[3];

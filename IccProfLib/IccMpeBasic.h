@@ -503,6 +503,7 @@ class CIccToneMapFunc
 public:
   CIccToneMapFunc();
   virtual ~CIccToneMapFunc();
+  CIccToneMapFunc(const CIccToneMapFunc& toneMap) = default;
   CIccToneMapFunc& operator=(const CIccToneMapFunc& toneMap);
   virtual CIccToneMapFunc* NewCopy() const;
 
