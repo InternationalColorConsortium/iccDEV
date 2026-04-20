@@ -91,10 +91,13 @@ IF(ENABLE_SHARED_LIBS)
   TARGET_LINK_LIBRARIES(${TARGET_NAME} PUBLIC ${TARGET_LIB_ICCPROFLIB} nlohmann_json::nlohmann_json ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
+    # Issue #823: export to RefIccMAXTargets so find_package(RefIccMAX CONFIG)
+    # consumers (e.g. examples/hello-iccdev) can resolve RefIccMAX::IccJSON2.
     INSTALL(TARGETS ${TARGET_NAME}
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+            EXPORT  RefIccMAXTargets
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT shared-proof
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
   ENDIF()
 ENDIF()
 
@@ -118,10 +121,11 @@ IF(ENABLE_STATIC_LIBS)
   TARGET_LINK_LIBRARIES(${TARGET_NAME}-static PUBLIC ${TARGET_LIB_ICCPROFLIB} nlohmann_json::nlohmann_json ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
+    # Issue #823: export to RefIccMAXTargets so find_package(RefIccMAX CONFIG)
+    # consumers can resolve RefIccMAX::IccJSON2-static.
     INSTALL(TARGETS ${TARGET_NAME}-static
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+            EXPORT  RefIccMAXTargets
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
   ENDIF()
 
   # Issue #823: When ENABLE_SHARED_LIBS is also ON, the SHARED build already
