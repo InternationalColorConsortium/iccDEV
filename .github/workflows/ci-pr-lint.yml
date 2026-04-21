@@ -229,7 +229,7 @@ jobs:
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
             llvm
       - name: Download build context
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: lint-build-context
 
@@ -334,7 +334,7 @@ jobs:
 
       - name: Download cppcheck IccProfLib results
         if: needs.lint.result == 'success' || needs.lint.result == 'failure'
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: lint-cppcheck-IccProfLib
           path: lint_reports/parts/
@@ -342,7 +342,7 @@ jobs:
 
       - name: Download cppcheck IccXML results
         if: needs.lint.result == 'success' || needs.lint.result == 'failure'
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: lint-cppcheck-IccXML
           path: lint_reports/parts/
@@ -350,7 +350,7 @@ jobs:
 
       - name: Download cppcheck Tools results
         if: needs.lint.result == 'success' || needs.lint.result == 'failure'
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: lint-cppcheck-Tools
           path: lint_reports/parts/
@@ -358,7 +358,7 @@ jobs:
 
       - name: Download cppcheck IccJSON results
         if: needs.lint.result == 'success' || needs.lint.result == 'failure'
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: lint-cppcheck-IccJSON
           path: lint_reports/parts/
@@ -366,7 +366,7 @@ jobs:
 
       - name: Download clang-tidy results
         if: needs.lint.result == 'success' || needs.lint.result == 'failure'
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: lint-clang-tidy-all
           path: lint_reports/
