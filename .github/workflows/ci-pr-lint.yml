@@ -168,7 +168,7 @@ jobs:
           make -j"$(nproc)"
       - name: Upload build context
         if: steps.diffcheck.outputs.no_src_changes == 'false'
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: lint-build-context
           retention-days: 1
@@ -310,7 +310,7 @@ jobs:
             echo "clang-tidy: $(wc -l < lint_reports/clang_tidy.txt) lines"
           fi
       - name: Upload results
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: lint-${{ matrix.tool }}-${{ matrix.component }}
           retention-days: 3
@@ -544,7 +544,7 @@ jobs:
           echo "✔ Report generated." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload combined reports
         if: always()
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: lint-reports
           path: lint_reports/

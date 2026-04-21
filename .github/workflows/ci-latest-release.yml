@@ -199,7 +199,7 @@ jobs:
           echo "Total: $total files staged into $stage"
           echo ""
       - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: iccdev-linux-${{ matrix.compiler }}
           path: staging
@@ -354,7 +354,7 @@ jobs:
           echo "Total: $total files staged into $stage"
           echo ""
       - name: Upload macOS Artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: iccdev-macos-clang
           path: staging
@@ -581,7 +581,7 @@ jobs:
           }
           Write-Host "`nTotal: $count files staged into $stage`n"
       - name: Upload build artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: iccdev-windows-msvc
           path: staging
@@ -933,7 +933,7 @@ jobs:
           fi
 
       - name: Upload WASM Artifacts
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: iccdev-wasm-release
           path: |
