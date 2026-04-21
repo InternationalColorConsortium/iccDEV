@@ -1,4 +1,0 @@
-#ifndef ICCLIBJSONVER
-#define ICCLIBJSONVER "2.3.1.7"
-#define ICCPROFLIBLIBJSONVER "2.3.1.7"
-#endif
