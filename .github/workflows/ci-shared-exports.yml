@@ -80,7 +80,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           RAW_ICCDEV_REPO: ${{ github.event.inputs.iccdev_repo || github.repository }}
-          RAW_ICCDEV_REF: ${{ github.event.inputs.iccdev_ref || github.ref_name }}
+          RAW_ICCDEV_REF: ${{ github.event.inputs.iccdev_ref || github.head_ref || github.ref_name }}
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh 2>/dev/null || true
