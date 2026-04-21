@@ -272,7 +272,7 @@ jobs:
               -s FORCE_FILESYSTEM=1 \
               -s MODULARIZE=1 \
               -s EXPORT_NAME=createModule \
-              -s EXPORTED_RUNTIME_METHODS=['FS','callMain']" \
+              -s EXPORTED_RUNTIME_METHODS=['FS','callMain'] -s EXIT_RUNTIME=0" \
             -Wno-dev
 
           emmake make -j$(nproc)
@@ -370,6 +370,44 @@ jobs:
             echo "iccDumpProfile WASM smoke test complete"
             set -e
           fi
+
+          # ------------------------------------------------------------------
+          # Regression test: re-invoke callMain() AFTER main() has exited.
+          #
+          # Without -s EXIT_RUNTIME=0 (or Module.noExitRuntime=true), the
+          # second callMain() aborts with:
+          #   Aborted(Assertion failed: native function `strerror` called
+          #   after runtime exit (use NO_EXIT_RUNTIME ...))
+          #
+          # This pattern broke the npm iccdev package after the Asan matrix
+          # variant landed; this test guards against any future regression
+          # of the EXIT_RUNTIME flag in the link line above.
+          # ------------------------------------------------------------------
+          if [ -n "$DUMP_JS" ] && [ -f "$DUMP_JS" ] && command -v node >/dev/null 2>&1; then
+            echo "Regression test: re-invoke callMain() after main() exits"
+            REG_JS="$GITHUB_WORKSPACE/.github/scripts/wasm-reinvoke-test.cjs"
+            REG_OUT=$(mktemp)
+            if [ -f "$REG_JS" ]; then
+              # Emscripten's runtime can swallow process.exit() after abort,
+              # so the script writes its verdict to a sentinel file. Trust
+              # the sentinel rather than node's exit code.
+              node "$REG_JS" "$DUMP_JS" "$REG_OUT" || true
+              VERDICT=$(head -1 "$REG_OUT" 2>/dev/null || echo "FAIL: no sentinel")
+              echo "regression verdict: $VERDICT"
+              if [ "$VERDICT" = "PASS" ]; then
+                { echo "### WASM Regression: PASS (re-invoke after main exit)"; echo ""; } >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "::error::WASM regression test failed - EXIT_RUNTIME flag may have been removed from the link line"
+                { echo "### WASM Regression: FAIL"; echo ""; echo '```'; echo "$VERDICT"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+                rm -f "$REG_OUT"
+                exit 1
+              fi
+              rm -f "$REG_OUT"
+            else
+              echo "::warning::regression script $REG_JS not found, skipping"
+            fi
+          fi
+
 
       - name: Upload WASM Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1

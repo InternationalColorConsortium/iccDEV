@@ -846,7 +846,7 @@ jobs:
               -s FORCE_FILESYSTEM=1 \
               -s MODULARIZE=1 \
               -s EXPORT_NAME=createModule \
-              -s EXPORTED_RUNTIME_METHODS=['FS','callMain']" \
+              -s EXPORTED_RUNTIME_METHODS=['FS','callMain'] -s EXIT_RUNTIME=0" \
             -Wno-dev
 
           emmake make -j$(nproc)

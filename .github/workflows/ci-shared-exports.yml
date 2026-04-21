@@ -438,7 +438,7 @@ jobs:
 
       - name: Upload Build Artifacts (on failure)
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v6.0.0 (node24)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: build-logs-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
           path: |
@@ -450,7 +450,7 @@ jobs:
 
       - name: Upload Build Artifacts (on success)
         if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v6.0.0 (node24)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: build-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
           path: |
@@ -627,7 +627,7 @@ jobs:
 
       - name: Upload Sanitizer Build Artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v6.0.0 (node24)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: sanitizer-${{ matrix.sanitizer }}-${{ matrix.build_type }}
           path: |
@@ -1245,7 +1245,7 @@ jobs:
 
       - name: Upload ABI Reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v6.0.0 (node24)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: abi-windows-${{ matrix.build_type }}
           path: Build/Cmake/build/abi-reports/*
@@ -2386,7 +2386,7 @@ jobs:
 
       - name: Upload Windows shared smoke bundle
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v6.0.0 (node24)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: windows-shared-smoke-${{ matrix.build_type }}
           path: ${{ runner.temp }}/windows-shared-smoke-${{ matrix.build_type }}
