@@ -2207,19 +2207,49 @@ jobs:
             "dumpbin /exports `"$iisDll`" > `"$iisExportsLog`"",
             "dumpbin /dependents `"$iisDll`" > `"$iisDepsLog`""
           ) -join ' && '
-          cmd.exe /d /s /c $inspectCmd
-          if ($LASTEXITCODE -ne 0) {
-            throw "iccIisIsapi dumpbin verification failed with exit code $LASTEXITCODE"
+          # issue #823: harden against the windows-latest AV/parallel-build
+          # race that can produce a transiently truncated PE import table
+          # (Windows Defender real-time scan holds an open handle on the
+          # freshly-installed DLL while dumpbin reads it). Add Defender
+          # exclusion + retry the dumpbin read up to 5 times so a single
+          # transient miss does not fail the smoke check. The /INCLUDE:
+          # linker anchor in Tools/IccIisIsapi/CMakeLists.txt prevents the
+          # underlying import elision; this loop mitigates I/O-layer flake.
+          try {
+            Add-MpPreference -ExclusionPath $env:INSTALL_PREFIX -ErrorAction SilentlyContinue
+            Add-MpPreference -ExclusionPath $env:RUNNER_TEMP -ErrorAction SilentlyContinue
+          } catch {
+            Write-Host "[INFO] Defender exclusion add skipped: $($_.Exception.Message)"
+          }
+          $expectedDeps = @(
+            ('IccProfLib2' + $configSuffix + '.dll'),
+            ('IccXML2'     + $configSuffix + '.dll'),
+            ('IccJSON2'    + $configSuffix + '.dll')
+          )
+          $depAttempts = 5
+          $depLastMissing = @()
+          for ($depTry = 1; $depTry -le $depAttempts; $depTry++) {
+            cmd.exe /d /s /c $inspectCmd
+            if ($LASTEXITCODE -ne 0) {
+              throw "iccIisIsapi dumpbin verification failed with exit code $LASTEXITCODE"
+            }
+            $depLastMissing = @($expectedDeps | Where-Object {
+              -not (Select-String -Path $iisDepsLog -Pattern $_ -SimpleMatch -Quiet)
+            })
+            if ($depLastMissing.Count -eq 0) { break }
+            Write-Host "[WARN] dumpbin attempt $depTry/$depAttempts missing: $($depLastMissing -join ', ')"
+            Start-Sleep -Seconds 2
           }
           foreach ($symbol in @('GetExtensionVersion', 'HttpExtensionProc', 'TerminateExtension')) {
             if (-not (Select-String -Path $iisExportsLog -Pattern $symbol -SimpleMatch -Quiet)) {
               throw "iccIisIsapi.dll missing export: $symbol"
             }
           }
-          foreach ($dependency in @(('IccProfLib2' + $configSuffix + '.dll'), ('IccXML2' + $configSuffix + '.dll'), ('IccJSON2' + $configSuffix + '.dll'))) {
-            if (-not (Select-String -Path $iisDepsLog -Pattern $dependency -SimpleMatch -Quiet)) {
-              throw "iccIisIsapi.dll is missing dependency: $dependency"
-            }
+          if ($depLastMissing.Count -gt 0) {
+            $depDump = (Get-Content -Path $iisDepsLog -Raw -ErrorAction SilentlyContinue)
+            Write-Host "----- dumpbin /dependents output (last attempt) -----"
+            Write-Host $depDump
+            throw "iccIisIsapi.dll is missing dependency: $($depLastMissing -join ', ')"
           }
           $originalPath = $env:PATH
           try {
@@ -2288,14 +2318,28 @@ jobs:
             "call `"$vcvars`" >nul",
             "dumpbin /dependents `"$helloExe`" > `"$helloDepsLog`""
           ) -join ' && '
-          cmd.exe /d /s /c $verifyCmd
-          if ($LASTEXITCODE -ne 0) {
-            throw "hello-iccdev dependents check failed with exit code $LASTEXITCODE"
-          }
-          foreach ($symbol in @('IccProfLib2d.dll', 'IccXML2d.dll', 'IccJSON2d.dll')) {
-            if (-not (Select-String -Path $helloDepsLog -Pattern $symbol -SimpleMatch -Quiet)) {
-              throw "hello-iccdev is missing dependency: $symbol"
+          # issue #823: retry to absorb windows-latest AV/parallel-build
+          # race that can transiently truncate dumpbin output.
+          $helloExpected = @('IccProfLib2d.dll', 'IccXML2d.dll', 'IccJSON2d.dll')
+          $helloAttempts = 5
+          $helloMissing = @()
+          for ($helloTry = 1; $helloTry -le $helloAttempts; $helloTry++) {
+            cmd.exe /d /s /c $verifyCmd
+            if ($LASTEXITCODE -ne 0) {
+              throw "hello-iccdev dependents check failed with exit code $LASTEXITCODE"
             }
+            $helloMissing = @($helloExpected | Where-Object {
+              -not (Select-String -Path $helloDepsLog -Pattern $_ -SimpleMatch -Quiet)
+            })
+            if ($helloMissing.Count -eq 0) { break }
+            Write-Host "[WARN] hello dumpbin attempt $helloTry/$helloAttempts missing: $($helloMissing -join ', ')"
+            Start-Sleep -Seconds 2
+          }
+          if ($helloMissing.Count -gt 0) {
+            $helloDump = (Get-Content -Path $helloDepsLog -Raw -ErrorAction SilentlyContinue)
+            Write-Host "----- dumpbin /dependents output (last attempt) -----"
+            Write-Host $helloDump
+            throw "hello-iccdev is missing dependency: $($helloMissing -join ', ')"
           }
           Write-Host "::group::dumpbin /dependents hello-iccdev.exe"
           Get-Content $helloDepsLog

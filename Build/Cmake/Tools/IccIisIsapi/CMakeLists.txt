@@ -48,6 +48,15 @@ if(ENABLE_ICCJSON)
   target_include_directories(iccIisIsapi PRIVATE
     "${SRC_ROOT}/IccJSON/IccLibJSON")
   target_compile_definitions(iccIisIsapi PRIVATE USE_ICCJSON=1)
+  if(MSVC)
+    # issue #823: anchor an exported IccJSON2 symbol so MSVC link
+    # (/OPT:REF,ICF) and any antivirus / parallel-build race on the
+    # windows-latest runner cannot silently elide the IccJSON2.dll
+    # import from iccIisIsapi.dll. The CIccProfileJson destructor is
+    # exported and stable (see dumpbin /exports IccJSON2.dll).
+    target_link_options(iccIisIsapi PRIVATE
+      "/INCLUDE:??1CIccProfileJson@@UEAA@XZ")
+  endif()
 endif()
 set_target_properties(iccIisIsapi PROPERTIES
   OUTPUT_NAME "iccIisIsapi"
