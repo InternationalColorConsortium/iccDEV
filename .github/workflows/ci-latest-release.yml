@@ -664,9 +664,9 @@ jobs:
           cd "$THIRD_PARTY"
 
           # libpng (checksum verified)
-          curl -sLO https://download.sourceforge.net/libpng/libpng-1.6.51.tar.gz
-          echo "ac25cafc2054cda3f6f0fe22ee9fc587024b99e01d03bd72b765824e48f39021  libpng-1.6.51.tar.gz" | sha256sum -c -
-          tar -xzf libpng-1.6.51.tar.gz && mv libpng-1.6.51 libpng && cd libpng
+          curl -sLO https://download.sourceforge.net/libpng/libpng-1.6.57.tar.gz
+          echo "01fdab044cdc575c74a9ef62a4042fbe24fea8bedfe8aa5c89f4467b781bbb60  libpng-1.6.57.tar.gz" | sha256sum -c -
+          tar -xzf libpng-1.6.57.tar.gz && mv libpng-1.6.57 libpng && cd libpng
           CPPFLAGS="-I$THIRD_PARTY/zlib" LDFLAGS="-L$THIRD_PARTY/zlib/out/lib" \
             emconfigure ./configure --disable-shared --enable-static --prefix="$THIRD_PARTY/libpng/out"
           emmake make -j$(nproc)
