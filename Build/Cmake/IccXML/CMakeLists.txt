@@ -31,7 +31,6 @@ SET( CFILES
 # Public headers — defined unconditionally for target properties
 SET( HEADERS_PUBLIC
       ${SRC_PATH}/IccXML/IccLibXML/IccIoXml.h
-      ${SRC_PATH}/IccXML/IccLibXML/IccLibXMLVer.h
       ${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.h
       ${SRC_PATH}/IccXML/IccLibXML/IccMpeXml.h
       ${SRC_PATH}/IccXML/IccLibXML/IccProfileXml.h
