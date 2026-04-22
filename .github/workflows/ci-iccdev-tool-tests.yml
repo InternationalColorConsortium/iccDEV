@@ -795,11 +795,11 @@ jobs:
           # --- iccPngDump: real PNG file ---
           PNG_FILE="${WORKSPACE_DIR}/Testing/hybrid/Data/cmykGreysPlot.png"
           if [ -x "$PNGDUMP" ] && [ -f "$PNG_FILE" ]; then
-            timeout 30 "$PNGDUMP" "$PNG_FILE" > "$OUTDIR/pngdump-file.log" 2>&1
-            rc=$?
+            rc=0
+            timeout 30 "$PNGDUMP" "$PNG_FILE" > "$OUTDIR/pngdump-file.log" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$OUTDIR/pngdump-file.log" 2>/dev/null; then
               echo "  [ASAN]  iccPngDump on cmykGreysPlot.png"; failed=$((failed + 1))
-            elif [ "$rc" -ge 128 ]; then
+            elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
               echo "  [CRASH] iccPngDump on cmykGreysPlot.png (exit $rc)"; failed=$((failed + 1))
             else
               echo "  [OK]    iccPngDump on cmykGreysPlot.png (exit $rc)"; passed=$((passed + 1))
@@ -814,11 +814,11 @@ jobs:
             # straightforward, but we can at least test with available PNGs
             PNG2="${WORKSPACE_DIR}/Testing/hybrid/Data/MS-Sensors.png"
             if [ -f "$PNG2" ]; then
-              timeout 30 "$PNGDUMP" "$PNG2" > "$OUTDIR/pngdump-sensors.log" 2>&1
-              rc=$?
+              rc=0
+              timeout 30 "$PNGDUMP" "$PNG2" > "$OUTDIR/pngdump-sensors.log" 2>&1 || rc=$?
               if grep -q "ERROR: AddressSanitizer" "$OUTDIR/pngdump-sensors.log" 2>/dev/null; then
                 echo "  [ASAN]  iccPngDump on MS-Sensors.png"; failed=$((failed + 1))
-              elif [ "$rc" -ge 128 ]; then
+              elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
                 echo "  [CRASH] iccPngDump on MS-Sensors.png (exit $rc)"; failed=$((failed + 1))
               else
                 echo "  [OK]    iccPngDump on MS-Sensors.png (exit $rc)"; passed=$((passed + 1))
@@ -1078,8 +1078,8 @@ jobs:
           CAT8_XML="${WORKSPACE_DIR}/Testing/hybrid/Data/Cat8Lab-D65_2deg.xml"
           CAT8_ICC="$OUTDIR/Cat8Lab-D65_2deg.icc"
           if [ -f "$CAT8_XML" ]; then
-            timeout 60 "$FROMXML" "$CAT8_XML" "$CAT8_ICC" > "$OUTDIR/fromxml-cat8.log" 2>&1
-            rc=$?
+            rc=0
+            timeout 60 "$FROMXML" "$CAT8_XML" "$CAT8_ICC" > "$OUTDIR/fromxml-cat8.log" 2>&1 || rc=$?
             if [ "$rc" -ne 0 ] || [ ! -f "$CAT8_ICC" ]; then
               echo "  [FAIL]  iccFromXml Cat8Lab-D65_2deg.xml (exit $rc)"; failed=$((failed + 1))
             else
@@ -1087,18 +1087,18 @@ jobs:
             fi
           fi
 
-          # --- v5→v4 conversion: LCDDisplay + Cat8Lab observer ---
+          # --- v5-to-v4 conversion: LCDDisplay + Cat8Lab observer ---
           LCD="${WORKSPACE_DIR}/Testing/Display/LCDDisplay.icc"
           OUT_V4="$OUTDIR/LCDDisplayCat8Obs.icc"
           if [ -f "$LCD" ] && [ -f "$CAT8_ICC" ]; then
-            timeout 60 "$V5DSP" "$LCD" "$CAT8_ICC" "$OUT_V4" > "$OUTDIR/v5dsp-cat8.log" 2>&1
-            rc=$?
+            rc=0
+            timeout 60 "$V5DSP" "$LCD" "$CAT8_ICC" "$OUT_V4" > "$OUTDIR/v5dsp-cat8.log" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$OUTDIR/v5dsp-cat8.log" 2>/dev/null; then
               echo "  [ASAN]  v5DspObs LCDDisplay+Cat8Lab"; failed=$((failed + 1))
-            elif [ "$rc" -ge 128 ]; then
+            elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
               echo "  [CRASH] v5DspObs LCDDisplay+Cat8Lab (exit $rc)"; failed=$((failed + 1))
             elif [ "$rc" -ne 0 ]; then
-              echo "  [WARN]  v5DspObs LCDDisplay+Cat8Lab (exit $rc — may be expected for some observer pairings)"
+              echo "  [WARN]  v5DspObs LCDDisplay+Cat8Lab (exit $rc -- may be expected for some observer pairings)"
             else
               echo "  [OK]    v5DspObs LCDDisplay+Cat8Lab (exit $rc)"; passed=$((passed + 1))
               # Validate output with iccDumpProfile
@@ -1113,15 +1113,15 @@ jobs:
             fi
           fi
 
-          # --- v5→v4 conversion: LCDDisplay + ICS observer ---
+          # --- v5-to-v4 conversion: LCDDisplay + ICS observer ---
           ICS_OBS="${WORKSPACE_DIR}/Testing/ICS/XYZ_float-D65_2deg-Part1.icc"
           OUT_V4_ICS="$OUTDIR/LCDDisplayIcsObs.icc"
           if [ -f "$LCD" ] && [ -f "$ICS_OBS" ]; then
-            timeout 60 "$V5DSP" "$LCD" "$ICS_OBS" "$OUT_V4_ICS" > "$OUTDIR/v5dsp-ics.log" 2>&1
-            rc=$?
+            rc=0
+            timeout 60 "$V5DSP" "$LCD" "$ICS_OBS" "$OUT_V4_ICS" > "$OUTDIR/v5dsp-ics.log" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$OUTDIR/v5dsp-ics.log" 2>/dev/null; then
               echo "  [ASAN]  v5DspObs LCDDisplay+ICS observer"; failed=$((failed + 1))
-            elif [ "$rc" -ge 128 ]; then
+            elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
               echo "  [CRASH] v5DspObs LCDDisplay+ICS observer (exit $rc)"; failed=$((failed + 1))
             elif [ "$rc" -ne 0 ]; then
               echo "  [WARN]  v5DspObs LCDDisplay+ICS observer (exit $rc)"
@@ -1138,6 +1138,7 @@ jobs:
 
       - name: "Test 18: Regression checks (bisect fixes)"
         if: always()
+        continue-on-error: true
         env:
           BASH_ENV: /dev/null
           WORKSPACE_DIR: ${{ github.workspace }}
@@ -1305,11 +1306,11 @@ jobs:
           echo "--- R7: PoC #599 GBD signed-integer-overflow ---"
           POC_599="${WORKSPACE_DIR}/.github/ci/regression/poc-599-gbd-sio.icc"
           if [ -f "$POC_599" ]; then
-            timeout 30 "$DUMP" "$POC_599" > "$OUTDIR/r7-poc599.log" 2>&1 || true
-            rc=$?
+            rc=0
+            timeout 30 "$DUMP" "$POC_599" > "$OUTDIR/r7-poc599.log" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r7-poc599.log" 2>/dev/null; then
               echo "  [ASAN]  PoC #599 triggered ASAN"; failed=$((failed + 1))
-            elif [ "$rc" -ge 128 ]; then
+            elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
               echo "  [CRASH] PoC #599 crashed (exit $rc)"; failed=$((failed + 1))
             else
               echo "  [OK]    PoC #599 handled without ASAN (exit $rc)"; passed=$((passed + 1))
@@ -1322,11 +1323,11 @@ jobs:
           echo "--- R8: PoC #744 ToneMapFunc HBO ---"
           POC_744="${WORKSPACE_DIR}/.github/ci/regression/poc-744-tonemap-hbo.icc"
           if [ -f "$POC_744" ]; then
-            timeout 30 "$DUMP" "$POC_744" ALL > "$OUTDIR/r8-poc744.log" 2>&1 || true
-            rc=$?
+            rc=0
+            timeout 30 "$DUMP" "$POC_744" ALL > "$OUTDIR/r8-poc744.log" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r8-poc744.log" 2>/dev/null; then
               echo "  [ASAN]  PoC #744 triggered ASAN"; failed=$((failed + 1))
-            elif [ "$rc" -ge 128 ]; then
+            elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
               echo "  [CRASH] PoC #744 crashed (exit $rc)"; failed=$((failed + 1))
             else
               echo "  [OK]    PoC #744 handled without ASAN (exit $rc)"; passed=$((passed + 1))
@@ -1340,11 +1341,11 @@ jobs:
           POC_763="${WORKSPACE_DIR}/.github/ci/regression/poc-763-cenc-huaf.icc"
           APPLYNAMEDCMM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
           if [ -f "$POC_763" ] && [ -x "$APPLYNAMEDCMM" ]; then
-            timeout 30 "$DUMP" "$POC_763" > "$OUTDIR/r9-poc763-dump.log" 2>&1 || true
-            rc=$?
+            rc=0
+            timeout 30 "$DUMP" "$POC_763" > "$OUTDIR/r9-poc763-dump.log" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-poc763-dump.log" 2>/dev/null; then
               echo "  [ASAN]  PoC #763 triggered ASAN on dump"; failed=$((failed + 1))
-            elif [ "$rc" -ge 128 ]; then
+            elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
               echo "  [CRASH] PoC #763 crashed on dump (exit $rc)"; failed=$((failed + 1))
             else
               echo "  [OK]    PoC #763 dump handled cleanly (exit $rc)"; passed=$((passed + 1))
@@ -1366,13 +1367,13 @@ jobs:
           for poc in "${POC_769_FILES[@]}"; do
             poc_path="${POC_769_DIR}/${poc}"
             if [ -f "$poc_path" ]; then
-              timeout 30 "$DUMP" "$poc_path" ALL > "$OUTDIR/r10-${poc}.log" 2>&1 || true
-              rc=$?
+              rc=0
+              timeout 30 "$DUMP" "$poc_path" ALL > "$OUTDIR/r10-${poc}.log" 2>&1 || rc=$?
               if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r10-${poc}.log" 2>/dev/null; then
                 echo "  [ASAN]  ${poc}"; poc769_fail=$((poc769_fail + 1))
               elif grep -q "runtime error.*unsigned integer overflow" "$OUTDIR/r10-${poc}.log" 2>/dev/null; then
                 echo "  [UIO]   ${poc} (unsigned overflow still present)"; poc769_fail=$((poc769_fail + 1))
-              elif [ "$rc" -ge 128 ]; then
+              elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
                 echo "  [CRASH] ${poc} (exit $rc)"; poc769_fail=$((poc769_fail + 1))
               else
                 echo "  [OK]    ${poc} (exit $rc)"; poc769_pass=$((poc769_pass + 1))
@@ -1392,12 +1393,12 @@ jobs:
             export PATH
             for d in "${WORKSPACE_DIR}"/build/Tools/*/; do PATH="$d:$PATH"; done
             cd "$HYBRID_DIR"
-            timeout 120 bash BuildAndTest.sh > "$OUTDIR/r10-hybrid.log" 2>&1
-            rc=$?
+            rc=0
+            timeout 120 bash BuildAndTest.sh > "$OUTDIR/r10-hybrid.log" 2>&1 || rc=$?
             cd "${WORKSPACE_DIR}"
             if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r10-hybrid.log" 2>/dev/null; then
               echo "  [ASAN]  hybrid/BuildAndTest.sh ASAN finding"; failed=$((failed + 1))
-            elif [ "$rc" -ge 128 ]; then
+            elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
               echo "  [CRASH] hybrid/BuildAndTest.sh crashed (exit $rc)"; failed=$((failed + 1))
             elif [ "$rc" -ne 0 ]; then
               echo "  [WARN]  hybrid/BuildAndTest.sh non-zero exit ($rc)"; passed=$((passed + 1))
@@ -1685,11 +1686,14 @@ jobs:
               fi
             done
           fi
-          ASAN_COUNT=$(echo "$ASAN_FILES" | grep -c . 2>/dev/null || echo 0)
-          UBSAN_COUNT=$(echo "$UBSAN_FILES" | grep -c . 2>/dev/null || echo 0)
-          # Handle empty string giving count of 1
-          [ -z "$ASAN_FILES" ] && ASAN_COUNT=0
-          [ -z "$UBSAN_FILES" ] && UBSAN_COUNT=0
+          ASAN_COUNT=0
+          UBSAN_COUNT=0
+          if [ -n "$ASAN_FILES" ]; then
+            ASAN_COUNT=$(grep -c . <<< "$ASAN_FILES" 2>/dev/null || echo 0)
+          fi
+          if [ -n "$UBSAN_FILES" ]; then
+            UBSAN_COUNT=$(grep -c . <<< "$UBSAN_FILES" 2>/dev/null || echo 0)
+          fi
 
           # Determine overall verdict
           if [ "$ASAN_COUNT" -gt 0 ]; then

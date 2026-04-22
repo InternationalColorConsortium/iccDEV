@@ -561,11 +561,11 @@ jobs:
             for poc in "$POC_DIR"/poc-*.icc; do
               [ -f "$poc" ] || continue
               poc_name="$(basename "$poc" .icc)"
-              timeout 30 "$DUMP" "$poc" ALL > "$OUTDIR/poc-${poc_name}.log" 2>&1 || true
-              rc=$?
+              rc=0
+              timeout 30 "$DUMP" "$poc" ALL > "$OUTDIR/poc-${poc_name}.log" 2>&1 || rc=$?
               if grep -q "ERROR: AddressSanitizer" "$OUTDIR/poc-${poc_name}.log" 2>/dev/null; then
                 echo "  [ASAN]  $poc_name"; failed=$((failed + 1))
-              elif [ "$rc" -ge 128 ]; then
+              elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
                 echo "  [CRASH] $poc_name (exit $rc)"; failed=$((failed + 1))
               else
                 echo "  [OK]    $poc_name (exit $rc)"; passed=$((passed + 1))
