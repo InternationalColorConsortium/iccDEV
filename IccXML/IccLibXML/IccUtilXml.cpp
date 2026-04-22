@@ -67,9 +67,18 @@
 #include "IccTagFactory.h"
 
 #ifdef WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 #ifdef GetClassName
 #undef GetClassName
+#endif
+#ifdef max
+#undef max
+#endif
+#ifdef min
+#undef min
 #endif
 #endif
 #include <cstring> /* C strings strcpy, memcpy ... */
