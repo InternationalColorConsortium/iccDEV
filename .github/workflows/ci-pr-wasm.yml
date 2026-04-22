@@ -35,7 +35,7 @@ on:
         type: string
 
 concurrency:
-  group: child-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.job }}
+  group: pr-wasm-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:

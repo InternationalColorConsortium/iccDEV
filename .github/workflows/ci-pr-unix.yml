@@ -43,9 +43,9 @@ on:
         default: '["gcc", "clang"]'
         type: string
 
-concurrency:
-  group: child-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.job }}
-  cancel-in-progress: true
+# Concurrency is set at job level so each matrix cell has its own group.
+# Workflow-level concurrency cannot use github.job (empty) or matrix.* values,
+# and github.workflow in a reusable workflow returns the caller's name.
 
 env:
   GH_REPO: ${{ github.repository }}
@@ -59,6 +59,9 @@ jobs:
     name: "${{ matrix.os }} • ${{ matrix.compiler }} • ${{ matrix.build_type }}"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
+    concurrency:
+      group: pr-unix-${{ github.event.pull_request.number || github.ref }}-${{ matrix.os }}-${{ matrix.compiler }}-${{ matrix.build_type }}
+      cancel-in-progress: true
     defaults:
       run:
         shell: bash --noprofile --norc {0}
