@@ -147,6 +147,13 @@ jobs:
             --threads=0 \
             .github/codeql-queries/iccdev-security-suite.qls
 
+          # IccJSON (JsonLib) targeted security queries
+          codeql database analyze /tmp/codeql-db \
+            --format=sarif-latest \
+            --output=codeql-results/iccdev-jsonlib-security.sarif \
+            --threads=0 \
+            .github/codeql-queries/iccdev-jsonlib-suite.qls
+
       - name: Generate report
         env:
           BASH_ENV: /dev/null
@@ -157,6 +164,7 @@ jobs:
           .github/scripts/codeql-report.sh \
             codeql-results/cpp-security-and-quality.sarif \
             codeql-results/iccdev-security.sarif \
+            codeql-results/iccdev-jsonlib-security.sarif \
             > codeql-results/report.txt
 
       - name: Upload report artifact
