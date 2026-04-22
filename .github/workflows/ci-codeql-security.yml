@@ -29,17 +29,6 @@ on:
       - 'examples/**'
       - '.github/codeql-queries/**'
       - '.github/codeql-config.yml'
-  pull_request:
-    branches:
-      - master
-    paths:
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - 'IccJSON/**'
-      - 'Tools/**'
-      - 'examples/**'
-      - '.github/codeql-queries/**'
-      - '.github/codeql-config.yml'
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
