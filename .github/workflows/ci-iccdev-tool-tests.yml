@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: iccdev-tool-tests-${{ github.ref }}
+  group: iccdev-tool-tests-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
