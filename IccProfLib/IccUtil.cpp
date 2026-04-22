@@ -1085,7 +1085,7 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
       c='?';
       bGetHexVal = true;
     }
-    pBuf[i]=c;
+    pBuf[i]=(icChar)c;
   }
 
   if (bGetHexVal)
@@ -1125,7 +1125,7 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
       c='?';
       bGetHexVal = true;
     }
-    pBuf[i]=c;
+    pBuf[i]=(icChar)c;
   }
 
   if (bGetHexVal)
@@ -1180,7 +1180,7 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
           c = '?';
           bNeedHexVal = true;
         }
-        pBuf[i]=c;
+        pBuf[i]=(icChar)c;
       }
 
       if (bGetHexVal)
@@ -1244,7 +1244,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
             c='?';
             bGetHexVal = true;
           }
-          pBuf[i]=c;
+          pBuf[i]=(icChar)c;
         }
 
         if (bGetHexVal)
