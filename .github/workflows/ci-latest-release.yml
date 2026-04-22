@@ -945,17 +945,134 @@ jobs:
             set -e
           fi
 
-      - name: Upload WASM Artifacts
+      - name: Stage npm-shaped WASM bundle (issue #830)
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          # Resolve a version string for package.json:
+          #   - tag push   : strip leading 'v' from refs/tags/vX.Y.Z
+          #   - other      : 0.0.0-dev+<short-sha>
+          REF_NAME="${GITHUB_REF_NAME:-}"
+          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            VERSION="${REF_NAME#v}"
+          else
+            VERSION="0.0.0-dev+${GITHUB_SHA:0:7}"
+          fi
+
+          chmod +x Build/Cmake/wasm-package/stage.sh
+          Build/Cmake/wasm-package/stage.sh build-wasm wasm-stage "$VERSION"
+
+          {
+            echo "### WASM npm-shaped bundle"
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| version | $(sanitize_line "$VERSION") |"
+            echo "| stage dir | wasm-stage/ |"
+            echo ""
+            echo "#### Top-level entries"
+            echo '```'
+            ls -1 wasm-stage | while IFS= read -r line; do
+              sanitize_line "$line"
+              echo ""
+            done
+            echo '```'
+            echo "#### Tool modules"
+            echo '```'
+            find wasm-stage -maxdepth 2 -name '*.js' -not -name 'index.js' -not -name 'test_all.js' \
+              -exec ls -lh {} \; | while IFS= read -r line; do
+              sanitize_line "$line"
+              echo ""
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke-test staged WASM bundle (test_all.js)
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          if [[ ! -d wasm-stage ]]; then
+            echo "::error::wasm-stage/ not present; staging step did not run"
+            exit 1
+          fi
+
+          cd wasm-stage
+          if ! node test_all.js; then
+            echo "::error::test_all.js (16-tool smoke) failed in staged WASM bundle"
+            exit 1
+          fi
+
+      - name: Parity gate (Testing/CreateAllProfiles.sh -> regression.js)
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_REGRESSION_EXPECTED: '207'
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            sanitize_line() { printf '%s' "$1"; }
+          fi
+
+          cd wasm-stage
+          OUT=$(mktemp)
+          if node regression.js 2>&1 | tee "$OUT"; then
+            {
+              echo "### WASM Parity (Testing/CreateAllProfiles.sh)"
+              echo '```'
+              grep -E '^(Result:|PASS|FAIL|Per-dir|  +[0-9]+ )' "$OUT" \
+                | while IFS= read -r line; do
+                  sanitize_line "$line"
+                  echo ""
+                done
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### WASM Parity: FAIL"
+              echo '```'
+              tail -40 "$OUT" | while IFS= read -r line; do
+                sanitize_line "$line"
+                echo ""
+              done
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::WASM regression.js parity gate failed (expected 207 .icc)"
+            exit 1
+          fi
+
+      - name: Upload WASM Artifacts (npm-shaped, issue #830)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: iccdev-wasm-release
-          path: |
-            build-wasm/Tools/**/*.js
-            build-wasm/Tools/**/*.wasm
-            build-wasm/IccProfLib/*.a
-            build-wasm/IccXML/*.a
-            build-wasm/IccJSON/*.a
-          if-no-files-found: warn
+          path: wasm-stage/**
+          if-no-files-found: error
 
       - name: WASM Summary Report
         if: always()

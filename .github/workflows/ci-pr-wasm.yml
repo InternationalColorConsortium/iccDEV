@@ -1,0 +1,377 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: WASM (Emscripten) build + npm-shaped staging + parity
+#         regression for PR validation.
+#
+# Builds Release-only WASM (Debug/Asan reserved for nightly
+# wasm-latest-matrix.yml), stages the npm-shaped consumer bundle
+# via Build/Cmake/wasm-package/stage.sh, and runs:
+#   * test_all.js  (16-tool usage smoke)
+#   * regression.js (Testing/CreateAllProfiles.sh -> 207 ICC parity)
+#
+# Governance: Hoyt shell prologue on every step, sanitize-sed.sh
+# for GITHUB_STEP_SUMMARY, matrix values via env: block, credential
+# isolation per-step.
+#
+###############################################################
+name: "ci-pr-wasm"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      expected-icc-count:
+        description: "Expected .icc count from CreateAllProfiles.sh (parity gate)"
+        required: false
+        default: "207"
+        type: string
+
+concurrency:
+  group: child-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.job }}
+  cancel-in-progress: true
+
+env:
+  GH_REPO: ${{ github.repository }}
+  GH_NO_UPDATE_NOTIFIER: 1
+  GH_PROMPT_DISABLED: 1
+
+jobs:
+  wasm-build-and-validate:
+    name: "WASM Release Build + Parity"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Harden Bash Environment
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+      - name: Install Emscripten SDK
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          cd emsdk
+          ./emsdk install latest
+          ./emsdk activate latest
+
+      - name: Build third-party dependencies (zlib, libpng, libjpeg, libtiff, libxml2, nlohmann-json)
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source emsdk/emsdk_env.sh
+
+          THIRD_PARTY="$PWD/third_party"
+          mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
+
+          # zlib
+          git clone --depth 1 https://github.com/madler/zlib.git && cd zlib
+          emconfigure ./configure --static --prefix="$THIRD_PARTY/zlib/out"
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libpng
+          curl -sLO https://download.sourceforge.net/libpng/libpng-1.6.57.tar.gz
+          echo "01fdab044cdc575c74a9ef62a4042fbe24fea8bedfe8aa5c89f4467b781bbb60  libpng-1.6.57.tar.gz" | sha256sum -c -
+          tar -xzf libpng-1.6.57.tar.gz && mv libpng-1.6.57 libpng && cd libpng
+          CPPFLAGS="-I$THIRD_PARTY/zlib" LDFLAGS="-L$THIRD_PARTY/zlib/out/lib" \
+            emconfigure ./configure --disable-shared --enable-static --prefix="$THIRD_PARTY/libpng/out"
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libjpeg
+          curl -sLO https://ijg.org/files/jpegsrc.v9e.tar.gz
+          echo "4077d6a6a75aeb01884f708919d25934c93305e49f7e3f36db9129320e6f4f3d  jpegsrc.v9e.tar.gz" | sha256sum -c -
+          tar -xzf jpegsrc.v9e.tar.gz && mv jpeg-9e libjpeg && cd libjpeg
+          emconfigure ./configure --prefix="$THIRD_PARTY/libjpeg/out" --disable-shared --enable-static
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libtiff
+          for attempt in 1 2 3; do
+            if git clone --depth 1 https://gitlab.com/libtiff/libtiff.git; then
+              break
+            fi
+            echo "::warning::libtiff clone attempt $attempt failed, retrying in 10s..."
+            rm -rf libtiff
+            sleep 10
+          done
+          if [[ ! -d libtiff ]]; then
+            echo "::error::Failed to clone libtiff after 3 attempts"
+            exit 1
+          fi
+          cd libtiff && mkdir wasm && cd wasm
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$THIRD_PARTY/libtiff/out" \
+            -DZLIB_INCLUDE_DIR="$THIRD_PARTY/zlib" \
+            -DZLIB_LIBRARY="$THIRD_PARTY/zlib/out/lib/libz.a" \
+            -DJPEG_INCLUDE_DIR="$THIRD_PARTY/libjpeg/out/include" \
+            -DJPEG_LIBRARY="$THIRD_PARTY/libjpeg/out/lib/libjpeg.a"
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # libxml2
+          for attempt in 1 2 3; do
+            if git clone --depth 1 https://gitlab.gnome.org/GNOME/libxml2.git; then
+              break
+            fi
+            echo "::warning::libxml2 clone attempt $attempt failed, retrying in 10s..."
+            rm -rf libxml2
+            sleep 10
+          done
+          if [[ ! -d libxml2 ]]; then
+            echo "::error::Failed to clone libxml2 after 3 attempts"
+            exit 1
+          fi
+          cd libxml2 && mkdir wasm-build && cd wasm-build
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$THIRD_PARTY/libxml2/out" \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DLIBXML2_WITH_PYTHON=OFF \
+            -DLIBXML2_WITH_TESTS=OFF \
+            -DLIBXML2_WITH_PROGRAMS=OFF \
+            -DLIBXML2_WITH_LZMA=OFF \
+            -DLIBXML2_WITH_ZLIB=OFF \
+            -DLIBXML2_WITH_ICONV=OFF
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+          # nlohmann-json
+          git clone --depth 1 https://github.com/nlohmann/json.git nlohmann-json && cd nlohmann-json
+          mkdir wasm && cd wasm
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$THIRD_PARTY/nlohmann-json/out" \
+            -DJSON_BuildTests=OFF \
+            -DJSON_Install=ON
+          emmake make -j$(nproc)
+          emmake make install
+          cd "$THIRD_PARTY"
+
+      - name: Configure and Build iccDEV-WASM (Release)
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source emsdk/emsdk_env.sh
+
+          THIRD_PARTY="$PWD/third_party"
+
+          mkdir -p build-wasm && cd build-wasm
+          emcmake cmake ../Build/Cmake \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_STATIC_LIBS=ON \
+            -DENABLE_SHARED_LIBS=OFF \
+            -DENABLE_TESTS=OFF \
+            -DLIBXML2_INCLUDE_DIR="$THIRD_PARTY/libxml2/out/include/libxml2" \
+            -DLIBXML2_LIBRARY="$THIRD_PARTY/libxml2/out/lib/libxml2.a" \
+            -DTIFF_INCLUDE_DIR="$THIRD_PARTY/libtiff/out/include" \
+            -DTIFF_LIBRARY="$THIRD_PARTY/libtiff/out/lib/libtiff.a" \
+            -DJPEG_INCLUDE_DIR="$THIRD_PARTY/libjpeg/out/include" \
+            -DJPEG_LIBRARY="$THIRD_PARTY/libjpeg/out/lib/libjpeg.a" \
+            -DPNG_PNG_INCLUDE_DIR="$THIRD_PARTY/libpng/out/include" \
+            -DPNG_LIBRARY="$THIRD_PARTY/libpng/out/lib/libpng16.a" \
+            -DZLIB_INCLUDE_DIR="$THIRD_PARTY/zlib" \
+            -DZLIB_LIBRARY="$THIRD_PARTY/zlib/out/lib/libz.a" \
+            -Dnlohmann_json_DIR="$THIRD_PARTY/nlohmann-json/out/share/cmake/nlohmann_json" \
+            -DCMAKE_CXX_FLAGS=" \
+              -I$THIRD_PARTY/libtiff/out/include \
+              -I$THIRD_PARTY/libjpeg/out/include \
+              -I$THIRD_PARTY/libpng/out/include \
+              -I$THIRD_PARTY/zlib \
+              -I$THIRD_PARTY/nlohmann-json/out/include" \
+            -DCMAKE_EXE_LINKER_FLAGS=" \
+              $THIRD_PARTY/libjpeg/out/lib/libjpeg.a \
+              $THIRD_PARTY/libpng/out/lib/libpng16.a \
+              $THIRD_PARTY/zlib/out/lib/libz.a \
+              -s INITIAL_MEMORY=128MB \
+              -s ALLOW_MEMORY_GROWTH=1 \
+              -s FORCE_FILESYSTEM=1 \
+              -s MODULARIZE=1 \
+              -s EXPORT_NAME=createModule \
+              -s EXPORTED_RUNTIME_METHODS=['FS','callMain'] -s EXIT_RUNTIME=0" \
+            -Wno-dev
+
+          emmake make -j$(nproc)
+
+      - name: Validate WASM artifact magic numbers
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          cd build-wasm
+          VALID=0; INVALID=0
+          while IFS= read -r wf; do
+            MAGIC=$(xxd -l 4 -p "$wf" 2>/dev/null || true)
+            if [[ "$MAGIC" == "0061736d" ]]; then
+              VALID=$((VALID + 1))
+            else
+              echo "INVALID: $wf (magic: $MAGIC)"
+              INVALID=$((INVALID + 1))
+            fi
+          done < <(find . -name '*.wasm' -type f)
+
+          {
+            echo "### WASM Validation"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Valid .wasm | $(sanitize_line "$VALID") |"
+            echo "| Invalid .wasm | $(sanitize_line "$INVALID") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ $INVALID -gt 0 ]]; then
+            echo "::error::$INVALID invalid WASM files"
+            exit 1
+          fi
+
+      - name: Stage npm-shaped bundle
+        env:
+          BASH_ENV: /dev/null
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          bash Build/Cmake/wasm-package/stage.sh build-wasm wasm-stage "0.0.0-pr${PR_NUMBER:-0}"
+
+      - name: WASM smoke (test_all.js, 16 tools)
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            sanitize_line() { printf '%s' "$1"; }
+          fi
+
+          cd wasm-stage
+          OUT=$(mktemp)
+          if node test_all.js 2>&1 | tee "$OUT"; then
+            {
+              echo "### WASM Smoke (test_all.js)"
+              echo '```'
+              tail -3 "$OUT" | while IFS= read -r line; do
+                sanitize_line "$line"
+                echo ""
+              done
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::test_all.js failed"
+            exit 1
+          fi
+
+      - name: WASM parity gate (Testing/CreateAllProfiles.sh)
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_REGRESSION_EXPECTED: ${{ inputs.expected-icc-count }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            sanitize_line() { printf '%s' "$1"; }
+          fi
+
+          cd wasm-stage
+          OUT=$(mktemp)
+          if node regression.js 2>&1 | tee "$OUT"; then
+            {
+              echo "### WASM Parity (Testing/CreateAllProfiles.sh)"
+              echo '```'
+              grep -E '^(Result:|PASS|FAIL|Per-dir|  +[0-9]+ )' "$OUT" \
+                | while IFS= read -r line; do
+                  sanitize_line "$line"
+                  echo ""
+                done
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### WASM Parity: FAIL"
+              echo '```'
+              tail -40 "$OUT" | while IFS= read -r line; do
+                sanitize_line "$line"
+                echo ""
+              done
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::WASM parity gate failed"
+            exit 1
+          fi
+
+      - name: Upload staged WASM bundle
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: wasm-pr-bundle
+          path: wasm-stage/
+          retention-days: 7
+          if-no-files-found: warn

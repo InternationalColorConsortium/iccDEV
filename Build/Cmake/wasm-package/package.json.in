@@ -1,0 +1,61 @@
+{
+  "name": "iccdev",
+  "version": "@WASM_PKG_VERSION@",
+  "description": "ICC color profile CLI tools as WebAssembly. 16 Node.js modules. Consumer package only.",
+  "main": "index.js",
+  "files": [
+    "README.md",
+    "LICENSE",
+    "index.js",
+    "test.icc",
+    "test_all.js",
+    "IccDumpProfile/",
+    "IccToXml/",
+    "IccFromXml/",
+    "IccToJson/",
+    "IccFromJson/",
+    "IccRoundTrip/",
+    "IccFromCube/",
+    "IccApplyNamedCmm/",
+    "IccApplyProfiles/",
+    "IccApplySearch/",
+    "IccApplyToLink/",
+    "IccTiffDump/",
+    "IccJpegDump/",
+    "IccPngDump/",
+    "IccSpecSepToTiff/",
+    "IccV5DspObsToV4Dsp/",
+    "IccProfLib/",
+    "IccXML/",
+    "IccJSON/",
+    "Testing/"
+  ],
+  "scripts": {
+    "test": "node test_all.js"
+  },
+  "keywords": [
+    "icc",
+    "color-management",
+    "wasm",
+    "webassembly",
+    "iccmax",
+    "color-profiles",
+    "icc-profile",
+    "color-science",
+    "json",
+    "xml"
+  ],
+  "author": "International Color Consortium",
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/InternationalColorConsortium/iccDEV.git"
+  },
+  "homepage": "https://github.com/InternationalColorConsortium/iccDEV#readme",
+  "bugs": {
+    "url": "https://github.com/InternationalColorConsortium/iccDEV/issues"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

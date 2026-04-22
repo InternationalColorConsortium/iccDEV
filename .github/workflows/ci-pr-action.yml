@@ -443,6 +443,14 @@ jobs:
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
 
+  wasm-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: 🌐 WASM Build & Parity (npm-shaped)
+    needs: [setup, detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-pr-wasm.yml
+    with:
+      expected-icc-count: '207'
+
   #############################################################################
   # Example Consumer Project -- verifies build-tree export works
   #############################################################################
@@ -527,6 +535,7 @@ jobs:
       - scan-build
       - tool-tests
       - win-ci
+      - wasm-ci
       - example-project
     if: always()
     steps:
@@ -561,6 +570,7 @@ jobs:
           SCAN_RESULT: ${{ needs['scan-build'].result }}
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
+          WASM_RESULT: ${{ needs['wasm-ci'].result }}
           EXAMPLE_RESULT: ${{ needs['example-project'].result }}
         run: |
           set -euo pipefail
@@ -681,6 +691,7 @@ jobs:
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
+            printf "| wasm-ci            | %s |\n" "$(sanitize_line "$WASM_RESULT")"
             printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"

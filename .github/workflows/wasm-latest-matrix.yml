@@ -398,7 +398,7 @@ jobs:
                 { echo "### WASM Regression: PASS (re-invoke after main exit)"; echo ""; } >> "$GITHUB_STEP_SUMMARY"
               else
                 echo "::error::WASM regression test failed - EXIT_RUNTIME flag may have been removed from the link line"
-                { echo "### WASM Regression: FAIL"; echo ""; echo '```'; echo "$VERDICT"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+                { echo "### WASM Regression: FAIL"; echo ""; echo '```'; printf '%s\n' "$VERDICT" | while IFS= read -r line; do sanitize_line "$line"; echo ""; done; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
                 rm -f "$REG_OUT"
                 exit 1
               fi

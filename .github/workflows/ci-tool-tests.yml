@@ -1116,3 +1116,32 @@ jobs:
             echo "  .github/scripts/iccdev-tool-coverage-baseline.sh --asan"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # -------------------------------------------------------------------
+  # WASM Parity Gate
+  #
+  # Builds iccDEV-WASM Release, stages the npm-shaped consumer bundle,
+  # then runs Build/Cmake/wasm-package/test_all.js (16-tool smoke) and
+  # Build/Cmake/wasm-package/regression.js (Testing/CreateAllProfiles.sh
+  # parity gate, asserts ICC count == 207 to match Linux/Windows).
+  #
+  # Implemented as a reusable workflow call to ci-pr-wasm.yml so the
+  # WASM build/test pipeline lives in one place. The local-path
+  # uses: resolves at the dispatched SHA, so when ci-tool-tests.yml is
+  # dispatched against a feature branch carrying ci-pr-wasm.yml, the
+  # job runs without requiring ci-pr-wasm.yml on the default branch.
+  #
+  # Governance:
+  #   - All hardening (BASH_ENV, set -euo pipefail, credential cleanup,
+  #     sanitize_line on STEP_SUMMARY, env intermediaries for inputs)
+  #     is enforced inside ci-pr-wasm.yml.
+  # -------------------------------------------------------------------
+  wasm-parity:
+    name: "WASM Parity -- Testing/CreateAllProfiles.sh -- 207 ICC"
+    uses: ./.github/workflows/ci-pr-wasm.yml
+    with:
+      expected-icc-count: '207'
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
