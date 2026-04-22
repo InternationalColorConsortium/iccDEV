@@ -314,7 +314,11 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 
     // format is text
     if (!strcmp(format, "text")) {
-      size_t num = file->GetLength();
+      icUInt32Number num;
+      if (!icXmlValidateFileCount(file->GetLength(), num, parseStr, filename)) {
+        delete file;
+        return false;
+      }
       char *buf = new char[num];
 
       if (!buf) {          
@@ -379,10 +383,15 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
       }
 
       if (storageType == icValueTypeUInt8){
-        size_t num = file->GetLength();
+        icUInt32Number num;
         icUInt8Number value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength(), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst =  m_pSamples;
         icUInt32Number i;
         for (i=0; i<num; i++) {
@@ -400,11 +409,16 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         return true;
       }        
       else if (storageType == icValueTypeUInt16){
-        size_t num = file->GetLength() / sizeof(icUInt16Number);
+        icUInt32Number num;
         icUInt16Number value;
         icUInt8Number *m_ptr = (icUInt8Number*)&value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength() / sizeof(icUInt16Number), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i=0; i<num; i++) {
@@ -431,11 +445,16 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         return true;
       }
       else if (storageType == icValueTypeFloat16){
-        size_t num = file->GetLength() / sizeof(icFloat16Number);
+        icUInt32Number num;
         icFloat16Number value;
         icUInt8Number *m_ptr = (icUInt8Number*)&value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength() / sizeof(icFloat16Number), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i=0; i<num; i++) {
@@ -462,11 +481,16 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         return true;
       }
       else if (storageType == icValueTypeFloat32) {
-        size_t num = file->GetLength()/sizeof(icFloat32Number);
+        icUInt32Number num;
         icFloat32Number value;
         icUInt8Number *m_ptr = (icUInt8Number*)&value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength() / sizeof(icFloat32Number), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst = m_pSamples;
 
         icUInt32Number i;
@@ -716,7 +740,11 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 
     // format is text
     if (!strcmp(format, "text")) {
-      size_t num = file->GetLength();
+      icUInt32Number num;
+      if (!icXmlValidateFileCount(file->GetLength(), num, parseStr, filename)) {
+        delete file;
+        return false;
+      }
       char *buf = new char[num];
 
       if (!buf) {
@@ -852,10 +880,15 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
       bool little_endian = !strcmp(order, "little");
 
       if (m_storageType == icValueTypeUInt8) {
-        size_t num = file->GetLength();
+        icUInt32Number num;
         icUInt8Number value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength(), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i = 0; i < num; i++) {
@@ -873,11 +906,16 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         return true;
       }
       else if (m_storageType == icValueTypeUInt16) {
-        size_t num = file->GetLength() / sizeof(icUInt16Number);
+        icUInt32Number num;
         icUInt16Number value;
         icUInt8Number *m_ptr = (icUInt8Number*)&value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength() / sizeof(icUInt16Number), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i = 0; i < num; i++) {
@@ -904,11 +942,16 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         return true;
         }
       else if (m_storageType == icValueTypeFloat16) {
-        size_t num = file->GetLength() / sizeof(icFloat16Number);
+        icUInt32Number num;
         icFloat16Number value;
         icUInt8Number *m_ptr = (icUInt8Number*)&value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength() / sizeof(icFloat16Number), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst = m_pSamples;
         icUInt32Number i;
         for (i = 0; i < num; i++) {
@@ -935,11 +978,16 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         return true;
         }
       else if (m_storageType == icValueTypeFloat32) {
-        size_t num = file->GetLength() / sizeof(icFloat32Number);
+        icUInt32Number num;
         icFloat32Number value;
         icUInt8Number *m_ptr = (icUInt8Number*)&value;
 
-        SetSize((icUInt32Number)num);
+        if (!icXmlValidateFileCount(file->GetLength() / sizeof(icFloat32Number), num, parseStr, filename)) {
+          delete file;
+          return false;
+        }
+
+        SetSize(num);
         icFloatNumber *dst = m_pSamples;
 
         icUInt32Number i;

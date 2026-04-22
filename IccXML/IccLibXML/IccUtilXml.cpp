@@ -461,6 +461,19 @@ size_t icXmlDumpHexData(std::string &xml, std::string blanks, void *pBuf, size_t
   return i;
 }
 
+bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &parseStr, const char *filename)
+{
+  if (value > (size_t)std::numeric_limits<icUInt32Number>::max()) {
+    parseStr += "Error! - File '";
+    parseStr += filename;
+    parseStr += "' exceeds supported XML import size.\n";
+    return false;
+  }
+
+  count = (icUInt32Number)value;
+  return true;
+}
+
 xmlAttr *icXmlFindAttr(xmlNode *pNode, const char *szAttrName)
 {
   if (!pNode) return NULL;

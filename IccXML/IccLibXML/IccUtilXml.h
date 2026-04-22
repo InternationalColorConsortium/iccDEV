@@ -92,6 +92,8 @@ icUInt32Number icXmlGetHexDataSize(const char *szText);
 
 size_t icXmlDumpHexData(std::string &xml, std::string blanks, void *pBuf, size_t nBufSize);
 
+bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &parseStr, const char *filename);
+
 #define icXmlStrCmp(x, y) strcmp((const char *)(x), (const char*)(y))
 
 xmlAttr *icXmlFindAttr(xmlNode *pNode, const char *szAttrName);
