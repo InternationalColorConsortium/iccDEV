@@ -1,2 +1,8 @@
-- description: "iccDEV comprehensive security query suite"
-- queries: "."
+- description: "iccDEV comprehensive security query suite (excludes IccJSON-only queries)"
+- queries: .
+- exclude:
+    query path:
+      - json-raw-normalized-value.ql
+      - json-recursive-parse.ql
+      - json-size-overflow.ql
+      - json-unchecked-type-access.ql
