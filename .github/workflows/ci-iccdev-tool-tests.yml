@@ -1586,8 +1586,11 @@ jobs:
 
             if [ -f "$OUTDIR/r14-poc-overflow.json" ]; then
               # Test 1: iccFromJson must NOT crash on oversized chromaticity
-              timeout 30 "$FROMJSON" "$OUTDIR/r14-poc-overflow.json" "$OUTDIR/r14-out.icc" > "$OUTDIR/r14.log" 2>&1
-              r14_ec=$?
+              # Capture exit code without tripping set -e: timeout returns the
+              # tool's exit code (or 124 for timeout, 128+sig for crash); we
+              # want to inspect r14_ec rather than abort the whole script.
+              r14_ec=0
+              timeout 30 "$FROMJSON" "$OUTDIR/r14-poc-overflow.json" "$OUTDIR/r14-out.icc" > "$OUTDIR/r14.log" 2>&1 || r14_ec=$?
               if ! check_asan "$OUTDIR/r14.log" "json size-overflow PoC"; then
                 r14_fail=$((r14_fail + 1))
               elif [ "$r14_ec" -ge 128 ]; then
