@@ -390,11 +390,19 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
       parseStr += "Private tag '" + key + "' missing 'sig'\n";
       return false;
     }
+    if (!tagValue["sig"].is_string()) {
+      parseStr += "Private tag '" + key + "' has non-string 'sig'\n";
+      return false;
+    }
     sig = (icTagSignature)icGetSigVal(tagValue["sig"].get<std::string>().c_str());
   }
 
   // sameAs: re-attach an already-parsed tag under this signature
   if (tagValue.contains("sameAs")) {
+    if (!tagValue["sameAs"].is_string()) {
+      parseStr += "sameAs for tag '" + key + "' must be a string\n";
+      return false;
+    }
     std::string refKey = tagValue["sameAs"].get<std::string>();
     auto it = keyToSig.find(refKey);
     if (it == keyToSig.end()) {
@@ -432,8 +440,13 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
   // Resolve type sig from name; for "PrivateType" use the "sig" field
   icTagTypeSignature typeSig = CIccTagCreator::GetTagTypeNameSig(typeName.c_str());
   if (typeSig == icSigUnknownType) {
-    if (typeName == "PrivateType" && tagData.contains("sig"))
+    if (typeName == "PrivateType" && tagData.contains("sig")) {
+      if (!tagData["sig"].is_string()) {
+        parseStr += "Tag '" + key + "' has non-string private type 'sig'\n";
+        return false;
+      }
       typeSig = (icTagTypeSignature)icGetSigVal(tagData["sig"].get<std::string>().c_str());
+    }
     else
       typeSig = (icTagTypeSignature)icGetSigVal(typeName.c_str());
   }
@@ -504,7 +517,7 @@ bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)
     const std::string &key   = it.key();
     const IccJson     &value = it.value();
     if (!ParseTag(key, value, keyToSig, parseStr))
-      parseStr += "Warning: skipped tag '" + key + "'\n";
+      return false;
   }
   return true;
 }
@@ -527,7 +540,16 @@ bool CIccProfileJson::LoadJson(const char *szFilename, std::string *parseStr)
   }
 
   std::string reason;
-  bool ok = ParseJson(root, reason);
+  bool ok = false;
+  try {
+    ok = ParseJson(root, reason);
+  }
+  catch (const std::exception &e) {
+    reason += std::string("JSON semantic error: ") + e.what() + "\n";
+    if (parseStr) *parseStr += reason;
+    return false;
+  }
+
   if (parseStr) *parseStr += reason;
   return ok;
 }
