@@ -4502,6 +4502,13 @@ CIccTagSparseMatrixArray::CIccTagSparseMatrixArray(const CIccTagSparseMatrixArra
   m_nMatrixType = ITSMA.m_nMatrixType;
 
   m_RawData = (icUInt8Number*)calloc(m_nSize, GetBytesPerMatrix());
+  if (!m_RawData) {
+    // calloc failed — leave the object in a safe, empty state rather
+    // than dereference NULL in the memcpy below.
+    m_nSize = 0;
+    m_bNonZeroPadding = false;
+    return;
+  }
   memcpy(m_RawData, ITSMA.m_RawData, (size_t)m_nSize*GetBytesPerMatrix());
 
   m_bNonZeroPadding = ITSMA.m_bNonZeroPadding;
