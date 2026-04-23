@@ -2400,6 +2400,10 @@ bool CIccTagJsonStruct::ParseTag(const IccJson &elemEntry, std::string &parseStr
 
   // SameAs: re-attach an already-parsed element
   if (elemObj.contains("sameAs")) {
+    if (!elemObj["sameAs"].is_string()) {
+      parseStr += "sameAs for member '" + key + "' must be a string\n";
+      return false;
+    }
     std::string refKey = elemObj["sameAs"].get<std::string>();
     icSignature refSig = pStruct ? pStruct->GetElemSig(refKey.c_str()) : 0;
     if (!refSig) {
@@ -2431,8 +2435,13 @@ bool CIccTagJsonStruct::ParseTag(const IccJson &elemEntry, std::string &parseStr
 
   icTagTypeSignature typeSig = CIccTagCreator::GetTagTypeNameSig(typeName.c_str());
   if (typeSig == icSigUnknownType) {
-    if (typeName == "PrivateType" && elemObj.contains("typeSig"))
+    if (typeName == "PrivateType" && elemObj.contains("typeSig")) {
+      if (!elemObj["typeSig"].is_string()) {
+        parseStr += "Member '" + key + "' has non-string private 'typeSig'\n";
+        return false;
+      }
       typeSig = (icTagTypeSignature)icGetSigVal(elemObj["typeSig"].get<std::string>().c_str());
+    }
     else
       typeSig = (icTagTypeSignature)icGetSigVal(typeName.c_str());
   }
@@ -2602,8 +2611,13 @@ bool CIccTagJsonArray::ParseJson(const IccJson &j, std::string &parseStr)
 
     icTagTypeSignature typeSig = CIccTagCreator::GetTagTypeNameSig(typeName.c_str());
     if (typeSig == icSigUnknownType) {
-      if (typeName == "PrivateType" && elemObj.contains("sig"))
+      if (typeName == "PrivateType" && elemObj.contains("sig")) {
+        if (!elemObj["sig"].is_string()) {
+          parseStr += "Array element " + std::to_string(i) + " has non-string private 'sig'\n";
+          return false;
+        }
         typeSig = (icTagTypeSignature)icGetSigVal(elemObj["sig"].get<std::string>().c_str());
+      }
       else
         typeSig = (icTagTypeSignature)icGetSigVal(typeName.c_str());
     }
