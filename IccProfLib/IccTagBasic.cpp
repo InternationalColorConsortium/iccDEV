@@ -2082,13 +2082,13 @@ CIccTagTextDescription::~CIccTagTextDescription()
  */
 bool CIccTagTextDescription::Read(icUInt32Number size, CIccIO *pIO)
 {
+  if (!pIO || size < 3 * sizeof(icUInt32Number))
+    return false;
+
   icTagTypeSignature sig;
 
   m_szText[0] = '\0';
   int64_t nEnd = pIO->Tell() + size;
-
-  if (size<3*sizeof(icUInt32Number) || !pIO)
-    return false;
 
   icUInt32Number nSize;
 
