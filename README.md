@@ -12,23 +12,8 @@
 To build from source, see: [Build documentation](docs/build.md)
 
 API docs:
-[API reference](Tools/Winnt/IccIisIsapi/api.md) -
+[API reference](Tools/Winnt/IccIisIsapi/api.md) ·
 [OpenAPI starter](Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml)
-
-## IccJSON -- ICC Profile JSON Serialization
-
-IccJSON provides native JSON serialization for ICC and iccMAX profiles.
-Two command-line tools convert between binary ICC and human-readable JSON:
-
-| Tool | Description |
-|------|-------------|
-| **iccToJson** | Binary ICC profile to JSON |
-| **iccFromJson** | JSON to binary ICC profile |
-
-- [Full guide and JSON format reference](docs/iccjson.md)
-- [JSON Schema for ICC profiles](docs/icc-profile.schema.json)
-- [Standalone C++ example (hello-iccdev)](examples/hello-iccdev/)
-- [Doxygen API docs](Doxyfile) (generate with `doxygen Doxyfile`)
 
 ## Introduction
 
@@ -56,7 +41,7 @@ document explains our contribution processes and procedures, so please review it
 
 ## License
 
-iccDEV is licensed under the BSD 3-Clause "New" or "Revised" License
+iccDEV is licensed under the BSD 3-Clause “New” or “Revised” License
 
 Membership in the ICC is encouraged when this software is used for commercial purposes.
 For more information on The International Color Consortium,
