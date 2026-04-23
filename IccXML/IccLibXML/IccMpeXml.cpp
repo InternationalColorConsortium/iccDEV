@@ -301,7 +301,7 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   // file exists
   if (filename[0]) {
-    CIccIO *file = IccOpenFileIO(filename, "rb");
+    CIccIO *file = IccXmlSafeOpenFileIO(filename, "rb");
     if (!file){
       parseStr += "Error! - File '";
       parseStr += filename;
@@ -727,7 +727,7 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   // file exists
   if (filename[0]) {
-    CIccIO *file = IccOpenFileIO(filename, "rb");
+    CIccIO *file = IccXmlSafeOpenFileIO(filename, "rb");
     if (!file) {
       parseStr += "Error! - File '";
       parseStr += filename;

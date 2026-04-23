@@ -9,6 +9,7 @@
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
 #include "IccLibXMLVer.h"
+#include "IccXmlConfig.h"
 #include <cstring> /* C strings strcpy, memcpy ... */
 
 int main(int argc, char* argv[])
@@ -18,6 +19,12 @@ int main(int argc, char* argv[])
     printf("Usage: IccFromXml xml_file saved_profile_file {-noid -v{=[relax_ng_schema_file - optional]}}\n");
     return 0;
   }
+
+  // Profile XML on the CLI tool's filesystem is trusted by the invoking
+  // user (same trust boundary as the XML file itself), so opt in to
+  // <tag File="..."/> / <tag Filename="..."/> loaders. Library/WASM
+  // callers leave the flag at its default-off state.
+  IccXmlSetAllowFileIncludes(true);
 
   CIccTagCreator::PushFactory(new CIccTagXmlFactory());
   CIccMpeCreator::PushFactory(new CIccMpeXmlFactory());

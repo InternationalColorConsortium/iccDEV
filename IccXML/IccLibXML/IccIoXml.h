@@ -108,6 +108,12 @@ public:
 ICCPROFLIB_API void IccSetOpenFileIO(IIccOpenFileIO *pOpenIO);
 ICCPROFLIB_API CIccIO* IccOpenFileIO(const icChar *szFilename, const char *szAttr);
 
+// Safe wrapper: gated on g_IccXmlAllowFileIncludes (default false) and
+// refuses attacker-ish paths containing '/', '\', or '..'. All
+// ParseXml callers that open a user-supplied filename should use this
+// instead of IccOpenFileIO directly.
+ICCPROFLIB_API CIccIO* IccXmlSafeOpenFileIO(const icChar *szFilename, const char *szAttr);
+
 #ifdef USEICCDEVNAMESPACE
 } //namespace iccDEV
 #endif

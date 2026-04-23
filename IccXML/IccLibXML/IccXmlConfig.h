@@ -60,6 +60,8 @@
 #ifndef _ICCXMLCONFIG_H
 #define _ICCXMLCONFIG_H
 
+#include "IccProfLibConf.h"
+
 typedef enum {
   icConvert8Bit=0,
   icConvert16Bit,
@@ -70,5 +72,14 @@ typedef enum {
 #define icXmlHalfFmt "%.8f"
 #define icXmlFloatFmt "%.12f"
 #define icXmlDoubleFmt "%.24lf"
+
+// Library-wide opt-in for <tag File="..."/> / <tag Filename="..."/>
+// loaders in IccLibXML. Off by default because the XML is usually
+// attacker-controlled in library/service/WASM contexts. The iccFromXml
+// CLI tool flips this on after argument parsing. Exposed as accessor
+// functions (not a bare extern bool) so the DLL interface works on
+// Windows MSVC where WINDOWS_EXPORT_ALL_SYMBOLS does not export data.
+ICCPROFLIB_API void IccXmlSetAllowFileIncludes(bool allow);
+ICCPROFLIB_API bool IccXmlGetAllowFileIncludes();
 
 #endif
