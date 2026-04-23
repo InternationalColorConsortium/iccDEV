@@ -237,8 +237,12 @@ static bool icXmlParseTextString(xmlNode *pNode, std::string &parseStr, std::str
             return false;
           }
 
-          size_t fileLength = file->GetLength();
-          char *ansiStr = (char *)malloc(fileLength+1);
+          icUInt32Number fileLength;
+          if (!icXmlValidateFileCount(file->GetLength(), fileLength, parseStr, filename)) {
+            delete file;
+            return false;
+          }
+          char *ansiStr = (char *)malloc((size_t)fileLength + 1);
 
           if (!ansiStr) {
             perror("Memory Error");
@@ -256,7 +260,8 @@ static bool icXmlParseTextString(xmlNode *pNode, std::string &parseStr, std::str
             free(ansiStr);
             delete file;             
             return false;
-          }   
+          }
+          ansiStr[fileLength] = '\0';
           // convert utf8 (xml format) to ansi (icc format)
           if (bConvert)
             icUtf8ToAnsi(buf, ansiStr);
@@ -438,13 +443,17 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
       return false;
     }
 
-    size_t fileLength = file->GetLength();
+    icUInt32Number fileLength;
+    if (!icXmlValidateFileCount(file->GetLength(), fileLength, parseStr, filename)) {
+      delete file;
+      return false;
+    }
     // +1 for the NUL terminator. icUtf8ToAnsi(buf) and CIccUTF16String(buf)
     // both treat `buf` as a C-string and walk it with strlen-like logic;
     // without the extra byte plus the explicit terminator below, those
     // functions read past the allocation until they happen to find a
     // zero byte in adjacent heap.
-    char *buf = (char *)malloc(fileLength + 1);
+    char *buf = (char *)malloc((size_t)fileLength + 1);
 
     if (!buf) {
       perror("Memory Error");
@@ -463,7 +472,8 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
       free(buf);
       delete file;             
       return false;
-    }   
+    }
+    buf[fileLength] = '\0';
 
     // set ANSII string
     std::string ansiStr;    
@@ -1542,23 +1552,20 @@ bool CIccTagXmlFloatNum<T, A, Tsig>::ParseXml(xmlNode *pNode, std::string &parse
     size_t len = file->GetLength();
 
     if (!stricmp(icXmlAttrValue(pNode, "Format", "text"), "text")) {
-      // Cap `len` so the +1 below can't wrap on an oversized file.
-      static const size_t kMaxFbufLen = 256ULL * 1024 * 1024;  // 256 MB
-      if (len > kMaxFbufLen) {
-        parseStr += "File exceeds 256 MB limit\n";
+      icUInt32Number nLen;
+      if (!icXmlValidateFileCount(len, nLen, parseStr, filename)) {
         delete file;
         return false;
       }
-
-      char *fbuf = (char*)malloc(len+1);
+      char *fbuf = (char*)malloc((size_t)nLen + 1);
       if (!fbuf) {
         parseStr += "Memory error!\n";
         delete file;
         return false;
       }
-      fbuf[len]=0;
+      fbuf[nLen] = 0;
 
-      if (file->Read8(fbuf, len)!=len) {
+      if (file->Read8(fbuf, nLen)!=nLen) {
         parseStr += "Read error of (";
         parseStr += filename;
         parseStr += ")!\n";
