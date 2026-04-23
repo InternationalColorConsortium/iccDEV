@@ -4931,7 +4931,7 @@ CIccMpeMatrix::CIccMpeMatrix(const CIccMpeMatrix &matrix)
 
   m_size = matrix.m_size;
   if(matrix.m_pMatrix) {
-    int num = m_size * sizeof(icFloatNumber);
+    size_t num = static_cast<size_t>(m_size) * sizeof(icFloatNumber);
     m_pMatrix = (icFloatNumber*)malloc(num);
     memcpy(m_pMatrix, matrix.m_pMatrix, num);
   }
@@ -4975,7 +4975,7 @@ CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
 
   m_size = matrix.m_size;
   if (matrix.m_pMatrix) {
-    int num = m_size * sizeof(icFloatNumber);
+    size_t num = static_cast<size_t>(m_size) * sizeof(icFloatNumber);
     m_pMatrix = (icFloatNumber*)malloc(num);
     memcpy(m_pMatrix, matrix.m_pMatrix, num);
   }
