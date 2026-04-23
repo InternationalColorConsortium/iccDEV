@@ -1238,3 +1238,25 @@ const std::string icGetPadSpace(double value)
 
    return space;
 }
+
+// See IccUtilXml.h for rationale — safe integer parsers to replace
+// `atoi(icXmlAttrValue(...))` patterns that silently narrow to u8/u16.
+bool icXmlParseU16(const char *s, icUInt16Number &out, icUInt16Number max_value)
+{
+  if (!s || !*s) return false;
+  char *end = nullptr;
+  unsigned long v = std::strtoul(s, &end, 10);
+  if (*end != '\0' || v > max_value) return false;
+  out = static_cast<icUInt16Number>(v);
+  return true;
+}
+
+bool icXmlParseU32(const char *s, icUInt32Number &out, icUInt32Number max_value)
+{
+  if (!s || !*s) return false;
+  char *end = nullptr;
+  unsigned long long v = std::strtoull(s, &end, 10);
+  if (*end != '\0' || v > max_value) return false;
+  out = static_cast<icUInt32Number>(v);
+  return true;
+}
