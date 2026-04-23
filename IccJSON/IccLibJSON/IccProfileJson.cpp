@@ -524,11 +524,25 @@ bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)
 
 bool CIccProfileJson::LoadJson(const char *szFilename, std::string *parseStr)
 {
-  std::ifstream f(szFilename);
+  std::ifstream f(szFilename, std::ios::binary | std::ios::ate);
   if (!f.is_open()) {
     if (parseStr) *parseStr += std::string("Unable to open file: ") + szFilename + "\n";
     return false;
   }
+
+  // Cap raw JSON size. nlohmann's default nesting + size limits are
+  // effectively "everything fits in memory", which is a DoS primitive
+  // when the JSON comes from an untrusted source. 64 MB is generous
+  // for any legitimate ICC profile round-trip — real JSON dumps of
+  // even big iccMAX spectral profiles top out around 5 MB.
+  static const std::streamsize kMaxJsonFileBytes =
+      static_cast<std::streamsize>(64) * 1024 * 1024;
+  auto sz = f.tellg();
+  if (sz < 0 || sz > kMaxJsonFileBytes) {
+    if (parseStr) *parseStr += std::string("JSON file exceeds 64 MB limit\n");
+    return false;
+  }
+  f.seekg(0, std::ios::beg);
 
   IccJson root;
   try {
