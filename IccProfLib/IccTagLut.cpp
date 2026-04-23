@@ -4739,6 +4739,7 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
       return false;
 
     pCurves[i] = pCurve = (CIccTagCurve*)CIccTag::Create(icSigCurveType);
+    if (!pCurve) return false;
 
     if (!pCurve->SetSize(256))
       return false;
@@ -4772,6 +4773,7 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
       return false;
 
     pCurves[i] = pCurve = (CIccTagCurve*)CIccTag::Create(icSigCurveType);
+    if (!pCurve) return false;
 
     if (!pCurve->SetSize(256))
       return false;
@@ -4808,6 +4810,7 @@ void CIccTagLut8::SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSign
       CIccTagCurve *pCurve;
       for (i=0; i<m_nInput; i++) {
         pCurves[i] = pCurve = (CIccTagCurve*)CIccTag::Create(icSigCurveType);
+        if (!pCurve) return;
         pCurve->SetSize(0);
       }
 
@@ -5197,6 +5200,7 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
       return false;
 
     pCurves[i] = pCurve = (CIccTagCurve*)CIccTag::Create(icSigCurveType);
+    if (!pCurve) return false;
 
     if (!pCurve->SetSize(nInputEntries))
       return false;
@@ -5226,6 +5230,7 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
       return false;
 
     pCurves[i] = pCurve = (CIccTagCurve*)CIccTag::Create(icSigCurveType);
+    if (!pCurve) return false;
 
     if (!pCurve->SetSize(nOutputEntries))
       return false;
@@ -5262,6 +5267,7 @@ void CIccTagLut16::SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSig
       CIccTagCurve *pCurve;
       for (i=0; i<m_nInput; i++) {
         pCurves[i] = pCurve = (CIccTagCurve*)CIccTag::Create(icSigCurveType);
+        if (!pCurve) return;
         pCurve->SetSize(0);
       }
 
