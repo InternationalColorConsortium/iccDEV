@@ -610,8 +610,15 @@ size_t CIccEmbedIO::Read8(void *pBuf, size_t nNum)
 
   if (m_nSize > 0) {
     size_t nPos = m_pIO->Tell();
+    // If the underlying IO's cursor is below our window start (possible
+    // when another CIccEmbedIO sharing the backing IO has seeked
+    // backwards), don't underflow nOffset — just refuse the read.
+    if (nPos < m_nStartPos)
+      return 0;
     size_t nOffset = nPos - m_nStartPos;
 
+    if (nOffset > m_nSize)
+      return 0;
     if (nOffset + nNum > m_nSize)
       nNum = m_nSize - nOffset;
   }
