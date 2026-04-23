@@ -319,7 +319,20 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         delete file;
         return false;
       }
-      char *buf = new char[num];
+      // 256 MB ceiling so `num+1` can't wrap size_t and the
+      // downstream ParseTextArrayNum doesn't chew gigabytes.
+      static const size_t kMaxTextFileBytes = 256ULL * 1024 * 1024;
+      if (num > kMaxTextFileBytes) {
+        parseStr += "'";
+        parseStr += filename;
+        parseStr += "' exceeds 256 MB limit.\n";
+        delete file;
+        return false;
+      }
+      // +1 and explicit NUL: ParseTextArrayNum eventually calls
+      // ParseText which scans until '\0'. Without a terminator
+      // it reads past the allocation into adjacent heap.
+      char *buf = new(std::nothrow) char[num + 1];
 
       if (!buf) {          
         perror("Memory Error");
@@ -339,6 +352,7 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         delete file;             
         return false;
       }   
+      buf[num] = '\0';  // NUL-terminate for ParseText downstream
 
       CIccFloatArray data;
 
@@ -745,7 +759,20 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         delete file;
         return false;
       }
-      char *buf = new char[num];
+      // 256 MB ceiling so `num+1` can't wrap size_t and the
+      // downstream ParseTextArrayNum doesn't chew gigabytes.
+      static const size_t kMaxTextFileBytes = 256ULL * 1024 * 1024;
+      if (num > kMaxTextFileBytes) {
+        parseStr += "'";
+        parseStr += filename;
+        parseStr += "' exceeds 256 MB limit.\n";
+        delete file;
+        return false;
+      }
+      // +1 and explicit NUL: ParseTextArrayNum eventually calls
+      // ParseText which scans until '\0'. Without a terminator
+      // it reads past the allocation into adjacent heap.
+      char *buf = new(std::nothrow) char[num + 1];
 
       if (!buf) {
         perror("Memory Error");
@@ -765,6 +792,7 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
         delete file;
         return false;
       }
+      buf[num] = '\0';  // NUL-terminate for ParseText downstream
 
       // lut8type
       if (m_storageType == icValueTypeUInt8) {

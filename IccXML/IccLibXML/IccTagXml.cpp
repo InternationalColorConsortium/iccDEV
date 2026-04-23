@@ -2678,7 +2678,19 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           delete file;
           return false;
         }
-        char *buf = (char *) new char[num];
+        // 256 MB ceiling so `num+1` can't wrap size_t and the
+        // downstream ParseTextArrayNum doesn't chew gigabytes.
+        static const size_t kMaxTextFileBytes = 256ULL * 1024 * 1024;
+        if (num > kMaxTextFileBytes) {
+          parseStr += "'";
+          parseStr += filename;
+          parseStr += "' exceeds 256 MB limit.\n";
+          delete file;
+          return false;
+        }
+        // +1 and explicit NUL; use nothrow so the immediate
+        // !buf check below actually fires on OOM.
+        char *buf = new(std::nothrow) char[num + 1];
 
         if (!buf) {          
           perror("Memory Error");
@@ -2699,6 +2711,7 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           delete file;             
           return false;
         }         
+        buf[num] = '\0';  // NUL-terminate for ParseText downstream
 
         // lut8type
         if (nType == icConvert8Bit) {
