@@ -7274,7 +7274,20 @@ bool CIccLocalizedUnicode::SetSize(icUInt32Number nSize)
   if (nSize == m_nLength)
     return true;
 
-  m_pBuf = (icUInt16Number*)icRealloc(m_pBuf, (nSize+2)*sizeof(icUInt16Number));
+  // Refuse pathologically large sizes. An ICC profile can never
+  // legitimately require more than 16M UTF-16 code units in a single
+  // localised record. Capping here also prevents the (nSize+2)*2
+  // multiplication from wrapping u32 (which on the old code path
+  // fed icRealloc a tiny allocation, then m_pBuf[nSize]=0 wrote far
+  // past the end of the returned buffer).
+  static const icUInt32Number kMaxUnicodeChars = 16u * 1024u * 1024u;
+  if (nSize > kMaxUnicodeChars) {
+    return false;
+  }
+
+  // Do the size math in 64-bit defensively, even with the cap above.
+  size_t nBytes = (static_cast<size_t>(nSize) + 2u) * sizeof(icUInt16Number);
+  m_pBuf = (icUInt16Number*)icRealloc(m_pBuf, nBytes);
 
   if (!m_pBuf) {
     m_nLength = 0;
