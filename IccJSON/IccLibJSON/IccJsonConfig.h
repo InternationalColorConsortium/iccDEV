@@ -74,4 +74,10 @@ typedef enum {
 #define icJsonFloatFmt  "%.12f"
 #define icJsonDoubleFmt "%.24lf"
 
+// Library-wide flag: permit `"imports": [{"file": "..."}]` and similar
+// file-loader paths in IccLibJSON. Off by default because the JSON is
+// usually attacker-controlled in library/service/WASM contexts. The
+// iccFromJson CLI tool flips this on after argument parsing.
+extern bool g_IccJsonAllowFileImports;
+
 #endif // _ICCJSONCONFIG_H

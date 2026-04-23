@@ -1588,6 +1588,21 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
         parseStr += "Missing file in import entry\n";
         return false;
       }
+      // File-based imports are useful for the iccFromJson CLI but
+      // dangerous when IccLibJSON is embedded in a library/service/WASM
+      // context where the JSON input is attacker-controlled. Gate them
+      // behind an opt-in (see IccJsonConfig.h), and reject anything
+      // that looks like a path escape even when allowed.
+      if (!g_IccJsonAllowFileImports) {
+        parseStr += "File imports disabled; ignored '" + file + "'\n";
+        continue;
+      }
+      if (file.find('/')  != std::string::npos ||
+          file.find('\\') != std::string::npos ||
+          file.find("..") != std::string::npos) {
+        parseStr += "Unsafe import path '" + file + "'\n";
+        return false;
+      }
       std::string look = "*" + file + "*";
       if (strstr(importPath.c_str(), look.c_str()))
         continue;  // Already imported -- skip
