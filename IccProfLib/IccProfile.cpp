@@ -1210,6 +1210,22 @@ void CIccProfile::InitHeader()
  */
 bool CIccProfile::ReadBasic(CIccIO *pIO)
 {
+  // Defense-in-depth: peek the magic field before reading the full
+  // 128-byte header. Random / non-ICC files that happen to pass
+  // upstream heuristics are otherwise walked through every header
+  // field + profileID hash before being rejected.
+  {
+    icInt64Number startPos = pIO->Tell();
+    icUInt32Number magic = 0;
+    if (pIO->Seek(startPos + 36, icSeekSet) < 0 ||
+        !pIO->Read32(&magic) ||
+        magic != icMagicNumber) {
+      pIO->Seek(startPos, icSeekSet);
+      return false;
+    }
+    pIO->Seek(startPos, icSeekSet);
+  }
+
   //Read Header
   if (pIO->Seek(0, icSeekSet)<0 ||
       !pIO->Read32(&m_Header.size) ||
