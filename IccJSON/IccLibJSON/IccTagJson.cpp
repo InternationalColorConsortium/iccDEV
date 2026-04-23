@@ -2140,9 +2140,14 @@ static CIccTagMultiLocalizedUnicode *dictLocalizedFromJson(const IccJson &arr)
   CIccTagMultiLocalizedUnicode *pTag = new(std::nothrow) CIccTagMultiLocalizedUnicode();
   if (!pTag) return nullptr;
   for (const auto &loc : arr) {
-    std::string lang    = loc.contains("language") ? loc["language"].get<std::string>() : "  ";
-    std::string country = loc.contains("country")  ? loc["country"].get<std::string>()  : "  ";
-    std::string text    = loc.contains("text")     ? loc["text"].get<std::string>()     : "";
+    // Defensive type-check before .get<std::string>(): nlohmann throws
+    // type_error on mismatch, and this function is reachable from
+    // ParseJson which is not currently wrapped in try/catch. Falling
+    // back to the "  " / "" defaults keeps parsing alive rather than
+    // aborting the whole profile on a malformed localized entry.
+    std::string lang    = (loc.contains("language") && loc["language"].is_string()) ? loc["language"].get<std::string>() : "  ";
+    std::string country = (loc.contains("country")  && loc["country"].is_string())  ? loc["country"].get<std::string>()  : "  ";
+    std::string text    = (loc.contains("text")     && loc["text"].is_string())     ? loc["text"].get<std::string>()     : "";
     while (lang.size()    < 2) lang    += ' ';
     while (country.size() < 2) country += ' ';
     icLanguageCode langCode    = (icLanguageCode)((lang[0]    << 8) | lang[1]);
