@@ -699,10 +699,14 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
 
   jGetValue(j, "vendorFlag", m_nVendorFlags);
   std::string prefix, suffix;
-  if (jGetString(j, "colorantPrefix", prefix))
+  if (jGetString(j, "colorantPrefix", prefix)) {
     strncpy(m_szPrefix, prefix.c_str(), sizeof(m_szPrefix)-1);
-  if (jGetString(j, "colorantSuffix", suffix))
+    m_szPrefix[sizeof(m_szPrefix)-1] = '\0';  // strncpy doesn't guarantee NUL
+  }
+  if (jGetString(j, "colorantSuffix", suffix)) {
     strncpy(m_szSufix,  suffix.c_str(), sizeof(m_szSufix)-1);
+    m_szSufix[sizeof(m_szSufix)-1]  = '\0';
+  }
 
   if (jsonExistsField(j, "colors") && j["colors"].is_array()) {
     const IccJson &colors = j["colors"];
