@@ -8291,11 +8291,18 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
             CIccXform *pNew = CIccXform::Create(pPrev->GetProfilePtr(), pPrev->IsInput(), pPrev->GetIntent(), pPrev->GetInterp(),
                                                 pPrev->GetConnectionConditions(), icXformLutMCS, bUseD2BxB2DxTags, pHintManager);
 
-            if (pNew) {
-              pPrev->DetachAll();
-              delete pPrev;
+            if (!pNew) {
+              // Create failed (e.g., previous profile has no MCS-
+              // suitable A2B / D2B tag, or factory was stripped).
+              // Do NOT overwrite prev->ptr with NULL — that would
+              // leave the list with a NULL xform that the next Apply
+              // dereferences → SIGSEGV. Leave pPrev in place and
+              // surface a clean error status.
+              return icCmmStatBadMCSLink;
             }
 
+            pPrev->DetachAll();
+            delete pPrev;
             prev->ptr = pNew;
 
           }
