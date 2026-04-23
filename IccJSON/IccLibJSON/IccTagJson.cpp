@@ -127,9 +127,14 @@ bool CIccTagJsonUnknown::ToJson(IccJson &j)
 
 bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 {
+  // Cap hex blob size so a multi-MB string doesn't allocate a 4-GB
+  // buffer. 16 MB is generous for any legitimate unknown-tag payload.
+  static const icUInt32Number kMaxUnknownTagBytes = 16u * 1024 * 1024;
+
   std::string hex;
   if (jGetString(j, "unknownData", hex)) {
     m_nSize = icJsonGetHexDataSize(hex.c_str());
+    if (m_nSize > kMaxUnknownTagBytes) return false;
     if (m_pData) { delete[] m_pData; m_pData = NULL; }
     if (m_nSize) {
       m_pData = new(std::nothrow) icUInt8Number[m_nSize];
