@@ -574,7 +574,18 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
   if (reclen!=16 && reclen!=24 && reclen!=32)
     return false;
 
-  if ((headerSize + (size_t)count*reclen) > (size_t)size)
+  // 64-bit widened bounds check. On wasm32 (size_t == u32) the product
+  // `count * reclen` can otherwise wrap, bypassing the guard and letting
+  // the subsequent calloc under-allocate while the Read loop writes
+  // `count` records into it.
+  icUInt64Number tableBytes =
+      static_cast<icUInt64Number>(count) * reclen;
+  if (static_cast<icUInt64Number>(headerSize) + tableBytes > size)
+    return false;
+
+  // Defensive upper cap: no legitimate dict tag has 2^20 entries.
+  static const icUInt32Number kMaxDictEntries = 0x100000;
+  if (count > kMaxDictEntries)
     return false;
 
   icDictRecordPos *pos = (icDictRecordPos*)calloc(count, sizeof(icDictRecordPos));
