@@ -1536,13 +1536,21 @@ bool CIccTagXmlFloatNum<T, A, Tsig>::ParseXml(xmlNode *pNode, std::string &parse
     size_t len = file->GetLength();
 
     if (!stricmp(icXmlAttrValue(pNode, "Format", "text"), "text")) {
+      // Cap `len` so the +1 below can't wrap on an oversized file.
+      static const size_t kMaxFbufLen = 256ULL * 1024 * 1024;  // 256 MB
+      if (len > kMaxFbufLen) {
+        parseStr += "File exceeds 256 MB limit\n";
+        delete file;
+        return false;
+      }
+
       char *fbuf = (char*)malloc(len+1);
-      fbuf[len]=0;
       if (!fbuf) {
         parseStr += "Memory error!\n";
         delete file;
         return false;
       }
+      fbuf[len]=0;
 
       if (file->Read8(fbuf, len)!=len) {
         parseStr += "Read error of (";
