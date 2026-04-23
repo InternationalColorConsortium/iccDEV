@@ -874,8 +874,16 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
   xmlDoc *doc = NULL;
   xmlNode *root_element = NULL;
 
-  /*parse the file and get the DOM */
-  doc = xmlReadFile(szFilename, NULL, XML_PARSE_HUGE | XML_PARSE_NONET);
+  /* Parse the file and get the DOM.
+   *
+   * Drop XML_PARSE_HUGE: it disables libxml2's depth cap, name-length
+   * cap, text-length cap, and the billion-laughs entity-expansion guard
+   * — all of which protect against crafted inputs. Keep XML_PARSE_NONET
+   * (no network) and add XML_PARSE_NOENT (refuse entity substitution)
+   * and XML_PARSE_DTDLOAD=false (don't pull in external DTDs). ICC
+   * profiles never use DTD entities legitimately.
+   */
+  doc = xmlReadFile(szFilename, NULL, XML_PARSE_NONET | XML_PARSE_NOENT);
 
   if (doc == NULL) 
     return false;

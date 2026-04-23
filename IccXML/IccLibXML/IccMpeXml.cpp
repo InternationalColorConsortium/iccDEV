@@ -2461,8 +2461,11 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
               continue;
             }
 
-            /*parse the file and get the DOM */
-            doc = xmlReadFile(file.c_str(), NULL, XML_PARSE_HUGE | XML_PARSE_NONET);
+            /* Parse the file and get the DOM. See IccProfileXml.cpp for
+             * the rationale for dropping XML_PARSE_HUGE and adding
+             * XML_PARSE_NOENT — matches the main LoadXml entry point.
+             */
+            doc = xmlReadFile(file.c_str(), NULL, XML_PARSE_NONET | XML_PARSE_NOENT);
 
             if (doc == NULL) {
               parseStr += "Unable to import '";
