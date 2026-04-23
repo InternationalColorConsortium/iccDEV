@@ -765,7 +765,16 @@ bool CIccTagParametricCurve::Read(icUInt32Number size, CIccIO *pIO)
   SetFunctionType(nFunctionType);
 
   if (!m_nNumParam) {
-    m_nNumParam = (icUInt16Number)((size-nHdrSize) / sizeof(icS15Fixed16Number));
+    // Unknown nFunctionType path. Previously this fell back to
+    // `(icUInt16Number)((size - nHdrSize) / 4)` which silently
+    // truncates large-size tags to a small number of parameters —
+    // a parse-desync primitive. Use u32 math and refuse pathological
+    // derived counts instead.
+    icUInt32Number derived =
+        static_cast<icUInt32Number>((size - nHdrSize) / sizeof(icS15Fixed16Number));
+    if (derived > 2048u)   // spec caps known types at 7; 2048 is a sane outer bound
+      return false;
+    m_nNumParam = static_cast<icUInt16Number>(derived);
     m_dParam = new icFloatNumber[m_nNumParam];
   }
 
