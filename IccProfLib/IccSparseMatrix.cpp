@@ -492,6 +492,13 @@ bool CIccSparseMatrix::IsValid()
     if (m_RowStart[r]>m_RowStart[r+1])
       return false;
 
+    // Empty-row case: skip both the inner loop AND the post-loop
+    // column-range check. Otherwise `i` is either uninitialised on
+    // the first outer iteration (r=0) or stale from the previous
+    // iteration, and `m_ColumnIndices[i]` reads from a garbage offset.
+    if (m_RowStart[r+1] == m_RowStart[r])
+      continue;
+
     for (i=m_RowStart[r]; i<(int)m_RowStart[r+1]-1; i++) {
       if (m_ColumnIndices[i]>=m_ColumnIndices[i+1] || m_ColumnIndices[i]>m_nCols)
         return false;
