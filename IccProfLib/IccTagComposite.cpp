@@ -1564,7 +1564,13 @@ void CIccTagArray::Cleanup()
 */
 CIccTag* CIccTagArray::GetIndex(icUInt32Number nIndex) const
 {
-  if (nIndex>m_nSize)
+  // Two bugs: `>` should be `>=` (reads one past array), and m_TagVals
+  // can be NULL when SetSize(0) was never called (Read guards SetSize
+  // behind `if (count)` at ~line 1262; zero-length array leaves the
+  // pointer at its default NULL). CIccArrayNamedColor::Begin /
+  // FindColor call GetIndex(0) unconditionally, so this is reachable
+  // from CMM apply time.
+  if (!m_TagVals || nIndex>=m_nSize)
     return NULL;
 
   return m_TagVals[nIndex].ptr;
