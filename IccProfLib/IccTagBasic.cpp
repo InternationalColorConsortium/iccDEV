@@ -7615,8 +7615,18 @@ bool CIccTagMultiLocalizedUnicode::Read(icUInt32Number size, CIccIO *pIO)
   CIccLocalizedUnicode Unicode;
   icUInt32Number nLastPos = 0;
 
+  // Hard-cap nNumRec so we neither loop forever nor overflow the bounds
+  // arithmetic below. 65536 localized records is already well beyond any
+  // plausible legitimate profile.
+  if (nNumRec > 65536u)
+    return false;
+
   for (i=0; i<nNumRec; i++) {
-    if (4*sizeof(icUInt32Number) + (i+1)*12 > size)
+    // 64-bit widened bounds check: 4*4 header + (i+1)*12 records.
+    icUInt64Number headerAndRecords =
+        static_cast<icUInt64Number>(4u * sizeof(icUInt32Number)) +
+        (static_cast<icUInt64Number>(i) + 1u) * 12u;
+    if (headerAndRecords > size)
       return false;
 
     pIO->Seek(nTagPos+4*sizeof(icUInt32Number) + i*12, icSeekSet);
@@ -7627,7 +7637,9 @@ bool CIccTagMultiLocalizedUnicode::Read(icUInt32Number size, CIccIO *pIO)
         !pIO->Read32(&nOffset))
       return false;
     
-    if (nOffset+nLength > size)
+    // 64-bit widened bounds check for the per-record string blob.
+    if (static_cast<icUInt64Number>(nOffset) +
+        static_cast<icUInt64Number>(nLength) > size)
       return false;
 
     //Find out position of the end of last named record
