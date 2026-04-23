@@ -1256,7 +1256,16 @@ bool CIccTagArray::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&count))
     return false;
 
-  if (headerSize + count*sizeof(icPositionNumber) > size)
+  // 64-bit widened bounds check so attacker-controlled `count` can't
+  // wrap the multiplication on wasm32 (size_t == u32) and bypass the
+  // guard before `new icPositionNumber[count]` is attempted. Mirror
+  // the u64 pattern already in CIccTagStruct::Read above.
+  static const icUInt32Number kMaxArrayEntries = 0x100000;  // 2^20
+  if (count > kMaxArrayEntries)
+    return false;
+  icUInt64Number tableBytes =
+      static_cast<icUInt64Number>(count) * sizeof(icPositionNumber);
+  if (static_cast<icUInt64Number>(headerSize) + tableBytes > size)
     return false;
 
   if (count) {
