@@ -199,8 +199,14 @@ icUtfConversionResult icConvertUTF16toUTF32 (const UTF16** sourceStart, const UT
   return result;
 }
 
-icUtfConversionResult icConvertUTF16toUTF32 (const UTF16* source, const UTF16* sourceEnd, 
-                                             icUtf32Vector target, UTF32* /* targetEnd */, icUtfConversionFlags flags)
+// Take `target` by reference so caller sees the populated vector, and
+// drop the dead `UTF32* targetEnd` parameter. The header declares this
+// overload with a reference (see IccConvertUTF.h); the previous
+// by-value signature here never matched the header, so the header's
+// declaration went undefined and any caller silently got a local-only
+// populate + empty return — classic data-loss bug.
+icUtfConversionResult icConvertUTF16toUTF32 (const UTF16* source, const UTF16* sourceEnd,
+                                             icUtf32Vector &target, icUtfConversionFlags flags)
 {
   icUtfConversionResult result = conversionOK;
   target.clear();
