@@ -4609,9 +4609,11 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
   // Sparse matrices store only non-zero entries, so file data is much smaller than the buffer.
   // Per-read bounds checks in the loop below validate actual file data consumption.
 
-  // this sets the sizes, and allocates a huge chunk of memory for matrix storage in m_RawData
-  Reset(nNumMatrices, nChannels);
-  
+  // this sets the sizes, and allocates a huge chunk of memory for matrix storage in m_RawData.
+  // Reset now refuses oversized allocations + returns false on OOM, so propagate the failure.
+  if (!Reset(nNumMatrices, nChannels))
+    return false;
+
   icUInt8Number *matrix_end = m_RawData + (size_t)m_nSize * nBytesPerMatrix;  // overflow detection
 
   if (m_nSize) {
@@ -5095,18 +5097,59 @@ bool CIccTagSparseMatrixArray::Reset(icUInt32Number nNumMatrices, icUInt16Number
   if (nNumMatrices==m_nSize && nChannelsPerMatrix==m_nChannelsPerMatrix)
     return true;
 
-  m_nSize = nNumMatrices;
-  m_nChannelsPerMatrix = nChannelsPerMatrix;
+  // Do the allocation math in explicit 64-bit. On 32-bit targets
+  // (wasm32 in particular, where size_t is u32) the product
+  // nNumMatrices * GetBytesPerMatrix() can wrap silently — returning
+  // a tiny allocation while leaving m_nSize huge, and the Read loop
+  // then writes records past the buffer end. Also cap the total at a
+  // library-wide 64 MB ceiling so a legitimately-sized tag can't
+  // coerce gigabytes of RAM.
+  const icUInt64Number perMatrix64 =
+      static_cast<icUInt64Number>(nChannelsPerMatrix) * sizeof(icFloatNumber);
+  const icUInt64Number total64 =
+      static_cast<icUInt64Number>(nNumMatrices) * perMatrix64;
 
-  size_t nSize = (size_t)m_nSize * GetBytesPerMatrix();
-  
-  m_RawData = (icUInt8Number *)icRealloc(m_RawData, nSize);
-
-  if (!m_RawData) {
-    m_nSize = 0;
+  static const icUInt64Number kMaxSparseMatrixArrayBytes =
+      64ULL * 1024 * 1024;
+  if (total64 > kMaxSparseMatrixArrayBytes ||
+      total64 > static_cast<icUInt64Number>(SIZE_MAX)) {
+    // Leave m_nSize untouched on failure so the object stays valid.
     return false;
   }
 
+  size_t nSize = static_cast<size_t>(total64);
+
+  // icRealloc (see IccUtil.cpp) diverges from std::realloc in two
+  // important ways:
+  //   1. icRealloc(ptr, 0) frees ptr and returns NULL (std::realloc's
+  //      behaviour here is implementation-defined).
+  //   2. On allocation failure (nptr == NULL && ptr != NULL) it frees
+  //      the old ptr — so the caller must NOT keep using m_RawData
+  //      after the call, regardless of the return value.
+  //
+  // Therefore we always write the result back to m_RawData and keep
+  // the object coherent (m_nSize / m_nChannelsPerMatrix match
+  // whatever m_RawData now is).
+  m_RawData = (icUInt8Number *)icRealloc(m_RawData, nSize);
+
+  if (nSize == 0) {
+    // Caller explicitly asked to clear. icRealloc returned NULL after
+    // freeing the old buffer — success, empty object.
+    m_nSize = 0;
+    m_nChannelsPerMatrix = 0;
+    return true;
+  }
+
+  if (!m_RawData) {
+    // Allocation failure. icRealloc already freed the old buffer.
+    // Keep the object in a safe empty state.
+    m_nSize = 0;
+    m_nChannelsPerMatrix = 0;
+    return false;
+  }
+
+  m_nSize = nNumMatrices;
+  m_nChannelsPerMatrix = nChannelsPerMatrix;
   memset(m_RawData, 0, nSize);
   return true;
 }
