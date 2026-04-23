@@ -480,6 +480,11 @@ static Boolean isLegalUTF8(const UTF8 *source, int length)
 */
 Boolean icIsLegalUTF8Sequence(const UTF8 *source, const UTF8 *sourceEnd)
 {
+  // Reject empty range before dereferencing *source. Otherwise this
+  // reads one byte past the end of the supplied buffer.
+  if (source >= sourceEnd)
+    return false;
+
   int length = trailingBytesForUTF8[*source]+1;
   if (source+length > sourceEnd) {
     return false;
