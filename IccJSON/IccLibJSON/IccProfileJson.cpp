@@ -485,41 +485,57 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
 
 bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)
 {
-  // The root may be the IccProfile object directly or wrapped in {"IccProfile": ...}
-  const IccJson *pProfile = &root;
-  IccJson unwrapped;
-  if (root.contains("IccProfile")) {
-    unwrapped  = root["IccProfile"];
-    pProfile   = &unwrapped;
-  }
-
-  if (!pProfile->contains("Header") || !pProfile->contains("Tags")) {
-    parseStr += "Missing Header or Tags in JSON profile\n";
-    return false;
-  }
-
-  if (!ParseBasic((*pProfile)["Header"], parseStr))
-    return false;
-
-  const IccJson &tags = (*pProfile)["Tags"];
-  if (!tags.is_array()) {
-    parseStr += "Tags must be a JSON array\n";
-    return false;
-  }
-
-  std::map<std::string, icTagSignature> keyToSig;
-  for (const auto &entry : tags) {
-    if (!entry.is_object() || entry.size() != 1) {
-      parseStr += "Warning: tag entry must be a single-member object, skipping\n";
-      continue;
+  // Wrap the whole parse body in a try/catch so nlohmann's
+  // type_error / out_of_range exceptions (thrown from the many raw
+  // .get<T>() / operator[] sites in IccTagJson / IccMpeJson) can't
+  // propagate out to std::terminate. LoadJson() has its own wrap,
+  // but other callers (wasm wrappers, custom embedders) calling
+  // ParseJson() directly would otherwise abort the host.
+  try {
+    // The root may be the IccProfile object directly or wrapped in {"IccProfile": ...}
+    const IccJson *pProfile = &root;
+    IccJson unwrapped;
+    if (root.contains("IccProfile")) {
+      unwrapped  = root["IccProfile"];
+      pProfile   = &unwrapped;
     }
-    auto it = entry.begin();
-    const std::string &key   = it.key();
-    const IccJson     &value = it.value();
-    if (!ParseTag(key, value, keyToSig, parseStr))
+
+    if (!pProfile->contains("Header") || !pProfile->contains("Tags")) {
+      parseStr += "Missing Header or Tags in JSON profile\n";
       return false;
+    }
+
+    if (!ParseBasic((*pProfile)["Header"], parseStr))
+      return false;
+
+    const IccJson &tags = (*pProfile)["Tags"];
+    if (!tags.is_array()) {
+      parseStr += "Tags must be a JSON array\n";
+      return false;
+    }
+
+    std::map<std::string, icTagSignature> keyToSig;
+    for (const auto &entry : tags) {
+      if (!entry.is_object() || entry.size() != 1) {
+        parseStr += "Warning: tag entry must be a single-member object, skipping\n";
+        continue;
+      }
+      auto it = entry.begin();
+      const std::string &key   = it.key();
+      const IccJson     &value = it.value();
+      if (!ParseTag(key, value, keyToSig, parseStr))
+        return false;
+    }
+    return true;
   }
-  return true;
+  catch (const nlohmann::json::exception &e) {
+    parseStr += std::string("JSON type/range error during parse: ") + e.what() + "\n";
+    return false;
+  }
+  catch (const std::exception &e) {
+    parseStr += std::string("Unexpected error during JSON parse: ") + e.what() + "\n";
+    return false;
+  }
 }
 
 bool CIccProfileJson::LoadJson(const char *szFilename, std::string *parseStr)
