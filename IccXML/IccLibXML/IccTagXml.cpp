@@ -439,7 +439,12 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
     }
 
     size_t fileLength = file->GetLength();
-    char *buf = (char *)malloc(fileLength);
+    // +1 for the NUL terminator. icUtf8ToAnsi(buf) and CIccUTF16String(buf)
+    // both treat `buf` as a C-string and walk it with strlen-like logic;
+    // without the extra byte plus the explicit terminator below, those
+    // functions read past the allocation until they happen to find a
+    // zero byte in adjacent heap.
+    char *buf = (char *)malloc(fileLength + 1);
 
     if (!buf) {
       perror("Memory Error");
@@ -449,6 +454,7 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
       delete file;
       return false;
     }
+    buf[fileLength] = '\0';
 
     if (file->ReadLine(buf, fileLength)!=fileLength) {
       parseStr += "Error while reading file '";
