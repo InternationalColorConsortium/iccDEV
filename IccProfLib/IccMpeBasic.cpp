@@ -5143,8 +5143,25 @@ bool CIccMpeMatrix::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read16(&nOutputChannels))
     return false;
 
-  if (dataSize >= (icUInt32Number)nInputChannels * nOutputChannels * sizeof(icFloatNumber) &&
-      dataSize < ((icUInt32Number)nInputChannels+1) * nOutputChannels * sizeof(icFloatNumber)) {
+  // Widen bounds arithmetic to u64. A crafted tag with nInputChannels
+  // and/or nOutputChannels near 2^16 can otherwise wrap these u32
+  // products below, bypassing the size checks and letting SetSize
+  // attempt an 17 GB allocation. Also reject pathological channel
+  // counts early: iccMAX does not mandate a tight per-element cap,
+  // but 255 is already far beyond any legitimate profile.
+  static const icUInt16Number kMaxMatrixChannels = 255;
+  if (nInputChannels > kMaxMatrixChannels ||
+      nOutputChannels > kMaxMatrixChannels)
+    return false;
+
+  icUInt64Number matrixBytes =
+      static_cast<icUInt64Number>(nInputChannels) *
+      static_cast<icUInt64Number>(nOutputChannels) *
+      sizeof(icFloatNumber);
+  icUInt64Number constBytes =
+      static_cast<icUInt64Number>(nOutputChannels) * sizeof(icFloatNumber);
+
+  if (dataSize >= matrixBytes && dataSize < matrixBytes + constBytes) {
     //Matrix with no constants
     if (!SetSize(nInputChannels, nOutputChannels, false))
       return false;
@@ -5156,8 +5173,7 @@ bool CIccMpeMatrix::Read(icUInt32Number size, CIccIO *pIO)
     if (pIO->ReadFloat32Float(m_pMatrix, m_size) != m_size)
       return false;
   }
-  else if (dataSize < (icUInt32Number)nInputChannels * nOutputChannels *sizeof(icFloatNumber) &&
-           dataSize >= (icUInt32Number)nOutputChannels * sizeof(icFloatNumber)) {
+  else if (dataSize < matrixBytes && dataSize >= constBytes) {
     //Constants with no matrix
     if (!SetSize(0, nOutputChannels))
       return false;
@@ -5169,9 +5185,8 @@ bool CIccMpeMatrix::Read(icUInt32Number size, CIccIO *pIO)
       return false;
   }
   else {
-    if ((icUInt32Number)nInputChannels*nOutputChannels > dataSize ||
-        ((icUInt32Number)nInputChannels*nOutputChannels + nOutputChannels) > dataSize ||
-        ((icUInt32Number)nInputChannels*nOutputChannels + nOutputChannels) * sizeof(icFloat32Number) > dataSize)
+    if (matrixBytes > dataSize ||
+        matrixBytes + constBytes > dataSize)
       return false;
 
     //Matrix with constants
