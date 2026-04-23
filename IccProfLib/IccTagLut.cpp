@@ -1900,10 +1900,17 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
   }
   m_nNumPoints = (icUInt32Number)nNumPoints;
 
-  icUInt32Number nSize = NumPoints() * m_nOutput;
-
-  if (!nSize)
+  // Use 64-bit math to catch overflows even when no nMaxSize was
+  // supplied (the earlier nMaxSize guard is skipped when nMaxSize==0,
+  // e.g. callers that don't pre-cap; multiplication in u32 then wraps
+  // and allocates a tiny buffer while downstream code addresses the
+  // full grid).
+  icUInt64Number nSize64 =
+      static_cast<icUInt64Number>(NumPoints()) *
+      static_cast<icUInt64Number>(m_nOutput);
+  if (nSize64 == 0 || nSize64 > 0xFFFFFFFFu)
     return false;
+  icUInt32Number nSize = static_cast<icUInt32Number>(nSize64);
 
   m_pData = new icFloatNumber[nSize];
 
