@@ -330,6 +330,7 @@ CIccStructNamedColor* CIccArrayNamedColor::FindDeviceColor(const icFloatNumber *
       CIccTag *pTag = pNamedColor->GetElem(icSigNmclDeviceDataMbr);
       if (pTag && pTag->IsNumArrayType()) {
         CIccTagNumArray *v = (CIccTagNumArray*)pTag;
+        if (!m_nDeviceSamples) continue;
         icUInt32Number sampleCount = v->GetNumValues()/m_nDeviceSamples;
         if (sampleCount) {
           v->GetValues(temp, (sampleCount-1)*m_nDeviceSamples, m_nDeviceSamples);
@@ -370,6 +371,7 @@ CIccStructNamedColor* CIccArrayNamedColor::FindPcsColor(const icFloatNumber *pPC
       CIccTag *pTag = pNamedColor->GetElem(icSigNmclDeviceDataMbr);
       if (pTag && pTag->IsNumArrayType()) {
         CIccTagNumArray *v = (CIccTagNumArray*)pTag;
+        if (!m_nDeviceSamples) continue;
         icUInt32Number sampleCount = v->GetNumValues()/m_nDeviceSamples;
         if (sampleCount) {
           v->GetValues(pLab, (sampleCount-1)*m_nDeviceSamples, 3);
@@ -405,7 +407,8 @@ CIccStructNamedColor* CIccArrayNamedColor::FindSpectralColor(const icFloatNumber
       CIccTag *pTag = pNamedColor->GetElem(icSigNmclDeviceDataMbr);
       if (pTag && pTag->IsNumArrayType()) {
         CIccTagNumArray *v = (CIccTagNumArray*)pTag;
-        icUInt32Number sampleCount = v->GetNumValues()/m_nDeviceSamples;
+        if (!m_nSpectralSamples) continue;
+        icUInt32Number sampleCount = v->GetNumValues()/m_nSpectralSamples;
         if (sampleCount) {
           v->GetValues(temp, (sampleCount-1)*m_nSpectralSamples, m_nSpectralSamples);
 
