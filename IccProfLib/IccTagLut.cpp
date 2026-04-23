@@ -981,7 +981,7 @@ bool CIccTagParametricCurve::SetFunctionType(icUInt16Number nFunctionType)
   }
 
   if (m_dParam)
-    delete m_dParam;
+    delete [] m_dParam;
   m_nNumParam = nNumParam;
   m_nFunctionType = nFunctionType;
 
