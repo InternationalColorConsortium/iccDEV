@@ -227,7 +227,7 @@ static bool icXmlParseTextString(xmlNode *pNode, std::string &parseStr, std::str
         const icChar *filename = icXmlAttrValue(pNode, "File");
 
         // file exists
-        if (filename[0]) {        
+        if (filename && filename[0]) {        
           CIccIO *file = IccOpenFileIO(filename, "rb");        
           if (!file){          
             parseStr += "Error! - File '";
@@ -427,7 +427,7 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
   const icChar *filename = icXmlAttrValue(pNode, "File");
 
   // file exists
-  if (filename[0]) {
+  if (filename && filename[0]) {
     CIccIO *file = IccOpenFileIO(filename, "rb");
 
     if (!file){
@@ -1523,7 +1523,7 @@ bool CIccTagXmlFloatNum<T, A, Tsig>::ParseXml(xmlNode *pNode, std::string &parse
 
   A a;
 
-  if (filename[0]) {
+  if (filename && filename[0]) {
     CIccIO *file = IccOpenFileIO(filename, "rb");
     if (!file){
       parseStr += "Error! - File '";
@@ -2659,7 +2659,7 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
     const char *filename = icXmlAttrValue(pCurveNode, "File");
 
     // file exists
-    if (filename[0]) {
+    if (filename && filename[0]) {
       CIccIO *file = IccOpenFileIO(filename, "rb");
       if (!file){
         parseStr += "Error! - File '";
@@ -3513,7 +3513,7 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
       filename = icXmlAttrValue(table, "File");
     }
 
-    if (filename[0]) {
+    if (filename && filename[0]) {
       CIccIO *file = IccOpenFileIO(filename, "rb");
 
       if (!file) {
@@ -5300,7 +5300,7 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
     }
 
     // file exists
-    if (filename[0]) {
+    if (filename && filename[0]) {
       CIccIO *file = IccOpenFileIO(filename, "rb");
       if (!file) {
         parseStr += "Error! - File '";
@@ -5401,7 +5401,7 @@ bool CIccTagXmlEmbeddedNormalImage::ParseXml(xmlNode *pNode, std::string &parseS
     }
 
     // file exists
-    if (filename[0]) {
+    if (filename && filename[0]) {
       CIccIO *file = IccOpenFileIO(filename, "rb");
       if (!file) {
         parseStr += "Error! - File '";
