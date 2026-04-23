@@ -188,8 +188,29 @@ void CIccTagEmbeddedProfile::SetProfile(CIccProfile* pProfile)
 *  true = successful, false = failure
 *****************************************************************************
 */
+// Guard against attacker-crafted profiles that nest embedded-profile tags
+// arbitrarily deep. Each level adds a C++ stack frame through
+// CIccProfile::Read -> ReadTags/LoadTag -> CIccTag::Create(icSigEmbeddedProfileTag)
+// -> CIccTagEmbeddedProfile::Read -> CIccProfile::Read (recursion). On
+// Emscripten's ~1 MB stack this aborts at ~50-150 levels; on native ~500-1500.
+// 8 nesting levels is far beyond any legitimate use.
+namespace {
+  static thread_local int s_embeddedProfileDepth = 0;
+  static const int kMaxEmbeddedProfileDepth = 8;
+
+  struct EmbedDepthGuard {
+    EmbedDepthGuard()  { ++s_embeddedProfileDepth; }
+    ~EmbedDepthGuard() { --s_embeddedProfileDepth; }
+    bool TooDeep() const { return s_embeddedProfileDepth > kMaxEmbeddedProfileDepth; }
+  };
+}
+
 bool CIccTagEmbeddedProfile::Read(icUInt32Number size, CIccIO *pIO, CIccProfile *pProfile)
 {
+  EmbedDepthGuard depthGuard;
+  if (depthGuard.TooDeep())
+    return false;
+
   if (size<sizeof(icTagTypeSignature) || !pIO) {
     return false;
   }
