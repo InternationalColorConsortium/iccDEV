@@ -3205,11 +3205,29 @@ bool CIccMpeXmlCalculator::ParseChanMap(ChanVarMap& chanMap, const char *szNames
 
 bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
+  // Guard against nested <CalculatorElement><SubElements>…</> recursion.
+  // Each level is one C++ stack frame; on Emscripten's ~1 MB stack a
+  // crafted XML with a few thousand nested CalculatorElements blows
+  // through it. 32 levels is generous for any legitimate iccMAX
+  // calculator.
+  static thread_local int s_xmlCalcDepth = 0;
+  static const int kMaxXmlCalcDepth = 32;
+
+  struct DepthGuard {
+    int *p;
+    DepthGuard(int *pp) : p(pp) { ++*p; }
+    ~DepthGuard() { --*p; }
+  } depthGuard(&s_xmlCalcDepth);
+  if (s_xmlCalcDepth > kMaxXmlCalcDepth) {
+    parseStr += "CalculatorElement nesting exceeds 32 levels\n";
+    return false;
+  }
+
   xmlNode *pChild;
 
   if (!pNode)
     return false;
-  
+
   SetSize(atoi(icXmlAttrValue(pNode, "InputChannels")),
           atoi(icXmlAttrValue(pNode, "OutputChannels")));
 
