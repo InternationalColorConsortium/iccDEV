@@ -3699,8 +3699,14 @@ bool CIccCalculatorFunc::InitSelectOp(SIccCalcOp *ops, icUInt32Number nOps)
 * 
 * Return: 
 ******************************************************************************/
-bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32Number nOps, SIccCalcOp *ops) const
+bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32Number nOps, SIccCalcOp *ops, int nDepth) const
 {
+  // Cap recursion depth. A crafted Calc tag with nested if/else/select
+  // opcodes can otherwise exhaust the C++ stack (~30K frames on wasm's
+  // 1 MB default stack). 64 levels is well beyond any legitimate profile.
+  static const int kMaxCalcRecursionDepth = 64;
+  if (nDepth > kMaxCalcRecursionDepth)
+    return false;
   SIccCalcOp *op;
   SIccOpState os;
 
@@ -3736,7 +3742,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
           if (os.idx+1 + dataSize >= nOps)
             return false;
 
-          if (!ApplySequence(pApply, dataSize, &ops[os.idx+1]))
+          if (!ApplySequence(pApply, dataSize, &ops[os.idx+1], nDepth + 1))
             return false;
         }
         else {
@@ -3748,7 +3754,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
           if (newOpIndex + nNewOps > nOps)  // now add and test the real limit
             return false;
 
-          if (!ApplySequence(pApply, nNewOps, &ops[os.idx+1 + op->data.size]))
+          if (!ApplySequence(pApply, nNewOps, &ops[os.idx+1 + op->data.size], nDepth + 1))
             return false;
         }
         os.idx += op->data.size + ops[os.idx].data.size;
@@ -3761,7 +3767,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
           if (os.idx+dataSize >= nOps)
             return false;
 
-          if (!ApplySequence(pApply, op->data.size, &ops[os.idx+1]))
+          if (!ApplySequence(pApply, op->data.size, &ops[os.idx+1], nDepth + 1))
             return false;
         }
         os.idx+= op->data.size;
@@ -3801,7 +3807,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
           if ((nDefOff + dataSize) >= nOps)
             return false;
           
-          if (!ApplySequence(pApply, dataSize, &ops[offset]))
+          if (!ApplySequence(pApply, dataSize, &ops[offset], nDepth + 1))
             break;
         }
       }
@@ -3821,7 +3827,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         if (offset >= nOps)
           return false;
         
-        if (!ApplySequence(pApply, dataSize, &ops[offset]))
+        if (!ApplySequence(pApply, dataSize, &ops[offset], nDepth + 1))
           break;
       }
 

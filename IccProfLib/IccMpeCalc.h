@@ -412,7 +412,7 @@ protected:
   void InsertBlanks(std::string &sDescription, int nBlanks);
   void DescribeSequence(std::string &sDescription,
                         icUInt32Number nOps, SIccCalcOp *op, int nBlanks);
-  bool ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32Number nOps, SIccCalcOp *op) const;
+  bool ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32Number nOps, SIccCalcOp *op, int nDepth = 0) const;
 
   const char *ParseFuncDef(const char *szFuncDef, CIccCalcOpList &m_list, std::string &sReport);
 
