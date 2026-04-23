@@ -1260,6 +1260,22 @@ bool CIccProfile::ReadBasic(CIccIO *pIO)
   if (!pIO->Read32(&count))
     return false;
 
+  // Bound `count` against the IO's actual length. Without this check a
+  // crafted count field can drive m_Tags into unbounded growth on a
+  // short profile body (OOM on native, wasm abort in browser builds).
+  //
+  // We intentionally don't cross-check against m_Header.size: that
+  // field is attacker-controlled (read from the file a few lines back)
+  // and, for legitimate round-trip flows that InitHeader() + Write()
+  // to a memory IO, it stays 0 until Write patches it up.
+  // pIO->GetLength() is the ground truth.
+  icUInt64Number minProfileBytes =
+      132u + static_cast<icUInt64Number>(count) * 12u;
+  icUInt64Number ioBytes = static_cast<icUInt64Number>(pIO->GetLength());
+  if (minProfileBytes > ioBytes) {
+    return false;
+  }
+
   //Read TagDir
   for (i=0; i<count; i++) {
     if (!pIO->Read32(&TagEntry.TagInfo.sig) ||
