@@ -4092,6 +4092,17 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
   if (m_nInput > 15 || m_nOutput > 15)
     return false;
 
+  // Every Offset[] field is attacker-controlled. Validate each in u64
+  // against `size` before the corresponding pIO->Seek(nStart + Offset[i])
+  // to prevent u32 wraparound (e.g. Offset[1] = 0xFFFFFFC0 + 48 == 0x10
+  // would previously pass the 32-bit check). Also ensure Offset[i] alone
+  // doesn't overflow when added to nStart; CIccMemIO's Seek clamps
+  // silently, producing a parser-confusion primitive when bypassed.
+  for (int oi = 0; oi < 5; ++oi) {
+    if (Offset[oi] && static_cast<icUInt64Number>(Offset[oi]) > size)
+      return false;
+  }
+
   //B Curves
   if (Offset[0]) {
     nCurves = IsInputB() ? m_nInput : m_nOutput;
@@ -4129,7 +4140,10 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
   if (Offset[1]) {
     icS15Fixed16Number tmp;
 
-    if (Offset[1] + 12*sizeof(icS15Fixed16Number) >size)
+    // 64-bit widened bounds check — the prior u32 addition wrapped
+    // when Offset[1] was close to 2^32.
+    if (static_cast<icUInt64Number>(Offset[1]) +
+        12u * sizeof(icS15Fixed16Number) > size)
       return false;
 
     m_Matrix = new CIccMatrix();
