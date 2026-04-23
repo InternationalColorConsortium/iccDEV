@@ -9,7 +9,10 @@ CIccSparseMatrix::CIccSparseMatrix(void *pMatrix, size_t nSize, icSparseMatrixTy
   m_nType = nType;
   m_Data = NULL;
 
-  if (bInitFromData) {
+  // bInitFromData dereferences the first 4 bytes of pMatrix. Callers
+  // inside IccProfLib guarantee at least 4 bytes, but this ctor is
+  // public API — external callers might pass a short buffer.
+  if (bInitFromData && pMatrix && nSize >= 2*sizeof(icUInt16Number)) {
     icUInt16Number nRows = *((icUInt16Number*)pMatrix);
     icUInt16Number nCols = *((icUInt16Number*)(m_pMatrix+sizeof(icUInt16Number)));
     Init(nRows, nCols);
@@ -123,7 +126,8 @@ bool CIccSparseMatrix::Reset(void *pMatrix, size_t nSize, icSparseMatrixType nTy
   m_nType = nType;
   m_Data = NULL;
 
-  if (bInitFromData) {
+  // Same guard as the ctor: don't dereference short buffers.
+  if (bInitFromData && pMatrix && nSize >= 2*sizeof(icUInt16Number)) {
     icUInt16Number nRows = *((icUInt16Number*)pMatrix);
     icUInt16Number nCols = *((icUInt16Number*)(m_pMatrix+sizeof(icUInt16Number)));
     return Init(nRows, nCols);
