@@ -2821,8 +2821,31 @@ bool CIccTagJsonEmbeddedProfile::ToJson(IccJson &j)
   return pProfile->ToJson(j["IccProfile"]);
 }
 
+// Guard against attacker-crafted JSON that nests <IccProfile>-in-embedded-
+// tag arbitrarily deep. The recursion path goes
+//   CIccProfileJson::ParseJson -> tag loop -> CIccTagJsonEmbeddedProfile::
+//   ParseJson -> CIccProfileJson::ParseJson -> ...
+// One C++ stack frame per level; Emscripten's ~1 MB stack aborts around
+// 500-2000 levels.
+namespace {
+  static thread_local int s_jsonEmbeddedDepth = 0;
+  static const int kMaxJsonEmbeddedDepth = 8;
+
+  struct JsonEmbedDepthGuard {
+    JsonEmbedDepthGuard()  { ++s_jsonEmbeddedDepth; }
+    ~JsonEmbedDepthGuard() { --s_jsonEmbeddedDepth; }
+    bool TooDeep() const { return s_jsonEmbeddedDepth > kMaxJsonEmbeddedDepth; }
+  };
+}
+
 bool CIccTagJsonEmbeddedProfile::ParseJson(const IccJson &j, std::string &parseStr)
 {
+  JsonEmbedDepthGuard depthGuard;
+  if (depthGuard.TooDeep()) {
+    parseStr += "Embedded profile nesting exceeds 8 levels\n";
+    return false;
+  }
+
   if (!j.contains("IccProfile") || !j["IccProfile"].is_object()) {
     parseStr += "Cannot find IccProfile in embedded profile tag\n";
     return false;
