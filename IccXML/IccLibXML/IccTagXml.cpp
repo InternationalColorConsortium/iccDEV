@@ -309,8 +309,8 @@ bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
         CIccUInt8Array buf;
-        if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content) ||
-            icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize()))
+        if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content)) ||
+            icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize())
           return false;
   
         AllocBuffer(buf.GetSize());
@@ -336,8 +336,8 @@ bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
         CIccUInt8Array buf;
-        if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content) ||
-          icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize()))
+        if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content)) ||
+          icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize())
           return false;
 
         AllocBuffer(buf.GetSize());
