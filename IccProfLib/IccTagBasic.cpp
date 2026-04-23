@@ -9699,6 +9699,14 @@ bool CIccTagProfileSeqDesc::Read(icUInt32Number size, CIccIO *pIO)
   size_t nPos;
   CIccProfileDescStruct ProfileDescStruct;
 
+  // Reject counts that can't possibly fit even a bare-minimum record
+  // per entry (20 bytes: mfg + model + attrs + tech). Without this,
+  // a crafted nCount of ~40,000 drives ~1M nested MLU allocations
+  // before per-iteration Read*() finally fails on EOF.
+  static const icUInt32Number kProfSeqDescMinBytesPerEntry = 20;
+  if (nCount > size / kProfSeqDescMinBytesPerEntry)
+    return false;
+
   for (i=0; i<nCount; i++) {
 
     if (!pIO->Read32(&ProfileDescStruct.m_deviceMfg) ||
@@ -9709,10 +9717,19 @@ bool CIccTagProfileSeqDesc::Read(icUInt32Number size, CIccIO *pIO)
 
     nPos = pIO->Tell();
 
+    // Guard against previous iteration having advanced the cursor past
+    // our tag window; otherwise (nEnd - nPos) wraps to near UINT32_MAX
+    // and is passed as `size` to the nested MLU Read — a second,
+    // independent overflow primitive.
+    if (nPos >= nEnd)
+      return false;
+
     if (!ProfileDescStruct.m_deviceMfgDesc.Read((icUInt32Number)(nEnd - nPos), pIO))
       return false;
-    
+
     nPos = pIO->Tell();
+    if (nPos >= nEnd)
+      return false;
     if (!ProfileDescStruct.m_deviceModelDesc.Read((icUInt32Number)(nEnd - nPos), pIO))
       return false;
 
