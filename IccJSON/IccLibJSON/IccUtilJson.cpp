@@ -231,7 +231,7 @@ icUInt64Number icJsonParseDeviceAttr(const IccJson &j)
   s.clear(); jGetString(j, "VendorSpecific", s);
   if (!s.empty()) {
     unsigned long long vendor = 0;
-    sscanf(s.c_str(), "%llx", &vendor);
+    if (sscanf(s.c_str(), "%llx", &vendor) != 1) vendor = 0;
     attr |= (icUInt64Number)vendor;
   }
   return attr;

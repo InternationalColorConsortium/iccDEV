@@ -103,8 +103,7 @@ static icUInt32Number icJsonParseHeaderFlags(const IccJson &j)
   jGetString(j, "VendorFlags", vendor);
   if (!vendor.empty()) {
     unsigned v = 0;
-    sscanf(vendor.c_str(), "%x", &v);
-    flags |= v;
+    if (sscanf(vendor.c_str(), "%x", &v) == 1) flags |= v;
   }
   return flags;
 }
