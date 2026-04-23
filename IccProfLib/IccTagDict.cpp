@@ -1107,7 +1107,7 @@ CIccDictEntry* CIccTagDict::Get(const icUnicodeChar *szName) const
 {
   std::wstring sName;
   while(*szName)
-    sName += *szName;
+    sName += *szName++;
 
   return Get(sName);
 }
@@ -1182,7 +1182,7 @@ std::wstring CIccTagDict::GetValue(const icUnicodeChar *szName, bool *bIsSet) co
 {
   std::wstring sName;
   while(*szName)
-    sName += *szName;
+    sName += *szName++;
 
   return GetValue(sName, bIsSet);
 }
@@ -1247,7 +1247,7 @@ CIccTagMultiLocalizedUnicode* CIccTagDict::GetNameLocalized(const icUnicodeChar 
 {
   std::wstring sName;
   while(*szName)
-    sName += *szName;
+    sName += *szName++;
 
   return GetNameLocalized(sName);
 }
@@ -1314,7 +1314,7 @@ CIccTagMultiLocalizedUnicode* CIccTagDict::GetValueLocalized(const icUnicodeChar
 {
   std::wstring sName;
   while(*szName)
-    sName += *szName;
+    sName += *szName++;
 
   return GetValueLocalized(sName);
 }
@@ -1388,7 +1388,7 @@ bool CIccTagDict::Remove(const icUnicodeChar *szName)
 {
   std::wstring sName;
   while(*szName)
-    sName += *szName;
+    sName += *szName++;
 
   return Remove(sName);
 
@@ -1460,7 +1460,7 @@ bool CIccTagDict::Set(const icUnicodeChar *szName, const icUnicodeChar *szValue)
 {
   std::wstring sName;
   while(*szName)
-    sName += *szName;
+    sName += *szName++;
 
   std::wstring sValue;
 
