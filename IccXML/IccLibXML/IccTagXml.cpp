@@ -506,10 +506,16 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
     else
       m_uzUnicodeText[0] = 0;
 
-    // Set ScriptCode
-    m_nScriptCode=0;
-    m_nScriptSize = (icUInt8Number) fileLength + 1;  
-    memcpy(m_szScriptText, buf, 67);
+    // Set ScriptCode (m_szScriptText is a fixed 67-byte field per ICC v2
+    // textDescriptionType; clamp source read to buf size to avoid OOB read,
+    // and clamp m_nScriptSize before the icUInt8Number narrowing.)
+    m_nScriptCode = 0;
+    icUInt32Number nScriptCopy = fileLength < 67 ? fileLength : 67;
+    icUInt32Number nScriptSize = nScriptCopy < 255 ? nScriptCopy + 1 : 255;
+    m_nScriptSize = (icUInt8Number)nScriptSize;
+    memset(m_szScriptText, 0, sizeof(m_szScriptText));
+    if (nScriptCopy)
+      memcpy(m_szScriptText, buf, nScriptCopy);
 
     delete file;
   }
