@@ -692,6 +692,11 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
 {
   icUInt32Number nDevCoords = 0;
   jGetValue(j, "countOfDeviceCoords", nDevCoords);
+  // ICC spec caps device colorants at 15. Reject pathologically large
+  // counts before SetSize (which allocates nColors * (33 + nDevCoords*4)
+  // bytes — an unbounded multiplication otherwise).
+  if (nDevCoords > 15u)
+    return false;
   icUInt32Number nColors = (jsonExistsField(j, "colors") && j["colors"].is_array())
                            ? icJsonSafeU32(j["colors"].size()) : 0;
 
