@@ -228,7 +228,10 @@ bool CIccSparseMatrix::Copy(const CIccSparseMatrix &mtx)
   if (!Init(mtx.m_nRows, mtx.m_nCols))
     return false;
 
-  memcpy(m_RowStart, mtx.m_RowStart, (m_nRows+1)*sizeof(icUInt32Number));
+  // m_RowStart is a u16* pointing at (m_nRows+1) u16 slots; copying with
+  // sizeof(icUInt32Number) stomps 2× the allocated region (into the
+  // adjacent m_ColumnIndices tail).
+  memcpy(m_RowStart, mtx.m_RowStart, (m_nRows+1)*sizeof(icUInt16Number));
   icUInt32Number nEntries = m_RowStart[m_nRows];
   icUInt32Number i;
 
