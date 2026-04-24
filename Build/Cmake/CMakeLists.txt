@@ -1025,6 +1025,13 @@ if(APPLE)
     -Wformat-security
     -Wimplicit-fallthrough
     -Wsign-compare
+    -Wnon-virtual-dtor
+    -Wuninitialized
+    -Werror=uninitialized
+    -Wshadow
+    -Wnull-dereference
+    -Wundef
+    -Wpointer-arith
     -fstack-protector-strong
   )
 
@@ -1046,9 +1053,33 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     -Wformat-security
     -Wimplicit-fallthrough
     -Wsign-compare
+    -Wnon-virtual-dtor
+    -Wuninitialized
+    -Werror=uninitialized
+    -Wshadow
+    -Wnull-dereference
+    -Wundef
+    -Wpointer-arith
     -fstack-protector-strong
     -fstack-clash-protection
   )
+
+  # GCC-only diagnostics (clang prints -Wunknown-warning-option)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-Wlogical-op)
+  endif()
+
+  # Opt-in: Effective C++ ruleset (currently ~3000 sites; multi-PR cleanup)
+  option(ENABLE_STRICT_EFFC "Enable -Weffc++ (Effective C++ guidelines)" OFF)
+  if(ENABLE_STRICT_EFFC)
+    add_compile_options(-Weffc++)
+  endif()
+
+  # Opt-in: float-to-double promotion warnings (~2000 sites; library-wide cleanup)
+  option(ENABLE_DOUBLE_PROMOTION "Enable -Wdouble-promotion" OFF)
+  if(ENABLE_DOUBLE_PROMOTION)
+    add_compile_options(-Wdouble-promotion)
+  endif()
 
   # Hardening: RELRO and BIND_NOW for executables
   add_link_options(-Wl,-z,relro,-z,now)
@@ -1072,6 +1103,13 @@ elseif(EMSCRIPTEN)
     -Wformat-security
     -Wimplicit-fallthrough
     -Wsign-compare
+    -Wnon-virtual-dtor
+    -Wuninitialized
+    -Werror=uninitialized
+    -Wshadow
+    -Wnull-dereference
+    -Wundef
+    -Wpointer-arith
   )
 
   message(STATUS "Emscripten build: Warning flags applied (no ELF hardening).")
