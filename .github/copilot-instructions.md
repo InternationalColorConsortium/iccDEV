@@ -42,7 +42,7 @@ RefIccMAX (iccDEV)  --  ICC color profile libraries and tools.
 - Error handling via return values  --  **no exceptions**
 - Match existing patterns; consistency over perfection
 - All new files must include the ICC copyright + BSD 3-Clause header
-- Aim for zero compiler warnings across all platforms
+- Aim for zero compiler warnings across all platforms (CI floor: GCC 15 / Clang 14 — see `docs/build.md`)
 
 ## Project Structure
 

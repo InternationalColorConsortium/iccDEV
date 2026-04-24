@@ -19,7 +19,7 @@ demonstrates JSON round-tripping via `CIccProfileJson::ToJson()`.
 
 | Requirement | Minimum Version |
 |-------------|-----------------|
-| C++ compiler | C++17 support  |
+| C++ compiler | C++17 support: GCC 11+, Clang 10+, or MSVC 19.30+ (recommended: GCC 15 / Clang 14 / MSVC 19.40 to match upstream CI) |
 
 ## Windows vcpkg
 

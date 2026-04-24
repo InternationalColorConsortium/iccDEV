@@ -11,7 +11,8 @@ The workflow was validated across 14 regressions fixed in PR #768 (April 2026).
 
 ## Prerequisites
 
-- clang-18 / clang++-18
+- clang-18 / clang++-18 (recommended; matches iccDEV Tool Tests CI)
+  - Alternative: GCC 15+ (matches ci-docker), or any compiler at GCC 11+ / Clang 10+ for the build
 - cmake 3.21+
 - libxml2-dev, libtiff-dev, libjpeg-dev, libpng-dev
 - ASAN + UBSAN runtime (`libclang-rt-18-dev`)

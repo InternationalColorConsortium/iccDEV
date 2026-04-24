@@ -91,9 +91,15 @@ causing text-mode EOF (`0x1A`) in ICC binary data to truncate reads.
 
 ## Build
 
+Compiler floor: GCC 11 / Clang 10 / MSVC 19.30 minimum; GCC 15 / Clang 14 / MSVC 19.40
+recommended (matches CI and unlocks the strict warning tier).
+
 ```bash
-# Standard
+# Standard (Clang)
 cd Build && cmake Cmake -DCMAKE_CXX_COMPILER=clang++ && make -j$(nproc)
+
+# Standard (GCC 15, matches ci-docker ubuntu:26.04)
+cd Build && cmake Cmake -DCMAKE_C_COMPILER=gcc-15 -DCMAKE_CXX_COMPILER=g++-15 && make -j$(nproc)
 
 # Full sanitizer coverage (recommended for bug hunting)
 cd Build && rm -rf CMakeCache.txt CMakeFiles/

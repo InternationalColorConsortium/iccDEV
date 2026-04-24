@@ -111,7 +111,7 @@ It's an older codebase, it isn't perfect, but let's at least **try** to keep thi
 | **Use of `std` namespace** | Minimize pollution.   | 
 | **Commenting style**       | There is no consistent style. Try to match nearby code.   | 
 | **Const correctness**      | Make inputs const when possible, class functions const when appropriate, and variables const as needed. |
-| **Compiler Warnings** | Should be zero (or as close as we can get across all platforms). |
+| **Compiler Warnings** | Should be zero on the strict tier (GCC 15+ / Clang 14+). PRs must build clean against ci-docker (GCC 15) and the iccDEV Tool Tests workflow (clang-18). |
 | **Static Analysis Warnings** | Should be zero (or as close as we can get across all platforms). |
 | **Templates / Generics**   | Currently minimal.  Make sure new templates are readable. | 
 | **Exceptions**             | Most of the code uses manual return values for error handling. |
@@ -119,6 +119,35 @@ It's an older codebase, it isn't perfect, but let's at least **try** to keep thi
 
 
 ## Development and Pull Requests
+
+## Build Requirements
+
+| Compiler | Minimum (build succeeds) | Recommended (full diagnostics) |
+|----------|--------------------------|--------------------------------|
+| GCC      | 11 | **15** |
+| Clang    | 10 | **14** |
+| MSVC     | VS 2022 17.0 | VS 2022 17.10 |
+
+The build's strict warning tier (`-Werror=uninitialized`, `-Wshadow`,
+`-Wnull-dereference`, `-Wundef`, `-Wpointer-arith`, GCC `-Wlogical-op`)
+auto-enables only on GCC 15+ / Clang 14+. CI exercises both:
+
+| Workflow | Compiler |
+|----------|----------|
+| `iccDEV Tool Tests` (ASAN+UBSAN) | clang-18 |
+| `ci-docker` (ubuntu variant)      | GCC 15 (ubuntu:26.04) |
+| `ci-docker-nixos`                 | NixOS clang |
+| `ci-docker-latest`                | GCC 15 (ubuntu:26.04) |
+
+Reproduce GCC 15 locally before pushing:
+
+```bash
+docker build -f Dockerfile -t iccdev-ubuntu-test:latest .
+```
+
+Older toolchains (e.g., Ubuntu 22.04 GCC 11, Ubuntu 24.04 GCC 13) still
+build cleanly but skip the strict tier; CMake prints the detected mode at
+configure time.
 
 Contributions should be submitted as Github pull requests. See
 [Creating a pull request](https://help.github.com/articles/creating-a-pull-request/)

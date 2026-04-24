@@ -10,6 +10,9 @@ Primary build file: `Build/Cmake/CMakeLists.txt`
 - **Project**: RefIccMAX v2.3.1.7
 - **Minimum CMake**: 3.21
 - **C++ Standard**: C++17 (required)
+- **Compiler floor**: GCC 11+, Clang 10+, MSVC 19.30+ (build succeeds)
+- **Recommended compilers**: GCC 15+, Clang 14+, MSVC 19.40+ (full strict-warning tier; matches CI)
+- **Strict warnings**: `-Werror=uninitialized -Wshadow -Wnull-dereference -Wundef -Wpointer-arith` (+ GCC `-Wlogical-op`) auto-enable on the recommended compilers; CMake prints the active tier per platform
 - **Dependencies**: libpng, libjpeg-turbo, libtiff, libxml2, wxwidgets, nlohmann-json
 
 ## Platform-Specific Notes
