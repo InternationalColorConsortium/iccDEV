@@ -7,7 +7,7 @@ applyTo: "Build/**"
 ## CMake Structure
 
 Primary build file: `Build/Cmake/CMakeLists.txt`
-- **Project**: RefIccMAX v2.3.1.7
+- **Project**: RefIccMAX v2.3.1.8
 - **Minimum CMake**: 3.21
 - **C++ Standard**: C++17 (required)
 - **Compiler floor**: GCC 11+, Clang 10+, MSVC 19.30+ (build succeeds)
