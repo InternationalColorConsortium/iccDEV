@@ -6745,10 +6745,10 @@ CIccXformNamedColor::CIccXformNamedColor(CIccTag *pTag, icColorSpaceSignature cs
 {
   m_nApplyInterface = icApplyPixel2Pixel; // was uninitialized
   m_pTag = NULL;
+  m_pArray = NULL;
   if (pTag) {
     if (pTag->GetType()==icSigNamedColor2Type) {
       m_pTag = (CIccTagNamedColor2*)pTag;
-      m_pArray = NULL;
 
       m_pTag->SetColorSpaces(csPcs, csDevice);
     }
@@ -6757,7 +6757,6 @@ CIccXformNamedColor::CIccXformNamedColor(CIccTag *pTag, icColorSpaceSignature cs
       CIccArrayNamedColor *pNamed = (CIccArrayNamedColor*)pArray->GetArrayHandler();
 
       if (pNamed) {
-        m_pTag = NULL;
         m_pArray = pNamed;
         pNamed->SetColorSpaces(csPcs, csDevice, csSpectralPcs, pSpectralRange, pBiSpectralRange);
       }
@@ -6766,7 +6765,6 @@ CIccXformNamedColor::CIccXformNamedColor(CIccTag *pTag, icColorSpaceSignature cs
 
   m_nSrcSpace = icSigUnknownData;
   m_nDestSpace = icSigUnknownData;
-  m_pArray = NULL;
 }
 
 
