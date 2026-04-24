@@ -1890,9 +1890,9 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
   xmlNode* pSubNode = icXmlFindNode(pNode->children, "LuminanceCurve");
 
   if (pSubNode) {
-    xmlNode* pNode;
-    for (pNode = pSubNode->children; pNode && pNode->type != XML_ELEMENT_NODE; pNode = pNode->next);
-    m_pLumCurve = ParseXmlCurve(pNode, parseStr);
+    xmlNode* pCurveNode;
+    for (pCurveNode = pSubNode->children; pCurveNode && pCurveNode->type != XML_ELEMENT_NODE; pCurveNode = pCurveNode->next);
+    m_pLumCurve = ParseXmlCurve(pCurveNode, parseStr);
     if (!m_pLumCurve) {
       parseStr += "Unable to parse Luminance Curve\n";
       return false;
@@ -1906,18 +1906,18 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
   pSubNode = icXmlFindNode(pNode->children, "ToneMapFunctions");
 
   if (pSubNode) {
-    xmlNode* pNode;
+    xmlNode* pTfNode;
     int nIndex = 0;
-    for (pNode = pSubNode->children, nIndex = 0;
-      pNode;
-      pNode = pNode->next) {
-      if (pNode->type == XML_ELEMENT_NODE) {
+    for (pTfNode = pSubNode->children, nIndex = 0;
+      pTfNode;
+      pTfNode = pTfNode->next) {
+      if (pTfNode->type == XML_ELEMENT_NODE) {
         if (nIndex >= nOutputChannels) {
           parseStr += "Too many ToneFunctions";
           return false;
         }
-        else if (!strcmp((const char*)pNode->name, "DuplicateFunction")) {
-          const char* attr = icXmlAttrValue(pNode, "Index", NULL);
+        else if (!strcmp((const char*)pTfNode->name, "DuplicateFunction")) {
+          const char* attr = icXmlAttrValue(pTfNode, "Index", NULL);
 
           if (attr) {
             int nCopyIndex = atoi(attr);
@@ -1935,10 +1935,10 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
             return false;
           }
         }
-        else if (!strcmp((const char*)pNode->name, "ToneMapFunction")) {
+        else if (!strcmp((const char*)pTfNode->name, "ToneMapFunction")) {
           CIccXmlToneMapFunc* pFunc = new CIccXmlToneMapFunc();
 
-          if (!pFunc->ParseXml(pNode, parseStr)) {
+          if (!pFunc->ParseXml(pTfNode, parseStr)) {
             delete pFunc;
             return false;
           }
@@ -1947,7 +1947,7 @@ bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
           nIndex++;
         }
         else {
-          parseStr += std::string("Unknown Tone Map Function '") + (const char*)pNode->name + "'\n";
+          parseStr += std::string("Unknown Tone Map Function '") + (const char*)pTfNode->name + "'\n";
           return false;
         }
       }

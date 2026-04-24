@@ -712,7 +712,6 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
         }
       }
       else {
-        char str[100];
         parseStr += "Invalid tag extension for \"";
         parseStr += (const char*)pTypeNode->name;
         parseStr += "\" (";

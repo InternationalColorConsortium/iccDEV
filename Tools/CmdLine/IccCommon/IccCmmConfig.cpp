@@ -2068,35 +2068,35 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   for (auto e = m_data.begin(); e != m_data.end(); e++) {
     std::string line;
 
-    CIccCfgDataEntry* pEntry = e->get();
-    if (!pEntry)
-      pEntry = &blank;
+    CIccCfgDataEntry* pCurEntry = e->get();
+    if (!pCurEntry)
+      pCurEntry = &blank;
 
     if (bShowIndex) {
-      snprintf(buf, bufSize, "%d", pEntry->m_index);
+      snprintf(buf, bufSize, "%d", pCurEntry->m_index);
       line += buf;
     }
 
     if (bShowLabel) {
       if (line.size()) line += "\t";
-      if (!pEntry->m_label.size())
+      if (!pCurEntry->m_label.size())
         line += "\"\"";
       else
-        line += pEntry->m_label;
+        line += pCurEntry->m_label;
     }
 
     if (bShowName) {
       if (line.size()) line += "\t";
-      if (!pEntry->m_name.size())
+      if (!pCurEntry->m_name.size())
         line += "\"\"";
       else
-        line += pEntry->m_name;
+        line += pCurEntry->m_name;
     }
 
     if (bShowValues) {
       if (line.size()) line += "\t";
       for (size_t i = 0; i < (size_t)nDstSamples; i++) {
-        icFloatNumber v = (i >= pEntry->m_values.size()) ? 0 : pEntry->m_values[i];
+        icFloatNumber v = (i >= pCurEntry->m_values.size()) ? 0 : pCurEntry->m_values[i];
         snprintf(buf, bufSize, fmt, v);
         if (i)
           line += "\t";
@@ -2106,16 +2106,16 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
 
     if (bShowSrcName) {
       if (line.size()) line += "\t";
-      if (!pEntry->m_srcName.size())
+      if (!pCurEntry->m_srcName.size())
         line += "\"\"";
       else
-        line += pEntry->m_srcName;
+        line += pCurEntry->m_srcName;
     }
 
     if (bShowSrcValues) {
       if (line.size()) line += "\t";
       for (size_t i = 0; i < (size_t)nSrcSamples; i++) {
-        icFloatNumber v = (i >= pEntry->m_srcValues.size()) ? 0 : pEntry->m_srcValues[i];
+        icFloatNumber v = (i >= pCurEntry->m_srcValues.size()) ? 0 : pCurEntry->m_srcValues[i];
         snprintf(buf, bufSize, fmt, v);
         if (i)
           line += "\t";

@@ -4756,7 +4756,7 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
       icTagTypeSignature sigType = icGetTypeNameTagSig((const icChar*)pTypeNode->name);
 
       if (sigType == icSigUnknownType) {
-        xmlAttr *attr = icXmlFindAttr(pTypeNode, "type");
+        attr = icXmlFindAttr(pTypeNode, "type");
         sigType = (icTagTypeSignature)icGetSigVal((icChar*)icXmlAttrValue(attr));
       }
 
@@ -4810,7 +4810,7 @@ bool CIccTagXmlStruct::ParseTag(xmlNode *pNode, std::string &parseStr)
     icTagTypeSignature sigType = icGetTypeNameTagSig(nodeName.c_str());
 
     if (sigType == icSigUnknownType) {
-      xmlAttr *attr = icXmlFindAttr(pNode, "type");
+      attr = icXmlFindAttr(pNode, "type");
       sigType = (icTagTypeSignature)icGetSigVal((icChar*)icXmlAttrValue(attr));
     }
 
@@ -5056,7 +5056,7 @@ bool CIccTagXmlArray::ParseXml(xmlNode *pNode, std::string &parseStr)
       icTagTypeSignature sigType = icGetTypeNameTagSig ((icChar*) tagNode->name);
 
       if (sigType==icSigUnknownType){
-        xmlAttr *attr = icXmlFindAttr(pNode, "type");
+        attr = icXmlFindAttr(pNode, "type");
         sigType = (icTagTypeSignature)icGetSigVal((icChar*) icXmlAttrValue(attr));
       }
 
