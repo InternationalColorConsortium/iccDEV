@@ -2561,7 +2561,7 @@ bool CIccTagXmlResponseCurveSet16::ParseXml(xmlNode *pNode, std::string & /*pars
         if (pChild->type == XML_ELEMENT_NODE && !icXmlStrCmp(pChild->name, "ChannelResponses")) {
           CIccResponse16List *pResponseList = curves.GetResponseList(i);
           icXYZNumber *pXYZ = curves.GetXYZ(i);
-          icResponse16Number response;
+          icResponse16Number response{};  // zero-init (.reserved is conditionally set; ICC spec requires it be 0)
 
           const icChar *szX = icXmlAttrValue(pChild, "X");
           const icChar *szY = icXmlAttrValue(pChild, "Y");
