@@ -32,7 +32,7 @@ iccApplyNamedCmm Calc/srgbCalcTest.txt 2 0 Calc/srgbCalc++Test.icc 3 sRGB_v4_ICC
 
 echo "==========================================================================="
 echo "Test NamedColor"
-iccApplyNamedCmm Named/NamedColorTest.txt 2 0 Named/NamedColor.icc 3 sRGB_v4_ICC_preference.icc 1
+iccApplyNamedCmm Named/NamedColorTest.txt 2 0 Named/NamedColor.icc 3 -pcc PCC/Lab_float-D50_2deg.icc sRGB_v4_ICC_preference.icc 1
 
 echo "==========================================================================="
 echo "Test NamedColor with D93 2degree"
@@ -96,7 +96,7 @@ iccApplyNamedCmm SpecRef/sixChanTest.txt 2 0 SpecRef/SixChanCameraRef.icc 3 PCC/
 
 echo "==========================================================================="
 echo "Test Six Channel Reflectance Camera to Lab"
-iccApplyNamedCmm SpecRef/sixChanTest.txt 3 0 SpecRef/SixChanCameraRef.icc 3 PCC/Lab_float-D50_2deg.icc 3
+iccApplyNamedCmm SpecRef/sixChanTest.txt 3 0 SpecRef/SixChanCameraRef.icc 3 -pcc PCC/Spec400_10_700-D50_2deg-Abs.icc PCC/Lab_float-D50_2deg.icc 3
 
 echo "==========================================================================="
 echo "Test Six Channel Reflectance Camera reflectance under D93 to Lab"
