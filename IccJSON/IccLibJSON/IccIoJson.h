@@ -77,6 +77,7 @@ namespace iccDEV {
 class IIccJsonOpenFileIO
 {
 public:
+  virtual ~IIccJsonOpenFileIO() {}
   virtual CIccIO *OpenFile(const icChar *szFilename, const char *szAttr) = 0;
 };
 

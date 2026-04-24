@@ -128,6 +128,7 @@ typedef CIccApplyMpeList::iterator CIccApplyMpeIter;
 class IIccExtensionMpe
 {
 public:
+  virtual ~IIccExtensionMpe() {}
   virtual const char *GetExtClassName()=0;
 };
 
