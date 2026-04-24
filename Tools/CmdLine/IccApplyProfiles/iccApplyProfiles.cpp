@@ -594,8 +594,8 @@ int main(int argc, const char** argv)
             unsigned char *pDPixel = dptr;
             icFloatNumber *pPixel = DestPixel;
             pDPixel[0]=(icUInt8Number)(UnitClip(pPixel[0]) * 255.0f + 0.5f);
-            pDPixel[1]=(icUInt8Number)(UnitClip(pPixel[1]) * 255.0f + 0.5f)+128;
-            pDPixel[2]=(icUInt8Number)(UnitClip(pPixel[2]) * 255.0f + 0.5f)+128;
+            pDPixel[1]=(icUInt8Number)(((icUInt8Number)(UnitClip(pPixel[1]) * 255.0f + 0.5f) + 128) & 0xFF);
+            pDPixel[2]=(icUInt8Number)(((icUInt8Number)(UnitClip(pPixel[2]) * 255.0f + 0.5f) + 128) & 0xFF);
           }
           else {
             icUInt8Number *pDPixel = dptr;
@@ -611,8 +611,8 @@ int main(int argc, const char** argv)
             unsigned short *pDPixel = (unsigned short*)dptr;
             icFloatNumber *pPixel = DestPixel;
             pDPixel[0]=(icUInt16Number)(UnitClip(pPixel[0]) * 65535.0f + 0.5f);
-            pDPixel[1]=(icUInt16Number)(UnitClip(pPixel[1]) * 65535.0f + 0.5f)+0x8000;
-            pDPixel[2]=(icUInt16Number)(UnitClip(pPixel[2]) * 65535.0f + 0.5f)+0x8000;
+            pDPixel[1]=(icUInt16Number)(((icUInt16Number)(UnitClip(pPixel[1]) * 65535.0f + 0.5f) + 0x8000) & 0xFFFF);
+            pDPixel[2]=(icUInt16Number)(((icUInt16Number)(UnitClip(pPixel[2]) * 65535.0f + 0.5f) + 0x8000) & 0xFFFF);
           }
           else {
             icUInt16Number *pDPixel = (icUInt16Number*)dptr;

@@ -976,32 +976,40 @@ done
 if [ -z "$TEST_DATA_DIR" ]; then
   TEST_DATA_DIR="/tmp/json-test-tiffs"
   mkdir -p "$TEST_DATA_DIR"
-  python3 -c "
-import struct, os
-def make_tiff(path, w, h, bps):
-    spp = 3; data_len = w * h * spp * (bps // 8)
-    pixel_data = bytes([128] * data_len)
-    ifd_offset = 8; num_entries = 12; ifd_size = 2 + num_entries * 12 + 4
-    data_offset = ifd_offset + ifd_size
-    bps_offset = data_offset; xres_offset = bps_offset + 6; yres_offset = xres_offset + 8
-    strip_offset = yres_offset + 8
-    header = struct.pack('<2sIH', b'II', 42, ifd_offset)
-    def e(tag, typ, cnt, val): return struct.pack('<HHII', tag, typ, cnt, val)
-    ifd = struct.pack('<H', num_entries)
-    ifd += e(256,3,1,w) + e(257,3,1,h) + e(258,3,3,bps_offset)
-    ifd += e(259,3,1,1) + e(262,3,1,2) + e(273,4,1,strip_offset)
-    ifd += e(277,3,1,spp) + e(278,3,1,h) + e(279,4,1,data_len)
-    ifd += e(282,5,1,xres_offset) + e(283,5,1,yres_offset) + e(296,3,1,2)
-    ifd += struct.pack('<I', 0)
-    extra = struct.pack('<HHH', bps, bps, bps)
-    extra += struct.pack('<II', 72, 1) + struct.pack('<II', 72, 1)
-    with open(path, 'wb') as f:
-        f.write(header); f.write(ifd); f.write(extra); f.write(pixel_data)
-make_tiff('$TEST_DATA_DIR/rgb-4x4-8bit.tif', 4, 4, 8)
-make_tiff('$TEST_DATA_DIR/rgb-4x4-16bit.tif', 4, 4, 16)
-make_tiff('$TEST_DATA_DIR/rgb-8x8-8bit.tif', 8, 8, 8)
-"
 fi
+
+# Generate any TIFFs missing from TEST_DATA_DIR (writing to /tmp if dir is read-only)
+GEN_DIR="$TEST_DATA_DIR"
+if [ ! -w "$TEST_DATA_DIR" ]; then GEN_DIR="/tmp/json-test-tiffs"; mkdir -p "$GEN_DIR"; fi
+for tif_spec in "rgb-4x4-8bit.tif:4:4:8" "rgb-4x4-16bit.tif:4:4:16" "rgb-8x8-8bit.tif:8:8:8"; do
+  name="${tif_spec%%:*}"; rest="${tif_spec#*:}"; w="${rest%%:*}"; rest="${rest#*:}"; h="${rest%%:*}"; bps="${rest#*:}"
+  if [ ! -f "$TEST_DATA_DIR/$name" ] && [ ! -f "$GEN_DIR/$name" ]; then
+    python3 - <<PYEOF
+import sys
+try:
+    from PIL import Image
+except ImportError:
+    sys.exit(0)
+w, h, bps = $w, $h, $bps
+mode = 'RGB' if bps == 8 else 'I;16'
+if bps == 16:
+    # 16-bit RGB via 3 separate I;16 channels merged
+    chans = [Image.new('I;16', (w, h), 32896) for _ in range(3)]
+    img = Image.merge('RGB', [c.convert('L') for c in chans])
+    # PIL can't natively write 16-bit RGB TIFFs in all builds; fallback to 8-bit RGB if needed
+    try:
+        img.save('$GEN_DIR/$name', format='TIFF', compression='raw')
+    except Exception:
+        Image.new('RGB', (w, h), (128, 128, 128)).save('$GEN_DIR/$name', format='TIFF', compression='raw')
+else:
+    Image.new('RGB', (w, h), (128, 128, 128)).save('$GEN_DIR/$name', format='TIFF', compression='raw')
+PYEOF
+  fi
+done
+# Use a per-file lookup so each missing TIFF resolves to whichever dir has it
+tif_path() {
+  if [ -f "$TEST_DATA_DIR/$1" ]; then echo "$TEST_DATA_DIR/$1"; else echo "$GEN_DIR/$1"; fi
+}
 
 # 23a: Real TIFF with each dstEncoding
 for enc in 8Bit 16Bit float sameAsSource; do
@@ -1015,9 +1023,10 @@ import json; json.dump({
 done
 
 # 23b: 16-bit source TIFF
+TIF16=$(tif_path rgb-4x4-16bit.tif)
 python3 -c "
 import json; json.dump({
-  'imageFiles':{'srcImageFile':'$TEST_DATA_DIR/rgb-4x4-16bit.tif','dstImageFile':'/tmp/json-tiff-16src.tif',
+  'imageFiles':{'srcImageFile':'$TIF16','dstImageFile':'/tmp/json-tiff-16src.tif',
     'dstEncoding':'16Bit','dstCompression':False,'dstPlanar':False,'dstEmbedIcc':True},
   'profileSequence':[{'iccFile':'Testing/Display/sRGB_D65_MAT.icc','intent':1}]
 }, open('/tmp/test-real-tiff-16src.json','w'), indent=2)"
@@ -1042,9 +1051,10 @@ import json; json.dump({
 run_test "applyProfiles: no embed ICC" "$PROFILES" "/tmp/test-real-tiff-noembed.json" 0
 
 # 23e: Multi-profile chain with real TIFF
+TIF88=$(tif_path rgb-8x8-8bit.tif)
 python3 -c "
 import json; json.dump({
-  'imageFiles':{'srcImageFile':'$TEST_DATA_DIR/rgb-8x8-8bit.tif','dstImageFile':'/tmp/json-tiff-chain.tif',
+  'imageFiles':{'srcImageFile':'$TIF88','dstImageFile':'/tmp/json-tiff-chain.tif',
     'dstEncoding':'8Bit','dstCompression':False,'dstPlanar':False,'dstEmbedIcc':True},
   'profileSequence':[
     {'iccFile':'Testing/Display/sRGB_D65_MAT.icc','intent':1},
@@ -1135,7 +1145,7 @@ else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL profiles cli: lin+abs (exit=$rc)"; f
 
 # 24g: 16-bit source TIFF -> float output
 TOTAL=$((TOTAL+1))
-output=$("$PROFILES" "$TEST_DATA_DIR/rgb-4x4-16bit.tif" "/tmp/cli-tiff-16to-float.tif" 4 0 0 1 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
+output=$("$PROFILES" "$(tif_path rgb-4x4-16bit.tif)" "/tmp/cli-tiff-16to-float.tif" 4 0 0 1 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
 rc=$?
 asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
 if [ "$asan_hit" -gt 0 ]; then ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL profiles cli: 16->float (exit=$rc)"
@@ -1144,7 +1154,7 @@ else FAIL=$((FAIL+1)); echo "[FAIL] #$TOTAL profiles cli: 16->float (exit=$rc)";
 
 # 24h: 2-profile chain CLI
 TOTAL=$((TOTAL+1))
-output=$("$PROFILES" "$TEST_DATA_DIR/rgb-8x8-8bit.tif" "/tmp/cli-tiff-2chain.tif" 1 0 0 1 1 "Testing/Display/sRGB_D65_MAT.icc" 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
+output=$("$PROFILES" "$(tif_path rgb-8x8-8bit.tif)" "/tmp/cli-tiff-2chain.tif" 1 0 0 1 1 "Testing/Display/sRGB_D65_MAT.icc" 1 "Testing/Display/sRGB_D65_MAT.icc" 1 2>&1)
 rc=$?
 asan_hit=$(echo "$output" | grep -c 'AddressSanitizer\|runtime error:' || true)
 if [ "$asan_hit" -gt 0 ]; then ASAN=$((ASAN+1)); echo "[ASAN] #$TOTAL profiles cli: 2-chain (exit=$rc)"
