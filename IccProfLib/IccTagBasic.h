@@ -85,6 +85,7 @@ class CIccSparseMatrix;
 class IIccExtensionTag
 {
 public:
+  virtual ~IIccExtensionTag() {}
   virtual const char *GetExtClassName() const =0;
   virtual const char *GetExtDerivedClassName() const =0;
 };

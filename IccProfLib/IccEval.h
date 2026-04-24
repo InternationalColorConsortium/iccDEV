@@ -76,6 +76,7 @@ namespace iccDEV {
 
 class CIccEvalCompare {
 public:
+  virtual ~CIccEvalCompare() {}
   //Create prototype for Compare function that must be implemented by a derived class
   virtual void Compare(icFloatNumber *pPixel, icFloatNumber *deviceLab, icFloatNumber *destLab1, icFloatNumber *destLab2)=0;
 

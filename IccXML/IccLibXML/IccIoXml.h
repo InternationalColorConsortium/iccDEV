@@ -85,6 +85,7 @@ namespace iccDEV {
 class IIccOpenFileIO
 {
 public:
+  virtual ~IIccOpenFileIO() {}
   virtual CIccIO* OpenFile(const icChar *szFilename, const char *szAttr) = 0;
 };
 

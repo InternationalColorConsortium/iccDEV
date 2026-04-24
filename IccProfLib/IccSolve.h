@@ -81,6 +81,8 @@ Copyright:  (c) see Software License
 class IIccMatrixSolver
 {
 public:
+  virtual ~IIccMatrixSolver() {}
+
   /**
   ****************************************************************************
   * Member Function: Solve
@@ -144,6 +146,8 @@ ICCPROFLIB_API IIccMatrixSolver *IccGetDefaultMatrixSolver();
 class IIccMatrixInverter
 {
 public:
+  virtual ~IIccMatrixInverter() {}
+
   /**
   ****************************************************************************
   * Member Function: Invert

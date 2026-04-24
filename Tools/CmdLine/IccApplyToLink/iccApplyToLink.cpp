@@ -819,16 +819,16 @@ int main(int argc, icChar* argv[])
 
   //init idx;
   int lutCount = 1;
-  for (auto i = 0; i < nSrcSamples; i++) {
-    idx[i] = 0;
+  for (auto si = 0; si < nSrcSamples; si++) {
+    idx[si] = 0;
     lutCount *= nLutSize;
   }
 
   int j = 0;
   for (int c = 0; j >= 0; c++) {
 
-    for (auto i = 0; i < nSrcSamples; i++) {
-      srcPixel[i] = sizeRange * (icFloatNumber)idx[i] / maxLut + loRange;
+    for (auto si = 0; si < nSrcSamples; si++) {
+      srcPixel[si] = sizeRange * (icFloatNumber)idx[si] / maxLut + loRange;
     }
 
     //Use CMM to convert SrcPixel to DestPixel

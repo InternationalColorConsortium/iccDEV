@@ -557,8 +557,8 @@ int main(int argc, const char* argv[])
       }      
     }
     else {
-      for (icUInt32Number i = 0; i < nSrcSamples && i < pData->m_values.size(); i++) {
-        Pixel[i] = pData->m_values[i];
+      for (icUInt32Number si = 0; si < nSrcSamples && si < pData->m_values.size(); si++) {
+        Pixel[si] = pData->m_values[si];
       }
 
       out->m_srcValues = pData->m_values;
