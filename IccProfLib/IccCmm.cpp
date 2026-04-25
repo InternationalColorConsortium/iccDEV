@@ -4783,7 +4783,7 @@ CIccPcsStepSrcMatrix::CIccPcsStepSrcMatrix(icUInt16Number nRows, icUInt16Number 
 CIccPcsStepSrcMatrix::~CIccPcsStepSrcMatrix()
 {
   if (m_vals)
-    delete m_vals;
+    delete[] m_vals;
 }
 
 
