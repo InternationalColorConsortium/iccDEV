@@ -1884,6 +1884,12 @@ public:
 
   virtual ~CIccMruCache();
 
+  // Rule of Three: m_cache and m_pixelData are owning raw pointers freed in
+  // the destructor. Disable copy/assignment to prevent silent double-free
+  // (CWE-415, CWE-762). See codeql rule-of-three-violation.ql.
+  CIccMruCache(const CIccMruCache &) = delete;
+  CIccMruCache &operator=(const CIccMruCache &) = delete;
+
   virtual bool Apply(T *DstPixel, const T *SrcPixel);
   virtual void Update(T *DstPixel);
 

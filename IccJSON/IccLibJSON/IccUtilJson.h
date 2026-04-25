@@ -154,6 +154,12 @@ public:
   CIccJsonArrayType();
   ~CIccJsonArrayType();
 
+  // Rule of Three: m_pBuf is an owning raw pointer freed in the destructor.
+  // Disable copy/assignment to prevent silent double-free (CWE-415, CWE-762).
+  // See codeql rule-of-three-violation.ql.
+  CIccJsonArrayType(const CIccJsonArrayType &) = delete;
+  CIccJsonArrayType &operator=(const CIccJsonArrayType &) = delete;
+
   static bool DumpArray(IccJson &j, const T *buf, icUInt32Number nBufSize,
                         icConvertType nType);
   static bool ParseArray(T *buf, icUInt32Number nBufSize, const IccJson &j);

@@ -43,6 +43,14 @@ predicate hasDeletedCopy(Class c) {
     mf.isDeleted() and
     (mf instanceof CopyConstructor or mf instanceof CopyAssignmentOperator)
   )
+  or
+  // Template instantiations inherit deleted copy ops from the primary template.
+  exists(Class tmpl, MemberFunction mf |
+    tmpl = c.(ClassTemplateInstantiation).getTemplate() and
+    mf.getDeclaringType() = tmpl and
+    mf.isDeleted() and
+    (mf instanceof CopyConstructor or mf instanceof CopyAssignmentOperator)
+  )
 }
 
 from Class c, Destructor d, Field f
