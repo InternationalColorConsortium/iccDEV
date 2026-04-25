@@ -1305,8 +1305,17 @@ bool CIccMpeJsonCalculator::ValidateMacroCalls(std::string &parseStr) const
 
 bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
                                      const char *szFunc, std::string &parseStr,
-                                     icUInt32Number nLocalsOffset)
+                                     icUInt32Number nLocalsOffset,
+                                     icUInt32Number nDepth)
 {
+  // CWE-674: hard cap on macro-call recursion depth (defense in depth;
+  // ValidateMacroCalls catches direct cycles, this catches deep non-cyclic
+  // chains and any path that bypasses validation).
+  if (nDepth >= kMaxFlattenDepth) {
+    parseStr += "Macro recursion depth limit exceeded in '" + macroName + "'\n";
+    return false;
+  }
+
   CIccFuncTokenizer parse(szFunc, true);
 
   while (parse.GetNext()) {
@@ -1334,7 +1343,7 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
       if (locals != m_macroLocalMap.end())
         nLocalsSize = locals->second.m_size;
 
-      if (!Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset + nLocalsSize))
+      if (!Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset + nLocalsSize, nDepth + 1))
         return false;
     }
 

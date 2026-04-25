@@ -2072,6 +2072,11 @@ bool CIccCLUT::Write(CIccIO *pIO)
  */
 void CIccCLUT::Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy )
 {
+  // CWE-674: ICC spec caps LUT input channels at 16 (icMaxChannels).
+  // Bound recursion depth defensively even though m_nInput is icUInt8Number.
+  static const icUInt8Number kMaxIterateDepth = 16;
+  if (nIndex >= kMaxIterateDepth)
+    return;
   if (nIndex < m_nInput) {
     int i;
     for (i=0; i<m_GridPoints[nIndex]; i++) {

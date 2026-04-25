@@ -2784,8 +2784,14 @@ bool CIccMpeXmlCalculator::ValidateMacroCalls(std::string &parseStr) const
   return true;
 }
 
-bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, const char *szFunc, std::string &parseStr, icUInt32Number nLocalsOffset)
+bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, const char *szFunc, std::string &parseStr, icUInt32Number nLocalsOffset, icUInt32Number nDepth)
 {
+  // CWE-674: hard cap on macro-call recursion depth (defense in depth).
+  if (nDepth >= kMaxFlattenDepth) {
+    parseStr += "Macro recursion depth limit exceeded in '" + macroName + "'\n";
+    return false;
+  }
+
   CIccFuncTokenizer parse(szFunc, true);
 
   while (parse.GetNext()) {
@@ -2822,7 +2828,7 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
         
         int i;
         for (i = 0; i < iter; i++) {
-          Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset+nLocalsSize);
+          Flatten(flatStr, name, m->second.c_str(), parseStr, nLocalsOffset+nLocalsSize, nDepth + 1);
         }
       }
       else {

@@ -316,8 +316,14 @@ protected:
   static bool validName(const char *szName);
   bool ValidMacroCalls(const char *szMacroText, std::string macroStack, std::string &parseStr) const;
   bool ValidateMacroCalls(std::string &parseStr) const;
+  // CWE-674: nDepth caps macro-call recursion as a defense-in-depth net.
+  // ValidateMacroCalls catches direct cycles via macroStack; nDepth bounds
+  // attacker-crafted long non-cyclic chains and any bypass of validation.
+  // See codeql recursive-parse-no-depth-limit.ql.
+  static const icUInt32Number kMaxFlattenDepth = 256;
   bool Flatten(std::string &flatStr, std::string macroName, const char *szFunc,
-               std::string &parseStr, icUInt32Number nLocalsOffset = 0);
+               std::string &parseStr, icUInt32Number nLocalsOffset = 0,
+               icUInt32Number nDepth = 0);
   bool UpdateLocals(std::string &func, std::string szFunc, std::string &parseStr, int nLocalsOffset);
   bool ParseChanMap(ChanVarMap &chanMap, const char *szNames, int nChannels);
 
