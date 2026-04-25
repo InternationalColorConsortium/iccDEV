@@ -33,18 +33,17 @@ predicate fieldAllocatedAsArray(Field f, NewArrayExpr nae) {
 }
 
 predicate fieldDeletedAsScalar(Field f, DeleteExpr del) {
-  del.getExpr().(FieldAccess).getTarget() = f and
-  not del instanceof DeleteArrayExpr
+  del.getExpr().(FieldAccess).getTarget() = f
 }
 
 from Field f, NewArrayExpr nae, DeleteExpr del
 where
   fieldAllocatedAsArray(f, nae) and
   fieldDeletedAsScalar(f, del) and
-  // Restrict to fields that are ONLY ever array-allocated (no scalar new sites)
-  not exists(NewExpr ne |
-    ne.(Assignment).getLValue().(FieldAccess).getTarget() = f and
-    not ne instanceof NewArrayExpr
+  // Exclude fields that are ALSO scalar-allocated somewhere (mixed use)
+  not exists(NewExpr ne, Assignment a |
+    a.getRValue() = ne and
+    a.getLValue().(FieldAccess).getTarget() = f
   )
 select del,
   "Field '" + f.getName() + "' is allocated with new[] (at $@) but freed with scalar delete here. Use delete[] to avoid undefined behavior.",
