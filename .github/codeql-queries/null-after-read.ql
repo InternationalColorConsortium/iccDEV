@@ -25,7 +25,63 @@ predicate canReturnNull(Function f) {
   f.getType().getUnspecifiedType() instanceof PointerType
 }
 
-/** A call whose result is immediately dereferenced (no intervening compare to 0). */
+/** A null-check on local variable lv (between fc and deref lines). */
+predicate hasNullCheck(LocalVariable lv, FunctionCall fc, Expr deref) {
+  // Explicit comparison: ptr == 0, ptr != NULL, etc.
+  exists(ComparisonOperation cmp |
+    cmp.getEnclosingFunction() = fc.getEnclosingFunction() and
+    cmp.getAnOperand().(VariableAccess).getTarget() = lv and
+    cmp.getLocation().getStartLine() >= fc.getLocation().getStartLine() and
+    cmp.getLocation().getStartLine() <= deref.getLocation().getStartLine()
+  )
+  or
+  // Logical-not style: if (!ptr) ...
+  exists(NotExpr ne |
+    ne.getEnclosingFunction() = fc.getEnclosingFunction() and
+    ne.getOperand().(VariableAccess).getTarget() = lv and
+    ne.getLocation().getStartLine() >= fc.getLocation().getStartLine() and
+    ne.getLocation().getStartLine() <= deref.getLocation().getStartLine()
+  )
+  or
+  // Truth test: if (ptr), while (ptr), ptr && x, ptr || x, ptr ? a : b.
+  // The variable access (or its immediate ImplicitCastExpr-to-bool wrapper)
+  // must be the entire condition / operand -- NOT a sub-expression of
+  // something like `if (ptr->method())` which is a USE, not a check.
+  exists(VariableAccess va, Expr cond |
+    va.getTarget() = lv and
+    va.getEnclosingFunction() = fc.getEnclosingFunction() and
+    va.getLocation().getStartLine() >= fc.getLocation().getStartLine() and
+    va.getLocation().getStartLine() <= deref.getLocation().getStartLine() and
+    (cond = va or cond.(Conversion).getExpr() = va) and
+    (
+      exists(IfStmt is | is.getCondition() = cond) or
+      exists(WhileStmt ws | ws.getCondition() = cond) or
+      exists(ForStmt fs | fs.getCondition() = cond) or
+      exists(ConditionalExpr ce | ce.getCondition() = cond) or
+      exists(LogicalAndExpr la | la.getAnOperand() = cond) or
+      exists(LogicalOrExpr lo | lo.getAnOperand() = cond)
+    )
+  )
+  or
+  // Guard call: assert(ptr), abort_if_null(ptr), etc.
+  exists(FunctionCall guard |
+    guard.getEnclosingFunction() = fc.getEnclosingFunction() and
+    guard.getAnArgument().(VariableAccess).getTarget() = lv and
+    guard.getTarget().getName().regexpMatch("(?i)(assert|abort|throw|require)") and
+    guard.getLocation().getStartLine() >= fc.getLocation().getStartLine() and
+    guard.getLocation().getStartLine() <= deref.getLocation().getStartLine()
+  )
+  or
+  // Reassignment: ptr = ...; (resets the chain — handled by the next call's check)
+  exists(Assignment reasn |
+    reasn.getEnclosingFunction() = fc.getEnclosingFunction() and
+    reasn.getLValue().(VariableAccess).getTarget() = lv and
+    reasn.getLocation().getStartLine() > fc.getLocation().getStartLine() and
+    reasn.getLocation().getStartLine() < deref.getLocation().getStartLine()
+  )
+}
+
+/** A call whose result is immediately dereferenced (no intervening NULL check). */
 predicate dereferencedWithoutCheck(FunctionCall fc, Expr deref) {
   canReturnNull(fc.getTarget()) and
   exists(VariableAccess va, LocalVariable lv, Assignment asn |
@@ -39,19 +95,7 @@ predicate dereferencedWithoutCheck(FunctionCall fc, Expr deref) {
       deref.(PointerFieldAccess).getQualifier().(VariableAccess).getTarget() = lv or
       deref.(FunctionCall).getQualifier().(VariableAccess).getTarget() = lv
     ) and
-    not exists(ComparisonOperation cmp |
-      cmp.getEnclosingFunction() = fc.getEnclosingFunction() and
-      cmp.getAnOperand().(VariableAccess).getTarget() = lv and
-      cmp.getLocation().getStartLine() >= fc.getLocation().getStartLine() and
-      cmp.getLocation().getStartLine() <= deref.getLocation().getStartLine()
-    ) and
-    not exists(FunctionCall guard |
-      guard.getEnclosingFunction() = fc.getEnclosingFunction() and
-      guard.getAnArgument().(VariableAccess).getTarget() = lv and
-      guard.getTarget().getName().regexpMatch("(?i)(assert|abort|throw|require)") and
-      guard.getLocation().getStartLine() >= fc.getLocation().getStartLine() and
-      guard.getLocation().getStartLine() <= deref.getLocation().getStartLine()
-    )
+    not hasNullCheck(lv, fc, deref)
   )
 }
 

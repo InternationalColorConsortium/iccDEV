@@ -9919,6 +9919,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
 
       pApply = i->ptr;
       pApplyXform = pApply->GetXform();
+      if (!pApplyXform) return icCmmStatIncorrectApply;
       if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
         pXform = (CIccXformNamedColor*)pApplyXform;
 
@@ -9972,6 +9973,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
 
     pApply = i->ptr;
     pApplyXform = pApply->GetXform();
+    if (!pApplyXform) return icCmmStatIncorrectApply;
     if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
       pXform = (CIccXformNamedColor*)pApplyXform;
 
@@ -10013,6 +10015,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
 
     pApply = i->ptr;
     pApplyXform = pApply->GetXform();
+    if (!pApplyXform) return icCmmStatIncorrectApply;
     if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
       return icCmmStatIncorrectApply;
     }
@@ -10075,6 +10078,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
 
         pApply = i->ptr;
         pApplyXform = pApply->GetXform();
+        if (!pApplyXform) return icCmmStatIncorrectApply;
         if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
           pXform = (CIccXformNamedColor*)pApplyXform;
 
@@ -10111,6 +10115,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
 
       pApply = i->ptr;
       pApplyXform = pApply->GetXform();
+      if (!pApplyXform) return icCmmStatIncorrectApply;
       if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
         pXform = (CIccXformNamedColor*)pApplyXform;
 
@@ -10143,6 +10148,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
 
       pApply = i->ptr;
       pApplyXform = pApply->GetXform();
+      if (!pApplyXform) return icCmmStatIncorrectApply;
       if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
         return icCmmStatIncorrectApply;
       }
@@ -10198,6 +10204,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar* DstColorName, const icFloatNum
 
       pApply = i->ptr;
       pApplyXform = pApply->GetXform();
+      if (!pApplyXform) return icCmmStatIncorrectApply;
       if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
         pXform = (CIccXformNamedColor*)pApplyXform;
         switch(pXform->GetInterface()) {
@@ -10236,6 +10243,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar* DstColorName, const icFloatNum
 
     pApply = i->ptr;
     pApplyXform = pApply->GetXform();
+    if (!pApplyXform) return icCmmStatIncorrectApply;
     if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
       pXform = (CIccXformNamedColor*)pApplyXform;
       switch(pXform->GetInterface()) {
@@ -10260,6 +10268,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar* DstColorName, const icFloatNum
     i = m_Xforms->begin();
     pApply = i->ptr;
     pApplyXform = pApply->GetXform();
+    if (!pApplyXform) return icCmmStatIncorrectApply;
     if (pApplyXform->GetXformType()!=icXformTypeNamedColor) {
       return icCmmStatIncorrectApply;
     }
@@ -10307,6 +10316,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icChar 
   i=m_Xforms->begin();
   pApply = i->ptr;
   pApplyXform = pApply->GetXform();
+  if (!pApplyXform) return icCmmStatIncorrectApply;
   if (pApplyXform->GetXformType()!=icXformTypeNamedColor)
     return icCmmStatIncorrectApply;
 
@@ -10327,6 +10337,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icChar 
 
       pApply = i->ptr;
       pApplyXform = pApply->GetXform();
+      if (!pApplyXform) return icCmmStatIncorrectApply;
       if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
         CIccXformNamedColor *pXformLocal = (CIccXformNamedColor*)pApplyXform;
         switch(pXformLocal->GetInterface()) {
@@ -10359,6 +10370,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icChar 
 
     pApply = i->ptr;
     pApplyXform = pApply->GetXform();
+    if (!pApplyXform) return icCmmStatIncorrectApply;
     if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
       pXform = (CIccXformNamedColor*)pApplyXform;
       switch(pXform->GetInterface()) {
@@ -10431,6 +10443,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar *DstColorName, const icChar *Sr
 
   pApply = i->ptr;
   pApplyXform = pApply->GetXform();
+  if (!pApplyXform) return icCmmStatIncorrectApply;
   if (pApplyXform->GetXformType()!=icXformTypeNamedColor)
     return icCmmStatIncorrectApply;
 
@@ -10452,6 +10465,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar *DstColorName, const icChar *Sr
 
       pApply = i->ptr;
       pApplyXform = pApply->GetXform();
+      if (!pApplyXform) return icCmmStatIncorrectApply;
       if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
         pXform = (CIccXformNamedColor*)pApplyXform;
         switch(pXform->GetInterface()) {
@@ -10485,6 +10499,7 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar *DstColorName, const icChar *Sr
 
     pApply = i->ptr;
     pApplyXform = pApply->GetXform();
+    if (!pApplyXform) return icCmmStatIncorrectApply;
     if (pApplyXform->GetXformType()==icXformTypeNamedColor) {
       pXform = (CIccXformNamedColor*)pApplyXform;
       switch(pXform->GetInterface()) {
