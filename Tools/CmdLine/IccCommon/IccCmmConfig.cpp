@@ -1471,7 +1471,7 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
   std::vector<std::string> line;
   if (!f.findTokenLine(line, "CGATS.17"))
     return false;
-  if (!f.findTokenLine(line, "NUBER_OF_FIELDS"))
+  if (!f.findTokenLine(line, "NUMBER_OF_FIELDS"))
     return false;
   size_t nFields = 0;
   if (line.size() >= 2) {
