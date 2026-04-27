@@ -65,6 +65,7 @@
 #include "IccMpeXml.h"
 #include "IccUtilXml.h"
 #include "IccIoXml.h"
+#include "IccXmlConfig.h"
 #include "IccCAM.h"
 
 #include <cstring> /* C strings strcpy, memcpy ... */
@@ -2451,6 +2452,17 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
             std::string file = icXmlAttrValue(attr);
             xmlDoc *doc = NULL;
             xmlNode *root_element = NULL;
+
+            // Gate behind the same allow-file-includes flag and path
+            // sanitizer used by IccXmlSafeOpenFileIO so that
+            // <Import Filename="..."> cannot be used as a file-read
+            // primitive when the library is in its default-off state.
+            if (!IccXmlGetAllowFileIncludes() || !IccXmlIsPathSafe(file.c_str())) {
+              parseStr += "File includes disabled or path rejected for import '";
+              parseStr += file;
+              parseStr += "' (file includes may be disabled or path rejected as unsafe)\n";
+              return false;
+            }
 
             std::string look = "*";
             look += file;

@@ -79,7 +79,15 @@ typedef enum {
 // CLI tool flips this on after argument parsing. Exposed as accessor
 // functions (not a bare extern bool) so the DLL interface works on
 // Windows MSVC where WINDOWS_EXPORT_ALL_SYMBOLS does not export data.
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
+
 ICCPROFLIB_API void IccXmlSetAllowFileIncludes(bool allow);
 ICCPROFLIB_API bool IccXmlGetAllowFileIncludes();
+
+#ifdef USEICCDEVNAMESPACE
+} // namespace iccDEV
+#endif
 
 #endif
