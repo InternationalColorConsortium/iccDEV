@@ -106,7 +106,7 @@ jobs:
 
       - name: Attest build provenance
         if: github.event_name != 'pull_request'
-        uses: actions/attest-build-provenance@c44148e5bf178192efd8947e07a0d439a356c60b # v3.2.0
+        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275 # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
