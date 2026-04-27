@@ -878,7 +878,7 @@
         "wavelengths":  { "$ref": "#/$defs/SpectralRange" },
         "whiteData":    { "type": "array", "items": { "type": "number" }, "description": "White spectral data (one value per wavelength step)" },
         "matrixData":   { "type": "array", "items": { "type": "number" }, "description": "Flattened matrix (outputChannels × steps)" },
-        "offsetData":   { "type": "array", "items": { "type": "number" }, "description": "Matrix offset vector (one value per output channel)" }
+        "offsetData":   { "type": "array", "items": { "type": "number" }, "description": "Matrix offset vector (one value per wavelength step)" }
       }
     },
 

@@ -279,6 +279,9 @@ template <typename T>
 bool jsonToArray(const json& v, T* vals, int n)
 {
   if (v.is_array()) {
+    if (v.size() != (size_t)n)
+      return false;
+
     size_t nValid = 0;
     auto e = v.begin();
     for (int i = 0; e != v.end() && i < n; e++, i++) {
@@ -287,7 +290,7 @@ bool jsonToArray(const json& v, T* vals, int n)
         nValid++;
       }
     }
-    return nValid == v.size();
+    return nValid == (size_t)n;
   }
 
   return false;

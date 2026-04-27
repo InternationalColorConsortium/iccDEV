@@ -862,7 +862,7 @@ void CIccCfgProfileSequence::toJson(json& obj) const
 
 CIccCfgPccWeight::CIccCfgPccWeight()
 {
-
+  reset();
 }
 
 CIccCfgPccWeight::~CIccCfgPccWeight() {
@@ -871,12 +871,16 @@ CIccCfgPccWeight::~CIccCfgPccWeight() {
 
 void CIccCfgPccWeight::reset()
 {
-
+  m_pccPath.clear();
+  m_dWeight = 0.0f;
 }
 
-int CIccCfgPccWeight::fromArgs(const char** args, int nArg, bool /*bReset*/)
+int CIccCfgPccWeight::fromArgs(const char** args, int nArg, bool bReset)
 {
   int nUsed = 0;
+
+  if (bReset)
+    reset();
 
   if (nArg >= 2) {
     m_pccPath = args[0];
@@ -889,10 +893,13 @@ int CIccCfgPccWeight::fromArgs(const char** args, int nArg, bool /*bReset*/)
   return nUsed;
 }
 
-bool CIccCfgPccWeight::fromJson(json j, bool /*bReset*/)
+bool CIccCfgPccWeight::fromJson(json j, bool bReset)
 {
   if (!j.is_object())
     return false;
+
+  if (bReset)
+    reset();
 
   jsonToValue(j["pccFile"], m_pccPath);
   jsonToValue(j["weight"], m_dWeight);
@@ -908,10 +915,18 @@ void CIccCfgPccWeight::toJson(json& obj) const
 
 CIccCfgSearchApply::CIccCfgSearchApply()
 {
+  reset();
 }
 
 void CIccCfgSearchApply::reset()
 {
+  m_bInitialized = false;
+  m_intentInitial = icUnknownIntent;
+  m_transformInitial = icXformLutColor;
+  m_useD2BxB2DxInitial = false;
+  m_adjustPcsLuminanceInitial = false;
+  m_useV5SubProfileInitial = false;
+  m_interpolationInitial = icInterpTetrahedral;
   m_pccWeights.clear();
   m_profiles.clear();
 }

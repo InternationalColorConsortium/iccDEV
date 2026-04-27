@@ -1927,7 +1927,15 @@ CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
     delete pCLUT; return nullptr;
   }
   const IccJson &data = j["data"];
+  if (icJsonSafeU32(data.size()) != nTotal) {
+    parseStr += "Inline CLUT data count does not match CLUT size\n";
+    delete pCLUT; return nullptr;
+  }
   for (icUInt32Number k = 0; k < nTotal && k < icJsonSafeU32(data.size()); k++) {
+    if (!data[k].is_number()) {
+      parseStr += "Inline CLUT data contains non-numeric value\n";
+      delete pCLUT; return nullptr;
+    }
     double v = data[k].get<double>();
     switch (nType) {
       case icConvert8Bit:  pData[k] = (icFloatNumber)(v / 255.0);   break;
@@ -2124,7 +2132,10 @@ bool CIccTagJsonMultiProcessElement::ParseJson(const IccJson &j, std::string &pa
     if (!pExt || strcmp(pExt->GetExtClassName(), "CIccMpeJson") != 0) { delete pElem; continue; }
 
     CIccMpeJson *pJsonElem = static_cast<CIccMpeJson*>(pExt);
-    pJsonElem->ParseJson(elemObj, parseStr);
+    if (!pJsonElem->ParseJson(elemObj, parseStr)) {
+      delete pElem;
+      return false;
+    }
 
     Attach(pElem);
   }
@@ -2503,7 +2514,7 @@ bool CIccTagJsonStruct::ParseJson(const IccJson &j, std::string &parseStr)
   }
   for (const auto &entry : j["memberTags"]) {
     if (!ParseTag(entry, parseStr))
-      parseStr += "Warning: skipped member tag\n";
+      return false;
   }
   return true;
 }

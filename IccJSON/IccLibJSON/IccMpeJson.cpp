@@ -1984,15 +1984,27 @@ static bool icFloatArrayFromJson(const IccJson &j, const char *field,
                                   icFloatNumber *buf, int n, std::string &parseStr,
                                   bool bRequired = true)
 {
-  if (!j.contains(field) || !j[field].is_array()) {
+  if (!j.contains(field)) {
     if (bRequired)
       parseStr += std::string("Missing ") + field + " in spectral element\n";
     return !bRequired;
   }
+  if (!j[field].is_array()) {
+    parseStr += std::string(field) + " must be an array in spectral element\n";
+    return false;
+  }
   const IccJson &arr = j[field];
-  int cnt = std::min(n, (int)arr.size());
-  for (int i = 0; i < cnt; i++)
+  if ((int)arr.size() != n) {
+    parseStr += std::string(field) + " count does not match spectral element size\n";
+    return false;
+  }
+  for (int i = 0; i < n; i++) {
+    if (!arr[i].is_number()) {
+      parseStr += std::string(field) + " contains non-numeric value in spectral element\n";
+      return false;
+    }
     buf[i] = (icFloatNumber)arr[i].get<double>();
+  }
   return true;
 }
 
@@ -2041,8 +2053,9 @@ static bool icSpectralMatrixFromJson(const IccJson &j, CIccMpeSpectralMatrix *pM
   if (!icFloatArrayFromJson(j, "matrixData", pMtx->GetMatrix(), nVectors * range.steps, parseStr))
     return false;
   // offsetData optional -- zero-fill if absent
-  if (j.contains("offsetData") && j["offsetData"].is_array()) {
-    icFloatArrayFromJson(j, "offsetData", pMtx->GetOffset(), range.steps, parseStr, false);
+  if (j.contains("offsetData")) {
+    if (!icFloatArrayFromJson(j, "offsetData", pMtx->GetOffset(), range.steps, parseStr, false))
+      return false;
   }
   else {
     memset(pMtx->GetOffset(), 0, range.steps * sizeof(icFloatNumber));

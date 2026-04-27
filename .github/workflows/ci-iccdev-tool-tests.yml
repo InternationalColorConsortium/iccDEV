@@ -1743,6 +1743,32 @@ jobs:
           passed=$((passed + r16_pass))
           failed=$((failed + r16_fail))
 
+          # --- R17: ICC JSON parser/config rejects malformed and stale data ---
+          echo "--- R17: ICC JSON parser/config malformed-data rejection ---"
+          r17_pass=0 r17_fail=0
+          PARSER_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-json-parser-regression-tests.sh"
+          if [ -f "$PARSER_SCRIPT" ]; then
+            chmod +x "$PARSER_SCRIPT"
+            r17_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r17-json-parser" \
+              "$PARSER_SCRIPT" > "$OUTDIR/r17-json-parser.log" 2>&1 || r17_ec=$?
+            cat "$OUTDIR/r17-json-parser.log"
+            if [ "$r17_ec" -eq 0 ]; then
+              echo "  [OK]    ICC JSON parser/config rejected malformed and stale data"
+              r17_pass=$((r17_pass + 8))
+            else
+              echo "  [FAIL]  ICC JSON parser regression script exited $r17_ec"
+              r17_fail=$((r17_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  parser regression script not found"
+          fi
+          echo "  JSON parser/config malformed-data rejection: $r17_pass passed, $r17_fail failed"
+          passed=$((passed + r17_pass))
+          failed=$((failed + r17_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
