@@ -84,6 +84,26 @@ git log --oneline --since="2025-01-01" | tail -1
 | Unsigned overflow in bounds check | `offset + size` wraps past `profileSize` -- use `size > limit \|\| offset > limit - size` |
 | Parameter semantic mismatch | Caller computes `steps * bytesPerSample`, callee also multiplies |
 
+## JSON/Config Parser Regressions
+
+Latest branch: `bisect-60bbb8c-json`. Reports: `~/bisect/iccdev-json-it8-srcType-report.txt`
+and `~/bisect/iccdev-json-parser-regression-report.txt`.
+
+Fail closed for JSON parser/config helpers:
+- Never ignore a nested `ParseJson()` false return.
+- Never truncate inline CLUT or spectral arrays; reject wrong counts/types.
+- Never skip failed struct members and return success.
+- Reset all stale fields in `reset()` and honor `fromJson(..., true)`.
+- Fixed-size array helpers must require exactly `n` numeric values.
+
+Focused gate:
+
+```bash
+ICCDEV_TOOLS_DIR=$PWD/Build/Tools ICCDEV_TESTING_DIR=$PWD/Testing \
+  LD_LIBRARY_PATH=$PWD/Build/IccProfLib:$PWD/Build/IccXML:$PWD/Build/IccJSON \
+  .github/scripts/iccdev-json-parser-regression-tests.sh
+```
+
 ## Fix Conventions
 
 - **Minimal patch**: change only what fixes the regression
