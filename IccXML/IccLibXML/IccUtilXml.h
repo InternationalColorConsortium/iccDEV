@@ -94,6 +94,11 @@ size_t icXmlDumpHexData(std::string &xml, std::string blanks, void *pBuf, size_t
 
 bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &parseStr, const char *filename);
 
+// Maximum byte count for text file buffers: caps num+1 from wrapping size_t
+// and prevents downstream ParseTextArrayNum from consuming gigabytes.
+// Used at every new(std::nothrow) char[num+1] text-buffer site.
+static const size_t icXmlMaxTextFileBytes = 256ULL * 1024 * 1024;
+
 #define icXmlStrCmp(x, y) strcmp((const char *)(x), (const char*)(y))
 
 xmlAttr *icXmlFindAttr(xmlNode *pNode, const char *szAttrName);

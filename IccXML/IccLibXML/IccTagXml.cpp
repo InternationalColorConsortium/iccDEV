@@ -71,6 +71,7 @@
 #include "IccStructFactory.h"
 #include "IccArrayFactory.h"
 #include "IccConvertUTF.h"
+#include <new>     /* std::nothrow */
 #include <cstring> /* C strings strcpy, memcpy ... */
 #include <set>
 #include <map>
@@ -2678,10 +2679,9 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           delete file;
           return false;
         }
-        // 256 MB ceiling so `num+1` can't wrap size_t and the
-        // downstream ParseTextArrayNum doesn't chew gigabytes.
-        static const size_t kMaxTextFileBytes = 256ULL * 1024 * 1024;
-        if (num > kMaxTextFileBytes) {
+        // Shared ceiling: prevents num+1 from wrapping size_t and caps
+        // downstream ParseTextArrayNum memory use. See IccUtilXml.h.
+        if (num > icXmlMaxTextFileBytes) {
           parseStr += "'";
           parseStr += filename;
           parseStr += "' exceeds 256 MB limit.\n";
@@ -2692,25 +2692,26 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
         // !buf check below actually fires on OOM.
         char *buf = new(std::nothrow) char[num + 1];
 
-        if (!buf) {          
-          perror("Memory Error");
-          parseStr += "'";
+        if (!buf) {
+          parseStr += "Out of memory allocating ";
+          parseStr += std::to_string(num + 1);
+          parseStr += " bytes for text buffer from '";
           parseStr += filename;
-          parseStr += "' may not be a valid text file.\n";
-          delete [] buf;
+          parseStr += "'.\n";
           delete file;
           return false;
         }
 
-        if (file->Read8(buf, num) !=num) {
-          perror("Read-File Error");
-          parseStr += "'";
+        if (file->Read8(buf, num) != num) {
+          parseStr += "Read error: could not read ";
+          parseStr += std::to_string(num);
+          parseStr += " bytes from '";
           parseStr += filename;
-          parseStr += "' may not be a valid text file.\n";
+          parseStr += "'.\n";
           delete [] buf;
-          delete file;             
+          delete file;
           return false;
-        }         
+        }
         buf[num] = '\0';  // NUL-terminate for ParseText downstream
 
         // lut8type
