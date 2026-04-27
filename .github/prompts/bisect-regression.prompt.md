@@ -86,8 +86,7 @@ git log --oneline --since="2025-01-01" | tail -1
 
 ## JSON/Config Parser Regressions
 
-Latest branch: `bisect-60bbb8c-json`. Reports: `~/bisect/iccdev-json-it8-srcType-report.txt`
-and `~/bisect/iccdev-json-parser-regression-report.txt`.
+Latest branch: `bisect-60bbb8c-json`.
 
 Fail closed for JSON parser/config helpers:
 - Never ignore a nested `ParseJson()` false return.

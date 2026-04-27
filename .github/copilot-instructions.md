@@ -17,13 +17,9 @@ here.
 | `ports/**` | `instructions/vcpkg-port.instructions.md` | vcpkg overlay port and CI |
 | `Tools/Winnt/IccIisIsapi/**` | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS ISAPI setup and hardening |
 
-## Current JSON/Config Bisect
+## Current JSON/Config Regression Gate
 
 Branch: `bisect-60bbb8c-json`
-
-Reports in `~/bisect/`:
-- `iccdev-json-it8-srcType-report.txt`
-- `iccdev-json-parser-regression-report.txt`
 
 Latest pushed commits:
 - `4ffcba5 fix: restore JSON config round-trips`
@@ -32,7 +28,6 @@ Latest pushed commits:
 Regression gate:
 
 ```bash
-cd ~/bisect/iccDEV-bisect-60bbb8c-json
 cd Build && cmake --build . --target iccFromJson iccToJson \
   iccApplySearch iccApplyNamedCmm iccApplyProfiles -j"$(nproc)"
 cd ..
@@ -95,6 +90,8 @@ use `integer,float-divide-by-zero,float-cast-overflow` for bug hunting.
 - Add regression coverage in the nearest script/workflow before claiming a fix.
 - For JSON/config bugs, prefer `.github/scripts/iccdev-json-parser-regression-tests.sh`
   and `.github/scripts/iccdev-json-cfg-tests.sh`.
+- For standard observer XML/JSON alias compatibility, run
+  `.github/scripts/iccdev-stdobserver-regression-tests.sh`.
 
 ## Prompts
 

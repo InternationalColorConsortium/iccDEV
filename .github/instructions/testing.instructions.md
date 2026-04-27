@@ -28,11 +28,24 @@ PoC profiles for automated regression testing live in `.github/ci/regression/`:
 
 Naming convention: `poc-{issue#}-{component}-{type}.icc`
 
-CI workflow `ci-iccdev-tool-tests.yml` Test 18 runs R1-R11 sub-tests against
-these files. When adding new PoC files, also add a corresponding R-sub-test.
+CI workflow `ci-iccdev-tool-tests.yml` Test 18 runs R-sub-tests for these PoCs
+and adjacent script-based regression gates. When adding new PoC files, also add
+a corresponding R-sub-test.
 
-Both scripts auto-source `Testing/path.sh` if present (sets `PATH` and
-`LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH` to the build output directory).
+Script-based regression gates also live in `.github/scripts/`:
+
+| Script | Coverage |
+|--------|----------|
+| `iccdev-json-parser-regression-tests.sh` | JSON parser/config malformed-data and stale-state rejection |
+| `iccdev-stdobserver-regression-tests.sh` | Legacy standard observer aliases through XML and JSON import paths |
+
+CI workflow `ci-tool-tests.yml` runs these gates after the coverage baseline,
+JSON config tests, and JSON CLI exercise. `ci-json-roundtrip.yml` also runs the
+standard observer gate because it covers `IccToJson` and `IccFromJson`.
+
+`CreateAllProfiles.sh` and `RunTests.sh` auto-source `Testing/path.sh` if
+present (sets `PATH` and `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH` to the build
+output directory).
 
 ## Test Profile Directories
 

@@ -49,6 +49,11 @@ The overall pass/fail result appears two lines below the `Validation Report` lin
 grep --text -A 3 "^Validation Report" output.txt
 ```
 
+`StdObserver` values accept both the canonical observer names and legacy XML
+aliases used by existing test profiles. Compatibility is checked by
+`.github/scripts/iccdev-stdobserver-regression-tests.sh`, which exercises XML
+import, JSON export, JSON alias editing, JSON import, and profile dumping.
+
 ---
 
 ## Typical Workflow

@@ -10,7 +10,8 @@
 #   1. Coverage baseline (105 tests) -- all 14 CLI tools
 #   2. JSON -cfg tests (33 tests) -- config mode validation
 #   3. JSON CLI exercise (125 tests) -- all CLI option combos
-#   4. Regression checks -- bisect fix PoCs and JSON parser/config failures
+#   4. Regression checks -- bisect fix PoCs, JSON parser/config failures,
+#      and standard observer XML/JSON alias compatibility
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -25,6 +26,7 @@
 #   .github/scripts/iccdev-json-cfg-tests.sh
 #   .github/scripts/json-cli-exercise.sh
 #   .github/scripts/iccdev-json-parser-regression-tests.sh
+#   .github/scripts/iccdev-stdobserver-regression-tests.sh
 #
 ###############################################################
 
@@ -41,6 +43,7 @@ on:
       - '.github/workflows/ci-tool-tests.yml'
       - '.github/scripts/iccdev-tool-coverage-baseline.sh'
       - '.github/scripts/iccdev-json-cfg-tests.sh'
+      - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
       - '.github/scripts/json-cli-exercise.sh'
       - '.github/ci/test-data/**'
       - 'IccProfLib/**'
@@ -57,7 +60,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: "iccDEV Tools -- ASAN+UBSAN -- 259+ tests"
+    name: "iccDEV Tools -- ASAN+UBSAN -- 263+ tests"
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -965,6 +968,32 @@ jobs:
           passed=$((passed + r13_pass))
           failed=$((failed + r13_fail))
 
+          # --- R14: Standard observer XML/JSON alias compatibility ---
+          echo "--- R14: Standard observer XML/JSON alias compatibility ---"
+          r14_pass=0 r14_fail=0
+          OBS_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-stdobserver-regression-tests.sh"
+          if [ -f "$OBS_SCRIPT" ]; then
+            chmod +x "$OBS_SCRIPT"
+            r14_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r14-stdobserver" \
+              "$OBS_SCRIPT" > "$OUTDIR/r14-stdobserver.log" 2>&1 || r14_ec=$?
+            cat "$OUTDIR/r14-stdobserver.log"
+            if [ "$r14_ec" -eq 0 ]; then
+              echo "  [OK]    Standard observer aliases round-trip through XML and JSON"
+              r14_pass=$((r14_pass + 4))
+            else
+              echo "  [FAIL]  Standard observer regression script exited $r14_ec"
+              r14_fail=$((r14_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  standard observer regression script not found"
+          fi
+          echo "  Standard observer XML/JSON aliases: $r14_pass passed, $r14_fail failed"
+          passed=$((passed + r14_pass))
+          failed=$((failed + r14_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
@@ -1256,6 +1285,9 @@ jobs:
             echo "ICCDEV_TOOLS_DIR=build/Tools ICCDEV_TESTING_DIR=Testing \\"
             echo "  LD_LIBRARY_PATH=build/IccProfLib:build/IccXML:build/IccJSON \\"
             echo "  .github/scripts/iccdev-tool-coverage-baseline.sh --asan"
+            echo "ICCDEV_TOOLS_DIR=build/Tools ICCDEV_TESTING_DIR=Testing \\"
+            echo "  LD_LIBRARY_PATH=build/IccProfLib:build/IccXML:build/IccJSON \\"
+            echo "  .github/scripts/iccdev-stdobserver-regression-tests.sh"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

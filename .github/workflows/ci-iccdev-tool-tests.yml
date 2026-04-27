@@ -1769,6 +1769,32 @@ jobs:
           passed=$((passed + r17_pass))
           failed=$((failed + r17_fail))
 
+          # --- R18: Standard observer XML/JSON alias compatibility ---
+          echo "--- R18: Standard observer XML/JSON alias compatibility ---"
+          r18_pass=0 r18_fail=0
+          OBS_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-stdobserver-regression-tests.sh"
+          if [ -f "$OBS_SCRIPT" ]; then
+            chmod +x "$OBS_SCRIPT"
+            r18_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r18-stdobserver" \
+              "$OBS_SCRIPT" > "$OUTDIR/r18-stdobserver.log" 2>&1 || r18_ec=$?
+            cat "$OUTDIR/r18-stdobserver.log"
+            if [ "$r18_ec" -eq 0 ]; then
+              echo "  [OK]    Standard observer aliases round-trip through XML and JSON"
+              r18_pass=$((r18_pass + 4))
+            else
+              echo "  [FAIL]  Standard observer regression script exited $r18_ec"
+              r18_fail=$((r18_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  standard observer regression script not found"
+          fi
+          echo "  Standard observer XML/JSON aliases: $r18_pass passed, $r18_fail failed"
+          passed=$((passed + r18_pass))
+          failed=$((failed + r18_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
@@ -1903,7 +1929,7 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
-              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases)"
             )
 
             for phase in $(seq 1 18); do
