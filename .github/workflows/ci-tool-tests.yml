@@ -7,8 +7,8 @@
 # across 3 external test suites plus regression PoC checks.
 #
 # Test Suites:
-#   1. Coverage baseline (103 tests) -- all 14 CLI tools
-#   2. JSON -cfg tests (31 tests) -- config mode validation
+#   1. Coverage baseline (105 tests) -- all 14 CLI tools
+#   2. JSON -cfg tests (33 tests) -- config mode validation
 #   3. JSON CLI exercise (125 tests) -- all CLI option combos
 #   4. Regression checks -- bisect fix PoCs
 #
@@ -261,9 +261,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # -------------------------------------------------------------------
-      # Run 103-test coverage baseline
+      # Run 105-test coverage baseline
       # -------------------------------------------------------------------
-      - name: Run iccDEV tool coverage baseline (103 tests)
+      - name: Run iccDEV tool coverage baseline (105 tests)
         env:
           BASH_ENV: /dev/null
           LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
@@ -306,9 +306,9 @@ jobs:
           echo "::endgroup::"
 
       # -------------------------------------------------------------------
-      # Run JSON configuration (-cfg) tests (31 tests)
+      # Run JSON configuration (-cfg) tests (33 tests)
       # -------------------------------------------------------------------
-      - name: Run JSON -cfg configuration tests (31 tests)
+      - name: Run JSON -cfg configuration tests (33 tests)
         env:
           BASH_ENV: /dev/null
           LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
@@ -357,7 +357,7 @@ jobs:
             echo ""
             echo "### JSON Configuration Tests"
             echo ""
-            echo "**31 tests** covering \`-cfg\` mode for iccApplyNamedCmm, iccApplySearch, iccApplyProfiles"
+            echo "**33 tests** covering \`-cfg\` mode for iccApplyNamedCmm, iccApplySearch, iccApplyProfiles"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # -------------------------------------------------------------------
@@ -431,6 +431,7 @@ jobs:
           FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
           TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
           DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          APPLYNCM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
           passed=0 failed=0
 
           check_asan() {
@@ -828,6 +829,114 @@ jobs:
           echo "  JSON size-overflow: $r10_pass passed, $r10_fail failed"
           passed=$((passed + r10_pass))
           failed=$((failed + r10_fail))
+
+          # --- R11: JSON -cfg srcType=it8 source data regression ---
+          echo "--- R11: JSON -cfg srcType=it8 named-color source data ---"
+          r11_pass=0 r11_fail=0
+          NAMED_PROFILE="$OUTDIR/NamedColor.icc"
+          if [ ! -f "$NAMED_PROFILE" ] && [ -f "${WORKSPACE_DIR}/Testing/Named/NamedColor.xml" ]; then
+            (cd "${WORKSPACE_DIR}/Testing/Named" && timeout 30 "$FROMXML" NamedColor.xml "$NAMED_PROFILE") \
+              > "$OUTDIR/r11-namedcolor.log" 2>&1 || true
+          fi
+
+          if [ -x "$APPLYNCM" ] && [ -f "$NAMED_PROFILE" ]; then
+            {
+              echo 'CGATS.17'
+              printf 'ORIGINATOR\t"iccDEV regression"\n'
+              printf 'FILE_DESCRIPTOR\t"Minimal named-color IT8 source data"\n'
+              printf 'NUMBER_OF_FIELDS\t2\n'
+              echo 'BEGIN_DATA_FORMAT'
+              printf 'NAME\tTINT\n'
+              echo 'END_DATA_FORMAT'
+              printf 'NUMBER_OF_SETS\t1\n'
+              echo 'BEGIN_DATA'
+              printf 'Black\t1.0\n'
+              echo 'END_DATA'
+            } > "$OUTDIR/r11-it8-src.it8"
+
+            {
+              echo '{'
+              echo '  "dataFiles": {'
+              echo '    "srcType": "it8",'
+              echo '    "srcSpace": "nmcl",'
+              echo '    "srcFile": "'"$OUTDIR"'/r11-it8-src.it8",'
+              echo '    "dstType": "colorData",'
+              echo '    "dstFile": "'"$OUTDIR"'/r11-it8-src-output.json",'
+              echo '    "dstEncoding": "value",'
+              echo '    "dstPrecision": 4,'
+              echo '    "dstDigits": 9'
+              echo '  },'
+              echo '  "profileSequence": ['
+              echo '    {'
+              echo '      "iccFile": "'"$NAMED_PROFILE"'",'
+              echo '      "intent": 1,'
+              echo '      "interpolation": "tetrahedral",'
+              echo '      "useBPC": false'
+              echo '    }'
+              echo '  ]'
+              echo '}'
+            } > "$OUTDIR/r11-it8-src.json"
+            r11_ec=0
+            timeout 30 "$APPLYNCM" -cfg "$OUTDIR/r11-it8-src.json" > "$OUTDIR/r11-it8-src.log" 2>&1 || r11_ec=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r11-it8-src.log" 2>/dev/null; then
+              echo "  [ASAN]  JSON IT8 srcType regression"; r11_fail=$((r11_fail + 1))
+            elif [ "$r11_ec" -ne 0 ]; then
+              echo "  [FAIL]  iccApplyNamedCmm -cfg srcType=it8 exited $r11_ec"
+              r11_fail=$((r11_fail + 1))
+            elif grep -Fq '"sn": "Black"' "$OUTDIR/r11-it8-src-output.json" 2>/dev/null; then
+              echo "  [OK]    JSON srcType=it8 loaded IT8 named-color data"
+              r11_pass=$((r11_pass + 1))
+            else
+              echo "  [FAIL]  JSON srcType=it8 produced empty or missing named-color data"
+              r11_fail=$((r11_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  iccApplyNamedCmm or NamedColor.icc not available"
+          fi
+          echo "  JSON IT8 srcType: $r11_pass passed, $r11_fail failed"
+          passed=$((passed + r11_pass))
+          failed=$((failed + r11_fail))
+
+          # --- R12: iccApplySearch JSON round-trip without pccWeights ---
+          echo "--- R12: iccApplySearch JSON round-trip without pccWeights ---"
+          r12_pass=0 r12_fail=0
+          SEARCH="${WORKSPACE_DIR}/build/Tools/IccApplySearch/iccApplySearch"
+          SEARCH_DATA="${WORKSPACE_DIR}/Testing/Calc/srgbCalcTest.txt"
+          SEARCH_PROFILE="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
+
+          if [ -x "$SEARCH" ] && [ -f "$SEARCH_DATA" ] && [ -f "$SEARCH_PROFILE" ]; then
+            r12_ec=0
+            timeout 30 "$SEARCH" -exportcfganddata "$OUTDIR/r12-search-export.json" \
+              "$SEARCH_DATA" 3 0 "$SEARCH_PROFILE" 1 "$SEARCH_PROFILE" 1 -INIT 1 \
+              > "$OUTDIR/r12-search-export.log" 2>&1 || r12_ec=$?
+            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r12-search-export.log" 2>/dev/null; then
+              echo "  [ASAN]  iccApplySearch exportcfganddata"; r12_fail=$((r12_fail + 1))
+            elif [ "$r12_ec" -ne 0 ]; then
+              echo "  [FAIL]  iccApplySearch exportcfganddata exited $r12_ec"
+              r12_fail=$((r12_fail + 1))
+            elif grep -Fq '"pccWeights"' "$OUTDIR/r12-search-export.json" 2>/dev/null; then
+              echo "  [FAIL]  export unexpectedly emitted empty pccWeights"
+              r12_fail=$((r12_fail + 1))
+            else
+              r12_import_ec=0
+              timeout 30 "$SEARCH" -cfg "$OUTDIR/r12-search-export.json" \
+                > "$OUTDIR/r12-search-import.log" 2>&1 || r12_import_ec=$?
+              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r12-search-import.log" 2>/dev/null; then
+                echo "  [ASAN]  iccApplySearch missing pccWeights import"; r12_fail=$((r12_fail + 1))
+              elif [ "$r12_import_ec" -eq 0 ]; then
+                echo "  [OK]    missing pccWeights round-trip import succeeded"
+                r12_pass=$((r12_pass + 1))
+              else
+                echo "  [FAIL]  missing pccWeights import exited $r12_import_ec"
+                r12_fail=$((r12_fail + 1))
+              fi
+            fi
+          else
+            echo "  [SKIP]  iccApplySearch, srgbCalcTest.txt, or sRGB_D65_MAT.icc not available"
+          fi
+          echo "  Search missing pccWeights: $r12_pass passed, $r12_fail failed"
+          passed=$((passed + r12_pass))
+          failed=$((failed + r12_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

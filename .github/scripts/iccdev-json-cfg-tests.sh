@@ -28,6 +28,7 @@ mkdir -p "$OUTDIR"
 APPLY_NAMED_CMM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
 APPLY_SEARCH="$TOOLS_DIR/IccApplySearch/iccApplySearch"
 APPLY_PROFILES="$TOOLS_DIR/IccApplyProfiles/iccApplyProfiles"
+FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
 
 # -- Sanitizer env ------------------------------------------------------------
 
@@ -62,6 +63,16 @@ echo "Using test profile: $PROFILE"
 echo "Tools dir: $TOOLS_DIR"
 echo "Testing dir: $TESTING_DIR"
 echo ""
+
+NAMED_PROFILE=""
+for candidate in \
+  "$TESTING_DIR/Named/NamedColor.icc" \
+  "$TESTING_DIR/NamedColor.icc"; do
+  if [ -f "$candidate" ]; then
+    NAMED_PROFILE="$candidate"
+    break
+  fi
+done
 
 # -- Test framework -----------------------------------------------------------
 
@@ -121,9 +132,59 @@ run_test() {
   fi
 }
 
+run_cfg_test_expect_text() {
+  local name="$1"
+  local tool="$2"
+  local config="$3"
+  local output="$4"
+  local expected="$5"
+  TOTAL=$((TOTAL + 1))
+
+  if [ ! -x "$tool" ]; then
+    echo "  [SKIP] $name -- tool not found: $tool"
+    PASS=$((PASS + 1))
+    return
+  fi
+
+  local logfile="$OUTDIR/json-${name}.log"
+  local exit_code=0
+  timeout 30 "$tool" -cfg "$config" > "$logfile" 2>&1 || exit_code=$?
+
+  if grep -q "ERROR: AddressSanitizer" "$logfile" 2>/dev/null; then
+    echo "  [ASAN] $name -- AddressSanitizer finding"
+    ASAN_FINDINGS=$((ASAN_FINDINGS + 1))
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  if grep -q "runtime error:" "$logfile" 2>/dev/null; then
+    echo "  [UBSAN] $name -- undefined behavior"
+    UBSAN_FINDINGS=$((UBSAN_FINDINGS + 1))
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -eq 0 ] && [ -f "$output" ] && grep -Fq "$expected" "$output"; then
+    echo "  [PASS] $name (exit=0, output matched)"
+    PASS=$((PASS + 1))
+  else
+    echo "  [FAIL] $name (exit=$exit_code, expected output not found)"
+    if [ -f "$output" ]; then
+      sed -n '1,40p' "$output"
+    else
+      echo "  Missing output file: $output"
+    fi
+    FAIL=$((FAIL + 1))
+  fi
+}
+
 # -- Generate JSON configs dynamically (using discovered profile path) --------
 
 TMPDIR="$(mktemp -d)"
+
+if [ -z "$NAMED_PROFILE" ] && [ -x "$FROMXML" ] && [ -f "$TESTING_DIR/Named/NamedColor.xml" ]; then
+  NAMED_PROFILE="$TMPDIR/NamedColor-json-it8.icc"
+  (cd "$TESTING_DIR/Named" && "$FROMXML" NamedColor.xml "$NAMED_PROFILE") >/dev/null 2>&1 || NAMED_PROFILE=""
+fi
 
 # 1. ApplyNamedCmm -- basic sRGB identity
 cat > "$TMPDIR/named-basic.json" <<EOF
@@ -256,6 +317,45 @@ cat > "$TMPDIR/named-output-file.json" <<EOF
 }
 EOF
 
+if [ -n "$NAMED_PROFILE" ]; then
+  cat > "$TMPDIR/named-it8-src.it8" <<EOF
+CGATS.17
+ORIGINATOR	"iccDEV regression"
+FILE_DESCRIPTOR	"Minimal named-color IT8 source data"
+NUMBER_OF_FIELDS	2
+BEGIN_DATA_FORMAT
+NAME	TINT
+END_DATA_FORMAT
+NUMBER_OF_SETS	1
+BEGIN_DATA
+Black	1.0
+END_DATA
+EOF
+
+  cat > "$TMPDIR/named-it8-src.json" <<EOF
+{
+  "dataFiles": {
+    "srcType": "it8",
+    "srcSpace": "nmcl",
+    "srcFile": "$TMPDIR/named-it8-src.it8",
+    "dstType": "colorData",
+    "dstFile": "$TMPDIR/named-it8-src-output.json",
+    "dstEncoding": "value",
+    "dstPrecision": 4,
+    "dstDigits": 9
+  },
+  "profileSequence": [
+    {
+      "iccFile": "$NAMED_PROFILE",
+      "intent": 1,
+      "interpolation": "tetrahedral",
+      "useBPC": false
+    }
+  ]
+}
+EOF
+fi
+
 # 5. ApplyNamedCmm -- debugCalc + BPC
 cat > "$TMPDIR/named-debug-bpc.json" <<EOF
 {
@@ -318,6 +418,47 @@ cat > "$TMPDIR/search-basic.json" <<EOF
       "l": 50.0,
       "sn": 30,
       "sv": 5.0
+    }
+  },
+  "colorData": {
+    "space": "RGB ",
+    "encoding": "float",
+    "data": [
+      {"values": [0.5, 0.5, 0.5]}
+    ]
+  }
+}
+EOF
+
+cat > "$TMPDIR/search-missing-pccweights.json" <<EOF
+{
+  "dataFiles": {
+    "srcType": "colorData",
+    "srcFile": "",
+    "dstType": "colorData",
+    "dstFile": "",
+    "dstEncoding": "float",
+    "dstPrecision": 4,
+    "dstDigits": 9
+  },
+  "searchApply": {
+    "profileSequence": [
+      {
+        "iccFile": "$PROFILE",
+        "intent": 1,
+        "interpolation": "tetrahedral",
+        "useBPC": false
+      },
+      {
+        "iccFile": "$PROFILE",
+        "intent": 1,
+        "interpolation": "tetrahedral",
+        "useBPC": false
+      }
+    ],
+    "initial": {
+      "intent": 1,
+      "interpolation": "tetrahedral"
     }
   },
   "colorData": {
@@ -563,6 +704,11 @@ run_test "named-basic"       "$APPLY_NAMED_CMM" "$TMPDIR/named-basic.json"
 run_test "named-8bit"        "$APPLY_NAMED_CMM" "$TMPDIR/named-8bit.json"
 run_test "named-16bit"       "$APPLY_NAMED_CMM" "$TMPDIR/named-16bit.json"
 run_test "named-output-file" "$APPLY_NAMED_CMM" "$TMPDIR/named-output-file.json"
+if [ -n "$NAMED_PROFILE" ]; then
+  run_cfg_test_expect_text "named-it8-src" "$APPLY_NAMED_CMM" "$TMPDIR/named-it8-src.json" "$TMPDIR/named-it8-src-output.json" '"sn": "Black"'
+else
+  echo "  [SKIP] named-it8-src -- NamedColor profile not available"
+fi
 run_test "named-debug-bpc"   "$APPLY_NAMED_CMM" "$TMPDIR/named-debug-bpc.json"
 run_test "named-chain"       "$APPLY_NAMED_CMM" "$TMPDIR/named-chain.json"
 run_test "named-booleans"    "$APPLY_NAMED_CMM" "$TMPDIR/named-booleans.json"
@@ -570,6 +716,7 @@ echo ""
 
 echo "-- Section 2: iccApplySearch -- Valid config --"
 run_test "search-basic"      "$APPLY_SEARCH" "$TMPDIR/search-basic.json" true  # search may reject non-search profiles
+run_test "search-missing-pccweights" "$APPLY_SEARCH" "$TMPDIR/search-missing-pccweights.json"
 echo ""
 
 echo "-- Section 3: Encoding variations --"

@@ -384,7 +384,7 @@ done
 echo ""
 
 # =============================================================================
-# 6. iccApplyNamedCmm (12 tests)
+# 6. iccApplyNamedCmm (16 tests)
 # =============================================================================
 echo "--- 6. iccApplyNamedCmm ---"
 APPLYNCM="$TOOLS/IccApplyNamedCmm/iccApplyNamedCmm"
@@ -440,6 +440,49 @@ run_test "ncm-14" "Custom RGB 16-bit data" \
 # Format precision
 run_test "ncm-15" "sRGB: encoding with precision 8:12" \
   "$APPLYNCM" "$SRGB_CALC_DATA" "0:8:12" 0 "$SRGB" 1
+
+if [ -f "$NAMED" ]; then
+  cat > "$OUTDIR/ncm-it8-src.it8" <<EOF
+CGATS.17
+ORIGINATOR	"iccDEV regression"
+FILE_DESCRIPTOR	"Minimal named-color IT8 source data"
+NUMBER_OF_FIELDS	2
+BEGIN_DATA_FORMAT
+NAME	TINT
+END_DATA_FORMAT
+NUMBER_OF_SETS	1
+BEGIN_DATA
+Black	1.0
+END_DATA
+EOF
+
+  cat > "$OUTDIR/ncm-it8-src.json" <<EOF
+{
+  "dataFiles": {
+    "srcType": "it8",
+    "srcSpace": "nmcl",
+    "srcFile": "$OUTDIR/ncm-it8-src.it8",
+    "dstType": "colorData",
+    "dstFile": "$OUTDIR/ncm-it8-src-output.json",
+    "dstEncoding": "value",
+    "dstPrecision": 4,
+    "dstDigits": 9
+  },
+  "profileSequence": [
+    {
+      "iccFile": "$NAMED",
+      "intent": 1,
+      "interpolation": "tetrahedral",
+      "useBPC": false
+    }
+  ]
+}
+EOF
+
+  run_test "ncm-16" "JSON -cfg srcType=it8 named-color data" \
+    bash -c '"$1" -cfg "$2" >/dev/null && grep -Fq "\"sn\": \"Black\"" "$3"' \
+    _ "$APPLYNCM" "$OUTDIR/ncm-it8-src.json" "$OUTDIR/ncm-it8-src-output.json"
+fi
 
 echo ""
 
@@ -519,7 +562,7 @@ run_test "apply-06" "TIFF 16bit->8bit sRGB absolute" \
 echo ""
 
 # =============================================================================
-# 9. iccApplySearch (4 tests)
+# 9. iccApplySearch (5 tests)
 # =============================================================================
 echo "--- 9. iccApplySearch ---"
 APPLYSRCH="$TOOLS/IccApplySearch/iccApplySearch"
@@ -535,6 +578,12 @@ run_test "search-03" "Search sRGB->sRGB float encoding" \
 
 run_test "search-04" "Search sRGB->DisplayP3->sRGB chain" \
   "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$DISPLAY_P3" 1 "$SRGB" 1 -INIT 1
+
+if [ -f "$SRGB_CALC_DATA" ] && [ -f "$SRGB" ]; then
+  run_test "search-05" "JSON -cfg search without pccWeights" \
+    bash -c '"$1" -exportcfganddata "$2" "$3" 3 0 "$4" 1 "$4" 1 -INIT 1 >/dev/null && ! grep -Fq "\"pccWeights\"" "$2" && "$1" -cfg "$2" >/dev/null' \
+    _ "$APPLYSRCH" "$OUTDIR/search-missing-pccweights.json" "$SRGB_CALC_DATA" "$SRGB"
+fi
 
 echo ""
 

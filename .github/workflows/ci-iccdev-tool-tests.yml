@@ -1157,6 +1157,7 @@ jobs:
           FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
           TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
           DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
+          APPLYNCM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
           passed=0 failed=0
 
           check_asan() {
@@ -1632,6 +1633,115 @@ jobs:
           echo "  JSON size-overflow: $r14_pass passed, $r14_fail failed"
           passed=$((passed + r14_pass))
           failed=$((failed + r14_fail))
+
+          # --- R15: JSON -cfg srcType=it8 source data regression ---
+          echo "--- R15: JSON -cfg srcType=it8 named-color source data ---"
+          r15_pass=0 r15_fail=0
+          NAMED_PROFILE="$OUTDIR/NamedColor.icc"
+          if [ ! -f "$NAMED_PROFILE" ] && [ -f "${WORKSPACE_DIR}/Testing/Named/NamedColor.xml" ]; then
+            (cd "${WORKSPACE_DIR}/Testing/Named" && timeout 30 "$FROMXML" NamedColor.xml "$NAMED_PROFILE") \
+              > "$OUTDIR/r15-namedcolor.log" 2>&1 || true
+          fi
+
+          if [ -x "$APPLYNCM" ] && [ -f "$NAMED_PROFILE" ]; then
+            {
+              echo 'CGATS.17'
+              printf 'ORIGINATOR\t"iccDEV regression"\n'
+              printf 'FILE_DESCRIPTOR\t"Minimal named-color IT8 source data"\n'
+              printf 'NUMBER_OF_FIELDS\t2\n'
+              echo 'BEGIN_DATA_FORMAT'
+              printf 'NAME\tTINT\n'
+              echo 'END_DATA_FORMAT'
+              printf 'NUMBER_OF_SETS\t1\n'
+              echo 'BEGIN_DATA'
+              printf 'Black\t1.0\n'
+              echo 'END_DATA'
+            } > "$OUTDIR/r15-it8-src.it8"
+
+            {
+              echo '{'
+              echo '  "dataFiles": {'
+              echo '    "srcType": "it8",'
+              echo '    "srcSpace": "nmcl",'
+              echo '    "srcFile": "'"$OUTDIR"'/r15-it8-src.it8",'
+              echo '    "dstType": "colorData",'
+              echo '    "dstFile": "'"$OUTDIR"'/r15-it8-src-output.json",'
+              echo '    "dstEncoding": "value",'
+              echo '    "dstPrecision": 4,'
+              echo '    "dstDigits": 9'
+              echo '  },'
+              echo '  "profileSequence": ['
+              echo '    {'
+              echo '      "iccFile": "'"$NAMED_PROFILE"'",'
+              echo '      "intent": 1,'
+              echo '      "interpolation": "tetrahedral",'
+              echo '      "useBPC": false'
+              echo '    }'
+              echo '  ]'
+              echo '}'
+            } > "$OUTDIR/r15-it8-src.json"
+
+            r15_ec=0
+            timeout 30 "$APPLYNCM" -cfg "$OUTDIR/r15-it8-src.json" > "$OUTDIR/r15-it8-src.log" 2>&1 || r15_ec=$?
+            if ! check_asan "$OUTDIR/r15-it8-src.log" "JSON IT8 srcType regression"; then
+              r15_fail=$((r15_fail + 1))
+            elif [ "$r15_ec" -ne 0 ]; then
+              echo "  [FAIL]  iccApplyNamedCmm -cfg srcType=it8 exited $r15_ec"
+              r15_fail=$((r15_fail + 1))
+            elif grep -Fq '"sn": "Black"' "$OUTDIR/r15-it8-src-output.json" 2>/dev/null; then
+              echo "  [OK]    JSON srcType=it8 loaded IT8 named-color data"
+              r15_pass=$((r15_pass + 1))
+            else
+              echo "  [FAIL]  JSON srcType=it8 produced empty or missing named-color data"
+              r15_fail=$((r15_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  iccApplyNamedCmm or NamedColor.icc not available"
+          fi
+          echo "  JSON IT8 srcType: $r15_pass passed, $r15_fail failed"
+          passed=$((passed + r15_pass))
+          failed=$((failed + r15_fail))
+
+          # --- R16: iccApplySearch JSON round-trip without pccWeights ---
+          echo "--- R16: iccApplySearch JSON round-trip without pccWeights ---"
+          r16_pass=0 r16_fail=0
+          SEARCH="${WORKSPACE_DIR}/build/Tools/IccApplySearch/iccApplySearch"
+          SEARCH_DATA="${WORKSPACE_DIR}/Testing/Calc/srgbCalcTest.txt"
+          SEARCH_PROFILE="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
+
+          if [ -x "$SEARCH" ] && [ -f "$SEARCH_DATA" ] && [ -f "$SEARCH_PROFILE" ]; then
+            r16_ec=0
+            timeout 30 "$SEARCH" -exportcfganddata "$OUTDIR/r16-search-export.json" \
+              "$SEARCH_DATA" 3 0 "$SEARCH_PROFILE" 1 "$SEARCH_PROFILE" 1 -INIT 1 \
+              > "$OUTDIR/r16-search-export.log" 2>&1 || r16_ec=$?
+            if ! check_asan "$OUTDIR/r16-search-export.log" "iccApplySearch exportcfganddata"; then
+              r16_fail=$((r16_fail + 1))
+            elif [ "$r16_ec" -ne 0 ]; then
+              echo "  [FAIL]  iccApplySearch exportcfganddata exited $r16_ec"
+              r16_fail=$((r16_fail + 1))
+            elif grep -Fq '"pccWeights"' "$OUTDIR/r16-search-export.json" 2>/dev/null; then
+              echo "  [FAIL]  export unexpectedly emitted empty pccWeights"
+              r16_fail=$((r16_fail + 1))
+            else
+              r16_import_ec=0
+              timeout 30 "$SEARCH" -cfg "$OUTDIR/r16-search-export.json" \
+                > "$OUTDIR/r16-search-import.log" 2>&1 || r16_import_ec=$?
+              if ! check_asan "$OUTDIR/r16-search-import.log" "iccApplySearch missing pccWeights import"; then
+                r16_fail=$((r16_fail + 1))
+              elif [ "$r16_import_ec" -eq 0 ]; then
+                echo "  [OK]    missing pccWeights round-trip import succeeded"
+                r16_pass=$((r16_pass + 1))
+              else
+                echo "  [FAIL]  missing pccWeights import exited $r16_import_ec"
+                r16_fail=$((r16_fail + 1))
+              fi
+            fi
+          else
+            echo "  [SKIP]  iccApplySearch, srgbCalcTest.txt, or sRGB_D65_MAT.icc not available"
+          fi
+          echo "  Search missing pccWeights: $r16_pass passed, $r16_fail failed"
+          passed=$((passed + r16_pass))
+          failed=$((failed + r16_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

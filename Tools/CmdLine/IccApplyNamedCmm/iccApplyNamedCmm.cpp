@@ -265,6 +265,7 @@ int main(int argc, const char* argv[])
       if (cfgApply.m_srcFile.empty()) {
         if (!cfgData.fromJson(cfg["colorData"])) {
           printf("Unable to parse colorData configuration from '%s'\n", argv[2]);
+          return -1;
         }
       }
       else {
@@ -273,6 +274,19 @@ int main(int argc, const char* argv[])
           printf("Unable to load color data from '%s'\n", cfgApply.m_srcFile.c_str());
           return -1;
         }
+      }
+    }
+    else if (cfgApply.m_srcType == icCfgIt8) {
+      cfgData.m_srcSpace = cfgApply.m_srcSpace;
+      if (cfgApply.m_srcFile.empty() || !cfgData.fromIt8(cfgApply.m_srcFile.c_str())) {
+        printf("Unable to parse IT8 data file '%s'\n", cfgApply.m_srcFile.c_str());
+        return -1;
+      }
+    }
+    else if (cfgApply.m_srcType == icCfgLegacy) {
+      if (!cfgData.fromLegacy(cfgApply.m_srcFile.c_str())) {
+        printf("Unable to parse legacy data file '%s'\n", cfgApply.m_srcFile.c_str());
+        return -1;
       }
     }
   }
