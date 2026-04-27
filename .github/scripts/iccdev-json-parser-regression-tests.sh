@@ -228,6 +228,28 @@ run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 
 HELPER_SRC="$OUTDIR/json-config-helper-test.cpp"
 HELPER_BIN="$OUTDIR/json-config-helper-test"
 HELPER_LOG="$OUTDIR/json-config-helper-test.log"
+
+find_library_file() {
+  local dir="$1"
+  local base="$2"
+  local candidate
+
+  for candidate in \
+    "$dir/lib${base}d.so" \
+    "$dir/lib${base}d.so."* \
+    "$dir/lib${base}.so" \
+    "$dir/lib${base}.so."* \
+    "$dir/lib${base}-staticd.a" \
+    "$dir/lib${base}-static.a"; do
+    if [ -f "$candidate" ] || [ -L "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 cat > "$HELPER_SRC" <<'CPP'
 #include "Tools/CmdLine/IccCommon/IccCmmConfig.h"
 #include "Tools/CmdLine/IccCommon/IccJsonUtil.h"
@@ -289,24 +311,31 @@ CPP
 
 TOTAL=$((TOTAL + 3))
 helper_compile=0
-"${CXX:-c++}" -std=c++17 \
-  -I"$REPO_ROOT" \
-  -I"$REPO_ROOT/IccProfLib" \
-  -I"$REPO_ROOT/IccXML/IccLibXML" \
-  -I"$REPO_ROOT/Tools/CmdLine/IccCommon" \
-  "$HELPER_SRC" \
-  "$REPO_ROOT/Tools/CmdLine/IccCommon/IccCmmConfig.cpp" \
-  "$REPO_ROOT/Tools/CmdLine/IccCommon/IccJsonUtil.cpp" \
-  -L"$BUILD_ROOT/IccProfLib" \
-  -L"$BUILD_ROOT/IccXML" \
-  -Wl,-rpath,"$BUILD_ROOT/IccProfLib" \
-  -Wl,-rpath,"$BUILD_ROOT/IccXML" \
-  -lIccProfLib2d -lIccXML2d \
-  -o "$HELPER_BIN" > "$HELPER_LOG" 2>&1 || helper_compile=$?
+if [ -n "${CXX:-}" ]; then
+  HELPER_CXX="$CXX"
+elif command -v clang++-18 >/dev/null 2>&1; then
+  HELPER_CXX="clang++-18"
+elif command -v clang++ >/dev/null 2>&1; then
+  HELPER_CXX="clang++"
+else
+  HELPER_CXX="c++"
+fi
+PROFLIB="$(find_library_file "$BUILD_ROOT/IccProfLib" "IccProfLib2" 2>/dev/null || true)"
+XMLLIB="$(find_library_file "$BUILD_ROOT/IccXML" "IccXML2" 2>/dev/null || true)"
 
-if [ "$helper_compile" -ne 0 ]; then
-  helper_compile=0
-  "${CXX:-c++}" -std=c++17 \
+if [ -z "$PROFLIB" ] || [ -z "$XMLLIB" ]; then
+  {
+    echo "Missing linkable iccDEV libraries"
+    echo "BUILD_ROOT=$BUILD_ROOT"
+    echo "IccProfLib candidates:"
+    find "$BUILD_ROOT/IccProfLib" -maxdepth 1 -name 'libIccProfLib2*' -print 2>/dev/null | sort
+    echo "IccXML candidates:"
+    find "$BUILD_ROOT/IccXML" -maxdepth 1 -name 'libIccXML2*' -print 2>/dev/null | sort
+  } > "$HELPER_LOG"
+  helper_compile=1
+else
+  "$HELPER_CXX" -std=c++17 \
+    -fsanitize=address,undefined \
     -I"$REPO_ROOT" \
     -I"$REPO_ROOT/IccProfLib" \
     -I"$REPO_ROOT/IccXML/IccLibXML" \
@@ -314,11 +343,9 @@ if [ "$helper_compile" -ne 0 ]; then
     "$HELPER_SRC" \
     "$REPO_ROOT/Tools/CmdLine/IccCommon/IccCmmConfig.cpp" \
     "$REPO_ROOT/Tools/CmdLine/IccCommon/IccJsonUtil.cpp" \
-    -L"$BUILD_ROOT/IccProfLib" \
-    -L"$BUILD_ROOT/IccXML" \
     -Wl,-rpath,"$BUILD_ROOT/IccProfLib" \
     -Wl,-rpath,"$BUILD_ROOT/IccXML" \
-    -lIccProfLib2 -lIccXML2 \
+    "$PROFLIB" "$XMLLIB" \
     -o "$HELPER_BIN" > "$HELPER_LOG" 2>&1 || helper_compile=$?
 fi
 
