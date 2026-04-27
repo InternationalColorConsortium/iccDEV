@@ -146,7 +146,7 @@ jobs:
 
       - name: Cache Dependencies (Linux)
         if: runner.os == 'Linux'
-        uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0  # v5.0.0 (node24)
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.0 (node24)
         with:
           path: |
             /var/cache/apt/archives
@@ -158,7 +158,7 @@ jobs:
 
       - name: Cache Dependencies (macOS)
         if: runner.os == 'macOS'
-        uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0  # v5.0.0 (node24)
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.0 (node24)
         with:
           path: |
             ~/Library/Caches/Homebrew
@@ -517,7 +517,7 @@ jobs:
           persist-credentials: false
 
       - name: Cache Dependencies
-        uses: actions/cache@a7833574556fa59680c1b7cb190c1735db73ebf0  # v5.0.0 (node24)
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.0 (node24)
         with:
           path: |
             /var/cache/apt/archives
