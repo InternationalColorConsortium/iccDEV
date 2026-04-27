@@ -2950,11 +2950,14 @@ icRenderingIntent icGetRenderingIntentValue(const icChar *szRenderingIntent)
 
 icStandardObserver icGetNamedStandardObserverValue(const icChar *str)
 {
-  if (!strcmp(str, "Unknown observer"))
+  if (!strcmp(str, "Unknown observer") ||
+      !strcmp(str, "Unknown Observer"))
     return icStdObsUnknown;
-  if (!strcmp(str, "CIE 1931 (two degree) standard observer"))
+  if (!strcmp(str, "CIE 1931 (two degree) standard observer") ||
+      !strcmp(str, "CIE 1931 standard colorimetric observer"))
     return icStdObs1931TwoDegrees;
-  if (!strcmp(str, "CIE 1964 (ten degree) standard observer"))
+  if (!strcmp(str, "CIE 1964 (ten degree) standard observer") ||
+      !strcmp(str, "CIE 1964 standard colorimetric observer"))
     return icStdObs1964TenDegrees;
   return icStdObsCustom;
 }
