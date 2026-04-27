@@ -109,16 +109,19 @@ bool CIccMpeXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlUnknown::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  SetType((icElemTypeSignature)icXmlStrToSig(icXmlAttrValue(pNode, "type")));
+  SetType((icElemTypeSignature)icXmlStrToSig(icXmlAttrValue(pNode, "Type")));
 
   // Demonstration use of the range-checked parsers: InputChannels /
   // OutputChannels are u16 in SetChannels. atoi + silent narrowing
   // previously accepted "65537" as 1 or "-1" as 65535; icXmlParseU16
   // refuses both.
   icUInt16Number nIn = 0, nOut = 0;
-  if (!icXmlParseU16(icXmlAttrValue(pNode, "InputChannels"),  nIn) ||
-      !icXmlParseU16(icXmlAttrValue(pNode, "OutputChannels"), nOut)) {
-    parseStr += "Invalid InputChannels or OutputChannels attribute on Unknown MPE element\n";
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "InputChannels"), nIn)) {
+    parseStr += "Invalid InputChannels attribute on Unknown MPE element\n";
+    return false;
+  }
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "OutputChannels"), nOut)) {
+    parseStr += "Invalid OutputChannels attribute on Unknown MPE element\n";
     return false;
   }
   SetChannels(nIn, nOut);

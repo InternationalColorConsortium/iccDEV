@@ -157,11 +157,15 @@ const std::string icGetDeviceAttrName(icUInt64Number devAttr);
 const std::string icGetHeaderFlagsName(icUInt32Number flags, bool bUsesMCS=false);
 const std::string icGetPadSpace(double value);
 
-// Safe integer parsers for XML attribute values. Unlike atoi these
-// return false (and leave `out` unchanged) on non-numeric input,
-// negative values, or values exceeding `max_value`. Intended as a
-// drop-in replacement at ParseXml sites that previously used atoi
-// followed by a silent narrowing cast.
+// Safe unsigned-integer parsers for XML attribute values.
+// Return false (leaving `out` unchanged) when:
+//   - the string is NULL or empty,
+//   - it has a leading '-' (explicitly rejected; strtoul would wrap),
+//   - it contains non-digit characters or trailing whitespace,
+//   - the value exceeds max_value, or
+//   - strtoul/strtoull sets errno == ERANGE.
+// These are stricter than atoi: they do not silently narrow, do not
+// accept trailing garbage, and do not wrap negative inputs.
 //
 //   icUInt16Number nRows = 0;
 //   if (!icXmlParseU16(icXmlAttrValue(node, "Rows"), nRows))

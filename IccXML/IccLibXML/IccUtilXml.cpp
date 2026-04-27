@@ -61,6 +61,8 @@
  * 
  */
 
+#include <cstdlib>  /* std::strtoul, std::strtoull */
+#include <cerrno>   /* errno, ERANGE */
 #include <time.h>
 #include "IccUtilXml.h"
 #include "IccConvertUTF.h"
@@ -1244,9 +1246,13 @@ const std::string icGetPadSpace(double value)
 bool icXmlParseU16(const char *s, icUInt16Number &out, icUInt16Number max_value)
 {
   if (!s || !*s) return false;
+  // strtoul accepts an optional leading sign; explicitly reject '-' so
+  // that "-0", "-1", etc. are refused rather than wrapping or returning 0.
+  if (*s == '-') return false;
   char *end = nullptr;
+  errno = 0;
   unsigned long v = std::strtoul(s, &end, 10);
-  if (*end != '\0' || v > max_value) return false;
+  if (*end != '\0' || errno == ERANGE || v > max_value) return false;
   out = static_cast<icUInt16Number>(v);
   return true;
 }
@@ -1254,9 +1260,12 @@ bool icXmlParseU16(const char *s, icUInt16Number &out, icUInt16Number max_value)
 bool icXmlParseU32(const char *s, icUInt32Number &out, icUInt32Number max_value)
 {
   if (!s || !*s) return false;
+  // Same sign guard as icXmlParseU16.
+  if (*s == '-') return false;
   char *end = nullptr;
+  errno = 0;
   unsigned long long v = std::strtoull(s, &end, 10);
-  if (*end != '\0' || v > max_value) return false;
+  if (*end != '\0' || errno == ERANGE || v > max_value) return false;
   out = static_cast<icUInt32Number>(v);
   return true;
 }
