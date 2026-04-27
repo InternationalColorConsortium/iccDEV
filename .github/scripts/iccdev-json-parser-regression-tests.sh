@@ -363,6 +363,7 @@ else
   sed -n '1,10p' "$HELPER_LOG"
   FAIL=$((FAIL + 1))
 fi
+rm -f "$HELPER_BIN"
 
 echo ""
 echo "JSON parser/config regression summary:"
