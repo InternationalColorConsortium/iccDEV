@@ -1,132 +1,186 @@
 # Contributing to International Color Consortium Software
 
-Thank you for your interest in contributing to ICC software. This document
-summarizes the contribution process:
+Thank you for your interest in contributing to ICC Software. This document
+explains our contribution process and procedures, so please review it first:
 
 * [Get Connected](#Get-Connected)
 * [Legal Requirements](#Legal-Requirements)
 * [Getting Started](#Getting-Started)
-* [Code Style](#Code-Style)
-* [Development Workflow](#Development-Workflow)
+* [Development and Pull Requests](#Development-and-Pull-Requests)
 * [Versioning Policy](#Versioning-Policy)
 
-Contributors submit content to the project, Committers review and approve such
-submissions, and the ICC provides general project oversight.
+Contributors are anyone who submits content to the project, Committers 
+review and approve such submissions, and the ICC provides general project
+oversight.
 
 We require all participants to abide by our [Code of Conduct](CODE_OF_CONDUCT.md).
 
+
 ## Get Connected
 
-Before starting non-trivial work, open or join a discussion with maintainers.
-Your issue, feature, or question may already have context, constraints, or a
-preferred implementation path.
+The first thing to do, before anything else, is to talk to us! Whether you are reporting an issue, requesting or implementing a feature, or just asking a question, please don’t hesitate to reach out to the project maintainers or the community. This is an important first step because your issue, feature, or question may have been solved or discussed already, and you will save yourself a lot of time by asking first.
 
-**Before opening a pull request, please start a conversation with us.**
-Pull requests should be tied to an existing issue that explains the problem or
-feature being addressed.
+**Before opening a Pull Request, please start a conversation with us.**  
+All Pull Requests should be tied to an existing Issue that discusses the problem or feature being addressed. This helps ensure the change aligns with project goals and prevents wasted effort on work that may already be in progress or out of scope.
 
-### Where to talk
+### How do you talk to us?
 
-* [GitHub Issues](https://github.com/InternationalColorConsortium/iccDEV/issues)
-  are the primary place for bug reports, feature requests, and planned changes.
+* [GitHub Issues](https://github.com/InternationalColorConsortium/iccDev/issues)  
+  GitHub **issues** are the primary place for project discussion. Issues aren’t
+  restricted to bugs; we happily welcome feature requests and other suggestions
+  submitted as issues. Opening an issue is the expected first step before
+  submitting a Pull Request.
 
-* [GitHub Discussions](https://github.com/InternationalColorConsortium/iccDEV/discussions)
-  are the place for open-ended questions, ideas, and early design feedback.
+* [GitHub Discussions](https://github.com/InternationalColorConsortium/iccDev/discussions)  
+  GitHub **Discussions** are the place for open-ended conversation and exploration.
+  Use Discussions to ask questions, float new ideas, firm up enhancement proposals,
+  or gather feedback before opening an Issue or Pull Request.
 
-Questions such as "How do I do X with ICC profiles?" are better suited to the
-ICC Members Mailing List.
+  The only conversations we would direct away from GitHub are questions in the
+  form of “How do I do X with ICC profiles”. Those questions should be discussed on
+  the ICC Members Mailing List.
 
 ## Legal Requirements
 
-The [International Color Consortium IP policy](https://www.color.org/iccip.xalter)
-governs ICC specification development and contributions to ICC open source
-software. Software contributions are also covered by the Contributor License
-Agreement (CLA).
+All official software projects hosted by the International Color Consoritum (ICC)
+follows the open source software best practice policies. The [International Color Consoritum IP policy](https://www.color.org/iccip.xalter) governs ICC specification development and contributions to ICC open source software. Software contributions are also covered by the Contributor License Agreement (CLA).
 
 ### Contributor License Agreements
 
-Developers who wish to contribute code for inclusion in ICC software must first
-complete a **Contributor License Agreement (CLA)**.
+Developers who wish to contribute code to be considered for inclusion
+in ICC software must first complete a **Contributor License Agreement
+(CLA)**.
 
-There is no cost or membership requirement to sign the CLA. This is different
-from membership in the International Color Consortium. If your organization
-relies on ICC projects, please consider becoming a member.
+There is no cost or membership requirement to sign the ICC Contributor License Agreement (CLA). Please note that this is different from membership in the International Color Consortium (ICC). If your organization relies on our projects, please become a member. Membership dues are an essential source of funding and investment for these projects.
 
-* If you are an individual writing the code on your own time and you are sure
-  you are the sole owner of any intellectual property you contribute, you can
-  sign the [CLA as an individual contributor](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md).
+* If you are an individual writing the code on your own time and you are SURE you are the sole owner of any intellectual property you contribute, you can sign the [CLA as an individual contributor](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md).
 
-* If you are writing the code as part of your job, or if there is any possibility
-  that your employer might think they own any intellectual property you create,
-  use the [Corporate Contributor License Agreement](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md).
+* If you are writing the code as part of your job, or if there is any possibility that your employer might think they own any intellectual property you create, then you should use the [Corporate Contributor Licence Agreement](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)
 
 ### License
 
-ICC software is licensed under the BSD 3-Clause "New" or "Revised" License.
-Contributions should use that license unless otherwise specified or approved by
-the ICC.
+ICC software is licensed under the BSD 3-Clause “New” or “Revised” License. Contributions to ICC software projects should abide by that license unless otherwised specified or approved by the ICC.
 
 ### Copyright Notices
 
-All new source files must begin with the ICC copyright notice and include or
-reference the BSD 3-Clause "New" or "Revised" License.
+All new source files must begin with the ICC Copyright notice and include or reference the BSD 3-Clause "New" or "Revised" License.
 
-### Intellectual Property and Patents
+### INTELLECTUAL PROPERTY & PATENTS
 
-Participation in ICC development activities is subject to
-[ICC's Patent Policy](https://www.color.org/iccip.xalter).
+Participation in ICC's development activities is subject to [ICC's Patent Policy](https://www.color.org/iccip.xalter).
 
 ## Getting Started
 
-Fork the repository, create a topic branch, make a focused change, and open a
-pull request tied to the relevant issue. Keep unrelated changes in separate
-branches and pull requests.
+So you’ve broken the ice and chatted with us, and it turns out you’ve found a
+gnarly bug that you have a beautiful solution for. Wonderful!
 
-Build instructions are in [docs/build.md](docs/build.md). Tool, library, and
-profile-test documentation starts at [docs/index.md](docs/index.md).
+From here on out we’ll be using a significant amount of Git and GitHub based
+terminology. If you’re unfamiliar with these tools or their lingo, please look
+at the [GitHub Glossary](https://help.github.com/articles/github-glossary/) or
+browse [GitHub Help](https://help.github.com/).
+
+The first requirement for contributing is to have a GitHub account. This is
+needed in order to push changes to the upstream repository. After setting up
+your account you should then **fork** the the ICC software project repository 
+to your account. This creates a copy of the repository under your user namespace
+and serves as the “home base” for your development branches, from which you will
+submit **pull requests** to the upstream repository to be merged.
+
+You will also need Git installed on your local development machine. If you need
+setup assistance, please see the official [Git Documentation](https://git-scm.com/doc).
+
+Once your Git environment is operational, the next step is to locally
+**clone** your forked ICC project repository, and add a **remote** pointing to
+the upstream ICC project repository. These topics are covered in
+[Cloning a repository](https://help.github.com/articles/cloning-a-repository/)
+and [Configuring a remote for a fork](https://help.github.com/articles/configuring-a-remote-for-a-fork/).
+
+You are now ready to contribute.
 
 ## Code Style
+It's an older codebase, it isn't perfect, but let's at least **try** to keep things consistent.
+| Category                   |  Style
+| -------------------------- | ---------------------------- |
+| **Indentation**            | 2 space indentation, no tabs. |
+| **Braces**                   | **K&R** style  |
+| **Naming class/struct members** |  prefix with m_ |
+| **Naming variables** | There is currently no uniform convention. Try to match nearby code. |
+| **Header guards**         | Use header guards.   |
+| **Namespaces**           | Currently not using namespaces, though there is work in progress. |
+| **File organization**      | Multiple classes per file, grouped by functionality.  | 
+| **Use of `std` namespace** | Minimize pollution.   | 
+| **Commenting style**       | There is no consistent style. Try to match nearby code.   | 
+| **Const correctness**      | Make inputs const when possible, class functions const when appropriate, and variables const as needed. |
+| **Compiler Warnings** | Should be zero on the strict tier (GCC 15+ / Clang 14+). PRs must build clean against ci-docker (GCC 15) and the iccDEV Tool Tests workflow (clang-18). |
+| **Static Analysis Warnings** | Should be zero (or as close as we can get across all platforms). |
+| **Templates / Generics**   | Currently minimal.  Make sure new templates are readable. | 
+| **Exceptions**             | Most of the code uses manual return values for error handling. |
+| **Containers vs. Raw Pointers**  | Prefer STL containers, but historically uses a lot of raw pointers. |
 
-This is an older codebase. Consistency with nearby code is more important than
-introducing a new style.
 
-| Category | Style |
-|----------|-------|
-| **Indentation** | 2 space indentation, no tabs. |
-| **Braces** | K&R style. |
-| **Class/struct members** | Prefix with `m_`. |
-| **Variables** | No uniform convention; match nearby code. |
-| **Header guards** | Use header guards. |
-| **Namespaces** | Currently not used broadly, though work is in progress. |
-| **File organization** | Multiple classes per file, grouped by functionality. |
-| **`std` namespace** | Minimize namespace pollution. |
-| **Comments** | Match nearby code. |
-| **Const correctness** | Make inputs, methods, and local variables const when appropriate. |
-| **Warnings** | Keep compiler and static-analysis warnings at or near zero. |
-| **Templates** | Keep new templates readable. |
-| **Exceptions** | Most code uses manual return values for error handling. |
-| **Containers vs. raw pointers** | Prefer STL containers, while respecting existing ownership patterns. |
+## Development and Pull Requests
 
-## Development Workflow
+## Build Requirements
 
-Contributions should be submitted as GitHub pull requests. Small bug fixes and
-documentation updates can be lightweight, but core functionality changes should
-follow this protocol:
+| Compiler | Minimum (build succeeds) | Recommended (full diagnostics) |
+|----------|--------------------------|--------------------------------|
+| GCC      | 11 | **15** |
+| Clang    | 10 | **14** |
+| MSVC     | VS 2022 17.0 | VS 2022 17.10 |
+
+The build's strict warning tier (`-Werror=uninitialized`, `-Wshadow`,
+`-Wnull-dereference`, `-Wundef`, `-Wpointer-arith`, GCC `-Wlogical-op`)
+auto-enables only on GCC 15+ / Clang 14+. CI exercises both:
+
+| Workflow | Compiler |
+|----------|----------|
+| `iccDEV Tool Tests` (ASAN+UBSAN) | clang-18 |
+| `ci-docker` (ubuntu variant)      | GCC 15 (ubuntu:26.04) |
+| `ci-docker-nixos`                 | NixOS clang |
+| `ci-docker-latest`                | GCC 15 (ubuntu:26.04) |
+
+Reproduce GCC 15 locally before pushing:
+
+```bash
+docker build -f Dockerfile -t iccdev-ubuntu-test:latest .
+```
+
+Older toolchains (e.g., Ubuntu 22.04 GCC 11, Ubuntu 24.04 GCC 13) still
+build cleanly but skip the strict tier; CMake prints the detected mode at
+configure time.
+
+Contributions should be submitted as Github pull requests. See
+[Creating a pull request](https://help.github.com/articles/creating-a-pull-request/)
+if you're unfamiliar with this concept.
+
+Small bug fixes and documentation changes can be
+more informal, but modifications to core functionality MUST follow
+process outlined below.
+
+The development cycle for a code change should follow this protocol:
 
 1. Create a topic branch in your local repository, following the naming format
-   `feature/<your-feature>` or `bugfix/<your-fix>`.
-2. Make focused changes, compile, and test thoroughly. Put unrelated changes in
-   separate branches and pull requests.
+"feature/<your-feature>" or "bugfix/<your-fix>".
+
+2. Make changes, compile, and test thoroughly. Code style should match existing
+style and conventions, and changes should be focused on the topic the pull
+request will be addressing. Make unrelated changes in a separate topic branch
+with a separate pull request.
+
 3. Push commits to your fork.
-4. Create a GitHub pull request from your topic branch.
-5. Pull requests will be reviewed by project Committers and Contributors, who may
-   discuss, offer feedback, request changes, or approve the work.
-6. After the required Committer approvals, a Committer other than the PR
-   contributor may squash and merge changes into the main branch.
+
+4. Create a Github pull request from your topic branch.
+
+5. Pull requests will be reviewed by project Committers and Contributors,
+who may discuss, offer constructive feedback, request changes, or approve
+the work.
+
+6. Upon receiving the required number of Committer approvals, a Committer other than the PR contributor may squash and merge changes into the  main branch.
+
 
 ## Versioning Policy
 
-ICC projects label each version with three numbers: Major.Minor.Patch, where:
+ICC projects labels each version with three numbers: Major.Minor.Patch, where:
 
 * **MAJOR** indicates major architectural changes
 * **MINOR** indicates an introduction of significant new features
