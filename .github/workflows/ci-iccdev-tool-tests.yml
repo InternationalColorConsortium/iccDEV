@@ -663,7 +663,7 @@ jobs:
             echo "[OK] checkInvalidProfiles.sh completed"
           fi
 
-      - name: "Test 11: Display/RunProtoTest.sh (Rec2020 spectral)"
+      - name: "Test 11: Display/RunProtoTests.sh (Rec2020 spectral)"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -685,19 +685,31 @@ jobs:
           mkdir -p "$OUTDIR"
 
           cd "${WORKSPACE_DIR}/Testing/Display"
-          timeout 120 bash RunProtoTest.sh > "$OUTDIR/RunProtoTest.log" 2>&1 || {
-            rc=$?
-            echo "RunProtoTest.sh exited $rc"
-          }
+          PROTO_SCRIPT="RunProtoTests.sh"
+          PROTO_LOG="$OUTDIR/RunProtoTests.log"
 
-          if grep -q "ERROR: AddressSanitizer" "$OUTDIR/RunProtoTest.log" 2>/dev/null; then
-            echo "[ASAN] RunProtoTest.sh"
-            grep -A5 "ERROR: AddressSanitizer" "$OUTDIR/RunProtoTest.log" | sed -n '1,20p'
-          elif grep -q "runtime error:" "$OUTDIR/RunProtoTest.log" 2>/dev/null; then
-            echo "[UBSAN] RunProtoTest.sh"
-            grep "runtime error:" "$OUTDIR/RunProtoTest.log" | sed -n '1,10p'
+          if [ ! -f "$PROTO_SCRIPT" ]; then
+            echo "[FAIL] Missing Display proto test script: $PROTO_SCRIPT"
+            exit 1
+          fi
+
+          proto_rc=0
+          timeout 120 bash "$PROTO_SCRIPT" > "$PROTO_LOG" 2>&1 || proto_rc=$?
+
+          if grep -q "ERROR: AddressSanitizer" "$PROTO_LOG" 2>/dev/null; then
+            echo "[ASAN] $PROTO_SCRIPT"
+            grep -A5 "ERROR: AddressSanitizer" "$PROTO_LOG" | sed -n '1,20p'
+            exit 1
+          elif grep -q "runtime error:" "$PROTO_LOG" 2>/dev/null; then
+            echo "[UBSAN] $PROTO_SCRIPT"
+            grep "runtime error:" "$PROTO_LOG" | sed -n '1,10p'
+            exit 1
+          elif [ "$proto_rc" -ne 0 ]; then
+            echo "[FAIL] $PROTO_SCRIPT exited $proto_rc"
+            sed -n '1,80p' "$PROTO_LOG"
+            exit "$proto_rc"
           else
-            echo "[OK] RunProtoTest.sh completed"
+            echo "[OK] $PROTO_SCRIPT completed"
           fi
 
       - name: "Test 12: iccTiffDump + iccSpecSepToTiff"
@@ -1948,7 +1960,7 @@ jobs:
               ["8"]="iccFromCube (.cube LUT import)"
               ["9"]="RunTests.sh (19 NamedColor/PCC/spectral/GSDF tests)"
               ["10"]="checkInvalidProfiles.sh (77 invalid profile checks)"
-              ["11"]="RunProtoTest.sh (6 Rec2020 spectral tests)"
+              ["11"]="RunProtoTests.sh (6 Rec2020 spectral tests)"
               ["12"]="iccTiffDump + iccSpecSepToTiff"
               ["13"]="Image tools (iccPngDump, iccJpegDump on real files)"
               ["14"]="Identity curve regression (PR 728)"
