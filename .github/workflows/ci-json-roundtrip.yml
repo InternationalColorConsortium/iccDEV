@@ -22,6 +22,7 @@ on:
   push:
     branches: [master]
     paths:
+      - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
       - 'IccJSON/**'
       - 'IccProfLib/**'
@@ -30,6 +31,7 @@ on:
   pull_request:
     branches: [master]
     paths:
+      - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
       - 'IccJSON/**'
       - 'IccProfLib/**'
@@ -87,6 +89,8 @@ jobs:
           unset GITHUB_TOKEN || true
           test -x Build/build-json/Tools/IccToJson/iccToJson
           test -x Build/build-json/Tools/IccFromJson/iccFromJson
+          test -x Build/build-json/Tools/IccFromXml/iccFromXml
+          test -x Build/build-json/Tools/IccDumpProfile/iccDumpProfile
           echo "[OK] JSON tool binaries built"
 
       - name: Generate test profiles
@@ -219,4 +223,40 @@ jobs:
             echo "### Standard Observer Alias Regression"
             echo ""
             echo "**Status**: $(sanitize_line "4/4 XML and JSON alias tests passed")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: mluc ISO code validation regression
+        env:
+          BASH_ENV: /dev/null
+          LD_LIBRARY_PATH: "${{ github.workspace }}/Build/build-json/IccProfLib:${{ github.workspace }}/Build/build-json/IccXML:${{ github.workspace }}/Build/build-json/IccJSON"
+          ICCDEV_TOOLS_DIR: "${{ github.workspace }}/Build/build-json/Tools"
+          ICCDEV_TESTING_DIR: "${{ github.workspace }}/Testing"
+          ICCDEV_TEST_OUTDIR: "/tmp/iccdev-mluc-iso-code-regressions"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          chmod +x .github/scripts/iccdev-mluc-iso-code-regression-tests.sh
+          .github/scripts/iccdev-mluc-iso-code-regression-tests.sh
+
+          {
+            echo ""
+            echo "### mluc ISO Code Validation Regression"
+            echo ""
+            echo "**Status**: $(sanitize_line "4/4 mluc ISO code validation tests passed")"
           } >> "$GITHUB_STEP_SUMMARY"
