@@ -876,7 +876,8 @@ bool CIccMpeJsonMatrix::ToJson(IccJson &j)
       matrix.push_back((double)m_pMatrix[i]);
     j["matrix"] = matrix;
   }
-  if (m_pConstants && m_bApplyConstants) {
+  // Preserve serialized matrix constants even when they are all zero.
+  if (m_pConstants) {
     IccJson constants = IccJson::array();
     for (icUInt16Number i = 0; i < m_nOutputChannels; i++)
       constants.push_back((double)m_pConstants[i]);
@@ -893,10 +894,13 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   icUInt16Number nIn  = (icUInt16Number)nInInt;
   icUInt16Number nOut = (icUInt16Number)nOutInt;
 
+  bool bHasMatrix = j.contains("matrix") && j["matrix"].is_array();
   bool bHasConstants = j.contains("constants") && j["constants"].is_array();
-  if (!SetSize(nIn, nOut, bHasConstants)) return false;
+  // Matrix elements require constants in serialized ICC data. For older JSON
+  // that omitted all-zero constants, allocate them and leave them zero-filled.
+  if (!SetSize(nIn, nOut, bHasMatrix || bHasConstants)) return false;
 
-  if (j.contains("matrix") && j["matrix"].is_array()) {
+  if (bHasMatrix) {
     const IccJson &mat = j["matrix"];
     icUInt32Number nEntries = nIn * nOut;
     for (icUInt32Number i = 0; i < nEntries && i < icJsonSafeU32(mat.size()); i++)

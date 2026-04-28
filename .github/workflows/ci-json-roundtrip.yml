@@ -17,6 +17,10 @@ name: "ci-json-roundtrip"
 permissions:
   contents: read
 
+concurrency:
+  group: "json-roundtrip-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}"
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
@@ -24,6 +28,7 @@ on:
     paths:
       - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
+      - '.github/workflows/ci-json-roundtrip.yml'
       - 'IccJSON/**'
       - 'IccProfLib/**'
       - 'IccXML/**'
@@ -33,6 +38,7 @@ on:
     paths:
       - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
+      - '.github/workflows/ci-json-roundtrip.yml'
       - 'IccJSON/**'
       - 'IccProfLib/**'
       - 'IccXML/**'
@@ -128,66 +134,207 @@ jobs:
               printf '%s' "$s"
             }
             sanitize_line() { escape_html "$1"; }
+            sanitize_filename() {
+              local s="$1"
+              s="${s//$'\r'/}"
+              s="${s//$'\n'/}"
+              s="$(printf '%s' "$s" | LC_ALL=C sed -E 's#[^A-Za-z0-9._-]#_#g; s#_+#_#g; s#^_+##; s#_+$##')"
+              if [ -z "$s" ]; then
+                s="profile"
+              fi
+              printf '%s' "$s"
+            }
           fi
 
           cd Build/build-json
           export LD_LIBRARY_PATH="$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON"
           TOJSON="$PWD/Tools/IccToJson/iccToJson"
           FROMJSON="$PWD/Tools/IccFromJson/iccFromJson"
+          RESULT_DIR="$GITHUB_WORKSPACE/Build/json-roundtrip-results"
+          JSON_DIR="$RESULT_DIR/json"
+          ICC_DIR="$RESULT_DIR/icc"
+          ORIGINAL_DIR="$RESULT_DIR/original-icc"
+          LOG_DIR="$RESULT_DIR/logs"
+          RESULTS_TSV="$RESULT_DIR/json-roundtrip-results.tsv"
+          WORK_DIR="${RUNNER_TEMP:-/tmp}/iccdev-json-roundtrip"
+
+          rm -rf "$RESULT_DIR" "$WORK_DIR"
+          mkdir -p "$JSON_DIR" "$ICC_DIR" "$ORIGINAL_DIR" "$LOG_DIR"
+          mkdir -p "$WORK_DIR"
+          printf 'status\tprofile\toriginal_bytes\tjson_bytes\troundtrip_bytes\tdelta\toriginal_icc\tjson\troundtrip_icc\ttojson_log\tfromjson_log\n' > "$RESULTS_TSV"
+
+          sanitize_tool_log() {
+            local prefix="$1"
+            local log_file="$2"
+            while IFS= read -r line; do
+              printf '%s ' "$prefix"
+              sanitize_line "$line"
+              printf '\n'
+            done < "$log_file"
+          }
 
           PASS=0
           FAIL=0
           SKIP=0
           TOTAL=0
+          LCDDISPLAY_STATUS=""
 
           {
             echo "### JSON Round-Trip Results"
             echo ""
-            echo "| Status | Profile | Original | Round-Trip | Delta |"
-            echo "|--------|---------|----------|------------|-------|"
+            echo "| Status | Profile | Original | JSON | Round-Trip | Delta |"
+            echo "|--------|---------|----------|------|------------|-------|"
           } >> "$GITHUB_STEP_SUMMARY"
 
           # Use process substitution to avoid subshell variable scoping
           while IFS= read -r f; do
-            name=$(basename "$f")
+            rel="${f#../../Testing/}"
+            artifact_name="$(sanitize_filename "${rel%.icc}")"
+            artifact_name="$(printf '%s' "$artifact_name" | LC_ALL=C sed -E 's#^[._-]+##; s#[._-]+$##')"
+            if [ -z "$artifact_name" ]; then
+              artifact_name="profile"
+            fi
+            artifact_hash="$(printf '%s' "$rel" | sha256sum | awk '{print substr($1, 1, 12)}')"
+            artifact_base="${artifact_name:0:120}-${artifact_hash}"
             orig_size=$(stat -c%s "$f")
+            orig_artifact="$ORIGINAL_DIR/${artifact_base}.icc"
+            json_artifact="$JSON_DIR/${artifact_base}.json"
+            rt_artifact="$ICC_DIR/${artifact_base}.roundtrip.icc"
+            json_out="$WORK_DIR/${artifact_base}.json"
+            rt_out="$WORK_DIR/${artifact_base}.roundtrip.icc"
+            tojson_log="$LOG_DIR/${artifact_base}.iccToJson.log"
+            fromjson_log="$LOG_DIR/${artifact_base}.iccFromJson.log"
             TOTAL=$((TOTAL+1))
+            safe_rel="$(sanitize_line "$rel")"
+            safe_source="$(sanitize_line "$f")"
+            profile_status=""
+            original_record="-"
+            json_record="-"
+            rt_record="-"
 
-            if ! timeout 30 "$TOJSON" "$f" /tmp/rt.json >/dev/null 2>&1; then
+            echo "[JSON-RT] START profile=${safe_rel} original_bytes=${orig_size}"
+            echo "[JSON-RT] COMMAND iccToJson source=${safe_source} output=${json_out} log=${tojson_log}"
+
+            if ! timeout 30 "$TOJSON" "$f" "$json_out" >"$tojson_log" 2>&1; then
               SKIP=$((SKIP+1))
+              profile_status="SKIP_TOJSON"
+              json_size=$(stat -c%s "$json_out" 2>/dev/null || printf '0')
+              cp "$f" "$orig_artifact"
+              original_record="$orig_artifact"
+              if [ -s "$json_out" ]; then
+                cp "$json_out" "$json_artifact"
+                json_record="$json_artifact"
+              fi
+              printf 'SKIP_TOJSON\t%s\t%s\t%s\t-\t-\t%s\t%s\t-\t%s\t-\n' \
+                "$safe_rel" "$orig_size" "$json_size" "$original_record" "$json_record" "$tojson_log" >> "$RESULTS_TSV"
+              echo "| [SKIP] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | iccToJson failed |" >> "$GITHUB_STEP_SUMMARY"
+              echo "[JSON-RT] SKIP_TOJSON profile=${safe_rel} original=${original_record} json=${json_record} log=${tojson_log}"
+              sanitize_tool_log "[JSON-RT][iccToJson]" "$tojson_log"
+              if [ "$rel" = "Display/LCDDisplay.icc" ]; then
+                LCDDISPLAY_STATUS="$profile_status"
+              fi
               continue
             fi
-            if ! timeout 30 "$FROMJSON" /tmp/rt.json /tmp/rt.icc >/dev/null 2>&1; then
+            json_size=$(stat -c%s "$json_out")
+            echo "[JSON-RT] TOJSON_OK profile=${safe_rel} json_bytes=${json_size} json=${json_out}"
+            echo "[JSON-RT] COMMAND iccFromJson source=${json_out} output=${rt_out} log=${fromjson_log}"
+
+            if ! timeout 30 "$FROMJSON" "$json_out" "$rt_out" >"$fromjson_log" 2>&1; then
               SKIP=$((SKIP+1))
+              profile_status="SKIP_FROMJSON"
+              cp "$f" "$orig_artifact"
+              cp "$json_out" "$json_artifact"
+              original_record="$orig_artifact"
+              json_record="$json_artifact"
+              if [ -s "$rt_out" ]; then
+                cp "$rt_out" "$rt_artifact"
+                rt_record="$rt_artifact"
+              fi
+              printf 'SKIP_FROMJSON\t%s\t%s\t%s\t-\t-\t%s\t%s\t%s\t%s\t%s\n' \
+                "$safe_rel" "$orig_size" "$json_size" "$original_record" "$json_record" "$rt_record" "$tojson_log" "$fromjson_log" >> "$RESULTS_TSV"
+              echo "| [SKIP] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | iccFromJson failed |" >> "$GITHUB_STEP_SUMMARY"
+              echo "[JSON-RT] SKIP_FROMJSON profile=${safe_rel} original=${original_record} json=${json_record} roundtrip=${rt_record} log=${fromjson_log}"
+              sanitize_tool_log "[JSON-RT][iccFromJson]" "$fromjson_log"
+              if [ "$rel" = "Display/LCDDisplay.icc" ]; then
+                LCDDISPLAY_STATUS="$profile_status"
+              fi
               continue
             fi
 
-            rt_size=$(stat -c%s /tmp/rt.icc)
-            safe_name="$(sanitize_line "$name")"
+            rt_size=$(stat -c%s "$rt_out")
+            echo "[JSON-RT] FROMJSON_OK profile=${safe_rel} roundtrip_bytes=${rt_size} roundtrip=${rt_out}"
 
             if [ "$orig_size" -eq "$rt_size" ]; then
               PASS=$((PASS+1))
-              echo "| [OK] | ${safe_name} | $(sanitize_line "${orig_size}") | $(sanitize_line "${rt_size}") | 0 |" >> "$GITHUB_STEP_SUMMARY"
+              profile_status="PASS"
+              if [ "$rel" = "Display/LCDDisplay.icc" ]; then
+                cp "$f" "$orig_artifact"
+                cp "$json_out" "$json_artifact"
+                cp "$rt_out" "$rt_artifact"
+                original_record="$orig_artifact"
+                json_record="$json_artifact"
+                rt_record="$rt_artifact"
+              fi
+              printf 'PASS\t%s\t%s\t%s\t%s\t0\t%s\t%s\t%s\t%s\t%s\n' \
+                "$safe_rel" "$orig_size" "$json_size" "$rt_size" "$original_record" "$json_record" "$rt_record" "$tojson_log" "$fromjson_log" >> "$RESULTS_TSV"
+              echo "| [OK] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | $(sanitize_line "${rt_size}") | 0 |" >> "$GITHUB_STEP_SUMMARY"
+              if [ "$rel" = "Display/LCDDisplay.icc" ]; then
+                LCDDISPLAY_STATUS="$profile_status"
+              fi
             else
               delta=$((rt_size - orig_size))
               FAIL=$((FAIL+1))
-              echo "| [DIFF] | ${safe_name} | $(sanitize_line "${orig_size}") | $(sanitize_line "${rt_size}") | $(sanitize_line "${delta}") |" >> "$GITHUB_STEP_SUMMARY"
+              profile_status="DIFF"
+              cp "$f" "$orig_artifact"
+              cp "$json_out" "$json_artifact"
+              cp "$rt_out" "$rt_artifact"
+              original_record="$orig_artifact"
+              json_record="$json_artifact"
+              rt_record="$rt_artifact"
+              printf 'DIFF\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$safe_rel" "$orig_size" "$json_size" "$rt_size" "$delta" "$original_record" "$json_record" "$rt_record" "$tojson_log" "$fromjson_log" >> "$RESULTS_TSV"
+              echo "| [DIFF] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | $(sanitize_line "${rt_size}") | $(sanitize_line "${delta}") |" >> "$GITHUB_STEP_SUMMARY"
+              if [ "$rel" = "Display/LCDDisplay.icc" ]; then
+                LCDDISPLAY_STATUS="$profile_status"
+              fi
             fi
 
-            rm -f /tmp/rt.json /tmp/rt.icc
+            echo "[JSON-RT] RESULT profile=${safe_rel} status=${profile_status} original_artifact=${original_record} json_artifact=${json_record} roundtrip_artifact=${rt_record}"
           done < <(find ../../Testing -name '*.icc' -size +100c 2>/dev/null | sort)
 
           {
             echo ""
             echo "**Summary**: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} TOTAL=${TOTAL}"
+            echo ""
+            echo "**Artifact manifest**: Build/json-roundtrip-results/json-roundtrip-results.tsv"
+            echo ""
+            echo "**Uploaded profile payloads**: Display/LCDDisplay.icc plus non-PASS profiles"
+            echo ""
+            echo "**Display/LCDDisplay.icc**: $(sanitize_line "${LCDDISPLAY_STATUS:-not exercised}")"
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "[OK] Round-trip test complete: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} TOTAL=${TOTAL}"
+          echo "[JSON-RT] Results written to ${RESULT_DIR}"
+          echo "[JSON-RT] Manifest: ${RESULTS_TSV}"
+          echo "[JSON-RT] Display/LCDDisplay.icc status=${LCDDISPLAY_STATUS:-not exercised}"
 
           if [ "${TOTAL}" -eq 0 ]; then
             echo "[FAIL] No ICC profiles found for round-trip testing"
             exit 1
           fi
+          if [ -z "${LCDDISPLAY_STATUS}" ] || [ "${LCDDISPLAY_STATUS}" = "SKIP_TOJSON" ] || [ "${LCDDISPLAY_STATUS}" = "SKIP_FROMJSON" ]; then
+            echo "[FAIL] Display/LCDDisplay.icc was not successfully exercised by JSON round-trip testing"
+            exit 1
+          fi
+
+      - name: Upload JSON round-trip artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: json-roundtrip-results
+          path: Build/json-roundtrip-results
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Standard observer XML/JSON alias regression
         env:
