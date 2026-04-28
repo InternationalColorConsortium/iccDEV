@@ -779,73 +779,10 @@ jobs:
 
           echo "## 7. Permissions Minimization Audit" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          TOTAL_WF=0
-          WF_WITH_PERMS=0
-          WF_WITH_WRITE_ALL=0
-          WF_NO_PERMS=0
-
-          declare -a NO_PERMS=()
-          declare -a WRITE_ALL=()
-
-          while IFS= read -r wf; do
-            TOTAL_WF=$((TOTAL_WF + 1))
-            wf_base=$(basename "$wf")
-
-            if grep -qE '^permissions:' "$wf"; then
-              WF_WITH_PERMS=$((WF_WITH_PERMS + 1))
-              # Detect ANY write permission: write-all, contents:write, packages:write,
-              # pull-requests:write, id-token:write, attestations:write, etc.
-              write_scopes=$(grep -E '^\s+[-a-zA-Z]+:\s*write' "$wf" 2>/dev/null \
-                | sed 's/^\s*//' | sort -u || true)
-              has_write_all=""
-              if grep -qE '^permissions:\s*write-all' "$wf"; then
-                has_write_all="yes"
-              fi
-              if [[ -n "$write_scopes" || -n "$has_write_all" ]]; then
-                WF_WITH_WRITE_ALL=$((WF_WITH_WRITE_ALL + 1))
-                # Build detail string: workflow name + specific write scopes
-                scope_list=""
-                if [[ -n "$has_write_all" ]]; then
-                  scope_list="write-all"
-                elif [[ -n "$write_scopes" ]]; then
-                  scope_list=$(echo "$write_scopes" | sed 's/: write//' | tr '\n' ',' | sed 's/,$//')
-                fi
-                WRITE_ALL+=("${wf_base} (${scope_list})")
-              fi
-            else
-              WF_NO_PERMS=$((WF_NO_PERMS + 1))
-              NO_PERMS+=("$wf_base")
-            fi
-          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
-
-          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Total workflows | $(sanitize_line "$TOTAL_WF") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| With explicit permissions | $(sanitize_line "$WF_WITH_PERMS") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Missing permissions block | $(sanitize_line "$WF_NO_PERMS") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| With any write permission | $(sanitize_line "$WF_WITH_WRITE_ALL") |" >> "$GITHUB_STEP_SUMMARY"
+          python3 .github/scripts/audit-workflow-permissions.py \
+            --workflows-dir .github/workflows \
+            --format markdown >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ ${#NO_PERMS[@]} -gt 0 ]]; then
-            echo "<details><summary>[HIGH] Missing permissions block ($(sanitize_line "${#NO_PERMS[@]}"))</summary>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            for item in "${NO_PERMS[@]}"; do
-              echo "- \`$(sanitize_line "$item")\`" >> "$GITHUB_STEP_SUMMARY"
-            done
-            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-           if [[ ${#WRITE_ALL[@]} -gt 0 ]]; then
-            echo "<details><summary>[MEDIUM] Workflows with write access ($(sanitize_line "${#WRITE_ALL[@]}"))</summary>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            for item in "${WRITE_ALL[@]}"; do
-              echo "- \`$(sanitize_line "$item")\`" >> "$GITHUB_STEP_SUMMARY"
-            done
-            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-          fi
 
           # H-4: id-token: write audit (cross-reference with dangerous triggers)
           ID_TOKEN_WRITE=0
@@ -937,14 +874,28 @@ jobs:
             RISK_ITEMS+=("$UNPIN_COUNT unpinned action reference(s) (+$((UNPIN_COUNT * 5)))")
           fi
 
-          # Check 3: Missing permissions
-          NOPERM_COUNT=$(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null | while read -r f; do
-            grep -qE '^permissions:' "$f" || echo "1"
-          done | wc -l)
-          NOPERM_COUNT=${NOPERM_COUNT:-0}
+          # Check 3: Missing permissions and explicit write permissions.
+          # This accounts for workflow-level and job-level permissions blocks.
+          NOPERM_COUNT=0
+          WRITE_WF_COUNT=0
+          WRITE_BLOCK_COUNT=0
+          while IFS='=' read -r key value; do
+            case "$key" in
+              WF_NO_PERMS) NOPERM_COUNT="$value" ;;
+              WF_WITH_WRITE) WRITE_WF_COUNT="$value" ;;
+              WF_WRITE_BLOCKS) WRITE_BLOCK_COUNT="$value" ;;
+            esac
+          done < <(python3 .github/scripts/audit-workflow-permissions.py \
+            --workflows-dir .github/workflows \
+            --format shell)
+
           if [[ $NOPERM_COUNT -gt 0 ]]; then
             RISK_SCORE=$((RISK_SCORE + NOPERM_COUNT * 3))
             RISK_ITEMS+=("$NOPERM_COUNT workflow(s) without permissions block (+$((NOPERM_COUNT * 3)))")
+          fi
+          if [[ $WRITE_WF_COUNT -gt 0 ]]; then
+            RISK_SCORE=$((RISK_SCORE + WRITE_WF_COUNT * 4))
+            RISK_ITEMS+=("$WRITE_WF_COUNT workflow(s) grant write permissions across $WRITE_BLOCK_COUNT permissions block(s) (+$((WRITE_WF_COUNT * 4)))")
           fi
 
           # Check 4: shell=true or shell: bash (without noprofile)
@@ -2094,60 +2045,14 @@ jobs:
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
           }
 
-          $withPerms = 0
-          $withoutPerms = 0
-          $withWrite = 0
-          $missingList = @()
-          $writeList = @()
-
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
-          foreach ($wf in $workflows) {
-            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            if ($content -match '(?m)^permissions:') {
-              $withPerms++
-              # Detect ANY write permission: write-all, contents:write, packages:write,
-              # pull-requests:write, id-token:write, attestations:write, etc.
-              $hasWriteAll = $content -match '(?m)^permissions:\s*write-all'
-              $writeScopes = [regex]::Matches($content, '(?m)^\s+([-a-zA-Z]+):\s*write\s*$') |
-                ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique
-              if ($hasWriteAll -or $writeScopes.Count -gt 0) {
-                $withWrite++
-                if ($hasWriteAll) {
-                  $scopeDetail = "write-all"
-                } else {
-                  $scopeDetail = ($writeScopes -join ",")
-                }
-                $writeList += "$($wf.Name) ($scopeDetail)"
-              }
-            } else {
-              $withoutPerms++
-              $missingList += $wf.Name
-            }
-          }
-
-          $report = @()
-          $report += "## 7. Permissions Minimization (Windows Validation)"
-          $report += ""
-          $report += "| Metric | Count |"
-          $report += "|--------|-------|"
-          $report += "| With permissions: block | $(Sanitize-Line "$withPerms") |"
-          $report += "| Without permissions: block | $(Sanitize-Line "$withoutPerms") |"
-          $report += "| With any write permission | $(Sanitize-Line "$withWrite") |"
-          $report += ""
-          if ($missingList.Count -gt 0) {
-            $report += "**Missing permissions: block:**"
-            foreach ($m in $missingList) { $report += "- ``$(Sanitize-Line $m)``" }
-          } else {
-            $report += "[OK] All workflows have explicit permissions"
-          }
-          $report += ""
-          if ($writeList.Count -gt 0) {
-            $report += "**Workflows with write access ($($writeList.Count)):**"
-            foreach ($w in $writeList) { $report += "- ``$(Sanitize-Line $w)``" }
-          }
-          $report += ""
+          $permJson = python .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format json | ConvertFrom-Json
+          python .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format markdown |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
           # H-4: id-token: write audit
+          $report = @()
           $idTokenWrite = 0
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
@@ -2182,7 +2087,7 @@ jobs:
           }
           $report += ""
           $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
-          Write-Host "[OK] Permissions audit complete (Windows): $withPerms with perms, $withoutPerms without, $withWrite with write"
+          Write-Host "[OK] Permissions audit complete (Windows): $($permJson.with_permissions) with perms, $($permJson.without_permissions) without, $($permJson.with_write) with write"
 
       - name: "8. Supply-Chain Risk Score (Windows)"
         if: always()
@@ -2268,13 +2173,18 @@ jobs:
             $deductions += "persist-credentials not false: $($checkouts - $persistFalse) checkouts (-$deduct)"
           }
 
-          # Check permissions blocks
-          $permsCount = ([regex]::Matches($allContent, '(?m)^permissions:')).Count
-          $wfCount = $workflows.Count
-          if ($permsCount -lt $wfCount) {
-            $deduct = [math]::Min(10, ($wfCount - $permsCount) * 2)
+          # Check permissions blocks and explicit write grants. The helper
+          # accounts for workflow-level and job-level permissions blocks.
+          $permAudit = python .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format json | ConvertFrom-Json
+          if ($permAudit.without_permissions -gt 0) {
+            $deduct = [math]::Min(10, $permAudit.without_permissions * 2)
             $score -= $deduct
-            $deductions += "Missing permissions blocks: $($wfCount - $permsCount) workflows (-$deduct)"
+            $deductions += "Missing permissions blocks: $($permAudit.without_permissions) workflows (-$deduct)"
+          }
+          if ($permAudit.with_write -gt 0) {
+            $deduct = [math]::Min(16, $permAudit.with_write * 2)
+            $score -= $deduct
+            $deductions += "Write permissions granted: $($permAudit.with_write) workflows / $($permAudit.write_blocks) block(s) (-$deduct)"
           }
 
           # H-2: shell: bash without --noprofile
