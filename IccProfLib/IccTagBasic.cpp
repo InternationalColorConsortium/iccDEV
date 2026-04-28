@@ -7236,7 +7236,7 @@ const icChar *CIccLocalizedUnicode::GetUtf8(icChar *szBuf, icUInt32Number nBufSi
 
   if (nBufSize - 1 < str.size()) {
     memcpy(szBuf, str.c_str(), nBufSize - 1);
-    szBuf[nBufSize] = 0;
+    szBuf[nBufSize - 1] = 0;
   }
   else {
     strcpy(szBuf, str.c_str());
