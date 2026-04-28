@@ -7461,7 +7461,10 @@ bool CIccLocalizedUnicode::SetText(const icChar *szText,
   icUInt16Number *pBuf;
 
   size_t len = utf16.size();
-  if (!SetSize((icUInt32Number)len+1))
+  if (len > (size_t)((icUInt32Number)-1))
+    return false;
+
+  if (!SetSize((icUInt32Number)len))
     return false;
   
   pBuf = m_pBuf;
@@ -7502,9 +7505,10 @@ bool CIccLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text,
 
   for (len=0; *pBuf; len++, pBuf++);
 
-  if (!SetSize(len+1))
+  if (!SetSize(len))
     return false;
-  memcpy(m_pBuf, sszUnicode16Text, (len+1)*sizeof(icUInt16Number));
+  if (len)
+    memcpy(m_pBuf, sszUnicode16Text, len*sizeof(icUInt16Number));
 
   m_nLanguageCode = nLanguageCode;
   m_nCountryCode = nRegionCode;

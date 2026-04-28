@@ -15,6 +15,12 @@ Test 18 (Regression Bisect).
 | `poc-763-cenc-huaf.icc` | #763 | cenc profile use-after-free in AddXform | CWE-416 | iccApplyNamedCmm |
 | `poc-769-*.icc` | #769 | Unsigned integer overflow in offset+size bounds checks | CWE-190 | iccDumpProfile ALL |
 
+## Script-based regressions
+
+| Script | Issue | Bug | Check |
+|--------|-------|-----|-------|
+| `.github/scripts/iccdev-mluc-setter-regression-tests.sh` | #928 | `multiLocalizedUnicodeType` setters included safety terminators in serialized `mluc` string lengths | Rebuilds `sRGB_D65_MAT.icc` and `NamedColor.icc` from XML and verifies canonical `desc`/`mluc` sizes |
+
 ## Adding a new PoC
 
 1. Minimize the crash file (smallest reproducer)

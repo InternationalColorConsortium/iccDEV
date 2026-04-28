@@ -11,7 +11,8 @@
 #   2. JSON -cfg tests (33 tests) -- config mode validation
 #   3. JSON CLI exercise (125 tests) -- all CLI option combos
 #   4. Regression checks -- bisect fix PoCs, JSON parser/config failures,
-#      and standard observer XML/JSON alias compatibility
+#      standard observer XML/JSON alias compatibility, and issue #928 mluc
+#      setter canonical length checks
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -27,6 +28,7 @@
 #   .github/scripts/json-cli-exercise.sh
 #   .github/scripts/iccdev-json-parser-regression-tests.sh
 #   .github/scripts/iccdev-stdobserver-regression-tests.sh
+#   .github/scripts/iccdev-mluc-setter-regression-tests.sh
 #
 ###############################################################
 
@@ -39,11 +41,13 @@ on:
   push:
     branches:
       - 'fix-bisect-*'
+      - 'bisect-*'
     paths:
       - '.github/workflows/ci-tool-tests.yml'
       - '.github/scripts/iccdev-tool-coverage-baseline.sh'
       - '.github/scripts/iccdev-json-cfg-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
+      - '.github/scripts/iccdev-mluc-setter-regression-tests.sh'
       - '.github/scripts/json-cli-exercise.sh'
       - '.github/ci/test-data/**'
       - 'IccProfLib/**'
@@ -993,6 +997,32 @@ jobs:
           echo "  Standard observer XML/JSON aliases: $r14_pass passed, $r14_fail failed"
           passed=$((passed + r14_pass))
           failed=$((failed + r14_fail))
+
+          # --- R15: Issue #928 multiLocalizedUnicodeType setter canonical length ---
+          echo "--- R15: Issue #928 multiLocalizedUnicodeType setter canonical length ---"
+          r15_pass=0 r15_fail=0
+          MLUC_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-mluc-setter-regression-tests.sh"
+          if [ -f "$MLUC_SCRIPT" ]; then
+            chmod +x "$MLUC_SCRIPT"
+            r15_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r15-mluc-setter" \
+              "$MLUC_SCRIPT" > "$OUTDIR/r15-mluc-setter.log" 2>&1 || r15_ec=$?
+            cat "$OUTDIR/r15-mluc-setter.log"
+            if [ "$r15_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #928 mluc setters preserve canonical serialized lengths"
+              r15_pass=$((r15_pass + 2))
+            else
+              echo "  [FAIL]  Issue #928 mluc setter regression script exited $r15_ec"
+              r15_fail=$((r15_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  mluc setter regression script not found"
+          fi
+          echo "  Issue #928 mluc setter canonical length: $r15_pass passed, $r15_fail failed"
+          passed=$((passed + r15_pass))
+          failed=$((failed + r15_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

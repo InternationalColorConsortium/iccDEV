@@ -27,6 +27,7 @@ Script-based gates live in `.github/scripts/`, including:
 - `iccdev-json-parser-regression-tests.sh`
 - `iccdev-json-cfg-tests.sh`
 - `iccdev-stdobserver-regression-tests.sh`
+- `iccdev-mluc-setter-regression-tests.sh`
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.

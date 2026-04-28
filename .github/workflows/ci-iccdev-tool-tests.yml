@@ -1795,6 +1795,32 @@ jobs:
           passed=$((passed + r18_pass))
           failed=$((failed + r18_fail))
 
+          # --- R19: Issue #928 multiLocalizedUnicodeType setter canonical length ---
+          echo "--- R19: Issue #928 multiLocalizedUnicodeType setter canonical length ---"
+          r19_pass=0 r19_fail=0
+          MLUC_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-mluc-setter-regression-tests.sh"
+          if [ -f "$MLUC_SCRIPT" ]; then
+            chmod +x "$MLUC_SCRIPT"
+            r19_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r19-mluc-setter" \
+              "$MLUC_SCRIPT" > "$OUTDIR/r19-mluc-setter.log" 2>&1 || r19_ec=$?
+            cat "$OUTDIR/r19-mluc-setter.log"
+            if [ "$r19_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #928 mluc setters preserve canonical serialized lengths"
+              r19_pass=$((r19_pass + 2))
+            else
+              echo "  [FAIL]  Issue #928 mluc setter regression script exited $r19_ec"
+              r19_fail=$((r19_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  mluc setter regression script not found"
+          fi
+          echo "  Issue #928 mluc setter canonical length: $r19_pass passed, $r19_fail failed"
+          passed=$((passed + r19_pass))
+          failed=$((failed + r19_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
@@ -1929,7 +1955,7 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
-              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter)"
             )
 
             for phase in $(seq 1 18); do
