@@ -11,8 +11,8 @@
 #   2. JSON -cfg tests (33 tests) -- config mode validation
 #   3. JSON CLI exercise (125 tests) -- all CLI option combos
 #   4. Regression checks -- bisect fix PoCs, JSON parser/config failures,
-#      standard observer XML/JSON alias compatibility, and issue #928 mluc
-#      setter canonical length checks
+#      standard observer XML/JSON alias compatibility, issue #928 mluc setter
+#      canonical length checks, and mluc read/UTF-16 validation
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -29,6 +29,7 @@
 #   .github/scripts/iccdev-json-parser-regression-tests.sh
 #   .github/scripts/iccdev-stdobserver-regression-tests.sh
 #   .github/scripts/iccdev-mluc-setter-regression-tests.sh
+#   .github/scripts/iccdev-mluc-read-utf16-regression-tests.sh
 #
 ###############################################################
 
@@ -48,6 +49,7 @@ on:
       - '.github/scripts/iccdev-json-cfg-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
       - '.github/scripts/iccdev-mluc-setter-regression-tests.sh'
+      - '.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh'
       - '.github/scripts/json-cli-exercise.sh'
       - '.github/ci/test-data/**'
       - 'IccProfLib/**'
@@ -1023,6 +1025,32 @@ jobs:
           echo "  Issue #928 mluc setter canonical length: $r15_pass passed, $r15_fail failed"
           passed=$((passed + r15_pass))
           failed=$((failed + r15_fail))
+
+          # --- R16: Issue #928 follow-up multiLocalizedUnicodeType read/UTF-16 validation ---
+          echo "--- R16: Issue #928 follow-up multiLocalizedUnicodeType read/UTF-16 validation ---"
+          r16_pass=0 r16_fail=0
+          MLUC_READ_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh"
+          if [ -f "$MLUC_READ_SCRIPT" ]; then
+            chmod +x "$MLUC_READ_SCRIPT"
+            r16_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r16-mluc-read-utf16" \
+              "$MLUC_READ_SCRIPT" > "$OUTDIR/r16-mluc-read-utf16.log" 2>&1 || r16_ec=$?
+            cat "$OUTDIR/r16-mluc-read-utf16.log"
+            if [ "$r16_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #928 follow-up mluc reader rejects malformed UTF-16/layout"
+              r16_pass=$((r16_pass + 4))
+            else
+              echo "  [FAIL]  Issue #928 follow-up mluc read/UTF-16 regression script exited $r16_ec"
+              r16_fail=$((r16_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  mluc read/UTF-16 regression script not found"
+          fi
+          echo "  Issue #928 follow-up mluc read/UTF-16 validation: $r16_pass passed, $r16_fail failed"
+          passed=$((passed + r16_pass))
+          failed=$((failed + r16_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

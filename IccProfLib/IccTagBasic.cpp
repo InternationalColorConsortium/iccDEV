@@ -7315,6 +7315,30 @@ CIccLocalizedUnicode::~CIccLocalizedUnicode()
     free(m_pBuf);
 }
 
+static bool icIsValidUtf16(const icUInt16Number *pBuf, icUInt32Number nLength)
+{
+  if (!pBuf && nLength)
+    return false;
+
+  for (icUInt32Number i=0; i<nLength; i++) {
+    icUInt16Number ch = pBuf[i];
+
+    if (ch >= 0xD800 && ch <= 0xDBFF) {
+      if (i + 1 >= nLength)
+        return false;
+      icUInt16Number low = pBuf[i + 1];
+      if (low < 0xDC00 || low > 0xDFFF)
+        return false;
+      i++;
+    }
+    else if (ch >= 0xDC00 && ch <= 0xDFFF) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  ****************************************************************************
  * Name: CIccLocalizedUnicode::GetUtf8Size
@@ -7391,14 +7415,18 @@ bool CIccLocalizedUnicode::GetText(std::string &sText)
       str++;
     }
     else if (*str <= 0xDBFF) {
-      icUInt16Number high = (*str - 0xD800) * 0x400;
-      icUInt16Number low = *(str + 1) - 0xDC00;
+      if (str + 1 >= str_end || str[1] < 0xDC00 || str[1] > 0xDFFF) {
+        sText.clear();
+        return false;
+      }
+      icUInt32Number high = (*str - 0xD800) * 0x400u;
+      icUInt32Number low = str[1] - 0xDC00u;
       code32 = (low | high) + 0x10000;
       str += 2;
     }
     else {  //range dc00-dfff should only occur after a d800-dbfff
-      str++;
-      continue;
+      sText.clear();
+      return false;
     }
 
     //UTF-32 to UTF-8 -------
@@ -7807,6 +7835,12 @@ bool CIccTagMultiLocalizedUnicode::Read(icUInt32Number size, CIccIO *pIO)
   if (nNumRec > 65536u)
     return false;
 
+  icUInt64Number nStringDataStart =
+      static_cast<icUInt64Number>(4u * sizeof(icUInt32Number)) +
+      static_cast<icUInt64Number>(nNumRec) * nRecSize;
+  if (nStringDataStart > size)
+    return false;
+
   for (i=0; i<nNumRec; i++) {
     // 64-bit widened bounds check: 4*4 header + (i+1)*12 records.
     icUInt64Number headerAndRecords =
@@ -7822,7 +7856,13 @@ bool CIccTagMultiLocalizedUnicode::Read(icUInt32Number size, CIccIO *pIO)
         !pIO->Read32(&nLength) ||
         !pIO->Read32(&nOffset))
       return false;
-    
+
+    if (nLength % sizeof(icUInt16Number))
+      return false;
+
+    if (nLength && static_cast<icUInt64Number>(nOffset) < nStringDataStart)
+      return false;
+
     // 64-bit widened bounds check for the per-record string blob.
     if (static_cast<icUInt64Number>(nOffset) +
         static_cast<icUInt64Number>(nLength) > size)
@@ -7843,6 +7883,9 @@ bool CIccTagMultiLocalizedUnicode::Read(icUInt32Number size, CIccIO *pIO)
     pIO->Seek(nTagPos+nOffset, icSeekSet);
 
     if (pIO->Read16(Unicode.GetBuf(), nNumChar) != nNumChar)
+      return false;
+
+    if (!icIsValidUtf16(Unicode.GetBuf(), Unicode.GetLength()))
       return false;
 
     m_Strings->push_back(Unicode);
@@ -8026,6 +8069,13 @@ icValidateStatus CIccTagMultiLocalizedUnicode::Validate(std::string sigPath, std
                                i->m_nCountryCode);
         rv = icMaxStatus(rv, icValidateWarning);
       }
+    }
+
+    if (!icIsValidUtf16(i->GetBuf(), i->GetLength())) {
+      sReport += icMsgValidateNonCompliant;
+      sReport += sSigPathName;
+      sReport += " - Invalid UTF-16 string data.\n";
+      rv = icMaxStatus(rv, icValidateNonCompliant);
     }
   }
 

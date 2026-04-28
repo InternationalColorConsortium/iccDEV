@@ -437,20 +437,27 @@ jobs:
 
           SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
 
-          # Create simple RGB test data (3 lines: black, white, mid-gray)
+          # Create legacy CMM input data (black, white, mid-gray)
           TESTDATA="/tmp/iccdev-tool-output/rgb-test-data.txt"
-          printf "0 0 0\n255 255 255\n128 128 128\n" > "$TESTDATA"
+          printf "'RGB ' ; Data Format\nicEncode8bit ; Encoding\n0 0 0\n255 255 255\n128 128 128\n" > "$TESTDATA"
 
           run_cmm() {
             local label="$1"; shift
             local logf="$OUTDIR/cmm-${label}.log"
-            timeout 30 "$APPLYCMM" "$@" > "$logf" 2>&1 || true
+            local rc=0
+            timeout 30 "$APPLYCMM" "$@" > "$logf" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
               ASAN=$((ASAN + 1)); FAIL=$((FAIL + 1))
               echo "  [ASAN]  $label"
             elif grep -q "runtime error:" "$logf" 2>/dev/null; then
               UBSAN=$((UBSAN + 1)); FAIL=$((FAIL + 1))
               echo "  [UBSAN] $label"
+            elif [ "$rc" -ne 0 ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [FAIL]  $label (exit $rc)"
+            elif [ ! -s "$logf" ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [FAIL]  $label (empty output)"
             else
               PASS=$((PASS + 1))
               echo "  [OK]    $label"
@@ -476,12 +483,16 @@ jobs:
           CMYK="${WORKSPACE_DIR}/Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc"
           if [ -f "$CMYK" ]; then
             CMYKDATA="/tmp/iccdev-tool-output/cmyk-test-data.txt"
-            printf "0 0 0 0\n100 0 0 0\n0 100 0 0\n0 0 100 0\n0 0 0 100\n" > "$CMYKDATA"
+            printf "'CMYK' ; Data Format\nicEncodePercent ; Encoding\n0 0 0 0\n100 0 0 0\n0 100 0 0\n0 0 100 0\n0 0 0 100\n" > "$CMYKDATA"
             run_cmm "CMYK-enc0" "$CMYKDATA" 0 0 "$CMYK" 1
           fi
 
           echo ""
           echo "iccApplyNamedCmm: $((PASS + FAIL)) tested, $PASS pass, $FAIL fail (ASAN=$ASAN UBSAN=$UBSAN)"
+          if [ "$FAIL" -gt 0 ]; then
+            echo "iccApplyNamedCmm failed: $FAIL failure(s)" > "$OUTDIR/.phase-fail"
+            exit 1
+          fi
 
       - name: "Test 7: iccApplyToLink (DeviceLink + .cube output)"
         if: always()
@@ -915,16 +926,29 @@ jobs:
           SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
           TESTDATA="/tmp/iccdev-tool-output/rgb-test-data.txt"
           if [ ! -f "$TESTDATA" ]; then
-            printf "0 0 0\n255 255 255\n128 128 128\n" > "$TESTDATA"
+            printf "'RGB ' ; Data Format\nicEncode8bit ; Encoding\n0 0 0\n255 255 255\n128 128 128\n" > "$TESTDATA"
           fi
 
           if [ -f "$SRGB" ] && [ -x "$SEARCH" ]; then
             logf="$OUTDIR/search-srgb.log"
-            timeout 60 "$SEARCH" "$TESTDATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1 > "$logf" 2>&1 || true
+            rc=0
+            timeout 60 "$SEARCH" "$TESTDATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1 > "$logf" 2>&1 || rc=$?
             if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
               echo "[ASAN] iccApplySearch"
+              echo "iccApplySearch ASAN finding" > "$OUTDIR/.phase-fail"
+              exit 1
             elif grep -q "runtime error:" "$logf" 2>/dev/null; then
               echo "[UBSAN] iccApplySearch"
+              echo "iccApplySearch UBSAN finding" > "$OUTDIR/.phase-fail"
+              exit 1
+            elif [ "$rc" -ne 0 ]; then
+              echo "[FAIL] iccApplySearch sRGB self-search (exit $rc)"
+              echo "iccApplySearch failed: exit $rc" > "$OUTDIR/.phase-fail"
+              exit 1
+            elif [ ! -s "$logf" ]; then
+              echo "[FAIL] iccApplySearch sRGB self-search (empty output)"
+              echo "iccApplySearch failed: empty output" > "$OUTDIR/.phase-fail"
+              exit 1
             else
               echo "[OK] iccApplySearch sRGB self-search"
             fi
@@ -967,7 +991,8 @@ jobs:
             base="$(basename "$xml" .xml)"
             icc="$MCS/${base}.icc"
             logf="$OUTDIR/fromxml-${base}.log"
-            if timeout 60 "$FROMXML" "$xml" "$icc" > "$logf" 2>&1; then
+            rm -f "$icc"
+            if (cd "$MCS" && timeout 60 "$FROMXML" "${base}.xml" "$icc") > "$logf" 2>&1; then
               echo "[OK] iccFromXml $base"
               PASS=$((PASS + 1))
             else
@@ -984,60 +1009,92 @@ jobs:
 
           # Test: iccApplyProfiles (updateprev equivalent)
           logf="$OUTDIR/applyprofiles-updateprev.log"
-          timeout 120 "$APPLY" "$TIFF_IN" "$OUTDIR/prev.tif" \
+          apply_rc=0
+          if timeout 120 "$APPLY" "$TIFF_IN" "$OUTDIR/prev.tif" \
             1 0 1 0 1 \
             "$MCS/6ChanSelect-MID.icc" 0 \
             "$MCS/18ChanWithSpots-MVIS.icc" 0 \
-            "$SRGB" 1 > "$logf" 2>&1 || true
-          if [ -f "$OUTDIR/prev.tif" ]; then
-            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
-              echo "[ASAN] iccApplyProfiles updateprev"
-              FAIL=$((FAIL + 1))
-            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
-              echo "[UBSAN] iccApplyProfiles updateprev"
-              FAIL=$((FAIL + 1))
-            else
-              echo "[OK] iccApplyProfiles updateprev"
-              PASS=$((PASS + 1))
-            fi
+            "$SRGB" 1 > "$logf" 2>&1; then
+            apply_rc=0
           else
+            apply_rc=$?
+          fi
+          if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+            echo "[ASAN] iccApplyProfiles updateprev"
+            FAIL=$((FAIL + 1))
+          elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+            echo "[UBSAN] iccApplyProfiles updateprev"
+            FAIL=$((FAIL + 1))
+          elif [ "$apply_rc" -ne 0 ]; then
+            echo "[FAIL] iccApplyProfiles updateprev (exit $apply_rc)"
+            FAIL=$((FAIL + 1))
+          elif [ ! -f "$OUTDIR/prev.tif" ]; then
             echo "[FAIL] iccApplyProfiles updateprev (no output)"
             FAIL=$((FAIL + 1))
+          else
+            echo "[OK] iccApplyProfiles updateprev"
+            PASS=$((PASS + 1))
           fi
 
           # Validate output TIFF
           if [ -f "$OUTDIR/prev.tif" ] && [ -x "$TDUMP" ]; then
             logf="$OUTDIR/tiffdump-prev.log"
-            timeout 30 "$TDUMP" "$OUTDIR/prev.tif" > "$logf" 2>&1 || true
-            echo "[OK] iccTiffDump prev.tif"
-            PASS=$((PASS + 1))
+            tiff_rc=0
+            if timeout 30 "$TDUMP" "$OUTDIR/prev.tif" > "$logf" 2>&1; then
+              tiff_rc=0
+            else
+              tiff_rc=$?
+            fi
+            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              echo "[ASAN] iccTiffDump prev.tif"
+              FAIL=$((FAIL + 1))
+            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+              echo "[UBSAN] iccTiffDump prev.tif"
+              FAIL=$((FAIL + 1))
+            elif [ "$tiff_rc" -ne 0 ]; then
+              echo "[FAIL] iccTiffDump prev.tif (exit $tiff_rc)"
+              FAIL=$((FAIL + 1))
+            else
+              echo "[OK] iccTiffDump prev.tif"
+              PASS=$((PASS + 1))
+            fi
           fi
 
           # Test: iccApplyProfiles with background ENV vars (updateprevWithBkgd)
           logf="$OUTDIR/applyprofiles-updateprevbkgd.log"
-          timeout 120 "$APPLY" "$TIFF_IN" "$OUTDIR/prev-bkgd.tif" \
+          apply_bkgd_rc=0
+          if timeout 120 "$APPLY" "$TIFF_IN" "$OUTDIR/prev-bkgd.tif" \
             1 0 1 0 1 \
             "$MCS/6ChanSelect-MID.icc" 0 \
             -ENV:bkgX 0.4014 -ENV:bkgY 0.2391 -ENV:bkgZ 0.0272 \
             "$MCS/18ChanWithSpots-MVIS.icc" 0 \
-            "$SRGB" 1 > "$logf" 2>&1 || true
-          if [ -f "$OUTDIR/prev-bkgd.tif" ]; then
-            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
-              echo "[ASAN] iccApplyProfiles updateprevWithBkgd"
-              FAIL=$((FAIL + 1))
-            elif grep -q "runtime error:" "$logf" 2>/dev/null; then
-              echo "[UBSAN] iccApplyProfiles updateprevWithBkgd"
-              FAIL=$((FAIL + 1))
-            else
-              echo "[OK] iccApplyProfiles updateprevWithBkgd"
-              PASS=$((PASS + 1))
-            fi
+            "$SRGB" 1 > "$logf" 2>&1; then
+            apply_bkgd_rc=0
           else
+            apply_bkgd_rc=$?
+          fi
+          if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+            echo "[ASAN] iccApplyProfiles updateprevWithBkgd"
+            FAIL=$((FAIL + 1))
+          elif grep -q "runtime error:" "$logf" 2>/dev/null; then
+            echo "[UBSAN] iccApplyProfiles updateprevWithBkgd"
+            FAIL=$((FAIL + 1))
+          elif [ "$apply_bkgd_rc" -ne 0 ]; then
+            echo "[FAIL] iccApplyProfiles updateprevWithBkgd (exit $apply_bkgd_rc)"
+            FAIL=$((FAIL + 1))
+          elif [ ! -f "$OUTDIR/prev-bkgd.tif" ]; then
             echo "[FAIL] iccApplyProfiles updateprevWithBkgd (no output)"
             FAIL=$((FAIL + 1))
+          else
+            echo "[OK] iccApplyProfiles updateprevWithBkgd"
+            PASS=$((PASS + 1))
           fi
 
           echo "MCS regression: $PASS passed, $FAIL failed, $SKIP skipped"
+          if [ "$FAIL" -gt 0 ]; then
+            echo "MCS regression failed: $FAIL failure(s)" > "$OUTDIR/.phase-fail"
+            exit 1
+          fi
 
       - name: "Test 17: iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
         if: always()
@@ -1821,6 +1878,32 @@ jobs:
           passed=$((passed + r19_pass))
           failed=$((failed + r19_fail))
 
+          # --- R20: Issue #928 follow-up multiLocalizedUnicodeType read/UTF-16 validation ---
+          echo "--- R20: Issue #928 follow-up multiLocalizedUnicodeType read/UTF-16 validation ---"
+          r20_pass=0 r20_fail=0
+          MLUC_READ_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh"
+          if [ -f "$MLUC_READ_SCRIPT" ]; then
+            chmod +x "$MLUC_READ_SCRIPT"
+            r20_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r20-mluc-read-utf16" \
+              "$MLUC_READ_SCRIPT" > "$OUTDIR/r20-mluc-read-utf16.log" 2>&1 || r20_ec=$?
+            cat "$OUTDIR/r20-mluc-read-utf16.log"
+            if [ "$r20_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #928 follow-up mluc reader rejects malformed UTF-16/layout"
+              r20_pass=$((r20_pass + 4))
+            else
+              echo "  [FAIL]  Issue #928 follow-up mluc read/UTF-16 regression script exited $r20_ec"
+              r20_fail=$((r20_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  mluc read/UTF-16 regression script not found"
+          fi
+          echo "  Issue #928 follow-up mluc read/UTF-16 validation: $r20_pass passed, $r20_fail failed"
+          passed=$((passed + r20_pass))
+          failed=$((failed + r20_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
@@ -1955,7 +2038,7 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
-              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter/read)"
             )
 
             for phase in $(seq 1 18); do
@@ -1970,6 +2053,9 @@ jobs:
               elif grep -rq "runtime error:" "$pdir"/ 2>/dev/null; then
                 pu=$(grep -rl "runtime error:" "$pdir"/ 2>/dev/null | wc -l)
                 echo "| $phase | $name | UBSAN ($pu files) |"
+              elif [ -f "$pdir/.phase-fail" ]; then
+                reason="$(sanitize_line "$(sed -n '1p' "$pdir/.phase-fail")")"
+                echo "| $phase | $name | FAIL ($reason) |"
               else
                 lc=$(find "$pdir" -name '*.log' -type f 2>/dev/null | wc -l)
                 echo "| $phase | $name | PASS ($lc logs) |"

@@ -1,18 +1,26 @@
 {
-  "applynamedcmm": {
-    "data_encoding": 4,
-    "interpolation": 1,
-    "profiles": [
-      {
-        "profile_file": "test-profiles/sRGB_D65_MAT.icc",
-        "intent": 1
-      }
-    ],
+  "colorData": {
     "data": [
-      [128, 77, 51],
-      [255, 0, 0],
-      [0, 255, 0],
-      [0, 0, 255]
-    ]
-  }
+      { "v": [128.0, 77.0, 51.0] },
+      { "v": [255.0, 0.0, 0.0] },
+      { "v": [0.0, 255.0, 0.0] },
+      { "v": [0.0, 0.0, 255.0] },
+      { "v": [128.0, 128.0, 128.0] }
+    ],
+    "encoding": "8Bit",
+    "srcEncoding": "value",
+    "srcSpace": "RGB "
+  },
+  "dataFiles": {
+    "dstType": "legacy",
+    "srcFile": null,
+    "srcType": "colorData"
+  },
+  "profileSequence": [
+    {
+      "iccFile": "Testing/Display/sRGB_D65_MAT.icc",
+      "intent": "relative",
+      "transform": "default"
+    }
+  ]
 }

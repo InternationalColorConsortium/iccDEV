@@ -29,6 +29,7 @@ Canonical regression scripts:
 - `.github/scripts/iccdev-json-cfg-tests.sh`
 - `.github/scripts/iccdev-stdobserver-regression-tests.sh`
 - `.github/scripts/iccdev-mluc-setter-regression-tests.sh`
+- `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh`
 
 For regression workflow updates, use
 `.github/skills/regression-workflow-governance/SKILL.md` and

@@ -8,8 +8,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
-BUILD="${BUILD:-Build/Cmake}"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-$BUILD/IccProfLib:$BUILD/IccXML}"
+if [ -z "${BUILD:-}" ]; then
+  if [ -x Build/Cmake/Tools/IccApplyNamedCmm/iccApplyNamedCmm ]; then
+    BUILD="Build/Cmake"
+  elif [ -x Build/Tools/IccApplyNamedCmm/iccApplyNamedCmm ]; then
+    BUILD="Build"
+  elif [ -x build/Tools/IccApplyNamedCmm/iccApplyNamedCmm ]; then
+    BUILD="build"
+  else
+    BUILD="Build/Cmake"
+  fi
+fi
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-$BUILD/IccProfLib:$BUILD/IccXML:$BUILD/IccJSON}"
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
 UBSAN_SUPP="$REPO_ROOT/Testing/silence.txt"
 if [ -f "$UBSAN_SUPP" ]; then
@@ -53,12 +63,20 @@ run_cli() {
   output=$("$@" 2>&1)
   rc=$?
   asan_hit=0
+  parse_hit=0
   if grep -qE 'AddressSanitizer|runtime error:' <<< "$output"; then
     asan_hit=1
+  fi
+  if grep -q 'Unable to parse legacy data file' <<< "$output"; then
+    parse_hit=1
   fi
   if [ "$asan_hit" -gt 0 ]; then
     ASAN=$((ASAN+1))
     echo "[ASAN] #$TOTAL $name (exit=$rc)"
+  elif [ "$parse_hit" -gt 0 ]; then
+    FAIL=$((FAIL+1))
+    echo "[FAIL] #$TOTAL $name (legacy data parse failure)"
+    tail -3 <<< "$output"
   elif [ "$expect" = "any" ] || [ "$rc" -eq "$expect" ]; then
     PASS=$((PASS+1))
     echo "[PASS] #$TOTAL $name (exit=$rc)"
@@ -79,7 +97,7 @@ echo "--- iccApplyNamedCmm -cfg JSON configs ---"
 for cfg in docs/Testing/json-configs/applynamedcmm-*.json; do
   [ -f "$cfg" ] || continue
   name=$(basename "$cfg" .json)
-  run_json_cfg "$name" "$NAMEDCMM" "$cfg" "any"
+  run_json_cfg "$name" "$NAMEDCMM" "$cfg" 0
 done
 
 echo ""
@@ -87,16 +105,16 @@ echo "--- iccApplySearch -cfg JSON configs ---"
 for cfg in docs/Testing/json-configs/applysearch-*.json; do
   [ -f "$cfg" ] || continue
   name=$(basename "$cfg" .json)
-  run_json_cfg "$name" "$SEARCH" "$cfg" "any"
+  run_json_cfg "$name" "$SEARCH" "$cfg" 0
 done
 
 # --- CLI legacy mode tests ---
 echo ""
 echo "--- iccApplyNamedCmm CLI legacy mode ---"
-run_cli "sRGB-float-tetrahedral" "any" "$NAMEDCMM" docs/Testing/test-data/rgb-float.txt 3 1 Testing/Display/sRGB_D65_MAT.icc 1
-run_cli "sRGB-8bit" "any" "$NAMEDCMM" docs/Testing/test-data/rgb-8bit.txt 4 1 Testing/Display/sRGB_D65_MAT.icc 1
-run_cli "sRGB-float-10digit" "any" "$NAMEDCMM" docs/Testing/test-data/rgb-float.txt 3:10 1 Testing/Display/sRGB_D65_MAT.icc 1
-run_cli "sRGB-BPC-intent40" "any" "$NAMEDCMM" docs/Testing/test-data/rgb-float.txt 3 1 Testing/Display/sRGB_D65_MAT.icc 40
+run_cli "sRGB-float-tetrahedral" 0 "$NAMEDCMM" docs/Testing/test-data/rgb-float.txt 3 1 Testing/Display/sRGB_D65_MAT.icc 1
+run_cli "sRGB-8bit-input" 0 "$NAMEDCMM" docs/Testing/test-data/rgb-8bit.txt 0 1 Testing/Display/sRGB_D65_MAT.icc 1
+run_cli "sRGB-float-10digit" 0 "$NAMEDCMM" docs/Testing/test-data/rgb-float.txt 3:10 1 Testing/Display/sRGB_D65_MAT.icc 1
+run_cli "sRGB-BPC-intent40" 0 "$NAMEDCMM" docs/Testing/test-data/rgb-float.txt 3 1 Testing/Display/sRGB_D65_MAT.icc 40
 
 # --- Malformed JSON (negative tests) ---
 echo ""
