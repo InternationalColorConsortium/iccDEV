@@ -92,12 +92,9 @@ Common patterns:
 ## Step 6: Create Minimal PoC
 
 ```bash
-# If the crash file is large, minimize it
-# For LibFuzzer crash files:
-cfl/bin/icc_dump_fuzzer -minimize_crash=1 -exact_artifact_path=minimized.icc crash-file
-
-# For manual minimization:
-# Copy the file, zero out non-essential tags, verify crash still reproduces
+# If the crash file is large, minimize it while preserving the crash.
+# Copy the file, remove non-essential tags or payload bytes, then verify the
+# same tool still produces the same sanitizer finding.
 ```
 
 ## Step 7: File Upstream

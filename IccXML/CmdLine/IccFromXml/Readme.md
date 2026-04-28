@@ -1,64 +1,29 @@
 # IccFromXml
 
-## Overview
-
-`IccFromXml` is a command-line tool that converts ICC profile XML representations into binary ICC profiles. It supports validation against RELAX NG schemas and preserves profile metadata including profile IDs. This tool is essential for ICC profile developers working with XML interchange formats.
-
----
-
-## Features
-
-- Converts `.xml` to binary ICC profile files
-- Validates XML using RELAX NG schema (optional)
-- Supports `-noid` to skip profile ID writing
-- Reports validation warnings and errors
-- Auto-locates `SampleIccRELAX.rng` schema if not provided
-- Compatible with ICC.1 and ICC.2 profile structures
-
----
+`iccFromXml` converts an ICC profile XML file to a binary ICC profile. It can
+optionally validate input with a RELAX NG schema before saving.
 
 ## Usage
 
 ```sh
-IccFromXml input.xml output.icc {-noid -v[=schema.rng]}
+iccFromXml input.xml output.icc {-noid -v[=schema.rng]}
 ```
-
-### Parameters
 
 - `input.xml`: The ICC profile XML file
-- `output.icc`: The output ICC binary profile
+- `output.icc`: The output binary ICC profile
 - `-noid`: Prevents writing a profile ID (optional)
-- `-v[=schema.rng]`: Enables validation using optional RELAX NG schema
+- `-v[=schema.rng]`: Enables RELAX NG validation, using the supplied schema or
+  `SampleIccRELAX.rng` from the current directory
 
----
-
-## Behavior
-
-- If `-v` is used without a schema file, the tool looks for `SampleIccRELAX.rng` in the current directory.
-- If validation fails but parsing succeeds, the profile is still saved and marked as invalid.
-- Profile ID is handled based on content unless `-noid` is used:
-  - `icNeverWriteID`, `icAlwaysWriteID`, or `icVersionBasedID` depending on header state
-
----
-
-## Output
-
-- Console status messages including:
-  - Parsing success or failure
-  - Validation report (if applicable)
-  - Save status
-
----
-
-## Example
+## Examples
 
 ```sh
-IccFromXml DisplayProfile.xml DisplayProfile.icc -v=SampleIccRELAX.rng
+iccFromXml DisplayProfile.xml DisplayProfile.icc -v=SampleIccRELAX.rng
+iccFromXml edited-profile.xml edited-profile.icc -noid
 ```
 
----
+## Notes
 
-## Changelog
-
-- Initial version by Max Derhak
-- Validation enhancements and ID control by David Hoyt (2025)
+- If validation fails but parsing succeeds, the profile may still be saved and
+  reported as invalid.
+- Use `iccToXml` for the reverse conversion.

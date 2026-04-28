@@ -1,55 +1,26 @@
 # IccToXml
 
-## Overview
-
-`IccToXml` is a command-line utility that converts binary ICC profiles to their XML representations. This is useful for inspection, validation, and editing of profile contents in a human-readable format, or for round-trip transformations in conjunction with `IccFromXml`.
-
----
-
-## Features
-
-- Converts `.icc` binary profiles into `.xml` representation
-- Preserves all tag and header data using ICC XML schema
-- Supports profiles using multi-process elements (MPEs)
-- Based on ICC ProfLib and ICC LibXML libraries
-- Outputs well-formed XML suitable for re-import or validation
-
----
+`iccToXml` converts a binary ICC profile to an XML representation for
+inspection, editing, validation, or round-trip testing with `iccFromXml`.
 
 ## Usage
 
 ```sh
-IccToXml source.icc output.xml
+iccToXml source.icc output.xml
 ```
 
----
+- `source.icc`: The input ICC profile (ICC.1 or ICC.2)
+- `output.xml`: Destination XML file
 
-## Parameters
-
-- `source.icc`: The input ICC profile (any valid ICC.1 or ICC.2 binary file)
-- `output.xml`: Destination XML file to save the profile representation
-
----
-
-## Output
-
-- A full XML representation of the ICC profile including:
-  - Header metadata
-  - Tag table with all defined tags
-  - Multi-process elements and nested structure
-- Can be re-imported using `IccFromXml`
-
----
-
-## Example
+## Examples
 
 ```sh
-IccToXml DisplayProfile.icc DisplayProfile.xml
+iccToXml DisplayProfile.icc DisplayProfile.xml
+iccToXml profile.icc profile.xml
 ```
 
----
+## Notes
 
-## Changelog
-
-- Original version by Max Derhak
-- XML serialization reliability improvements by David Hoyt (2025)
+- Output contains profile header data, the tag table, tag contents, and
+  multi-process element structure when present.
+- Use `iccFromXml` for the reverse conversion.

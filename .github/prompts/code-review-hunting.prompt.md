@@ -118,8 +118,9 @@ Types: `dbz` (div-by-zero), `hbo` (heap-buffer-overflow),
 `sbo` (stack-buffer-overflow), `npd` (null-pointer-deref),
 `ub` (undefined-behavior), `oom` (out-of-memory)
 
-Host in `xsscx/fuzz/graphics/icc/`, download via `wget` in issues.
-Never use inline Python generators or synthesized profiles in issues.
+Prefer a minimal standalone PoC file that can be attached to the issue or added
+to an upstream regression directory. Avoid inline generators in issues unless
+the generator itself is the clearest reproduction.
 
 ## Quality Checklist
 
@@ -145,7 +146,7 @@ Before filing an issue:
 | 5 | Miss `-fsanitize=float-divide-by-zero` | Div-by-zero bugs produce silent NaN |
 | 6 | Bundle multiple bugs in one issue | Blocks per-bug tracking and labeling |
 | 7 | Include shadow byte legend | 17 lines of noise (cut unless UAF) |
-| 8 | Use `cfl/` patched tools | Masks upstream behavior |
+| 8 | Use downstream-patched tools | Masks upstream behavior |
 
 ## CWE Quick Reference
 

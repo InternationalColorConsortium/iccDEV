@@ -1,31 +1,28 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a functional bug that is not a sanitizer crash
 title: ''
 labels: 'bug'
 assignees: ''
-
 ---
 
-## **Describe the bug**
-Provide a clear and concise description of the issue you're experiencing.
+For memory-safety bugs, sanitizer findings, or fuzzer crashes, use the
+**Security bug report** template instead.
 
-## **To Reproduce**
-List the steps required to reproduce the issue. For command-line issues, include the exact command(s) you ran.
+## Describe the Bug
+
+## Reproduce
+
 1. Run `<command>`
-2. Observe the output
+2. Observe `<output or behavior>`
 
-## **Expected behavior**
-Describe what you expected to happen instead.
+## Expected Behavior
 
-## **Terminal Output or Screenshots**
-If applicable, attach screenshots or paste terminal output (use fenced code blocks for logs).
+## Environment
 
-## **Environment (please complete the following information):**
-- **OS**: (e.g., Ubuntu 24.04, macOS 15.7.2, Windows 11)
-- **iccDEV version**: (e.g., 2.3.1)
-- **Shell**: (e.g., bash, zsh, PowerShell)
-- **Other relevant tools/versions**: (if applicable)
+- OS:
+- iccDEV version or commit:
+- Compiler/toolchain:
+- Shell:
 
-## **Additional context**
-Include any other details that might help diagnose the problem (configuration files, reproduction project, etc.).
+## Additional Context

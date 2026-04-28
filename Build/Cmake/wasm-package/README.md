@@ -28,7 +28,7 @@ const { IccDumpProfile } = require('iccdev');
 `IccApplySearch`, `IccApplyToLink`, `IccTiffDump`, `IccJpegDump`,
 `IccPngDump`, `IccSpecSepToTiff`, `IccV5DspObsToV4Dsp`.
 
-Tool reference: https://github.com/xsscx/research/tree/main/docs/iccDEV/Tools
+Tool reference: ../../../docs/tools-cli-reference.md
 
 ## Test
 

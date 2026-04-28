@@ -1,214 +1,70 @@
-## Introduction
+# iccDEV Documentation
 
-The iccdev project (formerly known as DemoIccMAX) provides an
-open source set of libraries and tools that allow for the interaction, manipulation,
-and application of ICC based color management profiles based on the 
-[ICC profile specification](http://www.color.org/icc_specs2.xalter) and 
-[iccMAX profile specification](http://www.color.org/iccmax.xalter).
+iccDEV, formerly DemoIccMAX, provides C++ libraries and command-line tools for
+working with ICC.1 and ICC.2/iccMAX color profiles.
 
-## Documentation
+## Start Here
 
-- [Build](build.md)
-- [Install](install.md)
-- [CodeQL Security Analysis](codeql.md)
+- [Install](install.md): package and container quickstart
+- [Build](build.md): build from source on Linux, macOS, and Windows
+- [CLI tool reference](tools-cli-reference.md): command-line tool summary and shared options
+- [IccJSON guide](iccjson.md): JSON conversion workflow
+- [ICC JSON tag reference](iccjson-tag-types.md): detailed JSON tag examples
+- [Bisecting regressions](bisect.md): focused debug workflow
+- [CodeQL security analysis](codeql.md): custom query overview
+- [Documentation maintenance](documentation-maintenance.md): canonical sources and review checklist
+- [Agent skills](../.github/skills/README.md): repeatable repository workflows
 
-## Features Overview
+## Libraries
 
-Within the project are several libraries and tools as follows:
+| Library | Purpose |
+|---------|---------|
+| `IccProfLib` | Reference C++ library for reading, writing, applying, and validating ICC profiles. |
+| `IccLibXML` | XML serialization layer for profiles and profile objects. |
+| `IccLibJSON` | JSON serialization layer for profile inspection, editing, and round-tripping. |
 
-### Libraries that allow applications to interact with ICC profiles
+## Tools
 
-  * IccProfLib - The IccProfLib library represents an open source &
-    cross platform reference implementation of a C++ library for reading,
-    writing, applying, manipulating ICC color profiles defined by the ICC specifications.
+Run any command-line tool without arguments to print its usage. See
+[CLI tool reference](tools-cli-reference.md) for signatures and common encoding
+tables.
 
-  * IccLibXML - The IccLibXML library contains a parallel C++
-    extension library (IccLibXML) which provides the ability to interact with the
-    objects defined by IccProfLib using an XML representation thus allowing ICC
-    profiles to be expressed as or created from text based XML files.
-
-  * IccLibJSON - The IccLibJSON library provides native JSON serialization for
-    ICC and iccMAX profiles. It extends IccProfLib with the ability to convert
-    profiles to and from a human-readable JSON representation, enabling
-    inspection and editing with any JSON-capable tooling. A
-    [JSON Schema](icc-profile.schema.json) is provided for inline validation.
-    See [IccJSON guide](iccjson.md) for full documentation.
-
-
-### Tools based upon these libraries
-
-  For command line arguments running the application without any arguments
-  will display help information about command line options.
-
-  * IccToXML is a cross platform command line tool that allows both ICC
-    and iccMAX profiles to be expressed using an XML representation. This allows
-    for profiles to be converted to a textual representation that can be directly
-    edited using a text editor and then converted back to ICC and iccMAX profile
-    formats using IccFromXML.
-
-  * IccFromXML is a cross platform command line tool that allows both ICC
-    and iccMAX profile formats to be created from the same XML representation provided by
-    IccToXML. A schema for iccXML files is forthcoming but can be determined using
-    the FromXML() and ToXML() member functions defined in IccLibXML. The
-    IccFromXML tool provides a simple direct method to create and manipulate
-    ICC and iccMAX profiles.
-
-  * IccToJson is a cross platform command line tool that converts a binary ICC or iccMAX
-    profile to a JSON representation. The resulting JSON file can be inspected or edited
-    and then converted back to a binary profile using IccFromJson.
-
-  * IccFromJson is a cross platform command line tool that creates a binary ICC or iccMAX
-    profile from a JSON file. A [JSON Schema](icc-profile.schema.json) is provided that
-    describes the format and enables inline validation in supporting editors.
-    See the [IccJSON guide](iccjson.md) for full documentation on the JSON format and
-    worked examples.
-
-  * IccApplyNamedCmm is a cross platform command line tool that allows a
-    sequence of ICC profile formats and/or iccMAX profile formats to be applied to colors
-    defined in a text based input profile outputting the results to the console, and can
-    be redirected to a output text file. Example source text files can be found in
-    Testing/ApplyDataFiles. The IccApplyNamedCmm application provides a basis for
-    testing various features of iccMAX.
-
-  * IccApplyProfiles is a cross platform command line tool that allows a sequence of
-    ICC profiles and/or iccMAX profiles to a source TIFF image resulting in a
-    destination TIFF image. The final destination profile can optionally be embedded
-    in the resulting TIFF image.
-
-  * IccDumpProfile is a cross platform command line tool that allows information
-    from a ICC profile and/or a iccMAX profile to be output to the console. Data
-    with non-printable values are replaced with '?'. Output from this tool is
-    not guaranteed to be ASCII or UTF-8, but line-endings are consistent for a
-    given platform. This tool is particularly useful for developers, color scientists,
-    and QA engineers who need to ensure ICC profiles conform to standards and contain
-    expected metadata.
-    
-    Detailed validation messages start with either "Warning!", "Error!" or "NonCompliant!".
-    The overall status of validation is reported 2 lines below the line starting
-    "Validation Report" and can be located using the following simple `grep`:
-
-    ```bash
-    grep --text -A 3 "^Validation Report" out.txt
-    ```
-
-  * IccRoundTrip is a cross platform command line tool that allows round trip
-    colorimetric processing characteristics of rendering intent of a profile to be
-    evaluated. Evaluation goes from device values to PCS to establish initial PCS
-    values. These are then converted to device values and then PCS values for the
-    first round trip. Second round trip comparison then converts the second PCS
-    values to device values to PCS values for comparison to the second PCS values.
-
-  * IccSpecSepToTiff is a cross platform command line tool that combines separate
-    individual TIFF images associated with different spectral wavelengths into a
-    single multi-sample per pixel TIFF image. An iccMAX based profile can optionally
-    be embedded in the resulting TIFF image.
-
-  * IccTiffDump is a cross platform command line tool that outputs header and
-    embedded ICC profile information about a TIFF image to the console.
-
-  * IccPngDump is a cross platform command line tool that outputs header and
-    embedded ICC profile information about a PNG image to the console. 
-
-  * IccJpegDump is a cross platform command line tool that outputs header and
-    embedded ICC profile information about a JPG image to the console. 
-
-  * wxProfileDump provides a [wxWidgets](https://www.wxwidgets.org/) GUI based
-    ICC and iccMAX profile inspector tool. The code for this tool is based on
-    wxWidgets 3.2.
-    
-  * iccV5DspObsToV4Dsp is a cross platform command line tool to combine a
-    V5 display profile with a V5 observer profile to create a V4 display profile.
-    This allows conversion to support legacy applications which only read
-    V4 profiles.
-    
-  * iccApplySearch is a cross platform command line tool that applies a
-    sequence of profiles utilizing a search with the forward transform of
-    the last profile. When the first profile is a PCS encoding profile this
-    provides a logical inverse of the forward transform of the last profile.
-    This is especially useful when the forward transform of the last profile
-    results in a spectral PCS without the availability of a reverse transform
-    in the last profile and the first profile is a spectral PCS encoding profile.
-    Using a colorimetric PCS encoding intermediate profile with a weighted set of
-    Profile Connection Conditions profiles allows for spectral color reproduction to
-    be performed. This tool supports JSON and legacy data inputs, and ICCv5
-    capabilities including debugging of calculator-based profiles.
-
-  * iccApplyToLink is a versatile command line tool that builds either an ICC
-    DeviceLink profile or a `.cube` LUT file by applying a sequence of ICC profiles.
-    It supports fine-grained control over rendering intents, LUT size, interpolation,
-    and Profile Connection Conditions (PCC). This tool is especially useful for creating
-    link profiles for production workflows or transforming color spaces for VFX, printing,
-    or display calibration.
-
-  * iccFromCube is a command line utility that converts a 3D LUT file in `.cube` format
-    (common in video and color grading applications) into an ICC.2 DeviceLink profile.
-    This tool enables integration of creative grading LUTs into ICC color management
-    workflows.
-
+| Tool | Purpose |
+|------|---------|
+| `iccToXml` / `iccFromXml` | Convert profiles between binary ICC and XML. |
+| `iccToJson` / `iccFromJson` | Convert profiles between binary ICC and JSON. |
+| `iccApplyNamedCmm` | Apply named CMM profiles to text input data. |
+| `iccApplyProfiles` | Apply a profile chain to a TIFF image. |
+| `iccApplySearch` | Apply a profile sequence using inverse search. |
+| `iccApplyToLink` | Create DeviceLink profiles or `.cube` LUTs from profile sequences. |
+| `iccDumpProfile` | Dump and validate ICC profile structure. |
+| `iccRoundTrip` | Evaluate round-trip profile behavior. |
+| `iccSpecSepToTiff` | Combine spectral separation TIFFs. |
+| `iccTiffDump`, `iccPngDump`, `iccJpegDump` | Inspect image metadata and embedded ICC profiles. |
+| `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display profiles. |
+| `iccFromCube` | Convert `.cube` 3D LUTs to ICC.2 DeviceLink profiles. |
+| `wxProfileDump` | wxWidgets GUI profile inspector. |
 
 ## Example iccMAX Profiles
 
-XML files are provided that can be used to create example iccMAX profiles. The
-CreateAllProfiles.bat file uses the iccFromXML tool to create ICC profiles for
-each of these XML files. The XML files can be found in the following folders:
+XML files under `Testing/` can be converted into example ICC profiles with
+`Testing/CreateAllProfiles.*`.
 
-### [Calc](../Testing/Calc)
+| Directory | Contents |
+|-----------|----------|
+| [`Calc`](../Testing/Calc) | Calculator MultiProcessElement profiles. |
+| [`Display`](../Testing/Display) | Spectral display profiles with observer late binding. |
+| [`Encoding`](../Testing/Encoding) | 3-channel encoding class profiles. |
+| [`Named`](../Testing/Named) | Named color profiles with tints, spectral reflectance, and fluorescence. |
+| [`PCC`](../Testing/PCC) | Profile Connection Condition examples. |
+| [`SpecRef`](../Testing/SpecRef) | Spectral reflectance PCS examples. |
 
-This folder contains profiles that demonstrate color modeling using the
-Calculator MultiProcessElement. The srgbCalcTest profile exercises all specified
-calculator operations.
-
-### [Display](../Testing/Display)
-
-This folder contains profiles that demonstrate spectral modeling of display
-profiles allowing for late binding of the observer using MultiProcessElements
-that are transformed at startup to colorimetry for the desired observer.
-
-### [Encoding](../Testing/Encoding)
-
-This folder contains 3 channel encoding class profiles. Both "name only"
-profiles as well as fully specified profiles are present.
-
-### [Named](../Testing/Named)
-
-This folder contains named color profiles showcasing
-features such as tints, spectral reflectance, and fluorescence (with and with
-out sparse notation).
-
-### [PCC](../Testing/PCC)
-
-This folder contains various profiles that can be used to
-define Profile Connection Conditions (PCC). All profiles are abstract profiles
-that perform no operation to PCS values. However, all profiles contain fully
-defined PCC tags that provide information that can be used to define rendering
-for various observers and illuminants. Profiles that utilize both absolute
-colorimetry as well as Material Adjusted colorimetry are present.
-
-### [SpecRef](../Testing/SpaceRef)
-
-This folder contains various profiles that convert data to/from/between a
-spectral reflectance PCS. The argbRef (AdobeRGB) and srgbRef (sRGB) convert RGB
-values to/from spectral reflectance. RefDecC, RefDecH, and RefIncW are abstract
-spectral reflectance profiles that modify "chroma", "hue", and "lightness" of
-spectral reflectance values in a spectral reflectance PCS. The argbRef, srgbRef,
-RefDecC, RefDecH, RefIncW profiles all estimate and/or manipulate spectral
-reflectance using Wpt based spectral estimation ([see chapter 7 of Spectrally Based Material Color Equivalency: Modeling and Manipulation](http://scholarworks.rit.edu/theses/8789/)). Additionally, examples of 6 channel
-abridged spectral encoding is provided.
-
-
-## Installation
-
-See [Install](install.md) for Docker, Homebrew, NPM, and NixOS quickstart.
-
-[Build on Windows, macOS, Linux](build.md)  . 
-[Bisecting Regressions](bisect.md)
+See [`Testing/Readme.md`](../Testing/Readme.md) for the full profile directory
+overview.
 
 ## Examples
 
-The [`examples/hello-iccdev/`](../examples/hello-iccdev/) directory contains a
-minimal standalone example that links IccProfLib2 and IccXML2, prints library
-versions, and round-trips an ICC profile header to XML. When IccJSON2 (and
-nlohmann-json) is available, the example also demonstrates JSON round-tripping
-via `CIccProfileJson::ToJson()` and `ParseJson()`. It supports three discovery
-paths: installed package (including vcpkg), build-tree export, and manual
-discovery.
+[`examples/hello-iccdev/`](../examples/hello-iccdev/) is a minimal standalone
+example that links IccProfLib2 and IccXML2, prints library versions, and
+round-trips an ICC profile header to XML. When IccJSON2 and nlohmann-json are
+available, it also demonstrates JSON round-tripping.

@@ -91,12 +91,8 @@ The PATCH number increments for each release containing bug fixes or
 security hardening. Security fixes from CFL patches, CI warning fixes,
 and upstream issue resolutions all warrant a PATCH bump.
 
-## Downstream Sync (research repo)
+## Downstream Notice
 
-After bumping iccDEV upstream, update the research repo:
-
-1. Update `iccDEV/` clone: `cd iccDEV && git fetch origin && git pull`
-2. Update `.github/copilot-instructions.md` version references
-3. Rebuild iccanalyzer-lite: `cd iccanalyzer-lite && ./build.sh`
-4. Rebuild CFL fuzzers: `cd cfl && rm -rf iccDEV/Build && ./build.sh`
-5. Run tests: `python3 iccanalyzer-lite/tests/run_tests.py`
+If downstream projects vendor or package iccDEV, mention the version bump in the
+release notes and point them to the updated tag or commit. Keep downstream
+repository-specific sync steps out of upstream iccDEV documentation.
