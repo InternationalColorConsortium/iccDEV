@@ -14,6 +14,7 @@ point to deeper references.
 | JSON workflow | `docs/iccjson.md` |
 | JSON tag examples | `docs/iccjson-tag-types.md` |
 | Bisect workflow | `docs/bisect.md` |
+| Regression workflow updates | `docs/regression-workflow-governance.md` |
 | CodeQL queries | `.github/codeql-queries/README.md` |
 | Security issue format | `.github/prompts/SECURITY_ISSUE_FORMAT.md` |
 | Agent routing | `.github/copilot-instructions.md` |

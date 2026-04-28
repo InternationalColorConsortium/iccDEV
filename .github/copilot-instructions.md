@@ -29,6 +29,10 @@ Canonical regression scripts:
 - `.github/scripts/iccdev-json-cfg-tests.sh`
 - `.github/scripts/iccdev-stdobserver-regression-tests.sh`
 
+For regression workflow updates, use
+`.github/skills/regression-workflow-governance/SKILL.md` and
+`docs/regression-workflow-governance.md`.
+
 ## Build, Test, and Safety
 
 - User build instructions: `docs/build.md`
@@ -56,6 +60,7 @@ Key safety rules:
 | Code review hunting | `.github/prompts/code-review-hunting.prompt.md` |
 | Reduce documentation noise | `.github/prompts/reduce-doc-noise.prompt.md` |
 | Build/test/coverage | `.github/prompts/build-and-test.prompt.md` |
+| Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
 | vcpkg debug | `.github/prompts/vcpkg-port-debug.prompt.md` |
 
@@ -66,4 +71,5 @@ Key safety rules:
 | Documentation maintenance | `.github/skills/docs-maintenance/SKILL.md` |
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
+| Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |
