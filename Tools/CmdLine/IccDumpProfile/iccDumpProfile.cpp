@@ -89,7 +89,7 @@
 
 #if defined(_WIN32) || defined(WIN32)
 #include <crtdbg.h>
-#elif __GLIBC__
+#elif defined(__GLIBC__)
 #include <mcheck.h>
 #endif
 
@@ -296,7 +296,7 @@ int main(int argc, char* argv[])
   tmp = tmp | _CRTDBG_LEAK_CHECK_DF | _CRTDBG_ALLOC_MEM_DF; // | _CRTDBG_CHECK_ALWAYS_DF;
   _CrtSetDbgFlag(tmp);
   //_CrtSetBreakAlloc(1163);
-#elif __GLIBC__
+#elif defined(__GLIBC__)
   mcheck(NULL);
 #endif // WIN32
 #endif // MEMORY_LEAK_CHECK && _DEBUG
