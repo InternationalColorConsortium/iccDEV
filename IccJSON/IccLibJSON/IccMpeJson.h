@@ -299,7 +299,7 @@ typedef std::map<std::string, std::string>      MacroMap;
 class CIccMpeJsonCalculator : public CIccMpeCalculator, public CIccMpeJson
 {
 public:
-  CIccMpeJsonCalculator() : CIccMpeCalculator() { m_sImport = "*"; }
+  CIccMpeJsonCalculator() : CIccMpeCalculator(), m_sImport("*"), m_nNextVar(0), m_nNextMpe(0) {}
   virtual ~CIccMpeJsonCalculator() { clean(); }
 
   virtual const char *GetClassName() const { return "CIccMpeJsonCalculator"; }

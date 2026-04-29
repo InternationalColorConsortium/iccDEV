@@ -233,8 +233,8 @@ jobs:
         with:
           name: lint-build-context
 
-      - name: Recreate build directory for clang-tidy
-        if: matrix.tool == 'clang-tidy'
+      - name: Recreate build directory for static analyzers
+        if: matrix.tool == 'clang-tidy' || matrix.tool == 'cppcheck'
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -243,13 +243,13 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # clang-tidy needs the Build subdirectories to exist because
+          # clang-tidy and cppcheck need the Build subdirectories to exist because
           # compile_commands.json entries have "directory" fields pointing
           # to Build/IccProfLib, Build/IccXML, etc.  The build job only
           # uploads compile_commands.json, so those directories are missing
-          # and clang-tidy crashes with SIGABRT on every file.
+          # and generated headers like IccProfLibVer.h are unavailable.
           # Running cmake configure (without make) recreates the directory
-          # structure and generates headers like IccProfLibVer.h.
+          # structure and generates version headers.
           # See: https://github.com/InternationalColorConsortium/iccDEV/issues/799
           mkdir -p Build
           cd Build
@@ -291,12 +291,15 @@ jobs:
               : > "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt"
             else
               echo "Running cppcheck on ${MATRIX_COMPONENT} with $NPROC parallel jobs"
-              xargs -0 cppcheck \
+              cppcheck \
                 -j "$NPROC" \
+                --project=Build/compile_commands.json \
+                --file-filter="${MATRIX_COMPONENT}/*" \
                 --enable=warning,performance,portability,style \
+                --language=c++ \
                 --std=c++17 \
                 --suppress=missingIncludeSystem \
-                < component_files.txt 2> "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt" || true
+                2> "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt" || true
               echo "cppcheck ${MATRIX_COMPONENT}: $(wc -l < "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt") lines"
             fi
           else

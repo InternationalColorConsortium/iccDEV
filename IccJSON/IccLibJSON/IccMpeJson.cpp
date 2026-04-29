@@ -1828,7 +1828,8 @@ bool CIccMpeJsonCalculator::ToJson(IccJson &j)
       elemObj["outputChannels"] = (int)m_SubElem[i]->NumOutputChannels();
       if (m_SubElem[i]->m_nReserved)
         elemObj["Reserved"] = (int)m_SubElem[i]->m_nReserved;
-      pJsonMpe->ToJson(elemObj);
+      if (!pJsonMpe->ToJson(elemObj))
+        return false;
       elems.push_back(elemObj);
     }
     j["subElements"] = elems;
