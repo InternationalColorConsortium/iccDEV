@@ -5,7 +5,7 @@
 
     Version:    V1
 
-    Copyright:  � see ICC Software License
+    Copyright:  see ICC Software License
 */
 
 /*
@@ -339,8 +339,10 @@ void CIccMpeSpectralMatrix::Describe(std::string &sDescription, int /* nVerbosen
   sDescription += "\n";
 
   if (data) {
+    icUInt16Number nVectors = numVectors();
+
     sDescription += "CHANNEL_DATA\n";
-    for (j=0; j<m_nOutputChannels; j++) {
+    for (j=0; j<(int)nVectors; j++) {
       for (i=0; i<(int)m_Range.steps; i++) {
         if (i)
           sDescription += " ";
@@ -348,7 +350,7 @@ void CIccMpeSpectralMatrix::Describe(std::string &sDescription, int /* nVerbosen
         sDescription += buf;
       }
       sDescription += "\n";
-      data += m_nInputChannels;
+      data += m_Range.steps;
     }
   }
 
