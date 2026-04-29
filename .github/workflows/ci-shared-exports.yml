@@ -2466,7 +2466,7 @@ jobs:
           esac
           # Run from temp dir to avoid vcpkg manifest mode (vcpkg.json at repo root)
           pushd "$RUNNER_TEMP" >/dev/null
-          "$VCPKG_ROOT/vcpkg" install "iccdev:${VCPKG_TRIPLET}" --overlay-ports="$VCPKG_ICCDEV_SOURCE/ports"
+          "$VCPKG_ROOT/vcpkg" install "iccdev[xml,json]:${VCPKG_TRIPLET}" --overlay-ports="$VCPKG_ICCDEV_SOURCE/ports"
           popd >/dev/null
           {
             printf 'VCPKG_ROOT=%s\n' "$VCPKG_ROOT"
@@ -2590,7 +2590,7 @@ jobs:
           $env:VCPKG_BINARY_SOURCES = 'clear'
           # Run from temp dir to avoid vcpkg manifest mode (vcpkg.json at repo root)
           Push-Location $env:RUNNER_TEMP
-          & "$vcpkgRoot\vcpkg.exe" install 'iccdev:x64-windows-static' "--overlay-ports=$vcpkgIccdevSource\ports"
+          & "$vcpkgRoot\vcpkg.exe" install 'iccdev[xml,json]:x64-windows-static' "--overlay-ports=$vcpkgIccdevSource\ports"
           Pop-Location
           if ($LASTEXITCODE -ne 0) {
             throw "vcpkg install failed with exit code $LASTEXITCODE"

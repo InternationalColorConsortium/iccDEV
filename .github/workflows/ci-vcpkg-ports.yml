@@ -99,9 +99,9 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           TRIPLET="$([ "$RUNNER_OS" = "macOS" ] && echo "arm64-osx" || echo "x64-linux")"
-          echo "::group::vcpkg install iccdev"
+          echo "::group::vcpkg install iccdev[tools,xml,json]"
           EXIT_CODE=0
-          "$VCPKG_ROOT/vcpkg" install iccdev \
+          "$VCPKG_ROOT/vcpkg" install "iccdev[tools,xml,json]" \
             --overlay-ports="$GITHUB_WORKSPACE/ports" \
             --triplet "$TRIPLET" \
             --x-install-root="$RUNNER_TEMP/vcpkg-installed" \
@@ -130,8 +130,8 @@ jobs:
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
-          Write-Host "::group::vcpkg install iccdev"
-          & "$env:VCPKG_ROOT\vcpkg.exe" install iccdev `
+          Write-Host "::group::vcpkg install iccdev[tools,xml,json]"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install 'iccdev[tools,xml,json]' `
             --overlay-ports="$env:GITHUB_WORKSPACE\ports" `
             --triplet x64-windows `
             --x-install-root="$env:RUNNER_TEMP\vcpkg-installed" `
@@ -203,7 +203,7 @@ jobs:
             errors=$((errors + 1))
           fi
           # Check tools
-          for tool in iccDumpProfile iccRoundTrip iccFromXml iccToXml; do
+          for tool in iccDumpProfile iccRoundTrip iccFromXml iccToXml iccFromJson iccToJson; do
             if [ -x "$PREFIX/tools/iccdev/$tool" ]; then
               echo "✅ Tool $tool found"
             else
@@ -278,7 +278,7 @@ jobs:
             $errors++
           }
           # Check tools
-          foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccFromXml.exe','iccToXml.exe')) {
+          foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccFromXml.exe','iccToXml.exe','iccFromJson.exe','iccToJson.exe')) {
             if (Test-Path "$prefix\tools\iccdev\$tool") {
               Write-Host "✅ Tool $tool found"
             } else {
@@ -362,8 +362,7 @@ jobs:
           find_package(RefIccMAX CONFIG REQUIRED)
           add_executable(test-iccdev test.cpp)
           target_link_libraries(test-iccdev PRIVATE
-              RefIccMAX::IccProfLib2-static
-              RefIccMAX::IccXML2-static
+              RefIccMAX::IccProfLib2
           )
           "@ | Set-Content "$testDir\CMakeLists.txt" -Encoding UTF8
           # Minimal test source
@@ -371,11 +370,8 @@ jobs:
           #include <cstdio>
           #include "IccProfile.h"
           #include "IccProfLibVer.h"
-          #include "IccProfileXml.h"
-          #include "IccLibXMLVer.h"
           int main() {
               std::printf("IccProfLib: %s\n", ICCPROFLIBVER);
-              std::printf("IccLibXML:  %s\n", ICCLIBXMLVER);
               CIccProfile p; p.InitHeader();
               std::printf("OK\n");
               return 0;

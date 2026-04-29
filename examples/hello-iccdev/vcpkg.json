@@ -2,8 +2,13 @@
   "name": "hello-iccdev",
   "version-string": "1.0.0",
   "dependencies": [
-    "iccdev",
-    "nlohmann-json"
+    {
+      "name": "iccdev",
+      "features": [
+        "json",
+        "xml"
+      ]
+    }
   ],
   "overrides": [
     {
