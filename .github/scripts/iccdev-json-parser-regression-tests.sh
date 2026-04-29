@@ -4,7 +4,8 @@
 ###############################################################################
 #
 # Exercises malformed ICC JSON and JSON config helpers that must fail cleanly
-# instead of being silently accepted or retaining stale state.
+# and sibling XML payloads that must fail cleanly instead of being silently
+# accepted or retaining stale state.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -23,6 +24,7 @@ mkdir -p "$OUTDIR"
 
 TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
 FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
+FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
 BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd)"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
@@ -106,8 +108,61 @@ run_reject_test() {
   PASS=$((PASS + 1))
 }
 
-if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ]; then
-  echo "ERROR: IccToJson and IccFromJson are required"
+run_xml_reject_test() {
+  local name="$1"
+  local xml_file="$2"
+  local expected_text="$3"
+  local output_file="$OUTDIR/${name}.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$output_file" "$logfile"
+
+  timeout 30 "$FROMXML" "$xml_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -eq 124 ]; then
+    echo "  [FAIL] $name -- timed out"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ge 129 ] && [ "$exit_code" -le 192 ]; then
+    echo "  [FAIL] $name -- crashed with signal $((exit_code - 128))"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -eq 0 ]; then
+    echo "  [FAIL] $name -- malformed XML parsed successfully"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ -s "$output_file" ]; then
+    echo "  [FAIL] $name -- parser wrote output profile despite failure"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if ! grep -Fq "$expected_text" "$logfile" 2>/dev/null; then
+    echo "  [FAIL] $name -- expected diagnostic not found: $expected_text"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (rejected, exit=$exit_code)"
+  PASS=$((PASS + 1))
+}
+
+if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ] || [ ! -x "$FROMXML" ]; then
+  echo "ERROR: IccToJson, IccFromJson, and IccFromXml are required"
   exit 1
 fi
 
@@ -128,6 +183,26 @@ fi
 
 if [ -z "$PROFILE" ]; then
   echo "ERROR: No ICC profile found in $TESTING_DIR"
+  exit 1
+fi
+
+XML_PROFILE=""
+for candidate in \
+  "$TESTING_DIR/ICS/Spec400_10_700-D50_2deg-Part1.xml" \
+  "$TESTING_DIR/HDR/BT2100HlgFullScene.xml" \
+  "$TESTING_DIR/ICS/Rec2100HlgFull-Part2.xml"; do
+  if [ -f "$candidate" ]; then
+    XML_PROFILE="$candidate"
+    break
+  fi
+done
+
+if [ -z "$XML_PROFILE" ]; then
+  XML_PROFILE="$(find "$TESTING_DIR" -name '*.xml' -size +100c 2>/dev/null | sed -n '1p')"
+fi
+
+if [ -z "$XML_PROFILE" ]; then
+  echo "ERROR: No XML profile found in $TESTING_DIR"
   exit 1
 fi
 
@@ -178,6 +253,30 @@ write("inline-clut-truncated", {
     }]
 })
 
+write("mpe-matrix-huge-channels", {
+    "type": "multiProcessElementType",
+    "inputChannels": 1,
+    "outputChannels": 1,
+    "elements": [{
+        "type": "MatrixElement",
+        "inputChannels": 65535,
+        "outputChannels": 65535,
+        "matrix": []
+    }]
+})
+
+write("mpe-matrix-short-data", {
+    "type": "multiProcessElementType",
+    "inputChannels": 3,
+    "outputChannels": 3,
+    "elements": [{
+        "type": "MatrixElement",
+        "inputChannels": 3,
+        "outputChannels": 3,
+        "matrix": [1.0]
+    }]
+})
+
 write("spectral-white-short", {
     "type": "multiProcessElementType",
     "inputChannels": 1,
@@ -189,6 +288,20 @@ write("spectral-white-short", {
         "wavelengths": {"start": 400.0, "end": 420.0, "steps": 3},
         "whiteData": [1.0],
         "matrixData": [1.0, 1.0, 1.0]
+    }]
+})
+
+write("spectral-matrix-huge-channels", {
+    "type": "multiProcessElementType",
+    "inputChannels": 1,
+    "outputChannels": 1,
+    "elements": [{
+        "type": "EmissionMatrixElement",
+        "inputChannels": 65535,
+        "outputChannels": 65535,
+        "wavelengths": {"start": 400.0, "end": 420.0, "steps": 3},
+        "whiteData": [1.0, 1.0, 1.0],
+        "matrixData": []
     }]
 })
 
@@ -215,15 +328,39 @@ write("struct-bad-member", {
 })
 ' "$BASE_JSON" "$OUTDIR"
 
+XML_MATRIX_HUGE="$OUTDIR/xml-matrix-huge-channels.xml"
+python3 -c '
+import pathlib
+import re
+import sys
+
+src_path, dst_path = sys.argv[1:3]
+text = pathlib.Path(src_path).read_text(encoding="utf-8")
+pattern = re.compile(r"(<MatrixElement\b[^>]*\bInputChannels=\")[^\"]+(\"[^>]*\bOutputChannels=\")[^\"]+(\")")
+
+def replace(match):
+    return match.group(1) + "65535" + match.group(2) + "65535" + match.group(3)
+
+text, count = pattern.subn(replace, text, count=1)
+if count != 1:
+    raise SystemExit("No MatrixElement InputChannels/OutputChannels pair found")
+pathlib.Path(dst_path).write_text(text, encoding="utf-8")
+' "$XML_PROFILE" "$XML_MATRIX_HUGE"
+
 echo "Using base profile: $PROFILE"
+echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
 echo ""
 
 run_reject_test "mpe-calculator-missing-main" "$OUTDIR/mpe-calculator-missing-main.json" "Missing mainFunction in CalculatorElement"
 run_reject_test "inline-clut-truncated" "$OUTDIR/inline-clut-truncated.json" "Inline CLUT data count does not match CLUT size"
+run_reject_test "mpe-matrix-huge-channels" "$OUTDIR/mpe-matrix-huge-channels.json" "Invalid inputChannels or outputChannels in MatrixElement"
+run_reject_test "mpe-matrix-short-data" "$OUTDIR/mpe-matrix-short-data.json" "matrix count does not match MatrixElement size"
 run_reject_test "spectral-white-short" "$OUTDIR/spectral-white-short.json" "whiteData count does not match spectral element size"
+run_reject_test "spectral-matrix-huge-channels" "$OUTDIR/spectral-matrix-huge-channels.json" "Invalid inputChannels or outputChannels in spectral matrix element"
 run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "offsetData count does not match spectral element size"
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
+run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
 
 HELPER_SRC="$OUTDIR/json-config-helper-test.cpp"
 HELPER_BIN="$OUTDIR/json-config-helper-test"
@@ -366,7 +503,7 @@ fi
 rm -f "$HELPER_BIN"
 
 echo ""
-echo "JSON parser/config regression summary:"
+echo "JSON/XML parser/config regression summary:"
 echo "  Total:      $TOTAL"
 echo "  Passed:     $PASS"
 echo "  Failed:     $FAIL"

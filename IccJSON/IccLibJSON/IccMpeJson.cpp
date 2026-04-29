@@ -81,6 +81,18 @@ static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
   return (icUInt32Number)n;
 }
 
+// Match the defensive cap used by CIccMpeMatrix::Read for user-controlled
+// matrix-family payloads before narrowing channel counts.
+static const int kIccJsonMaxMatrixChannels = 255;
+static const int kIccJsonMaxSpectralSteps = 65535;
+
+static bool icJsonValidMatrixChannels(int nIn, int nOut)
+{
+  return nIn > 0 && nOut > 0 &&
+         nIn <= kIccJsonMaxMatrixChannels &&
+         nOut <= kIccJsonMaxMatrixChannels;
+}
+
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
@@ -891,20 +903,55 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   int nInInt = 0, nOutInt = 0;
   jGetValue(j, "inputChannels",  nInInt);
   jGetValue(j, "outputChannels", nOutInt);
+
+  if (!icJsonValidMatrixChannels(nInInt, nOutInt)) {
+    parseStr += "Invalid inputChannels or outputChannels in MatrixElement\n";
+    return false;
+  }
+
   icUInt16Number nIn  = (icUInt16Number)nInInt;
   icUInt16Number nOut = (icUInt16Number)nOutInt;
+  icUInt64Number nEntries64 = (icUInt64Number)nIn * nOut;
+  if (nEntries64 > 0xFFFFFFFFUL) {
+    parseStr += "MatrixElement size is too large\n";
+    return false;
+  }
+  icUInt32Number nEntries = (icUInt32Number)nEntries64;
+
+  if (j.contains("matrix") && !j["matrix"].is_array()) {
+    parseStr += "matrix must be an array in MatrixElement\n";
+    return false;
+  }
+  if (j.contains("constants") && !j["constants"].is_array()) {
+    parseStr += "constants must be an array in MatrixElement\n";
+    return false;
+  }
 
   bool bHasMatrix = j.contains("matrix") && j["matrix"].is_array();
   bool bHasConstants = j.contains("constants") && j["constants"].is_array();
+
+  if (bHasMatrix && j["matrix"].size() != nEntries64) {
+    parseStr += "matrix count does not match MatrixElement size\n";
+    return false;
+  }
+  if (bHasConstants && j["constants"].size() != nOut) {
+    parseStr += "constants count does not match MatrixElement outputChannels\n";
+    return false;
+  }
+
   // Matrix elements require constants in serialized ICC data. For older JSON
   // that omitted all-zero constants, allocate them and leave them zero-filled.
   if (!SetSize(nIn, nOut, bHasMatrix || bHasConstants)) return false;
 
   if (bHasMatrix) {
     const IccJson &mat = j["matrix"];
-    icUInt32Number nEntries = nIn * nOut;
-    for (icUInt32Number i = 0; i < nEntries && i < icJsonSafeU32(mat.size()); i++)
+    for (icUInt32Number i = 0; i < nEntries; i++) {
+      if (!mat[i].is_number()) {
+        parseStr += "matrix contains non-numeric value in MatrixElement\n";
+        return false;
+      }
       m_pMatrix[i] = (icFloatNumber)mat[i].get<double>();
+    }
 
     bool bInvert = j.contains("invertMatrix") && j["invertMatrix"].is_boolean()
                    ? j["invertMatrix"].get<bool>() : false;
@@ -922,8 +969,13 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   }
   if (bHasConstants) {
     const IccJson &con = j["constants"];
-    for (icUInt16Number i = 0; i < nOut && i < con.size(); i++)
+    for (icUInt16Number i = 0; i < nOut; i++) {
+      if (!con[i].is_number()) {
+        parseStr += "constants contains non-numeric value in MatrixElement\n";
+        return false;
+      }
       m_pConstants[i] = (icFloatNumber)con[i].get<double>();
+    }
   }
   return true;
 }
@@ -1966,8 +2018,8 @@ static bool icSpectralRangeFromJson(const IccJson &j, icSpectralRange &range, st
   jGetValue(jw, "start", dStart);
   jGetValue(jw, "end",   dEnd);
   jGetValue(jw, "steps", nSteps);
-  if (!nSteps) {
-    parseStr += "Invalid spectral range (steps==0)\n";
+  if (nSteps <= 0 || nSteps > kIccJsonMaxSpectralSteps) {
+    parseStr += "Invalid spectral range (steps out of range)\n";
     return false;
   }
   range.start = icFtoF16((icFloat32Number)dStart);
@@ -1998,7 +2050,7 @@ static bool icFloatArrayFromJson(const IccJson &j, const char *field,
     return false;
   }
   const IccJson &arr = j[field];
-  if ((int)arr.size() != n) {
+  if (n < 0 || arr.size() != (size_t)n) {
     parseStr += std::string(field) + " count does not match spectral element size\n";
     return false;
   }
@@ -2038,14 +2090,25 @@ static bool icSpectralMatrixFromJson(const IccJson &j, CIccMpeSpectralMatrix *pM
   int nIn = 0, nOut = 0;
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
-  if (!nIn || !nOut) {
+  if (!icJsonValidMatrixChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in spectral matrix element\n";
+    return false;
+  }
+  if (nVectors <= 0 || nVectors > kIccJsonMaxMatrixChannels) {
+    parseStr += "Invalid vector count in spectral matrix element\n";
     return false;
   }
 
   icSpectralRange range{};
   if (!icSpectralRangeFromJson(j, range, parseStr))
     return false;
+
+  icUInt64Number nMatrixValues64 = (icUInt64Number)nVectors * range.steps;
+  if (nMatrixValues64 > 0x7fffffffUL) {
+    parseStr += "spectral matrix element size is too large\n";
+    return false;
+  }
+  int nMatrixValues = (int)nMatrixValues64;
 
   if (!pMtx->SetSize((icUInt16Number)nIn, (icUInt16Number)nOut, range)) {
     parseStr += "Unable to SetSize in spectral matrix element\n";
@@ -2054,7 +2117,7 @@ static bool icSpectralMatrixFromJson(const IccJson &j, CIccMpeSpectralMatrix *pM
 
   if (!icFloatArrayFromJson(j, "whiteData", pMtx->GetWhite(), range.steps, parseStr))
     return false;
-  if (!icFloatArrayFromJson(j, "matrixData", pMtx->GetMatrix(), nVectors * range.steps, parseStr))
+  if (!icFloatArrayFromJson(j, "matrixData", pMtx->GetMatrix(), nMatrixValues, parseStr))
     return false;
   // offsetData optional -- zero-fill if absent
   if (j.contains("offsetData")) {

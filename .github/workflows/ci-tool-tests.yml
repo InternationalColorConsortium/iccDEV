@@ -10,7 +10,7 @@
 #   1. Coverage baseline (105 tests) -- all 14 CLI tools
 #   2. JSON -cfg tests (33 tests) -- config mode validation
 #   3. JSON CLI exercise (125 tests) -- all CLI option combos
-#   4. Regression checks -- bisect fix PoCs, JSON parser/config failures,
+#   4. Regression checks -- bisect fix PoCs, JSON/XML parser/config failures,
 #      standard observer XML/JSON alias compatibility, issue #928 mluc setter
 #      canonical length checks, and mluc read/UTF-16 validation
 #
@@ -47,6 +47,7 @@ on:
       - '.github/workflows/ci-tool-tests.yml'
       - '.github/scripts/iccdev-tool-coverage-baseline.sh'
       - '.github/scripts/iccdev-json-cfg-tests.sh'
+      - '.github/scripts/iccdev-json-parser-regression-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
       - '.github/scripts/iccdev-mluc-setter-regression-tests.sh'
       - '.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh'
@@ -948,8 +949,8 @@ jobs:
           passed=$((passed + r12_pass))
           failed=$((failed + r12_fail))
 
-          # --- R13: ICC JSON parser/config rejects malformed and stale data ---
-          echo "--- R13: ICC JSON parser/config malformed-data rejection ---"
+          # --- R13: ICC JSON/XML parser/config rejects malformed and stale data ---
+          echo "--- R13: ICC JSON/XML parser/config malformed-data rejection ---"
           r13_pass=0 r13_fail=0
           PARSER_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-json-parser-regression-tests.sh"
           if [ -f "$PARSER_SCRIPT" ]; then
@@ -961,8 +962,8 @@ jobs:
               "$PARSER_SCRIPT" > "$OUTDIR/r13-json-parser.log" 2>&1 || r13_ec=$?
             cat "$OUTDIR/r13-json-parser.log"
             if [ "$r13_ec" -eq 0 ]; then
-              echo "  [OK]    ICC JSON parser/config rejected malformed and stale data"
-              r13_pass=$((r13_pass + 8))
+              echo "  [OK]    ICC JSON/XML parser/config rejected malformed and stale data"
+              r13_pass=$((r13_pass + 12))
             else
               echo "  [FAIL]  ICC JSON parser regression script exited $r13_ec"
               r13_fail=$((r13_fail + 1))
@@ -970,7 +971,7 @@ jobs:
           else
             echo "  [SKIP]  parser regression script not found"
           fi
-          echo "  JSON parser/config malformed-data rejection: $r13_pass passed, $r13_fail failed"
+          echo "  JSON/XML parser/config malformed-data rejection: $r13_pass passed, $r13_fail failed"
           passed=$((passed + r13_pass))
           failed=$((failed + r13_fail))
 
