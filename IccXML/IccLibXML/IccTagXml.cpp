@@ -5,7 +5,7 @@
 
     Version:    V1
 
-    Copyright:  © see ICC Software License
+    Copyright:  see ICC Software License
 */
 
 /*
@@ -1108,7 +1108,11 @@ bool CIccTagXmlSparseMatrixArray::ToXml(std::string &xml, std::string blanks/* =
   icUInt32Number bytesPerMatrix = GetBytesPerMatrix();
 
   for (i=0; i<(int)m_nSize; i++) {
-    mtx.Reset(m_RawData+i*bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, true);
+    if (!mtx.Reset(m_RawData+i*bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, true) ||
+        mtx.GetNumEntries() > mtx.GetMaxEntries() ||
+        !mtx.IsValid())
+      return false;
+
     snprintf(buf, bufSize, " <SparseMatrix rows=\"%d\" cols=\"%d\">\n", mtx.Rows(), mtx.Cols());
     xml += blanks + buf;
 
