@@ -5,7 +5,7 @@
 
     Version:    V1
 
-    Copyright:  � see ICC Software License
+    Copyright:  see ICC Software License
 */
 
 /*
@@ -3182,9 +3182,15 @@ void CIccProfile::getNormIlluminantXYZ(icFloatNumber *pXYZ)
       memcpy(pXYZ, icD50XYZ, 3 * sizeof(icFloatNumber));
     }
     else {
-      pXYZ[0] = pCond->m_illuminantXYZ.X / pCond->m_illuminantXYZ.Y;
-      pXYZ[1] = 1.0f;
-      pXYZ[2] = pCond->m_illuminantXYZ.Z / pCond->m_illuminantXYZ.Y;
+      icFloatNumber illumY = pCond->m_illuminantXYZ.Y;
+      if (icNotZero(illumY)) {
+        pXYZ[0] = pCond->m_illuminantXYZ.X / illumY;
+        pXYZ[1] = 1.0f;
+        pXYZ[2] = pCond->m_illuminantXYZ.Z / illumY;
+      }
+      else {
+        memcpy(pXYZ, icD50XYZ, 3 * sizeof(icFloatNumber));
+      }
     }
   }
 }
