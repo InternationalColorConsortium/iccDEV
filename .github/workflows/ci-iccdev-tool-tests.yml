@@ -2021,7 +2021,31 @@ jobs:
 
           OUTDIR="/tmp/iccdev-tool-output"
 
-          # Count ASAN and UBSAN across all logs
+          find_matching_logs() {
+            local root="$1"
+            local pattern="$2"
+            [ -d "$root" ] || return 0
+            while IFS= read -r -d '' logf; do
+              if grep -q -- "$pattern" "$logf" 2>/dev/null; then
+                printf '%s\n' "$logf"
+              fi
+            done < <(find "$root" -name '*.log' -type f -print0 2>/dev/null)
+          }
+
+          count_matching_logs() {
+            local root="$1"
+            local pattern="$2"
+            local matches
+            matches="$(find_matching_logs "$root" "$pattern")"
+            if [ -n "$matches" ]; then
+              grep -c . <<< "$matches" 2>/dev/null || echo 0
+            else
+              echo 0
+            fi
+          }
+
+          # Count ASAN and UBSAN across text logs only. Some tests write binary
+          # ICC artifacts under OUTDIR; recursive grep can misclassify them.
           ASAN_FILES=""
           UBSAN_FILES=""
           TOTAL_LOGS=0
@@ -2029,8 +2053,8 @@ jobs:
           TOTAL_FAIL=0
           TOTAL_READ_FAIL=0
           if [ -d "$OUTDIR" ]; then
-            ASAN_FILES=$({ grep -Irl "ERROR: AddressSanitizer" "$OUTDIR"/ 2>/dev/null || true; })
-            UBSAN_FILES=$({ grep -Irl "runtime error:" "$OUTDIR"/ 2>/dev/null || true; })
+            ASAN_FILES="$(find_matching_logs "$OUTDIR" "ERROR: AddressSanitizer")"
+            UBSAN_FILES="$(find_matching_logs "$OUTDIR" "runtime error:")"
             TOTAL_LOGS=$(find "$OUTDIR" -name '*.log' -type f 2>/dev/null | wc -l)
             # Count pass/fail across per-profile logs (exit code in log content)
             for logf in "$OUTDIR"/*/*.log; do
@@ -2137,11 +2161,11 @@ jobs:
               pdir="$OUTDIR/$dir"
               if [ ! -d "$pdir" ]; then
                 echo "| $phase | $name | SKIP |"
-              elif grep -Irq "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null; then
-                pa=$(grep -Irl "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null | wc -l)
+              elif [ "$(count_matching_logs "$pdir" "ERROR: AddressSanitizer")" -gt 0 ]; then
+                pa="$(count_matching_logs "$pdir" "ERROR: AddressSanitizer")"
                 echo "| $phase | $name | ASAN ($pa files) |"
-              elif grep -Irq "runtime error:" "$pdir"/ 2>/dev/null; then
-                pu=$(grep -Irl "runtime error:" "$pdir"/ 2>/dev/null | wc -l)
+              elif [ "$(count_matching_logs "$pdir" "runtime error:")" -gt 0 ]; then
+                pu="$(count_matching_logs "$pdir" "runtime error:")"
                 echo "| $phase | $name | UBSAN ($pu files) |"
               elif [ -f "$pdir/.phase-fail" ]; then
                 reason="$(sanitize_line "$(sed -n '1p' "$pdir/.phase-fail")")"
@@ -2169,11 +2193,11 @@ jobs:
                 {
                   echo "**${safe_fname}** (ASAN)"
                   echo '```'
-                  grep "ERROR: AddressSanitizer" "$logf" | sed -n '1,1p' | while IFS= read -r line; do
+                  { grep "ERROR: AddressSanitizer" "$logf" 2>/dev/null || true; } | sed -n '1,1p' | while IFS= read -r line; do
                     sanitize_line "$line"
                     echo ""
                   done
-                  grep -E '^\s+#[0-3]' "$logf" | sed -n '1,4p' | while IFS= read -r line; do
+                  { grep -E '^\s+#[0-3]' "$logf" 2>/dev/null || true; } | sed -n '1,4p' | while IFS= read -r line; do
                     sanitize_line "$line"
                     echo ""
                   done
@@ -2189,7 +2213,7 @@ jobs:
               echo '```' >> "$GITHUB_STEP_SUMMARY"
               echo "$UBSAN_FILES" | while IFS= read -r logf; do
                 [ -f "$logf" ] || continue
-                grep "runtime error:" "$logf" 2>/dev/null
+                grep "runtime error:" "$logf" 2>/dev/null || true
               done | sort -u | sed -n '1,20p' | while IFS= read -r line; do
                 sanitize_line "$line"
                 echo ""
