@@ -522,8 +522,11 @@ int main(int argc, char* argv[])
         // Number of actual padding bytes between this tag and closest neighbour (or EOF)
         // Should be 0-3 if compliant. Negative number if tags overlap!
         // Guard against unsigned integer overflow in subtraction
-        if (i->TagInfo.offset + (icUInt64Number)i->TagInfo.size > (icUInt64Number)closest)
-            pad = -((int)((icUInt64Number)i->TagInfo.offset + i->TagInfo.size - closest));
+        icUInt64Number tagEnd = (icUInt64Number)i->TagInfo.offset + i->TagInfo.size;
+        if (tagEnd > (icUInt64Number)closest) {
+            icUInt64Number overlap = tagEnd - (icUInt64Number)closest;
+            pad = (overlap > (icUInt64Number)INT_MAX) ? INT_MIN : -(int)overlap;
+        }
         else
             pad = closest - i->TagInfo.offset - i->TagInfo.size;
 
