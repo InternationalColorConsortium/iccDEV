@@ -1681,6 +1681,9 @@ IIccStruct *icGetTagStructHandler(CIccTag *pTag)
 
 IIccStruct *icGetTagStructHandlerOfType(CIccTag* pTag, icStructSignature sig)
 {
+  if (!pTag)
+    return NULL;
+
   if (pTag->GetTagStructType()==sig)
     return icGetTagStructHandler(pTag);
 
@@ -1701,9 +1704,11 @@ IIccArray *icGetTagArrayHandler(CIccTag *pTag)
 
 IIccArray *icGetTagArrayHandlerOfType(CIccTag* pTag, icArraySignature sig)
 {
+  if (!pTag)
+    return NULL;
+
   if (pTag->GetTagArrayType()==sig)
     return icGetTagArrayHandler(pTag);
 
   return NULL;
 }
-
