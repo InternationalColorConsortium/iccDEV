@@ -80,12 +80,12 @@ target_compile_options(target PRIVATE
 #### vcpkg Port-Specific
 ```
 # vcpkg overlay port issues:
-- Source patches (vcpkg_replace_string) fail if upstream CMakeLists.txt changes
 - VCPKG_ICCDEV_SOURCE env var stripped by vcpkg sandbox — need VCPKG_KEEP_ENV_VARS
 - GitHub API 403 on macOS runners when using --head (rate limiting)
 - VS-bundled vcpkg doesn't support --classic mode — use standalone clone
 - Static-only build (no __declspec(dllexport)) — ENABLE_SHARED_LIBS=OFF
-- IccDEVCmm PCH fails under Ninja — must be patched out
+- IccDEVCmm PCH fails under Ninja — keep ENABLE_CMM_TOOLS=OFF in vcpkg
+- Image tool dependencies stay out of vcpkg — keep ENABLE_IMAGE_TOOLS=OFF
 ```
 
 #### Dependency Failures

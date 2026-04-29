@@ -1,0 +1,16 @@
+iccdev provides CMake targets:
+
+  find_package(RefIccMAX CONFIG REQUIRED)
+  target_link_libraries(main PRIVATE RefIccMAX::IccProfLib2)
+
+Optional feature targets are available when their features are installed:
+
+  RefIccMAX::IccXML2
+  RefIccMAX::IccJSON2
+
+The vcpkg port builds static libraries only. Static-only installs also expose
+explicit -static targets for installed libraries:
+
+  RefIccMAX::IccProfLib2-static
+  RefIccMAX::IccXML2-static
+  RefIccMAX::IccJSON2-static

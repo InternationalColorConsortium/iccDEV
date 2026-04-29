@@ -18,6 +18,8 @@
 #
 ###############################################################
 
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
+
 # CI mode: use local checkout to avoid GitHub API auth issues.
 # Set VCPKG_ICCDEV_SOURCE env var to the repo root.
 # Requires VCPKG_KEEP_ENV_VARS=VCPKG_ICCDEV_SOURCE to pass through vcpkg sandbox.
@@ -46,117 +48,10 @@ else()
     )
 endif()
 
-# -- Source patches ------------------------------------------------
-
-# 1. Guard IccXML subdirectory behind ENABLE_ICCXML
-#    (upstream adds it unconditionally).
-set(_iccxml_old [=[#
-# XML library
-#
-if(VERBOSE_CONFIG)
-  message(STATUS "Adding subdirectory for IccXML.")
-endif()
-add_subdirectory(IccXML)
-
-# Set default link target for IccXML (matches build configuration)
-IF(ENABLE_SHARED_LIBS)
-  set(TARGET_LIB_ICCXML IccXML2 CACHE INTERNAL "Link target for IccXML2")
-ELSE()
-  set(TARGET_LIB_ICCXML IccXML2-static CACHE INTERNAL "Link target for IccXML2")
-ENDIF()]=])
-
-set(_iccxml_new [=[#
-# XML library (guarded by ENABLE_ICCXML)
-#
-if(ENABLE_ICCXML)
-  if(VERBOSE_CONFIG)
-    message(STATUS "Adding subdirectory for IccXML.")
-  endif()
-  add_subdirectory(IccXML)
-
-  # Set default link target for IccXML (matches build configuration)
-  IF(ENABLE_SHARED_LIBS)
-    set(TARGET_LIB_ICCXML IccXML2 CACHE INTERNAL "Link target for IccXML2")
-  ELSE()
-    set(TARGET_LIB_ICCXML IccXML2-static CACHE INTERNAL "Link target for IccXML2")
-  ENDIF()
-endif()]=])
-
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "${_iccxml_old}" "${_iccxml_new}"
-)
-
-# 2. Disable IccDEVCmm (Windows CMM DLL; PCH issues under Ninja)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "ADD_SUBDIRECTORY(Tools/IccDEVCmm)"
-    "# IccDEVCmm disabled in vcpkg port (Windows CMM DLL, not a library)"
-)
-
-# 3. Disable IccIisIsapi (Windows IIS ISAPI DLL; requires IIS SDK, not a library)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "ADD_SUBDIRECTORY(Tools/IccIisIsapi)"
-    "# IccIisIsapi disabled in vcpkg port (Windows IIS ISAPI DLL, not a library)"
-)
-
-# 4. Make TIFF/PNG/JPEG optional (only needed for image tools, excluded here)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "find_package(TIFF REQUIRED)"
-    "find_package(TIFF QUIET)"
-)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "find_package(PNG REQUIRED)"
-    "find_package(PNG QUIET)"
-)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "find_package(JPEG REQUIRED)"
-    "find_package(JPEG QUIET)"
-)
-
-# 5. Disable IccJpegDump (image tool mixed in with core tools)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "ADD_SUBDIRECTORY(Tools/IccJpegDump)"
-    "# IccJpegDump disabled in vcpkg port (requires JPEG, image tools excluded)"
-)
-
-# 6. Disable TIFF block FATAL_ERROR -> skip
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    [=[message(FATAL_ERROR "TIFF library not found. Please install libtiff-dev.")]=]
-    [=[message(STATUS "TIFF not found; skipping TIFF-dependent tools (vcpkg port: image tools excluded)")]=]
-)
-
-# 7. Disable PNG block FATAL_ERROR (line ~439 in deps section)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    [=[message(FATAL_ERROR " PNG not found. Please install libpng-dev or install via vcpkg.")]=]
-    [=[message(STATUS "PNG not found; skipping (vcpkg port: image tools excluded)")]=]
-)
-
-# 8. Disable IccPngDump subdirectory and its FATAL_ERROR guard
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    "ADD_SUBDIRECTORY(Tools/IccPngDump)"
-    "# IccPngDump disabled in vcpkg port (requires PNG, image tools excluded)"
-)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    [=[message(FATAL_ERROR "PNG not found. Please install libpng-dev or install via vcpkg.")]=]
-    [=[message(STATUS "PNG not found; skipping IccPngDump (vcpkg port)")]=]
-)
-
-# 9. Disable JPEG FATAL_ERROR
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    [=[message(FATAL_ERROR " JPEG not found. Please install libjpeg-dev or install via vcpkg.")]=]
-    [=[message(STATUS "JPEG not found; skipping (vcpkg port: image tools excluded)")]=]
-)
-
-# 10. Make LibXml2 conditional on ENABLE_ICCXML (upstream has it unconditional)
-vcpkg_replace_string("${SOURCE_PATH}/Build/Cmake/CMakeLists.txt"
-    [=[find_package(LibXml2 REQUIRED)]=]
-    [=[if(ENABLE_ICCXML)
-  find_package(LibXml2 REQUIRED)
-endif()]=]
-)
-
 # Feature flags -> CMake options
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     FEATURES
+        json    ENABLE_ICCJSON
         tools   ENABLE_TOOLS
         xml     ENABLE_ICCXML
 )
@@ -172,6 +67,9 @@ vcpkg_cmake_configure(
         -DENABLE_SHARED_LIBS=OFF
         -DENABLE_STATIC_LIBS=ON
         -DENABLE_WXWIDGETS=OFF
+        -DENABLE_IMAGE_TOOLS=OFF
+        -DENABLE_CMM_TOOLS=OFF
+        -DENABLE_IIS_TOOLS=OFF
         # Keep static archives linkable from non-Clang consumers by disabling
         # Release IPO/LTO in the packaged build.
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
@@ -216,6 +114,14 @@ if("tools" IN_LIST FEATURES)
             AUTO_CLEAN
         )
     endif()
+    if("json" IN_LIST FEATURES)
+        vcpkg_copy_tools(
+            TOOL_NAMES
+                iccFromJson
+                iccToJson
+            AUTO_CLEAN
+        )
+    endif()
 endif()
 
 # Clean up
@@ -242,6 +148,8 @@ foreach(_bindir "${CURRENT_PACKAGES_DIR}/bin" "${CURRENT_PACKAGES_DIR}/debug/bin
         endif()
     endif()
 endforeach()
+
+file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
 
 # Install license
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE.md")

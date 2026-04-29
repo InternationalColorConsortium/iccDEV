@@ -13,14 +13,15 @@ The workflow runs on 3 platforms. Check which job(s) failed:
 
 ### 2. Common Failure Categories
 
-#### Source Patch Failures
+#### Optional Component Regressions
 ```
-vcpkg_replace_string: Could not find the string to replace
+Could NOT find TIFF / PNG / JPEG / LibXml2
 ```
-**Cause**: Upstream `Build/Cmake/CMakeLists.txt` changed and a
-`vcpkg_replace_string` call in `portfile.cmake` no longer matches.
-**Fix**: Compare the portfile's old string with the current CMakeLists.txt.
-Update the exact match string in the portfile.
+**Cause**: A component option was enabled without its dependency, or the
+vcpkg feature mapping no longer matches the upstream CMake option.
+**Fix**: Check `ENABLE_ICCXML`, `ENABLE_ICCJSON`, `ENABLE_TOOLS`,
+`ENABLE_IMAGE_TOOLS`, `ENABLE_CMM_TOOLS`, and `ENABLE_IIS_TOOLS` in the
+configure log.
 
 #### GitHub API 403 (non-local mode)
 ```
@@ -53,7 +54,7 @@ the portfile's `vcpkg_cmake_configure` call.
 error: ... precompiled header ...
 ```
 **Cause**: IccDEVCmm uses PCH that fails under Ninja generator.
-**Fix**: Ensure IccDEVCmm is disabled in the portfile patches.
+**Fix**: Ensure `ENABLE_CMM_TOOLS=OFF` in the portfile configure options.
 
 ### 3. Reproduce Locally
 
@@ -100,7 +101,8 @@ ls $PREFIX/include/RefIccMAX/IccProfLib2/*.h | wc -l  # expect ~52
 
 # Libraries
 ls $PREFIX/lib/libIccProfLib2*   # expect libIccProfLib2-static.a
-ls $PREFIX/lib/libIccXML2*       # expect libIccXML2-static.a
+ls $PREFIX/lib/libIccXML2*       # present only with the xml feature
+ls $PREFIX/lib/libIccJSON2*      # present only with the json feature
 
 # CMake config
 cat $PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake
@@ -114,10 +116,10 @@ $PREFIX/tools/iccdev/iccRoundTrip --help
 
 | File | Purpose |
 |------|---------|
-| `ports/iccdev/portfile.cmake` | Build script with 9 source patches |
+| `ports/iccdev/portfile.cmake` | Static-only vcpkg build script |
 | `ports/iccdev/vcpkg.json` | Port manifest (deps, features) |
 | `.github/workflows/ci-vcpkg-ports.yml` | Cross-platform CI workflow |
-| `Build/Cmake/CMakeLists.txt` | Upstream CMake (target of patches) |
+| `Build/Cmake/CMakeLists.txt` | Upstream CMake options used by the port |
 
 ## Environment Variable Gotcha
 

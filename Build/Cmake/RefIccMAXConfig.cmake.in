@@ -45,6 +45,19 @@ set(REFICCMAX_VERSION_MICRO @REFICCMAX_MICRO_VERSION@)
 set(REFICCMAX_VERSION_PATCH @REFICCMAX_PATCH_VERSION@)
 set(REFICCMAX_VERSION @REFICCMAX_VERSION@)
 
+include(CMakeFindDependencyMacro)
+
+set(_REFICCMAX_ENABLE_ICCXML "@ENABLE_ICCXML@")
+set(_REFICCMAX_ENABLE_ICCJSON "@ENABLE_ICCJSON@")
+
+if(_REFICCMAX_ENABLE_ICCXML)
+  find_dependency(LibXml2)
+endif()
+
+if(_REFICCMAX_ENABLE_ICCJSON)
+  find_dependency(nlohmann_json CONFIG)
+endif()
+
 # Load exported targets — this creates RefIccMAX::IccProfLib2, RefIccMAX::IccXML2, etc.
 # with all include directories, link dependencies, and compile features pre-configured.
 include("${CMAKE_CURRENT_LIST_DIR}/RefIccMAXTargets.cmake")
@@ -57,8 +70,10 @@ include("${CMAKE_CURRENT_LIST_DIR}/RefIccMAXTargets.cmake")
 foreach(_rim_target
     RefIccMAX::IccProfLib2
     RefIccMAX::IccXML2
+    RefIccMAX::IccJSON2
     RefIccMAX::IccProfLib2-static
-    RefIccMAX::IccXML2-static)
+    RefIccMAX::IccXML2-static
+    RefIccMAX::IccJSON2-static)
   if(TARGET ${_rim_target})
     get_target_property(_rim_configs ${_rim_target} IMPORTED_CONFIGURATIONS)
     if(_rim_configs)
@@ -78,9 +93,6 @@ unset(_rim_configs)
 unset(_rim_fallback)
 unset(_rim_cfg)
 unset(_rim_cfg_upper)
-
-# IccXML2 requires libxml2 — find it so the transitive dependency resolves
-find_package(LibXml2 QUIET)
 
 # Handle find_package() standard args
 include(FindPackageHandleStandardArgs)
@@ -105,6 +117,12 @@ if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
     add_library(RefIccMAX::IccXML2 INTERFACE IMPORTED)
     set_target_properties(RefIccMAX::IccXML2 PROPERTIES
       INTERFACE_LINK_LIBRARIES "RefIccMAX::IccXML2-static"
+    )
+  endif()
+  if(NOT TARGET RefIccMAX::IccJSON2 AND TARGET RefIccMAX::IccJSON2-static)
+    add_library(RefIccMAX::IccJSON2 INTERFACE IMPORTED)
+    set_target_properties(RefIccMAX::IccJSON2 PROPERTIES
+      INTERFACE_LINK_LIBRARIES "RefIccMAX::IccJSON2-static"
     )
   endif()
 
@@ -132,6 +150,12 @@ if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
     list(APPEND REFICCMAX_LIBRARIES RefIccMAX::IccXML2-static)
   endif()
 
+  if(TARGET RefIccMAX::IccJSON2)
+    list(APPEND REFICCMAX_LIBRARIES RefIccMAX::IccJSON2)
+  elseif(TARGET RefIccMAX::IccJSON2-static)
+    list(APPEND REFICCMAX_LIBRARIES RefIccMAX::IccJSON2-static)
+  endif()
+
   if(REFICCMAX_INCLUDE_DIRS)
     list(REMOVE_DUPLICATES REFICCMAX_INCLUDE_DIRS)
   endif()
@@ -143,10 +167,16 @@ if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
   if(TARGET RefIccMAX::IccXML2 AND NOT TARGET IccXML2)
     add_library(IccXML2 ALIAS RefIccMAX::IccXML2)
   endif()
+  if(TARGET RefIccMAX::IccJSON2 AND NOT TARGET IccJSON2)
+    add_library(IccJSON2 ALIAS RefIccMAX::IccJSON2)
+  endif()
   if(TARGET RefIccMAX::IccProfLib2-static AND NOT TARGET IccProfLib2-static)
     add_library(IccProfLib2-static ALIAS RefIccMAX::IccProfLib2-static)
   endif()
   if(TARGET RefIccMAX::IccXML2-static AND NOT TARGET IccXML2-static)
     add_library(IccXML2-static ALIAS RefIccMAX::IccXML2-static)
+  endif()
+  if(TARGET RefIccMAX::IccJSON2-static AND NOT TARGET IccJSON2-static)
+    add_library(IccJSON2-static ALIAS RefIccMAX::IccJSON2-static)
   endif()
 endif()

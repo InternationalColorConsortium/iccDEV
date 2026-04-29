@@ -8,7 +8,8 @@ applyTo: "ports/**"
 
 ```
 ports/iccdev/
-├── portfile.cmake   — Build logic, source patches, feature flags
+├── portfile.cmake   — Build logic and feature flags
+├── usage            — CMake consumption hint printed by vcpkg
 └── vcpkg.json       — Port manifest (name, version, deps, features)
 ```
 
@@ -31,24 +32,18 @@ platforms (e.g., deflate, lzma, jpeg symbols unresolved on Linux).
 wxProfileDump GUI is excluded (`ENABLE_WXWIDGETS=OFF`) — the port
 targets library consumers and headless CLI usage.
 
-## Source Patches (9 total)
+## Upstream CMake Options
 
-The portfile applies 9 `vcpkg_replace_string` patches to the upstream
-`Build/Cmake/CMakeLists.txt`:
+The port no longer applies source-time string patches. Upstream CMake exposes
+the package switches used by vcpkg:
 
-1. **IccXML guard** — wrap `add_subdirectory(IccXML)` in `if(ENABLE_ICCXML)`
-2. **IccDEVCmm disable** — Windows CMM DLL has PCH issues under Ninja
-3. **TIFF REQUIRED → QUIET** — make libtiff optional
-4. **PNG REQUIRED → QUIET** — make libpng optional
-5. **JPEG REQUIRED → QUIET** — make libjpeg optional
-6. **IccJpegDump disable** — image tool mixed in with core tools
-7. **TIFF FATAL_ERROR → STATUS** — skip instead of abort
-8. **PNG FATAL_ERROR → STATUS** (2 locations) — skip instead of abort
-9. **IccPngDump disable** — image tool unconditionally added
-
-When updating upstream CMakeLists.txt, check whether these patches still
-apply. The `vcpkg_replace_string` calls do exact string matching and will
-fail if the upstream text changes.
+- `ENABLE_ICCXML`
+- `ENABLE_ICCJSON`
+- `ENABLE_TOOLS`
+- `ENABLE_IMAGE_TOOLS`
+- `ENABLE_CMM_TOOLS`
+- `ENABLE_IIS_TOOLS`
+- `ENABLE_WXWIDGETS`
 
 ## Local Source Mode
 
@@ -70,16 +65,17 @@ with `REF "v${VERSION}"` — requires a tagged release.
 
 | Feature | Default | CMake Option | Dependencies |
 |---------|---------|-------------|-------------|
-| `tools` | ON | `ENABLE_TOOLS` | — |
-| `xml` | ON | `ENABLE_ICCXML` | libxml2 |
+| `tools` | OFF | `ENABLE_TOOLS` | nlohmann-json |
+| `xml` | OFF | `ENABLE_ICCXML` | libxml2 |
+| `json` | OFF | `ENABLE_ICCJSON` | nlohmann-json |
 
 ## Installed Artifacts
 
 - **Headers**: `include/RefIccMAX/IccProfLib2/*.h` (52 files)
-- **Libraries**: `lib/IccProfLib2-static.lib`, `lib/IccXML2-static.lib`
+- **Libraries**: `lib/IccProfLib2-static.lib` plus feature libraries
 - **CMake config**: `share/RefIccMAX/RefIccMAXConfig.cmake`
-- **Tools** (9): iccDumpProfile, iccApplyNamedCmm, iccRoundTrip, iccFromCube,
-  iccApplyToLink, iccApplySearch, iccV5DspObsToV4Dsp, iccFromXml, iccToXml
+- **Tools**: installed only with the `tools` feature; XML/JSON conversion
+  tools are copied only when their matching feature is enabled
 
 ## CI Workflow
 
@@ -98,6 +94,5 @@ When bumping the port version:
 1. Update `"version"` in `ports/iccdev/vcpkg.json`
 2. If using tagged releases (non-local mode), update `REF` and `SHA512`
    in `portfile.cmake`
-3. Verify patches still apply against the new upstream CMakeLists.txt
-4. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
+3. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
    `vcpkg install iccdev --overlay-ports=ports --classic`

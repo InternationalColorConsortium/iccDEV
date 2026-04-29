@@ -349,7 +349,7 @@ jobs:
             "builtin-baseline": "$baseline",
             "dependencies": [ "iccdev" ],
             "overrides": [
-              { "name": "iccdev", "version": "2.3.1.7" }
+              { "name": "iccdev", "version": "2.3.1.8" }
             ]
           }
           "@ | Set-Content "$testDir\vcpkg.json" -Encoding UTF8

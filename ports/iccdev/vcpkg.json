@@ -6,14 +6,27 @@
   "license": "BSD-3-Clause",
   "supports": "!uwp",
   "dependencies": [
-    "vcpkg-cmake",
-    "vcpkg-cmake-config",
-    "nlohmann-json"
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
   ],
-  "default-features": [ "tools", "xml" ],
   "features": {
+    "json": {
+      "description": "Build IccJSON2 JSON serialization library and JSON conversion tools when tools are enabled",
+      "dependencies": [
+        "nlohmann-json"
+      ]
+    },
     "tools": {
-      "description": "Build core CLI tools (iccDumpProfile, iccRoundTrip, iccApplyNamedCmm, etc.)"
+      "description": "Build core CLI tools (iccDumpProfile, iccRoundTrip, iccApplyNamedCmm, etc.)",
+      "dependencies": [
+        "nlohmann-json"
+      ]
     },
     "xml": {
       "description": "Build IccXML2 XML serialization library and iccFromXml/iccToXml tools",
