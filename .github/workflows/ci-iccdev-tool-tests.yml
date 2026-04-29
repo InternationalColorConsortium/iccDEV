@@ -1968,6 +1968,32 @@ jobs:
           passed=$((passed + r22_pass))
           failed=$((failed + r22_fail))
 
+          # --- R23: Issue #955 lut16 zero-entry curve write validation ---
+          echo "--- R23: Issue #955 lut16 zero-entry curve write validation ---"
+          r23_pass=0 r23_fail=0
+          LUT16_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh"
+          if [ -f "$LUT16_SCRIPT" ]; then
+            chmod +x "$LUT16_SCRIPT"
+            r23_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_BUILD_DIR="${WORKSPACE_DIR}/build" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r23-lut16-zero-curve" \
+              "$LUT16_SCRIPT" > "$OUTDIR/r23-lut16-zero-curve.log" 2>&1 || r23_ec=$?
+            cat "$OUTDIR/r23-lut16-zero-curve.log"
+            if [ "$r23_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #955 lut16 zero-entry curves write cleanly"
+              r23_pass=$((r23_pass + 1))
+            else
+              echo "  [FAIL]  Issue #955 lut16 zero-curve regression script exited $r23_ec"
+              r23_fail=$((r23_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  lut16 zero-curve regression script not found"
+          fi
+          echo "  Issue #955 lut16 zero-entry curve write validation: $r23_pass passed, $r23_fail failed"
+          passed=$((passed + r23_pass))
+          failed=$((failed + r23_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
@@ -2102,7 +2128,7 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
-              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter/read; issue #958 PCC illuminant; calculator sanitizer)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter/read; issue #958 PCC illuminant; issue #955 lut16 zero curves; calculator sanitizer)"
             )
 
             for phase in $(seq 1 18); do

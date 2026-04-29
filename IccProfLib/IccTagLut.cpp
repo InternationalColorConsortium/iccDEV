@@ -5351,6 +5351,7 @@ bool CIccTagLut16::Write(CIccIO *pIO)
   icUInt8Number i, nGrid;
   icS15Fixed16Number XYZMatrix[9];
   icUInt16Number nInputEntries, nOutputEntries;
+  icUInt32Number nInputCurveEntries, nOutputCurveEntries;
   LPIccCurve *pCurves;
   CIccTagCurve *pCurve;
 
@@ -5374,10 +5375,22 @@ bool CIccTagLut16::Write(CIccIO *pIO)
   if (!pCurves || !m_CurvesA || !m_CLUT)
     return false;
 
+  if (m_nInput < 1 || m_nOutput < 1 || m_nInput > 15 || m_nOutput > 15)
+    return false;
+
+  if (!pCurves[0] || pCurves[0]->GetType()!=icSigCurveType ||
+      !m_CurvesA[0] || m_CurvesA[0]->GetType()!=icSigCurveType)
+    return false;
+
   nGrid = m_CLUT->GridPoints();
 
-  nInputEntries = (icUInt16Number)(((CIccTagCurve*)pCurves[0])->GetSize());
-  nOutputEntries = (icUInt16Number)(((CIccTagCurve*)m_CurvesA[0])->GetSize());
+  nInputCurveEntries = ((CIccTagCurve*)pCurves[0])->GetSize();
+  nOutputCurveEntries = ((CIccTagCurve*)m_CurvesA[0])->GetSize();
+  if (nInputCurveEntries > 0xffff || nOutputCurveEntries > 0xffff)
+    return false;
+
+  nInputEntries = (icUInt16Number)nInputCurveEntries;
+  nOutputEntries = (icUInt16Number)nOutputCurveEntries;
 
   if (!pIO->Write32(&sig) ||
       !pIO->Write32(&m_nReserved) ||
@@ -5391,20 +5404,23 @@ bool CIccTagLut16::Write(CIccIO *pIO)
     return false;
 
   //B Curves
-  for (i=0; i<m_nInput; i++) {
-    if (pCurves[i]->GetType()!=icSigCurveType)
-      return false;
+  for (i=0; i<15; i++) {
+    if (i>=m_nInput)
+      break;
 
     pCurve = (CIccTagCurve*)pCurves[i];
-    if (!pCurve)
+    if (!pCurve || pCurve->GetType()!=icSigCurveType)
       return false;
     
     // validate that the sizes match between all curves
     if (pCurve->GetSize() != nInputEntries)
         return false;
 
-    if (pIO->WriteUInt16Float(&(*pCurve)[0], nInputEntries) != nInputEntries)
-      return false;
+    if (nInputEntries) {
+      icFloatNumber *pCurveData = pCurve->GetData(0);
+      if (!pCurveData || pIO->WriteUInt16Float(pCurveData, nInputEntries) != nInputEntries)
+        return false;
+    }
   }
 
   //CLUT
@@ -5414,18 +5430,23 @@ bool CIccTagLut16::Write(CIccIO *pIO)
   //A Curves
   pCurves = m_CurvesA;
 
-  for (i=0; i<m_nOutput; i++) {
-    if (pCurves[i]->GetType()!=icSigCurveType)
-      return false;
+  for (i=0; i<15; i++) {
+    if (i>=m_nOutput)
+      break;
 
     pCurve = (CIccTagCurve*)pCurves[i];
-    
+    if (!pCurve || pCurve->GetType()!=icSigCurveType)
+      return false;
+
     // validate that the sizes match between all curves
     if (pCurve->GetSize() != nOutputEntries)
         return false;
 
-    if (pIO->WriteUInt16Float(&(*pCurve)[0], nOutputEntries) != nOutputEntries)
-      return false;
+    if (nOutputEntries) {
+      icFloatNumber *pCurveData = pCurve->GetData(0);
+      if (!pCurveData || pIO->WriteUInt16Float(pCurveData, nOutputEntries) != nOutputEntries)
+        return false;
+    }
   }
   return true;
 }

@@ -13,7 +13,8 @@
 #   4. Regression checks -- bisect fix PoCs, JSON/XML parser/config failures,
 #      standard observer XML/JSON alias compatibility, issue #928 mluc setter
 #      canonical length checks, mluc read/UTF-16 validation, and issue #958
-#      PCC zero-Y illuminant validation, and calculator sanitizer regressions
+#      PCC zero-Y illuminant validation, calculator sanitizer regressions,
+#      and lut16 zero-entry curve write validation
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -33,6 +34,8 @@
 #   .github/scripts/iccdev-mluc-read-utf16-regression-tests.sh
 #   .github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh
 #   .github/scripts/iccdev-calculator-regression-tests.sh
+#   .github/scripts/iccdev-lut16-zero-curve-regression-tests.sh
+#   .github/ci/regression/lut16-zero-entry-curve-write.cpp
 #
 ###############################################################
 
@@ -57,7 +60,9 @@ on:
       - '.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh'
       - '.github/ci/regression/pcc-zero-illuminant.cpp'
       - '.github/scripts/iccdev-calculator-regression-tests.sh'
+      - '.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh'
       - '.github/scripts/json-cli-exercise.sh'
+      - '.github/ci/regression/lut16-zero-entry-curve-write.cpp'
       - '.github/ci/test-data/**'
       - 'IccProfLib/**'
       - 'IccXML/**'
@@ -1110,6 +1115,32 @@ jobs:
           echo "  Calculator cast/offset sanitizer regression: $r18_pass passed, $r18_fail failed"
           passed=$((passed + r18_pass))
           failed=$((failed + r18_fail))
+
+          # --- R19: Issue #955 lut16 zero-entry curve write validation ---
+          echo "--- R19: Issue #955 lut16 zero-entry curve write validation ---"
+          r19_pass=0 r19_fail=0
+          LUT16_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh"
+          if [ -f "$LUT16_SCRIPT" ]; then
+            chmod +x "$LUT16_SCRIPT"
+            r19_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_BUILD_DIR="${WORKSPACE_DIR}/build" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r19-lut16-zero-curve" \
+              "$LUT16_SCRIPT" > "$OUTDIR/r19-lut16-zero-curve.log" 2>&1 || r19_ec=$?
+            cat "$OUTDIR/r19-lut16-zero-curve.log"
+            if [ "$r19_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #955 lut16 zero-entry curves write cleanly"
+              r19_pass=$((r19_pass + 1))
+            else
+              echo "  [FAIL]  Issue #955 lut16 zero-curve regression script exited $r19_ec"
+              r19_fail=$((r19_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  lut16 zero-curve regression script not found"
+          fi
+          echo "  Issue #955 lut16 zero-entry curve write validation: $r19_pass passed, $r19_fail failed"
+          passed=$((passed + r19_pass))
+          failed=$((failed + r19_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

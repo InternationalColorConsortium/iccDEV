@@ -140,7 +140,7 @@ public:
   virtual bool Write(CIccIO *pIO);
 
   icFloatNumber &operator[](icUInt32Number index) {return m_Curve[index];}
-  icFloatNumber *GetData(icUInt32Number index) {return &m_Curve[index];}
+  icFloatNumber *GetData(icUInt32Number index) {return m_Curve ? &m_Curve[index] : NULL;}
   icUInt32Number GetSize() const { return m_nSize; }
   bool SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt=icInitZero);
   bool SetGamma(icFloatNumber gamma);
