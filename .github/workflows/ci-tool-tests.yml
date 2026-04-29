@@ -13,7 +13,7 @@
 #   4. Regression checks -- bisect fix PoCs, JSON/XML parser/config failures,
 #      standard observer XML/JSON alias compatibility, issue #928 mluc setter
 #      canonical length checks, mluc read/UTF-16 validation, and issue #958
-#      PCC zero-Y illuminant validation
+#      PCC zero-Y illuminant validation, and calculator sanitizer regressions
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -32,6 +32,7 @@
 #   .github/scripts/iccdev-mluc-setter-regression-tests.sh
 #   .github/scripts/iccdev-mluc-read-utf16-regression-tests.sh
 #   .github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh
+#   .github/scripts/iccdev-calculator-regression-tests.sh
 #
 ###############################################################
 
@@ -55,6 +56,7 @@ on:
       - '.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh'
       - '.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh'
       - '.github/ci/regression/pcc-zero-illuminant.cpp'
+      - '.github/scripts/iccdev-calculator-regression-tests.sh'
       - '.github/scripts/json-cli-exercise.sh'
       - '.github/ci/test-data/**'
       - 'IccProfLib/**'
@@ -1082,6 +1084,32 @@ jobs:
           echo "  Issue #958 PCC zero-Y illuminant validation: $r17_pass passed, $r17_fail failed"
           passed=$((passed + r17_pass))
           failed=$((failed + r17_fail))
+
+          # --- R18: Calculator cast/offset sanitizer regression ---
+          echo "--- R18: Calculator cast/offset sanitizer regression ---"
+          r18_pass=0 r18_fail=0
+          CALC_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-calculator-regression-tests.sh"
+          if [ -f "$CALC_SCRIPT" ]; then
+            chmod +x "$CALC_SCRIPT"
+            r18_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r18-calculator" \
+              "$CALC_SCRIPT" > "$OUTDIR/r18-calculator.log" 2>&1 || r18_ec=$?
+            cat "$OUTDIR/r18-calculator.log"
+            if [ "$r18_ec" -eq 0 ]; then
+              echo "  [OK]    Calculator operator and malformed-profile regressions pass"
+              r18_pass=$((r18_pass + 10))
+            else
+              echo "  [FAIL]  Calculator regression script exited $r18_ec"
+              r18_fail=$((r18_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  calculator regression script not found"
+          fi
+          echo "  Calculator cast/offset sanitizer regression: $r18_pass passed, $r18_fail failed"
+          passed=$((passed + r18_pass))
+          failed=$((failed + r18_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
