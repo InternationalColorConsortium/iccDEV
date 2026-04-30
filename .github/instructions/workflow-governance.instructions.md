@@ -90,3 +90,38 @@ For multiline content, sanitize one line at a time.
 `ci-pr-risk-security-analysis.yml` checks workflow governance, including action
 pinning, dangerous triggers, credential hygiene, shell hardening, matrix
 expression injection, output sanitization, permissions, and supply-chain risk.
+
+## Full Run Log Audit
+
+A workflow conclusion of `success` is not proof that the workflow is clean.
+When a run URL is part of the task, download and inspect the complete log
+archive.
+
+Search runtime output for:
+
+- `##[error]`, `##[warning]`, `::error`, and `::warning`
+- `CMake Warning`
+- `File ".+" does not exist`
+- `Cannot open: Permission denied`
+- `post-build check`
+- `DEP0005`
+- `digest-mismatch`
+
+Filter out echoed shell source before classifying diagnostics. Bash source lines
+printed by Actions commonly include ANSI cyan `\033[36;1m`; those lines often
+show failure-handling code, not an actual failure.
+
+Treat these green-run signals as actionable:
+
+- Duplicate `install_manifest.txt` paths.
+- Install or uninstall logs with missing-file diagnostics.
+- Duplicate generated header install lines.
+- Cache paths that include apt lock or `partial` directories.
+- Homebrew already-installed annotations from unconditional `brew install`.
+- vcpkg root mismatch warnings.
+- Static vcpkg triplets linked against the wrong CRT.
+- Matrix configurations that skip smoke tests for non-Debug variants.
+
+Use YAML parsing, `actionlint`, shellcheck, `yamllint`, and the workflow
+permission audit for workflow files. Run CodeQL for related C/C++ or CMake
+changes, not as the workflow YAML checker.

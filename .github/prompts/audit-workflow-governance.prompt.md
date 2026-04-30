@@ -38,6 +38,15 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] `concurrency:` group defined for PR/push workflows
 - [ ] `cancel-in-progress: true` for PR workflows
 
+### 8. Full Run Log Audit
+- [ ] Full log archive downloaded with `gh api /repos/OWNER/REPO/actions/runs/RUN_ID/logs`
+- [ ] Runtime diagnostics grepped across every job, not only failed jobs
+- [ ] Echoed shell source filtered out before classifying findings
+- [ ] Green-run `##[error]`, `##[warning]`, and `CMake Warning` lines reviewed
+- [ ] Install/uninstall logs checked for duplicate manifest paths and missing files
+- [ ] Package-manager and cache warnings classified as fixed, deferred, or baseline
+- [ ] Matrix smoke-test skips reviewed for missing coverage
+
 ## Running the Audit
 
 ### Automated (preferred)
@@ -73,6 +82,20 @@ grep -n 'GITHUB_STEP_SUMMARY' "$FILE" | grep -v 'sanitize_line\|Sanitize-Line\|s
 grep -c 'credential.helper' "$FILE"  # should equal number of run: blocks
 ```
 
+### Full Run Log Grep
+
+```bash
+RUN_ID=<run-id>
+REPO=InternationalColorConsortium/iccDEV
+OUT="/tmp/iccdev-run-${RUN_ID}-logs.zip"
+DIR="/tmp/iccdev-run-${RUN_ID}-logs"
+rm -rf "$DIR" "$OUT"
+gh api "/repos/${REPO}/actions/runs/${RUN_ID}/logs" > "$OUT"
+mkdir -p "$DIR"
+unzip -q "$OUT" -d "$DIR"
+rg -n '##\[error\]|##\[warning\]|::error|::warning|CMake Warning|File ".+" does not exist|Cannot open: Permission denied|post-build check|DEP0005|digest-mismatch' "$DIR" | grep -v $'\033\[36;1m'
+```
+
 ## Severity Classification
 
 | Severity | Finding | Example |
@@ -81,8 +104,18 @@ grep -c 'credential.helper' "$FILE"  # should equal number of run: blocks
 | **CRITICAL** | Missing sanitizer for summary | Raw `>> $GITHUB_STEP_SUMMARY` |
 | **HIGH** | No shell hardening | Missing `--noprofile --norc` |
 | **HIGH** | No credential reduction | Missing `unset GITHUB_TOKEN` |
+| **HIGH** | Green-run missing-file diagnostic | `-- File "... " does not exist.` |
+| **HIGH** | Duplicate install manifest path | Same installed path removed twice |
+| **HIGH** | Skipped matrix smoke coverage | Release variants do not run consumer smoke |
+| **MEDIUM** | Package/cache warning in green job | apt cache permission or Homebrew annotation |
 | **MEDIUM** | Excessive permissions | `contents: write` when read suffices |
 | **LOW** | Missing concurrency group | No `concurrency:` block |
+
+## CodeQL Boundary
+
+CodeQL is required for related C/C++ or CMake changes, but it is not the YAML
+workflow linter. Pair CodeQL with YAML parsing, `actionlint`, shellcheck,
+`yamllint`, and the workflow permission audit.
 
 ## Reference Workflows
 

@@ -294,7 +294,7 @@ jobs:
               cppcheck_args=(
                 --language=c++
                 --std=c++17
-                --enable=warning,performance,portability,style
+                "--enable=warning,performance,portability,style"
                 --suppress=missingIncludeSystem
                 --suppress=unusedStructMember
                 --suppress=unknownMacro:Tools/wxWidget/wxProfileDump/wxProfileDump.cpp

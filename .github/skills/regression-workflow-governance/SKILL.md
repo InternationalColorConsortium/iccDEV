@@ -38,7 +38,9 @@ or changing `ci-iccdev-tool-tests.yml`.
    credential cleanup, no direct `${{ }}` in shell, and sanitized summary output.
 6. Update `.github/ci/regression/README.md` or the relevant docs so future
    maintainers can find the gate.
-7. Run local script syntax checks and the focused regression before handoff.
+7. If a GitHub Actions run URL is involved, download the full run log archive
+   and audit all jobs, including green jobs, for hidden diagnostics.
+8. Run local script syntax checks and the focused regression before handoff.
 
 ## Validation
 
@@ -57,6 +59,20 @@ ICCDEV_TEST_OUTDIR=/tmp/iccdev-regression \
   .github/scripts/<new-regression>.sh
 ```
 
+For workflow and packaging changes:
+
+```bash
+python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/ci-shared-exports.yml','.github/workflows/ci-pr-lint.yml']]; print('YAML parse OK')"
+actionlint -no-color .github/workflows/<workflow>.yml
+python3 .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format shell
+```
+
+If CMake or C++ changed, also run:
+
+```bash
+.github/scripts/run-codeql-local.sh --custom-only
+```
+
 ## Review Checklist
 
 - The test fails on the vulnerable or non-canonical behavior and passes on the
@@ -66,6 +82,11 @@ ICCDEV_TEST_OUTDIR=/tmp/iccdev-regression \
 - ASAN/UBSAN findings are treated as failures except for documented benign
   suppressions.
 - Workflow changes follow `.github/instructions/workflow-governance.instructions.md`.
+- Green workflow runs were checked for hidden log diagnostics, not only failed
+  annotations.
+- Any duplicate install manifest, missing-file uninstall, vcpkg CRT, vcpkg root,
+  apt cache, Homebrew annotation, or skipped smoke coverage issue has either a
+  hard gate or a documented reason for deferral.
 
 ## References
 

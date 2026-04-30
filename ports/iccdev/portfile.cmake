@@ -56,6 +56,26 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
         xml     ENABLE_ICCXML
 )
 
+set(_iccdev_msvc_runtime_options_release)
+set(_iccdev_msvc_runtime_options_debug)
+if(VCPKG_TARGET_IS_WINDOWS)
+    if(VCPKG_CRT_LINKAGE STREQUAL "static")
+        list(APPEND _iccdev_msvc_runtime_options_release
+            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded"
+        )
+        list(APPEND _iccdev_msvc_runtime_options_debug
+            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDebug"
+        )
+    else()
+        list(APPEND _iccdev_msvc_runtime_options_release
+            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL"
+        )
+        list(APPEND _iccdev_msvc_runtime_options_debug
+            "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDebugDLL"
+        )
+    endif()
+endif()
+
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}/Build/Cmake"
     OPTIONS
@@ -74,6 +94,10 @@ vcpkg_cmake_configure(
         # Release IPO/LTO in the packaged build.
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
         ${FEATURE_OPTIONS}
+    OPTIONS_RELEASE
+        ${_iccdev_msvc_runtime_options_release}
+    OPTIONS_DEBUG
+        ${_iccdev_msvc_runtime_options_debug}
 )
 
 vcpkg_cmake_build()

@@ -339,15 +339,26 @@ if(WIN32)
   # MSBuild Detection for Windows
   # ----------------------------------------------------------------------
   if(NOT DEFINED ENV{MSBUILD_PATH})
-    # Attempt to auto-detect common VS2022+ MSBuild path
-    set(_default_msbuild "C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe")
+    # Attempt to auto-detect common VS2022+ MSBuild paths.
+    set(_msbuild_candidates)
+    foreach(_vs_edition Enterprise Professional Community BuildTools)
+      list(APPEND _msbuild_candidates
+        "C:/Program Files/Microsoft Visual Studio/2022/${_vs_edition}/MSBuild/Current/Bin/MSBuild.exe"
+        "C:/Program Files (x86)/Microsoft Visual Studio/2022/${_vs_edition}/MSBuild/Current/Bin/MSBuild.exe"
+      )
+    endforeach()
 
-    if(EXISTS "${_default_msbuild}")
-      set(ENV{MSBUILD_PATH} "${_default_msbuild}")
-      if(VERBOSE_CONFIG)
-        message(STATUS "MSBuild path auto-detected and set to: ${_default_msbuild}")
+    foreach(_msbuild_candidate IN LISTS _msbuild_candidates)
+      if(EXISTS "${_msbuild_candidate}")
+        set(ENV{MSBUILD_PATH} "${_msbuild_candidate}")
+        if(VERBOSE_CONFIG)
+          message(STATUS "MSBuild path auto-detected and set to: ${_msbuild_candidate}")
+        endif()
+        break()
       endif()
-    else()
+    endforeach()
+
+    if(NOT DEFINED ENV{MSBUILD_PATH})
       message(WARNING "MSBuild Path is not defined in environment variables and default path not found.")
     endif()
   endif()
@@ -935,8 +946,11 @@ if(MSVC)
     # CMAKE_CXX_FLAGS_DEBUG uses CMake defaults
     # Release: CMake defaults only (no extra flags)
     # CMAKE_CXX_FLAGS_RELEASE uses CMake defaults
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    endif()
     message(STATUS "Configuring MSVC runtime and flags (CMake defaults)")
+    message(STATUS "  MSVC runtime:   ${CMAKE_MSVC_RUNTIME_LIBRARY}")
     message(STATUS "  DEBUG:          CMake defaults only")
     message(STATUS "  RELEASE:        CMake defaults only")
     message(STATUS "  RELWITHDEBINFO: CMake defaults only")

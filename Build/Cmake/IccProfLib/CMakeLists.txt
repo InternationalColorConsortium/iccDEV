@@ -79,7 +79,6 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccPrmg.h
   ${SRC_PATH}/IccProfLib/IccProfile.h
   ${SRC_PATH}/IccProfLib/IccProfLibConf.h
-  ${SRC_PATH}/IccProfLib/IccProfLibVer.h
   ${SRC_PATH}/IccProfLib/IccSolve.h
   ${SRC_PATH}/IccProfLib/IccSparseMatrix.h
   ${SRC_PATH}/IccProfLib/IccStructBasic.h

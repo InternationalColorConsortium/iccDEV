@@ -56,6 +56,39 @@ Every edited workflow `run:` block must keep these properties:
 See `.github/instructions/workflow-governance.instructions.md` for the full
 checklist.
 
+## Full Log Audit Requirements
+
+When reviewing a GitHub Actions run, inspect the complete log archive even if
+the run conclusion is `success`. Green runs can still hide missing coverage,
+cache failures, package-manager annotations, and non-fatal install/uninstall
+diagnostics.
+
+Use this pattern:
+
+```bash
+RUN_ID=<run-id>
+REPO=InternationalColorConsortium/iccDEV
+OUT="/tmp/iccdev-run-${RUN_ID}-logs.zip"
+DIR="/tmp/iccdev-run-${RUN_ID}-logs"
+rm -rf "$DIR" "$OUT"
+gh api "/repos/${REPO}/actions/runs/${RUN_ID}/logs" > "$OUT"
+mkdir -p "$DIR"
+unzip -q "$OUT" -d "$DIR"
+rg -n '##\[error\]|##\[warning\]|::error|::warning|CMake Warning|File ".+" does not exist|Cannot open: Permission denied|post-build check|DEP0005|digest-mismatch' "$DIR" | grep -v $'\033\[36;1m'
+```
+
+For install and packaging workflows, also check:
+
+- Duplicate entries in `install_manifest.txt`.
+- Install and uninstall logs containing `File ".+" does not exist`.
+- Duplicate generated version-header installs.
+- vcpkg root mismatch warnings.
+- vcpkg CRT linkage warnings for static triplets.
+- Build-type matrix entries whose smoke tests are skipped.
+
+Fixes should add a gate for the defect class, not only silence the observed log
+line.
+
 ## Script Pattern
 
 Regression scripts should:
@@ -104,6 +137,11 @@ Run the focused regression and capture the command plus result in the handoff.
 For workflow edits, also inspect the changed `run:` blocks for the governance
 rules above.
 
+For CI packaging edits, run the nearest local install/uninstall repro and grep
+the captured logs for missing-file diagnostics. If the change touches CMake or
+C++ code, run `.github/scripts/run-codeql-local.sh --custom-only`; CodeQL is not
+a substitute for YAML linting.
+
 ## Handoff
 
 Report:
@@ -113,3 +151,4 @@ Report:
 - Focused local commands and exit status.
 - Workflow names and sub-test labels to trigger.
 - Any known skips, warnings, or sanitizer suppressions.
+- Any green-run diagnostics that were converted into hard gates.

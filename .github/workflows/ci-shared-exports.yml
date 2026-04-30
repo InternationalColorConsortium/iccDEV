@@ -149,9 +149,8 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.0 (node24)
         with:
           path: |
-            /var/cache/apt/archives
             ~/.cache/ccache
-          key: ${{ runner.os }}-deps-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci-comprehensive-cross-platform.yml') }}
+          key: ${{ runner.os }}-deps-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci-shared-exports.yml') }}
           restore-keys: |
             ${{ runner.os }}-deps-${{ matrix.compiler }}-
             ${{ runner.os }}-deps-
@@ -163,7 +162,7 @@ jobs:
           path: |
             ~/Library/Caches/Homebrew
             ~/.cache/ccache
-          key: ${{ runner.os }}-deps-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci-comprehensive-cross-platform.yml') }}
+          key: ${{ runner.os }}-deps-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci-shared-exports.yml') }}
           restore-keys: |
             ${{ runner.os }}-deps-${{ matrix.compiler }}-
             ${{ runner.os }}-deps-
@@ -205,7 +204,18 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          brew install cmake llvm libpng libtiff libxml2 nlohmann-json ccache jpeg-turbo
+          brew_install_missing() {
+            local formula
+            for formula in "$@"; do
+              if brew list --formula "$formula" >/dev/null 2>&1; then
+                brew list --versions "$formula"
+              else
+                brew install "$formula"
+              fi
+            done
+          }
+          brew_install_missing \
+            cmake llvm libpng libtiff libxml2 nlohmann-json ccache jpeg-turbo
           ccache --zero-stats || true
 
       - name: Strip Emoji Selectors
@@ -520,9 +530,8 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.0 (node24)
         with:
           path: |
-            /var/cache/apt/archives
             ~/.cache/ccache
-          key: sanitizer-deps-${{ matrix.sanitizer }}-${{ hashFiles('.github/workflows/ci-comprehensive-cross-platform.yml') }}
+          key: sanitizer-deps-${{ matrix.sanitizer }}-${{ hashFiles('.github/workflows/ci-shared-exports.yml') }}
           restore-keys: |
             sanitizer-deps-${{ matrix.sanitizer }}-
             sanitizer-deps-
@@ -1523,7 +1532,17 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           set -euo pipefail
-          brew install cmake ninja libpng libtiff libxml2 nlohmann-json
+          brew_install_missing() {
+            local formula
+            for formula in "$@"; do
+              if brew list --formula "$formula" >/dev/null 2>&1; then
+                brew list --versions "$formula"
+              else
+                brew install "$formula"
+              fi
+            done
+          }
+          brew_install_missing cmake ninja libpng libtiff libxml2 nlohmann-json
           LIBXML2_PREFIX="$(brew --prefix libxml2)"
           LIBPNG_PREFIX="$(brew --prefix libpng)"
           LIBTIFF_PREFIX="$(brew --prefix libtiff)"
@@ -1544,6 +1563,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           JOBS="$(sysctl -n hw.logicalcpu 2>/dev/null || nproc 2>/dev/null || echo 3)"
           BUILD_DIR="$RUNNER_TEMP/source-${MATRIX_OS}-${MATRIX_COMPILER}-${BUILD_TYPE}"
           PREFIX="$RUNNER_TEMP/prefix-${MATRIX_OS}-${MATRIX_COMPILER}-${BUILD_TYPE}"
@@ -1567,6 +1587,15 @@ jobs:
           cmake "${cmake_args[@]}"
           cmake --build "$BUILD_DIR" --parallel "$JOBS"
           cmake --install "$BUILD_DIR"
+          test -f "$BUILD_DIR/install_manifest.txt"
+          duplicate_manifest_entries="$(
+            sort "$BUILD_DIR/install_manifest.txt" | uniq -d || true
+          )"
+          if [ -n "$duplicate_manifest_entries" ]; then
+            echo "::error title=Duplicate manifest::duplicate install paths"
+            printf '%s\n' "$duplicate_manifest_entries"
+            exit 1
+          fi
           test -f "$PREFIX/lib/cmake/reficcmax/RefIccMAXConfig.cmake"
           test -f "$PREFIX/bin/iccApplySearch"
           {
@@ -1842,6 +1871,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           set -euo pipefail
+          source .github/scripts/sanitize-sed.sh 2>/dev/null || true
           BUILD_DIR="$RUNNER_TEMP/housekeeping-${BUILD_TYPE}"
           PREFIX="$RUNNER_TEMP/housekeeping-prefix-${BUILD_TYPE}"
           CONFIG_PATH="$PREFIX/lib/cmake/reficcmax/RefIccMAXConfig.cmake"
@@ -1854,14 +1884,28 @@ jobs:
             -DENABLE_SHARED_LIBS=ON \
             -DENABLE_STATIC_LIBS=ON
           cmake --build "$BUILD_DIR" --parallel "$(nproc)"
-          cmake --install "$BUILD_DIR"
+          cmake --install "$BUILD_DIR" 2>&1 | tee "$BUILD_DIR/install.log"
           test -f "$BUILD_DIR/install_manifest.txt"
           test -f "$CONFIG_PATH"
           test -f "$PREFIX/bin/iccApplySearch"
           test "$(wc -l < "$BUILD_DIR/install_manifest.txt")" -gt 0
+          duplicate_manifest_entries="$(
+            sort "$BUILD_DIR/install_manifest.txt" | uniq -d || true
+          )"
+          if [ -n "$duplicate_manifest_entries" ]; then
+            echo "::error title=Duplicate manifest::duplicate install paths"
+            printf '%s\n' "$duplicate_manifest_entries"
+            exit 1
+          fi
           cmake --build "$BUILD_DIR" --target clean
           test -f "$CONFIG_PATH"
-          cmake --build "$BUILD_DIR" --target uninstall
+          cmake --build "$BUILD_DIR" --target uninstall 2>&1 \
+            | tee "$BUILD_DIR/uninstall.log"
+          if grep -E 'File ".+" does not exist\.' \
+              "$BUILD_DIR/install.log" "$BUILD_DIR/uninstall.log"; then
+            echo "::error title=Missing file diagnostic::install log"
+            exit 1
+          fi
           test ! -e "$CONFIG_PATH"
           test ! -e "$PREFIX/bin/iccApplySearch"
 
@@ -2278,7 +2322,6 @@ jobs:
           Write-Host "::endgroup::"
 
       - name: Build and run installed hello-iccdev
-        if: matrix.build_type == 'Debug'
         env:
           BUILD_TYPE: ${{ matrix.build_type }}
         run: |
@@ -2320,7 +2363,12 @@ jobs:
           ) -join ' && '
           # issue #823: retry to absorb windows-latest AV/parallel-build
           # race that can transiently truncate dumpbin output.
-          $helloExpected = @('IccProfLib2d.dll', 'IccXML2d.dll', 'IccJSON2d.dll')
+          $dllSuffix = if ($env:BUILD_TYPE -eq 'Debug') { 'd' } else { '' }
+          $helloExpected = @(
+            "IccProfLib2$dllSuffix.dll",
+            "IccXML2$dllSuffix.dll",
+            "IccJSON2$dllSuffix.dll"
+          )
           $helloAttempts = 5
           $helloMissing = @()
           for ($helloTry = 1; $helloTry -le $helloAttempts; $helloTry++) {
@@ -2429,7 +2477,17 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          brew install cmake ninja curl zip unzip
+          brew_install_missing() {
+            local formula
+            for formula in "$@"; do
+              if brew list --formula "$formula" >/dev/null 2>&1; then
+                brew list --versions "$formula"
+              else
+                brew install "$formula"
+              fi
+            done
+          }
+          brew_install_missing cmake ninja curl zip unzip
 
       - name: Bootstrap vcpkg and install iccdev
         env:
@@ -2441,6 +2499,7 @@ jobs:
           set -euo pipefail
           VCPKG_ROOT="$RUNNER_TEMP/vcpkg"
           VCPKG_ICCDEV_SOURCE="$GITHUB_WORKSPACE"
+          export VCPKG_ROOT
           # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
           git -C "$VCPKG_ROOT" checkout 1940ee77e81573713c0d364c42f5990172198be1
@@ -2578,6 +2637,7 @@ jobs:
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $vcpkgRoot = Join-Path $env:RUNNER_TEMP 'vcpkg'
           $vcpkgIccdevSource = (Resolve-Path .).Path
+          $env:VCPKG_ROOT = $vcpkgRoot
           # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git $vcpkgRoot
           git -C $vcpkgRoot checkout 1940ee77e81573713c0d364c42f5990172198be1

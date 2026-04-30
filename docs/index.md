@@ -12,6 +12,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 - [ICC JSON tag reference](iccjson-tag-types.md): detailed JSON tag examples
 - [Bisecting regressions](bisect.md): focused debug workflow
 - [Regression workflow governance](regression-workflow-governance.md): adding regression gates and tool-test workflow updates
+- [ci-shared-exports log audit](ci-shared-exports-log-audit-2026-04-30.md): hidden diagnostics found in a green workflow run
 - [CodeQL security analysis](codeql.md): custom query overview
 - [Documentation maintenance](documentation-maintenance.md): canonical sources and review checklist
 - [Agent skills](../.github/skills/README.md): repeatable repository workflows
