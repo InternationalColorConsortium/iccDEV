@@ -14,7 +14,7 @@
 #      standard observer XML/JSON alias compatibility, issue #928 mluc setter
 #      canonical length checks, mluc read/UTF-16 validation, and issue #958
 #      PCC zero-Y illuminant validation, calculator sanitizer regressions,
-#      and lut16 zero-entry curve write validation
+#      and lut16 invalid curve count validation
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -1116,8 +1116,8 @@ jobs:
           passed=$((passed + r18_pass))
           failed=$((failed + r18_fail))
 
-          # --- R19: Issue #955 lut16 zero-entry curve write validation ---
-          echo "--- R19: Issue #955 lut16 zero-entry curve write validation ---"
+          # --- R19: Issue #955 lut16 invalid curve count validation ---
+          echo "--- R19: Issue #955 lut16 invalid curve count validation ---"
           r19_pass=0 r19_fail=0
           LUT16_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh"
           if [ -f "$LUT16_SCRIPT" ]; then
@@ -1129,7 +1129,7 @@ jobs:
               "$LUT16_SCRIPT" > "$OUTDIR/r19-lut16-zero-curve.log" 2>&1 || r19_ec=$?
             cat "$OUTDIR/r19-lut16-zero-curve.log"
             if [ "$r19_ec" -eq 0 ]; then
-              echo "  [OK]    Issue #955 lut16 zero-entry curves write cleanly"
+              echo "  [OK]    Issue #955 invalid lut16 curve counts rejected cleanly"
               r19_pass=$((r19_pass + 1))
             else
               echo "  [FAIL]  Issue #955 lut16 zero-curve regression script exited $r19_ec"
@@ -1138,7 +1138,7 @@ jobs:
           else
             echo "  [SKIP]  lut16 zero-curve regression script not found"
           fi
-          echo "  Issue #955 lut16 zero-entry curve write validation: $r19_pass passed, $r19_fail failed"
+          echo "  Issue #955 lut16 invalid curve count validation: $r19_pass passed, $r19_fail failed"
           passed=$((passed + r19_pass))
           failed=$((failed + r19_fail))
 

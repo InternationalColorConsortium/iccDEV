@@ -1968,8 +1968,8 @@ jobs:
           passed=$((passed + r22_pass))
           failed=$((failed + r22_fail))
 
-          # --- R23: Issue #955 lut16 zero-entry curve write validation ---
-          echo "--- R23: Issue #955 lut16 zero-entry curve write validation ---"
+          # --- R23: Issue #955 lut16 invalid curve count validation ---
+          echo "--- R23: Issue #955 lut16 invalid curve count validation ---"
           r23_pass=0 r23_fail=0
           LUT16_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh"
           if [ -f "$LUT16_SCRIPT" ]; then
@@ -1981,7 +1981,7 @@ jobs:
               "$LUT16_SCRIPT" > "$OUTDIR/r23-lut16-zero-curve.log" 2>&1 || r23_ec=$?
             cat "$OUTDIR/r23-lut16-zero-curve.log"
             if [ "$r23_ec" -eq 0 ]; then
-              echo "  [OK]    Issue #955 lut16 zero-entry curves write cleanly"
+              echo "  [OK]    Issue #955 invalid lut16 curve counts rejected cleanly"
               r23_pass=$((r23_pass + 1))
             else
               echo "  [FAIL]  Issue #955 lut16 zero-curve regression script exited $r23_ec"
@@ -1990,7 +1990,7 @@ jobs:
           else
             echo "  [SKIP]  lut16 zero-curve regression script not found"
           fi
-          echo "  Issue #955 lut16 zero-entry curve write validation: $r23_pass passed, $r23_fail failed"
+          echo "  Issue #955 lut16 invalid curve count validation: $r23_pass passed, $r23_fail failed"
           passed=$((passed + r23_pass))
           failed=$((failed + r23_fail))
 
@@ -2152,7 +2152,7 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
-              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter/read; issue #958 PCC illuminant; issue #955 lut16 zero curves; calculator sanitizer)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter/read; issue #958 PCC illuminant; issue #955 lut16 invalid curve counts; calculator sanitizer)"
             )
 
             for phase in $(seq 1 18); do

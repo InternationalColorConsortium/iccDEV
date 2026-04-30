@@ -5231,6 +5231,10 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
   if (m_nInput > 15 || m_nOutput > 15)
     return false;
 
+  if (nInputEntries < 2 || nInputEntries > 4096 ||
+      nOutputEntries < 2 || nOutputEntries > 4096)
+    return false;
+
   //B Curves
   pCurves = NewCurvesB();
 
@@ -5386,7 +5390,8 @@ bool CIccTagLut16::Write(CIccIO *pIO)
 
   nInputCurveEntries = ((CIccTagCurve*)pCurves[0])->GetSize();
   nOutputCurveEntries = ((CIccTagCurve*)m_CurvesA[0])->GetSize();
-  if (nInputCurveEntries > 0xffff || nOutputCurveEntries > 0xffff)
+  if (nInputCurveEntries < 2 || nInputCurveEntries > 4096 ||
+      nOutputCurveEntries < 2 || nOutputCurveEntries > 4096)
     return false;
 
   nInputEntries = (icUInt16Number)nInputCurveEntries;
@@ -5507,10 +5512,11 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
             rv = icMaxStatus(rv, m_CurvesB[i]->Validate(sigPath+icGetSigPath(GetType()), sReport, pProfile));
             if (m_CurvesB[i]->GetType()==icSigCurveType) {
               CIccTagCurve *pTagCurve = (CIccTagCurve*)m_CurvesB[i];
-              if (pTagCurve->GetSize()==1) {
+              icUInt32Number nCurveEntries = pTagCurve->GetSize();
+              if (nCurveEntries < 2 || nCurveEntries > 4096) {
                 sReport += icMsgValidateCriticalError;
                 sReport += sSigPathName;
-                sReport += " - lut16Tags do not support single entry gamma curves.\n";
+                sReport += " - lut16Type input tables require 2 to 4096 entries.\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
               }
             }
@@ -5548,10 +5554,11 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
             rv = icMaxStatus(rv, m_CurvesA[i]->Validate(sigPath+icGetSigPath(GetType()), sReport, pProfile));
             if (m_CurvesA[i]->GetType()==icSigCurveType) {
               CIccTagCurve *pTagCurve = (CIccTagCurve*)m_CurvesA[i];
-              if (pTagCurve->GetSize()==1) {
+              icUInt32Number nCurveEntries = pTagCurve->GetSize();
+              if (nCurveEntries < 2 || nCurveEntries > 4096) {
                 sReport += icMsgValidateCriticalError;
                 sReport += sSigPathName;
-                sReport += " - lut16Tags do not support single entry gamma curves.\n";
+                sReport += " - lut16Type output tables require 2 to 4096 entries.\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
               }
             }

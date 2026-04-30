@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-# iccDEV lut16 zero-entry curve write regression tests
+# iccDEV lut16 invalid curve count regression tests
 ###############################################################################
 #
 # Issue:
@@ -101,15 +101,23 @@ run_zero_curve_write() {
   fi
 
   if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    if grep -q '^ENABLE_ASAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
-      san_flags+=("-fsanitize=address")
-    fi
-    if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
-      san_flags+=("-fsanitize=undefined")
-    fi
-    if grep -q '^ENABLE_INTEGER_SANITIZER:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt" &&
-       "$CXX" --version 2>/dev/null | grep -qi clang; then
-      san_flags+=("-fsanitize=integer")
+    if grep -q '^ENABLE_SANITIZERS:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+      if "$CXX" --version 2>/dev/null | grep -qi clang; then
+        san_flags+=("-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow")
+      else
+        san_flags+=("-fsanitize=address,undefined")
+      fi
+    else
+      if grep -q '^ENABLE_ASAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+        san_flags+=("-fsanitize=address")
+      fi
+      if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+        san_flags+=("-fsanitize=undefined")
+      fi
+      if grep -q '^ENABLE_INTEGER_SANITIZER:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt" &&
+         "$CXX" --version 2>/dev/null | grep -qi clang; then
+        san_flags+=("-fsanitize=integer")
+      fi
     fi
   fi
 
@@ -127,7 +135,7 @@ run_zero_curve_write() {
   LD_LIBRARY_PATH="$lib_dir:${LD_LIBRARY_PATH:-}" "$helper_bin" > "$run_log" 2>&1 || run_ec=$?
 
   if grep -q "ERROR: AddressSanitizer\\|runtime error:" "$run_log" 2>/dev/null; then
-    fail_case "$name" "sanitizer finding while writing zero-entry curves"
+    fail_case "$name" "sanitizer finding while checking invalid lut16 curve counts"
     sed -n '1,80p' "$run_log"
     return
   fi
@@ -138,14 +146,14 @@ run_zero_curve_write() {
     return
   fi
 
-  pass_case "$name" "zero-entry lut16 curves write without sanitizer findings"
+  pass_case "$name" "invalid lut16 curve counts rejected without sanitizer findings"
 }
 
-echo "=== lut16 zero-entry curve write regression ==="
+echo "=== lut16 invalid curve count regression ==="
 
 run_zero_curve_write
 
-echo "lut16 zero-entry curve write regression: $PASS passed, $FAIL failed, $TOTAL total"
+echo "lut16 invalid curve count regression: $PASS passed, $FAIL failed, $TOTAL total"
 
 if [ "$FAIL" -ne 0 ]; then
   exit 1
