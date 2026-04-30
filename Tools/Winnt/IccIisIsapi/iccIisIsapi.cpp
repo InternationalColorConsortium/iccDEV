@@ -346,7 +346,6 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
   std::vector<ToolResult> results;
   const std::filesystem::path generatedXml = workspace / "generated-from-upload.xml";
   const std::filesystem::path generatedIcc = workspace / "generated-from-xml.icc";
-  const std::filesystem::path workingIcc = inputIsXml ? generatedIcc : uploadedPath;
 
   if (!inputIsXml) {
     ToolResult toXml;
@@ -538,7 +537,7 @@ std::vector<ToolResult> RunTopTools(const std::filesystem::path& workspace,
     results.push_back(roundTrip);
 
     // -- JSON tools (conditional on binary presence) ----------------------
-    if (std::filesystem::exists(toJsonExe) && std::filesystem::exists(generatedIcc)) {
+    if (std::filesystem::exists(toJsonExe)) {
       const std::filesystem::path generatedJson = workspace / "generated-from-xml-icc.json";
       ToolResult toJson;
       toJson.name = "iccToJson";

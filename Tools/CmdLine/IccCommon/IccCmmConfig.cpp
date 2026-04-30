@@ -280,14 +280,14 @@ bool CIccCfgDataApply::fromJson(json j, bool bReset)
 
 void CIccCfgDataApply::toJson(json& j) const
 {
-  char buf[30];
-
   if (m_debugCalc)
     j["debugCalc"] = m_debugCalc;
 
   jsonSetValue(j, "srcType", m_srcType);
-  if (m_srcSpace != icSigUnknownData)
+  if (m_srcSpace != icSigUnknownData) {
+    char buf[30];
     j["srcSpace"] = icGetColorSigStr(buf, 30, m_srcSpace);
+  }
 
   if (m_srcFile.size())
     j["srcFile"] = m_srcFile;
@@ -551,6 +551,7 @@ CIccCfgProfile::CIccCfgProfile()
 
 void CIccCfgProfile::reset()
 {
+  m_useEmbedded = false;
   m_iccFile.clear();
   m_intent = icUnknownIntent;
   m_transform = icXformLutColor;
@@ -851,7 +852,7 @@ bool CIccCfgProfileSequence::fromJson(json j, bool bReset)
 void CIccCfgProfileSequence::toJson(json& obj) const
 {
   for (auto p = m_profiles.begin(); p != m_profiles.end(); p++) {
-    CIccCfgProfile* pProf = p->get();
+    const CIccCfgProfile* pProf = p->get();
     if (!pProf)
       continue;
     json prof;
@@ -1083,7 +1084,7 @@ bool CIccCfgSearchApply::fromJsonProfiles(json j)
 void CIccCfgSearchApply::toJsonProfiles(json& obj) const
 {
   for (auto p = m_profiles.begin(); p != m_profiles.end(); p++) {
-    CIccCfgProfile* pProf = p->get();
+    const CIccCfgProfile* pProf = p->get();
     if (!pProf)
       continue;
     json prof;
@@ -1118,7 +1119,7 @@ bool CIccCfgSearchApply::fromJsonPccWeights(json j)
 void CIccCfgSearchApply::toJsonPccWeights(json& obj) const
 {
   for (auto p = m_pccWeights.begin(); p != m_pccWeights.end(); p++) {
-    CIccCfgPccWeight* pPccWeight = p->get();
+    const CIccCfgPccWeight* pPccWeight = p->get();
     if (!pPccWeight)
       continue;
     json prof;
@@ -1231,9 +1232,8 @@ public:
     std::string str;
     bool bHasField = false;
 
-    int c = 0;
     while (!isEOF()) {
-      c = m_f->get();
+      int c = m_f->get();
       if (c < 0) {
         if (str.size())
           line.push_back(str);
@@ -1346,7 +1346,7 @@ static bool ParseName(icChar* pName, icChar* pString)
   if (strncmp(pString, "{ \"", 3))
     return false;
 
-  icChar* ptr = strstr(pString, "\" }");
+  const icChar* ptr = strstr(pString, "\" }");
 
   if (!ptr)
     return false;
@@ -1563,6 +1563,7 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
           lastSpace = space;
           icValueVector val(4);
           val[0].space = icSigCmykData;
+          samples.push_back(val);
           spaces.push_back(space);
         }
         const char* szChannels[] = { "C", "M", "Y", "K" };
@@ -1918,7 +1919,7 @@ std::string CIccCfgColorData::spaceName(icColorSpaceSignature sig)
   }
 }
 
-void CIccCfgColorData::addFields(std::string& dataFormat, int& nFields, int& nSamples, icColorSpaceSignature sig, std::string prefix)
+void CIccCfgColorData::addFields(std::string& dataFormat, int& nFields, int& nSamples, icColorSpaceSignature sig, const std::string& prefix)
 {
   std::string tabStr = "\t";
   const size_t bufSize = 32;

@@ -21,12 +21,14 @@
 
 #include "IccIsapiSanitize.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -85,15 +87,14 @@ static bool containsRawHtml(const std::string& s)
 static bool hasDangerousScheme(const std::string& uri)
 {
   std::string lower;
-  for (auto c : uri)
-    lower.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+  lower.reserve(uri.size());
+  std::transform(uri.begin(), uri.end(), std::back_inserter(lower),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
   // Strip whitespace/control chars that our sanitizer also strips
   std::string cleaned;
-  for (char c : lower) {
-    if (c != '\0' && c != '\n' && c != '\r' && c != '\t')
-      cleaned.push_back(c);
-  }
+  std::copy_if(lower.begin(), lower.end(), std::back_inserter(cleaned),
+               [](char c) { return c != '\0' && c != '\n' && c != '\r' && c != '\t'; });
 
   const char* bad[] = {
     "javascript:", "data:", "vbscript:", "blob:", "file:",
@@ -113,10 +114,10 @@ static bool hasDangerousScheme(const std::string& uri)
 static bool filenameIsSafe(const std::string& f)
 {
   if (f.empty()) return false;
-  for (unsigned char ch : f) {
-    if (!std::isalnum(ch) && ch != '.' && ch != '-' && ch != '_')
-      return false;
-  }
+  if (!std::all_of(f.begin(), f.end(), [](unsigned char ch) {
+        return std::isalnum(ch) || ch == '.' || ch == '-' || ch == '_';
+      }))
+    return false;
   if (f.front() == '.') return false;
   return true;
 }
@@ -168,7 +169,7 @@ static std::vector<std::string> loadLines(const fs::path& path, size_t maxLines 
       line.pop_back();
     // Cap line length to avoid multi-second processing on base64 blobs
     if (line.size() > 4096)
-      line = line.substr(0, 4096);
+      line.resize(4096);
     if (!line.empty())
       lines.push_back(line);
   }
@@ -206,12 +207,9 @@ static void testPayload(const std::string& payload, const std::string& source)
             source);
     }
     // No null/newline/tab in output
-    for (char ch : sanitized) {
-      if (ch == '\0' || ch == '\n' || ch == '\r' || ch == '\t') {
-        check(false, "SanitizeUri output has control char", source);
-        break;
-      }
-    }
+    if (std::any_of(sanitized.begin(), sanitized.end(),
+                    [](char ch) { return ch == '\0' || ch == '\n' || ch == '\r' || ch == '\t'; }))
+      check(false, "SanitizeUri output has control char", source);
   }
 
   // 3. SanitizeFilename: output must be safe
@@ -335,10 +333,8 @@ static bool isTextExtension(const std::string& ext)
     ".css", ".svg", ".xslt", ".dtd", ".xsl", ".yaml", ".yml",
     ".md", ".rst", ".log", ".sh", ".bat", ".ps1", ".py",
   };
-  for (const char* a : kAllow) {
-    if (ext == a) return true;
-  }
-  return false;
+  return std::any_of(std::begin(kAllow), std::end(kAllow),
+                     [&ext](const char* a) { return ext == a; });
 }
 
 static void testFuzzDir(const fs::path& root, const std::string& relDir)

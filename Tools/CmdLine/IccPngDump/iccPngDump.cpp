@@ -336,7 +336,8 @@ bool InjectIccProfile(const std::string& inputPng,
                       const std::string& outputPng) {
     std::ifstream iccIn(iccFile, std::ios::binary);
     if (!iccIn.is_open()) {
-        safe_exit("Failed to open ICC profile file for reading.");
+        LOG_ERROR("Failed to open ICC profile file for reading.");
+        return false;
     }
 
     std::vector<unsigned char> iccData((std::istreambuf_iterator<char>(iccIn)),
@@ -344,75 +345,133 @@ bool InjectIccProfile(const std::string& inputPng,
 
     FILE* fpIn = fopen(inputPng.c_str(), "rb");
     if (!fpIn) {
-        safe_exit("Failed to open input PNG file.");
+        LOG_ERROR("Failed to open input PNG file.");
+        return false;
     }
 
     FILE* fpOut = fopen(outputPng.c_str(), "wb");
     if (!fpOut) {
         fclose(fpIn);
-        safe_exit("Failed to open output PNG file.");
+        LOG_ERROR("Failed to open output PNG file.");
+        return false;
     }
 
     png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
     if (!png_ptr) {
         fclose(fpIn); fclose(fpOut);
-        safe_exit("Failed to create PNG read struct.");
+        LOG_ERROR("Failed to create PNG read struct.");
+        return false;
     }
 
     png_infop info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr) {
         png_destroy_read_struct(&png_ptr, NULL, NULL);
         fclose(fpIn); fclose(fpOut);
-        safe_exit("Failed to create PNG info struct.");
+        LOG_ERROR("Failed to create PNG info struct.");
+        return false;
     }
 
     if (setjmp(png_jmpbuf(png_ptr))) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         fclose(fpIn); fclose(fpOut);
-        safe_exit("LibPNG read error.");
+        LOG_ERROR("LibPNG read error.");
+        return false;
     }
 
     png_init_io(png_ptr, fpIn);
     png_read_info(png_ptr, info_ptr);
 
     png_structp write_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    png_infop write_info_ptr = png_create_info_struct(write_ptr);
-    if (!write_ptr || !write_info_ptr) {
-        safe_exit("Failed to create PNG write structures.");
+    if (!write_ptr) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(fpIn); fclose(fpOut);
+        LOG_ERROR("Failed to create PNG write struct.");
+        return false;
     }
 
+    png_infop write_info_ptr = png_create_info_struct(write_ptr);
+    if (!write_info_ptr) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        png_destroy_write_struct(&write_ptr, NULL);
+        fclose(fpIn); fclose(fpOut);
+        LOG_ERROR("Failed to create PNG write info struct.");
+        return false;
+    }
+
+    png_bytepp row_pointers = NULL;
+    png_uint_32 rowsAllocated = 0;
     if (setjmp(png_jmpbuf(write_ptr))) {
-        safe_exit("LibPNG write error.");
+        for (png_uint_32 y = 0; y < rowsAllocated; y++) {
+            free(row_pointers[y]);
+        }
+        free(row_pointers);
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        png_destroy_write_struct(&write_ptr, &write_info_ptr);
+        fclose(fpIn); fclose(fpOut);
+        LOG_ERROR("LibPNG write error.");
+        return false;
     }
 
     png_init_io(write_ptr, fpOut);
-   png_set_compression_level(write_ptr, Z_BEST_COMPRESSION);
+    png_set_compression_level(write_ptr, Z_BEST_COMPRESSION);
 
-// MUST propagate original info to write_info_ptr before setting ICC
-png_set_rows(write_ptr, write_info_ptr, nullptr);  // optional
-png_set_IHDR(write_ptr, write_info_ptr,
-             png_get_image_width(png_ptr, info_ptr),
-             png_get_image_height(png_ptr, info_ptr),
-             png_get_bit_depth(png_ptr, info_ptr),
-             png_get_color_type(png_ptr, info_ptr),
-             png_get_interlace_type(png_ptr, info_ptr),
-             png_get_compression_type(png_ptr, info_ptr),
-             png_get_filter_type(png_ptr, info_ptr));
+    // MUST propagate original info to write_info_ptr before setting ICC
+    png_set_rows(write_ptr, write_info_ptr, nullptr);  // optional
+    png_set_IHDR(write_ptr, write_info_ptr,
+                 png_get_image_width(png_ptr, info_ptr),
+                 png_get_image_height(png_ptr, info_ptr),
+                 png_get_bit_depth(png_ptr, info_ptr),
+                 png_get_color_type(png_ptr, info_ptr),
+                 png_get_interlace_type(png_ptr, info_ptr),
+                 png_get_compression_type(png_ptr, info_ptr),
+                 png_get_filter_type(png_ptr, info_ptr));
 
-// only now is it safe to attach ICC
-// TODO - this should have a size check to make sure the profile is less than 2 Gig (32 bit api limit)
-png_set_iCCP(write_ptr, write_info_ptr, "icc", 0, iccData.data(), (png_uint_32)iccData.size());
+    // only now is it safe to attach ICC
+    // TODO - this should have a size check to make sure the profile is less than 2 Gig (32 bit api limit)
+    png_set_iCCP(write_ptr, write_info_ptr, "icc", 0, iccData.data(), static_cast<png_uint_32>(iccData.size()));
 
-// finally write header
-png_write_info(write_ptr, write_info_ptr);
+    // finally write header
+    png_write_info(write_ptr, write_info_ptr);
 
 
     // Re-read the input image data and write to output
-    png_bytepp row_pointers = (png_bytepp)png_malloc(png_ptr,
-        sizeof(png_bytep) * png_get_image_height(png_ptr, info_ptr));
+    const png_uint_32 height = png_get_image_height(png_ptr, info_ptr);
+    const png_size_t rowBytes = png_get_rowbytes(png_ptr, info_ptr);
+    row_pointers = static_cast<png_bytepp>(calloc(height, sizeof(png_bytep)));
+    if (!row_pointers) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        png_destroy_write_struct(&write_ptr, &write_info_ptr);
+        fclose(fpIn); fclose(fpOut);
+        LOG_ERROR("Failed to allocate PNG row pointers.");
+        return false;
+    }
 
-    for (png_uint_32 y = 0; y < png_get_image_height(png_ptr, info_ptr); y++) {
-        row_pointers[y] = (png_bytep)png_malloc(png_ptr, png_get_rowbytes(png_ptr, info_ptr));
+    for (png_uint_32 y = 0; y < height; y++) {
+        row_pointers[y] = static_cast<png_bytep>(malloc(rowBytes));
+        if (!row_pointers[y]) {
+            for (png_uint_32 i = 0; i < rowsAllocated; i++) {
+                free(row_pointers[i]);
+            }
+            free(row_pointers);
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            png_destroy_write_struct(&write_ptr, &write_info_ptr);
+            fclose(fpIn); fclose(fpOut);
+            LOG_ERROR("Failed to allocate PNG row.");
+            return false;
+        }
+        rowsAllocated++;
+    }
+
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        for (png_uint_32 y = 0; y < rowsAllocated; y++) {
+            free(row_pointers[y]);
+        }
+        free(row_pointers);
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        png_destroy_write_struct(&write_ptr, &write_info_ptr);
+        fclose(fpIn); fclose(fpOut);
+        LOG_ERROR("LibPNG image read error.");
+        return false;
     }
 
     png_read_image(png_ptr, row_pointers);
@@ -420,10 +479,10 @@ png_write_info(write_ptr, write_info_ptr);
     png_write_end(write_ptr, NULL);
 
     // Cleanup
-    for (png_uint_32 y = 0; y < png_get_image_height(png_ptr, info_ptr); y++) {
-        png_free(png_ptr, row_pointers[y]);
+    for (png_uint_32 y = 0; y < rowsAllocated; y++) {
+        free(row_pointers[y]);
     }
-    png_free(png_ptr, row_pointers);
+    free(row_pointers);
 
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
     png_destroy_write_struct(&write_ptr, &write_info_ptr);
@@ -453,7 +512,7 @@ int ExtractIccProfile(png_structp png_ptr, png_infop info_ptr, unsigned char **p
     png_uint_32 profile_length = 0;
 
     if (png_get_iCCP(png_ptr, info_ptr, &profile_name, &compression_type,
-                     (png_bytepp)&profile_data_raw, &profile_length)) {
+                     &profile_data_raw, &profile_length)) {
 
         if (profile_length == 0) {
             LOG_ERROR("Empty ICC profile found.");
@@ -461,7 +520,7 @@ int ExtractIccProfile(png_structp png_ptr, png_infop info_ptr, unsigned char **p
         }
 
         *nLen = profile_length;
-        *pProfMem = (unsigned char *)malloc(profile_length);
+        *pProfMem = static_cast<unsigned char*>(malloc(profile_length));
         if (!(*pProfMem)) {
             LOG_ERROR("Memory allocation for ICC profile failed.");
             return 0;

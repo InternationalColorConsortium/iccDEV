@@ -326,7 +326,7 @@ std::string SanitizeErrorMessage(const std::string& message, size_t maxLen)
   }
 
   if (safe.size() > maxLen) {
-    safe = safe.substr(0, maxLen);
+    safe.resize(maxLen);
   }
 
   return safe;
@@ -353,7 +353,7 @@ std::string SanitizeUri(const std::string& uri)
   // can be used for DOM-XSS if reflected into client-side code.
   const size_t hashPos = clean.find('#');
   if (hashPos != std::string::npos) {
-    clean = clean.substr(0, hashPos);
+    clean.resize(hashPos);
   }
 
   // Block dangerous URI schemes.  Only allow relative paths, http, and https.
@@ -367,9 +367,8 @@ std::string SanitizeUri(const std::string& uri)
     // Has a colon — check if it's a scheme prefix.
     // Normalize to lowercase for scheme comparison.
     std::string lower = clean;
-    for (auto& c : lower) {
-      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
     // Relative paths start with ., /, or have no scheme at all.
     const bool isRelative = clean[0] == '.' || clean[0] == '/';

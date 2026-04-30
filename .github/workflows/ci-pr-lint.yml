@@ -291,14 +291,21 @@ jobs:
               : > "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt"
             else
               echo "Running cppcheck on ${MATRIX_COMPONENT} with $NPROC parallel jobs"
+              cppcheck_args=(
+                --language=c++
+                --std=c++17
+                --enable=warning,performance,portability,style
+                --suppress=missingIncludeSystem
+                --suppress=unusedStructMember
+                --suppress=unknownMacro:Tools/wxWidget/wxProfileDump/wxProfileDump.cpp
+                -DICCPROFLIBVER='"cppcheck"'
+                -DICFLOATSFX='"f"'
+              )
               cppcheck \
                 -j "$NPROC" \
                 --project=Build/compile_commands.json \
                 --file-filter="${MATRIX_COMPONENT}/*" \
-                --enable=warning,performance,portability,style \
-                --language=c++ \
-                --std=c++17 \
-                --suppress=missingIncludeSystem \
+                "${cppcheck_args[@]}" \
                 2> "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt" || true
               echo "cppcheck ${MATRIX_COMPONENT}: $(wc -l < "lint_reports/cppcheck_${MATRIX_COMPONENT}.txt") lines"
             fi

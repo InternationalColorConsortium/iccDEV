@@ -78,14 +78,14 @@
 template <typename T>
  std::string arrayToJson(T* a, int nCount)
 {
-  std::string str, num;
+  std::string str;
   str += "[ ";
 
   for (int i = 0; i < nCount; i++) {
     if (i)
       str += ", ";
 
-    num = std::to_string(a[i]);
+    std::string num = std::to_string(a[i]);
 
     str += num;
   }
@@ -437,7 +437,7 @@ bool saveJsonAs(const json& j, const char* szFname, int indent)
   if (f) {
     std::string str = j.dump(indent);
 
-    if ( (size_t)fwrite((void*)(str.c_str()), 1, (unsigned long)str.size(), f) == str.size())
+    if (fwrite(str.c_str(), 1, str.size(), f) == str.size())
       rv = true;
 
     if (f!=stdout)
@@ -460,23 +460,19 @@ bool loadJsonFrom(json& j, const char* szFname)
     unsigned long flen = (unsigned long)pos;
     if (flen > 100 * 1024 * 1024) { fclose(f); return false; }
     fseek(f, 0, SEEK_SET);
-    char* buf = (char*)malloc(flen+1);
+    std::string buf(flen, '\0');
 
-    if (buf && flen) {
-      buf[flen] = 0;
-      if (fread(buf, 1, flen, f) == flen) {
-        try {
-          j = json::parse(buf);
-          rv = true;
-        }
-        catch (const std::exception& e) {
-          fprintf(stderr, "JSON parse error in '%s': %s\n", szFname, e.what());
-        }
-        catch (...) {
-          fprintf(stderr, "JSON parse error in '%s': unknown exception\n", szFname);
-        }
+    if (fread(&buf[0], 1, buf.size(), f) == buf.size()) {
+      try {
+        j = json::parse(buf);
+        rv = true;
       }
-      free(buf);
+      catch (const std::exception& e) {
+        fprintf(stderr, "JSON parse error in '%s': %s\n", szFname, e.what());
+      }
+      catch (...) {
+        fprintf(stderr, "JSON parse error in '%s': unknown exception\n", szFname);
+      }
     }
     fclose(f);
   }

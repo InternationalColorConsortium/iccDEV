@@ -1957,8 +1957,6 @@ BOOL WINAPI CMTranslateRGBsExt(
 
         case BM_6CHANNEL:
           {
-            icUInt8Number *bits = (icUInt8Number*)lpSrcBits;
-
             *lpDestBits++ = (icUInt8Number)(UnitClip(destPixel[0]) * 255.0 + 0.5);
             *lpDestBits++ = (icUInt8Number)(UnitClip(destPixel[1]) * 255.0 + 0.5);
             *lpDestBits++ = (icUInt8Number)(UnitClip(destPixel[2]) * 255.0 + 0.5);

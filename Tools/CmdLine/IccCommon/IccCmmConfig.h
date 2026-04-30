@@ -245,7 +245,7 @@ public:
 
 protected:
 	std::string spaceName(icColorSpaceSignature sig);
-	void addFields(std::string& dataFormat, int& nFields, int& nSamples, icColorSpaceSignature sig, std::string prefix);
+	void addFields(std::string& dataFormat, int& nFields, int& nSamples, icColorSpaceSignature sig, const std::string& prefix);
 };
 
 #endif //_ICCCMMCONFIG_H

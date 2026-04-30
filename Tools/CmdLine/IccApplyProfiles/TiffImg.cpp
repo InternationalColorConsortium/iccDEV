@@ -86,15 +86,31 @@ static char THIS_FILE[]=__FILE__;
 //////////////////////////////////////////////////////////////////////
 
 CTiffImg::CTiffImg()
+  : m_hTif(NULL),
+    m_bRead(false),
+    m_nWidth(0),
+    m_nHeight(0),
+    m_nBitsPerSample(0),
+    m_nBytesPerSample(0),
+    m_nPhoto(0),
+    m_nSamples(0),
+    m_nExtraSamples(0),
+    m_nPlanar(0),
+    m_nCompress(0),
+    m_fXRes(0.0f),
+    m_fYRes(0.0f),
+    m_nBytesPerLine(0),
+    m_nRowsPerStrip(0),
+    m_nStripSize(0),
+    m_nStripSamples(0),
+    m_nStripsPerSample(0),
+    m_nBytesPerStripLine(0),
+    m_pStripBuf(NULL),
+    m_nCurLine(0),
+    m_nCurStrip(0),
+    m_pProfile(NULL),
+    m_nProfileLength(0)
 {
-  m_nWidth = 0;
-  m_nHeight = 0;
-  m_nBitsPerSample = 0;
-  m_nSamples = 0;
-  m_nExtraSamples = 0;
-
-  m_hTif = NULL;
-  m_pStripBuf = NULL;
 }
 
 CTiffImg::~CTiffImg()
@@ -185,7 +201,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   TIFFSetField(m_hTif, TIFFTAG_PLANARCONFIG, m_nPlanar);
   TIFFSetField(m_hTif, TIFFTAG_SAMPLESPERPIXEL, m_nSamples);
   if (m_nExtraSamples) {
-    unsigned short* extrasamplevalues = (unsigned short*)calloc(m_nExtraSamples, sizeof(unsigned short));
+    unsigned short* extrasamplevalues = static_cast<unsigned short*>(calloc(m_nExtraSamples, sizeof(unsigned short)));
     if (extrasamplevalues) {
       TIFFSetField(m_hTif, TIFFTAG_EXTRASAMPLES, m_nExtraSamples, extrasamplevalues);
       free(extrasamplevalues);
@@ -230,7 +246,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     }
     m_nBytesPerLine = m_nWidth * m_nBytesPerSample * m_nSamples;
 
-    m_pStripBuf = (unsigned char*)malloc((size_t)m_nStripSize*m_nStripSamples);
+    m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)m_nStripSize*m_nStripSamples));
 
     if (!m_pStripBuf) {
       Close();
@@ -331,7 +347,7 @@ bool CTiffImg::Open(const char *szFname)
   //   it is safer to have the buffer too large than too small.
   m_nStripSize = std::max( m_nStripSize, m_nRowsPerStrip * m_nBytesPerLine );
   
-  m_pStripBuf = (unsigned char*)malloc((size_t)m_nStripSize*m_nStripSamples);
+  m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)m_nStripSize*m_nStripSamples));
 
   if (!m_pStripBuf) {
     Close();
