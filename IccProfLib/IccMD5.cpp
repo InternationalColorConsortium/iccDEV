@@ -28,7 +28,13 @@ documentation and/or software.
 #include <memory.h>
 #include <cstring>
 
-static void MD5Transform  (UINT4 [4], unsigned char [64]);
+#if defined(__clang__)
+#define ICC_MD5_NO_SANITIZE __attribute__((no_sanitize("integer")))
+#else
+#define ICC_MD5_NO_SANITIZE
+#endif
+
+static void MD5Transform  (UINT4 [4], unsigned char [64]) ICC_MD5_NO_SANITIZE;
 static void Encode  (unsigned char *, UINT4 *, unsigned int);
 static void Decode  (UINT4 *, unsigned char *, unsigned int);
 
@@ -175,7 +181,7 @@ void ICCPROFLIB_API icMD5Final (unsigned char* digest, MD5_CTX *context)
 
 /** MD5 basic transformation. Transforms state based on block.
  */
-static void MD5Transform (UINT4 state[4], unsigned char block[64])
+static void MD5Transform (UINT4 state[4], unsigned char block[64]) ICC_MD5_NO_SANITIZE
 {
   UINT4 a = state[0], b = state[1], c = state[2], d = state[3], x[16];
 
@@ -289,4 +295,3 @@ static void Decode (UINT4 *output, unsigned char *input, unsigned int len)
     output[i] = ((UINT4)input[j]) | (((UINT4)input[j+1]) << 8) |
       (((UINT4)input[j+2]) << 16) | (((UINT4)input[j+3]) << 24);
 }
-

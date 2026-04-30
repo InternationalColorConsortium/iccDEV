@@ -37,7 +37,8 @@ if [ -d "$REPO_ROOT/IccProfLib" ]; then
   # Running inside iccDEV repo directly
   TOOLS="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/build/Tools}"
   ICCDEV_TESTING="${ICCDEV_TESTING_DIR:-$REPO_ROOT/Testing}"
-  export LD_LIBRARY_PATH="$REPO_ROOT/build/IccProfLib:$REPO_ROOT/build/IccXML"
+  BUILD_ROOT="$(cd "$TOOLS/.." 2>/dev/null && pwd -P)"
+  export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   # Stage all generated profiles into a flat directory for uniform $TP access
   TP="/tmp/iccdev-test-profiles"
   TP_TIFF="/tmp/iccdev-test-tiff"
@@ -65,7 +66,8 @@ else
   # Running inside research repo
   TOOLS="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/iccDEV/Build/Tools}"
   ICCDEV_TESTING="${ICCDEV_TESTING_DIR:-$REPO_ROOT/iccDEV/Testing}"
-  export LD_LIBRARY_PATH="$REPO_ROOT/iccDEV/Build/IccProfLib:$REPO_ROOT/iccDEV/Build/IccXML"
+  BUILD_ROOT="$(cd "$TOOLS/.." 2>/dev/null && pwd -P)"
+  export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   TP="$REPO_ROOT/test-profiles"
   TP_TIFF="$REPO_ROOT/test-profiles"
   TP_IMG="$REPO_ROOT/test-profiles"
@@ -625,6 +627,7 @@ EOF
 }
 EOF
 
+  # shellcheck disable=SC2016
   run_test "ncm-16" "JSON -cfg srcType=it8 named-color data" \
     bash -c '"$1" -cfg "$2" >/dev/null && grep -Fq "\"sn\": \"Black\"" "$3"' \
     _ "$APPLYNCM" "$OUTDIR/ncm-it8-src.json" "$OUTDIR/ncm-it8-src-output.json"
@@ -738,6 +741,7 @@ run_expect_exit "search-04" "Reject legacy three-profile search chain" 255 \
   "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$DISPLAY_P3" 1 "$SRGB" 1 -INIT 1
 
 if [ -f "$SRGB_CALC_DATA" ] && [ -f "$SRGB" ]; then
+  # shellcheck disable=SC2016
   run_test "search-05" "JSON -cfg search without pccWeights" \
     bash -c '"$1" -exportcfganddata "$2" "$3" 3 0 "$4" 1 "$4" 1 -INIT 1 >/dev/null && ! grep -Fq "\"pccWeights\"" "$2" && "$1" -cfg "$2" >/dev/null' \
     _ "$APPLYSRCH" "$OUTDIR/search-missing-pccweights.json" "$SRGB_CALC_DATA" "$SRGB"
@@ -979,7 +983,7 @@ if [ "$ASAN_FINDINGS" -gt 0 ]; then
   KNOWN_ASAN_SUMMARY=0
   UNKNOWN_ASAN_SUMMARY=0
   echo "  ASAN finding details:"
-  grep -rl "ERROR: AddressSanitizer" "$OUTDIR/"*.log 2>/dev/null | while read f; do
+  grep -rl "ERROR: AddressSanitizer" "$OUTDIR/"*.log 2>/dev/null | while read -r f; do
     asan_line="$(grep 'ERROR: AddressSanitizer' "$f" | sed -n '1p')"
     if grep -q "alloc-dealloc-mismatch" <<< "$asan_line"; then
       echo "    $(basename "$f"): $asan_line [KNOWN -- CWE-762, CFL-011 pending]"
@@ -992,7 +996,7 @@ fi
 if [ "$UBSAN_FINDINGS" -gt 0 ]; then
   echo ""
   echo "  !!! UBSAN FINDINGS -- review logs in $OUTDIR/ !!!"
-  grep -rl "runtime error:" "$OUTDIR/"*.log 2>/dev/null | while read f; do
+  grep -rl "runtime error:" "$OUTDIR/"*.log 2>/dev/null | while read -r f; do
     echo "    $(basename "$f"): $(grep 'runtime error:' "$f" | sed -n '1p')"
   done
 fi
@@ -1039,7 +1043,7 @@ if [ -n "$JOB_SUMMARY" ]; then
       fi
       echo ""
       echo '```'
-      grep -rl "ERROR: AddressSanitizer" "$OUTDIR/"*.log 2>/dev/null | while read f; do
+      grep -rl "ERROR: AddressSanitizer" "$OUTDIR/"*.log 2>/dev/null | while read -r f; do
         raw="$(basename "$f"): $(grep 'ERROR: AddressSanitizer' "$f" | sed -n '1p')"
         clean="${raw//[<>&\"\'\`]/}"
         if grep -q "alloc-dealloc-mismatch" <<< "$raw"; then
@@ -1055,7 +1059,7 @@ if [ -n "$JOB_SUMMARY" ]; then
       echo "### [WARN] UBSAN Findings"
       echo ""
       echo '```'
-      grep -rl "runtime error:" "$OUTDIR/"*.log 2>/dev/null | while read f; do
+      grep -rl "runtime error:" "$OUTDIR/"*.log 2>/dev/null | while read -r f; do
         # Sanitize UBSAN output -- may contain attacker-controlled profile data
         raw="$(basename "$f"): $(grep 'runtime error:' "$f" | sed -n '1p')"
         echo "${raw//[<>&\"\'\`]/}"

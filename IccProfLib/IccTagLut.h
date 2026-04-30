@@ -145,7 +145,7 @@ public:
   bool SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt=icInitZero);
   bool SetGamma(icFloatNumber gamma);
 
-  virtual void Begin() {m_nMaxIndex = (icUInt16Number)m_nSize - 1;}
+  virtual void Begin() {m_nMaxIndex = m_nSize ? (icUInt16Number)(m_nSize - 1) : 0;}
   virtual icFloatNumber Apply(icFloatNumber v) const;
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
   virtual bool IsIdentity();

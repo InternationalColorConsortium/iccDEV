@@ -59,6 +59,38 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
 
+## CTest Tool Suites
+
+Enable both tools and tests to expose the script-backed tool suites through
+CTest:
+
+```bash
+cmake -S Build/Cmake -B build \
+  -DENABLE_TOOLS=ON \
+  -DENABLE_TESTS=ON \
+  -DENABLE_WXWIDGETS=OFF
+cmake --build build --parallel "$(nproc)"
+ctest --test-dir build -N --no-tests=error
+ctest --test-dir build --output-on-failure --no-tests=error
+```
+
+The `check` target runs the same CTest suite after building tool dependencies:
+
+```bash
+cmake --build build --target check
+```
+
+For Visual Studio builds, pass the configuration to CTest:
+
+```cmd
+ctest --test-dir out/vs2022-x64 -C Release -N --no-tests=error
+ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
+cmake --build out/vs2022-x64 --config Release --target check
+```
+
+See [CTest tool suites](ctest.md) for the registered tests, fixtures, logs, and
+add-test process.
+
 ## vcpkg Consumers
 
 The `ports/iccdev/` overlay port builds core static libraries and CLI tools.

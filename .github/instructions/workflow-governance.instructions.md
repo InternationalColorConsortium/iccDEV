@@ -8,6 +8,11 @@ These rules apply to all GitHub Actions workflow files in this repository.
 Reference implementations: `ci-pr-action.yml` for Bash and `ci-pr-win.yml` for
 PowerShell.
 
+Workflow files, sanitizer helpers, CodeQL configuration, CTest gates, CPack and
+release packaging, and security automation are maintainer-owned
+infrastructure. General contributors should not edit these areas unless an
+iccDEV maintainer explicitly requests that work.
+
 ## Shell Hardening
 
 Every Bash `run:` block should use:
@@ -125,3 +130,17 @@ Treat these green-run signals as actionable:
 Use YAML parsing, `actionlint`, shellcheck, `yamllint`, and the workflow
 permission audit for workflow files. Run CodeQL for related C/C++ or CMake
 changes, not as the workflow YAML checker.
+
+## Test Workflow Guardrails
+
+CTest discovery and execution steps must use `--no-tests=error`. Workflows that
+own the Linux CTest gate must assert the expected `Total Tests` line after
+`ctest -N`.
+
+Do not mask profile generation, CTest discovery, or regression execution with
+`|| true`. Expected skips must be represented as explicit script output and the
+workflow must still have a deterministic pass/fail condition.
+
+When profile generation counts change, update the assertions in
+`docs/ctest.md`, `Build/Cmake/Testing/CMakeLists.txt`, and the workflows that
+validate generated-profile totals.

@@ -68,6 +68,21 @@ coverage are both OFF. Consumers using non-LTO-aware linkers should pass
 6. If the tool should ship in vcpkg, update the `_core_tools` list in
    `ports/iccdev/portfile.cmake` and the `ci-vcpkg-ports.yml` verification step.
 
+## CTest Integration
+
+CTest registrations live in `Build/Cmake/Testing/CMakeLists.txt`. The `check`
+target must exist on every platform and run CTest with `--no-tests=error`.
+CTest, CPack, sanitizer, release packaging, and workflow integration are
+maintainer-owned infrastructure. General contributors should not change these
+areas unless an iccDEV maintainer explicitly requests it.
+
+When adding a tool that should be covered by standard testing:
+
+1. Add its build output directory to the CTest tool path list.
+2. Add the target to the `check` dependency list when the test needs the tool.
+3. Add or update a CTest suite for the tool.
+4. Update `docs/ctest.md` and any workflow test-count assertions.
+
 ## vcpkg Port Integration
 
 The `ports/iccdev/` overlay port builds static libraries and core CLI tools.

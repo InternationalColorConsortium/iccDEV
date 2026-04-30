@@ -3,6 +3,13 @@
 Use this guide when adding or changing regression gates, tool-test workflows, or
 focused validation scripts.
 
+These workflows and gates are maintainer-owned infrastructure. General
+contributors should not edit `.github/**`, CTest registration, sanitizer helper
+scripts, CPack or release packaging, workflow policy, or security automation
+unless an iccDEV maintainer explicitly requests that work. Contributors should
+describe needed coverage in the issue or pull request so maintainers can decide
+where it belongs.
+
 ## Canonical Locations
 
 | Item | Location | Purpose |
@@ -11,6 +18,10 @@ focused validation scripts.
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
 | Main tool gate | `.github/workflows/ci-tool-tests.yml` | ASAN/UBSAN tool coverage, JSON gates, and regression scripts. |
 | Comprehensive tool gate | `.github/workflows/ci-iccdev-tool-tests.yml` | Broad generated-profile and CLI coverage. |
+| CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
+| CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
+| Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
+| Maintainer CI prompt | `.github/prompts/maintainer-ci-ctest.prompt.md` | Structured planning prompt for maintainer-owned infrastructure changes. |
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
 
@@ -114,6 +125,8 @@ ICCDEV_TEST_OUTDIR=/tmp/iccdev-regression \
 
 When adding a gate, update the smallest useful index:
 
+- `docs/ctest.md` for CTest registrations, expected suite counts, fixtures, or
+  generated-profile count changes.
 - `.github/ci/regression/README.md` for PoC files or script-based gates.
 - `.github/instructions/testing.instructions.md` when the gate becomes part of
   standard testing policy.

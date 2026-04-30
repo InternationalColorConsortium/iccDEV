@@ -33,6 +33,7 @@ on:
       - 'IccProfLib/**'
       - 'IccXML/**'
       - 'Build/Cmake/CMakeLists.txt'
+      - 'Build/Cmake/Testing/CMakeLists.txt'
   pull_request:
     branches: [master]
     paths:
@@ -43,6 +44,7 @@ on:
       - 'IccProfLib/**'
       - 'IccXML/**'
       - 'Build/Cmake/CMakeLists.txt'
+      - 'Build/Cmake/Testing/CMakeLists.txt'
 
 jobs:
   json-roundtrip:
@@ -83,7 +85,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DENABLE_TOOLS=ON
+            -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=ON
           make -j"$(nproc)"
 
       - name: Verify tool binaries
@@ -106,13 +109,27 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          cd Build/build-json
-          export LD_LIBRARY_PATH="$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON"
-          if [ -x "../../Testing/CreateAllProfiles.sh" ]; then
-            cd ../../Testing
-            PATH="$OLDPWD/Tools/IccFromXml:$OLDPWD/Tools/IccApplyProfiles:$OLDPWD/Tools/IccApplyNamedCmm:$OLDPWD/Tools/IccSpecSepToTiff:$OLDPWD/Tools/IccV5DspObsToV4Dsp:$PATH" \
-              bash CreateAllProfiles.sh || true
+
+          BUILD_JSON="$GITHUB_WORKSPACE/Build/build-json"
+          CREATE_LOG="$BUILD_JSON/create-all-profiles.log"
+
+          if [ ! -x "$GITHUB_WORKSPACE/Testing/CreateAllProfiles.sh" ]; then
+            echo "[FAIL] Testing/CreateAllProfiles.sh is missing or not executable"
+            exit 1
           fi
+
+          export LD_LIBRARY_PATH="$BUILD_JSON/IccProfLib:$BUILD_JSON/IccXML:$BUILD_JSON/IccJSON"
+          cd "$GITHUB_WORKSPACE/Testing"
+          PATH="$BUILD_JSON/Tools/IccFromXml:$BUILD_JSON/Tools/IccApplyProfiles:$BUILD_JSON/Tools/IccApplyNamedCmm:$BUILD_JSON/Tools/IccSpecSepToTiff:$BUILD_JSON/Tools/IccV5DspObsToV4Dsp:$PATH" \
+            ICCDEV_TEST_OUTDIR="$BUILD_JSON/Testing/ctest-output/ci-json-create-profiles" \
+            bash CreateAllProfiles.sh 2>&1 | tee "$CREATE_LOG"
+
+          profile_parse_count="$(grep -c 'Profile parsed and saved correctly' "$CREATE_LOG" || true)"
+          if [ "$profile_parse_count" -ne 129 ]; then
+            echo "[FAIL] Expected 129 generated profiles, got ${profile_parse_count}"
+            exit 1
+          fi
+          echo "[OK] Generated ${profile_parse_count} test profiles"
 
       - name: JSON round-trip test
         env:
@@ -336,13 +353,10 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Standard observer XML/JSON alias regression
+      - name: CTest JSON focused regressions
         env:
           BASH_ENV: /dev/null
           LD_LIBRARY_PATH: "${{ github.workspace }}/Build/build-json/IccProfLib:${{ github.workspace }}/Build/build-json/IccXML:${{ github.workspace }}/Build/build-json/IccJSON"
-          ICCDEV_TOOLS_DIR: "${{ github.workspace }}/Build/build-json/Tools"
-          ICCDEV_TESTING_DIR: "${{ github.workspace }}/Testing"
-          ICCDEV_TEST_OUTDIR: "/tmp/iccdev-stdobserver-regressions"
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -362,48 +376,15 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          chmod +x .github/scripts/iccdev-stdobserver-regression-tests.sh
-          .github/scripts/iccdev-stdobserver-regression-tests.sh
+          ctest --test-dir Build/build-json \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit Build/build-json/json-focused-ctest-results.xml \
+            -R 'iccdev\.(stdobserver-regressions|mluc-iso-code-regressions)'
 
           {
             echo ""
-            echo "### Standard Observer Alias Regression"
+            echo "### CTest JSON Focused Regressions"
             echo ""
-            echo "**Status**: $(sanitize_line "4/4 XML and JSON alias tests passed")"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: mluc ISO code validation regression
-        env:
-          BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/Build/build-json/IccProfLib:${{ github.workspace }}/Build/build-json/IccXML:${{ github.workspace }}/Build/build-json/IccJSON"
-          ICCDEV_TOOLS_DIR: "${{ github.workspace }}/Build/build-json/Tools"
-          ICCDEV_TESTING_DIR: "${{ github.workspace }}/Testing"
-          ICCDEV_TEST_OUTDIR: "/tmp/iccdev-mluc-iso-code-regressions"
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
-
-          chmod +x .github/scripts/iccdev-mluc-iso-code-regression-tests.sh
-          .github/scripts/iccdev-mluc-iso-code-regression-tests.sh
-
-          {
-            echo ""
-            echo "### mluc ISO Code Validation Regression"
-            echo ""
-            echo "**Status**: $(sanitize_line "4/4 mluc ISO code validation tests passed")"
+            echo "**Command**: $(sanitize_line "ctest -R iccdev.(stdobserver-regressions|mluc-iso-code-regressions)")"
           } >> "$GITHUB_STEP_SUMMARY"

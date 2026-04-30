@@ -1,44 +1,10 @@
 ###############################################################
-# iccDEV Tool Tests -- ASAN+UBSAN Coverage Baseline
+# iccDEV Tool Tests -- ASAN+UBSAN CTest Gate
 #
-# Migrated from xsscx/research iccdev-tool-tests.yml for
-# upstream iccDEV CI. Builds with full ASAN+UBSAN, generates
-# test profiles via CreateAllProfiles.sh, then runs the core
-# tool suites plus regression PoC checks.
-#
-# Test Suites:
-#   1. Coverage baseline (105 tests) -- all 14 CLI tools
-#   2. JSON -cfg tests (33 tests) -- config mode validation
-#   3. JSON CLI exercise (125 tests) -- all CLI option combos
-#   4. Regression checks -- bisect fix PoCs, JSON/XML parser/config failures,
-#      standard observer XML/JSON alias compatibility, issue #928 mluc setter
-#      canonical length checks, mluc read/UTF-16 validation, and issue #958
-#      PCC zero-Y illuminant validation, calculator sanitizer regressions,
-#      lut16 invalid curve count validation, and namedColor2 pixel-to-name
-#      apply guards
-#
-# Hardening:
-#   - sanitize-sed.sh sourced in every step
-#   - BASH_ENV=/dev/null to block .bashrc injection
-#   - Pinned action SHAs (no floating tags)
-#   - persist-credentials: false on checkout
-#   - No shell=true subprocess calls
-#   - Minimal permissions (contents: read)
-#
-# Reference:
-#   .github/scripts/iccdev-tool-coverage-baseline.sh
-#   .github/scripts/iccdev-json-cfg-tests.sh
-#   .github/scripts/json-cli-exercise.sh
-#   .github/scripts/iccdev-json-parser-regression-tests.sh
-#   .github/scripts/iccdev-stdobserver-regression-tests.sh
-#   .github/scripts/iccdev-mluc-setter-regression-tests.sh
-#   .github/scripts/iccdev-mluc-read-utf16-regression-tests.sh
-#   .github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh
-#   .github/scripts/iccdev-calculator-regression-tests.sh
-#   .github/scripts/iccdev-lut16-zero-curve-regression-tests.sh
-#   .github/ci/regression/lut16-zero-entry-curve-write.cpp
-#   .github/scripts/iccdev-namedcolor-apply-regression-tests.sh
-#
+# Builds iccDEV with sanitizer instrumentation and runs the
+# script-backed tool suites through CTest. The CTest layer owns
+# profile generation, legacy Testing/RunTests.sh, tool coverage,
+# JSON/config exercises, and focused regression scripts.
 ###############################################################
 
 name: iccDEV Tool Tests
@@ -53,26 +19,27 @@ on:
       - 'bisect-*'
     paths:
       - '.github/workflows/ci-tool-tests.yml'
+      - '.github/workflows/ci-pr-wasm.yml'
+      - '.github/scripts/ci-safe-apt-update.sh'
       - '.github/scripts/iccdev-tool-coverage-baseline.sh'
       - '.github/scripts/iccdev-json-cfg-tests.sh'
       - '.github/scripts/iccdev-json-parser-regression-tests.sh'
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
       - '.github/scripts/iccdev-mluc-setter-regression-tests.sh'
       - '.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh'
+      - '.github/scripts/iccdev-mluc-iso-code-regression-tests.sh'
       - '.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh'
-      - '.github/ci/regression/pcc-zero-illuminant.cpp'
       - '.github/scripts/iccdev-calculator-regression-tests.sh'
       - '.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh'
       - '.github/scripts/iccdev-namedcolor-apply-regression-tests.sh'
-      - '.github/scripts/ci-safe-apt-update.sh'
       - '.github/scripts/json-cli-exercise.sh'
-      - '.github/ci/regression/lut16-zero-entry-curve-write.cpp'
       - '.github/ci/test-data/**'
       - '.github/ci/regression/**'
       - 'IccProfLib/**'
       - 'IccXML/**'
       - 'IccJSON/**'
       - 'Tools/**'
+      - 'Testing/**'
       - 'Build/Cmake/**'
   workflow_dispatch:
   workflow_call:
@@ -83,7 +50,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    name: "iccDEV Tools -- ASAN+UBSAN -- 263+ tests"
+    name: "iccDEV Tools -- CTest ASAN+UBSAN"
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -92,20 +59,15 @@ jobs:
 
     env:
       BASH_ENV: /dev/null
+      BUILD_DIR: build
 
     steps:
-      # -------------------------------------------------------------------
-      # Checkout
-      # -------------------------------------------------------------------
       - name: Checkout repository
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v4.2.2
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           persist-credentials: false
           fetch-depth: 1
 
-      # -------------------------------------------------------------------
-      # Harden Bash environment
-      # -------------------------------------------------------------------
       - name: Harden Bash environment
         env:
           BASH_ENV: /dev/null
@@ -117,32 +79,14 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          echo "Workflow: ${WORKFLOW_NAME}"
+          echo "Ref: ${WORKFLOW_REF}"
+          echo "Commit: ${WORKFLOW_SHA}"
 
-          echo "Workflow:    ${WORKFLOW_NAME}"
-          echo "Ref:         ${WORKFLOW_REF}"
-          echo "Commit:      ${WORKFLOW_SHA}"
-
-      # -------------------------------------------------------------------
-      # Verify sanitize-sed.sh exists and is functional
-      # -------------------------------------------------------------------
-      - name: Verify sanitize-sed.sh
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          if [ ! -r .github/scripts/sanitize-sed.sh ]; then
-            echo "ERROR: sanitize-sed.sh not found" >&2
-            exit 1
-          fi
-          source .github/scripts/sanitize-sed.sh
-          echo "Sanitizer loaded"
-
-      # -------------------------------------------------------------------
-      # Install build dependencies
-      # -------------------------------------------------------------------
       - name: Install build dependencies
         env:
           BASH_ENV: /dev/null
+          DEBIAN_FRONTEND: noninteractive
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -150,1275 +94,115 @@ jobs:
 
           bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y --no-install-recommends \
-            build-essential cmake clang-18 clang++-18 \
+            build-essential cmake clang-18 clang++-18 llvm-18 \
             libxml2-dev libtiff-dev libpng-dev libjpeg-dev \
             nlohmann-json3-dev liblzma-dev libwxgtk3.2-dev \
             wx-common libssl-dev libclang-rt-18-dev
 
-      # -------------------------------------------------------------------
-      # Build iccDEV (Debug + ASAN + UBSAN + all tools)
-      # -------------------------------------------------------------------
-      - name: Build iccDEV (Debug + ASAN + UBSAN + Tools)
+      - name: Configure CTest build
         env:
           BASH_ENV: /dev/null
           CC: clang-18
           CXX: clang++-18
-          WORKSPACE_DIR: ${{ github.workspace }}
+          UBSAN_IGNORELIST: .github/ci/ubsan-ignorelist.txt
         run: |
           set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          mkdir -p build && cd build
-
-          echo "::group::CMake Configure"
-          sed -i 's/set(CMAKE_DEBUG_POSTFIX "d")/set(CMAKE_DEBUG_POSTFIX "")/' \
-            ../Build/Cmake/CMakeLists.txt
-          cmake ../Build/Cmake \
+          cmake -S Build/Cmake -B "${BUILD_DIR}" \
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang-18 \
             -DCMAKE_CXX_COMPILER=clang++-18 \
-            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0 -g3 -fstack-protector-strong" \
-            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls -O0 -g3 -fstack-protector-strong -std=c++17" \
-            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
-            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_C_FLAGS="-O0 -g3" \
+            -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
+            -DENABLE_ASAN=ON \
+            -DENABLE_UBSAN=ON \
+            -DENABLE_INTEGER_SANITIZER=ON \
+            -DSANITIZER_RECOVER=ON \
+            -DUBSAN_IGNORELIST="${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}" \
             -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=ON \
+            -DENABLE_WXWIDGETS=OFF \
             -DENABLE_SHARED_LIBS=ON \
             -DENABLE_STATIC_LIBS=ON \
             -Wno-dev
-          echo "::endgroup::"
 
-          echo "::group::Build"
-          make -j"$(nproc)" 2>&1 | tee /tmp/iccdev-build.log
-          echo "::endgroup::"
+      - name: Build
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
 
-          mapfile -t TOOL_BINS < <(find Tools -mindepth 2 -maxdepth 2 -type f -executable | sort)
+          cmake --build "${BUILD_DIR}" --parallel "$(nproc)" 2>&1 | tee "${BUILD_DIR}/build.log"
+
+          mapfile -t TOOL_BINS < <(find "${BUILD_DIR}/Tools" -mindepth 2 -maxdepth 2 -type f -executable | sort)
           TOOL_COUNT="${#TOOL_BINS[@]}"
           echo "Built $TOOL_COUNT tool binaries"
           if [ "$TOOL_COUNT" -lt 14 ]; then
-            echo "WARNING: Expected 14+ tools, got $TOOL_COUNT"
+            echo "::warning title=Tool Count::Expected at least 14 tools, got $TOOL_COUNT"
           fi
-          for tool_bin in "${TOOL_BINS[@]}"; do
-            echo "  - $tool_bin"
-          done
 
-          ls -lh IccProfLib/libIccProfLib2.so* || echo "WARN: shared lib missing"
-          ls -lh IccXML/libIccXML2.so* || echo "WARN: XML shared lib missing"
-          ls -lh IccJSON/libIccJSON2.so* || echo "WARN: JSON shared lib missing"
-
-          {
-            echo "### iccDEV Build"
-            echo ""
-            echo "| Setting | Value |"
-            echo "|---------|-------|"
-            echo "| Compiler | clang-18 |"
-            echo "| Build type | Debug |"
-            echo "| Sanitizers | ASAN + UBSAN |"
-            echo "| Tools built | $TOOL_COUNT |"
-            echo "| Commit | $(cd "${WORKSPACE_DIR}" && git log --oneline -1 | tr -cd '[:print:]') |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # -------------------------------------------------------------------
-      # Generate test profiles (CreateAllProfiles.sh)
-      # -------------------------------------------------------------------
-      - name: Generate test profiles (CreateAllProfiles.sh)
+      - name: List CTest suites
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
-          ASAN_OPTIONS: "detect_leaks=0,halt_on_error=0"
-          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
-          WORKSPACE_DIR: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          for d in "${WORKSPACE_DIR}"/build/Tools/*/; do
-            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
-          done
-
-          cd "${WORKSPACE_DIR}/Testing"
-          echo "::group::CreateAllProfiles.sh"
-          timeout 300 sh CreateAllProfiles.sh 2>&1 || {
-            rc=$?
-            if [ "$rc" -eq 124 ]; then
-              echo "WARN: CreateAllProfiles.sh timed out (acceptable for sanitizer builds)"
-            else
-              echo "WARN: CreateAllProfiles.sh exited with $rc"
-            fi
-          }
-          echo "::endgroup::"
-
-          PROFILE_COUNT=$(find . -name '*.icc' -o -name '*.txt' | wc -l)
-          echo "Generated $PROFILE_COUNT test artifacts"
-
-          {
-            echo ""
-            echo "### Test Profile Generation"
-            echo ""
-            echo "**CreateAllProfiles.sh** generated **$PROFILE_COUNT** test artifacts"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # -------------------------------------------------------------------
-      # Run 105-test coverage baseline
-      # -------------------------------------------------------------------
-      - name: Run iccDEV tool coverage baseline (105 tests)
-        env:
-          BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
-          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
-          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
-          LLVM_PROFILE_FILE: "/dev/null"
-          ICCDEV_TOOLS_DIR: "${{ github.workspace }}/build/Tools"
-          ICCDEV_TESTING_DIR: "${{ github.workspace }}/Testing"
-          ICCDEV_TEST_OUTDIR: "/tmp/iccdev-tool-output"
-        run: |
-          set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
+          CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
+          ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
+          if ! grep -q "^Total Tests: 14$" "${CTEST_LIST}"; then
+            echo "::error title=CTest Discovery::Expected Total Tests: 14"
+            cat "${CTEST_LIST}"
+            exit 1
           fi
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
 
-          chmod +x .github/scripts/iccdev-tool-coverage-baseline.sh
-
-          echo "::group::Coverage Baseline Output"
-          .github/scripts/iccdev-tool-coverage-baseline.sh --asan 2>&1 || {
-            rc=$?
-            echo "::endgroup::"
-            echo ""
-            echo "Baseline script exited with code $rc"
-            echo "Review ASAN/UBSAN findings in test logs"
-            exit "$rc"
-          }
-          echo "::endgroup::"
-
-      # -------------------------------------------------------------------
-      # Run JSON configuration (-cfg) tests (33 tests)
-      # -------------------------------------------------------------------
-      - name: Run JSON -cfg configuration tests (33 tests)
+      - name: Run CTest suites
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
-          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
-          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
-          LLVM_PROFILE_FILE: "/dev/null"
-          ICCDEV_TOOLS_DIR: "${{ github.workspace }}/build/Tools"
-          ICCDEV_TESTING_DIR: "${{ github.workspace }}/Testing"
-          ICCDEV_TEST_OUTDIR: "/tmp/iccdev-tool-output"
-        run: |
-          set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          chmod +x .github/scripts/iccdev-json-cfg-tests.sh
-
-          echo "::group::JSON Configuration Tests Output"
-          .github/scripts/iccdev-json-cfg-tests.sh 2>&1 || {
-            rc=$?
-            echo "::endgroup::"
-            echo ""
-            if [ "$rc" -eq 2 ]; then
-              echo "::error::JSON tests found ASAN/UBSAN issues"
-            else
-              echo "JSON tests had $rc test failures (non-sanitizer)"
-            fi
-            exit "$rc"
-          }
-          echo "::endgroup::"
-
-          {
-            echo ""
-            echo "### JSON Configuration Tests"
-            echo ""
-            echo "**33 tests** covering \`-cfg\` mode for iccApplyNamedCmm, iccApplySearch, iccApplyProfiles"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # -------------------------------------------------------------------
-      # JSON CLI Exercise Tests (125 tests)
-      # -------------------------------------------------------------------
-      - name: JSON CLI Exercise Tests (125 tests)
-        if: success() || failure()
-        env:
-          BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
         run: |
           set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          chmod +x .github/scripts/json-cli-exercise.sh
+          ctest --test-dir "${BUILD_DIR}" \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "${BUILD_DIR}/ctest-results.xml"
 
-          echo "::group::JSON CLI Exercise Output"
-          .github/scripts/json-cli-exercise.sh 2>&1 || {
-            rc=$?
-            echo "::endgroup::"
-            echo "::error::JSON CLI exercise failed with exit code $rc"
-            exit "$rc"
-          }
-          echo "::endgroup::"
-
-          {
-            echo ""
-            echo "### JSON CLI Exercise Tests"
-            echo ""
-            echo "**125 tests** across 26 groups covering all JSON CLI options"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # -------------------------------------------------------------------
-      # Regression checks (bisect fix PoCs)
-      # -------------------------------------------------------------------
-      - name: Regression checks (bisect fixes)
-        if: always()
-        continue-on-error: true
-        env:
-          BASH_ENV: /dev/null
-          WORKSPACE_DIR: ${{ github.workspace }}
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
-          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0,symbolize=1,print_scariness=1"
-          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
-          LLVM_PROFILE_FILE: "/dev/null"
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          OUTDIR="/tmp/iccdev-tool-output/regression-bisect"
-          mkdir -p "$OUTDIR"
-
-          FROMXML="${WORKSPACE_DIR}/build/Tools/IccFromXml/iccFromXml"
-          TOXML="${WORKSPACE_DIR}/build/Tools/IccToXml/iccToXml"
-          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
-          APPLYNCM="${WORKSPACE_DIR}/build/Tools/IccApplyNamedCmm/iccApplyNamedCmm"
-          passed=0 failed=0
-
-          check_asan() {
-            local logfile="$1" label="$2"
-            if grep -q "ERROR: AddressSanitizer" "$logfile" 2>/dev/null; then
-              echo "  [ASAN]  $label"; return 1
-            fi
-            return 0
-          }
-
-          echo "=== Regression Checks: Bisect Fixes ==="
-          echo ""
-
-          # --- R1: NamedColor.xml sampleCount regression (b1722f9) ---
-          echo "--- R1: NamedColor.xml sampleCount (#b1722f9) ---"
-          NAMED_XML="${WORKSPACE_DIR}/Testing/Named/NamedColor.xml"
-          NAMED_OUT="$OUTDIR/NamedColor.icc"
-          if [ -f "$NAMED_XML" ]; then
-            cd "${WORKSPACE_DIR}/Testing/Named"
-            timeout 30 "$FROMXML" NamedColor.xml "$NAMED_OUT" > "$OUTDIR/r1-namedcolor.log" 2>&1 || true
-            cd "${WORKSPACE_DIR}"
-            if grep -q "doesn't match tint values" "$OUTDIR/r1-namedcolor.log" 2>/dev/null; then
-              echo "  [FAIL] NamedColor.xml still has tint value mismatch"; failed=$((failed + 1))
-            elif ! check_asan "$OUTDIR/r1-namedcolor.log" "NamedColor.xml fromXml"; then
-              failed=$((failed + 1))
-            elif [ -f "$NAMED_OUT" ]; then
-              echo "  [OK]   NamedColor.xml parsed without tint mismatch"; passed=$((passed + 1))
-            else
-              echo "  [FAIL] NamedColor.xml did not produce output"; failed=$((failed + 1))
-            fi
-          else
-            echo "  [SKIP] NamedColor.xml not found"
-          fi
-
-          # --- R2: CMYK-3DLUTs.xml case-sensitive filenames (4aa5857) ---
-          echo "--- R2: CMYK-3DLUTs.xml case-sensitive filenames (#4aa5857) ---"
-          CMYK_XML="${WORKSPACE_DIR}/Testing/CMYK-3DLUTs/CMYK-3DLUTs.xml"
-          CMYK_OUT="$OUTDIR/CMYK-3DLUTs.icc"
-          if [ -f "$CMYK_XML" ]; then
-            cd "${WORKSPACE_DIR}/Testing/CMYK-3DLUTs"
-            timeout 60 "$FROMXML" CMYK-3DLUTs.xml "$CMYK_OUT" > "$OUTDIR/r2-cmyk3dluts.log" 2>&1 || true
-            cd "${WORKSPACE_DIR}"
-            if grep -q "Unable to parse" "$OUTDIR/r2-cmyk3dluts.log" 2>/dev/null; then
-              echo "  [FAIL] CMYK-3DLUTs.xml has parse errors"; failed=$((failed + 1))
-            elif ! check_asan "$OUTDIR/r2-cmyk3dluts.log" "CMYK-3DLUTs.xml fromXml"; then
-              failed=$((failed + 1))
-            elif [ -f "$CMYK_OUT" ]; then
-              echo "  [OK]   CMYK-3DLUTs.xml parsed successfully"; passed=$((passed + 1))
-            else
-              echo "  [FAIL] CMYK-3DLUTs.xml did not produce output"; failed=$((failed + 1))
-            fi
-          else
-            echo "  [SKIP] CMYK-3DLUTs.xml not found"
-          fi
-
-          # --- R3: LaserProjector.xml EmissionCLUT (ba81cd9 / #768) ---
-          echo "--- R3: LaserProjector.xml EmissionCLUT (#768) ---"
-          LASER_XML="${WORKSPACE_DIR}/Testing/Display/LaserProjector.xml"
-          LASER_OUT="$OUTDIR/LaserProjector.icc"
-          if [ -f "$LASER_XML" ]; then
-            cd "${WORKSPACE_DIR}/Testing/Display"
-            timeout 120 "$FROMXML" LaserProjector.xml "$LASER_OUT" > "$OUTDIR/r3-laserprojector.log" 2>&1 || true
-            cd "${WORKSPACE_DIR}"
-            if grep -q "Error in setting the size of GridPoints" "$OUTDIR/r3-laserprojector.log" 2>/dev/null; then
-              echo "  [FAIL] LaserProjector.xml EmissionCLUT GridPoints error"; failed=$((failed + 1))
-            elif ! check_asan "$OUTDIR/r3-laserprojector.log" "LaserProjector.xml fromXml"; then
-              failed=$((failed + 1))
-            elif [ -f "$LASER_OUT" ]; then
-              echo "  [OK]   LaserProjector.xml parsed (spectral EmissionCLUT ok)"; passed=$((passed + 1))
-            else
-              echo "  [FAIL] LaserProjector.xml did not produce output"; failed=$((failed + 1))
-            fi
-          else
-            echo "  [SKIP] LaserProjector.xml not found"
-          fi
-
-          # --- R4: SparseMatrixNamedColor.xml (#751) ---
-          echo "--- R4: SparseMatrixNamedColor.xml (#751) ---"
-          SPARSE_XML="${WORKSPACE_DIR}/Testing/Named/SparseMatrixNamedColor.xml"
-          SPARSE_OUT="$OUTDIR/SparseMatrixNamedColor.icc"
-          if [ -f "$SPARSE_XML" ]; then
-            cd "${WORKSPACE_DIR}/Testing/Named"
-            timeout 30 "$FROMXML" SparseMatrixNamedColor.xml "$SPARSE_OUT" > "$OUTDIR/r4-sparse.log" 2>&1 || true
-            cd "${WORKSPACE_DIR}"
-            if ! check_asan "$OUTDIR/r4-sparse.log" "SparseMatrixNamedColor.xml fromXml"; then
-              failed=$((failed + 1))
-            elif [ -f "$SPARSE_OUT" ]; then
-              echo "  [OK]   SparseMatrixNamedColor.xml parsed successfully"; passed=$((passed + 1))
-            else
-              echo "  [FAIL] SparseMatrixNamedColor.xml did not produce output"; failed=$((failed + 1))
-            fi
-          else
-            echo "  [SKIP] SparseMatrixNamedColor.xml not found"
-          fi
-
-          # --- R5: Observer name round-trip (#736) ---
-          echo "--- R5: Observer name round-trip (#736) ---"
-          OBS_XML="${WORKSPACE_DIR}/Testing/PCC/CustomObserverLab_int-D65_2deg.xml"
-          OBS_ICC="$OUTDIR/observer-roundtrip.icc"
-          OBS_XML2="$OUTDIR/observer-roundtrip.xml"
-          if [ -f "$OBS_XML" ]; then
-            cd "${WORKSPACE_DIR}/Testing/PCC"
-            timeout 30 "$FROMXML" "CustomObserverLab_int-D65_2deg.xml" "$OBS_ICC" > "$OUTDIR/r5-obs-fromxml.log" 2>&1 || true
-            cd "${WORKSPACE_DIR}"
-            if [ -f "$OBS_ICC" ]; then
-              timeout 30 "$TOXML" "$OBS_ICC" "$OBS_XML2" > "$OUTDIR/r5-obs-toxml.log" 2>&1 || true
-              if [ -f "$OBS_XML2" ]; then
-                timeout 30 "$FROMXML" "$OBS_XML2" "$OUTDIR/observer-roundtrip2.icc" > "$OUTDIR/r5-obs-rt.log" 2>&1 || true
-                if [ -f "$OUTDIR/observer-roundtrip2.icc" ]; then
-                  echo "  [OK]   Observer name round-trip: XML->ICC->XML->ICC succeeded"; passed=$((passed + 1))
-                else
-                  echo "  [FAIL] Observer round-trip failed on second fromXml"; failed=$((failed + 1))
-                fi
-              else
-                echo "  [FAIL] Observer round-trip failed on toXml"; failed=$((failed + 1))
-              fi
-            else
-              echo "  [FAIL] Observer round-trip failed on first fromXml"; failed=$((failed + 1))
-            fi
-          else
-            echo "  [SKIP] CustomObserverLab_int-D65_2deg.xml not found"
-          fi
-
-          # --- R6: PoC files from .github/ci/regression/ ---
-          echo "--- R6: PoC regression files ---"
-          POC_DIR="${WORKSPACE_DIR}/.github/ci/regression"
-          if [ -d "$POC_DIR" ]; then
-            for poc in "$POC_DIR"/poc-*.icc; do
-              [ -f "$poc" ] || continue
-              poc_name="$(basename "$poc" .icc)"
-              rc=0
-              timeout 30 "$DUMP" "$poc" ALL > "$OUTDIR/poc-${poc_name}.log" 2>&1 || rc=$?
-              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/poc-${poc_name}.log" 2>/dev/null; then
-                echo "  [ASAN]  $poc_name"; failed=$((failed + 1))
-              elif [ "$rc" -eq 124 ] || { [ "$rc" -ge 129 ] && [ "$rc" -le 192 ]; }; then
-                echo "  [CRASH] $poc_name (exit $rc)"; failed=$((failed + 1))
-              else
-                echo "  [OK]    $poc_name (exit $rc)"; passed=$((passed + 1))
-              fi
-            done
-          else
-            echo "  [SKIP] .github/ci/regression/ not found"
-          fi
-
-          # --- R7: XML_PARSE_NONET defense-in-depth (#735) ---
-          echo "--- R7: XML_PARSE_NONET defense-in-depth (#735) ---"
-
-          # R7a: Source-level check -- XML_PARSE_NONET must be present
-          nonet_ok=true
-          for src in IccXML/IccLibXML/IccProfileXml.cpp IccXML/IccLibXML/IccMpeXml.cpp; do
-            src_path="${WORKSPACE_DIR}/${src}"
-            if [ ! -f "$src_path" ]; then
-              echo "  [SKIP] $src not found"; continue
-            fi
-            if grep -q 'XML_PARSE_NONET' "$src_path"; then
-              echo "  [OK]   $src contains XML_PARSE_NONET"
-              passed=$((passed + 1))
-            else
-              echo "  [FAIL] $src missing XML_PARSE_NONET flag"
-              failed=$((failed + 1)); nonet_ok=false
-            fi
-          done
-
-          # R7b: Runtime check -- iccFromXml must not attempt network fetch
-          # Uses external DTD at TEST-NET-1 (RFC 5737, 192.0.2.0/24).
-          # With NONET: completes in <2s.  Without: blocks 30-120s.
-          XXE_XML="${WORKSPACE_DIR}/.github/ci/test-data/xxe-nonet-regression-735.xml"
-          if [ -f "$XXE_XML" ] && [ -x "$FROMXML" ]; then
-            START_NS=$(date +%s%N)
-            timeout 5 "$FROMXML" "$XXE_XML" "$OUTDIR/xxe-nonet.icc" \
-              > "$OUTDIR/r7-xxe-nonet.log" 2>&1 || true
-            END_NS=$(date +%s%N)
-            ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
-            if [ "$ELAPSED_MS" -lt 4000 ]; then
-              echo "  [OK]   iccFromXml+NONET completed in ${ELAPSED_MS}ms (no network fetch)"
-              passed=$((passed + 1))
-            else
-              echo "  [FAIL] iccFromXml took ${ELAPSED_MS}ms -- XML_PARSE_NONET may be missing"
-              failed=$((failed + 1))
-            fi
-          else
-            echo "  [SKIP] xxe-nonet-regression-735.xml or iccFromXml not found"
-          fi
-
-          # --- R8: Gamma u8Fixed8 precision regression (PR #808) ---
-          echo "--- R8: Gamma u8Fixed8 precision (PR #808) ---"
-          GAMMA_DIR="${WORKSPACE_DIR}/.github/ci/regression"
-          r8_pass=0 r8_fail=0
-          declare -A GAMMA_TESTS=(
-            ["gamma-2.20703125.icc"]="2.2070312500"
-            ["gamma-1.796875.icc"]="1.7968750000"
-            ["gamma-2.3984375.icc"]="2.3984375000"
-            ["gamma-1.0000000000.icc"]="1.0000000000"
-          )
-          for poc in "${!GAMMA_TESTS[@]}"; do
-            expected="${GAMMA_TESTS[$poc]}"
-            poc_path="${GAMMA_DIR}/${poc}"
-            if [ -f "$poc_path" ]; then
-              timeout 30 "$DUMP" "$poc_path" ALL > "$OUTDIR/r8-${poc}.log" 2>&1 || true
-              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r8-${poc}.log" 2>/dev/null; then
-                echo "  [ASAN]  gamma ${poc}"; r8_fail=$((r8_fail + 1))
-              elif grep -q "Y = X ^ ${expected}" "$OUTDIR/r8-${poc}.log" 2>/dev/null; then
-                echo "  [OK]    ${poc}: Y = X ^ ${expected}"; r8_pass=$((r8_pass + 1))
-              else
-                actual=$(grep -oP 'Y = X \^ [\d.]+' "$OUTDIR/r8-${poc}.log" | head -1)
-                echo "  [FAIL]  ${poc}: expected ${expected}, got ${actual:-<none>}"
-                r8_fail=$((r8_fail + 1))
-              fi
-            else
-              echo "  [SKIP]  ${poc} not found"
-            fi
-          done
-          echo "  Gamma precision: $r8_pass passed, $r8_fail failed"
-          passed=$((passed + r8_pass))
-          failed=$((failed + r8_fail))
-
-          # --- R9: JSON gamma serialization regression (PR #808) ---
-          echo "--- R9: JSON gamma serialization (PR #808) ---"
-          TOJSON="${WORKSPACE_DIR}/build/Tools/IccToJson/iccToJson"
-          FROMJSON="${WORKSPACE_DIR}/build/Tools/IccFromJson/iccFromJson"
-          r9_pass=0 r9_fail=0
-
-          # Write JSON gamma checker to temp script (avoids YAML block-scalar breakage)
-          {
-            echo 'import json, sys'
-            echo 'json_path, tag_name, field_name, expected_str = sys.argv[1:5]'
-            echo 'expected = float(expected_str)'
-            echo 'd = json.load(open(json_path))'
-            echo 'for t in d["IccProfile"]["Tags"]:'
-            echo '    if tag_name in t:'
-            echo '        data = t[tag_name]["data"]'
-            echo '        actual = data["gamma"] if field_name == "gamma" else data["params"][0]'
-            echo '        if abs(actual - expected) < 0.01:'
-            echo '            sys.exit(0)'
-            echo '        else:'
-            echo '            print(f"{field_name}={actual}, expected ~{expected}", file=sys.stderr)'
-            echo '            sys.exit(1)'
-            echo 'print(f"tag {tag_name} not found", file=sys.stderr)'
-            echo 'sys.exit(2)'
-          } > "$OUTDIR/r9-check-gamma.py"
-
-          if [ -x "$TOJSON" ]; then
-            # Test 1: curveType gamma (u8Fixed8 raw 565 = 2.20703125)
-            CURVE_ICC="${WORKSPACE_DIR}/.github/ci/regression/gamma-2.20703125.icc"
-            if [ -f "$CURVE_ICC" ]; then
-              timeout 30 "$TOJSON" "$CURVE_ICC" "$OUTDIR/r9-curve.json" > "$OUTDIR/r9-curve.log" 2>&1 || true
-              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-curve.log" 2>/dev/null; then
-                echo "  [ASAN]  json curveType gamma"; r9_fail=$((r9_fail + 1))
-              elif python3 "$OUTDIR/r9-check-gamma.py" "$OUTDIR/r9-curve.json" "redTRCTag" "gamma" "2.20703125" 2>"$OUTDIR/r9-curve-err.log"; then
-                echo "  [OK]    curveType JSON gamma ~2.207"; r9_pass=$((r9_pass + 1))
-              else
-                echo "  [FAIL]  curveType JSON gamma: $(cat "$OUTDIR/r9-curve-err.log")"
-                r9_fail=$((r9_fail + 1))
-              fi
-            else
-              echo "  [SKIP]  gamma-2.20703125.icc not found"
-            fi
-
-            # Test 2: parametricCurveType gamma (s15Fixed16 = 2.399993896484375)
-            PARA_ICC="${WORKSPACE_DIR}/.github/ci/regression/para-gamma-2.4.icc"
-            if [ -f "$PARA_ICC" ]; then
-              timeout 30 "$TOJSON" "$PARA_ICC" "$OUTDIR/r9-para.json" > "$OUTDIR/r9-para.log" 2>&1 || true
-              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-para.log" 2>/dev/null; then
-                echo "  [ASAN]  json parametric gamma"; r9_fail=$((r9_fail + 1))
-              elif python3 "$OUTDIR/r9-check-gamma.py" "$OUTDIR/r9-para.json" "redTRCTag" "params" "2.4" 2>"$OUTDIR/r9-para-err.log"; then
-                echo "  [OK]    parametric JSON gamma ~2.4"; r9_pass=$((r9_pass + 1))
-              else
-                echo "  [FAIL]  parametric JSON gamma: $(cat "$OUTDIR/r9-para-err.log")"
-                r9_fail=$((r9_fail + 1))
-              fi
-            else
-              echo "  [SKIP]  para-gamma-2.4.icc not found"
-            fi
-
-            # Test 3: JSON round-trip preserves curveType gamma
-            if [ -f "$OUTDIR/r9-curve.json" ] && [ -x "$FROMJSON" ]; then
-              timeout 30 "$FROMJSON" "$OUTDIR/r9-curve.json" "$OUTDIR/r9-curve-rt.icc" > "$OUTDIR/r9-rt.log" 2>&1 || true
-              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r9-rt.log" 2>/dev/null; then
-                echo "  [ASAN]  json roundtrip"; r9_fail=$((r9_fail + 1))
-              elif [ -f "$OUTDIR/r9-curve-rt.icc" ]; then
-                timeout 30 "$DUMP" "$OUTDIR/r9-curve-rt.icc" ALL > "$OUTDIR/r9-rt-dump.log" 2>&1 || true
-                if grep -q "Y = X ^ 2.2070312500" "$OUTDIR/r9-rt-dump.log" 2>/dev/null; then
-                  echo "  [OK]    JSON round-trip preserves gamma 2.2070312500"; r9_pass=$((r9_pass + 1))
-                else
-                  actual=$(grep -oP 'Y = X \^ [\d.]+' "$OUTDIR/r9-rt-dump.log" | head -1)
-                  echo "  [FAIL]  JSON round-trip: expected 2.2070312500, got ${actual:-<none>}"
-                  r9_fail=$((r9_fail + 1))
-                fi
-              else
-                echo "  [FAIL]  JSON round-trip: iccFromJson produced no output"
-                r9_fail=$((r9_fail + 1))
-              fi
-            fi
-          else
-            echo "  [SKIP]  iccToJson not available"
-          fi
-
-          echo "  JSON gamma: $r9_pass passed, $r9_fail failed"
-          passed=$((passed + r9_pass))
-          failed=$((failed + r9_fail))
-
-          # --- R10: JSON size_t-to-u16 truncation overflow regression (PR #808) ---
-          # Validates icJsonSafeU16() rejects chromaticity channels > 65535.
-          # Bug: (icUInt16Number)size_t silently truncated 65537 -> 1, causing massive heap-buffer-overflow.
-          # Fix: icJsonSafeU16() returns 0 for out-of-range; ParseJson rejects and skips allocation.
-          echo "--- R10: JSON size-overflow rejection (PR #808) ---"
-          FROMJSON="${WORKSPACE_DIR}/build/Tools/IccFromJson/iccFromJson"
-          r10_pass=0 r10_fail=0
-
-          if [ -x "$FROMJSON" ]; then
-            # Generate PoC JSON with 65537 chromaticity channels (overflows icUInt16Number)
-            {
-              echo 'import json'
-              echo 'profile = {'
-              echo '    "IccProfile": {'
-              echo '        "Header": {'
-              echo '            "preferredCMMType": "none",'
-              echo '            "profileVersion": "4.4.0.0",'
-              echo '            "deviceClass": "mntr",'
-              echo '            "colorSpace": "RGB",'
-              echo '            "pcs": "XYZ",'
-              echo '            "platform": "APPL",'
-              echo '            "flags": "00000000",'
-              echo '            "manufacturer": "none",'
-              echo '            "model": "none",'
-              echo '            "attributes": "0000000000000000",'
-              echo '            "renderingIntent": "Perceptual",'
-              echo '            "illuminant": {"X": 0.9642, "Y": 1.0, "Z": 0.8249},'
-              echo '            "creator": "test",'
-              echo '            "profileID": "00000000000000000000000000000000",'
-              echo '            "spectralPCS": "none",'
-              echo '            "spectralRange": None,'
-              echo '            "biSpectralRange": None,'
-              echo '            "MCS": "none",'
-              echo '            "SubClass": "none",'
-              echo '            "SubClassVersion": "0.0.0.0"'
-              echo '        },'
-              echo '        "Tags": ['
-              echo '            {'
-              echo '                "chromaticityTag": {'
-              echo '                    "type": "chromaticityType",'
-              echo '                    "data": {'
-              echo '                        "colorantType": "Unknown",'
-              echo '                        "channels": [[0.1, 0.2]] * 65537'
-              echo '                    }'
-              echo '                }'
-              echo '            }'
-              echo '        ]'
-              echo '    }'
-              echo '}'
-              echo 'json.dump(profile, open("'"$OUTDIR"'/r10-poc-overflow.json", "w"))'
-            } > "$OUTDIR/r10-gen-poc.py"
-            python3 "$OUTDIR/r10-gen-poc.py"
-
-            if [ -f "$OUTDIR/r10-poc-overflow.json" ]; then
-              # Test 1: iccFromJson must NOT crash on oversized chromaticity.
-              # `|| r10_ec=$?` keeps `set -e` happy when the tool returns a
-              # graceful non-zero (e.g. 255 from `return -1`).
-              r10_ec=0
-              timeout 30 "$FROMJSON" "$OUTDIR/r10-poc-overflow.json" "$OUTDIR/r10-out.icc" > "$OUTDIR/r10.log" 2>&1 || r10_ec=$?
-              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r10.log" 2>/dev/null; then
-                echo "  [ASAN]  json size-overflow PoC"; r10_fail=$((r10_fail + 1))
-              elif [ "$r10_ec" -eq 124 ]; then
-                echo "  [FAIL]  iccFromJson timed out on overflow PoC"
-                r10_fail=$((r10_fail + 1))
-              elif [ "$r10_ec" -ge 129 ] && [ "$r10_ec" -le 192 ]; then
-                echo "  [FAIL]  iccFromJson crashed (signal $((r10_ec - 128))) on overflow PoC"
-                r10_fail=$((r10_fail + 1))
-              else
-                echo "  [OK]    iccFromJson handled 65537-channel PoC without crash (exit $r10_ec)"
-                r10_pass=$((r10_pass + 1))
-              fi
-
-              # Test 2: output profile must be small (channels were rejected, not allocated)
-              if [ -f "$OUTDIR/r10-out.icc" ]; then
-                r10_size=$(stat -c%s "$OUTDIR/r10-out.icc" 2>/dev/null || echo 0)
-                if [ "$r10_size" -lt 1024 ]; then
-                  echo "  [OK]    output profile is $r10_size bytes (overflow channels rejected)"
-                  r10_pass=$((r10_pass + 1))
-                else
-                  echo "  [FAIL]  output profile is $r10_size bytes (expected <1024 -- channels not rejected?)"
-                  r10_fail=$((r10_fail + 1))
-                fi
-              else
-                echo "  [OK]    no output profile (overflow rejected entirely)"
-                r10_pass=$((r10_pass + 1))
-              fi
-            else
-              echo "  [SKIP]  PoC generation failed"
-            fi
-          else
-            echo "  [SKIP]  iccFromJson not available"
-          fi
-
-          echo "  JSON size-overflow: $r10_pass passed, $r10_fail failed"
-          passed=$((passed + r10_pass))
-          failed=$((failed + r10_fail))
-
-          # --- R11: JSON -cfg srcType=it8 source data regression ---
-          echo "--- R11: JSON -cfg srcType=it8 named-color source data ---"
-          r11_pass=0 r11_fail=0
-          NAMED_PROFILE="$OUTDIR/NamedColor.icc"
-          if [ ! -f "$NAMED_PROFILE" ] && [ -f "${WORKSPACE_DIR}/Testing/Named/NamedColor.xml" ]; then
-            (cd "${WORKSPACE_DIR}/Testing/Named" && timeout 30 "$FROMXML" NamedColor.xml "$NAMED_PROFILE") \
-              > "$OUTDIR/r11-namedcolor.log" 2>&1 || true
-          fi
-
-          if [ -x "$APPLYNCM" ] && [ -f "$NAMED_PROFILE" ]; then
-            {
-              echo 'CGATS.17'
-              printf 'ORIGINATOR\t"iccDEV regression"\n'
-              printf 'FILE_DESCRIPTOR\t"Minimal named-color IT8 source data"\n'
-              printf 'NUMBER_OF_FIELDS\t2\n'
-              echo 'BEGIN_DATA_FORMAT'
-              printf 'NAME\tTINT\n'
-              echo 'END_DATA_FORMAT'
-              printf 'NUMBER_OF_SETS\t1\n'
-              echo 'BEGIN_DATA'
-              printf 'Black\t1.0\n'
-              echo 'END_DATA'
-            } > "$OUTDIR/r11-it8-src.it8"
-
-            {
-              echo '{'
-              echo '  "dataFiles": {'
-              echo '    "srcType": "it8",'
-              echo '    "srcSpace": "nmcl",'
-              echo '    "srcFile": "'"$OUTDIR"'/r11-it8-src.it8",'
-              echo '    "dstType": "colorData",'
-              echo '    "dstFile": "'"$OUTDIR"'/r11-it8-src-output.json",'
-              echo '    "dstEncoding": "value",'
-              echo '    "dstPrecision": 4,'
-              echo '    "dstDigits": 9'
-              echo '  },'
-              echo '  "profileSequence": ['
-              echo '    {'
-              echo '      "iccFile": "'"$NAMED_PROFILE"'",'
-              echo '      "intent": 1,'
-              echo '      "interpolation": "tetrahedral",'
-              echo '      "useBPC": false'
-              echo '    }'
-              echo '  ]'
-              echo '}'
-            } > "$OUTDIR/r11-it8-src.json"
-            r11_ec=0
-            timeout 30 "$APPLYNCM" -cfg "$OUTDIR/r11-it8-src.json" > "$OUTDIR/r11-it8-src.log" 2>&1 || r11_ec=$?
-            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r11-it8-src.log" 2>/dev/null; then
-              echo "  [ASAN]  JSON IT8 srcType regression"; r11_fail=$((r11_fail + 1))
-            elif [ "$r11_ec" -ne 0 ]; then
-              echo "  [FAIL]  iccApplyNamedCmm -cfg srcType=it8 exited $r11_ec"
-              r11_fail=$((r11_fail + 1))
-            elif grep -Fq '"sn": "Black"' "$OUTDIR/r11-it8-src-output.json" 2>/dev/null; then
-              echo "  [OK]    JSON srcType=it8 loaded IT8 named-color data"
-              r11_pass=$((r11_pass + 1))
-            else
-              echo "  [FAIL]  JSON srcType=it8 produced empty or missing named-color data"
-              r11_fail=$((r11_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  iccApplyNamedCmm or NamedColor.icc not available"
-          fi
-          echo "  JSON IT8 srcType: $r11_pass passed, $r11_fail failed"
-          passed=$((passed + r11_pass))
-          failed=$((failed + r11_fail))
-
-          # --- R12: iccApplySearch JSON round-trip without pccWeights ---
-          echo "--- R12: iccApplySearch JSON round-trip without pccWeights ---"
-          r12_pass=0 r12_fail=0
-          SEARCH="${WORKSPACE_DIR}/build/Tools/IccApplySearch/iccApplySearch"
-          SEARCH_DATA="${WORKSPACE_DIR}/Testing/Calc/srgbCalcTest.txt"
-          SEARCH_PROFILE="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
-
-          if [ -x "$SEARCH" ] && [ -f "$SEARCH_DATA" ] && [ -f "$SEARCH_PROFILE" ]; then
-            r12_ec=0
-            timeout 30 "$SEARCH" -exportcfganddata "$OUTDIR/r12-search-export.json" \
-              "$SEARCH_DATA" 3 0 "$SEARCH_PROFILE" 1 "$SEARCH_PROFILE" 1 -INIT 1 \
-              > "$OUTDIR/r12-search-export.log" 2>&1 || r12_ec=$?
-            if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r12-search-export.log" 2>/dev/null; then
-              echo "  [ASAN]  iccApplySearch exportcfganddata"; r12_fail=$((r12_fail + 1))
-            elif [ "$r12_ec" -ne 0 ]; then
-              echo "  [FAIL]  iccApplySearch exportcfganddata exited $r12_ec"
-              r12_fail=$((r12_fail + 1))
-            elif grep -Fq '"pccWeights"' "$OUTDIR/r12-search-export.json" 2>/dev/null; then
-              echo "  [FAIL]  export unexpectedly emitted empty pccWeights"
-              r12_fail=$((r12_fail + 1))
-            else
-              r12_import_ec=0
-              timeout 30 "$SEARCH" -cfg "$OUTDIR/r12-search-export.json" \
-                > "$OUTDIR/r12-search-import.log" 2>&1 || r12_import_ec=$?
-              if grep -q "ERROR: AddressSanitizer" "$OUTDIR/r12-search-import.log" 2>/dev/null; then
-                echo "  [ASAN]  iccApplySearch missing pccWeights import"; r12_fail=$((r12_fail + 1))
-              elif [ "$r12_import_ec" -eq 0 ]; then
-                echo "  [OK]    missing pccWeights round-trip import succeeded"
-                r12_pass=$((r12_pass + 1))
-              else
-                echo "  [FAIL]  missing pccWeights import exited $r12_import_ec"
-                r12_fail=$((r12_fail + 1))
-              fi
-            fi
-          else
-            echo "  [SKIP]  iccApplySearch, srgbCalcTest.txt, or sRGB_D65_MAT.icc not available"
-          fi
-          echo "  Search missing pccWeights: $r12_pass passed, $r12_fail failed"
-          passed=$((passed + r12_pass))
-          failed=$((failed + r12_fail))
-
-          # --- R13: ICC JSON/XML parser/config rejects malformed and stale data ---
-          echo "--- R13: ICC JSON/XML parser/config malformed-data rejection ---"
-          r13_pass=0 r13_fail=0
-          PARSER_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-json-parser-regression-tests.sh"
-          if [ -f "$PARSER_SCRIPT" ]; then
-            chmod +x "$PARSER_SCRIPT"
-            r13_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r13-json-parser" \
-              "$PARSER_SCRIPT" > "$OUTDIR/r13-json-parser.log" 2>&1 || r13_ec=$?
-            cat "$OUTDIR/r13-json-parser.log"
-            if [ "$r13_ec" -eq 0 ]; then
-              echo "  [OK]    ICC JSON/XML parser/config rejected malformed and stale data"
-              r13_pass=$((r13_pass + 12))
-            else
-              echo "  [FAIL]  ICC JSON parser regression script exited $r13_ec"
-              r13_fail=$((r13_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  parser regression script not found"
-          fi
-          echo "  JSON/XML parser/config malformed-data rejection: $r13_pass passed, $r13_fail failed"
-          passed=$((passed + r13_pass))
-          failed=$((failed + r13_fail))
-
-          # --- R14: Standard observer XML/JSON alias compatibility ---
-          echo "--- R14: Standard observer XML/JSON alias compatibility ---"
-          r14_pass=0 r14_fail=0
-          OBS_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-stdobserver-regression-tests.sh"
-          if [ -f "$OBS_SCRIPT" ]; then
-            chmod +x "$OBS_SCRIPT"
-            r14_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r14-stdobserver" \
-              "$OBS_SCRIPT" > "$OUTDIR/r14-stdobserver.log" 2>&1 || r14_ec=$?
-            cat "$OUTDIR/r14-stdobserver.log"
-            if [ "$r14_ec" -eq 0 ]; then
-              echo "  [OK]    Standard observer aliases round-trip through XML and JSON"
-              r14_pass=$((r14_pass + 4))
-            else
-              echo "  [FAIL]  Standard observer regression script exited $r14_ec"
-              r14_fail=$((r14_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  standard observer regression script not found"
-          fi
-          echo "  Standard observer XML/JSON aliases: $r14_pass passed, $r14_fail failed"
-          passed=$((passed + r14_pass))
-          failed=$((failed + r14_fail))
-
-          # --- R15: Issue #928 multiLocalizedUnicodeType setter canonical length ---
-          echo "--- R15: Issue #928 multiLocalizedUnicodeType setter canonical length ---"
-          r15_pass=0 r15_fail=0
-          MLUC_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-mluc-setter-regression-tests.sh"
-          if [ -f "$MLUC_SCRIPT" ]; then
-            chmod +x "$MLUC_SCRIPT"
-            r15_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r15-mluc-setter" \
-              "$MLUC_SCRIPT" > "$OUTDIR/r15-mluc-setter.log" 2>&1 || r15_ec=$?
-            cat "$OUTDIR/r15-mluc-setter.log"
-            if [ "$r15_ec" -eq 0 ]; then
-              echo "  [OK]    Issue #928 mluc setters preserve canonical serialized lengths"
-              r15_pass=$((r15_pass + 2))
-            else
-              echo "  [FAIL]  Issue #928 mluc setter regression script exited $r15_ec"
-              r15_fail=$((r15_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  mluc setter regression script not found"
-          fi
-          echo "  Issue #928 mluc setter canonical length: $r15_pass passed, $r15_fail failed"
-          passed=$((passed + r15_pass))
-          failed=$((failed + r15_fail))
-
-          # --- R16: Issue #928 follow-up multiLocalizedUnicodeType read/UTF-16 validation ---
-          echo "--- R16: Issue #928 follow-up multiLocalizedUnicodeType read/UTF-16 validation ---"
-          r16_pass=0 r16_fail=0
-          MLUC_READ_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh"
-          if [ -f "$MLUC_READ_SCRIPT" ]; then
-            chmod +x "$MLUC_READ_SCRIPT"
-            r16_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r16-mluc-read-utf16" \
-              "$MLUC_READ_SCRIPT" > "$OUTDIR/r16-mluc-read-utf16.log" 2>&1 || r16_ec=$?
-            cat "$OUTDIR/r16-mluc-read-utf16.log"
-            if [ "$r16_ec" -eq 0 ]; then
-              echo "  [OK]    Issue #928 follow-up mluc reader rejects malformed UTF-16/layout"
-              r16_pass=$((r16_pass + 4))
-            else
-              echo "  [FAIL]  Issue #928 follow-up mluc read/UTF-16 regression script exited $r16_ec"
-              r16_fail=$((r16_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  mluc read/UTF-16 regression script not found"
-          fi
-          echo "  Issue #928 follow-up mluc read/UTF-16 validation: $r16_pass passed, $r16_fail failed"
-          passed=$((passed + r16_pass))
-          failed=$((failed + r16_fail))
-
-          # --- R17: Issue #958 PCC zero-Y illuminant validation ---
-          echo "--- R17: Issue #958 PCC zero-Y illuminant validation ---"
-          r17_pass=0 r17_fail=0
-          PCC_ILLUMINANT_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh"
-          if [ -f "$PCC_ILLUMINANT_SCRIPT" ]; then
-            chmod +x "$PCC_ILLUMINANT_SCRIPT"
-            r17_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r17-pcc-zero-illuminant" \
-              "$PCC_ILLUMINANT_SCRIPT" > "$OUTDIR/r17-pcc-zero-illuminant.log" 2>&1 || r17_ec=$?
-            cat "$OUTDIR/r17-pcc-zero-illuminant.log"
-            if [ "$r17_ec" -eq 0 ]; then
-              echo "  [OK]    Issue #958 PCC zero-Y illuminants rejected cleanly"
-              r17_pass=$((r17_pass + 1))
-            else
-              echo "  [FAIL]  Issue #958 PCC zero-Y illuminant regression script exited $r17_ec"
-              r17_fail=$((r17_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  PCC zero-Y illuminant regression script not found"
-          fi
-          echo "  Issue #958 PCC zero-Y illuminant validation: $r17_pass passed, $r17_fail failed"
-          passed=$((passed + r17_pass))
-          failed=$((failed + r17_fail))
-
-          # --- R18: Calculator cast/offset sanitizer regression ---
-          echo "--- R18: Calculator cast/offset sanitizer regression ---"
-          r18_pass=0 r18_fail=0
-          CALC_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-calculator-regression-tests.sh"
-          if [ -f "$CALC_SCRIPT" ]; then
-            chmod +x "$CALC_SCRIPT"
-            r18_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r18-calculator" \
-              "$CALC_SCRIPT" > "$OUTDIR/r18-calculator.log" 2>&1 || r18_ec=$?
-            cat "$OUTDIR/r18-calculator.log"
-            if [ "$r18_ec" -eq 0 ]; then
-              echo "  [OK]    Calculator operator and malformed-profile regressions pass"
-              r18_pass=$((r18_pass + 10))
-            else
-              echo "  [FAIL]  Calculator regression script exited $r18_ec"
-              r18_fail=$((r18_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  calculator regression script not found"
-          fi
-          echo "  Calculator cast/offset sanitizer regression: $r18_pass passed, $r18_fail failed"
-          passed=$((passed + r18_pass))
-          failed=$((failed + r18_fail))
-
-          # --- R19: Issue #955 lut16 invalid curve count validation ---
-          echo "--- R19: Issue #955 lut16 invalid curve count validation ---"
-          r19_pass=0 r19_fail=0
-          LUT16_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh"
-          if [ -f "$LUT16_SCRIPT" ]; then
-            chmod +x "$LUT16_SCRIPT"
-            r19_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_BUILD_DIR="${WORKSPACE_DIR}/build" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r19-lut16-zero-curve" \
-              "$LUT16_SCRIPT" > "$OUTDIR/r19-lut16-zero-curve.log" 2>&1 || r19_ec=$?
-            cat "$OUTDIR/r19-lut16-zero-curve.log"
-            if [ "$r19_ec" -eq 0 ]; then
-              echo "  [OK]    Issue #955 invalid lut16 curve counts rejected cleanly"
-              r19_pass=$((r19_pass + 1))
-            else
-              echo "  [FAIL]  Issue #955 lut16 zero-curve regression script exited $r19_ec"
-              r19_fail=$((r19_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  lut16 zero-curve regression script not found"
-          fi
-          echo "  Issue #955 lut16 invalid curve count validation: $r19_pass passed, $r19_fail failed"
-          passed=$((passed + r19_pass))
-          failed=$((failed + r19_fail))
-
-          # --- R20: namedColor2 pixel-to-name apply validation ---
-          echo "--- R20: namedColor2 pixel-to-name apply validation ---"
-          r20_pass=0 r20_fail=0
-          NAMEDCOLOR_APPLY_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-namedcolor-apply-regression-tests.sh"
-          if [ -f "$NAMEDCOLOR_APPLY_SCRIPT" ]; then
-            chmod +x "$NAMEDCOLOR_APPLY_SCRIPT"
-            r20_ec=0
-            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
-              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
-              ICCDEV_TEST_OUTDIR="$OUTDIR/r20-namedcolor-apply" \
-              "$NAMEDCOLOR_APPLY_SCRIPT" > "$OUTDIR/r20-namedcolor-apply.log" 2>&1 || r20_ec=$?
-            cat "$OUTDIR/r20-namedcolor-apply.log"
-            if [ "$r20_ec" -eq 0 ]; then
-              echo "  [OK]    namedColor2 pixel-to-name apply rejects malformed device data"
-              r20_pass=$((r20_pass + 1))
-            else
-              echo "  [FAIL]  namedColor2 apply regression script exited $r20_ec"
-              r20_fail=$((r20_fail + 1))
-            fi
-          else
-            echo "  [SKIP]  namedColor2 apply regression script not found"
-          fi
-          echo "  namedColor2 pixel-to-name apply validation: $r20_pass passed, $r20_fail failed"
-          passed=$((passed + r20_pass))
-          failed=$((failed + r20_fail))
-
-          echo ""
-          echo "Regression checks: $passed passed, $failed failed"
-          if [ "$failed" -gt 0 ]; then exit 1; fi
-
-      # -------------------------------------------------------------------
-      # Generate LUT visualizations (SVG + TIFF)
-      # -------------------------------------------------------------------
-      - name: Generate LUT visualizations (SVG + TIFF)
-        if: always()
-        env:
-          BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
-          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
-          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
-          LLVM_PROFILE_FILE: "/dev/null"
-          WORKSPACE_DIR: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
-
-          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
-          OUTDIR="/tmp/iccdev-lut-viz"
-          mkdir -p "$OUTDIR"
-
-          if [ ! -x "$DUMP" ]; then
-            echo "WARN: iccDumpProfile not found, skipping LUT visualization"
-            exit 0
-          fi
-
-          find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f 2>/dev/null | sort | while read -r profile; do
-            name="$(basename "$profile" .icc)"
-            dir="$(dirname "$profile")"
-            echo "  LUTS: $profile"
-            timeout 30 "$DUMP" "$profile" LUTS 2>/dev/null || true
-            if [ -f "$dir/${name}_luts.svg" ]; then
-              cp "$dir/${name}_luts.svg" "$OUTDIR/"
-            fi
-            for tif in "$dir"/${name}_*.tif; do
-              [ -f "$tif" ] || continue
-              cp "$tif" "$OUTDIR/"
-            done
-          done
-
-          SVG_COUNT=$(find "$OUTDIR" -name '*.svg' 2>/dev/null | wc -l)
-          TIF_COUNT=$(find "$OUTDIR" -name '*.tif' 2>/dev/null | wc -l)
-          echo "Generated $SVG_COUNT SVG + $TIF_COUNT TIFF files"
-
-          {
-            echo ""
-            echo "### LUT Visualizations"
-            echo ""
-            echo "**$SVG_COUNT** SVG + **$TIF_COUNT** TIFF via \`iccDumpProfile LUTS\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # -------------------------------------------------------------------
-      # Upload LUT visualizations
-      # -------------------------------------------------------------------
-      - name: Upload LUT visualizations
+      - name: Upload CTest logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: iccdev-lut-visualizations
-          path: /tmp/iccdev-lut-viz/
-          if-no-files-found: warn
-          retention-days: 14
-          compression-level: 6
-
-      # -------------------------------------------------------------------
-      # Generate LUT text exports (TXTS)
-      # -------------------------------------------------------------------
-      - name: Generate LUT text exports (TXTS)
-        if: always()
-        env:
-          BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/build/IccProfLib:${{ github.workspace }}/build/IccXML:${{ github.workspace }}/build/IccJSON"
-          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
-          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
-          LLVM_PROFILE_FILE: "/dev/null"
-          WORKSPACE_DIR: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
-
-          DUMP="${WORKSPACE_DIR}/build/Tools/IccDumpProfile/iccDumpProfile"
-          OUTDIR="/tmp/iccdev-lut-txt"
-          mkdir -p "$OUTDIR"
-
-          if [ ! -x "$DUMP" ]; then
-            echo "WARN: iccDumpProfile not found, skipping LUT text export"
-            exit 0
-          fi
-
-          find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f 2>/dev/null | sort | while read -r profile; do
-            name="$(basename "$profile" .icc)"
-            dir="$(dirname "$profile")"
-            echo "  TXTS: $profile"
-            timeout 30 "$DUMP" "$profile" TXTS 2>/dev/null || true
-            for txt in "$dir"/${name}_*.txt; do
-              [ -f "$txt" ] || continue
-              cp "$txt" "$OUTDIR/"
-            done
-          done
-
-          TXT_COUNT=$(find "$OUTDIR" -name '*.txt' 2>/dev/null | wc -l)
-          echo "Generated $TXT_COUNT LUT text export files"
-
-          {
-            echo ""
-            echo "### LUT Text Exports"
-            echo ""
-            echo "**$TXT_COUNT** TSV files via \`iccDumpProfile TXTS\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # -------------------------------------------------------------------
-      # Upload LUT text exports
-      # -------------------------------------------------------------------
-      - name: Upload LUT text exports
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: iccdev-lut-text-exports
-          path: /tmp/iccdev-lut-txt/
-          if-no-files-found: warn
-          retention-days: 14
-          compression-level: 6
-
-      # -------------------------------------------------------------------
-      # Upload test output logs
-      # -------------------------------------------------------------------
-      - name: Upload test logs
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: iccdev-tool-test-logs
-          path: /tmp/iccdev-tool-output/
+          name: iccdev-tool-ctest-logs
+          path: |
+            build/build.log
+            build/ctest-list.txt
+            build/ctest-results.xml
+            build/Testing/Temporary/
+            build/Testing/ctest-output/
           if-no-files-found: warn
           retention-days: 14
           compression-level: 9
 
-      # -------------------------------------------------------------------
-      # ASAN finding detail report (on failure)
-      # -------------------------------------------------------------------
-      - name: Report ASAN findings
-        if: failure()
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
-          if [ -f "$SANITIZER" ]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
-
-          OUTDIR="/tmp/iccdev-tool-output"
-          if [ ! -d "$OUTDIR" ]; then
-            echo "No output directory found"
-            exit 0
-          fi
-
-          {
-            echo ""
-            echo "## ASAN/UBSAN Finding Details"
-            echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          for logf in "$OUTDIR"/*.log "$OUTDIR"/*/*.log; do
-            [ -f "$logf" ] || continue
-            if grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
-              test_name="$(sanitize_line "$(basename "$logf" .log)")"
-              error_type="$(grep 'ERROR: AddressSanitizer' "$logf" | sed -n '1,1p')"
-              safe_error="$(sanitize_line "$error_type")"
-              {
-                echo "### \`$test_name\`"
-                echo ""
-                echo '```'
-                echo "$safe_error"
-                grep -E '^\s+#[0-5]' "$logf" | sed -n '1,6p' | while IFS= read -r frame; do
-                  sanitize_line "$frame"
-                  echo ""
-                done
-                echo '```'
-                echo ""
-              } >> "$GITHUB_STEP_SUMMARY"
-            fi
-          done
-
-          for logf in "$OUTDIR"/*.log "$OUTDIR"/*/*.log; do
-            [ -f "$logf" ] || continue
-            if grep -q "runtime error:" "$logf" 2>/dev/null; then
-              test_name="$(sanitize_line "$(basename "$logf" .log)")"
-              ub_line="$(grep 'runtime error:' "$logf" | sed -n '1,1p')"
-              safe_ub="$(sanitize_line "$ub_line")"
-              {
-                echo "### \`$test_name\` (UBSAN)"
-                echo ""
-                echo '```'
-                echo "$safe_ub"
-                echo '```'
-                echo ""
-              } >> "$GITHUB_STEP_SUMMARY"
-            fi
-          done
-
-      # -------------------------------------------------------------------
-      # Final summary
-      # -------------------------------------------------------------------
       - name: Generate summary
         if: always()
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
-          SANITIZER=".github/scripts/sanitize-sed.sh"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
           if [ -f "$SANITIZER" ]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -1433,62 +217,29 @@ jobs:
           fi
 
           {
+            echo "### iccDEV Tool CTest Summary"
             echo ""
-            echo "---"
-            echo ""
-            echo "### Environment"
-            echo ""
-            echo "| Component | Version |"
-            echo "|-----------|---------|"
+            echo "| Component | Value |"
+            echo "|-----------|-------|"
             echo "| Runner | ubuntu-24.04 |"
             echo "| Compiler | $(sanitize_line "$(clang-18 --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
-            echo "| Sanitizers | ASAN + UBSAN |"
-            echo ""
-            echo "---"
+            echo "| Test command | \`ctest --test-dir build --output-on-failure --no-tests=error\` |"
             echo ""
             echo "### Manual Reproduction"
             echo ""
             echo '```bash'
-            echo "git clone https://github.com/InternationalColorConsortium/iccDEV.git"
-            echo "cd iccDEV && mkdir -p build && cd build"
-            echo "cmake ../Build/Cmake -DCMAKE_BUILD_TYPE=Debug \\"
+            echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=Debug \\"
             echo "  -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \\"
-            echo "  -DCMAKE_C_FLAGS=\"-g -O0 -fsanitize=address,undefined\" \\"
-            echo "  -DCMAKE_CXX_FLAGS=\"-g -O0 -fsanitize=address,undefined\" \\"
-            echo "  -DCMAKE_EXE_LINKER_FLAGS=\"-fsanitize=address,undefined\" \\"
-            echo "  -DCMAKE_SHARED_LINKER_FLAGS=\"-fsanitize=address,undefined\" \\"
-            echo "  -DENABLE_TOOLS=ON && make -j\$(nproc)"
-            echo "cd ../Testing && ./CreateAllProfiles.sh"
-            echo "ICCDEV_TOOLS_DIR=build/Tools ICCDEV_TESTING_DIR=Testing \\"
-            echo "  LD_LIBRARY_PATH=build/IccProfLib:build/IccXML:build/IccJSON \\"
-            echo "  .github/scripts/iccdev-tool-coverage-baseline.sh --asan"
-            echo "ICCDEV_TOOLS_DIR=build/Tools ICCDEV_TESTING_DIR=Testing \\"
-            echo "  LD_LIBRARY_PATH=build/IccProfLib:build/IccXML:build/IccJSON \\"
-            echo "  .github/scripts/iccdev-stdobserver-regression-tests.sh"
+            echo "  -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON \\"
+            echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
+            echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON"
+            echo "cmake --build build --parallel \"\$(nproc)\""
+            echo "ctest --test-dir build --output-on-failure --no-tests=error"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # -------------------------------------------------------------------
-  # WASM Parity Gate
-  #
-  # Builds iccDEV-WASM Release, stages the npm-shaped consumer bundle,
-  # then runs Build/Cmake/wasm-package/test_all.js (16-tool smoke) and
-  # Build/Cmake/wasm-package/regression.js (Testing/CreateAllProfiles.sh
-  # parity gate, asserts ICC count == 207 to match Linux/Windows).
-  #
-  # Implemented as a reusable workflow call to ci-pr-wasm.yml so the
-  # WASM build/test pipeline lives in one place. The local-path
-  # uses: resolves at the dispatched SHA, so when ci-tool-tests.yml is
-  # dispatched against a feature branch carrying ci-pr-wasm.yml, the
-  # job runs without requiring ci-pr-wasm.yml on the default branch.
-  #
-  # Governance:
-  #   - All hardening (BASH_ENV, set -euo pipefail, credential cleanup,
-  #     sanitize_line on STEP_SUMMARY, env intermediaries for inputs)
-  #     is enforced inside ci-pr-wasm.yml.
-  # -------------------------------------------------------------------
   wasm-parity:
     name: "WASM Parity -- Testing/CreateAllProfiles.sh -- 207 ICC"
     uses: ./.github/workflows/ci-pr-wasm.yml

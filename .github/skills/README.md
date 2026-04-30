@@ -9,6 +9,7 @@ long command references.
 | `docs-maintenance` | Reducing documentation noise or reorganizing docs. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
+| `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
 | `regression-workflow-governance` | Adding regression gates or updating tool-test workflows. |
 | `vcpkg-export-consumer-debug` | Fixing vcpkg, install/export, uninstall, or packaged consumer CI failures. |
 | `version-bump` | Updating iccDEV release version references. |

@@ -16,6 +16,7 @@ if [ -f "$SCRIPT_DIR/path.sh" ]; then
 fi
 
 echo "====================== Entering Testing/RunTests.sh =========================="
+RUNTEST_STATUS=0
 
 if ! command -v iccApplyNamedCmm > /dev/null
 then
@@ -118,16 +119,26 @@ echo "==========================================================================
 echo "Test JSON round-trip (iccToJson / iccFromJson)"
 if command -v iccToJson > /dev/null && command -v iccFromJson > /dev/null
 then
-	iccToJson sRGB_v4_ICC_preference.icc sRGB_v4_ICC_preference.json
-	iccFromJson sRGB_v4_ICC_preference.json sRGB_v4_ICC_preference_rt.icc
-	if [ -f sRGB_v4_ICC_preference_rt.icc ]; then
+	JSON_RT_DIR="${TMPDIR:-/tmp}/iccdev-json-roundtrip-$$"
+	rm -rf "$JSON_RT_DIR"
+	mkdir -p "$JSON_RT_DIR" || exit 1
+	JSON_RT_FILE="$JSON_RT_DIR/sRGB_v4_ICC_preference.json"
+	JSON_RT_PROFILE="$JSON_RT_DIR/sRGB_v4_ICC_preference_rt.icc"
+	iccToJson sRGB_v4_ICC_preference.icc "$JSON_RT_FILE"
+	iccFromJson "$JSON_RT_FILE" "$JSON_RT_PROFILE"
+	if [ -f "$JSON_RT_PROFILE" ]; then
 		echo "JSON round-trip: PASS"
-		rm -f sRGB_v4_ICC_preference.json sRGB_v4_ICC_preference_rt.icc
 	else
 		echo "JSON round-trip: FAIL"
+		RUNTEST_STATUS=1
 	fi
+	rm -rf "$JSON_RT_DIR"
 else
 	echo "iccToJson/iccFromJson not found -- skipping JSON tests"
+	if [ "${ICCDEV_REQUIRE_JSON_ROUNDTRIP:-0}" = "1" ]; then
+		RUNTEST_STATUS=1
+	fi
 fi
 
 echo "====================== Exiting Testing/RunTests.sh =========================="
+exit "$RUNTEST_STATUS"

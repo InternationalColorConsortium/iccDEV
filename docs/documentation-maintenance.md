@@ -10,6 +10,7 @@ point to deeper references.
 |-------|------------------|
 | User install and packaging | `docs/install.md` |
 | User build instructions | `docs/build.md` |
+| CTest tool suites and add-test process | `docs/ctest.md` |
 | CLI tools and shared option tables | `docs/tools-cli-reference.md` |
 | JSON workflow | `docs/iccjson.md` |
 | JSON tag examples | `docs/iccjson-tag-types.md` |
@@ -23,6 +24,7 @@ point to deeper references.
 | Test and regression policy | `.github/instructions/testing.instructions.md` |
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |
 | Agent skills | `.github/skills/README.md` |
+| Maintainer CI and CTest workflow | `.github/skills/maintainer-ci-ctest/SKILL.md` and `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | IIS sample setup | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` |
 | IIS API reference | `Tools/Winnt/IccIisIsapi/api.md` |
 
@@ -31,6 +33,8 @@ point to deeper references.
 - Keep quickstart docs short and link to the canonical source for detail.
 - Verify command names against CMake targets or existing scripts.
 - Keep exact paths reproducible from the repository root.
+- Route workflow, CTest, CPack, sanitizer, release packaging, and security
+  automation changes through iccDEV maintainers.
 - Prefer tables for indexes and terse prose for workflows.
 - Remove duplicate explanations after preserving any unique details.
 - Keep prompts operational; move long reference material into a named reference

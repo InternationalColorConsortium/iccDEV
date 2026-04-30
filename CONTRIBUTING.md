@@ -18,7 +18,7 @@ We require all participants to abide by our [Code of Conduct](CODE_OF_CONDUCT.md
 
 ## Get Connected
 
-The first thing to do, before anything else, is to talk to us! Whether you are reporting an issue, requesting or implementing a feature, or just asking a question, please don’t hesitate to reach out to the project maintainers or the community. This is an important first step because your issue, feature, or question may have been solved or discussed already, and you will save yourself a lot of time by asking first.
+The first thing to do, before anything else, is to talk to us! Whether you are reporting an issue, requesting or implementing a feature, or just asking a question, please don't hesitate to reach out to the project maintainers or the community. This is an important first step because your issue, feature, or question may have been solved or discussed already, and you will save yourself a lot of time by asking first.
 
 **Before opening a Pull Request, please start a conversation with us.**  
 All Pull Requests should be tied to an existing Issue that discusses the problem or feature being addressed. This helps ensure the change aligns with project goals and prevents wasted effort on work that may already be in progress or out of scope.
@@ -26,7 +26,7 @@ All Pull Requests should be tied to an existing Issue that discusses the problem
 ### How do you talk to us?
 
 * [GitHub Issues](https://github.com/InternationalColorConsortium/iccDev/issues)  
-  GitHub **issues** are the primary place for project discussion. Issues aren’t
+  GitHub **issues** are the primary place for project discussion. Issues aren't
   restricted to bugs; we happily welcome feature requests and other suggestions
   submitted as issues. Opening an issue is the expected first step before
   submitting a Pull Request.
@@ -37,7 +37,7 @@ All Pull Requests should be tied to an existing Issue that discusses the problem
   or gather feedback before opening an Issue or Pull Request.
 
   The only conversations we would direct away from GitHub are questions in the
-  form of “How do I do X with ICC profiles”. Those questions should be discussed on
+  form of "How do I do X with ICC profiles". Those questions should be discussed on
   the ICC Members Mailing List.
 
 ## Legal Requirements
@@ -59,7 +59,7 @@ There is no cost or membership requirement to sign the ICC Contributor License A
 
 ### License
 
-ICC software is licensed under the BSD 3-Clause “New” or “Revised” License. Contributions to ICC software projects should abide by that license unless otherwised specified or approved by the ICC.
+ICC software is licensed under the BSD 3-Clause "New" or "Revised" License. Contributions to ICC software projects should abide by that license unless otherwised specified or approved by the ICC.
 
 ### Copyright Notices
 
@@ -71,11 +71,11 @@ Participation in ICC's development activities is subject to [ICC's Patent Policy
 
 ## Getting Started
 
-So you’ve broken the ice and chatted with us, and it turns out you’ve found a
+So you've broken the ice and chatted with us, and it turns out you've found a
 gnarly bug that you have a beautiful solution for. Wonderful!
 
-From here on out we’ll be using a significant amount of Git and GitHub based
-terminology. If you’re unfamiliar with these tools or their lingo, please look
+From here on out we'll be using a significant amount of Git and GitHub based
+terminology. If you're unfamiliar with these tools or their lingo, please look
 at the [GitHub Glossary](https://help.github.com/articles/github-glossary/) or
 browse [GitHub Help](https://help.github.com/).
 
@@ -83,7 +83,7 @@ The first requirement for contributing is to have a GitHub account. This is
 needed in order to push changes to the upstream repository. After setting up
 your account you should then **fork** the the ICC software project repository 
 to your account. This creates a copy of the repository under your user namespace
-and serves as the “home base” for your development branches, from which you will
+and serves as the "home base" for your development branches, from which you will
 submit **pull requests** to the upstream repository to be merged.
 
 You will also need Git installed on your local development machine. If you need
@@ -119,6 +119,26 @@ It's an older codebase, it isn't perfect, but let's at least **try** to keep thi
 
 
 ## Development and Pull Requests
+
+## Maintainer-Owned Infrastructure
+
+General contributor pull requests should avoid changing maintainer-owned
+security, release, package, and CI infrastructure unless an iccDEV maintainer
+has explicitly requested that work in the issue or review thread.
+
+Maintainer-owned areas include:
+
+- `.github/**`, including workflows, actions policy, CodeQL configuration,
+  sanitizer helpers, prompts, and repository instructions.
+- CTest registration and CI gate logic under `Build/Cmake/Testing/`.
+- CPack, release packaging, installer, and artifact publishing logic.
+- vcpkg port maintenance and release verification.
+- Security policy, vulnerability reporting, and disclosure process files.
+
+If a contribution needs new CI coverage or a workflow behavior change, describe
+the needed coverage in the issue or pull request. A maintainer can decide
+whether to update workflows, CTest, CPack, sanitizer policy, or other protected
+infrastructure in a separate maintainer-owned change.
 
 ## Build Requirements
 
@@ -165,7 +185,9 @@ The development cycle for a code change should follow this protocol:
 2. Make changes, compile, and test thoroughly. Code style should match existing
 style and conventions, and changes should be focused on the topic the pull
 request will be addressing. Make unrelated changes in a separate topic branch
-with a separate pull request.
+with a separate pull request. For tool and profile changes, use the documented
+CTest flow in `docs/ctest.md`; discovery and execution should use
+`--no-tests=error`.
 
 3. Push commits to your fork.
 

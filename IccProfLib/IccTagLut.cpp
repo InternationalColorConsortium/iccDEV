@@ -452,9 +452,13 @@ bool CIccTagCurve::SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt/*=i
   if (nSize==m_nSize)
     return true;
 
-  if (!nSize && m_Curve) {
-    free(m_Curve);
-    m_Curve = NULL;
+  if (!nSize) {
+    if (m_Curve) {
+      free(m_Curve);
+      m_Curve = NULL;
+    }
+    m_nSize = 0;
+    return true;
   }
   else {
     if (!m_Curve)

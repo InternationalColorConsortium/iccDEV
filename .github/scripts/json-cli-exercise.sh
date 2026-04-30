@@ -16,9 +16,13 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-build/IccProfLib:build/IccXML}"
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
 export UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1
 
-NAMEDCMM=build/Tools/IccApplyNamedCmm/iccApplyNamedCmm
-SEARCH=build/Tools/IccApplySearch/iccApplySearch
-PROFILES=build/Tools/IccApplyProfiles/iccApplyProfiles
+TOOLS_DIR="${ICCDEV_TOOLS_DIR:-build/Tools}"
+BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd -P)"
+export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+NAMEDCMM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
+SEARCH="$TOOLS_DIR/IccApplySearch/iccApplySearch"
+PROFILES="$TOOLS_DIR/IccApplyProfiles/iccApplyProfiles"
 
 PASS=0; FAIL=0; ASAN=0; TOTAL=0
 
