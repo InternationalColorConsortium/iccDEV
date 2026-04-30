@@ -2676,7 +2676,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_MANIFEST_MODE=OFF `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
           cmake --build $exampleBuild --config Release -- /m /maxcpucount
           $helloExe = Join-Path $exampleBuild 'Release\hello-iccdev.exe'
           $output = & $helloExe 2>&1
