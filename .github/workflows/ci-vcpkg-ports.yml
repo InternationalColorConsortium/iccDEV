@@ -99,6 +99,10 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           TRIPLET="$([ "$RUNNER_OS" = "macOS" ] && echo "arm64-osx" || echo "x64-linux")"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            export VCPKG_FORCE_SYSTEM_BINARIES=1
+            echo "Using runner-provided CMake/Ninja for Linux vcpkg install"
+          fi
           echo "::group::vcpkg install iccdev[tools,xml,json]"
           EXIT_CODE=0
           "$VCPKG_ROOT/vcpkg" install "iccdev[tools,xml,json]" \
