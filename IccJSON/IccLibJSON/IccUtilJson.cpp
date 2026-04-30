@@ -71,9 +71,14 @@
 bool g_IccJsonAllowFileImports = false;
 
 // Safely narrow size_t to icUInt32Number; returns 0 on truncation
-static inline icUInt32Number icJsonSafeU32(size_t n)
+static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
 {
-  return (n > (size_t)UINT32_MAX) ? 0 : (icUInt32Number)n;
+  if (n > (size_t)UINT32_MAX) {
+    if (overflow) *overflow = true;
+    return 0;
+  }
+  if (overflow) *overflow = false;
+  return (icUInt32Number)n;
 }
 
 // ---------------------------------------------------------------------------
@@ -465,10 +470,15 @@ bool CIccJsonArrayType<T, Tsig>::ParseArray(T *buf, icUInt32Number nBufSize,
                                              const IccJson &j)
 {
   if (!j.is_array()) return false;
-  icUInt32Number n = icJsonSafeU32(j.size());
+  bool overflow = false;
+  icUInt32Number n = icJsonSafeU32(j.size(), &overflow);
+  if (overflow) return false;
   if (n > nBufSize) n = nBufSize;
-  for (icUInt32Number i = 0; i < n; i++)
+  for (icUInt32Number i = 0; i < n; i++) {
+    if (!j[i].is_number())
+      return false;
     buf[i] = j[i].get<T>();
+  }
   return true;
 }
 
@@ -476,11 +486,15 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccJsonArrayType<T, Tsig>::ParseArray(const IccJson &j)
 {
   if (!j.is_array()) return false;
-  icUInt32Number n = icJsonSafeU32(j.size());
-  if (!n && j.size()) return false;
+  bool overflow = false;
+  icUInt32Number n = icJsonSafeU32(j.size(), &overflow);
+  if (overflow) return false;
   if (!SetSize(n)) return false;
-  for (icUInt32Number i = 0; i < n; i++)
+  for (icUInt32Number i = 0; i < n; i++) {
+    if (!j[i].is_number())
+      return false;
     m_pBuf[i] = j[i].get<T>();
+  }
   return true;
 }
 

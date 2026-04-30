@@ -699,7 +699,7 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
   jGetValue(j, "countOfDeviceCoords", nDevCoords);
   // ICC spec caps device colorants at 15. Reject pathologically large
   // counts before SetSize (which allocates nColors * (33 + nDevCoords*4)
-  // bytes — an unbounded multiplication otherwise).
+  // bytes - an unbounded multiplication otherwise).
   if (nDevCoords > 15u)
     return false;
   icUInt32Number nColors = (jsonExistsField(j, "colors") && j["colors"].is_array())
@@ -744,7 +744,8 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
 bool CIccTagJsonColorantOrder::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
-  for (icUInt32Number i = 0; i < m_nCount; i++)
+  const icUInt32Number nCount = m_nCount;
+  for (icUInt32Number i = 0; i < nCount; i++)
     arr.push_back((int)m_pData[i]);
   j["colorantOrder"] = arr;
   return true;
@@ -769,7 +770,8 @@ bool CIccTagJsonColorantTable::ToJson(IccJson &j)
 {
   j["pcsEncoding"] = "Lab";
   IccJson arr = IccJson::array();
-  for (icUInt32Number i = 0; i < m_nCount; i++) {
+  const icUInt32Number nCount = m_nCount;
+  for (icUInt32Number i = 0; i < nCount; i++) {
     icFloatNumber pcs[3];
     pcs[0] = icU16toF(m_pData[i].data[0]);
     pcs[1] = icU16toF(m_pData[i].data[1]);

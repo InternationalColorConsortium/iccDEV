@@ -767,7 +767,7 @@ bool CIccTagParametricCurve::Read(icUInt32Number size, CIccIO *pIO)
   if (!m_nNumParam) {
     // Unknown nFunctionType path. Previously this fell back to
     // `(icUInt16Number)((size - nHdrSize) / 4)` which silently
-    // truncates large-size tags to a small number of parameters —
+    // truncates large-size tags to a small number of parameters -
     // a parse-desync primitive. Use u32 math and refuse pathological
     // derived counts instead.
     icUInt32Number derived =
@@ -780,10 +780,11 @@ bool CIccTagParametricCurve::Read(icUInt32Number size, CIccIO *pIO)
 
   if (m_nNumParam) {
     int i;
-    if (nHdrSize + m_nNumParam*sizeof(icS15Fixed16Number) > size)
+    const icUInt16Number nNumParam = m_nNumParam;
+    if (nHdrSize + nNumParam*sizeof(icS15Fixed16Number) > size)
       return false;
 
-    for (i=0; i<m_nNumParam; i++) {
+    for (i=0; i<nNumParam; i++) {
       icS15Fixed16Number num;
       if (!pIO->Read32(&num, 1))
         return false;
@@ -826,7 +827,8 @@ bool CIccTagParametricCurve::Write(CIccIO *pIO)
 
   if (m_nNumParam) {
     int i;
-    for (i=0; i<m_nNumParam; i++) {
+    const icUInt16Number nNumParam = m_nNumParam;
+    for (i=0; i<nNumParam; i++) {
       icS15Fixed16Number num = icDtoF(m_dParam[i]);
       if (!pIO->Write32(&num, 1))
         return false;
@@ -914,7 +916,8 @@ default:
   snprintf(buf, bufSize, "Unknown Function with %d parameters:\n", m_nNumParam);
   sDescription += buf;
 
-  for (i=0; i<m_nNumParam; i++) {
+  const icUInt16Number nNumParam = m_nNumParam;
+  for (i=0; i<nNumParam; i++) {
     snprintf(buf, bufSize, "Param[%d] = %.4lf\n", i, m_dParam[i]);
     sDescription += buf;
   }
@@ -3286,7 +3289,8 @@ icValidateStatus CIccCLUT::Validate(std::string sigPath, std::string &sReport, c
   if (sig==icSigLutAtoBType || sig==icSigLutBtoAType) {
     const size_t tempSize = 256;
     char temp[tempSize];
-    for (int i=0; i<m_nInput; i++) {
+    const int nInput = (int)m_nInput;
+    for (int i=0; i<nInput; i++) {
       if (m_GridPoints[i]<2) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
@@ -4161,7 +4165,7 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
   if (Offset[1]) {
     icS15Fixed16Number tmp;
 
-    // 64-bit widened bounds check — the prior u32 addition wrapped
+    // 64-bit widened bounds check - the prior u32 addition wrapped
     // when Offset[1] was close to 2^32.
     if (static_cast<icUInt64Number>(Offset[1]) +
         12u * sizeof(icS15Fixed16Number) > size)
