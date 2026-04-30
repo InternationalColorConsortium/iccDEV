@@ -12,7 +12,8 @@
 #   3. JSON CLI exercise (125 tests) -- all CLI option combos
 #   4. Regression checks -- bisect fix PoCs, JSON parser/config failures,
 #      standard observer XML/JSON alias compatibility, issue #928 mluc setter
-#      canonical length checks, and mluc read/UTF-16 validation
+#      canonical length checks, mluc read/UTF-16 validation, and issue #958
+#      PCC zero-Y illuminant validation
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -30,6 +31,7 @@
 #   .github/scripts/iccdev-stdobserver-regression-tests.sh
 #   .github/scripts/iccdev-mluc-setter-regression-tests.sh
 #   .github/scripts/iccdev-mluc-read-utf16-regression-tests.sh
+#   .github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh
 #
 ###############################################################
 
@@ -50,6 +52,8 @@ on:
       - '.github/scripts/iccdev-stdobserver-regression-tests.sh'
       - '.github/scripts/iccdev-mluc-setter-regression-tests.sh'
       - '.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh'
+      - '.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh'
+      - '.github/ci/regression/pcc-zero-illuminant.cpp'
       - '.github/scripts/json-cli-exercise.sh'
       - '.github/ci/test-data/**'
       - 'IccProfLib/**'
@@ -1051,6 +1055,32 @@ jobs:
           echo "  Issue #928 follow-up mluc read/UTF-16 validation: $r16_pass passed, $r16_fail failed"
           passed=$((passed + r16_pass))
           failed=$((failed + r16_fail))
+
+          # --- R17: Issue #958 PCC zero-Y illuminant validation ---
+          echo "--- R17: Issue #958 PCC zero-Y illuminant validation ---"
+          r17_pass=0 r17_fail=0
+          PCC_ILLUMINANT_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh"
+          if [ -f "$PCC_ILLUMINANT_SCRIPT" ]; then
+            chmod +x "$PCC_ILLUMINANT_SCRIPT"
+            r17_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r17-pcc-zero-illuminant" \
+              "$PCC_ILLUMINANT_SCRIPT" > "$OUTDIR/r17-pcc-zero-illuminant.log" 2>&1 || r17_ec=$?
+            cat "$OUTDIR/r17-pcc-zero-illuminant.log"
+            if [ "$r17_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #958 PCC zero-Y illuminants rejected cleanly"
+              r17_pass=$((r17_pass + 1))
+            else
+              echo "  [FAIL]  Issue #958 PCC zero-Y illuminant regression script exited $r17_ec"
+              r17_fail=$((r17_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  PCC zero-Y illuminant regression script not found"
+          fi
+          echo "  Issue #958 PCC zero-Y illuminant validation: $r17_pass passed, $r17_fail failed"
+          passed=$((passed + r17_pass))
+          failed=$((failed + r17_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

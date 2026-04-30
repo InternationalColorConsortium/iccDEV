@@ -375,18 +375,21 @@ CIccCombinedConnectionConditions::CIccCombinedConnectionConditions(CIccProfile *
           m_pPCC = pAppliedPCC;
           m_pViewingConditions = NULL;
 
-          if (icNotZero(pView->m_illuminantXYZ.Y)) {
+          bool bValidIlluminantXYZ = icNotZero(pView->m_illuminantXYZ.Y);
+          if (bValidIlluminantXYZ) {
             m_illuminantXYZ[0] = pView->m_illuminantXYZ.X / pView->m_illuminantXYZ.Y;
             m_illuminantXYZ[1] = 1.0f;
             m_illuminantXYZ[2] = pView->m_illuminantXYZ.Z / pView->m_illuminantXYZ.Y;
           }
           else {
-            memcpy(m_illuminantXYZ, icD50XYZ, 3 * sizeof(icFloatNumber));
+            memset(m_illuminantXYZ, 0, 3 * sizeof(icFloatNumber));
           }
           m_illuminantXYZLum[0] = pView->m_illuminantXYZ.X;
           m_illuminantXYZLum[1] = pView->m_illuminantXYZ.Y;
           m_illuminantXYZLum[2] = pView->m_illuminantXYZ.Z;
           m_bValidMediaXYZ = pProfile->calcMediaWhiteXYZ(m_mediaXYZ, pAppliedPCC);
+          if (!bValidIlluminantXYZ)
+            m_bValidMediaXYZ = false;
       }
       else {
           m_pPCC = pAppliedPCC;

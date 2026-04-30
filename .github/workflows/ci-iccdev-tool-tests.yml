@@ -1916,6 +1916,32 @@ jobs:
           passed=$((passed + r20_pass))
           failed=$((failed + r20_fail))
 
+          # --- R21: Issue #958 PCC zero-Y illuminant validation ---
+          echo "--- R21: Issue #958 PCC zero-Y illuminant validation ---"
+          r21_pass=0 r21_fail=0
+          PCC_ILLUMINANT_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh"
+          if [ -f "$PCC_ILLUMINANT_SCRIPT" ]; then
+            chmod +x "$PCC_ILLUMINANT_SCRIPT"
+            r21_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r21-pcc-zero-illuminant" \
+              "$PCC_ILLUMINANT_SCRIPT" > "$OUTDIR/r21-pcc-zero-illuminant.log" 2>&1 || r21_ec=$?
+            cat "$OUTDIR/r21-pcc-zero-illuminant.log"
+            if [ "$r21_ec" -eq 0 ]; then
+              echo "  [OK]    Issue #958 PCC zero-Y illuminants rejected cleanly"
+              r21_pass=$((r21_pass + 1))
+            else
+              echo "  [FAIL]  Issue #958 PCC zero-Y illuminant regression script exited $r21_ec"
+              r21_fail=$((r21_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  PCC zero-Y illuminant regression script not found"
+          fi
+          echo "  Issue #958 PCC zero-Y illuminant validation: $r21_pass passed, $r21_fail failed"
+          passed=$((passed + r21_pass))
+          failed=$((failed + r21_fail))
+
           echo ""
           echo "Regression checks: $passed passed, $failed failed"
           if [ "$failed" -gt 0 ]; then exit 1; fi
@@ -2050,7 +2076,7 @@ jobs:
               ["15"]="iccApplySearch (CMM search optimization)"
               ["16"]="MCS regression (iccApplyProfiles TIFF pipeline)"
               ["17"]="iccV5DspObsToV4Dsp (v5 display to v4 conversion)"
-              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter/read)"
+              ["18"]="Regression checks (bisect fixes: 599,736,744,751,752,763,769; stdobserver aliases; issue #928 mluc setter/read; issue #958 PCC illuminant)"
             )
 
             for phase in $(seq 1 18); do

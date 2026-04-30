@@ -3189,7 +3189,9 @@ void CIccProfile::getNormIlluminantXYZ(icFloatNumber *pXYZ)
         pXYZ[2] = pCond->m_illuminantXYZ.Z / illumY;
       }
       else {
-        memcpy(pXYZ, icD50XYZ, 3 * sizeof(icFloatNumber));
+        pXYZ[0] = 0.0f;
+        pXYZ[1] = 0.0f;
+        pXYZ[2] = 0.0f;
       }
     }
   }
