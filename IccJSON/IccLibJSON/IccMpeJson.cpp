@@ -65,6 +65,7 @@
 #include "IccSolve.h"
 #include "IccCAM.h"
 #include "IccMpeFactory.h"
+#include <algorithm>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -95,18 +96,26 @@ static bool icJsonValidMatrixChannels(int nIn, int nOut)
 
 static bool icJsonGetFloatNumber(const IccJson &jv, icFloatNumber &v)
 {
-  if (jv.is_number()) {
-    v = (icFloatNumber)jv.get<double>();
-    return true;
+  try {
+    if (jv.is_number()) {
+      v = (icFloatNumber)jv.get<double>();
+      return true;
+    }
+  }
+  catch (...) {
   }
   return false;
 }
 
 static bool icJsonGetBoolValue(const IccJson &jv, bool &v)
 {
-  if (jv.is_boolean()) {
-    v = jv.get<bool>();
-    return true;
+  try {
+    if (jv.is_boolean()) {
+      v = jv.get<bool>();
+      return true;
+    }
+  }
+  catch (...) {
   }
   return false;
 }
@@ -249,7 +258,13 @@ public:
       if (!m_params) return false;
       for (int i = 0; i < nParams; i++) m_params[i] = 0.0f;
       if (jsonExistsField(j, "parameters") && j["parameters"].is_array()) {
-        int cnt = std::min(nParams, (int)j["parameters"].size());
+        bool overflow = false;
+        icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
+        if (overflow) {
+          parseStr += "parameters count exceeds supported range in FormulaSegment\n";
+          return false;
+        }
+        int cnt = std::min(nParams, (int)nJsonParams);
         for (int i = 0; i < cnt; i++) {
           if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
             parseStr += "parameters contains non-numeric value in FormulaSegment\n";
@@ -819,7 +834,13 @@ bool CIccJsonToneMapFunc::ParseJson(const IccJson &j, std::string &parseStr)
   for (int i = 0; i < nParameters; i++) m_params[i] = 0.0f;
 
   if (j.contains("parameters") && j["parameters"].is_array()) {
-    int cnt = std::min(nParameters, (int)j["parameters"].size());
+    bool overflow = false;
+    icUInt32Number nJsonParams = icJsonSafeU32(j["parameters"].size(), &overflow);
+    if (overflow) {
+      parseStr += "parameters count exceeds supported range in ToneMapFunction\n";
+      return false;
+    }
+    int cnt = std::min(nParameters, (int)nJsonParams);
     for (int i = 0; i < cnt; i++) {
       if (!icJsonGetFloatNumber(j["parameters"][i], m_params[i])) {
         parseStr += "parameters contains non-numeric value in ToneMapFunction\n";
@@ -1017,11 +1038,10 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   if (bHasMatrix) {
     const IccJson &mat = j["matrix"];
     for (icUInt32Number i = 0; i < nEntries; i++) {
-      if (!mat[i].is_number()) {
+      if (!icJsonGetFloatNumber(mat[i], m_pMatrix[i])) {
         parseStr += "matrix contains non-numeric value in MatrixElement\n";
         return false;
       }
-      m_pMatrix[i] = (icFloatNumber)mat[i].get<double>();
     }
 
     bool bInvert = false;
@@ -1042,11 +1062,10 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   if (bHasConstants) {
     const IccJson &con = j["constants"];
     for (icUInt16Number i = 0; i < nOut; i++) {
-      if (!con[i].is_number()) {
+      if (!icJsonGetFloatNumber(con[i], m_pConstants[i])) {
         parseStr += "constants contains non-numeric value in MatrixElement\n";
         return false;
       }
-      m_pConstants[i] = (icFloatNumber)con[i].get<double>();
     }
   }
   return true;
@@ -2036,7 +2055,7 @@ bool CIccMpeJsonCalculator::ParseJson(const IccJson &j, std::string &parseStr)
   icFuncParseStatus stat = SetCalcFunc(flatFunc.c_str(), parseStr);
   if (stat != icFuncParseNoError) {
     char buf[65];
-    int len = std::min(64, (int)flatFunc.size());
+    size_t len = std::min(sizeof(buf) - 1, flatFunc.size());
     strncpy(buf, flatFunc.c_str(), len);
     buf[len] = 0;
     switch (stat) {

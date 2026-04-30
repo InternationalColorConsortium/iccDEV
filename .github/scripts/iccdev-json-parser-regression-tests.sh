@@ -280,11 +280,11 @@ write("mpe-matrix-short-data", {
 write("spectral-white-short", {
     "type": "multiProcessElementType",
     "inputChannels": 1,
-    "outputChannels": 1,
+    "outputChannels": 3,
     "elements": [{
         "type": "EmissionMatrixElement",
         "inputChannels": 1,
-        "outputChannels": 1,
+        "outputChannels": 3,
         "wavelengths": {"start": 400.0, "end": 420.0, "steps": 3},
         "whiteData": [1.0],
         "matrixData": [1.0, 1.0, 1.0]
@@ -293,12 +293,12 @@ write("spectral-white-short", {
 
 write("spectral-matrix-huge-channels", {
     "type": "multiProcessElementType",
-    "inputChannels": 1,
-    "outputChannels": 1,
+    "inputChannels": 65535,
+    "outputChannels": 3,
     "elements": [{
         "type": "EmissionMatrixElement",
         "inputChannels": 65535,
-        "outputChannels": 65535,
+        "outputChannels": 3,
         "wavelengths": {"start": 400.0, "end": 420.0, "steps": 3},
         "whiteData": [1.0, 1.0, 1.0],
         "matrixData": []
@@ -308,11 +308,11 @@ write("spectral-matrix-huge-channels", {
 write("spectral-offset-short", {
     "type": "multiProcessElementType",
     "inputChannels": 1,
-    "outputChannels": 1,
+    "outputChannels": 3,
     "elements": [{
         "type": "EmissionMatrixElement",
         "inputChannels": 1,
-        "outputChannels": 1,
+        "outputChannels": 3,
         "wavelengths": {"start": 400.0, "end": 420.0, "steps": 3},
         "whiteData": [1.0, 1.0, 1.0],
         "matrixData": [1.0, 1.0, 1.0],
