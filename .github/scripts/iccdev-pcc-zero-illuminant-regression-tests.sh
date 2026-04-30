@@ -68,7 +68,7 @@ pass_case() {
 run_zero_illuminant_helper() {
   local name="pcc-zero-illuminant"
   local helper_cpp="$REPO_ROOT/.github/ci/regression/pcc-zero-illuminant.cpp"
-  local helper_bin="$OUTDIR/$name"
+  local helper_bin="${TMPDIR:-/tmp}/iccdev-${name}-helper-$$"
   local compile_log="$OUTDIR/$name.compile.log"
   local run_log="$OUTDIR/$name.run.log"
   local lib_dir="$BUILD_DIR/IccProfLib"
@@ -129,6 +129,7 @@ run_zero_illuminant_helper() {
       -o "$helper_bin" > "$compile_log" 2>&1; then
     fail_case "$name" "failed to compile helper"
     sed -n '1,80p' "$compile_log"
+    rm -f "$helper_bin"
     return
   fi
 
@@ -137,15 +138,18 @@ run_zero_illuminant_helper() {
   if grep -q "ERROR: AddressSanitizer\\|runtime error:" "$run_log" 2>/dev/null; then
     fail_case "$name" "sanitizer finding while checking zero-Y PCC illuminant"
     sed -n '1,80p' "$run_log"
+    rm -f "$helper_bin"
     return
   fi
 
   if [ "$run_ec" -ne 0 ]; then
     fail_case "$name" "helper exited $run_ec"
     sed -n '1,80p' "$run_log"
+    rm -f "$helper_bin"
     return
   fi
 
+  rm -f "$helper_bin"
   pass_case "$name" "zero-Y custom PCC illuminant is rejected without D50 fallback"
 }
 

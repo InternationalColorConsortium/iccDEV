@@ -2003,8 +2003,8 @@ jobs:
           TOTAL_FAIL=0
           TOTAL_READ_FAIL=0
           if [ -d "$OUTDIR" ]; then
-            ASAN_FILES=$({ grep -rl "ERROR: AddressSanitizer" "$OUTDIR"/ 2>/dev/null || true; })
-            UBSAN_FILES=$({ grep -rl "runtime error:" "$OUTDIR"/ 2>/dev/null || true; })
+            ASAN_FILES=$({ grep -Irl "ERROR: AddressSanitizer" "$OUTDIR"/ 2>/dev/null || true; })
+            UBSAN_FILES=$({ grep -Irl "runtime error:" "$OUTDIR"/ 2>/dev/null || true; })
             TOTAL_LOGS=$(find "$OUTDIR" -name '*.log' -type f 2>/dev/null | wc -l)
             # Count pass/fail across per-profile logs (exit code in log content)
             for logf in "$OUTDIR"/*/*.log; do
@@ -2111,11 +2111,11 @@ jobs:
               pdir="$OUTDIR/$dir"
               if [ ! -d "$pdir" ]; then
                 echo "| $phase | $name | SKIP |"
-              elif grep -rq "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null; then
-                pa=$(grep -rl "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null | wc -l)
+              elif grep -Irq "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null; then
+                pa=$(grep -Irl "ERROR: AddressSanitizer" "$pdir"/ 2>/dev/null | wc -l)
                 echo "| $phase | $name | ASAN ($pa files) |"
-              elif grep -rq "runtime error:" "$pdir"/ 2>/dev/null; then
-                pu=$(grep -rl "runtime error:" "$pdir"/ 2>/dev/null | wc -l)
+              elif grep -Irq "runtime error:" "$pdir"/ 2>/dev/null; then
+                pu=$(grep -Irl "runtime error:" "$pdir"/ 2>/dev/null | wc -l)
                 echo "| $phase | $name | UBSAN ($pu files) |"
               elif [ -f "$pdir/.phase-fail" ]; then
                 reason="$(sanitize_line "$(sed -n '1p' "$pdir/.phase-fail")")"
