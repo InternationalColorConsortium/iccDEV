@@ -156,7 +156,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y \
             build-essential cmake gcc g++ clang ccache \
             libpng-dev libxml2-dev libtiff-dev \
@@ -395,7 +395,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y \
             build-essential cmake clang llvm \
             libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
@@ -595,7 +595,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y \
             build-essential cmake clang \
             libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
@@ -868,7 +868,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y build-essential cmake libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
       - name: Disable wxWidgets (headless CI)
@@ -959,7 +959,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y build-essential cmake libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
       - name: Disable wxWidgets (headless CI)
@@ -1066,7 +1066,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y build-essential cmake libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
       # ── macOS dependencies ──

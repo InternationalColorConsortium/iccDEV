@@ -14,7 +14,8 @@
 #      standard observer XML/JSON alias compatibility, issue #928 mluc setter
 #      canonical length checks, mluc read/UTF-16 validation, and issue #958
 #      PCC zero-Y illuminant validation, calculator sanitizer regressions,
-#      and lut16 invalid curve count validation
+#      lut16 invalid curve count validation, and namedColor2 pixel-to-name
+#      apply guards
 #
 # Hardening:
 #   - sanitize-sed.sh sourced in every step
@@ -36,6 +37,7 @@
 #   .github/scripts/iccdev-calculator-regression-tests.sh
 #   .github/scripts/iccdev-lut16-zero-curve-regression-tests.sh
 #   .github/ci/regression/lut16-zero-entry-curve-write.cpp
+#   .github/scripts/iccdev-namedcolor-apply-regression-tests.sh
 #
 ###############################################################
 
@@ -61,9 +63,12 @@ on:
       - '.github/ci/regression/pcc-zero-illuminant.cpp'
       - '.github/scripts/iccdev-calculator-regression-tests.sh'
       - '.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh'
+      - '.github/scripts/iccdev-namedcolor-apply-regression-tests.sh'
+      - '.github/scripts/ci-safe-apt-update.sh'
       - '.github/scripts/json-cli-exercise.sh'
       - '.github/ci/regression/lut16-zero-entry-curve-write.cpp'
       - '.github/ci/test-data/**'
+      - '.github/ci/regression/**'
       - 'IccProfLib/**'
       - 'IccXML/**'
       - 'IccJSON/**'
@@ -143,7 +148,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake clang-18 clang++-18 \
             libxml2-dev libtiff-dev libpng-dev libjpeg-dev \
@@ -1141,6 +1146,32 @@ jobs:
           echo "  Issue #955 lut16 invalid curve count validation: $r19_pass passed, $r19_fail failed"
           passed=$((passed + r19_pass))
           failed=$((failed + r19_fail))
+
+          # --- R20: namedColor2 pixel-to-name apply validation ---
+          echo "--- R20: namedColor2 pixel-to-name apply validation ---"
+          r20_pass=0 r20_fail=0
+          NAMEDCOLOR_APPLY_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-namedcolor-apply-regression-tests.sh"
+          if [ -f "$NAMEDCOLOR_APPLY_SCRIPT" ]; then
+            chmod +x "$NAMEDCOLOR_APPLY_SCRIPT"
+            r20_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r20-namedcolor-apply" \
+              "$NAMEDCOLOR_APPLY_SCRIPT" > "$OUTDIR/r20-namedcolor-apply.log" 2>&1 || r20_ec=$?
+            cat "$OUTDIR/r20-namedcolor-apply.log"
+            if [ "$r20_ec" -eq 0 ]; then
+              echo "  [OK]    namedColor2 pixel-to-name apply rejects malformed device data"
+              r20_pass=$((r20_pass + 1))
+            else
+              echo "  [FAIL]  namedColor2 apply regression script exited $r20_ec"
+              r20_fail=$((r20_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  namedColor2 apply regression script not found"
+          fi
+          echo "  namedColor2 pixel-to-name apply validation: $r20_pass passed, $r20_fail failed"
+          passed=$((passed + r20_pass))
+          failed=$((failed + r20_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

@@ -64,7 +64,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake \
             clang-18 clang++-18 llvm-18 \
@@ -1993,6 +1993,32 @@ jobs:
           echo "  Issue #955 lut16 invalid curve count validation: $r23_pass passed, $r23_fail failed"
           passed=$((passed + r23_pass))
           failed=$((failed + r23_fail))
+
+          # --- R24: namedColor2 pixel-to-name apply validation ---
+          echo "--- R24: namedColor2 pixel-to-name apply validation ---"
+          r24_pass=0 r24_fail=0
+          NAMEDCOLOR_APPLY_SCRIPT="${WORKSPACE_DIR}/.github/scripts/iccdev-namedcolor-apply-regression-tests.sh"
+          if [ -f "$NAMEDCOLOR_APPLY_SCRIPT" ]; then
+            chmod +x "$NAMEDCOLOR_APPLY_SCRIPT"
+            r24_ec=0
+            ICCDEV_TOOLS_DIR="${WORKSPACE_DIR}/build/Tools" \
+              ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing" \
+              ICCDEV_TEST_OUTDIR="$OUTDIR/r24-namedcolor-apply" \
+              "$NAMEDCOLOR_APPLY_SCRIPT" > "$OUTDIR/r24-namedcolor-apply.log" 2>&1 || r24_ec=$?
+            cat "$OUTDIR/r24-namedcolor-apply.log"
+            if [ "$r24_ec" -eq 0 ]; then
+              echo "  [OK]    namedColor2 pixel-to-name apply rejects malformed device data"
+              r24_pass=$((r24_pass + 1))
+            else
+              echo "  [FAIL]  namedColor2 apply regression script exited $r24_ec"
+              r24_fail=$((r24_fail + 1))
+            fi
+          else
+            echo "  [SKIP]  namedColor2 apply regression script not found"
+          fi
+          echo "  namedColor2 pixel-to-name apply validation: $r24_pass passed, $r24_fail failed"
+          passed=$((passed + r24_pass))
+          failed=$((failed + r24_fail))
 
           echo ""
           echo "Regression checks: $passed passed, $failed failed"

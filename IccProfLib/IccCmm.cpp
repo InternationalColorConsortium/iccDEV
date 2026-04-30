@@ -6900,7 +6900,8 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorN
 
     icFloatNumber DevicePix[16], PCSPix[3];
     std::string NamedColor;
-    icUInt32Number i, j;
+    icUInt32Number i;
+    icInt32Number j;
 
     if (IsSrcPCS()) {
       if (m_bSrcPcsConversion)
@@ -6910,14 +6911,20 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform* pApply, icChar *DstColorN
         PCSPix[i] = SrcPixel[i];
 
       j = pTag->FindCachedPCSColor(PCSPix);
-      pTag->GetColorName(NamedColor, j);
+      if (j<0 || !pTag->GetColorName(NamedColor, j))
+        return icCmmStatColorNotFound;
     }
     else {
-      for(i=0; i<m_pTag->GetDeviceCoords(); i++)
+      const icUInt32Number nDeviceCoords = pTag->GetDeviceCoords();
+      if (nDeviceCoords > 16)
+        return icCmmStatTooManySamples;
+
+      for(i=0; i<nDeviceCoords; i++)
         DevicePix[i] = SrcPixel[i];
 
       j = pTag->FindDeviceColor(DevicePix);
-      pTag->GetColorName(NamedColor, j);
+      if (j<0 || !pTag->GetColorName(NamedColor, j))
+        return icCmmStatColorNotFound;
     }
 
     snprintf(DstColorName, 256, "%s", NamedColor.c_str());
@@ -9932,7 +9939,10 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
           break;
 
         case icApplyPixel2Named:
-          pXform->Apply(pApply, NamedColor, pSrc);
+          rv = pXform->Apply(pApply, NamedColor, pSrc);
+          if (rv) {
+            return rv;
+          }
 #ifdef DEBUG_CMM_APPLY
           printf("Xfm%d: \"%s\"\n", nCount++, NamedColor);
 #endif
@@ -10088,7 +10098,10 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icFloatNumber *DstPixel, const icFloat
             break;
 
           case icApplyPixel2Named:
-            pXform->Apply(pApply, NamedColor, pSrc);
+            rv = pXform->Apply(pApply, NamedColor, pSrc);
+            if (rv) {
+              return rv;
+            }
             break;
 
           case icApplyNamed2Pixel:
@@ -10213,7 +10226,10 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar* DstColorName, const icFloatNum
           break;
 
         case icApplyPixel2Named:
-          pXform->Apply(pApply, NamedColor, pSrc);
+          rv = pXform->Apply(pApply, NamedColor, pSrc);
+          if (rv) {
+            return rv;
+          }
           break;
 
         case icApplyNamed2Pixel:
@@ -10249,7 +10265,10 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar* DstColorName, const icFloatNum
       switch(pXform->GetInterface()) {
 
       case icApplyPixel2Named:
-        pXform->Apply(pApply, DstColorName, pSrc);
+        rv = pXform->Apply(pApply, DstColorName, pSrc);
+        if (rv) {
+          return rv;
+        }
         break;
 
       case icApplyPixel2Pixel:
@@ -10274,7 +10293,10 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar* DstColorName, const icFloatNum
     }
 
     pXform = (CIccXformNamedColor*)pApplyXform;
-    pXform->Apply(pApply, DstColorName, pSrc);
+    rv = pXform->Apply(pApply, DstColorName, pSrc);
+    if (rv) {
+      return rv;
+    }
   }
 
   return icCmmStatOk;
@@ -10475,7 +10497,10 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar *DstColorName, const icChar *Sr
 
 
         case icApplyPixel2Named:
-          pXform->Apply(pApply, NamedColor, pSrc);
+          rv = pXform->Apply(pApply, NamedColor, pSrc);
+          if (rv) {
+            return rv;
+          }
           break;
 
         case icApplyNamed2Pixel:
@@ -10504,7 +10529,10 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar *DstColorName, const icChar *Sr
       pXform = (CIccXformNamedColor*)pApplyXform;
       switch(pXform->GetInterface()) {
       case icApplyPixel2Named:
-        pXform->Apply(pApply, DstColorName, pSrc);
+        rv = pXform->Apply(pApply, DstColorName, pSrc);
+        if (rv) {
+          return rv;
+        }
         break;
 
       case icApplyPixel2Pixel:

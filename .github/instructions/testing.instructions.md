@@ -29,6 +29,7 @@ Script-based gates live in `.github/scripts/`, including:
 - `iccdev-stdobserver-regression-tests.sh`
 - `iccdev-mluc-setter-regression-tests.sh`
 - `iccdev-mluc-read-utf16-regression-tests.sh`
+- `iccdev-namedcolor-apply-regression-tests.sh`
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.
