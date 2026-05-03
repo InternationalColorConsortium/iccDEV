@@ -156,8 +156,8 @@ jobs:
 
           CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
           ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
-          if ! grep -q "^Total Tests: 14$" "${CTEST_LIST}"; then
-            echo "::error title=CTest Discovery::Expected Total Tests: 14"
+          if ! grep -q "^Total Tests: 15$" "${CTEST_LIST}"; then
+            echo "::error title=CTest Discovery::Expected Total Tests: 15"
             cat "${CTEST_LIST}"
             exit 1
           fi

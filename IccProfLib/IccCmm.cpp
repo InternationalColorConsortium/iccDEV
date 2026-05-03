@@ -560,7 +560,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       if (bInput) {
         CIccTag *pTag = NULL;
         if (bUseD2BTags) {
-          if (pProfile->m_Header.spectralPCS && nLutType!=icXformLutColorimetric) {
+          if (nLutType != icXformLutColorimetric &&
+              (pProfile->m_Header.spectralPCS || pProfile->m_Header.version >= icVersionNumberV5)) {
             pTag = pProfile->FindTag(icSigDToB0Tag + nTagIntent);
 
             if (!pTag && nTagIntent == icAbsoluteColorimetric) {
@@ -576,7 +577,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
               }
             }
 
-            if (pTag)
+            if (pTag && pProfile->m_Header.spectralPCS)
               bUseSpectralPCS = true;
 
             if (!pTag) {
@@ -647,16 +648,11 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           pTag = NULL;
 
         if (!pTag) {
-          if (pProfile->m_Header.version < icVersionNumberV5) {
-            //Matrix/TRC profiles are deprecated in v5 profiles
-            if (pProfile->m_Header.colorSpace == icSigRgbData) {
-              rv = CIccXformCreator::CreateXform(icXformTypeMatrixTRC, NULL, pHintManager);
-            }
-            else if (pProfile->m_Header.colorSpace == icSigGrayData) {
-              rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
-            }
-            else
-              return NULL;
+          if (pProfile->m_Header.colorSpace == icSigRgbData) {
+            rv = CIccXformCreator::CreateXform(icXformTypeMatrixTRC, NULL, pHintManager);
+          }
+          else if (pProfile->m_Header.colorSpace == icSigGrayData) {
+            rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
           }
           else
             return NULL;
@@ -778,15 +774,11 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         }
 
         if (!pTag) {
-          if (pProfile->m_Header.version < icVersionNumberV5) {
-            if (pProfile->m_Header.colorSpace == icSigRgbData) {
-              rv = CIccXformCreator::CreateXform(icXformTypeMatrixTRC, pTag, pHintManager);
-            }
-            else if (pProfile->m_Header.colorSpace == icSigGrayData) {
-              rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
-            }
-            else
-              return NULL;
+          if (pProfile->m_Header.colorSpace == icSigRgbData) {
+            rv = CIccXformCreator::CreateXform(icXformTypeMatrixTRC, pTag, pHintManager);
+          }
+          else if (pProfile->m_Header.colorSpace == icSigGrayData) {
+            rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
           }
           else
             return NULL;
@@ -932,22 +924,49 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
       CIccTag *pTag = NULL;
       if (bUseD2BTags) {
-        if (pProfile->m_Header.spectralPCS) {
+        if (pProfile->m_Header.spectralPCS || pProfile->m_Header.version >= icVersionNumberV5) {
 
           pTag = pProfile->FindTag(icSigBRDFDToB0Tag + nTagIntent);
 
-          if (pTag)
+          if (!pTag && nTagIntent == icAbsoluteColorimetric) {
+            pTag = pProfile->FindTag(icSigBRDFDToB1Tag);
+            if (pTag)
+              nTagIntent = icRelativeColorimetric;
+          }
+          else if (!pTag && nTagIntent == icRelativeColorimetric) {
+            pTag = pProfile->FindTag(icSigBRDFDToB3Tag);
+            if (pTag) {
+              nTagIntent = icAbsoluteColorimetric;
+              bAbsToRel = true;
+            }
+          }
+
+          if (pTag && pProfile->m_Header.spectralPCS)
             bUseSpectralPCS = true;
+
+          if (!pTag) {
+            pTag = pProfile->FindTag(icSigBRDFDToB0Tag);
+          }
+          if (!pTag) {
+            pTag = pProfile->FindTag(icSigBRDFDToB1Tag);
+          }
+          if (!pTag) {
+            pTag = pProfile->FindTag(icSigBRDFDToB3Tag);
+            if (pTag) {
+              nTagIntent = icAbsoluteColorimetric;
+              bAbsToRel = true;
+            }
+          }
         }
       }
       else
       {
         pTag = pProfile->FindTag(icSigBRDFAToB0Tag + nTagIntent);
-
-        //Unsupported elements cause fall back behavior
-        if (pTag && !pTag->IsSupported())
-          pTag = NULL;
       }
+
+      //Unsupported elements cause fall back behavior
+      if (pTag && !pTag->IsSupported())
+        pTag = NULL;
 
       if (pTag != NULL)
       {

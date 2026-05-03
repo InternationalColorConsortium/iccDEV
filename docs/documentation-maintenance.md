@@ -16,7 +16,6 @@ point to deeper references.
 | JSON tag examples | `docs/iccjson-tag-types.md` |
 | Bisect workflow | `docs/bisect.md` |
 | Regression workflow updates | `docs/regression-workflow-governance.md` |
-| CI log audit case studies | `docs/ci-shared-exports-log-audit-2026-04-30.md` |
 | CodeQL queries | `.github/codeql-queries/README.md` |
 | Security issue format | `.github/prompts/SECURITY_ISSUE_FORMAT.md` |
 | Agent routing | `.github/copilot-instructions.md` |

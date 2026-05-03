@@ -230,13 +230,14 @@ icStatusCMM CIccPRMG::EvaluateProfile(CIccProfile *pProfile, icRenderingIntent n
   }
 
   CIccCmm Lab2Dev2Lab(icSigLabData, icSigLabData, false);
+  icXformLutType nLutType = buseMpeTags ? icXformLutColor : icXformLutColorimetric;
 
-  icStatusCMM result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, icXformLutColorimetric, buseMpeTags);
+  icStatusCMM result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, nLutType, buseMpeTags);
   if (result != icCmmStatOk) {
     return result;
   }
 
-  result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, icXformLutColorimetric, buseMpeTags);
+  result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, nLutType, buseMpeTags);
   if (result != icCmmStatOk) {
     return result;
   }

@@ -98,10 +98,11 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
 
   CIccCmm dev2Lab(icSigUnknownData, icSigLabData);
   CIccCmm Lab2Dev2Lab(icSigLabData, icSigLabData, false);
+  icXformLutType nLutType = buseMpeTags ? icXformLutColor : icXformLutColorimetric;
 
   icStatusCMM result;
 
-  result = dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, icXformLutColorimetric, buseMpeTags);
+  result = dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, nLutType, buseMpeTags);
 
   if (result!=icCmmStatOk) {
     return result;
@@ -112,12 +113,12 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     return result;
   }
 
-  result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, icXformLutColorimetric, buseMpeTags);
+  result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, nLutType, buseMpeTags);
   if (result != icCmmStatOk) {
     return result;
   }
 
-  result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, icXformLutColorimetric, buseMpeTags);
+  result = Lab2Dev2Lab.AddXform(*pProfile, nIntent, nInterp, NULL, nLutType, buseMpeTags);
   if (result != icCmmStatOk) {
     return result;
   }

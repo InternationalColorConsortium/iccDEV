@@ -349,3 +349,14 @@ iccdev_add_script_test(
 set_tests_properties(iccdev.namedcolor-apply-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
+
+iccdev_add_script_test(
+  iccdev.v5-namedcmm-regressions
+  300
+  "iccdev;v5;namedcmm;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-v5-namedcmm-regression-tests.sh"
+)
+set_tests_properties(iccdev.v5-namedcmm-regressions PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
