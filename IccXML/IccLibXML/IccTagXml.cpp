@@ -2867,8 +2867,21 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
             return false;
           }
 
-          SetSize(num);
+          if (!SetSize(num)) {
+            parseStr += "Out of memory allocating curve data from '";
+            parseStr += filename;
+            parseStr += "'.\n";
+            delete file;
+            return false;
+          }
           icFloatNumber *dst =  GetData(0);
+          if (num && !dst) {
+            parseStr += "Curve data allocation failed for '";
+            parseStr += filename;
+            parseStr += "'.\n";
+            delete file;
+            return false;
+          }
           icUInt32Number i;
           for (i=0; i<num; i++) {
             if (!file->Read8(&value)) { 
@@ -2894,8 +2907,21 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
             return false;
           }
 
-          SetSize(num);
+          if (!SetSize(num)) {
+            parseStr += "Out of memory allocating curve data from '";
+            parseStr += filename;
+            parseStr += "'.\n";
+            delete file;
+            return false;
+          }
           icFloatNumber *dst = GetData(0);
+          if (num && !dst) {
+            parseStr += "Curve data allocation failed for '";
+            parseStr += filename;
+            parseStr += "'.\n";
+            delete file;
+            return false;
+          }
           icUInt32Number i;
           for (i=0; i<num; i++) {
             if (!file->Read16(&value)) {  //this assumes data is big endian
@@ -2930,8 +2956,21 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
             return false;
           }
 
-          SetSize(num);
+          if (!SetSize(num)) {
+            parseStr += "Out of memory allocating curve data from '";
+            parseStr += filename;
+            parseStr += "'.\n";
+            delete file;
+            return false;
+          }
           icFloatNumber *dst = GetData(0);
+          if (num && !dst) {
+            parseStr += "Curve data allocation failed for '";
+            parseStr += filename;
+            parseStr += "'.\n";
+            delete file;
+            return false;
+          }
 
           icUInt32Number i;
           for (i=0; i<num; i++) {

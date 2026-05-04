@@ -47,7 +47,7 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 15 tests:
+Linux currently registers 16 tests:
 
 | Test | Source |
 |------|--------|
@@ -66,6 +66,7 @@ Linux currently registers 15 tests:
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
+| `iccdev.version-bcd-regressions` | `.github/scripts/iccdev-version-bcd-regression-tests.sh` |
 
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.
 The JSON round-trip uses a temporary directory for generated `.json` and

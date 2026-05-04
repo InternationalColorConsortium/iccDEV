@@ -1792,6 +1792,18 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     }
 
     icUInt8Number  bcdpair = (icUInt8Number)(m_Header.version >> 24);
+    bool bInvalidVersionBcd =
+        ((bcdpair >> 4) > 9) || ((bcdpair & 0x0F) > 9) ||
+        ((((m_Header.version & 0x00FF0000) >> 20) & 0x0F) > 9) ||
+        ((((m_Header.version & 0x00FF0000) >> 16) & 0x0F) > 9);
+
+    if (bInvalidVersionBcd) {
+        sReport += icMsgValidateWarning;
+        snprintf(buf, bufSize, "Version number 0x%08X contains non-BCD digit(s).\n", m_Header.version);
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateWarning);
+    }
+
     // Report on unusual version (stored as BCD)
     if (bcdpair<0x05 && (m_Header.version & 0x0000FFFF)) {
         sReport += icMsgValidateWarning;

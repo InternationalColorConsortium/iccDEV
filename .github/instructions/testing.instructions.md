@@ -37,7 +37,7 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
-Linux currently registers 14 CTest suites. Windows currently registers 2 CTest
+Linux currently registers 15 CTest suites. Windows currently registers 2 CTest
 suites through `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The Windows
 wrapper runs the batch scripts from a disposable copy of `Testing/` under the
 build tree and must not dirty the source `Testing/` directory.
@@ -62,6 +62,7 @@ Script-based gates live in `.github/scripts/`, including:
 - `iccdev-mluc-setter-regression-tests.sh`
 - `iccdev-mluc-read-utf16-regression-tests.sh`
 - `iccdev-namedcolor-apply-regression-tests.sh`
+- `iccdev-version-bcd-regression-tests.sh`
 
 When adding a new regression input, add the matching script or workflow assertion
 in the same change.

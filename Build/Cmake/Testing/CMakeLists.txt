@@ -360,3 +360,14 @@ iccdev_add_script_test(
 set_tests_properties(iccdev.v5-namedcmm-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
+
+iccdev_add_script_test(
+  iccdev.version-bcd-regressions
+  300
+  "iccdev;version;bcd;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-version-bcd-regression-tests.sh"
+)
+set_tests_properties(iccdev.version-bcd-regressions PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)

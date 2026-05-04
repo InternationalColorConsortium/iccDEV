@@ -244,17 +244,22 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           BITCODE_FOUND=0
-          for lib in Build/IccProfLib/libIccProfLib2-static.a \
-                     Build/IccXML/libIccXML2-static.a \
-                     Build/IccJSON/libIccJSON2-static.a; do
+          STATIC_POSTFIX=""
+          if [ "$MATRIX_BUILD_TYPE" = "Debug" ]; then
+            STATIC_POSTFIX="d"
+          fi
+          for lib in Build/IccProfLib/libIccProfLib2-static${STATIC_POSTFIX}.a \
+                     Build/IccXML/libIccXML2-static${STATIC_POSTFIX}.a \
+                     Build/IccJSON/libIccJSON2-static${STATIC_POSTFIX}.a; do
             if [ ! -f "$lib" ]; then
-              echo "[SKIP] $lib not found"
-              continue
+              echo "::error title=Missing Static Library::$lib not found"
+              exit 1
             fi
             TMP_DIR="$(mktemp -d)"
             (cd "$TMP_DIR" && ar x "$GITHUB_WORKSPACE/$lib")

@@ -1498,8 +1498,19 @@ const icChar *CIccInfo::GetUnknownName(icUInt32Number val)
   return m_szStr;
 }
 
+static bool icIsValidBcdByte(icUInt32Number val)
+{
+  return ((val >> 4) & 0xf) <= 9 && (val & 0xf) <= 9;
+}
+
 const icChar *CIccInfo::GetVersionName(icUInt32Number val)
 {
+  if (!icIsValidBcdByte((val >> 24) & 0xff) ||
+      !icIsValidBcdByte((val >> 16) & 0xff)) {
+    snprintf(m_szStr, m_bufSize, "Invalid BCD version 0x%08X", val);
+    return m_szStr;
+  }
+
   icFloatNumber ver = (icFloatNumber)(((val>>28)&0xf)*10.0 + ((val>>24)&0xf) +
                                       ((val>>20)&0xf)/10.0 + ((val>>16)&0xf)/100.0);
 
@@ -1510,6 +1521,12 @@ const icChar *CIccInfo::GetVersionName(icUInt32Number val)
 
 const icChar *CIccInfo::GetSubClassVersionName(icUInt32Number val)
 {
+  if (!icIsValidBcdByte((val >> 8) & 0xff) ||
+      !icIsValidBcdByte(val & 0xff)) {
+    snprintf(m_szStr, m_bufSize, "Invalid BCD subclass version 0x%04X", val & 0xffff);
+    return m_szStr;
+  }
+
   icFloatNumber ver = (icFloatNumber)(((val >> 12) & 0xf)*10.0 + ((val >> 8) & 0xf) +
     ((val >> 4) & 0xf) / 10.0 + (val & 0xf) / 100.0);
 
