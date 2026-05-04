@@ -249,6 +249,78 @@ CIccTag::~CIccTag()
 
 /**
  ****************************************************************************
+ * Name: OptionsFromVerbosity / VerbosityFromOptions
+ *
+ * Purpose: Translate between the legacy integer nVerboseness gates
+ *          (>25 / >50 / >75) and the structured DescribeOptions struct.
+ *          Round-trip through these helpers preserves the verbosity
+ *          tier — i.e. VerbosityFromOptions(OptionsFromVerbosity(v))
+ *          maps each input v back into the same gate bucket.
+ *****************************************************************************
+ */
+DescribeOptions OptionsFromVerbosity(int v)
+{
+  DescribeOptions o;
+  o.emit_header        = true;
+  o.emit_text_meta     = (v > 25);
+  o.emit_text_full     = (v > 50);
+  o.emit_curve_points  = (v > 75);
+  o.emit_clut_channels = (v > 75);
+  o.emit_clut_cells    = (v > 75);
+  o.emit_spd_samples   = (v > 75);
+  // Budgets default to 0 (unbounded) — matches verbosity-only callers.
+  return o;
+}
+
+int VerbosityFromOptions(const DescribeOptions &opts)
+{
+  // Pick the highest tier any enabled section requires. Tiers chosen to
+  // sit just past the legacy gate so `> N` checks remain truthy.
+  if (opts.emit_curve_points || opts.emit_clut_channels ||
+      opts.emit_clut_cells   || opts.emit_spd_samples)
+    return 100;
+  if (opts.emit_text_full)
+    return 76;
+  if (opts.emit_text_meta)
+    return 51;
+  return 26;
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccTag::Describe (sink overload)
+ *
+ * Purpose: Default sink-based Describe(). Delegates to the legacy
+ *          Describe(std::string&, int) virtual via a StringDescribeSink,
+ *          then forwards the bytes to `sink` honouring
+ *          opts.max_total_bytes. Tag classes that produce large output
+ *          (CIccMBB, CIccCLUT, ...) override this virtual to stream
+ *          output directly and honour the structured option flags.
+ *****************************************************************************
+ */
+void CIccTag::Describe(IDescribeSink &sink, const DescribeOptions &opts)
+{
+  std::string buffer;
+  this->Describe(buffer, VerbosityFromOptions(opts));
+
+  std::size_t total = buffer.size();
+  std::size_t toWrite = total;
+  bool truncated = false;
+  if (opts.max_total_bytes && toWrite > opts.max_total_bytes) {
+    toWrite = opts.max_total_bytes;
+    truncated = true;
+  }
+  if (toWrite)
+    sink.Write(buffer.data(), toWrite);
+
+  if (truncated && sink.ShouldContinue()) {
+    static const char kTruncFooter[] = "\n[truncated]\n";
+    sink.Write(kTruncFooter, sizeof(kTruncFooter) - 1);
+  }
+}
+
+/**
+ ****************************************************************************
  * Name: CIccTag::Create
  * 
  * Purpose: This is a static tag creator based upon tag signature type

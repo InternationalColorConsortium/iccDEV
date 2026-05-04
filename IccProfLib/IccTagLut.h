@@ -338,6 +338,9 @@ public:
   void DumpLut(std::string  &sDescription, const icChar *szName,
                icColorSpaceSignature csInput, icColorSpaceSignature csOutput,
                int nVerboseness, bool bUseLegacy=false);
+  void DumpLut(IDescribeSink &sink, const icChar *szName,
+               icColorSpaceSignature csInput, icColorSpaceSignature csOutput,
+               const DescribeOptions &opts, bool bUseLegacy=false);
 
   icFloatNumber& operator[](int index) { return m_pData[index]; }
   icFloatNumber* GetData(int index) { return &m_pData[index]; }
@@ -379,6 +382,10 @@ public:
 
 protected:
   void Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy=false );
+  // Sink-based iteration. `cellsRemaining`==NULL means unbounded.
+  void Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number nPos,
+               size_t bufSize, bool bUseLegacy,
+               std::size_t *cellsRemaining);
   void SubIterate(IIccCLUTExec* pExec, icUInt8Number nIndex, icUInt32Number nPos);
 
   icCLUTCLIPFUNC m_UnitClipFunc;
@@ -448,6 +455,12 @@ public:
   icUInt8Number OutputChannels() const { return m_nOutput; }
 
   virtual void Describe(std::string &sDescription, int nVerboseness);
+  // Sink override — streams the (potentially huge) CLUT cell dump
+  // through `sink` instead of materializing the full description in
+  // memory first. Curves and matrix output, which is bounded, still
+  // uses small per-call string buffers internally.
+  using CIccTag::Describe;
+  virtual void Describe(IDescribeSink &sink, const DescribeOptions &opts);
 
   virtual void SetColorSpaces(icColorSpaceSignature csInput, icColorSpaceSignature csOutput);
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
