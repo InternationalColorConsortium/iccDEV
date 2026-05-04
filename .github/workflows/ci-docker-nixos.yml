@@ -94,7 +94,7 @@ jobs:
 
       - name: Attest SBOM
         if: github.event_name != 'pull_request'
-        uses: actions/attest-sbom@b74e95116c27d38263fc426c93ebfca07aa6197b # v3.0.0
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v3.0.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
