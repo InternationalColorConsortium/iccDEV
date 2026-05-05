@@ -149,6 +149,21 @@ bool CIccSparseMatrix::Init(icUInt16Number nRows, icUInt16Number nCols, bool bSe
   if (!m_pMatrix)
     return false;
 
+  // Hard upper bound on profile-controlled dimensions to defend
+  // Union()/iteration loops against malformed sparse matrix data
+  // (CWE-400/CWE-834). Real ICC spectral matrices have ~36-95 rows
+  // (visible-spectrum sampling); 4096 is a generous ceiling.
+  const icUInt16Number kMaxSparseMatrixDim = 4096;
+  if (nRows > kMaxSparseMatrixDim || nCols > kMaxSparseMatrixDim) {
+    m_nRows = 0;
+    m_nCols = 0;
+    m_Data = NULL;
+    m_RowStart = NULL;
+    m_ColumnIndices = NULL;
+    m_nMaxEntries = 0;
+    return false;
+  }
+
   icUInt16Number *Dim = (icUInt16Number*)m_pMatrix;
 
   if (m_Data)

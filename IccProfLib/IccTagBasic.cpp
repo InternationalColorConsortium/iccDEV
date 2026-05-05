@@ -3158,6 +3158,15 @@ bool CIccTagNamedColor2::Read(icUInt32Number size, CIccIO *pIO)
   m_szPrefix[sizeof(m_szPrefix)-1] = 0;
   m_szSufix[sizeof(m_szSufix)-1] = 0;
 
+  // Hard upper bounds on profile-controlled counts to defend
+  // Describe()/Find()/Apply() loops against malformed tags
+  // (CWE-400/CWE-834). Real profiles have a few thousand named
+  // colors at most and well under 16 device channels.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+  if (nNum > kMaxNamedColorEntries || nCoords > kMaxNamedColorDeviceCoords)
+    return false;
+
   size -= nTagHdrSize;
 
   size_t nCount = size / (32+(3+(size_t)nCoords)*sizeof(icUInt16Number));
@@ -4793,6 +4802,12 @@ bool CIccTagSparseMatrixArray::Read(icUInt32Number size, CIccIO *pIO)
   
   // reject tags with invalid counts of items
   if (nNumMatrices < 1 || nChannels < 1)
+    return false;
+
+  // Hard upper bound on profile-controlled matrix count to defend
+  // Validate()/Apply() loops against malformed tags (CWE-400/CWE-834).
+  const icUInt32Number kMaxSparseMatrixArrayCount = 65536;
+  if (nNumMatrices > kMaxSparseMatrixArrayCount)
     return false;
 
   m_nMatrixType = (icSparseMatrixType)nMatrixType;
