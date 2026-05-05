@@ -16,10 +16,6 @@ name: ci-docker
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
-  artifact-metadata: write
 
 on:
   workflow_dispatch:
@@ -29,6 +25,12 @@ jobs:
     name: "Docker (${{ matrix.variant }})"
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -48,7 +50,7 @@ jobs:
             run_shell: sh
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           persist-credentials: false
 
@@ -61,13 +63,24 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/iccdev${MATRIX_SUFFIX}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          if [[ ! "$owner" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+            echo "Invalid repository owner for image name" >&2
+            exit 1
+          fi
+          if [[ ! "$MATRIX_SUFFIX" =~ ^(-nixos)?$ ]]; then
+            echo "Invalid Docker image suffix" >&2
+            exit 1
+          fi
+
+          printf 'name=ghcr.io/%s/iccdev%s\n' "$owner" "$MATRIX_SUFFIX" >> "$GITHUB_OUTPUT"  # elements-sanitized
+
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
@@ -76,7 +89,7 @@ jobs:
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -84,7 +97,7 @@ jobs:
 
       - name: Build and push
         id: build-push
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
         with:
           context: .
           file: ./${{ matrix.dockerfile }}
@@ -98,7 +111,7 @@ jobs:
 
       - name: Generate SBOM
         if: github.event_name != 'pull_request'
-        uses: anchore/sbom-action@f0d33c151c04af6fcbf4363834e838fcc7c87783 # v0.22.2
+        uses: anchore/sbom-action@f0d33c151c04af6fcbf4363834e838fcc7c87783  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           format: spdx-json
@@ -106,7 +119,7 @@ jobs:
 
       - name: Attest build provenance
         if: github.event_name != 'pull_request'
-        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275 # v3.2.0
+        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
@@ -114,7 +127,7 @@ jobs:
 
       - name: Attest SBOM
         if: github.event_name != 'pull_request'
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v3.0.0
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v3.0.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
@@ -123,7 +136,7 @@ jobs:
 
       - name: Upload SBOM
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
           path: sbom.spdx.json
@@ -163,7 +176,7 @@ jobs:
           TOOL_SMOKE=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
             "${MATRIX_WORKDIR}/Build/Tools/IccDumpProfile/iccDumpProfile 2>&1 || true")
           if ! grep -qiE 'Usage:|IccProfLib' <<< "$TOOL_SMOKE"; then
-            echo "::error::Tool smoke test failed — runtime library issue"
+            echo "::error::Tool smoke test failed -- runtime library issue"
             echo "$TOOL_SMOKE"
             exit 1
           fi

@@ -18,4 +18,4 @@ for source_file in /etc/apt/sources.list.d/*; do
   fi
 done
 
-sudo apt-get update -qq
+sudo apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq

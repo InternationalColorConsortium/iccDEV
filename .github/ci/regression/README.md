@@ -28,6 +28,13 @@ Test 18 (Regression Bisect).
 | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` | v5 NamedCMM bring-up | v5 non-spectral DToB/BRDFDToB and matrix/TRC fallback paths were skipped by CMM selection | Recreates compact v5 profiles in the configured test output directory and verifies `iccApplyNamedCmm` plus `iccRoundTrip` complete without sanitizer findings |
 | `.github/scripts/iccdev-version-bcd-regression-tests.sh` | `bisect-version-bcd-report` | ICC header version bytes with non-BCD nibbles were decoded as decimal-looking versions such as 141.91 | Mutates a known-good ICC profile version to `0xDB91BA7B` and verifies explicit invalid BCD diagnostics plus valid-version compatibility |
 
+## Workflow-based external compatibility checks
+
+| Workflow | Issue | Purpose | Check |
+|----------|-------|---------|-------|
+| `.github/workflows/ci-issue-987-unicolour.yml` | #987 | Compare iccDEV issue #987 FOGRA39 handling with the reporter's likely Unicolour context and MinGW native toolchain | Runs the fixed `waacton/Unicolour` `IccProfileTests.Fogra39` test on Windows, builds `IccProfLib2` and `iccDumpProfile` with UCRT64 MinGW across Debug/Release/RelWithDebInfo and shared/static linkage, runs `iccdev.windows-icc-dump-profile-smoke` for every matrix row, runs `iccdev.issue-987-shared-mpe-export` for shared builds, and captures `iccDumpProfile --read --diag` output for the attached FOGRA39 profile |
+| `.github/workflows/ci-pr-win.yml` | MinGW toolchain | Keep normal Windows PR CI from regressing MinGW CMake/tool support | Runs a fast UCRT64 MinGW Release static build of `iccDumpProfile` and the `iccdev.windows-icc-dump-profile-smoke` CTest |
+
 ## Adding a new PoC
 
 1. Minimize the crash file (smallest reproducer)

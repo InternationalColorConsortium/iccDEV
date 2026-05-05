@@ -42,6 +42,24 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
+Windows MinGW single-config generators:
+
+```cmd
+set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
+cmake -S Build/Cmake -B out/mingw-x64 -G Ninja ^
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
+  -DCMAKE_C_COMPILER=C:\msys64\ucrt64\bin\x86_64-w64-mingw32-gcc.exe ^
+  -DCMAKE_CXX_COMPILER=C:\msys64\ucrt64\bin\x86_64-w64-mingw32-g++.exe ^
+  -DENABLE_TESTS=ON ^
+  -DENABLE_TOOLS=ON ^
+  -DENABLE_ICCXML=OFF ^
+  -DENABLE_ICCJSON=OFF ^
+  -DENABLE_IMAGE_TOOLS=OFF ^
+  -DENABLE_WXWIDGETS=OFF
+cmake --build out/mingw-x64 --target iccDumpProfile IccProfLib2 --parallel
+ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
+```
+
 Use `--no-tests=error` for discovery and execution so a registration regression
 cannot pass as a green no-op.
 
@@ -74,18 +92,29 @@ The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
 files in `Testing/`.
 
-Windows currently registers 2 tests:
+Windows currently registers 4 tests:
 
 | Test | Source |
 |------|--------|
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
 | `iccdev.windows-legacy-run-tests` | `Testing/RunTests.bat` |
+| `iccdev.windows-icc-dump-profile-smoke` | `Build/Cmake/Testing/RunWindowsDumpProfileSmokeTest.cmake` |
+| `iccdev.issue-987-shared-mpe-export` | `Build/Cmake/Testing/RunWindowsSharedExportTest.cmake` |
 
-The Windows tests run through
-`Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies
-`Testing/` into `build/Testing/ctest-output/windows-testing`, runs the batch
-scripts from that disposable directory, verifies key output, and fails if the
-source `Testing/` tree is changed.
+The batch-backed Windows tests run through
+`Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
+into `build/Testing/ctest-output/windows-testing`, runs the batch scripts from
+that disposable directory, verifies key output, and fails if the source
+`Testing/` tree is changed.
+
+`iccdev.windows-icc-dump-profile-smoke` runs `iccDumpProfile --read --diag`
+against the checked-in `Testing/CalcTest/calcUnderStack_add.icc` profile and
+verifies the eager `ReadIccProfile()` path, expected profile size, tag count,
+and header/file-size diagnostic. `iccdev.issue-987-shared-mpe-export` is a
+focused Windows shared-library regression for MSVC and MinGW. It checks that
+`IccProfLib2.dll` exports `CIccTagMultiProcessElement::NumElements` with
+`dumpbin` or `objdump`, then builds and runs a small consumer against the
+build-tree DLL and import library.
 
 ## Fixtures and Logs
 

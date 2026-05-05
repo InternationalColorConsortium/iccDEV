@@ -59,6 +59,33 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
 
+## Windows MinGW UCRT64
+
+Install MSYS2 UCRT64 packages for the selected feature set. A core command-line
+tool build uses GCC, CMake, Ninja, libxml2, and nlohmann-json:
+
+```cmd
+pacman -S --needed ^
+  mingw-w64-ucrt-x86_64-gcc ^
+  mingw-w64-ucrt-x86_64-cmake ^
+  mingw-w64-ucrt-x86_64-ninja ^
+  mingw-w64-ucrt-x86_64-make ^
+  mingw-w64-ucrt-x86_64-libxml2 ^
+  mingw-w64-ucrt-x86_64-nlohmann-json
+
+set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
+cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
+  -DCMAKE_BUILD_TYPE=Release ^
+  -DENABLE_TOOLS=ON ^
+  -DENABLE_ICCXML=ON ^
+  -DENABLE_ICCJSON=OFF ^
+  -DENABLE_IMAGE_TOOLS=OFF ^
+  -DENABLE_WXWIDGETS=OFF ^
+  -DENABLE_CMM_TOOLS=OFF ^
+  -DENABLE_IIS_TOOLS=OFF
+cmake --build out/mingw-x64 --target iccDumpProfile --parallel
+```
+
 ## CTest Tool Suites
 
 Enable both tools and tests to expose the script-backed tool suites through

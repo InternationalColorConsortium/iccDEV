@@ -5,7 +5,7 @@
 #                 https://color.org
 #
 #
-# Intent: Windows MSVC build and test pipeline for PR validation
+# Intent: Windows MSVC and MinGW build and test pipeline for PR validation
 #
 # Last Updated: 2026-04-05 23:41:13 UTC by David Hoyt
 #               Review Permissions
@@ -339,3 +339,151 @@ jobs:
           "Runner OS: $(Sanitize-Line $env:GH_RUNNER_OS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+  mingw-smoke:
+    name: MinGW UCRT64 smoke
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup MSYS2 UCRT64 MinGW
+        id: setup-msys2
+        uses: msys2/setup-msys2@40677d36a502eb2cf0fb808cc9dec31bf6152638  # v2.28.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-make
+            mingw-w64-ucrt-x86_64-nlohmann-json
+
+      - name: Run MinGW CTest smoke
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          MSYS2_LOCATION: ${{ steps.setup-msys2.outputs.msys2-location }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $env:GH_NO_UPDATE_NOTIFIER = '1'
+          $env:GH_PROMPT_DISABLED = '1'
+
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          if (Test-Path env:ACTIONS_ID_TOKEN_REQUEST_URL) {
+            Remove-Item env:ACTIONS_ID_TOKEN_REQUEST_URL
+          }
+          if (Test-Path env:ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
+            Remove-Item env:ACTIONS_ID_TOKEN_REQUEST_TOKEN
+          }
+          . .github/scripts/sanitize.ps1
+
+          $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
+          $ucrtBin = Join-Path $msysRoot 'ucrt64\bin'
+          $usrBin = Join-Path $msysRoot 'usr\bin'
+          $env:PATH = "$ucrtBin;$usrBin;$env:PATH"
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
+          git config --global --add safe.directory $workspace
+
+          $sourceDir = Join-Path $workspace 'Build\Cmake'
+          $buildDir = Join-Path $sourceDir 'build-mingw-pr-smoke'
+          $cmake = Join-Path $ucrtBin 'cmake.exe'
+          $ctest = Join-Path $ucrtBin 'ctest.exe'
+          $gcc = Join-Path $ucrtBin 'x86_64-w64-mingw32-gcc.exe'
+          $gxx = Join-Path $ucrtBin 'x86_64-w64-mingw32-g++.exe'
+          $ninja = Join-Path $ucrtBin 'ninja.exe'
+
+          foreach ($tool in @($cmake, $ctest, $gcc, $gxx, $ninja)) {
+            if (-not (Test-Path -LiteralPath $tool)) {
+              throw "Required MinGW tool missing: $(Sanitize-Line $tool)"
+            }
+          }
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments
+            )
+            & $FilePath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "$(Sanitize-Line $FilePath) failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          if (Test-Path -LiteralPath $buildDir) {
+            Remove-Item -Recurse -Force -LiteralPath $buildDir
+          }
+
+          Invoke-Native $cmake @(
+            '-S', $sourceDir,
+            '-B', $buildDir,
+            '-G', 'Ninja',
+            '-DCMAKE_BUILD_TYPE=Release',
+            "-DCMAKE_C_COMPILER=$gcc",
+            "-DCMAKE_CXX_COMPILER=$gxx",
+            '-DENABLE_TOOLS=ON',
+            '-DENABLE_ICCXML=OFF',
+            '-DENABLE_ICCJSON=OFF',
+            '-DENABLE_IMAGE_TOOLS=OFF',
+            '-DENABLE_WXWIDGETS=OFF',
+            '-DENABLE_CMM_TOOLS=OFF',
+            '-DENABLE_IIS_TOOLS=OFF',
+            '-DENABLE_TESTS=ON',
+            '-DENABLE_SHARED_LIBS=OFF',
+            '-DENABLE_STATIC_LIBS=ON'
+          )
+          Invoke-Native $cmake @(
+            '--build', $buildDir,
+            '--target', 'iccDumpProfile',
+            '--parallel'
+          )
+          Invoke-Native $ctest @(
+            '--test-dir', $buildDir,
+            '-N',
+            '-R', '^iccdev\.windows-icc-dump-profile-smoke$',
+            '--no-tests=error'
+          )
+          Invoke-Native $ctest @(
+            '--test-dir', $buildDir,
+            '-R', '^iccdev\.windows-icc-dump-profile-smoke$',
+            '--output-on-failure',
+            '--no-tests=error'
+          )
+
+          $compilerLine = (& $gxx --version)[0]
+          $summaryLines = @(
+            '### Windows MinGW UCRT64 smoke',
+            '',
+            "- Compiler: ``$(Sanitize-Line $compilerLine)``",
+            "- Build type: ``Release``",
+            "- Linkage: ``static``",
+            "- CTest: ``iccdev.windows-icc-dump-profile-smoke``",
+            "- Result: ``passed``"
+          )
+          $summaryLines | ForEach-Object {
+            Sanitize-Print $_
+          } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload MinGW smoke results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-pr-win-mingw-smoke-results
+          path: Build/Cmake/build-mingw-pr-smoke/Testing
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9

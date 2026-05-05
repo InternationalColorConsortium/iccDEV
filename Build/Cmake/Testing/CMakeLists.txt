@@ -130,6 +130,55 @@ if(WIN32)
     FIXTURES_REQUIRED iccdev_profiles
   )
 
+  if(TARGET iccDumpProfile)
+    add_test(
+      NAME iccdev.windows-icc-dump-profile-smoke
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_NAME=iccdev.windows-icc-dump-profile-smoke"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-windows-icc-dump-profile-smoke"
+        "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DICCDEV_ICCDUMP_EXE=$<TARGET_FILE:iccDumpProfile>"
+        "-DICCDEV_PROFILE=${ICCDEV_TESTING_DIR}/CalcTest/calcUnderStack_add.icc"
+        "-DICCDEV_EXPECTED_PROFILE_SIZE=3932"
+        "-DICCDEV_EXPECTED_TAG_COUNT=8"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsDumpProfileSmokeTest.cmake"
+    )
+    set_tests_properties(iccdev.windows-icc-dump-profile-smoke PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 60
+      LABELS "iccdev;windows;tools;profile"
+    )
+    add_dependencies(check iccDumpProfile)
+  endif()
+
+  if(TARGET IccProfLib2)
+    add_test(
+      NAME iccdev.issue-987-shared-mpe-export
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_NAME=iccdev.issue-987-shared-mpe-export"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-issue-987-shared-mpe-export"
+        "-DICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT}"
+        "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DICCDEV_CONFIG=$<CONFIG>"
+        "-DICCDEV_ICCPROFLIB_DLL=$<TARGET_FILE:IccProfLib2>"
+        "-DICCDEV_ICCPROFLIB_IMPLIB=$<TARGET_LINKER_FILE:IccProfLib2>"
+        "-DICCDEV_GENERATOR=${CMAKE_GENERATOR}"
+        "-DICCDEV_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+        "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DICCDEV_CXX_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}"
+        "-DICCDEV_OBJDUMP=${CMAKE_OBJDUMP}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsSharedExportTest.cmake"
+    )
+    set_tests_properties(iccdev.issue-987-shared-mpe-export PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 180
+      LABELS "iccdev;windows;shared;issue-987"
+    )
+    add_dependencies(check IccProfLib2)
+  endif()
+
   return()
 endif()
 

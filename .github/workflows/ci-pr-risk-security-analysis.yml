@@ -16,6 +16,28 @@ permissions:
   pull-requests: read
 
 on:
+  workflow_call:
+    inputs:
+      analysis_target:
+        description: 'What to analyze'
+        required: false
+        type: string
+        default: 'Current branch workflows'
+      pr_number:
+        description: 'PR number (only when target = Specific PR number)'
+        required: false
+        type: string
+        default: ''
+      git_ref:
+        description: 'Git ref / branch / SHA (only when target = Specific git ref)'
+        required: false
+        type: string
+        default: 'master'
+      severity_threshold:
+        description: 'Minimum severity to report (display-only; filtering planned)'
+        required: false
+        type: string
+        default: 'INFO'
   workflow_dispatch:
     inputs:
       analysis_target:
@@ -49,7 +71,11 @@ on:
         default: 'INFO'
 
 concurrency:
-  group: pr-risk-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    pr-risk-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{
+    inputs.analysis_target || 'Current branch workflows' }}-${{
+    inputs.pr_number || 'none' }}-${{ inputs.git_ref || 'none' }}-${{
+    inputs.severity_threshold || 'INFO' }}
   cancel-in-progress: true
 
 env:
@@ -72,12 +98,24 @@ jobs:
       PR_NUMBER: ${{ inputs.pr_number }}
       GIT_REF: ${{ inputs.git_ref }}
       SEVERITY_THRESHOLD: ${{ inputs.severity_threshold }}
+      SCAN_ROOT: ${{ github.workspace }}/target
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
 
     steps:
-      - name: "Checkout repository"
+      - name: "Checkout trusted scanner helpers"
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: "Checkout target repository"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          path: target
           fetch-depth: 0
           persist-credentials: false
 
@@ -86,6 +124,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
+          path: target
           fetch-depth: 0
           persist-credentials: false
 
@@ -96,7 +135,8 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             echo "Sanitizer found at $SANITIZER"
             echo "SANITIZER_AVAILABLE=true" >> "$GITHUB_ENV"
@@ -115,7 +155,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -157,9 +198,20 @@ jobs:
                 UNPINNED_LIST+=("$wf_base: $action_ref")
               fi
             done < <(awk '
-              /^[[:space:]]*run:[[:space:]]*\|/ { in_run=1; next }
-              in_run && /^[[:space:]]*[a-zA-Z_-]+:/ && !/^[[:space:]]{6,}/ { in_run=0 }
-              in_run { next }
+              /^[[:space:]]*run:[[:space:]]*\|/ {
+                in_run=1
+                match($0, /^[[:space:]]*/)
+                run_indent=RLENGTH
+                next
+              }
+              in_run {
+                match($0, /^[[:space:]]*/)
+                if ($0 !~ /^[[:space:]]*$/ && RLENGTH <= run_indent) {
+                  in_run=0
+                } else {
+                  next
+                }
+              }
               /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]/ {
                 sub(/.*uses:[[:space:]]*/, "")
                 gsub(/["'\'']/, "")
@@ -215,7 +267,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -303,7 +356,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -421,7 +475,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -565,7 +620,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -639,7 +695,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -672,14 +729,14 @@ jobs:
 
               # Strip single-quoted content first (regex patterns, not actual writes)
               write_check=$(sed "s/'[^']*'//g" <<< "$line")
-              # Only match actual writes to GITHUB_STEP_SUMMARY (>> redirect or Out-File)
-              if ! grep -qE '>>.*GITHUB_STEP_SUMMARY|Out-File.*GITHUB_STEP_SUMMARY' <<< "$write_check"; then
+              # Only match actual writes to summary/output env files.
+              if ! grep -qE '>>.*GITHUB_(STEP_SUMMARY|OUTPUT)|Out-File.*GITHUB_(STEP_SUMMARY|OUTPUT)' <<< "$write_check"; then
                 continue
               fi
 
               # Extract the content before the redirect/pipe target
-              content_part=$(sed 's/>>.*GITHUB_STEP_SUMMARY.*//' <<< "$line")
-              content_part=$(sed 's/|[[:space:]]*Out-File.*GITHUB_STEP_SUMMARY.*//' <<< "$content_part")
+              content_part=$(sed -E 's/>>.*GITHUB_(STEP_SUMMARY|OUTPUT).*//' <<< "$line")
+              content_part=$(sed -E 's/\|[[:space:]]*Out-File.*GITHUB_(STEP_SUMMARY|OUTPUT).*//' <<< "$content_part")
 
               # Strip single-quoted content (no interpolation in bash single quotes)
               content_stripped=$(sed "s/'[^']*'//g" <<< "$content_part")
@@ -687,6 +744,8 @@ jobs:
               # Strip the redirect variable reference itself
               content_stripped="${content_stripped//\$GITHUB_STEP_SUMMARY/}"
               content_stripped="${content_stripped//\$env:GITHUB_STEP_SUMMARY/}"
+              content_stripped="${content_stripped//\$GITHUB_OUTPUT/}"
+              content_stripped="${content_stripped//\$env:GITHUB_OUTPUT/}"
 
               # Skip static-only writes (no variables or command substitution)
               if ! grep -qE '\$[a-zA-Z_{(]|\$\(' <<< "$content_stripped"; then
@@ -731,7 +790,7 @@ jobs:
 
           echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
           echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Total GITHUB_STEP_SUMMARY writes | $(sanitize_line "$SUMMARY_WRITES") |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Total GITHUB_STEP_SUMMARY/GITHUB_OUTPUT writes | $(sanitize_line "$SUMMARY_WRITES") |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Via sanitizer function | $(sanitize_line "$SANITIZED_WRITES") |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Direct/unsanitized | $(sanitize_line "$UNSANITIZED_WRITES") |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -763,7 +822,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -777,9 +837,7 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 7. Permissions Minimization Audit" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          python3 .github/scripts/audit-workflow-permissions.py \
+          python3 "$TRUSTED_SCRIPTS/audit-workflow-permissions.py" \
             --workflows-dir .github/workflows \
             --format markdown >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -823,7 +881,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -885,7 +944,7 @@ jobs:
               WF_WITH_WRITE) WRITE_WF_COUNT="$value" ;;
               WF_WRITE_BLOCKS) WRITE_BLOCK_COUNT="$value" ;;
             esac
-          done < <(python3 .github/scripts/audit-workflow-permissions.py \
+          done < <(python3 "$TRUSTED_SCRIPTS/audit-workflow-permissions.py" \
             --workflows-dir .github/workflows \
             --format shell)
 
@@ -1042,7 +1101,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -1198,7 +1258,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -1329,7 +1390,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [[ -f "$SANITIZER" ]]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -1341,7 +1403,9 @@ jobs:
               printf '%s' "$s"
             }
             sanitize_line() { escape_html "$1"; }
+            sanitizer_version() { printf 'unknown\n'; }
           fi
+          SAFE_SANITIZER_VERSION=$(sanitize_line "$(sanitizer_version)")
 
           {
             echo "---"
@@ -1424,7 +1488,7 @@ jobs:
             echo "- [GitHub Actions Security Hardening](https://docs.github.com/en/actions/reference/security/secure-use)"
             echo "- [xsscx/governance/actions](https://github.com/xsscx/governance/tree/main/actions)"
             echo "- \`.github/instructions/workflow-governance\`"
-            echo "- \`.github/scripts/sanitize-sed.sh\` (V3)"
+            echo "- \`.github/scripts/sanitize-sed.sh\` (${SAFE_SANITIZER_VERSION})"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -1442,14 +1506,26 @@ jobs:
       PR_NUMBER: ${{ inputs.pr_number }}
       GIT_REF: ${{ inputs.git_ref }}
       SEVERITY_THRESHOLD: ${{ inputs.severity_threshold }}
+      SCAN_ROOT: ${{ github.workspace }}/target
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
       POWERSHELL_TELEMETRY_OPTOUT: 1
       POWERSHELL_UPDATECHECK: Off
 
     steps:
-      - name: "Checkout repository"
+      - name: "Checkout trusted scanner helpers"
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: "Checkout target repository"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          path: target
           fetch-depth: 0
           persist-credentials: false
 
@@ -1458,6 +1534,7 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: refs/pull/${{ inputs.pr_number }}/head
+          path: target
           fetch-depth: 0
           persist-credentials: false
 
@@ -1471,7 +1548,8 @@ jobs:
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) {
             Write-Host "[OK] PowerShell sanitizer found at $sanitizerPath"
             . $sanitizerPath
@@ -1487,10 +1565,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -1507,13 +1587,20 @@ jobs:
           foreach ($wf in $workflows) {
             $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
             $inRunBlock = $false
+            $runIndent = 0
             foreach ($ln in $lines) {
               # Track run: | blocks to skip script content
-              if ($ln -match '^\s*run:\s*\|') { $inRunBlock = $true; continue }
+              if ($ln -match '^(\s*)run:\s*\|') {
+                $inRunBlock = $true
+                $runIndent = $matches[1].Length
+                continue
+              }
               if ($inRunBlock) {
-                # Exit run block when we hit a non-indented YAML key
-                if ($ln -match '^\s{0,5}[a-zA-Z_-]+:' -and $ln -notmatch '^\s{6,}') { $inRunBlock = $false }
-                else { continue }
+                if ($ln -match '^\S' -or ($ln -match '^(\s*)\S' -and $matches[1].Length -le $runIndent)) {
+                  $inRunBlock = $false
+                } else {
+                  continue
+                }
               }
               if ($ln -match '^\s*#') { continue }
               if ($ln -notmatch '^\s*-?\s*uses:\s') { continue }
@@ -1570,10 +1657,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -1654,10 +1743,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -1734,10 +1825,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -1858,10 +1951,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -1932,10 +2027,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -1958,19 +2055,20 @@ jobs:
 
               # Strip single-quoted content first (regex patterns are not actual writes)
               $writeCheck = $ln -replace "'[^']*'", ''
-              # Only match actual writes (>> redirect or Out-File pipe)
-              if ($writeCheck -notmatch '>>.*GITHUB_STEP_SUMMARY' -and $writeCheck -notmatch 'Out-File.*GITHUB_STEP_SUMMARY') {
+              # Only match actual writes to summary/output env files.
+              if ($writeCheck -notmatch '>>.*GITHUB_(STEP_SUMMARY|OUTPUT)' -and $writeCheck -notmatch 'Out-File.*GITHUB_(STEP_SUMMARY|OUTPUT)') {
                 continue
               }
 
               # Extract content before redirect target
-              $contentPart = $ln -replace '>>.*GITHUB_STEP_SUMMARY.*', '' -replace '\|?\s*Out-File.*GITHUB_STEP_SUMMARY.*', ''
+              $contentPart = $ln -replace '>>.*GITHUB_(STEP_SUMMARY|OUTPUT).*', '' -replace '\|?\s*Out-File.*GITHUB_(STEP_SUMMARY|OUTPUT).*', ''
 
               # Strip single-quoted content (no interpolation in bash single quotes)
               $contentStripped = $contentPart -replace "'[^']*'", ''
 
               # Strip the redirect variable reference itself
               $contentStripped = $contentStripped -replace '\$GITHUB_STEP_SUMMARY', '' -replace '\$env:GITHUB_STEP_SUMMARY', ''
+              $contentStripped = $contentStripped -replace '\$GITHUB_OUTPUT', '' -replace '\$env:GITHUB_OUTPUT', ''
 
               # Skip static-only writes (no variables or command substitution)
               if ($contentStripped -notmatch '\$[a-zA-Z_{(]' -and $contentStripped -notmatch '\$\(') {
@@ -2014,7 +2112,7 @@ jobs:
           $report += ""
           $report += "| Metric | Count |"
           $report += "|--------|-------|"
-          $report += "| GITHUB_STEP_SUMMARY writes | $(Sanitize-Line "$totalSummaryWrites") |"
+          $report += "| GITHUB_STEP_SUMMARY/GITHUB_OUTPUT writes | $(Sanitize-Line "$totalSummaryWrites") |"
           $report += "| Sanitized writes | $(Sanitize-Line "$sanitizedWrites") |"
           $report += "| Potentially unsanitized | $(Sanitize-Line "$($unsanitizedList.Count)") |"
           $report += ""
@@ -2036,18 +2134,20 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
           }
 
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
-          $permJson = python .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format json | ConvertFrom-Json
-          python .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format markdown |
+          $permJson = python "$env:TRUSTED_SCRIPTS/audit-workflow-permissions.py" --workflows-dir .github/workflows --format json | ConvertFrom-Json
+          python "$env:TRUSTED_SCRIPTS/audit-workflow-permissions.py" --workflows-dir .github/workflows --format markdown |
             Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
@@ -2096,10 +2196,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -2175,7 +2277,7 @@ jobs:
 
           # Check permissions blocks and explicit write grants. The helper
           # accounts for workflow-level and job-level permissions blocks.
-          $permAudit = python .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format json | ConvertFrom-Json
+          $permAudit = python "$env:TRUSTED_SCRIPTS/audit-workflow-permissions.py" --workflows-dir .github/workflows --format json | ConvertFrom-Json
           if ($permAudit.without_permissions -gt 0) {
             $deduct = [math]::Min(10, $permAudit.without_permissions * 2)
             $score -= $deduct
@@ -2318,10 +2420,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -2416,10 +2520,12 @@ jobs:
           PR_BASE_REF: ${{ github.base_ref }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
@@ -2508,10 +2614,12 @@ jobs:
           POWERSHELL_TELEMETRY_OPTOUT: 1
         run: |
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
 
-          $sanitizerPath = Join-Path $env:GITHUB_WORKSPACE ".github/scripts/sanitize.ps1"
+          Set-Location $env:SCAN_ROOT
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
           if (Test-Path $sanitizerPath) { . $sanitizerPath }
           else {
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }

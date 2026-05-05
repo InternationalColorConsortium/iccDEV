@@ -48,6 +48,9 @@ jobs:
     name: "WASM Release Build + Parity"
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      EMSDK_VERSION: latest
+      WASM_DEPS_CACHE_VERSION: v1
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -68,6 +71,19 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
+      - name: Restore Emscripten SDK cache
+        id: emsdk-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: |
+            emsdk
+            ~/.emscripten
+            ~/.emscripten_cache
+          key: iccdev-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml', '.github/workflows/wasm-latest-matrix.yml') }}
+          restore-keys: |
+            iccdev-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+            ci-latest-release-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+
       - name: Install Emscripten SDK
         env:
           BASH_ENV: /dev/null
@@ -75,14 +91,32 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          if [[ -d emsdk/.git ]]; then
+            git -C emsdk remote set-url origin https://github.com/emscripten-core/emsdk.git
+            git -C emsdk fetch --depth 1 origin main
+            git -C emsdk checkout --force FETCH_HEAD
+          else
+            rm -rf emsdk
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git emsdk
+          fi
           cd emsdk
-          ./emsdk install latest
-          ./emsdk activate latest
+          ./emsdk install "$EMSDK_VERSION"
+          ./emsdk activate "$EMSDK_VERSION"
+
+      - name: Restore WASM third-party dependency cache
+        id: wasm-deps-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: third_party
+          key: iccdev-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml', '.github/workflows/wasm-latest-matrix.yml') }}
+          restore-keys: |
+            iccdev-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-
+            ci-latest-release-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-
 
       - name: Build third-party dependencies (zlib, libpng, libjpeg, libtiff, libxml2, nlohmann-json)
         env:
           BASH_ENV: /dev/null
+          WASM_DEPS_CACHE_HIT: ${{ steps.wasm-deps-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -90,12 +124,27 @@ jobs:
           source emsdk/emsdk_env.sh
 
           THIRD_PARTY="$PWD/third_party"
+          deps_ready() {
+            [[ -f "$THIRD_PARTY/zlib/out/lib/libz.a" ]] &&
+            [[ -f "$THIRD_PARTY/libpng/out/lib/libpng16.a" ]] &&
+            [[ -f "$THIRD_PARTY/libjpeg/out/lib/libjpeg.a" ]] &&
+            [[ -f "$THIRD_PARTY/libtiff/out/lib/libtiff.a" ]] &&
+            [[ -f "$THIRD_PARTY/libxml2/out/lib/libxml2.a" ]] &&
+            [[ -d "$THIRD_PARTY/nlohmann-json/out/share/cmake/nlohmann_json" ]]
+          }
+
+          if deps_ready; then
+            echo "Using cached WASM third-party dependencies from $THIRD_PARTY"
+            echo "WASM dependency cache hit: ${WASM_DEPS_CACHE_HIT:-false}"
+          else
+          echo "WASM third-party cache is missing or incomplete; rebuilding dependencies."
+          rm -rf "$THIRD_PARTY"
           mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
 
           # zlib
           git clone --depth 1 https://github.com/madler/zlib.git && cd zlib
           emconfigure ./configure --static --prefix="$THIRD_PARTY/zlib/out"
-          emmake make -j$(nproc)
+          emmake make -j"$(nproc)"
           emmake make install
           cd "$THIRD_PARTY"
 
@@ -105,7 +154,7 @@ jobs:
           tar -xzf libpng-1.6.57.tar.gz && mv libpng-1.6.57 libpng && cd libpng
           CPPFLAGS="-I$THIRD_PARTY/zlib" LDFLAGS="-L$THIRD_PARTY/zlib/out/lib" \
             emconfigure ./configure --disable-shared --enable-static --prefix="$THIRD_PARTY/libpng/out"
-          emmake make -j$(nproc)
+          emmake make -j"$(nproc)"
           emmake make install
           cd "$THIRD_PARTY"
 
@@ -114,7 +163,7 @@ jobs:
           echo "4077d6a6a75aeb01884f708919d25934c93305e49f7e3f36db9129320e6f4f3d  jpegsrc.v9e.tar.gz" | sha256sum -c -
           tar -xzf jpegsrc.v9e.tar.gz && mv jpeg-9e libjpeg && cd libjpeg
           emconfigure ./configure --prefix="$THIRD_PARTY/libjpeg/out" --disable-shared --enable-static
-          emmake make -j$(nproc)
+          emmake make -j"$(nproc)"
           emmake make install
           cd "$THIRD_PARTY"
 
@@ -139,7 +188,7 @@ jobs:
             -DZLIB_LIBRARY="$THIRD_PARTY/zlib/out/lib/libz.a" \
             -DJPEG_INCLUDE_DIR="$THIRD_PARTY/libjpeg/out/include" \
             -DJPEG_LIBRARY="$THIRD_PARTY/libjpeg/out/lib/libjpeg.a"
-          emmake make -j$(nproc)
+          emmake make -j"$(nproc)"
           emmake make install
           cd "$THIRD_PARTY"
 
@@ -167,7 +216,7 @@ jobs:
             -DLIBXML2_WITH_LZMA=OFF \
             -DLIBXML2_WITH_ZLIB=OFF \
             -DLIBXML2_WITH_ICONV=OFF
-          emmake make -j$(nproc)
+          emmake make -j"$(nproc)"
           emmake make install
           cd "$THIRD_PARTY"
 
@@ -179,9 +228,13 @@ jobs:
             -DCMAKE_INSTALL_PREFIX="$THIRD_PARTY/nlohmann-json/out" \
             -DJSON_BuildTests=OFF \
             -DJSON_Install=ON
-          emmake make -j$(nproc)
+          emmake make -j"$(nproc)"
           emmake make install
           cd "$THIRD_PARTY"
+
+          find "$THIRD_PARTY" -type d -name .git -prune -print0 | xargs -0r rm -rf
+          touch "$THIRD_PARTY/.ci-pr-wasm-deps-complete"
+          fi
 
       - name: Configure and Build iccDEV-WASM (Release)
         env:
@@ -230,7 +283,7 @@ jobs:
               -s EXPORTED_RUNTIME_METHODS=['FS','callMain'] -s EXIT_RUNTIME=0" \
             -Wno-dev
 
-          emmake make -j$(nproc)
+          emmake make -j"$(nproc)"
 
       - name: Validate WASM artifact magic numbers
         env:

@@ -2,19 +2,19 @@
 # CODEOWNERS — https://github.com/InternationalColorConsortium
 # ============================================================
 #
-# Updated 2026-05-04 19:48:32 UTC by David Hoyt @xsscx
+# Updated 2026-05-06 14:29:57 UTC by David Hoyt @xsscx
 # Intent: Governance, Transparency, Best Practice
-# Last Modification: Add Absolute Path for CODEOWNERS
+# Last Modification: Add Points of Contact
 #
 #
 # ============================================================
 
 # Notify Default
-# Triage Point of Contact
-* @xsscx
+# Triage Points of Contact
+* @xsscx @ChrisCoxArt
 
 # GitHub Actions workflows & PR automation
-.github/** @xsscx @dwtza
+.github/** @xsscx @dwtza @ChrisCoxArt
 
 # Build system logic
 Build/** @xsscx @ChrisCoxArt

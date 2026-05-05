@@ -392,7 +392,7 @@ public:
 
   void SetChannels(icUInt16Number nInputChannels, icUInt16Number nOutputChannels) {m_nInputChannels = nInputChannels; m_nOutputChannels = nOutputChannels;}
 
-  icUInt32Number NumElements() const { return m_list ? (icUInt32Number)(m_list->size()) : 0; }
+  icUInt32Number NumElements() const;
 
   bool IsLateBinding() const;
   bool IsLateBindingReflectance() const;

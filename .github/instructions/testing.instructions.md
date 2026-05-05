@@ -37,10 +37,12 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
-Linux currently registers 15 CTest suites. Windows currently registers 2 CTest
-suites through `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The Windows
-wrapper runs the batch scripts from a disposable copy of `Testing/` under the
-build tree and must not dirty the source `Testing/` directory.
+Linux currently registers 17 CTest suites. Windows currently registers 4 CTest
+suites: two batch-backed suites through
+`Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the iccDumpProfile smoke suite,
+and the issue-987 shared export suite. The Windows batch wrapper runs scripts
+from a disposable copy of `Testing/` under the build tree and must not dirty the
+source `Testing/` directory.
 
 See `docs/ctest.md` for the complete suite list, expected counts, fixtures, and
 add-test process.

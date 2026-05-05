@@ -1,6 +1,6 @@
 ###############################################################
 #
-# Copyright (©) 2025-2026 International Color Consortium.
+# Copyright (c) 2025-2026 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   detect-src:
-    name: 🧭 Welcome to iccDEV
+    name: Welcome to iccDEV
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -180,36 +180,36 @@ jobs:
           {
             echo "<div align=\"center\">"
             echo "  <h3>Welcome to the ICC Development Workflow</h3>"
-            echo "  ⏱️ <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "  <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             echo "</div>"
             echo ""
-            echo "## ✔️ PR Checklist"
+            echo "## PR Checklist"
             echo ""
             echo "- [x] You have followed the [guidelines for contributing](https://github.com/InternationalColorConsortium/iccDEV/blob/master/CONTRIBUTING.md)"
-            echo "- [x] Commits follow GitHub’s [acceptable use policy](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)"
+            echo "- [x] Commits follow GitHub's [acceptable use policy](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)"
             echo "- [x] You checked for duplicate [pull requests](https://github.com/InternationalColorConsortium/iccDEV/pulls)"
             echo "- [x] You built your PR locally using the official [Build Instructions](https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/build.md)"
             echo "- [x] You included Unit Tests and/or Issue reproduction steps + fix"
             echo ""
             echo "If you have questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/tree/master/.github/CODEOWNERS)."
             echo ""
-            echo "## 🛡️ Legal Requirements"
+            echo "## Legal Requirements"
             echo ""
             echo "All contributions to ICC open-source projects follow:"
             echo "- The [International Color Consortium IP Policy](https://www.color.org/iccip.xalter)"
             echo "- Open-source software best practices"
             echo "- Contributor License Agreement (CLA) requirements"
             echo ""
-            echo "### 📄 Contributor License Agreements"
+            echo "### Contributor License Agreements"
             echo "Before contributing code, you must complete a **Contributor License Agreement (CLA)**."
             echo ""
-            echo "- [🧍 Personal CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)"
-            echo "- [🏢 Corporate CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/icc-individual-cla.pdf)"
+            echo "- [Personal CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)"
+            echo "- [Corporate CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/icc-individual-cla.pdf)"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
   setup:
-    name: 🧭 Thank You for the PR
+    name: Thank You for the PR
     runs-on: ubuntu-latest
     needs: [detect-src]
     permissions:
@@ -326,7 +326,7 @@ jobs:
 
           # write step summary (all dynamic values passed through sanitize_line)
           {
-            echo "## 🧭 PR Init Complete"
+            echo "## PR Init Complete"
             echo ""
             echo "**Workflow:** ci-pr-action"
             echo "- **GITHUB_Repository:** \`$(sanitize_line "${GITHUB_REPOSITORY}")\`"
@@ -337,11 +337,11 @@ jobs:
             echo "- **Session start:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             echo "- **Source changed:** \`$(sanitize_line "${SRC_CHANGED}")\`"
             echo ""
-            echo "✅ CI environment successfully initialized and ready for subsequent jobs."
+            echo "[OK] CI environment successfully initialized and ready for subsequent jobs."
           } >> "$GITHUB_STEP_SUMMARY"
 
   validate-inputs:
-    name: 🧭 Init PR Build Matrix
+    name: Init PR Build Matrix
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -357,8 +357,12 @@ jobs:
       - name: Set up Matrix Runners
         id: v
         shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
         run: |
           set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
 
           # --- Define for child workflows ---
           # Windows is Hardcoded - TODO
@@ -395,17 +399,37 @@ jobs:
             done
           }
 
+          write_github_output() {
+            local key="$1"
+            local value="$2"
+
+            case "$key" in
+              os|comp|bt) ;;
+              *)
+                echo "Invalid output key: $key" >&2
+                exit 1
+                ;;
+            esac
+
+            if [[ "$value" == *$'\r'* || "$value" == *$'\n'* ]]; then
+              echo "Invalid multiline value for output: $key" >&2
+              exit 1
+            fi
+
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          }
+
           validate "$os_raw"   "${allowed_os[@]}"
           validate "$comp_raw" "${allowed_comp[@]}"
           validate "$bt_raw"   "${allowed_bt[@]}"
 
-          echo "os=$os_raw"   >> "$GITHUB_OUTPUT"
-          echo "comp=$comp_raw" >> "$GITHUB_OUTPUT"
-          echo "bt=$bt_raw"     >> "$GITHUB_OUTPUT"
+          write_github_output os "$os_raw"
+          write_github_output comp "$comp_raw"
+          write_github_output bt "$bt_raw"
 
   unix-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🧱 Unix Build & Test Profiles
+    name: Unix Build & Test Profiles
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
     # pass minimized inputs
@@ -417,7 +441,7 @@ jobs:
 
   lint:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🧹 Lint & Code Quality
+    name: Lint & Code Quality
     needs: [setup, detect-src]
     uses: ./.github/workflows/ci-pr-lint.yml
     with:
@@ -425,7 +449,7 @@ jobs:
 
   scan-build:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🔍 Scan-Build
+    name: Scan-Build
     needs: [unix-ci, detect-src]
     uses: ./.github/workflows/ci-pr-unix-sb.yml
     with:
@@ -439,13 +463,13 @@ jobs:
 
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🧱 Windows Build & Test Profiles
+    name: Windows Build & Test Profiles
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
 
   wasm-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: 🌐 WASM Build & Parity (npm-shaped)
+    name: WASM Build & Parity (npm-shaped)
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-wasm.yml
     with:
@@ -526,7 +550,7 @@ jobs:
           fi
 
   finalize:
-    name: 🧾 PR Summary
+    name: PR Summary
     runs-on: ubuntu-latest
     needs:
       - detect-src
@@ -552,7 +576,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: 🧭 PR Details
+      - name: PR Details
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -636,11 +660,11 @@ jobs:
           {
             echo "<div align=\"center\">"
             echo "  <h3>Completed the ICC Development Workflow</h3>"
-            echo "  ⏱️ <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "  <em>Date:</em> $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             echo ""
             echo "</div>"
             echo ""
-            echo "## 🧩 PR Summary"
+            echo "## PR Summary"
             echo "  <strong>PRs Are Typically Reviewed Within 14 Days</strong><br>"
             echo ""
             echo "## PR / Branch Context"
@@ -682,7 +706,7 @@ jobs:
 
           # --- write job status summary ---------------------------------------
           {
-            echo "## 🛠️ Job Status"
+            echo "## Job Status"
             echo ""
             echo "| Job                | Status   |"
             echo "|--------------------|----------|"

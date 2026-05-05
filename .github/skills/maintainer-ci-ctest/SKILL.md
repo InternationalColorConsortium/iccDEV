@@ -45,7 +45,7 @@ when practical.
 - `check` must exist on every platform.
 - `check` and workflow CTest execution must use `--no-tests=error`.
 - Linux suite count assertions currently expect `Total Tests: 17`.
-- Windows currently registers 2 CTest suites and validates 129 profile parses.
+- Windows currently registers 4 CTest suites and validates 129 profile parses.
 - JSON round-trip profile generation validates 129 profile parses.
 - WASM parity currently expects 207 generated ICC profiles.
 - Windows batch CTest runs must use the disposable Testing copy under the build

@@ -1184,17 +1184,23 @@ elseif(EMSCRIPTEN)
 elseif(WIN32)
   message(STATUS "Detected platform: Windows")
 
-  # Windows + MSVC flags
-  add_compile_options(/std:c++17 /D_WINDOWS /EHsc /GS)
+  if(MSVC)
+    # Windows + MSVC flags
+    add_compile_options(/std:c++17 /D_WINDOWS /EHsc /GS)
 
-  # ASLR + DEP + CET shadow stacks
-  add_link_options(/DYNAMICBASE /NXCOMPAT)
-  # CET (Control-flow Enforcement Technology) requires VS 2019 16.7+
-  if(MSVC_VERSION GREATER_EQUAL 1927)
-    add_link_options(/CETCOMPAT)
+    # ASLR + DEP + CET shadow stacks
+    add_link_options(/DYNAMICBASE /NXCOMPAT)
+    # CET (Control-flow Enforcement Technology) requires VS 2019 16.7+
+    if(MSVC_VERSION GREATER_EQUAL 1927)
+      add_link_options(/CETCOMPAT)
+    endif()
+
+    message(STATUS "Windows build: Compiler flags set for MSVC with C++17, buffer security, and ASLR/DEP.")
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(STATUS "Windows build: Using CMake C++17 defaults for MinGW/Clang.")
+  else()
+    message(STATUS "Windows build: Using compiler defaults for ${CMAKE_CXX_COMPILER_ID}.")
   endif()
-
-  message(STATUS "Windows build: Compiler flags set for MSVC with C++17, buffer security, and ASLR/DEP.")
 
 else()
   message(FATAL_ERROR "Unsupported or unknown platform. Aborting build configuration.")

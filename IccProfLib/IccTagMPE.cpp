@@ -1211,8 +1211,23 @@ CIccMultiProcessElement *CIccTagMultiProcessElement::GetElement(int nIndex)
 }
 
 /**
-******************************************************************************
-* Name: CIccTagMultiProcessElement::GetNextElemIterator
+ ******************************************************************************
+ * Name: CIccTagMultiProcessElement::NumElements
+ *
+ * Purpose:
+ *
+ * Args:
+ *
+ * Return:
+ ******************************************************************************/
+icUInt32Number CIccTagMultiProcessElement::NumElements() const
+{
+  return m_list ? (icUInt32Number)(m_list->size()) : 0;
+}
+
+/**
+ ******************************************************************************
+ * Name: CIccTagMultiProcessElement::GetNextElemIterator
 * 
 * Purpose: 
 * 

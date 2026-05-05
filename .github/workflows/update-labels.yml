@@ -1,6 +1,6 @@
 ###############################################################
 #
-# Copyright (©) 2025-2026 International Color Consortium.
+# Copyright (c) 2025-2026 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
@@ -82,24 +82,48 @@ jobs:
           INPUT="${INPUT_PR_NUMBER}"
           EVENT_PR="${EVENT_PR_NUMBER}"
 
+          write_github_output() {
+            local key="$1"
+            local value="$2"
+
+            case "$key" in
+              prs|mode) ;;
+              *)
+                echo "Invalid output key: $key" >&2
+                exit 1
+                ;;
+            esac
+
+            if [[ "$value" == *$'\r'* || "$value" == *$'\n'* ]]; then
+              echo "Invalid multiline value for output: $key" >&2
+              exit 1
+            fi
+
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          }
+
           if [[ "$INPUT" =~ ^[0-9]+$ ]] && [[ -n "$INPUT" ]]; then
-            echo "prs=$INPUT" >> "$GITHUB_OUTPUT"
-            echo "mode=single" >> "$GITHUB_OUTPUT"
+            write_github_output prs "$INPUT"
+            write_github_output mode "single"
             echo "Processing single PR: #$INPUT"
           elif [[ "$EVENT_PR" =~ ^[0-9]+$ ]]; then
-            echo "prs=$EVENT_PR" >> "$GITHUB_OUTPUT"
-            echo "mode=single" >> "$GITHUB_OUTPUT"
+            write_github_output prs "$EVENT_PR"
+            write_github_output mode "single"
             echo "Processing PR from event: #$EVENT_PR"
           else
-            # Schedule / dispatch with no number → scan all open PRs
-            OPEN_PRS=$(gh pr list --state open --json number -q '.[].number' | tr '\n' ' ')
+            # Schedule / dispatch with no number -> scan all open PRs
+            OPEN_PRS=$(gh pr list --state open --json number -q '.[].number' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+            if [[ ! "$OPEN_PRS" =~ ^[0-9[:space:]]*$ ]]; then
+              echo "Invalid PR list returned by gh" >&2
+              exit 1
+            fi
             if [[ -z "$OPEN_PRS" ]]; then
-              echo "prs=" >> "$GITHUB_OUTPUT"
-              echo "mode=none" >> "$GITHUB_OUTPUT"
-              echo "No open PRs found — nothing to do"
+              write_github_output prs ""
+              write_github_output mode "none"
+              echo "No open PRs found -- nothing to do"
             else
-              echo "prs=$OPEN_PRS" >> "$GITHUB_OUTPUT"
-              echo "mode=batch" >> "$GITHUB_OUTPUT"
+              write_github_output prs "$OPEN_PRS"
+              write_github_output mode "batch"
               echo "Processing open PRs: $OPEN_PRS"
             fi
           fi
@@ -121,6 +145,26 @@ jobs:
           RESULTS_FILE=$(mktemp)
           PROCESSED=0
           LABELED=0
+
+          write_github_output() {
+            local key="$1"
+            local value="$2"
+
+            case "$key" in
+              processed|labeled) ;;
+              *)
+                echo "Invalid output key: $key" >&2
+                exit 1
+                ;;
+            esac
+
+            if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+              echo "Invalid numeric value for output: $key" >&2
+              exit 1
+            fi
+
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          }
 
           evaluate_pr() {
             local pr="$1"
@@ -170,7 +214,7 @@ jobs:
             elif [[ "$check_conclusion" == "none" && "$state" == "pending" ]]; then
               combined="pending"
             elif [[ "$check_conclusion" == "none" && "$state" == "unknown" ]]; then
-              # No checks at all yet — treat as pending
+              # No checks at all yet -- treat as pending
               combined="pending"
             else
               combined="$state"
@@ -193,20 +237,20 @@ jobs:
                 ;;
             esac
 
-            echo "$pr|$combined|status=$state checks=$check_conclusion → added=$added removed=$removed" >> "$RESULTS_FILE"
+            echo "$pr|$combined|status=$state checks=$check_conclusion -> added=$added removed=$removed" >> "$RESULTS_FILE"
             if [[ -n "$added" ]]; then
               LABELED=$((LABELED + 1))
             fi
           }
 
           for pr in ${PR_LIST}; do
-            echo "── PR #$pr ──"
+            echo "-- PR #$pr --"
             evaluate_pr "$pr"
             PROCESSED=$((PROCESSED + 1))
           done
 
-          echo "processed=$PROCESSED" >> "$GITHUB_OUTPUT"
-          echo "labeled=$LABELED" >> "$GITHUB_OUTPUT"
+          write_github_output processed "$PROCESSED"
+          write_github_output labeled "$LABELED"
           # Pass results file path for summary step
           cp "$RESULTS_FILE" "${GITHUB_WORKSPACE}/pr_results.txt"
 
@@ -246,7 +290,7 @@ jobs:
           MODE="${PR_MODE}"
 
           {
-            echo "### 🏷️ PR Status Labeler Summary"
+            echo "### PR Status Labeler Summary"
             echo ""
             echo "| Field | Value |"
             echo "|-------|-------|"
@@ -258,7 +302,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [[ "$MODE" == "none" ]]; then
-            echo "🟦 No open PRs — nothing to label." >> "$GITHUB_STEP_SUMMARY"
+            echo "No open PRs -- nothing to label." >> "$GITHUB_STEP_SUMMARY"
           elif [[ -f "${GITHUB_WORKSPACE}/pr_results.txt" ]]; then
             {
               echo "#### Per-PR Results"
@@ -273,4 +317,4 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          echo "✅ Workflow completed." >> "$GITHUB_STEP_SUMMARY"
+          echo "[OK] Workflow completed." >> "$GITHUB_STEP_SUMMARY"

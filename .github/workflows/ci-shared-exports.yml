@@ -814,6 +814,7 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github/scripts/sanitize.ps1
           cd Build/Cmake
           cmake -B build -S . `
                 -G "Visual Studio 17 2022" `
@@ -822,6 +823,7 @@ jobs:
                 -DVCPKG_MANIFEST_MODE=OFF `
                 -DCMAKE_BUILD_TYPE=$env:BUILD_TYPE `
                 -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF `
+                -DENABLE_TESTS=ON `
                 -DENABLE_TOOLS=ON `
                 -DENABLE_SHARED_LIBS=ON `
                 -DENABLE_STATIC_LIBS=ON `
@@ -1211,7 +1213,14 @@ jobs:
           $ProgressPreference = 'SilentlyContinue'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github/scripts/sanitize.ps1
           cd Build/Cmake
+          ctest --test-dir build `
+                -C $env:BUILD_TYPE `
+                -R '^iccdev\.issue-987-shared-mpe-export$' `
+                --output-on-failure `
+                --no-tests=error
+
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
               Where-Object {
                 $_.FullName -match 'icc' -and

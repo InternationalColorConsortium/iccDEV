@@ -95,6 +95,8 @@ For multiline content, sanitize one line at a time.
 `ci-pr-risk-security-analysis.yml` checks workflow governance, including action
 pinning, dangerous triggers, credential hygiene, shell hardening, matrix
 expression injection, output sanitization, permissions, and supply-chain risk.
+It supports both manual `workflow_dispatch` runs and reusable `workflow_call`
+invocation from other CI workflows. Prefer calling it over copying scanner logic.
 
 ## Full Run Log Audit
 

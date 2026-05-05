@@ -74,6 +74,7 @@
 #include <memory.h>
 #include <cstring>
 #include <cmath>
+#include <limits>
 
 
 #ifndef __max
@@ -91,6 +92,17 @@ namespace iccDEV {
 // Class CIccIO
 //////////////////////////////////////////////////////////////////////
 
+static size_t icReadFixedWidth(CIccIO *pIO, void *pBuf, size_t nNum, size_t nBytes)
+{
+  if (!pIO || !pBuf || !nBytes)
+    return 0;
+
+  if (nNum > std::numeric_limits<size_t>::max() / nBytes)
+    return 0;
+
+  size_t nRead = pIO->Read8(pBuf, nNum * nBytes) / nBytes;
+  return nRead > nNum ? nNum : nRead;
+}
 
 size_t CIccIO::ReadLine(void *pBuf8, size_t nNum/*=256*/)
 {
@@ -121,7 +133,7 @@ size_t CIccIO::Read16(void *pBuf16, size_t nNum)
   if (!pBuf16)
     return 0;
 
-  nNum = Read8(pBuf16, nNum<<1)>>1;
+  nNum = icReadFixedWidth(this, pBuf16, nNum, 2);
 #ifdef ICC_BYTE_ORDER_LITTLE_ENDIAN
   icSwab16Array(pBuf16, nNum);
 #endif
@@ -158,7 +170,7 @@ size_t CIccIO::Read32(void *pBuf32, size_t nNum)
   if (!pBuf32)
     return 0;
 
-  nNum = Read8(pBuf32, nNum<<2)>>2;
+  nNum = icReadFixedWidth(this, pBuf32, nNum, 4);
 #ifdef ICC_BYTE_ORDER_LITTLE_ENDIAN
   icSwab32Array(pBuf32, nNum);
 #endif
@@ -196,7 +208,7 @@ size_t CIccIO::Read64(void *pBuf64, size_t nNum)
   if (!pBuf64)
     return 0;
 
-  nNum = Read8(pBuf64, nNum<<3)>>3;
+  nNum = icReadFixedWidth(this, pBuf64, nNum, 8);
 #ifdef ICC_BYTE_ORDER_LITTLE_ENDIAN
   icSwab64Array(pBuf64, nNum);
 #endif

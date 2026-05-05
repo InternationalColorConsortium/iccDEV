@@ -1,17 +1,29 @@
 ---
 name: Bug report
-about: Report a functional bug that is not a sanitizer crash
+about: Report a bug or crash
 title: ''
 labels: 'bug'
 assignees: ''
 ---
 
-For memory-safety bugs, sanitizer findings, or fuzzer crashes, use the
-**Security bug report** template instead.
-
 ## Describe the Bug
 
-## Reproduce
+## Build Instructions
+
+Please include your Build Instructions.
+
+Example:
+
+```
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+cd iccDEV
+vcpkg integrate install
+vcpkg install
+cmake --preset vs2022-x64 -B msvc -S Build/Cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build msvc -- /m /maxcpucount
+```
+
+## Reproduce Bug or Crash
 
 1. Run `<command>`
 2. Observe `<output or behavior>`

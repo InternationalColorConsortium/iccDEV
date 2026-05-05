@@ -64,6 +64,10 @@ Every edited workflow `run:` block must keep these properties:
 - Sanitized writes to `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT`.
 - Least-privilege permissions.
 
+For reusable governance coverage, call
+`.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the
+scanner logic in a new CI workflow.
+
 See `.github/instructions/workflow-governance.instructions.md` for the full
 checklist.
 

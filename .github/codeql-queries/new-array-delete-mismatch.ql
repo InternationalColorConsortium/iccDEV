@@ -15,7 +15,6 @@
  */
 
 import cpp
-import semmle.code.cpp.dataflow.DataFlow
 
 /**
  * A scalar `delete` expression whose operand is the result of a `new[]`
