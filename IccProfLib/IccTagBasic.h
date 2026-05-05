@@ -68,6 +68,7 @@
 #if !defined(_ICCTAGBASIC_H)
 #define _ICCTAGBASIC_H
 
+#include <cstddef>
 #include <list>
 #include <string>
 #include "IccDefs.h"
@@ -89,6 +90,99 @@ public:
   virtual const char *GetExtClassName() const =0;
   virtual const char *GetExtDerivedClassName() const =0;
 };
+
+/**
+ ***********************************************************************
+ * Class: IDescribeSink
+ *
+ * Purpose:
+ *  Output sink for streaming Describe() output. Lets memory-constrained
+ *  consumers (WASM, sandboxed, embedded) receive bytes incrementally
+ *  instead of forcing the whole dump to materialize in a single
+ *  std::string. ShouldContinue() lets a sink enforce byte budgets, honour
+ *  user cancellation, or pipe to bounded buffers.
+ *
+ *  See StringDescribeSink for a default implementation that funnels
+ *  output back into a std::string (preserves the existing
+ *  Describe(std::string&, int) contract).
+ ***********************************************************************
+ */
+class ICCPROFLIB_API IDescribeSink
+{
+public:
+  virtual ~IDescribeSink() {}
+
+  // Append `len` bytes from `data` to the sink. Sinks must be append-only;
+  // existing content is never modified.
+  virtual void Write(const char *data, std::size_t len) = 0;
+
+  // Return false to ask the producer to stop emitting further output.
+  // Implementations that do not need cancellation can leave the default,
+  // matching today's "always run to completion" behaviour.
+  virtual bool ShouldContinue() { return true; }
+};
+
+/**
+ ***********************************************************************
+ * Class: StringDescribeSink
+ *
+ * Purpose:
+ *  Drop-in sink that appends to a caller-owned std::string. The legacy
+ *  CIccTag::Describe(std::string&, int) overload is implemented in
+ *  terms of this sink, so existing code paths produce byte-for-byte
+ *  identical output.
+ ***********************************************************************
+ */
+class ICCPROFLIB_API StringDescribeSink : public IDescribeSink
+{
+public:
+  explicit StringDescribeSink(std::string &out) : m_out(out) {}
+  virtual void Write(const char *data, std::size_t len) override
+  { if (data && len) m_out.append(data, len); }
+
+private:
+  std::string &m_out;
+};
+
+/**
+ ***********************************************************************
+ * Struct: DescribeOptions
+ *
+ * Purpose:
+ *  Composable, per-section verbosity controls. Replaces the coarse
+ *  integer verbosity (>25 / >50 / >75 / 100) with explicit booleans plus
+ *  budgets, so callers can ask for "everything except CLUT cells" or
+ *  "first N cells then truncate" without modifying IccProfLib.
+ *
+ *  Defaults match nVerboseness = 100 — i.e. a default-constructed
+ *  DescribeOptions produces today's full dump.
+ ***********************************************************************
+ */
+struct DescribeOptions
+{
+  // Section toggles. Defaults match nVerboseness = 100, so a default-
+  // constructed DescribeOptions produces today's full dump verbatim.
+  // Each flag is annotated with the legacy nVerboseness threshold it
+  // mirrors. Tag classes that have not yet been converted to honour the
+  // flags directly fall back through the legacy integer verbosity path
+  // (see CIccTag::Describe(IDescribeSink&, const DescribeOptions&)
+  // default implementation).
+  bool emit_header        = true;
+  bool emit_text_meta     = true;   // legacy gate: nVerboseness > 25 (text/desc/mluc tag metadata)
+  bool emit_text_full     = true;   // legacy gate: nVerboseness > 50 (full text content)
+  bool emit_curve_points  = true;   // legacy gate: nVerboseness > 75 (CIccTagCurve point dump)
+  bool emit_clut_channels = true;   // legacy gate: nVerboseness > 75 (CIccCLUT input/output channel header)
+  bool emit_clut_cells    = true;   // legacy gate: nVerboseness > 75 (CIccCLUT grid cells — the explosive one)
+  bool emit_spd_samples   = true;   // legacy gate: nVerboseness > 75 (observer / illuminant SPD samples)
+
+  // Budgets. 0 = unbounded (matches today's behaviour).
+  std::size_t max_clut_cells_per_tag = 0;
+  std::size_t max_curve_points       = 0;
+  std::size_t max_total_bytes        = 0; // soft cap; "[truncated]" footer
+};
+
+ICCPROFLIB_API DescribeOptions OptionsFromVerbosity(int nVerboseness);
+ICCPROFLIB_API int             VerbosityFromOptions(const DescribeOptions &opts);
 
 /**
  ***********************************************************************
@@ -213,9 +307,30 @@ public:
   *
   * Parameter(s):
   * sDescription - A string to put the tag's description into.
-* * verbosenss   - integer value. Default=0. The larger the value, the more verbose the output. 
+* * verbosenss   - integer value. Default=0. The larger the value, the more verbose the output.
   */
   virtual void Describe(std::string &sDescription, int /*nVerboseness=0*/) { sDescription.clear(); }
+
+  /**
+  * Function: Describe(sink, opts)
+  *  Sink-based Describe overload. Lets memory-constrained consumers
+  *  receive Describe() output incrementally and lets callers express
+  *  finer-grained verbosity than the integer nVerboseness gates.
+  *
+  *  Default implementation delegates to the legacy
+  *  Describe(std::string&, int) virtual via a StringDescribeSink, then
+  *  copies the bytes through `sink` honouring opts.max_total_bytes. So
+  *  every existing tag class works through this entry point with no
+  *  changes to its derived implementation; tag classes whose Describe()
+  *  output can grow large (e.g. CIccMBB / CIccCLUT) can override this
+  *  virtual to stream output directly and honour the per-section flags
+  *  and budgets.
+  */
+  virtual void Describe(IDescribeSink &sink, const DescribeOptions &opts);
+
+  // Convenience overload — Describe to a sink with verbosity-style int.
+  void Describe(IDescribeSink &sink, int nVerboseness)
+  { Describe(sink, OptionsFromVerbosity(nVerboseness)); }
 
   /**
    ******************************************************************************

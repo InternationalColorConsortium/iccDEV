@@ -2079,16 +2079,35 @@ bool CIccCLUT::Write(CIccIO *pIO)
  */
 void CIccCLUT::Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy )
 {
+  // Delegate to the sink-based recursion via a string sink. The legacy
+  // protected entry point is preserved so any external callers that
+  // override or invoke it directly keep working byte-for-byte.
+  StringDescribeSink sink(sDescription);
+  Iterate(sink, nIndex, nPos, bufSize, bUseLegacy, /*cellsRemaining=*/NULL);
+}
+
+void CIccCLUT::Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number nPos,
+                       size_t bufSize, bool bUseLegacy,
+                       std::size_t *cellsRemaining)
+{
   // CWE-674: ICC spec caps LUT input channels at 16 (icMaxChannels).
   // Bound recursion depth defensively even though m_nInput is icUInt8Number.
   static const icUInt8Number kMaxIterateDepth = 16;
   if (nIndex >= kMaxIterateDepth)
     return;
+  if (cellsRemaining && *cellsRemaining == 0)
+    return;
+  if (!sink.ShouldContinue())
+    return;
   if (nIndex < m_nInput) {
     int i;
     for (i=0; i<m_GridPoints[nIndex]; i++) {
       m_GridAdr[nIndex] = i;
-      Iterate(sDescription, nIndex+1, nPos, bufSize, bUseLegacy);
+      Iterate(sink, nIndex+1, nPos, bufSize, bUseLegacy, cellsRemaining);
+      if (cellsRemaining && *cellsRemaining == 0)
+        return;
+      if (!sink.ShouldContinue())
+        return;
       nPos += m_DimSize[nIndex];
     }
   }
@@ -2121,8 +2140,10 @@ void CIccCLUT::Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32
             return;
     }
     strcpy(ptr, "\n");
-    sDescription += (const icChar*)m_pOutText;
+    sink.Write((const char*)m_pOutText, strlen(m_pOutText));
 
+    if (cellsRemaining && *cellsRemaining > 0)
+      --(*cellsRemaining);
   }
 }
 
@@ -2231,60 +2252,80 @@ void CIccCLUT::DumpLut(std::string  &sDescription, const icChar *szName,
                        icColorSpaceSignature csInput, icColorSpaceSignature csOutput,
                        int nVerboseness, bool bUseLegacy)
 {
+  StringDescribeSink sink(sDescription);
+  DumpLut(sink, szName, csInput, csOutput,
+          OptionsFromVerbosity(nVerboseness), bUseLegacy);
+}
+
+void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
+                       icColorSpaceSignature csInput, icColorSpaceSignature csOutput,
+                       const DescribeOptions &opts, bool bUseLegacy)
+{
   const size_t outSize = 200000;
   const size_t nameSize = 40;
   icChar szOutText[outSize], szColor[nameSize];
   int i;
+  int n;
 
-  snprintf(szOutText, outSize, "BEGIN_LUT %s %d %d\n", szName, m_nInput, m_nOutput);
-  sDescription += szOutText;
+  if (!sink.ShouldContinue())
+    return;
 
-  if (nVerboseness > 75) {
+  n = snprintf(szOutText, outSize, "BEGIN_LUT %s %d %d\n", szName, m_nInput, m_nOutput);
+  if (n > 0) sink.Write(szOutText, (std::size_t)n);
 
-    for (i=0; i<m_nInput; i++) {
-      icColorIndexName(szColor, nameSize, csInput, i, m_nInput, "In");
-      snprintf(szOutText, outSize, " %s=%d", szColor, m_GridPoints[i]);
-      sDescription += szOutText;
-    }
+  // Channel header + cells share the legacy nVerboseness > 75 gate.
+  // Suppressing channels alone (channels=false, cells=true) is rejected
+  // here because the cell rows reference channel indices set up below.
+  if (!opts.emit_clut_channels)
+    return;
 
-    sDescription += "  ";
-
-    for (i=0; i<m_nOutput; i++) {
-      icColorIndexName(szColor, nameSize, csOutput, i, m_nOutput, "Out");
-      snprintf(szOutText, outSize, " %s", szColor);
-      sDescription += szOutText;
-    }
-
-    sDescription += "\n";
-
-    if (nVerboseness > 75) {
-      size_t len = 0;
-      for (i=0; i<m_nInput; i++) {
-        icColorValue(szColor, nameSize, 1.0, csInput, i, bUseLegacy);
-        len += strlen(szColor);
-      }
-      for (i=0; i<m_nOutput; i++) {
-        icColorValue(szColor, nameSize, 1.0, csOutput, i, bUseLegacy);
-        len += strlen(szColor);
-      }
-      len += m_nInput + m_nOutput + 6;
-
-      sDescription.reserve(sDescription.size() + NumPoints()*len);
-
-      //Initialize iteration member variables
-      m_csInput = csInput;
-      m_csOutput = csOutput;
-      m_pOutText = szOutText;
-      m_pVal = szColor;
-      memset(m_GridAdr, 0, 16);
-
-      Iterate(sDescription, 0, 0, outSize, bUseLegacy);
-
-      // Reset member pointers to avoid dangling references to stack arrays
-      m_pOutText = NULL;
-      m_pVal = NULL;
-    }
+  for (i=0; i<m_nInput; i++) {
+    icColorIndexName(szColor, nameSize, csInput, i, m_nInput, "In");
+    n = snprintf(szOutText, outSize, " %s=%d", szColor, m_GridPoints[i]);
+    if (n > 0) sink.Write(szOutText, (std::size_t)n);
   }
+
+  sink.Write("  ", 2);
+
+  for (i=0; i<m_nOutput; i++) {
+    icColorIndexName(szColor, nameSize, csOutput, i, m_nOutput, "Out");
+    n = snprintf(szOutText, outSize, " %s", szColor);
+    if (n > 0) sink.Write(szOutText, (std::size_t)n);
+  }
+
+  sink.Write("\n", 1);
+
+  if (!opts.emit_clut_cells)
+    return;
+  if (!sink.ShouldContinue())
+    return;
+
+  // Initialize iteration member variables. Same instance-level scratch
+  // pointers as the legacy path — preserves the existing thread-safety
+  // contract (Describe is per-instance non-reentrant).
+  m_csInput = csInput;
+  m_csOutput = csOutput;
+  m_pOutText = szOutText;
+  m_pVal = szColor;
+  memset(m_GridAdr, 0, 16);
+
+  // Apply opts.max_clut_cells_per_tag as a budget on emitted cells.
+  std::size_t budget = opts.max_clut_cells_per_tag;
+  std::size_t *budgetPtr = budget ? &budget : NULL;
+  std::size_t budgetStart = budget;
+
+  Iterate(sink, 0, 0, outSize, bUseLegacy, budgetPtr);
+
+  // If we ran out of budget mid-dump, mark the truncation explicitly.
+  if (budgetPtr && budget == 0 && sink.ShouldContinue()) {
+    n = snprintf(szOutText, outSize,
+                 "[clut cells truncated after %zu]\n", budgetStart);
+    if (n > 0) sink.Write(szOutText, (std::size_t)n);
+  }
+
+  // Reset member pointers to avoid dangling references to stack arrays
+  m_pOutText = NULL;
+  m_pVal = NULL;
 }
 
 
@@ -3693,6 +3734,126 @@ void CIccMBB::Describe(std::string &sDescription, int nVerboseness)
         icColorIndexName(color, nameSize, m_csOutput, i, m_nOutput, "");
         snprintf(buf, bufSize, "B_Curve_%s", color);
         m_CurvesB[i]->DumpLut(sDescription, buf, m_csOutput, i, nVerboseness);
+      }
+    }
+  }
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccMBB::Describe (sink overload)
+ *
+ * Purpose: Same output as the legacy Describe(std::string&, int), but
+ *  emitted through `sink` so the CLUT cell dump (which can be tens to
+ *  hundreds of MB on high-channel-count profiles) streams instead of
+ *  materializing in a single std::string. Curves and matrix output,
+ *  which is bounded by sample/parameter count, still goes through small
+ *  per-call string buffers.
+ *
+ *  Byte-for-byte identical to legacy Describe() when invoked via
+ *  CIccTag::Describe(sink, OptionsFromVerbosity(v)) at v=100.
+ *****************************************************************************
+ */
+void CIccMBB::Describe(IDescribeSink &sink, const DescribeOptions &opts)
+{
+  int i;
+  const size_t nameSize = 40;
+  icChar color[nameSize], buf[128];
+  // Per-section scratch buffer for legacy DumpLut() calls. Reused so
+  // each curve/matrix dump goes to the sink before the next one runs,
+  // bounding live string memory to a single section's output.
+  std::string section;
+  // Approximate the legacy nVerboseness so the curve/matrix DumpLut()
+  // calls (which still take int verbosity) honour the same gates the
+  // structured options express.
+  const int nVerboseness = VerbosityFromOptions(opts);
+
+  auto flushSection = [&](void) {
+    if (!sink.ShouldContinue()) { section.clear(); return; }
+    if (!section.empty()) {
+      sink.Write(section.data(), section.size());
+      section.clear();
+    }
+  };
+
+  if (IsInputMatrix()) {
+    if (m_CurvesB && !m_bUseMCurvesAsBCurves) {
+      for (i=0; i<m_nInput && sink.ShouldContinue(); i++) {
+        icColorIndexName(color, nameSize, m_csInput, i, m_nInput, "");
+        snprintf(buf, sizeof(buf), "B_Curve_%s", color);
+        m_CurvesB[i]->DumpLut(section, buf, m_csInput, i, nVerboseness);
+        flushSection();
+      }
+    }
+
+    if (m_Matrix && sink.ShouldContinue()) {
+      m_Matrix->DumpLut(section, "Matrix", nVerboseness);
+      flushSection();
+    }
+
+    if (m_CurvesM) {
+      for (i=0; i<m_nInput && sink.ShouldContinue(); i++) {
+        icColorIndexName(color, nameSize, m_csInput, i, m_nInput, "");
+        if (!m_bUseMCurvesAsBCurves)
+          snprintf(buf, sizeof(buf), "M_Curve_%s", color);
+        else
+          snprintf(buf, sizeof(buf), "B_Curve_%s", color);
+        m_CurvesM[i]->DumpLut(section, buf, m_csInput, i, nVerboseness);
+        flushSection();
+      }
+    }
+
+    if (m_CLUT && sink.ShouldContinue()) {
+      // Direct sink path — this is the entry that avoids the
+      // multi-MB std::string allocation on high-channel-count CLUTs.
+      m_CLUT->DumpLut(sink, "CLUT", m_csInput, m_csOutput, opts,
+                      GetType()==icSigLut16Type);
+    }
+
+    if (m_CurvesA) {
+      for (i=0; i<m_nOutput && sink.ShouldContinue(); i++) {
+        icColorIndexName(color, nameSize, m_csOutput, i, m_nOutput, "");
+        snprintf(buf, sizeof(buf), "A_Curve_%s", color);
+        m_CurvesA[i]->DumpLut(section, buf, m_csOutput, i, nVerboseness);
+        flushSection();
+      }
+    }
+  }
+  else {
+    if (m_CurvesA) {
+      for (i=0; i<m_nInput && sink.ShouldContinue(); i++) {
+        icColorIndexName(color, nameSize, m_csInput, i, m_nInput, "");
+        snprintf(buf, sizeof(buf), "A_Curve_%s", color);
+        m_CurvesA[i]->DumpLut(section, buf, m_csInput, i, nVerboseness);
+        flushSection();
+      }
+    }
+
+    if (m_CLUT && sink.ShouldContinue()) {
+      m_CLUT->DumpLut(sink, "CLUT", m_csInput, m_csOutput, opts,
+                      GetType()==icSigLut16Type);
+    }
+
+    if (m_CurvesM && this->GetType()!=icSigLut8Type) {
+      for (i=0; i<m_nOutput && sink.ShouldContinue(); i++) {
+        icColorIndexName(color, nameSize, m_csOutput, i, m_nOutput, "");
+        snprintf(buf, sizeof(buf), "M_Curve_%s", color);
+        m_CurvesM[i]->DumpLut(section, buf, m_csOutput, i, nVerboseness);
+        flushSection();
+      }
+    }
+
+    if (m_Matrix && sink.ShouldContinue()) {
+      m_Matrix->DumpLut(section, "Matrix", nVerboseness);
+      flushSection();
+    }
+
+    if (m_CurvesB) {
+      for (i=0; i<m_nOutput && sink.ShouldContinue(); i++) {
+        icColorIndexName(color, nameSize, m_csOutput, i, m_nOutput, "");
+        snprintf(buf, sizeof(buf), "B_Curve_%s", color);
+        m_CurvesB[i]->DumpLut(section, buf, m_csOutput, i, nVerboseness);
+        flushSection();
       }
     }
   }

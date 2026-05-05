@@ -35,6 +35,7 @@ function(iccdev_add_check_dependencies)
       iccApplyProfiles
       iccApplySearch
       iccApplyToLink
+      iccDescribeSinkTest
       iccDumpProfile
       iccFromCube
       iccFromJson
@@ -371,3 +372,24 @@ iccdev_add_script_test(
 set_tests_properties(iccdev.version-bcd-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
+
+# Describe sink + options API smoke test. Verifies byte-equivalence
+# between the legacy std::string Describe() and the new
+# Describe(IDescribeSink&, const DescribeOptions&) virtual, plus
+# truncation/suppression honouring of the structured options.
+# Uses the always-shipped sRGB v4 profile from Testing/.
+if(TARGET iccDescribeSinkTest)
+  add_test(
+    NAME iccdev.describe-sink-api
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      "LD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{LD_LIBRARY_PATH}"
+      "DYLD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{DYLD_LIBRARY_PATH}"
+      $<TARGET_FILE:iccDescribeSinkTest>
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.describe-sink-api PROPERTIES
+    TIMEOUT 60
+    LABELS  "iccdev;describe;api;sink;options"
+  )
+endif()
