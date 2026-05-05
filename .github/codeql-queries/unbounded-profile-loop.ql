@@ -24,11 +24,24 @@ where
   fa.getTarget().getName().regexpMatch("(?i).*(count|num|size|length|steps|nInput|nOutput|m_n).*") and
   // The field is from a class/struct (not a local)
   exists(fa.getTarget().getDeclaringType()) and
-  // No bounds check before the loop (simple heuristic: no if/min in the 3 lines before)
+  // Exempt loops with a cooperative-cancellation guard in the condition
+  // (e.g., && sink.ShouldContinue()) — bounded by IDescribeSink contract.
+  not loop.getCondition().getAChild*().toString().matches("%ShouldContinue%") and
+  // Exempt loops driven by u8/u16-narrowed fields — already capped at
+  // 255/65535 by the field type itself.
+  not exists(IntegralType t |
+    t = fa.getTarget().getType() and
+    t.getSize() <= 2
+  ) and
+  // No bounds check anywhere earlier in the same function. Cross-function
+  // bounds (e.g., guards in Read() applying to fields used in Apply())
+  // require dataflow and are out of scope for this rule.
   not exists(IfStmt guard |
-    guard.getLocation().getStartLine() >= loop.getLocation().getStartLine() - 5 and
+    guard.getEnclosingFunction() = loop.getEnclosingFunction() and
     guard.getLocation().getStartLine() < loop.getLocation().getStartLine() and
-    guard.getCondition().getAChild*().toString().regexpMatch(".*(?i)(max|limit|bound|INT_MAX).*")
+    guard.getCondition().getAChild*().toString().regexpMatch(
+      "(?i).*(max|limit|bound|INT_MAX|icMaxEnum|4096|65535|MAX_CALC_ELEMENTS).*"
+    )
   ) and
   not exists(FunctionCall minCall |
     minCall.getTarget().getName().matches("%min%") and
