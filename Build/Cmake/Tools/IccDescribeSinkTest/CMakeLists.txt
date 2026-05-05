@@ -1,5 +1,5 @@
 SET( SRC_PATH ../../../.. )
-SET( SOURCES  ${SRC_PATH}/Tools/CmdLine/IccDescribeSinkTest/iccDescribeSinkTest.cpp )
+SET( SOURCES  ${SRC_PATH}/.github/ci/regression/iccDescribeSinkTest.cpp )
 SET( TARGET_NAME iccDescribeSinkTest )
 
 ADD_EXECUTABLE( ${TARGET_NAME} ${SOURCES} )

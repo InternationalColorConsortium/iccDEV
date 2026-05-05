@@ -67,7 +67,7 @@ Linux currently registers 17 tests:
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
 | `iccdev.version-bcd-regressions` | `.github/scripts/iccdev-version-bcd-regression-tests.sh` |
-| `iccdev.describe-sink-api` | `Tools/CmdLine/IccDescribeSinkTest/iccDescribeSinkTest.cpp` |
+| `iccdev.describe-sink-api` | `.github/ci/regression/iccDescribeSinkTest.cpp` |
 
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.
 The JSON round-trip uses a temporary directory for generated `.json` and
