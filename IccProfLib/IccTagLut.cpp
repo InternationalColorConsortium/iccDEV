@@ -78,6 +78,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <vector>
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfile.h"
@@ -1730,8 +1731,6 @@ CIccCLUT::CIccCLUT(icUInt8Number nInputChannels, icUInt16Number nOutputChannels,
   m_nPrecision = nPrecision;
   m_pData = NULL;
   m_nOffset = NULL;
-  m_pOutText = NULL;
-  m_pVal = NULL;
   m_nNumPoints = 0;
   m_nNodes = 0;
   m_csInput = icSigUnknownData;
@@ -2073,22 +2072,26 @@ bool CIccCLUT::Write(CIccIO *pIO)
  *  sDescription = string to concatenate data dump to,
  *  nIndex = the channel number,
  *  nPos = the current position in the CLUT
- *  bufSize = the size of the buffer m_pOutText, for error checking
+ *  bufSize = the size of the row-format scratch buffer, for error checking
  *
  *****************************************************************************
  */
 void CIccCLUT::Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy )
 {
-  // Delegate to the sink-based recursion via a string sink. The legacy
-  // protected entry point is preserved so any external callers that
-  // override or invoke it directly keep working byte-for-byte.
+  // Delegate to the sink-based recursion via a string sink. Allocates the
+  // scratch buffers locally — keeps the legacy protected entry point
+  // self-contained so any external callers keep working byte-for-byte.
+  std::vector<icChar> outBuf(bufSize ? bufSize : 1);
+  icChar valBuf[40];
   StringDescribeSink sink(sDescription);
-  Iterate(sink, nIndex, nPos, bufSize, bUseLegacy, /*cellsRemaining=*/NULL);
+  Iterate(sink, nIndex, nPos, bufSize, bUseLegacy, /*cellsRemaining=*/NULL,
+          outBuf.data(), valBuf, sizeof(valBuf));
 }
 
 void CIccCLUT::Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number nPos,
                        size_t bufSize, bool bUseLegacy,
-                       std::size_t *cellsRemaining)
+                       std::size_t *cellsRemaining,
+                       icChar *pOutText, icChar *pVal, std::size_t valSize)
 {
   // CWE-674: ICC spec caps LUT input channels at 16 (icMaxChannels).
   // Bound recursion depth defensively even though m_nInput is icUInt8Number.
@@ -2103,7 +2106,8 @@ void CIccCLUT::Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number
     int i;
     for (i=0; i<m_GridPoints[nIndex]; i++) {
       m_GridAdr[nIndex] = i;
-      Iterate(sink, nIndex+1, nPos, bufSize, bUseLegacy, cellsRemaining);
+      Iterate(sink, nIndex+1, nPos, bufSize, bUseLegacy, cellsRemaining,
+              pOutText, pVal, valSize);
       if (cellsRemaining && *cellsRemaining == 0)
         return;
       if (!sink.ShouldContinue())
@@ -2112,19 +2116,18 @@ void CIccCLUT::Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number
     }
   }
   else {
-    icChar *ptr = m_pOutText;
+    icChar *ptr = pOutText;
     icChar *ptrEnd = ptr + bufSize;
     icFloatNumber *pData = &m_pData[nPos];
     int i;
 
     for (i=0; i<m_nInput; i++) {
-// TODO - hard coding size temporarily, really should be passed in
-      icColorValue(m_pVal, 40, (icFloatNumber)m_GridAdr[i] / (m_GridPoints[i]-1) , m_csInput, i, bUseLegacy);
+      icColorValue(pVal, valSize, (icFloatNumber)m_GridAdr[i] / (m_GridPoints[i]-1), m_csInput, i, bUseLegacy);
 
 // TODO - this buffer handling is sloppy, but should be ok for now
 // really needs to be refactored, needs some sort of error return if buffer overflows
 // right now it will terminate the output when the buffer overflows
-      ptr += snprintf(ptr, size_t(ptrEnd-ptr), " %s", m_pVal);
+      ptr += snprintf(ptr, size_t(ptrEnd-ptr), " %s", pVal);
       if (ptr >= ptrEnd)
             return;
     }
@@ -2132,15 +2135,14 @@ void CIccCLUT::Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number
     ptr += 2;
 
     for (i=0; i<m_nOutput; i++) {
-// TODO - hard coding size temporarily, really should be passed in
-      icColorValue(m_pVal, 40, pData[i], m_csOutput, i, bUseLegacy);
+      icColorValue(pVal, valSize, pData[i], m_csOutput, i, bUseLegacy);
 
-      ptr += snprintf(ptr, size_t(ptrEnd-ptr), " %s", m_pVal);
+      ptr += snprintf(ptr, size_t(ptrEnd-ptr), " %s", pVal);
       if (ptr >= ptrEnd)
             return;
     }
     strcpy(ptr, "\n");
-    sink.Write((const char*)m_pOutText, strlen(m_pOutText));
+    sink.Write((const char*)pOutText, strlen(pOutText));
 
     if (cellsRemaining && *cellsRemaining > 0)
       --(*cellsRemaining);
@@ -2300,13 +2302,11 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
   if (!sink.ShouldContinue())
     return;
 
-  // Initialize iteration member variables. Same instance-level scratch
-  // pointers as the legacy path — preserves the existing thread-safety
-  // contract (Describe is per-instance non-reentrant).
+  // Cache the colour-space signatures so Iterate can format channel labels.
+  // Scratch buffers are threaded through Iterate as parameters, which keeps
+  // the stack arrays' lifetimes confined to this function frame.
   m_csInput = csInput;
   m_csOutput = csOutput;
-  m_pOutText = szOutText;
-  m_pVal = szColor;
   memset(m_GridAdr, 0, 16);
 
   // Apply opts.max_clut_cells_per_tag as a budget on emitted cells.
@@ -2314,7 +2314,8 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
   std::size_t *budgetPtr = budget ? &budget : NULL;
   std::size_t budgetStart = budget;
 
-  Iterate(sink, 0, 0, outSize, bUseLegacy, budgetPtr);
+  Iterate(sink, 0, 0, outSize, bUseLegacy, budgetPtr,
+          szOutText, szColor, nameSize);
 
   // If we ran out of budget mid-dump, mark the truncation explicitly.
   if (budgetPtr && budget == 0 && sink.ShouldContinue()) {
@@ -2322,10 +2323,6 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
                  "[clut cells truncated after %zu]\n", budgetStart);
     if (n > 0) sink.Write(szOutText, (std::size_t)n);
   }
-
-  // Reset member pointers to avoid dangling references to stack arrays
-  m_pOutText = NULL;
-  m_pVal = NULL;
 }
 
 

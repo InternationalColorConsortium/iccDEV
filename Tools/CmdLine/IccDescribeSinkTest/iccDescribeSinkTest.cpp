@@ -35,6 +35,7 @@
 #include "IccProfile.h"
 #include "IccTagBasic.h"
 #include "IccTagLut.h"
+#include "IccUtil.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -108,6 +109,17 @@ CIccTag *firstLutTag(CIccProfile *pProfile, icSignature *sigOut)
   return NULL;
 }
 
+// Per-tag Validate() — defensive against malformed tag data slipping past
+// whole-profile ValidateIccProfile(). Returns true if the tag is safe to
+// describe; false if Describe() should be skipped.
+bool validateTag(CIccTag *pTag, CIccProfile *pProfile, icSignature sig)
+{
+  std::string sigPath = "tag:" + icGetSigPath(sig);
+  std::string vReport;
+  icValidateStatus vStatus = pTag->Validate(sigPath, vReport, pProfile);
+  return vStatus < icValidateCriticalError;
+}
+
 } // namespace
 
 int main(int argc, char *argv[])
@@ -133,6 +145,11 @@ int main(int argc, char *argv[])
     char sigStr[5];
     tagSigToStr((icSignature)it->TagInfo.sig, sigStr);
 
+    if (!validateTag(pTag, pProfile, (icSignature)it->TagInfo.sig)) {
+      std::printf("[SKIP] tag '%s' failed per-tag Validate; skipping Describe\n", sigStr);
+      continue;
+    }
+
     std::string legacy;
     pTag->Describe(legacy, 100);
 
@@ -152,6 +169,10 @@ int main(int argc, char *argv[])
   // ── Tests 2 & 3: only meaningful on a CLUT-bearing tag ──────────────────
   icSignature lutSig = 0;
   CIccTag *pLutTag = firstLutTag(pProfile, &lutSig);
+  if (pLutTag && !validateTag(pLutTag, pProfile, lutSig)) {
+    std::printf("[SKIP] LUT tag failed per-tag Validate; Tests 2, 3, 5 skipped\n");
+    pLutTag = NULL;
+  }
   if (pLutTag) {
     char lutStr[5];
     tagSigToStr(lutSig, lutStr);
@@ -217,6 +238,9 @@ int main(int argc, char *argv[])
   for (auto it = pProfile->m_Tags.begin(); it != pProfile->m_Tags.end(); ++it) {
     CIccTag *pTag = pProfile->FindTag(it->TagInfo.sig);
     if (!pTag) continue;
+
+    if (!validateTag(pTag, pProfile, (icSignature)it->TagInfo.sig))
+      continue;
 
     std::string legacy;
     pTag->Describe(legacy, 100);

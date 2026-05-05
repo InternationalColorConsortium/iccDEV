@@ -383,9 +383,13 @@ public:
 protected:
   void Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy=false );
   // Sink-based iteration. `cellsRemaining`==NULL means unbounded.
+  // `pOutText` is a row-format scratch buffer of size `bufSize`; `pVal` is a
+  // per-channel-value scratch buffer of size `valSize`. Caller owns both —
+  // they replace the older instance-level scratch members.
   void Iterate(IDescribeSink &sink, icUInt8Number nIndex, icUInt32Number nPos,
                size_t bufSize, bool bUseLegacy,
-               std::size_t *cellsRemaining);
+               std::size_t *cellsRemaining,
+               icChar *pOutText, icChar *pVal, std::size_t valSize);
   void SubIterate(IIccCLUTExec* pExec, icUInt8Number nIndex, icUInt32Number nPos);
 
   icCLUTCLIPFUNC m_UnitClipFunc;
@@ -405,7 +409,6 @@ protected:
   //Iteration temporary variables
   icUInt8Number m_GridAdr[16];
   icFloatNumber m_fGridAdr[16];
-  icChar *m_pOutText, *m_pVal;
   icColorSpaceSignature m_csInput, m_csOutput;
 
   //Tetrahedral interpolation variables
