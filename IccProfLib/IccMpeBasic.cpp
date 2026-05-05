@@ -5643,7 +5643,7 @@ bool CIccMpeCLUT::Read(icUInt32Number size, CIccIO *pIO)
     return false;
   }
 
-  icUInt32Number nPoints = (icUInt32Number)m_nInputChannels * m_nOutputChannels;
+  size_t nPoints = (size_t)m_nInputChannels * m_nOutputChannels;
 
   if (m_nInputChannels > 16 || nPoints > dataSize || nPoints * sizeof (icFloat32Number) > dataSize)
     return false;
@@ -5664,7 +5664,6 @@ bool CIccMpeCLUT::Read(icUInt32Number size, CIccIO *pIO)
 
   nPoints = (size_t)m_pCLUT->NumPoints()*m_nOutputChannels;
 
-    // ERROR - comparison of values with different signs!
   if (pIO->ReadFloat32Float(pData,nPoints)!= nPoints)
     return false;
   

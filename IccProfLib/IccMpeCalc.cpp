@@ -96,7 +96,7 @@ static icInt32Number icCalcSaturatingIntCast(double v)
   if (v <= (double)std::numeric_limits<icInt32Number>::lowest())
     return std::numeric_limits<icInt32Number>::lowest();
 
-  return std::lround(std::trunc(v));
+  return (icInt32Number) std::lround(std::trunc(v));
 }
 
 static icInt32Number icCalcSaturatingRound(icFloatNumber v)

@@ -94,10 +94,10 @@ static int hexVal(char c)
   return -1;
 }
 
-icUInt32Number icJsonGetHexData(void *pBuf, const char *szText, icUInt32Number nBufSize)
+size_t icJsonGetHexData(void *pBuf, const char *szText, size_t nBufSize)
 {
   unsigned char *pDest = (unsigned char*)pBuf;
-  icUInt32Number rv = 0;
+  size_t rv = 0;
   while (rv < nBufSize && *szText) {
     int c1 = hexVal(szText[0]);
     if (c1 >= 0 && szText[1]) {

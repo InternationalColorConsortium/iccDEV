@@ -736,7 +736,7 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
       size_t fileLen = pIO->GetLength();
       char *buf = new(std::nothrow) char[fileLen + 1];
       if (!buf) { delete pIO; parseStr += "Out of memory\n"; delete pTag; return false; }
-      icUInt32Number nRead = pIO->Read8(buf, (icUInt32Number)fileLen);
+      size_t nRead = pIO->Read8(buf, (icUInt32Number)fileLen);
       buf[nRead] = '\0';
       delete pIO;
 
