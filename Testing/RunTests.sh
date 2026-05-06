@@ -141,5 +141,10 @@ else
 	fi
 fi
 
+echo "==========================================================================="
+echo "Test iccProfileVisualize with sRGBv4_preference"
+iccProfileVisualize sRGB_v4_ICC_preference.icc
+
+
 echo "====================== Exiting Testing/RunTests.sh =========================="
 exit "$RUNTEST_STATUS"

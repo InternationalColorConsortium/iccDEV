@@ -110,4 +110,8 @@ if exist sRGB_v4_ICC_preference_rt.icc (
 	echo JSON round-trip: FAIL
 )
 
+echo ===========================================================================
+echo Test iccProfileVisualize with sRGBv4_preference
+iccProfileVisualize sRGB_v4_ICC_preference.icc
+
 :end

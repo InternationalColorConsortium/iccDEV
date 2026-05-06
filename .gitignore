@@ -92,7 +92,8 @@ Build-AFL/
 codeql-results/
 
 # Built tool binaries (no extension on Linux)
-Build/Cmake/Tools/**/icc*
+# DANGER - this line overfilters and removes the ability to add or change CMakeList.txt files in the tools directory
+#Build/Cmake/Tools/**/icc*
 Build/Cmake/Tools/**/wxProfileDump
 
 # Versioned shared libraries

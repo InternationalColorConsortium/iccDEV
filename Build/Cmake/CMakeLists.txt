@@ -1433,6 +1433,7 @@ IF(ENABLE_TOOLS)
   ADD_SUBDIRECTORY(Tools/IccV5DspObsToV4Dsp)
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
   ADD_SUBDIRECTORY(Tools/IccApplySearch)
+  ADD_SUBDIRECTORY(Tools/IccProfileVisualize)
 
   # Ensure IccXML-dependent tools are built after IccXML library (safety net)
   IF(ENABLE_ICCXML)
@@ -1542,6 +1543,7 @@ IF(ENABLE_TOOLS)
       iccSpecSepToTiff
       iccTiffDump
       iccDumpProfileGui
+      iccProfileVisualize
   )
     iccdev_fixup_msvc_compile_pdb(${_iccdev_tool_target})
   endforeach()
@@ -1605,6 +1607,7 @@ ADD_CUSTOM_TARGET( dist-bin2
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccTiffDump ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccPngDump ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccV5DspObsToV4Dsp ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
+    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccProfileVisualize ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/CreateAllProfiles.sh ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/RunTests.sh ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
     COMMAND echo tar cf - ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/ --owner user:1000 --group group:500 | gzip -9 > ../${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}.tar.gz
