@@ -1,7 +1,7 @@
-# 
+#
 # iccProfileVisualize.cpp CMakeLists.txt | iccDEV Project
-# Copyright (©) 2026 The International Color Consortium. All rights reserved.
-# 
+# Copyright (c) 2026 The International Color Consortium. All rights reserved.
+#
 
 set(TARGET_NAME iccProfileVisualize)
 set(SRC_PATH ../../../.. )
@@ -14,16 +14,20 @@ set(SOURCES
 
 add_executable(${TARGET_NAME} ${SOURCES})
 
+set_target_properties(${TARGET_NAME} PROPERTIES
+  OUTPUT_NAME "iccProfileVisualize"
+)
+
 target_link_libraries(${TARGET_NAME}
   PRIVATE
-    IccProfLib2-static
-    $<$<BOOL:${ENABLE_ICCXML}>:IccXML2-static>
+    ${TARGET_LIB_ICCPROFLIB}
+    $<$<BOOL:${ENABLE_ICCXML}>:${TARGET_LIB_ICCXML}>
 )
 
 target_include_directories(${TARGET_NAME}
   PRIVATE
-    ${PROJECT_SOURCE_DIR}/IccProfLib
-    $<$<BOOL:${ENABLE_ICCXML}>:${PROJECT_SOURCE_DIR}/IccXML/IccLibXML>
+    ${PROJECT_ROOT_DIR}/IccProfLib
+    $<$<BOOL:${ENABLE_ICCXML}>:${PROJECT_ROOT_DIR}/IccXML/IccLibXML>
 )
 
 install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})

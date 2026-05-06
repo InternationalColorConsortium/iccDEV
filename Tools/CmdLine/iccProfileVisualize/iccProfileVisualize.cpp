@@ -66,6 +66,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
+#include <cmath>
 #include <string>
 #include <memory>
 #include <algorithm>
@@ -117,7 +118,7 @@ void DrawAxis( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
     point2D startN = basepoint + range*(i/100.0);
     svgfile.AddLine( startN, startN+tickLength*0.25);
   }
-  
+
   // label near halfway
   std::string font = "Arial";
   std::string style = "Regular";
@@ -140,7 +141,7 @@ void graph1DLUT( CIccCurve *curve, const std::string &name,
   std::string font = "Arial";
   std::string style = "Bold";
   std::string align = "Center";
-  
+
   std::string clean_description( description );
   // remove any line breaks from our text, because SVG doesn't do line breaks
   std::replace( clean_description.begin(), clean_description.end(), '\n', ' ');
@@ -165,8 +166,8 @@ void graph1DLUT( CIccCurve *curve, const std::string &name,
   for (int i = 0; i <= steps; ++i ) {
     float input = i / (float)steps;
     float output = curve->Apply( input );
-    if (isnan(output)) output = 0.0;
-    if (isinf(output)) output = 1.0;
+    if (std::isnan(output)) output = 0.0;
+    if (std::isinf(output)) output = 1.0;
     if (output > 1.0) output = 1.0;
     if (output < 0.0) output = 0.0;
     points[i] = point2D( input*scale, -output*scale ) + base;
@@ -220,7 +221,7 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
   char buf[bufSize];
 
   icTagTypeSignature typeSig = tag->GetType();
-  
+
   switch(typeSig) {
     case icSigCurveType:
       {
@@ -293,22 +294,22 @@ int TIFFColorModelFromICCModel( icColorSpaceSignature colorSig )
     case icSigHlsData:
       return TIFF_MODE_RGB;
       break;
-    
+
     case icSigCmykData:
       return TIFF_MODE_CMYK;
       break;
-    
+
     case icSigLabData:
       return TIFF_MODE_CIELAB;
       break;
-    
+
     case icSigGrayData:
     case icSigGamutData:
     default:
       // and let additional channels be unassociated alphas
       return TIFF_MODE_GRAY_BLACKZERO;
       break;
-    
+
   }
 
   // some compilers are picky, and stupid
@@ -355,7 +356,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     if (lut) {
       std::string description;
       lut->Describe( description, 100 );
-      
+
       // output input and output curves
       CIccCurve **curveA = lut->GetCurvesA();
       CIccCurve **curveB = lut->GetCurvesB();
@@ -379,7 +380,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           }
         }
       }
-      
+
       if (curveB) {
         int curveBCount = isInputMatrix ? inputChannels : outputChannels;
         for (int i = 0; i < curveBCount; ++i) {
@@ -391,7 +392,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           }
         }
       }
-      
+
       if (curveM) {
         int curveMCount = isInputMatrix ? inputChannels : outputChannels;
         for (int i = 0; i < curveMCount; ++i) {
@@ -403,24 +404,24 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           }
         }
       }
-      
-      
+
+
     // write nD Data to TIFF
       int bytes = lut->GetPrecision();    // currently only 1 or 2
       CIccCLUT *clut = lut->GetCLUT();
 
       clut->Begin();  // initialize some grid information
-    
+
       int tiles = clut->GridPoints();   // gridSize[0]
       int tileWidth = 1;
       int tileHeight = 1;
-      
+
       if (inputChannels >= 2)
         tileWidth = clut->GridPoint(1);
-      
+
       if (inputChannels >= 3)
         tileHeight = clut->GridPoint(2);
-      
+
       if (inputChannels > 3) {
         for (int i = 3; i < inputChannels; ++i)
           tiles *= clut->GridPoint(i);
@@ -432,28 +433,28 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         tiles = 1;
         tileHeight = 1;
       }
-      
+
       // find tile arrangement closest to a square
-      int tilesWide = (int)sqrt(tiles);
+      int tilesWide = (int)std::sqrt(tiles);
       int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
-      
+
       // multiply out by tile size
       int imageWidth = tilesWide * tileWidth;
       int imageHeight = tilesHigh * tileHeight;
-      
+
       //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
       size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
       // NOTE that bufferSize will usually be greater than clutSize
-      
+
       std::unique_ptr<uint8_t> imageBuffer( new uint8_t[ bufferSize ] );
       uint8_t *imageBuf = imageBuffer.get();
       uint16_t *imageBuf16 = (uint16_t *)imageBuf;
       float *imageBuf32 = (float *)imageBuf;
       memset( imageBuf, 0, bufferSize );
-      
+
       // copy data from CLUT to image buffer
       icFloatNumber *clutData = clut->GetData(0);
-      
+
 // simplest possible conversion for now
 // TODO - figure out how to abstract this for n Dimensions!
 /*
@@ -466,12 +467,12 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       size_t n001 = tileWidth * tileHeight * outputChannels;
       size_t n010 = tileWidth * outputChannels;
       size_t n100 = outputChannels;
-      
+
       size_t outTileStepV = imageWidth * tileHeight * outputChannels;
       size_t outTileStepH = tileWidth * outputChannels;
       size_t outColStep = outputChannels;
       size_t outRowStep = imageWidth * outputChannels;
-      
+
       for (int x = 0; x < tileWidth; ++x)
       for (int y = 0; y < tileHeight; ++y)
       for (int z = 0; z < tiles; ++z) {
@@ -489,7 +490,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           for (int c = 0; c < outputChannels; ++c)
             imageBuf[outputIndex+c] = clutData[inputIndex+c] * 255.0;
       }
-      
+
       std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
       int tiffColor = TIFFColorModelFromICCModel( outputSpace );
       WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
@@ -498,7 +499,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     }
     break;
 
-  
+
   default:
     printf("Unknown nD LUT type %s for tag %s\n",
          icGetSig(buf, bufSize, typeSig),
@@ -528,7 +529,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
 {
   const size_t bufSize = 64;
   char buf1[bufSize];
-  
+
   std::string basename = remove_extension( profilePath );
 
 // write next to input file, or in current directory?
@@ -547,7 +548,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
 // But name will limit us to known tags and ignore bogus tags.
 
     switch (sig) {
-    
+
       // 1D LUTs
       case icSigRedTRCTag:
       case icSigGreenTRCTag:
@@ -581,16 +582,16 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
         output3DLUT(pIcc, pTag, sigDesc, basename, svgfile, verbosity );
         }
         break;
-    
+
       // ignore everything else
       default:
         break;
 
     }   // end switch over tag signatures
   }   // end loop over tags
-  
+
   svgfile.CloseFile();
-  
+
 }   // end processLuts()
 
 /******************************************************************************/
@@ -644,10 +645,6 @@ int main(int argc, char* argv[])
   processLuts( pIcc, argv[nArg], verbosity );
 
   delete pIcc;
-
-#if defined(_DEBUG) || defined(DEBUG)
-  printf("EXIT %d\n", nValid);
-#endif
 
   return 0;
 }

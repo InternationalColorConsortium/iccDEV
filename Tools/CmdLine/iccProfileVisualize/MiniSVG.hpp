@@ -64,6 +64,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <vector>
 
 /******************************************************************************/
 
@@ -113,7 +114,7 @@ public:
     { }
   SVGOut( const std::string &filename ): m_GroupLevel(0)
     { OpenFile(filename); }
-  
+
   ~SVGOut()
     { CloseFile(); }
 
@@ -123,29 +124,29 @@ public:
 public:
 
   void WriteHeader( const point2D &topLeft, const point2D &bottomRight );
-  
+
   void AddCircle( float radius, float xCenter, float yCenter, bool isFilled ) {
 	  out << "<circle cx=\"" << xCenter << "mm\" cy=\"" << yCenter
     << "mm\" r=\"" << radius << "mm\"";
     out << " " << DefaultFillStroke(isFilled) << " />\n";
     }
-  
+
   void AddLine( float xStart, float yStart, float xEnd, float yEnd ) {
 	  out << "<line x1=\"" << xStart << "mm\" y1=\"" << yStart << "mm\" x2=\""
       << xEnd << "mm\" y2=\"" << yEnd << "mm\"";
     out << " " << DefaultFillStroke(false) << " />\n";
     }
-  
+
   void AddLine( const point2D &start, const point2D &end ) {
     AddLine( start.x, start.y, end.x, end.y );
     }
-  
+
   void AddRect( float left, float top, float right, float bottom, bool isFilled ) {
 	  out << "<rect x=\"" << left << "mm\" y=\"" << top << "mm\" width=\""
       << (right-left) << "mm\" height=\"" << (bottom-top) << "mm\"";
     out << " " << DefaultFillStroke(isFilled) << " />\n";
     }
-  
+
   void AddRect( const point2D &topLeft, const point2D &bottomRight, bool isFilled ) {
     AddRect( topLeft.x, topLeft.y, bottomRight.x, bottomRight.y, isFilled );
     }
@@ -159,16 +160,16 @@ public:
     out << "\"";
     out << " " << DefaultFillStroke(isFilled) << " />\n";
     }
-  
+
   void AddText( const float xCoord, const float yCoord, const std::string &text,
         const float size, const std::string &font, const std::string &style,
         const std::string &align, const float rotation = 0.0 );
-  
+
   void StartGroup( const std::string &name ) {
     out << "<g id=\"" << name << "\">\n";
     m_GroupLevel++;
     }
-  
+
   void EndGroup() {
     out << "</g>\n";
     m_GroupLevel--;
@@ -178,7 +179,7 @@ protected:
   void WriteFooter() {
     out << "</svg>\n";
     }
-  
+
   // this could be made variable, but just static color and width for now
   std::string DefaultFillStroke( bool isFilled ) {
     if (isFilled)

@@ -58,6 +58,7 @@
 
 #include <cstdio>
 #include <cstdint>
+#include <climits>
 #include <cassert>
 #include <cstring>
 #include <cstdlib>
@@ -150,7 +151,7 @@ void shiftTIFFLAB( uint16_t *in, size_t count )
     uint16_t l = in[index+0];
     int a = in[index+1];
     int b = in[index+2];
-    
+
     in[index+0] = l; // just copy
     in[index+1] = uint16_t(a - 0x8000);
     in[index+2] = uint16_t(b - 0x8000);
@@ -165,7 +166,7 @@ void putIFDLong( uint16_t tag, uint16_t type, uint32_t count, uint32_t value, FI
   uint16_t tagval = tag;
   uint16_t typeval = type;
   uint32_t countval = count;
-  
+
   fwrite( &tagval, 2, 1, out );
   fwrite( &typeval, 2, 1, out );
   fwrite( &countval, 4, 1, out );
@@ -179,13 +180,13 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
         size_t width, size_t height, int channels, int depth )
 {
   FILE *outfile = NULL;
-  
+
   // see if we can create or update this filename
   if((outfile=fopen(name.c_str(),"wb"))==NULL) {
     fprintf(stderr,"Could not create output file %s\n", name.c_str());
     exit(-1);
   }
-  
+
   // TIFF header, and byte order indicator
   // if constexpr (std::endian::native == std::endian::big) {  // only works in C++20 and up
   if (bigEndian) {
@@ -203,22 +204,22 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // number of entries
   uint16_t tagCount = 15;
   putShort( tagCount, outfile );
-  
+
   uint32_t width32 = uint32_t(width);
   putIFDLong( TIFF_WIDTH, TIFF_LONG, 1, width32, outfile );
   uint32_t height32 = uint32_t(height);
   putIFDLong( TIFF_HEIGHT, TIFF_LONG, 1, height32, outfile );
-  
+
   uint16_t bits = (uint16_t) depth;
-  
+
   uint32_t ifd_end = 8 + 2 + 4 + tagCount*12;
   uint32_t align_bytes = (4 - (ifd_end & 0x03)) & 0x03;
   uint32_t start_data = ifd_end + align_bytes;   // align to 4 byte boundary
-  
+
   uint32_t bits_offset = start_data;
   uint32_t xres_offset = bits_offset + (uint32_t)channels*2;
   uint32_t yres_offset = xres_offset + 8;
-  
+
   // some readers break if the bitsPerSample is not a short value
   if (channels == 1)
     putIFDLong( TIFF_BITSPERSAMPLE, TIFF_LONG, 1, bits, outfile );
@@ -233,16 +234,16 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   assert( nrowBytes > 0 );
   size_t rowsPerBuffer = height;
   size_t stripCount = 1;
-  
+
   size_t rowsPerStrip = rowsPerBuffer;
   //size_t stripBytes = rowsPerStrip * nrowBytes;
-  
+
   uint32_t stripOffset_offset = yres_offset + 8;
-  
+
   size_t stripCountSize = stripCount * 4;
   assert( (stripOffset_offset + stripCountSize) <= UINT_MAX );
   uint32_t stripByteCount_offset = uint32_t( stripOffset_offset + stripCountSize );
-  
+
   assert( (stripByteCount_offset + stripCountSize) <= UINT_MAX );
   uint32_t pixelData_offset = uint32_t ( stripByteCount_offset + stripCountSize );
 
@@ -253,7 +254,7 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     putIFDLong( TIFF_STRIPOFFSETS, TIFF_LONG, uint32_t(stripCount), stripOffset_offset, outfile );
   else
     putIFDLong( TIFF_STRIPOFFSETS, TIFF_LONG, 1, pixelData_offset, outfile );
-  
+
   putIFDLong( TIFF_SAMPLESPERPIXEL, TIFF_LONG, 1, (uint32_t)channels, outfile );
   putIFDLong( TIFF_ROWSPERSTRIP, TIFF_LONG, 1, uint32_t(rowsPerStrip), outfile );
 
@@ -269,16 +270,16 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   putIFDLong( TIFF_YRESOLUTION, TIFF_RATIO, 1, yres_offset, outfile );
   putIFDLong( TIFF_PLANARCONFIG, TIFF_LONG, 1, 1, outfile );
   putIFDLong( TIFF_RESOLUTIONUNIT, TIFF_LONG, 1, 2, outfile );  // inches
-  
+
   putIFDLong( TIFF_PREDICTOR, TIFF_LONG, 1, 1, outfile );  // no predictor
-  
+
   if (bits == 32 || bits == 64)
     putIFDLong( TIFF_SAMPLE_FORMAT, TIFF_LONG, 1, TIFF_SAMPLE_FLOAT, outfile );
   else
     putIFDLong( TIFF_SAMPLE_FORMAT, TIFF_LONG, 1, TIFF_SAMPLE_UINT, outfile );
 
   putLong( (uint32_t)0, outfile );  // offset to next IFD
-  
+
   // align to 4 byte boundary
   for (uint32_t i = 0; i < align_bytes; ++i)
     putc( 0, outfile );
@@ -287,7 +288,7 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // bits per sample, because some readers break if it's just a byte instead of short
   for (int i = 0; i < channels; ++i)
     putShort( bits, outfile );
-  
+
   // resolution ratios
 // xres_offset:
   putLong( resRatio32, outfile );  // X dpi
@@ -306,15 +307,15 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // file with zeros, then backfill once we compress the strips
   for (size_t i = 0; i < stripCount; ++i)
     putLong( 0, outfile );
-  
+
 // pixelData_offset:
   // Pixel Data
 
   std::vector<uint32_t> stripOffsetList( stripCount );
   std::vector<uint32_t> stripSizeList( stripCount );
-  
+
   for (size_t strip = 0; strip < stripCount; ++strip) {
-  
+
     size_t startRow = strip * rowsPerStrip;
     size_t rowCount = rowsPerStrip;
     if (startRow + rowsPerStrip > height)
@@ -331,9 +332,9 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     }
 
     long stripStart = ftell( outfile );
-    
+
     fwrite( buffer, (size_t)width*(size_t)channels*((size_t)depth/8), rowCount, outfile );
-    
+
     long stripEnd = ftell( outfile );
     assert( stripStart < UINT_MAX );
     stripOffsetList[strip] = uint32_t(stripStart);
@@ -352,7 +353,7 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     fseek(outfile, stripOffset_offset, SEEK_SET);
     for (size_t i = 0; i < stripCount; ++i)
       putLong( stripOffsetList[i], outfile );
-  
+
     fseek(outfile, stripByteCount_offset, SEEK_SET);
     for (size_t i = 0; i < stripCount; ++i)
       putLong( stripSizeList[i], outfile );
