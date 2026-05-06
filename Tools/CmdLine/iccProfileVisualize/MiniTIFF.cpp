@@ -65,7 +65,6 @@
 #include <vector>
 #include <cmath>
 #include <memory>
-#include <bit>
 #include "MiniTIFF.hpp"
 
 /******************************************************************************/
