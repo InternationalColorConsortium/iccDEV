@@ -446,7 +446,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
       // NOTE that bufferSize will usually be greater than clutSize
 
-      std::unique_ptr<uint8_t> imageBuffer( new uint8_t[ bufferSize ] );
+      std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
       uint8_t *imageBuf = imageBuffer.get();
       uint16_t *imageBuf16 = (uint16_t *)imageBuf;
       float *imageBuf32 = (float *)imageBuf;

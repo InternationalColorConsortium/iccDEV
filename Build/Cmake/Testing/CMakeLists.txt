@@ -55,6 +55,7 @@ function(iccdev_add_check_dependencies)
       iccToJson
       iccToXml
       iccV5DspObsToV4Dsp
+      iccProfileVisualize
   )
     if(TARGET "${_target}")
       add_dependencies(check "${_target}")
@@ -268,6 +269,7 @@ set(ICCDEV_TOOL_PATHS
   "${ICCDEV_TOOLS_DIR}/IccToJson"
   "${ICCDEV_TOOLS_DIR}/IccToXml"
   "${ICCDEV_TOOLS_DIR}/IccV5DspObsToV4Dsp"
+  "${ICCDEV_TOOLS_DIR}/iccProfileVisualize"
 )
 
 list(JOIN ICCDEV_TOOL_PATHS ":" ICCDEV_TOOL_PATH)
@@ -485,6 +487,17 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-version-bcd-regression-tests.sh"
 )
 set_tests_properties(iccdev.version-bcd-regressions PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
+  iccdev.profile-visualize-regressions
+  300
+  "iccdev;profile;visualize;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-profile-visualize-tests.sh"
+)
+set_tests_properties(iccdev.profile-visualize-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
