@@ -341,6 +341,11 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
   const size_t bufSize = 128;
   char buf[bufSize];
 
+  if (!tag) {
+    fprintf(stderr, "Skipping %s: unable to load tag\n", sigDesc.c_str());
+    return;
+  }
+
   icTagTypeSignature typeSig = tag->GetType();
   switch(typeSig) {
 
@@ -368,6 +373,11 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       icColorSpaceSignature inputSpace = lut->GetCsInput();
       icColorSpaceSignature outputSpace = lut->GetCsOutput();
       bool isInputMatrix = lut->IsInputMatrix();
+
+      if (inputChannels <= 0 || outputChannels <= 0) {
+        fprintf(stderr, "Skipping %s: invalid channel count\n", sigDesc.c_str());
+        return;
+      }
 
       if (curveA) {
         int curveACount = isInputMatrix ? outputChannels : inputChannels;
@@ -409,22 +419,47 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     // write nD Data to TIFF
       int bytes = lut->GetPrecision();    // currently only 1 or 2
       CIccCLUT *clut = lut->GetCLUT();
+      if (!clut) {
+        fprintf(stderr, "Skipping %s: missing CLUT\n", sigDesc.c_str());
+        return;
+      }
 
       clut->Begin();  // initialize some grid information
 
       int tiles = clut->GridPoints();   // gridSize[0]
+      if (tiles <= 0) {
+        fprintf(stderr, "Skipping %s: invalid CLUT grid\n", sigDesc.c_str());
+        return;
+      }
+
       int tileWidth = 1;
       int tileHeight = 1;
 
-      if (inputChannels >= 2)
+      if (inputChannels >= 2) {
         tileWidth = clut->GridPoint(1);
+        if (tileWidth <= 0) {
+          fprintf(stderr, "Skipping %s: invalid CLUT width\n", sigDesc.c_str());
+          return;
+        }
+      }
 
-      if (inputChannels >= 3)
+      if (inputChannels >= 3) {
         tileHeight = clut->GridPoint(2);
+        if (tileHeight <= 0) {
+          fprintf(stderr, "Skipping %s: invalid CLUT height\n", sigDesc.c_str());
+          return;
+        }
+      }
 
       if (inputChannels > 3) {
-        for (int i = 3; i < inputChannels; ++i)
-          tiles *= clut->GridPoint(i);
+        for (int i = 3; i < inputChannels; ++i) {
+          int gridPoints = clut->GridPoint(i);
+          if (gridPoints <= 0) {
+            fprintf(stderr, "Skipping %s: invalid CLUT tile count\n", sigDesc.c_str());
+            return;
+          }
+          tiles *= gridPoints;
+        }
       }
 
       // special case for single dimensional LUT
@@ -441,10 +476,18 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       // multiply out by tile size
       int imageWidth = tilesWide * tileWidth;
       int imageHeight = tilesHigh * tileHeight;
+      if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
+        fprintf(stderr, "Skipping %s: invalid image geometry\n", sigDesc.c_str());
+        return;
+      }
 
       //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
       size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
       // NOTE that bufferSize will usually be greater than clutSize
+      if (!bufferSize) {
+        fprintf(stderr, "Skipping %s: empty image buffer\n", sigDesc.c_str());
+        return;
+      }
 
       std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
       uint8_t *imageBuf = imageBuffer.get();

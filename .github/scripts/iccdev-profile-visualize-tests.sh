@@ -22,6 +22,8 @@ VISUALIZE="$TOOLS_DIR/iccProfileVisualize/iccProfileVisualize"
 PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 JSON_PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.json"
 WORK_PROFILE="$OUTDIR/sRGB_v4_ICC_preference.icc"
+BAD_TAG_PROFILE="$OUTDIR/sRGB_v4_ICC_preference-bad-A2B0-offset.icc"
+BAD_CLUT_PROFILE="$OUTDIR/sRGB_v4_ICC_preference-missing-A2B0-clut.icc"
 LOGFILE="$OUTDIR/iccProfileVisualize.log"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
@@ -102,6 +104,65 @@ require_svg() {
   return 0
 }
 
+require_text() {
+  local name="$1"
+  local path="$2"
+  local expected="$3"
+
+  if ! grep -Fq "$expected" "$path" 2>/dev/null; then
+    fail_case "$name" "missing expected text: $expected"
+    sed -n '1,40p' "$path"
+    return 1
+  fi
+
+  return 0
+}
+
+make_bad_tag_offset_profile() {
+  local input="$1"
+  local output="$2"
+
+  python3 -c '
+import struct
+import sys
+
+src, dst = sys.argv[1:3]
+data = bytearray(open(src, "rb").read())
+count = struct.unpack(">I", data[128:132])[0]
+for i in range(count):
+    entry = 132 + i * 12
+    if data[entry:entry + 4] == b"A2B0":
+        data[entry + 4:entry + 8] = struct.pack(">I", len(data) + 4096)
+        open(dst, "wb").write(data)
+        sys.exit(0)
+raise SystemExit("A2B0 tag not found")
+' "$input" "$output"
+}
+
+make_missing_clut_profile() {
+  local input="$1"
+  local output="$2"
+
+  python3 -c '
+import struct
+import sys
+
+src, dst = sys.argv[1:3]
+data = bytearray(open(src, "rb").read())
+count = struct.unpack(">I", data[128:132])[0]
+for i in range(count):
+    entry = 132 + i * 12
+    if data[entry:entry + 4] == b"A2B0":
+        offset = struct.unpack(">I", data[entry + 4:entry + 8])[0]
+        if data[offset:offset + 4] != b"mAB ":
+            raise SystemExit("A2B0 is not mAB")
+        data[offset + 24:offset + 28] = b"\x00\x00\x00\x00"
+        open(dst, "wb").write(data)
+        sys.exit(0)
+raise SystemExit("A2B0 tag not found")
+' "$input" "$output"
+}
+
 run_visualize() {
   local name="srgb-v4-icc-preference-lut-exports"
   local exit_code=0
@@ -159,9 +220,51 @@ run_visualize() {
   pass_case "$name" "generated A2B/B2A TIFFs and LUT SVG"
 }
 
+run_malformed_visualize() {
+  local name="$1"
+  local profile="$2"
+  local expected="$3"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile"
+
+  if [ ! -x "$VISUALIZE" ]; then
+    fail_case "$name" "missing executable: $VISUALIZE"
+    return
+  fi
+
+  timeout 60 "$VISUALIZE" "$profile" > "$logfile" 2>&1 || exit_code=$?
+  check_sanitizers "$name" "$logfile" || return
+
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "iccProfileVisualize timed out"
+    return
+  fi
+
+  if [ "$exit_code" -ge 129 ] && [ "$exit_code" -le 192 ]; then
+    fail_case "$name" "iccProfileVisualize crashed with signal $((exit_code - 128))"
+    return
+  fi
+
+  require_text "$name" "$logfile" "$expected" || return
+  pass_case "$name" "malformed LUT skipped without sanitizer findings"
+}
+
 echo "=== iccProfileVisualize regression ==="
 
 run_visualize
+
+if [ "$FAIL" -eq 0 ]; then
+  make_bad_tag_offset_profile "$PROFILE" "$BAD_TAG_PROFILE" || fail_case "bad-tag-fixture" "failed to create bad tag offset profile"
+  make_missing_clut_profile "$PROFILE" "$BAD_CLUT_PROFILE" || fail_case "missing-clut-fixture" "failed to create missing CLUT profile"
+fi
+
+if [ "$FAIL" -eq 0 ]; then
+  run_malformed_visualize "bad-A2B0-offset" "$BAD_TAG_PROFILE" "Skipping A2B0: unable to load tag"
+  run_malformed_visualize "missing-A2B0-clut" "$BAD_CLUT_PROFILE" "Skipping A2B0: missing CLUT"
+fi
 
 echo "iccProfileVisualize regression: $PASS passed, $FAIL failed, $TOTAL total"
 
