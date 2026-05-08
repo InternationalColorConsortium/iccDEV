@@ -65,6 +65,10 @@ jobs:
           gh label create "passed"  --color "0e8a16" --description "All CI checks passed"    2>/dev/null || true
           gh label create "failed"  --color "d93f0b" --description "One or more CI checks failed" 2>/dev/null || true
           gh label create "pending" --color "fbca04" --description "CI checks still running"  2>/dev/null || true
+          gh label create "Merge Ready" \
+            --color "0e8a16" \
+            --description "Approved, mergeable, and all CI checks passed" \
+            2>/dev/null || true
 
       - name: Build PR list
         id: pr_list
@@ -185,9 +189,23 @@ jobs:
             fi
 
             # Query commit statuses API
-            local state
-            state=$(gh api "repos/${GH_REPO}/commits/$head/status" \
-              --jq '.state' 2>/dev/null || echo "unknown")
+            local status_data state status_count
+            status_data=$(gh api "repos/${GH_REPO}/commits/$head/status" \
+              --jq '"\(.state)|\(.total_count)"' 2>/dev/null || echo "unknown|0")
+            state="${status_data%%|*}"
+            status_count="${status_data##*|}"
+            if [[ ! "$status_count" =~ ^[0-9]+$ ]]; then
+              status_count=0
+            fi
+
+            local readiness_data is_draft merge_state review_decision
+            readiness_data=$(gh pr view "$pr" \
+              --json isDraft,mergeStateStatus,reviewDecision \
+              --jq '"\(.isDraft)|\(.mergeStateStatus // "UNKNOWN")|\(.reviewDecision // "UNKNOWN")"' 2>/dev/null || echo "true|UNKNOWN|UNKNOWN")
+            is_draft="${readiness_data%%|*}"
+            readiness_data="${readiness_data#*|}"
+            merge_state="${readiness_data%%|*}"
+            review_decision="${readiness_data##*|}"
 
             # Query Check Runs API (Actions uses this, not statuses)
             local check_conclusion
@@ -207,7 +225,10 @@ jobs:
             local combined
             if [[ "$state" == "failure" || "$check_conclusion" == "failure" ]]; then
               combined="failure"
-            elif [[ "$state" == "success" && "$check_conclusion" == "success" ]]; then
+            elif [[ "$check_conclusion" == "success" ]] &&
+                 [[ "$state" == "success" || "$status_count" -eq 0 ]]; then
+              combined="success"
+            elif [[ "$state" == "success" && "$check_conclusion" == "none" ]]; then
               combined="success"
             elif [[ "$state" == "pending" || "$check_conclusion" == "pending" ]]; then
               combined="pending"
@@ -220,24 +241,49 @@ jobs:
               combined="$state"
             fi
 
+            local merge_ready="false"
+            if [[ "$combined" == "success" ]] &&
+               [[ "$is_draft" == "false" ]] &&
+               [[ "$merge_state" == "CLEAN" ]] &&
+               [[ "$review_decision" == "APPROVED" ]]; then
+              merge_ready="true"
+            fi
+
             # Apply label
             local added="" removed=""
             case "$combined" in
               success)
-                gh pr edit "$pr" --add-label "passed" --remove-label "failed,pending" 2>/dev/null || true
-                added="passed"; removed="failed,pending"
+                if [[ "$merge_ready" == "true" ]]; then
+                  gh pr edit "$pr" \
+                    --add-label "passed,Merge Ready" \
+                    --remove-label "failed,pending" \
+                    2>/dev/null || true
+                  added="passed,Merge Ready"; removed="failed,pending"
+                else
+                  gh pr edit "$pr" \
+                    --add-label "passed" \
+                    --remove-label "failed,pending,Merge Ready" \
+                    2>/dev/null || true
+                  added="passed"; removed="failed,pending,Merge Ready"
+                fi
                 ;;
               failure|error)
-                gh pr edit "$pr" --add-label "failed" --remove-label "passed,pending" 2>/dev/null || true
-                added="failed"; removed="passed,pending"
+                gh pr edit "$pr" \
+                  --add-label "failed" \
+                  --remove-label "passed,pending,Merge Ready" \
+                  2>/dev/null || true
+                added="failed"; removed="passed,pending,Merge Ready"
                 ;;
               pending)
-                gh pr edit "$pr" --add-label "pending" --remove-label "passed,failed" 2>/dev/null || true
-                added="pending"; removed="passed,failed"
+                gh pr edit "$pr" \
+                  --add-label "pending" \
+                  --remove-label "passed,failed,Merge Ready" \
+                  2>/dev/null || true
+                added="pending"; removed="passed,failed,Merge Ready"
                 ;;
             esac
 
-            echo "$pr|$combined|status=$state checks=$check_conclusion -> added=$added removed=$removed" >> "$RESULTS_FILE"
+            echo "$pr|$combined|status=$state status_count=$status_count checks=$check_conclusion merge=$merge_state review=$review_decision draft=$is_draft ready=$merge_ready -> added=$added removed=$removed" >> "$RESULTS_FILE"
             if [[ -n "$added" ]]; then
               LABELED=$((LABELED + 1))
             fi
