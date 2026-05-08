@@ -113,29 +113,25 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
   m_objects.clear();
   m_xrefStart = 0;          // set when writing
-  m_pageParentIndex = 2;    // PDF index from 1
-  m_outlineIndex = 3;
+  m_pageParentIndex = 3;    // PDF index from 1
+  m_outlineIndex = 2;
 
   // Create root object, always object 1
   PDFRoot *rootObj = new PDFRoot(m_pageParentIndex,m_outlineIndex);
   m_objects.emplace_back( rootObj );
-
-  // Create page parent 2, link to add children out of order
-  PDFPageParent *pageParentObj = new PDFPageParent();
-  m_objects.emplace_back( pageParentObj );
   
-  // Create outline data 3 from pages
+  // Create outline data 2 from pages
   PDFOutlineParent *outlineObj = new PDFOutlineParent();
   m_objects.emplace_back( outlineObj );
 
+  // Create page parent 3, link to add children out of order
+  PDFPageParent *pageParentObj = new PDFPageParent();
+  m_objects.emplace_back( pageParentObj );
 
 
 
-// TODO - somehow this is confusing Acrobat
-// what is missing or wrong?  Works in Safari, Photoshop, Illustrator.
 
-
-// temporary fake page
+// temporary fake pages
 
     // procset
   PDFProcSet *procObj = new PDFProcSet( "[/PDF /Text]" );
@@ -297,7 +293,7 @@ void PDFPage::WriteContent( std::ostream &out )
     if (m_procset)
         out << "/ProcSet " << m_procset << " 0 R";
     if (m_font)
-        out << " /Font <</F1 " << m_font << " 0 R>>";
+        out << " /Font << /F1 " << m_font << " 0 R>>";
     out << " >> ";
   }
   out << ">>\n";
@@ -314,7 +310,7 @@ void PDFProcSet::WriteContent( std::ostream &out )
 
 void PDFFont::WriteContent( std::ostream &out )
 {
-  out << "<< /Type /Font /SubType /Type1 /Encoding /MacRomanEncoding ";
+  out << "<< /Type /Font /Subtype /Type1 /Encoding /MacRomanEncoding ";
   out << "/Name /F1 /BaseFont /" << m_fontname << " >>\n";
 }
 
