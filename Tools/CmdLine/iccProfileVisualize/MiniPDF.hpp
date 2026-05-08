@@ -109,13 +109,14 @@ typedef std::vector<PDFObject *> pdf_object_list;
 
 /******************************************************************************/
 
+// root object
 class PDFRoot : public PDFObject
 {
 public:
   PDFRoot( size_t pageObj, size_t outlineObj ) :
         PDFObject(), m_pageObj(pageObj), m_outlineObj(outlineObj) {}
 
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
   size_t m_pageObj;
@@ -124,12 +125,13 @@ public:
 
 /******************************************************************************/
 
+// pages parent
 class PDFPageParent : public PDFObject
 {
 public:
   PDFPageParent() : PDFObject() {}
   
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
     std::vector<size_t> m_pageObjectIndices;
@@ -137,12 +139,13 @@ public:
 
 /******************************************************************************/
 
+// outline parent (currently not implemented)
 class PDFOutlineParent : public PDFObject
 {
 public:
   PDFOutlineParent() : PDFObject() {}
   
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
     // nothing yet
@@ -150,6 +153,7 @@ public:
 
 /******************************************************************************/
 
+// a page object, with references to all sub-objects
 class PDFPage: public PDFObject
 {
 public:
@@ -159,7 +163,7 @@ public:
     m_procset(procSet), m_font(font), m_xobject(xobject)
      {}
 
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
   float m_pageWidth;
@@ -179,7 +183,7 @@ class PDFProcSet : public PDFObject
 public:
   PDFProcSet( const std::string &proc ) : PDFObject(), m_buf(proc) {}
   
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
   std::string m_buf;
@@ -192,7 +196,7 @@ class PDFGraphic : public PDFObject
 public:
   PDFGraphic() : PDFObject() {}
   
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
   std::string m_buf;
@@ -205,7 +209,7 @@ class PDFFont : public PDFObject
 public:
   PDFFont( const std::string &font ) : PDFObject(), m_fontname(font) {}
   
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
   std::string m_fontname;
@@ -218,7 +222,7 @@ class PDFGroup : public PDFObject
 public:
   PDFGroup() : PDFObject() {}
   
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
     // nothing yet
@@ -235,7 +239,7 @@ public:
     m_font(font), m_group(group)
         {}
   
-  virtual void WriteContent(  std::ostream &out );
+  virtual void WriteContent(  std::ostream &out ) final;
 
 public:
   std::string m_buf;
@@ -247,7 +251,8 @@ public:
 
 /******************************************************************************/
 
-// all input units are in mm, but SVG works mostly in points
+// units are in mm for now
+// but PDF usually works in points
 class PDFWriter
 {
 public:
@@ -285,8 +290,8 @@ protected:
 
 
 private:
-  float m_pageWidth;
-  float m_pageHeight;
+  float m_pageWidth;     // used to init pages
+  float m_pageHeight;    // used to init pages
   
   size_t m_pageCount;
   size_t m_xrefStart;

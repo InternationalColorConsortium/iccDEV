@@ -70,36 +70,14 @@
 #include "MiniPDF.hpp"
 
 
-/*
-PDF structure:
-    Header
-        %PDF-1.7
-    objects
-        first catalog, lists major sections
-            1 obj
-            <</Pages 2 0 R/Type/Catalog>>
-            endobj
-        metadata (XMP - yuck, optional)
-        outlines (optional, can be created from pages)
-        pages parent
-            page definitions (artbox,viewbox,cropbox, content refs, XObject refs, etc.)
-        shared objects
-        text objects
-        graphics objects
-        
-    directory to objects (20 bytes each)
-        xref
-        0 count
-        0000000000 65535 f
-        offset 00000 n
-        ....
-    trailer
-        object count, root ref, metadata ref, GUIDs?
-        offset of directory
-        %%EOF
+/******************************************************************************/
 
+std::ostream& operator<<( std::ostream &os, const Rect2D &r )
+{
+  // llx lly urx ury
+  return os << r.left << " " << r.bottom << " " << r.right << " " << r.top;
+}
 
- */
 /******************************************************************************/
 
 void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heightMM ) {
@@ -113,20 +91,25 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
   m_objects.clear();
   m_xrefStart = 0;          // set when writing
+  
+  // root = 1
+  m_outlineIndex = 2;
+  m_pageParentIndex = 3;
 
   // Create root object, always object 1
   PDFRoot *rootObj = new PDFRoot(m_pageParentIndex,m_outlineIndex);
   m_objects.emplace_back( rootObj );
   
   // Create outline data from pages
+// DEFERRED - group of tag, subsections for each LUT ???
+// or just section for tag start?
+// needs a bit of additional structure input
   PDFOutlineParent *outlineObj = new PDFOutlineParent();
   m_objects.emplace_back( outlineObj );
-  m_outlineIndex = m_objects.size();
 
   // Create page parent, link to add children out of order
   PDFPageParent *pageParentObj = new PDFPageParent();
   m_objects.emplace_back( pageParentObj );
-  m_pageParentIndex = m_objects.size();
 
 
   // common procset
@@ -317,12 +300,6 @@ void PDFPage::WriteContent( std::ostream &out )
 
 /******************************************************************************/
 
-std::ostream& operator<<( std::ostream &os, const Rect2D &r )
-{
-  // llx lly urx ury
-  return os << r.left << " " << r.bottom << " " << r.right << " " << r.top;
-}
-
 void PDFXObject::WriteContent( std::ostream &out )
 {
   out << "<< /Subtype/Form /BBox[ " << m_bounds << "]";
@@ -371,10 +348,7 @@ void PDFGraphic::WriteContent( std::ostream &out )
 
 void PDFGroup::WriteContent( std::ostream &out )
 {
-/*
-I == isolated
-K == knockout
- */
+    // I == isolated       K == knockout
   out << "<< /I true /K false /S /Transparency /Type/Group >>\n";
 }
 
