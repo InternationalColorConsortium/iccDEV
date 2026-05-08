@@ -253,11 +253,13 @@ class PDFWriter
 public:
   PDFWriter() : m_pageWidth(0), m_pageHeight(0), m_pageCount(0),
             m_xrefStart(0), m_pageParentIndex(0), m_outlineIndex(0),
-            m_xobjectIndex(0)
+            m_xobjectIndex(0), m_fontIndex(0), m_groupIndex(0),
+            m_procsetIndex(0)
     { }
   PDFWriter( const std::string &filename, float widthMM, float heightMM ):
             m_pageWidth(0), m_pageHeight(0), m_pageCount(0), m_xrefStart(0),
-            m_pageParentIndex(0), m_outlineIndex(0), m_xobjectIndex(0)
+            m_pageParentIndex(0), m_outlineIndex(0), m_xobjectIndex(0),
+            m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
     { OpenFile(filename, widthMM, heightMM); }
   
   ~PDFWriter()
@@ -290,7 +292,11 @@ private:
   size_t m_xrefStart;
   size_t m_pageParentIndex;
   size_t m_outlineIndex;
-  size_t m_xobjectIndex;
+  
+  size_t m_xobjectIndex;    // used to init pages
+  size_t m_fontIndex;       // used to init pages
+  size_t m_groupIndex;      // used to init pages
+  size_t m_procsetIndex;    // used to init pages
   
   std::string m_filename;
   pdf_object_list m_objects;

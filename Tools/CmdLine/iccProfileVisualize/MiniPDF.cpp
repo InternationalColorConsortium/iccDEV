@@ -113,51 +113,53 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
   m_objects.clear();
   m_xrefStart = 0;          // set when writing
-  m_pageParentIndex = 3;    // PDF index from 1
-  m_outlineIndex = 2;
 
   // Create root object, always object 1
   PDFRoot *rootObj = new PDFRoot(m_pageParentIndex,m_outlineIndex);
   m_objects.emplace_back( rootObj );
   
-  // Create outline data 2 from pages
+  // Create outline data from pages
   PDFOutlineParent *outlineObj = new PDFOutlineParent();
   m_objects.emplace_back( outlineObj );
+  m_outlineIndex = m_objects.size();
 
-  // Create page parent 3, link to add children out of order
+  // Create page parent, link to add children out of order
   PDFPageParent *pageParentObj = new PDFPageParent();
   m_objects.emplace_back( pageParentObj );
+  m_pageParentIndex = m_objects.size();
 
 
-
-
-// temporary fake pages
-
-  // procset
+  // common procset
   PDFProcSet *procObj = new PDFProcSet( "[/PDF /Text]" );
   m_objects.emplace_back( procObj );
   size_t procSet = m_objects.size();
+  m_procsetIndex = procSet;
   
-  // font definition
+  // common font definition
   PDFFont *fontObj = new PDFFont( "Helvetica" );
   m_objects.emplace_back( fontObj );
   size_t font = m_objects.size();
+  m_fontIndex = font;
 
-  // group object
+  // common group object
   PDFGroup *groupObj = new PDFGroup();
   m_objects.emplace_back( groupObj );
   size_t group = m_objects.size();
+  m_groupIndex = group;
 
   // common axes object
+// TODO - create real axes and labels
   std::string axesString = "20 20 m 20 500 l S 20 20 m 500 20 l S";
   Rect2D axesBounds( 20, 500, 20, 500 );
   PDFXObject *xobjObj = new PDFXObject( axesString, axesBounds, group, font, procSet );
   m_objects.emplace_back( xobjObj );
   size_t xobject = m_objects.size();
+  m_xobjectIndex = xobject;
+
 
 // first page
   size_t content = m_objects.size() + 2;
-  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font, xobject );
+  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
   m_objects.emplace_back( pageObj );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
@@ -173,7 +175,7 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
 // second page
   content = m_objects.size() + 2;
-  PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font, xobject );
+  PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
   m_objects.emplace_back( pageObj2 );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
@@ -181,7 +183,6 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
   PDFGraphic *graphics2 = new PDFGraphic();
   // add text data
   graphics2->m_buf += "/Axes Do\n";
-  graphics2->m_buf += "150 250 m 150 350 l S";
   graphics2->m_buf += " 200 300 50 75 re B";
   graphics2->m_buf += " BT\n /F1 24 Tf 200 100 Td (Hello World 2) Tj\nET";
   m_objects.emplace_back( graphics2 );
