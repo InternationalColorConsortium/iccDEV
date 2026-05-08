@@ -133,27 +133,39 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
 // temporary fake pages
 
-    // procset
+  // procset
   PDFProcSet *procObj = new PDFProcSet( "[/PDF /Text]" );
   m_objects.emplace_back( procObj );
   size_t procSet = m_objects.size();
   
-    // font definition
+  // font definition
   PDFFont *fontObj = new PDFFont( "Helvetica" );
   m_objects.emplace_back( fontObj );
   size_t font = m_objects.size();
 
+  // group object
+  PDFGroup *groupObj = new PDFGroup();
+  m_objects.emplace_back( groupObj );
+  size_t group = m_objects.size();
 
+  // common axes object
+  std::string axesString = "20 20 m 20 500 l S 20 20 m 500 20 l S";
+  Rect2D axesBounds( 20, 500, 20, 500 );
+  PDFXObject *xobjObj = new PDFXObject( axesString, axesBounds, group, font, procSet );
+  m_objects.emplace_back( xobjObj );
+  size_t xobject = m_objects.size();
 
+// first page
   size_t content = m_objects.size() + 2;
-  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font );
+  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font, xobject );
   m_objects.emplace_back( pageObj );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
   
   PDFGraphic *graphics = new PDFGraphic();
   // add text data
-  graphics->m_buf += "150 250 m 150 350 l S";
+  graphics->m_buf += "/Axes Do\n";
+  graphics->m_buf += " 150 250 m 150 350 l S";
   graphics->m_buf += " 200 300 50 75 re B";
   graphics->m_buf += " BT\n /F1 24 Tf 100 100 Td (Hello World 1) Tj\nET";
   m_objects.emplace_back( graphics );
@@ -161,19 +173,18 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
 // second page
   content = m_objects.size() + 2;
-  PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font );
+  PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font, xobject );
   m_objects.emplace_back( pageObj2 );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
   
   PDFGraphic *graphics2 = new PDFGraphic();
   // add text data
+  graphics2->m_buf += "/Axes Do\n";
   graphics2->m_buf += "150 250 m 150 350 l S";
   graphics2->m_buf += " 200 300 50 75 re B";
   graphics2->m_buf += " BT\n /F1 24 Tf 200 100 Td (Hello World 2) Tj\nET";
   m_objects.emplace_back( graphics2 );
-
-// need to add common content (axes and basic labels)
 
 }
 
@@ -288,6 +299,36 @@ void PDFPage::WriteContent( std::ostream &out )
   out << "<< /Type /Page /Parent " << m_pageParentIndex << " 0 R";
   out << " /MediaBox [0 0 " << m_pageWidth << " " << m_pageHeight << "]";
   out << " /Contents " << m_pageContentIndex << " 0 R";
+
+  if (m_procset || m_font || m_xobject) {
+    out << " /Resources <<";
+    if (m_xobject) {  // could be abstracted to a list if needed
+      out << " /XObject<</Axes " << m_xobject << " 0 R>>";
+    }
+    if (m_procset)
+        out << "/ProcSet " << m_procset << " 0 R";
+    if (m_font)
+        out << " /Font << /F1 " << m_font << " 0 R>>";
+    out << " >> ";
+  }
+  out << ">>\n";
+}
+
+/******************************************************************************/
+
+std::ostream& operator<<( std::ostream &os, const Rect2D &r )
+{
+  // llx lly urx ury
+  return os << r.left << " " << r.bottom << " " << r.right << " " << r.top;
+}
+
+void PDFXObject::WriteContent( std::ostream &out )
+{
+  out << "<< /Subtype/Form /BBox[ " << m_bounds << "]";
+  
+  if (m_group)
+    out << " /Group " << m_group << " 0 R";
+  out << " /Length " << m_buf.size();
   if (m_procset || m_font) {
     out << " /Resources <<";
     if (m_procset)
@@ -297,6 +338,8 @@ void PDFPage::WriteContent( std::ostream &out )
     out << " >> ";
   }
   out << ">>\n";
+  
+  out << "stream\n" << m_buf << "\nendstream\n";
 }
 
 /******************************************************************************/
@@ -321,6 +364,17 @@ void PDFGraphic::WriteContent( std::ostream &out )
   out << "<</Length " << m_buf.size() << ">>\nstream\n";
   out << m_buf;
   out << "\nendstream\n";
+}
+
+/******************************************************************************/
+
+void PDFGroup::WriteContent( std::ostream &out )
+{
+/*
+I == isolated
+K == knockout
+ */
+  out << "<< /I true /K false /S /Transparency /Type/Group >>\n";
 }
 
 /******************************************************************************/

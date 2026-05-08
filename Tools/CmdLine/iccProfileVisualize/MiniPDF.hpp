@@ -68,6 +68,28 @@
 #include <string>
 #include "MiniSVG.hpp"
 
+
+/******************************************************************************/
+
+struct Rect2D {
+  Rect2D(float leftin, float rightin, float bottomin, float topin) :
+    left(leftin), right(rightin), bottom(bottomin), top(topin)
+    {}
+    
+  Rect2D() : left(0.0f), right(0.0f), bottom(0.0f), top(0.0f)
+    {}
+    
+  Rect2D(const point2D &ll, const point2D &tr) :
+    left(ll.x), right(tr.x), bottom(ll.y), top(tr.y)
+    {}
+
+  point2D Size() const  { return point2D( right-left, bottom-top ); }
+
+  float left, right, bottom, top;
+};
+
+std::ostream& operator<<( std::ostream &os, const Rect2D &r );
+
 /******************************************************************************/
 
 // parent class
@@ -131,12 +153,12 @@ public:
 class PDFPage: public PDFObject
 {
 public:
-  PDFPage( float widthPt, float heightPt, size_t parent, size_t content, size_t procSet = 0, size_t font = 0 ) :
+  PDFPage( float widthPt, float heightPt, size_t parent, size_t content, size_t procSet = 0, size_t font = 0, size_t xobject = 0 ) :
     PDFObject(), m_pageWidth(widthPt), m_pageHeight(heightPt),
     m_pageParentIndex(parent), m_pageContentIndex(content),
-    m_procset(procSet), m_font(font)
+    m_procset(procSet), m_font(font), m_xobject(xobject)
      {}
-  
+
   virtual void WriteContent(  std::ostream &out );
 
 public:
@@ -146,6 +168,7 @@ public:
   size_t m_pageContentIndex;
   size_t m_procset;
   size_t m_font;
+  size_t m_xobject;
 };
 
 /******************************************************************************/
@@ -190,16 +213,51 @@ public:
 
 /******************************************************************************/
 
+class PDFGroup : public PDFObject
+{
+public:
+  PDFGroup() : PDFObject() {}
+  
+  virtual void WriteContent(  std::ostream &out );
+
+public:
+    // nothing yet
+};
+
+/******************************************************************************/
+
+class PDFXObject : public PDFObject
+{
+public:
+  PDFXObject( const std::string &buf, Rect2D &bounds,
+            size_t group = 0, size_t font = 0, size_t procSet = 0 ) :
+    PDFObject(), m_buf(buf), m_bounds(bounds), m_procset(procSet),
+    m_font(font), m_group(group)
+        {}
+  
+  virtual void WriteContent(  std::ostream &out );
+
+public:
+  std::string m_buf;
+  Rect2D m_bounds;
+  size_t m_procset;
+  size_t m_font;
+  size_t m_group;
+};
+
+/******************************************************************************/
+
 // all input units are in mm, but SVG works mostly in points
 class PDFWriter
 {
 public:
   PDFWriter() : m_pageWidth(0), m_pageHeight(0), m_pageCount(0),
-            m_xrefStart(0), m_pageParentIndex(0), m_outlineIndex(0)
+            m_xrefStart(0), m_pageParentIndex(0), m_outlineIndex(0),
+            m_xobjectIndex(0)
     { }
   PDFWriter( const std::string &filename, float widthMM, float heightMM ):
             m_pageWidth(0), m_pageHeight(0), m_pageCount(0), m_xrefStart(0),
-            m_pageParentIndex(0), m_outlineIndex(0)
+            m_pageParentIndex(0), m_outlineIndex(0), m_xobjectIndex(0)
     { OpenFile(filename, widthMM, heightMM); }
   
   ~PDFWriter()
@@ -232,7 +290,7 @@ private:
   size_t m_xrefStart;
   size_t m_pageParentIndex;
   size_t m_outlineIndex;
-// page shared objects?
+  size_t m_xobjectIndex;
   
   std::string m_filename;
   pdf_object_list m_objects;
