@@ -1178,10 +1178,13 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           TRIVY_INDICATORS=0
-          SELF_WF=$(basename "${GITHUB_WORKFLOW_REF%%@*}" 2>/dev/null || echo "ci-pr-risk-security-analysis.yml")
+          # In workflow_call runs, GITHUB_WORKFLOW_REF can identify the caller.
+          # Always exclude this scanner workflow, not the calling workflow.
+          SELF_WF="ci-pr-risk-security-analysis.yml"
+          SELF_WF_RE='(^|/)ci-pr-risk-security-analysis\.ya?ml:'
 
           # Pattern 1: curl/wget piped to shell in workflows (exclude self)
-          EXT_CALLS=$({ grep -rnE 'curl.*\|\s*(ba)?sh|wget.*\|\s*(ba)?sh' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+          EXT_CALLS=$({ grep -rnE 'curl.*\|[[:space:]]*(ba)?sh|wget.*\|[[:space:]]*(ba)?sh' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $EXT_CALLS -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[CRITICAL] $(sanitize_line "$EXT_CALLS") curl/wget|bash pipe(s) in workflows (remote code execution vector)" >> "$GITHUB_STEP_SUMMARY"
@@ -1189,7 +1192,7 @@ jobs:
           fi
 
           # Pattern 2: Base64 encoding (common obfuscation, exclude self)
-          B64_CALLS=$({ grep -rnE 'base64|b64encode|btoa' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+          B64_CALLS=$({ grep -rnE 'base64|b64encode|btoa' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $B64_CALLS -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[WARN] $(sanitize_line "$B64_CALLS") base64 encoding reference(s) detected (check for credential obfuscation)" >> "$GITHUB_STEP_SUMMARY"
@@ -1197,7 +1200,7 @@ jobs:
           fi
 
           # Pattern 3: Environment variable dumping (exclude self)
-          ENV_DUMP=$({ grep -rnE 'printenv|echo.*SECRET|echo.*TOKEN' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | { grep -v 'BASH_ENV' || true; } | { grep -v 'GITHUB_ENV' || true; } | wc -l)
+          ENV_DUMP=$({ grep -rnE 'printenv|echo.*SECRET|echo.*TOKEN' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | { grep -v 'BASH_ENV' || true; } | { grep -v 'GITHUB_ENV' || true; } | wc -l)
           if [[ $ENV_DUMP -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[WARN] $(sanitize_line "$ENV_DUMP") environment dump pattern(s) detected" >> "$GITHUB_STEP_SUMMARY"
@@ -1205,7 +1208,7 @@ jobs:
           fi
 
           # Pattern 4a: git force-push / tag rewriting (actual Trivy attack vector)
-          GIT_FORCE=$({ grep -rnE 'git\s+(push\s+--force|push\s+-f|tag\s+-f|tag\s+-d)' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+          GIT_FORCE=$({ grep -rnE 'git[[:space:]]+(push[[:space:]]+--force|push[[:space:]]+-f|tag[[:space:]]+-f|tag[[:space:]]+-d)' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $GIT_FORCE -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[HIGH] $(sanitize_line "$GIT_FORCE") git force-push/tag-rewrite pattern(s) detected" >> "$GITHUB_STEP_SUMMARY"
@@ -1213,7 +1216,7 @@ jobs:
           fi
 
           # Pattern 4b: Regular git push (auto-commit pattern, informational)
-          GIT_PUSH=$({ grep -rnE 'git\s+push' .github/workflows/ 2>/dev/null || true; } | { grep -v "$SELF_WF" || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | { grep -vE '\-\-force|\s-f\b' || true; } | wc -l)
+          GIT_PUSH=$({ grep -rnE 'git[[:space:]]+push' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | { grep -vE '\-\-force|[[:space:]]-f([[:space:]]|$)' || true; } | wc -l)
           if [[ $GIT_PUSH -gt 0 ]]; then
             echo "[INFO] $(sanitize_line "$GIT_PUSH") git push pattern(s) detected (auto-commit, verify workflow_dispatch-only triggers)" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -1259,7 +1262,7 @@ jobs:
           # Only flag github.head_ref and PR/issue title/body (attacker-controlled)
           # Exclude inputs.* (reusable workflow / workflow_dispatch -- collaborator-controlled)
           ART_NAME_INJECT=$({ grep -rnE 'name:.*\$\{\{.*(github\.head_ref|github\.event\.(issue|pull_request)\.(title|body))' .github/workflows/ 2>/dev/null || true; } \
-            | { grep -v "$SELF_WF" || true; } \
+            | { grep -vE "$SELF_WF_RE" || true; } \
             | { grep -i 'artifact' || true; } | wc -l)
           if [[ $ART_NAME_INJECT -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
@@ -1270,8 +1273,8 @@ jobs:
           # C-4: Cache key injection (attacker-controllable cache keys)
           # github.head_ref is PR-author-controlled (real injection risk)
           CACHE_KEY_HIGH=$({ grep -rnE 'key:.*\$\{\{.*github\.head_ref' .github/workflows/ 2>/dev/null || true; } \
-            | { grep -v "$SELF_WF" || true; } \
-            | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+            | { grep -vE "$SELF_WF_RE" || true; } \
+            | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $CACHE_KEY_HIGH -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
             echo "[MEDIUM] $(sanitize_line "$CACHE_KEY_HIGH") cache key(s) use attacker-controllable github.head_ref" >> "$GITHUB_STEP_SUMMARY"
@@ -1280,8 +1283,8 @@ jobs:
 
           # github.event.inputs.* and inputs.* require repo write access (informational)
           CACHE_KEY_INFO=$({ grep -rnE 'key:.*\$\{\{.*(github\.event\.inputs|inputs\.)' .github/workflows/ 2>/dev/null || true; } \
-            | { grep -v "$SELF_WF" || true; } \
-            | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
+            | { grep -vE "$SELF_WF_RE" || true; } \
+            | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $CACHE_KEY_INFO -gt 0 ]]; then
             echo "[INFO] $(sanitize_line "$CACHE_KEY_INFO") cache key(s) use workflow input expressions (collaborator-controlled)" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
