@@ -70,26 +70,37 @@
 #include "MiniPDF.hpp"
 
 
+/*
+PDF structure:
+    Header
+        %PDF-1.7
+    objects
+        first catalog, lists major sections
+            1 obj
+            <</Pages 2 0 R/Type/Catalog>>
+            endobj
+        metadata (XMP - yuck, optional)
+        outlines (optional, can be created from pages)
+        pages parent
+            page definitions (artbox,viewbox,cropbox, content refs, XObject refs, etc.)
+        shared objects
+        text objects
+        graphics objects
+        
+    directory to objects (20 bytes each)
+        xref
+        0 count
+        0000000000 65535 f
+        offset 00000 n
+        ....
+    trailer
+        object count, root ref, metadata ref, GUIDs?
+        offset of directory
+        %%EOF
+
+
+ */
 /******************************************************************************/
-
-std::ostream& operator<<( std::ostream &os, const Rect2D &r )
-{
-  // llx lly urx ury
-  return os << r.left << " " << r.bottom << " " << r.right << " " << r.top;
-}
-
-/******************************************************************************/
-
-std::ostream& operator<<( std::ostream &os, const point2D &p )
-{
-  return os << p.x << " " << p.y;
-}
-
-/******************************************************************************/
-
-// DEBUG
-void CreateAxesXobject( PDFWriter &pdfout );
-
 
 void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heightMM ) {
   if (!m_filename.empty()) {
@@ -102,77 +113,71 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
   m_objects.clear();
   m_xrefStart = 0;          // set when writing
-  
-  // root = 1
-  m_outlineIndex = 2;
-  m_pageParentIndex = 3;
+  m_pageParentIndex = 2;    // PDF index from 1
+  m_outlineIndex = 3;
 
   // Create root object, always object 1
   PDFRoot *rootObj = new PDFRoot(m_pageParentIndex,m_outlineIndex);
-  m_objects.push_back( rootObj );
-  
-  // Create outline data from pages
-// DEFERRED - group of tag, subsections for each LUT ???
-// or just section for tag start?
-// needs a bit of additional structure input
-  PDFOutlineParent *outlineObj = new PDFOutlineParent();
-  m_objects.push_back( outlineObj );
+  m_objects.emplace_back( rootObj );
 
-  // Create page parent, link to add children out of order
+  // Create page parent 2, link to add children out of order
   PDFPageParent *pageParentObj = new PDFPageParent();
-  m_objects.push_back( pageParentObj );
-
-
-  // common procset
-  PDFProcSet *procObj = new PDFProcSet( "[/PDF /Text]" );
-  m_objects.push_back( procObj );
-  size_t procSet = m_objects.size();
-  m_procsetIndex = procSet;
+  m_objects.emplace_back( pageParentObj );
   
-  // common font definition
+  // Create outline data 3 from pages
+  PDFOutlineParent *outlineObj = new PDFOutlineParent();
+  m_objects.emplace_back( outlineObj );
+
+
+
+
+// TODO - somehow this is confusing Acrobat
+// what is missing or wrong?  Works in Safari, Photoshop, Illustrator.
+
+
+// temporary fake page
+
+    // procset
+  PDFProcSet *procObj = new PDFProcSet( "[/PDF /Text]" );
+  m_objects.emplace_back( procObj );
+  size_t procSet = m_objects.size();
+  
+    // font definition
   PDFFont *fontObj = new PDFFont( "Helvetica" );
-  m_objects.push_back( fontObj );
+  m_objects.emplace_back( fontObj );
   size_t font = m_objects.size();
-  m_fontIndex = font;
-
-  // common group object
-  PDFGroup *groupObj = new PDFGroup();
-  m_objects.push_back( groupObj );
-  size_t group = m_objects.size();
-  m_groupIndex = group;
 
 
-#if 0
-// first page
+
   size_t content = m_objects.size() + 2;
-  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
-  m_objects.push_back( pageObj );
+  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font );
+  m_objects.emplace_back( pageObj );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
   
   PDFGraphic *graphics = new PDFGraphic();
   // add text data
-  graphics->m_buf += "/Axes Do\n";
-  graphics->m_buf += " 150 250 m 150 350 l S";
+  graphics->m_buf += "150 250 m 150 350 l S";
   graphics->m_buf += " 200 300 50 75 re B";
   graphics->m_buf += " BT\n /F1 24 Tf 100 100 Td (Hello World 1) Tj\nET";
-  m_objects.push_back( graphics );
+  m_objects.emplace_back( graphics );
 
 
 // second page
   content = m_objects.size() + 2;
-  PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
-  m_objects.push_back( pageObj2 );
+  PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, procSet, font );
+  m_objects.emplace_back( pageObj2 );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
   
   PDFGraphic *graphics2 = new PDFGraphic();
   // add text data
-  graphics2->m_buf += "/Axes Do\n";
+  graphics2->m_buf += "150 250 m 150 350 l S";
   graphics2->m_buf += " 200 300 50 75 re B";
   graphics2->m_buf += " BT\n /F1 24 Tf 200 100 Td (Hello World 2) Tj\nET";
-  m_objects.push_back( graphics2 );
-#endif
+  m_objects.emplace_back( graphics2 );
+
+// need to add common content (axes and basic labels)
 
 }
 
@@ -287,41 +292,15 @@ void PDFPage::WriteContent( std::ostream &out )
   out << "<< /Type /Page /Parent " << m_pageParentIndex << " 0 R";
   out << " /MediaBox [0 0 " << m_pageWidth << " " << m_pageHeight << "]";
   out << " /Contents " << m_pageContentIndex << " 0 R";
-
-  if (m_procset || m_font || m_xobject) {
-    out << " /Resources <<";
-    if (m_xobject) {  // could be abstracted to a list if needed
-      out << " /XObject<</Axes " << m_xobject << " 0 R>>";
-    }
-    if (m_procset)
-        out << "/ProcSet " << m_procset << " 0 R";
-    if (m_font)
-        out << " /Font << /F1 " << m_font << " 0 R>>";
-    out << " >> ";
-  }
-  out << ">>\n";
-}
-
-/******************************************************************************/
-
-void PDFXObject::WriteContent( std::ostream &out )
-{
-  out << "<< /Subtype/Form /BBox[ " << m_bounds << "]";
-  
-  if (m_group)
-    out << " /Group " << m_group << " 0 R";
-  out << " /Length " << m_buf.size();
   if (m_procset || m_font) {
     out << " /Resources <<";
     if (m_procset)
         out << "/ProcSet " << m_procset << " 0 R";
     if (m_font)
-        out << " /Font << /F1 " << m_font << " 0 R>>";
+        out << " /Font <</F1 " << m_font << " 0 R>>";
     out << " >> ";
   }
   out << ">>\n";
-  
-  out << "stream\n" << m_buf << "\nendstream\n";
 }
 
 /******************************************************************************/
@@ -335,7 +314,7 @@ void PDFProcSet::WriteContent( std::ostream &out )
 
 void PDFFont::WriteContent( std::ostream &out )
 {
-  out << "<< /Type /Font /Subtype /Type1 /Encoding /MacRomanEncoding ";
+  out << "<< /Type /Font /SubType /Type1 /Encoding /MacRomanEncoding ";
   out << "/Name /F1 /BaseFont /" << m_fontname << " >>\n";
 }
 
@@ -346,35 +325,6 @@ void PDFGraphic::WriteContent( std::ostream &out )
   out << "<</Length " << m_buf.size() << ">>\nstream\n";
   out << m_buf;
   out << "\nendstream\n";
-}
-
-/******************************************************************************/
-
-void PDFGroup::WriteContent( std::ostream &out )
-{
-    // I == isolated       K == knockout
-  out << "<< /I true /K false /S /Transparency /Type/Group >>\n";
-}
-
-/******************************************************************************/
-
-void PDFWriter::AddXObject( Rect2D &bounds, std::string content, size_t group,
-                size_t font, size_t procSet )
-{
-  if (m_xobjectIndex != 0) {
-    fprintf(stderr,"WARNING - PDF xobject already defined!\n");
-  }
-  
-  if (group == 0)
-    group = m_groupIndex;
-  if (font == 0)
-    font = m_fontIndex;
-  if (procSet == 0)
-    procSet = m_procsetIndex;
-
-  PDFXObject *xobjObj = new PDFXObject( content, bounds, group, font, procSet );
-  m_objects.emplace_back( xobjObj );
-  m_xobjectIndex =  m_objects.size();
 }
 
 /******************************************************************************/

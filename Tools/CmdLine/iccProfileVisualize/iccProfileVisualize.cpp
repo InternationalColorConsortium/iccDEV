@@ -736,9 +736,8 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
   
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2mm, 8*inch2mm );
-  CreateAxesXobject( pdffile );
   
-  
+
 
   for ( auto &tag: pIcc->m_Tags ) {
     icTagSignature sig = tag.TagInfo.sig;
@@ -792,7 +791,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
 
   svgfile.CloseFile();
   pdffile.CloseFile();
-
+  
 }   // end processLuts()
 
 /******************************************************************************/
