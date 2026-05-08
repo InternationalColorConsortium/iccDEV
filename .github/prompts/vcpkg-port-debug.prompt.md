@@ -23,14 +23,16 @@ vcpkg feature mapping no longer matches the upstream CMake option.
 `ENABLE_IMAGE_TOOLS`, `ENABLE_CMM_TOOLS`, and `ENABLE_IIS_TOOLS` in the
 configure log.
 
-#### GitHub API 403 (non-local mode)
+#### Source Download or Hash Failures (non-local mode)
 ```
 error: curl operation failed with response code 403
+error: SHA512 mismatch
 ```
-**Cause**: `vcpkg_from_github` hits GitHub API rate limits when resolving
-`--head` refs. This was the reason local source mode was created.
-**Fix**: Ensure `VCPKG_ICCDEV_SOURCE` and `VCPKG_KEEP_ENV_VARS` are set
-in the workflow step's `env:` block.
+**Cause**: `vcpkg_from_github` is using the pinned commit/hash path. API 403
+usually means local source mode was not enabled in CI; SHA512 mismatch means
+`REF` and `SHA512` were not refreshed together.
+**Fix**: In CI, set both `VCPKG_ICCDEV_SOURCE` and `VCPKG_KEEP_ENV_VARS` in the
+same step. For external consumers, update `REF`, `SHA512`, and `port-version`.
 
 #### Missing Transitive Dependencies
 ```
@@ -107,9 +109,13 @@ ls $PREFIX/lib/libIccJSON2*      # present only with the json feature
 # CMake config
 cat $PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake
 
-# Tools
+# Tools enabled by iccdev[tools,xml,json]
 $PREFIX/tools/iccdev/iccDumpProfile --help
 $PREFIX/tools/iccdev/iccRoundTrip --help
+$PREFIX/tools/iccdev/iccFromXml --help
+$PREFIX/tools/iccdev/iccToXml --help
+$PREFIX/tools/iccdev/iccFromJson --help
+$PREFIX/tools/iccdev/iccToJson --help
 ```
 
 ## Key Files

@@ -1,0 +1,7 @@
+paths:
+  .github/workflows/ci-pr-risk-security-analysis.yml:
+    ignore:
+      - 'SC2129'
+      - 'SC2001'
+      - 'SC2016'
+      - 'SC2034'

@@ -24,12 +24,12 @@ demonstrates JSON round-tripping via `CIccProfileJson::ToJson()`.
 ## Windows vcpkg
 
 ```
-git clone https://github.com/InternationalColorConsortium/iccdev.git
-cd iccdev\examples\hello-iccdev 
-git checkout ci-vcpkg-ports
-vcpkg install --overlay-ports=../../ports/iccdev
-cmake -S . -B build-vcpkg-verify -G "Visual Studio 17 2022" -A x64 "-DCMAKE_TOOLCHAIN_FILE=C:/Program Files/Microsoft Visual Studio/2022/Community/VC/vcpkg/scripts/buildsystems/vcpkg.cmake" "-DICCDEV_BUILD_DIR=..\..\Release"
-cmake --build .\build-vcpkg-verify\ --config Release
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+cd iccDEV\examples\hello-iccdev
+vcpkg install --overlay-ports=..\..\ports
+cmake -S . -B build-vcpkg-verify -G "Visual Studio 17 2022" -A x64 ^
+  "-DCMAKE_TOOLCHAIN_FILE=C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake"
+cmake --build build-vcpkg-verify --config Release
 build-vcpkg-verify\Release\hello-iccdev.exe
 ```
 
@@ -37,14 +37,12 @@ build-vcpkg-verify\Release\hello-iccdev.exe
 
 ```
 git clone https://github.com/microsoft/vcpkg.git
-cd vcpkg
-./bootstrap-vcpkg.sh --disableMetrics
-./vcpkg integrate install
-cd ..
-git clone https://github.com/InternationalColorConsortium/iccdev.git iccdev
-cd iccdev/examples/hello-iccdev
-../../../vcpkg/vcpkg install --overlay-ports=../../ports/iccdev
-cmake -S . -B build-vcpkg-verify "-DCMAKE_TOOLCHAIN_FILE=-DCMAKE_TOOLCHAIN_FILE=..\..\..\vcpkg\scripts\buildsystems\vcpkg.cmake" -G Ninja" -G "Visual Studio 17 2022" -A x64
+./vcpkg/bootstrap-vcpkg.sh --disableMetrics
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+cd iccDEV/examples/hello-iccdev
+../../../vcpkg/vcpkg install --overlay-ports=../../ports
+cmake -S . -B build-vcpkg-verify -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=../../../vcpkg/scripts/buildsystems/vcpkg.cmake
 cmake --build build-vcpkg-verify --config Release
 ./build-vcpkg-verify/Release/hello-iccdev
 ```
@@ -52,8 +50,8 @@ cmake --build build-vcpkg-verify --config Release
 ### CMake
 
 ```
-git clone https://github.com/InternationalColorConsortium/iccdev.git
-cd iccdev 
+git clone https://github.com/InternationalColorConsortium/iccDEV.git
+cd iccDEV
 cmake -B unix -S Build/Cmake/
 cmake --build unix
 cd examples/hello-iccdev 
@@ -65,8 +63,8 @@ cmake --build unix
 ### Output
 
 ```
-IccProfLib version: 2.3.1.7+e280b0a
-IccLibXML  version: 2.3.1.7+e280b0a
+IccProfLib version: 2.3.1.8+<sha>
+IccLibXML  version: 2.3.1.8+<sha>
 Profile spec ver:  4.00
 
 XML round-trip OK (786 bytes)

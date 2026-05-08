@@ -231,12 +231,9 @@ skip_test() {
 # Key test profiles (diverse classes)
 # =============================================================================
 SRGB="$TP/sRGB_D65_MAT.icc"
-SRGB_500="$TP/sRGB_D65_MAT-500lx.icc"
 CMYK="$TP/CMYK-3DLUTs2.icc"
 REC2020="$TP/Rec2020rgbSpectral.icc"
 NAMED="$TP/NamedColor.icc"
-SPARSE_NAMED="$TP/SparseMatrixNamedColor.icc"
-FLUOR_NAMED="$TP/FluorescentNamedColor.icc"
 MULTICHAN="$TP/17ChanPart1.icc"
 MVIS="$TP/17ChanWithSpots-MVIS.icc"
 CAT8="$TP/Cat8Lab-D65_2deg.icc"
@@ -258,10 +255,7 @@ PNG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.png"
 JPG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.jpg"
 SPECTRAL_TIFF="$ICCDEV_TESTING/hybrid/Data/smCows380_5_780.tif"
 V5_DISPLAY="$ICCDEV_TESTING/Display/LCDDisplay.icc"
-NAMED_DATA="$ICCDEV_TESTING/Named/NamedColorTest.txt"
-FLUOR_DATA="$ICCDEV_TESTING/Named/FluorescentNamedColorTest.txt"
 SRGB_CALC_DATA="$ICCDEV_TESTING/Calc/srgbCalcTest.txt"
-SIXCHAN_DATA="$ICCDEV_TESTING/SpecRef/sixChanTest.txt"
 CMYK_DATA="$ICCDEV_TESTING/hybrid/Data/cmykGrays.txt"
 HYBRID_XML="$ICCDEV_TESTING/hybrid/LCDDisplay.xml"
 
@@ -980,8 +974,6 @@ echo "  Non-failing:    $(( (PASS + EXPECTED_FAIL + SKIP) * 100 / TOTAL ))%"
 if [ "$ASAN_FINDINGS" -gt 0 ]; then
   echo ""
   # Classify ASAN findings: known (alloc-dealloc-mismatch) vs unknown (real crashes)
-  KNOWN_ASAN_SUMMARY=0
-  UNKNOWN_ASAN_SUMMARY=0
   echo "  ASAN finding details:"
   grep -rl "ERROR: AddressSanitizer" "$OUTDIR/"*.log 2>/dev/null | while read -r f; do
     asan_line="$(grep 'ERROR: AddressSanitizer' "$f" | sed -n '1p')"

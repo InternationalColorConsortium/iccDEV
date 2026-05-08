@@ -7,8 +7,8 @@ Use this prompt to audit any GitHub Actions workflow for compliance.
 For EVERY `run:` step in the workflow, verify:
 
 ### 1. Shell Hardening
-- [ ] `shell: bash --noprofile --norc {0}` (bash) or `pwsh -NoProfile -NoLogo -NonInteractive -Command {0}` (PowerShell)
-- [ ] `BASH_ENV: /dev/null` in env (bash steps)
+- [ ] `shell: bash --noprofile --norc {0}` for bash or `pwsh -NoProfile -NoLogo -NonInteractive -Command {0}` for PowerShell
+- [ ] `BASH_ENV: /dev/null` in env for bash steps only
 - [ ] `set -euo pipefail` as first command (bash)
 - [ ] `$ErrorActionPreference = 'Stop'` (PowerShell)
 
@@ -24,6 +24,8 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] No `${{ matrix.* }}` directly in `run:` blocks — must use `env:` passthrough
 - [ ] No `${{ github.event.*.title }}` or other user-controllable contexts in `run:`
 - [ ] No `${{ github.head_ref }}` in `run:` blocks
+- [ ] `pull_request_target` and `workflow_run` jobs do not checkout or execute
+      PR-controlled code before mutating labels, comments, releases, or checks
 
 ### 5. Output Sanitization
 - [ ] All `GITHUB_STEP_SUMMARY` writes use `sanitize_line`/`Sanitize-Line`
@@ -62,6 +64,8 @@ gh workflow run ci-pr-risk-security-analysis.yml \
 The scanner checks: SHA pinning, dangerous triggers, credential hygiene,
 shell hardening, matrix injection, output sanitization, permissions,
 supply-chain score, trivy indicators, and workflow inventory.
+PowerShell-only workflows with `defaults.run.shell: pwsh ...` are exempt from
+the bash-specific BASH_ENV check.
 
 ### Manual Grep
 
@@ -81,6 +85,18 @@ grep -n 'GITHUB_STEP_SUMMARY' "$FILE" | grep -v 'sanitize_line\|Sanitize-Line\|s
 # Missing credential cleanup
 grep -c 'credential.helper' "$FILE"  # should equal number of run: blocks
 ```
+
+### Local Tooling
+
+```bash
+python3 -c "import yaml; yaml.safe_load(open('$FILE')); print('YAML OK')"
+actionlint -no-color "$FILE"
+yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' "$FILE"
+gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+```
+
+Use CodeQL to validate query packs and C/C++ or CMake-relevant security changes;
+do not treat CodeQL as the workflow YAML parser.
 
 ### Full Run Log Grep
 

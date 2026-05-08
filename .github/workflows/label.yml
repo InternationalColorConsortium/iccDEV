@@ -1,36 +1,161 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium.
+# Copyright (c) 2025-2026 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
-#
-# Intent: Apply file-pattern-based labels to PRs using actions/labeler
-#
-# Last Updated: 2026-02-17 16:30:16 UTC by David Hoyt
-#                Remove labeled trigger (loop risk), add workflow_dispatch,
-#
+# Intent: Apply trusted PR labels and mark PRs ready for CodeQL after
+#         ci-pr-action succeeds.
 #
 ###############################################################
 
 name: Labeler
 
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_run:
+    workflows: ["ci-pr-action"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to relabel'
+        required: true
+        type: string
+
 permissions:
   contents: read
+  issues: write
   pull-requests: write
 
-on:
-  pull_request:
-    types: [opened, synchronize, reopened]
-  workflow_dispatch:
+concurrency:
+  group: "labeler-${{ github.run_id }}"
+  cancel-in-progress: false
+
+env:
+  CODEQL_READY_LABEL: codeql-ready
+  CODEQL_READY_DESCRIPTION: ci-pr-action passed; trigger CodeQL PR scan
 
 jobs:
   apply-labels:
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
 
     steps:
+      - name: Ensure managed labels
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          CODEQL_READY_LABEL: ${{ env.CODEQL_READY_LABEL }}
+          CODEQL_READY_DESCRIPTION: ${{ env.CODEQL_READY_DESCRIPTION }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          gh label create "$CODEQL_READY_LABEL" \
+            --repo "$GH_REPOSITORY" \
+            --color "5319e7" \
+            --description "$CODEQL_READY_DESCRIPTION" \
+            --force
+
+      - name: Clear stale CodeQL-ready label
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
+          CODEQL_READY_LABEL: ${{ env.CODEQL_READY_LABEL }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          PR_NUMBER="${PR_NUMBER:-$DISPATCH_PR_NUMBER}"
+          if [[ -z "$PR_NUMBER" ]]; then
+            echo "[SKIP] No PR number supplied"
+            exit 0
+          fi
+
+          gh pr edit "$PR_NUMBER" \
+            --repo "$GH_REPOSITORY" \
+            --remove-label "$CODEQL_READY_LABEL" >/dev/null 2>&1 || true
+
       - name: Apply PR labels
         uses: actions/labeler@c5dadc2a45784a4b6adfcd20fea3465da3a5f904  # v5+
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
           configuration-path: .github/labeler.yml
+          pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}
+          sync-labels: true
+
+  mark-codeql-ready:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+
+    steps:
+      - name: Add CodeQL-ready label
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_EVENT_PATH: ${{ github.event_path }}
+          CODEQL_READY_LABEL: ${{ env.CODEQL_READY_LABEL }}
+          CODEQL_READY_DESCRIPTION: ${{ env.CODEQL_READY_DESCRIPTION }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          escape_html() {
+            local s="$1"
+            s="${s//&/&amp;}"
+            s="${s//</&lt;}"
+            s="${s//>/&gt;}"
+            s="${s//\"/&quot;}"
+            s="${s//\'/&#39;}"
+            printf '%s' "$s"
+          }
+          sanitize_line() { escape_html "$1"; }
+
+          pr_number="$(jq -r '
+            .workflow_run.pull_requests[0].number // empty
+          ' "$GH_EVENT_PATH")"
+          if [[ -z "$pr_number" ]]; then
+            echo "[SKIP] ci-pr-action workflow_run did not include a PR number"
+            exit 0
+          fi
+
+          gh label create "$CODEQL_READY_LABEL" \
+            --repo "$GH_REPOSITORY" \
+            --color "5319e7" \
+            --description "$CODEQL_READY_DESCRIPTION" \
+            --force
+
+          gh pr edit "$pr_number" \
+            --repo "$GH_REPOSITORY" \
+            --add-label "$CODEQL_READY_LABEL"
+
+          {
+            echo "## CodeQL Trigger Label"
+            echo ""
+            echo "- PR: #$(sanitize_line "$pr_number")"
+            echo "- Label: \`$(sanitize_line "$CODEQL_READY_LABEL")\`"
+          } >> "$GITHUB_STEP_SUMMARY"

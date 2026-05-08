@@ -107,7 +107,7 @@ vcpkg install iccdev \
 vcpkg list | grep iccdev
 ```
 
-This builds: IccProfLib2-static, IccXML2-static, 9 CLI tools, CMake config.
+This builds static libraries, feature-selected tools, and the CMake config.
 See `ports/iccdev/portfile.cmake` for the full build configuration.
 
 ## Coverage Report

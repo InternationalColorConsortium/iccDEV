@@ -29,9 +29,22 @@ on:
       - synchronize
       - reopened
       - ready_for_review
+  workflow_dispatch:
+    inputs:
+      ci_scope:
+        description: 'CI scope to run'
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - full
+          - source
+          - governance
+          - docs
 
 concurrency:
-  group: "ci-pr-${{ github.workflow }}-${{ github.event.pull_request.number }}"
+  group: "ci-pr-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
 jobs:
@@ -44,6 +57,11 @@ jobs:
 
     outputs:
       src_changed: ${{ steps.diffcheck.outputs.src_changed }}
+      ci_scope: ${{ steps.diffcheck.outputs.ci_scope }}
+      source_changed: ${{ steps.diffcheck.outputs.source_changed }}
+      build_config_changed: ${{ steps.diffcheck.outputs.build_config_changed }}
+      ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
+      docs_only: ${{ steps.diffcheck.outputs.docs_only }}
 
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -58,7 +76,7 @@ jobs:
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           # Use the base commit SHA to ensure we fetch the exact trusted version.
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: base
           fetch-depth: 1
           persist-credentials: false
@@ -77,17 +95,58 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_SCOPE: ${{ inputs.ci_scope || 'auto' }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          PR_BASE_REF: ${{ github.base_ref }}
+          PR_BASE_REF: ${{ github.base_ref || 'master' }}
         run: |
           set -euo pipefail
 
           git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
 
-          base_sha="${PR_BASE_SHA}"
+          ci_scope="${CI_SCOPE:-auto}"
           head_sha="${PR_HEAD_SHA}"
+
+          case "$ci_scope" in
+            auto|full|source|governance|docs)
+              ;;
+            *)
+              echo "Invalid CI scope: $ci_scope" >&2
+              exit 1
+              ;;
+          esac
+
+          write_scope_outputs() {
+            local run_full="$1"
+            local source_changed="$2"
+            local build_config_changed="$3"
+            local ci_changed="$4"
+            local docs_only="$5"
+
+            {
+              printf 'src_changed=%s\n' "$run_full"
+              printf 'ci_scope=%s\n' "$ci_scope"
+              printf 'source_changed=%s\n' "$source_changed"
+              printf 'build_config_changed=%s\n' "$build_config_changed"
+              printf 'ci_changed=%s\n' "$ci_changed"
+              printf 'docs_only=%s\n' "$docs_only"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          case "$ci_scope" in
+            full|source)
+              write_scope_outputs true true true false false
+              exit 0
+              ;;
+            governance)
+              write_scope_outputs false false false true false
+              exit 0
+              ;;
+            docs)
+              write_scope_outputs false false false false true
+              exit 0
+              ;;
+          esac
 
           # Validate that both SHAs look like exact Git commit OIDs (40 hex chars).
           validate_sha() {
@@ -102,9 +161,9 @@ jobs:
             return 0
           }
 
-          if ! validate_sha "$base_sha" || ! validate_sha "$head_sha"; then
-            echo "Warning: invalid or missing commit sha(s); skipping diff-based source detection." >&2
-            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+          if ! validate_sha "$head_sha"; then
+            echo "Warning: invalid or missing head commit sha; assuming source changed for safety" >&2
+            write_scope_outputs true true true false false
             exit 0
           fi
 
@@ -115,29 +174,61 @@ jobs:
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
-              echo "src_changed=false" >> "$GITHUB_OUTPUT"
+              write_scope_outputs false false false false false
               exit 0
               ;;
           esac
 
           # Fetch with increased depth to find merge base
           # Use fully-qualified refspec (defense-in-depth: prevents ambiguous ref resolution)
-          git -c protocol.version=2 fetch --no-tags origin "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}" --depth=50
+          git -c protocol.version=2 fetch --no-tags origin \
+            "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}" \
+            --depth=50
 
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
-            echo "Warning: no merge base found between origin/${base_ref} and HEAD; assuming source changed for safety" >&2
-            echo "src_changed=true" >> "$GITHUB_OUTPUT"
+            echo "Warning: no merge base found; assuming source changed for safety" >&2
+            write_scope_outputs true true true false false
             exit 0
           fi
 
-          # Case-insensitive extension match (c/h/cpp variants)
-          if git diff --name-only "origin/${base_ref}"...HEAD |
-             grep -Ei '\.(cpp|cxx|cc|c|h|hpp|hh)$' >/dev/null; then
-            echo "src_changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "src_changed=false" >> "$GITHUB_OUTPUT"
+          changed_files="$(git diff --name-only "origin/${base_ref}"...HEAD)"
+
+          has_changed_file() {
+            local pattern="$1"
+            grep -Eiq "$pattern" <<< "$changed_files"
+          }
+
+          source_changed=false
+          build_config_changed=false
+          ci_changed=false
+          docs_only=false
+
+          if has_changed_file '\.(cpp|cxx|cc|c|h|hpp|hh)$'; then
+            source_changed=true
           fi
+
+          if has_changed_file '(^|/)(CMakeLists\.txt|[^/]+\.cmake)$|^Build/Cmake/|^cmake/'; then
+            build_config_changed=true
+          fi
+
+          if has_changed_file '^\.github/(workflows|scripts|actions|codeql-queries)/'; then
+            ci_changed=true
+          fi
+
+          docs_pattern='(^docs/|^README(\..*)?$|^CONTRIBUTING(\..*)?$'
+          docs_pattern+='|^CHANGELOG(\..*)?$|^LICENSE(\..*)?$|\.(md|rst|txt)$)'
+          if [[ -n "$changed_files" ]] &&
+             ! grep -Eiv "$docs_pattern" <<< "$changed_files" >/dev/null; then
+            docs_only=true
+          fi
+
+          run_full=false
+          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" ]]; then
+            run_full=true
+          fi
+
+          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$ci_changed" "$docs_only"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -149,6 +240,12 @@ jobs:
           GH_SHA: ${{ github.sha }}
           GH_ACTOR: ${{ github.actor }}
           GH_RUN_ID: ${{ github.run_id }}
+          RUN_FULL_BUILD: ${{ steps.diffcheck.outputs.src_changed }}
+          CI_SCOPE: ${{ steps.diffcheck.outputs.ci_scope }}
+          SOURCE_CHANGED: ${{ steps.diffcheck.outputs.source_changed }}
+          BUILD_CONFIG_CHANGED: ${{ steps.diffcheck.outputs.build_config_changed }}
+          CI_CHANGED: ${{ steps.diffcheck.outputs.ci_changed }}
+          DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -185,13 +282,22 @@ jobs:
             echo ""
             echo "## PR Checklist"
             echo ""
-            echo "- [x] You have followed the [guidelines for contributing](https://github.com/InternationalColorConsortium/iccDEV/blob/master/CONTRIBUTING.md)"
-            echo "- [x] Commits follow GitHub's [acceptable use policy](https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies)"
-            echo "- [x] You checked for duplicate [pull requests](https://github.com/InternationalColorConsortium/iccDEV/pulls)"
-            echo "- [x] You built your PR locally using the official [Build Instructions](https://github.com/InternationalColorConsortium/iccDEV/blob/master/docs/build.md)"
+            echo "- [x] You followed CONTRIBUTING.md"
+            echo "- [x] Commits follow GitHub's acceptable use policy"
+            echo "- [x] You checked for duplicate pull requests"
+            echo "- [x] You built locally using docs/build.md"
             echo "- [x] You included Unit Tests and/or Issue reproduction steps + fix"
             echo ""
-            echo "If you have questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/tree/master/.github/CODEOWNERS)."
+            echo "## CI Scope"
+            echo ""
+            echo "- **Requested scope:** \`$(sanitize_line "${CI_SCOPE:-auto}")\`"
+            echo "- **Run full build matrix:** \`$(sanitize_line "${RUN_FULL_BUILD:-false}")\`"
+            echo "- **Source changed:** \`$(sanitize_line "${SOURCE_CHANGED:-false}")\`"
+            echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED:-false}")\`"
+            echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED:-false}")\`"
+            echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY:-false}")\`"
+            echo ""
+            echo "If you have questions, contact a listed maintainer."
             echo ""
             echo "## Legal Requirements"
             echo ""
@@ -204,14 +310,14 @@ jobs:
             echo "Before contributing code, you must complete a **Contributor License Agreement (CLA)**."
             echo ""
             echo "- [Personal CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)"
-            echo "- [Corporate CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/icc-individual-cla.pdf)"
+            echo "- Corporate CLA: InternationalColorConsortium/.github docs"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
   setup:
     name: Thank You for the PR
     runs-on: ubuntu-latest
-    needs: [detect-src]
+    needs: [detect-src, risk-gate]
     permissions:
       contents: read
       pull-requests: read
@@ -225,7 +331,7 @@ jobs:
       - name: Checkout base commit (trusted sanitizers)
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: base
           fetch-depth: 1
           persist-credentials: false
@@ -241,6 +347,11 @@ jobs:
           GH_ACTOR: ${{ github.actor }}
           GH_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope }}
+          SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed }}
+          BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed }}
+          CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed }}
+          DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -279,6 +390,11 @@ jobs:
           echo "Run ID: $(sanitize_print "$GH_RUN_ID")"
           echo "Start time: $(date)"
           echo "Source changed: $(sanitize_print "$SRC_CHANGED")"
+          echo "CI scope: $(sanitize_print "$CI_SCOPE")"
+          echo "Source files changed: $(sanitize_print "$SOURCE_CHANGED")"
+          echo "Build config changed: $(sanitize_print "$BUILD_CONFIG_CHANGED")"
+          echo "CI/governance changed: $(sanitize_print "$CI_CHANGED")"
+          echo "Docs only: $(sanitize_print "$DOCS_ONLY")"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -291,6 +407,11 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
+          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'auto' }}
+          SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed || 'false' }}
+          BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
+          CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed || 'false' }}
+          DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only || 'false' }}
         run: |
           set -euo pipefail
 
@@ -323,6 +444,11 @@ jobs:
           : "${GITHUB_SHA:=<none>}"
           : "${GITHUB_RUN_ID:=<none>}"
           : "${SRC_CHANGED:=false}"
+          : "${CI_SCOPE:=auto}"
+          : "${SOURCE_CHANGED:=false}"
+          : "${BUILD_CONFIG_CHANGED:=false}"
+          : "${CI_CHANGED:=false}"
+          : "${DOCS_ONLY:=false}"
 
           # write step summary (all dynamic values passed through sanitize_line)
           {
@@ -335,7 +461,12 @@ jobs:
             echo "- **Commit:** \`$(sanitize_line "${GITHUB_SHA}")\`"
             echo "- **Run ID:** \`$(sanitize_line "${GITHUB_RUN_ID}")\`"
             echo "- **Session start:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "- **Source changed:** \`$(sanitize_line "${SRC_CHANGED}")\`"
+            echo "- **CI scope:** \`$(sanitize_line "${CI_SCOPE}")\`"
+            echo "- **Run full build matrix:** \`$(sanitize_line "${SRC_CHANGED}")\`"
+            echo "- **Source files changed:** \`$(sanitize_line "${SOURCE_CHANGED}")\`"
+            echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED}")\`"
+            echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED}")\`"
+            echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY}")\`"
             echo ""
             echo "[OK] CI environment successfully initialized and ready for subsequent jobs."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -427,6 +558,16 @@ jobs:
           write_github_output comp "$comp_raw"
           write_github_output bt "$bt_raw"
 
+  risk-gate:
+    name: Risk Analysis Gate
+    needs: [detect-src]
+    uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
+    with:
+      analysis_target: 'Specific git ref'
+      git_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      severity_threshold: 'HIGH'
+      fail_on_findings: true
+
   unix-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: Unix Build & Test Profiles
@@ -481,7 +622,7 @@ jobs:
   example-project:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: Example Project
-    needs: [detect-src]
+    needs: [detect-src, risk-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -535,11 +676,14 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/Build/Cmake/build/IccProfLib:${{ github.workspace }}/Build/Cmake/build/IccXML:${{ github.workspace }}/Build/Cmake/build/IccJSON"
+          ICCDEV_BUILD_DIR: ${{ github.workspace }}/Build/Cmake/build
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          export LD_LIBRARY_PATH="${ICCDEV_BUILD_DIR}/IccProfLib"
+          LD_LIBRARY_PATH+=":${ICCDEV_BUILD_DIR}/IccXML"
+          LD_LIBRARY_PATH+=":${ICCDEV_BUILD_DIR}/IccJSON"
           OUTPUT=$(./examples/hello-iccdev/build/hello-iccdev 2>&1)
           echo "$OUTPUT"
           if grep -qE 'IccProfLib|Successfully opened' <<< "$OUTPUT"; then
@@ -554,6 +698,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - detect-src
+      - risk-gate
       - unix-ci
       - lint
       - scan-build
@@ -571,7 +716,7 @@ jobs:
       - name: Checkout base commit (trusted sanitizers)
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: base
           fetch-depth: 1
           persist-credentials: false
@@ -589,6 +734,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          RISK_RESULT: ${{ needs.risk-gate.result }}
           UNIX_RESULT: ${{ needs.unix-ci.result }}
           LINT_RESULT: ${{ needs.lint.result }}
           SCAN_RESULT: ${{ needs['scan-build'].result }}
@@ -626,6 +772,7 @@ jobs:
           SCAN_RESULT="${SCAN_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
           EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
+          RISK_RESULT="${RISK_RESULT:-success}"
 
           # remove CRs, trim whitespace and lowercase each value
           trim_and_norm() {
@@ -644,10 +791,11 @@ jobs:
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
           EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
+          RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT" "$EXAMPLE_RESULT"; do
+          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT" "$EXAMPLE_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -710,6 +858,7 @@ jobs:
             echo ""
             echo "| Job                | Status   |"
             echo "|--------------------|----------|"
+            printf "| risk-gate          | %s |\n" "$(sanitize_line "$RISK_RESULT")"
             printf "| unix-ci            | %s |\n" "$(sanitize_line "$UNIX_RESULT")"
             printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"

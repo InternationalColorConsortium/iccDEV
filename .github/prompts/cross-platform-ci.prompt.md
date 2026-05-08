@@ -81,7 +81,7 @@ target_compile_options(target PRIVATE
 ```
 # vcpkg overlay port issues:
 - VCPKG_ICCDEV_SOURCE env var stripped by vcpkg sandbox — need VCPKG_KEEP_ENV_VARS
-- GitHub API 403 on macOS runners when using --head (rate limiting)
+- Non-local port source uses pinned REF + SHA512; refresh both with port-version
 - VS-bundled vcpkg doesn't support --classic mode — use standalone clone
 - Static-only build (no __declspec(dllexport)) — ENABLE_SHARED_LIBS=OFF
 - IccDEVCmm PCH fails under Ninja — keep ENABLE_CMM_TOOLS=OFF in vcpkg

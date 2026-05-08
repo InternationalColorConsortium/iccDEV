@@ -18,6 +18,14 @@ Use this skill when a review or workflow log mentions `ci-vcpkg-ports`,
 `ci-shared-exports`, `examples/hello-iccdev`, install manifests, uninstall,
 or packaged CMake consumers.
 
+## Port Pin Check
+
+For source refreshes without an upstream version bump, update the port as
+`version#port-version`: increment `ports/iccdev/vcpkg.json` `port-version`, and
+refresh `ports/iccdev/portfile.cmake` `REF` plus `SHA512` together. CI should
+use local source mode (`VCPKG_ICCDEV_SOURCE` and `VCPKG_KEEP_ENV_VARS`) so it
+tests the checked-out branch, not the GitHub archive fallback.
+
 ## Staleness Check
 
 1. Compare the tested ref with the current PR head:

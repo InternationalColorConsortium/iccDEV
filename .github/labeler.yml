@@ -1,71 +1,142 @@
 ###############################################################
 #
-## Copyright (©) 2025 International Color Consortium.
+## Copyright (c) 2025-2026 International Color Consortium.
 ##                 All rights reserved.
 ##                 https://color.org
 #
-#
-## Intent: iccDEV labeler.yml
-#
-## Last Updated: 28-NOV-2025 2300Z by David Hoyt
-##               Added user-controllable input (uci) checks
-## TODO: Push binary releases, tags etc..
-#
-## Comment: Known good and working from PatchIccMax
-#
-#
-#
-#
+## Intent: iccDEV PR labeler configuration
 #
 ###############################################################
 
 Source:
-  - any:
-      - 'IccProfLib/**/*.cpp'
-      - 'IccProfLib/**/*.h'
-      - 'IccProfLib/**/*.hpp'
-      - 'IccXML/**/*.cpp'
-      - 'IccXML/**/*.h'
-      - 'IccXML/**/*.hpp'
-      - 'Tools/**/**/*.cpp'
-      - 'Tools/**/**/*.h'
-      - 'Tools/**/**/*.hpp'
-      - 'Tools/wxWidget/wxProfileDump/*.cpp'
-      - 'Tools/wxWidget/wxProfileDump/*.h'
-      - 'Tools/wxWidget/wxProfileDump/*.hpp'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'IccProfLib/**/*'
+          - 'IccXML/**/*'
+          - 'IccJSON/**/*'
+          - 'Tools/**/*.{c,cc,cpp,cxx,h,hh,hpp}'
 
 Documentation:
-  - any:
-      - 'docs/*.md'
-      - '*.md'
-      - 'LICENSE*'
-      - 'SECURITY*'
-      - 'README*'
-      - 'CHANGELOG*'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'docs/**/*.md'
+          - 'README*'
+          - 'CHANGELOG*'
+          - 'CONTRIBUTING*'
+          - 'SECURITY*'
 
 Configuration:
-  - any:
-      - '**/**/*.json'
-      - '**/*.yaml'
-      - '**/*.yml'
-      - '**/*.cmake'
-      - 'Build/Cmake/*.txt'
-      - 'Build/Cmake/**/**/*.txt'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/*.cmake'
+          - '**/CMakeLists.txt'
+          - '**/*.json'
+          - '**/*.yml'
+          - '**/*.yaml'
 
 CI:
-  - any:
-      - '.github/workflows/*.yml'
-      - '.github/workflows/*.yaml'
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/actions/**'
 
-Licenses:
-  - any:
-      - 'LICENSE*'
-      - 'COPYING*'
+github-actions:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/actions/**'
 
-Profiles:
-  - any:
-      - 'Testing/**/**/**'
+Scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/scripts/**'
+          - 'scripts/**'
+          - '**/*.sh'
+          - '**/*.ps1'
+
+CodeQL:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/codeql-config.yml'
+          - '.github/codeql-queries/**'
+          - '.github/scripts/codeql-report.sh'
+          - '.github/scripts/run-codeql-local.sh'
+          - '.github/workflows/ci-codeql-security.yml'
+
+SAST:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/codeql-config.yml'
+          - '.github/codeql-queries/**'
+          - '.github/workflows/ci-codeql-security.yml'
+          - '.github/workflows/ci-pr-lint.yml'
 
 Build:
-  - any:
-      - 'Build/Cmake/**/**'
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Build/Cmake/**'
+          - 'Build/Cmake/**/CMakeLists.txt'
+
+Testing:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Testing/**'
+          - 'Build/Cmake/Testing/**'
+          - '.github/workflows/ci-*-tests.yml'
+
+Profiles:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Testing/**/*.icc'
+          - 'Testing/**/*.xml'
+          - 'Testing/**/*.json'
+          - 'contrib/BuildEnv/**'
+
+Tools:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Tools/**'
+
+Spec:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Spec/**'
+          - 'docs/**/*spec*.md'
+
+Docker:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/Dockerfile'
+          - '**/*.dockerfile'
+          - '.dockerignore'
+          - '.github/workflows/ci-docker*.yml'
+
+WASM:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'Build/Cmake/**/*wasm*'
+          - '.github/workflows/*wasm*.yml'
+          - '.github/scripts/*wasm*'
+
+vcpkg:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'ports/**'
+          - '**/vcpkg.json'
+          - '**/vcpkg-configuration.json'
+          - '.github/workflows/ci-vcpkg-ports.yml'
+
+BREW:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '**/brew*'
+          - '**/Homebrew*'
+
+NPM:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'package-lock.json'
+          - '**/package.json'
+          - '**/package-lock.json'

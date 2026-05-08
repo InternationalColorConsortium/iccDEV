@@ -1281,62 +1281,25 @@ jobs:
             [ -d "$dir" ] || continue
             name="$(basename "$dir")"
             echo "--- Packaging $name ---"
-            (cd "$dir" && zip -r "../../release-assets/${name}.zip" .)
+            (cd "$dir" && zip -r "../../release-assets/${name}.zip" . \
+              -x './binary-hardening.md' \
+              -x './binary-inventory.csv' \
+              -x './failures.txt' \
+              -x './needed-libraries.txt' \
+              -x './strings-hygiene.txt' \
+              -x './binary-review/*' \
+              -x 'binary-hardening.md' \
+              -x 'binary-inventory.csv' \
+              -x 'failures.txt' \
+              -x 'needed-libraries.txt' \
+              -x 'strings-hygiene.txt' \
+              -x 'binary-review/*')
             echo "  Created ${name}.zip ($(du -h "release-assets/${name}.zip" | cut -f1))"
           done
 
           echo ""
           echo "=== Release assets ==="
           ls -lh release-assets/
-
-      - name: Run binary artifact inventory
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-          BINARY_INVENTORY_STRICT: "1"
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$PWD"
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
-          if [[ -f "$SANITIZER" ]]; then
-            # shellcheck disable=SC1090
-            source "$SANITIZER"
-          else
-            escape_html() {
-              local s="$1"
-              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
-              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
-              printf '%s' "$s"
-            }
-            sanitize_line() { escape_html "$1"; }
-          fi
-
-          mkdir -p release-assets/binary-review
-          chmod +x .github/scripts/ci-binary-inventory.sh
-          .github/scripts/ci-binary-inventory.sh \
-            artifacts \
-            release-assets/binary-review \
-            | tee /tmp/iccdev-binary-inventory-output.txt
-
-          {
-            echo "### Binary Artifact Inventory"
-            echo ""
-            echo "- Mode: report-only"
-            echo "- Output: \`release-assets/binary-review/\`"
-            echo ""
-            echo "#### Generated files"
-            echo '```'
-            find release-assets/binary-review -maxdepth 1 -type f -printf '%f\n' \
-              | sort \
-              | while IFS= read -r line; do
-                sanitize_line "$line"
-                echo ""
-              done
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate release checksums
         shell: bash --noprofile --norc {0}
@@ -1431,7 +1394,6 @@ jobs:
             | Windows (MSVC) | `iccdev-windows-msvc.zip` |
             | WASM (Emscripten) | `iccdev-wasm-release.zip` |
             | Checksums | `SHA256SUMS`, `SHA512SUMS` |
-            | Binary review | `binary-review/*` |
 
             ### Provenance
 
@@ -1457,7 +1419,6 @@ jobs:
             release-assets/*.zip
             release-assets/SHA256SUMS
             release-assets/SHA512SUMS
-            release-assets/binary-review/*
 
       - name: Summary Report
         if: always()

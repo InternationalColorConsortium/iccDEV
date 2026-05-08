@@ -5,7 +5,7 @@
 #                 https://color.org
 #
 ## Intent: CodeQL security analysis with custom iccDEV queries
-##         Generates local SARIF report as artifact (no upload)
+##         Uploads SARIF and stores a local report artifact
 #
 ## Last Updated: 2026-04-09 by David Hoyt
 #
@@ -14,6 +14,11 @@
 name: "ci-codeql-security"
 
 on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - labeled
   push:
     branches:
       - master
@@ -34,11 +39,17 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: "codeql-${{ github.ref }}"
+  group: "codeql-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
 jobs:
   analyze:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (
+        github.event.action == 'labeled' &&
+        github.event.label.name == 'codeql-ready'
+      )
     name: CodeQL Security Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -80,9 +91,12 @@ jobs:
           if ! command -v codeql >/dev/null 2>&1; then
             CODEQL_VER="2.24.1"
             CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
+            CODEQL_SHA256="9767468e00a505ed022eedcf5813dd47760567a400ead7bf2519ce22f953dde1"
+            CODEQL_URL="https://github.com/github/codeql-action/releases/download"
             curl -fsSL --retry 3 \
               -o "${CODEQL_ARCHIVE}" \
-              "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz"
+              "${CODEQL_URL}/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz"
+            printf '%s  %s\n' "${CODEQL_SHA256}" "${CODEQL_ARCHIVE}" | sha256sum -c -
             tar xzf "${CODEQL_ARCHIVE}" -C /opt
             echo "/opt/codeql" >> "$GITHUB_PATH"
           fi

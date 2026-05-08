@@ -10,7 +10,7 @@ applyTo: "ports/**"
 ports/iccdev/
 ├── portfile.cmake   — Build logic and feature flags
 ├── usage            — CMake consumption hint printed by vcpkg
-└── vcpkg.json       — Port manifest (name, version, deps, features)
+└── vcpkg.json       — Port manifest (version, port-version, deps, features)
 ```
 
 ## Architecture Decisions
@@ -58,8 +58,8 @@ export VCPKG_KEEP_ENV_VARS=VCPKG_ICCDEV_SOURCE
 CMake. The `VCPKG_KEEP_ENV_VARS` setting is mandatory to whitelist custom
 env vars through the sandbox.
 
-Without local source mode, the portfile falls back to `vcpkg_from_github`
-with `REF "v${VERSION}"` — requires a tagged release.
+Without local source mode, the portfile falls back to `vcpkg_from_github` with
+an immutable `REF` commit and matching `SHA512`. Refresh both together.
 
 ## Features
 
@@ -85,14 +85,15 @@ with `REF "v${VERSION}"` — requires a tagged release.
 - macos-14 (arm64-osx, Apple Clang)
 
 Verification checks: headers present, static libs exist, CMake config
-resolves, 4 tools executable (iccDumpProfile, iccRoundTrip, iccFromXml,
-iccToXml).
+resolves, and six tools execute: iccDumpProfile, iccRoundTrip, iccFromXml,
+iccToXml, iccFromJson, and iccToJson.
 
 ## Version Bumps
 
-When bumping the port version:
+When updating the port:
 1. Update `"version"` in `ports/iccdev/vcpkg.json`
-2. If using tagged releases (non-local mode), update `REF` and `SHA512`
-   in `portfile.cmake`
-3. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
+2. For source-only refreshes without an upstream version bump, increment
+   `"port-version"` instead of changing `"version"`.
+3. Update `REF` and `SHA512` in `portfile.cmake` for non-local consumers.
+4. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
    `vcpkg install iccdev --overlay-ports=ports --classic`

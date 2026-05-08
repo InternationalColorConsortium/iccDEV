@@ -28,6 +28,9 @@ run: |
   source .github/scripts/sanitize-sed.sh
 ```
 
+PowerShell-only workflows and jobs do not need `BASH_ENV`. Use an explicit
+PowerShell shell on each step or `defaults.run.shell` at job/workflow scope.
+
 Every PowerShell `run:` block should use:
 
 ```yaml
@@ -57,6 +60,11 @@ run: echo "Building ${BUILD_TYPE}"
 This applies to branch names, PR titles, issue titles, comments, workflow inputs,
 and matrix values. Expressions in YAML-level `name:`, `with:`, `key:`, and `if:`
 fields are evaluated by GitHub Actions, not by the shell.
+
+For privileged `pull_request_target` or `workflow_run` automation, never check
+out or execute PR-controlled content. Use trusted workflow metadata only, pass
+IDs through `env:`, and mutate PR state with least-privilege `issues: write` or
+`pull-requests: write` permissions.
 
 ## SIGPIPE Avoidance
 
@@ -132,6 +140,19 @@ Treat these green-run signals as actionable:
 Use YAML parsing, `actionlint`, shellcheck, `yamllint`, and the workflow
 permission audit for workflow files. Run CodeQL for related C/C++ or CMake
 changes, not as the workflow YAML checker.
+
+Before merging workflow changes, run:
+
+```bash
+python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/<workflow>.yml']]; print('YAML OK')"
+actionlint -no-color .github/workflows/<workflow>.yml
+yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' .github/workflows/<workflow>.yml
+gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+```
+
+Also scan changed `run:` blocks for direct `${{ }}` interpolation. Any value
+from `github.event`, `github.head_ref`, `matrix`, or workflow inputs must be
+passed through `env:` and sanitized before output.
 
 ## Test Workflow Guardrails
 

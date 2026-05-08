@@ -38,6 +38,11 @@ on:
         required: false
         type: string
         default: 'INFO'
+      fail_on_findings:
+        description: 'Fail on blocking governance findings'
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       analysis_target:
@@ -69,6 +74,11 @@ on:
           - 'HIGH'
           - 'CRITICAL'
         default: 'INFO'
+      fail_on_findings:
+        description: 'Fail on blocking governance findings'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: >-
@@ -98,6 +108,7 @@ jobs:
       PR_NUMBER: ${{ inputs.pr_number }}
       GIT_REF: ${{ inputs.git_ref }}
       SEVERITY_THRESHOLD: ${{ inputs.severity_threshold }}
+      FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
       SCAN_ROOT: ${{ github.workspace }}/target
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
 
@@ -132,6 +143,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -151,6 +164,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -263,6 +278,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -284,8 +301,8 @@ jobs:
 
           echo "## 2. Dangerous Trigger Detection" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Checks for \`pull_request_target\`, \`issue_comment\`, and" >> "$GITHUB_STEP_SUMMARY"
-          echo "other triggers that grant write access to untrusted code." >> "$GITHUB_STEP_SUMMARY"
+          echo "Checks trigger patterns that can grant write access to untrusted code." >> "$GITHUB_STEP_SUMMARY"
+          echo "\`pull_request_target\` is advisory unless it checks out PR head code." >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           DANGEROUS_COUNT=0
@@ -296,12 +313,17 @@ jobs:
             on_section=$(awk '/^on:/{f=1;print;next} /^[a-zA-Z]/{f=0} f{print}' "$wf")
 
             if grep -q 'pull_request_target' <<< "$on_section"; then
-              DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
-              echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\`" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "> Trivy-style supply chain attack vector. This trigger runs" >> "$GITHUB_STEP_SUMMARY"
-              echo "> workflow code with write access but can checkout untrusted PR code." >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              if grep -q 'ref.*pull_request.*head' "$wf" 2>/dev/null; then
+                DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
+                echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\` with PR head checkout" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "> Trivy-style supply chain attack vector: privileged workflow" >> "$GITHUB_STEP_SUMMARY"
+                echo "> checks out untrusted PR code." >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "[INFO] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\` without PR head checkout" >> "$GITHUB_STEP_SUMMARY"
+                echo "" >> "$GITHUB_STEP_SUMMARY"
+              fi
             fi
 
             if grep -q 'issue_comment' <<< "$on_section"; then
@@ -352,6 +374,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -389,15 +413,27 @@ jobs:
             TOTAL_WF=$((TOTAL_WF + 1))
             wf_base=$(basename "$wf")
 
-            # Determine if workflow uses bash (has run: blocks without explicit pwsh shell)
-            # A workflow is pwsh-only if: shell: pwsh count >= run: block count AND no shell: bash
+            # Determine if workflow uses bash without treating PowerShell-only
+            # workflows with defaults.run.shell as missing BASH_ENV.
             HAS_BASH_STEPS="false"
-            if grep -qE 'shell:\s*bash' "$wf" 2>/dev/null; then
+            if grep -qE '^\s+shell:\s*bash\b' "$wf" 2>/dev/null; then
               HAS_BASH_STEPS="true"
             elif grep -qE '^\s+run:' "$wf" 2>/dev/null; then
               run_count=$(grep -cE '^\s+run:' "$wf" 2>/dev/null) || run_count=0
-              pwsh_count=$(grep -cE 'shell:\s*pwsh' "$wf" 2>/dev/null) || pwsh_count=0
+              pwsh_count=$(grep -cE '^\s+shell:\s*pwsh\b' "$wf" 2>/dev/null) || pwsh_count=0
+              HAS_PWSH_DEFAULT="false"
+              if awk '
+                /^[[:space:]]*defaults:[[:space:]]*$/ { in_defaults=1; next }
+                in_defaults && /^[[:space:]]*run:[[:space:]]*$/ { in_run=1; next }
+                in_defaults && in_run && /^[[:space:]]*shell:[[:space:]]*pwsh([[:space:]]|$)/ { found=1 }
+                END { exit(found ? 0 : 1) }
+              ' "$wf"; then
+                HAS_PWSH_DEFAULT="true"
+              fi
+
               if [[ "$pwsh_count" -ge "$run_count" ]] && [[ "$pwsh_count" -gt 0 ]]; then
+                HAS_BASH_STEPS="false"
+              elif [[ "$HAS_PWSH_DEFAULT" == "true" ]]; then
                 HAS_BASH_STEPS="false"
               else
                 HAS_BASH_STEPS="true"
@@ -471,6 +507,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -616,6 +654,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2001,SC2016,SC2034,SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -691,6 +731,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -818,6 +860,8 @@ jobs:
         env:
           BASH_ENV: /dev/null
         run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
@@ -903,6 +947,7 @@ jobs:
 
           RISK_SCORE=0
           RISK_ITEMS=()
+          ADVISORY_ITEMS=()
 
           # Check 1: pull_request_target (on: section only)
           PRT_COUNT=0
@@ -913,8 +958,7 @@ jobs:
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
           if [[ $PRT_COUNT -gt 0 ]]; then
-            RISK_SCORE=$((RISK_SCORE + 40))
-            RISK_ITEMS+=("pull_request_target trigger detected (+40)")
+            ADVISORY_ITEMS+=("$PRT_COUNT workflow(s) use pull_request_target for privileged automation")
           fi
 
           # Check 2: Unpinned actions (skip run: block content)
@@ -953,8 +997,7 @@ jobs:
             RISK_ITEMS+=("$NOPERM_COUNT workflow(s) without permissions block (+$((NOPERM_COUNT * 3)))")
           fi
           if [[ $WRITE_WF_COUNT -gt 0 ]]; then
-            RISK_SCORE=$((RISK_SCORE + WRITE_WF_COUNT * 4))
-            RISK_ITEMS+=("$WRITE_WF_COUNT workflow(s) grant write permissions across $WRITE_BLOCK_COUNT permissions block(s) (+$((WRITE_WF_COUNT * 4)))")
+            ADVISORY_ITEMS+=("$WRITE_WF_COUNT workflow(s) grant write permissions across $WRITE_BLOCK_COUNT permissions block(s)")
           fi
 
           # Check 4: shell=true or shell: bash (without noprofile)
@@ -992,7 +1035,7 @@ jobs:
           # Check 6: secrets in env blocks
           SECRETS_COUNT=$({ grep -rn 'secrets\.' .github/workflows/ 2>/dev/null || true; } | { grep -vE ':[0-9]+:\s*#' || true; } | wc -l)
           if [[ $SECRETS_COUNT -gt 0 ]]; then
-            RISK_ITEMS+=("$SECRETS_COUNT secret reference(s) found (informational)")
+            ADVISORY_ITEMS+=("$SECRETS_COUNT secret reference(s) found")
           fi
 
           # Check 7: Expression injection in run: blocks (H-1, +10 each)
@@ -1080,6 +1123,8 @@ jobs:
 
           echo "### $(sanitize_line "$RISK_EMOJI") Supply-Chain Risk: $(sanitize_line "$RISK_LEVEL") (Score: $(sanitize_line "$RISK_SCORE"))" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Composite score excludes approved privileged automation. The enforcement gate fails only objective blocking findings." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
           if [[ ${#RISK_ITEMS[@]} -gt 0 ]]; then
             echo "| Finding | Impact |" >> "$GITHUB_STEP_SUMMARY"
@@ -1089,6 +1134,16 @@ jobs:
             done
           else
             echo "No risk indicators detected." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ ${#ADVISORY_ITEMS[@]} -gt 0 ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Privileged Automation Inventory (Advisory)" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Advisory | Detail |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|----------|--------|" >> "$GITHUB_STEP_SUMMARY"
+            for item in "${ADVISORY_ITEMS[@]}"; do
+              echo "| $(sanitize_line "$item") | Review trust boundary and least privilege |" >> "$GITHUB_STEP_SUMMARY"
+            done
           fi
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
@@ -1494,6 +1549,73 @@ jobs:
 
           echo "[OK] PR Risk & Security Analysis complete (Linux)"
 
+      - name: "12. Enforce Blocking Findings"
+        if: inputs.fail_on_findings
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          summary="${GITHUB_STEP_SUMMARY:-}"
+          if [[ -z "$summary" || ! -f "$summary" ]]; then
+            echo "[FAIL] Missing risk-analysis summary for enforcement" >&2
+            exit 1
+          fi
+
+          blocking_patterns=(
+            '^\[CRITICAL\] Found .*injectable expression'
+            '^\[CRITICAL\].*Unpinned actions'
+            '^\[CRITICAL\].*curl/wget\|bash'
+            '^\[CRITICAL\].*checkout PR head code with elevated permissions'
+            '^\[CRITICAL\].*id-token: write'
+            '^\[CRITICAL\].*hidden Unicode'
+            '^\*\*\[CRITICAL\].*hidden Unicode'
+            '^\[HIGH\] Missing BASH_ENV'
+            '^\[HIGH\].*git force-push/tag-rewrite'
+            '^\[HIGH\].*workflow_run \+ download-artifact'
+          )
+
+          blockers=0
+          {
+            echo ""
+            echo "## 12. Enforcement Gate"
+            echo ""
+            echo "Composite supply-chain score and privileged automation inventory are advisory."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for pattern in "${blocking_patterns[@]}"; do
+            while IFS= read -r finding; do
+              [[ -z "$finding" ]] && continue
+              blockers=$((blockers + 1))
+              echo "- \`$(sanitize_line "$finding")\`" >> "$GITHUB_STEP_SUMMARY"
+            done < <(grep -E "$pattern" "$summary" || true)
+          done
+
+          if [[ "$blockers" -gt 0 ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[FAIL] Blocking governance findings: $(sanitize_line "$blockers")" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "[OK] No blocking governance findings" >> "$GITHUB_STEP_SUMMARY"
+
   ###########################################################################
   # Job 2: Windows PowerShell Workflow Security Audit
   ###########################################################################
@@ -1506,6 +1628,7 @@ jobs:
       PR_NUMBER: ${{ inputs.pr_number }}
       GIT_REF: ${{ inputs.git_ref }}
       SEVERITY_THRESHOLD: ${{ inputs.severity_threshold }}
+      FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
       SCAN_ROOT: ${{ github.workspace }}/target
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
       POWERSHELL_TELEMETRY_OPTOUT: 1
@@ -1668,12 +1791,7 @@ jobs:
             function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
           }
 
-          $dangerousTriggers = @(
-            'pull_request_target',
-            'issue_comment',
-            'workflow_run',
-            'repository_dispatch'
-          )
+          $dangerousTriggers = @('issue_comment', 'workflow_run', 'repository_dispatch')
           $mediumTriggers = @('create', 'delete')
           $infoTriggers = @('workflow_call')
           $findings = @()
@@ -1691,6 +1809,14 @@ jobs:
               if ($inOnSection) { $onLines += $ln }
             }
             $onText = $onLines -join "`n"
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            if ($onText -match 'pull_request_target') {
+              if ($content -match 'ref.*pull_request.*head') {
+                $findings += "$($wf.Name): pull_request_target with PR head checkout (CRITICAL)"
+              } else {
+                $infoFindings += "$($wf.Name): pull_request_target (INFO -- no PR head checkout)"
+              }
+            }
             foreach ($trigger in $dangerousTriggers) {
               if ($onText -match $trigger) {
                 $findings += "$($wf.Name): $trigger"
@@ -1765,19 +1891,18 @@ jobs:
             $totalWf++
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
 
-            # Determine if workflow has bash run: blocks (not just pwsh)
-            $hasBashSteps = $false
-            if ($content -match 'shell:\s*bash') {
-              $hasBashSteps = $true
-            } elseif ($content -match '(?m)^\s+run:') {
-              $runCount = ([regex]::Matches($content, '(?m)^\s+run:')).Count
-              $pwshCount = ([regex]::Matches($content, 'shell:\s*pwsh')).Count
-              if ($pwshCount -ge $runCount -and $pwshCount -gt 0) {
-                $hasBashSteps = $false
-              } else {
-                $hasBashSteps = $true
-              }
-            }
+            # Determine if workflow has bash run: blocks, without treating
+            # PowerShell-only jobs as bash because of unrelated shell text.
+            $runCount = ([regex]::Matches($content, '(?m)^\s+run:\s*\|')).Count
+            $pwshCount = ([regex]::Matches($content, '(?m)^\s+shell:\s*pwsh\b')).Count
+            $explicitBashCount = ([regex]::Matches($content, '(?m)^\s+shell:\s*bash\b')).Count
+            $hasBashDefault = $content -match '(?ms)^\s*defaults:\s*.*?^\s*run:\s*.*?^\s*shell:\s*bash\b'
+            $hasPwshDefault = $content -match '(?ms)^\s*defaults:\s*.*?^\s*run:\s*.*?^\s*shell:\s*pwsh\b'
+            $hasBashSteps = $explicitBashCount -gt 0 -or (
+              $runCount -gt $pwshCount -and -not $hasPwshDefault
+            ) -or (
+              $hasBashDefault -and $runCount -gt $pwshCount
+            )
 
             if ($hasBashSteps) {
               if ($content -match 'BASH_ENV') { $bashEnvCount++ }
@@ -2209,6 +2334,7 @@ jobs:
 
           $score = 100
           $deductions = @()
+          $advisories = @()
 
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
           $allContent = ""
@@ -2262,8 +2388,7 @@ jobs:
             if ($hasPRT) { break }
           }
           if ($hasPRT) {
-            $score -= 20
-            $deductions += "pull_request_target trigger (-20)"
+            $advisories += "pull_request_target trigger present for privileged automation"
           }
 
           # Check persist-credentials
@@ -2284,9 +2409,7 @@ jobs:
             $deductions += "Missing permissions blocks: $($permAudit.without_permissions) workflows (-$deduct)"
           }
           if ($permAudit.with_write -gt 0) {
-            $deduct = [math]::Min(16, $permAudit.with_write * 2)
-            $score -= $deduct
-            $deductions += "Write permissions granted: $($permAudit.with_write) workflows / $($permAudit.write_blocks) block(s) (-$deduct)"
+            $advisories += "Write permissions granted: $($permAudit.with_write) workflows / $($permAudit.write_blocks) block(s)"
           }
 
           # H-2: shell: bash without --noprofile
@@ -2305,9 +2428,7 @@ jobs:
           # Check GITHUB_TOKEN in env blocks
           $envTokenCount = ([regex]::Matches($allContent, '(?m)GITHUB_TOKEN:\s*\$')).Count
           if ($envTokenCount -gt 0) {
-            $deduct = [math]::Min(10, $envTokenCount * 2)
-            $score -= $deduct
-            $deductions += "$envTokenCount GITHUB_TOKEN env reference(s) (-$deduct)"
+            $advisories += "$envTokenCount GITHUB_TOKEN env reference(s)"
           }
 
           # H-1: Expression injection in run: blocks
@@ -2400,6 +2521,8 @@ jobs:
           $report += ""
           $report += "**Score: $(Sanitize-Line "$score")/100 (Grade: $(Sanitize-Line "$grade"))**"
           $report += ""
+          $report += "Composite score excludes approved privileged automation. The enforcement gate fails only objective blocking findings."
+          $report += ""
           if ($deductions.Count -gt 0) {
             $report += "| Deduction | Detail |"
             $report += "|-----------|--------|"
@@ -2408,6 +2531,16 @@ jobs:
             }
           } else {
             $report += "[OK] Perfect supply-chain security score"
+          }
+          if ($advisories.Count -gt 0) {
+            $report += ""
+            $report += "### Privileged Automation Inventory (Advisory)"
+            $report += ""
+            $report += "| Advisory | Detail |"
+            $report += "|----------|--------|"
+            foreach ($a in $advisories) {
+              $report += "| $(Sanitize-Line $a) | Review trust boundary and least privilege |"
+            }
           }
           $report += ""
           $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
@@ -2463,7 +2596,7 @@ jobs:
               if ($inOnSection) { $onText += "$ln`n" }
             }
             if ($onText -match 'pull_request_target') {
-              $findings += @{Workflow=$wf.Name; Indicator='pull_request_target trigger'; Severity='HIGH'}
+              $findings += @{Workflow=$wf.Name; Indicator='pull_request_target trigger'; Severity='INFO'}
               # Check if it also checks out PR head
               if ($content -match 'ref.*pull_request.*head') {
                 $findings += @{Workflow=$wf.Name; Indicator='pull_request_target with PR head checkout'; Severity='CRITICAL'}

@@ -22,6 +22,7 @@ point to deeper references.
 | Build and sanitizer policy | `.github/instructions/build-system.instructions.md` |
 | Test and regression policy | `.github/instructions/testing.instructions.md` |
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |
+| vcpkg port policy | `.github/instructions/vcpkg-port.instructions.md` |
 | Agent skills | `.github/skills/README.md` |
 | Maintainer CI and CTest workflow | `.github/skills/maintainer-ci-ctest/SKILL.md` and `.github/prompts/maintainer-ci-ctest.prompt.md` |
 | IIS sample setup | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` |

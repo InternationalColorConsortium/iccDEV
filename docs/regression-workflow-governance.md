@@ -55,18 +55,26 @@ assert specific tag sizes, offsets, record lengths, or validation messages.
 
 Every edited workflow `run:` block must keep these properties:
 
-- `shell: bash --noprofile --norc {0}` at the workflow or job default.
-- `BASH_ENV: /dev/null` in the step or job environment.
-- `set -euo pipefail` as the first shell command.
+- `shell: bash --noprofile --norc {0}` for bash steps.
+- `BASH_ENV: /dev/null` for bash steps only.
+- `set -euo pipefail` as the first bash command.
+- `pwsh -NoProfile -NoLogo -NonInteractive -Command {0}` and
+  `$ErrorActionPreference = 'Stop'` for PowerShell steps.
 - `git config --global credential.helper ""`.
 - `unset GITHUB_TOKEN || true`.
 - No direct `${{ }}` expressions inside shell code; pass values through `env:`.
 - Sanitized writes to `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT`.
 - Least-privilege permissions.
+- `pull_request_target` and `workflow_run` automation must not checkout or run
+  PR-controlled code before mutating trusted state such as labels or checks.
 
 For reusable governance coverage, call
 `.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the
 scanner logic in a new CI workflow.
+
+Local review should include YAML parsing, `actionlint`, `yamllint`, direct
+`${{ }}` interpolation scans for `run:` blocks, and CodeQL query-pack resolution
+when CodeQL workflows or queries are touched.
 
 See `.github/instructions/workflow-governance.instructions.md` for the full
 checklist.
