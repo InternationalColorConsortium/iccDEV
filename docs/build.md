@@ -20,6 +20,10 @@ listed below. Maintainer-level sanitizer and CMake policy details live in
 | macOS | `libpng jpeg-turbo libtiff libxml2 wxwidgets nlohmann-json` |
 | Windows | MSVC 2022 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `wxwidgets`, `nlohmann-json` |
 
+Windows examples include both `cmd.exe` and PowerShell forms where shell syntax
+differs. If CMake reports `No such preset`, fetch and switch to a branch that
+contains the matching `Build/Cmake/CMakePresets.json` update.
+
 ## Ubuntu
 
 ```bash
@@ -76,6 +80,8 @@ cmake --build out/vs2022-clangcl-x64 --config Release -- /m /maxcpucount
 Install MSYS2 UCRT64 packages for the selected feature set. A core command-line
 tool build uses GCC, CMake, Ninja, libxml2, and nlohmann-json:
 
+`cmd.exe`:
+
 ```cmd
 pacman -S --needed ^
   mingw-w64-ucrt-x86_64-gcc ^
@@ -98,12 +104,47 @@ cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
 cmake --build out/mingw-x64 --target iccDumpProfile --parallel
 ```
 
+PowerShell:
+
+```powershell
+pacman -S --needed `
+  mingw-w64-ucrt-x86_64-gcc `
+  mingw-w64-ucrt-x86_64-cmake `
+  mingw-w64-ucrt-x86_64-ninja `
+  mingw-w64-ucrt-x86_64-make `
+  mingw-w64-ucrt-x86_64-libxml2 `
+  mingw-w64-ucrt-x86_64-nlohmann-json
+
+$env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
+cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DENABLE_TOOLS=ON `
+  -DENABLE_ICCXML=ON `
+  -DENABLE_ICCJSON=OFF `
+  -DENABLE_IMAGE_TOOLS=OFF `
+  -DENABLE_WXWIDGETS=OFF `
+  -DENABLE_CMM_TOOLS=OFF `
+  -DENABLE_IIS_TOOLS=OFF
+cmake --build out/mingw-x64 --target iccDumpProfile --parallel
+```
+
 For a dependency-light local compiler sanity check, use the static core preset.
 It disables XML and image tools, but still builds the core library, JSON library,
 IccConnect, JSON CLI tools, and the IccConnect threaded CMM regression target:
 
+`cmd.exe`:
+
 ```cmd
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
+cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
+cmake --build out/mingw-core-x64 --parallel
+ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
+```
+
+PowerShell:
+
+```powershell
+$env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error

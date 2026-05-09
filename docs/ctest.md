@@ -15,6 +15,10 @@ maintainer explicitly asks otherwise.
 
 ## Local Commands
 
+Windows examples include both `cmd.exe` and PowerShell forms where shell syntax
+differs. If CMake reports `No such preset`, fetch and switch to a branch that
+contains the matching `Build/Cmake/CMakePresets.json` update.
+
 Linux and macOS single-config generators:
 
 ```bash
@@ -42,7 +46,7 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
-Windows MinGW single-config generators:
+Windows MinGW single-config generators, `cmd.exe`:
 
 ```cmd
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
@@ -52,11 +56,30 @@ cmake --build out/mingw-x64 --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
+Windows MinGW single-config generators, PowerShell:
+
+```powershell
+$env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
+cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
+  -DENABLE_TESTS=ON
+cmake --build out/mingw-x64 --parallel
+ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
+```
+
 When the local MSYS2 install only has the core compiler and nlohmann-json
-packages, use the dependency-light static preset:
+packages, use the dependency-light static preset. `cmd.exe`:
 
 ```cmd
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
+cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
+cmake --build out/mingw-core-x64 --parallel
+ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
+```
+
+PowerShell:
+
+```powershell
+$env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
