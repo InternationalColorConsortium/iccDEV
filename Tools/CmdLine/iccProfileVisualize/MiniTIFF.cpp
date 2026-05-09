@@ -70,6 +70,7 @@
 
 /******************************************************************************/
 
+// NOTE - we don't have to worry about byte order, because the TIFF will always be written in host byte order
 static
 void putShort( uint16_t val, FILE *out )
 {
@@ -176,15 +177,17 @@ void putIFDLong( uint16_t tag, uint16_t type, uint32_t count, uint32_t value, FI
 /******************************************************************************/
 
 /// Write the image buffer to a TIFF (.tif) file
-void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *buffer,
+bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *buffer,
         size_t width, size_t height, int channels, int depth )
 {
   FILE *outfile = NULL;
+  bool writeOk = true;
 
   // see if we can create or update this filename
-  if((outfile=fopen(name.c_str(),"wb"))==NULL) {
+  outfile = fopen(name.c_str(),"wb");
+  if(outfile==NULL) {
     fprintf(stderr,"Could not create output file %s\n", name.c_str());
-    exit(-1);
+    return false;
   }
 
   // TIFF header, and byte order indicator
@@ -202,6 +205,7 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
 
   // IFD
   // number of entries
+// TODO: make a data structure to store IFD entries, sort, then write values and offsets
   uint16_t tagCount = 15;
   putShort( tagCount, outfile );
 
@@ -233,7 +237,7 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   size_t nrowBytes = ( (size_t)channels * (size_t)width * (size_t)depth + 7) / 8;
   assert( nrowBytes > 0 );
   size_t rowsPerBuffer = height;
-  size_t stripCount = 1;
+  size_t stripCount = 1;        // may be changed later
 
   size_t rowsPerStrip = rowsPerBuffer;
   //size_t stripBytes = rowsPerStrip * nrowBytes;
@@ -332,14 +336,27 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     }
 
     long stripStart = ftell( outfile );
-
-    fwrite( buffer, (size_t)width*(size_t)channels*((size_t)depth/8), rowCount, outfile );
+    if (stripStart < 0 || (unsigned long)stripStart > UINT32_MAX) {
+      fprintf(stderr, "WriteTIFF: strip offset exceeds 32-bit range\n");
+      fclose(outfile);
+      return false;
+    }
+    
+    size_t pixelBytes = (size_t)width * (size_t)channels * (size_t)(depth/8);
+    if (fwrite( buffer + offset, pixelBytes, rowCount, outfile ) != rowCount) {
+      fprintf(stderr, "WriteTIFF: failed to write pixel data\n");
+      fclose(outfile);
+      return false;
+    }
 
     long stripEnd = ftell( outfile );
-    assert( stripStart < UINT_MAX );
+    if (stripEnd < 0 || (unsigned long)stripEnd > UINT32_MAX) {
+      fprintf(stderr, "WriteTIFF: strip end offset exceeds 32-bit range\n");
+      fclose(outfile);
+      return false;
+    }
     stripOffsetList[strip] = uint32_t(stripStart);
     size_t len = (size_t)(stripEnd - stripStart);
-    assert ( len < UINT_MAX );
     stripSizeList[strip] = uint32_t(len);
 
   }   // for strip
@@ -359,8 +376,18 @@ void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
       putLong( stripSizeList[i], outfile );
   }
 
+  if (!writeOk || ferror(outfile)) {
+    fprintf(stderr, "WriteTIFF: I/O error writing TIFF data\n");
+    fclose(outfile);
+    return false;
+  }
+
   // and close the file
-  fclose(outfile);
+  if (fclose(outfile) != 0) {
+    fprintf(stderr, "Warning: fclose failed for TIFF output\n");
+  }
+  
+  return true;
 }
 
 /******************************************************************************/

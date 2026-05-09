@@ -63,14 +63,17 @@
 #include <cstdint>
 #include <iostream>
 #include <fstream>
+#include <sstream>
+#include <vector>
 #include <string>
 #include <vector>
 
 /******************************************************************************/
 
-const float inch2mm = 25.4;                 // 25.4 millimeters per inch, international standard
-const float point2mm = inch2mm / 72.0;      // 72 points per inch, DTP and W3C standard
-const float mm2point = 72.0 / inch2mm;      // 2.834645669 (Shows up severeal places)
+const float inch2mm = 25.4f;                 // 25.4 millimeters per inch, international standard
+const float mm2point = 72.0f / inch2mm;      // 2.834645669 (Shows up severeal places)
+const float inch2point = 72.0f;              // 72 points per inch, DTP and W3C standard
+
 
 struct point2D {
   point2D(float xx, float yy) : x(xx), y(yy) {}
@@ -84,6 +87,18 @@ inline point2D operator+(const point2D& xx, const point2D& yy) {
 
 inline point2D operator-(const point2D& xx, const point2D& yy) {
   return point2D(xx.x - yy.x, xx.y - yy.y);
+}
+
+inline point2D& operator+=(point2D& xx, const point2D& yy) {
+  xx.x += yy.x;
+  xx.y += yy.y;
+  return xx;
+}
+
+inline point2D& operator-=(point2D& xx, const point2D& yy) {
+  xx.x -= yy.x;
+  xx.y -= yy.y;
+  return xx;
 }
 
 inline point2D operator*(const point2D& xx, const point2D& yy) {
@@ -110,9 +125,12 @@ typedef std::vector<point2D> pointList;
 class SVGOut
 {
 public:
-  SVGOut() : m_GroupLevel(0)
+  SVGOut() : m_GroupLevel(0), m_pageCount(0), m_pageInProgress(false),
+               m_pageWidth(0), m_pageHeight(0)
     { }
-  SVGOut( const std::string &filename ): m_GroupLevel(0)
+  SVGOut( const std::string &filename ): m_GroupLevel(0),
+            m_pageCount(0), m_pageInProgress(false),
+            m_pageWidth(0), m_pageHeight(0)
     { OpenFile(filename); }
 
   ~SVGOut()
@@ -123,18 +141,16 @@ public:
 
 public:
 
-  void WriteHeader( const point2D &topLeft, const point2D &bottomRight );
-
   void AddCircle( float radius, float xCenter, float yCenter, bool isFilled ) {
-	  out << "<circle cx=\"" << xCenter << "mm\" cy=\"" << yCenter
-    << "mm\" r=\"" << radius << "mm\"";
-    out << " " << DefaultFillStroke(isFilled) << " />\n";
+    m_buf << "<circle cx=\"" << xCenter << "mm\" cy=\"" << yCenter
+          << "mm\" r=\"" << radius << "mm\"";
+    m_buf << " " << DefaultFillStroke(isFilled) << " />\n";
     }
 
   void AddLine( float xStart, float yStart, float xEnd, float yEnd ) {
-	  out << "<line x1=\"" << xStart << "mm\" y1=\"" << yStart << "mm\" x2=\""
-      << xEnd << "mm\" y2=\"" << yEnd << "mm\"";
-    out << " " << DefaultFillStroke(false) << " />\n";
+    m_buf << "<line x1=\"" << xStart << "mm\" y1=\"" << yStart << "mm\" x2=\""
+          << xEnd << "mm\" y2=\"" << yEnd << "mm\"";
+    m_buf << " " << DefaultFillStroke(false) << " />\n";
     }
 
   void AddLine( const point2D &start, const point2D &end ) {
@@ -142,9 +158,9 @@ public:
     }
 
   void AddRect( float left, float top, float right, float bottom, bool isFilled ) {
-	  out << "<rect x=\"" << left << "mm\" y=\"" << top << "mm\" width=\""
-      << (right-left) << "mm\" height=\"" << (bottom-top) << "mm\"";
-    out << " " << DefaultFillStroke(isFilled) << " />\n";
+    m_buf << "<rect x=\"" << left << "mm\" y=\"" << top << "mm\" width=\""
+          << (right-left) << "mm\" height=\"" << (bottom-top) << "mm\"";
+    m_buf << " " << DefaultFillStroke(isFilled) << " />\n";
     }
 
   void AddRect( const point2D &topLeft, const point2D &bottomRight, bool isFilled ) {
@@ -152,13 +168,13 @@ public:
     }
 
   void AddPolyLine( const pointList &points, bool isClosed, bool isFilled ) {
-    out << "<polyline points=\"";
+    m_buf << "<polyline points=\"";
     for ( auto &item : points)
-      out << mm2point*item.x << "," << mm2point*item.y << " ";
+      m_buf << mm2point*item.x << "," << mm2point*item.y << " ";
     if (isClosed)
-      out << mm2point*points[0].x << "," << mm2point*points[0].y << " ";
-    out << "\"";
-    out << " " << DefaultFillStroke(isFilled) << " />\n";
+      m_buf << mm2point*points[0].x << "," << mm2point*points[0].y << " ";
+    m_buf << "\"";
+    m_buf << " " << DefaultFillStroke(isFilled) << " />\n";
     }
 
   void AddText( const float xCoord, const float yCoord, const std::string &text,
@@ -166,31 +182,58 @@ public:
         const std::string &align, const float rotation = 0.0 );
 
   void StartGroup( const std::string &name ) {
-    out << "<g id=\"" << name << "\">\n";
+    m_buf << "<g id=\"" << name << "\">\n";
     m_GroupLevel++;
     }
 
   void EndGroup() {
-    out << "</g>\n";
+    m_buf << "</g>\n";
     m_GroupLevel--;
     }
 
+    // Set the page size in mm. Call once before adding content.
+    void SetPageSize( float widthMM, float heightMM ) {
+      m_pageWidth = widthMM * mm2point;
+      m_pageHeight = heightMM * mm2point;
+    }
+
+    // Start a new page. Each graph gets its own page, offset vertically.
+    void NextPage() {
+      if (m_pageInProgress) {
+        m_buf << "</g>\n";
+      }
+      float yOffset = m_pageCount * m_pageHeight;
+      m_buf << "<g transform=\"translate(0," << yOffset << ")\">\n";
+      m_pageCount++;
+      m_pageInProgress = true;
+    }
+
+    int PageCount() const { return m_pageCount; }
+
 protected:
-  void WriteFooter() {
+
+  void WriteHeader( std::ostream &out );
+  
+  void WriteFooter( std::ostream &out ) {
     out << "</svg>\n";
     }
 
   // this could be made variable, but just static color and width for now
   std::string DefaultFillStroke( bool isFilled ) {
     if (isFilled)
-    return std::string("fill=\"black\" stroke=\"none\"");
+      return std::string("fill=\"black\" stroke=\"none\"");
     else
-    return std::string("fill=\"none\" stroke=\"black\" stroke-width=\"0.5\"");  // in points
+      return std::string("fill=\"none\" stroke=\"black\" stroke-width=\"0.5\"");  // in points
     }
 
 private:
   int64_t m_GroupLevel;
-  std::ofstream out;
+  int m_pageCount;
+  bool m_pageInProgress;
+  float m_pageWidth;
+  float m_pageHeight;
+  std::string m_filename;
+  std::ostringstream m_buf;
 };
 
 /******************************************************************************/

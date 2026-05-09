@@ -72,38 +72,54 @@
 /******************************************************************************/
 
 void SVGOut::OpenFile( const std::string &filename ) {
-  if (out.is_open()) {
+  if (!m_filename.empty()) {
     fprintf(stderr,"WARNING - SVG file already open!\n");
-    out.close();
   }
   m_GroupLevel = 0;
-  out.open( filename );
+  m_pageCount = 0;
+  m_pageInProgress = false;
+  m_filename = filename;
+  m_buf.str("");
+  m_buf.clear();
 }
 
 /******************************************************************************/
 
 void SVGOut::CloseFile() {
+  if (m_pageInProgress) {
+    m_buf << "</g>\n";
+    m_pageInProgress = false;
+  }
   if (m_GroupLevel > 0)
     fprintf(stderr,"WARNING - SVG group levels not closed.\n");
   if (m_GroupLevel < 0)
     fprintf(stderr,"WARNING - Too many SVG group levels closed.\n");
-  if (out.is_open()) {
-    WriteFooter();
-    out.close();
+  if (!m_filename.empty()) {
+    if (m_pageCount > 0) {
+        std::ofstream out(m_filename);
+        WriteHeader(out);
+        out << m_buf.str();
+        WriteFooter(out);
+        out.close();
+    }
+    m_filename.clear();
   }
 }
 
 /******************************************************************************/
 
 // NOTE - the viewBox and background are always interpreted as points for some reason, can't use mm for scale modification
-void SVGOut::WriteHeader( const point2D &topLeft, const point2D &bottomRight )
+// NOTE - pageset / page in SVG 1.2 sound nice, but don't appear to be supported anywhere anymore.
+// To get this working everywhere, we may have to spit out a file per page!
+//  OR use PDF.
+void SVGOut::WriteHeader( std::ostream &out )
 {
-	out << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
-	out << "<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n";
-	out << "\tx=\"0\" y=\"0\" viewBox=\"" << (topLeft.x*mm2point) << " " << (topLeft.y*mm2point)
-      << " " << (bottomRight.x*mm2point) << " " << (bottomRight.y*mm2point) << "\" ";
-  out << "style=\"enable-background:new " << (topLeft.x*mm2point) << " " << (topLeft.y*mm2point)
-      << " " << (bottomRight.x*mm2point) << " " << (bottomRight.y*mm2point) << ";\" xml:space=\"preserve\">\n";
+  float w = m_pageWidth;
+  float h = m_pageHeight * m_pageCount;
+  out << "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+  out << "<svg version=\"1.1\" id=\"Layer_1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n";
+  out << "  width=\"" << w << "\" height=\"" << h
+      << "\" viewBox=\"0 0 " << w << " " << h << "\">\n";
 }
 
 /******************************************************************************/
@@ -114,58 +130,56 @@ void SVGOut::AddText( const float xCoord, const float yCoord, const std::string 
           const std::string &style, const std::string &align,
           const float rotation )
 {
-	out << "<text";
-
-  if (align != std::string())
-    {
+  m_buf << "<text";
+  
+  if (align != std::string()) {
     if (align == "left" || align == "Left")
-      out << " text-anchor=\"start\"";
+      m_buf << " text-anchor=\"start\"";
     else if (align == "middle" || align == "Middle"
         || align == "center" || align == "Center")
-      out << " text-anchor=\"middle\"";
+      m_buf << " text-anchor=\"middle\"";
     else if (align == "right" || align == "Right")
-      out << " text-anchor=\"end\"";
+      m_buf << " text-anchor=\"end\"";
     else
       fprintf(stderr,"WARNING - unknown text alignment %s while exporting SVG\n", align.c_str());
     }
 
   float xx = xCoord*mm2point;
   float yy = yCoord*mm2point;
-  out << " x=\"" << xx << "\" y=\"" << yy << "\"";
-
+  m_buf << " x=\"" << xx << "\" y=\"" << yy << "\"";
+  
   if (rotation != 0.0)
-    out << " transform=\"rotate(" << rotation <<", " << xx << ", " << yy << ")\"";
-
+    m_buf << " transform=\"rotate(" << rotation <<", " << xx << ", " << yy << ")\"";
+  
   if (font != std::string())
-    out << " font-family=\"" << font << "\"";
-
-  if (style != std::string())
-    {
+    m_buf << " font-family=\"" << font << "\"";
+  
+  if (style != std::string()) {
     if (style == "Regular" || style == "Normal")
-      out << " font-weight=\"normal\"";
+      m_buf << " font-weight=\"normal\"";
     else if (style == "Bold")
-      out << " font-weight=\"bold\"";
+      m_buf << " font-weight=\"bold\"";
     else if (style == "Italic")
-      out << " font-style=\"italic\"";
+      m_buf << " font-style=\"italic\"";
     else if (style == "Oblique")
-      out << " font-style=\"oblique\"";
+      m_buf << " font-style=\"oblique\"";
     else if (style == "Light")
-      out << " font-weight=\"lighter\"";
+      m_buf << " font-weight=\"lighter\"";
     else if (style == "Light Oblique")
-      out << " font-weight=\"lighter\"" << " font-style=\"oblique\"";
+      m_buf << " font-weight=\"lighter\"" << " font-style=\"oblique\"";
     else if (style == "Bold Oblique")
-      out << " font-weight=\"bold\"" << " font-style=\"oblique\"";
+      m_buf << " font-weight=\"bold\"" << " font-style=\"oblique\"";
     else if (style == "Light Italic")
-      out << " font-weight=\"lighter\"" << " font-style=\"italic\"";
+      m_buf << " font-weight=\"lighter\"" << " font-style=\"italic\"";
     else if (style == "Bold Italic")
-      out << " font-weight=\"bold\"" << " font-style=\"italic\"";
+      m_buf << " font-weight=\"bold\"" << " font-style=\"italic\"";
     else
       fprintf(stderr,"WARNING - unknown text style %s while exporting SVG\n", style.c_str() );
     }
-
-  out << " font-size=\"" << size << "pt\"";
-
-  out << ">" << text << "</text>\n";
+  
+    m_buf << " font-size=\"" << size << "pt\"";
+  
+    m_buf << ">" << text << "</text>\n";
 }
 
 /******************************************************************************/

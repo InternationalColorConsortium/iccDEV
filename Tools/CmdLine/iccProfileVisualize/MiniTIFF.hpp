@@ -134,7 +134,7 @@ enum {
 
 /******************************************************************************/
 
-void WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *buffer,
+bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *buffer,
                 size_t width, size_t height, int channels, int depth );
 
 /******************************************************************************/

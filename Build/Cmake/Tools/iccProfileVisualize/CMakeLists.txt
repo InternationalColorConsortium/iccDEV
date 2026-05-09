@@ -10,6 +10,7 @@ set(SOURCES
 	"${SRC_ROOT}/iccProfileVisualize.cpp"
 	"${SRC_ROOT}/MiniTIFF.cpp"
 	"${SRC_ROOT}/MiniSVG.cpp"
+	"${SRC_ROOT}/MiniPDF.cpp"
 )
 
 add_executable(${TARGET_NAME} ${SOURCES})

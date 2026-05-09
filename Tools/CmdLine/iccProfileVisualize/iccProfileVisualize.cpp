@@ -76,6 +76,7 @@
 #include "IccProfLibVer.h"
 #include "MiniTIFF.hpp"
 #include "MiniSVG.hpp"
+#include "MiniPDF.hpp"
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -89,7 +90,7 @@
 /******************************************************************************/
 
 static
-void DrawAxis( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
+void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
         const point2D &tickLength, const std::string &label )
 {
   // main line
@@ -130,11 +131,93 @@ void DrawAxis( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
 
 /******************************************************************************/
 
-// TODO - rough draft in inches
 static
-void graph1DLUT( CIccCurve *curve, const std::string &name,
+std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
+        const point2D &tickLength, float labelSize, const std::string &label )
+{
+  std::ostringstream commands;
+
+  // main line
+  commands << "q\n";
+  commands << basepoint << " m " << (basepoint+range) << " l S\n";
+
+  // big marks for 0.0, 0.5, and 1.0
+  point2D start0 = basepoint;
+  commands << start0 << " m " << (start0+tickLength) << " l S\n";
+  point2D start1 = basepoint + range;
+  commands << start1 << " m " << (start1+tickLength) << " l S\n";
+  point2D start2 = basepoint + range*0.5;
+  commands << start2 << " m " << (start2+tickLength) << " l S\n";
+
+// TODO - values???  0.1 increments?
+  // small marks for each tenth that isn't 0.5
+  for (int i = 1; i < 10; ++i) {
+    if (i == 5) continue;
+    point2D startN = basepoint + range*(i/10.0);
+    commands << startN << " m " << (startN+tickLength*0.5) << " l S\n";
+  }
+
+  // small marks for each hundredth
+  for (int i = 1; i < 100; ++i) {
+    if ((i % 10) == 0) continue;
+    point2D startN = basepoint + range*(i/100.0);
+    commands << startN << " m " << (startN+tickLength*0.25) << " l S\n";
+  }
+
+  // label near halfway
+  float textHalf = labelSize * 0.25f * label.size(); // very approximate, not using font metrics
+  point2D labelPt = basepoint + range*0.5;
+  commands << "BT /F1 " << labelSize << " Tf ";
+  if (range.x == 0.0) {
+    labelPt += tickLength*1.25f - point2D(0,textHalf);
+    commands << "0 " << 1 << " " << -1 << " 0 " << labelPt << " Tm ";
+  }
+  else {
+    labelPt += tickLength - point2D(textHalf,labelSize);
+    commands << labelPt << " Td ";
+  }
+  commands << "(" << label << ") Tj ET\n";
+  commands << "Q\n";
+  
+  return commands.str();
+}
+
+/******************************************************************************/
+
+void CreateAxesXobject( PDFWriter &pdfout )
+{
+  std::string commands;
+  float margin = 0.5*inch2point;
+  float tickLength = 12.0f; // pt
+  
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdfout.PageHeight();
+  float right = pdfout.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+
+  // draw axes
+  // horizontal
+  point2D basepoint( margin, bottom+margin );
+  point2D rangeX( right-2*margin, 0.0 );
+  point2D tickLengthX( 0, -tickLength );
+  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, 14.0, "Input" );
+
+  // vertical
+  point2D rangeY( 0.0, (top-2*margin) );
+  point2D tickLengthY( -tickLength, 0 );
+  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, 14.0, "Output" );
+
+  pdfout.AddXObject( bounds, commands );
+}
+
+/******************************************************************************/
+
+static
+void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
         const std::string &description, SVGOut &svgfile, int steps )
 {
+  svgfile.NextPage();
   svgfile.StartGroup( name );
 
   // draw title/description
@@ -153,11 +236,11 @@ void graph1DLUT( CIccCurve *curve, const std::string &name,
   point2D basepoint( 0.5*inch2mm, 7.5*inch2mm );
   point2D rangeX( 7.0*inch2mm, 0.0 );
   point2D tickLengthX( 0, 5 );
-  DrawAxis( svgfile, basepoint, rangeX, tickLengthX, "Input" );
+  DrawAxisSVG( svgfile, basepoint, rangeX, tickLengthX, "Input" );
 
   point2D rangeY( 0.0, -7.0*inch2mm );
   point2D tickLengthY( -5, 0 );
-  DrawAxis( svgfile, basepoint, rangeY, tickLengthY, "Output" );
+  DrawAxisSVG( svgfile, basepoint, rangeY, tickLengthY, "Output" );
 
   // draw the curve
   pointList points(steps+1);
@@ -176,6 +259,67 @@ void graph1DLUT( CIccCurve *curve, const std::string &name,
 
   svgfile.EndGroup();
 }
+
+/******************************************************************************/
+
+static
+void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
+        const std::string &description, PDFWriter &pdffile, int steps )
+{
+  std::ostringstream commands;
+  
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdffile.PageHeight();
+  float right = pdffile.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+  
+  
+  // add the axes
+  commands << "/Axes Do\n";
+
+  // label
+  std::string clean_description( description );
+  // remove any line breaks from our text, because PDF doesn't do line breaks
+// TODO - actually make multiple lines of text
+  std::replace( clean_description.begin(), clean_description.end(), '\n', ' ');
+
+  float labelSize = 14;     // points
+  std::string outdescription = name + " " + clean_description;
+  float textHalf = labelSize * 0.25f * outdescription.size();
+  commands << "BT /F1 " << labelSize << " Tf ";
+  point2D labelPt( 0.5f * right - textHalf, top - 0.25f*inch2point );
+  commands << labelPt << " Td ";
+  commands << "(" << outdescription << ") Tj ET\n";
+
+  // draw the curve
+  float scale = (7.5f-0.5f)*inch2point;
+//  point2D base( 1.0f*inch2point, 1.0f*inch2point );
+  const point2D base( 0.5f*inch2point, 0.5f*inch2point );
+  commands << base << " m\n";
+  for (int i = 0; i <= steps; ++i ) {
+    float input = i / (float)steps;
+    float output = curve->Apply( input );
+    if (std::isnan(output)) output = 0.0f;
+    if (std::isinf(output)) output = 1.0f;
+    if (output > 1.0f) output = 1.0f;
+    if (output < 0.0f) output = 0.0f;
+    point2D currentPt( input*scale, output*scale );
+    commands << (base+currentPt) << " l\n";
+  }
+  commands << " S\n";
+
+
+  PDFGraphic *graphics = new PDFGraphic();
+    graphics->m_buf = commands.str();
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+
+  pdffile.AddPage( content );
+
+}
+
+
 /******************************************************************************/
 
 static
@@ -199,14 +343,12 @@ void describe1DLUT( CIccTagCurve *curve, std::string &description )
 static
 void describe1DLUT( CIccTagParametricCurve *curve, std::string &description )
 {
-// TODO - probably needs more formatting
   curve->Describe( description, 100 );
 }
 
 static
 void describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description )
 {
-// TODO - probably needs more formatting
   curve->Describe( description, 100 );
 }
 
@@ -215,10 +357,15 @@ void describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description )
 // output graphic representation of 1D LUTs
 static
 void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
-        SVGOut &svgfile, int /* verbosity */ )
+        SVGOut &svgfile, PDFWriter &pdffile, int /* verbosity */ )
 {
   const size_t bufSize = 64;
   char buf[bufSize];
+  
+  if (!tag) {
+    fprintf(stderr, "ERROR - missing data for %s\n", sigDesc.c_str());
+    return;
+  }
 
   icTagTypeSignature typeSig = tag->GetType();
 
@@ -231,7 +378,8 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
         describe1DLUT(curve, description);
         int size = curve->GetSize();
         int steps = std::max( 1000, size );
-        graph1DLUT( curve, sigDesc, description, svgfile, steps );
+        graph1DLUTSVG( curve, sigDesc, description, svgfile, steps );
+        graph1DLUTPDF( curve, sigDesc, description, pdffile, steps );
         }
       }
       break;
@@ -243,7 +391,8 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
       if (pCurve) {
         std::string description;
         describe1DLUT(pCurve, description);
-        graph1DLUT( pCurve, sigDesc, description, svgfile, 1000 );
+        graph1DLUTSVG( pCurve, sigDesc, description, svgfile, 1000 );
+        graph1DLUTPDF( pCurve, sigDesc, description, pdffile, 1000 );
         }
       }
       break;
@@ -255,21 +404,22 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
       if (sCurve) {
         std::string description;
         describe1DLUT(sCurve, description);
-        graph1DLUT( sCurve, sigDesc, description, svgfile, 1000 );
+        graph1DLUTSVG( sCurve, sigDesc, description, svgfile, 1000 );
+        graph1DLUTPDF( sCurve, sigDesc, description, pdffile, 1000 );
         }
       }
       break;
 
     default:
       printf("Unknown 1D LUT type %s for tag %s\n",
-         icGetSig(buf, bufSize, typeSig),
-         sigDesc.c_str() );
+         icGetSig(buf, bufSize, typeSig), sigDesc.c_str() );
       {
       CIccCurve *uCurve = dynamic_cast<CIccCurve*> (tag);
       if (uCurve) {
         std::string description;
         uCurve->Describe( description, 100 );
-        graph1DLUT( uCurve, sigDesc, description, svgfile, 1000 );
+        graph1DLUTSVG( uCurve, sigDesc, description, svgfile, 1000 );
+        graph1DLUTPDF( uCurve, sigDesc, description, pdffile, 1000 );
         }
       }
       break;
@@ -336,7 +486,7 @@ std::string channelName(int index, bool isInputMatrix, icColorSpaceSignature inp
 // output graphic representation of nD LUTs
 static
 void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
-        const std::string &basename, SVGOut &svgfile, int verbosity )
+        const std::string &basename, SVGOut &svgfile, PDFWriter &pdffile, int verbosity )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
@@ -386,7 +536,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, !isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveA[ " + channel + " ]";
-          output1DLUT( pIcc, curveA[i], channelDesc, svgfile, verbosity );
+          output1DLUT( pIcc, curveA[i], channelDesc, svgfile, pdffile, verbosity );
           }
         }
       }
@@ -398,7 +548,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, isInputMatrix,
                   inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveB[ " + channel + " ]";
-          output1DLUT( pIcc, curveB[i], channelDesc, svgfile, verbosity );
+          output1DLUT( pIcc, curveB[i], channelDesc, svgfile, pdffile, verbosity );
           }
         }
       }
@@ -410,7 +560,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveM[ " + channel + " ]";
-          output1DLUT( pIcc, curveM[i], channelDesc, svgfile, verbosity );
+          output1DLUT( pIcc, curveM[i], channelDesc, svgfile, pdffile, verbosity );
           }
         }
       }
@@ -536,8 +686,10 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
       std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
       int tiffColor = TIFFColorModelFromICCModel( outputSpace );
-      WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
-        imageWidth, imageHeight, outputChannels, 8*bytes );
+      if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
+                imageWidth, imageHeight, outputChannels, 8*bytes )) {
+        fprintf(stderr, "Failed to write TIFF: %s\n", tiffPath2.c_str());
+        }
       }
     }
     break;
@@ -580,8 +732,13 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
 // write basename + _ + tag + .tiff for nD LUTs
   std::string svgPath = basename + "_luts.svg";
   SVGOut svgfile( svgPath );
-  svgfile.WriteHeader( point2D(0,0), point2D(8*inch2mm, 8*inch2mm) );
-
+  svgfile.SetPageSize( 8*inch2mm, 8*inch2mm );
+  
+  std::string pdfPath = basename + "_luts.pdf";
+  PDFWriter pdffile( pdfPath, 8*inch2mm, 8*inch2mm );
+  CreateAxesXobject( pdffile );
+  
+  
 
   for ( auto &tag: pIcc->m_Tags ) {
     icTagSignature sig = tag.TagInfo.sig;
@@ -602,7 +759,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
         {
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output1DLUT(pIcc, pTag, sigDesc, svgfile, verbosity );
+        output1DLUT(pIcc, pTag, sigDesc, svgfile, pdffile, verbosity );
         }
         break;
 
@@ -622,7 +779,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
         {
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output3DLUT(pIcc, pTag, sigDesc, basename, svgfile, verbosity );
+        output3DLUT(pIcc, pTag, sigDesc, basename, svgfile, pdffile, verbosity );
         }
         break;
 
@@ -634,6 +791,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
   }   // end loop over tags
 
   svgfile.CloseFile();
+  pdffile.CloseFile();
 
 }   // end processLuts()
 
