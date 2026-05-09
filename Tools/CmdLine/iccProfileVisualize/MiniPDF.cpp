@@ -93,14 +93,14 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
   if (!m_filename.empty()) {
     fprintf(stderr,"WARNING - PDF file already open!\n");
   }
-  
+
   m_filename = filename;
   m_pageWidth = widthMM * mm2point;
   m_pageHeight = heightMM * mm2point;
 
   m_objects.clear();
   m_xrefStart = 0;          // set when writing
-  
+
   // root = 1
   m_outlineIndex = 2;
   m_pageParentIndex = 3;
@@ -108,7 +108,7 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
   // Create root object, always object 1
   PDFRoot *rootObj = new PDFRoot(m_pageParentIndex,m_outlineIndex);
   m_objects.push_back( rootObj );
-  
+
   // Create outline data from pages
 // DEFERRED - group of tag, subsections for each LUT ???
 // or just section for tag start?
@@ -126,7 +126,7 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
   m_objects.push_back( procObj );
   size_t procSet = m_objects.size();
   m_procsetIndex = procSet;
-  
+
   // common font definition
   PDFFont *fontObj = new PDFFont( "Helvetica" );
   m_objects.push_back( fontObj );
@@ -158,7 +158,7 @@ void PDFWriter::CloseFile() {
     }
     m_filename.clear();
   }
-  
+
   // cleanup all the allocated objects
   for (auto &obj: m_objects ) {
     delete obj;
@@ -198,11 +198,11 @@ void PDFWriter::WriteXRefs( std::ostream &out ) {
   char buf[ bufSize ];
 
   m_xrefStart = out.tellp();
-  
+
   out << "xref\n";
   out << "0 " << (m_objects.size()+1) << "\n";
   out << "0000000000 65535 f \n";  // first required fake entry
-  
+
   for( auto &obj : m_objects ) {
     if (obj->m_offset == 0)
         fprintf(stderr,"WARNING - PDF object referenced but not written yet\n");
@@ -240,11 +240,11 @@ void PDFRoot::WriteContent( std::ostream &out )
 void PDFPageParent::WriteContent( std::ostream &out )
 {
   out << "<< /Type /Pages /Kids [";
-  
+
   for ( auto &page : m_pageObjectIndices ) {
     out << " " << page << " 0 R";
   }
-  
+
   out << "] /Count " << m_pageObjectIndices.size() << " >>\n";
 }
 
@@ -283,7 +283,7 @@ void PDFPage::WriteContent( std::ostream &out )
 void PDFXObject::WriteContent( std::ostream &out )
 {
   out << "<< /Subtype/Form /BBox[ " << m_bounds << "]";
-  
+
   if (m_group)
     out << " /Group " << m_group << " 0 R";
   out << " /Length " << m_buf.size();
@@ -296,7 +296,7 @@ void PDFXObject::WriteContent( std::ostream &out )
     out << " >> ";
   }
   out << ">>\n";
-  
+
   out << "stream\n" << m_buf << "\nendstream\n";
 }
 
@@ -340,7 +340,7 @@ void PDFWriter::AddXObject( Rect2D &bounds, std::string content, size_t group,
   if (m_xobjectIndex != 0) {
     fprintf(stderr,"WARNING - PDF xobject already defined!\n");
   }
-  
+
   if (group == 0)
     group = m_groupIndex;
   if (font == 0)

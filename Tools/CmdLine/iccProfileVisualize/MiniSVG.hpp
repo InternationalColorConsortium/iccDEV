@@ -212,7 +212,7 @@ public:
 protected:
 
   void WriteHeader( std::ostream &out );
-  
+
   void WriteFooter( std::ostream &out ) {
     out << "</svg>\n";
     }

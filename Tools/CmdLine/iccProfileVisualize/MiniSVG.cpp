@@ -131,7 +131,7 @@ void SVGOut::AddText( const float xCoord, const float yCoord, const std::string 
           const float rotation )
 {
   m_buf << "<text";
-  
+
   if (align != std::string()) {
     if (align == "left" || align == "Left")
       m_buf << " text-anchor=\"start\"";
@@ -147,13 +147,13 @@ void SVGOut::AddText( const float xCoord, const float yCoord, const std::string 
   float xx = xCoord*mm2point;
   float yy = yCoord*mm2point;
   m_buf << " x=\"" << xx << "\" y=\"" << yy << "\"";
-  
+
   if (rotation != 0.0)
     m_buf << " transform=\"rotate(" << rotation <<", " << xx << ", " << yy << ")\"";
-  
+
   if (font != std::string())
     m_buf << " font-family=\"" << font << "\"";
-  
+
   if (style != std::string()) {
     if (style == "Regular" || style == "Normal")
       m_buf << " font-weight=\"normal\"";
@@ -176,9 +176,9 @@ void SVGOut::AddText( const float xCoord, const float yCoord, const std::string 
     else
       fprintf(stderr,"WARNING - unknown text style %s while exporting SVG\n", style.c_str() );
     }
-  
+
     m_buf << " font-size=\"" << size << "pt\"";
-  
+
     m_buf << ">" << text << "</text>\n";
 }
 

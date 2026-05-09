@@ -188,7 +188,7 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   }
   commands << "(" << label << ") Tj ET\n";
   commands << "Q\n";
-  
+
   return commands.str();
 }
 
@@ -199,7 +199,7 @@ void CreateAxesXobject( PDFWriter &pdfout )
   std::string commands;
   float margin = 0.5*inch2point;
   float tickLength = 12.0f; // pt
-  
+
   float bottom = 0.0f;
   float left = 0.0f;
   float top = pdfout.PageHeight();
@@ -298,14 +298,14 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
         const std::string &description, PDFWriter &pdffile, int steps )
 {
   std::ostringstream commands;
-  
+
   float bottom = 0.0f;
   float left = 0.0f;
   float top = pdffile.PageHeight();
   float right = pdffile.PageWidth();
   Rect2D bounds ( left, right, bottom, top );
-  
-  
+
+
   // add the common axes
   commands << "/Axes Do\n";
 
@@ -404,7 +404,7 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
 {
   const size_t bufSize = 64;
   char buf[bufSize];
-  
+
   if (!tag) {
     fprintf(stderr, "ERROR - missing data for %s\n", sigDesc.c_str());
     return;
@@ -508,12 +508,12 @@ int TIFFColorModelFromICCModel( icColorSpaceSignature colorSig )
     case icSigGamutData:
       return TIFF_MODE_GRAY_BLACKZERO;
       break;
-    
+
     default:
       // and N-ink should be multichannel
       return TIFF_MODE_GRAY_WHITEZERO;
       break;
-    
+
   }
 
   // some compilers are picky, and stupid
@@ -672,7 +672,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         tiles = 1;
         tileHeight = 1;
       }
-      
+
       // special case for 2 dimensional LUT
       if (inputChannels == 2) {
         tileHeight = tiles;
@@ -687,7 +687,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 //Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange_output_A2B0.tif
 //Turquoise-Magenta-Yellow-Violet-Green_output_A2B0.tif
 //Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange-BlueGreen-PinkViolet-Red-Teal-YellowOrange-Cerulean-GreenGold-Indigo_output_A2B0.tiff
-      
+
       // find tile arrangement closest to a square
       int tilesWide = (int)std::sqrt(tiles);
       int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
@@ -716,7 +716,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
       // copy data from CLUT to image buffer
       icFloatNumber *clutData = clut->GetData(0);
-      
+
       size_t n001 = tileWidth * tileHeight * outputChannels;
       size_t n010 = tileWidth * outputChannels;
       size_t n100 = outputChannels;
@@ -785,10 +785,10 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   const size_t bufSize = 64;
   char buf1[bufSize];
   int outputItems = 0;
-  
+
   std::string basename = remove_extension( profilePath );
-  
-  
+
+
 // write next to input file
 // write output to basename + _luts.pdf
 // write basename + _ + tag + .tiff for nD LUTs
@@ -798,12 +798,12 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   SVGOut svgfile( svgPath );
   svgfile.SetPageSize( 8*inch2mm, 8*inch2mm );
 #endif
-  
+
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2mm, 8*inch2mm );
   CreateAxesXobject( pdffile );
-  
-  
+
+
 
   for ( auto &tag: pIcc->m_Tags ) {
     icTagSignature sig = tag.TagInfo.sig;
@@ -862,9 +862,9 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   svgfile.CloseFile();
 #endif
   pdffile.CloseFile();
-  
+
   return outputItems;
-  
+
 }   // end processLuts()
 
 /******************************************************************************/

@@ -75,10 +75,10 @@ struct Rect2D {
   Rect2D(float leftin, float rightin, float bottomin, float topin) :
     left(leftin), right(rightin), bottom(bottomin), top(topin)
     {}
-    
+
   Rect2D() : left(0.0f), right(0.0f), bottom(0.0f), top(0.0f)
     {}
-    
+
   Rect2D(const point2D &ll, const point2D &tr) :
     left(ll.x), right(tr.x), bottom(ll.y), top(tr.y)
     {}
@@ -131,7 +131,7 @@ class PDFPageParent : public PDFObject
 {
 public:
   PDFPageParent() : PDFObject() {}
-  
+
   virtual void WriteContent(  std::ostream &out ) final;
 
 public:
@@ -145,7 +145,7 @@ class PDFOutlineParent : public PDFObject
 {
 public:
   PDFOutlineParent() : PDFObject() {}
-  
+
   virtual void WriteContent(  std::ostream &out ) final;
 
 public:
@@ -183,7 +183,7 @@ class PDFProcSet : public PDFObject
 {
 public:
   PDFProcSet( const std::string &proc ) : PDFObject(), m_buf(proc) {}
-  
+
   virtual void WriteContent(  std::ostream &out ) final;
 
 public:
@@ -196,7 +196,7 @@ class PDFGraphic : public PDFObject
 {
 public:
   PDFGraphic( const std::string &content ) : PDFObject(), m_buf(content) {}
-  
+
   virtual void WriteContent(  std::ostream &out ) final;
 
 public:
@@ -209,7 +209,7 @@ class PDFFont : public PDFObject
 {
 public:
   PDFFont( const std::string &font ) : PDFObject(), m_fontname(font) {}
-  
+
   virtual void WriteContent(  std::ostream &out ) final;
 
 public:
@@ -222,7 +222,7 @@ class PDFGroup : public PDFObject
 {
 public:
   PDFGroup() : PDFObject() {}
-  
+
   virtual void WriteContent(  std::ostream &out ) final;
 
 public:
@@ -239,7 +239,7 @@ public:
     PDFObject(), m_buf(buf), m_bounds(bounds), m_procset(procSet),
     m_font(font), m_group(group)
         {}
-  
+
   virtual void WriteContent(  std::ostream &out ) final;
 
 public:
@@ -267,7 +267,7 @@ public:
             m_pageParentIndex(0), m_outlineIndex(0), m_xobjectIndex(0),
             m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
     { OpenFile(filename, widthMM, heightMM); }
-  
+
   ~PDFWriter()
     { CloseFile(); }
 
@@ -283,11 +283,11 @@ public:
   float PageWidth() const { return m_pageWidth; }
   float PageHeight() const { return m_pageHeight; }
   size_t ObjectCount() const { return m_objects.size(); }
-  
+
   void AddObject( PDFObject *obj ) {
     m_objects.push_back( obj );
   }
-  
+
   void AddPage( size_t content ) {
     PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
     m_objects.push_back( pageObj );
@@ -301,7 +301,7 @@ protected:
   void WriteObjects( std::ostream &out );
   void WriteXRefs( std::ostream &out );
   void WriteFooter( std::ostream &out );
-  
+
   PDFPageParent *GetPageParent() {
     if (!m_pageParentIndex) {
       fprintf(stderr,"FATAL - PDF page parent index not set!\n");
@@ -315,17 +315,17 @@ protected:
 private:
   float m_pageWidth;     // used to init pages
   float m_pageHeight;    // used to init pages
-  
+
   size_t m_pageCount;
   size_t m_xrefStart;
   size_t m_pageParentIndex;
   size_t m_outlineIndex;
-  
+
   size_t m_xobjectIndex;    // used to init pages
   size_t m_fontIndex;       // used to init pages
   size_t m_groupIndex;      // used to init pages
   size_t m_procsetIndex;    // used to init pages
-  
+
   std::string m_filename;
   pdf_object_list m_objects;
 };

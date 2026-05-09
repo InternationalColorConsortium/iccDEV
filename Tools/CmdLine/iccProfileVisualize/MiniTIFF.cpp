@@ -341,7 +341,7 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
       fclose(outfile);
       return false;
     }
-    
+
     size_t pixelBytes = (size_t)width * (size_t)channels * (size_t)(depth/8);
     if (fwrite( buffer + offset, pixelBytes, rowCount, outfile ) != rowCount) {
       fprintf(stderr, "WriteTIFF: failed to write pixel data\n");
@@ -386,7 +386,7 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   if (fclose(outfile) != 0) {
     fprintf(stderr, "Warning: fclose failed for TIFF output\n");
   }
-  
+
   return true;
 }
 
