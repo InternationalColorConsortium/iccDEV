@@ -144,7 +144,7 @@ IF(ENABLE_STATIC_LIBS)
   # which causes consumers (iccIisIsapi, hello-iccdev) to silently statically
   # link IccJSON2 and lose the IccJSON2.dll runtime dependency. Only create
   # the convenience alias when the shared import library is NOT being built.
-  IF(WIN32 AND NOT ENABLE_SHARED_LIBS)
+  IF(MSVC AND NOT ENABLE_SHARED_LIBS)
     ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}-static POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:${TARGET_NAME}-static>"

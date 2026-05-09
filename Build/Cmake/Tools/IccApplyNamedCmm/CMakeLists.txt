@@ -35,7 +35,6 @@ if(NOT TARGET iccApplyNamedCmm)
   target_link_libraries(iccApplyNamedCmm PRIVATE
     ${TARGET_LIB_ICCPROFLIB}
     ${TARGET_LIB_ICCCONNECT}
-    IccXML2
     nlohmann_json::nlohmann_json
   )
 

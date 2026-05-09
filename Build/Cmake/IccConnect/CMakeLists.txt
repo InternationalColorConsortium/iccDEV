@@ -112,7 +112,7 @@ IF(ENABLE_STATIC_LIBS)
   # When the shared library is also built, MSVC already creates
   # IccConnect2.lib as the DLL import library. Do not overwrite it with the
   # static archive alias.
-  IF(WIN32 AND NOT ENABLE_SHARED_LIBS)
+  IF(MSVC AND NOT ENABLE_SHARED_LIBS)
     ADD_CUSTOM_COMMAND(TARGET ${TARGET_NAME}-static POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:${TARGET_NAME}-static>"

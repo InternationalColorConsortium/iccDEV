@@ -26,12 +26,51 @@
       }
     },
     {
-      "name": "mingw-x64",
+      "name": "vs2022-clangcl-x64",
+      "inherits": "vs2022-x64",
+      "displayName": "Windows ClangCL (VS2022)",
+      "toolset": "ClangCL"
+    },
+    {
+      "name": "mingw-ucrt64-base",
       "inherits": "default-base",
-      "displayName": "Windows MinGW x64",
+      "hidden": true,
+      "generator": "Ninja",
+      "environment": {
+        "PATH": "C:/msys64/ucrt64/bin;C:/msys64/usr/bin;$penv{PATH}"
+      },
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "x86_64-w64-mingw32-gcc",
-        "CMAKE_CXX_COMPILER": "x86_64-w64-mingw32-g++"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "C:/msys64/ucrt64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "C:/msys64/ucrt64/bin/g++.exe",
+        "CMAKE_PREFIX_PATH": "C:/msys64/ucrt64"
+      }
+    },
+    {
+      "name": "mingw-x64",
+      "inherits": "mingw-ucrt64-base",
+      "displayName": "Windows MinGW UCRT64",
+      "cacheVariables": {
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_CMM_TOOLS": "OFF",
+        "ENABLE_IIS_TOOLS": "OFF"
+      }
+    },
+    {
+      "name": "mingw-core-x64",
+      "inherits": "mingw-ucrt64-base",
+      "displayName": "Windows MinGW UCRT64 core static",
+      "cacheVariables": {
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_STATIC_LIBS": "ON",
+        "ENABLE_SHARED_LIBS": "OFF",
+        "ENABLE_ICCXML": "OFF",
+        "ENABLE_ICCJSON": "ON",
+        "ENABLE_IMAGE_TOOLS": "OFF",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_CMM_TOOLS": "OFF",
+        "ENABLE_IIS_TOOLS": "OFF"
       }
     },
     {

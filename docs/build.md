@@ -59,6 +59,18 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
 
+## Windows ClangCL
+
+Use the Visual Studio LLVM toolset with the same vcpkg-managed dependencies as
+the MSVC build:
+
+```cmd
+git clone https://github.com/InternationalColorConsortium/iccDEV.git iccdev
+cd iccdev
+cmake --preset vs2022-clangcl-x64 -S Build/Cmake -B out/vs2022-clangcl-x64
+cmake --build out/vs2022-clangcl-x64 --config Release -- /m /maxcpucount
+```
+
 ## Windows MinGW UCRT64
 
 Install MSYS2 UCRT64 packages for the selected feature set. A core command-line
@@ -84,6 +96,17 @@ cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
   -DENABLE_CMM_TOOLS=OFF ^
   -DENABLE_IIS_TOOLS=OFF
 cmake --build out/mingw-x64 --target iccDumpProfile --parallel
+```
+
+For a dependency-light local compiler sanity check, use the static core preset.
+It disables XML and image tools, but still builds the core library, JSON library,
+IccConnect, JSON CLI tools, and the IccConnect threaded CMM regression target:
+
+```cmd
+set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
+cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
+cmake --build out/mingw-core-x64 --parallel
+ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
 ## CTest Tool Suites

@@ -46,20 +46,20 @@ Windows MinGW single-config generators:
 
 ```cmd
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
-cmake -S Build/Cmake -B out/mingw-x64 -G Ninja ^
-  -DCMAKE_BUILD_TYPE=Release ^
-  -DCMAKE_C_COMPILER=C:\msys64\ucrt64\bin\x86_64-w64-mingw32-gcc.exe ^
-  -DCMAKE_CXX_COMPILER=C:\msys64\ucrt64\bin\x86_64-w64-mingw32-g++.exe ^
-  -DENABLE_TESTS=ON ^
-  -DENABLE_TOOLS=ON ^
-  -DENABLE_STATIC_LIBS=ON ^
-  -DENABLE_SHARED_LIBS=OFF ^
-  -DENABLE_ICCXML=ON ^
-  -DENABLE_ICCJSON=ON ^
-  -DENABLE_IMAGE_TOOLS=ON ^
-  -DENABLE_WXWIDGETS=OFF
+cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
+  -DENABLE_TESTS=ON
 cmake --build out/mingw-x64 --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
+```
+
+When the local MSYS2 install only has the core compiler and nlohmann-json
+packages, use the dependency-light static preset:
+
+```cmd
+set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
+cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
+cmake --build out/mingw-core-x64 --parallel
+ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
 Use `--no-tests=error` for discovery and execution so a registration regression
@@ -95,7 +95,7 @@ The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
 files in `Testing/`.
 
-Windows currently registers 5 tests:
+Windows full tool builds currently register 5 tests:
 
 | Test | Source |
 |------|--------|
@@ -110,6 +110,11 @@ The batch-backed Windows tests run through
 into `build/Testing/ctest-output/windows-testing`, runs the batch scripts from
 that disposable directory, verifies key output, and fails if the source
 `Testing/` tree is changed.
+
+Feature-disabled Windows builds register the tests whose targets are available.
+For example, `mingw-core-x64` does not build XML conversion tools, so it skips
+the batch-backed generated-profile suites and can still run the dump-profile
+smoke test plus the IccConnect threaded CMM regression.
 
 `iccdev.windows-icc-dump-profile-smoke` runs `iccDumpProfile --read --diag`
 against the checked-in `Testing/CalcTest/calcUnderStack_add.icc` profile and

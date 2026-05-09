@@ -91,7 +91,6 @@ function(iccdev_add_iccconnect_thread_test)
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
     LABELS "iccdev;iccconnect;threaded;regression"
-    FIXTURES_REQUIRED iccdev_profiles
   )
   if(WIN32)
     set(_iccconnect_windows_env_mods
@@ -155,28 +154,32 @@ if(WIN32)
     )
   endfunction()
 
-  iccdev_add_windows_batch_test(
-    iccdev.windows-create-profiles
-    300
-    "iccdev;windows;setup;profiles"
-    "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
-    EXPECTED_PROFILE_PARSE_COUNT 129
-  )
-  set_tests_properties(iccdev.windows-create-profiles PROPERTIES
-    FIXTURES_SETUP iccdev_profiles
-  )
+  if(TARGET iccFromXml)
+    iccdev_add_windows_batch_test(
+      iccdev.windows-create-profiles
+      300
+      "iccdev;windows;setup;profiles"
+      "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
+      EXPECTED_PROFILE_PARSE_COUNT 129
+    )
+    set_tests_properties(iccdev.windows-create-profiles PROPERTIES
+      FIXTURES_SETUP iccdev_profiles
+    )
+  endif()
 
-  iccdev_add_windows_batch_test(
-    iccdev.windows-legacy-run-tests
-    300
-    "iccdev;windows;legacy;profiles"
-    "${ICCDEV_TESTING_DIR}/RunTests.bat"
-    EXPECTED_OUTPUT "JSON round-trip: PASS"
-    FORBIDDEN_REGEX "JSON round-trip: FAIL|not found -- skipping JSON tests"
-  )
-  set_tests_properties(iccdev.windows-legacy-run-tests PROPERTIES
-    FIXTURES_REQUIRED iccdev_profiles
-  )
+  if(TARGET iccFromXml AND TARGET iccApplyNamedCmm AND TARGET iccToJson AND TARGET iccFromJson)
+    iccdev_add_windows_batch_test(
+      iccdev.windows-legacy-run-tests
+      300
+      "iccdev;windows;legacy;profiles"
+      "${ICCDEV_TESTING_DIR}/RunTests.bat"
+      EXPECTED_OUTPUT "JSON round-trip: PASS"
+      FORBIDDEN_REGEX "JSON round-trip: FAIL|not found -- skipping JSON tests"
+    )
+    set_tests_properties(iccdev.windows-legacy-run-tests PROPERTIES
+      FIXTURES_REQUIRED iccdev_profiles
+    )
+  endif()
 
   if(TARGET iccDumpProfile)
     add_test(
@@ -200,7 +203,7 @@ if(WIN32)
     add_dependencies(check iccDumpProfile)
   endif()
 
-  if(TARGET IccProfLib2)
+  if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
     add_test(
       NAME iccdev.issue-987-shared-mpe-export
       COMMAND
