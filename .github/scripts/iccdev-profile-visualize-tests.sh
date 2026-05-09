@@ -104,6 +104,20 @@ require_svg() {
   return 0
 }
 
+require_pdf() {
+  local name="$1"
+  local path="$2"
+
+  require_file "$name" "$path" || return 1
+
+  if ! python3 -c 'import sys; data = open(sys.argv[1], "rb").read(4); assert data == b"%PDF"' "$path"; then
+    fail_case "$name" "invalid PDF magic: $path"
+    return 1
+  fi
+
+  return 0
+}
+
 require_text() {
   local name="$1"
   local path="$2"
@@ -173,7 +187,7 @@ run_visualize() {
         "$OUTDIR"/sRGB_v4_ICC_preference_A2B1.tif \
         "$OUTDIR"/sRGB_v4_ICC_preference_B2A0.tif \
         "$OUTDIR"/sRGB_v4_ICC_preference_B2A1.tif \
-        "$OUTDIR"/sRGB_v4_ICC_preference_luts.svg \
+        "$OUTDIR"/sRGB_v4_ICC_preference_luts.pdf \
         "$WORK_PROFILE" "$LOGFILE"
 
   if [ ! -x "$VISUALIZE" ]; then
@@ -206,18 +220,18 @@ run_visualize() {
   require_tiff "$name/A2B1" "$OUTDIR/sRGB_v4_ICC_preference_A2B1.tif" || return
   require_tiff "$name/B2A0" "$OUTDIR/sRGB_v4_ICC_preference_B2A0.tif" || return
   require_tiff "$name/B2A1" "$OUTDIR/sRGB_v4_ICC_preference_B2A1.tif" || return
-  require_svg "$name/svg" "$OUTDIR/sRGB_v4_ICC_preference_luts.svg" || return
+  require_pdf "$name/pdf" "$OUTDIR/sRGB_v4_ICC_preference_luts.pdf" || return
 
   echo "  [INFO] generated artifacts:"
   for artifact in "$OUTDIR"/sRGB_v4_ICC_preference_A2B0.tif \
                   "$OUTDIR"/sRGB_v4_ICC_preference_A2B1.tif \
                   "$OUTDIR"/sRGB_v4_ICC_preference_B2A0.tif \
                   "$OUTDIR"/sRGB_v4_ICC_preference_B2A1.tif \
-                  "$OUTDIR"/sRGB_v4_ICC_preference_luts.svg; do
+                  "$OUTDIR"/sRGB_v4_ICC_preference_luts.pdf; do
     printf "    %s %s bytes\n" "$(basename "$artifact")" "$(wc -c < "$artifact")"
   done
 
-  pass_case "$name" "generated A2B/B2A TIFFs and LUT SVG"
+  pass_case "$name" "generated A2B/B2A TIFFs and LUT PDF"
 }
 
 run_malformed_visualize() {
