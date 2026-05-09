@@ -211,12 +211,12 @@ void CreateAxesXobject( PDFWriter &pdfout )
   point2D basepoint( margin, bottom+margin );
   point2D rangeX( right-2*margin, 0.0 );
   point2D tickLengthX( 0, -tickLength );
-  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, 14.0, "Input" );
+  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, 12.0, "Input" );
 
   // vertical
   point2D rangeY( 0.0, (top-2*margin) );
   point2D tickLengthY( -tickLength, 0 );
-  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, 14.0, "Output" );
+  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, 12.0, "Output" );
 
   pdfout.AddXObject( bounds, commands );
 }
@@ -274,6 +274,25 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 
 /******************************************************************************/
 
+std::vector<std::string> splitLines(const std::string& str)
+{
+    const char newline = '\n';
+    std::vector<std::string> lines;
+    size_t start = 0;
+    size_t end = str.find(newline);
+    while (end != std::string::npos) {
+        lines.push_back(str.substr(start, end - start));
+        start = end + 1;
+        end = str.find(newline, start);
+    }
+    auto temp = str.substr(start);
+    if (temp.size() > 0)
+        lines.push_back(temp);
+    return lines;
+}
+
+/******************************************************************************/
+
 static
 void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
         const std::string &description, PDFWriter &pdffile, int steps )
@@ -287,26 +306,40 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   Rect2D bounds ( left, right, bottom, top );
   
   
-  // add the axes
+  // add the common axes
   commands << "/Axes Do\n";
 
   // label
-  std::string clean_description( description );
-  // remove any line breaks from our text, because PDF doesn't do line breaks
-// TODO - actually make multiple lines of text
-  std::replace( clean_description.begin(), clean_description.end(), '\n', ' ');
-
-  float labelSize = 14;     // points
-  std::string outdescription = name + " " + clean_description;
-  float textHalf = labelSize * 0.25f * outdescription.size();
+  std::vector<std::string> lines = splitLines( description );
+  float labelSize = 12;     // points
+  float leading = labelSize * 1.1f;
+  float indent = 0.5f * inch2point;
   commands << "BT /F1 " << labelSize << " Tf ";
-  point2D labelPt( 0.5f * right - textHalf, top - 0.25f*inch2point );
-  commands << labelPt << " Td ";
-  commands << "(" << outdescription << ") Tj ET\n";
+  size_t line_num = 0;
+  for (size_t i = 0; i < lines.size(); ++i, ++line_num) {
+    std::string label = lines[i];
+    if (label.size() == 0)  // double returns are not pretty
+        continue;
+    if (line_num == 0) {
+      label = name + " " + label;
+      float textHalf = labelSize * 0.25f * label.size();
+      point2D labelPt( 0.5f*right - textHalf, top - 0.25f*inch2point );
+      commands << labelPt << " Td ";
+    }
+    else {
+      commands << " " << indent << " " << -leading << " Td ";
+      indent = 0.0f;
+    }
+    commands << "(" << label << ") Tj\n";
+  }
+  commands << "ET\n";
+
 
   // draw the curve
+  // optimization - draw only 3 points for identity curve
+  if (curve->IsIdentity())
+    steps = 2;
   float scale = (7.5f-0.5f)*inch2point;
-//  point2D base( 1.0f*inch2point, 1.0f*inch2point );
   const point2D base( 0.5f*inch2point, 0.5f*inch2point );
   commands << base << " m\n";
   for (int i = 0; i <= steps; ++i ) {
@@ -319,7 +352,7 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
     point2D currentPt( input*scale, output*scale );
     commands << (base+currentPt) << " l\n";
   }
-  commands << " S\n";
+  commands << "S\n";
 
   // and finally create the graphics object and page
   PDFGraphic *graphics = new PDFGraphic( commands.str() );
@@ -327,7 +360,6 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   size_t content = pdffile.ObjectCount();
 
   pdffile.AddPage( content );
-
 }
 
 
@@ -368,7 +400,7 @@ void describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description )
 // output graphic representation of 1D LUTs
 static
 void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
-        PDFWriter &pdffile, int /* verbosity */ )
+        PDFWriter &pdffile )
 {
   const size_t bufSize = 64;
   char buf[bufSize];
@@ -505,7 +537,7 @@ std::string channelName(int index, bool isInputMatrix, icColorSpaceSignature inp
 // output graphic representation of nD LUTs
 static
 void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
-        const std::string &basename, PDFWriter &pdffile, int verbosity )
+        const std::string &basename, PDFWriter &pdffile )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
@@ -555,7 +587,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, !isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveA[ " + channel + " ]";
-          output1DLUT( pIcc, curveA[i], channelDesc, pdffile, verbosity );
+          output1DLUT( pIcc, curveA[i], channelDesc, pdffile );
           }
         }
       }
@@ -567,7 +599,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, isInputMatrix,
                   inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveB[ " + channel + " ]";
-          output1DLUT( pIcc, curveB[i], channelDesc, pdffile, verbosity );
+          output1DLUT( pIcc, curveB[i], channelDesc, pdffile );
           }
         }
       }
@@ -579,7 +611,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveM[ " + channel + " ]";
-          output1DLUT( pIcc, curveM[i], channelDesc, pdffile, verbosity );
+          output1DLUT( pIcc, curveM[i], channelDesc, pdffile );
           }
         }
       }
@@ -739,7 +771,7 @@ std::string remove_extension( const std::string& filename)
 
 // output graphic representation of 1D and nD LUTs
 static
-void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
+void processLuts(CIccProfile *pIcc, const char *profilePath )
 {
   const size_t bufSize = 64;
   char buf1[bufSize];
@@ -782,7 +814,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
         {
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output1DLUT(pIcc, pTag, sigDesc, pdffile, verbosity );
+        output1DLUT(pIcc, pTag, sigDesc, pdffile );
         }
         break;
 
@@ -802,7 +834,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
         {
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output3DLUT(pIcc, pTag, sigDesc, basename, pdffile, verbosity );
+        output3DLUT(pIcc, pTag, sigDesc, basename, pdffile );
         }
         break;
 
@@ -827,7 +859,7 @@ static
 void printUsage(void)
 {
   printf("Usage: iccProfileVisualize input_profile\n");
-  printf("  output will be TIFF and SVG files next to the input profile.\n");
+  printf("  output will be TIFF and PDF files next to the input profile.\n");
   printf("iccProfileVisualize built with IccProfLib version " ICCPROFLIBVER "\n\n");
 }
 
@@ -853,8 +885,9 @@ int main(int argc, char* argv[])
 #endif // WIN32
 #endif // MEMORY_LEAK_CHECK && _DEBUG
 
+
+// TODO - should this process a list of files, or one at a time?
   int nArg = 1;
-  int verbosity = 100; // default is maximum verbosity (old behaviour)
 
   if (argc <= 1) {
     printUsage();
@@ -870,7 +903,7 @@ int main(int argc, char* argv[])
     return -1;
   }
 
-  processLuts( pIcc, argv[nArg], verbosity );
+  processLuts( pIcc, argv[nArg] );
 
   delete pIcc;
 
