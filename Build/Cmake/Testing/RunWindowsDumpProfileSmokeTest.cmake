@@ -28,17 +28,28 @@ if(NOT EXISTS "${ICCDEV_PROFILE}")
   message(FATAL_ERROR "Smoke-test ICC profile not found: ${ICCDEV_PROFILE}")
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/WindowsRuntimePaths.cmake")
+
 file(REMOVE_RECURSE "${ICCDEV_TEST_OUTDIR}")
 file(MAKE_DIRECTORY "${ICCDEV_TEST_OUTDIR}")
 set(_log_file "${ICCDEV_TEST_OUTDIR}/output.log")
 
 get_filename_component(_tool_dir "${ICCDEV_ICCDUMP_EXE}" DIRECTORY)
+get_filename_component(_tool_config "${_tool_dir}" NAME)
 set(_tool_path
   "${_tool_dir}"
   "${ICCDEV_BUILD_DIR}/IccProfLib"
+  "${ICCDEV_BUILD_DIR}/IccProfLib/${_tool_config}"
   "${ICCDEV_BUILD_DIR}/IccXML"
+  "${ICCDEV_BUILD_DIR}/IccXML/${_tool_config}"
   "${ICCDEV_BUILD_DIR}/IccJSON"
+  "${ICCDEV_BUILD_DIR}/IccJSON/${_tool_config}"
+  "${ICCDEV_BUILD_DIR}/IccConnect"
+  "${ICCDEV_BUILD_DIR}/IccConnect/${_tool_config}"
 )
+iccdev_collect_cache_runtime_path_entries(_runtime_path_entries "${ICCDEV_BUILD_DIR}")
+list(APPEND _tool_path ${_runtime_path_entries})
+list(REMOVE_DUPLICATES _tool_path)
 list(JOIN _tool_path ";" _path_prefix)
 
 execute_process(

@@ -19,6 +19,13 @@ else()
   set(ICCDEV_CTEST_CONFIG_ARGS)
 endif()
 
+if(WIN32)
+  include("${CMAKE_CURRENT_LIST_DIR}/WindowsRuntimePaths.cmake")
+  iccdev_collect_cache_runtime_path_entries(
+    ICCDEV_WINDOWS_RUNTIME_PATHS
+    "${CMAKE_BINARY_DIR}")
+endif()
+
 add_custom_target(check
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
@@ -98,6 +105,10 @@ function(iccdev_add_iccconnect_thread_test)
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
       "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
     )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccconnect_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
     set_tests_properties(iccdev.iccconnect-threaded-cmm PROPERTIES
       ENVIRONMENT_MODIFICATION "${_iccconnect_windows_env_mods}"
     )

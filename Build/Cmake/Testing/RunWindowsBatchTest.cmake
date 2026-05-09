@@ -18,6 +18,8 @@ if(NOT EXISTS "${ICCDEV_BATCH_SCRIPT}")
   message(FATAL_ERROR "Batch script not found: ${ICCDEV_BATCH_SCRIPT}")
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/WindowsRuntimePaths.cmake")
+
 file(MAKE_DIRECTORY "${ICCDEV_TEST_OUTDIR}")
 set(_log_file "${ICCDEV_TEST_OUTDIR}/output.log")
 set(_source_testing_dir "${ICCDEV_TESTING_DIR}")
@@ -90,7 +92,12 @@ list(APPEND _path_entries
   "${ICCDEV_BUILD_DIR}/IccProfLib/${_resolved_config}"
   "${ICCDEV_BUILD_DIR}/IccXML/${_resolved_config}"
   "${ICCDEV_BUILD_DIR}/IccJSON/${_resolved_config}"
+  "${ICCDEV_BUILD_DIR}/IccConnect/${_resolved_config}"
 )
+
+iccdev_collect_cache_runtime_path_entries(_runtime_path_entries "${ICCDEV_BUILD_DIR}")
+list(APPEND _path_entries ${_runtime_path_entries})
+
 list(JOIN _path_entries ";" _path_prefix)
 set(_run_path "${_path_prefix};$ENV{PATH}")
 

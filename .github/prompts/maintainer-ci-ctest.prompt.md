@@ -55,6 +55,9 @@ Choose the smallest gate that proves the behavior:
 - Update `docs/regression-workflow-governance.md` for workflow process changes.
 - Update `.github/skills/README.md` or a skill when the process becomes a
   repeatable maintainer workflow.
+- For Windows executable tests, keep runtime DLL path handling centralized in
+  `Build/Cmake/Testing/WindowsRuntimePaths.cmake`; update docs and skills when
+  a test needs vcpkg, Visual Studio LLVM, or MinGW runtime DLLs.
 - Keep root contributor docs focused on boundaries and routing, not internal
   workflow mechanics.
 

@@ -45,6 +45,12 @@ feature-disabled builds register the subset whose targets are available. The
 Windows batch wrapper runs scripts from a disposable copy of `Testing/` under
 the build tree and must not dirty the source `Testing/` directory.
 
+Windows CTest wrappers source runtime DLL directories from `CMakeCache.txt`
+through `Build/Cmake/Testing/WindowsRuntimePaths.cmake`. Keep that helper in
+sync when adding Windows tests that execute build-tree tools, especially for
+vcpkg DLLs and MinGW runtime DLLs such as `libwinpthread-1.dll`. MinGW compiler
+builds still require the UCRT64 `bin` directory on the invoking shell `PATH`.
+
 See `docs/ctest.md` for the complete suite list, expected counts, fixtures, and
 add-test process.
 

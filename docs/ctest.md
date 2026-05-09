@@ -134,6 +134,14 @@ into `build/Testing/ctest-output/windows-testing`, runs the batch scripts from
 that disposable directory, verifies key output, and fails if the source
 `Testing/` tree is changed.
 
+Windows CTest wrappers collect build-tree DLL directories plus runtime
+dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
+vcpkg installed triplets, compiler `bin` directories, and common dependency
+library prefixes. This keeps CTest execution independent of a developer's
+interactive `PATH` for tools such as `libxml2.dll` or `libwinpthread-1.dll`.
+MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
+because GCC launches runtime-dependent compiler subprocesses during the build.
+
 Feature-disabled Windows builds register the tests whose targets are available.
 For example, `mingw-core-x64` does not build XML conversion tools, so it skips
 the batch-backed generated-profile suites and can still run the dump-profile

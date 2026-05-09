@@ -71,7 +71,9 @@ target_compile_options(target PRIVATE
 ```
 # MSVC differences:
 - vcpkg handles all dependencies (manifest mode)
-- No LD_LIBRARY_PATH → DLLs must be in PATH or same directory
+- No LD_LIBRARY_PATH -> DLLs must be in PATH or same directory
+- Windows CTest wrappers add build-tree, vcpkg, compiler, and MinGW runtime
+  directories from CMakeCache; raw executable runs still need an explicit PATH
 - PowerShell sanitizer: .github/scripts/sanitize.ps1
 - Line endings: CRLF in bat scripts, LF in sh scripts
 - Path separators: backslash in build output
@@ -118,8 +120,11 @@ cd ../Testing && ./CreateAllProfiles.sh && ./RunTests.sh
 ```powershell
 vcpkg integrate install
 cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
-cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
-cd Testing && .\CreateAllProfiles.bat && .\RunTests.bat
+cmake --build out/vs2022-x64 --config Release --target check -- /m /maxcpucount
+
+$env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
+cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
+cmake --build out/mingw-core-x64 --target check --parallel
 ```
 
 ### WASM (matches ci-wasm-build-test, wasm-latest-matrix)

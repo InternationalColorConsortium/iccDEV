@@ -244,8 +244,7 @@ jobs:
           cmake --build build -- /m /maxcpucount
           cmake --build build -- /m /maxcpucount
 
-      - name: Create Profiles
-        continue-on-error: true
+      - name: Run Windows CTest check
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -260,59 +259,8 @@ jobs:
             }
           pwd
           cd Build/Cmake
-          Write-Host "========= Creating Profiles ... ================`n"
-          $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
-              Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
-              ForEach-Object { Split-Path $_.FullName -Parent } |
-              Sort-Object -Unique
-          $runtimeDirs = Get-ChildItem -Recurse -File -Include *.dll -Path .\build\ |
-              ForEach-Object { Split-Path $_.FullName -Parent } |
-              Sort-Object -Unique
-          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ -ErrorAction SilentlyContinue |
-              ForEach-Object { Split-Path -Parent $_.FullName } |
-              Sort-Object -Unique
-          $pathDirs = @($toolDirs) + @($exeDirs) + @($runtimeDirs) + @("$env:SystemRoot\system32", "$env:SystemRoot")
-          $env:Path = (($pathDirs | Where-Object { $_ } | Sort-Object -Unique) -join ';')
-          $env:Path -split ';' | Select-String "icc"
-          $env:Path -split ';'
-          pwd
-          cd ..\..\Testing
-          .\CreateAllProfiles.bat
-          .\RunTests.bat
-          cd CalcTest\
-          .\checkInvalidProfiles.bat
-          .\runtests.bat
-          cd ..\Display
-          .\RunProtoTests.bat
-          cd ..\HDR
-          .\mkprofiles.bat
-          cd ..\mcs\
-          .\updateprev.bat
-          .\updateprevWithBkgd.bat
-          cd ..\Overprint
-          .\RunTests.bat
-          cd ..
-          cd hybrid
-          try { .\BuildAndTest.bat } catch { Write-Host "BuildAndTest.bat exited with error (continue-on-error): $_" }
-          cd ..
-          cd ..
-          pwd
-          # Collect .icc profile information
-          $profiles = Get-ChildItem -Path . -Filter "*.icc" -Recurse -File
-          $totalCount = $profiles.Count
-          # Group profiles by directory
-          $groupedProfiles = $profiles | Group-Object { $_.Directory.FullName }
-          # Generate Summary Report
-          Write-Host "`n========================="
-          Write-Host " ICC Profile Report"
-          Write-Host "========================="
-          # Print count per subdirectory
-          foreach ($group in $groupedProfiles) {
-              Write-Host ("{0}: {1} .icc profiles" -f $group.Name, $group.Count)
-          }
-          Write-Host "`nTotal .icc profiles found: $totalCount"
-          Write-Host "=========================`n"
-          Write-Host "All Done!"
+          Write-Host "========= Running CTest check ... ================`n"
+          cmake --build build --config Debug --target check -- /m /maxcpucount
       - name: GitHub Summary
         if: always()
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -378,7 +326,7 @@ jobs:
             mingw-w64-ucrt-x86_64-libjpeg-turbo
             mingw-w64-ucrt-x86_64-nlohmann-json
 
-      - name: Run MinGW build and CTest smoke
+      - name: Run MinGW build and CTest check
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
           POWERSHELL_UPDATECHECK: Off
@@ -402,6 +350,7 @@ jobs:
           . .github/scripts/sanitize.ps1
 
           $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
+          $ucrtRoot = Join-Path $msysRoot 'ucrt64'
           $ucrtBin = Join-Path $msysRoot 'ucrt64\bin'
           $usrBin = Join-Path $msysRoot 'usr\bin'
           $env:PATH = "$ucrtBin;$usrBin;$env:PATH"
@@ -444,6 +393,7 @@ jobs:
             '-DCMAKE_BUILD_TYPE=Release',
             "-DCMAKE_C_COMPILER=$gcc",
             "-DCMAKE_CXX_COMPILER=$gxx",
+            "-DCMAKE_PREFIX_PATH=$ucrtRoot",
             '-DENABLE_TOOLS=ON',
             '-DENABLE_ICCXML=ON',
             '-DENABLE_ICCJSON=ON',
@@ -462,14 +412,12 @@ jobs:
           Invoke-Native $ctest @(
             '--test-dir', $buildDir,
             '-N',
-            '-R', '^iccdev\.windows-icc-dump-profile-smoke$',
             '--no-tests=error'
           )
-          Invoke-Native $ctest @(
-            '--test-dir', $buildDir,
-            '-R', '^iccdev\.windows-icc-dump-profile-smoke$',
-            '--output-on-failure',
-            '--no-tests=error'
+          Invoke-Native $cmake @(
+            '--build', $buildDir,
+            '--target', 'check',
+            '--parallel'
           )
 
           $compilerLine = (& $gxx --version)[0]
@@ -480,7 +428,7 @@ jobs:
             "- Build scope: ``full configured command-line project``",
             "- Build type: ``Release``",
             "- Linkage: ``static``",
-            "- CTest: ``iccdev.windows-icc-dump-profile-smoke``",
+            "- CTest: ``all registered MinGW suites``",
             "- Result: ``passed``"
           )
           $summaryLines | ForEach-Object {

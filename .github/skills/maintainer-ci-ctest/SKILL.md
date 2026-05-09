@@ -50,6 +50,11 @@ when practical.
 - WASM parity currently expects 207 generated ICC profiles.
 - Windows batch CTest runs must use the disposable Testing copy under the build
   tree and must not dirty the source `Testing/` directory.
+- Windows executable tests must receive runtime DLL directories through
+  `Build/Cmake/Testing/WindowsRuntimePaths.cmake`; do not rely on a developer or
+  runner shell `PATH` for vcpkg or MinGW runtime DLLs.
+- MinGW builds still need UCRT64 `bin` on the invoking shell `PATH` because GCC
+  subprocesses such as `cc1plus.exe` depend on MSYS2 runtime DLLs during build.
 
 ## Workflow Rules
 
