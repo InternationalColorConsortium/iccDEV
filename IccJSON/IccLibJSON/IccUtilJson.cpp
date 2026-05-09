@@ -415,6 +415,7 @@ template bool jsonToValue<int>(const IccJson&, int&);
 template bool jsonToValue<icUInt8Number>(const IccJson&, icUInt8Number&);
 template bool jsonToValue<icUInt16Number>(const IccJson&, icUInt16Number&);
 template bool jsonToValue<icUInt32Number>(const IccJson&, icUInt32Number&);
+template bool jsonToValue<icUInt64Number>(const IccJson&, icUInt64Number&);
 template bool jsonToValue<icInt16Number>(const IccJson&, icInt16Number&);
 template bool jsonToValue<icFloat32Number>(const IccJson&, icFloat32Number&);
 template bool jsonToValue<icFloat64Number>(const IccJson&, icFloat64Number&);
@@ -427,6 +428,7 @@ template bool jsonToArray<float>(const IccJson&, float*, int);
 template bool jsonToArray<icUInt8Number>(const IccJson&, icUInt8Number*, int);
 template bool jsonToArray<icUInt16Number>(const IccJson&, icUInt16Number*, int);
 template bool jsonToArray<icUInt32Number>(const IccJson&, icUInt32Number*, int);
+template bool jsonToArray<icUInt64Number>(const IccJson&, icUInt64Number*, int);
 template bool jsonToArray<double>(const IccJson&, std::vector<double>&);
 template bool jsonToArray<float>(const IccJson&, std::vector<float>&);
 
@@ -434,6 +436,7 @@ template bool jGetValue<int>(const IccJson&, const char*, int&);
 template bool jGetValue<icUInt8Number>(const IccJson&, const char*, icUInt8Number&);
 template bool jGetValue<icUInt16Number>(const IccJson&, const char*, icUInt16Number&);
 template bool jGetValue<icUInt32Number>(const IccJson&, const char*, icUInt32Number&);
+template bool jGetValue<icUInt64Number>(const IccJson&, const char*, icUInt64Number&);
 template bool jGetValue<icInt16Number>(const IccJson&, const char*, icInt16Number&);
 template bool jGetValue<icFloat32Number>(const IccJson&, const char*, icFloat32Number&);
 template bool jGetValue<icFloat64Number>(const IccJson&, const char*, icFloat64Number&);
@@ -447,6 +450,7 @@ template bool jGetArray<float>(const IccJson&, const char*, float*, int);
 template bool jGetArray<icUInt8Number>(const IccJson&, const char*, icUInt8Number*, int);
 template bool jGetArray<icUInt16Number>(const IccJson&, const char*, icUInt16Number*, int);
 template bool jGetArray<icUInt32Number>(const IccJson&, const char*, icUInt32Number*, int);
+template bool jGetArray<icUInt64Number>(const IccJson&, const char*, icUInt64Number*, int);
 
 // ---------------------------------------------------------------------------
 // CIccJsonArrayType template implementations

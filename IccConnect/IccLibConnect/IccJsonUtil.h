@@ -75,7 +75,7 @@
 #include <nlohmann/json.hpp>
 #include "../../IccProfLib/IccDefs.h"
 
-using json = nlohmann::json;
+using json = nlohmann::ordered_json;
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {

@@ -37,6 +37,12 @@ Issue #769 required this flag. MSVC does not support it.
 
 ## Step 3: Reproduce
 
+Before writing the one-liner, inspect the affected tool's argument handling.
+Some tools transform path arguments before opening files. For example,
+`iccSpecSepToTiff` treats `infile_fmt` as a prefix and appends the channel
+number, so a file ending in `spec_3` is reproduced with prefix `spec_` and
+`start=end=3`.
+
 ```bash
 # Set sanitizer options for catch-and-continue (full crash chain)
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
@@ -105,6 +111,10 @@ Create an issue with:
 3. Minimal PoC file attached (rename `.icc` -> `.icc.txt` for GitHub)
 4. One-liner reproduction command
 5. Suggested fix (if known)
+
+For maintainer-facing repros, prefer a direct program invocation with absolute
+paths and literal arguments. Avoid wrapper harnesses, shell substitutions, temp
+copies, or filtered output unless the report explicitly requires them.
 
 ```bash
 # Example upstream report format:

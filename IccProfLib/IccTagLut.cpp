@@ -587,10 +587,14 @@ bool CIccTagCurve::IsIdentity()
 */
 icFloatNumber CIccTagCurve::Apply(icFloatNumber v) const
 {
-  if(v<0.0) v = 0.0;
+  if (std::isnan(v))
+    v = 0.0;
+  else if (std::isinf(v))
+    v = v < 0.0 ? 0.0 : 1.0;
+  else if(v<0.0) v = 0.0;
   else if(v>1.0) v = 1.0;
 
-  icUInt32Number nIndex = (icUInt32Number)(v * m_nMaxIndex);
+  icUInt32Number nIndex = static_cast<icUInt32Number>(v * m_nMaxIndex);
 
   if (!m_nSize) {
     return v;
@@ -2083,7 +2087,7 @@ bool CIccCLUT::Write(CIccIO *pIO)
 void CIccCLUT::Iterate(std::string &sDescription, icUInt8Number nIndex, icUInt32Number nPos, size_t bufSize, bool bUseLegacy )
 {
   // Delegate to the sink-based recursion via a string sink. Allocates the
-  // scratch buffers locally — keeps the legacy protected entry point
+  // scratch buffers locally - keeps the legacy protected entry point
   // self-contained so any external callers keep working byte-for-byte.
   std::vector<icChar> outBuf(bufSize ? bufSize : 1);
   icChar valBuf[40];
@@ -3839,7 +3843,7 @@ void CIccMBB::Describe(IDescribeSink &sink, const DescribeOptions &opts)
     }
 
     if (m_CLUT && sink.ShouldContinue()) {
-      // Direct sink path — this is the entry that avoids the
+      // Direct sink path - this is the entry that avoids the
       // multi-MB std::string allocation on high-channel-count CLUTs.
       m_CLUT->DumpLut(sink, "CLUT", m_csInput, m_csOutput, opts,
                       GetType()==icSigLut16Type);

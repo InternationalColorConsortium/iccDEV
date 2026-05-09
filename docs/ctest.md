@@ -90,14 +90,17 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 19 tests:
+Linux currently registers 22 tests:
 
 | Test | Source |
 |------|--------|
 | `iccdev.create-profiles` | `Testing/CreateAllProfiles.sh` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
-| `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan` |
+| `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |
+| `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh` |
+| `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
+| `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
 | `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
@@ -118,6 +121,27 @@ Linux currently registers 19 tests:
 The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
 files in `Testing/`.
+
+`iccdev.tool-coverage` may add focused command-line regressions inside the
+existing script without changing the CTest suite count. When a bug is tied to an
+AFL-minimized crash or hang, embed the smallest stable reproducer in the script
+or generate it under `ICCDEV_TEST_OUTDIR`; do not require local AFL output
+directories or commit generated crash artifacts. Validate both the direct script
+path and the CTest wrapper when changing this suite.
+
+`iccdev.hybrid-pipeline` preserves the full six-phase hybrid spectral/colorimetric
+integration test as a separate `slow` CTest label. Routine CI tool sweeps run
+with `--label-exclude slow`; run the hybrid gate explicitly with
+`ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
+
+Use a standalone CTest row for focused crash regressions that need clear
+maintainer visibility in CTest output. For example,
+`iccdev.specsep-tiff-geometry-regression` generates a malformed TIFF under
+`ICCDEV_TEST_OUTDIR`, invokes `iccSpecSepToTiff` using its prefix-plus-channel
+input semantics, and verifies graceful rejection without sanitizer findings.
+`iccdev.dump-profile-header-regression` mutates the ICC header size field to
+`0xffffffff` and verifies `iccDumpProfile -v 100` handles validation reporting
+without signed-conversion sanitizer findings.
 
 Windows full tool builds currently register 5 tests:
 
@@ -202,6 +226,9 @@ For repeatable agent-assisted work, use
      `Testing/CreateAllProfiles.sh` changes the generated-profile set.
 4. Validate locally with CMake configure, build, `ctest -N --no-tests=error`,
    `ctest --output-on-failure --no-tests=error`, and `git diff --check`.
+   For changes inside `iccdev.tool-coverage`, also run the direct script with
+   explicit `ICCDEV_TOOLS_DIR`, `ICCDEV_TESTING_DIR`, and
+   `ICCDEV_TEST_OUTDIR`, plus `ctest -R '^iccdev\.tool-coverage$'`.
 
 Do not let a workflow keep `|| true` around profile generation, CTest
 discovery, or regression execution. Expected skips should be explicit in the

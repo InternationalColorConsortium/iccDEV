@@ -30,6 +30,9 @@ Add a minimal, reproducible regression gate for:
 2. Inspect existing regression blocks in `ci-tool-tests.yml` and
    `ci-iccdev-tool-tests.yml`.
 3. Add the smallest script or inline test that proves the behavior.
+   If the case belongs inside `iccdev-tool-coverage-baseline.sh`, keep it
+   self-contained under `ICCDEV_TEST_OUTDIR` and do not change the CTest suite
+   count.
 4. Name the test with the issue number and technical subject.
 5. Update `.github/ci/regression/README.md` or related docs.
 6. Run:
@@ -42,6 +45,8 @@ file .github/scripts/<new-regression>.sh
 
 7. Run the focused regression locally with explicit `ICCDEV_TOOLS_DIR`,
    `ICCDEV_TESTING_DIR`, and `ICCDEV_TEST_OUTDIR`.
+   For `iccdev-tool-coverage-baseline.sh`, also run
+   `ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure`.
 
 ## Handoff Format
 

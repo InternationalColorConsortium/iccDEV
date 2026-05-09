@@ -78,9 +78,6 @@
 #include "IccProfLibVer.h"
 #include "IccConnect.h"
 
-
-using namespace nlohmann;
-
 //----------------------------------------------------
 // Function Declarations
 //----------------------------------------------------

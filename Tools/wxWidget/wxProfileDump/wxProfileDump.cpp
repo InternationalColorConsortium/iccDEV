@@ -543,7 +543,7 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
             str += buf;
         }
         m_textProfileID->SetLabel(str);
-        m_textSize->SetLabel(wxString::Format(_T("%d (0x%x) bytes"), pHdr->size, pHdr->size));
+        m_textSize->SetLabel(wxString::Format(_T("%u (0x%x) bytes"), pHdr->size, pHdr->size));
         m_textAttribute->SetLabel(wxT(Fmt.GetDeviceAttrName(pHdr->attributes)));
         m_textCMM->SetLabel(wxT(Fmt.GetCmmSigName((icCmmSignature)pHdr->cmmId)));
 	    m_textCreationDate->SetLabel(wxString::Format(wxT("%d/%d/%d (M/D/Y) %02u:%02u:%02u"),
@@ -618,7 +618,7 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
             // use upper_bound to allow for duplicate tags (pointing to the same offset)
             int closest;
             // Safe cast of profile size for comparisons (cap at INT_MAX for malformed profiles)
-            int safeProfileSize = (pHdr->size <= (icUInt32Number)INT_MAX) ? (int)pHdr->size : INT_MAX;
+            int safeProfileSize = (pHdr->size <= static_cast<icUInt32Number>(INT_MAX)) ? static_cast<int>(pHdr->size) : INT_MAX;
             offsetVector::const_iterator match = std::upper_bound( sortedTagOffsets.cbegin(), sortedTagOffsets.cend(), i->TagInfo.offset );
             if (match == sortedTagOffsets.end())
                 closest = safeProfileSize;
@@ -628,7 +628,18 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
 
             // Number of actual padding bytes between this tag and closest neighbour (or EOF)
             // Should be 0-3 if compliant. Negative number if tags overlap!
-            int pad = closest - i->TagInfo.offset - i->TagInfo.size;
+            icUInt64Number tagEnd = (icUInt64Number)i->TagInfo.offset + i->TagInfo.size;
+            icUInt64Number closest64 = (icUInt64Number)closest;
+            int pad;
+
+            if (tagEnd > closest64) {
+                icUInt64Number overlap = tagEnd - closest64;
+                pad = (overlap > (icUInt64Number)INT_MAX) ? INT_MIN : -static_cast<int>(overlap);
+            }
+            else {
+                icUInt64Number gap = closest64 - tagEnd;
+                pad = (gap > (icUInt64Number)INT_MAX) ? INT_MAX : static_cast<int>(gap);
+            }
 
             m_tagsCtrl->SetItem(item, 1, Fmt.GetTagSigName(i->TagInfo.sig));
 
@@ -638,8 +649,8 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
             else
                 m_tagsCtrl->SetItem(item, 2, Fmt.GetTagTypeSigName(pTag->GetType()));
 
-            m_tagsCtrl->SetItem(item, 3, wxString::Format("%d", i->TagInfo.offset));
-            m_tagsCtrl->SetItem(item, 4, wxString::Format("%d", i->TagInfo.size));
+            m_tagsCtrl->SetItem(item, 3, wxString::Format("%u", i->TagInfo.offset));
+            m_tagsCtrl->SetItem(item, 4, wxString::Format("%u", i->TagInfo.size));
             m_tagsCtrl->SetItem(item, 5, wxString::Format("%d", pad));
 
             m_tagsCtrl->SetItemData(item, (long)i->TagInfo.sig);
@@ -798,9 +809,10 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
             //   occurs in real-world ICC profiles
             // - Tags with overlapping tag data are considered highly suspect (but officially valid)
             // - 1-3 padding bytes after each tag's data need to be all zero *** NOT DONE - TODO ***
-            int  closest, rndup, smallest_offset = pHdr->size;
             // Safe cast of profile size for comparisons (cap at INT_MAX for malformed profiles)
-            int safeProfileSize2 = (pHdr->size <= (icUInt32Number)INT_MAX) ? (int)pHdr->size : INT_MAX;
+            int safeProfileSize2 = (pHdr->size <= static_cast<icUInt32Number>(INT_MAX)) ? static_cast<int>(pHdr->size) : INT_MAX;
+            int closest;
+            icUInt64Number rndup, smallest_offset = pHdr->size;
 
             // File size is required to be a multiple of 4 bytes according to clause 7.2.1 bullet (c):
             // "all tagged element data, including the last, shall be padded by no more than three
@@ -822,21 +834,21 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
             std::sort( sortedTagOffsets.begin(), sortedTagOffsets.end() );
 
             for (i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i) {
-                rndup = 4 * ((i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
+                rndup = 4 * (((icUInt64Number)i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
                 //pad = rndup - i->TagInfo.size;           // Optimal smallest number of bytes of padding for this tag (0-3)
 
                 // Is the Tag offset + Tag Size beyond EOF?
-                if (i->TagInfo.size > pHdr->size || i->TagInfo.offset > pHdr->size - i->TagInfo.size) {
+                if ((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)pHdr->size) {
                     sReport += icMsgValidateNonCompliant;
-                    snprintf(str, strSize, "Tag %s (offset %d, size %d) ends beyond EOF.\n",
+                    snprintf(str, strSize, "Tag %s (offset %u, size %u) ends beyond EOF.\n",
                         Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size);
                     sReport += str;
                     nStat = icMaxStatus(nStat, icValidateNonCompliant);
                 }
 
                 // Is it the first tag data in the file?
-                if ((int)i->TagInfo.offset < smallest_offset) {
-                    smallest_offset = (int)i->TagInfo.offset;
+                if ((icUInt64Number)i->TagInfo.offset < smallest_offset) {
+                    smallest_offset = i->TagInfo.offset;
                 }
 
                 // Find closest tag after this tag, by scanning all other tag offsets
@@ -849,20 +861,23 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                 closest = std::min( closest, safeProfileSize2 );
 
                 // Check if closest tag after this tag is less than offset+size - in which case it overlaps! Ignore last tag.
-                if ((closest < (int)((icUInt64Number)i->TagInfo.offset + i->TagInfo.size)) && (closest < safeProfileSize2)) {
+                if (((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)closest) && (closest < safeProfileSize2)) {
                     sReport += icMsgValidateWarning;
-                    snprintf(str, strSize, "Tag %s (offset %d, size %d) overlaps with following tag data starting at offset %d.\n",
+                    snprintf(str, strSize, "Tag %s (offset %u, size %u) overlaps with following tag data starting at offset %d.\n",
                         Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size, closest);
                     sReport += str;
                     nStat = icMaxStatus(nStat, icValidateWarning);
                 }
 
                 // Check for gaps between tag data (accounting for 4-byte alignment)
-                if (closest > (int)((icUInt64Number)i->TagInfo.offset + rndup)) {
-                    int gapBytes = closest - (int)((icUInt64Number)i->TagInfo.offset + rndup);
+                if ((icUInt64Number)closest > (icUInt64Number)i->TagInfo.offset + rndup) {
+                    icUInt64Number gapStart64 = (icUInt64Number)i->TagInfo.offset + rndup;
+                    icUInt64Number gapBytes64 = (icUInt64Number)closest - gapStart64;
+                    int gapBytes = (gapBytes64 <= (icUInt64Number)INT_MAX) ? (int)gapBytes64 : INT_MAX;
+                    icUInt32Number gapStart = (gapStart64 <= (icUInt64Number)UINT_MAX) ? (icUInt32Number)gapStart64 : UINT_MAX;
                     sReport += icMsgValidateWarning;
-                    snprintf(str, strSize, "Tag %s (size %d) is followed by %d unnecessary additional bytes (from offset %d).\n",
-                        Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, gapBytes, (i->TagInfo.offset + rndup));
+                    snprintf(str, strSize, "Tag %s (size %u) is followed by %d unnecessary additional bytes (from offset %u).\n",
+                        Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, gapBytes, gapStart);
                     sReport += str;
                     nStat = icMaxStatus(nStat, icValidateWarning);
                 }
@@ -870,10 +885,13 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
 
             // Clause 7.2.1, bullet (b): "the first set of tagged element data shall immediately follow the tag table"
             // 1st tag offset should be = Header (128) + Tag Count (4) + Tag Table (n*12)
-            if ((n > 0) && (smallest_offset > 128 + 4 + (n * 12))) {
+            icUInt64Number expectedFirstOffset = 128 + 4 + ((icUInt64Number)n * 12);
+            if ((n > 0) && (smallest_offset > expectedFirstOffset)) {
+                icUInt32Number firstOffset = (smallest_offset <= (icUInt64Number)UINT_MAX) ? (icUInt32Number)smallest_offset : UINT_MAX;
+                icUInt32Number expectedOffset = (expectedFirstOffset <= (icUInt64Number)UINT_MAX) ? (icUInt32Number)expectedFirstOffset : UINT_MAX;
                 sReport += icMsgValidateNonCompliant;
-                snprintf(str, strSize, "First tag data is at offset %d rather than immediately after tag table (offset %d).\n",
-                    smallest_offset, 128 + 4 + (n * 12));
+                snprintf(str, strSize, "First tag data is at offset %u rather than immediately after tag table (offset %u).\n",
+                    firstOffset, expectedOffset);
                 sReport += str;
                 nStat = icMaxStatus(nStat, icValidateNonCompliant);
             }
@@ -1160,7 +1178,13 @@ wxDialog(pParent, wxID_ANY, _T("View Tag"), wxDefaultPosition, wxDefaultSize, wx
 	    sTagType += Fmt.GetTagTypeSigName(pTag->GetType());
 
 	    wxBeginBusyCursor();
-	    pTag->Describe(desc, 100);
+        std::string validateReport;
+        if (pTag->Validate("", validateReport, pIcc) >= icValidateCriticalError) {
+            desc = validateReport;
+        }
+        else {
+            pTag->Describe(desc, 100);
+        }
 	    wxEndBusyCursor();
     }
     else if (pIcc) {

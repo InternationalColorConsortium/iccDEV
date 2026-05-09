@@ -4213,58 +4213,58 @@ bool CIccTagXmlMultiProcessElement::ToXml(std::string &xml, std::string blanks/*
 CIccMultiProcessElement *CIccTagXmlMultiProcessElement::CreateElement(const icChar *szElementNodeName)
 {
   if (!strcmp(szElementNodeName, "CurveSetElement")) {
-    return new CIccMpeXmlCurveSet;
+    return new(std::nothrow) CIccMpeXmlCurveSet;
   }
   if (!strcmp(szElementNodeName, "MatrixElement")) {
-    return new CIccMpeXmlMatrix;
+    return new(std::nothrow) CIccMpeXmlMatrix;
   }
   if (!strcmp(szElementNodeName, "CLutElement")) {
-    return new CIccMpeXmlCLUT;
+    return new(std::nothrow) CIccMpeXmlCLUT;
   }
   if (!strcmp(szElementNodeName, "ExtCLutElement")) {
-    return new CIccMpeXmlExtCLUT;
+    return new(std::nothrow) CIccMpeXmlExtCLUT;
   }
   if (!strcmp(szElementNodeName, "CalculatorElement")) {
-    return new CIccMpeXmlCalculator;
+    return new(std::nothrow) CIccMpeXmlCalculator;
   }
   if (!strcmp(szElementNodeName, "TintArrayElement")) {
-    return new CIccMpeXmlTintArray;
+    return new(std::nothrow) CIccMpeXmlTintArray;
   }
   if (!strcmp(szElementNodeName, "ToneMapElement")) {
-    return new CIccMpeXmlToneMap;
+    return new(std::nothrow) CIccMpeXmlToneMap;
   }
   if (!strcmp(szElementNodeName, "JabToXYZElement")) {
-    return new CIccMpeXmlJabToXYZ;
+    return new(std::nothrow) CIccMpeXmlJabToXYZ;
   }
   if (!strcmp(szElementNodeName, "UnknownElement")) {
-    return new CIccMpeXmlUnknown;
+    return new(std::nothrow) CIccMpeXmlUnknown;
   }
   if (!strcmp(szElementNodeName, "XYZToJabElement")) {
-    return new CIccMpeXmlXYZToJab;
+    return new(std::nothrow) CIccMpeXmlXYZToJab;
   }
   if (!strcmp(szElementNodeName, "EmissionMatrixElement")) {
-    return new CIccMpeXmlEmissionMatrix;
+    return new(std::nothrow) CIccMpeXmlEmissionMatrix;
   }
   if (!strcmp(szElementNodeName, "InvEmissionMatrixElement")) {
-    return new CIccMpeXmlInvEmissionMatrix;
+    return new(std::nothrow) CIccMpeXmlInvEmissionMatrix;
   }
   if (!strcmp(szElementNodeName, "EmissionCLutElement")) {
-    return new CIccMpeXmlEmissionCLUT;
+    return new(std::nothrow) CIccMpeXmlEmissionCLUT;
   }
   if (!strcmp(szElementNodeName, "ReflectanceCLutElement")) {
-    return new CIccMpeXmlReflectanceCLUT;
+    return new(std::nothrow) CIccMpeXmlReflectanceCLUT;
   }
   if (!strcmp(szElementNodeName, "EmissionObserverElement")) {
-    return new CIccMpeXmlEmissionObserver;
+    return new(std::nothrow) CIccMpeXmlEmissionObserver;
   }
   if (!strcmp(szElementNodeName, "ReflectanceObserverElement")) {
-    return new CIccMpeXmlReflectanceObserver;
+    return new(std::nothrow) CIccMpeXmlReflectanceObserver;
   }
   if (!strcmp(szElementNodeName, "BAcsElement")) {
-    return new CIccMpeXmlBAcs;
+    return new(std::nothrow) CIccMpeXmlBAcs;
   }
   if (!strcmp(szElementNodeName, "EAcsElement")) {
-    return new CIccMpeXmlEAcs;
+    return new(std::nothrow) CIccMpeXmlEAcs;
   }
   return NULL;
 }

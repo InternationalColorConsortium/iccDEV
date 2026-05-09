@@ -302,9 +302,11 @@ public:
       return false;
     }
     const IccJson &arr = j["samples"];
-    if (!SetSize(icJsonSafeU32(arr.size())))
+    bool sizeOverflow = false;
+    icUInt32Number nSamples = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !SetSize(nSamples))
       return false;
-    for (icUInt32Number i = 0; i < icJsonSafeU32(arr.size()); i++) {
+    for (icUInt32Number i = 0; i < nSamples; i++) {
       if (!icJsonGetFloatNumber(arr[i], m_pSamples[i])) {
         parseStr += "samples contains non-numeric value in SampledSegment\n";
         return false;
@@ -434,9 +436,11 @@ public:
       return false;
     }
     const IccJson &arr = j["samples"];
-    if (!SetSize(icJsonSafeU32(arr.size())))
+    bool sizeOverflow = false;
+    icUInt32Number nSamples = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !SetSize(nSamples))
       return false;
-    for (icUInt32Number i = 0; i < icJsonSafeU32(arr.size()); i++) {
+    for (icUInt32Number i = 0; i < nSamples; i++) {
       if (!icJsonGetFloatNumber(arr[i], m_pSamples[i])) {
         parseStr += "samples contains non-numeric value in SingleSampledCurve\n";
         return false;

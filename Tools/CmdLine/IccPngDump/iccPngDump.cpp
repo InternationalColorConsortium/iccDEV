@@ -90,6 +90,11 @@
 #include "IccDefs.h"
 #include "IccProfLibVer.h"
 #include <zlib.h>
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 // Handle platform-specific png_get_iCCP() profile pointer types
 #if defined(__APPLE__) && defined(__clang__)
@@ -323,6 +328,23 @@ void Usage() {
 // Function: InjectIccProfile
 // Description: Injects an ICC profile into a PNG file
 // =====================================================================
+static FILE* OpenPngOutputFile(const std::string& outputPng)
+{
+#if defined(_WIN32)
+    return fopen(outputPng.c_str(), "wb");
+#else
+    int fd = open(outputPng.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd < 0) {
+        return NULL;
+    }
+    FILE* fp = fdopen(fd, "wb");
+    if (!fp) {
+        close(fd);
+    }
+    return fp;
+#endif
+}
+
 /**
  * Injects a new ICC profile into a PNG image and writes the output.
  *
@@ -349,7 +371,7 @@ bool InjectIccProfile(const std::string& inputPng,
         return false;
     }
 
-    FILE* fpOut = fopen(outputPng.c_str(), "wb");
+    FILE* fpOut = OpenPngOutputFile(outputPng);
     if (!fpOut) {
         fclose(fpIn);
         LOG_ERROR("Failed to open output PNG file.");

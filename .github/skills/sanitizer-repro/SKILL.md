@@ -23,8 +23,14 @@ manual findings involving iccDEV command-line tools.
 3. Run the exact reproduction command and capture exit code plus stderr.
 4. Classify exit codes: `0` success, `1-127` graceful failure, `128+` signal.
 5. Attribute root cause from sanitizer stack frames, not PoC filenames.
-6. Minimize reproduction steps while keeping them copy-pasteable.
-7. File or update issues using the canonical security format.
+6. Inspect tool argument semantics before writing a one-liner. If a tool
+   appends channel numbers, expands prefixes, or parses config files, preserve
+   that behavior in the command instead of copying artifacts to synthetic names.
+7. Minimize reproduction steps while keeping them copy-pasteable. When a
+   maintainer asks for no substitutions, the command must start with the tool
+   binary and use literal arguments only; do not use shell variables, loops,
+   `mktemp`, or copy helpers.
+8. File or update issues using the canonical security format.
 
 ## Build
 

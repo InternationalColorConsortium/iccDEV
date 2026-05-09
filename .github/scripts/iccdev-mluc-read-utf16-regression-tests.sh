@@ -99,6 +99,16 @@ for idx in range(tag_count):
     elif mode == "unpaired-high-surrogate":
         struct.pack_into(">I", data, rec + 4, 2)
         struct.pack_into(">H", data, off + first_off, 0xD800)
+    elif mode == "two-byte-utf8":
+        struct.pack_into(">I", data, rec + 4, 2)
+        struct.pack_into(">H", data, off + first_off, 0x00E9)
+    elif mode == "three-byte-utf8":
+        struct.pack_into(">I", data, rec + 4, 2)
+        struct.pack_into(">H", data, off + first_off, 0x20AC)
+    elif mode == "four-byte-utf8":
+        struct.pack_into(">I", data, rec + 4, 4)
+        struct.pack_into(">H", data, off + first_off, 0xD83D)
+        struct.pack_into(">H", data, off + first_off + 2, 0xDE00)
     else:
         raise SystemExit(f"unknown mode: {mode}")
 
@@ -161,6 +171,54 @@ run_expect_reject() {
   return 0
 }
 
+run_expect_decode() {
+  local name="$1"
+  local mode="$2"
+  local icc="$OUTDIR/$name.icc"
+  local meta="$OUTDIR/$name.meta"
+  local dump_log="$OUTDIR/$name.dump.log"
+  local dump_ec=0
+
+  TOTAL=$((TOTAL + 1))
+
+  if ! make_mluc_case "$mode" "$icc" > "$meta" 2>&1; then
+    fail_case "$name" "failed to create valid mluc profile"
+    cat "$meta"
+    return 1
+  fi
+
+  "$DUMP" "$icc" ALL > "$dump_log" 2>&1
+  dump_ec=$?
+
+  if grep -q "ERROR: AddressSanitizer\\|runtime error:" "$dump_log" 2>/dev/null; then
+    fail_case "$name" "sanitizer finding while decoding valid non-ASCII mluc"
+    cat "$meta"
+    sed -n '1,40p' "$dump_log"
+    return 1
+  fi
+
+  if [ "$dump_ec" -eq 124 ]; then
+    fail_case "$name" "iccDumpProfile timed out"
+    return 1
+  fi
+
+  if [ "$dump_ec" -eq 134 ] || [ "$dump_ec" -eq 136 ] || [ "$dump_ec" -eq 139 ]; then
+    fail_case "$name" "iccDumpProfile crashed with signal $((dump_ec - 128))"
+    sed -n '1,40p' "$dump_log"
+    return 1
+  fi
+
+  if grep -q "Tag ('desc' = 64657363) not found in profile" "$dump_log"; then
+    fail_case "$name" "valid desc mluc was not decoded"
+    cat "$meta"
+    sed -n '1,40p' "$dump_log"
+    return 1
+  fi
+
+  pass_case "$name" "valid non-ASCII desc mluc decoded without sanitizer findings (dump=$dump_ec)"
+  return 0
+}
+
 echo "=== multiLocalizedUnicodeType read/UTF-16 validation regression ==="
 
 if ! check_tools; then
@@ -171,6 +229,9 @@ run_expect_reject "mluc-odd-record-length" "odd-length"
 run_expect_reject "mluc-header-overlap-offset" "header-overlap-offset"
 run_expect_reject "mluc-record-overlap-offset" "record-overlap-offset"
 run_expect_reject "mluc-unpaired-high-surrogate" "unpaired-high-surrogate"
+run_expect_decode "mluc-two-byte-utf8" "two-byte-utf8"
+run_expect_decode "mluc-three-byte-utf8" "three-byte-utf8"
+run_expect_decode "mluc-four-byte-utf8" "four-byte-utf8"
 
 echo "mluc read/UTF-16 validation regression: $PASS passed, $FAIL failed, $TOTAL total"
 

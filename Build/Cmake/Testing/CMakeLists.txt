@@ -337,13 +337,44 @@ set_tests_properties(iccdev.legacy-run-tests PROPERTIES
 
 iccdev_add_script_test(
   iccdev.tool-coverage
-  900
+  300
   "iccdev;tools;asan;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tool-coverage-baseline.sh"
   --asan
+  --skip-hybrid
 )
 set_tests_properties(iccdev.tool-coverage PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
+  iccdev.hybrid-pipeline
+  900
+  "iccdev;tools;hybrid;asan;regression;slow"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-hybrid-pipeline-tests.sh"
+)
+set_tests_properties(iccdev.hybrid-pipeline PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
+  iccdev.specsep-tiff-geometry-regression
+  120
+  "iccdev;specsep;tiff;geometry;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh"
+)
+
+iccdev_add_script_test(
+  iccdev.dump-profile-header-regression
+  120
+  "iccdev;dump;profile;header;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-dump-profile-header-regression-tests.sh"
+)
+set_tests_properties(iccdev.dump-profile-header-regression PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 

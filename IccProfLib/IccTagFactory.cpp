@@ -5,7 +5,7 @@
 
     Version:    V1
 
-    Copyright:  � see ICC Software License
+    Copyright:  (c) see ICC Software License
 */
 
 /*
@@ -74,6 +74,7 @@
 #include "IccUtil.h"
 #include "IccProfile.h"
 #include <map>
+#include <new>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -317,158 +318,158 @@ CIccTag* CIccSpecTagFactory::CreateTag(icTagTypeSignature tagSig)
 {
   switch(tagSig) {
     case icSigSignatureType:
-      return new CIccTagSignature;
+      return new(std::nothrow) CIccTagSignature;
 
     case icSigTextType:
-      return new CIccTagText;
+      return new(std::nothrow) CIccTagText;
 
     case icSigXYZArrayType:
-      return new CIccTagXYZ;
+      return new(std::nothrow) CIccTagXYZ;
 
     case icSigCicpType:
-      return new CIccTagCicp;
+      return new(std::nothrow) CIccTagCicp;
 
     case icSigUInt8ArrayType:
-      return new CIccTagUInt8;
+      return new(std::nothrow) CIccTagUInt8;
 
     case icSigUInt16ArrayType:
-      return new CIccTagUInt16;
+      return new(std::nothrow) CIccTagUInt16;
 
     case icSigUInt32ArrayType:
-      return new CIccTagUInt32;
+      return new(std::nothrow) CIccTagUInt32;
 
     case icSigUInt64ArrayType:
-      return new CIccTagUInt64;
+      return new(std::nothrow) CIccTagUInt64;
 
     case icSigS15Fixed16ArrayType:
-      return new CIccTagS15Fixed16;
+      return new(std::nothrow) CIccTagS15Fixed16;
 
     case icSigU16Fixed16ArrayType:
-      return new CIccTagU16Fixed16;
+      return new(std::nothrow) CIccTagU16Fixed16;
 
     case icSigFloat16ArrayType:
-      return new CIccTagFloat16;
+      return new(std::nothrow) CIccTagFloat16;
 
     case icSigFloat32ArrayType:
-      return new CIccTagFloat32;
+      return new(std::nothrow) CIccTagFloat32;
 
     case icSigFloat64ArrayType:
-      return new CIccTagFloat64;
+      return new(std::nothrow) CIccTagFloat64;
 
     case icSigGamutBoundaryDescType:
-      return new CIccTagGamutBoundaryDesc;
+      return new(std::nothrow) CIccTagGamutBoundaryDesc;
 
     case icSigCurveType:
-      return new CIccTagCurve;
+      return new(std::nothrow) CIccTagCurve;
 
     case icSigSegmentedCurveType:
-      return new CIccTagSegmentedCurve;
+      return new(std::nothrow) CIccTagSegmentedCurve;
 
     case icSigMeasurementType:
-      return new CIccTagMeasurement;
+      return new(std::nothrow) CIccTagMeasurement;
 
     case icSigMultiLocalizedUnicodeType:
-      return new CIccTagMultiLocalizedUnicode;
+      return new(std::nothrow) CIccTagMultiLocalizedUnicode;
 
     case icSigMultiProcessElementType:
-      return new CIccTagMultiProcessElement();
+      return new(std::nothrow) CIccTagMultiProcessElement();
 
     case icSigParametricCurveType:
-      return new CIccTagParametricCurve;
+      return new(std::nothrow) CIccTagParametricCurve;
 
     case icSigLutAtoBType:
-      return new CIccTagLutAtoB;
+      return new(std::nothrow) CIccTagLutAtoB;
 
     case icSigLutBtoAType:
-      return new CIccTagLutBtoA;
+      return new(std::nothrow) CIccTagLutBtoA;
 
     case icSigLut16Type:
-      return new CIccTagLut16;
+      return new(std::nothrow) CIccTagLut16;
 
     case icSigLut8Type:
-      return new CIccTagLut8;
+      return new(std::nothrow) CIccTagLut8;
 
     case icSigTextDescriptionType:
-      return new CIccTagTextDescription;
+      return new(std::nothrow) CIccTagTextDescription;
 
     case icSigNamedColor2Type:
-      return new CIccTagNamedColor2;
+      return new(std::nothrow) CIccTagNamedColor2;
 
     case icSigChromaticityType:
-      return new CIccTagChromaticity;
+      return new(std::nothrow) CIccTagChromaticity;
 
     case icSigDataType:
-      return new CIccTagData;
+      return new(std::nothrow) CIccTagData;
 
     case icSigDateTimeType:
-      return new CIccTagDateTime;
+      return new(std::nothrow) CIccTagDateTime;
 
 #ifndef ICC_UNSUPPORTED_TAG_DICT
     case icSigDictType:
-      return new CIccTagDict;
+      return new(std::nothrow) CIccTagDict;
 #endif
 
     case icSigColorantOrderType:
-      return new CIccTagColorantOrder;
+      return new(std::nothrow) CIccTagColorantOrder;
 
     case icSigColorantTableType:
-      return new CIccTagColorantTable;
+      return new(std::nothrow) CIccTagColorantTable;
 
     case icSigSparseMatrixArrayType:
-      return new CIccTagSparseMatrixArray;
+      return new(std::nothrow) CIccTagSparseMatrixArray;
 
     case icSigViewingConditionsType:
-      return new CIccTagViewingConditions;
+      return new(std::nothrow) CIccTagViewingConditions;
 
     case icSigSpectralDataInfoType:
-      return new CIccTagSpectralDataInfo;
+      return new(std::nothrow) CIccTagSpectralDataInfo;
 
     case icSigSpectralViewingConditionsType:
-      return new CIccTagSpectralViewingConditions;
+      return new(std::nothrow) CIccTagSpectralViewingConditions;
 
     case icSigProfileSequenceDescType:
-      return new CIccTagProfileSeqDesc;
+      return new(std::nothrow) CIccTagProfileSeqDesc;
 
     case icSigResponseCurveSet16Type:
-      return new CIccTagResponseCurveSet16;
+      return new(std::nothrow) CIccTagResponseCurveSet16;
 
     case icSigProfileSequceIdType:
-      return new CIccTagProfileSequenceId;
+      return new(std::nothrow) CIccTagProfileSequenceId;
 
     case icSigUtf8TextType:
-      return new CIccTagUtf8Text;
+      return new(std::nothrow) CIccTagUtf8Text;
 
     case icSigZipUtf8TextType:
-      return new CIccTagZipUtf8Text;
+      return new(std::nothrow) CIccTagZipUtf8Text;
 
     case icSigZipXmlType:
     case icSigZipXMLType:
-      return new CIccTagZipXml;
+      return new(std::nothrow) CIccTagZipXml;
 
     case icSigUtf16TextType:
-      return new CIccTagUtf16Text;
+      return new(std::nothrow) CIccTagUtf16Text;
 
     case icSigTagArrayType:
-      return new CIccTagArray;
+      return new(std::nothrow) CIccTagArray;
 
     case icSigTagStructType:
-      return new CIccTagStruct;
+      return new(std::nothrow) CIccTagStruct;
 
     case icSigEmbeddedProfileType:
-      return new CIccTagEmbeddedProfile;
+      return new(std::nothrow) CIccTagEmbeddedProfile;
 
     case icSigEmbeddedHeightImageType:
-      return new CIccTagEmbeddedHeightImage;
+      return new(std::nothrow) CIccTagEmbeddedHeightImage;
 
     case icSigEmbeddedNormalImageType:
-      return new CIccTagEmbeddedNormalImage;
+      return new(std::nothrow) CIccTagEmbeddedNormalImage;
 
     case icSigScreeningType:
     case icSigUcrBgType:
     case icSigCrdInfoType:
 
     default:
-      return new CIccTagUnknown;
+      return new(std::nothrow) CIccTagUnknown;
   }
 }
 

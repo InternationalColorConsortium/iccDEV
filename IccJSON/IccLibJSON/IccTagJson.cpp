@@ -75,6 +75,7 @@
 #include <iomanip>
 #include <climits>
 #include <cmath>
+#include <limits>
 #include <new>
 
 static int icJsonDeviceCoordToU16(icFloatNumber v)
@@ -97,12 +98,62 @@ static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
   return (icUInt32Number)n;
 }
 
+static inline int icJsonSafeInt(size_t n, bool *overflow = nullptr)
+{
+  if (n > (size_t)INT_MAX) {
+    if (overflow) *overflow = true;
+    return 0;
+  }
+  if (overflow) *overflow = false;
+  return (int)n;
+}
+
+static inline icInt32Number icJsonSafeI32(size_t n, bool *overflow = nullptr)
+{
+  if (n > (size_t)std::numeric_limits<icInt32Number>::max()) {
+    if (overflow) *overflow = true;
+    return 0;
+  }
+  if (overflow) *overflow = false;
+  return (icInt32Number)n;
+}
+
 // Safely narrow size_t to icUInt16Number; returns 0 on truncation
 static inline icUInt16Number icJsonSafeU16(size_t n)
 {
   if (n > (size_t)0xFFFF)
     return 0;
   return (icUInt16Number)n;
+}
+
+static std::string icJsonFixedAsciiString(const icChar *szText, size_t nMaxLen)
+{
+  std::string text;
+  if (!szText || !nMaxLen)
+    return text;
+
+  for (size_t i = 0; i < nMaxLen && szText[i]; i++) {
+    unsigned char ch = static_cast<unsigned char>(szText[i]);
+    text.push_back((ch >= 0x20 && ch <= 0x7e) ? static_cast<char>(ch) : '?');
+  }
+
+  return text;
+}
+
+static void icJsonCopyFixedAsciiString(icChar *szDst, size_t nMaxLen, const std::string &text)
+{
+  if (!szDst || !nMaxLen)
+    return;
+
+  size_t i = 0;
+  for (; i + 1 < nMaxLen && i < text.size(); i++) {
+    unsigned char ch = static_cast<unsigned char>(text[i]);
+    szDst[i] = (ch >= 0x20 && ch <= 0x7e) ? static_cast<icChar>(ch) : '?';
+  }
+  szDst[i++] = '\0';
+
+  for (; i < nMaxLen; i++)
+    szDst[i] = '\0';
 }
 
 typedef std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
@@ -161,15 +212,17 @@ bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 
 bool CIccTagJsonText::ToJson(IccJson &j)
 {
-  j["text"] = m_szText ? m_szText : "";
+  j["text"] = m_szText ? icJsonFixedAsciiString(m_szText, strlen(m_szText)) : "";
   return true;
 }
 
 bool CIccTagJsonText::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 {
   std::string text;
-  if (jGetString(j, "text", text))
-    SetText(text.c_str());
+  if (jGetString(j, "text", text)) {
+    std::string ascii = icJsonFixedAsciiString(text.c_str(), text.size());
+    SetText(ascii.c_str());
+  }
   return true;
 }
 
@@ -273,15 +326,17 @@ bool CIccTagJsonUtf16Text::ParseJson(const IccJson &j, std::string & /*parseStr*
 
 bool CIccTagJsonTextDescription::ToJson(IccJson &j)
 {
-  j["description"] = m_szText ? m_szText : "";
+  j["description"] = m_szText ? icJsonFixedAsciiString(m_szText, strlen(m_szText)) : "";
   return true;
 }
 
 bool CIccTagJsonTextDescription::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 {
   std::string desc;
-  if (jGetString(j, "description", desc))
-    SetText(desc.c_str());
+  if (jGetString(j, "description", desc)) {
+    std::string ascii = icJsonFixedAsciiString(desc.c_str(), desc.size());
+    SetText(ascii.c_str());
+  }
   return true;
 }
 
@@ -350,8 +405,10 @@ bool CIccTagJsonXYZ::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 {
   if (!jsonExistsField(j, "XYZ") || !j["XYZ"].is_array()) return false;
   const IccJson &arr = j["XYZ"];
-  if (!SetSize(icJsonSafeU32(arr.size()))) return false;
-  for (size_t i = 0; i < arr.size(); i++) {
+  bool sizeOverflow = false;
+  icUInt32Number nXYZ = icJsonSafeU32(arr.size(), &sizeOverflow);
+  if (sizeOverflow || !SetSize(nXYZ)) return false;
+  for (icUInt32Number i = 0; i < nXYZ; i++) {
     if (arr[i].is_array() && arr[i].size() >= 3) {
       double xyz[3] = {0, 0, 0};
       jsonToArray(arr[i], xyz, 3);
@@ -385,7 +442,7 @@ bool CIccTagJsonChromaticity::ParseJson(const IccJson &j, std::string & /*parseS
   if (jsonExistsField(j, "channels") && j["channels"].is_array()) {
     const IccJson &ch = j["channels"];
     icUInt16Number nCh = icJsonSafeU16(ch.size());
-    if (!nCh && ch.size()) return false;
+    if (ch.size() > 0 && !nCh) return false;
     if (!SetSize(nCh)) return false;
     for (icUInt16Number i = 0; i < nCh; i++) {
       if (ch[i].is_array() && ch[i].size() >= 2) {
@@ -604,6 +661,10 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     jGetValue(obs, "steps", steps);
     unsigned int res2 = 0;
     jGetValue(obs, "Reserved", res2);
+    if (steps < 0 || steps > 0xffff) {
+      parseStr += "ObserverFuncs steps out of range\n";
+      return false;
+    }
     m_observerRange.start = icFtoF16(start);
     m_observerRange.end   = icFtoF16(end);
     m_observerRange.steps = (icUInt16Number)steps;
@@ -612,15 +673,22 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     if (jsonExistsField(obs, "data") && obs["data"].is_array()) {
       const IccJson &data = obs["data"];
       icUInt32Number nExpected = (icUInt32Number)steps * 3;
-      if (icJsonSafeU32(data.size()) != nExpected) {
+      bool sizeOverflow = false;
+      if (icJsonSafeU32(data.size(), &sizeOverflow) != nExpected || sizeOverflow) {
         parseStr += "ObserverFuncs data size mismatch\n";
         return false;
       }
       if (m_observer) { delete[] m_observer; }
       m_observer = new(std::nothrow) icFloatNumber[nExpected];
       if (!m_observer) { parseStr += "Allocation failed for observer\n"; return false; }
-      for (icUInt32Number i = 0; i < nExpected; i++)
-        m_observer[i] = (icFloatNumber)data[i].get<double>();
+      for (icUInt32Number i = 0; i < nExpected; i++) {
+        double value = 0.0;
+        if (!jsonToValue(data[i], value)) {
+          parseStr += "Invalid ObserverFuncs data value\n";
+          return false;
+        }
+        m_observer[i] = (icFloatNumber)value;
+      }
     }
     else {
       setObserver(m_stdObserver, m_observerRange, NULL);
@@ -644,6 +712,10 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     jGetValue(illum, "steps", steps);
     unsigned int res3 = 0;
     jGetValue(illum, "Reserved", res3);
+    if (steps < 0 || steps > 0xffff) {
+      parseStr += "IlluminantSPD steps out of range\n";
+      return false;
+    }
     m_illuminantRange.start = icFtoF16(start);
     m_illuminantRange.end   = icFtoF16(end);
     m_illuminantRange.steps = (icUInt16Number)steps;
@@ -651,15 +723,22 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
 
     if (jsonExistsField(illum, "data") && illum["data"].is_array()) {
       const IccJson &data = illum["data"];
-      if ((int)data.size() != steps) {
+      bool sizeOverflow = false;
+      if (icJsonSafeU32(data.size(), &sizeOverflow) != (icUInt32Number)steps || sizeOverflow) {
         parseStr += "IlluminantSPD data size mismatch\n";
         return false;
       }
       if (m_illuminant) { delete[] m_illuminant; }
       m_illuminant = new(std::nothrow) icFloatNumber[steps];
       if (!m_illuminant) { parseStr += "Allocation failed for illuminant\n"; return false; }
-      for (int i = 0; i < steps; i++)
-        m_illuminant[i] = (icFloatNumber)data[i].get<double>();
+      for (int i = 0; i < steps; i++) {
+        double value = 0.0;
+        if (!jsonToValue(data[i], value)) {
+          parseStr += "Invalid IlluminantSPD data value\n";
+          return false;
+        }
+        m_illuminant[i] = (icFloatNumber)value;
+      }
     }
     else {
       setIlluminant(m_stdIlluminant, m_illuminantRange, NULL, m_colorTemperature);
@@ -683,15 +762,15 @@ bool CIccTagJsonNamedColor2::ToJson(IccJson &j)
 {
   j["vendorFlag"]  = (int)m_nVendorFlags;
   j["countOfDeviceCoords"] = (int)m_nDeviceCoords;
-  j["colorantPrefix"] = m_szPrefix[0] ? m_szPrefix : "";
-  j["colorantSuffix"] = m_szSufix[0]  ? m_szSufix  : "";
+  j["colorantPrefix"] = icJsonFixedAsciiString(m_szPrefix, sizeof(m_szPrefix));
+  j["colorantSuffix"] = icJsonFixedAsciiString(m_szSufix, sizeof(m_szSufix));
 
   IccJson colors = IccJson::array();
   if (m_NamedColor) {
     for (icUInt32Number i = 0; i < m_nSize; i++) {
       const SIccNamedColorEntry *pColor = GetEntry(i);
       IccJson c;
-      c["name"] = pColor->rootName;
+      c["name"] = icJsonFixedAsciiString(pColor->rootName, sizeof(pColor->rootName));
       c["pcsCoords"] = IccJson::array({ pColor->pcsCoords[0], pColor->pcsCoords[1], pColor->pcsCoords[2] });
       IccJson dev = IccJson::array();
       for (icUInt32Number d = 0; d < m_nDeviceCoords; d++)
@@ -713,38 +792,47 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
   // bytes - an unbounded multiplication otherwise).
   if (nDevCoords > 15u)
     return false;
+  bool colorsOverflow = false;
   icUInt32Number nColors = (jsonExistsField(j, "colors") && j["colors"].is_array())
-                           ? icJsonSafeU32(j["colors"].size()) : 0;
+                           ? icJsonSafeU32(j["colors"].size(), &colorsOverflow) : 0;
+  if (colorsOverflow) return false;
 
   if (!SetSize(nColors, nDevCoords)) return false;
 
   jGetValue(j, "vendorFlag", m_nVendorFlags);
   std::string prefix, suffix;
   if (jGetString(j, "colorantPrefix", prefix)) {
-    strncpy(m_szPrefix, prefix.c_str(), sizeof(m_szPrefix)-1);
-    m_szPrefix[sizeof(m_szPrefix)-1] = '\0';  // strncpy doesn't guarantee NUL
+    icJsonCopyFixedAsciiString(m_szPrefix, sizeof(m_szPrefix), prefix);
   }
   if (jGetString(j, "colorantSuffix", suffix)) {
-    strncpy(m_szSufix,  suffix.c_str(), sizeof(m_szSufix)-1);
-    m_szSufix[sizeof(m_szSufix)-1]  = '\0';
+    icJsonCopyFixedAsciiString(m_szSufix, sizeof(m_szSufix), suffix);
   }
 
   if (jsonExistsField(j, "colors") && j["colors"].is_array()) {
     const IccJson &colors = j["colors"];
-    for (icUInt32Number i = 0; i < nColors && i < icJsonSafeU32(colors.size()); i++) {
+    bool jsonColorsOverflow = false;
+    icUInt32Number nJsonColors = icJsonSafeU32(colors.size(), &jsonColorsOverflow);
+    if (jsonColorsOverflow) return false;
+    for (icUInt32Number i = 0; i < nColors && i < nJsonColors; i++) {
       const IccJson &c = colors[i];
       SIccNamedColorEntry *pColor = GetEntry(i);
       std::string name;
       if (jGetString(c, "name", name)) {
-        strncpy(pColor->rootName, name.c_str(), sizeof(pColor->rootName)-1);
-        pColor->rootName[sizeof(pColor->rootName)-1] = '\0';
+        icJsonCopyFixedAsciiString(pColor->rootName, sizeof(pColor->rootName), name);
       }
       if (jsonExistsField(c, "pcsCoords") && c["pcsCoords"].is_array() && c["pcsCoords"].size() >= 3) {
         jGetArray(c, "pcsCoords", pColor->pcsCoords, 3);
       }
       if (jsonExistsField(c, "deviceCoords") && c["deviceCoords"].is_array()) {
-        for (icUInt32Number d = 0; d < nDevCoords && d < icJsonSafeU32(c["deviceCoords"].size()); d++)
-          pColor->deviceCoords[d] = (icFloatNumber)c["deviceCoords"][d].get<int>() / 65535.0f;
+        bool coordOverflow = false;
+        icUInt32Number nJsonCoords = icJsonSafeU32(c["deviceCoords"].size(), &coordOverflow);
+        if (coordOverflow) return false;
+        for (icUInt32Number d = 0; d < nDevCoords && d < nJsonCoords; d++) {
+          int deviceCoord = 0;
+          if (!jsonToValue(c["deviceCoords"][d], deviceCoord))
+            return false;
+          pColor->deviceCoords[d] = (icFloatNumber)deviceCoord / 65535.0f;
+        }
       }
     }
   }
@@ -769,9 +857,15 @@ bool CIccTagJsonColorantOrder::ParseJson(const IccJson &j, std::string & /*parse
 {
   if (jsonExistsField(j, "colorantOrder") && j["colorantOrder"].is_array()) {
     const IccJson &arr = j["colorantOrder"];
-    if (!SetSize(icJsonSafeU32(arr.size()))) return false;
-    for (size_t i = 0; i < arr.size(); i++)
-      m_pData[i] = (icUInt8Number)arr[i].get<int>();
+    bool sizeOverflow = false;
+    icUInt32Number nValues = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !SetSize(nValues)) return false;
+    for (icUInt32Number i = 0; i < nValues; i++) {
+      int value = 0;
+      if (!jsonToValue(arr[i], value))
+        return false;
+      m_pData[i] = (icUInt8Number)value;
+    }
   }
   return true;
 }
@@ -831,8 +925,10 @@ bool CIccTagJsonColorantTable::ParseJson(const IccJson &j, std::string & /*parse
 
   if (jsonExistsField(j, "colorantTable") && j["colorantTable"].is_array()) {
     const IccJson &arr = j["colorantTable"];
-    if (!SetSize(icJsonSafeU32(arr.size()))) return false;
-    for (size_t i = 0; i < arr.size(); i++) {
+    bool sizeOverflow = false;
+    icUInt32Number nColorants = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !SetSize(nColorants)) return false;
+    for (icUInt32Number i = 0; i < nColorants; i++) {
       const IccJson &c = arr[i];
       std::string name;
       if (jGetString(c, "name", name))
@@ -908,8 +1004,16 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
     return false;
   }
 
-  icUInt16Number nChannels = (icUInt16Number)j["outputChannels"].get<int>();
-  icSparseMatrixType nMatrixType = (icSparseMatrixType)j["matrixType"].get<int>();
+  int nChannelsValue = 0;
+  int nMatrixTypeValue = 0;
+  if (!jGetValue(j, "outputChannels", nChannelsValue) ||
+      !jGetValue(j, "matrixType", nMatrixTypeValue) ||
+      nChannelsValue < 0 || nChannelsValue > 0xffff) {
+    parseStr += "Invalid SparseMatrixArray outputChannels or matrixType\n";
+    return false;
+  }
+  icUInt16Number nChannels = (icUInt16Number)nChannelsValue;
+  icSparseMatrixType nMatrixType = (icSparseMatrixType)nMatrixTypeValue;
   const IccJson &jMats = j["matrices"];
 
   if (!jMats.is_array()) {
@@ -917,7 +1021,12 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
     return false;
   }
 
-  icUInt32Number n = icJsonSafeU32(jMats.size());
+  bool matricesOverflow = false;
+  icUInt32Number n = icJsonSafeU32(jMats.size(), &matricesOverflow);
+  if (matricesOverflow) {
+    parseStr += "Too many SparseMatrixArray matrices\n";
+    return false;
+  }
   if (!Reset(n, nChannels)) {
     parseStr += "Failed to reset SparseMatrixArray\n";
     return false;
@@ -934,8 +1043,17 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
       return false;
     }
 
-    icUInt16Number nRows = (icUInt16Number)jMtx["rows"].get<int>();
-    icUInt16Number nCols = (icUInt16Number)jMtx["cols"].get<int>();
+    int nRowsValue = 0;
+    int nColsValue = 0;
+    if (!jGetValue(jMtx, "rows", nRowsValue) ||
+        !jGetValue(jMtx, "cols", nColsValue) ||
+        nRowsValue < 0 || nRowsValue > 0xffff ||
+        nColsValue < 0 || nColsValue > 0xffff) {
+      parseStr += "Invalid SparseMatrix rows or cols\n";
+      return false;
+    }
+    icUInt16Number nRows = (icUInt16Number)nRowsValue;
+    icUInt16Number nCols = (icUInt16Number)nColsValue;
 
     mtx.Reset(m_RawData + i * bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, false);
     mtx.Init(nRows, nCols, true);
@@ -944,8 +1062,19 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
     icUInt32Number  nMaxEntries = mtx.GetMaxEntries();
     const IccJson  &jRows = jMtx["sparseRows"];
     icUInt32Number  pos = 0;
+    if (!jRows.is_array()) {
+      parseStr += "SparseMatrix sparseRows must be an array\n";
+      return false;
+    }
+    bool rowsOverflow = false;
+    icUInt32Number nJsonRows = icJsonSafeU32(jRows.size(), &rowsOverflow);
+    if (rowsOverflow) {
+      parseStr += "Too many SparseMatrix rows\n";
+      return false;
+    }
+    icUInt32Number nActiveRows = nJsonRows < nRows ? nJsonRows : nRows;
 
-    for (int r = 0; r < (int)nRows && r < (int)jRows.size(); r++) {
+    for (icUInt32Number r = 0; r < nActiveRows; r++) {
       const IccJson &jRow = jRows[r];
       rowstart[r] = (icUInt16Number)pos;
 
@@ -959,8 +1088,13 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
         return false;
       }
 
-      icUInt32Number cnt = icJsonSafeU32(jIdx.size());
-      if (pos + cnt > nMaxEntries) {
+      bool indexOverflow = false;
+      icUInt32Number cnt = icJsonSafeU32(jIdx.size(), &indexOverflow);
+      if (indexOverflow) {
+        parseStr += "Too many sparse matrix entries\n";
+        return false;
+      }
+      if (pos > nMaxEntries || cnt > nMaxEntries - pos) {
         parseStr += "Exceeded maximum number of sparse matrix entries\n";
         return false;
       }
@@ -968,13 +1102,16 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
       icUInt16Number *dstCols = mtx.GetColumnsForRow(r);
       icFloatNumber  *dstData = (icFloatNumber*)mtx.GetData()->getPtr(pos);
       for (icUInt32Number k = 0; k < cnt; k++) {
-        dstCols[k] = jIdx[k].get<icUInt16Number>();
-        dstData[k] = jData[k].get<icFloatNumber>();
+        if (!jsonToValue(jIdx[k], dstCols[k]) ||
+            !jsonToValue(jData[k], dstData[k])) {
+          parseStr += "SparseMatrix row contains invalid numeric value\n";
+          return false;
+        }
       }
       pos += cnt;
     }
     // fill remaining row-start sentinels (including end sentinel at nRows)
-    for (int r = (int)jRows.size(); r <= (int)nRows; r++)
+    for (icUInt32Number r = nActiveRows; r <= nRows; r++)
       rowstart[r] = (icUInt16Number)pos;
   }
   return true;
@@ -1006,9 +1143,15 @@ bool CIccTagJsonFixedNum<T, Tsig>::ParseJson(const IccJson &j, std::string & /*p
 {
   if (jsonExistsField(j, "values") && j["values"].is_array()) {
     const IccJson &arr = j["values"];
-    if (!this->SetSize(icJsonSafeU32(arr.size()))) return false;
-    for (size_t i = 0; i < arr.size(); i++)
-      this->m_Num[i] = icDtoF(arr[i].get<double>());
+    bool sizeOverflow = false;
+    icUInt32Number nValues = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !this->SetSize(nValues)) return false;
+    for (icUInt32Number i = 0; i < nValues; i++) {
+      double value = 0.0;
+      if (!jsonToValue(arr[i], value))
+        return false;
+      this->m_Num[i] = icDtoF(value);
+    }
   }
   return true;
 }
@@ -1043,9 +1186,13 @@ bool CIccTagJsonNum<T, A, Tsig>::ParseJson(const IccJson &j, std::string & /*par
 {
   if (jsonExistsField(j, "values") && j["values"].is_array()) {
     const IccJson &arr = j["values"];
-    if (!this->SetSize(icJsonSafeU32(arr.size()))) return false;
-    for (size_t i = 0; i < arr.size(); i++)
-      this->m_Num[i] = arr[i].get<T>();
+    bool sizeOverflow = false;
+    icUInt32Number nValues = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !this->SetSize(nValues)) return false;
+    for (icUInt32Number i = 0; i < nValues; i++) {
+      if (!jsonToValue(arr[i], this->m_Num[i]))
+        return false;
+    }
   }
   return true;
 }
@@ -1082,9 +1229,15 @@ bool CIccTagJsonFloatNum<T, A, Tsig>::ParseJson(const IccJson &j, std::string & 
 {
   if (jsonExistsField(j, "values") && j["values"].is_array()) {
     const IccJson &arr = j["values"];
-    if (!this->SetSize(icJsonSafeU32(arr.size()))) return false;
-    for (size_t i = 0; i < arr.size(); i++)
-      this->m_Num[i] = (T)arr[i].get<double>();
+    bool sizeOverflow = false;
+    icUInt32Number nValues = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !this->SetSize(nValues)) return false;
+    for (icUInt32Number i = 0; i < nValues; i++) {
+      double value = 0.0;
+      if (!jsonToValue(arr[i], value))
+        return false;
+      this->m_Num[i] = (T)value;
+    }
   }
   return true;
 }
@@ -1444,9 +1597,14 @@ bool CIccTagJsonResponseCurveSet16::ParseJson(const IccJson &j, std::string &par
       pXYZ->X = pXYZ->Y = pXYZ->Z = 0;
       if (jsonExistsField(jChan, "MaxColorantXYZ") && jChan["MaxColorantXYZ"].is_array()
           && jChan["MaxColorantXYZ"].size() >= 3) {
-        pXYZ->X = icDtoF((icFloatNumber)jChan["MaxColorantXYZ"][0].get<double>());
-        pXYZ->Y = icDtoF((icFloatNumber)jChan["MaxColorantXYZ"][1].get<double>());
-        pXYZ->Z = icDtoF((icFloatNumber)jChan["MaxColorantXYZ"][2].get<double>());
+        icFloatNumber maxXYZ[3] = {};
+        if (!jGetArray(jChan, "MaxColorantXYZ", maxXYZ, 3)) {
+          parseStr += "Invalid MaxColorantXYZ in ResponseCurve entry\n";
+          return false;
+        }
+        pXYZ->X = icDtoF(maxXYZ[0]);
+        pXYZ->Y = icDtoF(maxXYZ[1]);
+        pXYZ->Z = icDtoF(maxXYZ[2]);
       }
 
       CIccResponse16List *pList = curves.GetResponseList(i);
@@ -1551,16 +1709,25 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std:
   } else {
     if (!jsonExistsField(j, "table") || !j["table"].is_array()) return false;
     const IccJson &arr = j["table"];
-    if (!SetSize(icJsonSafeU32(arr.size()))) return false;
+    bool sizeOverflow = false;
+    icUInt32Number nValues = icJsonSafeU32(arr.size(), &sizeOverflow);
+    if (sizeOverflow || !SetSize(nValues)) return false;
     int precision = 0;
     jGetValue(j, "precision", precision);
-    for (size_t i = 0; i < arr.size(); i++) {
-      if (precision == 1)
-        m_Curve[i] = (icFloatNumber)arr[i].get<int>() / 255.0f;
-      else if (precision == 2)
-        m_Curve[i] = (icFloatNumber)arr[i].get<int>() / 65535.0f;
-      else
-        m_Curve[i] = (icFloatNumber)arr[i].get<double>();
+    for (icUInt32Number i = 0; i < nValues; i++) {
+      if (precision == 1 || precision == 2) {
+        int encoded = 0;
+        if (!jsonToValue(arr[i], encoded))
+          return false;
+        m_Curve[i] = (precision == 1) ? (icFloatNumber)encoded / 255.0f
+                                      : (icFloatNumber)encoded / 65535.0f;
+      }
+      else {
+        double value = 0.0;
+        if (!jsonToValue(arr[i], value))
+          return false;
+        m_Curve[i] = (icFloatNumber)value;
+      }
     }
   }
   return true;
@@ -1598,8 +1765,17 @@ bool CIccTagJsonParametricCurve::ParseJson(const IccJson &j, icConvertType /*nTy
   if (!SetFunctionType((icUInt16Number)funcType)) return false;
   if (jsonExistsField(j, "params") && j["params"].is_array()) {
     const IccJson &params = j["params"];
-    for (icUInt8Number i = 0; i < nParam && i < (icUInt8Number)params.size(); i++)
-      m_dParam[i] = (icFloatNumber)params[i].get<double>();
+    bool paramsOverflow = false;
+    icUInt32Number nParams = icJsonSafeU32(params.size(), &paramsOverflow);
+    if (paramsOverflow)
+      return false;
+    icUInt8Number nParamToRead = nParams < nParam ? (icUInt8Number)nParams : nParam;
+    for (icUInt8Number i = 0; i < nParamToRead; i++) {
+      double param = 0.0;
+      if (!jsonToValue(params[i], param))
+        return false;
+      m_dParam[i] = (icFloatNumber)param;
+    }
   }
   return true;
 }
@@ -1677,7 +1853,7 @@ static bool icMBBCurvesToJson(IccJson &arr, LPIccCurve *pCurves, int nChannels, 
 static bool icMBBCurvesFromJson(LPIccCurve *pCurves, int nChannels,
                                  const IccJson &arr, icConvertType nType, std::string &parseStr)
 {
-  if (!arr.is_array() || (int)arr.size() != nChannels) {
+  if (!arr.is_array() || nChannels < 0 || arr.size() != (size_t)nChannels) {
     parseStr += "Curve array length does not match channel count\n";
     return false;
   }
@@ -1726,9 +1902,13 @@ static bool icMBBMatrixFromJson(CIccMatrix *pMatrix, const IccJson &j)
   pMatrix->m_bUseConstants = false;
   if (!jsonExistsField(j, "e") || !j["e"].is_array()) return false;
   const IccJson &e = j["e"];
-  int n = std::min((int)e.size(), 12);
-  for (int i = 0; i < n; i++)
-    pMatrix->m_e[i] = (icFloatNumber)e[i].get<double>();
+  size_t n = e.size() < 12 ? e.size() : 12;
+  for (size_t i = 0; i < n; i++) {
+    double value = 0.0;
+    if (!jsonToValue(e[i], value))
+      return false;
+    pMatrix->m_e[i] = (icFloatNumber)value;
+  }
   if (n > 9)
     pMatrix->m_bUseConstants = true;
   return true;
@@ -1771,6 +1951,11 @@ static icUInt32Number icParseCLUTTextBuf(const char *buf, size_t bufLen,
 CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
                           icConvertType nType, std::string &parseStr)
 {
+  if (nIn <= 0 || nIn > 16 || nOut <= 0 || nOut > 0xffff) {
+    parseStr += "CLUT channel count out of range\n";
+    return nullptr;
+  }
+
   // Resolve variable type from stored precision field (mirrors icConvertVariable in XML)
   if (nType == icConvertVariable) {
     int prec = 2;
@@ -1785,15 +1970,26 @@ CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
   if (jsonExistsField(j, "gridPoints") && j["gridPoints"].is_array()) {
     const IccJson &gp = j["gridPoints"];
     icUInt8Number pts[16] = {};
-    int cnt = std::min((int)gp.size(), nIn);
-    for (int i = 0; i < cnt; i++)
-      pts[i] = (icUInt8Number)gp[i].get<int>();
+    size_t cnt = gp.size() < (size_t)nIn ? gp.size() : (size_t)nIn;
+    for (size_t i = 0; i < cnt; i++) {
+      int gridPoint = 0;
+      if (!jsonToValue(gp[i], gridPoint)) {
+        parseStr += "Invalid CLUT gridPoints array value\n";
+        delete pCLUT; return nullptr;
+      }
+      pts[i] = (icUInt8Number)gridPoint;
+    }
     if (!pCLUT->Init(pts)) {
       parseStr += "Failed to initialize CLUT from gridPoints array\n";
       delete pCLUT; return nullptr;
     }
   } else if (jsonExistsField(j, "gridPoints") && j["gridPoints"].is_number()) {
-    icUInt8Number gran = (icUInt8Number)j["gridPoints"].get<int>();
+    int gridPoint = 0;
+    if (!jGetValue(j, "gridPoints", gridPoint)) {
+      parseStr += "Invalid CLUT gridPoints scalar\n";
+      delete pCLUT; return nullptr;
+    }
+    icUInt8Number gran = (icUInt8Number)gridPoint;
     if (!pCLUT->Init(gran)) {
       parseStr += "Failed to initialize CLUT from gridPoints scalar\n";
       delete pCLUT; return nullptr;
@@ -1816,7 +2012,11 @@ CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
   // External file
   // -----------------------------------------------------------------------
   if (jsonExistsField(j, "file") && j["file"].is_string()) {
-    std::string filename = j["file"].get<std::string>();
+    std::string filename;
+    if (!jGetString(j, "file", filename)) {
+      parseStr += "Invalid CLUT file field\n";
+      delete pCLUT; return nullptr;
+    }
 
     // Same gate as CIccMpeJsonCalculator::ParseImport: file-based loads
     // are opt-in. In library/service/WASM contexts, JSON input is
@@ -1967,16 +2167,21 @@ CIccCLUT *icCLUTFromJson(const IccJson &j, int nIn, int nOut,
     delete pCLUT; return nullptr;
   }
   const IccJson &data = j["data"];
-  if (icJsonSafeU32(data.size()) != nTotal) {
+  bool dataOverflow = false;
+  if (icJsonSafeU32(data.size(), &dataOverflow) != nTotal || dataOverflow) {
     parseStr += "Inline CLUT data count does not match CLUT size\n";
     delete pCLUT; return nullptr;
   }
-  for (icUInt32Number k = 0; k < nTotal && k < icJsonSafeU32(data.size()); k++) {
+  for (icUInt32Number k = 0; k < nTotal; k++) {
     if (!data[k].is_number()) {
       parseStr += "Inline CLUT data contains non-numeric value\n";
       delete pCLUT; return nullptr;
     }
-    double v = data[k].get<double>();
+    double v = 0.0;
+    if (!jsonToValue(data[k], v)) {
+      parseStr += "Inline CLUT data contains invalid numeric value\n";
+      delete pCLUT; return nullptr;
+    }
     switch (nType) {
       case icConvert8Bit:  pData[k] = (icFloatNumber)(v / 255.0);   break;
       case icConvert16Bit: pData[k] = (icFloatNumber)(v / 65535.0); break;
@@ -2227,14 +2432,12 @@ static CIccTagMultiLocalizedUnicode *dictLocalizedFromJson(const IccJson &arr)
   CIccTagMultiLocalizedUnicode *pTag = new(std::nothrow) CIccTagMultiLocalizedUnicode();
   if (!pTag) return nullptr;
   for (const auto &loc : arr) {
-    // Defensive type-check before .get<std::string>(): nlohmann throws
-    // type_error on mismatch, and this function is reachable from
-    // ParseJson which is not currently wrapped in try/catch. Falling
-    // back to the "  " / "" defaults keeps parsing alive rather than
-    // aborting the whole profile on a malformed localized entry.
-    std::string lang    = (loc.contains("language") && loc["language"].is_string()) ? loc["language"].get<std::string>() : "  ";
-    std::string country = (loc.contains("country")  && loc["country"].is_string())  ? loc["country"].get<std::string>()  : "  ";
-    std::string text    = (loc.contains("text")     && loc["text"].is_string())     ? loc["text"].get<std::string>()     : "";
+    std::string lang = "  ";
+    std::string country = "  ";
+    std::string text;
+    jGetString(loc, "language", lang);
+    jGetString(loc, "country", country);
+    jGetString(loc, "text", text);
     while (lang.size()    < 2) lang    += ' ';
     while (country.size() < 2) country += ' ';
     icLanguageCode langCode    = (icLanguageCode)((lang[0]    << 8) | lang[1]);
@@ -2260,14 +2463,20 @@ bool CIccTagJsonDict::ToJson(IccJson &j)
     // Name (stored as wstring / UTF-16 on Windows)
     std::string name;
     const std::wstring &wname = nv->GetName();
-    icUtf16ToUtf8(name, (const icUInt16Number*)wname.c_str(), (int)wname.size());
+    bool nameOverflow = false;
+    int nameLen = icJsonSafeInt(wname.size(), &nameOverflow);
+    if (nameOverflow) return false;
+    icUtf16ToUtf8(name, (const icUInt16Number*)wname.c_str(), nameLen);
     entry["name"] = name;
 
     // Optional value
     if (nv->IsValueSet()) {
       std::string value;
       const std::wstring wval = nv->GetValue();
-      icUtf16ToUtf8(value, (const icUInt16Number*)wval.c_str(), (int)wval.size());
+      bool valueOverflow = false;
+      int valueLen = icJsonSafeInt(wval.size(), &valueOverflow);
+      if (valueOverflow) return false;
+      icUtf16ToUtf8(value, (const icUInt16Number*)wval.c_str(), valueLen);
       entry["value"] = value;
     }
 
@@ -2455,7 +2664,8 @@ bool CIccTagJsonStruct::ParseTag(const IccJson &elemEntry, std::string &parseStr
       parseStr += "sameAs for member '" + key + "' must be a string\n";
       return false;
     }
-    std::string refKey = elemObj["sameAs"].get<std::string>();
+    std::string refKey;
+    jGetString(elemObj, "sameAs", refKey);
     icSignature refSig = pStruct ? pStruct->GetElemSig(refKey.c_str()) : 0;
     if (!refSig) {
       // refKey may be a "PrivateSubTag_N" -- look up by walking existing entries
@@ -2491,7 +2701,9 @@ bool CIccTagJsonStruct::ParseTag(const IccJson &elemEntry, std::string &parseStr
         parseStr += "Member '" + key + "' has non-string private 'typeSig'\n";
         return false;
       }
-      typeSig = (icTagTypeSignature)icGetSigVal(elemObj["typeSig"].get<std::string>().c_str());
+      std::string typeSigStr;
+      jGetString(elemObj, "typeSig", typeSigStr);
+      typeSig = (icTagTypeSignature)icGetSigVal(typeSigStr.c_str());
     }
     else
       typeSig = (icTagTypeSignature)icGetSigVal(typeName.c_str());
@@ -2517,7 +2729,7 @@ bool CIccTagJsonStruct::ParseTag(const IccJson &elemEntry, std::string &parseStr
   }
 
   if (elemObj.contains("Reserved"))
-    pTag->m_nReserved = (icUInt32Number)elemObj["Reserved"].get<unsigned int>();
+    jGetValue(elemObj, "Reserved", pTag->m_nReserved);
 
   if (!AttachElem(sigElem, pTag)) {
     delete pTag;
@@ -2643,7 +2855,12 @@ bool CIccTagJsonArray::ParseJson(const IccJson &j, std::string &parseStr)
     return false;
   }
   const IccJson &elems = j["arrayTags"];
-  icUInt32Number nSize = icJsonSafeU32(elems.size());
+  bool elemsOverflow = false;
+  icUInt32Number nSize = icJsonSafeU32(elems.size(), &elemsOverflow);
+  if (elemsOverflow) {
+    parseStr += "Too many array tag elements\n";
+    return false;
+  }
   if (!SetSize(nSize)) {
     parseStr += "Unable to allocate array of size " + std::to_string(nSize) + "\n";
     return false;
@@ -2667,7 +2884,9 @@ bool CIccTagJsonArray::ParseJson(const IccJson &j, std::string &parseStr)
           parseStr += "Array element " + std::to_string(i) + " has non-string private 'sig'\n";
           return false;
         }
-        typeSig = (icTagTypeSignature)icGetSigVal(elemObj["sig"].get<std::string>().c_str());
+        std::string sigStr;
+        jGetString(elemObj, "sig", sigStr);
+        typeSig = (icTagTypeSignature)icGetSigVal(sigStr.c_str());
       }
       else
         typeSig = (icTagTypeSignature)icGetSigVal(typeName.c_str());
@@ -2693,7 +2912,7 @@ bool CIccTagJsonArray::ParseJson(const IccJson &j, std::string &parseStr)
     }
 
     if (elemObj.contains("Reserved"))
-      pTag->m_nReserved = (icUInt32Number)elemObj["Reserved"].get<unsigned int>();
+      jGetValue(elemObj, "Reserved", pTag->m_nReserved);
 
     if (!AttachTag(i, pTag)) {
       delete pTag;
@@ -2759,15 +2978,32 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
     parseStr += "Cannot find PCSValues\n";
     return false;
   }
-  int nPCSCh = verts["PCSChannels"].get<int>();
+  int nPCSCh = 0;
+  if (!jGetValue(verts, "PCSChannels", nPCSCh)) {
+    parseStr += "Bad PCSValues channels\n";
+    return false;
+  }
   if (nPCSCh <= 0 || nPCSCh > 32767) {
     parseStr += "Bad PCSValues channels\n";
     return false;
   }
   m_nPCSChannels = (icInt16Number)nPCSCh;
   const IccJson &pcsArr = verts["PCSValues"];
-  icInt32Number nPCSTotal = (icInt32Number)pcsArr.size();
+  bool pcsSizeOverflow = false;
+  icInt32Number nPCSTotal = icJsonSafeI32(pcsArr.size(), &pcsSizeOverflow);
+  if (pcsSizeOverflow) {
+    parseStr += "Too many PCSValues entries\n";
+    return false;
+  }
+  if (m_nPCSChannels < 1) {
+    parseStr += "Bad PCSValues channels\n";
+    return false;
+  }
   m_NumberOfVertices = nPCSTotal / m_nPCSChannels;
+  if (nPCSTotal % m_nPCSChannels) {
+    parseStr += "PCSValues count is not a multiple of channel count\n";
+    return false;
+  }
   if (m_NumberOfVertices < 4) {
     parseStr += "Must have at least 4 PCSValues vertices\n";
     return false;
@@ -2777,19 +3013,39 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
   if (nPCSAlloc > 0x7FFFFFFF) { parseStr += "PCSValues allocation overflow\n"; return false; }
   m_PCSValues = new(std::nothrow) icFloatNumber[(size_t)nPCSAlloc];
   if (!m_PCSValues) { parseStr += "Allocation failed for PCSValues\n"; return false; }
-  for (icInt32Number i = 0; i < nPCSTotal; i++)
-    m_PCSValues[i] = (icFloatNumber)pcsArr[i].get<double>();
+  for (icInt32Number i = 0; i < nPCSTotal; i++) {
+    double value = 0.0;
+    if (!jsonToValue(pcsArr[i], value)) {
+      parseStr += "PCSValues contains non-numeric value\n";
+      return false;
+    }
+    m_PCSValues[i] = (icFloatNumber)value;
+  }
 
   // Parse optional Device values
   if (verts.contains("DeviceChannels") && verts.contains("DeviceValues") && verts["DeviceValues"].is_array()) {
-    m_nDeviceChannels = (icInt16Number)verts["DeviceChannels"].get<int>();
-    if (m_nDeviceChannels <= 0) {
+    int nDeviceCh = 0;
+    if (!jGetValue(verts, "DeviceChannels", nDeviceCh) || nDeviceCh <= 0 || nDeviceCh > 32767) {
       parseStr += "Bad DeviceValues channels\n";
       return false;
     }
+    m_nDeviceChannels = (icInt16Number)nDeviceCh;
     const IccJson &devArr = verts["DeviceValues"];
-    icInt32Number nDevTotal = (icInt32Number)devArr.size();
+    bool devSizeOverflow = false;
+    icInt32Number nDevTotal = icJsonSafeI32(devArr.size(), &devSizeOverflow);
+    if (devSizeOverflow) {
+      parseStr += "Too many DeviceValues entries\n";
+      return false;
+    }
+    if (m_nDeviceChannels < 1) {
+      parseStr += "Bad DeviceValues channels\n";
+      return false;
+    }
     icInt32Number nDevVerts = nDevTotal / m_nDeviceChannels;
+    if (nDevTotal % m_nDeviceChannels) {
+      parseStr += "DeviceValues count is not a multiple of channel count\n";
+      return false;
+    }
     if (nDevVerts != m_NumberOfVertices) {
       parseStr += "Number of Device vertices doesn't match PCS vertices\n";
       return false;
@@ -2799,8 +3055,14 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
     if (nDevAlloc > 0x7FFFFFFF) { parseStr += "DeviceValues allocation overflow\n"; return false; }
     m_DeviceValues = new(std::nothrow) icFloatNumber[(size_t)nDevAlloc];
     if (!m_DeviceValues) { parseStr += "Allocation failed for DeviceValues\n"; return false; }
-    for (icInt32Number i = 0; i < nDevTotal; i++)
-      m_DeviceValues[i] = (icFloatNumber)devArr[i].get<double>();
+    for (icInt32Number i = 0; i < nDevTotal; i++) {
+      double value = 0.0;
+      if (!jsonToValue(devArr[i], value)) {
+        parseStr += "DeviceValues contains non-numeric value\n";
+        return false;
+      }
+      m_DeviceValues[i] = (icFloatNumber)value;
+    }
   }
 
   // Parse triangles
@@ -2809,7 +3071,12 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
     return false;
   }
   const IccJson &triArr = j["Triangles"];
-  m_NumberOfTriangles = (icInt32Number)triArr.size();
+  bool triangleSizeOverflow = false;
+  m_NumberOfTriangles = icJsonSafeI32(triArr.size(), &triangleSizeOverflow);
+  if (triangleSizeOverflow) {
+    parseStr += "Too many Triangles entries\n";
+    return false;
+  }
   if (m_Triangles) { delete[] m_Triangles; }
   m_Triangles = new(std::nothrow) icGamutBoundaryTriangle[m_NumberOfTriangles];
   if (!m_Triangles) { parseStr += "Allocation failed for Triangles\n"; return false; }
@@ -2819,9 +3086,12 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
       parseStr += "Invalid Triangle entry\n";
       return false;
     }
-    m_Triangles[i].m_VertexNumbers[0] = tri[0].get<icUInt32Number>();
-    m_Triangles[i].m_VertexNumbers[1] = tri[1].get<icUInt32Number>();
-    m_Triangles[i].m_VertexNumbers[2] = tri[2].get<icUInt32Number>();
+    if (!jsonToValue(tri[0], m_Triangles[i].m_VertexNumbers[0]) ||
+        !jsonToValue(tri[1], m_Triangles[i].m_VertexNumbers[1]) ||
+        !jsonToValue(tri[2], m_Triangles[i].m_VertexNumbers[2])) {
+      parseStr += "Triangle entry contains non-numeric vertex index\n";
+      return false;
+    }
   }
 
   return true;

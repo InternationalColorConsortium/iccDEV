@@ -72,6 +72,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <limits>
 #include "TiffImg.h"
 
 
@@ -80,6 +81,40 @@
 static char THIS_FILE[]=__FILE__;
 #define new DEBUG_NEW
 #endif
+
+namespace {
+
+bool checkedUInt32(icUInt64Number value, unsigned int &result)
+{
+  if (value > static_cast<icUInt64Number>(std::numeric_limits<unsigned int>::max()))
+    return false;
+
+  result = static_cast<unsigned int>(value);
+  return true;
+}
+
+bool checkedUInt32Product(unsigned int a, unsigned int b, unsigned int &result)
+{
+  return checkedUInt32(static_cast<icUInt64Number>(a) * b, result);
+}
+
+bool calcBytesPerLine(unsigned int width, unsigned int bitsPerSample,
+                      unsigned int samples, unsigned int &bytesPerLine)
+{
+  if (!width || !bitsPerSample || !samples)
+    return false;
+
+  icUInt64Number bitsPerLine = static_cast<icUInt64Number>(width) *
+                               bitsPerSample * samples;
+  icUInt64Number bytes = bitsPerLine / 8;
+
+  if (bitsPerLine % 8)
+    bytes++;
+
+  return checkedUInt32(bytes, bytesPerLine);
+}
+
+}
 
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
@@ -291,7 +326,8 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetField(m_hTif, TIFFTAG_YRESOLUTION, &m_fYRes);
   TIFFGetField(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
   
-  if (m_nRowsPerStrip == 0 || m_nSamples == 0 || m_nBitsPerSample == 0) {
+  if (m_nWidth == 0 || m_nHeight == 0 || m_nRowsPerStrip == 0 ||
+      m_nSamples == 0 || m_nBitsPerSample == 0) {
     // Corrupt parameters - can't read the file
     // If the file is uncompressed, we might guess some of the values,
     // but it would take a bit of testing to get right.  Probably not worth it.
@@ -319,15 +355,26 @@ bool CTiffImg::Open(const char *szFname)
   m_nCurStrip=(unsigned int)-1;
   m_nCurLine = 0;
 
-  m_nStripSize = (unsigned int)TIFFStripSize(m_hTif);
+  tmsize_t stripSize = TIFFStripSize(m_hTif);
+  if (stripSize <= 0 ||
+      !checkedUInt32(static_cast<icUInt64Number>(stripSize), m_nStripSize)) {
+    Close();
+    return false;
+  }
 
   if (m_nSamples>1 && m_nPlanar==PLANARCONFIG_SEPARATE) {
     m_nStripSamples = m_nSamples;
-    m_nBytesPerLine = (m_nWidth * m_nBitsPerSample * m_nSamples + 7)>>3;
-    m_nBytesPerSample = m_nBitsPerSample / 8;
-    m_nBytesPerStripLine = m_nWidth * m_nBytesPerSample;
     //Only support bitspersample that fits on byte boundary
     if (m_nBitsPerSample%8) {
+      Close();
+      return false;
+    }
+    if (!calcBytesPerLine(m_nWidth, m_nBitsPerSample, m_nSamples, m_nBytesPerLine)) {
+      Close();
+      return false;
+    }
+    m_nBytesPerSample = m_nBitsPerSample / 8;
+    if (!checkedUInt32Product(m_nWidth, m_nBytesPerSample, m_nBytesPerStripLine)) {
       Close();
       return false;
     }
@@ -340,14 +387,28 @@ bool CTiffImg::Open(const char *szFname)
   }
   else {
     m_nStripSamples = 1;
-    m_nBytesPerLine = (m_nWidth * m_nBitsPerSample * m_nSamples + 7)>>3;
+    if (!calcBytesPerLine(m_nWidth, m_nBitsPerSample, m_nSamples, m_nBytesPerLine)) {
+      Close();
+      return false;
+    }
   }
   
   // Just in case we had to recalc the strip byte count,
   //   it is safer to have the buffer too large than too small.
-  m_nStripSize = std::max( m_nStripSize, m_nRowsPerStrip * m_nBytesPerLine );
+  unsigned int minStripSize = 0;
+  if (!checkedUInt32Product(m_nRowsPerStrip, m_nBytesPerLine, minStripSize)) {
+    Close();
+    return false;
+  }
+  m_nStripSize = std::max( m_nStripSize, minStripSize );
   
-  m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)m_nStripSize*m_nStripSamples));
+  unsigned int stripBufferSize = 0;
+  if (!checkedUInt32Product(m_nStripSize, m_nStripSamples, stripBufferSize)) {
+    Close();
+    return false;
+  }
+
+  m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)stripBufferSize));
 
   if (!m_pStripBuf) {
     Close();

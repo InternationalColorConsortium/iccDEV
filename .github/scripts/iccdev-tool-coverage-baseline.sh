@@ -7,11 +7,12 @@
 # encoding modes, and edge cases to establish coverage baseline.
 #
 # Usage:
-#   ./iccdev-tool-coverage-baseline.sh [--asan] [--quick]
+#   ./iccdev-tool-coverage-baseline.sh [--asan] [--quick] [--skip-hybrid]
 #
 # Options:
-#   --asan     Enable ASAN halt_on_error=0 for catch-and-continue (default: leaks off)
-#   --quick    Skip slow tools (ApplyToLink LUT generation, RoundTrip exhaustive)
+#   --asan         Enable ASAN halt_on_error=0 for catch-and-continue (default: leaks off)
+#   --quick        Skip slow tools (ApplyToLink LUT generation, RoundTrip exhaustive)
+#   --skip-hybrid  Skip the slow Testing/hybrid/BuildAndTest.sh integration case
 #
 # Output:
 #   Per-test PASS/FAIL with exit codes, ASAN/UBSAN findings noted
@@ -88,13 +89,15 @@ OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-tool-output}"
 # Defaults
 ASAN_MODE=0
 QUICK_MODE=0
+SKIP_HYBRID=0
 JOB_SUMMARY="${GITHUB_STEP_SUMMARY:-}"
 
 for arg in "$@"; do
   case "$arg" in
-    --asan)  ASAN_MODE=1 ;;
-    --quick) QUICK_MODE=1 ;;
-    *)       echo "Unknown option: $arg"; exit 1 ;;
+    --asan)         ASAN_MODE=1 ;;
+    --quick)        QUICK_MODE=1 ;;
+    --skip-hybrid)  SKIP_HYBRID=1 ;;
+    *)              echo "Unknown option: $arg"; exit 1 ;;
   esac
 done
 
@@ -124,9 +127,10 @@ run_test() {
 
   TOTAL=$((TOTAL + 1))
   local logfile="$OUTDIR/${test_id}.log"
+  local timeout_sec="${RUN_TEST_TIMEOUT:-60}"
 
   local exit_code=0
-  timeout 60 "${cmd[@]}" > "$logfile" 2>&1 || exit_code=$?
+  timeout "$timeout_sec" "${cmd[@]}" > "$logfile" 2>&1 || exit_code=$?
 
   # Check for ASAN/UBSAN
   local has_asan=0
@@ -158,7 +162,7 @@ run_test() {
   elif [ "$exit_code" -eq 124 ]; then
     status="TIMEOUT"
     FAIL=$((FAIL + 1))
-    note=" [>60s]"
+    note=" [>${timeout_sec}s]"
   elif [ "$exit_code" -ne 0 ]; then
     # Exit 1-127 = graceful failure (not a crash, but track it)
     status="FAIL"
@@ -202,7 +206,13 @@ run_expect_exit() {
   local status="XFAIL"
   local note=" [expected exit=$expected_exit]"
   if [ "$exit_code" -eq "$expected_exit" ] && [ "$has_asan" -eq 0 ] && [ "$has_ubsan" -eq 0 ]; then
-    EXPECTED_FAIL=$((EXPECTED_FAIL + 1))
+    if [ "$expected_exit" -eq 0 ]; then
+      status="PASS"
+      note=""
+      PASS=$((PASS + 1))
+    else
+      EXPECTED_FAIL=$((EXPECTED_FAIL + 1))
+    fi
   else
     status="FAIL"
     FAIL=$((FAIL + 1))
@@ -254,10 +264,15 @@ TIFF_MUTATED="$TP_TIFF/catalyst-16bit-mutated.tiff"
 PNG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.png"
 JPG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.jpg"
 SPECTRAL_TIFF="$ICCDEV_TESTING/hybrid/Data/smCows380_5_780.tif"
-V5_DISPLAY="$ICCDEV_TESTING/Display/LCDDisplay.icc"
+V5_DISPLAY="$TP/LCDDisplay.icc"
+LCDDISPLAY_XML="$ICCDEV_TESTING/Display/LCDDisplay.xml"
+[ -f "$LCDDISPLAY_XML" ] || LCDDISPLAY_XML="$ICCDEV_TESTING/hybrid/LCDDisplay.xml"
 SRGB_CALC_DATA="$ICCDEV_TESTING/Calc/srgbCalcTest.txt"
 CMYK_DATA="$ICCDEV_TESTING/hybrid/Data/cmykGrays.txt"
 HYBRID_XML="$ICCDEV_TESTING/hybrid/LCDDisplay.xml"
+APPLYPROF_REGRESSION_DIR="$OUTDIR/applyprofiles-regression"
+APPLYPROF_CURVE_NAN="$APPLYPROF_REGRESSION_DIR/curve-nan.icc"
+APPLYPROF_CALC_TEMP="$APPLYPROF_REGRESSION_DIR/calc-temp-overflow.icc"
 
 generate_rgb_tiff_fixtures() {
   local tiff_dir="$1"
@@ -340,12 +355,176 @@ write_tiff(out / "catalyst-16bit-mutated.tiff", 16, 1)
 PY
 }
 
+ensure_profile_from_xml() {
+  local profile_name="$1"
+  local xml_path="$2"
+  local dst="$TP/$profile_name"
+
+  if [ -f "$dst" ]; then
+    return 0
+  fi
+  if [ ! -x "$TOOLS/IccFromXml/iccFromXml" ] || [ ! -f "$xml_path" ]; then
+    return 1
+  fi
+
+  (
+    cd "$(dirname "$xml_path")"
+    "$TOOLS/IccFromXml/iccFromXml" "$(basename "$xml_path")" "$dst" >/dev/null 2>&1
+  )
+}
+
+generate_specsep_overflow_tiff() {
+  local tiff_dir="$1"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$tiff_dir" <<'PY'
+import pathlib
+import struct
+import sys
+
+out = pathlib.Path(sys.argv[1])
+out.mkdir(parents=True, exist_ok=True)
+path = out / "spec_1"
+
+
+def ifd_entry(tag, tag_type, count, value):
+    entry = struct.pack("<HHI", tag, tag_type, count)
+    if tag_type == 3 and count == 1:
+        return entry + struct.pack("<H", value) + b"\0\0"
+    return entry + struct.pack("<I", value)
+
+
+entry_count = 12
+xres_offset = 8 + 2 + 12 * entry_count + 4
+yres_offset = xres_offset + 8
+entries = [
+    (256, 4, 1, 0xDFFF0004),  # width: overflows row-byte math
+    (257, 4, 1, 4),
+    (258, 3, 1, 37136),
+    (259, 3, 1, 1),
+    (262, 3, 1, 1),
+    (273, 4, 1, 256),
+    (277, 3, 1, 1),
+    (278, 4, 1, 3),
+    (279, 4, 1, 32),
+    (282, 5, 1, xres_offset),
+    (283, 5, 1, yres_offset),
+    (296, 3, 1, 2),
+]
+
+data = bytearray(b"II" + struct.pack("<H", 42) + struct.pack("<I", 8))
+data.extend(struct.pack("<H", len(entries)))
+for entry in entries:
+    data.extend(ifd_entry(*entry))
+data.extend(struct.pack("<I", 0))
+data.extend(struct.pack("<II", 72, 1))
+data.extend(struct.pack("<II", 72, 1))
+path.write_bytes(data)
+PY
+}
+
+generate_applyprofiles_regression_profiles() {
+  local profile_dir="$1"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$profile_dir" <<'PY'
+import base64
+import pathlib
+import sys
+
+out = pathlib.Path(sys.argv[1])
+out.mkdir(parents=True, exist_ok=True)
+
+profiles = {
+    "curve-nan.icc": """
+SUkqAGQbAAAFEAAAbW50clJHQiBYWVogB+gABQAKABUAFAAZYWNzcAAAAAAAAAAJAAAAAAAAAAAA
+AAAAAAAAAAAAAAEAAPNPAAEAAAABFqUAAAAA0MMDnBvDq6+I5rlKHY5qygAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAMY3BydAAAARQAAABwZGVzYwAAAYQAAAA8d3RwdAAAAcAAAAAUQTJC
+MAAAAdQAAACEQTJCMwAAAdQAAACEQTJCMQAAAlgAAADsQjJBMAAAA0QAAADsQjJBMgAAA0QAAADs
+QjJBMQAABDAAAADsY2hhZAAABRwAAAAsdGVjaAAABUgAAAAMY2lpcwAABVQAAAAMbWx1YwAAAAAA
+AAABAAAADGVuVVMAAABUAAAAHABDAG8AcAB5AHIAaQBnAGgAdAAgADIAMAAwADcAIABBAGQAbwBi
+AGUAIABTAHkAcwB0AGUAbQBzACAASQBuAGMAbwByAHAAbwByAGEAdABlAGQAAG1sdWMAAAAAAAAA
+AQAAAAxlblVTAAAAIAAAABwASABEAFQAVgAgACgAUgBlAGMALgAgADcAMAA5ACkAAFhZWiAAAAAA
+AAD21gABAAAAANMsbUFCIAAAAAADAQAAAAAAIAAAACwAAABcAAAAAAAAAHljdXJ2AAAAAAAAAAAA
+ADefAAAxHwAAEj8AABxhAABbcgAAB7sAAAHGAAAMYgAAWxAAJQBuAAAAcgAAAF5wYXJhAAAAAAAE
+AAAAAjjkAADo8AAAFxAAADjkAAAUvAAAAAAAAAAAbUFCIAAAAAADAwAAAAAAIAAAAEQAAAB0AAAA
+AAAAACBjdXJ2AAAAAAAAAABjdXJ2AAAAAAAAAABjdXJ2AAAAAAAAAAEAAAAAAAfDSwAAElAAABx7
+AABbxAAAB8IAAAHIAAAMbQAAW2EAAAAAAAAAAAAAAABwYXJhAAAAAAAEAACaAjjkAADo8AAAFxAA
+ADjkAABCbhVNcgAEAAAAcGFyYQAAAAAABAAAAAI45AAA6PAAABcQAAA45AAAFLwAAAAAAAAAAHBh
+cmEAAAAAAAAAA+gCOOQAAAAAAAAAAGNVcnYAAAAAAAAAAGN1cnY=
+""",
+    "calc-temp-overflow.icc": """
+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
+YQ==
+""",
+}
+
+for name, data in profiles.items():
+    (out / name).write_bytes(base64.b64decode("".join(data.split())))
+PY
+}
+
 if [ ! -f "$TIFF_8BIT" ] || [ ! -f "$TIFF_16BIT" ] || [ ! -f "$TIFF_32BIT" ] || \
    [ ! -f "$TIFF_MISMATCH" ] || [ ! -f "$TIFF_MUTATED" ]; then
   if ! generate_rgb_tiff_fixtures "$TP_TIFF"; then
     echo "  [WARN   ] python3 unavailable; TIFF-specific tests will be skipped"
   fi
 fi
+
+generate_applyprofiles_regression_profiles "$APPLYPROF_REGRESSION_DIR" || true
+
+ensure_profile_from_xml "sRGB_D65_MAT.icc" "$ICCDEV_TESTING/Display/sRGB_D65_MAT.xml" || true
+ensure_profile_from_xml "CMYK-3DLUTs2.icc" "$ICCDEV_TESTING/CMYK-3DLUTs/CMYK-3DLUTs2.xml" || true
+ensure_profile_from_xml "Rec2020rgbSpectral.icc" "$ICCDEV_TESTING/Display/Rec2020rgbSpectral.xml" || true
+ensure_profile_from_xml "NamedColor.icc" "$ICCDEV_TESTING/Named/NamedColor.xml" || true
+ensure_profile_from_xml "17ChanPart1.icc" "$ICCDEV_TESTING/Overprint/17ChanPart1.xml" || true
+ensure_profile_from_xml "17ChanWithSpots-MVIS.icc" "$ICCDEV_TESTING/mcs/17ChanWithSpots-MVIS.xml" || true
+ensure_profile_from_xml "Cat8Lab-D65_2deg.icc" "$ICCDEV_TESTING/PCC/CustomObservers/Cat8Lab-D65_2deg.xml" || true
+ensure_profile_from_xml "CameraModel.icc" "$ICCDEV_TESTING/Calc/CameraModel.xml" || true
+ensure_profile_from_xml "LCDDisplay.icc" "$LCDDISPLAY_XML" || true
 
 echo "============================================================================="
 echo " iccDEV Tool Coverage Baseline"
@@ -714,6 +893,20 @@ else
   skip_test "apply-06" "TIFF 16bit->8bit sRGB absolute" "16-bit TIFF fixture unavailable"
 fi
 
+if [ -f "$TIFF_8BIT" ] && [ -f "$APPLYPROF_CURVE_NAN" ]; then
+  run_expect_exit "apply-07" "ApplyProfiles: AFL curve NaN profile" 0 \
+    "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_afl_curve_nan.tiff" 0 0 0 0 0 "$APPLYPROF_CURVE_NAN" 1
+else
+  skip_test "apply-07" "ApplyProfiles: AFL curve NaN profile" "regression profile unavailable"
+fi
+
+if [ -f "$TIFF_8BIT" ] && [ -f "$APPLYPROF_CALC_TEMP" ]; then
+  run_expect_exit "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" 255 \
+    "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_afl_calc_temp.tiff" 0 0 0 0 0 "$APPLYPROF_CALC_TEMP" 1
+else
+  skip_test "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" "regression profile unavailable"
+fi
+
 echo ""
 
 # =============================================================================
@@ -895,6 +1088,14 @@ else
   echo "  [SKIP   ] SpecSepToTiff: no sequential spectral TIFFs available"
 fi
 
+SPECSEP_BAD_DIR="$OUTDIR/specsep-malformed"
+if generate_specsep_overflow_tiff "$SPECSEP_BAD_DIR"; then
+  run_expect_exit "specsep-04" "SpecSepToTiff: reject oversized TIFF geometry" 255 \
+    "$SPECSEP" "$OUTDIR/spectral_malformed.tiff" 0 0 "$SPECSEP_BAD_DIR/spec_" 1 1 1
+else
+  skip_test "specsep-04" "SpecSepToTiff: reject oversized TIFF geometry" "python3 unavailable"
+fi
+
 echo ""
 
 # =============================================================================
@@ -902,20 +1103,25 @@ echo ""
 # =============================================================================
 echo "--- 15. Hybrid Pipeline (BuildAndTest.sh) ---"
 HYBRID_DIR="$ICCDEV_TESTING/hybrid"
-if [ -f "$HYBRID_DIR/BuildAndTest.sh" ]; then
+if [ "$SKIP_HYBRID" -eq 1 ]; then
+  skip_test "hybrid-01" "Hybrid pipeline: 6-phase spectral color management" \
+    "moved to separate iccdev.hybrid-pipeline CTest gate"
+elif [ -f "$HYBRID_DIR/BuildAndTest.sh" ]; then
   # BuildAndTest.sh expects tools on PATH and runs from its own directory
   TOOL_DIRS=""
   for tooldir in "$TOOLS"/*/; do
     TOOL_DIRS="${TOOL_DIRS:+$TOOL_DIRS:}$tooldir"
   done
-  (
-    cd "$HYBRID_DIR"
-    PATH="$TOOL_DIRS:$PATH" \
-    run_test "hybrid-01" "Hybrid pipeline: 6-phase spectral color management" \
-      bash BuildAndTest.sh
-  )
+  old_pwd="$PWD"
+  cd "$HYBRID_DIR"
+  PATH="$TOOL_DIRS:$PATH" \
+  RUN_TEST_TIMEOUT="${HYBRID_TIMEOUT:-600}" \
+  run_test "hybrid-01" "Hybrid pipeline: 6-phase spectral color management" \
+    bash BuildAndTest.sh
+  cd "$old_pwd"
 else
-  echo "  [SKIP   ] Hybrid pipeline: BuildAndTest.sh not found"
+  skip_test "hybrid-01" "Hybrid pipeline: 6-phase spectral color management" \
+    "BuildAndTest.sh not found"
 fi
 
 echo ""

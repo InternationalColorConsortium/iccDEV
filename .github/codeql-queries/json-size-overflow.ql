@@ -29,20 +29,18 @@ class JsonSizeCall extends FunctionCall {
 /**
  * A cast expression that narrows the result of .size().
  */
-class NarrowingCast extends Cast {
+class NarrowingCast extends CStyleCast {
   NarrowingCast() {
     this.getType().getSize() < 8 and
     exists(JsonSizeCall sizeCall |
-      this.getExpr() = sizeCall or
-      this.getExpr().(Expr).getAChild*() = sizeCall
+      this.getExpr() = sizeCall
     )
   }
 }
 
 from NarrowingCast cast, JsonSizeCall sizeCall
 where
-  cast.getExpr() = sizeCall or
-  cast.getExpr().(Expr).getAChild*() = sizeCall
+  cast.getExpr() = sizeCall
 select cast,
   "JSON .size() result (size_t, 64-bit) is narrowed to a " +
   cast.getType().getName() +

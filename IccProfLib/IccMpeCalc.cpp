@@ -120,6 +120,18 @@ static bool icCalcAddUInt32(icUInt32Number a, icUInt32Number b, icUInt32Number &
   return true;
 }
 
+static bool icCalcTempSpan(icUInt32Number pos, icUInt32Number countMinusOne,
+                           icUInt32Number nMaxTemp, icUInt32Number &count)
+{
+  if (!icCalcAddUInt32(countMinusOne, 1, count))
+    return false;
+
+  if (pos >= nMaxTemp || count > nMaxTemp - pos)
+    return false;
+
+  return true;
+}
+
 
 class CIccConsoleDebugger : public IIccCalcDebugger
 {
@@ -4074,7 +4086,9 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
     icSigCalcOp sig = op[i].sig;
     if (sig==icSigTempGetChanOp) {
       icUInt32Number p = op[i].data.select.v1;
-      icUInt32Number n = op[i].data.select.v2+1;
+      icUInt32Number n = 0;
+      if (!icCalcTempSpan(p, op[i].data.select.v2, nMaxTemp, n))
+        return true;
       for (j=0; j<n; j++) {
         if (!tempUsage[p+j]) {
           return true;
@@ -4083,12 +4097,16 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
     }
     else if (sig==icSigTempPutChanOp) {
       icUInt32Number p = op[i].data.select.v1;
-      icUInt32Number n = op[i].data.select.v2+1;
+      icUInt32Number n = 0;
+      if (!icCalcTempSpan(p, op[i].data.select.v2, nMaxTemp, n))
+        return true;
       memset(tempUsage+p, 1, n);
     }
     else if (sig==icSigTempSaveChanOp) {
       icUInt32Number p = op[i].data.select.v1;
-      icUInt32Number n = op[i].data.select.v2+1;
+      icUInt32Number n = 0;
+      if (!icCalcTempSpan(p, op[i].data.select.v2, nMaxTemp, n))
+        return true;
       memset(tempUsage+p, 1, n);
     }
     else if (sig==icSigIfOp) {
@@ -4164,6 +4182,9 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
       if (rv)
         return true;
     }
+
+    if (i == std::numeric_limits<icUInt32Number>::max())
+      return true;
   }
   return false;
 }

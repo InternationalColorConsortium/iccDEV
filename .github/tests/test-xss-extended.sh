@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ###############################################################
 #
-## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+## Copyright (c) 2024-2025 David H Hoyt. All rights reserved.
 ##                 https://srd.cx
 ##
 ## Last Updated:  16-DEC-2025-2025 1400Z by David Hoyt
@@ -24,6 +24,8 @@ set -euo pipefail
 
 # Source the sanitizer functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=.github/scripts/sanitize-sed.sh
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../scripts/sanitize-sed.sh"
 
 # Disable errexit for test execution
@@ -33,13 +35,11 @@ set +e
 if [[ -t 1 ]]; then
   RED='\033[0;31m'
   GREEN='\033[0;32m'
-  YELLOW='\033[1;33m'
   BLUE='\033[0;34m'
   NC='\033[0m' # No Color
 else
   RED=''
   GREEN=''
-  YELLOW=''
   BLUE=''
   NC=''
 fi
@@ -54,7 +54,7 @@ test_passed() {
   local name="$1"
   ((PASSED_TESTS++))
   ((TOTAL_TESTS++))
-  printf "${GREEN}✓ PASS${NC}: %s\n" "$name"
+  printf "${GREEN}[PASS]${NC}: %s\n" "$name"
 }
 
 test_failed() {
@@ -62,12 +62,12 @@ test_failed() {
   local reason="$2"
   ((FAILED_TESTS++))
   ((TOTAL_TESTS++))
-  printf "${RED}✗ FAIL${NC}: %s\n  Reason: %s\n" "$name" "$reason"
+  printf "${RED}[FAIL]${NC}: %s\n  Reason: %s\n" "$name" "$reason"
 }
 
 test_info() {
   local msg="$1"
-  printf "${BLUE}ℹ INFO${NC}: %s\n" "$msg"
+  printf "${BLUE}[INFO]${NC}: %s\n" "$msg"
 }
 
 # Assert that output does NOT contain dangerous patterns
@@ -352,15 +352,20 @@ echo "${BLUE}Test Suite 12: Control Character Fuzzing${NC}"
 echo "${BLUE}=========================================${NC}"
 echo ""
 
-# Test various control characters mixed with XSS
+# Test various control characters mixed with XSS. Bash strings cannot carry a
+# literal NUL byte, so 0x00 is represented as the argv-visible empty value.
 for i in {0..31}; do
-  char=$(printf "\\x$(printf '%02x' $i)")
+  hex=$(printf '%02x' "$i")
+  char=''
+  if (( i != 0 )); then
+    printf -v char '%b' "\\x${hex}"
+  fi
   input="<script${char}>alert(1)</script>"
   output=$(sanitize_line "$input")
-  assert_safe_html "Control Char Test: 0x$(printf '%02x' $i)" "$output"
+  assert_safe_html "Control Char Test: 0x${hex}" "$output"
 done
 
-test_info "Tested 32 control character variations"
+test_info "Tested 32 control character cases"
 
 ###############################################################
 # Summary

@@ -154,7 +154,11 @@ void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
       printf("  ===\n");
     }
 
-    pTag->Describe(contents, nVerboseness);
+    std::string validateReport;
+    if (pTag->Validate("", validateReport) >= icValidateCriticalError)
+      contents = validateReport;
+    else
+      pTag->Describe(contents, nVerboseness);
     fwrite(contents.c_str(), contents.length(), 1, stdout);
   }
   else {
@@ -568,7 +572,8 @@ int main(int argc, char* argv[])
     if (bDumpValidation) {
       const size_t strSize = 256;
       char str[strSize];
-      int rndup, smallest_offset = pHdr->size;
+      icUInt64Number rndup;
+      icUInt64Number smallest_offset = pHdr->size;
       FILE *fpRaw = fopen(argv[nArg], "rb");
 
       // File size is required to be a multiple of 4 bytes according to clause 7.2.1 bullet (c):
@@ -581,20 +586,20 @@ int main(int argc, char* argv[])
       }
 
       for (i = pIcc->m_Tags.begin(); i != pIcc->m_Tags.end(); ++i) {
-        rndup = 4 * ((i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
+        rndup = 4 * (((icUInt64Number)i->TagInfo.size + 3) / 4); // Round up to a 4-byte aligned size as per ICC spec
 
         // Is the Tag offset + Tag Size beyond EOF?
-        if (i->TagInfo.offset + i->TagInfo.size > pHdr->size) {
+        if ((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)pHdr->size) {
           sReport += icMsgValidateNonCompliant;
-          snprintf(str, strSize, "Tag %s (offset %d, size %d) ends beyond EOF.\n",
+          snprintf(str, strSize, "Tag %s (offset %u, size %u) ends beyond EOF.\n",
                   Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size);
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
         }
 
         // Is it the first tag data in the file?
-        if ((int)i->TagInfo.offset < smallest_offset) {
-          smallest_offset = (int)i->TagInfo.offset;
+        if ((icUInt64Number)i->TagInfo.offset < smallest_offset) {
+          smallest_offset = i->TagInfo.offset;
         }
 
         // Find closest tag after this tag, by checking offsets of other tags
@@ -626,7 +631,8 @@ int main(int argc, char* argv[])
         }
 
         // Validate padding bytes are all zero (ICC.1:2022-05 clause 7.2.1)
-        int padBytes = rndup - (int)i->TagInfo.size;
+        icUInt64Number padBytes64 = rndup - i->TagInfo.size;
+        int padBytes = (padBytes64 <= (icUInt64Number)INT_MAX) ? (int)padBytes64 : INT_MAX;
         icUInt64Number padOffset = (icUInt64Number)i->TagInfo.offset + i->TagInfo.size;
         if (padBytes > 0 && padBytes <= 3 && fpRaw &&
             padOffset < pHdr->size && padOffset <= (icUInt64Number)LONG_MAX &&
@@ -655,10 +661,11 @@ int main(int argc, char* argv[])
 
       // Clause 7.2.1, bullet (b): "the first set of tagged element data shall immediately follow the tag table"
       // 1st tag offset should be = Header (128) + Tag Count (4) + Tag Table (n*12)
-      if ((n > 0) && (smallest_offset > 128 + 4 + (n * 12))) {
+      icUInt64Number expectedFirstOffset = 128 + 4 + (icUInt64Number)n * 12;
+      if ((n > 0) && (smallest_offset > expectedFirstOffset)) {
         sReport += icMsgValidateNonCompliant;
-        snprintf(str, strSize, "First tag data is at offset %d rather than immediately after tag table (offset %d).\n",
-            smallest_offset, 128 + 4 + (n * 12));
+        snprintf(str, strSize, "First tag data is at offset %llu rather than immediately after tag table (offset %llu).\n",
+            (unsigned long long)smallest_offset, (unsigned long long)expectedFirstOffset);
         sReport += str;
         nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
       }

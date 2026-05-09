@@ -70,6 +70,7 @@
 //////////////////////////////////////////////////////////////////////
 
 #include "IccXformFactory.h"
+#include <new>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -80,23 +81,23 @@ CIccXform* CIccBaseXformFactory::CreateXform(icXformType xformSig, CIccTag *pTag
   //We generally ignore pHint in the base creator (used by others to determine what form of xform to create)
   switch(xformSig) {
    case icXformTypeMatrixTRC:
-     return new CIccXformMatrixTRC();
+     return new(std::nothrow) CIccXformMatrixTRC();
 
    case icXformType3DLut:
-     return new CIccXform3DLut(pTag);
+     return new(std::nothrow) CIccXform3DLut(pTag);
 
    case icXformType4DLut:
-     return new CIccXform4DLut(pTag);
+     return new(std::nothrow) CIccXform4DLut(pTag);
 
    case icXformTypeNDLut:
-     return new CIccXformNDLut(pTag);
+     return new(std::nothrow) CIccXformNDLut(pTag);
 
    case icXformTypeNamedColor:
      if (pHintManager) {
 			 IIccCreateXformHint* pHint = pHintManager->GetHint("CIccCreateNamedColorXformHint");
 			 if (pHint) {
 				 CIccCreateNamedColorXformHint *pNCHint = (CIccCreateNamedColorXformHint*)pHint;
-				 return new CIccXformNamedColor(pTag, pNCHint->csPcs, pNCHint->csDevice, 
+				 return new(std::nothrow) CIccXformNamedColor(pTag, pNCHint->csPcs, pNCHint->csDevice,
                                         pNCHint->csSpectralPcs, 
                                         &pNCHint->spectralRange,
                                         &pNCHint->biSpectralRange);
@@ -105,10 +106,10 @@ CIccXform* CIccBaseXformFactory::CreateXform(icXformType xformSig, CIccTag *pTag
 		 return NULL;
 
    case icXformTypeMpe:
-     return new CIccXformMpe(pTag);
+     return new(std::nothrow) CIccXformMpe(pTag);
 
 	 case icXformTypeMonochrome:
-		 return new CIccXformMonochrome();
+		 return new(std::nothrow) CIccXformMonochrome();
 
     default:
       return NULL;

@@ -16,6 +16,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SANITIZER="$SCRIPT_DIR/../scripts/sanitize-sed.sh"
 if [ -r "$SANITIZER" ]; then
+  # shellcheck source=.github/scripts/sanitize-sed.sh
   # shellcheck disable=SC1091
   source "$SANITIZER"
 else
@@ -46,13 +47,17 @@ run_test() {
   echo "  Result:   $result"
 
   if [ "$result" = "$expected" ]; then
-    echo "  ✅ PASS"
+    echo "  [PASS]"
     pass=$((pass + 1))
   else
-    echo "  ❌ FAIL"
+    echo "  [FAIL]"
     fail=$((fail + 1))
   fi
   echo ""
+}
+
+from_hex() {
+  printf '%s' "$1" | xxd -r -p
 }
 
 # =============================================================================
@@ -83,21 +88,25 @@ run_test "Normal text (no special chars)" \
 # Unicode and Charset Tests
 # =============================================================================
 
+unicode_sample=$(from_hex "48656c6c6f20e4b896e7958c20d985d8b1d8add8a8d8a720f09f8c8d")
+emoji_security=$(from_hex "e29c85205041535320e29d8c204641494c20f09f9492205365637572697479")
+arabic_word=$(from_hex "d8a7d984d8b9d8b1d8a8d98ad8a9")
+
 run_test "Unicode characters (UTF-8)" \
-  "Hello 世界 مرحبا 🌍" \
-  "Hello 世界 مرحبا 🌍"
+  "$unicode_sample" \
+  "$unicode_sample"
 
 run_test "Unicode with HTML entities" \
-  "<div>Hello 世界 & 'test'</div>" \
-  "&lt;div&gt;Hello 世界 &amp; &#39;test&#39;&lt;/div&gt;"
+  "<div>${unicode_sample} & 'test'</div>" \
+  "&lt;div&gt;${unicode_sample} &amp; &#39;test&#39;&lt;/div&gt;"
 
 run_test "Emoji and special symbols" \
-  "✅ PASS ❌ FAIL 🔒 Security" \
-  "✅ PASS ❌ FAIL 🔒 Security"
+  "$emoji_security" \
+  "$emoji_security"
 
 run_test "Mixed RTL/LTR text with entities" \
-  "English & العربية <tag>" \
-  "English &amp; العربية &lt;tag&gt;"
+  "English & ${arabic_word} <tag>" \
+  "English &amp; ${arabic_word} &lt;tag&gt;"
 
 run_test "Zero-width characters (stripped by v3)" \
   "$(printf 'test\xe2\x80\x8bzero\xe2\x80\x8cwidth\xe2\x80\x8bchars')" \
@@ -107,8 +116,10 @@ run_test "Zero-width characters (stripped by v3)" \
 # Control Character and Injection Tests
 # =============================================================================
 
-run_test "Null bytes removed" \
-  "$(printf 'test\x00null\x00byte')" \
+# Bash cannot store a NUL byte in variables or command substitutions. These
+# cases exercise the argv-visible payload that the Bash sanitizer can receive.
+run_test "NUL-stripped payload after Bash argv conversion" \
+  "testnullbyte" \
   "testnullbyte"
 
 run_test "Carriage return removed" \
@@ -131,13 +142,16 @@ run_test "Bell and other control chars" \
 # Homograph and Lookalike Attack Tests
 # =============================================================================
 
+cyrillic_admin=$(from_hex "d090646d696e2028437972696c6c6963204129")
+math_text=$(from_hex "f09d9087f09d909ef09d90a5f09d90a5f09d90a820f09d91bef09d9290f09d9293f09d928df09d9285")
+
 run_test "Cyrillic lookalikes" \
-  "Аdmin (Cyrillic A)" \
-  "Аdmin (Cyrillic A)"
+  "$cyrillic_admin" \
+  "$cyrillic_admin"
 
 run_test "Mathematical bold/italic (preserved)" \
-  "𝐇𝐞𝐥𝐥𝐨 𝑾𝒐𝒓𝒍𝒅" \
-  "𝐇𝐞𝐥𝐥𝐨 𝑾𝒐𝒓𝒍𝒅"
+  "$math_text" \
+  "$math_text"
 
 # =============================================================================
 # Truncation and Length Tests
@@ -152,10 +166,10 @@ echo "  Input length: 2000"
 echo "  Result length: $result_len"
 echo "  Max allowed: $SANITIZE_LINE_MAXLEN"
 if [ "$result_len" -le "$SANITIZE_LINE_MAXLEN" ]; then
-  echo "  ✅ PASS (truncated correctly)"
+  echo "  [PASS] (truncated correctly)"
   pass=$((pass + 1))
 else
-  echo "  ❌ FAIL (not truncated)"
+  echo "  [FAIL] (not truncated)"
   fail=$((fail + 1))
 fi
 echo ""
@@ -200,6 +214,7 @@ run_test "CDATA section" \
   "<![CDATA[<script>alert(1)</script>]]>" \
   "&lt;![CDATA[&lt;script&gt;alert(1)&lt;/script&gt;]]&gt;"
 
+# shellcheck disable=SC2016
 run_test "Server-side template injection" \
   '{{7*7}} ${7*7} <%= 7*7 %>' \
   '{{7*7}} ${7*7} &lt;%= 7*7 %&gt;'
@@ -258,10 +273,10 @@ result=$(sanitize_print "$multiline_input")
 if echo "$result" | grep -q "&lt;error&gt;" && \
    echo "$result" | grep -q "&amp;" && \
    echo "$result" | grep -q "&#39;"; then
-  echo "  ✅ PASS (contains expected entities)"
+  echo "  [PASS] (contains expected entities)"
   pass=$((pass + 1))
 else
-  echo "  ❌ FAIL"
+  echo "  [FAIL]"
   fail=$((fail + 1))
 fi
 echo ""
@@ -286,7 +301,7 @@ run_test "Filename sanitization: slashes to underscores" \
   "sanitize_filename"
 
 # =============================================================================
-# Unicode Attack Pattern Tests (v3 — Trojan Source / Supply Chain)
+# Unicode Attack Pattern Tests (v3 - Trojan Source / Supply Chain)
 # =============================================================================
 
 # Pattern 1: Bidi override (Trojan Source attack)
@@ -339,7 +354,7 @@ run_test "Ref: BOM stripped from ref" \
   "malicious" \
   "sanitize_ref"
 
-# Pattern 3: Homoglyph (cannot auto-strip — valid Unicode letters)
+# Pattern 3: Homoglyph (cannot auto-strip - valid Unicode letters)
 # sanitize_ref replaces non-ASCII with dash; sanitize_line preserves them
 run_test "Ref: Cyrillic homoglyph replaced" \
   "$(printf 'micr\xd0\xbesoft')" \
@@ -389,11 +404,13 @@ run_test "Ref: double ampersand" \
   "branch-curl-evil.com" \
   "sanitize_ref"
 
+# shellcheck disable=SC2016
 run_test "Ref: backtick substitution" \
   'branch`whoami`end' \
   "branch-whoami-end" \
   "sanitize_ref"
 
+# shellcheck disable=SC2016
 run_test "Ref: dollar-paren substitution" \
   'branch$(id)end' \
   "branch-id-end" \
@@ -443,8 +460,8 @@ run_test "Ref: CRLF injection" \
   "branchinjected" \
   "sanitize_ref"
 
-run_test "Ref: null byte truncation attempt" \
-  "$(printf 'branch\x00hidden')" \
+run_test "Ref: NUL-stripped payload after Bash argv conversion" \
+  "branchhidden" \
   "branchhidden" \
   "sanitize_ref"
 
@@ -453,23 +470,23 @@ run_test "Ref: null byte truncation attempt" \
 # =============================================================================
 
 # Overlong 2-byte encoding of '/' (U+002F): 0xC0 0xAF
-# With LC_ALL=C in sanitize_ref, these bytes are individually non-ASCII → replaced
+# With LC_ALL=C in sanitize_ref, these bytes are individually non-ASCII, then replaced
 run_test "Ref: overlong UTF-8 slash (0xC0 0xAF)" \
   "$(printf 'branch\xc0\xafetc\xc0\xafpasswd')" \
   "branch-etc-passwd" \
   "sanitize_ref"
 
 # Overlong bytes in sanitize_line: preserved as invalid UTF-8
-# (not a practical attack — no modern system decodes overlong to ASCII)
+# (not a practical attack - no modern system decodes overlong to ASCII)
 echo "Test $((pass + fail + 1)): Line: overlong UTF-8 bytes preserved (no decode)"
 overlong_input=$(printf 'test\xc0\xbcscript\xc0\xbe')
 result=$(sanitize_line "$overlong_input")
 # Verify the '<'/'>' ASCII bytes (0x3c/0x3e) are NOT present
 if ! printf '%s' "$result" | xxd -p | grep -q '3c\|3e'; then
-  echo "  ✅ PASS (no ASCII < or > injected from overlong encoding)"
+  echo "  [PASS] (no ASCII < or > injected from overlong encoding)"
   pass=$((pass + 1))
 else
-  echo "  ❌ FAIL (overlong was decoded to ASCII — dangerous!)"
+  echo "  [FAIL] (overlong was decoded to ASCII - dangerous!)"
   fail=$((fail + 1))
 fi
 echo ""
@@ -492,7 +509,7 @@ run_test "Line: heredoc delimiter injection attempt" \
 # sanitize_print Edge Cases
 # =============================================================================
 
-# Test newline collapse (>3 consecutive → 3)
+# Test newline collapse (>3 consecutive to 3)
 echo "Test $((pass + fail + 1)): sanitize_print collapses >3 newlines"
 collapse_input="$(printf 'line1\n\n\n\n\n\nline2')"
 result=$(sanitize_print "$collapse_input")
@@ -500,10 +517,10 @@ newline_count=$(printf '%s' "$result" | tr -cd '\n' | wc -c)
 echo "  Input has 6 consecutive newlines between lines"
 echo "  Result newlines: $newline_count"
 if [ "$newline_count" -le 3 ]; then
-  echo "  ✅ PASS (collapsed to ≤3)"
+  echo "  [PASS] (collapsed to <=3)"
   pass=$((pass + 1))
 else
-  echo "  ❌ FAIL (got $newline_count newlines)"
+  echo "  [FAIL] (got $newline_count newlines)"
   fail=$((fail + 1))
 fi
 echo ""
@@ -516,10 +533,10 @@ newline_count=$(printf '%s' "$result" | tr -cd '\n' | wc -c)
 echo "  Input: 3 lines with 2 newlines"
 echo "  Result newlines: $newline_count"
 if [ "$newline_count" -eq 2 ]; then
-  echo "  ✅ PASS"
+  echo "  [PASS]"
   pass=$((pass + 1))
 else
-  echo "  ❌ FAIL (expected 2, got $newline_count)"
+  echo "  [FAIL] (expected 2, got $newline_count)"
   fail=$((fail + 1))
 fi
 echo ""
@@ -533,8 +550,8 @@ run_test "Filename: double-encoded traversal (%2e%2e%2f)" \
   "2e-2e-2fetc-2fpasswd" \
   "sanitize_filename"
 
-run_test "Filename: null byte extension bypass" \
-  "$(printf 'evil.php\x00.jpg')" \
+run_test "Filename: NUL-stripped payload after Bash argv conversion" \
+  "evil.php.jpg" \
   "evil.php.jpg" \
   "sanitize_filename"
 
@@ -550,10 +567,10 @@ result_len=${#result}
 echo "  Input length: $SANITIZE_LINE_MAXLEN"
 echo "  Result length: $result_len"
 if [ "$result_len" -eq "$SANITIZE_LINE_MAXLEN" ]; then
-  echo "  ✅ PASS (not truncated)"
+  echo "  [PASS] (not truncated)"
   pass=$((pass + 1))
 else
-  echo "  ❌ FAIL (was truncated or changed)"
+  echo "  [FAIL] (was truncated or changed)"
   fail=$((fail + 1))
 fi
 echo ""
@@ -566,10 +583,10 @@ result_len=${#result}
 echo "  Input length: $((SANITIZE_LINE_MAXLEN + 1))"
 echo "  Result length: $result_len"
 if [ "$result_len" -le "$SANITIZE_LINE_MAXLEN" ]; then
-  echo "  ✅ PASS (truncated to ≤$SANITIZE_LINE_MAXLEN)"
+  echo "  [PASS] (truncated to <=$SANITIZE_LINE_MAXLEN)"
   pass=$((pass + 1))
 else
-  echo "  ❌ FAIL (not truncated)"
+  echo "  [FAIL] (not truncated)"
   fail=$((fail + 1))
 fi
 echo ""
@@ -599,10 +616,9 @@ echo "Results: $pass passed, $fail failed"
 echo "=========================================="
 
 if [ $fail -eq 0 ]; then
-  echo "✅ All tests PASSED"
+  echo "[PASS] All tests PASSED"
   exit 0
 else
-  echo "❌ Some tests FAILED"
+  echo "[FAIL] Some tests FAILED"
   exit 1
 fi
-

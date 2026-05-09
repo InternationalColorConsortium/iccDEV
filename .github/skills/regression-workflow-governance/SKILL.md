@@ -41,6 +41,9 @@ or changing `ci-iccdev-tool-tests.yml`.
 7. If a GitHub Actions run URL is involved, download the full run log archive
    and audit all jobs, including green jobs, for hidden diagnostics.
 8. Run local script syntax checks and the focused regression before handoff.
+   If the regression is added inside `iccdev-tool-coverage-baseline.sh`, run the
+   direct script and the CTest wrapper because the CTest suite count should stay
+   unchanged.
 
 ## Validation
 
@@ -57,6 +60,16 @@ ICCDEV_TOOLS_DIR=$PWD/Build/Tools \
 ICCDEV_TESTING_DIR=$PWD/Testing \
 ICCDEV_TEST_OUTDIR=/tmp/iccdev-regression \
   .github/scripts/<new-regression>.sh
+```
+
+For edits to the existing tool coverage script:
+
+```bash
+ICCDEV_TOOLS_DIR=$PWD/build/Tools \
+ICCDEV_TESTING_DIR=$PWD/Testing \
+ICCDEV_TEST_OUTDIR=/tmp/iccdev-tool-output \
+  .github/scripts/iccdev-tool-coverage-baseline.sh --asan --quick
+ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
 ```
 
 For workflow and packaging changes:

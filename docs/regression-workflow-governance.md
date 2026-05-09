@@ -139,6 +139,8 @@ When adding a gate, update the smallest useful index:
 
 - `docs/ctest.md` for CTest registrations, expected suite counts, fixtures, or
   generated-profile count changes.
+- `docs/ctest.md` or the relevant tool README when adding cases inside an
+  existing CTest-backed script without changing the CTest suite count.
 - `.github/ci/regression/README.md` for PoC files or script-based gates.
 - `.github/instructions/testing.instructions.md` when the gate becomes part of
   standard testing policy.
@@ -161,6 +163,9 @@ file .github/scripts/<regression-script>.sh
 Run the focused regression and capture the command plus result in the handoff.
 For workflow edits, also inspect the changed `run:` blocks for the governance
 rules above.
+For updates to `.github/scripts/iccdev-tool-coverage-baseline.sh`, run both the
+direct script invocation and `ctest -R '^iccdev\.tool-coverage$'` so CI wrapper
+behavior is covered.
 
 For CI packaging edits, run the nearest local install/uninstall repro and grep
 the captured logs for missing-file diagnostics. If the change touches CMake or

@@ -44,7 +44,9 @@ when practical.
 
 - `check` must exist on every platform.
 - `check` and workflow CTest execution must use `--no-tests=error`.
-- Linux suite count assertions currently expect `Total Tests: 19`.
+- Linux suite count assertions currently expect `Total Tests: 22`.
+- Adding checks inside `iccdev-tool-coverage-baseline.sh` does not change that
+  count; validate the direct script and `ctest -R '^iccdev\.tool-coverage$'`.
 - Windows currently registers 5 CTest suites.
 - Generated-profile gates currently validate 207 ICC profiles.
 - JSON round-trip profile generation validates 129 profile parses.
@@ -76,6 +78,16 @@ cmake -S Build/Cmake -B build -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_WXWID
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
 ctest --test-dir build --output-on-failure --no-tests=error
+```
+
+For tool coverage script changes:
+
+```bash
+ICCDEV_TOOLS_DIR=$PWD/build/Tools \
+ICCDEV_TESTING_DIR=$PWD/Testing \
+ICCDEV_TEST_OUTDIR=/tmp/iccdev-tool-output \
+  .github/scripts/iccdev-tool-coverage-baseline.sh --asan --quick
+ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
 ```
 
 For workflow YAML:

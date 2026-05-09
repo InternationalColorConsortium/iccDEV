@@ -128,8 +128,8 @@ jobs:
 
           CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
           ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
-          if ! grep -q "^Total Tests: 19$" "${CTEST_LIST}"; then
-            echo "::error title=CTest Discovery::Expected Total Tests: 19"
+          if ! grep -q "^Total Tests: 22$" "${CTEST_LIST}"; then
+            echo "::error title=CTest Discovery::Expected Total Tests: 22"
             cat "${CTEST_LIST}"
             exit 1
           fi
@@ -147,6 +147,7 @@ jobs:
 
           ctest --test-dir "${BUILD_DIR}" \
             --output-on-failure \
+            --label-exclude "slow" \
             --no-tests=error \
             --output-junit "${BUILD_DIR}/ctest-results.xml"
 
@@ -188,6 +189,8 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
+          test_cmd="ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
+
           {
             echo "### iccDEV CTest Tool Suites"
             echo ""
@@ -197,7 +200,7 @@ jobs:
             echo "| Compiler | $(sanitize_line "$(clang-18 --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
-            echo "| Test command | \`ctest --test-dir build --output-on-failure --no-tests=error\` |"
+            echo "| Test command | \`${test_cmd}\` |"
             echo ""
             echo "### Manual Reproduction"
             echo ""
@@ -208,6 +211,7 @@ jobs:
             echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON"
             echo "cmake --build build --parallel \"\$(nproc)\""
-            echo "ctest --test-dir build --output-on-failure --no-tests=error"
+            echo "ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
+            echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

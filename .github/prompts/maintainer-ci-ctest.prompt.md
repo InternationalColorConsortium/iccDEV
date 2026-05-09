@@ -55,6 +55,9 @@ Choose the smallest gate that proves the behavior:
 - Update `docs/regression-workflow-governance.md` for workflow process changes.
 - Update `.github/skills/README.md` or a skill when the process becomes a
   repeatable maintainer workflow.
+- When adding cases inside an existing script-backed suite, document that the
+  CTest suite count is unchanged and validate both direct script execution and
+  the CTest wrapper.
 - For Windows executable tests, keep runtime DLL path handling centralized in
   `Build/Cmake/Testing/WindowsRuntimePaths.cmake`; update docs and skills when
   a test needs vcpkg, Visual Studio LLVM, or MinGW runtime DLLs.
@@ -70,6 +73,16 @@ cmake -S Build/Cmake -B build -DENABLE_TOOLS=ON -DENABLE_TESTS=ON -DENABLE_WXWID
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
 ctest --test-dir build --output-on-failure --no-tests=error
+```
+
+For `.github/scripts/iccdev-tool-coverage-baseline.sh` updates:
+
+```bash
+ICCDEV_TOOLS_DIR=$PWD/build/Tools \
+ICCDEV_TESTING_DIR=$PWD/Testing \
+ICCDEV_TEST_OUTDIR=/tmp/iccdev-tool-output \
+  .github/scripts/iccdev-tool-coverage-baseline.sh --asan --quick
+ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
 ```
 
 Workflow YAML:

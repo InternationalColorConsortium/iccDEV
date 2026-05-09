@@ -38,7 +38,7 @@ jobs:
         shell: bash --noprofile --norc {0}
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -160,9 +160,11 @@ jobs:
               'ldd /opt/iccdev/Build/Tools/IccToXml/iccToXml 2>&1 | grep "not found"'
             exit 1
           fi
-          echo "### Build Results" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Tools: $(sanitize_line "$TOOL_COUNT")" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Runtime deps: All resolved [OK]" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Build Results"
+            echo "- Tools: $(sanitize_line "$TOOL_COUNT")"
+            echo "- Runtime deps: All resolved [OK]"
+          } >> "$GITHUB_STEP_SUMMARY"
           TOOL_LIST=$(docker run --rm iccdev-test:latest bash -c \
             'find /opt/iccdev/Build/Tools -type f -executable -exec basename {} \; | sort')
           {

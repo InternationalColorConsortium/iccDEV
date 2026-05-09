@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 ###############################################################
 #
-## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+## Copyright (c) 2024-2025 David H Hoyt. All rights reserved.
 ##                 https://srd.cx
 ##
 ## Last Updated:  16-DEC-2025-2025 1400Z by David Hoyt
@@ -24,6 +24,8 @@ set -euo pipefail
 
 # Source the sanitizer functions
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=.github/scripts/sanitize-sed.sh
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../scripts/sanitize-sed.sh"
 
 # Disable errexit for test execution (we want to continue on test failures)
@@ -33,12 +35,10 @@ set +e
 if [[ -t 1 ]]; then
   RED='\033[0;31m'
   GREEN='\033[0;32m'
-  YELLOW='\033[1;33m'
   NC='\033[0m' # No Color
 else
   RED=''
   GREEN=''
-  YELLOW=''
   NC=''
 fi
 
@@ -52,7 +52,7 @@ test_passed() {
   local name="$1"
   ((PASSED_TESTS++))
   ((TOTAL_TESTS++))
-  printf "${GREEN}✓ PASS${NC}: %s\n" "$name"
+  printf "${GREEN}[PASS]${NC}: %s\n" "$name"
 }
 
 test_failed() {
@@ -60,7 +60,7 @@ test_failed() {
   local reason="$2"
   ((FAILED_TESTS++))
   ((TOTAL_TESTS++))
-  printf "${RED}✗ FAIL${NC}: %s\n  Reason: %s\n" "$name" "$reason"
+  printf "${RED}[FAIL]${NC}: %s\n  Reason: %s\n" "$name" "$reason"
 }
 
 # Assert that output does NOT contain dangerous patterns

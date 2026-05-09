@@ -1213,13 +1213,21 @@ bool CIccSampledCurveSegment::Begin(CIccCurveSegment *pPrevSeg = NULL)
  ******************************************************************************/
 icFloatNumber CIccSampledCurveSegment::Apply(icFloatNumber v) const
 {
+  if (!std::isfinite(v))
+    v=m_startPoint;
+
   if (v<m_startPoint)
     v=m_startPoint;
   else if (v>m_endPoint)
     v=m_endPoint;
 
   icFloatNumber pos = (v-m_startPoint)/m_range * m_last;
-  icUInt32Number index = (icUInt32Number) pos;
+  if (!std::isfinite(pos) || pos<0.0f)
+    pos=0.0f;
+  else if (pos>m_last)
+    pos=m_last;
+
+  icUInt32Number index = static_cast<icUInt32Number>(pos);
   icFloatNumber remainder = pos - (icFloatNumber)index;
 
   if (remainder==0.0)
@@ -1838,7 +1846,12 @@ icFloatNumber CIccSingleSampledCurve::Apply(icFloatNumber v) const
   }
 
   icFloatNumber pos = (v-m_firstEntry)/m_range * m_last;
-  icUInt32Number index = (icUInt32Number) pos;
+  if (!std::isfinite(pos) || pos<0.0f)
+    pos=0.0f;
+  else if (pos>m_last)
+    pos=m_last;
+
+  icUInt32Number index = static_cast<icUInt32Number>(pos);
   icFloatNumber remainder = pos - (icFloatNumber)index;
 
   if (remainder==0.0)
@@ -2471,6 +2484,9 @@ bool CIccSampledCalculatorCurve::Begin(icElemInterp nInterp, CIccTagMultiProcess
 ******************************************************************************/
 icFloatNumber CIccSampledCalculatorCurve::Apply(icFloatNumber v) const
 {
+  if (!std::isfinite(v))
+    v=m_firstEntry;
+
   if (v < m_firstEntry) {
     return m_loSlope * v + m_loIntercept;;
   }
@@ -2479,7 +2495,12 @@ icFloatNumber CIccSampledCalculatorCurve::Apply(icFloatNumber v) const
   }
 
   icFloatNumber pos = (v - m_firstEntry) / m_range * m_last;
-  icUInt32Number index = (icUInt32Number)pos;
+  if (!std::isfinite(pos) || pos<0.0f)
+    pos=0.0f;
+  else if (pos>m_last)
+    pos=m_last;
+
+  icUInt32Number index = static_cast<icUInt32Number>(pos);
   icFloatNumber remainder = pos - (icFloatNumber)index;
 
   if (remainder == 0.0)

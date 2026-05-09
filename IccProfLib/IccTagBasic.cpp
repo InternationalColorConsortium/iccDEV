@@ -7426,6 +7426,11 @@ static bool icIsValidUtf16(const icUInt16Number *pBuf, icUInt32Number nLength)
   return true;
 }
 
+static void icAppendUtf8Byte(std::string &sText, icUInt32Number nByte)
+{
+  sText.push_back(static_cast<char>(nByte & 0xffu));
+}
+
 /**
  ****************************************************************************
  * Name: CIccLocalizedUnicode::GetUtf8Size
@@ -7490,6 +7495,9 @@ bool CIccLocalizedUnicode::GetText(std::string &sText)
 {
   sText.clear();
 
+  if (!m_pBuf)
+    return m_nLength == 0;
+
   icUInt16Number* str = m_pBuf;
   icUInt16Number *str_end = m_pBuf + m_nLength;
   while ( (str < str_end) && *str ) {
@@ -7519,22 +7527,22 @@ bool CIccLocalizedUnicode::GetText(std::string &sText)
     //UTF-32 to UTF-8 -------
 
     if (code32 <= 0x007F) {
-      sText += (unsigned char)code32;
+      icAppendUtf8Byte(sText, code32);
     }
     else if (code32 <= 0x07FF) {
-      sText += (unsigned char)(((code32 >> 6) & 0x1F) | 0xC0);
-      sText += (unsigned char)((code32 & 0x3F) | 0x80);
+      icAppendUtf8Byte(sText, ((code32 >> 6) & 0x1F) | 0xC0);
+      icAppendUtf8Byte(sText, (code32 & 0x3F) | 0x80);
     }
     else if (code32 <= 0xFFFF) {
-      sText += (unsigned char)(((code32 >> 12) & 0x0F) | 0xE0);
-      sText += (unsigned char)(((code32 >> 6) & 0x3F) | 0x80);
-      sText += (unsigned char)(((code32) & 0x3F) | 0x80);
+      icAppendUtf8Byte(sText, ((code32 >> 12) & 0x0F) | 0xE0);
+      icAppendUtf8Byte(sText, ((code32 >> 6) & 0x3F) | 0x80);
+      icAppendUtf8Byte(sText, (code32 & 0x3F) | 0x80);
     }
     else if (code32 <= 0x10FFFF) {
-      sText += (unsigned char)(((code32 >> 18) & 0x07) | 0xF0);
-      sText += (unsigned char)(((code32 >> 12) & 0x3F) | 0x80);
-      sText += (unsigned char)(((code32 >> 6) & 0x3F) | 0x80);
-      sText += (unsigned char)(((code32) & 0x3F) | 0x80);
+      icAppendUtf8Byte(sText, ((code32 >> 18) & 0x07) | 0xF0);
+      icAppendUtf8Byte(sText, ((code32 >> 12) & 0x3F) | 0x80);
+      icAppendUtf8Byte(sText, ((code32 >> 6) & 0x3F) | 0x80);
+      icAppendUtf8Byte(sText, (code32 & 0x3F) | 0x80);
     }
   }
 

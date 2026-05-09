@@ -393,7 +393,9 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
       parseStr += "Private tag '" + key + "' has non-string 'sig'\n";
       return false;
     }
-    sig = (icTagSignature)icGetSigVal(tagValue["sig"].get<std::string>().c_str());
+    std::string sigStr;
+    jGetString(tagValue, "sig", sigStr);
+    sig = (icTagSignature)icGetSigVal(sigStr.c_str());
   }
 
   // sameAs: re-attach an already-parsed tag under this signature
@@ -402,7 +404,8 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
       parseStr += "sameAs for tag '" + key + "' must be a string\n";
       return false;
     }
-    std::string refKey = tagValue["sameAs"].get<std::string>();
+    std::string refKey;
+    jGetString(tagValue, "sameAs", refKey);
     auto it = keyToSig.find(refKey);
     if (it == keyToSig.end()) {
       parseStr += "sameAs references unknown tag '" + refKey + "' for '" + key + "'\n";
@@ -444,7 +447,9 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
         parseStr += "Tag '" + key + "' has non-string private type 'sig'\n";
         return false;
       }
-      typeSig = (icTagTypeSignature)icGetSigVal(tagData["sig"].get<std::string>().c_str());
+      std::string typeSigStr;
+      jGetString(tagData, "sig", typeSigStr);
+      typeSig = (icTagTypeSignature)icGetSigVal(typeSigStr.c_str());
     }
     else
       typeSig = (icTagTypeSignature)icGetSigVal(typeName.c_str());
@@ -469,8 +474,11 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
     return false;
   }
 
-  if (tagValue.contains("Reserved"))
-    pTag->m_nReserved = (icUInt32Number)tagValue["Reserved"].get<unsigned int>();
+  if (tagValue.contains("Reserved") && !jGetValue(tagValue, "Reserved", pTag->m_nReserved)) {
+    delete pTag;
+    parseStr += "Tag '" + key + "' has invalid Reserved value\n";
+    return false;
+  }
 
   if (!AttachTag(sig, pTag)) {
     delete pTag;
@@ -485,8 +493,8 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
 bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)
 {
   // Wrap the whole parse body in a try/catch so nlohmann's
-  // type_error / out_of_range exceptions (thrown from the many raw
-  // .get<T>() / operator[] sites in IccTagJson / IccMpeJson) can't
+  // type_error / out_of_range exceptions (thrown from raw typed JSON
+  // access sites in IccTagJson / IccMpeJson) can't
   // propagate out to std::terminate. LoadJson() has its own wrap,
   // but other callers (wasm wrappers, custom embedders) calling
   // ParseJson() directly would otherwise abort the host.
@@ -548,7 +556,7 @@ bool CIccProfileJson::LoadJson(const char *szFilename, std::string *parseStr)
   // Cap raw JSON size. nlohmann's default nesting + size limits are
   // effectively "everything fits in memory", which is a DoS primitive
   // when the JSON comes from an untrusted source. 64 MB is generous
-  // for any legitimate ICC profile round-trip — real JSON dumps of
+  // for any legitimate ICC profile round-trip - real JSON dumps of
   // even big iccMAX spectral profiles top out around 5 MB.
   static const std::streamsize kMaxJsonFileBytes =
       static_cast<std::streamsize>(64) * 1024 * 1024;

@@ -99,13 +99,13 @@ void Usage(const char *name)
   else
     ++strippedName;
 
-  printf("Usage: %s output compress sep infile_fmt start end incr {profile}\n", strippedName ); // argv[0]
+  printf("Usage: %s output compress sep infile_prefix start end incr {profile}\n", strippedName ); // argv[0]
   printf("Concatenates several spectral TIFF files into a single file, with optional embedded ICC profile.\n");
   
   printf("\toutput: path/name of the TIFF file to be created\n");                               // argv[1]
   printf("\tcompress: boolean (0 | 1), should the output be compressed\n");                     // argv[2]
   printf("\tsep: boolean (0 | 1), plane data be seperated in the output TIFF\n");               // argv[3]
-  printf("\tinfile_fmt: printf format string for input files, example: \"spec_%%06d.tiff\"\n"); // argv[4]
+  printf("\tinfile_prefix: input filename prefix; channel numbers are appended, example: \"spec_\"\n"); // argv[4]
   printf("\tstart: integer, first channel number to process\n");                                // argv[5]
   printf("\tend: integer, last channel number to process\n");                                   // argv[6]
   printf("\tincrement: integer, increment between channels\n");                                 // argv[7]

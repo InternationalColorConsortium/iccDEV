@@ -16,15 +16,3 @@ fun:*MD5Transform*
 
 [unsigned-shift-base]
 fun:*MD5Transform*
-
-# UTF-16 to UTF-8 encoding appends unsigned char (0x80-0xFF) to std::string
-# Sign change from unsigned char to signed char is expected for multi-byte UTF-8
-# Fires in: IccTagBasic.cpp CIccLocalizedUnicode::GetText() lines 7238-7253
-[implicit-integer-sign-change]
-fun:*CIccLocalizedUnicode*GetText*
-
-# libstdc++ std::string comparison subtracts lengths while ordering object keys.
-# This is well-defined unsigned arithmetic, but -fsanitize=integer reports it
-# through nlohmann::json's std::map-backed object storage.
-[unsigned-integer-overflow]
-src:*/bits/basic_string.h

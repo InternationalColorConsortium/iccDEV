@@ -161,6 +161,119 @@ run_xml_reject_test() {
   PASS=$((PASS + 1))
 }
 
+run_tojson_success_test() {
+  local name="$1"
+  local icc_file="$2"
+  local output_file="$OUTDIR/${name}.json"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$output_file" "$logfile"
+
+  timeout 30 "$TOJSON" "$icc_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -eq 124 ]; then
+    echo "  [FAIL] $name -- timed out"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ge 129 ] && [ "$exit_code" -le 192 ]; then
+    echo "  [FAIL] $name -- crashed with signal $((exit_code - 128))"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+    echo "  [FAIL] $name -- iccToJson failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if ! python3 -c '
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    doc = json.load(fh)
+
+for entry in doc["IccProfile"]["Tags"]:
+    for tag in entry.values():
+        data = tag.get("data", {})
+        if data.get("type") == "namedColor2Type":
+            if not data.get("colorantSuffix", "").startswith("?bad"):
+                raise SystemExit("namedColor2 suffix was not sanitized")
+            colors = data.get("colors", [])
+            if not colors or not colors[0].get("name", "").startswith("?"):
+                raise SystemExit("namedColor2 root name was not sanitized")
+            raise SystemExit(0)
+
+raise SystemExit("namedColor2 tag not found")
+' "$output_file" > "$OUTDIR/${name}-inspect.log" 2>&1; then
+    echo "  [FAIL] $name -- JSON output did not contain sanitized namedColor2 strings"
+    sed -n '1,5p' "$OUTDIR/${name}-inspect.log"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccToJson emitted valid sanitized JSON)"
+  PASS=$((PASS + 1))
+}
+
+run_tojson_valid_json_test() {
+  local name="$1"
+  local icc_file="$2"
+  local output_file="$OUTDIR/${name}.json"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$output_file" "$logfile"
+
+  timeout 30 "$TOJSON" "$icc_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -eq 124 ]; then
+    echo "  [FAIL] $name -- timed out"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ge 129 ] && [ "$exit_code" -le 192 ]; then
+    echo "  [FAIL] $name -- crashed with signal $((exit_code - 128))"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+    echo "  [FAIL] $name -- iccToJson failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if ! python3 -m json.tool "$output_file" > "$OUTDIR/${name}-jsoncheck.log" 2>&1; then
+    echo "  [FAIL] $name -- iccToJson output is not valid JSON"
+    sed -n '1,5p' "$OUTDIR/${name}-jsoncheck.log"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccToJson emitted valid JSON)"
+  PASS=$((PASS + 1))
+}
+
 if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ] || [ ! -x "$FROMXML" ]; then
   echo "ERROR: IccToJson, IccFromJson, and IccFromXml are required"
   exit 1
@@ -347,6 +460,70 @@ if count != 1:
 pathlib.Path(dst_path).write_text(text, encoding="utf-8")
 ' "$XML_PROFILE" "$XML_MATRIX_HUGE"
 
+TEXT_INVALID_ASCII="$OUTDIR/text-invalid-ascii.icc"
+python3 -c '
+import pathlib
+import struct
+import sys
+
+src, dst = sys.argv[1:3]
+data = bytearray(pathlib.Path(src).read_bytes())
+if len(data) < 132:
+    raise SystemExit("profile too small")
+
+tag_count = struct.unpack(">I", data[128:132])[0]
+for idx in range(tag_count):
+    pos = 132 + idx * 12
+    if pos + 12 > len(data):
+        raise SystemExit("tag table truncated")
+    offset, size = struct.unpack(">II", data[pos + 4:pos + 12])
+    if offset + size > len(data) or size < 16:
+        continue
+    data[offset:offset + 8] = b"text\0\0\0\0"
+    data[offset + 8] = 0xb0
+    data[offset + 9:offset + 16] = b" text\0\0"
+    pathlib.Path(dst).write_bytes(data)
+    raise SystemExit(0)
+
+raise SystemExit("no tag large enough for textType mutation")
+' "$PROFILE" "$TEXT_INVALID_ASCII"
+
+NAMED_PROFILE="$TESTING_DIR/Named/NamedColor.icc"
+NAMED_INVALID_ASCII="$OUTDIR/namedcolor-invalid-ascii.icc"
+python3 -c '
+import pathlib
+import struct
+import sys
+
+src, dst = sys.argv[1:3]
+data = bytearray(pathlib.Path(src).read_bytes())
+if len(data) < 132:
+    raise SystemExit("profile too small")
+
+tag_count = struct.unpack(">I", data[128:132])[0]
+for idx in range(tag_count):
+    pos = 132 + idx * 12
+    if pos + 12 > len(data):
+        raise SystemExit("tag table truncated")
+    sig = bytes(data[pos:pos + 4])
+    offset, size = struct.unpack(">II", data[pos + 4:pos + 12])
+    if sig != b"ncl2":
+        continue
+    if offset + size > len(data) or size < 122:
+        raise SystemExit("namedColor2 tag is truncated")
+    payload = bytearray(size)
+    payload[0:4] = b"ncl2"
+    payload[12:16] = struct.pack(">I", 1)
+    payload[20:24] = b"pre\0"
+    payload[52:57] = b"\xb0bad\0"
+    payload[84:90] = b"\xb1root\0"
+    data[offset:offset + size] = payload
+    pathlib.Path(dst).write_bytes(data)
+    raise SystemExit(0)
+
+raise SystemExit("namedColor2 tag not found")
+' "$NAMED_PROFILE" "$NAMED_INVALID_ASCII"
+
 echo "Using base profile: $PROFILE"
 echo "Using XML profile:  $XML_PROFILE"
 echo "Tools dir: $TOOLS_DIR"
@@ -361,6 +538,8 @@ run_reject_test "spectral-matrix-huge-channels" "$OUTDIR/spectral-matrix-huge-ch
 run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "offsetData count does not match spectral element size"
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
+run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
+run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
 
 HELPER_SRC="$OUTDIR/json-config-helper-test.cpp"
 HELPER_BIN="$OUTDIR/json-config-helper-test"
