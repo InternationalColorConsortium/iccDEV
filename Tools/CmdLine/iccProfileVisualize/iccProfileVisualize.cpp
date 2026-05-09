@@ -506,11 +506,14 @@ int TIFFColorModelFromICCModel( icColorSpaceSignature colorSig )
 
     case icSigGrayData:
     case icSigGamutData:
-    default:
-      // and let additional channels be unassociated alphas
       return TIFF_MODE_GRAY_BLACKZERO;
       break;
-
+    
+    default:
+      // and N-ink should be multichannel
+      return TIFF_MODE_GRAY_WHITEZERO;
+      break;
+    
   }
 
   // some compilers are picky, and stupid
@@ -669,7 +672,22 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         tiles = 1;
         tileHeight = 1;
       }
+      
+      // special case for 2 dimensional LUT
+      if (inputChannels == 2) {
+        tileHeight = tiles;
+        tiles = 1;
+      }
 
+// 4, 6 look ok, just odd in the order of data
+
+// odd numbers of inputs are wrong for N > 3, similar to MultiInkMapping
+// 5, 7, 13, 15 look bogus   7 most bogus - work on that!
+// 15 is next most heinous
+//Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange_output_A2B0.tif
+//Turquoise-Magenta-Yellow-Violet-Green_output_A2B0.tif
+//Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange-BlueGreen-PinkViolet-Red-Teal-YellowOrange-Cerulean-GreenGold-Indigo_output_A2B0.tiff
+      
       // find tile arrangement closest to a square
       int tilesWide = (int)std::sqrt(tiles);
       int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
@@ -698,16 +716,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
       // copy data from CLUT to image buffer
       icFloatNumber *clutData = clut->GetData(0);
-
-// simplest possible conversion for now
-// TODO - figure out how to abstract this for n Dimensions!
-/*
-3D LUT, 3 input, 3 output, 17 samples per side
-&m_pData[ix*n001 + iy*n010 + iz*n100];
-  n001 = 867
-  n010 = 51
-  n100 = 3
- */
+      
       size_t n001 = tileWidth * tileHeight * outputChannels;
       size_t n010 = tileWidth * outputChannels;
       size_t n100 = outputChannels;
@@ -771,11 +780,12 @@ std::string remove_extension( const std::string& filename)
 
 // output graphic representation of 1D and nD LUTs
 static
-void processLuts(CIccProfile *pIcc, const char *profilePath )
+int processLuts(CIccProfile *pIcc, const char *profilePath )
 {
   const size_t bufSize = 64;
   char buf1[bufSize];
-
+  int outputItems = 0;
+  
   std::string basename = remove_extension( profilePath );
   
   
@@ -815,6 +825,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath )
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
         output1DLUT(pIcc, pTag, sigDesc, pdffile );
+        outputItems++;
         }
         break;
 
@@ -835,6 +846,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath )
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
         output3DLUT(pIcc, pTag, sigDesc, basename, pdffile );
+        outputItems++;
         }
         break;
 
@@ -850,6 +862,8 @@ void processLuts(CIccProfile *pIcc, const char *profilePath )
   svgfile.CloseFile();
 #endif
   pdffile.CloseFile();
+  
+  return outputItems;
   
 }   // end processLuts()
 
@@ -885,27 +899,29 @@ int main(int argc, char* argv[])
 #endif // WIN32
 #endif // MEMORY_LEAK_CHECK && _DEBUG
 
-
-// TODO - should this process a list of files, or one at a time?
-  int nArg = 1;
-
   if (argc <= 1) {
     printUsage();
     return 0;
   }
 
-// TODO - figure out a way to recognize and open XML and JSON profiles as well
-  CIccProfile *pIcc = OpenIccProfile( argv[nArg] );
+// if we need options in the future, then parse -* and add all unknowns to a list of filenames
 
-  // Precondition: nArg is argument of ICC profile filename
-  if (!pIcc) {
-    printf("Unable to parse '%s' as ICC profile!\n", argv[nArg]);
-    return -1;
+  for (int k = 1; k < argc; ++k) {
+    CIccProfile *pIcc = OpenIccProfile( argv[k] );
+    if (!pIcc) {
+      printf("Unable to parse '%s' as ICC profile!\n", argv[k]);
+      continue;
+    }
+    auto count = processLuts( pIcc, argv[k] );
+    if (!count) {
+        printf("Profile %s had no content for output\n", argv[k] );
+    }
+    delete pIcc;
   }
 
-  processLuts( pIcc, argv[nArg] );
-
-  delete pIcc;
+#if defined(_DEBUG) || defined(DEBUG)
+  printf("EXIT %d\n", nValid);
+#endif
 
   return 0;
 }

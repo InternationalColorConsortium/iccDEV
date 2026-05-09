@@ -47,7 +47,7 @@ tables.
 | `iccTiffDump`, `iccPngDump`, `iccJpegDump` | Inspect image metadata and embedded ICC profiles. |
 | `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display profiles. |
 | `iccFromCube` | Convert `.cube` 3D LUTs to ICC.2 DeviceLink profiles. |
-| `iccProfileVisualize` | Convert profile LUT data to images and SVG graphs. |
+| `iccProfileVisualize` | Convert profile LUT data to images and PDF graphs. |
 | `wxProfileDump` | wxWidgets GUI profile inspector. |
 
 ## Example iccMAX Profiles
