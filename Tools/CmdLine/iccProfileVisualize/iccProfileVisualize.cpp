@@ -682,11 +682,12 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 // 4, 6 look ok, just odd in the order of data
 
 // odd numbers of inputs are wrong for N > 3, similar to MultiInkMapping
-// 5, 7, 13, 15 look bogus   7 most bogus - work on that!
+// 5, 7, 11, 13, 15 look bogus   7 most bogus - work on that!
 // 15 is next most heinous
 //Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange_output_A2B0.tif
 //Turquoise-Magenta-Yellow-Violet-Green_output_A2B0.tif
-//Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange-BlueGreen-PinkViolet-Red-Teal-YellowOrange-Cerulean-GreenGold-Indigo_output_A2B0.tiff
+// Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange-BlueGreen-PinkViolet-Red-Teal_output_A2B0.tif
+//Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange-BlueGreen-PinkViolet-Red-Teal-YellowOrange-Cerulean-GreenGold-Indigo_output_A2B0.tif
 
       // find tile arrangement closest to a square
       int tilesWide = (int)std::sqrt(tiles);
@@ -717,9 +718,37 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       // copy data from CLUT to image buffer
       icFloatNumber *clutData = clut->GetData(0);
 
+
+#if 0
+// TEST
+    size_t gridCount = (size_t)tileWidth * (size_t)tileHeight * (size_t)tiles;
+    uint16_t gridPoints = clut->GridPoints();       // TODO - probably a bad assumption!
+    for (size_t k = 0; k < gridCount; ++k ) {
+        size_t x = k % gridPoints;
+        size_t y = (k / gridPoints) % gridPoints;
+        size_t tile = k / (gridPoints*gridPoints);
+        size_t tileX = tile % tilesWide;
+        size_t tileY = tile / tilesWide;
+        size_t outputIndex = outputChannels * ((tileY * gridPoints * imageWidth) + (tileX * gridPoints) + (y * imageWidth) + x);
+        size_t inputIndex = outputChannels * k;
+        if (bytes == 4 || bytes == 8)
+          for (int c = 0; c < outputChannels; ++c)
+            imageBuf32[outputIndex+c] = clutData[inputIndex+c];
+        else if (bytes == 2)
+          for (int c = 0; c < outputChannels; ++c)
+            imageBuf16[outputIndex+c] = clutData[inputIndex+c] * 65535.0;
+        else
+          for (int c = 0; c < outputChannels; ++c)
+            imageBuf[outputIndex+c] = clutData[inputIndex+c] * 255.0;
+    }
+
+#else
       size_t n001 = tileWidth * tileHeight * outputChannels;
       size_t n010 = tileWidth * outputChannels;
       size_t n100 = outputChannels;
+
+      if (inputChannels < 2)
+        std::swap(n010,n100);
 
       size_t outTileStepV = imageWidth * tileHeight * outputChannels;
       size_t outTileStepH = tileWidth * outputChannels;
@@ -729,7 +758,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       for (int x = 0; x < tileWidth; ++x)
       for (int y = 0; y < tileHeight; ++y)
       for (int z = 0; z < tiles; ++z) {
-        size_t inputIndex = z * n001 + y * n010 + x * n100;
+        size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;
         int z2 = z % tilesWide; // tile # horiz
         int z3 = z / tilesWide; // tile # vert
         size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
@@ -743,6 +772,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           for (int c = 0; c < outputChannels; ++c)
             imageBuf[outputIndex+c] = clutData[inputIndex+c] * 255.0;
       }
+#endif
 
       std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
       int tiffColor = TIFFColorModelFromICCModel( outputSpace );
