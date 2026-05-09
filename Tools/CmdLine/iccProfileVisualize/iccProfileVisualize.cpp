@@ -1,7 +1,7 @@
 /*
   File:     iccProfileVisualize.cpp
 
-  Contains:   Console app to output LUTs as images and SVG plots
+  Contains:   Console app to output LUTs as images and PDF plots
 
   Version:  V1
 
@@ -89,6 +89,15 @@
 
 /******************************************************************************/
 
+// NOTE - ccox - multipage SVG doesn't work, but we may want to use SVG for UI drawing.
+// So I'm keeping the code, but disabling output.
+#ifndef USE_SVG
+#define USE_SVG     false
+#endif
+
+/******************************************************************************/
+
+#if USE_SVG
 static
 void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
         const point2D &tickLength, const std::string &label )
@@ -128,6 +137,7 @@ void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &rang
   float rotation = (range.x == 0.0) ? 90 : 0;   // horiz or vertical
   svgfile.AddText( labelPt.x, labelPt.y, label, 14, font, style, align, rotation );
 }
+#endif  // USE_SVG
 
 /******************************************************************************/
 
@@ -213,6 +223,7 @@ void CreateAxesXobject( PDFWriter &pdfout )
 
 /******************************************************************************/
 
+#if USE_SVG
 static
 void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
         const std::string &description, SVGOut &svgfile, int steps )
@@ -259,6 +270,7 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 
   svgfile.EndGroup();
 }
+#endif  // USE_SVG
 
 /******************************************************************************/
 
@@ -309,9 +321,8 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   }
   commands << " S\n";
 
-
-  PDFGraphic *graphics = new PDFGraphic();
-    graphics->m_buf = commands.str();
+  // and finally create the graphics object and page
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
   pdffile.AddObject( graphics );
   size_t content = pdffile.ObjectCount();
 
@@ -357,7 +368,7 @@ void describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description )
 // output graphic representation of 1D LUTs
 static
 void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
-        SVGOut &svgfile, PDFWriter &pdffile, int /* verbosity */ )
+        PDFWriter &pdffile, int /* verbosity */ )
 {
   const size_t bufSize = 64;
   char buf[bufSize];
@@ -378,7 +389,9 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
         describe1DLUT(curve, description);
         int size = curve->GetSize();
         int steps = std::max( 1000, size );
+#if USE_SVG
         graph1DLUTSVG( curve, sigDesc, description, svgfile, steps );
+#endif
         graph1DLUTPDF( curve, sigDesc, description, pdffile, steps );
         }
       }
@@ -391,7 +404,9 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
       if (pCurve) {
         std::string description;
         describe1DLUT(pCurve, description);
+#if USE_SVG
         graph1DLUTSVG( pCurve, sigDesc, description, svgfile, 1000 );
+#endif
         graph1DLUTPDF( pCurve, sigDesc, description, pdffile, 1000 );
         }
       }
@@ -404,7 +419,9 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
       if (sCurve) {
         std::string description;
         describe1DLUT(sCurve, description);
+#if USE_SVG
         graph1DLUTSVG( sCurve, sigDesc, description, svgfile, 1000 );
+#endif
         graph1DLUTPDF( sCurve, sigDesc, description, pdffile, 1000 );
         }
       }
@@ -418,7 +435,9 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
       if (uCurve) {
         std::string description;
         uCurve->Describe( description, 100 );
+#if USE_SVG
         graph1DLUTSVG( uCurve, sigDesc, description, svgfile, 1000 );
+#endif
         graph1DLUTPDF( uCurve, sigDesc, description, pdffile, 1000 );
         }
       }
@@ -486,7 +505,7 @@ std::string channelName(int index, bool isInputMatrix, icColorSpaceSignature inp
 // output graphic representation of nD LUTs
 static
 void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
-        const std::string &basename, SVGOut &svgfile, PDFWriter &pdffile, int verbosity )
+        const std::string &basename, PDFWriter &pdffile, int verbosity )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
@@ -536,7 +555,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, !isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveA[ " + channel + " ]";
-          output1DLUT( pIcc, curveA[i], channelDesc, svgfile, pdffile, verbosity );
+          output1DLUT( pIcc, curveA[i], channelDesc, pdffile, verbosity );
           }
         }
       }
@@ -548,7 +567,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, isInputMatrix,
                   inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveB[ " + channel + " ]";
-          output1DLUT( pIcc, curveB[i], channelDesc, svgfile, pdffile, verbosity );
+          output1DLUT( pIcc, curveB[i], channelDesc, pdffile, verbosity );
           }
         }
       }
@@ -560,7 +579,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
           std::string channel = channelName( i, isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveM[ " + channel + " ]";
-          output1DLUT( pIcc, curveM[i], channelDesc, svgfile, pdffile, verbosity );
+          output1DLUT( pIcc, curveM[i], channelDesc, pdffile, verbosity );
           }
         }
       }
@@ -726,13 +745,17 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
   char buf1[bufSize];
 
   std::string basename = remove_extension( profilePath );
-
-// write next to input file, or in current directory?
-// write output to basename + _luts.svg - better to pass in SVG object, write after all completed
+  
+  
+// write next to input file
+// write output to basename + _luts.pdf
 // write basename + _ + tag + .tiff for nD LUTs
+
+#if USE_SVG
   std::string svgPath = basename + "_luts.svg";
   SVGOut svgfile( svgPath );
   svgfile.SetPageSize( 8*inch2mm, 8*inch2mm );
+#endif
   
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2mm, 8*inch2mm );
@@ -759,7 +782,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
         {
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output1DLUT(pIcc, pTag, sigDesc, svgfile, pdffile, verbosity );
+        output1DLUT(pIcc, pTag, sigDesc, pdffile, verbosity );
         }
         break;
 
@@ -779,7 +802,7 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
         {
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output3DLUT(pIcc, pTag, sigDesc, basename, svgfile, pdffile, verbosity );
+        output3DLUT(pIcc, pTag, sigDesc, basename, pdffile, verbosity );
         }
         break;
 
@@ -790,7 +813,10 @@ void processLuts(CIccProfile *pIcc, const char *profilePath, int verbosity )
     }   // end switch over tag signatures
   }   // end loop over tags
 
+
+#if USE_SVG
   svgfile.CloseFile();
+#endif
   pdffile.CloseFile();
   
 }   // end processLuts()
@@ -835,6 +861,7 @@ int main(int argc, char* argv[])
     return 0;
   }
 
+// TODO - figure out a way to recognize and open XML and JSON profiles as well
   CIccProfile *pIcc = OpenIccProfile( argv[nArg] );
 
   // Precondition: nArg is argument of ICC profile filename

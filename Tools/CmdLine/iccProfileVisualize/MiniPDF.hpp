@@ -195,7 +195,7 @@ public:
 class PDFGraphic : public PDFObject
 {
 public:
-  PDFGraphic() : PDFObject() {}
+  PDFGraphic( const std::string &content ) : PDFObject(), m_buf(content) {}
   
   virtual void WriteContent(  std::ostream &out ) final;
 
@@ -275,10 +275,6 @@ public:
   void CloseFile();
 
 public:
-  
-  void AddText( const float xCoord, const float yCoord, const std::string &text,
-        const float size, const std::string &font, const std::string &style,
-        const std::string &align, const float rotation = 0.0 );
 
   void AddXObject( Rect2D &bounds, std::string content, size_t group = 0,
                     size_t font = 0, size_t procSet = 0 );

@@ -87,11 +87,8 @@ std::ostream& operator<<( std::ostream &os, const point2D &p )
 
 /******************************************************************************/
 
-// DEBUG
-void CreateAxesXobject( PDFWriter &pdfout );
-
-
-void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heightMM ) {
+void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heightMM )
+{
   if (!m_filename.empty()) {
     fprintf(stderr,"WARNING - PDF file already open!\n");
   }
@@ -141,39 +138,7 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
   size_t group = m_objects.size();
   m_groupIndex = group;
 
-
-#if 0
-// first page
-  size_t content = m_objects.size() + 2;
-  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
-  m_objects.push_back( pageObj );
-  pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
-  m_pageCount++;
-  
-  PDFGraphic *graphics = new PDFGraphic();
-  // add text data
-  graphics->m_buf += "/Axes Do\n";
-  graphics->m_buf += " 150 250 m 150 350 l S";
-  graphics->m_buf += " 200 300 50 75 re B";
-  graphics->m_buf += " BT\n /F1 24 Tf 100 100 Td (Hello World 1) Tj\nET";
-  m_objects.push_back( graphics );
-
-
-// second page
-  content = m_objects.size() + 2;
-  PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
-  m_objects.push_back( pageObj2 );
-  pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
-  m_pageCount++;
-  
-  PDFGraphic *graphics2 = new PDFGraphic();
-  // add text data
-  graphics2->m_buf += "/Axes Do\n";
-  graphics2->m_buf += " 200 300 50 75 re B";
-  graphics2->m_buf += " BT\n /F1 24 Tf 200 100 Td (Hello World 2) Tj\nET";
-  m_objects.push_back( graphics2 );
-#endif
-
+    // preliminaries are done
 }
 
 /******************************************************************************/
@@ -375,16 +340,6 @@ void PDFWriter::AddXObject( Rect2D &bounds, std::string content, size_t group,
   PDFXObject *xobjObj = new PDFXObject( content, bounds, group, font, procSet );
   m_objects.emplace_back( xobjObj );
   m_xobjectIndex =  m_objects.size();
-}
-
-/******************************************************************************/
-
-// type size is in points, rotation in degrees
-void PDFWriter::AddText( const float xCoord, const float yCoord, const std::string &text,
-          const float size, const std::string &font,
-          const std::string &style, const std::string &align,
-          const float rotation )
-{
 }
 
 /******************************************************************************/
