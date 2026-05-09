@@ -323,7 +323,7 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
     if (line_num == 0) {
       label = name + " " + label;
       float textHalf = labelSize * 0.25f * label.size();
-      point2D labelPt( 0.5f*right - textHalf, top - 0.25f*inch2point );
+      point2D labelPt( 0.5f*right - textHalf, top - 0.2f*inch2point );
       commands << labelPt << " Td ";
     }
     else {

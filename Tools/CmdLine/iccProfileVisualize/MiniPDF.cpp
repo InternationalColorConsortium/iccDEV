@@ -157,6 +157,14 @@ void PDFWriter::CloseFile() {
     }
     m_filename.clear();
   }
+  
+  // cleanup all the allocated objects
+  for (auto &obj: m_objects ) {
+    delete obj;
+    obj = NULL;
+  }
+  m_objects.clear();
+
 }
 
 /******************************************************************************/

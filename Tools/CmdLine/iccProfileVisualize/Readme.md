@@ -1,6 +1,6 @@
 # IccProfileVisualize
 
-`IccProfileVisualize` renders icc profile tables and LUTs as images and SVG plots.
+`IccProfileVisualize` renders icc profile tables and LUTs as images and PDF plots.
 
 ## Usage
 

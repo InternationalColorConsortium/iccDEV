@@ -12,7 +12,7 @@ single index for common command shapes and shared option tables.
 | `iccToJson` | Convert ICC binary to JSON | `iccToJson input.icc output.json -indent=2` |
 | `iccFromJson` | Convert JSON to ICC binary | `iccFromJson input.json output.icc` |
 | `iccDumpProfile` | Dump and validate ICC profile contents | `iccDumpProfile -v profile.icc ALL` |
-| `iccProfileVisualize` | Dump profile LUT data as images and SVG graphs | `iccProfileVisualize profile.icc` |
+| `iccProfileVisualize` | Dump profile LUT data as images and PDF graphs | `iccProfileVisualize profile.icc` |
 
 ## Applying Profiles
 
