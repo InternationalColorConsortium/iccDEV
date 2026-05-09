@@ -906,6 +906,10 @@ int main(int argc, char* argv[])
 
 // if we need options in the future, then parse -* and add all unknowns to a list of filenames
 
+#if defined(_DEBUG) || defined(DEBUG)
+  int nValid = 0;
+#endif
+
   for (int k = 1; k < argc; ++k) {
     CIccProfile *pIcc = OpenIccProfile( argv[k] );
     if (!pIcc) {
@@ -916,6 +920,11 @@ int main(int argc, char* argv[])
     if (!count) {
         printf("Profile %s had no content for output\n", argv[k] );
     }
+#if defined(_DEBUG) || defined(DEBUG)
+    else {
+      nValid++;
+    }
+#endif
     delete pIcc;
   }
 
