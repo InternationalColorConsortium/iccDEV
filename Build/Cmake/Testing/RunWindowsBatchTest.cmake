@@ -52,16 +52,32 @@ list(APPEND _candidate_configs Release RelWithDebInfo Debug MinSizeRel)
 list(REMOVE_DUPLICATES _candidate_configs)
 
 set(_resolved_config "")
+set(_resolved_tool_suffix "")
+set(_candidate_tool_suffixes)
 foreach(_candidate_config IN LISTS _candidate_configs)
-  if(EXISTS "${ICCDEV_BUILD_DIR}/Tools/IccFromXml/${_candidate_config}/iccFromXml.exe")
-    set(_resolved_config "${_candidate_config}")
+  if(NOT "${_candidate_config}" STREQUAL "")
+    list(APPEND _candidate_tool_suffixes "/${_candidate_config}")
+  endif()
+endforeach()
+list(APPEND _candidate_tool_suffixes "")
+list(REMOVE_DUPLICATES _candidate_tool_suffixes)
+
+foreach(_candidate_tool_suffix IN LISTS _candidate_tool_suffixes)
+  if(EXISTS "${ICCDEV_BUILD_DIR}/Tools/IccFromXml${_candidate_tool_suffix}/iccFromXml.exe")
+    set(_resolved_tool_suffix "${_candidate_tool_suffix}")
+    if(_candidate_tool_suffix STREQUAL "")
+      set(_resolved_config "single-config")
+    else()
+      string(REGEX REPLACE "^/" "" _resolved_config "${_candidate_tool_suffix}")
+    endif()
     break()
   endif()
 endforeach()
 
 if(_resolved_config STREQUAL "")
   message(FATAL_ERROR
-    "Could not find iccFromXml.exe under ${ICCDEV_BUILD_DIR}/Tools/IccFromXml. "
+    "Could not find iccFromXml.exe under ${ICCDEV_BUILD_DIR}/Tools/IccFromXml "
+    "or its config subdirectories. "
     "Build the tools first, or run ctest with -C <config> for multi-config generators.")
 endif()
 
@@ -86,13 +102,13 @@ set(_tool_dirs
 
 set(_path_entries)
 foreach(_tool_dir IN LISTS _tool_dirs)
-  list(APPEND _path_entries "${ICCDEV_BUILD_DIR}/Tools/${_tool_dir}/${_resolved_config}")
+  list(APPEND _path_entries "${ICCDEV_BUILD_DIR}/Tools/${_tool_dir}${_resolved_tool_suffix}")
 endforeach()
 list(APPEND _path_entries
-  "${ICCDEV_BUILD_DIR}/IccProfLib/${_resolved_config}"
-  "${ICCDEV_BUILD_DIR}/IccXML/${_resolved_config}"
-  "${ICCDEV_BUILD_DIR}/IccJSON/${_resolved_config}"
-  "${ICCDEV_BUILD_DIR}/IccConnect/${_resolved_config}"
+  "${ICCDEV_BUILD_DIR}/IccProfLib${_resolved_tool_suffix}"
+  "${ICCDEV_BUILD_DIR}/IccXML${_resolved_tool_suffix}"
+  "${ICCDEV_BUILD_DIR}/IccJSON${_resolved_tool_suffix}"
+  "${ICCDEV_BUILD_DIR}/IccConnect${_resolved_tool_suffix}"
 )
 
 iccdev_collect_cache_runtime_path_entries(_runtime_path_entries "${ICCDEV_BUILD_DIR}")
