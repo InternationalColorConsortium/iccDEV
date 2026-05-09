@@ -89,6 +89,7 @@ struct Rect2D {
 };
 
 std::ostream& operator<<( std::ostream &os, const Rect2D &r );
+std::ostream& operator<<( std::ostream &os, const point2D &r );
 
 /******************************************************************************/
 
@@ -279,7 +280,24 @@ public:
         const float size, const std::string &font, const std::string &style,
         const std::string &align, const float rotation = 0.0 );
 
-    size_t PageCount() const { return m_pageCount; }
+  void AddXObject( Rect2D &bounds, std::string content, size_t group = 0,
+                    size_t font = 0, size_t procSet = 0 );
+
+  size_t PageCount() const { return m_pageCount; }
+  float PageWidth() const { return m_pageWidth; }
+  float PageHeight() const { return m_pageHeight; }
+  size_t ObjectCount() const { return m_objects.size(); }
+  
+  void AddObject( PDFObject *obj ) {
+    m_objects.push_back( obj );
+  }
+  
+  void AddPage( size_t content ) {
+    PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
+    m_objects.push_back( pageObj );
+    GetPageParent()->m_pageObjectIndices.push_back( ObjectCount() );
+    m_pageCount++;
+  }
 
 protected:
 
@@ -287,7 +305,16 @@ protected:
   void WriteObjects( std::ostream &out );
   void WriteXRefs( std::ostream &out );
   void WriteFooter( std::ostream &out );
-
+  
+  PDFPageParent *GetPageParent() {
+    if (!m_pageParentIndex) {
+      fprintf(stderr,"FATAL - PDF page parent index not set!\n");
+      return NULL;
+    }
+    PDFObject *parentObj( m_objects[m_pageParentIndex-1] );
+    PDFPageParent *pageParent = dynamic_cast<PDFPageParent *>(parentObj);
+    return pageParent;
+  }
 
 private:
   float m_pageWidth;     // used to init pages

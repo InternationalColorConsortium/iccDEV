@@ -80,6 +80,17 @@ std::ostream& operator<<( std::ostream &os, const Rect2D &r )
 
 /******************************************************************************/
 
+std::ostream& operator<<( std::ostream &os, const point2D &p )
+{
+  return os << p.x << " " << p.y;
+}
+
+/******************************************************************************/
+
+// DEBUG
+void CreateAxesXobject( PDFWriter &pdfout );
+
+
 void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heightMM ) {
   if (!m_filename.empty()) {
     fprintf(stderr,"WARNING - PDF file already open!\n");
@@ -98,52 +109,44 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
 
   // Create root object, always object 1
   PDFRoot *rootObj = new PDFRoot(m_pageParentIndex,m_outlineIndex);
-  m_objects.emplace_back( rootObj );
+  m_objects.push_back( rootObj );
   
   // Create outline data from pages
 // DEFERRED - group of tag, subsections for each LUT ???
 // or just section for tag start?
 // needs a bit of additional structure input
   PDFOutlineParent *outlineObj = new PDFOutlineParent();
-  m_objects.emplace_back( outlineObj );
+  m_objects.push_back( outlineObj );
 
   // Create page parent, link to add children out of order
   PDFPageParent *pageParentObj = new PDFPageParent();
-  m_objects.emplace_back( pageParentObj );
+  m_objects.push_back( pageParentObj );
 
 
   // common procset
   PDFProcSet *procObj = new PDFProcSet( "[/PDF /Text]" );
-  m_objects.emplace_back( procObj );
+  m_objects.push_back( procObj );
   size_t procSet = m_objects.size();
   m_procsetIndex = procSet;
   
   // common font definition
   PDFFont *fontObj = new PDFFont( "Helvetica" );
-  m_objects.emplace_back( fontObj );
+  m_objects.push_back( fontObj );
   size_t font = m_objects.size();
   m_fontIndex = font;
 
   // common group object
   PDFGroup *groupObj = new PDFGroup();
-  m_objects.emplace_back( groupObj );
+  m_objects.push_back( groupObj );
   size_t group = m_objects.size();
   m_groupIndex = group;
 
-  // common axes object
-// TODO - create real axes and labels
-  std::string axesString = "20 20 m 20 500 l S 20 20 m 500 20 l S";
-  Rect2D axesBounds( 20, 500, 20, 500 );
-  PDFXObject *xobjObj = new PDFXObject( axesString, axesBounds, group, font, procSet );
-  m_objects.emplace_back( xobjObj );
-  size_t xobject = m_objects.size();
-  m_xobjectIndex = xobject;
 
-
+#if 0
 // first page
   size_t content = m_objects.size() + 2;
   PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
-  m_objects.emplace_back( pageObj );
+  m_objects.push_back( pageObj );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
   
@@ -153,13 +156,13 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
   graphics->m_buf += " 150 250 m 150 350 l S";
   graphics->m_buf += " 200 300 50 75 re B";
   graphics->m_buf += " BT\n /F1 24 Tf 100 100 Td (Hello World 1) Tj\nET";
-  m_objects.emplace_back( graphics );
+  m_objects.push_back( graphics );
 
 
 // second page
   content = m_objects.size() + 2;
   PDFPage *pageObj2 = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
-  m_objects.emplace_back( pageObj2 );
+  m_objects.push_back( pageObj2 );
   pageParentObj->m_pageObjectIndices.push_back( m_objects.size() );
   m_pageCount++;
   
@@ -168,7 +171,8 @@ void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heig
   graphics2->m_buf += "/Axes Do\n";
   graphics2->m_buf += " 200 300 50 75 re B";
   graphics2->m_buf += " BT\n /F1 24 Tf 200 100 Td (Hello World 2) Tj\nET";
-  m_objects.emplace_back( graphics2 );
+  m_objects.push_back( graphics2 );
+#endif
 
 }
 
@@ -350,6 +354,27 @@ void PDFGroup::WriteContent( std::ostream &out )
 {
     // I == isolated       K == knockout
   out << "<< /I true /K false /S /Transparency /Type/Group >>\n";
+}
+
+/******************************************************************************/
+
+void PDFWriter::AddXObject( Rect2D &bounds, std::string content, size_t group,
+                size_t font, size_t procSet )
+{
+  if (m_xobjectIndex != 0) {
+    fprintf(stderr,"WARNING - PDF xobject already defined!\n");
+  }
+  
+  if (group == 0)
+    group = m_groupIndex;
+  if (font == 0)
+    font = m_fontIndex;
+  if (procSet == 0)
+    procSet = m_procsetIndex;
+
+  PDFXObject *xobjObj = new PDFXObject( content, bounds, group, font, procSet );
+  m_objects.emplace_back( xobjObj );
+  m_xobjectIndex =  m_objects.size();
 }
 
 /******************************************************************************/
