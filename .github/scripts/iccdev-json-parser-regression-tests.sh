@@ -388,8 +388,8 @@ find_library_file() {
 }
 
 cat > "$HELPER_SRC" <<'CPP'
-#include "Tools/CmdLine/IccCommon/IccCmmConfig.h"
-#include "Tools/CmdLine/IccCommon/IccJsonUtil.h"
+#include "IccCmmConfig.h"
+#include "IccJsonUtil.h"
 
 #include <cmath>
 #include <iostream>
@@ -476,10 +476,10 @@ else
     -I"$REPO_ROOT" \
     -I"$REPO_ROOT/IccProfLib" \
     -I"$REPO_ROOT/IccXML/IccLibXML" \
-    -I"$REPO_ROOT/Tools/CmdLine/IccCommon" \
+    -I"$REPO_ROOT/IccConnect/IccLibConnect" \
     "$HELPER_SRC" \
-    "$REPO_ROOT/Tools/CmdLine/IccCommon/IccCmmConfig.cpp" \
-    "$REPO_ROOT/Tools/CmdLine/IccCommon/IccJsonUtil.cpp" \
+    "$REPO_ROOT/IccConnect/IccLibConnect/IccCmmConfig.cpp" \
+    "$REPO_ROOT/IccConnect/IccLibConnect/IccJsonUtil.cpp" \
     -Wl,-rpath,"$BUILD_ROOT/IccProfLib" \
     -Wl,-rpath,"$BUILD_ROOT/IccXML" \
     "$PROFLIB" "$XMLLIB" \

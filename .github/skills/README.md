@@ -7,6 +7,7 @@ long command references.
 | Skill | Use when |
 |-------|----------|
 | `docs-maintenance` | Reducing documentation noise or reorganizing docs. |
+| `pre-pr-security-cycle` | Running the maintainer pre-PR secure loop: code, build/test, SAST/CodeQL, sanitizer/DAST-style checks, fix, repeat, handoff. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |

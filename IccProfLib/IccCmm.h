@@ -380,6 +380,7 @@ public:
   virtual CIccApplyXform *GetNewApply(icStatusCMM &status);
 
   virtual void Apply(CIccApplyXform *pXform, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const = 0;
+  virtual void ApplyN(CIccApplyXform *pXform, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel, icUInt32Number nPixels) const;
 
   //Detach and remove CIccIO object associated with xform's profile.  Must call after Begin()
   virtual bool RemoveIO() { return m_pProfile ? m_pProfile->Detach() : false; }
@@ -524,6 +525,7 @@ public:
   virtual icXformType GetXformType() const { return icXformTypeUnknown; }
 
   void __inline Apply(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) { m_pXform->Apply(this, DstPixel, SrcPixel); }
+  void __inline ApplyN(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel, icUInt32Number nPixels) { m_pXform->ApplyN(this, DstPixel, SrcPixel, nPixels); }
 
   const CIccXform *GetXform() { return m_pXform; }
 
@@ -1591,6 +1593,7 @@ protected:
 
   icFloatNumber *m_Pixel;
   icFloatNumber *m_Pixel2;
+  icFloatNumber *m_ChunkBuf[2];
 };
 
 class IXformIterator

@@ -118,7 +118,7 @@ jobs:
             exit 1
           fi
 
-          export LD_LIBRARY_PATH="$BUILD_JSON/IccProfLib:$BUILD_JSON/IccXML:$BUILD_JSON/IccJSON"
+          export LD_LIBRARY_PATH="$BUILD_JSON/IccProfLib:$BUILD_JSON/IccXML:$BUILD_JSON/IccJSON:$BUILD_JSON/IccConnect"
           cd "$GITHUB_WORKSPACE/Testing"
           PATH="$BUILD_JSON/Tools/IccFromXml:$BUILD_JSON/Tools/IccApplyProfiles:$BUILD_JSON/Tools/IccApplyNamedCmm:$BUILD_JSON/Tools/IccSpecSepToTiff:$BUILD_JSON/Tools/IccV5DspObsToV4Dsp:$PATH" \
             ICCDEV_TEST_OUTDIR="$BUILD_JSON/Testing/ctest-output/ci-json-create-profiles" \
@@ -164,7 +164,7 @@ jobs:
           fi
 
           cd Build/build-json
-          export LD_LIBRARY_PATH="$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON"
+          export LD_LIBRARY_PATH="$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON:$PWD/IccConnect"
           TOJSON="$PWD/Tools/IccToJson/iccToJson"
           FROMJSON="$PWD/Tools/IccFromJson/iccFromJson"
           RESULT_DIR="$GITHUB_WORKSPACE/Build/json-roundtrip-results"
@@ -190,9 +190,19 @@ jobs:
             done < "$log_file"
           }
 
+          is_expected_fromjson_failure() {
+            case "$1" in
+              CalcTest/calcUnderStack_*.icc)
+                return 0
+                ;;
+            esac
+            return 1
+          }
+
           PASS=0
           FAIL=0
           SKIP=0
+          XFAIL=0
           TOTAL=0
           LCDDISPLAY_STATUS=""
 
@@ -257,8 +267,13 @@ jobs:
             echo "[JSON-RT] COMMAND iccFromJson source=${json_out} output=${rt_out} log=${fromjson_log}"
 
             if ! timeout 30 "$FROMJSON" "$json_out" "$rt_out" >"$fromjson_log" 2>&1; then
-              SKIP=$((SKIP+1))
-              profile_status="SKIP_FROMJSON"
+              if is_expected_fromjson_failure "$rel"; then
+                XFAIL=$((XFAIL+1))
+                profile_status="XFAIL_FROMJSON"
+              else
+                SKIP=$((SKIP+1))
+                profile_status="SKIP_FROMJSON"
+              fi
               cp "$f" "$orig_artifact"
               cp "$json_out" "$json_artifact"
               original_record="$orig_artifact"
@@ -267,10 +282,15 @@ jobs:
                 cp "$rt_out" "$rt_artifact"
                 rt_record="$rt_artifact"
               fi
-              printf 'SKIP_FROMJSON\t%s\t%s\t%s\t-\t-\t%s\t%s\t%s\t%s\t%s\n' \
+              printf '%s\t%s\t%s\t%s\t-\t-\t%s\t%s\t%s\t%s\t%s\n' \
+                "$profile_status" \
                 "$safe_rel" "$orig_size" "$json_size" "$original_record" "$json_record" "$rt_record" "$tojson_log" "$fromjson_log" >> "$RESULTS_TSV"
-              echo "| [SKIP] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | iccFromJson failed |" >> "$GITHUB_STEP_SUMMARY"
-              echo "[JSON-RT] SKIP_FROMJSON profile=${safe_rel} original=${original_record} json=${json_record} roundtrip=${rt_record} log=${fromjson_log}"
+              if [ "$profile_status" = "XFAIL_FROMJSON" ]; then
+                echo "| [XFAIL] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | expected invalid calculator profile |" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "| [SKIP] | ${safe_rel} | $(sanitize_line "${orig_size}") | $(sanitize_line "${json_size}") | - | iccFromJson failed |" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              echo "[JSON-RT] ${profile_status} profile=${safe_rel} original=${original_record} json=${json_record} roundtrip=${rt_record} log=${fromjson_log}"
               sanitize_tool_log "[JSON-RT][iccFromJson]" "$fromjson_log"
               if [ "$rel" = "Display/LCDDisplay.icc" ]; then
                 LCDDISPLAY_STATUS="$profile_status"
@@ -321,16 +341,16 @@ jobs:
 
           {
             echo ""
-            echo "**Summary**: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} TOTAL=${TOTAL}"
+            echo "**Summary**: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} XFAIL=${XFAIL} TOTAL=${TOTAL}"
             echo ""
             echo "**Artifact manifest**: Build/json-roundtrip-results/json-roundtrip-results.tsv"
             echo ""
-            echo "**Uploaded profile payloads**: Display/LCDDisplay.icc plus non-PASS profiles"
+            echo "**Uploaded profile payloads**: Display/LCDDisplay.icc plus non-PASS profiles, including expected failures"
             echo ""
             echo "**Display/LCDDisplay.icc**: $(sanitize_line "${LCDDISPLAY_STATUS:-not exercised}")"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          echo "[OK] Round-trip test complete: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} TOTAL=${TOTAL}"
+          echo "[OK] Round-trip test complete: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} XFAIL=${XFAIL} TOTAL=${TOTAL}"
           echo "[JSON-RT] Results written to ${RESULT_DIR}"
           echo "[JSON-RT] Manifest: ${RESULTS_TSV}"
           echo "[JSON-RT] Display/LCDDisplay.icc status=${LCDDISPLAY_STATUS:-not exercised}"
@@ -356,7 +376,7 @@ jobs:
       - name: CTest JSON focused regressions
         env:
           BASH_ENV: /dev/null
-          LD_LIBRARY_PATH: "${{ github.workspace }}/Build/build-json/IccProfLib:${{ github.workspace }}/Build/build-json/IccXML:${{ github.workspace }}/Build/build-json/IccJSON"
+          LD_LIBRARY_PATH: "${{ github.workspace }}/Build/build-json/IccProfLib:${{ github.workspace }}/Build/build-json/IccXML:${{ github.workspace }}/Build/build-json/IccJSON:${{ github.workspace }}/Build/build-json/IccConnect"
         run: |
           set -euo pipefail
           git config --global credential.helper ""

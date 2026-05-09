@@ -5,7 +5,7 @@
 
     Version:    V1
 
-    Copyright:  � see ICC Software License
+    Copyright:  See ICC Software License
 */
 
 /*
@@ -1524,7 +1524,7 @@ icStatusCMM CIccXform::Begin()
 CIccApplyXform *CIccXform::GetNewApply(icStatusCMM &status)
 {
   CIccApplyXform *rv = new CIccApplyXform(this);
-  
+
   if (!rv) {
     status = icCmmStatAllocErr;
     return NULL;
@@ -1532,6 +1532,23 @@ CIccApplyXform *CIccXform::GetNewApply(icStatusCMM &status)
 
   status = icCmmStatOk;
   return rv;
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXform::ApplyN
+ *
+ * Purpose:
+ *  Default implementation: applies single-pixel Apply for each pixel.
+ *  Subclasses may override for better vectorized throughput.
+ **************************************************************************
+ */
+void CIccXform::ApplyN(CIccApplyXform *pXform, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel, icUInt32Number nPixels) const
+{
+  icUInt16Number nSrc = GetNumSrcSamples();
+  icUInt16Number nDst = GetNumDstSamples();
+  for (icUInt32Number k = 0; k < nPixels; k++, SrcPixel += nSrc, DstPixel += nDst)
+    Apply(pXform, DstPixel, SrcPixel);
 }
 
 /**
@@ -7749,6 +7766,8 @@ CIccApplyCmm::CIccApplyCmm(CIccCmm *pCmm)
 
   m_Pixel = NULL;
   m_Pixel2 = NULL;
+  m_ChunkBuf[0] = NULL;
+  m_ChunkBuf[1] = NULL;
 }
 
 /**
@@ -7779,11 +7798,20 @@ CIccApplyCmm::~CIccApplyCmm()
     free(m_Pixel);
   if (m_Pixel2)
     free(m_Pixel2);
+  if (m_ChunkBuf[0])
+    free(m_ChunkBuf[0]);
+  if (m_ChunkBuf[1])
+    free(m_ChunkBuf[1]);
 }
+
+// Chunk size for transform-sequential multi-pixel apply (pixels per batch).
+// Tuned so two chunk buffers (each kCmmChunkPixels * max_samples * 4 bytes)
+// fit comfortably in L2 cache on typical hardware.
+static const icUInt32Number kCmmChunkPixels = 256;
 
 bool CIccApplyCmm::InitPixel()
 {
-  if (m_Pixel && m_Pixel2)
+  if (m_Pixel && m_Pixel2 && m_ChunkBuf[0] && m_ChunkBuf[1])
     return true;
 
   icUInt16Number nSamples = 16;
@@ -7800,6 +7828,12 @@ bool CIccApplyCmm::InitPixel()
   m_Pixel2 = (icFloatNumber*)malloc(nSamples*sizeof(icFloatNumber));
 
   if (!m_Pixel || !m_Pixel2)
+    return false;
+
+  m_ChunkBuf[0] = (icFloatNumber*)malloc(kCmmChunkPixels * nSamples * sizeof(icFloatNumber));
+  m_ChunkBuf[1] = (icFloatNumber*)malloc(kCmmChunkPixels * nSamples * sizeof(icFloatNumber));
+
+  if (!m_ChunkBuf[0] || !m_ChunkBuf[1])
     return false;
 
   return true;
@@ -7919,44 +7953,52 @@ icStatusCMM CIccApplyCmm::Apply(icFloatNumber *DstPixel, const icFloatNumber *Sr
 */
 icStatusCMM CIccApplyCmm::Apply(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel, icUInt32Number nPixels)
 {
-  icFloatNumber *pDst, *pTmp;
-  const icFloatNumber *pSrc;
-  CIccApplyXformList::iterator i;
-  int j, n = (int)m_Xforms->size();
-  icUInt32Number k;
+  int n = (int)m_Xforms->size();
 
   if (!n)
     return icCmmStatBadXform;
 
-  if (!m_Pixel && !InitPixel()) {
+  if (!m_Pixel && !InitPixel())
     return icCmmStatAllocErr;
+
+  if (n == 1) {
+    m_Xforms->begin()->ptr->ApplyN(DstPixel, SrcPixel, nPixels);
+    return icCmmStatOk;
   }
 
-  for (k=0; k<nPixels; k++) {
-    pSrc = SrcPixel;
-    pDst = m_Pixel;
+  // Transform-sequential chunked apply: process kCmmChunkPixels through each
+  // xform in turn before advancing to the next xform.  This keeps each xform's
+  // CLUT data warm in L2/L3 cache across all pixels in the chunk.
+  int nSrcSamples = m_pCmm->GetSourceSamples();
+  int nDstSamples = m_pCmm->GetDestSamples();
+  icUInt32Number offset = 0;
 
-    if (n>1) {
-      for (j=0, i=m_Xforms->begin(); j<n-1 && i!=m_Xforms->end(); i++, j++) {
+  while (offset < nPixels) {
+    icUInt32Number chunk = nPixels - offset;
+    if (chunk > kCmmChunkPixels)
+      chunk = kCmmChunkPixels;
 
-        i->ptr->Apply(pDst, pSrc);
-        pTmp = (icFloatNumber*)pSrc;
-        pSrc = pDst;
-        if (pTmp==SrcPixel)
-          pDst = m_Pixel2;
-        else
-          pDst = pTmp;
-      }
+    icFloatNumber *pBuf0 = m_ChunkBuf[0];
+    icFloatNumber *pBuf1 = m_ChunkBuf[1];
+    const icFloatNumber *pSrc = SrcPixel + offset * nSrcSamples;
+    icFloatNumber *pDstChunk  = DstPixel  + offset * nDstSamples;
 
-      i->ptr->Apply(DstPixel, pSrc);
+    CIccApplyXformList::iterator i = m_Xforms->begin();
+
+    // First xform: src -> buf0
+    i->ptr->ApplyN(pBuf0, pSrc, chunk);
+    ++i;
+
+    // Middle xforms: ping-pong buf0 <-> buf1
+    for (int j = 1; j < n - 1; ++j, ++i) {
+      i->ptr->ApplyN(pBuf1, pBuf0, chunk);
+      icFloatNumber *pTmp = pBuf0; pBuf0 = pBuf1; pBuf1 = pTmp;
     }
-    else if (n==1) {
-      i = m_Xforms->begin();
-      i->ptr->Apply(DstPixel, SrcPixel);
-    }
 
-    DstPixel += m_pCmm->GetDestSamples();
-    SrcPixel += m_pCmm->GetSourceSamples();
+    // Last xform: buf0 -> final dst
+    i->ptr->ApplyN(pDstChunk, pBuf0, chunk);
+
+    offset += chunk;
   }
 
   return icCmmStatOk;
@@ -8107,7 +8149,7 @@ icStatusCMM CIccCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
-  // CFL-078: Save deviceClass before AddXform — CIccXform::Create() deletes
+  // CFL-078: Save deviceClass before AddXform - CIccXform::Create() deletes
   // cenc profiles internally (line 546), so caller must NOT double-delete.
   icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
 
@@ -8167,7 +8209,7 @@ icStatusCMM CIccCmm::AddXform(icUInt8Number *pProfileMem,
     return icCmmStatCantOpenProfile;
   }
 
-  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer
+  // CFL-078: Save deviceClass before AddXform - cenc ownership transfer
   icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
 
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
@@ -8318,9 +8360,9 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
             if (!pNew) {
               // Create failed (e.g., previous profile has no MCS-
               // suitable A2B / D2B tag, or factory was stripped).
-              // Do NOT overwrite prev->ptr with NULL — that would
+              // Do NOT overwrite prev->ptr with NULL - that would
               // leave the list with a NULL xform that the next Apply
-              // dereferences → SIGSEGV. Leave pPrev in place and
+              // dereferences -> SIGSEGV. Leave pPrev in place and
               // surface a clean error status.
               return icCmmStatBadMCSLink;
             }
@@ -8579,7 +8621,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
   //borrow the caller's AttachIO to perform the AddXform
   pProfile->CopyAttach(&Profile);
 
-  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer
+  // CFL-078: Save deviceClass before AddXform - cenc ownership transfer
   icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
 
   icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
@@ -10589,6 +10631,8 @@ icStatusCMM CIccApplyNamedColorCmm::Apply(icChar *DstColorName, const icChar *Sr
 CIccNamedColorCmm::CIccNamedColorCmm(icColorSpaceSignature nSrcSpace, icColorSpaceSignature nDestSpace,
                                      bool bFirstInput) : CIccCmm(nSrcSpace, nDestSpace, bFirstInput)
 {
+  // No file access occurs here; CodeQL traces intentional CLI profile paths through this constructor.
+  // codeql[cpp/path-injection]
   m_nApplyInterface = icApplyPixel2Pixel;
 }
 
@@ -10636,7 +10680,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
-  // CFL-078: Save deviceClass before AddXform — cenc ownership transfer (CWE-416)
+  // CFL-078: Save deviceClass before AddXform - cenc ownership transfer (CWE-416)
   icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
 
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);

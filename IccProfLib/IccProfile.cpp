@@ -137,6 +137,7 @@ CIccProfile::CIccProfile(const CIccProfile &Profile)
     for (i=Profile.m_TagVals.begin(); i!=Profile.m_TagVals.end(); i++) {
       tagptr.ptr = i->ptr->NewCopy();
       m_TagVals.push_back(tagptr);
+      tagptr.ptr->SetParentObject(this);
     }
   }
 
@@ -197,6 +198,7 @@ CIccProfile &CIccProfile::operator=(const CIccProfile &Profile)
     for (i=Profile.m_TagVals.begin(); i!=Profile.m_TagVals.end(); i++) {
       tagptr.ptr = i->ptr->NewCopy();
       m_TagVals.push_back(tagptr);
+      tagptr.ptr->SetParentObject(this);
     }
   }
 
@@ -587,6 +589,7 @@ bool CIccProfile::AttachTag(icSignature sig, CIccTag *pTag)
     IccTagPtr TagPtr = {};
     TagPtr.ptr = pTag;
     m_TagVals.push_back(TagPtr);
+    pTag->SetParentObject(this);
   }
 
   return true;
@@ -1421,6 +1424,7 @@ bool CIccProfile::LoadTag(IccTagEntry *pTagEntry, CIccIO *pIO, bool bReadAll/*=f
   TagPtr.ptr = pTag;
 
   m_TagVals.push_back(TagPtr);
+  pTag->SetParentObject(this);
 
   TagEntryList::iterator i;
 
@@ -1467,6 +1471,7 @@ bool CIccProfile::DetachTag(CIccTag *pTag)
   if (i==m_TagVals.end())
     return false;
 
+  pTag->SetParentObject(nullptr);
   m_TagVals.erase(i);
 
   TagEntryList::iterator j;

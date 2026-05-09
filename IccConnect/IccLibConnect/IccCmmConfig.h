@@ -9,6 +9,10 @@
 #include "IccCmm.h"
 #include "IccEnvVar.h"
 
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
+
 typedef enum {
 	icCfgColorData,
 	icCfgLegacy,
@@ -24,6 +28,7 @@ public:
 	void reset();
 	int fromArgs(const char **args, int nArg, bool bReset=false); //returns args used
 	bool fromJson(json obj, bool bReset=false);
+	bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
 	void toJson(json &obj) const;
 
 	bool m_debugCalc;
@@ -63,6 +68,7 @@ public:
 	void reset();
 	int fromArgs(const char **args, int nArg, bool bReset=false); //returns args used
 	bool fromJson(json obj, bool bReset=false);
+	bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
 	void toJson(json& obj) const;
 
 	std::string m_srcImgFile;
@@ -71,6 +77,21 @@ public:
 	icDstBool m_dstCompression;
 	icDstBool m_dstPlanar;
 	icDstBool m_dstEmbedIcc;
+};
+
+class CIccCfgConnectOptions
+{
+public:
+	CIccCfgConnectOptions();
+	virtual ~CIccCfgConnectOptions() {}
+
+	void reset();
+	bool fromJson(json obj, bool bReset=false);
+	bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
+	void toJson(json& obj) const;
+
+	// 1 means use the normal scalar CMM. 0 means use hardware concurrency.
+	int m_nThreads;
 };
 
 typedef enum {
@@ -88,6 +109,7 @@ public:
   void reset();
   int fromArgs(const char** args, int nArg, bool bReset = false); //returns args used
   bool fromJson(json obj, bool bReset = false);
+  bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
   void toJson(json& obj) const;
 
   std::string m_linkFile;
@@ -108,6 +130,7 @@ public:
 	
 	void reset();
 	bool fromJson(json obj, bool bReset=false);
+	bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
 	void toJson(json& obj) const;
 
 	bool m_useEmbedded;
@@ -137,8 +160,9 @@ public:
 	void reset();
 	int fromArgs(const char **args, int nArg, bool bReset=false); //return args used
 	bool fromJson(json obj, bool bReset=false);
+	bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
 	void toJson(json &obj) const;
-	
+
 	CIccCfgProfileArray m_profiles;
 };
 
@@ -151,8 +175,8 @@ public:
 	void reset();
   int fromArgs(const char** args, int nArg, bool bReset = false); //return args used
   bool fromJson(json obj, bool bReset = false);
+  bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
   void toJson(json& obj) const;
-
 
 	std::string m_pccPath;
 	icFloatNumber m_dWeight;
@@ -170,9 +194,10 @@ public:
   void reset();
   int fromArgs(const char** args, int nArg, bool bReset = false); //return args used
   bool fromJson(json obj, bool bReset = false);
+  bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
   void toJson(json& obj) const;
 
-	bool isInitialized() { return m_bInitialized; }
+	bool isInitialized() const { return m_bInitialized; }
 
   icRenderingIntent m_intentInitial;
   icXformLutType m_transformInitial;
@@ -206,6 +231,7 @@ public:
 
 	void reset();
 	bool fromJson(json obj, bool bReset=false);
+	bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
 	void toJson(json& obj);
 
 	std::string m_name;
@@ -230,8 +256,9 @@ public:
 	bool fromLegacy(const char *filename, bool bReset=false);
 	bool fromIt8(const char* filename, bool bReset=false);
 	bool fromJson(json obj, bool bReset=false);
+	bool fromJson(const char* szJson, bool bReset=false) { json j = json::parse(szJson, nullptr, false); return !j.is_discarded() && fromJson(j, bReset); }
 	bool toLegacy(const char *filename, const CIccCfgProfileArray &profiles, icUInt8Number nDigits, icUInt8Number nPrecision, bool bShowDebug=false);
-  bool toIt8(const char *filename, icUInt8Number nDigits, icUInt8Number nPrecision);
+    bool toIt8(const char *filename, icUInt8Number nDigits, icUInt8Number nPrecision);
 
 	void toJson(json& obj) const;
 
@@ -247,5 +274,9 @@ protected:
 	std::string spaceName(icColorSpaceSignature sig);
 	void addFields(std::string& dataFormat, int& nFields, int& nSamples, icColorSpaceSignature sig, const std::string& prefix);
 };
+
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
+#endif
 
 #endif //_ICCCMMCONFIG_H

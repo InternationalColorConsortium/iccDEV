@@ -265,11 +265,16 @@ jobs:
               Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
               ForEach-Object { Split-Path $_.FullName -Parent } |
               Sort-Object -Unique
-          $env:PATH = ($exeDirs -join ';') + ';' + $env:PATH
-          $env:PATH -split ';' | Select-String "icc"
-          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
-          $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
-          $env:PATH -split ';'
+          $runtimeDirs = Get-ChildItem -Recurse -File -Include *.dll -Path .\build\ |
+              ForEach-Object { Split-Path $_.FullName -Parent } |
+              Sort-Object -Unique
+          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ -ErrorAction SilentlyContinue |
+              ForEach-Object { Split-Path -Parent $_.FullName } |
+              Sort-Object -Unique
+          $pathDirs = @($toolDirs) + @($exeDirs) + @($runtimeDirs) + @("$env:SystemRoot\system32", "$env:SystemRoot")
+          $env:Path = (($pathDirs | Where-Object { $_ } | Sort-Object -Unique) -join ';')
+          $env:Path -split ';' | Select-String "icc"
+          $env:Path -split ';'
           pwd
           cd ..\..\Testing
           .\CreateAllProfiles.bat
@@ -367,9 +372,13 @@ jobs:
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-make
+            mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-libpng
+            mingw-w64-ucrt-x86_64-libtiff
+            mingw-w64-ucrt-x86_64-libjpeg-turbo
             mingw-w64-ucrt-x86_64-nlohmann-json
 
-      - name: Run MinGW CTest smoke
+      - name: Run MinGW build and CTest smoke
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
           POWERSHELL_UPDATECHECK: Off
@@ -436,9 +445,9 @@ jobs:
             "-DCMAKE_C_COMPILER=$gcc",
             "-DCMAKE_CXX_COMPILER=$gxx",
             '-DENABLE_TOOLS=ON',
-            '-DENABLE_ICCXML=OFF',
-            '-DENABLE_ICCJSON=OFF',
-            '-DENABLE_IMAGE_TOOLS=OFF',
+            '-DENABLE_ICCXML=ON',
+            '-DENABLE_ICCJSON=ON',
+            '-DENABLE_IMAGE_TOOLS=ON',
             '-DENABLE_WXWIDGETS=OFF',
             '-DENABLE_CMM_TOOLS=OFF',
             '-DENABLE_IIS_TOOLS=OFF',
@@ -448,7 +457,6 @@ jobs:
           )
           Invoke-Native $cmake @(
             '--build', $buildDir,
-            '--target', 'iccDumpProfile',
             '--parallel'
           )
           Invoke-Native $ctest @(
@@ -469,6 +477,7 @@ jobs:
             '### Windows MinGW UCRT64 smoke',
             '',
             "- Compiler: ``$(Sanitize-Line $compilerLine)``",
+            "- Build scope: ``full configured command-line project``",
             "- Build type: ``Release``",
             "- Linkage: ``static``",
             "- CTest: ``iccdev.windows-icc-dump-profile-smoke``",

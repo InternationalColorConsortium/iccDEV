@@ -57,6 +57,54 @@ endfunction()
 
 iccdev_add_check_dependencies()
 
+function(iccdev_add_iccconnect_thread_test)
+  if(NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+
+  add_executable(iccConnectThreadTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccconnect-threaded-cmm.cpp"
+  )
+  target_compile_features(iccConnectThreadTest PRIVATE cxx_std_17)
+  target_link_libraries(iccConnectThreadTest PRIVATE ${TARGET_LIB_ICCCONNECT})
+
+  add_dependencies(check iccConnectThreadTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.iccconnect-threaded-cmm
+      COMMAND
+        "$<TARGET_FILE:iccConnectThreadTest>"
+        "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+    )
+  else()
+    add_test(
+      NAME iccdev.iccconnect-threaded-cmm
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccConnectThreadTest>"
+        "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+    )
+  endif()
+  set_tests_properties(iccdev.iccconnect-threaded-cmm PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccconnect;threaded;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+  if(WIN32)
+    set(_iccconnect_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccConnectThreadTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    set_tests_properties(iccdev.iccconnect-threaded-cmm PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccconnect_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -179,6 +227,8 @@ if(WIN32)
     add_dependencies(check IccProfLib2)
   endif()
 
+  iccdev_add_iccconnect_thread_test()
+
   return()
 endif()
 
@@ -208,7 +258,7 @@ set(ICCDEV_TOOL_PATHS
 
 list(JOIN ICCDEV_TOOL_PATHS ":" ICCDEV_TOOL_PATH)
 set(ICCDEV_SHARED_LIBRARY_PATH
-    "${CMAKE_BINARY_DIR}/IccProfLib:${CMAKE_BINARY_DIR}/IccXML:${CMAKE_BINARY_DIR}/IccJSON")
+    "${CMAKE_BINARY_DIR}/IccProfLib:${CMAKE_BINARY_DIR}/IccXML:${CMAKE_BINARY_DIR}/IccJSON:${CMAKE_BINARY_DIR}/IccConnect")
 
 set(ICCDEV_TEST_ENV
   "PATH=${ICCDEV_TOOL_PATH}:$ENV{PATH}"
@@ -222,6 +272,8 @@ set(ICCDEV_TEST_ENV
   "ICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
   "ICCDEV_REQUIRE_JSON_ROUNDTRIP=1"
 )
+
+iccdev_add_iccconnect_thread_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

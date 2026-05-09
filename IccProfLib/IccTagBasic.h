@@ -72,6 +72,7 @@
 #include <list>
 #include <string>
 #include "IccDefs.h"
+#include "IccObject.h"
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -195,7 +196,7 @@ ICCPROFLIB_API int             VerbosityFromOptions(const DescribeOptions &opts)
  *  factory.
  ***********************************************************************
  */
-class ICCPROFLIB_API CIccTag  
+class ICCPROFLIB_API CIccTag : public IIccObject
 {
 public:
   CIccTag();
@@ -228,6 +229,7 @@ public:
   virtual bool IsNumArrayType() const { return false;} //If true then CIccTag can be cast as a CIccTagNumArray
 
   virtual const icChar *GetClassName() const { return "CIccTag"; }
+  virtual const icChar *GetObjectType() const { return GetClassName(); }
 
   static CIccTag* Create(icTagTypeSignature sig);
 
@@ -1566,7 +1568,7 @@ public:
 *  so this class provides a single interface to both.
 *****************************************************************************
 */
-class ICCPROFLIB_API CIccProfileDescText
+class ICCPROFLIB_API CIccProfileDescText : public IIccObject
 {
 public:
   CIccProfileDescText();

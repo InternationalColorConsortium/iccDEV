@@ -466,7 +466,10 @@ if(ENABLE_ICCXML)
   endif()
 endif()
 
-# --- nlohmann_json (found later, guarded by ENABLE_ICCJSON) ---
+# --- nlohmann_json ---
+if(ENABLE_ICCJSON OR ENABLE_TOOLS)
+  find_package(nlohmann_json REQUIRED)
+endif()
 
 # --- TIFF ---
 if(ENABLE_TOOLS AND ENABLE_IMAGE_TOOLS)
@@ -879,6 +882,11 @@ elseif(ipo_supported)
     # LNK2001 unresolved externals when consumers link the import library.
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
     message(STATUS ">>> Link-Time Optimization (LTO) disabled: WINDOWS_EXPORT_ALL_SYMBOLS requires COFF objects")
+  elseif(MINGW AND ENABLE_STATIC_LIBS AND NOT ENABLE_SHARED_LIBS)
+    # MinGW static tool links can fail when executable objects use -flto while
+    # iccDEV static archives intentionally disable IPO for native COFF output.
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+    message(STATUS ">>> Link-Time Optimization (LTO) disabled: MinGW static builds require native COFF objects")
   elseif(_is_multi_config)
     # Multi-config generator (Visual Studio, Xcode, Ninja Multi-Config):
     # enable LTO for Release only
@@ -1325,7 +1333,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccXML)
 # JSON library (parallel to IccXML, uses nlohmann/json)
 #
 IF(ENABLE_ICCJSON)
-  find_package(nlohmann_json REQUIRED)
   if(VERBOSE_CONFIG)
     message(STATUS "nlohmann_json          : ${nlohmann_json_DIR} (version: ${nlohmann_json_VERSION})")
   endif()
@@ -1353,6 +1360,25 @@ IF(ENABLE_ICCJSON)
   include_directories(${TOP_SOURCE_DIR}/IccJSON/IccLibJSON/)
   include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccJSON)
 ENDIF(ENABLE_ICCJSON)
+
+#
+# IccConnect library (JSON-configurable CMM transform construction)
+#
+IF(ENABLE_ICCJSON OR ENABLE_TOOLS)
+  message(STATUS "Adding subdirectory for IccConnect.")
+  add_subdirectory(IccConnect)
+
+  # Set default link target for IccConnect (matches build configuration)
+  IF(ENABLE_SHARED_LIBS)
+    set(TARGET_LIB_ICCCONNECT IccConnect2 CACHE INTERNAL "Link target for IccConnect2")
+  ELSE()
+    set(TARGET_LIB_ICCCONNECT IccConnect2-static CACHE INTERNAL "Link target for IccConnect2")
+  ENDIF()
+
+  # Ensure IccConnect headers are available globally
+  include_directories(${TOP_SOURCE_DIR}/IccConnect/IccLibConnect/)
+  include_directories(${CMAKE_CURRENT_BINARY_DIR}/IccConnect)
+ENDIF()
 
 # Diagnostic: Output current linker flags
 if(VERBOSE_CONFIG)

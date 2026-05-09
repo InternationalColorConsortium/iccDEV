@@ -3353,7 +3353,7 @@ void CIccTagNamedColor2::SetColorSpaces(icColorSpaceSignature csPCS, icColorSpac
 icInt32Number CIccTagNamedColor2::FindRootColor(const icChar *szRootColor) const
 {
   for (icUInt32Number i=0; i<m_nSize; i++) {
-    if (stricmp(m_NamedColor[i].rootName,szRootColor) == 0)
+    if (stricmp(GetEntry(i)->rootName,szRootColor) == 0)
       return i;
   }
 
@@ -3399,7 +3399,7 @@ bool CIccTagNamedColor2::InitFindCachedPCSColor()
     if (m_csPCS != icSigLabData) {
       for (icUInt32Number i=0; i<m_nSize; i++) {
         pLab = m_NamedLab[i].lab;
-        pXYZ = m_NamedColor[i].pcsCoords;
+        pXYZ = GetEntry(i)->pcsCoords;
         icXyzFromPcs(pXYZ);
         icXYZtoLab(pLab, pXYZ);
       }
@@ -3407,7 +3407,7 @@ bool CIccTagNamedColor2::InitFindCachedPCSColor()
     else {
       for (icUInt32Number i=0; i<m_nSize; i++) {
         pLab = m_NamedLab[i].lab;
-        Lab2ToLab4(pLab, m_NamedColor[i].pcsCoords);
+        Lab2ToLab4(pLab, GetEntry(i)->pcsCoords);
         icLabFromPcs(pLab);
       }
     }
@@ -3526,7 +3526,7 @@ icInt32Number CIccTagNamedColor2::FindColor(const icChar *szColor) const
 
   for ( i=0; i<(icInt32Number)m_nSize; i++) {
     sColorName = m_szPrefix;
-    sColorName += m_NamedColor[i].rootName;
+    sColorName += GetEntry(i)->rootName;
     sColorName += m_szSufix;
 
     if (strcmp(sColorName.c_str(),szColor) == 0)
@@ -3560,7 +3560,7 @@ icInt32Number CIccTagNamedColor2::FindDeviceColor(icFloatNumber *pDevColor) cons
 
 
   for (icUInt32Number i=0; i<m_nSize; i++) {
-    pDevOut = m_NamedColor[i].deviceCoords;
+    pDevOut = GetEntry(i)->deviceCoords;
 
     for (icUInt32Number j=0; j<m_nDeviceCoords; j++) {
       dCalcDiff += (pDevColor[j]-pDevOut[j])*(pDevColor[j]-pDevOut[j]);
@@ -9678,6 +9678,7 @@ CIccProfileDescText::CIccProfileDescText(const CIccProfileDescText &IPDC)
 {
   if (IPDC.m_pTag) {
     m_pTag = IPDC.m_pTag->NewCopy();
+    m_pTag->SetParentObject(this);
     m_bNeedsPading = IPDC.m_bNeedsPading;
   }
   else {
@@ -9702,11 +9703,14 @@ CIccProfileDescText &CIccProfileDescText::operator=(const CIccProfileDescText &P
   if (&ProfDescText == this)
     return *this;
 
-  if (m_pTag)
+  if (m_pTag) {
+    m_pTag->SetParentObject(nullptr);
     delete m_pTag;
+  }
 
   if (ProfDescText.m_pTag) {
     m_pTag = ProfDescText.m_pTag->NewCopy();
+    m_pTag->SetParentObject(this);
     m_bNeedsPading = ProfDescText.m_bNeedsPading;
   }
   else {
@@ -9728,8 +9732,10 @@ CIccProfileDescText &CIccProfileDescText::operator=(const CIccProfileDescText &P
  */
 CIccProfileDescText::~CIccProfileDescText()
 {
-  if (m_pTag)
+  if (m_pTag) {
+    m_pTag->SetParentObject(nullptr);
     delete m_pTag;
+  }
 }
 
 
@@ -9753,6 +9759,7 @@ bool CIccProfileDescText::SetType(icTagTypeSignature nType)
     if (m_pTag->GetType() == nType)
       return true;
 
+    m_pTag->SetParentObject(nullptr);
     delete m_pTag;
   }
 
@@ -9761,6 +9768,9 @@ bool CIccProfileDescText::SetType(icTagTypeSignature nType)
     m_pTag = CIccTagCreator::CreateTag(nType);
   else
     m_pTag = NULL;
+
+  if (m_pTag)
+    m_pTag->SetParentObject(this);
 
   return(m_pTag != NULL);
 }

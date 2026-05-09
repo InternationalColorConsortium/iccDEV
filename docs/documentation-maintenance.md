@@ -15,6 +15,7 @@ point to deeper references.
 | JSON workflow | `docs/iccjson.md` |
 | JSON tag examples | `docs/iccjson-tag-types.md` |
 | Bisect workflow | `docs/bisect.md` |
+| Pre-PR security cycle | `docs/pre-pr-security-cycle.md` and `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Regression workflow updates | `docs/regression-workflow-governance.md` |
 | CodeQL queries | `.github/codeql-queries/README.md` |
 | Security issue format | `.github/prompts/SECURITY_ISSUE_FORMAT.md` |

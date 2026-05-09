@@ -1,23 +1,13 @@
-# 
+#
 # IccApplyNamedCmm CMakeLists.txt | iccDEV Project
 # Copyright (©) 2024-2026 The International Color Consortium. All rights reserved.
-# 
+#
 #
 # Last Updated: 02-JAN-2026 at 0230Z by David Hoyt
 #
 # Changes: 	Fixups for ApplyNamedCmm & NamedProfiles CMakeLists.txt
-#		Make windows ASAN Changes				
-#               
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
+#		Make windows ASAN Changes
+#               Updated to link against IccConnect2 library
 
 # ---- Sources root ----
 # Reminder: CMAKE_SOURCE_DIR is Build/Cmake; the repo root is two levels up.
@@ -31,8 +21,6 @@ if(NOT TARGET iccApplyNamedCmm)
 
   set(SOURCES
     "${SRC_ROOT}/Tools/CmdLine/IccApplyNamedCmm/iccApplyNamedCmm.cpp"
-    "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp"
-    "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp"
   )
 
   add_executable(iccApplyNamedCmm ${SOURCES})
@@ -44,12 +32,9 @@ if(NOT TARGET iccApplyNamedCmm)
     CXX_EXTENSIONS NO
   )
 
-  target_include_directories(iccApplyNamedCmm PRIVATE
-    "${SRC_ROOT}/Tools/CmdLine/IccApplyProfiles"
-  )
-
   target_link_libraries(iccApplyNamedCmm PRIVATE
     ${TARGET_LIB_ICCPROFLIB}
+    ${TARGET_LIB_ICCCONNECT}
     IccXML2
     nlohmann_json::nlohmann_json
   )

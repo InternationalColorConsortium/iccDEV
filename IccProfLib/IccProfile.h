@@ -69,6 +69,7 @@
 
 #include "IccDefs.h"
 #include "IccPcc.h"
+#include "IccObject.h"
 #include <list>
 #include <string>
 
@@ -142,7 +143,7 @@ typedef enum {
  *  on a profile is done using this object.
  **************************************************************************
  */
-class ICCPROFLIB_API CIccProfile : public IIccProfileConnectionConditions 
+class ICCPROFLIB_API CIccProfile : public IIccProfileConnectionConditions, public IIccObject
 {
 public:
   CIccProfile();
@@ -150,9 +151,12 @@ public:
   CIccProfile &operator=(const CIccProfile &Profile);
   virtual CIccProfile* NewCopy() const { return new CIccProfile(*this); }
   virtual CIccProfile* NewProfile() const { return new CIccProfile(); }
+
   virtual ~CIccProfile();
 
-  virtual const char *GetClassName() const { return "CIccProfile"; }
+  virtual const char *GetClassName()  const { return "CIccProfile"; }
+  virtual const char *GetObjectType() const { return GetClassName(); }
+  virtual const CIccProfile* GetParentProfile() const { return m_pParent; }
 
   CIccTag* FindTag(icSignature sig);
   CIccTag* FindTag(IccTagEntry &entry);
@@ -247,6 +251,7 @@ protected:
   TagPtrList m_TagVals;
 
   icColorSpaceSignature m_parentColorSpace = icSigNoColorData;
+  const CIccProfile *m_pParent = nullptr;
 };
 
 ICCPROFLIB_API CIccProfile *ReadIccProfile(const icChar *szFilename, bool bUseSubProfile=false);

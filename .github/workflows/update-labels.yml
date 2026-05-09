@@ -29,10 +29,23 @@ on:
   workflow_run:
     workflows:
       - ci-pr-action
+      - ci-pr-lint
+      - ci-risk-analysis
+      - ci-pr-unix
+      - ci-pr-unix-sb
+      - ci-pr-win
+      - ci-pr-wasm
+      - ci-build-matrix
+      - ci-regression-checks
+      - ci-json-roundtrip
       - ci-vcpkg-ports
       - ci-codeql-security
       - ci-docker
+      - ci-docker-latest
+      - ci-docker-nixos
       - ci-latest-release
+      - ci-sanitizer-tests
+      - ci-shared-exports
     types: [completed]
 
 permissions:
@@ -227,11 +240,16 @@ jobs:
               --jq '
                 if (.total_count == 0) then "none"
                 else
-                  [.check_runs[] | select(.name != "label-status") | .conclusion // "pending"]
+                  [.check_runs[]
+                    | select(.name as $name
+                        | ["label-status", "apply-labels", "mark-codeql-ready"]
+                        | index($name) | not)
+                    | if .status != "completed" then "pending"
+                      else (.conclusion // "pending") end]
                   | if length == 0 then "none"
-                    elif all(. == "success") then "success"
-                    elif any(. == "failure") then "failure"
+                    elif any(. == "failure" or . == "timed_out" or . == "cancelled" or . == "action_required") then "failure"
                     elif any(. == "pending" or . == "null" or . == null) then "pending"
+                    elif all(. == "success" or . == "skipped" or . == "neutral") then "success"
                     else "unknown" end
                 end' 2>/dev/null || echo "unknown")
 

@@ -1966,8 +1966,10 @@ CIccSampledCalculatorCurve::CIccSampledCalculatorCurve(const CIccSampledCalculat
 
   m_nDesiredSize = curve.m_nDesiredSize;
 
-  if (curve.m_pCalc)
+  if (curve.m_pCalc) {
     m_pCalc = curve.m_pCalc->NewCopy();
+    m_pCalc->SetParentObject(this);
+  }
   else
     m_pCalc = NULL;
 
@@ -2008,8 +2010,10 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
   if (this == &curve)   // safety
     return (*this);
 
-  if (m_pCalc)
+  if (m_pCalc) {
+    m_pCalc->SetParentObject(nullptr);
     delete m_pCalc;
+  }
 
   if (m_pSamples)
     free(m_pSamples);
@@ -2024,8 +2028,10 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
   m_storageType = curve.m_storageType;
   m_extensionType = curve.m_extensionType;
 
-  if (curve.m_pCalc)
+  if (curve.m_pCalc) {
     m_pCalc = curve.m_pCalc->NewCopy();
+    m_pCalc->SetParentObject(this);
+  }
   else
     m_pCalc = NULL;
 
@@ -2067,8 +2073,10 @@ CIccSampledCalculatorCurve::~CIccSampledCalculatorCurve()
   if (m_pSamples)
     free(m_pSamples);
 
-  if (m_pCalc)
+  if (m_pCalc) {
+    m_pCalc->SetParentObject(nullptr);
     delete m_pCalc;
+  }
 }
 
 /**
@@ -2136,10 +2144,14 @@ bool CIccSampledCalculatorCurve::SetExtensionType(icUInt16Number nExtensionType)
 ******************************************************************************/
 bool CIccSampledCalculatorCurve::SetCalculator(CIccMpeCalculator *pCalc)
 {
-  if (m_pCalc)
+  if (m_pCalc) {
+    m_pCalc->SetParentObject(nullptr);
     delete m_pCalc;
+  }
 
   m_pCalc = pCalc;
+  if (pCalc)
+    pCalc->SetParentObject(this);
 
   return true;
 }
@@ -3586,8 +3598,10 @@ CIccMpeTintArray::CIccMpeTintArray(const CIccMpeTintArray &tintArray)
   m_nInputChannels = tintArray.m_nInputChannels;
   m_nOutputChannels = tintArray.m_nOutputChannels;
 
-  if (tintArray.m_Array)
+  if (tintArray.m_Array) {
     m_Array = (CIccTagNumArray*)tintArray.m_Array->NewCopy();
+    m_Array->SetParentObject(this);
+  }
 
 }
 
@@ -3609,14 +3623,17 @@ CIccMpeTintArray &CIccMpeTintArray::operator=(const CIccMpeTintArray &tintArray)
   m_nReserved = tintArray.m_nReserved;
 
   if (m_Array) {
+    m_Array->SetParentObject(nullptr);
     delete m_Array;
   }
 
   m_nInputChannels = tintArray.m_nInputChannels;
   m_nOutputChannels = tintArray.m_nOutputChannels;
 
-  if (tintArray.m_Array)
+  if (tintArray.m_Array) {
     m_Array = (CIccTagNumArray*)tintArray.m_Array->NewCopy();
+    m_Array->SetParentObject(this);
+  }
 
   return *this;
 }
@@ -3633,8 +3650,10 @@ CIccMpeTintArray &CIccMpeTintArray::operator=(const CIccMpeTintArray &tintArray)
  ******************************************************************************/
 CIccMpeTintArray::~CIccMpeTintArray()
 {
-  if (m_Array)
+  if (m_Array) {
+    m_Array->SetParentObject(nullptr);
     delete m_Array;
+  }
 }
 
 /**
@@ -3664,10 +3683,14 @@ void CIccMpeTintArray::SetVectorSize(int nVectorSize)
  ******************************************************************************/
 void CIccMpeTintArray::SetArray(CIccTagNumArray *pArray)
 {
-  if (m_Array)
+  if (m_Array) {
+    m_Array->SetParentObject(nullptr);
     delete m_Array;
+  }
 
   m_Array = pArray;
+  if (pArray)
+    pArray->SetParentObject(this);
 }
 
 
@@ -3708,8 +3731,10 @@ void CIccMpeTintArray::Describe(std::string &sDescription, int nVerboseness)
  ******************************************************************************/
 bool CIccMpeTintArray::Read(icUInt32Number size, CIccIO *pIO)
 {
-  if (m_Array)
+  if (m_Array) {
+    m_Array->SetParentObject(nullptr);
     delete m_Array;
+  }
   m_Array = NULL;
 
   icElemTypeSignature sig;
@@ -3764,6 +3789,7 @@ bool CIccMpeTintArray::Read(icUInt32Number size, CIccIO *pIO)
   }
 
   m_Array = (CIccTagNumArray*)pTag;
+  m_Array->SetParentObject(this);
   pIO->Seek(arrayPos, icSeekSet);
   if (!m_Array->Read(size-headerSize, pIO)) {
     return false;

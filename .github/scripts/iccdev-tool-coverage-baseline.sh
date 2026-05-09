@@ -38,7 +38,7 @@ if [ -d "$REPO_ROOT/IccProfLib" ]; then
   TOOLS="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/build/Tools}"
   ICCDEV_TESTING="${ICCDEV_TESTING_DIR:-$REPO_ROOT/Testing}"
   BUILD_ROOT="$(cd "$TOOLS/.." 2>/dev/null && pwd -P)"
-  export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   # Stage all generated profiles into a flat directory for uniform $TP access
   TP="/tmp/iccdev-test-profiles"
   TP_TIFF="/tmp/iccdev-test-tiff"
@@ -67,7 +67,7 @@ else
   TOOLS="${ICCDEV_TOOLS_DIR:-$REPO_ROOT/iccDEV/Build/Tools}"
   ICCDEV_TESTING="${ICCDEV_TESTING_DIR:-$REPO_ROOT/iccDEV/Testing}"
   BUILD_ROOT="$(cd "$TOOLS/.." 2>/dev/null && pwd -P)"
-  export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
   TP="$REPO_ROOT/test-profiles"
   TP_TIFF="$REPO_ROOT/test-profiles"
   TP_IMG="$REPO_ROOT/test-profiles"

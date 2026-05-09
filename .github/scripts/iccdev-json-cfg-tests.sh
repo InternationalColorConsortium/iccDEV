@@ -11,7 +11,7 @@
 # Environment variables (set by CI workflow):
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools/ (contains tool subdirs)
 #   ICCDEV_TESTING_DIR -- path to Testing/ (contains generated profiles)
-#   LD_LIBRARY_PATH    -- must include IccProfLib + IccXML shared libs
+#   LD_LIBRARY_PATH    -- must include IccProfLib, IccXML, IccJSON, and IccConnect shared libs
 #
 # Exit code: 0 = all pass, 1 = test failure, 2 = ASAN/UBSAN finding
 ###############################################################################

@@ -22,3 +22,9 @@ fun:*MD5Transform*
 # Fires in: IccTagBasic.cpp CIccLocalizedUnicode::GetText() lines 7238-7253
 [implicit-integer-sign-change]
 fun:*CIccLocalizedUnicode*GetText*
+
+# libstdc++ std::string comparison subtracts lengths while ordering object keys.
+# This is well-defined unsigned arithmetic, but -fsanitize=integer reports it
+# through nlohmann::json's std::map-backed object storage.
+[unsigned-integer-overflow]
+src:*/bits/basic_string.h

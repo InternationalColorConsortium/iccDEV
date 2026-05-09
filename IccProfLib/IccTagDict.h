@@ -89,7 +89,7 @@ namespace iccDEV {
 * name and value
 *****************************************************************************
 */
-class ICCPROFLIB_API CIccDictEntry
+class ICCPROFLIB_API CIccDictEntry : public IIccObject
 {
 public: //member functions
   CIccDictEntry();

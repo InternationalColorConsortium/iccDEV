@@ -69,10 +69,52 @@
 #include <cstdio>
 #include <fstream>
 #include <cstring>
+#include <new>
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
+
+static bool icWriteString(FILE* f, const std::string& out)
+{
+  return out.empty() || fwrite(out.c_str(), 1, out.size(), f) == out.size();
+}
+
+static FILE* icOpenWriteTextFile(const char* filename)
+{
+  if (!filename || !filename[0])
+    return stdout;
+
+#if defined(_WIN32)
+  return fopen(filename, "wt");
+#else
+  int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if (fd < 0)
+    return nullptr;
+
+  FILE* f = fdopen(fd, "w");
+  if (!f)
+    close(fd);
+
+  return f;
+#endif
+}
+
+static bool icFormatFloatValue(char* buf, size_t bufSize, int nDigits, int nPrecision, icFloatNumber v)
+{
+  int n;
+  if (!nDigits)
+    n = snprintf(buf, bufSize, " %.*f", nPrecision, v);
+  else
+    n = snprintf(buf, bufSize, " %*.*f", nDigits, nPrecision, v);
+
+  return n >= 0 && (size_t)n < bufSize;
+}
 
 static const icChar* icGetJsonFloatColorEncoding(icFloatColorEncoding val)
 {
@@ -429,6 +471,43 @@ void CIccCfgImageApply::toJson(json& j) const
   setDstBool(j, "dstCompression", m_dstCompression);
   setDstBool(j, "dstPlanar", m_dstPlanar);
   setDstBool(j, "dstEmbedIcc", m_dstEmbedIcc);
+}
+
+CIccCfgConnectOptions::CIccCfgConnectOptions()
+{
+  reset();
+}
+
+void CIccCfgConnectOptions::reset()
+{
+  m_nThreads = 1;
+}
+
+bool CIccCfgConnectOptions::fromJson(json j, bool bReset)
+{
+  if (j.is_null())
+    return true;
+
+  if (!j.is_object())
+    return false;
+
+  if (bReset)
+    reset();
+
+  if (j.find("threads") != j.end()) {
+    int nThreads = m_nThreads;
+    if (!jsonToValue(j["threads"], nThreads) || nThreads < 0)
+      return false;
+    m_nThreads = nThreads;
+  }
+
+  return true;
+}
+
+void CIccCfgConnectOptions::toJson(json& j) const
+{
+  if (m_nThreads != 1)
+    j["threads"] = m_nThreads;
 }
 
 CIccCfgCreateLink::CIccCfgCreateLink()
@@ -1221,8 +1300,13 @@ public:
   bool open(const char* szFilename) {
     if (m_f)
       delete m_f;
-    m_f = new std::ifstream(szFilename);
-    return m_f != nullptr;
+    m_f = new (std::nothrow) std::ifstream(szFilename);
+    if (!m_f || !m_f->is_open()) {
+      delete m_f;
+      m_f = nullptr;
+      return false;
+    }
+    return true;
   }
   bool isEOF() { return m_f->eof(); }
   bool parseLine(std::vector<std::string>& line) {
@@ -1375,7 +1459,7 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
   }
 
   int tempBufSize = 20000;
-  icChar ColorSig[7], *tempBuf = new icChar[tempBufSize];
+  icChar ColorSig[7], *tempBuf = new (std::nothrow) icChar[tempBufSize];
   if (!tempBuf)
     return false;
   InputData.getline(tempBuf, tempBufSize);
@@ -1798,41 +1882,37 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
   char tempBuf2[tempSize];
   if (nDigits > 20) nDigits = 20;
   if (nPrecision > 20) nPrecision = 20;
-  const size_t fmtSize = 20;
-  char fmt[fmtSize];
-  if (!nDigits)
-    snprintf(fmt, fmtSize, " %%.%df", nPrecision);
-  else
-    snprintf(fmt, fmtSize, " %%%d.%df", nDigits, nPrecision);
 
-  if (!filename || !filename[0])
-    f = stdout;
-  else
-    f = fopen(filename, "wt");
+  f = icOpenWriteTextFile(filename);
 
   if (!f)
     return false;
+
+  auto writeFloat = [&](icFloatNumber v)->bool {
+    return icFormatFloatValue(tempBuf, tempSize, nDigits, nPrecision, v) &&
+           icWriteString(f, tempBuf);
+  };
 
   std::string out;
   snprintf(tempBuf, tempSize, "%s\t; ", icGetColorSig(tempBuf2, tempSize, m_space, false));
   out = tempBuf;
   out += "Data Format\n";
-  fwrite(out.c_str(), out.size(), 1, f);
+  if (!icWriteString(f, out)) { if (f != stdout) fclose(f); return false; }
 
   snprintf(tempBuf, tempSize, "%s\t; ", CIccCmm::GetFloatColorEncoding(m_encoding));
   out = tempBuf;
   out += "Encoding\n\n";
-  fwrite(out.c_str(), out.size(), 1, f);
+  if (!icWriteString(f, out)) { if (f != stdout) fclose(f); return false; }
 
   out = ";Source Data Format: ";
   snprintf(tempBuf, tempSize, "%s\n", icGetColorSig(tempBuf2, tempSize, m_srcSpace, false));
   out += tempBuf;
-  fwrite(out.c_str(), out.size(), 1, f);
+  if (!icWriteString(f, out)) { if (f != stdout) fclose(f); return false; }
 
   out = ";Source Data Encoding: ";
   snprintf(tempBuf, tempSize, "%s\n", CIccCmm::GetFloatColorEncoding(m_srcEncoding));
   out += tempBuf;
-  fwrite(out.c_str(), out.size(), 1, f);
+  if (!icWriteString(f, out)) { if (f != stdout) fclose(f); return false; }
 
   fprintf(f, ";Source data is after semicolon\n");
   
@@ -1866,7 +1946,7 @@ fprintf(f, "\n");
     }
     else {
       for (size_t i = 0; i < pData->m_values.size(); i++) {
-        fprintf(f, fmt, pData->m_values[i]);
+        if (!writeFloat(pData->m_values[i])) { if (f != stdout) fclose(f); return false; }
       }
       fprintf(f, "\t;");
     }
@@ -1874,12 +1954,12 @@ fprintf(f, "\n");
     if (pData->m_srcName.size()) {
       fprintf(f,"{ \"%s\" }", pData->m_srcName.c_str());
       if (pData->m_srcValues.size() && pData->m_srcValues[0] != 1.0) {
-        fprintf(f, fmt, pData->m_srcValues[0]);
+        if (!writeFloat(pData->m_srcValues[0])) { if (f != stdout) fclose(f); return false; }
       }
     }
     else {
       for (size_t i = 0; i < pData->m_srcValues.size(); i++) {
-        fprintf(f, fmt, pData->m_srcValues[i]);
+        if (!writeFloat(pData->m_srcValues[i])) { if (f != stdout) fclose(f); return false; }
       }
     }
     fprintf(f, "\n");
@@ -1997,12 +2077,6 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   FILE* f;
   if (nDigits > 20) nDigits = 20;
   if (nPrecision > 20) nPrecision = 20;
-  const size_t fmtSize = 64;
-  char fmt[fmtSize];
-  if (!nDigits)
-    snprintf(fmt, fmtSize, " %%.%df", nPrecision);
-  else
-    snprintf(fmt, fmtSize, " %%%d.%df", nDigits, nPrecision);
 
   auto first = m_data.begin();
   CIccCfgDataEntry* pEntry = first->get();
@@ -2064,10 +2138,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   if (!nFields)
     return false;
 
-  if (!filename || !filename[0])
-    f = stdout;
-  else
-    f = fopen(filename, "wt");
+  f = icOpenWriteTextFile(filename);
 
   if (!f)
     return false;
@@ -2119,7 +2190,10 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
       if (line.size()) line += "\t";
       for (size_t i = 0; i < (size_t)nDstSamples; i++) {
         icFloatNumber v = (i >= pCurEntry->m_values.size()) ? 0 : pCurEntry->m_values[i];
-        snprintf(buf, bufSize, fmt, v);
+        if (!icFormatFloatValue(buf, bufSize, nDigits, nPrecision, v)) {
+          if (f != stdout) fclose(f);
+          return false;
+        }
         if (i)
           line += "\t";
         line += buf;
@@ -2138,7 +2212,10 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
       if (line.size()) line += "\t";
       for (size_t i = 0; i < (size_t)nSrcSamples; i++) {
         icFloatNumber v = (i >= pCurEntry->m_srcValues.size()) ? 0 : pCurEntry->m_srcValues[i];
-        snprintf(buf, bufSize, fmt, v);
+        if (!icFormatFloatValue(buf, bufSize, nDigits, nPrecision, v)) {
+          if (f != stdout) fclose(f);
+          return false;
+        }
         if (i)
           line += "\t";
         line += buf;

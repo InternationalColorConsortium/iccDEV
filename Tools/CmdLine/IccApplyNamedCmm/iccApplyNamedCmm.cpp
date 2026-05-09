@@ -74,11 +74,9 @@
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
-#include "IccApplyBPC.h"
-#include "IccEnvVar.h"
 #include "IccMpeCalc.h"
 #include "IccProfLibVer.h"
-#include "../IccCommon/IccCmmConfig.h"
+#include "IccConnect.h"
 
 
 using namespace nlohmann;
@@ -181,8 +179,6 @@ typedef std::shared_ptr<CIccLogDebugger> LogDebuggerPtr;
 // Function Definitions
 //----------------------------------------------------
 
-
-typedef std::list<CIccProfile*> IccProfilePtrList;
 
 void Usage()
 {
@@ -384,91 +380,30 @@ int main(int argc, const char* argv[])
 
   //If first profile colorspace is PCS and it matches the source data space then treat as input profile
   bool bInputProfile = !IsSpacePCS(SrcspaceSig);
-  if (!bInputProfile) {
-    CIccProfile *pProf = OpenIccProfile(cfgProfiles.m_profiles[0]->m_iccFile.c_str());
+  if (!bInputProfile && !cfgProfiles.m_profiles.empty()) {
+    // Named CMM profile paths are intentional caller-selected inputs.
+    // codeql[cpp/path-injection]
+    CIccProfile* pProf = OpenIccProfile(cfgProfiles.m_profiles[0]->m_iccFile.c_str());
     if (pProf) {
-      if (pProf->m_Header.deviceClass!=icSigAbstractClass && IsSpacePCS(pProf->m_Header.colorSpace))
+      if (pProf->m_Header.deviceClass != icSigAbstractClass && IsSpacePCS(pProf->m_Header.colorSpace))
         bInputProfile = true;
       delete pProf;
     }
   }
 
-  //Allocate a CIccCmm to use to apply profiles
-  CIccNamedColorCmm namedCmm(SrcspaceSig, icSigUnknownData, bInputProfile);
-  IccProfilePtrList pccList;
+  std::unique_ptr<CIccConnectCmm> pConnect(
+    CIccConnectCmm::CreateNamed(cfgProfiles, SrcspaceSig, bInputProfile));
 
-  icCmmEnvSigMap sigMap;
-
-  for (auto pProfIter = cfgProfiles.m_profiles.begin(); pProfIter != cfgProfiles.m_profiles.end(); pProfIter++) {
-    CIccCfgProfile* pProfCfg = pProfIter->get();
-
-    if (!pProfCfg)
-      continue;
-
-    CIccProfile *pPccProfile = NULL;
-
-    //Adjust type and hint information based on rendering intent
-    CIccCreateXformHintManager Hint;
-    if (pProfCfg->m_useBPC)
-      Hint.AddHint(new CIccApplyBPCHint());
-
-    if (pProfCfg->m_adjustPcsLuminance) {
-      Hint.AddHint(new CIccLuminanceMatchingHint());
-    }
-
-    if (pProfCfg->m_pccFile.size()) {
-      pPccProfile = OpenIccProfile(pProfCfg->m_pccFile.c_str());
-      if (!pPccProfile) {
-        printf("Unable to open Profile Connections Conditions from '%s'\n", pProfCfg->m_pccFile.c_str());
-        return -1;
-      }
-      //Keep track of pPccProfile for until after cmm.Begin is called
-      pccList.push_back(pPccProfile);
-    }
-
-    //CMM Environment variables are passed in as a Hint to the Xform associated with the profile
-    if (pProfCfg->m_iccEnvVars.size()>0) {
-      Hint.AddHint(new CIccCmmEnvVarHint(pProfCfg->m_iccEnvVars));
-    }
-
-    if (pProfCfg->m_pccEnvVars.size() > 0) {
-      Hint.AddHint(new CIccCmmPccEnvVarHint(pProfCfg->m_pccEnvVars));
-    }
-
-    //Read profile from path and add it to namedCmm
-    if (namedCmm.AddXform(pProfCfg->m_iccFile.c_str(),
-                          pProfCfg->m_intent<0 ? icUnknownIntent : (icRenderingIntent)pProfCfg->m_intent,
-                          pProfCfg->m_interpolation,
-                          pPccProfile,
-                          pProfCfg->m_transform,
-                          pProfCfg->m_useD2BxB2Dx,
-                          &Hint,
-                          pProfCfg->m_useV5SubProfile)) {
-      printf("Invalid Profile:  %s\n", pProfCfg->m_iccFile.c_str());
-      return -1;
-    }
-  }
-
-  icStatusCMM stat;
-
-  //All profiles have been added to CMM.  Tell CMM that we are ready to begin applying colors/pixels
-  if((stat=namedCmm.Begin())) {
-    printf("Error %d - Unable to begin profile application - Possibly invalid or incompatible profiles\n", stat);
+  if (!pConnect) {
+    printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return -1;
   }
 
-  CIccCmm *pMruCmm = NULL; // CIccMruCmm::Attach(&namedCmm, 6, false);
+  CIccNamedColorCmm* pNamedCmm = pConnect->GetNamedCmm();
+  CIccCmm* pMruCmm = nullptr;
 
-  //Now we can release the pccProfile nodes.
-  IccProfilePtrList::iterator pcc;
-  for (pcc=pccList.begin(); pcc!=pccList.end(); pcc++) {
-    CIccProfile *pPccProfile = *pcc;
-    delete pPccProfile;
-  }
-  pccList.clear();
-
-  //Get and validate the source color space from namedCmm.
-  SrcspaceSig = namedCmm.GetSourceSpace();
+  //Get and validate the source color space from pNamedCmm->
+  SrcspaceSig = pNamedCmm->GetSourceSpace();
   icUInt32Number nSrcSamples = icGetSpaceSamples(SrcspaceSig);
 
   bool bClip = true;
@@ -483,8 +418,8 @@ int main(int argc, const char* argv[])
       bClip = false;
   }
 
-  //Get and validate the destination color space from namedCmm.
-  icColorSpaceSignature DestspaceSig = namedCmm.GetDestSpace();
+  //Get and validate the destination color space from the CMM.
+  icColorSpaceSignature DestspaceSig = pNamedCmm->GetDestSpace();
   int nDestSamples = icGetSpaceSamples(DestspaceSig);
   
   //Allocate pixel buffers for performing encoding transformations
@@ -534,11 +469,11 @@ int main(int argc, const char* argv[])
       else
         tint = 1.0;
 
-      switch(namedCmm.GetInterface()) {
+      switch(pNamedCmm->GetInterface()) {
         case icApplyNamed2Pixel:
           {
 
-            if(namedCmm.Apply(DestPixel, szName, tint)) {
+            if(pNamedCmm->Apply(DestPixel, szName, tint)) {
               printf("Profile application failed.\n");
               return -1;
             }
@@ -555,7 +490,7 @@ int main(int argc, const char* argv[])
           }
         case icApplyNamed2Named:
           {
-            if(namedCmm.Apply(DestNameBuf, SrcNameBuf, tint)) {
+            if(pNamedCmm->Apply(DestNameBuf, SrcNameBuf, tint)) {
               printf("Profile application failed.\n");
               return -1;
             }
@@ -582,7 +517,7 @@ int main(int argc, const char* argv[])
         return -1;
       }
 
-      switch(namedCmm.GetInterface()) {
+      switch(pNamedCmm->GetInterface()) {
         case icApplyPixel2Pixel:
           {
             if (pMruCmm) {
@@ -591,7 +526,7 @@ int main(int argc, const char* argv[])
                 return -1;
               }
             }
-            else if(namedCmm.Apply(DestPixel, SrcPixel)) {
+            else if(pNamedCmm->Apply(DestPixel, SrcPixel)) {
               printf("Profile application failed.\n");
               return -1;
             }
@@ -607,7 +542,7 @@ int main(int argc, const char* argv[])
           }
         case icApplyPixel2Named:
           {
-            if(namedCmm.Apply(DestNameBuf, SrcPixel)) {
+            if(pNamedCmm->Apply(DestNameBuf, SrcPixel)) {
               printf("Profile application failed.\n");
               return -1;
             }

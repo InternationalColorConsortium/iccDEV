@@ -79,6 +79,10 @@
 #include <cstring>
 #include <cstdlib>
 #include <vector>
+#include "IccProfLibConf.h"
+#ifdef ICC_USE_SSE2
+  #include <emmintrin.h>
+#endif
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfile.h"
@@ -2820,7 +2824,7 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber *p = &m_pData[ix*n001 + iy*n010 + iz*n100];
 
   //Normalize grid units
-  icFloatNumber dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7, pv;
+  icFloatNumber dF0, dF1, dF2, dF3, dF4, dF5, dF6, dF7;
 
   dF0 = ns* nt* nu;
   dF1 = ns* nt*  u;
@@ -2831,12 +2835,46 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   dF6 =  s*  t* nu;
   dF7 =  s*  t*  u;
 
-  for (i=0; i<m_nOutput; i++, p++) {
-    pv = p[n000]*dF0 + p[n001]*dF1 + p[n010]*dF2 + p[n011]*dF3 +
-         p[n100]*dF4 + p[n101]*dF5 + p[n110]*dF6 + p[n111]*dF7;
+#ifdef ICC_USE_SSE2
+  const int nOutputLimit = (int)m_nOutput;
+  if (nOutputLimit >= 4) {
+    __m128 vF0 = _mm_set1_ps(dF0), vF1 = _mm_set1_ps(dF1);
+    __m128 vF2 = _mm_set1_ps(dF2), vF3 = _mm_set1_ps(dF3);
+    __m128 vF4 = _mm_set1_ps(dF4), vF5 = _mm_set1_ps(dF5);
+    __m128 vF6 = _mm_set1_ps(dF6), vF7 = _mm_set1_ps(dF7);
 
-    destPixel[i] = pv;
+    int i4 = 0;
+    for (; i4 <= nOutputLimit - 4; i4 += 4, p += 4) {
+      __m128 v = _mm_mul_ps(_mm_loadu_ps(p + n000), vF0);
+      v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(p + n001), vF1));
+      v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(p + n010), vF2));
+      v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(p + n011), vF3));
+      v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(p + n100), vF4));
+      v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(p + n101), vF5));
+      v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(p + n110), vF6));
+      v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(p + n111), vF7));
+      _mm_storeu_ps(destPixel + i4, v);
+    }
+    for (i = i4; i < nOutputLimit; i++, p++) {
+      destPixel[i] = p[n000]*dF0 + p[n001]*dF1 + p[n010]*dF2 + p[n011]*dF3 +
+                     p[n100]*dF4 + p[n101]*dF5 + p[n110]*dF6 + p[n111]*dF7;
+    }
+  } else {
+    for (i=0; i<nOutputLimit; i++, p++) {
+      destPixel[i] = p[n000]*dF0 + p[n001]*dF1 + p[n010]*dF2 + p[n011]*dF3 +
+                     p[n100]*dF4 + p[n101]*dF5 + p[n110]*dF6 + p[n111]*dF7;
+    }
   }
+#else
+  {
+    icFloatNumber pv;
+    for (i=0; i<m_nOutput; i++, p++) {
+      pv = p[n000]*dF0 + p[n001]*dF1 + p[n010]*dF2 + p[n011]*dF3 +
+           p[n100]*dF4 + p[n101]*dF5 + p[n110]*dF6 + p[n111]*dF7;
+      destPixel[i] = pv;
+    }
+  }
+#endif
 }
 
 

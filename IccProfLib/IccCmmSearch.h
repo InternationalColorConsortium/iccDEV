@@ -155,6 +155,7 @@ public:
     icXformLutType nLutType,
     bool bUseD2BxB2DxTags);
 
+  //Note ownership of pPCC object is passed to the CMM (it will delete these objects)
   icStatusCMM AttachPCC(IIccProfileConnectionConditions* pPCC, icFloatNumber dWeight);
 
   //The Begin function should be called before Apply or GetNewApplyCmm()

@@ -745,6 +745,7 @@ CIccTagMultiProcessElement::CIccTagMultiProcessElement(const CIccTagMultiProcess
     for (i=lut.m_list->begin(); i!= lut.m_list->end(); i++) {
       ptr.ptr = (CIccMultiProcessElement*)i->ptr->NewCopy();
       m_list->push_back(ptr);
+      ptr.ptr->SetParentObject(this);
     }
   }
   m_nInputChannels = lut.m_nInputChannels;
@@ -789,6 +790,7 @@ CIccTagMultiProcessElement &CIccTagMultiProcessElement::operator=(const CIccTagM
     for (i=lut.m_list->begin(); i!= lut.m_list->end(); i++) {
       ptr.ptr = (CIccMultiProcessElement*)i->ptr->NewCopy();
       m_list->push_back(ptr);
+      ptr.ptr->SetParentObject(this);
     }
   }
   m_nInputChannels = lut.m_nInputChannels;
@@ -846,6 +848,7 @@ void CIccTagMultiProcessElement::Clean()
     for (i=m_list->begin(); i!=m_list->end(); i++) {
       if (!map[i->ptr].offset) {
         map[i->ptr].offset = 1;
+        i->ptr->SetParentObject(nullptr);
         delete i->ptr;
       }
     }
@@ -940,6 +943,7 @@ void CIccTagMultiProcessElement::Attach(CIccMultiProcessElement *pElement)
   ptr.ptr = pElement;
 
   m_list->push_back(ptr);
+  pElement->SetParentObject(this);
 }
 
 /**
@@ -963,6 +967,7 @@ void CIccTagMultiProcessElement::Insert(CIccMultiProcessElement *pElement)
   ptr.ptr = pElement;
 
   m_list->push_front(ptr);
+  pElement->SetParentObject(this);
 }
 
 
@@ -1075,6 +1080,7 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
     ptr.ptr = element;
 
     m_list->push_back(ptr);
+    element->SetParentObject(this);
   }
 
   return true;

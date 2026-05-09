@@ -432,7 +432,7 @@ namespace iccDEV {
 
 
 #ifdef USEICCDEVNAMESPACE
-}; // namespace iccDEV {
+} //namespace iccDEV
 #endif
 
 #endif  // _ICCSEARCH_H

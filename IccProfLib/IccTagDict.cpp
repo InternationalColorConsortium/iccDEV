@@ -132,12 +132,14 @@ CIccDictEntry::CIccDictEntry(const CIccDictEntry& IDE)
 
   if (IDE.m_pNameLocalized) {
     m_pNameLocalized = (CIccTagMultiLocalizedUnicode*)IDE.m_pNameLocalized->NewCopy();
+    m_pNameLocalized->SetParentObject(this);
   }
   else
     m_pNameLocalized = NULL;
 
   if (IDE.m_pValueLocalized) {
     m_pValueLocalized = (CIccTagMultiLocalizedUnicode*)IDE.m_pValueLocalized->NewCopy();
+    m_pValueLocalized->SetParentObject(this);
   }
   else
     m_pValueLocalized = NULL;
@@ -158,11 +160,15 @@ CIccDictEntry &CIccDictEntry::operator=(const CIccDictEntry &IDE)
   if (&IDE == this)
     return *this;
 
-  if (m_pNameLocalized)
+  if (m_pNameLocalized) {
+    m_pNameLocalized->SetParentObject(nullptr);
     delete m_pNameLocalized;
+  }
 
-  if (m_pValueLocalized)
+  if (m_pValueLocalized) {
+    m_pValueLocalized->SetParentObject(nullptr);
     delete m_pValueLocalized;
+  }
 
   *m_sName = *IDE.m_sName;
   m_bValueSet = IDE.m_bValueSet;
@@ -170,12 +176,14 @@ CIccDictEntry &CIccDictEntry::operator=(const CIccDictEntry &IDE)
 
   if (IDE.m_pNameLocalized) {
     m_pNameLocalized = (CIccTagMultiLocalizedUnicode*)IDE.m_pNameLocalized->NewCopy();
+    m_pNameLocalized->SetParentObject(this);
   }
   else
     m_pNameLocalized = NULL;
 
   if (IDE.m_pValueLocalized) {
     m_pValueLocalized = (CIccTagMultiLocalizedUnicode*)IDE.m_pValueLocalized->NewCopy();
+    m_pValueLocalized->SetParentObject(this);
   }
   else
     m_pValueLocalized = NULL;
@@ -197,8 +205,14 @@ CIccDictEntry::~CIccDictEntry()
 {
   delete m_sName;
   delete m_sValue;
-  delete m_pNameLocalized;
-  delete m_pValueLocalized;
+  if (m_pNameLocalized) {
+    m_pNameLocalized->SetParentObject(nullptr);
+    delete m_pNameLocalized;
+  }
+  if (m_pValueLocalized) {
+    m_pValueLocalized->SetParentObject(nullptr);
+    delete m_pValueLocalized;
+  }
 }
 
 /**
@@ -328,6 +342,7 @@ bool CIccDictEntry::SetNameLocalized(CIccTagMultiLocalizedUnicode *pNameLocalize
   bool rv;
 
   if (m_pNameLocalized) {
+    m_pNameLocalized->SetParentObject(nullptr);
     delete m_pNameLocalized;
     rv = true;
   }
@@ -335,6 +350,8 @@ bool CIccDictEntry::SetNameLocalized(CIccTagMultiLocalizedUnicode *pNameLocalize
     rv = false;
 
   m_pNameLocalized = pNameLocalized;
+  if (pNameLocalized)
+    pNameLocalized->SetParentObject(this);
 
   return rv;
 }
@@ -355,6 +372,7 @@ bool CIccDictEntry::SetValueLocalized(CIccTagMultiLocalizedUnicode *pValueLocali
   bool rv;
 
   if (m_pValueLocalized) {
+    m_pValueLocalized->SetParentObject(nullptr);
     delete m_pValueLocalized;
     rv = true;
   }
@@ -362,6 +380,8 @@ bool CIccDictEntry::SetValueLocalized(CIccTagMultiLocalizedUnicode *pValueLocali
     rv = false;
 
   m_pValueLocalized = pValueLocalized;
+  if (pValueLocalized)
+    pValueLocalized->SetParentObject(this);
 
   return rv;
 }

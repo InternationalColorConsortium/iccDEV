@@ -61,11 +61,12 @@
  *
  */
 
- ////////////////////////////////////////////////////////////////////// 
+ //////////////////////////////////////////////////////////////////////
  // HISTORY:
  //
  // -Initial implementation by Max Derhak 1-11-2024
  // -Added Explicit Template Instantiations D Hoyt 18-MAR-2025
+ // -Moved to IccConnect library by Max Derhak 4-2026
  //
  //////////////////////////////////////////////////////////////////////
 
@@ -74,6 +75,35 @@
 #include <cstdio>
 #include <string>
 #include <sstream>  // For std::to_string fallback
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
+
+static FILE* icOpenWriteBinaryFile(const char* szFname)
+{
+  if (!szFname || !szFname[0])
+    return stdout;
+
+#if defined(_WIN32)
+  return fopen(szFname, "wb");
+#else
+  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if (fd < 0)
+    return nullptr;
+
+  FILE* f = fdopen(fd, "wb");
+  if (!f)
+    close(fd);
+
+  return f;
+#endif
+}
 
 template <typename T>
  std::string arrayToJson(T* a, int nCount)
@@ -429,10 +459,7 @@ bool saveJsonAs(const json& j, const char* szFname, int indent)
 
   FILE* f;
 
-  if (szFname && szFname[0])
-    f = fopen(szFname, "wb");
-  else
-    f = stdout;
+  f = icOpenWriteBinaryFile(szFname);
 
   if (f) {
     std::string str = j.dump(indent);
@@ -452,14 +479,17 @@ bool loadJsonFrom(json& j, const char* szFname)
   bool rv = false;
   j.clear();
 
+  if (!szFname || !szFname[0])
+    return false;
+
   FILE* f = fopen(szFname, "rb");
   if (f) {
-    fseek(f, 0, SEEK_END);
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return false; }
     long pos = ftell(f);
     if (pos <= 0) { fclose(f); return false; }
     unsigned long flen = (unsigned long)pos;
     if (flen > 100 * 1024 * 1024) { fclose(f); return false; }
-    fseek(f, 0, SEEK_SET);
+    if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return false; }
     std::string buf(flen, '\0');
 
     if (fread(&buf[0], 1, buf.size(), f) == buf.size()) {
@@ -479,3 +509,7 @@ bool loadJsonFrom(json& j, const char* szFname)
 
   return rv;
 }
+
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
+#endif

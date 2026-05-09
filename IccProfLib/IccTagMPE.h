@@ -73,6 +73,7 @@ Copyright:  (c) see Software License
 #define _ICCTAGMPE_H
 
 #include "IccProfLibConf.h"
+#include "IccObject.h"
 
 #include "IccTag.h"
 #include "IccTagFactory.h"
@@ -139,7 +140,7 @@ public:
 * Purpose: Base Class for Multi Process Elements
 *****************************************************************************
 */
-class ICCPROFLIB_API CIccMultiProcessElement
+class ICCPROFLIB_API CIccMultiProcessElement : public IIccObject
 {
 public:
   CIccMultiProcessElement() { m_nReserved = 0; m_nInputChannels = 0; m_nOutputChannels = 0; }
@@ -152,6 +153,7 @@ public:
 
   virtual icElemTypeSignature GetType() const = 0;
   virtual const icChar *GetClassName() const = 0;
+  virtual const icChar *GetObjectType() const { return GetClassName(); }
 
   virtual icUInt16Number NumInputChannels() const { return m_nInputChannels; }
   virtual icUInt16Number NumOutputChannels() const { return m_nOutputChannels; }

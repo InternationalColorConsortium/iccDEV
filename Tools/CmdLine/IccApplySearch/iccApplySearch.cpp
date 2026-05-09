@@ -72,12 +72,11 @@
 #include "IccCmmSearch.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
-#include "IccApplyBPC.h"
-#include "IccEnvVar.h"
 #include "IccMpeCalc.h"
 #include "IccProfLibVer.h"
 #include "IccSearch.h"
-#include "../IccCommon/IccCmmConfig.h"
+#include "IccConnect.h"
+#include <memory>
 #include <vector>
 
 
@@ -186,8 +185,6 @@ bool IsSpacePCS( const icColorSpaceSignature &x )
     return ((x)==icSigXYZData || (x)==icSigLabData);
 }
 
-
-typedef std::vector<CIccProfile*> IccProfilePtrList;
 
 void Usage()
 {
@@ -385,126 +382,18 @@ int main(int argc, const char* argv[])
   //Setup source encoding
   srcEncoding = cfgData.m_encoding;
 
-  //Allocate a CIccCmm to use to apply profiles
-  CIccCmmSearch cmm;
-  IccProfilePtrList pccList;
+  std::unique_ptr<CIccConnectCmm> pConnect(CIccConnectCmm::CreateSearch(cfgSearchApply));
 
-  icCmmEnvSigMap sigMap;
-
-  icStatusCMM stat;
-
-  for (auto pProfIter = cfgSearchApply.m_profiles.begin(); pProfIter != cfgSearchApply.m_profiles.end(); pProfIter++) {
-    CIccCfgProfile* pProfCfg = pProfIter->get();
-
-    if (!pProfCfg)
-      continue;
-
-    CIccProfile *pPccProfile = NULL;
-
-    //Adjust type and hint information based on rendering intent
-    CIccCreateXformHintManager Hint;
-
-    if (pProfCfg->m_pccFile.size()) {
-      pPccProfile = OpenIccProfile(pProfCfg->m_pccFile.c_str());
-      if (!pPccProfile) {
-        printf("Unable to open Profile Connections Conditions from '%s'\n", pProfCfg->m_pccFile.c_str());
-        return -1;
-      }
-      //Keep track of pPccProfile for until after cmm.Begin is called
-      pccList.push_back(pPccProfile);
-    }
-
-    //CMM Environment variables are passed in as a Hint to the Xform associated with the profile
-    if (pProfCfg->m_iccEnvVars.size()>0) {
-      Hint.AddHint(new CIccCmmEnvVarHint(pProfCfg->m_iccEnvVars));
-    }
-
-    if (pProfCfg->m_pccEnvVars.size() > 0) {
-      Hint.AddHint(new CIccCmmPccEnvVarHint(pProfCfg->m_pccEnvVars));
-    }
-
-    //Read profile from path and add it to namedCmm
-    stat = cmm.CIccCmm::AddXform(pProfCfg->m_iccFile.c_str(),
-                        pProfCfg->m_intent<0 ? icUnknownIntent : (icRenderingIntent)pProfCfg->m_intent,
-                        pProfCfg->m_interpolation,
-                        pPccProfile,
-                        pProfCfg->m_transform,
-                        pProfCfg->m_useD2BxB2Dx,
-                        &Hint,
-                        pProfCfg->m_useV5SubProfile);
-    if (stat!=icCmmStatOk) {
-      printf("Unable to add profile (%s) to cmm - status %d\n", pProfCfg->m_iccFile.c_str(), stat);
-      return -1;
-    }
-  }
-
-  for (auto pPccIter = cfgSearchApply.m_pccWeights.begin(); pPccIter != cfgSearchApply.m_pccWeights.end(); pPccIter++) {
-    CIccCfgPccWeight* pPccWeight = pPccIter->get();
-
-    if (!pPccWeight)
-      continue;
-
-    CIccProfile* pPcc = OpenIccProfile(pPccWeight->m_pccPath.c_str());
-
-    if (!pPcc || !pPcc->ReadPccTags()) {
-      printf("Unable to read PCC profile (%s)", pPccWeight->m_pccPath.c_str());
-      return -1;
-    }
-
-    pPcc->Detach();
-
-    stat = cmm.AttachPCC(pPcc, pPccWeight->m_dWeight);
-    if (stat != icCmmStatOk) {
-      printf("Unable to add profile (%s) to cmm - status %d\n", pPccWeight->m_pccPath.c_str(), stat);
-        return -1;
-    }
-  }
-
-  if (cfgSearchApply.isInitialized()) {
-    CIccCfgProfile* pProfCfg = cfgSearchApply.m_profiles.rbegin()->get();
-
-    CIccProfile* pProfile = OpenIccProfile(pProfCfg->m_iccFile.c_str(), cfgSearchApply.m_useV5SubProfileInitial);
-    CIccProfile* pPccProfile = nullptr;
-
-    //Adjust type and hint information based on rendering intent
-    CIccCreateXformHintManager Hint;
-
-    if (pProfCfg->m_pccFile.size()) {
-      pPccProfile = OpenIccProfile(pProfCfg->m_pccFile.c_str());
-      if (!pPccProfile) {
-        printf("Unable to open Profile Connections Conditions from '%s'\n", pProfCfg->m_pccFile.c_str());
-        return -1;
-      }
-      //Keep track of pPccProfile for until after cmm.Begin is called
-      pccList.push_back(pPccProfile);
-    }
-
-    cmm.SetDstInitProfile(pProfile,
-                          cfgSearchApply.m_intentInitial,
-                          pProfCfg->m_interpolation,
-                          pPccProfile,
-                          cfgSearchApply.m_transformInitial,
-                          cfgSearchApply.m_useD2BxB2DxInitial);
-  }
- 
-  //All profiles have been added to CMM.  Tell CMM that we are ready to begin applying colors/pixels
-  if((stat=cmm.Begin())) {
-    printf("Error %d - Unable to begin profile application - Possibly invalid or incompatible profiles\n", stat);
+  if (!pConnect) {
+    printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return -1;
   }
 
-  CIccCmm *pMruCmm = NULL; // CIccMruCmm::Attach(&namedCmm, 6, false);
+  CIccCmmSearch* pCmm = pConnect->GetSearchCmm();
+  CIccCmm *pMruCmm = NULL;
 
-  //Now we can release the pccProfile nodes.
-  IccProfilePtrList::iterator pcc;
-  for (pcc=pccList.begin(); pcc!=pccList.end(); pcc++) {
-    CIccProfile *pPccProfile = *pcc;
-    delete pPccProfile;
-  }
-  pccList.clear();
-
-  //Get and validate the source color space from namedCmm.
-  icColorSpaceSignature SrcspaceSig = cmm.GetSourceSpace();
+  //Get and validate the source color space from the CMM.
+  icColorSpaceSignature SrcspaceSig = pCmm->GetSourceSpace();
   icUInt32Number nSrcSamples = icGetSpaceSamples(SrcspaceSig);
 
   bool bClip = true;
@@ -519,8 +408,8 @@ int main(int argc, const char* argv[])
       bClip = false;
   }
 
-  //Get and validate the destination color space from namedCmm.
-  icColorSpaceSignature DestspaceSig = cmm.GetDestSpace();
+  //Get and validate the destination color space from the CMM.
+  icColorSpaceSignature DestspaceSig = pCmm->GetDestSpace();
   icUInt32Number nDestSamples = icGetSpaceSamples(DestspaceSig);
   
   //Allocate pixel buffers for performing encoding transformations
@@ -572,7 +461,7 @@ int main(int argc, const char* argv[])
         return -1;
       }
     }
-    else if(cmm.Apply(DestPixel, SrcPixel)) {
+    else if(pCmm->Apply(DestPixel, SrcPixel)) {
       printf("Profile application failed.\n");
       return -1;
     }

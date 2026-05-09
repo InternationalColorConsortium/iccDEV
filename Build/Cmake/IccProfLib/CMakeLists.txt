@@ -24,6 +24,7 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccArrayFactory.cpp
     ${SRC_PATH}/IccProfLib/IccCAM.cpp
     ${SRC_PATH}/IccProfLib/IccCmm.cpp
+    ${SRC_PATH}/IccProfLib/IccCmmThread.cpp
     ${SRC_PATH}/IccProfLib/IccConvertUTF.cpp
     ${SRC_PATH}/IccProfLib/IccEncoding.cpp
     ${SRC_PATH}/IccProfLib/IccEnvVar.cpp
@@ -36,6 +37,7 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccMpeFactory.cpp
     ${SRC_PATH}/IccProfLib/IccMpeSpectral.cpp
     ${SRC_PATH}/IccProfLib/IccPrmg.cpp
+    ${SRC_PATH}/IccProfLib/IccObject.cpp
     ${SRC_PATH}/IccProfLib/IccPcc.cpp
     ${SRC_PATH}/IccProfLib/IccProfile.cpp
     ${SRC_PATH}/IccProfLib/IccSolve.cpp
@@ -56,13 +58,14 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccCmmSearch.cpp
    )
 
-# Public headers — defined unconditionally for target_sources / install
+# Public headers - defined unconditionally for target_sources / install
 SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccApplyBPC.h
   ${SRC_PATH}/IccProfLib/IccArrayBasic.h
   ${SRC_PATH}/IccProfLib/IccArrayFactory.h
   ${SRC_PATH}/IccProfLib/IccCAM.h
   ${SRC_PATH}/IccProfLib/IccCmm.h
+  ${SRC_PATH}/IccProfLib/IccCmmThread.h
   ${SRC_PATH}/IccProfLib/IccConvertUTF.h
   ${SRC_PATH}/IccProfLib/IccDefs.h
   ${SRC_PATH}/IccProfLib/IccEncoding.h
@@ -75,6 +78,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccMpeCalc.h
   ${SRC_PATH}/IccProfLib/IccMpeFactory.h
   ${SRC_PATH}/IccProfLib/IccMpeSpectral.h
+  ${SRC_PATH}/IccProfLib/IccObject.h
   ${SRC_PATH}/IccProfLib/IccPcc.h
   ${SRC_PATH}/IccProfLib/IccPrmg.h
   ${SRC_PATH}/IccProfLib/IccProfile.h
@@ -132,7 +136,7 @@ IF(ENABLE_INSTALL_RIM)
     COMPONENT shared-proof )
 ENDIF(ENABLE_INSTALL_RIM)
 
-# Generated header dir — propagated via target_include_directories(PUBLIC) below
+# Generated header dir - propagated via target_include_directories(PUBLIC) below
 
 SET(SOURCES ${CFILES})
 
@@ -169,7 +173,7 @@ IF(ENABLE_SHARED_LIBS)
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
 
-  # PUBLIC include dirs — propagate to consumers via target_link_libraries()
+  # PUBLIC include dirs - propagate to consumers via target_link_libraries()
   # Build dir FIRST so generated IccProfLibVer.h (with git hash) wins over source tree copy
   target_include_directories(${TARGET_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -203,7 +207,7 @@ IF(ENABLE_STATIC_LIBS)
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
 
-  # PUBLIC include dirs — build dir FIRST for generated version header
+  # PUBLIC include dirs - build dir FIRST for generated version header
   target_include_directories(${TARGET_NAME}-static PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../IccProfLib>

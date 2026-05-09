@@ -438,7 +438,7 @@ bool CTiffImg::WriteLine(unsigned char *pBuf)
         src += m_nStripSize;
       }
     }
-    else if (TIFFWriteEncodedStrip(m_hTif, m_nCurStrip, pBuf, (size_t)m_nWidth*m_nBytesPerSample) < 0)
+    else if (TIFFWriteEncodedStrip(m_hTif, m_nCurStrip, pBuf, m_nBytesPerLine) < 0)
       return false;
 
     m_nCurStrip++;

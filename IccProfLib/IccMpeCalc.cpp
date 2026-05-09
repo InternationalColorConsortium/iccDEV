@@ -4545,8 +4545,10 @@ CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
     m_SubElem = (CIccMultiProcessElement**)calloc(m_nSubElem, sizeof(CIccMultiProcessElement*));
     if (m_SubElem) {
       for (i=0; i<m_nSubElem; i++) {
-        if (channelGen.m_SubElem[i])
+        if (channelGen.m_SubElem[i]) {
           m_SubElem[i] = channelGen.m_SubElem[i]->NewCopy();
+          m_SubElem[i]->SetParentObject(this);
+        }
       }
     }
     else {
@@ -4594,8 +4596,10 @@ CIccMpeCalculator &CIccMpeCalculator::operator=(const CIccMpeCalculator &channel
     m_SubElem = (CIccMultiProcessElement**)calloc(m_nSubElem, sizeof(CIccMultiProcessElement*));
     if (m_SubElem) {
       for (i=0; i<m_nSubElem; i++) {
-        if (channelGen.m_SubElem[i])
+        if (channelGen.m_SubElem[i]) {
           m_SubElem[i] = channelGen.m_SubElem[i]->NewCopy();
+          m_SubElem[i]->SetParentObject(this);
+        }
       }
     }
     else {
@@ -4646,8 +4650,10 @@ void CIccMpeCalculator::SetSize(icUInt16Number nInputChannels, icUInt16Number nO
 
   if (m_SubElem) {
     for (i=0; i<m_nSubElem; i++) {
-      if (m_SubElem[i])
+      if (m_SubElem[i]) {
+        m_SubElem[i]->SetParentObject(nullptr);
         delete m_SubElem[i];
+      }
     }
     free(m_SubElem);
     m_SubElem = NULL;
@@ -5282,11 +5288,14 @@ bool CIccMpeCalculator::SetElem(icUInt32Number idx, CIccMultiProcessElement *pEl
     return false;
 
   if ((*pArray)[idx]) {
+    (*pArray)[idx]->SetParentObject(nullptr);
     delete (*pArray)[idx];
     rv = false;
   }
 
   (*pArray)[idx] = pElem;
+  if (pElem)
+    pElem->SetParentObject(this);
 
   return rv;
 }

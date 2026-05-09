@@ -25,11 +25,21 @@ if [ ! -x "$FROMJSON" ]; then
   exit 1
 fi
 
-export LD_LIBRARY_PATH="$BUILD_DIR/IccProfLib:$BUILD_DIR/IccXML:$BUILD_DIR/IccJSON${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$BUILD_DIR/IccProfLib:$BUILD_DIR/IccXML:$BUILD_DIR/IccJSON:$BUILD_DIR/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+is_expected_fromjson_failure() {
+  case "$1" in
+    CalcTest/calcUnderStack_*.icc)
+      return 0
+      ;;
+  esac
+  return 1
+}
 
 PASS=0
 FAIL=0
 SKIP=0
+XFAIL=0
 TOTAL=0
 CALC_FAIL=0
 
@@ -49,8 +59,13 @@ while IFS= read -r icc; do
   fi
   # FromJson
   if ! timeout 30 "$FROMJSON" /tmp/json-rt-test.json /tmp/json-rt-test.icc >/dev/null 2>&1; then
-    SKIP=$((SKIP + 1))
-    echo "[SKIP] $relpath (FromJson failed)"
+    if is_expected_fromjson_failure "$relpath"; then
+      XFAIL=$((XFAIL + 1))
+      echo "[XFAIL] $relpath (expected invalid calculator profile)"
+    else
+      SKIP=$((SKIP + 1))
+      echo "[SKIP] $relpath (FromJson failed)"
+    fi
     rm -f /tmp/json-rt-test.json
     continue
   fi
@@ -81,12 +96,13 @@ echo "Total:      $TOTAL"
 echo "Pass:       $PASS"
 echo "Fail:       $FAIL (CalcTest: $CALC_FAIL, Other: $NON_CALC_FAIL)"
 echo "Skip:       $SKIP"
+echo "XFail:      $XFAIL"
 echo ""
 
 if [ "$NON_CALC_FAIL" -eq 0 ]; then
   echo "[OK] All non-CalcTest profiles passed or skipped"
-  if [ "$CALC_FAIL" -gt 0 ]; then
-    echo "[INFO] $CALC_FAIL CalcTest profiles have known MPE Calculator gaps"
+  if [ "$CALC_FAIL" -gt 0 ] || [ "$XFAIL" -gt 0 ]; then
+    echo "[INFO] $((CALC_FAIL + XFAIL)) CalcTest profiles have known MPE Calculator gaps"
   fi
   exit 0
 else

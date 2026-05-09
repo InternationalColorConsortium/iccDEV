@@ -111,6 +111,7 @@ jobs:
       FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
       SCAN_ROOT: ${{ github.workspace }}/target
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+      RISK_REPORT_PATH: ${{ github.workspace }}/risk-analysis-report-linux.md
 
     steps:
       - name: "Checkout trusted scanner helpers"
@@ -185,8 +186,8 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 1. Action SHA Pinning Audit" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 1. Action SHA Pinning Audit" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           TOTAL_ACTIONS=0
           PINNED_ACTIONS=0
@@ -236,42 +237,42 @@ jobs:
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
 
           if [[ $TOTAL_ACTIONS -eq 0 ]]; then
-            echo "No workflow actions found." >> "$GITHUB_STEP_SUMMARY"
+            echo "No workflow actions found." >> "$RISK_REPORT_PATH"
           else
             PIN_PCT=$((PINNED_ACTIONS * 100 / TOTAL_ACTIONS))
             if [[ $UNPINNED_ACTIONS -eq 0 && $TAG_ONLY_ACTIONS -eq 0 ]]; then
-              echo "[OK] All $(sanitize_line "$TOTAL_ACTIONS") actions are SHA-pinned ($(sanitize_line "$PIN_PCT")%)" >> "$GITHUB_STEP_SUMMARY"
+              echo "[OK] All $(sanitize_line "$TOTAL_ACTIONS") actions are SHA-pinned ($(sanitize_line "$PIN_PCT")%)" >> "$RISK_REPORT_PATH"
             else
-              echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
-              echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-              echo "| Total actions | $(sanitize_line "$TOTAL_ACTIONS") |" >> "$GITHUB_STEP_SUMMARY"
-              echo "| SHA-pinned | $(sanitize_line "$PINNED_ACTIONS") ($(sanitize_line "$PIN_PCT")%) |" >> "$GITHUB_STEP_SUMMARY"
-              echo "| Tag-only (MEDIUM risk) | $(sanitize_line "$TAG_ONLY_ACTIONS") |" >> "$GITHUB_STEP_SUMMARY"
-              echo "| Unpinned (CRITICAL risk) | $(sanitize_line "$UNPINNED_ACTIONS") |" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Metric | Count |" >> "$RISK_REPORT_PATH"
+              echo "|--------|-------|" >> "$RISK_REPORT_PATH"
+              echo "| Total actions | $(sanitize_line "$TOTAL_ACTIONS") |" >> "$RISK_REPORT_PATH"
+              echo "| SHA-pinned | $(sanitize_line "$PINNED_ACTIONS") ($(sanitize_line "$PIN_PCT")%) |" >> "$RISK_REPORT_PATH"
+              echo "| Tag-only (MEDIUM risk) | $(sanitize_line "$TAG_ONLY_ACTIONS") |" >> "$RISK_REPORT_PATH"
+              echo "| Unpinned (CRITICAL risk) | $(sanitize_line "$UNPINNED_ACTIONS") |" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
             fi
 
             if [[ ${#TAG_ONLY_LIST[@]} -gt 0 ]]; then
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "<details><summary>[WARN] Tag-only actions ($(sanitize_line "${#TAG_ONLY_LIST[@]}"))</summary>" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$RISK_REPORT_PATH"
+              echo "<details><summary>[WARN] Tag-only actions ($(sanitize_line "${#TAG_ONLY_LIST[@]}"))</summary>" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
               for item in "${TAG_ONLY_LIST[@]}"; do
-                echo "- \`$(sanitize_line "$item")\`" >> "$GITHUB_STEP_SUMMARY"
+                echo "- \`$(sanitize_line "$item")\`" >> "$RISK_REPORT_PATH"
               done
-              echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+              echo "</details>" >> "$RISK_REPORT_PATH"
             fi
 
             if [[ ${#UNPINNED_LIST[@]} -gt 0 ]]; then
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "<details><summary>[CRITICAL] Unpinned actions ($(sanitize_line "${#UNPINNED_LIST[@]}"))</summary>" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$RISK_REPORT_PATH"
+              echo "<details><summary>[CRITICAL] Unpinned actions ($(sanitize_line "${#UNPINNED_LIST[@]}"))</summary>" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
               for item in "${UNPINNED_LIST[@]}"; do
-                echo "- \`$(sanitize_line "$item")\`" >> "$GITHUB_STEP_SUMMARY"
+                echo "- \`$(sanitize_line "$item")\`" >> "$RISK_REPORT_PATH"
               done
-              echo "</details>" >> "$GITHUB_STEP_SUMMARY"
+              echo "</details>" >> "$RISK_REPORT_PATH"
             fi
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$RISK_REPORT_PATH"
 
       - name: "2. Dangerous Trigger Detection"
         if: always()
@@ -299,11 +300,11 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 2. Dangerous Trigger Detection" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Checks trigger patterns that can grant write access to untrusted code." >> "$GITHUB_STEP_SUMMARY"
-          echo "\`pull_request_target\` is advisory unless it checks out PR head code." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 2. Dangerous Trigger Detection" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Checks trigger patterns that can grant write access to untrusted code." >> "$RISK_REPORT_PATH"
+          echo "\`pull_request_target\` is advisory unless it checks out PR head code." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           DANGEROUS_COUNT=0
 
@@ -315,59 +316,59 @@ jobs:
             if grep -q 'pull_request_target' <<< "$on_section"; then
               if grep -q 'ref.*pull_request.*head' "$wf" 2>/dev/null; then
                 DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
-                echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\` with PR head checkout" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
-                echo "> Trivy-style supply chain attack vector: privileged workflow" >> "$GITHUB_STEP_SUMMARY"
-                echo "> checks out untrusted PR code." >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\` with PR head checkout" >> "$RISK_REPORT_PATH"
+                echo "" >> "$RISK_REPORT_PATH"
+                echo "> Trivy-style supply chain attack vector: privileged workflow" >> "$RISK_REPORT_PATH"
+                echo "> checks out untrusted PR code." >> "$RISK_REPORT_PATH"
+                echo "" >> "$RISK_REPORT_PATH"
               else
-                echo "[INFO] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\` without PR head checkout" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "[INFO] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\` without PR head checkout" >> "$RISK_REPORT_PATH"
+                echo "" >> "$RISK_REPORT_PATH"
               fi
             fi
 
             if grep -q 'issue_comment' <<< "$on_section"; then
               DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses \`issue_comment\` trigger" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses \`issue_comment\` trigger" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
             fi
 
             if grep -q 'workflow_run' <<< "$on_section"; then
               DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
-              echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`workflow_run\` trigger" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`workflow_run\` trigger" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
             fi
 
             # C-2: Additional dangerous triggers
             if grep -qw 'repository_dispatch' <<< "$on_section"; then
               DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses \`repository_dispatch\` trigger" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "> External event source that can execute arbitrary workflow code." >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses \`repository_dispatch\` trigger" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+              echo "> External event source that can execute arbitrary workflow code." >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
             fi
 
             for evt in create delete; do
               if grep -qE "^\s+${evt}:" <<< "$on_section"; then
                 DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
-                echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`$evt\` trigger" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`$evt\` trigger" >> "$RISK_REPORT_PATH"
+                echo "" >> "$RISK_REPORT_PATH"
               fi
             done
 
             if grep -qw 'workflow_call' <<< "$on_section"; then
-              echo "[INFO] \`$(sanitize_line "$wf_base")\` accepts \`workflow_call\` (reusable workflow -- safe)" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "[INFO] \`$(sanitize_line "$wf_base")\` accepts \`workflow_call\` (reusable workflow -- safe)" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
 
           if [[ $DANGEROUS_COUNT -eq 0 ]]; then
-            echo "[OK] No dangerous triggers detected" >> "$GITHUB_STEP_SUMMARY"
+            echo "[OK] No dangerous triggers detected" >> "$RISK_REPORT_PATH"
           else
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Total dangerous triggers: $(sanitize_line "$DANGEROUS_COUNT")**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "**Total dangerous triggers: $(sanitize_line "$DANGEROUS_COUNT")**" >> "$RISK_REPORT_PATH"
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$RISK_REPORT_PATH"
 
       - name: "3. Credential Hygiene Audit"
         if: always()
@@ -395,8 +396,8 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 3. Credential Hygiene Audit" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 3. Credential Hygiene Audit" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           TOTAL_WF=0
           WF_WITH_BASH_ENV=0
@@ -475,31 +476,31 @@ jobs:
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
 
-          echo "| Check | Compliant | Non-compliant |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|-----------|---------------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| BASH_ENV=/dev/null | $(sanitize_line "$WF_WITH_BASH_ENV") | $(sanitize_line "$WF_MISSING_BASH_ENV") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| credential.helper cleanup | $(sanitize_line "$WF_WITH_CRED_CLEANUP") | $(sanitize_line "$WF_MISSING_CRED") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| persist-credentials: false | $(sanitize_line "$WF_WITH_PERSIST_FALSE") | $(sanitize_line "$((TOTAL_WF - WF_WITH_PERSIST_FALSE))") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Compliant | Non-compliant |" >> "$RISK_REPORT_PATH"
+          echo "|-------|-----------|---------------|" >> "$RISK_REPORT_PATH"
+          echo "| BASH_ENV=/dev/null | $(sanitize_line "$WF_WITH_BASH_ENV") | $(sanitize_line "$WF_MISSING_BASH_ENV") |" >> "$RISK_REPORT_PATH"
+          echo "| credential.helper cleanup | $(sanitize_line "$WF_WITH_CRED_CLEANUP") | $(sanitize_line "$WF_MISSING_CRED") |" >> "$RISK_REPORT_PATH"
+          echo "| persist-credentials: false | $(sanitize_line "$WF_WITH_PERSIST_FALSE") | $(sanitize_line "$((TOTAL_WF - WF_WITH_PERSIST_FALSE))") |" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           if [[ ${#MISSING_ENV[@]} -gt 0 ]]; then
-            echo "<details><summary>[HIGH] Missing BASH_ENV=/dev/null ($(sanitize_line "${#MISSING_ENV[@]}"))</summary>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "<details><summary>[HIGH] Missing BASH_ENV=/dev/null ($(sanitize_line "${#MISSING_ENV[@]}"))</summary>" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
             for item in "${MISSING_ENV[@]}"; do
-              echo "- \`$(sanitize_line "$item")\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "- \`$(sanitize_line "$item")\`" >> "$RISK_REPORT_PATH"
             done
-            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "</details>" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           if [[ ${#MISSING_PERSIST[@]} -gt 0 ]]; then
-            echo "<details><summary>[MEDIUM] Missing persist-credentials: false ($(sanitize_line "${#MISSING_PERSIST[@]}"))</summary>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "<details><summary>[MEDIUM] Missing persist-credentials: false ($(sanitize_line "${#MISSING_PERSIST[@]}"))</summary>" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
             for item in "${MISSING_PERSIST[@]}"; do
-              echo "- \`$(sanitize_line "$item")\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "- \`$(sanitize_line "$item")\`" >> "$RISK_REPORT_PATH"
             done
-            echo "</details>" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "</details>" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
       - name: "4. Shell Hardening Audit"
@@ -528,8 +529,8 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 4. Shell Hardening Audit" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 4. Shell Hardening Audit" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           TOTAL_STEPS=0
           HARDENED_STEPS=0
@@ -629,25 +630,25 @@ jobs:
 
           if [[ $TOTAL_STEPS -gt 0 ]]; then
             COMBINED_PCT=$((COMBINED_HARDENED * 100 / TOTAL_STEPS))
-            echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Total run: blocks | $(sanitize_line "$TOTAL_STEPS") |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Bash: set -euo pipefail | $(sanitize_line "$HARDENED_STEPS") |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| PowerShell: ErrorActionPreference | $(sanitize_line "$PWSH_HARDENED") |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Combined hardened | $(sanitize_line "$COMBINED_HARDENED") ($(sanitize_line "$COMBINED_PCT")%) |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Missing hardening | $(sanitize_line "$UNHARDENED") |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Metric | Count |" >> "$RISK_REPORT_PATH"
+            echo "|--------|-------|" >> "$RISK_REPORT_PATH"
+            echo "| Total run: blocks | $(sanitize_line "$TOTAL_STEPS") |" >> "$RISK_REPORT_PATH"
+            echo "| Bash: set -euo pipefail | $(sanitize_line "$HARDENED_STEPS") |" >> "$RISK_REPORT_PATH"
+            echo "| PowerShell: ErrorActionPreference | $(sanitize_line "$PWSH_HARDENED") |" >> "$RISK_REPORT_PATH"
+            echo "| Combined hardened | $(sanitize_line "$COMBINED_HARDENED") ($(sanitize_line "$COMBINED_PCT")%) |" >> "$RISK_REPORT_PATH"
+            echo "| Missing hardening | $(sanitize_line "$UNHARDENED") |" >> "$RISK_REPORT_PATH"
             if [[ $DEFAULTS_SHELL -gt 0 ]]; then
-              echo "| Job-level defaults.run.shell | $(sanitize_line "$DEFAULTS_SHELL") |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| Job-level defaults.run.shell | $(sanitize_line "$DEFAULTS_SHELL") |" >> "$RISK_REPORT_PATH"
             fi
           else
-            echo "No run: blocks found" >> "$GITHUB_STEP_SUMMARY"
+            echo "No run: blocks found" >> "$RISK_REPORT_PATH"
           fi
 
           if [[ $SH_COUNT -gt 0 ]]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "[WARN] $(sanitize_line "$SH_COUNT") step(s) use \`shell: sh\` -- prefer \`bash --noprofile --norc {0}\` for proper hardening" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "[WARN] $(sanitize_line "$SH_COUNT") step(s) use \`shell: sh\` -- prefer \`bash --noprofile --norc {0}\` for proper hardening" >> "$RISK_REPORT_PATH"
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$RISK_REPORT_PATH"
 
       - name: "5. Matrix Expression Injection Scan"
         if: always()
@@ -675,11 +676,11 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 5. Matrix Expression Injection Scan" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Detects unsafe matrix/github/inputs expressions in \`run:\` blocks." >> "$GITHUB_STEP_SUMMARY"
-          echo "These are injectable via PR titles, branch names, or workflow inputs." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 5. Matrix Expression Injection Scan" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Detects unsafe matrix/github/inputs expressions in \`run:\` blocks." >> "$RISK_REPORT_PATH"
+          echo "These are injectable via PR titles, branch names, or workflow inputs." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           INJECTION_COUNT=0
           declare -a INJECTION_LIST=()
@@ -713,18 +714,18 @@ jobs:
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
 
           if [[ $INJECTION_COUNT -eq 0 ]]; then
-            echo "[OK] No injectable expressions detected in run: blocks" >> "$GITHUB_STEP_SUMMARY"
+            echo "[OK] No injectable expressions detected in run: blocks" >> "$RISK_REPORT_PATH"
           else
-            echo "[CRITICAL] Found $(sanitize_line "$INJECTION_COUNT") injectable expression(s):" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "[CRITICAL] Found $(sanitize_line "$INJECTION_COUNT") injectable expression(s):" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo '```' >> "$RISK_REPORT_PATH"
             for item in "${INJECTION_LIST[@]}"; do
-              sanitize_line "$item" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
+              sanitize_line "$item" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
             done
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$RISK_REPORT_PATH"
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$RISK_REPORT_PATH"
 
       - name: "6. Output Sanitization Audit"
         if: always()
@@ -752,8 +753,8 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 6. Output Sanitization Audit" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 6. Output Sanitization Audit" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           SUMMARY_WRITES=0
           SANITIZED_WRITES=0
@@ -830,29 +831,29 @@ jobs:
             done < "$wf"
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
 
-          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Total GITHUB_STEP_SUMMARY/GITHUB_OUTPUT writes | $(sanitize_line "$SUMMARY_WRITES") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Via sanitizer function | $(sanitize_line "$SANITIZED_WRITES") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Direct/unsanitized | $(sanitize_line "$UNSANITIZED_WRITES") |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Count |" >> "$RISK_REPORT_PATH"
+          echo "|--------|-------|" >> "$RISK_REPORT_PATH"
+          echo "| Total GITHUB_STEP_SUMMARY/GITHUB_OUTPUT writes | $(sanitize_line "$SUMMARY_WRITES") |" >> "$RISK_REPORT_PATH"
+          echo "| Via sanitizer function | $(sanitize_line "$SANITIZED_WRITES") |" >> "$RISK_REPORT_PATH"
+          echo "| Direct/unsanitized | $(sanitize_line "$UNSANITIZED_WRITES") |" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           if [[ ${#UNSANITIZED_LIST[@]} -gt 0 && ${#UNSANITIZED_LIST[@]} -le 30 ]]; then
-            echo "**Unsanitized writes ($(sanitize_line "${#UNSANITIZED_LIST[@]}")):**" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "| File | Line | Content |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|------|------|---------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "**Unsanitized writes ($(sanitize_line "${#UNSANITIZED_LIST[@]}")):**" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "| File | Line | Content |" >> "$RISK_REPORT_PATH"
+            echo "|------|------|---------|" >> "$RISK_REPORT_PATH"
             for idx in "${!UNSANITIZED_LIST[@]}"; do
               loc="${UNSANITIZED_LIST[$idx]}"
               content="${UNSANITIZED_CONTENT[$idx]:-}"
               file_part="${loc%%:*}"
               line_part="${loc##*:}"
-              echo "| \`$(sanitize_line "$file_part")\` | $(sanitize_line "$line_part") | \`$(sanitize_line "$content")\` |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| \`$(sanitize_line "$file_part")\` | $(sanitize_line "$line_part") | \`$(sanitize_line "$content")\` |" >> "$RISK_REPORT_PATH"
             done
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$RISK_REPORT_PATH"
           elif [[ ${#UNSANITIZED_LIST[@]} -gt 30 ]]; then
-            echo "**$(sanitize_line "${#UNSANITIZED_LIST[@]}") unsanitized writes found (too many to list)**" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**$(sanitize_line "${#UNSANITIZED_LIST[@]}") unsanitized writes found (too many to list)**" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
       - name: "7. Permissions Minimization Audit"
@@ -883,8 +884,8 @@ jobs:
 
           python3 "$TRUSTED_SCRIPTS/audit-workflow-permissions.py" \
             --workflows-dir .github/workflows \
-            --format markdown >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+            --format markdown >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           # H-4: id-token: write audit (cross-reference with dangerous triggers)
           ID_TOKEN_WRITE=0
@@ -894,27 +895,27 @@ jobs:
               ID_TOKEN_WRITE=$((ID_TOKEN_WRITE + 1))
               on_section=$(awk '/^on:/{f=1;print;next} /^[a-zA-Z]/{f=0} f{print}' "$wf")
               if grep -qE 'pull_request_target|workflow_run|repository_dispatch' <<< "$on_section"; then
-                echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` has \`id-token: write\` with dangerous trigger" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` has \`id-token: write\` with dangerous trigger" >> "$RISK_REPORT_PATH"
+                echo "" >> "$RISK_REPORT_PATH"
               fi
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
           if [[ $ID_TOKEN_WRITE -gt 0 ]]; then
-            echo "**id-token: write found in $(sanitize_line "$ID_TOKEN_WRITE") workflow(s)**" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**id-token: write found in $(sanitize_line "$ID_TOKEN_WRITE") workflow(s)**" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # H-6: CODEOWNERS coverage check for workflow directory
           if [[ -f .github/CODEOWNERS ]]; then
             if grep -qE '\.github/(workflows|actions|\*\*)' .github/CODEOWNERS; then
-              echo "[OK] CODEOWNERS covers .github/workflows/ directory" >> "$GITHUB_STEP_SUMMARY"
+              echo "[OK] CODEOWNERS covers .github/workflows/ directory" >> "$RISK_REPORT_PATH"
             else
-              echo "[WARN] CODEOWNERS exists but does not cover .github/workflows/" >> "$GITHUB_STEP_SUMMARY"
+              echo "[WARN] CODEOWNERS exists but does not cover .github/workflows/" >> "$RISK_REPORT_PATH"
             fi
           else
-            echo "[WARN] No .github/CODEOWNERS file -- workflow changes are unprotected" >> "$GITHUB_STEP_SUMMARY"
+            echo "[WARN] No .github/CODEOWNERS file -- workflow changes are unprotected" >> "$RISK_REPORT_PATH"
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$RISK_REPORT_PATH"
 
       - name: "8. Supply-Chain Risk Score"
         if: always()
@@ -940,10 +941,10 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 8. Supply-Chain Risk Score" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Composite risk assessment based on Trivy compromise indicators." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 8. Supply-Chain Risk Score" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Composite risk assessment based on Trivy compromise indicators." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           RISK_SCORE=0
           RISK_ITEMS=()
@@ -1121,31 +1122,31 @@ jobs:
             RISK_EMOJI="[CRITICAL]"
           fi
 
-          echo "### $(sanitize_line "$RISK_EMOJI") Supply-Chain Risk: $(sanitize_line "$RISK_LEVEL") (Score: $(sanitize_line "$RISK_SCORE"))" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Composite score excludes approved privileged automation. The enforcement gate fails only objective blocking findings." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### $(sanitize_line "$RISK_EMOJI") Supply-Chain Risk: $(sanitize_line "$RISK_LEVEL") (Score: $(sanitize_line "$RISK_SCORE"))" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Composite score excludes approved privileged automation. The enforcement gate fails only objective blocking findings." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           if [[ ${#RISK_ITEMS[@]} -gt 0 ]]; then
-            echo "| Finding | Impact |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|---------|--------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Finding | Impact |" >> "$RISK_REPORT_PATH"
+            echo "|---------|--------|" >> "$RISK_REPORT_PATH"
             for item in "${RISK_ITEMS[@]}"; do
-              echo "| $(sanitize_line "$item") |  |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| $(sanitize_line "$item") |  |" >> "$RISK_REPORT_PATH"
             done
           else
-            echo "No risk indicators detected." >> "$GITHUB_STEP_SUMMARY"
+            echo "No risk indicators detected." >> "$RISK_REPORT_PATH"
           fi
           if [[ ${#ADVISORY_ITEMS[@]} -gt 0 ]]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### Privileged Automation Inventory (Advisory)" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Advisory | Detail |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|----------|--------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "### Privileged Automation Inventory (Advisory)" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "| Advisory | Detail |" >> "$RISK_REPORT_PATH"
+            echo "|----------|--------|" >> "$RISK_REPORT_PATH"
             for item in "${ADVISORY_ITEMS[@]}"; do
-              echo "| $(sanitize_line "$item") | Review trust boundary and least privilege |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| $(sanitize_line "$item") | Review trust boundary and least privilege |" >> "$RISK_REPORT_PATH"
             done
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$RISK_REPORT_PATH"
 
       - name: "9. Trivy-Specific Indicator Check"
         if: always()
@@ -1171,11 +1172,11 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 9. Trivy-Specific Indicator Check" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Checks for patterns matching the Trivy supply-chain attack (March 2026):" >> "$GITHUB_STEP_SUMMARY"
-          echo "credential exfiltration, tag rewriting, pull_request_target abuse." >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 9. Trivy-Specific Indicator Check" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Checks for patterns matching the Trivy supply-chain attack (March 2026):" >> "$RISK_REPORT_PATH"
+          echo "credential exfiltration, tag rewriting, pull_request_target abuse." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
 
           TRIVY_INDICATORS=0
           # In workflow_call runs, GITHUB_WORKFLOW_REF can identify the caller.
@@ -1187,39 +1188,39 @@ jobs:
           EXT_CALLS=$({ grep -rnE 'curl.*\|[[:space:]]*(ba)?sh|wget.*\|[[:space:]]*(ba)?sh' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $EXT_CALLS -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[CRITICAL] $(sanitize_line "$EXT_CALLS") curl/wget|bash pipe(s) in workflows (remote code execution vector)" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[CRITICAL] $(sanitize_line "$EXT_CALLS") curl/wget|bash pipe(s) in workflows (remote code execution vector)" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # Pattern 2: Base64 encoding (common obfuscation, exclude self)
           B64_CALLS=$({ grep -rnE 'base64|b64encode|btoa' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $B64_CALLS -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[WARN] $(sanitize_line "$B64_CALLS") base64 encoding reference(s) detected (check for credential obfuscation)" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[WARN] $(sanitize_line "$B64_CALLS") base64 encoding reference(s) detected (check for credential obfuscation)" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # Pattern 3: Environment variable dumping (exclude self)
           ENV_DUMP=$({ grep -rnE 'printenv|echo.*SECRET|echo.*TOKEN' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | { grep -v 'BASH_ENV' || true; } | { grep -v 'GITHUB_ENV' || true; } | wc -l)
           if [[ $ENV_DUMP -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[WARN] $(sanitize_line "$ENV_DUMP") environment dump pattern(s) detected" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[WARN] $(sanitize_line "$ENV_DUMP") environment dump pattern(s) detected" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # Pattern 4a: git force-push / tag rewriting (actual Trivy attack vector)
           GIT_FORCE=$({ grep -rnE 'git[[:space:]]+(push[[:space:]]+--force|push[[:space:]]+-f|tag[[:space:]]+-f|tag[[:space:]]+-d)' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $GIT_FORCE -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[HIGH] $(sanitize_line "$GIT_FORCE") git force-push/tag-rewrite pattern(s) detected" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[HIGH] $(sanitize_line "$GIT_FORCE") git force-push/tag-rewrite pattern(s) detected" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # Pattern 4b: Regular git push (auto-commit pattern, informational)
           GIT_PUSH=$({ grep -rnE 'git[[:space:]]+push' .github/workflows/ 2>/dev/null || true; } | { grep -vE "$SELF_WF_RE" || true; } | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | { grep -vE '\-\-force|[[:space:]]-f([[:space:]]|$)' || true; } | wc -l)
           if [[ $GIT_PUSH -gt 0 ]]; then
-            echo "[INFO] $(sanitize_line "$GIT_PUSH") git push pattern(s) detected (auto-commit, verify workflow_dispatch-only triggers)" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[INFO] $(sanitize_line "$GIT_PUSH") git push pattern(s) detected (auto-commit, verify workflow_dispatch-only triggers)" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # Pattern 5: pull_request_target trigger + PR head checkout (on: section only, exclude self)
@@ -1236,8 +1237,8 @@ jobs:
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
           if [[ $PR_CHECKOUT -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[CRITICAL] $(sanitize_line "$PR_CHECKOUT") workflow(s) checkout PR head code with elevated permissions" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[CRITICAL] $(sanitize_line "$PR_CHECKOUT") workflow(s) checkout PR head code with elevated permissions" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # C-3: Artifact poisoning -- workflow_run + download-artifact (Nx attack pattern)
@@ -1249,8 +1250,8 @@ jobs:
             if grep -q 'workflow_run' <<< "$on_section"; then
               if grep -q 'download-artifact' "$f" 2>/dev/null; then
                 ART_POISON=$((ART_POISON + 1))
-                echo "[HIGH] \`$(sanitize_line "$f_base")\` uses workflow_run + download-artifact (artifact poisoning vector)" >> "$GITHUB_STEP_SUMMARY"
-                echo "" >> "$GITHUB_STEP_SUMMARY"
+                echo "[HIGH] \`$(sanitize_line "$f_base")\` uses workflow_run + download-artifact (artifact poisoning vector)" >> "$RISK_REPORT_PATH"
+                echo "" >> "$RISK_REPORT_PATH"
               fi
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
@@ -1266,8 +1267,8 @@ jobs:
             | { grep -i 'artifact' || true; } | wc -l)
           if [[ $ART_NAME_INJECT -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[MEDIUM] $(sanitize_line "$ART_NAME_INJECT") artifact name(s) use attacker-controllable expressions" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[MEDIUM] $(sanitize_line "$ART_NAME_INJECT") artifact name(s) use attacker-controllable expressions" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # C-4: Cache key injection (attacker-controllable cache keys)
@@ -1277,8 +1278,8 @@ jobs:
             | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $CACHE_KEY_HIGH -gt 0 ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[MEDIUM] $(sanitize_line "$CACHE_KEY_HIGH") cache key(s) use attacker-controllable github.head_ref" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[MEDIUM] $(sanitize_line "$CACHE_KEY_HIGH") cache key(s) use attacker-controllable github.head_ref" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # github.event.inputs.* and inputs.* require repo write access (informational)
@@ -1286,24 +1287,24 @@ jobs:
             | { grep -vE "$SELF_WF_RE" || true; } \
             | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
           if [[ $CACHE_KEY_INFO -gt 0 ]]; then
-            echo "[INFO] $(sanitize_line "$CACHE_KEY_INFO") cache key(s) use workflow input expressions (collaborator-controlled)" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[INFO] $(sanitize_line "$CACHE_KEY_INFO") cache key(s) use workflow input expressions (collaborator-controlled)" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           # C-5: Dependabot configuration audit
           if [[ ! -f .github/dependabot.yml && ! -f .github/dependabot.yaml ]]; then
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + 1))
-            echo "[MEDIUM] No .github/dependabot.yml -- automated dependency updates not configured" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "[MEDIUM] No .github/dependabot.yml -- automated dependency updates not configured" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
           fi
 
           if [[ $TRIVY_INDICATORS -eq 0 ]]; then
-            echo "[OK] No Trivy-pattern indicators detected" >> "$GITHUB_STEP_SUMMARY"
+            echo "[OK] No Trivy-pattern indicators detected" >> "$RISK_REPORT_PATH"
           else
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "**Total Trivy-pattern indicators: $(sanitize_line "$TRIVY_INDICATORS")**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "**Total Trivy-pattern indicators: $(sanitize_line "$TRIVY_INDICATORS")**" >> "$RISK_REPORT_PATH"
           fi
-          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$RISK_REPORT_PATH"
 
       - name: "10. Ref Name Security Validation"
         if: always()
@@ -1322,7 +1323,7 @@ jobs:
             # shellcheck disable=SC1090
             source "$SANITIZER"
           else
-            echo "[FAIL] Sanitizer not found" >> "$GITHUB_STEP_SUMMARY"
+            echo "[FAIL] Sanitizer not found" >> "$RISK_REPORT_PATH"
             exit 1
           fi
 
@@ -1334,7 +1335,7 @@ jobs:
             echo "and ref confusion attacks. Achieves parity with GitHub UI warning:"
             echo "_The head ref may contain hidden characters._"
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$RISK_REPORT_PATH"
 
           REF_FINDINGS=0
 
@@ -1348,7 +1349,7 @@ jobs:
             CANARY_PASS=true
           fi
           if [[ "$CANARY_PASS" == "true" ]]; then
-            echo "- Canary: [OK] BOM detection engine verified (PR #786 pattern)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Canary: [OK] BOM detection engine verified (PR #786 pattern)" >> "$RISK_REPORT_PATH"
           else
             {
               echo ""
@@ -1360,7 +1361,7 @@ jobs:
               echo "\`detect_hidden_chars()\` is functional (grep -P support,"
               echo "sanitize-sed.sh version, locale settings)."
               echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> "$RISK_REPORT_PATH"
           fi
 
           # emit_ref_finding REF_VALUE LABEL
@@ -1398,7 +1399,7 @@ jobs:
               echo "> could enable ref confusion, Trojan Source, or supply-chain"
               echo "> attacks. The branch should be renamed to remove hidden chars."
               echo ""
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> "$RISK_REPORT_PATH"
           }
 
           # Check HEAD_REF (PR source branch)
@@ -1407,7 +1408,7 @@ jobs:
               REF_FINDINGS=$((REF_FINDINGS + 1))
               emit_ref_finding "$PR_HEAD_REF" "HEAD ref"
             else
-              echo "- HEAD ref \`$(sanitize_line "$PR_HEAD_REF")\`: [OK] clean" >> "$GITHUB_STEP_SUMMARY"
+              echo "- HEAD ref \`$(sanitize_line "$PR_HEAD_REF")\`: [OK] clean" >> "$RISK_REPORT_PATH"
             fi
           fi
 
@@ -1417,7 +1418,7 @@ jobs:
               REF_FINDINGS=$((REF_FINDINGS + 1))
               emit_ref_finding "$PR_BASE_REF" "BASE ref"
             else
-              echo "- BASE ref \`$(sanitize_line "$PR_BASE_REF")\`: [OK] clean" >> "$GITHUB_STEP_SUMMARY"
+              echo "- BASE ref \`$(sanitize_line "$PR_BASE_REF")\`: [OK] clean" >> "$RISK_REPORT_PATH"
             fi
           fi
 
@@ -1437,7 +1438,7 @@ jobs:
               echo "[OK] All ref names are clean ASCII"
             fi
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$RISK_REPORT_PATH"
 
       - name: "11. Workflow Inventory & Final Report"
         if: always()
@@ -1548,7 +1549,7 @@ jobs:
             echo "- \`.github/instructions/workflow-governance\`"
             echo "- \`.github/scripts/sanitize-sed.sh\` (${SAFE_SANITIZER_VERSION})"
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$RISK_REPORT_PATH"
 
           echo "[OK] PR Risk & Security Analysis complete (Linux)"
 
@@ -1575,9 +1576,9 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          summary="${GITHUB_STEP_SUMMARY:-}"
+          summary="${RISK_REPORT_PATH:-}"
           if [[ -z "$summary" || ! -f "$summary" ]]; then
-            echo "[FAIL] Missing risk-analysis summary for enforcement" >&2
+            echo "[FAIL] Missing risk-analysis report for enforcement" >&2
             exit 1
           fi
 
@@ -1601,23 +1602,142 @@ jobs:
             echo ""
             echo "Composite supply-chain score and privileged automation inventory are advisory."
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$RISK_REPORT_PATH"
 
           for pattern in "${blocking_patterns[@]}"; do
             while IFS= read -r finding; do
               [[ -z "$finding" ]] && continue
               blockers=$((blockers + 1))
-              echo "- \`$(sanitize_line "$finding")\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "- \`$(sanitize_line "$finding")\`" >> "$RISK_REPORT_PATH"
             done < <(grep -E "$pattern" "$summary" || true)
           done
 
           if [[ "$blockers" -gt 0 ]]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "[FAIL] Blocking governance findings: $(sanitize_line "$blockers")" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "[FAIL] Blocking governance findings: $(sanitize_line "$blockers")" >> "$RISK_REPORT_PATH"
             exit 1
           fi
 
-          echo "[OK] No blocking governance findings" >> "$GITHUB_STEP_SUMMARY"
+          echo "[OK] No blocking governance findings" >> "$RISK_REPORT_PATH"
+
+      - name: "Mark Prior Linux Risk Failure"
+        if: failure()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          touch "${RUNNER_TEMP}/risk-analysis-linux-failed"
+
+      - name: "13. Executive Risk Summary"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          report="${RISK_REPORT_PATH:-${RUNNER_TEMP}/risk-analysis-report-linux.md}"
+          mkdir -p "$(dirname "$report")"
+
+          missing_report=false
+          if [[ ! -s "$report" ]]; then
+            missing_report=true
+            {
+              echo "## Risk Gate Analysis Report"
+              echo ""
+              echo "[FAIL] Detailed risk report was not generated."
+            } >> "$report"
+          fi
+
+          blocking_patterns=(
+            '^\[CRITICAL\] Found .*injectable expression'
+            '^\[CRITICAL\].*Unpinned actions'
+            '^\[CRITICAL\].*curl/wget\|bash'
+            '^\[CRITICAL\].*checkout PR head code with elevated permissions'
+            '^\[CRITICAL\].*id-token: write'
+            '^\[CRITICAL\].*hidden Unicode'
+            '^\*\*\[CRITICAL\].*hidden Unicode'
+            '^\[HIGH\] Missing BASH_ENV'
+            '^\[HIGH\].*git force-push/tag-rewrite'
+            '^\[HIGH\].*workflow_run \+ download-artifact'
+          )
+
+          audit_failed=false
+          if [[ -f "${RUNNER_TEMP}/risk-analysis-linux-failed" ]]; then
+            audit_failed=true
+          fi
+
+          findings_file="$(mktemp)"
+          for pattern in "${blocking_patterns[@]}"; do
+            grep -E "$pattern" "$report" >> "$findings_file" || true
+          done
+
+          finding_count="$(wc -l < "$findings_file" | tr -d ' ')"
+          result="[PASS]"
+          if [[ "$audit_failed" == "true" || "$missing_report" == "true" || "$finding_count" -gt 0 ]]; then
+            result="[FAIL]"
+          fi
+
+          {
+            echo "## Risk Gate Analysis - Executive Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Result | $(sanitize_line "$result") |"
+            echo "| Platform | Linux (Bash) |"
+            echo "| Enforcement enabled | $(sanitize_line "$FAIL_ON_FINDINGS") |"
+            echo "| Blocking findings | $(sanitize_line "$finding_count") |"
+            echo "| Full report artifact | \`risk-analysis-report-linux\` |"
+            echo ""
+
+            if [[ "$result" == "[FAIL]" ]]; then
+              echo "### Failure Evidence"
+              echo ""
+              if [[ "$finding_count" -gt 0 ]]; then
+                while IFS= read -r finding; do
+                  [[ -z "$finding" ]] && continue
+                  echo "- \`$(sanitize_line "$finding")\`"
+                done < <(sed -n '1,20p' "$findings_file")
+                if [[ "$finding_count" -gt 20 ]]; then
+                  echo "- Additional findings are included in the uploaded full report."
+                fi
+              elif [[ "$missing_report" == "true" ]]; then
+                echo "- Detailed risk report was not generated."
+              else
+                echo "- One or more risk-analysis steps failed before producing blocking-finding evidence."
+              fi
+              echo ""
+            fi
+
+            echo "Full detailed evidence is uploaded as the \`risk-analysis-report-linux\` artifact."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Upload Linux Risk Report"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: risk-analysis-report-linux
+          path: ${{ env.RISK_REPORT_PATH }}
+          if-no-files-found: error
+          retention-days: 14
 
   ###########################################################################
   # Job 2: Windows PowerShell Workflow Security Audit
@@ -1634,6 +1754,7 @@ jobs:
       FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
       SCAN_ROOT: ${{ github.workspace }}/target
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+      RISK_REPORT_PATH: ${{ github.workspace }}/risk-analysis-report-windows.md
       POWERSHELL_TELEMETRY_OPTOUT: 1
       POWERSHELL_UPDATECHECK: Off
 
@@ -1773,7 +1894,7 @@ jobs:
             }
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] SHA pinning audit complete (Windows): $pinnedActions/$totalActions pinned"
 
       - name: "2. Dangerous Trigger Detection (Windows)"
@@ -1862,7 +1983,7 @@ jobs:
             }
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Dangerous trigger detection complete (Windows): $($findings.Count) findings"
 
       - name: "3. Credential Hygiene Audit (Windows)"
@@ -1943,7 +2064,7 @@ jobs:
             $report += "[OK] All workflows have proper credential hygiene"
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Credential hygiene audit complete (Windows)"
 
       - name: "4. Shell Hardening Audit (Windows)"
@@ -2069,7 +2190,7 @@ jobs:
             $report += "| defaults.run.shell | $(Sanitize-Line "$defaultsShellCount") |"
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Shell hardening audit complete (Windows): $combinedHardened/$totalBlocks hardened (bash=$hardenedBlocks, pwsh=$pwshHardenedBlocks)"
 
       - name: "5. Expression Injection Scan (Windows)"
@@ -2145,7 +2266,7 @@ jobs:
             foreach ($f in $findings) { $report += "- ``$(Sanitize-Line $f)``" }
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Expression injection scan complete (Windows): $($findings.Count) findings"
 
       - name: "6. Output Sanitization Audit (Windows)"
@@ -2252,7 +2373,7 @@ jobs:
             $report += "**$(Sanitize-Line "$($unsanitizedList.Count)") unsanitized writes (too many to list)**"
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Output sanitization audit complete (Windows): $sanitizedWrites/$totalSummaryWrites sanitized"
 
       - name: "7. Permissions Audit (Windows)"
@@ -2276,8 +2397,8 @@ jobs:
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
           $permJson = python "$env:TRUSTED_SCRIPTS/audit-workflow-permissions.py" --workflows-dir .github/workflows --format json | ConvertFrom-Json
           python "$env:TRUSTED_SCRIPTS/audit-workflow-permissions.py" --workflows-dir .github/workflows --format markdown |
-            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8
+          "" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8
 
           # H-4: id-token: write audit
           $report = @()
@@ -2314,7 +2435,7 @@ jobs:
             $report += "[WARN] No .github/CODEOWNERS file -- workflow changes are unprotected"
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Permissions audit complete (Windows): $($permJson.with_permissions) with perms, $($permJson.without_permissions) without, $($permJson.with_write) with write"
 
       - name: "8. Supply-Chain Risk Score (Windows)"
@@ -2546,7 +2667,7 @@ jobs:
             }
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Supply-chain risk score (Windows): $score/100 ($grade)"
 
       - name: "9. Trivy-Specific Indicator Check (Windows)"
@@ -2644,7 +2765,7 @@ jobs:
             }
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Trivy indicator check complete (Windows): $($findings.Count) indicators"
 
       - name: "10. Ref Name Security Validation (Windows)"
@@ -2740,7 +2861,7 @@ jobs:
             $report += "[OK] All ref names are clean ASCII"
           }
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] Ref name security validation complete (Windows): $refFindings findings"
 
       - name: "11. Inventory & Cross-Platform Summary"
@@ -2848,5 +2969,126 @@ jobs:
           $report += "- ``.github/instructions/workflow-governance``"
           $report += "- ``.github/scripts/sanitize.ps1`` (PowerShell sanitizer)"
           $report += ""
-          $report -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+          $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
           Write-Host "[OK] PR Risk & Security Analysis complete (Windows)"
+
+      - name: "Mark Prior Windows Risk Failure"
+        if: failure()
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          New-Item -ItemType File -Force -Path (Join-Path $env:RUNNER_TEMP "risk-analysis-windows-failed") | Out-Null
+
+      - name: "12. Executive Risk Summary (Windows)"
+        if: always()
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
+          if (Test-Path $sanitizerPath) { . $sanitizerPath }
+          else {
+            function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
+          }
+
+          $reportPath = $env:RISK_REPORT_PATH
+          if ([string]::IsNullOrWhiteSpace($reportPath)) {
+            $reportPath = Join-Path $env:RUNNER_TEMP "risk-analysis-report-windows.md"
+          }
+          $reportDir = Split-Path -Parent $reportPath
+          if (-not [string]::IsNullOrWhiteSpace($reportDir)) {
+            New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
+          }
+
+          $missingReport = $false
+          if (-not (Test-Path $reportPath) -or (Get-Item $reportPath).Length -eq 0) {
+            $missingReport = $true
+            @(
+              "## Risk Gate Analysis Report",
+              "",
+              "[FAIL] Detailed risk report was not generated."
+            ) | Out-File -FilePath $reportPath -Append -Encoding utf8
+          }
+
+          $auditFailed = Test-Path (Join-Path $env:RUNNER_TEMP "risk-analysis-windows-failed")
+
+          $blockingPatterns = @(
+            '^\[CRITICAL\] Found .*injectable expression',
+            '^\[CRITICAL\].*Unpinned actions',
+            '^\[CRITICAL\].*curl/wget\|bash',
+            '^\[CRITICAL\].*checkout PR head code with elevated permissions',
+            '^\[CRITICAL\].*id-token: write',
+            '^\[CRITICAL\].*hidden Unicode',
+            '^\*\*\[CRITICAL\].*hidden Unicode',
+            '^\[HIGH\] Missing BASH_ENV',
+            '^\[HIGH\].*git force-push/tag-rewrite',
+            '^\[HIGH\].*workflow_run \+ download-artifact'
+          )
+
+          $findings = New-Object System.Collections.Generic.List[string]
+          foreach ($line in Get-Content -Path $reportPath -ErrorAction SilentlyContinue) {
+            foreach ($pattern in $blockingPatterns) {
+              if ($line -match $pattern) {
+                $findings.Add($line)
+                break
+              }
+            }
+          }
+
+          $result = "[PASS]"
+          if ($auditFailed -or $missingReport -or $findings.Count -gt 0) {
+            $result = "[FAIL]"
+          }
+
+          $summary = @()
+          $summary += "## Risk Gate Analysis - Executive Summary"
+          $summary += ""
+          $summary += "| Field | Value |"
+          $summary += "|-------|-------|"
+          $summary += "| Result | $(Sanitize-Line $result) |"
+          $summary += "| Platform | Windows (PowerShell) |"
+          $summary += "| Enforcement enabled | $(Sanitize-Line $env:FAIL_ON_FINDINGS) |"
+          $summary += "| Blocking findings | $(Sanitize-Line $findings.Count) |"
+          $summary += "| Full report artifact | ``risk-analysis-report-windows`` |"
+          $summary += ""
+
+          if ($result -eq "[FAIL]") {
+            $summary += "### Failure Evidence"
+            $summary += ""
+            if ($findings.Count -gt 0) {
+              $findings | Select-Object -First 20 | ForEach-Object {
+                $summary += "- ``$(Sanitize-Line $_)``"
+              }
+              if ($findings.Count -gt 20) {
+                $summary += "- Additional findings are included in the uploaded full report."
+              }
+            } elseif ($missingReport) {
+              $summary += "- Detailed risk report was not generated."
+            } else {
+              $summary += "- One or more risk-analysis steps failed before producing blocking-finding evidence."
+            }
+            $summary += ""
+          }
+
+          $summary += "Full detailed evidence is uploaded as the ``risk-analysis-report-windows`` artifact."
+          $summary += ""
+          $summary -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8  # elements-sanitized
+
+      - name: "Upload Windows Risk Report"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: risk-analysis-report-windows
+          path: ${{ env.RISK_REPORT_PATH }}
+          if-no-files-found: error
+          retention-days: 14

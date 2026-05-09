@@ -166,6 +166,7 @@ CIccTagStruct::CIccTagStruct(const CIccTagStruct &subTags)
     for (i=subTags.m_ElemVals->begin(); i!=subTags.m_ElemVals->end(); i++) {
       tagptr.ptr = i->ptr->NewCopy();
       m_ElemVals->push_back(tagptr);
+      tagptr.ptr->SetParentObject(this);
     }
   }
 
@@ -214,6 +215,7 @@ CIccTagStruct &CIccTagStruct::operator=(const CIccTagStruct &subTags)
     for (i=subTags.m_ElemVals->begin(); i!=subTags.m_ElemVals->end(); i++) {
       tagptr.ptr = i->ptr->NewCopy();
       m_ElemVals->push_back(tagptr);
+      tagptr.ptr->SetParentObject(this);
     }
   }
 
@@ -563,8 +565,10 @@ void CIccTagStruct::Cleanup()
   TagPtrList::iterator i;
 
   for (i=m_ElemVals->begin(); i!=m_ElemVals->end(); i++) {
-    if (i->ptr)
+    if (i->ptr) {
+      i->ptr->SetParentObject(nullptr);
       delete i->ptr;
+    }
   }
   m_ElemEntries->clear();
   m_ElemVals->clear();
@@ -785,6 +789,7 @@ bool CIccTagStruct::AttachElem(icSignature sig, CIccTag *pTag)
     IccTagPtr TagPtr;
     TagPtr.ptr = pTag;
     m_ElemVals->push_back(TagPtr);
+    pTag->SetParentObject(this);
   }
 
   return true;
@@ -902,6 +907,7 @@ bool CIccTagStruct::LoadElem(IccTagEntry *pTagEntry, CIccIO *pIO)
   TagPtr.ptr = pTag;
 
   m_ElemVals->push_back(TagPtr);
+  pTag->SetParentObject(this);
 
   TagEntryList::iterator i;
 
@@ -1540,6 +1546,7 @@ void CIccTagArray::Cleanup()
         if (m_TagVals[j].ptr == pTag)
           m_TagVals[j].ptr = NULL;
       }
+      pTag->SetParentObject(nullptr);
       delete pTag;
       m_TagVals[i].ptr = NULL;
     }
@@ -1610,6 +1617,7 @@ bool CIccTagArray::AttachTag(icUInt32Number nIndex, CIccTag *pTag)
   }
 
   m_TagVals[nIndex].ptr = pTag;
+  pTag->SetParentObject(this);
   return true;
 }
 
@@ -1635,6 +1643,9 @@ CIccTag * CIccTagArray::DetachTag(icUInt32Number nIndex, bool bDeleteFlag)
 
    CIccTag *rv = m_TagVals[nIndex].ptr;
    m_TagVals[nIndex].ptr = NULL;
+
+   if (rv)
+     rv->SetParentObject(nullptr);
 
    if (bDeleteFlag) {
      delete rv;

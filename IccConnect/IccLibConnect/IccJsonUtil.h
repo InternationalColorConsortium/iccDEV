@@ -57,11 +57,12 @@
  *
  */
 
- ////////////////////////////////////////////////////////////////////// 
+ //////////////////////////////////////////////////////////////////////
  // HISTORY:
  //
  // -Initial implementation by Max Derhak 1-11-2024
  // -Added Explicit Template Instantiations D Hoyt 18-MAR-2025
+ // -Moved to IccConnect library by Max Derhak 4-2026
  //
  //////////////////////////////////////////////////////////////////////
 
@@ -72,9 +73,13 @@
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
-#include "../../../IccProfLib/IccDefs.h"
+#include "../../IccProfLib/IccDefs.h"
 
 using json = nlohmann::json;
+
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
 
 // ========================
 // JSON Conversion Helpers
@@ -145,5 +150,9 @@ bool loadJsonFrom(json& j, const char* szFname);
 extern template bool jsonToValue<int>(const json&, int&);
 extern template bool jsonToValue<bool>(const json&, bool&);
 extern template bool jsonToValue<std::string>(const json&, std::string&);
+
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
+#endif
 
 #endif  // _ICCJSONUTIL_H

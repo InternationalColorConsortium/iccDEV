@@ -47,16 +47,18 @@ Windows MinGW single-config generators:
 ```cmd
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake -S Build/Cmake -B out/mingw-x64 -G Ninja ^
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
+  -DCMAKE_BUILD_TYPE=Release ^
   -DCMAKE_C_COMPILER=C:\msys64\ucrt64\bin\x86_64-w64-mingw32-gcc.exe ^
   -DCMAKE_CXX_COMPILER=C:\msys64\ucrt64\bin\x86_64-w64-mingw32-g++.exe ^
   -DENABLE_TESTS=ON ^
   -DENABLE_TOOLS=ON ^
-  -DENABLE_ICCXML=OFF ^
-  -DENABLE_ICCJSON=OFF ^
-  -DENABLE_IMAGE_TOOLS=OFF ^
+  -DENABLE_STATIC_LIBS=ON ^
+  -DENABLE_SHARED_LIBS=OFF ^
+  -DENABLE_ICCXML=ON ^
+  -DENABLE_ICCJSON=ON ^
+  -DENABLE_IMAGE_TOOLS=ON ^
   -DENABLE_WXWIDGETS=OFF
-cmake --build out/mingw-x64 --target iccDumpProfile IccProfLib2 --parallel
+cmake --build out/mingw-x64 --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
@@ -65,11 +67,12 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 17 tests:
+Linux currently registers 18 tests:
 
 | Test | Source |
 |------|--------|
 | `iccdev.create-profiles` | `Testing/CreateAllProfiles.sh` |
+| `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
@@ -92,10 +95,11 @@ The JSON round-trip uses a temporary directory for generated `.json` and
 round-trip `.icc` files so a passing Unix run does not remove or modify tracked
 files in `Testing/`.
 
-Windows currently registers 4 tests:
+Windows currently registers 5 tests:
 
 | Test | Source |
 |------|--------|
+| `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
 | `iccdev.windows-legacy-run-tests` | `Testing/RunTests.bat` |
 | `iccdev.windows-icc-dump-profile-smoke` | `Build/Cmake/Testing/RunWindowsDumpProfileSmokeTest.cmake` |

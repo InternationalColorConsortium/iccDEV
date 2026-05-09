@@ -74,7 +74,17 @@
 #include <sstream>
 #include <iomanip>
 #include <climits>
+#include <cmath>
 #include <new>
+
+static int icJsonDeviceCoordToU16(icFloatNumber v)
+{
+  if (!std::isfinite(static_cast<double>(v)) || v <= 0.0f)
+    return 0;
+  if (v >= 1.0f)
+    return 65535;
+  return static_cast<int>(v * 65535.0f + 0.5f);
+}
 
 // Safely narrow size_t to icUInt32Number; returns 0 and sets overflow flag on truncation
 static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
@@ -679,12 +689,13 @@ bool CIccTagJsonNamedColor2::ToJson(IccJson &j)
   IccJson colors = IccJson::array();
   if (m_NamedColor) {
     for (icUInt32Number i = 0; i < m_nSize; i++) {
+      const SIccNamedColorEntry *pColor = GetEntry(i);
       IccJson c;
-      c["name"] = m_NamedColor[i].rootName;
-      c["pcsCoords"] = IccJson::array({ m_NamedColor[i].pcsCoords[0], m_NamedColor[i].pcsCoords[1], m_NamedColor[i].pcsCoords[2] });
+      c["name"] = pColor->rootName;
+      c["pcsCoords"] = IccJson::array({ pColor->pcsCoords[0], pColor->pcsCoords[1], pColor->pcsCoords[2] });
       IccJson dev = IccJson::array();
       for (icUInt32Number d = 0; d < m_nDeviceCoords; d++)
-        dev.push_back((int)(m_NamedColor[i].deviceCoords[d] * 65535.0f + 0.5f));
+        dev.push_back(icJsonDeviceCoordToU16(pColor->deviceCoords[d]));
       c["deviceCoords"] = dev;
       colors.push_back(c);
     }
@@ -722,15 +733,18 @@ bool CIccTagJsonNamedColor2::ParseJson(const IccJson &j, std::string & /*parseSt
     const IccJson &colors = j["colors"];
     for (icUInt32Number i = 0; i < nColors && i < icJsonSafeU32(colors.size()); i++) {
       const IccJson &c = colors[i];
+      SIccNamedColorEntry *pColor = GetEntry(i);
       std::string name;
-      if (jGetString(c, "name", name))
-        strncpy(m_NamedColor[i].rootName, name.c_str(), sizeof(m_NamedColor[i].rootName)-1);
+      if (jGetString(c, "name", name)) {
+        strncpy(pColor->rootName, name.c_str(), sizeof(pColor->rootName)-1);
+        pColor->rootName[sizeof(pColor->rootName)-1] = '\0';
+      }
       if (jsonExistsField(c, "pcsCoords") && c["pcsCoords"].is_array() && c["pcsCoords"].size() >= 3) {
-        jGetArray(c, "pcsCoords", m_NamedColor[i].pcsCoords, 3);
+        jGetArray(c, "pcsCoords", pColor->pcsCoords, 3);
       }
       if (jsonExistsField(c, "deviceCoords") && c["deviceCoords"].is_array()) {
         for (icUInt32Number d = 0; d < nDevCoords && d < icJsonSafeU32(c["deviceCoords"].size()); d++)
-          m_NamedColor[i].deviceCoords[d] = (icFloatNumber)c["deviceCoords"][d].get<int>() / 65535.0f;
+          pColor->deviceCoords[d] = (icFloatNumber)c["deviceCoords"][d].get<int>() / 65535.0f;
       }
     }
   }
@@ -768,18 +782,42 @@ bool CIccTagJsonColorantOrder::ParseJson(const IccJson &j, std::string & /*parse
 
 bool CIccTagJsonColorantTable::ToJson(IccJson &j)
 {
-  j["pcsEncoding"] = "Lab";
+  const CIccProfile *pProfile = GetParentProfile();
+  icColorSpaceSignature pcsSpace = pProfile ? pProfile->m_Header.pcs : icSigNoColorData;
+
+  std::string pcsEncoding;
+  if (pcsSpace == icSigXYZData)
+    pcsEncoding = "XYZ";
+  else if (pcsSpace == icSigLabData)
+    pcsEncoding = "Lab";
+  else
+    pcsEncoding = "16bit";
+
+  j["pcsEncoding"] = pcsEncoding;
   IccJson arr = IccJson::array();
   const icUInt32Number nCount = m_nCount;
   for (icUInt32Number i = 0; i < nCount; i++) {
-    icFloatNumber pcs[3];
-    pcs[0] = icU16toF(m_pData[i].data[0]);
-    pcs[1] = icU16toF(m_pData[i].data[1]);
-    pcs[2] = icU16toF(m_pData[i].data[2]);
-    icLabFromPcs(pcs);
     IccJson c;
     c["name"] = m_pData[i].name;
-    c["pcs"]  = IccJson::array({ pcs[0], pcs[1], pcs[2] });
+    if (pcsEncoding == "XYZ") {
+      icFloatNumber pcsValues[3];
+      pcsValues[0] = icU16toF(m_pData[i].data[0]);
+      pcsValues[1] = icU16toF(m_pData[i].data[1]);
+      pcsValues[2] = icU16toF(m_pData[i].data[2]);
+      icXyzFromPcs(pcsValues);
+      c["pcs"] = IccJson::array({ pcsValues[0], pcsValues[1], pcsValues[2] });
+    }
+    else if (pcsEncoding == "Lab") {
+      icFloatNumber pcsValues[3];
+      pcsValues[0] = icU16toF(m_pData[i].data[0]);
+      pcsValues[1] = icU16toF(m_pData[i].data[1]);
+      pcsValues[2] = icU16toF(m_pData[i].data[2]);
+      icLabFromPcs(pcsValues);
+      c["pcs"] = IccJson::array({ pcsValues[0], pcsValues[1], pcsValues[2] });
+    }
+    else {
+      c["pcs"] = IccJson::array({ m_pData[i].data[0], m_pData[i].data[1], m_pData[i].data[2] });
+    }
     arr.push_back(c);
   }
   j["colorantTable"] = arr;

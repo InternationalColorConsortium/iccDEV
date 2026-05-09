@@ -1,0 +1,489 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "icc-connect-config.schema.json",
+  "title": "IccConnect Configuration Schema",
+  "description": "JSON Schema for IccConnect CMM configuration objects (IccCmmConfig.h/cpp)",
+
+  "$defs": {
+
+    "colorSpaceSig": {
+      "type": "string",
+      "description": "ICC color space signature as a 4-character string (e.g. 'XYZ ', 'Lab ', 'RGB ')"
+    },
+
+    "renderingIntent": {
+      "description": "ICC rendering intent - name string or integer (0-3)",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["perceptual", "relative", "saturation", "absolute"]
+        },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        }
+      ]
+    },
+
+    "transform": {
+      "type": "string",
+      "description": "Xform LUT type to use for a profile",
+      "enum": [
+        "default",
+        "named",
+        "colorimetric",
+        "spectral",
+        "MCS",
+        "preview",
+        "gamut",
+        "brdfParam",
+        "brdfDirect",
+        "brdfMcsParam"
+      ]
+    },
+
+    "interpolation": {
+      "type": "string",
+      "description": "CLUT interpolation method",
+      "enum": ["linear", "tetrahedral"]
+    },
+
+    "floatColorEncoding": {
+      "type": "string",
+      "description": "Float color encoding for data I/O",
+      "enum": ["value", "float", "unitFloat", "percent", "8Bit", "16Bit", "16BitV2"]
+    },
+
+    "fileEncoding": {
+      "type": "string",
+      "description": "Pixel encoding for image file output",
+      "enum": ["8Bit", "16Bit", "float", "sameAsSource"]
+    },
+
+    "dstBool": {
+      "description": "Destination boolean - true/false or inherited from source",
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "string", "enum": ["sameAsSource"] }
+      ]
+    },
+
+    "envVar": {
+      "type": "object",
+      "description": "A single CMM environment variable binding",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "ICC signature string for the environment variable"
+        },
+        "value": {
+          "type": "number",
+          "description": "Floating-point value assigned to the variable"
+        }
+      }
+    },
+
+    "envVarArray": {
+      "type": "array",
+      "description": "Array of CMM environment variable bindings",
+      "items": { "$ref": "#/$defs/envVar" }
+    },
+
+    "profile": {
+      "type": "object",
+      "description": "CIccCfgProfile - configuration for a single profile in a CMM chain",
+      "additionalProperties": false,
+      "properties": {
+        "iccFile": {
+          "type": ["string", "null"],
+          "description": "Path to the ICC profile file. Null or omitted uses an embedded profile."
+        },
+        "intent": {
+          "$ref": "#/$defs/renderingIntent",
+          "description": "Rendering intent for this profile step"
+        },
+        "transform": {
+          "$ref": "#/$defs/transform",
+          "description": "Which transform LUT to use"
+        },
+        "iccEnvVars": {
+          "$ref": "#/$defs/envVarArray",
+          "description": "Environment variables passed to the ICC profile calculator"
+        },
+        "pccFile": {
+          "type": "string",
+          "description": "Path to a Profile Connection Conditions (PCC) profile"
+        },
+        "pccEnvVars": {
+          "$ref": "#/$defs/envVarArray",
+          "description": "Environment variables passed to the PCC profile"
+        },
+        "adjustPcsLuminance": {
+          "type": "boolean",
+          "default": false,
+          "description": "Scale PCS luminance to match the observing PCC illuminant"
+        },
+        "useBPC": {
+          "type": "boolean",
+          "default": false,
+          "description": "Apply black-point compensation for this profile step"
+        },
+        "useHToS": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use hue-to-saturation transform for this profile step"
+        },
+        "useV5SubProfile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prefer the V5 sub-profile when present"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/interpolation",
+          "default": "tetrahedral",
+          "description": "CLUT interpolation method for this profile"
+        }
+      }
+    },
+
+    "profileSequence": {
+      "type": "array",
+      "description": "CIccCfgProfileSequence - ordered list of profiles forming a CMM chain",
+      "items": { "$ref": "#/$defs/profile" }
+    },
+
+    "connectOptions": {
+      "type": "object",
+      "description": "CIccCfgConnectOptions - common IccConnect CMM construction options",
+      "additionalProperties": false,
+      "properties": {
+        "threads": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1,
+          "description": "Thread count for standard CMM apply. 1 uses the scalar CMM; 0 uses hardware concurrency; values greater than 1 wrap the CMM with CIccThreadedCmm."
+        }
+      }
+    },
+
+    "pccWeight": {
+      "type": "object",
+      "description": "CIccCfgPccWeight - a PCC profile with an associated spectral search weight",
+      "required": ["pccFile", "weight"],
+      "additionalProperties": false,
+      "properties": {
+        "pccFile": {
+          "type": "string",
+          "description": "Path to the PCC profile"
+        },
+        "weight": {
+          "type": "number",
+          "description": "Relative weight used during spectral PCC search"
+        }
+      }
+    },
+
+    "dataEntry": {
+      "type": "object",
+      "description": "CIccCfgDataEntry - a single color sample record (field names are abbreviated for compactness)",
+      "additionalProperties": false,
+      "properties": {
+        "n": {
+          "type": "string",
+          "description": "Sample name (destination)"
+        },
+        "v": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Sample values (destination)"
+        },
+        "sn": {
+          "type": "string",
+          "description": "Sample name (source)"
+        },
+        "sv": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "Sample values (source)"
+        },
+        "i": {
+          "type": "integer",
+          "description": "Sample index (-1 if unset)"
+        },
+        "l": {
+          "type": "string",
+          "description": "Sample label"
+        },
+        "d": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Debug information lines for this sample"
+        }
+      }
+    },
+
+    "colorData": {
+      "type": "object",
+      "description": "CIccCfgColorData - a block of color samples with space and encoding metadata",
+      "additionalProperties": false,
+      "properties": {
+        "space": {
+          "$ref": "#/$defs/colorSpaceSig",
+          "description": "Destination color space signature"
+        },
+        "encoding": {
+          "$ref": "#/$defs/floatColorEncoding",
+          "default": "value",
+          "description": "Numeric encoding for destination sample values"
+        },
+        "srcSpace": {
+          "$ref": "#/$defs/colorSpaceSig",
+          "description": "Source color space signature"
+        },
+        "srcEncoding": {
+          "$ref": "#/$defs/floatColorEncoding",
+          "default": "value",
+          "description": "Numeric encoding for source sample values"
+        },
+        "data": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dataEntry" },
+          "description": "Array of color sample records"
+        }
+      }
+    },
+
+    "dataApply": {
+      "type": "object",
+      "description": "CIccCfgDataApply - options for applying a CMM to color-data files",
+      "additionalProperties": false,
+      "properties": {
+        "debugCalc": {
+          "type": "boolean",
+          "default": false,
+          "description": "Emit per-sample calculator debug output"
+        },
+        "srcType": {
+          "type": "string",
+          "enum": ["colorData", "legacy", "it8"],
+          "default": "colorData",
+          "description": "Format of the source data"
+        },
+        "srcSpace": {
+          "$ref": "#/$defs/colorSpaceSig",
+          "description": "Override color space for 'legacy' or 'it8' source files"
+        },
+        "srcFile": {
+          "type": "string",
+          "description": "Path to the source data file. Omit to use the inline colorData section."
+        },
+        "dstType": {
+          "type": "string",
+          "enum": ["colorData", "legacy", "it8"],
+          "default": "colorData",
+          "description": "Format for the destination output"
+        },
+        "dstFile": {
+          "type": "string",
+          "description": "Path for the destination output file. Omit to write to stdout."
+        },
+        "dstEncoding": {
+          "$ref": "#/$defs/floatColorEncoding",
+          "default": "value",
+          "description": "Numeric encoding for destination output values"
+        },
+        "dstDigits": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 9,
+          "description": "Total field width for formatted numeric output (0 = auto)"
+        },
+        "dstPrecision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 4,
+          "description": "Decimal places for formatted numeric output"
+        }
+      }
+    },
+
+    "imageApply": {
+      "type": "object",
+      "description": "CIccCfgImageApply - options for applying a CMM to image files",
+      "additionalProperties": false,
+      "properties": {
+        "srcImageFile": {
+          "type": "string",
+          "description": "Path to the source image file"
+        },
+        "dstImageFile": {
+          "type": "string",
+          "description": "Path for the destination image file"
+        },
+        "dstEncoding": {
+          "$ref": "#/$defs/fileEncoding",
+          "default": "8Bit",
+          "description": "Bit depth / encoding for the destination image"
+        },
+        "dstCompression": {
+          "$ref": "#/$defs/dstBool",
+          "default": true,
+          "description": "Enable compression in the destination image, or inherit from source"
+        },
+        "dstPlanar": {
+          "$ref": "#/$defs/dstBool",
+          "default": false,
+          "description": "Use planar (band-interleaved) layout in the destination image, or inherit from source"
+        },
+        "dstEmbedIcc": {
+          "$ref": "#/$defs/dstBool",
+          "default": true,
+          "description": "Embed the destination ICC profile in the output image, or inherit from source"
+        }
+      }
+    },
+
+    "createLink": {
+      "type": "object",
+      "description": "CIccCfgCreateLink - options for creating a device-link or cube-file output",
+      "additionalProperties": false,
+      "properties": {
+        "linkFile": {
+          "type": "string",
+          "description": "Output path for the device-link or cube file"
+        },
+        "linkType": {
+          "type": "string",
+          "enum": ["iccDeviceLinkV4", "iccDeviceLinkV5", "cubeFile"],
+          "default": "iccDeviceLinkV4",
+          "description": "Output format for the link"
+        },
+        "linkGridSize": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 255,
+          "default": 19,
+          "description": "Number of grid points per channel in the output CLUT"
+        },
+        "linkPrecision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "default": 4,
+          "description": "Decimal precision for cube-file output (cubeFile linkType only)"
+        },
+        "linkTitle": {
+          "type": "string",
+          "description": "Description string written into the device-link profile header"
+        },
+        "linkMinRange": {
+          "type": "number",
+          "default": 0.0,
+          "description": "Minimum input range value for cube-file output"
+        },
+        "linkMaxRange": {
+          "type": "number",
+          "default": 1.0,
+          "description": "Maximum input range value for cube-file output"
+        },
+        "useSourceTransform": {
+          "type": "boolean",
+          "default": true,
+          "description": "Apply the source profile's forward transform when building the link"
+        }
+      }
+    },
+
+    "searchApplyInitial": {
+      "type": "object",
+      "description": "Initial CMM state for spectral search (CIccCfgSearchApply 'initial' sub-object)",
+      "additionalProperties": false,
+      "properties": {
+        "intent": {
+          "$ref": "#/$defs/renderingIntent",
+          "description": "Initial rendering intent before profile search"
+        },
+        "transform": {
+          "$ref": "#/$defs/transform",
+          "description": "Initial transform type before profile search"
+        },
+        "adjustPcsLuminance": {
+          "type": "boolean",
+          "default": false,
+          "description": "Scale PCS luminance to match the observing PCC illuminant"
+        },
+        "useV5SubProfile": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prefer the V5 sub-profile when present"
+        },
+        "interpolation": {
+          "$ref": "#/$defs/interpolation",
+          "default": "tetrahedral",
+          "description": "CLUT interpolation method for the initial state"
+        }
+      }
+    },
+
+    "searchApply": {
+      "type": "object",
+      "description": "CIccCfgSearchApply - full configuration for iccApplySearch",
+      "additionalProperties": false,
+      "properties": {
+        "profileSequence": {
+          "$ref": "#/$defs/profileSequence",
+          "description": "Fixed profile chain applied before the spectral search"
+        },
+        "initial": {
+          "$ref": "#/$defs/searchApplyInitial",
+          "description": "Initial CMM state used as the starting point for spectral search"
+        },
+        "pccWeights": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pccWeight" },
+          "description": "Weighted PCC candidates for spectral search"
+        }
+      }
+    }
+
+  },
+
+  "description": "Top-level IccConnect configuration document. Must contain either a profile-apply configuration (profileSequence + one of applyData/applyImage/createLink) or a search-apply configuration (searchApply).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "connect": {
+      "$ref": "#/$defs/connectOptions",
+      "description": "Common IccConnect construction options. Currently only standard profile CMM creation uses threaded apply."
+    },
+    "profileSequence": {
+      "$ref": "#/$defs/profileSequence",
+      "description": "Ordered list of profiles forming the CMM chain (iccApplyProfiles / iccApplyNamedCmm)"
+    },
+    "applyData": {
+      "$ref": "#/$defs/dataApply",
+      "description": "Options for color-data file input/output"
+    },
+    "applyImage": {
+      "$ref": "#/$defs/imageApply",
+      "description": "Options for image file input/output"
+    },
+    "createLink": {
+      "$ref": "#/$defs/createLink",
+      "description": "Options for device-link or cube-file creation"
+    },
+    "colorData": {
+      "$ref": "#/$defs/colorData",
+      "description": "Inline color sample data (used when applyData.srcType is 'colorData')"
+    },
+    "searchApply": {
+      "$ref": "#/$defs/searchApply",
+      "description": "Spectral PCC search configuration (iccApplySearch)"
+    }
+  }
+}

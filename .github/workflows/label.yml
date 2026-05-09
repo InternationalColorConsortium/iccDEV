@@ -116,7 +116,6 @@ jobs:
           BASH_ENV: /dev/null
           GH_TOKEN: ${{ github.token }}
           GH_REPOSITORY: ${{ github.repository }}
-          GH_EVENT_PATH: ${{ github.event_path }}
           CODEQL_READY_LABEL: ${{ env.CODEQL_READY_LABEL }}
           CODEQL_READY_DESCRIPTION: ${{ env.CODEQL_READY_DESCRIPTION }}
         run: |
@@ -135,9 +134,15 @@ jobs:
           }
           sanitize_line() { escape_html "$1"; }
 
+          event_path="${GITHUB_EVENT_PATH:-}"
+          if [[ -z "$event_path" || ! -f "$event_path" ]]; then
+            echo "[SKIP] GitHub event payload is unavailable"
+            exit 0
+          fi
+
           pr_number="$(jq -r '
             .workflow_run.pull_requests[0].number // empty
-          ' "$GH_EVENT_PATH")"
+          ' "$event_path")"
           if [[ -z "$pr_number" ]]; then
             echo "[SKIP] ci-pr-action workflow_run did not include a PR number"
             exit 0

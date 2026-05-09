@@ -207,7 +207,7 @@ protected:
 * Purpose: Base class for Curve Set Curves
 *****************************************************************************
 */
-class CIccCurveSetCurve
+class CIccCurveSetCurve : public IIccObject
 {
 public:
   virtual ~CIccCurveSetCurve() {}
@@ -829,7 +829,7 @@ public:
 
 //CIccMPElements support
 #ifdef USEICCDEVNAMESPACE
-}
+} //namespace iccDEV
 #endif
 
 

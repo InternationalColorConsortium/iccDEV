@@ -1,23 +1,12 @@
-# 
+#
 # IccApplyProfiles CMakeLists.txt | DemoIccMAX Project
 # Copyright (©) 2024-2025 The International Color Consortium. All rights reserved.
-# 
+#
 #
 # Last Updated: 10-AUGUST-2025 at 1500Z by David Hoyt
 #
 # Changes: 	Fixups for ApplyNamedCmm & NamedProfiles CMakeLists.txt
-#						
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
+#               Updated to link against IccConnect2 library
 
 if(NOT TARGET iccApplyProfiles)
   # Top of repo is two dirs above Build/Cmake
@@ -33,8 +22,6 @@ if(NOT TARGET iccApplyProfiles)
   set(SOURCES
     "${SRC_ROOT}/Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp"
     "${SRC_ROOT}/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp"
-    "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccJsonUtil.cpp"
-    "${SRC_ROOT}/Tools/CmdLine/IccCommon/IccCmmConfig.cpp"
   )
 
   foreach(f IN LISTS SOURCES)
@@ -56,6 +43,7 @@ if(NOT TARGET iccApplyProfiles)
   target_link_libraries(${TARGET_NAME}
     PRIVATE
       ${TARGET_LIB_ICCPROFLIB}
+      ${TARGET_LIB_ICCCONNECT}
       ${_TIFF_LIB}
       nlohmann_json::nlohmann_json
   )

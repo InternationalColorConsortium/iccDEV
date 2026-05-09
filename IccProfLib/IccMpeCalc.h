@@ -568,7 +568,7 @@ public:
 
 //CIccMPElements support  
 #ifdef USEICCDEVNAMESPACE
-}
+} //namespace iccDEV
 #endif
 
 #endif //_ICCMPECALC_H

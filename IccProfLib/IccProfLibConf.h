@@ -175,6 +175,14 @@ namespace iccDEV {
 // Uncomment below if you wish to utilize Eigen library to support matrix solving
 //#define ICC_USE_EIGEN_SOLVER
 
+// Auto-detect SSE2 on x86-64 (always available) or x86-32 when compiler signals it.
+// Define ICC_DISABLE_SSE2 before including this header to opt out.
+#if !defined(ICC_USE_SSE2) && !defined(ICC_DISABLE_SSE2)
+  #if defined(_M_X64) || defined(__x86_64__) || defined(__SSE2__)
+    #define ICC_USE_SSE2
+  #endif
+#endif
+
 #ifdef USEICCDEVNAMESPACE
 }
 #endif

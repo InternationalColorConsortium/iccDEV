@@ -12,13 +12,13 @@ else
   REPO_ROOT="$(pwd)"
 fi
 cd "$REPO_ROOT" || exit 1
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-build/IccProfLib:build/IccXML}"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-build/IccProfLib:build/IccXML:build/IccJSON:build/IccConnect}"
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
 export UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1
 
 TOOLS_DIR="${ICCDEV_TOOLS_DIR:-build/Tools}"
 BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd -P)"
-export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 NAMEDCMM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
 SEARCH="$TOOLS_DIR/IccApplySearch/iccApplySearch"
