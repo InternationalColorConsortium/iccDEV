@@ -76,42 +76,49 @@
 /******************************************************************************/
 
 // NOTE - we don't have to worry about byte order, because the TIFF will always be written in host byte order
+// returns false if written correctly, true if the write failed
 static
-void putShort( uint16_t val, FILE *out )
+bool putByte( uint8_t val, FILE *out )
 {
-  fwrite( &val, 2, 1, out );
+  return fputc( val, out ) != val;
 }
 
 static
-void putShort( int16_t val, FILE *out )
+bool putShort( uint16_t val, FILE *out )
 {
-  fwrite( &val, 2, 1, out );
+  return fwrite( &val, 2, 1, out ) != 1;
 }
 
 static
-void putLong( uint32_t val, FILE *out )
+bool putShort( int16_t val, FILE *out )
 {
-  fwrite( &val, 4, 1, out );
+  return fwrite( &val, 2, 1, out ) != 1;
 }
 
 static
-void putLong( int32_t val, FILE *out )
+bool putLong( uint32_t val, FILE *out )
 {
-  fwrite( &val, 4, 1, out );
+  return fwrite( &val, 4, 1, out ) != 1;
+}
+
+static
+bool putLong( int32_t val, FILE *out )
+{
+  return fwrite( &val, 4, 1, out ) != 1;
 }
 
 #if 0
 // not supporting BIGTIFF yet, and don't need any other 8 byte quantities
 static
-void putLongLong( uint64_t val, FILE *out )
+bool putLongLong( uint64_t val, FILE *out )
 {
-  fwrite( &val, 8, 1, out );
+  return fwrite( &val, 8, 1, out ) != 1;
 }
 
 static
-void putLongLong( int64_t val, FILE *out )
+bool putLongLong( int64_t val, FILE *out )
 {
-  fwrite( &val, 8, 1, out );
+  return fwrite( &val, 8, 1, out ) != 1;
 }
 #endif
 
@@ -166,17 +173,24 @@ void shiftTIFFLAB( uint16_t *in, size_t count )
 
 /******************************************************************************/
 
+// returns true if write failed
 static
-void putIFDLong( uint16_t tag, uint16_t type, uint32_t count, uint32_t value, FILE *out )
+bool putIFDLong( uint16_t tag, uint16_t type, uint32_t count, uint32_t value, FILE *out )
 {
   uint16_t tagval = tag;
   uint16_t typeval = type;
   uint32_t countval = count;
 
-  fwrite( &tagval, 2, 1, out );
-  fwrite( &typeval, 2, 1, out );
-  fwrite( &countval, 4, 1, out );
-  fwrite( &value, 4, 1, out );
+  if (fwrite( &tagval, 2, 1, out ) != 1)
+    return true;
+  if (fwrite( &typeval, 2, 1, out ) != 1)
+    return true;
+  if (fwrite( &countval, 4, 1, out ) != 1)
+    return true;
+  if (fwrite( &value, 4, 1, out ) != 1)
+    return true;
+  
+  return false;
 }
 
 /******************************************************************************/
@@ -209,7 +223,7 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
         size_t width, size_t height, int channels, int depth )
 {
   FILE *outfile = NULL;
-  bool writeOk = true;
+  bool writeFailed = false;
 
   // see if we can create or update this filename
   outfile = icOpenWriteBinaryFile(name.c_str());
@@ -221,26 +235,34 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   // TIFF header, and byte order indicator
   // if constexpr (std::endian::native == std::endian::big) {  // only works in C++20 and up
   if (bigEndian) {
-    putc('M',outfile);
-    putc('M',outfile);
+    writeFailed |= putByte('M',outfile);
+    writeFailed |= putByte('M',outfile);
   } else {
-    putc('I',outfile);
-    putc('I',outfile);
+    writeFailed |= putByte('I',outfile);
+    writeFailed |= putByte('I',outfile);
   }
 
-  putShort( (int16_t)42, outfile );
-  putLong( (int32_t)8, outfile );  // offset to first IFD, from start of file
+  writeFailed |= putShort( (int16_t)42, outfile );
+  writeFailed |= putLong( (int32_t)8, outfile );  // offset to first IFD, from start of file
+
+  // check for early failure
+  if (writeFailed || ferror(outfile)) {
+    fprintf(stderr, "ERROR: I/O error writing TIFF header to %s\n", name.c_str() );
+    fclose(outfile);
+    return false;
+  }
 
   // IFD
   // number of entries
 // TODO: make a data structure to store IFD entries, sort, then write values and offsets
   uint16_t tagCount = 15;
-  putShort( tagCount, outfile );
+  writeFailed |= putShort( tagCount, outfile );
+  
 
   uint32_t width32 = uint32_t(width);
-  putIFDLong( TIFF_WIDTH, TIFF_LONG, 1, width32, outfile );
+  writeFailed |= putIFDLong( TIFF_WIDTH, TIFF_LONG, 1, width32, outfile );
   uint32_t height32 = uint32_t(height);
-  putIFDLong( TIFF_HEIGHT, TIFF_LONG, 1, height32, outfile );
+  writeFailed |= putIFDLong( TIFF_HEIGHT, TIFF_LONG, 1, height32, outfile );
 
   uint16_t bits = (uint16_t) depth;
 
@@ -254,13 +276,13 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
 
   // some readers break if the bitsPerSample is not a short value
   if (channels == 1)
-    putIFDLong( TIFF_BITSPERSAMPLE, TIFF_LONG, 1, bits, outfile );
+    writeFailed |= putIFDLong( TIFF_BITSPERSAMPLE, TIFF_LONG, 1, bits, outfile );
   else if (channels == 2)
-    putIFDLong( TIFF_BITSPERSAMPLE, TIFF_SHORT, (uint32_t)channels, ((uint32_t)bits << 16) | bits, outfile );
+    writeFailed |= putIFDLong( TIFF_BITSPERSAMPLE, TIFF_SHORT, (uint32_t)channels, ((uint32_t)bits << 16) | bits, outfile );
   else
-    putIFDLong( TIFF_BITSPERSAMPLE, TIFF_SHORT, (uint32_t)channels, bits_offset, outfile );
+    writeFailed |= putIFDLong( TIFF_BITSPERSAMPLE, TIFF_SHORT, (uint32_t)channels, bits_offset, outfile );
 
-  putIFDLong( TIFF_COMPRESSION, TIFF_LONG, 1, TIFF_COMPRESS_NONE, outfile );
+  writeFailed |= putIFDLong( TIFF_COMPRESSION, TIFF_LONG, 1, TIFF_COMPRESS_NONE, outfile );
 
   size_t nrowBytes = ( (size_t)channels * (size_t)width * (size_t)depth + 7) / 8;
   assert( nrowBytes > 0 );
@@ -279,69 +301,76 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   assert( (stripByteCount_offset + stripCountSize) <= UINT_MAX );
   uint32_t pixelData_offset = uint32_t ( stripByteCount_offset + stripCountSize );
 
-  putIFDLong( TIFF_INTERPRETATION, TIFF_LONG, 1, (uint32_t)color_model, outfile );
+  writeFailed |= putIFDLong( TIFF_INTERPRETATION, TIFF_LONG, 1, (uint32_t)color_model, outfile );
 
   // using an offset for offsets and bytecounts trips up tiffinfo
   if (stripCount > 1)
-    putIFDLong( TIFF_STRIPOFFSETS, TIFF_LONG, uint32_t(stripCount), stripOffset_offset, outfile );
+    writeFailed |= putIFDLong( TIFF_STRIPOFFSETS, TIFF_LONG, uint32_t(stripCount), stripOffset_offset, outfile );
   else
-    putIFDLong( TIFF_STRIPOFFSETS, TIFF_LONG, 1, pixelData_offset, outfile );
+    writeFailed |= putIFDLong( TIFF_STRIPOFFSETS, TIFF_LONG, 1, pixelData_offset, outfile );
 
-  putIFDLong( TIFF_SAMPLESPERPIXEL, TIFF_LONG, 1, (uint32_t)channels, outfile );
-  putIFDLong( TIFF_ROWSPERSTRIP, TIFF_LONG, 1, uint32_t(rowsPerStrip), outfile );
+  writeFailed |= putIFDLong( TIFF_SAMPLESPERPIXEL, TIFF_LONG, 1, (uint32_t)channels, outfile );
+  writeFailed |= putIFDLong( TIFF_ROWSPERSTRIP, TIFF_LONG, 1, uint32_t(rowsPerStrip), outfile );
 
   long byteCountOffset = ftell( outfile );
   if (stripCount > 1)
-    putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, uint32_t(stripCount), stripByteCount_offset, outfile );
+    writeFailed |= putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, uint32_t(stripCount), stripByteCount_offset, outfile );
   else
-    putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, 1, 0, outfile );
+    writeFailed |= putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, 1, 0, outfile );
 
   uint32_t resDenom32 = 1000;
   uint32_t resRatio32 = (uint32_t)(dpi * resDenom32);
-  putIFDLong( TIFF_XRESOLUTION, TIFF_RATIO, 1, xres_offset, outfile );
-  putIFDLong( TIFF_YRESOLUTION, TIFF_RATIO, 1, yres_offset, outfile );
-  putIFDLong( TIFF_PLANARCONFIG, TIFF_LONG, 1, 1, outfile );
-  putIFDLong( TIFF_RESOLUTIONUNIT, TIFF_LONG, 1, 2, outfile );  // inches
+  writeFailed |= putIFDLong( TIFF_XRESOLUTION, TIFF_RATIO, 1, xres_offset, outfile );
+  writeFailed |= putIFDLong( TIFF_YRESOLUTION, TIFF_RATIO, 1, yres_offset, outfile );
+  writeFailed |= putIFDLong( TIFF_PLANARCONFIG, TIFF_LONG, 1, 1, outfile );
+  writeFailed |= putIFDLong( TIFF_RESOLUTIONUNIT, TIFF_LONG, 1, 2, outfile );  // inches
 
-  putIFDLong( TIFF_PREDICTOR, TIFF_LONG, 1, 1, outfile );  // no predictor
+  writeFailed |= putIFDLong( TIFF_PREDICTOR, TIFF_LONG, 1, 1, outfile );  // no predictor
 
   if (bits == 32 || bits == 64)
-    putIFDLong( TIFF_SAMPLE_FORMAT, TIFF_LONG, 1, TIFF_SAMPLE_FLOAT, outfile );
+    writeFailed |= putIFDLong( TIFF_SAMPLE_FORMAT, TIFF_LONG, 1, TIFF_SAMPLE_FLOAT, outfile );
   else
-    putIFDLong( TIFF_SAMPLE_FORMAT, TIFF_LONG, 1, TIFF_SAMPLE_UINT, outfile );
+    writeFailed |= putIFDLong( TIFF_SAMPLE_FORMAT, TIFF_LONG, 1, TIFF_SAMPLE_UINT, outfile );
 
-  putLong( (uint32_t)0, outfile );  // offset to next IFD
+  writeFailed |= putLong( (uint32_t)0, outfile );  // offset to next IFD
 
   // align to 4 byte boundary
   for (uint32_t i = 0; i < align_bytes; ++i)
-    putc( 0, outfile );
+    writeFailed |= putByte( 0, outfile );
 
 // bits_offset:
   // bits per sample, because some readers break if it's just a byte instead of short
   for (int i = 0; i < channels; ++i)
-    putShort( bits, outfile );
+    writeFailed |= putShort( bits, outfile );
 
   // resolution ratios
 // xres_offset:
-  putLong( resRatio32, outfile );  // X dpi
-  putLong( resDenom32, outfile );  // denominator
+  writeFailed |= putLong( resRatio32, outfile );  // X dpi
+  writeFailed |= putLong( resDenom32, outfile );  // denominator
 
 // yres_offset:
-  putLong( resRatio32, outfile );  // Y dpi
-  putLong( resDenom32, outfile );  // denominator
+  writeFailed |= putLong( resRatio32, outfile );  // Y dpi
+  writeFailed |= putLong( resDenom32, outfile );  // denominator
 
 // stripOffset_offset
   // file with zeros, then backfill once we compress the strips
   for (size_t i = 0; i < stripCount; ++i)
-    putLong( 0, outfile );
+    writeFailed |= putLong( 0, outfile );
 
 // stripByteCount_offset
   // file with zeros, then backfill once we compress the strips
   for (size_t i = 0; i < stripCount; ++i)
-    putLong( 0, outfile );
+    writeFailed |= putLong( 0, outfile );
 
 // pixelData_offset:
   // Pixel Data
+  
+  // check again after writing the tag directory
+  if (writeFailed || ferror(outfile)) {
+    fprintf(stderr, "ERROR: I/O error writing TIFF directory to %s\n", name.c_str() );
+    fclose(outfile);
+    return false;
+  }
 
   std::vector<uint32_t> stripOffsetList( stripCount );
   std::vector<uint32_t> stripSizeList( stripCount );
@@ -365,21 +394,21 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
 
     long stripStart = ftell( outfile );
     if (stripStart < 0 || (unsigned long)stripStart > UINT32_MAX) {
-      fprintf(stderr, "WriteTIFF: strip offset exceeds 32-bit range\n");
+      fprintf(stderr, "ERROR: TIFF strip offset exceeds 32-bit range\n");
       fclose(outfile);
       return false;
     }
 
     size_t pixelBytes = (size_t)width * (size_t)channels * (size_t)(depth/8);
     if (fwrite( buffer + offset, pixelBytes, rowCount, outfile ) != rowCount) {
-      fprintf(stderr, "WriteTIFF: failed to write pixel data\n");
+      fprintf(stderr, "ERROR: TIFF failed to write pixel data\n");
       fclose(outfile);
       return false;
     }
 
     long stripEnd = ftell( outfile );
     if (stripEnd < 0 || (unsigned long)stripEnd > UINT32_MAX) {
-      fprintf(stderr, "WriteTIFF: strip end offset exceeds 32-bit range\n");
+      fprintf(stderr, "ERROR: TIFF strip end offset exceeds 32-bit range\n");
       fclose(outfile);
       return false;
     }
@@ -393,26 +422,26 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   if (stripCount == 1) {
     fseek(outfile, byteCountOffset, SEEK_SET);
     uint32_t compressed = stripSizeList[0];
-    putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, 1, compressed, outfile );
+    writeFailed |= putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, 1, compressed, outfile );
   } else {
     fseek(outfile, stripOffset_offset, SEEK_SET);
     for (size_t i = 0; i < stripCount; ++i)
-      putLong( stripOffsetList[i], outfile );
+      writeFailed |= putLong( stripOffsetList[i], outfile );
 
     fseek(outfile, stripByteCount_offset, SEEK_SET);
     for (size_t i = 0; i < stripCount; ++i)
-      putLong( stripSizeList[i], outfile );
+      writeFailed |= putLong( stripSizeList[i], outfile );
   }
 
-  if (!writeOk || ferror(outfile)) {
-    fprintf(stderr, "WriteTIFF: I/O error writing TIFF data\n");
+  if (writeFailed || ferror(outfile)) {
+    fprintf(stderr, "ERROR: I/O error writing TIFF data to %s\n", name.c_str() );
     fclose(outfile);
     return false;
   }
 
   // and close the file
   if (fclose(outfile) != 0) {
-    fprintf(stderr, "Warning: fclose failed for TIFF output\n");
+    fprintf(stderr, "WARNING: fclose failed for %s\n", name.c_str() );
   }
 
   return true;
