@@ -277,19 +277,19 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 
 std::vector<std::string> splitLines(const std::string& str)
 {
-    const char newline = '\n';
-    std::vector<std::string> lines;
-    size_t start = 0;
-    size_t end = str.find(newline);
-    while (end != std::string::npos) {
-        lines.push_back(str.substr(start, end - start));
-        start = end + 1;
-        end = str.find(newline, start);
-    }
-    auto temp = str.substr(start);
-    if (temp.size() > 0)
-        lines.push_back(temp);
-    return lines;
+  const char newline = '\n';
+  std::vector<std::string> lines;
+  size_t start = 0;
+  size_t end = str.find(newline);
+  while (end != std::string::npos) {
+    lines.push_back(str.substr(start, end - start));
+    start = end + 1;
+    end = str.find(newline, start);
+  }
+  auto temp = str.substr(start);
+  if (temp.size() > 0)
+    lines.push_back(temp);
+  return lines;
 }
 
 /******************************************************************************/
@@ -364,7 +364,6 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
 
   pdffile.AddPage( content );
 }
-
 
 /******************************************************************************/
 
@@ -447,8 +446,9 @@ void describe3DLUT( CIccMBB *curve, CIccProfile *pIcc, std::string &description 
 /******************************************************************************/
 
 // output graphic representation of 1D LUTs
+// return 1 if output created, 0 if none
 static
-void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
+int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
         PDFWriter &pdffile )
 {
   const size_t bufSize = 64;
@@ -456,7 +456,7 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
 
   if (!tag) {
     fprintf(stderr, "ERROR - missing data for %s\n", sigDesc.c_str());
-    return;
+    return 0;
   }
 
   icTagTypeSignature typeSig = tag->GetType();
@@ -474,6 +474,7 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
         graph1DLUTSVG( curve, sigDesc, description, svgfile, steps );
 #endif
         graph1DLUTPDF( curve, sigDesc, description, pdffile, steps );
+        return 1;
         }
       }
       break;
@@ -489,6 +490,7 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
         graph1DLUTSVG( pCurve, sigDesc, description, svgfile, 1000 );
 #endif
         graph1DLUTPDF( pCurve, sigDesc, description, pdffile, 1000 );
+        return 1;
         }
       }
       break;
@@ -504,6 +506,7 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
         graph1DLUTSVG( sCurve, sigDesc, description, svgfile, 1000 );
 #endif
         graph1DLUTPDF( sCurve, sigDesc, description, pdffile, 1000 );
+        return 1;
         }
       }
       break;
@@ -520,11 +523,14 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
         graph1DLUTSVG( uCurve, sigDesc, description, svgfile, 1000 );
 #endif
         graph1DLUTPDF( uCurve, sigDesc, description, pdffile, 1000 );
+        return 1;
         }
       }
       break;
 
   }   // end switch by type
+  
+  return 0; // no output created
 
 }   // end output1DLUT()
 
@@ -619,16 +625,18 @@ uint16_t ClipU16( const icFloatNumber &input )
 /******************************************************************************/
 
 // output graphic representation of nD LUTs
+// return count of output objects created, 0 if none
 static
-void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+int output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         const std::string &basename, PDFWriter &pdffile )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
+  int outputCount = 0;
 
   if (!tag) {
     fprintf(stderr, "Skipping %s: unable to load tag\n", sigDesc.c_str());
-    return;
+    return 0;
   }
 
   icTagTypeSignature typeSig = tag->GetType();
@@ -641,179 +649,183 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
   case icSigLutBtoAType:  // CIccTagLutBtoA
     {
     CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
-    if (lut) {
-      std::string description;
-      describe3DLUT( lut, pIcc, description );
+    if (!lut) {
+      fprintf(stderr, "Skipping %s: unable to convert LUT\n", sigDesc.c_str());
+      return outputCount;
+    }
+    
+    std::string description;
+    describe3DLUT( lut, pIcc, description );
 
-      // output input and output curves
-      CIccCurve **curveA = lut->GetCurvesA();
-      CIccCurve **curveB = lut->GetCurvesB();
-      CIccCurve **curveM = lut->GetCurvesM();
-      std::string curveDesc = sigDesc + ": ";
+    // output input and output curves
+    CIccCurve **curveA = lut->GetCurvesA();
+    CIccCurve **curveB = lut->GetCurvesB();
+    CIccCurve **curveM = lut->GetCurvesM();
+    std::string curveDesc = sigDesc + ": ";
 
-      int inputChannels = lut->InputChannels();
-      int outputChannels = lut->OutputChannels();
-      icColorSpaceSignature inputSpace = lut->GetCsInput();
-      icColorSpaceSignature outputSpace = lut->GetCsOutput();
-      bool isInputMatrix = lut->IsInputMatrix();
+    int inputChannels = lut->InputChannels();
+    int outputChannels = lut->OutputChannels();
+    icColorSpaceSignature inputSpace = lut->GetCsInput();
+    icColorSpaceSignature outputSpace = lut->GetCsOutput();
+    bool isInputMatrix = lut->IsInputMatrix();
 
-      if (inputChannels <= 0 || outputChannels <= 0) {
-        fprintf(stderr, "Skipping %s: invalid channel count\n", sigDesc.c_str());
-        return;
-      }
+    if (inputChannels <= 0 || outputChannels <= 0) {
+      fprintf(stderr, "Skipping %s: invalid channel count\n", sigDesc.c_str());
+      return outputCount;
+    }
 
-      if (curveA) {
-        int curveACount = isInputMatrix ? outputChannels : inputChannels;
-        for (int i = 0; i < curveACount; ++i) {
-          if (curveA[i]) {
+    if (curveA) {
+      int curveACount = isInputMatrix ? outputChannels : inputChannels;
+      for (int i = 0; i < curveACount; ++i) {
+        if (curveA[i]) {
           std::string channel = channelName( i, !isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveA[ " + channel + " ]";
-          output1DLUT( pIcc, curveA[i], channelDesc, pdffile );
-          }
+          outputCount += output1DLUT( pIcc, curveA[i], channelDesc, pdffile );
         }
       }
+    }
 
-      if (curveB) {
-        int curveBCount = isInputMatrix ? inputChannels : outputChannels;
-        for (int i = 0; i < curveBCount; ++i) {
-          if (curveB[i]) {
+    if (curveB) {
+      int curveBCount = isInputMatrix ? inputChannels : outputChannels;
+      for (int i = 0; i < curveBCount; ++i) {
+        if (curveB[i]) {
           std::string channel = channelName( i, isInputMatrix,
-                  inputSpace, outputSpace, inputChannels, outputChannels );
+                    inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveB[ " + channel + " ]";
-          output1DLUT( pIcc, curveB[i], channelDesc, pdffile );
-          }
+          outputCount += output1DLUT( pIcc, curveB[i], channelDesc, pdffile );
         }
       }
+    }
 
-      if (curveM) {
-        int curveMCount = isInputMatrix ? inputChannels : outputChannels;
-        for (int i = 0; i < curveMCount; ++i) {
-          if (curveM[i]) {
+    if (curveM) {
+      int curveMCount = isInputMatrix ? inputChannels : outputChannels;
+      for (int i = 0; i < curveMCount; ++i) {
+        if (curveM[i]) {
           std::string channel = channelName( i, isInputMatrix,
                     inputSpace, outputSpace, inputChannels, outputChannels );
           std::string channelDesc = curveDesc + "curveM[ " + channel + " ]";
-          output1DLUT( pIcc, curveM[i], channelDesc, pdffile );
-          }
+          outputCount += output1DLUT( pIcc, curveM[i], channelDesc, pdffile );
         }
       }
+    }
 
 
     // write nD Data to TIFF
-      int bytes = lut->GetPrecision();    // currently only 1 or 2
-      CIccCLUT *clut = lut->GetCLUT();
-      if (!clut) {
-        // clut is optional in mAB and mBA tags - only report if it isn't one of those
-        if ( !(typeSig == icSigLutAtoBType || typeSig == icSigLutBtoAType) ) {
-            std::string typeDesc = icGetSigStr(buf, bufSize, typeSig);
-            fprintf(stderr,"ERROR - clut data could not be read for tag '%s' of type '%s' in file '%s'\n", sigDesc.c_str(), typeDesc.c_str(), basename.c_str() );
+    int bytes = lut->GetPrecision();    // currently only 1 or 2
+    CIccCLUT *clut = lut->GetCLUT();
+    if (!clut) {
+      // clut is optional in mAB and mBA tags - only report if it isn't one of those
+      if ( !(typeSig == icSigLutAtoBType || typeSig == icSigLutBtoAType) ) {
+        std::string typeDesc = icGetSigStr(buf, bufSize, typeSig);
+        fprintf(stderr,"ERROR - clut data could not be read for tag '%s' of type '%s' in file '%s'\n",
+                sigDesc.c_str(), typeDesc.c_str(), basename.c_str() );
+      }
+      return outputCount;
+    }
+
+    clut->Begin();  // initialize some grid information
+
+    int gridPoints = clut->GridPoints(); // gridSize[0]
+    int tiles = gridPoints;
+    if (gridPoints <= 0) {
+      fprintf(stderr, "Skipping %s: invalid CLUT grid\n", sigDesc.c_str());
+      return outputCount;
+    }
+    
+    int tileWidth = 1;
+    int tileHeight = 1;
+
+    if (inputChannels >= 2) {
+      tileWidth = clut->GridPoint(1);
+      if (tileWidth <= 0) {
+        fprintf(stderr, "Skipping %s: invalid CLUT width\n", sigDesc.c_str());
+        return outputCount;
+      }
+    }
+
+    if (inputChannels >= 3) {
+      tileHeight = clut->GridPoint(2);
+      if (tileHeight <= 0) {
+        fprintf(stderr, "Skipping %s: invalid CLUT height\n", sigDesc.c_str());
+        return outputCount;
+      }
+    }
+
+    if (inputChannels > 3) {
+      for (int i = 3; i < inputChannels; ++i) {
+        int extraGridPoints = clut->GridPoint(i);
+        if (extraGridPoints <= 0) {
+          fprintf(stderr, "Skipping %s: invalid CLUT tile count\n", sigDesc.c_str());
+          return outputCount;
         }
-        return;
+        tiles *= extraGridPoints;
       }
-
-      clut->Begin();  // initialize some grid information
-
-      int gridPoints = clut->GridPoints(); // gridSize[0]
-      int tiles = gridPoints;
-      if (gridPoints <= 0) {
-        fprintf(stderr, "Skipping %s: invalid CLUT grid\n", sigDesc.c_str());
-        return;
-      }
-
-      int tileWidth = 1;
-      int tileHeight = 1;
-
-      if (inputChannels >= 2) {
-        tileWidth = clut->GridPoint(1);
-        if (tileWidth <= 0) {
-          fprintf(stderr, "Skipping %s: invalid CLUT width\n", sigDesc.c_str());
-          return;
-        }
-      }
-
-      if (inputChannels >= 3) {
-        tileHeight = clut->GridPoint(2);
-        if (tileHeight <= 0) {
-          fprintf(stderr, "Skipping %s: invalid CLUT height\n", sigDesc.c_str());
-          return;
-        }
-      }
-
-      if (inputChannels > 3) {
-        for (int i = 3; i < inputChannels; ++i) {
-          int extraGridPoints = clut->GridPoint(i);
-          if (extraGridPoints <= 0) {
-            fprintf(stderr, "Skipping %s: invalid CLUT tile count\n", sigDesc.c_str());
-            return;
-          }
-          tiles *= extraGridPoints;
-        }
-      }
+    }
 
       // special case for single dimensional LUT
-      if (inputChannels == 1) {
-        tileWidth = tiles;
-        tiles = 1;
-        tileHeight = 1;
-      }
+    if (inputChannels == 1) {
+      tileWidth = tiles;
+      tiles = 1;
+      tileHeight = 1;
+    }
 
       // special case for 2 dimensional LUT
-      if (inputChannels == 2) {
-        tileHeight = tiles;
-        tiles = 1;
-      }
+    if (inputChannels == 2) {
+      tileHeight = tiles;
+      tiles = 1;
+    }
 
       // find tile arrangement closest to a square
-      if (tiles <= 0) {
-        fprintf(stderr,"WARNING - tile count overflow.\n");
-        tiles = 1;
-      }
+    if (tiles <= 0) {
+      fprintf(stderr,"WARNING - tile count overflow.\n");
+      tiles = 1;
+    }
       
-      auto tempResult = std::sqrt(tiles);
-      if (tempResult > std::numeric_limits<int>::max()) {
-        fprintf(stderr,"ERROR - sqrt bad result!\n");
-        tempResult = tiles/2;
+    auto tempResult = std::sqrt(tiles);
+    if (tempResult > std::numeric_limits<int>::max()) {
+      fprintf(stderr,"ERROR - sqrt bad result!\n");
+      tempResult = tiles/2;
+    }
+    int tilesWide = (int)tempResult;
+
+    // some odd counts need a tweak to align and look more sane
+    if (inputChannels > 3 && (inputChannels & 1)) {
+      auto oldValue = tilesWide;
+      // round down to a multiple of the grid size to better align rows
+      tilesWide -= (tilesWide % (gridPoints*tileWidth));
+      if (tilesWide == 0) {
+        // this does happen -- should I round up in some cases?
+        tilesWide = oldValue;
       }
-      int tilesWide = (int)tempResult;
+    }
 
-      // some odd counts need a tweak to align and look more sane
-      if (inputChannels > 3 && (inputChannels & 1)) {
-        auto oldValue = tilesWide;
-        // round down to a multiple of the grid size to better align rows
-        tilesWide -= (tilesWide % (gridPoints*tileWidth));
-        if (tilesWide == 0) {
-            // this does happen -- should I round up in some cases?
-            tilesWide = oldValue;
-        }
-      }
+    int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
 
-      int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
+    // multiply out by tile size
+    int imageWidth = tilesWide * tileWidth;
+    int imageHeight = tilesHigh * tileHeight;
+    if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
+      fprintf(stderr, "Skipping %s: invalid image geometry\n", sigDesc.c_str());
+      return outputCount;
+    }
 
-      // multiply out by tile size
-      int imageWidth = tilesWide * tileWidth;
-      int imageHeight = tilesHigh * tileHeight;
-      if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
-        fprintf(stderr, "Skipping %s: invalid image geometry\n", sigDesc.c_str());
-        return;
-      }
+    //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
+    size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
+    // NOTE that bufferSize will usually be greater than clutSize
+    if (!bufferSize) {
+      fprintf(stderr, "Skipping %s: empty image buffer\n", sigDesc.c_str());
+      return outputCount;
+    }
 
-      //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
-      // NOTE that bufferSize will usually be greater than clutSize
-      if (!bufferSize) {
-        fprintf(stderr, "Skipping %s: empty image buffer\n", sigDesc.c_str());
-        return;
-      }
+    std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
+    uint8_t *imageBuf = imageBuffer.get();
+    uint16_t *imageBuf16 = (uint16_t *)imageBuf;
+    float *imageBuf32 = (float *)imageBuf;
+    memset( imageBuf, 0, bufferSize );
 
-      std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
-      uint8_t *imageBuf = imageBuffer.get();
-      uint16_t *imageBuf16 = (uint16_t *)imageBuf;
-      float *imageBuf32 = (float *)imageBuf;
-      memset( imageBuf, 0, bufferSize );
-
-      // copy data from CLUT to image buffer
-      icFloatNumber *clutData = clut->GetData(0);
-
+    // copy data from CLUT to image buffer
+    icFloatNumber *clutData = clut->GetData(0);
 
 
 #if 0
@@ -874,11 +886,11 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
       int tiffColor = TIFFColorModelFromICCModel( outputSpace );
       if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
-                imageWidth, imageHeight, outputChannels, 8*bytes )) {
+                        imageWidth, imageHeight, outputChannels, 8*bytes )) {
         fprintf(stderr, "Failed to write TIFF: %s\n", tiffPath2.c_str());
-        }
       }
     }
+    return ++outputCount;
     break;
 
   case icSigMultiProcessElementType:
@@ -890,7 +902,10 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
          icGetSig(buf, bufSize, typeSig),
          sigDesc.c_str() );
     break;
+
   }   // end switch by type
+  
+  return 0; // no output was created
 
 }   // end output3DLUT()
 
@@ -954,8 +969,7 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
         {
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output1DLUT(pIcc, pTag, sigDesc, pdffile );
-        outputItems++;
+        outputItems += output1DLUT(pIcc, pTag, sigDesc, pdffile );
         }
         break;
 
@@ -975,8 +989,7 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
         {
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        output3DLUT(pIcc, pTag, sigDesc, basename, pdffile );
-        outputItems++;
+        outputItems += output3DLUT(pIcc, pTag, sigDesc, basename, pdffile );
         }
         break;
 
@@ -1002,8 +1015,8 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
 static
 void printUsage(void)
 {
-  printf("Usage: iccProfileVisualize input_profile\n");
-  printf("  output will be TIFF and PDF files next to the input profile.\n");
+  printf("Usage: iccProfileVisualize input_profiles\n");
+  printf("  output will be TIFF and PDF files next to each input profile.\n");
   printf("iccProfileVisualize built with IccProfLib version " ICCPROFLIBVER "\n\n");
 }
 
@@ -1043,13 +1056,15 @@ int main(int argc, char* argv[])
         printf("Unable to parse '%s' as ICC profile!\n", argv[k]);
         continue;
       }
+      
       // DEBUGGING printf("Processing profile '%s'\n", argv[k]);
       auto count = processLuts( pIcc, argv[k] );
       if (!count) {
         printf("Profile %s had no content for output\n", argv[k] );
       }
+      
       delete pIcc;
-    }
+    }   // end try
     catch (const std::exception& e) {
       fprintf(stderr, "ERROR processing '%s': '%s'\n", argv[k], e.what() );
     }
@@ -1057,7 +1072,7 @@ int main(int argc, char* argv[])
       fprintf(stderr, "ERROR processing '%s': unknown exception\n", argv[k] );
     }
 
-  }
+  } // end for argc
 
   return 0;
 }
