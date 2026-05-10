@@ -148,13 +148,21 @@ void PDFWriter::CloseFile() {
 
   if (!m_filename.empty()) {
     if (PageCount() > 0) {
-        std::ofstream out(m_filename);
-        WriteHeader(out);
-        WriteObjects(out);
-        WriteXRefs(out);
-        WriteFooter(out);
-        out.close();
-        m_objects.clear();
+        try  {
+          std::ofstream out(m_filename);
+          WriteHeader(out);
+          WriteObjects(out);
+          WriteXRefs(out);
+          WriteFooter(out);
+          out.close();
+          m_objects.clear();
+        }
+        catch (const std::exception& e) {
+          fprintf(stderr, "PDF writing error in '%s': '%s'\n", m_filename.c_str(), e.what() );
+        }
+        catch (...) {
+          fprintf(stderr, "PDF writing error in '%s': unknown exception\n", m_filename.c_str());
+        }
     }
     m_filename.clear();
   }

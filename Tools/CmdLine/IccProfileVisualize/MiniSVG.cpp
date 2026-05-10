@@ -71,7 +71,8 @@
 
 /******************************************************************************/
 
-void SVGOut::OpenFile( const std::string &filename ) {
+void SVGOut::OpenFile( const std::string &filename )
+{
   if (!m_filename.empty()) {
     fprintf(stderr,"WARNING - SVG file already open!\n");
   }
@@ -85,25 +86,38 @@ void SVGOut::OpenFile( const std::string &filename ) {
 
 /******************************************************************************/
 
-void SVGOut::CloseFile() {
+void SVGOut::CloseFile()
+{
   if (m_pageInProgress) {
     m_buf << "</g>\n";
     m_pageInProgress = false;
   }
+  
   if (m_GroupLevel > 0)
     fprintf(stderr,"WARNING - SVG group levels not closed.\n");
   if (m_GroupLevel < 0)
     fprintf(stderr,"WARNING - Too many SVG group levels closed.\n");
+
   if (!m_filename.empty()) {
     if (m_pageCount > 0) {
+      try  {
         std::ofstream out(m_filename);
         WriteHeader(out);
         out << m_buf.str();
         WriteFooter(out);
         out.close();
-    }
+      }
+      catch (const std::exception& e) {
+        fprintf(stderr, "SVG writing error in '%s': '%s'\n", m_filename.c_str(), e.what() );
+      }
+      catch (...) {
+        fprintf(stderr, "SVG writing error in '%s': unknown exception\n", m_filename.c_str());
+      }
+    }   // if pages > 0
+    
     m_filename.clear();
-  }
+  } // if filename !empty
+
 }
 
 /******************************************************************************/

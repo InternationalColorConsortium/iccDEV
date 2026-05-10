@@ -1036,32 +1036,28 @@ int main(int argc, char* argv[])
 
 // if we need options in the future, then parse -* and add all unknowns to a list of filenames
 
-#if defined(_DEBUG) || defined(DEBUG)
-  int nValid = 0;
-#endif
-
   for (int k = 1; k < argc; ++k) {
-    CIccProfile *pIcc = OpenIccProfile( argv[k] );
-    if (!pIcc) {
-      printf("Unable to parse '%s' as ICC profile!\n", argv[k]);
-      continue;
-    }
-// DEBUGGING printf("Processing profile '%s'\n", argv[k]);
-    auto count = processLuts( pIcc, argv[k] );
-    if (!count) {
+    try {
+      CIccProfile *pIcc = OpenIccProfile( argv[k] );
+      if (!pIcc) {
+        printf("Unable to parse '%s' as ICC profile!\n", argv[k]);
+        continue;
+      }
+      // DEBUGGING printf("Processing profile '%s'\n", argv[k]);
+      auto count = processLuts( pIcc, argv[k] );
+      if (!count) {
         printf("Profile %s had no content for output\n", argv[k] );
+      }
+      delete pIcc;
     }
-#if defined(_DEBUG) || defined(DEBUG)
-    else {
-      nValid++;
+    catch (const std::exception& e) {
+      fprintf(stderr, "ERROR processing '%s': '%s'\n", argv[k], e.what() );
     }
-#endif
-    delete pIcc;
-  }
+    catch (...) {
+      fprintf(stderr, "ERROR processing '%s': unknown exception\n", argv[k] );
+    }
 
-#if defined(_DEBUG) || defined(DEBUG)
-  printf("EXIT %d\n", nValid);
-#endif
+  }
 
   return 0;
 }
