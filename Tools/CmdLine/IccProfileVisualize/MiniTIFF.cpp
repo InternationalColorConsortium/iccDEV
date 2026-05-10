@@ -66,6 +66,11 @@
 #include <vector>
 #include <cmath>
 #include <memory>
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 #include "MiniTIFF.hpp"
 
 /******************************************************************************/
@@ -176,6 +181,29 @@ void putIFDLong( uint16_t tag, uint16_t type, uint32_t count, uint32_t value, FI
 
 /******************************************************************************/
 
+static
+FILE* icOpenWriteBinaryFile(const char* szFname)
+{
+  if (!szFname || !szFname[0])
+    return stdout;
+
+#if defined(_WIN32)
+  return fopen(szFname, "wb");
+#else
+  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if (fd < 0)
+    return nullptr;
+
+  FILE* f = fdopen(fd, "wb");
+  if (!f)
+    close(fd);
+
+  return f;
+#endif
+}
+
+/******************************************************************************/
+
 /// Write the image buffer to a TIFF (.tif) file
 bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *buffer,
         size_t width, size_t height, int channels, int depth )
@@ -184,7 +212,7 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   bool writeOk = true;
 
   // see if we can create or update this filename
-  outfile = fopen(name.c_str(),"wb");
+  outfile = icOpenWriteBinaryFile(name.c_str());
   if(outfile==NULL) {
     fprintf(stderr,"Could not create output file %s\n", name.c_str());
     return false;
