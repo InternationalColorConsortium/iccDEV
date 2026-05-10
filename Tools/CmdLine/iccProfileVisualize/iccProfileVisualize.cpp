@@ -630,8 +630,9 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
       clut->Begin();  // initialize some grid information
 
-      int tiles = clut->GridPoints();   // gridSize[0]
-      if (tiles <= 0) {
+      int gridPoints = clut->GridPoints(); // gridSize[0]
+      int tiles = gridPoints;
+      if (gridPoints <= 0) {
         fprintf(stderr, "Skipping %s: invalid CLUT grid\n", sigDesc.c_str());
         return;
       }
@@ -657,12 +658,12 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
       if (inputChannels > 3) {
         for (int i = 3; i < inputChannels; ++i) {
-          int gridPoints = clut->GridPoint(i);
-          if (gridPoints <= 0) {
+          int extraGridPoints = clut->GridPoint(i);
+          if (extraGridPoints <= 0) {
             fprintf(stderr, "Skipping %s: invalid CLUT tile count\n", sigDesc.c_str());
             return;
           }
-          tiles *= gridPoints;
+          tiles *= extraGridPoints;
         }
       }
 
@@ -679,18 +680,20 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         tiles = 1;
       }
 
-// 4, 6 look ok, just odd in the order of data
-
-// odd numbers of inputs are wrong for N > 3, similar to MultiInkMapping
-// 5, 7, 11, 13, 15 look bogus   7 most bogus - work on that!
-// 15 is next most heinous
-//Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange_output_A2B0.tif
-//Turquoise-Magenta-Yellow-Violet-Green_output_A2B0.tif
-// Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange-BlueGreen-PinkViolet-Red-Teal_output_A2B0.tif
-//Turquoise-Magenta-Yellow-Violet-Green-Blue-Orange-BlueGreen-PinkViolet-Red-Teal-YellowOrange-Cerulean-GreenGold-Indigo_output_A2B0.tif
-
       // find tile arrangement closest to a square
       int tilesWide = (int)std::sqrt(tiles);
+
+      // odd counts need a tweak to align and look more sane
+      if (inputChannels > 3 && (inputChannels & 1) == 1) {
+        auto oldValue = tilesWide;
+        // round down to a multiple of the grid size to better align rows
+        tilesWide -= (tilesWide % (gridPoints*tileWidth));
+        if (tilesWide == 0) {
+            // this does happen -- should I round up in some cases?
+            tilesWide = oldValue;
+        }
+      }
+
       int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
 
       // multiply out by tile size
@@ -719,13 +722,13 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       icFloatNumber *clutData = clut->GetData(0);
 
 
+
 #if 0
-// TEST
+// TEST - same as below, just more expensive calculation
     size_t gridCount = (size_t)tileWidth * (size_t)tileHeight * (size_t)tiles;
-    uint16_t gridPoints = clut->GridPoints();       // TODO - probably a bad assumption!
     for (size_t k = 0; k < gridCount; ++k ) {
-        size_t x = k % gridPoints;
-        size_t y = (k / gridPoints) % gridPoints;
+        size_t y = (gridPoints -1) - (k % gridPoints);  // turn LAB to look as expected
+        size_t x = (k / gridPoints) % gridPoints;
         size_t tile = k / (gridPoints*gridPoints);
         size_t tileX = tile % tilesWide;
         size_t tileY = tile / tilesWide;
@@ -755,22 +758,23 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       size_t outColStep = outputChannels;
       size_t outRowStep = imageWidth * outputChannels;
 
-      for (int x = 0; x < tileWidth; ++x)
-      for (int y = 0; y < tileHeight; ++y)
       for (int z = 0; z < tiles; ++z) {
-        size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;
         int z2 = z % tilesWide; // tile # horiz
         int z3 = z / tilesWide; // tile # vert
-        size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
-        if (bytes == 4 || bytes == 8)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf32[outputIndex+c] = clutData[inputIndex+c];
-        else if (bytes == 2)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf16[outputIndex+c] = clutData[inputIndex+c] * 65535.0;
-        else
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf[outputIndex+c] = clutData[inputIndex+c] * 255.0;
+        for (int x = 0; x < tileWidth; ++x)
+        for (int y = 0; y < tileHeight; ++y) {
+          size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;  // turn LAB to look as expected
+          size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
+          if (bytes == 4 || bytes == 8)
+            for (int c = 0; c < outputChannels; ++c)
+              imageBuf32[outputIndex+c] = clutData[inputIndex+c];
+          else if (bytes == 2)
+            for (int c = 0; c < outputChannels; ++c)
+              imageBuf16[outputIndex+c] = clutData[inputIndex+c] * 65535.0;
+          else
+            for (int c = 0; c < outputChannels; ++c)
+              imageBuf[outputIndex+c] = clutData[inputIndex+c] * 255.0;
+        }
       }
 #endif
 
