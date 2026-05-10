@@ -67,6 +67,7 @@
 #include <fstream>
 #include <cstring>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <memory>
 #include <algorithm>
@@ -341,18 +342,20 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
     steps = 2;
   float scale = (7.5f-0.5f)*inch2point;
   const point2D base( 0.5f*inch2point, 0.5f*inch2point );
-  commands << base << " m\n";
-  for (int i = 0; i <= steps; ++i ) {
-    float input = i / (float)steps;
-    float output = curve->Apply( input );
-    if (std::isnan(output)) output = 0.0f;
-    if (std::isinf(output)) output = 1.0f;
-    if (output > 1.0f) output = 1.0f;
-    if (output < 0.0f) output = 0.0f;
-    point2D currentPt( input*scale, output*scale );
-    commands << (base+currentPt) << " l\n";
+  if (steps > 0) {
+      commands << base << " m\n";
+      for (int i = 0; i <= steps; ++i ) {
+        float input = i / (float)steps;
+        float output = curve->Apply( input );
+        if (std::isnan(output)) output = 0.0f;
+        if (std::isinf(output)) output = 1.0f;
+        if (output > 1.0f) output = 1.0f;
+        if (output < 0.0f) output = 0.0f;
+        point2D currentPt( input*scale, output*scale );
+        commands << (base+currentPt) << " l\n";
+      }
+      commands << "S\n";
   }
-  commands << "S\n";
 
   // and finally create the graphics object and page
   PDFGraphic *graphics = new PDFGraphic( commands.str() );
@@ -583,6 +586,38 @@ std::string channelName(int index, bool isInputMatrix, icColorSpaceSignature inp
 
 /******************************************************************************/
 
+static
+uint8_t ClipU8( const icFloatNumber &input )
+{
+  if (std::isnan(input))
+    return 0;
+  if (std::isinf(input))
+    return 255;
+  if (input < 0)
+    return 0;
+  if (input > 255)
+    return 255;
+  return (uint8_t)input;
+}
+
+/******************************************************************************/
+
+static
+uint16_t ClipU16( const icFloatNumber &input )
+{
+  if (std::isnan(input))
+    return 0;
+  if (std::isinf(input))
+    return 65535;
+  if (input < 0)
+    return 0;
+  if (input > 65535)
+    return 65535;
+  return (uint16_t)input;
+}
+
+/******************************************************************************/
+
 // output graphic representation of nD LUTs
 static
 void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
@@ -729,7 +764,17 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       }
 
       // find tile arrangement closest to a square
-      int tilesWide = (int)std::sqrt(tiles);
+      if (tiles <= 0) {
+        fprintf(stderr,"WARNING - tile count overflow.\n");
+        tiles = 1;
+      }
+      
+      auto tempResult = std::sqrt(tiles);
+      if (tempResult > std::numeric_limits<int>::max()) {
+        fprintf(stderr,"ERROR - sqrt bad result!\n");
+        tempResult = tiles/2;
+      }
+      int tilesWide = (int)tempResult;
 
       // some odd counts need a tweak to align and look more sane
       if (inputChannels > 3 && (inputChannels & 1)) {
@@ -787,10 +832,10 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
             imageBuf32[outputIndex+c] = clutData[inputIndex+c];
         else if (bytes == 2)
           for (int c = 0; c < outputChannels; ++c)
-            imageBuf16[outputIndex+c] = clutData[inputIndex+c] * 65535.0;
+            imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
         else
           for (int c = 0; c < outputChannels; ++c)
-            imageBuf[outputIndex+c] = clutData[inputIndex+c] * 255.0;
+            imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
     }
 
 #else
@@ -818,10 +863,10 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
               imageBuf32[outputIndex+c] = clutData[inputIndex+c];
           else if (bytes == 2)
             for (int c = 0; c < outputChannels; ++c)
-              imageBuf16[outputIndex+c] = clutData[inputIndex+c] * 65535.0;
+              imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
           else
             for (int c = 0; c < outputChannels; ++c)
-              imageBuf[outputIndex+c] = clutData[inputIndex+c] * 255.0;
+              imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
         }
       }
 #endif
