@@ -788,6 +788,9 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     }
     break;
 
+  case icSigMultiProcessElementType:
+    // do nothing for now, because we don't know how to render the Multiprocess elements
+    break;
 
   default:
     printf("Unknown nD LUT type %s for tag %s\n",
@@ -950,7 +953,7 @@ int main(int argc, char* argv[])
       printf("Unable to parse '%s' as ICC profile!\n", argv[k]);
       continue;
     }
-printf("Processing profile '%s'\n", argv[k]);
+// DEBUGGING printf("Processing profile '%s'\n", argv[k]);
     auto count = processLuts( pIcc, argv[k] );
     if (!count) {
         printf("Profile %s had no content for output\n", argv[k] );
