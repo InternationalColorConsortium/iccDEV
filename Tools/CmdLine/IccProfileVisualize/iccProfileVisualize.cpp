@@ -386,12 +386,58 @@ void describe1DLUT( CIccTagCurve *curve, std::string &description )
 static
 void describe1DLUT( CIccTagParametricCurve *curve, std::string &description )
 {
+  std::string path("parametricCurve");
+  std::string report;
+  if (curve->Validate(path, report, NULL) > icValidateWarning) {
+    fprintf(stderr,"WARNING - curve failed validation: %s\n", report.c_str() );
+    description = "parametric";
+    return;
+  }
   curve->Describe( description, 100 );
 }
+
+/******************************************************************************/
 
 static
 void describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description )
 {
+  std::string path("segmentedCurve");
+  std::string report;
+  if (curve->Validate(path, report, NULL) > icValidateWarning) {
+    fprintf(stderr,"WARNING - curve failed validation: %s\n", report.c_str() );
+    description = "segmented";
+    return;
+  }
+  curve->Describe( description, 100 );
+}
+
+/******************************************************************************/
+
+static
+void describe1DLUT( CIccCurve *curve, std::string &description )
+{
+  std::string path("unknownCurve");
+  std::string report;
+  if (curve->Validate(path, report, NULL) > icValidateWarning) {
+    fprintf(stderr,"WARNING - curve failed validation: %s\n", report.c_str() );
+    description = "unknown";
+    return;
+  }
+  curve->Describe( description, 100 );
+}
+
+/******************************************************************************/
+
+static
+void describe3DLUT( CIccMBB *curve, CIccProfile *pIcc, std::string &description )
+{
+  std::string path("MBBLut");
+  std::string report;
+  if (curve->Validate(path, report, pIcc ) > icValidateWarning) {
+    fprintf(stderr,"WARNING - table failed validation: %s\n", report.c_str() );
+    description = "MBBLut";
+    return;
+  }
   curve->Describe( description, 100 );
 }
 
@@ -466,7 +512,7 @@ void output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigD
       CIccCurve *uCurve = dynamic_cast<CIccCurve*> (tag);
       if (uCurve) {
         std::string description;
-        uCurve->Describe( description, 100 );
+        describe1DLUT( uCurve, description );
 #if USE_SVG
         graph1DLUTSVG( uCurve, sigDesc, description, svgfile, 1000 );
 #endif
@@ -564,7 +610,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
     if (lut) {
       std::string description;
-      lut->Describe( description, 100 );
+      describe3DLUT( lut, pIcc, description );
 
       // output input and output curves
       CIccCurve **curveA = lut->GetCurvesA();
