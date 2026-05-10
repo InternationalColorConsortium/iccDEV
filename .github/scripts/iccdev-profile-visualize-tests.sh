@@ -132,6 +132,20 @@ require_text() {
   return 0
 }
 
+reject_text() {
+  local name="$1"
+  local path="$2"
+  local unexpected="$3"
+
+  if grep -Fq "$unexpected" "$path" 2>/dev/null; then
+    fail_case "$name" "unexpected text: $unexpected"
+    sed -n '1,40p' "$path"
+    return 1
+  fi
+
+  return 0
+}
+
 make_bad_tag_offset_profile() {
   local input="$1"
   local output="$2"
@@ -238,6 +252,8 @@ run_malformed_visualize() {
   local name="$1"
   local profile="$2"
   local expected="$3"
+  local unexpected="${4:-}"
+  local unexpected2="${5:-}"
   local logfile="$OUTDIR/${name}.log"
   local exit_code=0
 
@@ -262,7 +278,18 @@ run_malformed_visualize() {
     return
   fi
 
-  require_text "$name" "$logfile" "$expected" || return
+  if [ -n "$expected" ]; then
+    require_text "$name" "$logfile" "$expected" || return
+  fi
+
+  if [ -n "$unexpected" ]; then
+    reject_text "$name" "$logfile" "$unexpected" || return
+  fi
+
+  if [ -n "$unexpected2" ]; then
+    reject_text "$name" "$logfile" "$unexpected2" || return
+  fi
+
   pass_case "$name" "malformed LUT skipped without sanitizer findings"
 }
 
@@ -277,7 +304,7 @@ fi
 
 if [ "$FAIL" -eq 0 ]; then
   run_malformed_visualize "bad-A2B0-offset" "$BAD_TAG_PROFILE" "Skipping A2B0: unable to load tag"
-  run_malformed_visualize "missing-A2B0-clut" "$BAD_CLUT_PROFILE" "Skipping A2B0: missing CLUT"
+  run_malformed_visualize "missing-A2B0-clut" "$BAD_CLUT_PROFILE" "" "missing CLUT" "clut data could not be read"
 fi
 
 echo "iccProfileVisualize regression: $PASS passed, $FAIL failed, $TOTAL total"
