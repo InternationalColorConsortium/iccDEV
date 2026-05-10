@@ -837,7 +837,7 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
 #endif
 
   std::string pdfPath = basename + "_luts.pdf";
-  PDFWriter pdffile( pdfPath, 8*inch2mm, 8*inch2mm );
+  PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
   CreateAxesXobject( pdffile );
 
 

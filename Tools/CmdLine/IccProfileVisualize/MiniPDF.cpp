@@ -88,15 +88,15 @@ std::ostream& operator<<( std::ostream &os, const point2D &p )
 /******************************************************************************/
 /******************************************************************************/
 
-void PDFWriter::OpenFile( const std::string &filename, float widthMM, float heightMM )
+void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heightPt )
 {
   if (!m_filename.empty()) {
     fprintf(stderr,"WARNING - PDF file already open!\n");
   }
 
   m_filename = filename;
-  m_pageWidth = widthMM * mm2point;
-  m_pageHeight = heightMM * mm2point;
+  m_pageWidth = widthPt;
+  m_pageHeight = heightPt;
 
   m_objects.clear();
   m_xrefStart = 0;          // set when writing

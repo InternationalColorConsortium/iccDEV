@@ -252,8 +252,7 @@ public:
 
 /******************************************************************************/
 
-// units are in mm for now
-// but PDF usually works in points
+// units are in points, as is common for PDF
 class PDFWriter
 {
 public:
@@ -262,11 +261,11 @@ public:
             m_xobjectIndex(0), m_fontIndex(0), m_groupIndex(0),
             m_procsetIndex(0)
     { }
-  PDFWriter( const std::string &filename, float widthMM, float heightMM ):
+  PDFWriter( const std::string &filename, float widthPt, float heightPt ):
             m_pageWidth(0), m_pageHeight(0), m_pageCount(0), m_xrefStart(0),
             m_pageParentIndex(0), m_outlineIndex(0), m_xobjectIndex(0),
             m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
-    { OpenFile(filename, widthMM, heightMM); }
+    { OpenFile(filename, widthPt, heightPt); }
 
   ~PDFWriter()
     { CloseFile(); }
