@@ -624,7 +624,11 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       int bytes = lut->GetPrecision();    // currently only 1 or 2
       CIccCLUT *clut = lut->GetCLUT();
       if (!clut) {
-        fprintf(stderr,"ERROR - clut data could not be read for %s in %s\n", sigDesc.c_str(), basename.c_str() );
+        // clut is optional in mAB and mBA tags - only report if it isn't one of those
+        if ( !(typeSig == icSigLutAtoBType || typeSig == icSigLutBtoAType) ) {
+            std::string typeDesc = icGetSigStr(buf, bufSize, typeSig);
+            fprintf(stderr,"ERROR - clut data could not be read for tag '%s' of type '%s' in file '%s'\n", sigDesc.c_str(), typeDesc.c_str(), basename.c_str() );
+        }
         return;
       }
 
