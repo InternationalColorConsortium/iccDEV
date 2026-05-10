@@ -1,6 +1,6 @@
 ###############################################################
 #
-# ci-vcpkg-ports.yml — Cross-platform vcpkg port overlay test
+# ci-vcpkg-ports.yml - Cross-platform vcpkg port overlay test
 #
 # Validates that the ports/iccdev overlay installs correctly
 # on Windows, Linux, and macOS via vcpkg.
@@ -33,7 +33,7 @@ concurrency:
 
 jobs:
   vcpkg-overlay-test:
-    name: "vcpkg overlay – ${{ matrix.os }}"
+    name: "vcpkg overlay - ${{ matrix.os }}"
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -44,14 +44,14 @@ jobs:
         os: [ windows-latest, ubuntu-24.04, macos-14 ]
 
     steps:
-      # ── Checkout (pinned SHA, no credentials) ──────────────
+      # Checkout (pinned SHA, no credentials)
       - name: Checkout repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           fetch-depth: 1
           persist-credentials: false
 
-      # ── Bootstrap vcpkg ────────────────────────────────────
+      # Bootstrap vcpkg
       - name: Bootstrap vcpkg (Unix)
         if: runner.os != 'Windows'
         shell: bash --noprofile --norc {0}
@@ -84,7 +84,7 @@ jobs:
           git -C "$env:RUNNER_TEMP\vcpkg" checkout 1940ee77e81573713c0d364c42f5990172198be1
           & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg"
-      # ── Install port via overlay ───────────────────────────
+      # Install port via overlay
       - name: Install iccdev port (Unix)
         if: runner.os != 'Windows'
         shell: bash --noprofile --norc {0}
@@ -151,7 +151,7 @@ jobs:
             throw "vcpkg install failed with exit code $LASTEXITCODE"
           }
           Write-Host "::endgroup::"
-      # ── Verify installed artifacts ─────────────────────────
+      # Verify installed artifacts
       - name: Verify installed artifacts (Unix)
         if: runner.os != 'Windows'
         shell: bash --noprofile --norc {0}
@@ -184,53 +184,53 @@ jobs:
           # Check headers
           if [ -d "$PREFIX/include/RefIccMAX/IccProfLib2" ]; then
             hdr_count=$(find "$PREFIX/include/RefIccMAX/IccProfLib2" -name '*.h' | wc -l)
-            echo "✅ IccProfLib2 headers: $hdr_count files"
+            echo "[OK] IccProfLib2 headers: $hdr_count files"
           else
-            echo "❌ IccProfLib2 headers NOT found"
+            echo "[FAIL] IccProfLib2 headers NOT found"
             errors=$((errors + 1))
           fi
           # Check libraries
           for lib in libIccProfLib2 libIccXML2 libIccJSON2; do
             if ls "$PREFIX/lib/"${lib}* 1>/dev/null 2>&1; then
-              echo "✅ $lib found"
+              echo "[OK] $lib found"
             else
-              echo "❌ $lib NOT found"
+              echo "[FAIL] $lib NOT found"
               errors=$((errors + 1))
             fi
           done
           # Check cmake config
           if [ -f "$PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake" ] || \
              [ -f "$PREFIX/share/reficcmax/RefIccMAXConfig.cmake" ]; then
-            echo "✅ CMake config found"
+            echo "[OK] CMake config found"
           else
-            echo "❌ CMake config NOT found"
+            echo "[FAIL] CMake config NOT found"
             errors=$((errors + 1))
           fi
           # Check tools
           for tool in iccDumpProfile iccRoundTrip iccFromXml iccToXml iccFromJson iccToJson; do
             if [ -x "$PREFIX/tools/iccdev/$tool" ]; then
-              echo "✅ Tool $tool found"
+              echo "[OK] Tool $tool found"
             else
-              echo "❌ Tool $tool NOT found"
+              echo "[FAIL] Tool $tool NOT found"
               errors=$((errors + 1))
             fi
           done
           # Summary
           {
-            echo "## vcpkg Port Verification — $(sanitize_line "$RUNNER_OS")"
+            echo "## vcpkg Port Verification - $(sanitize_line "$RUNNER_OS")"
             echo ""
             echo "| Check | Result |"
             echo "|-------|--------|"
-            echo "| Headers | $([ -d "$PREFIX/include/RefIccMAX/IccProfLib2" ] && echo '✅' || echo '❌') |"
-            echo "| Libraries | $(ls "$PREFIX/lib/"libIccProfLib2* >/dev/null 2>&1 && echo '✅' || echo '❌') |"
-            echo "| CMake config | $([ -f "$PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake" ] || [ -f "$PREFIX/share/reficcmax/RefIccMAXConfig.cmake" ] && echo '✅' || echo '❌') |"
-            echo "| Tools | $([ -x "$PREFIX/tools/iccdev/iccDumpProfile" ] && echo '✅' || echo '❌') |"
+            echo "| Headers | $([ -d "$PREFIX/include/RefIccMAX/IccProfLib2" ] && echo '[OK]' || echo '[FAIL]') |"
+            echo "| Libraries | $(ls "$PREFIX/lib/"libIccProfLib2* >/dev/null 2>&1 && echo '[OK]' || echo '[FAIL]') |"
+            echo "| CMake config | $([ -f "$PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake" ] || [ -f "$PREFIX/share/reficcmax/RefIccMAXConfig.cmake" ] && echo '[OK]' || echo '[FAIL]') |"
+            echo "| Tools | $([ -x "$PREFIX/tools/iccdev/iccDumpProfile" ] && echo '[OK]' || echo '[FAIL]') |"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$errors" -gt 0 ]; then
             echo "::error::$errors verification checks failed"
             exit 1
           fi
-          echo "All verification checks passed ✅"
+          echo "All verification checks passed [OK]"
       - name: Verify installed artifacts (Windows)
         if: runner.os == 'Windows'
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -258,17 +258,17 @@ jobs:
           $hdrDir = "$prefix\include\RefIccMAX\IccProfLib2"
           if (Test-Path $hdrDir) {
             $count = (Get-ChildItem $hdrDir -Filter *.h).Count
-            Write-Host "✅ IccProfLib2 headers: $count files"
+            Write-Host "[OK] IccProfLib2 headers: $count files"
           } else {
-            Write-Host "❌ IccProfLib2 headers NOT found"
+            Write-Host "[FAIL] IccProfLib2 headers NOT found"
             $errors++
           }
           # Check libraries
           foreach ($lib in @('IccProfLib2-static.lib','IccXML2-static.lib','IccJSON2-static.lib')) {
             if (Test-Path "$prefix\lib\$lib") {
-              Write-Host "✅ $lib found"
+              Write-Host "[OK] $lib found"
             } else {
-              Write-Host "❌ $lib NOT found"
+              Write-Host "[FAIL] $lib NOT found"
               $errors++
             }
           }
@@ -276,39 +276,39 @@ jobs:
           $cmakeFound = (Test-Path "$prefix\share\RefIccMAX\RefIccMAXConfig.cmake") -or
                         (Test-Path "$prefix\share\reficcmax\RefIccMAXConfig.cmake")
           if ($cmakeFound) {
-            Write-Host "✅ CMake config found"
+            Write-Host "[OK] CMake config found"
           } else {
-            Write-Host "❌ CMake config NOT found"
+            Write-Host "[FAIL] CMake config NOT found"
             $errors++
           }
           # Check tools
           foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccFromXml.exe','iccToXml.exe','iccFromJson.exe','iccToJson.exe')) {
             if (Test-Path "$prefix\tools\iccdev\$tool") {
-              Write-Host "✅ Tool $tool found"
+              Write-Host "[OK] Tool $tool found"
             } else {
-              Write-Host "❌ Tool $tool NOT found"
+              Write-Host "[FAIL] Tool $tool NOT found"
               $errors++
             }
           }
           # Summary
           $os = Sanitize-Line "Windows"
           @"
-          ## vcpkg Port Verification — $os
+          ## vcpkg Port Verification - $os
           | Check | Result |
           |-------|--------|
-          | Headers | $(if (Test-Path $hdrDir) {'✅'} else {'❌'}) |
-          | Libraries | $(if (Test-Path "$prefix\lib\IccProfLib2-static.lib") {'✅'} else {'❌'}) |
-          | CMake config | $(if ($cmakeFound) {'✅'} else {'❌'}) |
-          | Tools | $(if (Test-Path "$prefix\tools\iccdev\iccDumpProfile.exe") {'✅'} else {'❌'}) |
+          | Headers | $(if (Test-Path $hdrDir) {'[OK]'} else {'[FAIL]'}) |
+          | Libraries | $(if (Test-Path "$prefix\lib\IccProfLib2-static.lib") {'[OK]'} else {'[FAIL]'}) |
+          | CMake config | $(if ($cmakeFound) {'[OK]'} else {'[FAIL]'}) |
+          | Tools | $(if (Test-Path "$prefix\tools\iccdev\iccDumpProfile.exe") {'[OK]'} else {'[FAIL]'}) |
           "@ >> $env:GITHUB_STEP_SUMMARY
           if ($errors -gt 0) {
             Write-Error "$errors verification checks failed"
             exit 1
           }
-          Write-Host "All verification checks passed ✅"
-  # ── Manifest mode test (VS-bundled vcpkg) ───────────────
+          Write-Host "All verification checks passed [OK]"
+  # Manifest mode test (VS-bundled vcpkg)
   vcpkg-manifest-test:
-    name: "vcpkg manifest – windows-latest"
+    name: "vcpkg manifest - windows-latest"
     runs-on: windows-latest
     permissions:
       contents: read
@@ -353,7 +353,7 @@ jobs:
             "builtin-baseline": "$baseline",
             "dependencies": [ "iccdev" ],
             "overrides": [
-              { "name": "iccdev", "version": "2.3.1.8", "port-version": 1 }
+              { "name": "iccdev", "version": "2.3.2.0" }
             ]
           }
           "@ | Set-Content "$testDir\vcpkg.json" -Encoding UTF8
@@ -440,17 +440,17 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Test executable failed" }
           if ($output -notmatch "IccProfLib") { throw "Missing IccProfLib version output" }
           if ($output -notmatch "OK") { throw "Missing OK output" }
-          Write-Host "✅ Manifest mode test passed"
+          Write-Host "[OK] Manifest mode test passed"
           # Load sanitizer for summary output
           if (Test-Path ".github/scripts/sanitize.ps1") {
             . .github/scripts/sanitize.ps1
           }
           # Summary
           @"
-          ## vcpkg Manifest Mode — Windows
+          ## vcpkg Manifest Mode - Windows
           | Check | Result |
           |-------|--------|
-          | CMake configure | ✅ |
-          | Build | ✅ |
-          | Run | ✅ |
+          | CMake configure | [OK] |
+          | Build | [OK] |
+          | Run | [OK] |
           "@ >> $env:GITHUB_STEP_SUMMARY

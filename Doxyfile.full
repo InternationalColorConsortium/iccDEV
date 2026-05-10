@@ -6,7 +6,7 @@
 # and client-side search.
 
 PROJECT_NAME           = "iccDEV"
-PROJECT_NUMBER         = "2.3.1"
+PROJECT_NUMBER         = "2.3.2.0"
 PROJECT_BRIEF          = "ICC Color Profile Library - ProfLib, XML, JSON, and CLI Tools"
 OUTPUT_DIRECTORY       = docs/generated-full
 INPUT                  = IccProfLib \
