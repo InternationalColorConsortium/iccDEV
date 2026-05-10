@@ -624,7 +624,7 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       int bytes = lut->GetPrecision();    // currently only 1 or 2
       CIccCLUT *clut = lut->GetCLUT();
       if (!clut) {
-        fprintf(stderr, "Skipping %s: missing CLUT\n", sigDesc.c_str());
+        fprintf(stderr,"ERROR - clut data could not be read for %s in %s\n", sigDesc.c_str(), basename.c_str() );
         return;
       }
 
@@ -683,8 +683,8 @@ void output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       // find tile arrangement closest to a square
       int tilesWide = (int)std::sqrt(tiles);
 
-      // odd counts need a tweak to align and look more sane
-      if (inputChannels > 3 && (inputChannels & 1) == 1) {
+      // some odd counts need a tweak to align and look more sane
+      if (inputChannels > 3 && (inputChannels & 1)) {
         auto oldValue = tilesWide;
         // round down to a multiple of the grid size to better align rows
         tilesWide -= (tilesWide % (gridPoints*tileWidth));
@@ -950,6 +950,7 @@ int main(int argc, char* argv[])
       printf("Unable to parse '%s' as ICC profile!\n", argv[k]);
       continue;
     }
+printf("Processing profile '%s'\n", argv[k]);
     auto count = processLuts( pIcc, argv[k] );
     if (!count) {
         printf("Profile %s had no content for output\n", argv[k] );
