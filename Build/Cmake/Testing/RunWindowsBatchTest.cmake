@@ -92,6 +92,7 @@ set(_tool_dirs
   IccFromXml
   IccJpegDump
   IccPngDump
+  IccProfileVisualize
   IccRoundTrip
   IccSpecSepToTiff
   IccTiffDump
@@ -121,7 +122,7 @@ get_filename_component(_script_name "${ICCDEV_BATCH_SCRIPT}" NAME)
 if(_script_name STREQUAL "CreateAllProfiles.bat")
   set(_required_tools iccFromXml.exe)
 elseif(_script_name STREQUAL "RunTests.bat")
-  set(_required_tools iccApplyNamedCmm.exe iccToJson.exe iccFromJson.exe)
+  set(_required_tools iccApplyNamedCmm.exe iccToJson.exe iccFromJson.exe iccProfileVisualize.exe)
 else()
   set(_required_tools)
 endif()
