@@ -1,11 +1,11 @@
 #
-# iccProfileVisualize.cpp CMakeLists.txt | iccDEV Project
+# IccProfileVisualize CMakeLists.txt | iccDEV Project
 # Copyright (c) 2026 The International Color Consortium. All rights reserved.
 #
 
 set(TARGET_NAME iccProfileVisualize)
 set(SRC_PATH ../../../.. )
-set(SRC_ROOT ${SRC_PATH}/Tools/CmdLine/iccProfileVisualize )
+set(SRC_ROOT ${SRC_PATH}/Tools/CmdLine/IccProfileVisualize )
 set(SOURCES
 	"${SRC_ROOT}/iccProfileVisualize.cpp"
 	"${SRC_ROOT}/MiniTIFF.cpp"

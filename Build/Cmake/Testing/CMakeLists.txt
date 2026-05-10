@@ -269,7 +269,7 @@ set(ICCDEV_TOOL_PATHS
   "${ICCDEV_TOOLS_DIR}/IccToJson"
   "${ICCDEV_TOOLS_DIR}/IccToXml"
   "${ICCDEV_TOOLS_DIR}/IccV5DspObsToV4Dsp"
-  "${ICCDEV_TOOLS_DIR}/iccProfileVisualize"
+  "${ICCDEV_TOOLS_DIR}/IccProfileVisualize"
 )
 
 list(JOIN ICCDEV_TOOL_PATHS ":" ICCDEV_TOOL_PATH)

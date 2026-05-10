@@ -18,7 +18,7 @@ TESTING_DIR="${ICCDEV_TESTING_DIR:-$REPO_ROOT/Testing}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-profile-visualize}"
 mkdir -p "$OUTDIR"
 
-VISUALIZE="$TOOLS_DIR/iccProfileVisualize/iccProfileVisualize"
+VISUALIZE="$TOOLS_DIR/IccProfileVisualize/iccProfileVisualize"
 PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 JSON_PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.json"
 WORK_PROFILE="$OUTDIR/sRGB_v4_ICC_preference.icc"
