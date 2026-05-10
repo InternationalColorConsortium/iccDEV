@@ -566,6 +566,7 @@ int TIFFColorModelFromICCModel( icColorSpaceSignature colorSig )
 
     default:
       // and N-ink should be multichannel
+      // where white = no ink, black = full ink
       return TIFF_MODE_GRAY_WHITEZERO;
       break;
 
@@ -724,6 +725,7 @@ int output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       return outputCount;
     }
 
+    // validate is called back before the Describe call
     clut->Begin();  // initialize some grid information
 
     int gridPoints = clut->GridPoints(); // gridSize[0]

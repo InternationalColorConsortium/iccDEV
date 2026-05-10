@@ -76,7 +76,7 @@
 /******************************************************************************/
 
 // NOTE - we don't have to worry about byte order, because the TIFF will always be written in host byte order
-// returns false if written correctly, true if the write failed
+// returns true if the write failed, otherwise false
 static
 bool putByte( uint8_t val, FILE *out )
 {
