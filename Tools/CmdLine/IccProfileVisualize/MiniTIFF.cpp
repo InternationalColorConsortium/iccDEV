@@ -420,15 +420,15 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
 
   // and update our strip offsets and sizes
   if (stripCount == 1) {
-    fseek(outfile, byteCountOffset, SEEK_SET);
+    writeFailed |= (fseek(outfile, byteCountOffset, SEEK_SET) != 0);
     uint32_t compressed = stripSizeList[0];
     writeFailed |= putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, 1, compressed, outfile );
   } else {
-    fseek(outfile, stripOffset_offset, SEEK_SET);
+    writeFailed |= (fseek(outfile, stripOffset_offset, SEEK_SET) != 0);
     for (size_t i = 0; i < stripCount; ++i)
       writeFailed |= putLong( stripOffsetList[i], outfile );
 
-    fseek(outfile, stripByteCount_offset, SEEK_SET);
+    writeFailed |= (fseek(outfile, stripByteCount_offset, SEEK_SET) != 0);
     for (size_t i = 0; i < stripCount; ++i)
       writeFailed |= putLong( stripSizeList[i], outfile );
   }
