@@ -272,15 +272,19 @@ void PDFPage::WriteContent( std::ostream &out )
   out << " /MediaBox [0 0 " << m_pageWidth << " " << m_pageHeight << "]";
   out << " /Contents " << m_pageContentIndex << " 0 R";
 
-  if (m_procset || m_font || m_xobject) {
+// TODO - can't lookup here because we don't have the PDFWriter pointer
+// should probably pass that in to all writers
+
+  if (m_procset || m_font || m_xobjectIndex) {
     out << " /Resources <<";
-// TODO - make these output a list of items by name (map)
-    if (m_xobject) {  // could be abstracted to a list if needed
-      out << " /XObject<</Axes " << m_xobject << " 0 R>>";
+    if (m_xobjectIndex) {  // could be abstracted to a list if needed
+      out << " /XObject<<";
+      out << "/" << m_xobjectName << " " << m_xobjectIndex << " 0 R";
+      out << ">>";
     }
-    if (m_procset)
+    if (m_procset)  // could also be a list if needed
         out << "/ProcSet " << m_procset << " 0 R";
-    if (m_font)
+    if (m_font)     // could also be a list if needed
         out << " /Font << /F1 " << m_font << " 0 R>>";
     out << " >> ";
   }
@@ -343,13 +347,9 @@ void PDFGroup::WriteContent( std::ostream &out )
 
 /******************************************************************************/
 
-void PDFWriter::AddXObject( Rect2D &bounds, std::string content, size_t group,
-                size_t font, size_t procSet )
+void PDFWriter::AddXObject( Rect2D &bounds, std::string &content, std::string name,
+                size_t group, size_t font, size_t procSet )
 {
-  if (m_xobjectIndex != 0) {
-    fprintf(stderr,"WARNING - PDF xobject already defined!\n");
-  }
-
   if (group == 0)
     group = m_groupIndex;
   if (font == 0)
@@ -359,7 +359,44 @@ void PDFWriter::AddXObject( Rect2D &bounds, std::string content, size_t group,
 
   PDFXObject *xobjObj = new PDFXObject( content, bounds, group, font, procSet );
   m_objects.emplace_back( xobjObj );
-  m_xobjectIndex =  m_objects.size();
+  
+  m_xobjects[ name ] = m_objects.size();
+}
+
+/******************************************************************************/
+  
+size_t PDFWriter::lookupXObjectByName( std::string name )
+{
+  if (name == std::string())
+    return 0;   // don't waste time on lookup for empty strings
+  auto lookup = m_xobjects.find(name);
+  if (lookup == m_xobjects.end())
+    return 0; // not found, indicates to use none
+  else
+    return lookup->second;
+}
+
+/******************************************************************************/
+  
+bool PDFWriter::xobjectExists( std::string name )
+{
+  if (name == std::string())
+    return false;   // don't waste time on lookup for empty strings
+  auto lookup = m_xobjects.find(name);
+  return (lookup != m_xobjects.end());  // C++20 can use map.contains
+}
+
+/******************************************************************************/
+
+void PDFWriter::AddPage( size_t content, std::string xObjectName )
+{
+  size_t xindex = lookupXObjectByName( xObjectName );
+  PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight,
+                    m_pageParentIndex, content, m_procsetIndex,
+                    m_fontIndex, xindex, xObjectName );
+  m_objects.push_back( pageObj );
+  GetPageParent()->m_pageObjectIndices.push_back( ObjectCount() );
+  m_pageCount++;
 }
 
 /******************************************************************************/

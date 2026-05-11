@@ -66,6 +66,7 @@
 #include <sstream>
 #include <vector>
 #include <string>
+#include <map>
 #include "MiniSVG.hpp"
 
 
@@ -158,10 +159,11 @@ public:
 class PDFPage: public PDFObject
 {
 public:
-  PDFPage( float widthPt, float heightPt, size_t parent, size_t content, size_t procSet = 0, size_t font = 0, size_t xobject = 0 ) :
+  PDFPage( float widthPt, float heightPt, size_t parent, size_t content, size_t procSet = 0, size_t font = 0, size_t xobject = 0, std::string xobjectName = std::string() ) :
     PDFObject(), m_pageWidth(widthPt), m_pageHeight(heightPt),
     m_pageParentIndex(parent), m_pageContentIndex(content),
-    m_procset(procSet), m_font(font), m_xobject(xobject)
+    m_procset(procSet), m_font(font), m_xobjectIndex(xobject),
+    m_xobjectName(xobjectName)
      {}
 
   virtual void WriteContent(  std::ostream &out ) final;
@@ -173,7 +175,8 @@ public:
   size_t m_pageContentIndex;
   size_t m_procset;
   size_t m_font;
-  size_t m_xobject;
+  size_t m_xobjectIndex;
+  std::string m_xobjectName;
 };
 
 /******************************************************************************/
@@ -252,19 +255,20 @@ public:
 
 /******************************************************************************/
 
+typedef std::map<std::string,size_t>    object_name_to_index_map;
+
 // units are in points, as is common for PDF
 class PDFWriter
 {
 public:
   PDFWriter() : m_pageWidth(0), m_pageHeight(0), m_pageCount(0),
             m_xrefStart(0), m_pageParentIndex(0), m_outlineIndex(0),
-            m_xobjectIndex(0), m_fontIndex(0), m_groupIndex(0),
-            m_procsetIndex(0)
+            m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
     { }
   PDFWriter( const std::string &filename, float widthPt, float heightPt ):
             m_pageWidth(0), m_pageHeight(0), m_pageCount(0), m_xrefStart(0),
-            m_pageParentIndex(0), m_outlineIndex(0), m_xobjectIndex(0),
-            m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
+            m_pageParentIndex(0), m_outlineIndex(0), m_fontIndex(0),
+            m_groupIndex(0), m_procsetIndex(0)
     { OpenFile(filename, widthPt, heightPt); }
 
   ~PDFWriter()
@@ -275,24 +279,20 @@ public:
 
 public:
 
-  void AddXObject( Rect2D &bounds, std::string content, size_t group = 0,
-                    size_t font = 0, size_t procSet = 0 );
+  void AddXObject( Rect2D &bounds, std::string &content, std::string name,
+                size_t group = 0, size_t font = 0, size_t procSet = 0 );
 
   size_t PageCount() const { return m_pageCount; }
   float PageWidth() const { return m_pageWidth; }
   float PageHeight() const { return m_pageHeight; }
   size_t ObjectCount() const { return m_objects.size(); }
+  bool xobjectExists( std::string name );
 
   void AddObject( PDFObject *obj ) {
     m_objects.push_back( obj );
   }
 
-  void AddPage( size_t content ) {
-    PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight, m_pageParentIndex, content, m_procsetIndex, m_fontIndex, m_xobjectIndex );
-    m_objects.push_back( pageObj );
-    GetPageParent()->m_pageObjectIndices.push_back( ObjectCount() );
-    m_pageCount++;
-  }
+  void AddPage( size_t content, std::string xObjectName );
 
 protected:
 
@@ -300,6 +300,8 @@ protected:
   void WriteObjects( std::ostream &out );
   void WriteXRefs( std::ostream &out );
   void WriteFooter( std::ostream &out );
+  
+  size_t lookupXObjectByName( std::string name );
 
   PDFPageParent *GetPageParent() {
     if (!m_pageParentIndex) {
@@ -320,7 +322,7 @@ private:
   size_t m_pageParentIndex;
   size_t m_outlineIndex;
 
-  size_t m_xobjectIndex;    // used to init pages   // TODO - make this a map from name to object index
+  object_name_to_index_map m_xobjects;
   size_t m_fontIndex;       // used to init pages   // TODO - make this a map from name to object index
   size_t m_groupIndex;      // used to init pages   // this may not change too quickly
   size_t m_procsetIndex;    // used to init pages   // this may not change too quickly

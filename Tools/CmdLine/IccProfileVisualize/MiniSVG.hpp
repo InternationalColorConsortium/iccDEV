@@ -108,6 +108,10 @@ inline point2D operator*(const point2D& xx, const float ss) {
   return point2D(xx.x * ss, xx.y * ss);
 }
 
+inline point2D operator/(const point2D& xx, const float ss) {
+  return point2D(xx.x / ss, xx.y / ss);
+}
+
 inline point2D operator*(const float ss, const point2D& yy) {
   return point2D(ss * yy.x, ss * yy.y);
 }

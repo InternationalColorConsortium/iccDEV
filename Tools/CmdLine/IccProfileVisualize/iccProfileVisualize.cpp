@@ -78,6 +78,7 @@
 #include "MiniTIFF.hpp"
 #include "MiniSVG.hpp"
 #include "MiniPDF.hpp"
+#include "spectralLocus.hpp"
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -142,20 +143,46 @@ void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &rang
 
 /******************************************************************************/
 
+enum TextAlignment {
+    kTextAlignLeft = 0,
+    kTextAlignCenter = 1,
+    kTextAlignRight = 2
+};
+
 std::string AddGraphLabels( const point2D &basepoint, const point2D &range,
-        const point2D &tickLength, float labelSize, const std::string &text )
+        const point2D &tickLength, float labelSize, const std::string &text,
+        TextAlignment align = kTextAlignCenter )
 {
   std::ostringstream commands;
   
-  float textHalf = labelSize * 0.25f * text.size(); // very approximate, not using font metrics
+  float textWidth = labelSize * 0.6f * text.size(); // very approximate, not using font metrics
+  float textHalf = 0.5 * textWidth;
+  
+  point2D position(0,0);
+  switch(align) {
+    default:
+    case kTextAlignLeft:
+        // do nothing
+        break;
+    
+    case kTextAlignCenter:
+        position = point2D(-textHalf,0);
+        break;
+    
+    case kTextAlignRight:
+        position = point2D(-textWidth,0);
+        break;
+  }
+  
   point2D pt00 = basepoint;
   commands << "BT /F1 " << labelSize << " Tf ";
   if (range.x == 0.0) {
-    pt00 += tickLength*1.25f - point2D(0,textHalf);
+    std::swap(position.x,position.y);
+    pt00 += tickLength*1.25f + position;
     commands << "0 " << 1 << " " << -1 << " 0 " << pt00 << " Tm ";
   }
   else {
-    pt00 += tickLength - point2D(textHalf,labelSize);
+    pt00 += tickLength + position - point2D(0,labelSize);
     commands << pt00 << " Td ";
   }
   commands << "(" << text << ") Tj ET\n";
@@ -222,7 +249,7 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   std::string full("100%");
   commands << AddGraphLabels( basepoint, range, tickLength, labelSize, zero );
   commands << AddGraphLabels( basepoint+0.5*range, range, tickLength, labelSize, half );
-  commands << AddGraphLabels( basepoint+range, range, tickLength, labelSize, full );
+  commands << AddGraphLabels( basepoint+range, range, tickLength, labelSize, full, kTextAlignRight );
 
   // IO label near 2/3
   commands << AddGraphLabels( basepoint + range*0.66, range, tickLength, labelSize, label );
@@ -261,7 +288,171 @@ void CreateAxesXobject( PDFWriter &pdfout )
   point2D fullLengthY( (right-margin) - (left+margin), 0 );
   commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0, "Output" );
 
-  pdfout.AddXObject( bounds, commands );
+  pdfout.AddXObject( bounds, commands, "Axes" );
+}
+
+/******************************************************************************/
+
+struct XYColor
+{
+    double x;
+    double y;
+};
+
+// https://en.wikipedia.org/wiki/Planckian_locus
+// Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho; Youngsun Kim (December 2002). "Design of Advanced Color Temperature Control System for HDTV Applications" (PDF). Journal of the Korean Physical Society. 41 (6): 865–871. S2CID 4489377
+static
+XYColor approx_planck( double t )
+{
+    const double c3a = -0.2661239;
+    const double c2a = -0.2343589;
+    const double c1a =  0.8776956;
+    const double c0a =  0.179910;
+    
+    const double c3b = -3.0258469;
+    const double c2b =  2.1070379;
+    const double c1b =  0.2226347;
+    const double c0b =  0.240390;
+    
+    const double k3a = -1.1063814;
+    const double k2a = -1.34811020;
+    const double k1a =  2.18555832;
+    const double k0a = -0.20219683;
+    
+    const double k3b = -0.9549476;
+    const double k2b = -1.37418593;
+    const double k1b =  2.09137015;
+    const double k0b = -0.16748867;
+    
+    const double k3c =  3.0817580;
+    const double k2c = -5.87338670;
+    const double k1c =  3.75112997;
+    const double k0c = -0.37001483;
+    
+    double t2 = t*t;
+    double t3 = t*t*t;
+    
+    double x = 0.0;
+    
+    if (t < 4000.0) {
+        x = c3a*(1e9/t3) + c2a*(1e6/t2) + c1a*(1e3/t) + c0a;
+    } else {
+        x = c3b*(1e9/t3) + c2b*(1e6/t2) + c1b*(1e3/t) + c0b;
+    }
+    
+    double x2 = x*x;
+    double x3 = x*x*x;
+    
+    double y = 0.0;
+    
+    if (t < 2222.0) {
+        y = k3a*x3 + k2a*x2 + k1a*x + k0a;
+    } else if (t < 4000.0) {
+        y = k3b*x3 + k2b*x2 + k1b*x + k0b;
+    } else {
+        y = k3c*x3 + k2c*x2 + k1c*x + k0c;
+    }
+    
+    XYColor result = {x,y};
+    return result;
+}
+
+/******************************************************************************/
+
+void CreateXYPlotXobject( PDFWriter &pdfout )
+{
+  std::ostringstream commands;
+  float margin = 0.25*inch2point;
+  
+  // x range [ 0.00364, 0.73469 ]   for 2degree 1931 observer
+  // y range [ 0.00529, 0.83409 ]
+  const float chromaticityChartScale = 0.85f;
+  const float fineIncrement = 0.01;
+  const float coarseIncrement = 0.1;
+
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdfout.PageHeight();
+  float right = pdfout.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+  point2D basepoint( left+margin, bottom+margin );
+  point2D rangeX( right-bottom-2*margin, 0 );
+  point2D rangeY( 0, top-bottom-2*margin );
+
+
+  // draw grid
+  commands << "q\n";
+  
+  // vertical fine grid
+  commands << "0.05 0 0 0 K\n";
+  for (float i = 0.0; i <= chromaticityChartScale; i += fineIncrement) {
+    point2D startN = basepoint + i/chromaticityChartScale * rangeX;
+    commands << startN << " m " << (startN+rangeY) << " l S\n";
+  }
+  // horizontal fine grid
+  commands << "0.05 0 0 0 K\n";
+  for (float i = 0.0; i <= chromaticityChartScale; i += fineIncrement) {
+    point2D startN = basepoint + i/chromaticityChartScale * rangeY;
+    commands << startN << " m " << (startN+rangeX) << " l S\n";
+  }
+  
+  // vertical coarse grid
+  commands << "0.1 0 0 0 K\n";
+  for (float i = 0.0; i <= chromaticityChartScale; i += coarseIncrement) {
+    point2D startN = basepoint + i/chromaticityChartScale * rangeX;
+    commands << startN << " m " << (startN+rangeY) << " l S\n";
+  }
+  // horizontal coarse grid
+  commands << "0.1 0 0 0 K\n";
+  for (float i = 0.0; i <= chromaticityChartScale; i += coarseIncrement) {
+    point2D startN = basepoint + i/chromaticityChartScale * rangeY;
+    commands << startN << " m " << (startN+rangeX) << " l S\n";
+  }
+
+  // end colored grid, grestore, gsave
+  commands << "Q q\n";
+  
+  
+  
+  // spectral locus
+  commands << "0 0 0 1 K\n";
+  point2D scaling = (rangeX + rangeY) / chromaticityChartScale;
+  point2D firstPoint = basepoint + scaling * point2D( spectralLocus2degree[0].x , spectralLocus2degree[0].y );
+  commands << firstPoint << " m\n";
+  for (size_t k = 1; k < spectralLocus2degree.size(); ++k ) {
+    point2D thispoint = basepoint + scaling * point2D( spectralLocus2degree[k].x , spectralLocus2degree[k].y );
+    commands << thispoint << " l\n";
+  }
+  // close and stroke the shape
+  commands << "s\n";
+
+// DEFERRED - labels for spectral locus?  Not enough room on left
+// and tricky to handle around upper curve
+// could hard code some locations and alignents into a list, 10nm for most, spread out around bottom
+
+
+  // plankian white curve
+  commands << "0 0.25 0.25 0 K\n";
+  const float start_temp = 1667.0;   // degrees Kelvin
+  const float end_temp = 25000.0;
+  const float temp_step = 200.0;
+
+  // scan over the planck curve and plot the lines
+  XYColor firstXY = approx_planck( start_temp );
+  firstPoint = basepoint + scaling * point2D( firstXY.x, firstXY.y );
+  commands << firstPoint << " m\n";
+  for (float temp = start_temp+temp_step; temp <= end_temp; temp += temp_step ) {
+        XYColor thisXY = approx_planck( temp );
+        point2D thispoint = basepoint + scaling * point2D( thisXY.x, thisXY.y );
+        commands << thispoint << " l\n";
+  }
+  // stroke the curve
+  commands << "S\n";
+
+  // grestore
+  commands << "Q\n";
+  std::string commandString = commands.str();
+  pdfout.AddXObject( bounds, commandString, "xyPlot" );
 }
 
 /******************************************************************************/
@@ -317,7 +508,7 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 
 /******************************************************************************/
 
-std::vector<std::string> splitLines(const std::string& str)
+std::vector<std::string> splitTextLines(const std::string& str)
 {
   const char newline = '\n';
   std::vector<std::string> lines;
@@ -348,12 +539,15 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   float right = pdffile.PageWidth();
   Rect2D bounds ( left, right, bottom, top );
 
+  // if the axes xobject doesn't exist, create it now
+  if (!pdffile.xobjectExists("Axes"))
+    CreateAxesXobject( pdffile );
 
   // add the common axes
   commands << "/Axes Do\n";
 
-  // label
-  std::vector<std::string> lines = splitLines( description );
+  // label (may be a couple of lines)
+  std::vector<std::string> lines = splitTextLines( description );
   float labelSize = 12;     // points
   float leading = labelSize * 1.1f;
   float indent = 0.5f * inch2point;
@@ -365,7 +559,7 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
         continue;
     if (line_num == 0) {
       label = name + " " + label;
-      float textHalf = labelSize * 0.25f * label.size();
+      float textHalf = labelSize * 0.3f * label.size();
       point2D labelPt( 0.5f*right - textHalf, top - 0.2f*inch2point );
       commands << labelPt << " Td ";
     }
@@ -404,7 +598,7 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   pdffile.AddObject( graphics );
   size_t content = pdffile.ObjectCount();
 
-  pdffile.AddPage( content );
+  pdffile.AddPage( content, "Axes" );
 }
 
 /******************************************************************************/
@@ -990,7 +1184,6 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
 
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
-  CreateAxesXobject( pdffile );
 
 
 
@@ -1034,7 +1227,21 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
         outputItems += output3DLUT(pIcc, pTag, sigDesc, basename, pdffile );
+// TODO - plot gamut from A2B and B2A tags into xy and LAB plots
         }
+        break;
+    
+      // matrix TRC components
+      case icSigRedColorantTag:
+      case icSigGreenColorantTag:
+      case icSigBlueColorantTag:
+      case icSigMediaWhitePointTag:
+      case icSigMediaBlackPointTag:
+// TODO - assemble RGB, optional white and black, to plot gamut
+// needs background xy plot with spectral locus, white curve added to xobjects
+// needs backgrond AB plot added to xobjects
+//      Maybe look for just wtpt, then look for others inside routine
+//      keep logic localized, allow for all in single call
         break;
 
       // ignore everything else
