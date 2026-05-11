@@ -142,16 +142,58 @@ void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &rang
 
 /******************************************************************************/
 
+std::string AddGraphLabels( const point2D &basepoint, const point2D &range,
+        const point2D &tickLength, float labelSize, const std::string &text )
+{
+  std::ostringstream commands;
+  
+  float textHalf = labelSize * 0.25f * text.size(); // very approximate, not using font metrics
+  point2D pt00 = basepoint;
+  commands << "BT /F1 " << labelSize << " Tf ";
+  if (range.x == 0.0) {
+    pt00 += tickLength*1.25f - point2D(0,textHalf);
+    commands << "0 " << 1 << " " << -1 << " 0 " << pt00 << " Tm ";
+  }
+  else {
+    pt00 += tickLength - point2D(textHalf,labelSize);
+    commands << pt00 << " Td ";
+  }
+  commands << "(" << text << ") Tj ET\n";
+  
+  return commands.str();
+}
+
+/******************************************************************************/
+
 static
 std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
-        const point2D &tickLength, float labelSize, const std::string &label )
+        const point2D &tickLength, const point2D &fullLength, float labelSize, const std::string &label )
 {
   std::ostringstream commands;
 
-  // main line
+  // save gstate
   commands << "q\n";
+  
+  // grid behind major axes
+  commands << "0.05 0 0 0 K\n";
+  for (int i = 1; i <= 100; ++i) {
+    if ((i % 10) == 0) continue;
+    point2D startN = basepoint + range*(i/100.0);
+    commands << startN << " m " << (startN+fullLength) << " l S\n";
+  }
+  commands << "0.1 0 0 0 K\n";
+  for (int i = 1; i <= 10; ++i) {
+    point2D startN = basepoint + range*(i/10.0);
+    commands << startN << " m " << (startN+fullLength) << " l S\n";
+  }
+  // identity line
+  commands << basepoint << " m " << (basepoint+fullLength+range) << " l S\n";
+  // end colored grid, grestore, gsave
+  commands << "Q q\n";
+  
+  // main line
   commands << basepoint << " m " << (basepoint+range) << " l S\n";
-
+  
   // big marks for 0.0, 0.5, and 1.0
   point2D start0 = basepoint;
   commands << start0 << " m " << (start0+tickLength) << " l S\n";
@@ -160,7 +202,6 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   point2D start2 = basepoint + range*0.5;
   commands << start2 << " m " << (start2+tickLength) << " l S\n";
 
-// TODO - values???  0.1 increments?
   // small marks for each tenth that isn't 0.5
   for (int i = 1; i < 10; ++i) {
     if (i == 5) continue;
@@ -175,19 +216,18 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
     commands << startN << " m " << (startN+tickLength*0.25) << " l S\n";
   }
 
-  // label near halfway
-  float textHalf = labelSize * 0.25f * label.size(); // very approximate, not using font metrics
-  point2D labelPt = basepoint + range*0.5;
-  commands << "BT /F1 " << labelSize << " Tf ";
-  if (range.x == 0.0) {
-    labelPt += tickLength*1.25f - point2D(0,textHalf);
-    commands << "0 " << 1 << " " << -1 << " 0 " << labelPt << " Tm ";
-  }
-  else {
-    labelPt += tickLength - point2D(textHalf,labelSize);
-    commands << labelPt << " Td ";
-  }
-  commands << "(" << label << ") Tj ET\n";
+  // labels for 0, 50, 100%
+  std::string zero("0");
+  std::string half("50%");
+  std::string full("100%");
+  commands << AddGraphLabels( basepoint, range, tickLength, labelSize, zero );
+  commands << AddGraphLabels( basepoint+0.5*range, range, tickLength, labelSize, half );
+  commands << AddGraphLabels( basepoint+range, range, tickLength, labelSize, full );
+
+  // IO label near 2/3
+  commands << AddGraphLabels( basepoint + range*0.66, range, tickLength, labelSize, label );
+
+  // grestore at end
   commands << "Q\n";
 
   return commands.str();
@@ -212,12 +252,14 @@ void CreateAxesXobject( PDFWriter &pdfout )
   point2D basepoint( margin, bottom+margin );
   point2D rangeX( right-2*margin, 0.0 );
   point2D tickLengthX( 0, -tickLength );
-  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, 12.0, "Input" );
+  point2D fullLengthX( 0, (top-margin) - (bottom+margin) );
+  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, fullLengthX, 12.0, "Input" );
 
   // vertical
   point2D rangeY( 0.0, (top-2*margin) );
   point2D tickLengthY( -tickLength, 0 );
-  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, 12.0, "Output" );
+  point2D fullLengthY( (right-margin) - (left+margin), 0 );
+  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0, "Output" );
 
   pdfout.AddXObject( bounds, commands );
 }
