@@ -4,15 +4,14 @@
 ###############################################################################
 #
 # Verifies that iccApplyProfiles produces bit-identical TIFF output under
-# every -threads mode supported by CIccConnectCmm::EnableThreading():
-#   -threads -1   single-threaded (no CIccThreadedCmm wrapper, per-pixel apply)
-#   -threads  1   wrapper with one worker (row-batched apply, no concurrency)
+# every non-negative -threads mode supported by CIccConnectCmm::CreateStandard():
+#   -threads  1   single-threaded (no CIccThreadedCmm wrapper, per-pixel apply)
 #   -threads  0   wrapper with std::thread::hardware_concurrency() workers
 #   -threads  N   wrapper with N workers (default N=4 here)
 #
 # Catches partitioning regressions in CIccApplyThreadedCmm::Apply()'s strip
 # split / async-launch / last-strip-on-caller logic, and any future ownership
-# regression in CIccConnectCmm::EnableThreading().
+# regression in CIccConnectCmm threaded initialization.
 #
 # Input: a deterministic 512x512 sRGB TIFF generated on the fly so this test
 # does not depend on a checked-in image with a specific colour space. Python 3
@@ -164,7 +163,7 @@ run_threads() {
 }
 
 REF=""
-for entry in "-1:single" "1:t1" "0:auto" "4:t4"; do
+for entry in "1:t1" "0:auto" "4:t4"; do
   TOTAL=$((TOTAL + 1))
   nthreads="${entry%%:*}"
   label="${entry##*:}"
