@@ -320,10 +320,10 @@ private:
   size_t m_pageParentIndex;
   size_t m_outlineIndex;
 
-  size_t m_xobjectIndex;    // used to init pages
-  size_t m_fontIndex;       // used to init pages
-  size_t m_groupIndex;      // used to init pages
-  size_t m_procsetIndex;    // used to init pages
+  size_t m_xobjectIndex;    // used to init pages   // TODO - make this a map from name to object index
+  size_t m_fontIndex;       // used to init pages   // TODO - make this a map from name to object index
+  size_t m_groupIndex;      // used to init pages   // this may not change too quickly
+  size_t m_procsetIndex;    // used to init pages   // this may not change too quickly
 
   std::string m_filename;
   pdf_object_list m_objects;

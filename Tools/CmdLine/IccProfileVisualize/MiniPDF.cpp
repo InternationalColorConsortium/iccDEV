@@ -274,6 +274,7 @@ void PDFPage::WriteContent( std::ostream &out )
 
   if (m_procset || m_font || m_xobject) {
     out << " /Resources <<";
+// TODO - make these output a list of items by name (map)
     if (m_xobject) {  // could be abstracted to a list if needed
       out << " /XObject<</Axes " << m_xobject << " 0 R>>";
     }
