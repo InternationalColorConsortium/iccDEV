@@ -20,17 +20,23 @@ permissions:
 on:
   workflow_dispatch:
 
+concurrency:
+  group: "docker-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   build:
     name: "Docker (${{ matrix.variant }})"
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    environment: ghcr-publish
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write
-      id-token: write
-      attestations: write
-      artifact-metadata: write
+      packages: write  # Required to publish GHCR images.
+      id-token: write  # Required for artifact attestation identity.
+      attestations: write  # Required to publish build provenance.
+      artifact-metadata: write  # Required to attach artifact metadata attestations.
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -88,7 +94,6 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
         with:
           registry: ghcr.io
@@ -101,7 +106,7 @@ jobs:
         with:
           context: .
           file: ./${{ matrix.dockerfile }}
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -110,7 +115,6 @@ jobs:
           sbom: true
 
       - name: Generate SBOM
-        if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@cf54b07f9a24febf56b236893d115bafc5be6a27  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
@@ -118,7 +122,6 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Attest build provenance
-        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -126,7 +129,6 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
-        if: github.event_name != 'pull_request'
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v3.0.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -135,7 +137,6 @@ jobs:
           push-to-registry: true
 
       - name: Upload SBOM
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
@@ -262,9 +263,10 @@ jobs:
     name: "Prune old container versions"
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/master'
+    environment: ghcr-publish
     permissions:
-      packages: write
+      packages: write  # Required to delete old GHCR package versions.
     strategy:
       matrix:
         package: [iccdev, iccdev-nixos]

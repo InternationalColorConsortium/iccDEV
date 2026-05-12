@@ -1,28 +1,24 @@
 # ============================================================
-# CODEOWNERS — https://github.com/InternationalColorConsortium
+# CODEOWNERS - https://github.com/InternationalColorConsortium
 # ============================================================
 #
-# Updated 2026-05-06 14:29:57 UTC by David Hoyt @xsscx
+# Updated 2026-05-12 17:16:37 UTC by David Hoyt @xsscx
 # Intent: Governance, Transparency, Best Practice
 # Last Modification: Add Points of Contact
-#
 #
 # ============================================================
 
 # Notify Default
 # Triage Points of Contact
-* @xsscx @ChrisCoxArt
+* @ChrisCoxArt @xsscx
 
 # GitHub Actions workflows & PR automation
-.github/** @xsscx @dwtza @ChrisCoxArt
-
-# Build system logic
-Build/** @xsscx @ChrisCoxArt
+.github/** @xsscx @ChrisCoxArt @dwtza
 
 # Protect the CODEOWNERS file itself
-.github/CODEOWNERS                 @xsscx @maxderhak @ChrisCoxArt @dwtza @colourbill-ctrl
+.github/CODEOWNERS @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
 
 # Governance: protect CODEOWNERS and key security/docs
-SECURITY.md @xsscx @maxderhak @ChrisCoxArt @dwtza @colourbill-ctrl
-README.md @xsscx @maxderhak @ChrisCoxArt @dwtza @colourbill-ctrl
-docs/** @xsscx @maxderhak @ChrisCoxArt @dwtza @colourbill-ctrl
+SECURITY.md @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
+README.md @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
+docs/** @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx

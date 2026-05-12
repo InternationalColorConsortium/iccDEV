@@ -18,13 +18,9 @@ name: "ci-pr-unix"
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read  # Required by reusable PR build callers.
 
 on:
-  # Allow manual runs
-  workflow_dispatch:
-
-  # Allow reuse by other workflows
   workflow_call:
     inputs:
       os-list:
@@ -56,7 +52,7 @@ env:
 
 jobs:
   build:
-    name: "${{ matrix.os }} • ${{ matrix.compiler }} • ${{ matrix.build_type }}"
+    name: "${{ matrix.os }} - ${{ matrix.compiler }} - ${{ matrix.build_type }}"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     concurrency:
@@ -148,7 +144,7 @@ jobs:
             echo "**Build Type:**    ${PR_BUILD_TYPE}"
             echo "**Compiler:**      ${PR_COMPILER}"
             echo "**OS:**            ${PR_OS}"
-          } >> $GITHUB_STEP_SUMMARY
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Install Build Dependencies (Linux)
         if: runner.os == 'Linux'
         shell: bash --noprofile --norc {0}
@@ -189,11 +185,11 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           if [ "$MATRIX_COMPILER" = "gcc" ]; then
-            echo "CC=gcc" >> $GITHUB_ENV
-            echo "CXX=g++" >> $GITHUB_ENV
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
           else
-            echo "CC=clang" >> $GITHUB_ENV
-            echo "CXX=clang++" >> $GITHUB_ENV
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
           fi
 
       - name: Configure with CMake
@@ -210,8 +206,8 @@ jobs:
           mkdir -p Build
           cd Build
           cmake -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}" \
-                -DCMAKE_C_COMPILER=$CC \
-                -DCMAKE_CXX_COMPILER=$CXX \
+                -DCMAKE_C_COMPILER="$CC" \
+                -DCMAKE_CXX_COMPILER="$CXX" \
                  Cmake
           echo "::group::CMake Cache"
           cat CMakeCache.txt || true
@@ -231,7 +227,8 @@ jobs:
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
           echo "CMake build type: ${MATRIX_BUILD_TYPE}"
-          make -j$(nproc || sysctl -n hw.logicalcpu) 2>&1 | tee build.log
+          jobs="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
+          make -j"$jobs" 2>&1 | tee build.log
           WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
           if [ "$WARNING_COUNT" -gt 0 ]; then
             echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
@@ -293,7 +290,10 @@ jobs:
           cd Testing
           echo "=== Updating PATH ==="
           for d in ../Build/Tools/*; do
-          [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="${tool_dir}:$PATH"
+            fi
           done
           sh CreateAllProfiles.sh
           sh RunTests.sh
@@ -331,11 +331,14 @@ jobs:
             echo "ERROR: .github/scripts/sanitize-sed.sh not found or not readable" >&2
             exit 1
           fi
+          # shellcheck disable=SC1091
           source .github/scripts/sanitize-sed.sh
           SANITIZED_OS=$(sanitize_line "${MATRIX_OS}")
           SANITIZED_COMPILER=$(sanitize_line "${MATRIX_COMPILER}")
           SANITIZED_BUILD_TYPE=$(sanitize_line "${MATRIX_BUILD_TYPE}")
-          echo "## 🧱 ci-pr-unix Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **OS:**         $SANITIZED_OS" >> $GITHUB_STEP_SUMMARY
-          echo "- **Compiler:**   $SANITIZED_COMPILER" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Type:** $SANITIZED_BUILD_TYPE" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## ci-pr-unix Build Summary"
+            echo "- **OS:**         $SANITIZED_OS"
+            echo "- **Compiler:**   $SANITIZED_COMPILER"
+            echo "- **Build Type:** $SANITIZED_BUILD_TYPE"
+          } >> "$GITHUB_STEP_SUMMARY"

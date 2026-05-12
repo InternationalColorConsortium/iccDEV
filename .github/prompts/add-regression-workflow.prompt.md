@@ -27,8 +27,7 @@ Add a minimal, reproducible regression gate for:
 ## Implementation Steps
 
 1. Read `docs/regression-workflow-governance.md`.
-2. Inspect existing regression blocks in `ci-tool-tests.yml` and
-   `ci-iccdev-tool-tests.yml`.
+2. Inspect existing regression blocks in `ci-iccdev-tool-tests.yml`.
 3. Add the smallest script or inline test that proves the behavior.
    If the case belongs inside `iccdev-tool-coverage-baseline.sh`, keep it
    self-contained under `ICCDEV_TEST_OUTDIR` and do not change the CTest suite

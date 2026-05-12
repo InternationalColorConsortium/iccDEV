@@ -2,12 +2,15 @@
 name: Security bug report
 about: Report a memory-safety bug, sanitizer finding, or fuzzer crash
 title: '{CrashType} in {Function}() at {File}:{Line}'
-labels: 'Bug'
+labels: 'bug, security, needs-triage'
 assignees: ''
 ---
 
 Use one issue per independent finding. For detailed formatting guidance, see
 `.github/prompts/SECURITY_ISSUE_FORMAT.md`.
+
+Maintainers may update labels during triage. If you have questions, contact a
+listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/CODEOWNERS).
 
 ## Maintainer Repro
 

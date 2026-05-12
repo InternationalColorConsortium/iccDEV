@@ -1,6 +1,6 @@
 # Debug WASM Build Failures
 
-Use this prompt when a WASM CI workflow fails (ci-wasm-build-test.yml or wasm-latest-matrix.yml).
+Use this prompt when the WASM CI workflow fails (ci-pr-wasm.yml).
 
 ## Quick Diagnosis
 
@@ -8,7 +8,7 @@ Use this prompt when a WASM CI workflow fails (ci-wasm-build-test.yml or wasm-la
 ```
 # Look for: "fatal: unable to access 'https://chromium.googlesource.com/'"
 # Fix: Retry logic already built into workflows (3 attempts, 10s backoff)
-# If persistent: GitLab/Chromium CDN outage — wait and re-trigger
+# If persistent: GitLab/Chromium CDN outage - wait and re-trigger
 ```
 
 ### 2. Check if libxml2 build failed
@@ -20,7 +20,7 @@ Use this prompt when a WASM CI workflow fails (ci-wasm-build-test.yml or wasm-la
 
 ### 3. Check if iccDEV cmake failed
 ```
-# Common: "wasm branch not found" — the wasm branch was consolidated into master
+# Common: "wasm branch not found" - the wasm branch was consolidated into master
 # All WASM CMake guards are in Build/Cmake/CMakeLists.txt under if(EMSCRIPTEN)
 # WASM builds MUST use: -DENABLE_TESTS=OFF -DENABLE_TOOLS=ON -DENABLE_SHARED_LIBS=OFF
 ```
@@ -30,7 +30,7 @@ Use this prompt when a WASM CI workflow fails (ci-wasm-build-test.yml or wasm-la
 ### Build Configs (3-matrix)
 - **Debug**: `-O0 -g -sASSERTIONS=2` (256MB initial memory)
 - **Release**: `-O3` (128MB initial memory)
-- **RelWithDebInfo**: `-O2 -g` (128MB initial memory)
+- **Asan**: Debug build with `-fsanitize=address`
 
 ### Critical CMake Flags
 ```bash
@@ -44,9 +44,9 @@ emcmake cmake ../Build/Cmake \
 ```
 
 ### Critical Emscripten Link Flags (set in CMakeLists.txt)
-- `-sINVOKE_RUN=0` — MANDATORY with `-sMODULARIZE=1`
-- `-sEXPORTED_RUNTIME_METHODS=callMain,FS` — for Module.callMain() and Module.FS
-- `-sALLOW_MEMORY_GROWTH=1` — dynamic memory for large profiles
+- `-sINVOKE_RUN=0` - MANDATORY with `-sMODULARIZE=1`
+- `-sEXPORTED_RUNTIME_METHODS=callMain,FS` - for Module.callMain() and Module.FS
+- `-sALLOW_MEMORY_GROWTH=1` - dynamic memory for large profiles
 - CMakeLists.txt has `if(EMSCRIPTEN)` guards that skip ELF-only flags automatically
 
 ### Expected Artifacts (per config)
@@ -64,17 +64,17 @@ done
 
 ## Common Pitfalls
 
-1. **Stale wasm branch reference** — The `wasm` branch was consolidated. Build from
+1. **Stale wasm branch reference** - The `wasm` branch was consolidated. Build from
    the checked-out branch directly. Never `git checkout wasm`.
 
-2. **emsdk version pinning** — emsdk git tags are emsdk releases (e.g., `5.0.3`),
+2. **emsdk version pinning** - emsdk git tags are emsdk releases (e.g., `5.0.3`),
    NOT Emscripten SDK versions (`3.1.78`). Use `./emsdk install latest`.
 
-3. **ASan and SAFE_HEAP** — Mutually exclusive in Emscripten. Debug config uses
+3. **ASan and SAFE_HEAP** - Mutually exclusive in Emscripten. Debug config uses
    ASSERTIONS+SAFE_HEAP. ASan config uses `-fsanitize=address` WITHOUT SAFE_HEAP.
 
-4. **GitLab clone transient failures** — `chromium.googlesource.com` has intermittent
+4. **GitLab clone transient failures** - `chromium.googlesource.com` has intermittent
    503s. Workflows include retry logic (3 attempts, 10s exponential backoff).
 
-5. **Summary formatting** — Multiline file lists must iterate line-by-line through
+5. **Summary formatting** - Multiline file lists must iterate line-by-line through
    `sanitize_line` to avoid collapsing to a single line in GITHUB_STEP_SUMMARY.

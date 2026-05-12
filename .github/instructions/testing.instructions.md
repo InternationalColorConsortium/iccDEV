@@ -125,8 +125,8 @@ CTest or workflow infrastructure directly.
 2. Register the test in `Build/Cmake/Testing/CMakeLists.txt`.
 3. Use `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated
    profiles.
-4. Update Linux CTest count assertions in `ci-tool-tests.yml` and
-   `ci-iccdev-tool-tests.yml` when adding or removing Linux suites.
+4. Update Linux CTest count assertions in `ci-iccdev-tool-tests.yml` when
+   adding or removing Linux suites.
 5. Update `docs/ctest.md` with the test name, source script, labels, and any
    count changes.
 

@@ -29,6 +29,10 @@ permissions:
 on:
   workflow_dispatch:
 
+concurrency:
+  group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   linux:
     name: "Linux ${{ matrix.compiler }}"
@@ -249,7 +253,18 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           echo "Installing Homebrew dependencies..."
-          brew install libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo || echo "[WARN] Some dependencies might already be installed."
+          packages=(libpng nlohmann-json libxml2 wxwidgets libtiff jpeg-turbo)
+          missing=()
+          for package in "${packages[@]}"; do
+            if brew list --versions "$package" >/dev/null 2>&1; then
+              echo "[OK] Homebrew package already installed: $package"
+            else
+              missing+=("$package")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            brew install "${missing[@]}"
+          fi
           echo "[OK] Dependency installation complete."
 
       - name: CMake Configure
@@ -432,7 +447,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
   windows:
     name: "Windows MSVC"
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 45
     env:
       POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -693,8 +708,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
-      EMSDK_VERSION: latest
-      WASM_DEPS_CACHE_VERSION: v1
+      EMSDK_VERSION: 4.0.20
+      EMSDK_REF: e4fe26ef59168ff44f4c23c466e497bf60b3411e
+      ZLIB_REF: f9dd6009be3ed32415edf1e89d1bc38380ecb95d
+      LIBTIFF_REF: 97ae1f6f0bba8999326f084f04950ecfd6166580
+      LIBXML2_REF: 39b66eb2089f491eacf8e22a7965a235f7f5735e
+      NLOHMANN_JSON_REF: f0bf4c731a53aab29ebde0234385b9e63bf70dcd
+      WASM_DEPS_CACHE_VERSION: v2
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -712,10 +732,7 @@ jobs:
             emsdk
             ~/.emscripten
             ~/.emscripten_cache
-          key: iccdev-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml', '.github/workflows/wasm-latest-matrix.yml') }}
-          restore-keys: |
-            iccdev-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-            ci-latest-release-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+          key: iccdev-release-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.EMSDK_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
 
       - name: Install Emscripten SDK
         env:
@@ -725,13 +742,15 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          if [[ -d emsdk/.git ]]; then
-            git -C emsdk remote set-url origin https://github.com/emscripten-core/emsdk.git
-            git -C emsdk fetch --depth 1 origin main
-            git -C emsdk checkout --force FETCH_HEAD
-          else
-            rm -rf emsdk
-            git clone --depth 1 https://github.com/emscripten-core/emsdk.git emsdk
+          rm -rf emsdk
+          git init emsdk
+          git -C emsdk remote add origin https://github.com/emscripten-core/emsdk.git
+          git -C emsdk fetch --depth 1 origin "$EMSDK_REF"
+          git -C emsdk checkout --detach "$EMSDK_REF"
+          actual_ref="$(git -C emsdk rev-parse HEAD)"
+          if [[ "$actual_ref" != "$EMSDK_REF" ]]; then
+            echo "::error::emsdk checkout mismatch"
+            exit 1
           fi
           cd emsdk
           ./emsdk install "$EMSDK_VERSION"
@@ -742,10 +761,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: third_party
-          key: iccdev-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml', '.github/workflows/wasm-latest-matrix.yml') }}
-          restore-keys: |
-            iccdev-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-
-            ci-latest-release-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-
+          key: iccdev-release-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-${{ env.ZLIB_REF }}-${{ env.LIBTIFF_REF }}-${{ env.LIBXML2_REF }}-${{ env.NLOHMANN_JSON_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
 
       - name: Build third-party dependencies
         env:
@@ -759,6 +775,22 @@ jobs:
 
           THIRD_PARTY="$PWD/third_party"
           CACHE_ACTION="rebuilt"
+          fetch_pinned_dep() {
+            local name="$1"
+            local url="$2"
+            local ref="$3"
+            rm -rf "$name"
+            git init "$name"
+            git -C "$name" remote add origin "$url"
+            git -C "$name" fetch --depth 1 origin "$ref"
+            git -C "$name" checkout --detach "$ref"
+            local actual
+            actual="$(git -C "$name" rev-parse HEAD)"
+            if [[ "$actual" != "$ref" ]]; then
+              echo "::error::$name checkout mismatch"
+              exit 1
+            fi
+          }
           deps_ready() {
             [[ -f "$THIRD_PARTY/zlib/out/lib/libz.a" ]] &&
             [[ -f "$THIRD_PARTY/libpng/out/lib/libpng16.a" ]] &&
@@ -777,7 +809,8 @@ jobs:
             mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
 
             # zlib
-            git clone --depth 1 https://github.com/madler/zlib.git && cd zlib
+            fetch_pinned_dep zlib https://github.com/madler/zlib.git "$ZLIB_REF"
+            cd zlib
             emconfigure ./configure --static --prefix="$THIRD_PARTY/zlib/out"
             emmake make -j"$(nproc)"
             emmake make install
@@ -804,7 +837,7 @@ jobs:
 
             # libtiff (with retry for GitLab)
             for attempt in 1 2 3; do
-              if git clone --depth 1 https://gitlab.com/libtiff/libtiff.git; then
+              if fetch_pinned_dep libtiff https://gitlab.com/libtiff/libtiff.git "$LIBTIFF_REF"; then
                 break
               fi
               echo "::warning::libtiff clone attempt $attempt failed, retrying in 10s..."
@@ -830,7 +863,7 @@ jobs:
 
             # libxml2 (CMake build with retry for GitLab)
             for attempt in 1 2 3; do
-              if git clone --depth 1 https://gitlab.gnome.org/GNOME/libxml2.git; then
+              if fetch_pinned_dep libxml2 https://gitlab.gnome.org/GNOME/libxml2.git "$LIBXML2_REF"; then
                 break
               fi
               echo "::warning::libxml2 clone attempt $attempt failed, retrying in 10s..."
@@ -858,7 +891,8 @@ jobs:
             cd "$THIRD_PARTY"
 
             # nlohmann-json (build with CMake for find_package support)
-            git clone --depth 1 https://github.com/nlohmann/json.git nlohmann-json && cd nlohmann-json
+            fetch_pinned_dep nlohmann-json https://github.com/nlohmann/json.git "$NLOHMANN_JSON_REF"
+            cd nlohmann-json
             mkdir wasm && cd wasm
             emcmake cmake .. \
               -DCMAKE_BUILD_TYPE=Release \
@@ -1231,12 +1265,14 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm]
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 15
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: write  # Required to replace the rolling latest release.
+      id-token: write  # Required for artifact attestation identity.
+      attestations: write  # Required to publish release archive provenance.
     steps:
       - name: Checkout
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -1372,53 +1408,67 @@ jobs:
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
 
       - name: Create latest release
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda
-        with:
-          tag_name: latest
-          name: "Latest Build"
-          body: |
-            ## Rolling Latest Build
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
 
-            **Commit:** ${{ github.sha }}
-            **Branch:** ${{ github.ref_name }}
-            **Event:** ${{ github.event_name }}
-            **Run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          body_file="$(mktemp)"
+          {
+            echo "## Rolling Latest Build"
+            echo ""
+            echo "**Commit:** ${GH_SHA}"
+            echo "**Branch:** ${GH_REF_NAME}"
+            echo "**Event:** ${GH_EVENT_NAME}"
+            echo "**Run:** https://github.com/${GH_REPOSITORY}/actions/runs/${GH_RUN_ID}"
+            echo ""
+            echo "### Downloads"
+            echo ""
+            echo "| Platform | Archive |"
+            echo "|----------|---------|"
+            echo "| Linux (GCC) | \`iccdev-linux-gcc.zip\` |"
+            echo "| Linux (Clang) | \`iccdev-linux-clang.zip\` |"
+            echo "| macOS (Clang) | \`iccdev-macos-clang.zip\` |"
+            echo "| Windows (MSVC) | \`iccdev-windows-msvc.zip\` |"
+            echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
+            echo "| Checksums | \`SHA256SUMS\`, \`SHA512SUMS\` |"
+            echo ""
+            echo "### Provenance"
+            echo ""
+            echo "GitHub Artifact Attestations are generated for each release archive"
+            echo "listed in \`SHA256SUMS\`."
+            echo ""
+            echo "### Install via Package Managers"
+            echo ""
+            echo "| Method | Command |"
+            echo "|--------|---------|"
+            echo "| **Homebrew** | \`brew install iccdev\` |"
+            echo "| **NPM** | \`npm install iccdev\` |"
+            echo "| **Docker Pull** | \`docker pull ghcr.io/internationalcolorconsortium/iccdev:latest\` |"
+            echo "| **Docker Run** | \`docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest\` |"
+            echo ""
+            echo "---"
+            echo "*Auto-published by ci-latest-release.*"
+          } > "$body_file"
 
-            ### Downloads
-
-            | Platform | Archive |
-            |----------|---------|
-            | Linux (GCC) | `iccdev-linux-gcc.zip` |
-            | Linux (Clang) | `iccdev-linux-clang.zip` |
-            | macOS (Clang) | `iccdev-macos-clang.zip` |
-            | Windows (MSVC) | `iccdev-windows-msvc.zip` |
-            | WASM (Emscripten) | `iccdev-wasm-release.zip` |
-            | Checksums | `SHA256SUMS`, `SHA512SUMS` |
-
-            ### Provenance
-
-            GitHub Artifact Attestations are generated for each release archive
-            listed in `SHA256SUMS`.
-
-            ### Install via Package Managers
-
-            | Method | Command |
-            |--------|---------|
-            | **Homebrew** | `brew install iccdev` |
-            | **NPM** | `npm install iccdev` |
-            | **Docker Pull** | `docker pull ghcr.io/internationalcolorconsortium/iccdev:latest` |
-            | **Docker Run** | `docker run -it ghcr.io/internationalcolorconsortium/iccdev:latest` |
-
-            ---
-            *Auto-published by ci-latest-release.*
-          draft: false
-          prerelease: false
-          make_latest: true
-          target_commitish: ${{ github.sha }}
-          files: |
-            release-assets/*.zip
-            release-assets/SHA256SUMS
-            release-assets/SHA512SUMS
+          gh release create latest \
+            release-assets/*.zip \
+            release-assets/SHA256SUMS \
+            release-assets/SHA512SUMS \
+            --repo "$GH_REPOSITORY" \
+            --target "$GH_SHA" \
+            --title "Latest Build" \
+            --notes-file "$body_file" \
+            --latest
 
       - name: Summary Report
         if: always()

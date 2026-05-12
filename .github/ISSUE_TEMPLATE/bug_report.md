@@ -2,7 +2,7 @@
 name: Bug report
 about: Report a bug or crash
 title: ''
-labels: 'bug'
+labels: 'bug, needs-triage'
 assignees: ''
 ---
 
@@ -27,6 +27,11 @@ cmake --build msvc -- /m /maxcpucount
 
 1. Run `<command>`
 2. Observe `<output or behavior>`
+
+## Triage
+
+Maintainers may add or update labels as the issue is reviewed. If you have
+questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/CODEOWNERS).
 
 ## Expected Behavior
 

@@ -15,44 +15,16 @@
 name: ci-status-label
 
 on:
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: 'Pull request number to process (blank = all open)'
-        required: false
-        default: ''
-        type: string
   schedule:
     - cron: '0 */4 * * *'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_run:
-    workflows:
-      - ci-pr-action
-      - ci-pr-lint
-      - ci-risk-analysis
-      - ci-pr-unix
-      - ci-pr-unix-sb
-      - ci-pr-win
-      - ci-pr-wasm
-      - ci-build-matrix
-      - ci-regression-checks
-      - ci-json-roundtrip
-      - ci-vcpkg-ports
-      - ci-codeql-security
-      - ci-docker
-      - ci-docker-latest
-      - ci-docker-nixos
-      - ci-latest-release
-      - ci-sanitizer-tests
-      - ci-shared-exports
-    types: [completed]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
-  statuses: read
-  checks: read
+  statuses: read  # Required to evaluate legacy commit statuses.
+  checks: read  # Required to evaluate GitHub Actions check runs.
 
 concurrency:
   group: pr-status-labeler-${{ github.event.pull_request.number || github.event.workflow_run.id || 'batch' }}
@@ -60,11 +32,14 @@ concurrency:
 
 jobs:
   label-status:
-    if: >
-      github.event_name != 'workflow_dispatch' ||
-      contains(fromJson('["xsscx","maxderhak","ChrisCoxArt","dwtza"]'), github.actor)
+    name: PR status labeler
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write  # Required to update PR status labels.
+      statuses: read  # Required to evaluate legacy commit statuses.
+      checks: read  # Required to evaluate GitHub Actions check runs.
 
     steps:
       - name: Check out repository
@@ -97,7 +72,6 @@ jobs:
         env:
           BASH_ENV: /dev/null
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_PR_NUMBER: ${{ github.event.inputs.pr_number }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
           EVENT_WORKFLOW_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
@@ -105,7 +79,6 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
 
-          INPUT="${INPUT_PR_NUMBER}"
           EVENT_PR="${EVENT_PR_NUMBER}"
           WORKFLOW_PR="${EVENT_WORKFLOW_PR_NUMBER}"
 
@@ -129,11 +102,7 @@ jobs:
             printf '%s=%s\n' "$key" "$value" >> "$GITHUB_OUTPUT"  # elements-sanitized
           }
 
-          if [[ "$INPUT" =~ ^[0-9]+$ ]] && [[ -n "$INPUT" ]]; then
-            write_github_output prs "$INPUT"
-            write_github_output mode "single"
-            echo "Processing single PR: #$INPUT"
-          elif [[ "$EVENT_PR" =~ ^[0-9]+$ ]]; then
+          if [[ "$EVENT_PR" =~ ^[0-9]+$ ]]; then
             write_github_output prs "$EVENT_PR"
             write_github_output mode "single"
             echo "Processing PR from event: #$EVENT_PR"
@@ -236,6 +205,7 @@ jobs:
 
             # Query Check Runs API (Actions uses this, not statuses)
             local check_conclusion
+            # shellcheck disable=SC2016
             check_conclusion=$(gh api "repos/${GH_REPO}/commits/$head/check-runs" \
               --jq '
                 if (.total_count == 0) then "none"

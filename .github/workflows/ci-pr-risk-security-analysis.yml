@@ -13,7 +13,7 @@ name: ci-risk-analysis
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read  # Required to analyze PR workflow changes.
 
 on:
   workflow_call:
@@ -905,6 +905,62 @@ jobs:
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
+          # H-5: privileged workflow_dispatch publish jobs must be master/environment gated.
+          PUBLISH_GATE_GAPS=0
+          while IFS= read -r wf; do
+            wf_base=$(basename "$wf")
+            on_section=$(awk '/^on:/{f=1;print;next} /^[a-zA-Z]/{f=0} f{print}' "$wf")
+            if ! grep -q 'workflow_dispatch' <<< "$on_section"; then
+              continue
+            fi
+            if ! grep -qE '^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write' "$wf"; then
+              continue
+            fi
+            has_master_gate=false
+            has_environment=false
+            if grep -q "github.ref == 'refs/heads/master'" "$wf"; then
+              has_master_gate=true
+            fi
+            if grep -qE '^\s+environment:' "$wf"; then
+              has_environment=true
+            fi
+            if [[ "$has_master_gate" != "true" || "$has_environment" != "true" ]]; then
+              PUBLISH_GATE_GAPS=$((PUBLISH_GATE_GAPS + 1))
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` has privileged workflow_dispatch publish permissions without both master ref and environment gates" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+            fi
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $PUBLISH_GATE_GAPS -eq 0 ]]; then
+            echo "[OK] Privileged workflow_dispatch publish jobs are master/environment gated" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          fi
+
+          # H-6: privileged cache boundaries must not mix PR/release cache namespaces.
+          CACHE_BOUNDARY_GAPS=0
+          while IFS= read -r wf; do
+            wf_base=$(basename "$wf")
+            has_write=false
+            if grep -qE '^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write' "$wf"; then
+              has_write=true
+            fi
+            if [[ "$has_write" == "true" ]] && grep -qE 'cache-to:\s*type=gha|restore-keys:' "$wf"; then
+              if ! grep -q "github.ref == 'refs/heads/master'" "$wf"; then
+                CACHE_BOUNDARY_GAPS=$((CACHE_BOUNDARY_GAPS + 1))
+                echo "[HIGH] \`$(sanitize_line "$wf_base")\` combines write credentials with GHA cache usage without a master-only gate" >> "$RISK_REPORT_PATH"
+                echo "" >> "$RISK_REPORT_PATH"
+              fi
+            fi
+            if [[ "$wf_base" == "ci-latest-release.yml" ]] && grep -q 'restore-keys:' "$wf"; then
+              CACHE_BOUNDARY_GAPS=$((CACHE_BOUNDARY_GAPS + 1))
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` release workflow uses broad cache restore keys" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+            fi
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $CACHE_BOUNDARY_GAPS -eq 0 ]]; then
+            echo "[OK] Privileged cache boundaries are isolated from PR/release namespace mixing" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          fi
+
           # H-6: CODEOWNERS coverage check for workflow directory
           if [[ -f .github/CODEOWNERS ]]; then
             if grep -qE '\.github/(workflows|actions|\*\*)' .github/CODEOWNERS; then
@@ -943,7 +999,7 @@ jobs:
 
           echo "## 8. Supply-Chain Risk Score" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
-          echo "Composite risk assessment based on Trivy compromise indicators." >> "$RISK_REPORT_PATH"
+          echo "Composite risk assessment based on TanStack, Trivy, cache-isolation, and OIDC compromise indicators." >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
 
           RISK_SCORE=0
@@ -1298,11 +1354,20 @@ jobs:
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
+          # C-6: Package install lifecycle audit. Advisory only: publish and OIDC gates are enforced elsewhere.
+          PACKAGE_INSTALLS=$({ grep -rnE '(^|[[:space:]])(pip|python3 -m pip|npm|pnpm|yarn|npx|twine|cibuildwheel)[[:space:]].*(install|publish|build)' .github/workflows/ 2>/dev/null || true; } \
+            | { grep -vE "$SELF_WF_RE" || true; } \
+            | { grep -vE ':[0-9]+:[[:space:]]*#' || true; } | wc -l)
+          if [[ $PACKAGE_INSTALLS -gt 0 ]]; then
+            echo "[INFO] $(sanitize_line "$PACKAGE_INSTALLS") package install/build/publish command(s) found; verify high-trust jobs use pinned constraints or isolated publish credentials" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          fi
+
           if [[ $TRIVY_INDICATORS -eq 0 ]]; then
-            echo "[OK] No Trivy-pattern indicators detected" >> "$RISK_REPORT_PATH"
+            echo "[OK] No TanStack/Trivy-pattern indicators detected" >> "$RISK_REPORT_PATH"
           else
             echo "" >> "$RISK_REPORT_PATH"
-            echo "**Total Trivy-pattern indicators: $(sanitize_line "$TRIVY_INDICATORS")**" >> "$RISK_REPORT_PATH"
+            echo "**Total TanStack/Trivy-pattern indicators: $(sanitize_line "$TRIVY_INDICATORS")**" >> "$RISK_REPORT_PATH"
           fi
           echo "" >> "$RISK_REPORT_PATH"
 
@@ -1471,7 +1536,7 @@ jobs:
             echo ""
             echo "## 11. Workflow Inventory"
             echo ""
-            echo "| Workflow | Triggers | Permissions | SHA-Pinned |"
+            echo "| Workflow | Triggers | Explicit Permissions | SHA-Pinned |"
             echo "|----------|----------|-------------|------------|"
 
             while IFS= read -r wf; do
@@ -1480,15 +1545,15 @@ jobs:
               # Extract triggers from on: section only
               triggers=""
               on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$wf")
-              for t in push pull_request workflow_dispatch schedule pull_request_target issue_comment workflow_run; do
-                if grep -q "$t" <<< "$on_section" 2>/dev/null; then
+              for t in push pull_request pull_request_target workflow_call workflow_dispatch schedule issues issue_comment workflow_run repository_dispatch create delete release; do
+                if grep -Eq "(^on:[[:space:]].*\\b${t}\\b|^[[:space:]]{2}${t}:)" <<< "$on_section" 2>/dev/null; then
                   triggers="${triggers:+$triggers, }$t"
                 fi
               done
               triggers="${triggers:-none detected}"
 
               # Check permissions
-              if grep -qE '^permissions:' "$wf" 2>/dev/null; then
+              if grep -qE '^[[:space:]]*permissions:' "$wf" 2>/dev/null; then
                 perms="Yes"
               else
                 perms="No"
@@ -1498,13 +1563,13 @@ jobs:
               total_acts=$(awk '
                 /^[[:space:]]*run:[[:space:]]*\|/ { in_run=1; match($0,/^[[:space:]]*/); ri=RLENGTH; next }
                 in_run { match($0,/^[[:space:]]*/); if ($0 !~ /^[[:space:]]*$/ && RLENGTH <= ri) in_run=0 }
-                !in_run && /uses:/ { c++ }
+                !in_run && /^[[:space:]]*-?[[:space:]]*uses:/ && $0 !~ /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*\.\// { c++ }
                 END { print c+0 }
               ' "$wf")
               pinned_acts=$(awk '
                 /^[[:space:]]*run:[[:space:]]*\|/ { in_run=1; match($0,/^[[:space:]]*/); ri=RLENGTH; next }
                 in_run { match($0,/^[[:space:]]*/); if ($0 !~ /^[[:space:]]*$/ && RLENGTH <= ri) in_run=0 }
-                !in_run && /uses:.*@[0-9a-f]{40}/ { c++ }
+                !in_run && /^[[:space:]]*-?[[:space:]]*uses:.*@[0-9a-f]{40}/ && $0 !~ /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*\.\// { c++ }
                 END { print c+0 }
               ' "$wf")
               if [[ $total_acts -eq 0 ]]; then
@@ -1540,6 +1605,9 @@ jobs:
             echo ""
             echo "### Governance References"
             echo ""
+            echo "- [iccDEV CI TanStack audit issue #1016](https://github.com/InternationalColorConsortium/iccDEV/issues/1016)"
+            echo "- [TanStack npm supply-chain compromise postmortem](https://tanstack.com/blog/npm-supply-chain-compromise-postmortem)"
+            echo "- [GitHub Actions cache isolation discussion](https://github.com/orgs/community/discussions/194493)"
             echo "- [Trivy Supply-Chain Compromise (March 2026)](https://snyk.io/articles/trivy-github-actions-supply-chain-compromise/)"
             echo "- [tj-actions/changed-files Compromise (March 2025)](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3)"
             echo "- [Nx Supply-Chain Attack (Feb 2025)](https://nx.dev/blog/security-incident-feb-2025)"
@@ -1554,7 +1622,7 @@ jobs:
           echo "[OK] PR Risk & Security Analysis complete (Linux)"
 
       - name: "12. Enforce Blocking Findings"
-        if: inputs.fail_on_findings
+        if: always() && inputs.fail_on_findings
         env:
           BASH_ENV: /dev/null
         run: |
@@ -1593,9 +1661,76 @@ jobs:
             '^\[HIGH\] Missing BASH_ENV'
             '^\[HIGH\].*git force-push/tag-rewrite'
             '^\[HIGH\].*workflow_run \+ download-artifact'
+            '^\[HIGH\].*privileged workflow_dispatch publish permissions'
+            '^\[HIGH\].*write credentials with GHA cache'
+            '^\[HIGH\].*release workflow uses broad cache restore keys'
           )
 
+          rca_for_finding() {
+            local finding="$1"
+            local cause remediation
+            case "$finding" in
+              *"injectable expression"*)
+                cause="Untrusted GitHub context or matrix data is interpolated directly inside a run block."
+                remediation="Move the expression to an env value and consume the quoted environment variable from shell."
+                ;;
+              *"Unpinned actions"*)
+                cause="A workflow action can be replaced upstream because it is not pinned to an immutable commit SHA."
+                remediation="Pin every third-party action to a reviewed 40-character commit SHA."
+                ;;
+              *"curl/wget|bash"*)
+                cause="Remote script execution bypasses review, pinning, and provenance controls."
+                remediation="Fetch pinned artifacts, verify checksums/signatures, and execute reviewed local scripts only."
+                ;;
+              *"checkout PR head code with elevated permissions"*)
+                cause="Untrusted pull-request code can run with privileged tokens or write-capable workflow context."
+                remediation="Run PR head code only with read-only permissions, no secrets, and trusted scanner code checked out separately."
+                ;;
+              *"id-token: write"*)
+                cause="OIDC federation is available in a context that can be influenced by untrusted workflow triggers."
+                remediation="Restrict id-token: write to master-only release/publish jobs protected by a GitHub environment."
+                ;;
+              *"hidden Unicode"*)
+                cause="A ref or workflow value contains invisible Unicode that can hide intent or confuse review."
+                remediation="Reject hidden Unicode and require normalized ASCII ref names for automation entry points."
+                ;;
+              *"Missing BASH_ENV"*)
+                cause="A shell step does not explicitly block startup-file injection."
+                remediation="Set BASH_ENV: /dev/null on bash steps and use bash --noprofile --norc."
+                ;;
+              *"git force-push/tag-rewrite"*)
+                cause="A workflow contains commands capable of rewriting shared refs or tags."
+                remediation="Remove rewrite commands from CI or gate them behind protected manual maintainer release flows."
+                ;;
+              *"workflow_run + download-artifact"*)
+                cause="A privileged workflow can consume artifacts from a less-trusted workflow boundary."
+                remediation="Verify artifact provenance and never execute or trust artifacts from untrusted workflows."
+                ;;
+              *"privileged workflow_dispatch publish permissions"*)
+                cause="Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
+                remediation="Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
+                ;;
+              *"write credentials with GHA cache"*)
+                cause="A write-capable job shares mutable GitHub Actions cache state without a master-only trust boundary."
+                remediation="Namespace caches by workflow role and restrict write-capable cache producers to master-only jobs."
+                ;;
+              *"release workflow uses broad cache restore keys"*)
+                cause="Release builds can restore cache entries from broader or lower-trust cache namespaces."
+                remediation="Use exact release-specific cache keys with pinned dependency versions and no broad restore prefixes."
+                ;;
+              *)
+                cause="A blocking governance rule matched this workflow state."
+                remediation="Review the finding, remove unsafe trust expansion, and rerun risk analysis."
+                ;;
+            esac
+            printf '| `%s` | %s | %s |\n' \
+              "$(sanitize_line "$finding")" \
+              "$(sanitize_line "$cause")" \
+              "$(sanitize_line "$remediation")"
+          }
+
           blockers=0
+          rca_file="$(mktemp)"
           {
             echo ""
             echo "## 12. Enforcement Gate"
@@ -1609,12 +1744,33 @@ jobs:
               [[ -z "$finding" ]] && continue
               blockers=$((blockers + 1))
               echo "- \`$(sanitize_line "$finding")\`" >> "$RISK_REPORT_PATH"
+              rca_for_finding "$finding" >> "$rca_file"
             done < <(grep -E "$pattern" "$summary" || true)
           done
 
           if [[ "$blockers" -gt 0 ]]; then
             echo "" >> "$RISK_REPORT_PATH"
+            echo "### Root Cause Analysis" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo "| Finding | Root cause | Required remediation |" >> "$RISK_REPORT_PATH"
+            echo "|---------|------------|----------------------|" >> "$RISK_REPORT_PATH"
+            cat "$rca_file" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
             echo "[FAIL] Blocking governance findings: $(sanitize_line "$blockers")" >> "$RISK_REPORT_PATH"
+            exit 1
+          fi
+
+          if [[ -f "${RUNNER_TEMP}/risk-analysis-linux-failed" ]]; then
+            {
+              echo ""
+              echo "### Root Cause Analysis"
+              echo ""
+              echo "| Finding | Root cause | Required remediation |"
+              echo "|---------|------------|----------------------|"
+              echo "| \`prior risk-analysis step failed\` | One or more scanner steps failed before enforcement completed. | Inspect the uploaded report and job log, then fix the scanner/runtime failure so the gate cannot fail open. |"
+              echo ""
+              echo "[FAIL] Risk-analysis step failure detected before enforcement"
+            } >> "$RISK_REPORT_PATH"
             exit 1
           fi
 
@@ -1677,6 +1833,9 @@ jobs:
             '^\[HIGH\] Missing BASH_ENV'
             '^\[HIGH\].*git force-push/tag-rewrite'
             '^\[HIGH\].*workflow_run \+ download-artifact'
+            '^\[HIGH\].*privileged workflow_dispatch publish permissions'
+            '^\[HIGH\].*write credentials with GHA cache'
+            '^\[HIGH\].*release workflow uses broad cache restore keys'
           )
 
           audit_failed=false
@@ -1724,6 +1883,10 @@ jobs:
                 echo "- One or more risk-analysis steps failed before producing blocking-finding evidence."
               fi
               echo ""
+              echo "### Root Cause Analysis"
+              echo ""
+              echo "Root cause analysis is included in the uploaded full report artifact."
+              echo ""
             fi
 
             echo "Full detailed evidence is uploaded as the \`risk-analysis-report-linux\` artifact."
@@ -1744,7 +1907,7 @@ jobs:
   ###########################################################################
   windows-security-audit:
     name: "Windows Security Audit (PowerShell)"
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     timeout-minutes: 15
     env:
       ANALYSIS_TARGET: ${{ inputs.analysis_target }}
@@ -2423,6 +2586,50 @@ jobs:
             $report += "**id-token: write found in $(Sanitize-Line "$idTokenWrite") workflow(s)**"
           }
 
+          # H-5: privileged workflow_dispatch publish jobs must be master/environment gated.
+          $publishGateGaps = 0
+          foreach ($wf in $workflows) {
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            $onSection = ""
+            $inOn = $false
+            foreach ($ln in (Get-Content $wf.FullName)) {
+              if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
+              if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
+              if ($inOn) { $onSection += "$ln`n" }
+            }
+            if ($onSection -notmatch 'workflow_dispatch') { continue }
+            if ($content -notmatch '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write') { continue }
+            $hasMasterGate = $content -match "github\.ref == 'refs/heads/master'"
+            $hasEnvironment = $content -match '(?m)^\s+environment:'
+            if (-not $hasMasterGate -or -not $hasEnvironment) {
+              $publishGateGaps++
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` has privileged workflow_dispatch publish permissions without both master ref and environment gates"
+            }
+          }
+          if ($publishGateGaps -eq 0) {
+            $report += "[OK] Privileged workflow_dispatch publish jobs are master/environment gated"
+          }
+
+          # H-6: privileged cache boundaries must not mix PR/release cache namespaces.
+          $cacheBoundaryGaps = 0
+          foreach ($wf in $workflows) {
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            $hasWrite = $content -match '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write'
+            if ($hasWrite -and $content -match 'cache-to:\s*type=gha|restore-keys:') {
+              if ($content -notmatch "github\.ref == 'refs/heads/master'") {
+                $cacheBoundaryGaps++
+                $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` combines write credentials with GHA cache usage without a master-only gate"
+              }
+            }
+            if ($wf.Name -eq "ci-latest-release.yml" -and $content -match 'restore-keys:') {
+              $cacheBoundaryGaps++
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` release workflow uses broad cache restore keys"
+            }
+          }
+          if ($cacheBoundaryGaps -eq 0) {
+            $report += "[OK] Privileged cache boundaries are isolated from PR/release namespace mixing"
+          }
+
           # H-6: CODEOWNERS coverage
           if (Test-Path ".github/CODEOWNERS") {
             $coContent = Get-Content ".github/CODEOWNERS" -Raw -ErrorAction SilentlyContinue
@@ -2752,11 +2959,27 @@ jobs:
             $findings += @{Workflow='(repo)'; Indicator='No .github/dependabot.yml found'; Severity='MEDIUM'}
           }
 
+          # C-6: Package install lifecycle audit. Advisory only: publish and OIDC gates are enforced elsewhere.
+          $packageInstalls = 0
+          foreach ($wf in $workflows) {
+            if ($wf.Name -eq $selfWf) { continue }
+            $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
+            foreach ($ln in $lines) {
+              if ($ln -match '(^|\s)(pip|python3 -m pip|npm|pnpm|yarn|npx|twine|cibuildwheel)\s.*(install|publish|build)' -and
+                  $ln -notmatch '^\s*#') {
+                $packageInstalls++
+              }
+            }
+          }
+          if ($packageInstalls -gt 0) {
+            $findings += @{Workflow='(repo)'; Indicator="$packageInstalls package install/build/publish command(s); verify pinned constraints or isolated publish credentials"; Severity='INFO'}
+          }
+
           $report = @()
-          $report += "## 9. Trivy-Specific Indicator Check (Windows Validation)"
+          $report += "## 9. TanStack/Trivy Indicator Check (Windows Validation)"
           $report += ""
           if ($findings.Count -eq 0) {
-            $report += "[OK] No Trivy-style supply-chain indicators detected"
+            $report += "[OK] No TanStack/Trivy-style supply-chain indicators detected"
           } else {
             $report += "| Workflow | Indicator | Severity |"
             $report += "|----------|-----------|----------|"
@@ -2766,7 +2989,7 @@ jobs:
           }
           $report += ""
           $report -join "`n" | Out-File -FilePath $env:RISK_REPORT_PATH -Append -Encoding utf8  # elements-sanitized
-          Write-Host "[OK] Trivy indicator check complete (Windows): $($findings.Count) indicators"
+          Write-Host "[OK] TanStack/Trivy indicator check complete (Windows): $($findings.Count) indicators"
 
       - name: "10. Ref Name Security Validation (Windows)"
         if: always()
@@ -2885,7 +3108,7 @@ jobs:
           $report = @()
           $report += "## 11. Workflow Inventory (Windows Validation)"
           $report += ""
-          $report += "| Workflow | Triggers | Permissions | Pinning |"
+          $report += "| Workflow | Triggers | Explicit Permissions | Pinning |"
           $report += "|----------|----------|-------------|---------|"
 
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue | Sort-Object Name
@@ -2893,20 +3116,39 @@ jobs:
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
             $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
 
-            # Extract triggers
+            # Extract top-level workflow events from the on: section.
+            $knownEvents = @(
+              'push', 'pull_request', 'pull_request_target', 'workflow_call',
+              'workflow_dispatch', 'schedule', 'issues', 'issue_comment',
+              'workflow_run', 'repository_dispatch', 'create', 'delete', 'release'
+            )
             $triggerList = @()
             $inOn = $false
             foreach ($ln in $lines) {
-              if ($ln -match '^on:') { $inOn = $true; continue }
+              if ($ln -match '^on:\s*(.*)$') {
+                $inOn = $true
+                $inlineOn = $matches[1]
+                foreach ($eventName in $knownEvents) {
+                  if ($inlineOn -match "(^|[\[,\s])$([regex]::Escape($eventName))($|[\],\s:])" -and $triggerList -notcontains $eventName) {
+                    $triggerList += $eventName
+                  }
+                }
+                continue
+              }
               if ($inOn) {
                 if ($ln -match '^\S') { break }
-                if ($ln -match '^\s+(\w+):') { $triggerList += $matches[1] }
+                if ($ln -match '^  ([A-Za-z_][A-Za-z0-9_-]*):') {
+                  $eventName = $matches[1]
+                  if ($knownEvents -contains $eventName -and $triggerList -notcontains $eventName) {
+                    $triggerList += $eventName
+                  }
+                }
               }
             }
             $triggers = if ($triggerList.Count -gt 0) { $triggerList -join ", " } else { "unknown" }
 
             # Check permissions
-            $hasPerms = if ($content -match '(?m)^permissions:') { "Yes" } else { "No" }
+            $hasPerms = if ($content -match '(?m)^\s*permissions:') { "Yes" } else { "No" }
 
             # Check pinning (skip run: block content)
             $totalActs = 0
@@ -2924,9 +3166,12 @@ jobs:
                   $inRunBlock = $false
                 }
               }
-              if (-not $inRunBlock -and $ln -match 'uses:') {
-                $totalActs++
-                if ($ln -match '@[0-9a-f]{40}') { $pinnedActs++ }
+              if (-not $inRunBlock -and $ln -match '^\s*-?\s*uses:\s+(.+)$') {
+                $usesTarget = $matches[1].Trim()
+                if (-not $usesTarget.StartsWith('./')) {
+                  $totalActs++
+                  if ($usesTarget -match '@[0-9a-f]{40}') { $pinnedActs++ }
+                }
               }
             }
             $pinStatus = if ($totalActs -eq 0) { "N/A" } else { "$pinnedActs/$totalActs" }
@@ -2960,6 +3205,9 @@ jobs:
           $report += ""
           $report += "### Governance References"
           $report += ""
+          $report += "- [iccDEV CI TanStack audit issue #1016](https://github.com/InternationalColorConsortium/iccDEV/issues/1016)"
+          $report += "- [TanStack npm supply-chain compromise postmortem](https://tanstack.com/blog/npm-supply-chain-compromise-postmortem)"
+          $report += "- [GitHub Actions cache isolation discussion](https://github.com/orgs/community/discussions/194493)"
           $report += "- [Trivy Supply-Chain Compromise (March 2026)](https://snyk.io/articles/trivy-github-actions-supply-chain-compromise/)"
           $report += "- [tj-actions/changed-files Compromise (March 2025)](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3)"
           $report += "- [Nx Supply-Chain Attack (Feb 2025)](https://nx.dev/blog/security-incident-feb-2025)"
@@ -2983,6 +3231,149 @@ jobs:
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           New-Item -ItemType File -Force -Path (Join-Path $env:RUNNER_TEMP "risk-analysis-windows-failed") | Out-Null
+
+      - name: "12. Enforce Blocking Findings (Windows)"
+        if: always() && inputs.fail_on_findings
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+
+          $sanitizerPath = Join-Path $env:TRUSTED_SCRIPTS "sanitize.ps1"
+          if (Test-Path $sanitizerPath) { . $sanitizerPath }
+          else {
+            function Sanitize-Line { param([string]$InputString = "") return $InputString.Replace("&","&amp;").Replace("<","&lt;").Replace(">","&gt;") }
+          }
+
+          $reportPath = $env:RISK_REPORT_PATH
+          if ([string]::IsNullOrWhiteSpace($reportPath)) {
+            $reportPath = Join-Path $env:RUNNER_TEMP "risk-analysis-report-windows.md"
+          }
+          if (-not (Test-Path $reportPath)) {
+            "[FAIL] Missing risk-analysis report for enforcement" |
+              Out-File -FilePath $reportPath -Append -Encoding utf8
+            exit 1
+          }
+
+          $blockingPatterns = @(
+            '^\[CRITICAL\] Found .*injectable expression',
+            '^\[CRITICAL\].*Unpinned actions',
+            '^\[CRITICAL\].*curl/wget\|bash',
+            '^\[CRITICAL\].*checkout PR head code with elevated permissions',
+            '^\[CRITICAL\].*id-token: write',
+            '^\[CRITICAL\].*hidden Unicode',
+            '^\*\*\[CRITICAL\].*hidden Unicode',
+            '^\[HIGH\] Missing BASH_ENV',
+            '^\[HIGH\].*git force-push/tag-rewrite',
+            '^\[HIGH\].*workflow_run \+ download-artifact',
+            '^\[HIGH\].*privileged workflow_dispatch publish permissions',
+            '^\[HIGH\].*write credentials with GHA cache',
+            '^\[HIGH\].*release workflow uses broad cache restore keys'
+          )
+
+          function Get-RootCause {
+            param([string]$Finding)
+            $cause = "A blocking governance rule matched this workflow state."
+            $remediation = "Review the finding, remove unsafe trust expansion, and rerun risk analysis."
+            if ($Finding -like "*injectable expression*") {
+              $cause = "Untrusted GitHub context or matrix data is interpolated directly inside a run block."
+              $remediation = "Move the expression to an env value and consume the quoted environment variable from shell."
+            } elseif ($Finding -like "*Unpinned actions*") {
+              $cause = "A workflow action can be replaced upstream because it is not pinned to an immutable commit SHA."
+              $remediation = "Pin every third-party action to a reviewed 40-character commit SHA."
+            } elseif ($Finding -like "*curl/wget|bash*") {
+              $cause = "Remote script execution bypasses review, pinning, and provenance controls."
+              $remediation = "Fetch pinned artifacts, verify checksums/signatures, and execute reviewed local scripts only."
+            } elseif ($Finding -like "*checkout PR head code with elevated permissions*") {
+              $cause = "Untrusted pull-request code can run with privileged tokens or write-capable workflow context."
+              $remediation = "Run PR head code only with read-only permissions, no secrets, and trusted scanner code checked out separately."
+            } elseif ($Finding -like "*id-token: write*") {
+              $cause = "OIDC federation is available in a context that can be influenced by untrusted workflow triggers."
+              $remediation = "Restrict id-token: write to master-only release/publish jobs protected by a GitHub environment."
+            } elseif ($Finding -like "*hidden Unicode*") {
+              $cause = "A ref or workflow value contains invisible Unicode that can hide intent or confuse review."
+              $remediation = "Reject hidden Unicode and require normalized ASCII ref names for automation entry points."
+            } elseif ($Finding -like "*Missing BASH_ENV*") {
+              $cause = "A shell step does not explicitly block startup-file injection."
+              $remediation = "Set BASH_ENV: /dev/null on bash steps and use bash --noprofile --norc."
+            } elseif ($Finding -like "*git force-push/tag-rewrite*") {
+              $cause = "A workflow contains commands capable of rewriting shared refs or tags."
+              $remediation = "Remove rewrite commands from CI or gate them behind protected manual maintainer release flows."
+            } elseif ($Finding -like "*workflow_run + download-artifact*") {
+              $cause = "A privileged workflow can consume artifacts from a less-trusted workflow boundary."
+              $remediation = "Verify artifact provenance and never execute or trust artifacts from untrusted workflows."
+            } elseif ($Finding -like "*privileged workflow_dispatch publish permissions*") {
+              $cause = "Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
+              $remediation = "Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
+            } elseif ($Finding -like "*write credentials with GHA cache*") {
+              $cause = "A write-capable job shares mutable GitHub Actions cache state without a master-only trust boundary."
+              $remediation = "Namespace caches by workflow role and restrict write-capable cache producers to master-only jobs."
+            } elseif ($Finding -like "*release workflow uses broad cache restore keys*") {
+              $cause = "Release builds can restore cache entries from broader or lower-trust cache namespaces."
+              $remediation = "Use exact release-specific cache keys with pinned dependency versions and no broad restore prefixes."
+            }
+            return [pscustomobject]@{ Cause = $cause; Remediation = $remediation }
+          }
+
+          $findings = New-Object System.Collections.Generic.List[string]
+          foreach ($line in Get-Content -Path $reportPath -ErrorAction SilentlyContinue) {
+            foreach ($pattern in $blockingPatterns) {
+              if ($line -match $pattern) {
+                $findings.Add($line)
+                break
+              }
+            }
+          }
+
+          @(
+            "",
+            "## 12. Enforcement Gate",
+            "",
+            "Composite supply-chain score and privileged automation inventory are advisory.",
+            ""
+          ) | Out-File -FilePath $reportPath -Append -Encoding utf8
+
+          if ($findings.Count -gt 0) {
+            foreach ($finding in $findings) {
+              "- ``$(Sanitize-Line $finding)``" | Out-File -FilePath $reportPath -Append -Encoding utf8
+            }
+            @(
+              "",
+              "### Root Cause Analysis",
+              "",
+              "| Finding | Root cause | Required remediation |",
+              "|---------|------------|----------------------|"
+            ) | Out-File -FilePath $reportPath -Append -Encoding utf8
+            foreach ($finding in $findings) {
+              $rca = Get-RootCause $finding
+              "| ``$(Sanitize-Line $finding)`` | $(Sanitize-Line $rca.Cause) | $(Sanitize-Line $rca.Remediation) |" |
+                Out-File -FilePath $reportPath -Append -Encoding utf8
+            }
+            "" | Out-File -FilePath $reportPath -Append -Encoding utf8
+            "[FAIL] Blocking governance findings: $(Sanitize-Line $findings.Count)" |
+              Out-File -FilePath $reportPath -Append -Encoding utf8
+            exit 1
+          }
+
+          if (Test-Path (Join-Path $env:RUNNER_TEMP "risk-analysis-windows-failed")) {
+            @(
+              "",
+              "### Root Cause Analysis",
+              "",
+              "| Finding | Root cause | Required remediation |",
+              "|---------|------------|----------------------|",
+              "| ``prior risk-analysis step failed`` | One or more scanner steps failed before enforcement completed. | Inspect the uploaded report and job log, then fix the scanner/runtime failure so the gate cannot fail open. |",
+              "",
+              "[FAIL] Risk-analysis step failure detected before enforcement"
+            ) | Out-File -FilePath $reportPath -Append -Encoding utf8
+            exit 1
+          }
+
+          "[OK] No blocking governance findings" | Out-File -FilePath $reportPath -Append -Encoding utf8
 
       - name: "12. Executive Risk Summary (Windows)"
         if: always()
@@ -3032,7 +3423,10 @@ jobs:
             '^\*\*\[CRITICAL\].*hidden Unicode',
             '^\[HIGH\] Missing BASH_ENV',
             '^\[HIGH\].*git force-push/tag-rewrite',
-            '^\[HIGH\].*workflow_run \+ download-artifact'
+            '^\[HIGH\].*workflow_run \+ download-artifact',
+            '^\[HIGH\].*privileged workflow_dispatch publish permissions',
+            '^\[HIGH\].*write credentials with GHA cache',
+            '^\[HIGH\].*release workflow uses broad cache restore keys'
           )
 
           $findings = New-Object System.Collections.Generic.List[string]
@@ -3077,6 +3471,10 @@ jobs:
             } else {
               $summary += "- One or more risk-analysis steps failed before producing blocking-finding evidence."
             }
+            $summary += ""
+            $summary += "### Root Cause Analysis"
+            $summary += ""
+            $summary += "Root cause analysis is included in the uploaded full report artifact."
             $summary += ""
           }
 

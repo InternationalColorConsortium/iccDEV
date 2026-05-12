@@ -13,6 +13,9 @@
 
 name: "ci-codeql-security"
 
+permissions:
+  contents: read
+
 on:
   pull_request:
     branches:
@@ -36,8 +39,6 @@ on:
       - '.github/workflows/ci-codeql-security.yml'
   schedule:
     - cron: '0 6 * * 1'
-  workflow_dispatch:
-
 concurrency:
   group: "codeql-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
@@ -55,8 +56,8 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      actions: read
-      security-events: write
+      actions: read  # Required to correlate CodeQL upload with workflow metadata.
+      security-events: write  # Required to upload SARIF code scanning results.
 
     steps:
       - name: Checkout repository

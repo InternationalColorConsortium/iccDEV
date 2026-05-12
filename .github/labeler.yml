@@ -41,6 +41,16 @@ CI:
           - '.github/workflows/**'
           - '.github/actions/**'
 
+Governance:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/CODEOWNERS'
+          - '.github/instructions/**'
+          - '.github/prompts/**'
+          - '.github/skills/**'
+          - '.github/pull_request_template.md'
+          - '.github/ISSUE_TEMPLATE/**'
+
 github-actions:
   - changed-files:
       - any-glob-to-any-file:
@@ -70,7 +80,27 @@ SAST:
           - '.github/codeql-config.yml'
           - '.github/codeql-queries/**'
           - '.github/workflows/ci-codeql-security.yml'
-          - '.github/workflows/ci-pr-lint.yml'
+
+Security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'SECURITY.md'
+          - '.github/codeql-config.yml'
+          - '.github/codeql-queries/**'
+          - '.github/workflows/ci-pr-risk-security-analysis.yml'
+          - '.github/workflows/ci-codeql-security.yml'
+          - '.github/scripts/audit-workflow-permissions.py'
+          - '.github/scripts/sanitize-sed.sh'
+          - '.github/scripts/sanitize.ps1'
+
+Sanitizers:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/ci/ubsan-ignorelist.txt'
+          - '.github/tests/test_sanitization.*'
+          - '.github/workflows/ci-sanitizer-tests.yml'
+          - '.github/scripts/*sanitizer*'
+          - '.github/scripts/sanitize-*'
 
 Build:
   - changed-files:
@@ -84,6 +114,8 @@ Testing:
           - 'Testing/**'
           - 'Build/Cmake/Testing/**'
           - '.github/workflows/ci-*-tests.yml'
+          - '.github/ci/regression/**'
+          - '.github/scripts/*regression-tests.sh'
 
 Profiles:
   - changed-files:
@@ -118,6 +150,42 @@ WASM:
           - 'Build/Cmake/**/*wasm*'
           - '.github/workflows/*wasm*.yml'
           - '.github/scripts/*wasm*'
+
+Release:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/ci-latest-release.yml'
+          - 'Build/Cmake/CPack*'
+          - 'Build/Cmake/**/*install*'
+          - 'Build/Cmake/**/*package*'
+
+JSON:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'IccJSON/**'
+          - '.github/scripts/*json*'
+          - '.github/workflows/ci-json-roundtrip.yml'
+
+Windows:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/*win*.yml'
+          - '**/*.ps1'
+          - 'Build/Cmake/**/*Win*'
+          - 'Build/Cmake/**/*MSVC*'
+
+Unix:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/*unix*.yml'
+          - '**/*.sh'
+
+Labels:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/labeler.yml'
+          - '.github/workflows/label.yml'
+          - '.github/workflows/update-labels.yml'
 
 vcpkg:
   - changed-files:

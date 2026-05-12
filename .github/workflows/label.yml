@@ -4,135 +4,46 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: Apply trusted PR labels and mark PRs ready for CodeQL after
-#         ci-pr-action succeeds.
+# Intent: Trusted issue triage labeler.
 #
 ###############################################################
 
 name: Labeler
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
-  workflow_run:
-    workflows: ["ci-pr-action"]
-    types: [completed]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: 'PR number to relabel'
-        required: true
-        type: string
+  issues:
+    types: [opened, edited, reopened]
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 concurrency:
-  group: "labeler-${{ github.run_id }}"
+  group: "labeler-${{ github.event.issue.number || github.run_id }}"
   cancel-in-progress: false
 
 env:
-  CODEQL_READY_LABEL: codeql-ready
-  CODEQL_READY_DESCRIPTION: ci-pr-action passed; trigger CodeQL PR scan
+  MAINTAINER_CONTACT: https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/CODEOWNERS
 
 jobs:
-  apply-labels:
-    if: github.event_name != 'workflow_run'
+  triage-issue:
+    name: Triage issue
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
+      issues: write  # Required to apply issue triage labels and comments.
 
     steps:
-      - name: Ensure managed labels
+      - name: Triage and welcome issue
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
           GH_TOKEN: ${{ github.token }}
           GH_REPOSITORY: ${{ github.repository }}
-          CODEQL_READY_LABEL: ${{ env.CODEQL_READY_LABEL }}
-          CODEQL_READY_DESCRIPTION: ${{ env.CODEQL_READY_DESCRIPTION }}
+          MAINTAINER_CONTACT: ${{ env.MAINTAINER_CONTACT }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-
-          gh label create "$CODEQL_READY_LABEL" \
-            --repo "$GH_REPOSITORY" \
-            --color "5319e7" \
-            --description "$CODEQL_READY_DESCRIPTION" \
-            --force
-
-      - name: Clear stale CodeQL-ready label
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DISPATCH_PR_NUMBER: ${{ inputs.pr_number }}
-          CODEQL_READY_LABEL: ${{ env.CODEQL_READY_LABEL }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          PR_NUMBER="${PR_NUMBER:-$DISPATCH_PR_NUMBER}"
-          if [[ -z "$PR_NUMBER" ]]; then
-            echo "[SKIP] No PR number supplied"
-            exit 0
-          fi
-
-          gh pr edit "$PR_NUMBER" \
-            --repo "$GH_REPOSITORY" \
-            --remove-label "$CODEQL_READY_LABEL" >/dev/null 2>&1 || true
-
-      - name: Apply PR labels
-        uses: actions/labeler@c5dadc2a45784a4b6adfcd20fea3465da3a5f904  # v5+
-        with:
-          repo-token: "${{ secrets.GITHUB_TOKEN }}"
-          configuration-path: .github/labeler.yml
-          pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}
-          sync-labels: true
-
-  mark-codeql-ready:
-    if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      issues: write
-      pull-requests: write
-
-    steps:
-      - name: Add CodeQL-ready label
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-          GH_TOKEN: ${{ github.token }}
-          GH_REPOSITORY: ${{ github.repository }}
-          CODEQL_READY_LABEL: ${{ env.CODEQL_READY_LABEL }}
-          CODEQL_READY_DESCRIPTION: ${{ env.CODEQL_READY_DESCRIPTION }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          escape_html() {
-            local s="$1"
-            s="${s//&/&amp;}"
-            s="${s//</&lt;}"
-            s="${s//>/&gt;}"
-            s="${s//\"/&quot;}"
-            s="${s//\'/&#39;}"
-            printf '%s' "$s"
-          }
-          sanitize_line() { escape_html "$1"; }
 
           event_path="${GITHUB_EVENT_PATH:-}"
           if [[ -z "$event_path" || ! -f "$event_path" ]]; then
@@ -140,27 +51,131 @@ jobs:
             exit 0
           fi
 
-          pr_number="$(jq -r '
-            .workflow_run.pull_requests[0].number // empty
-          ' "$event_path")"
-          if [[ -z "$pr_number" ]]; then
-            echo "[SKIP] ci-pr-action workflow_run did not include a PR number"
+          issue_number="$(jq -r '.issue.number // empty' "$event_path")"
+          action="$(jq -r '.action // empty' "$event_path")"
+          title="$(jq -r '.issue.title // ""' "$event_path")"
+          body="$(jq -r '.issue.body // ""' "$event_path")"
+          labels="$(jq -r '[.issue.labels[].name] | join(" ")' "$event_path")"
+
+          if [[ ! "$issue_number" =~ ^[0-9]+$ ]]; then
+            echo "[SKIP] Invalid issue number"
             exit 0
           fi
 
-          gh label create "$CODEQL_READY_LABEL" \
-            --repo "$GH_REPOSITORY" \
-            --color "5319e7" \
-            --description "$CODEQL_READY_DESCRIPTION" \
-            --force
+          ensure_label() {
+            local name="$1"
+            local color="$2"
+            local description="$3"
+            gh label create "$name" \
+              --repo "$GH_REPOSITORY" \
+              --color "$color" \
+              --description "$description" \
+              --force >/dev/null
+          }
 
-          gh pr edit "$pr_number" \
-            --repo "$GH_REPOSITORY" \
-            --add-label "$CODEQL_READY_LABEL"
+          ensure_label "needs-triage" "fbca04" "Maintainer triage required"
+          ensure_label "security" "d73a4a" "Security, sanitizer, or fuzzer-relevant report"
+          ensure_label "bug" "d73a4a" "Confirmed or suspected defect"
+          ensure_label "feature" "a2eeef" "Feature request or enhancement"
+          ensure_label "question" "d4c5f9" "Question or support request"
+          ensure_label "requires:more-information" "fbca04" "More detail is needed before maintainers can act"
+          ensure_label "needs-repro" "fbca04" "Needs a reproducible input, command, or minimal test case"
+          ensure_label "Documentation" "0075ca" "Documentation-only or documentation-related change"
+          ensure_label "CI" "0e8a16" "Continuous integration workflow changes"
+          ensure_label "Build" "0052cc" "Build system, CMake, compiler, or packaging"
+          ensure_label "Testing" "c2e0c6" "CTest, regression, or test coverage"
+          ensure_label "WASM" "0052cc" "WebAssembly or Emscripten build"
+          ensure_label "vcpkg" "0052cc" "vcpkg ports or dependency integration"
+          ensure_label "JSON" "1d76db" "ICC JSON parser, config, or round-trip behavior"
+          ensure_label "Windows" "c5def5" "Windows, MSVC, or PowerShell scope"
 
-          {
-            echo "## CodeQL Trigger Label"
-            echo ""
-            echo "- PR: #$(sanitize_line "$pr_number")"
-            echo "- Label: \`$(sanitize_line "$CODEQL_READY_LABEL")\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          text="$(printf '%s\n%s\n%s\n' "$title" "$body" "$labels" | tr '[:upper:]' '[:lower:]')"
+          body_compact="$(printf '%s' "$body" | tr -d '[:space:]')"
+          add_labels=("needs-triage")
+          issue_notes=()
+
+          if grep -Eq 'asan|ubsan|sanitizer|security|cve|cwe|crash|segv|heap|stack|overflow|fuzzer|poc' <<< "$text"; then
+            add_labels+=("security")
+          fi
+          if grep -Eq 'bug|crash|regression|error|failure|incorrect|broken' <<< "$text"; then
+            add_labels+=("bug")
+          fi
+          if grep -Eq 'feature|enhancement|request|proposal|support' <<< "$text"; then
+            add_labels+=("feature")
+          fi
+          if grep -Eq 'question|how do|help|usage' <<< "$text"; then
+            add_labels+=("question")
+          fi
+          if grep -Eq 'doc|docs|readme|typo|documentation' <<< "$text"; then
+            add_labels+=("Documentation")
+          fi
+          if grep -Eq 'ci|workflow|github action|actionlint|shellcheck|codeql|sast|dast' <<< "$text"; then
+            add_labels+=("CI")
+          fi
+          if grep -Eq 'build|cmake|compiler|link|msvc|clang|gcc|install|package' <<< "$text"; then
+            add_labels+=("Build")
+          fi
+          if grep -Eq 'ctest|test|regression|coverage' <<< "$text"; then
+            add_labels+=("Testing")
+          fi
+          if grep -Eq 'wasm|emscripten|webassembly' <<< "$text"; then
+            add_labels+=("WASM")
+          fi
+          if grep -Eq 'vcpkg|portfile|triplet' <<< "$text"; then
+            add_labels+=("vcpkg")
+          fi
+          if grep -Eq 'json|cfg|roundtrip|round-trip' <<< "$text"; then
+            add_labels+=("JSON")
+          fi
+          if [[ -z "$body_compact" || ${#body_compact} -lt 40 ]]; then
+            add_labels+=("requires:more-information")
+            issue_notes+=("Please add a concise description of the issue, the exact command or workflow used, the expected result, and the actual result.")
+          fi
+          if grep -Eq 'copy issue body from|%2fissue_body\.md|issue_body\.md' <<< "$text"; then
+            add_labels+=("requires:more-information")
+            issue_notes+=("The issue appears to contain an issue_body.md placeholder. Please paste the generated issue body and the relevant failing log excerpt.")
+          fi
+          if grep -Eq 'error: building.*build_failed|build_failed|cmake error|ninja: build stopped|make: \*\*\*|linker command failed|undefined symbol|unresolved external' <<< "$text"; then
+            add_labels+=("Build" "needs-repro")
+            issue_notes+=("For build failures, please include the platform, compiler, CMake options, complete failing command, and the first actionable compiler or linker error.")
+          fi
+          if grep -Eq 'rc pass 1: command "rc |windows sdk|desktop development with c\+\+|fatal error c1001|internal compiler error|msvc|cl\.exe|lld-link' <<< "$text"; then
+            add_labels+=("Windows" "Build")
+            issue_notes+=("For Windows build failures, please confirm the Visual Studio Desktop development with C++ workload and a Windows 10 or Windows 11 SDK are installed, then include the MSVC or clang-cl version.")
+          fi
+          if grep -Eq 'pkg-config.*not found|vcpkg_find_acquire_program.*pkg-config|autoconf-archive.*missing|configure: error:.*missing' <<< "$text"; then
+            add_labels+=("question" "Build")
+            issue_notes+=("This looks like a missing host dependency. Please install the named package with your platform package manager and rerun the exact command.")
+          fi
+          if grep -Eq 'asan|ubsan|sanitizer|cve|crash|segv|heap|stack|overflow|fuzzer|poc' <<< "$text" &&
+             ! grep -Eq 'attached|attachment|profile|\.icc|\.icm|\.tif|\.tiff|\.png|\.jpg|\.jpeg|\.xml|poc|repro|stack trace|backtrace|asan' <<< "$text"; then
+            add_labels+=("needs-repro")
+            issue_notes+=("For crash or security reports, please attach the smallest reproducible input file or provide a sanitized stack trace and exact tool command. Maintainers will handle sensitive samples carefully.")
+          fi
+
+          label_csv="$(printf '%s\n' "${add_labels[@]}" | awk '!seen[$0]++' | paste -sd, -)"
+          gh issue edit "$issue_number" \
+            --repo "$GH_REPOSITORY" \
+            --add-label "$label_csv" >/dev/null
+
+          if [[ "$action" == "opened" ]]; then
+            body_file="$(mktemp)"
+            {
+              echo "Thanks for opening this issue."
+              echo ""
+              echo "The triage bot added initial labels based on the template and issue text. Maintainers may adjust labels as they review scope, reproduction details, CTest/regression needs, and security impact."
+              if [ "${#issue_notes[@]}" -gt 0 ]; then
+                echo ""
+                echo "Suggested next steps:"
+                for note in "${issue_notes[@]}"; do
+                  printf -- "- %s\n" "$note"
+                done
+              fi
+              echo ""
+              echo "If you have questions, contact a listed [Maintainer](${MAINTAINER_CONTACT})."
+            } > "$body_file"
+
+            gh issue comment "$issue_number" \
+              --repo "$GH_REPOSITORY" \
+              --body-file "$body_file" >/dev/null
+          fi

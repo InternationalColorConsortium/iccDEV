@@ -67,7 +67,8 @@ when practical.
 - Use least-privilege permissions and credential cleanup.
 - Sanitize all `GITHUB_STEP_SUMMARY` and `GITHUB_OUTPUT` writes.
 - Trigger shared-concurrency workflows sequentially to avoid canceling your own
-  run. `iccDEV Tool Tests` and `ci-regression-checks` share the CTest group.
+  run. Use `ci-pr-action` for normal maintainer validation and
+  `ci-regression-checks` through that orchestrator for ASAN/UBSAN CTest coverage.
 
 ## Local Validation
 
@@ -106,9 +107,9 @@ manifest entries, CRT mismatch warnings, and skipped smoke coverage.
 After pushing, trigger only the workflows affected by the change:
 
 ```bash
-gh workflow run "iccDEV Tool Tests" --repo InternationalColorConsortium/iccDEV --ref <branch>
-gh workflow run "ci-json-roundtrip" --repo InternationalColorConsortium/iccDEV --ref <branch>
-gh workflow run "ci-regression-checks" --repo InternationalColorConsortium/iccDEV --ref <branch>
+gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <branch> -f ci_scope=full
+gh workflow run "ci-risk-analysis" --repo InternationalColorConsortium/iccDEV --ref <branch> \
+  -f analysis_target="Specific git ref" -f git_ref=<full-sha> -f severity_threshold=HIGH -f fail_on_findings=true
 ```
 
 Wait for shared-concurrency workflows one at a time. Capture run IDs, head SHA,

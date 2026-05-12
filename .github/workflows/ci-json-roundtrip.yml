@@ -22,7 +22,6 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  workflow_dispatch:
   push:
     branches: [master]
     paths:
@@ -48,6 +47,7 @@ on:
 
 jobs:
   json-roundtrip:
+    name: JSON round-trip regression
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

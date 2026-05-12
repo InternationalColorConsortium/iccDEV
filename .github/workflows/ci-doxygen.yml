@@ -21,37 +21,6 @@ on:
       - 'examples/**'
       - 'Doxyfile'
       - 'Doxyfile.full'
-  workflow_dispatch:
-    inputs:
-      target_type:
-        description: 'Documentation source target'
-        required: true
-        default: current-ref
-        type: choice
-        options:
-          - current-ref
-          - pr
-          - git-ref
-      pr_number:
-        description: 'PR number when target_type is pr'
-        required: false
-        type: string
-        default: ''
-      git_ref:
-        description: 'Branch, tag, or SHA when target_type is git-ref'
-        required: false
-        type: string
-        default: ''
-      docs_scope:
-        description: 'Documentation set to generate'
-        required: true
-        default: both
-        type: choice
-        options:
-          - iccjson
-          - full
-          - both
-
 concurrency:
   group: "doxygen-${{ github.workflow }}-${{ github.ref_name }}"
   cancel-in-progress: true
@@ -74,11 +43,6 @@ jobs:
         id: resolve
         env:
           BASH_ENV: /dev/null
-          EVENT_NAME: ${{ github.event_name }}
-          TARGET_TYPE: ${{ inputs.target_type || 'current-ref' }}
-          PR_NUMBER: ${{ inputs.pr_number || '' }}
-          GIT_REF: ${{ inputs.git_ref || '' }}
-          DOCS_SCOPE: ${{ inputs.docs_scope || 'both' }}
           DEFAULT_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
@@ -86,33 +50,7 @@ jobs:
           unset GITHUB_TOKEN || true
 
           checkout_ref="$DEFAULT_REF"
-          docs_scope="$DOCS_SCOPE"
-
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            case "$TARGET_TYPE" in
-              current-ref)
-                checkout_ref="$DEFAULT_REF"
-                ;;
-              pr)
-                if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
-                  echo "Invalid PR number for Doxygen dispatch" >&2
-                  exit 1
-                fi
-                checkout_ref="refs/pull/${PR_NUMBER}/head"
-                ;;
-              git-ref)
-                if [[ ! "$GIT_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-                  echo "Invalid git ref for Doxygen dispatch" >&2
-                  exit 1
-                fi
-                checkout_ref="$GIT_REF"
-                ;;
-              *)
-                echo "Invalid target_type: $TARGET_TYPE" >&2
-                exit 1
-                ;;
-            esac
-          fi
+          docs_scope="both"
 
           case "$docs_scope" in
             iccjson|full|both)

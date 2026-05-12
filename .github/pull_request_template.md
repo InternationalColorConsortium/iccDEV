@@ -12,3 +12,9 @@
 - [ ] Did not change maintainer-owned workflow, CTest, CPack, sanitizer, release, or security infrastructure unless requested by an iccDEV maintainer
 - [ ] New source files include the ICC copyright and BSD 3-Clause license header
 - [ ] Code style matches nearby code: 2-space indent, K&R braces, `m_` members
+
+## Maintainer Review
+
+Maintainer-owned workflow, release, sanitizer, CTest, CodeQL, or security changes
+may receive additional labels and require CODEOWNERS review. If you have
+questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/CODEOWNERS).

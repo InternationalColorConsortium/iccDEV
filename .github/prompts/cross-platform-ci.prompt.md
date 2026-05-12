@@ -19,12 +19,10 @@ gh run view <RUN_ID> --repo InternationalColorConsortium/iccDEV --log-failed
 | Workflow | Platform | Compiler | Key Differences |
 |----------|----------|----------|-----------------|
 | `ci-pr-action.yml` | ubuntu-24.04 | clang | Gold-standard bash governance |
-| `ci-pr-unix.yml` | ubuntu-24.04 | gcc + clang | Matrix: {gcc, clang} × {Debug, Release} |
-| `ci-pr-unix-sb.yml` | ubuntu-24.04 | clang | Scan-build static analysis |
+| `ci-pr-unix.yml` | ubuntu-24.04 | gcc + clang | Matrix: {gcc, clang} x {Debug, Release} |
 | `ci-pr-win.yml` | windows-latest | MSVC | vcpkg deps, PowerShell governance |
 | `ci-sanitizer-tests.yml` | ubuntu-24.04 | clang | ASan, UBSan, TSan, MSan matrix |
-| `ci-wasm-build-test.yml` | ubuntu-24.04 | emcc | Emscripten, no system libs |
-| `wasm-latest-matrix.yml` | ubuntu-24.04 | emcc | Debug/Release/RelWithDebInfo |
+| `ci-pr-wasm.yml` | ubuntu-24.04 | emcc | Release WASM PR parity gate |
 | `ci-docker.yml` | ubuntu-24.04 | gcc | Docker build + test (Ubuntu + NixOS matrix) |
 | `ci-vcpkg-ports.yml` | win/ubuntu/macos | varies | vcpkg overlay port install + verify |
 
@@ -51,7 +49,7 @@ target_compile_options(target PRIVATE
 #   - Use halt_on_error=0 for catch-and-continue
 # TSan: conflicts with ASan (CMake enforces this)
 # MSan: requires ALL linked libraries to be MSan-instrumented
-#   - System libxml2/libtiff are NOT instrumented → false positives
+#   - System libxml2/libtiff are NOT instrumented -> false positives
 #   - May need to build deps from source with MSan
 # UBSan: most portable, fewest false positives
 ```
@@ -61,8 +59,8 @@ target_compile_options(target PRIVATE
 # Emscripten quirks:
 - No POSIX signals (alarm, sigsetjmp, sigaltstack)
 - No shared libraries (-DENABLE_SHARED_LIBS=OFF required)
-- No pkg-config → must build libxml2 with CMake
-- emsdk git tags ≠ Emscripten SDK versions
+- No pkg-config -> must build libxml2 with CMake
+- emsdk git tags != Emscripten SDK versions
 - ASan and SAFE_HEAP are mutually exclusive
 - -sINVOKE_RUN=0 is MANDATORY with -sMODULARIZE=1
 ```
@@ -82,12 +80,12 @@ target_compile_options(target PRIVATE
 #### vcpkg Port-Specific
 ```
 # vcpkg overlay port issues:
-- VCPKG_ICCDEV_SOURCE env var stripped by vcpkg sandbox — need VCPKG_KEEP_ENV_VARS
+- VCPKG_ICCDEV_SOURCE env var stripped by vcpkg sandbox - need VCPKG_KEEP_ENV_VARS
 - Non-local port source uses pinned REF + SHA512; refresh both with port-version
-- VS-bundled vcpkg doesn't support --classic mode — use standalone clone
-- Static-only build (no __declspec(dllexport)) — ENABLE_SHARED_LIBS=OFF
-- IccDEVCmm PCH fails under Ninja — keep ENABLE_CMM_TOOLS=OFF in vcpkg
-- Image tool dependencies stay out of vcpkg — keep ENABLE_IMAGE_TOOLS=OFF
+- VS-bundled vcpkg doesn't support --classic mode - use standalone clone
+- Static-only build (no __declspec(dllexport)) - ENABLE_SHARED_LIBS=OFF
+- IccDEVCmm PCH fails under Ninja - keep ENABLE_CMM_TOOLS=OFF in vcpkg
+- Image tool dependencies stay out of vcpkg - keep ENABLE_IMAGE_TOOLS=OFF
 ```
 
 #### Dependency Failures
@@ -127,7 +125,7 @@ cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --target check --parallel
 ```
 
-### WASM (matches ci-wasm-build-test, wasm-latest-matrix)
+### WASM (matches ci-pr-wasm)
 ```bash
 source /path/to/emsdk/emsdk_env.sh
 # Build libxml2 for WASM first (see debug-wasm-build.prompt.md)

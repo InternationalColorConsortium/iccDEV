@@ -17,7 +17,7 @@ name: "ci-pr-action"
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read  # Required to classify PR scope and summarize metadata.
   # Avoid unnecessary permissions; do not add write permissions.
 
 on:
@@ -53,7 +53,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read  # Required to inspect changed files and PR metadata.
 
     outputs:
       src_changed: ${{ steps.diffcheck.outputs.src_changed }}
@@ -297,7 +297,7 @@ jobs:
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED:-false}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY:-false}")\`"
             echo ""
-            echo "If you have questions, contact a listed maintainer."
+            echo "If you have questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/CODEOWNERS)."
             echo ""
             echo "## Legal Requirements"
             echo ""
@@ -320,7 +320,7 @@ jobs:
     needs: [detect-src, risk-gate]
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read  # Required to render trusted PR summary details.
     steps:
       - name: Checkout repository (for shared sanitize helpers)
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -476,7 +476,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: read  # Required to derive the PR build matrix.
     needs: [setup, detect-src]
 
     outputs:
@@ -579,25 +579,6 @@ jobs:
       os-list: ${{ needs.validate-inputs.outputs.os-list }}
       build-types: ${{ needs.validate-inputs.outputs.build-types }}
       compilers: ${{ needs.validate-inputs.outputs.compilers }}
-
-  # Temporarily disabled while add-icc-connect CI is being adjusted.
-  # ci-pr-lint includes clang-tidy; leave this commented for easy restoration.
-  # lint:
-  #   if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-  #   name: Lint & Code Quality
-  #   needs: [setup, detect-src]
-  #   uses: ./.github/workflows/ci-pr-lint.yml
-  #   with:
-  #     ubuntu-version: 'ubuntu-latest'
-
-  # Temporarily disabled while add-icc-connect CI is being adjusted.
-  # scan-build:
-  #   if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-  #   name: Scan-Build
-  #   needs: [unix-ci, detect-src]
-  #   uses: ./.github/workflows/ci-pr-unix-sb.yml
-  #   with:
-  #     build-type: 'Release'
 
   tool-tests:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}

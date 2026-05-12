@@ -8,7 +8,7 @@
 //
 // This pattern fails with "native function called after runtime exit"
 // when the link line is missing -s EXIT_RUNTIME=0. This script is
-// invoked from .github/workflows/wasm-latest-matrix.yml.
+// invoked from .github/workflows/ci-pr-wasm.yml.
 //
 // Usage: node wasm-reinvoke-test.cjs <path-to-iccDumpProfile.js> [sentinel-file]
 

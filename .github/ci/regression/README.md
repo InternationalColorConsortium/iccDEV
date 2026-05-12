@@ -33,7 +33,6 @@ Test 18 (Regression Bisect).
 
 | Workflow | Issue | Purpose | Check |
 |----------|-------|---------|-------|
-| `.github/workflows/ci-issue-987-unicolour.yml` | #987 | Compare iccDEV issue #987 FOGRA39 handling with the reporter's likely Unicolour context and MinGW native toolchain | Runs the fixed `waacton/Unicolour` `IccProfileTests.Fogra39` test on Windows, builds `IccProfLib2` and `iccDumpProfile` with UCRT64 MinGW across Debug/Release/RelWithDebInfo and shared/static linkage, runs `iccdev.windows-icc-dump-profile-smoke` for every matrix row, runs `iccdev.issue-987-shared-mpe-export` for shared builds, and captures `iccDumpProfile --read --diag` output for the attached FOGRA39 profile |
 | `.github/workflows/ci-pr-win.yml` | MinGW toolchain | Keep normal Windows PR CI from regressing MinGW CMake/tool support | Runs a UCRT64 MinGW Release static build and the full registered MinGW CTest set, including `iccdev.windows-icc-dump-profile-smoke` and `iccdev.iccconnect-threaded-cmm` |
 
 ## Adding a new PoC

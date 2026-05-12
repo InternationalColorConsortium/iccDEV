@@ -22,8 +22,6 @@ on:
     paths:
       - 'ports/**'
       - '.github/workflows/ci-vcpkg-ports.yml'
-  workflow_dispatch:
-
 permissions:
   contents: read
 
@@ -41,7 +39,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-latest, ubuntu-24.04, macos-14 ]
+        os: [ windows-2022, ubuntu-24.04, macos-14 ]
 
     steps:
       # Checkout (pinned SHA, no credentials)
@@ -308,8 +306,8 @@ jobs:
           Write-Host "All verification checks passed [OK]"
   # Manifest mode test (VS-bundled vcpkg)
   vcpkg-manifest-test:
-    name: "vcpkg manifest - windows-latest"
-    runs-on: windows-latest
+    name: "vcpkg manifest - windows-2022"
+    runs-on: windows-2022
     permissions:
       contents: read
 
@@ -334,9 +332,19 @@ jobs:
           $testDir = "$env:RUNNER_TEMP\manifest-test"
           New-Item -ItemType Directory -Path $testDir -Force | Out-Null
           # Find the VS-bundled vcpkg baseline
-          $bundleJson = Get-Content "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\vcpkg\vcpkg-bundle.json" -Raw -ErrorAction SilentlyContinue
-          if (-not $bundleJson) {
-            $bundleJson = Get-Content "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg\vcpkg-bundle.json" -Raw -ErrorAction SilentlyContinue
+          $vsRoots = @(
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise",
+            "C:\Program Files\Microsoft Visual Studio\2022\Professional",
+            "C:\Program Files\Microsoft Visual Studio\2022\Community",
+            "C:\Program Files\Microsoft Visual Studio\2022\BuildTools"
+          )
+          $bundleJson = $null
+          foreach ($root in $vsRoots) {
+            $candidate = Join-Path $root "VC\vcpkg\vcpkg-bundle.json"
+            if (Test-Path $candidate) {
+              $bundleJson = Get-Content $candidate -Raw
+              break
+            }
           }
           if ($bundleJson) {
             $baseline = ($bundleJson | ConvertFrom-Json).embeddedsha
@@ -396,10 +404,22 @@ jobs:
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           $testDir = "$env:RUNNER_TEMP\manifest-test"
-          # Find VS-bundled vcpkg toolchain
-          $toolchain = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\vcpkg\scripts\buildsystems\vcpkg.cmake"
-          if (-not (Test-Path $toolchain)) {
-            $toolchain = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg\scripts\buildsystems\vcpkg.cmake"
+          $vsRoots = @(
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise",
+            "C:\Program Files\Microsoft Visual Studio\2022\Professional",
+            "C:\Program Files\Microsoft Visual Studio\2022\Community",
+            "C:\Program Files\Microsoft Visual Studio\2022\BuildTools"
+          )
+          $toolchain = $null
+          foreach ($root in $vsRoots) {
+            $candidate = Join-Path $root "VC\vcpkg\scripts\buildsystems\vcpkg.cmake"
+            if (Test-Path $candidate) {
+              $toolchain = $candidate
+              break
+            }
+          }
+          if (-not $toolchain) {
+            throw "VS 2022 bundled vcpkg toolchain not found; this job must run on a VS 2022 runner such as windows-2022."
           }
           Write-Host "Toolchain: $toolchain"
           cmake -B "$testDir\build" -S $testDir `

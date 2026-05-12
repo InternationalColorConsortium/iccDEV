@@ -99,9 +99,9 @@ gh workflow run "<workflow>" --repo InternationalColorConsortium/iccDEV --ref <b
 gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 ```
 
-Trigger workflows with shared concurrency sequentially. Do not launch
-`iccDEV Tool Tests` and `ci-regression-checks` at the same time on the same
-branch.
+Trigger workflows with shared concurrency sequentially. Use `ci-pr-action` for
+normal maintainer validation and `ci-regression-checks` through that
+orchestrator for ASAN/UBSAN CTest coverage.
 
 ## Handoff Format
 

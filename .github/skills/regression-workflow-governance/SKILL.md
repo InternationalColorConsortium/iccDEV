@@ -14,8 +14,8 @@ allowed-tools:
 
 # Regression Workflow Governance
 
-Use this skill when adding regression coverage, updating `ci-tool-tests.yml`,
-or changing `ci-iccdev-tool-tests.yml`.
+Use this skill when adding regression coverage or changing
+`ci-iccdev-tool-tests.yml`.
 
 ## Required Inputs
 
@@ -30,8 +30,7 @@ or changing `ci-iccdev-tool-tests.yml`.
 2. Put reusable checks in `.github/scripts/` when the logic is more than a few
    shell lines or should run in more than one workflow.
 3. Wire the check into the nearest existing regression block:
-   - `ci-tool-tests.yml` for the main ASAN/UBSAN tool gate.
-   - `ci-iccdev-tool-tests.yml` for comprehensive tool coverage.
+   - `ci-iccdev-tool-tests.yml` for the main ASAN/UBSAN tool gate.
    - Other workflows only when they own the affected platform or feature.
 4. Label the sub-test with the issue number and a short technical purpose.
 5. Keep `run:` blocks compliant with workflow governance: `set -euo pipefail`,
@@ -75,7 +74,7 @@ ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
 For workflow and packaging changes:
 
 ```bash
-python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/ci-shared-exports.yml','.github/workflows/ci-pr-lint.yml']]; print('YAML parse OK')"
+python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/ci-pr-action.yml','.github/workflows/ci-iccdev-tool-tests.yml']]; print('YAML parse OK')"
 actionlint -no-color .github/workflows/<workflow>.yml
 python3 .github/scripts/audit-workflow-permissions.py --workflows-dir .github/workflows --format shell
 ```

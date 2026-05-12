@@ -1,6 +1,6 @@
 ###############################################################
 #
-# Copyright (©) 2025 International Color Consortium.
+# Copyright (c) 2025 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
@@ -19,10 +19,9 @@ name: ci-pr-win
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read  # Required by reusable PR build callers.
 
 on:
-  workflow_dispatch:
   workflow_call:
 
 concurrency:
@@ -38,7 +37,8 @@ env:
 
 jobs:
   build:
-    runs-on: windows-latest
+    name: Windows MSVC build
+    runs-on: windows-2022
     timeout-minutes: 20
     defaults:
       run:
@@ -135,11 +135,12 @@ jobs:
           # Source the sanitization functions
           . .github/scripts/sanitize.ps1
           # Quick validation tests
+          $unicodeInput = "Hello " + [char]0x4E16 + [char]0x754C
           $tests = @(
               @{Name="XSS prevention"; Input="<script>alert(1)</script>"; Expected="&lt;script&gt;alert(1)&lt;/script&gt;"},
               @{Name="HTML entities"; Input="A&B"; Expected="A&amp;B"},
               @{Name="Quotes"; Input="'test'"; Expected="&#39;test&#39;"},
-              @{Name="Unicode"; Input="Hello 世界"; Expected="Hello 世界"},
+              @{Name="Unicode"; Input=$unicodeInput; Expected=$unicodeInput},
               @{Name="Null bytes"; Input="test$([char]0x00)null"; Expected="testnull"},
               @{Name="CR/LF"; Input="line1`r`nline2"; Expected="line1 line2"}
           )
@@ -148,10 +149,10 @@ jobs:
           foreach ($test in $tests) {
               $result = Sanitize-Line -InputString $test.Input
               if ($result -eq $test.Expected) {
-                  Write-Host "  ✅ PASS: $($test.Name)" -ForegroundColor Green
+                  Write-Host "  [OK] PASS: $($test.Name)" -ForegroundColor Green
                   $pass++
               } else {
-                  Write-Host "  ❌ FAIL: $($test.Name)" -ForegroundColor Red
+                  Write-Host "  [FAIL] FAIL: $($test.Name)" -ForegroundColor Red
                   Write-Host "     Expected: [$($test.Expected)]"
                   Write-Host "     Got:      [$result]"
                   $fail++
@@ -163,7 +164,7 @@ jobs:
               throw "Sanitization tests failed"
           }
           Write-Host ""
-          Write-Host "✅ All sanitization functions validated" -ForegroundColor Green
+          Write-Host "[OK] All sanitization functions validated" -ForegroundColor Green
           Write-Host ""
 
       - name: Setup MSBuild
@@ -282,7 +283,7 @@ jobs:
           # Use canonical sanitization from .github/scripts/sanitize.ps1
           # PowerShell dot-sourcing: loads the script into the current scope
           . .github/scripts/sanitize.ps1
-          "## 🧱 CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "## CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "Run URL: $(Sanitize-Line $env:GH_RUN_URL)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
@@ -295,7 +296,7 @@ jobs:
 
   mingw-smoke:
     name: MinGW UCRT64 smoke
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 15
     defaults:
       run:

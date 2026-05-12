@@ -15,8 +15,8 @@ allowed-tools:
 # vcpkg Export Consumer Debug
 
 Use this skill when a review or workflow log mentions `ci-vcpkg-ports`,
-`ci-shared-exports`, `examples/hello-iccdev`, install manifests, uninstall,
-or packaged CMake consumers.
+`ci-pr-action`, `examples/hello-iccdev`, install manifests, uninstall, or
+packaged CMake consumers.
 
 ## Port Pin Check
 
@@ -95,11 +95,11 @@ Run local checks before pushing:
 ```bash
 git diff --check -- \
   Build/Cmake/RefIccMAXUninstall.cmake.in \
-  .github/workflows/ci-shared-exports.yml \
+  .github/workflows/ci-vcpkg-ports.yml \
   .github/skills/vcpkg-export-consumer-debug/SKILL.md
 
-python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci-shared-exports.yml')); print('YAML parse OK')"
-actionlint -no-color .github/workflows/ci-shared-exports.yml
+python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci-vcpkg-ports.yml')); print('YAML parse OK')"
+actionlint -no-color .github/workflows/ci-vcpkg-ports.yml
 file Build/Cmake/RefIccMAXUninstall.cmake.in .github/skills/vcpkg-export-consumer-debug/SKILL.md
 ```
 
@@ -109,7 +109,7 @@ after pushing.
 
 ## References
 
-- `../../workflows/ci-shared-exports.yml`
+- `../../workflows/ci-vcpkg-ports.yml`
 - `../../../Build/Cmake/RefIccMAXUninstall.cmake.in`
 - `../../../examples/hello-iccdev/CMakeLists.txt`
 - `../../../ports/iccdev/portfile.cmake`

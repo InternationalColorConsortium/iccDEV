@@ -7,8 +7,7 @@
 # Intent: WASM (Emscripten) build + npm-shaped staging + parity
 #         regression for PR validation.
 #
-# Builds Release-only WASM (Debug/Asan reserved for nightly
-# wasm-latest-matrix.yml), stages the npm-shaped consumer bundle
+# Builds Release-only WASM, stages the npm-shaped consumer bundle
 # via Build/Cmake/wasm-package/stage.sh, and runs:
 #   * test_all.js  (16-tool usage smoke)
 #   * regression.js (Testing/CreateAllProfiles.sh -> 207 ICC parity)
@@ -22,10 +21,9 @@ name: "ci-pr-wasm"
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: read  # Required by reusable PR build callers.
 
 on:
-  workflow_dispatch:
   workflow_call:
     inputs:
       expected-icc-count:
@@ -49,8 +47,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
-      EMSDK_VERSION: latest
-      WASM_DEPS_CACHE_VERSION: v1
+      EMSDK_VERSION: 4.0.20
+      EMSDK_REF: e4fe26ef59168ff44f4c23c466e497bf60b3411e
+      ZLIB_REF: f9dd6009be3ed32415edf1e89d1bc38380ecb95d
+      LIBTIFF_REF: 97ae1f6f0bba8999326f084f04950ecfd6166580
+      LIBXML2_REF: 39b66eb2089f491eacf8e22a7965a235f7f5735e
+      NLOHMANN_JSON_REF: f0bf4c731a53aab29ebde0234385b9e63bf70dcd
+      WASM_DEPS_CACHE_VERSION: v2
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -79,10 +82,7 @@ jobs:
             emsdk
             ~/.emscripten
             ~/.emscripten_cache
-          key: iccdev-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml', '.github/workflows/wasm-latest-matrix.yml') }}
-          restore-keys: |
-            iccdev-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-            ci-latest-release-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+          key: iccdev-pr-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.EMSDK_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
 
       - name: Install Emscripten SDK
         env:
@@ -91,13 +91,15 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          if [[ -d emsdk/.git ]]; then
-            git -C emsdk remote set-url origin https://github.com/emscripten-core/emsdk.git
-            git -C emsdk fetch --depth 1 origin main
-            git -C emsdk checkout --force FETCH_HEAD
-          else
-            rm -rf emsdk
-            git clone --depth 1 https://github.com/emscripten-core/emsdk.git emsdk
+          rm -rf emsdk
+          git init emsdk
+          git -C emsdk remote add origin https://github.com/emscripten-core/emsdk.git
+          git -C emsdk fetch --depth 1 origin "$EMSDK_REF"
+          git -C emsdk checkout --detach "$EMSDK_REF"
+          actual_ref="$(git -C emsdk rev-parse HEAD)"
+          if [[ "$actual_ref" != "$EMSDK_REF" ]]; then
+            echo "::error::emsdk checkout mismatch"
+            exit 1
           fi
           cd emsdk
           ./emsdk install "$EMSDK_VERSION"
@@ -108,10 +110,7 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: third_party
-          key: iccdev-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml', '.github/workflows/wasm-latest-matrix.yml') }}
-          restore-keys: |
-            iccdev-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-
-            ci-latest-release-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-
+          key: iccdev-pr-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-${{ env.ZLIB_REF }}-${{ env.LIBTIFF_REF }}-${{ env.LIBXML2_REF }}-${{ env.NLOHMANN_JSON_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
 
       - name: Build third-party dependencies (zlib, libpng, libjpeg, libtiff, libxml2, nlohmann-json)
         env:
@@ -124,6 +123,22 @@ jobs:
           source emsdk/emsdk_env.sh
 
           THIRD_PARTY="$PWD/third_party"
+          fetch_pinned_dep() {
+            local name="$1"
+            local url="$2"
+            local ref="$3"
+            rm -rf "$name"
+            git init "$name"
+            git -C "$name" remote add origin "$url"
+            git -C "$name" fetch --depth 1 origin "$ref"
+            git -C "$name" checkout --detach "$ref"
+            local actual
+            actual="$(git -C "$name" rev-parse HEAD)"
+            if [[ "$actual" != "$ref" ]]; then
+              echo "::error::$name checkout mismatch"
+              exit 1
+            fi
+          }
           deps_ready() {
             [[ -f "$THIRD_PARTY/zlib/out/lib/libz.a" ]] &&
             [[ -f "$THIRD_PARTY/libpng/out/lib/libpng16.a" ]] &&
@@ -142,7 +157,8 @@ jobs:
           mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
 
           # zlib
-          git clone --depth 1 https://github.com/madler/zlib.git && cd zlib
+          fetch_pinned_dep zlib https://github.com/madler/zlib.git "$ZLIB_REF"
+          cd zlib
           emconfigure ./configure --static --prefix="$THIRD_PARTY/zlib/out"
           emmake make -j"$(nproc)"
           emmake make install
@@ -169,7 +185,7 @@ jobs:
 
           # libtiff
           for attempt in 1 2 3; do
-            if git clone --depth 1 https://gitlab.com/libtiff/libtiff.git; then
+            if fetch_pinned_dep libtiff https://gitlab.com/libtiff/libtiff.git "$LIBTIFF_REF"; then
               break
             fi
             echo "::warning::libtiff clone attempt $attempt failed, retrying in 10s..."
@@ -194,7 +210,7 @@ jobs:
 
           # libxml2
           for attempt in 1 2 3; do
-            if git clone --depth 1 https://gitlab.gnome.org/GNOME/libxml2.git; then
+            if fetch_pinned_dep libxml2 https://gitlab.gnome.org/GNOME/libxml2.git "$LIBXML2_REF"; then
               break
             fi
             echo "::warning::libxml2 clone attempt $attempt failed, retrying in 10s..."
@@ -221,7 +237,8 @@ jobs:
           cd "$THIRD_PARTY"
 
           # nlohmann-json
-          git clone --depth 1 https://github.com/nlohmann/json.git nlohmann-json && cd nlohmann-json
+          fetch_pinned_dep nlohmann-json https://github.com/nlohmann/json.git "$NLOHMANN_JSON_REF"
+          cd nlohmann-json
           mkdir wasm && cd wasm
           emcmake cmake .. \
             -DCMAKE_BUILD_TYPE=Release \
