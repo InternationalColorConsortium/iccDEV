@@ -149,7 +149,7 @@ enum TextAlignment {
     kTextAlignRight = 2
 };
 
-std::string AddGraphLabels( const point2D &basepoint, const point2D &range,
+std::string AddGraphLabels( const point2D &basepoint, bool isVertical,
         const point2D &tickLength, float labelSize, const std::string &text,
         TextAlignment align = kTextAlignCenter )
 {
@@ -176,7 +176,7 @@ std::string AddGraphLabels( const point2D &basepoint, const point2D &range,
   
   point2D pt00 = basepoint;
   commands << "BT /F1 " << labelSize << " Tf ";
-  if (range.x == 0.0) {
+  if (isVertical) {
     std::swap(position.x,position.y);
     pt00 += tickLength*1.25f + position;
     commands << "0 " << 1 << " " << -1 << " 0 " << pt00 << " Tm ";
@@ -247,12 +247,13 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   std::string zero("0");
   std::string half("50%");
   std::string full("100%");
-  commands << AddGraphLabels( basepoint, range, tickLength, labelSize, zero );
-  commands << AddGraphLabels( basepoint+0.5*range, range, tickLength, labelSize, half );
-  commands << AddGraphLabels( basepoint+range, range, tickLength, labelSize, full, kTextAlignRight );
+  bool isVertical = (range.x == 0);
+  commands << AddGraphLabels( basepoint, isVertical, tickLength, labelSize, zero );
+  commands << AddGraphLabels( basepoint+0.5*range, isVertical, tickLength, labelSize, half );
+  commands << AddGraphLabels( basepoint+range, isVertical, tickLength, labelSize, full, kTextAlignRight );
 
   // IO label near 2/3
-  commands << AddGraphLabels( basepoint + range*0.66, range, tickLength, labelSize, label );
+  commands << AddGraphLabels( basepoint + range*0.66, isVertical, tickLength, labelSize, label );
 
   // grestore at end
   commands << "Q\n";
@@ -295,8 +296,10 @@ void CreateAxesXobject( PDFWriter &pdfout )
 
 struct XYColor
 {
-    double x;
-    double y;
+    XYColor (float xx, float yy) : x(xx), y(yy) {}
+
+    float x;
+    float y;
 };
 
 // https://en.wikipedia.org/wiki/Planckian_locus
@@ -353,8 +356,7 @@ XYColor approx_planck( double t )
         y = k3c*x3 + k2c*x2 + k1c*x + k0c;
     }
     
-    XYColor result = {x,y};
-    return result;
+    return XYColor(x,y);
 }
 
 /******************************************************************************/
@@ -390,7 +392,6 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
     commands << startN << " m " << (startN+rangeY) << " l S\n";
   }
   // horizontal fine grid
-  commands << "0.05 0 0 0 K\n";
   for (float i = 0.0; i <= chromaticityChartScale; i += fineIncrement) {
     point2D startN = basepoint + i/chromaticityChartScale * rangeY;
     commands << startN << " m " << (startN+rangeX) << " l S\n";
@@ -403,7 +404,6 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
     commands << startN << " m " << (startN+rangeY) << " l S\n";
   }
   // horizontal coarse grid
-  commands << "0.1 0 0 0 K\n";
   for (float i = 0.0; i <= chromaticityChartScale; i += coarseIncrement) {
     point2D startN = basepoint + i/chromaticityChartScale * rangeY;
     commands << startN << " m " << (startN+rangeX) << " l S\n";
@@ -412,10 +412,8 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   // end colored grid, grestore, gsave
   commands << "Q q\n";
   
-  
-  
   // spectral locus
-  commands << "0 0 0 1 K\n";
+  commands << "0.5 0.5 0 0 K\n";
   point2D scaling = (rangeX + rangeY) / chromaticityChartScale;
   point2D firstPoint = basepoint + scaling * point2D( spectralLocus2degree[0].x , spectralLocus2degree[0].y );
   commands << firstPoint << " m\n";
@@ -453,6 +451,161 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   commands << "Q\n";
   std::string commandString = commands.str();
   pdfout.AddXObject( bounds, commandString, "xyPlot" );
+}
+
+/******************************************************************************/
+
+static
+XYColor xyFromICCXYZ( const icXYZNumber *xyz )
+{
+    // integers, so don't have to test for NaN or Inf
+    float X = xyz->X / 65535.0;
+    float Y = xyz->Y / 65535.0;
+    float Z = xyz->Z / 65535.0;
+    
+    float sum = X + Y + Z;
+    if (sum <= 1e-8)
+        return XYColor(0,0);
+    
+    float x = X / sum;
+    float y = Y / sum;
+    return XYColor(x,y);
+}
+
+/******************************************************************************/
+
+static
+std::string plotSquare( const point2D &center, float size )
+{
+  std::ostringstream commands;
+  
+  float half = 0.5f * size;
+
+  point2D pt0(center.x-half,center.y-half);
+  point2D pt1(center.x-half,center.y+half);
+  point2D pt2(center.x+half,center.y+half);
+  point2D pt3(center.x+half,center.y-half);
+
+  commands << pt0 << " m " << pt1 << " l\n";
+  commands << pt2 << " l\n";
+  commands << pt3 << " l s\n";
+
+  return commands.str();
+}
+
+/******************************************************************************/
+
+static
+std::string plotXYZTag( CIccTag *tag, std::string label, const point2D &basepoint,
+                        const point2D &scaling, float symbolSize, float textSize,
+                        point2D *result = NULL )
+{
+  std::ostringstream commands;
+
+  auto theXYZTag = dynamic_cast<CIccTagXYZ*>(tag);
+  if (theXYZTag) {
+    auto theXYZ = theXYZTag->GetXYZ(0);
+    if (theXYZ) {
+      auto theXY = xyFromICCXYZ( theXYZ );
+      point2D thePt = basepoint + scaling * point2D( theXY.x, theXY.y );
+      commands << plotSquare( thePt, symbolSize );
+      point2D textOffset( 0, symbolSize+2+textSize );
+      commands << AddGraphLabels( thePt + textOffset, false, point2D(0,0),
+                                    textSize, label, kTextAlignLeft );
+      if (result)
+        *result = thePt;
+    }
+  }
+
+  return commands.str();
+}
+
+/******************************************************************************/
+
+static
+int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
+{
+  std::ostringstream commands;
+
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdffile.PageHeight();
+  float right = pdffile.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+  float margin = 0.25*inch2point;
+  
+    // icSigMediaBlackPointTag ????
+  auto whiteTag = pIcc->FindTag( icSigMediaWhitePointTag );
+  bool hasWhite = (whiteTag != NULL);
+
+  auto redTag = pIcc->FindTag( icSigRedColorantTag );
+  auto greenTag = pIcc->FindTag( icSigGreenColorantTag );
+  auto blueTag = pIcc->FindTag( icSigBlueColorantTag );
+  bool hasRGB = (redTag && greenTag && blueTag);
+  
+  // bail if there is nothing to plot
+  if (!hasWhite && !hasRGB)
+    return 0;
+
+
+  // if the xyPlot xobject doesn't exist, create it now
+  if (!pdffile.xobjectExists("xyPlot"))
+    CreateXYPlotXobject( pdffile );
+
+  // add the common axes
+  commands << "/xyPlot Do\n";
+
+  // add label
+  point2D range( right - left, 0 );
+  point2D labelBase( left, top - 0.2f*inch2point );
+  point2D tickLength(0,0);
+  commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12, "Chromaticity xy" );
+
+
+  // gsave, color black
+  commands << "q 0 0 0 1 K\n";
+
+  const float chromaticityChartScale = 0.85f;   // must match CreateXYPlotXobject
+  point2D basepoint( left+margin, bottom+margin );
+  point2D rangeX( right-bottom-2*margin, 0 );
+  point2D rangeY( 0, top-bottom-2*margin );
+  point2D scaling = (rangeX + rangeY) / chromaticityChartScale;
+  float markSize = 4;
+  float textSize = 10;
+
+
+// TODO - determine approximate CCT and add that to label
+
+  if (hasWhite)
+    commands << plotXYZTag( whiteTag, "White", basepoint,
+                        scaling, markSize, textSize );
+
+  if (hasRGB) {
+    point2D redPt, greenPt, bluePt;
+    commands << plotXYZTag( redTag, "R", basepoint,
+                        scaling, markSize, textSize, &redPt );
+    commands << plotXYZTag( greenTag, "G", basepoint,
+                        scaling, markSize, textSize, &greenPt );
+    commands << plotXYZTag( blueTag, "B", basepoint,
+                        scaling, markSize, textSize, &bluePt );
+    
+    // draw lines between points for gamut
+    commands << "0 0 0 0.5 K\n";
+    commands << redPt << " m " << greenPt << " l\n";
+    commands << bluePt << " l s\n";
+  }
+
+  // grestore
+  commands << "Q\n";
+
+  // and finally create the graphics object and page
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+
+  pdffile.AddPage( content, "xyPlot" );
+  
+  return 1;
 }
 
 /******************************************************************************/
@@ -864,7 +1017,7 @@ uint16_t ClipU16( const icFloatNumber &input )
 // output graphic representation of nD LUTs
 // return count of output objects created, 0 if none
 static
-int output3DLUT(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         const std::string &basename, PDFWriter &pdffile )
 {
   const size_t bufSize = 128;
@@ -1186,6 +1339,9 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
 
 
+    // plot white point, RGB chromaticities
+  outputItems += graphChromaticityPDF( pIcc, pdffile );
+
 
   for ( auto &tag: pIcc->m_Tags ) {
     icTagSignature sig = tag.TagInfo.sig;
@@ -1229,19 +1385,6 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
         outputItems += output3DLUT(pIcc, pTag, sigDesc, basename, pdffile );
 // TODO - plot gamut from A2B and B2A tags into xy and LAB plots
         }
-        break;
-    
-      // matrix TRC components
-      case icSigRedColorantTag:
-      case icSigGreenColorantTag:
-      case icSigBlueColorantTag:
-      case icSigMediaWhitePointTag:
-      case icSigMediaBlackPointTag:
-// TODO - assemble RGB, optional white and black, to plot gamut
-// needs background xy plot with spectral locus, white curve added to xobjects
-// needs backgrond AB plot added to xobjects
-//      Maybe look for just wtpt, then look for others inside routine
-//      keep logic localized, allow for all in single call
         break;
 
       // ignore everything else
