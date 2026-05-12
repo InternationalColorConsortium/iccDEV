@@ -303,7 +303,9 @@ struct XYColor
 };
 
 // https://en.wikipedia.org/wiki/Planckian_locus
-// Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho; Youngsun Kim (December 2002). "Design of Advanced Color Temperature Control System for HDTV Applications" (PDF). Journal of the Korean Physical Society. 41 (6): 865–871. S2CID 4489377
+// Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho; Youngsun Kim (December 2002).
+// "Design of Advanced Color Temperature Control System for HDTV Applications"
+// Journal of the Korean Physical Society. 41 (6): 865–871. S2CID 4489377
 static
 XYColor approx_planck( double t )
 {
@@ -357,6 +359,46 @@ XYColor approx_planck( double t )
     }
     
     return XYColor(x,y);
+}
+
+/******************************************************************************/
+
+/*
+label points for spectrum in nm
+sorta, kinda evenly spaced, plus endpoints
+ */
+std::vector<int> locusLabelWavelengths =
+{
+    360,
+    460, 450,
+    470, 475, 480, 485, 490, 495, 500, 505, 510, 515,
+    520, 530, 540, 550, 560, 570, 580, 590, 600, 610, 620,
+    640,
+    700
+};
+
+/******************************************************************************/
+
+point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
+{
+// NOTE - Yes, I could create normal vectors from the locus points, etc.
+// but this looks better with less math, and is much easier to debug.
+
+    if (nm < 515) {
+        // go left
+        align = kTextAlignRight;
+        return point2D( -2, 0 );
+    } else if (nm <= 520) {
+        // go up
+        align = kTextAlignCenter;
+        return point2D( -3, textSize*1.55 );
+    } else {
+        // go right
+        align = kTextAlignLeft;
+        return point2D( textSize*0.5, textSize );
+    }
+    
+    // unreachable
 }
 
 /******************************************************************************/
@@ -424,15 +466,23 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   // close and stroke the shape
   commands << "s\n";
 
-// DEFERRED - labels for spectral locus?  Not enough room on left
-// and tricky to handle around upper curve
-// could hard code some locations and alignents into a list, 10nm for most, spread out around bottom
-
+  // labels for spectral locus
+  commands << "0.5 0.5 0 0 k\n";
+  float labelSize = 9;
+  int wavelengthOffset = spectralLocus2degree[0].wavelength;
+  for (auto &nm : locusLabelWavelengths ) {
+    TextAlignment align;
+    point2D offset = spectrumLabelOffset( nm,labelSize, align );
+    size_t index = nm - wavelengthOffset;
+    point2D thispoint = basepoint + scaling * point2D( spectralLocus2degree[index].x , spectralLocus2degree[index].y );
+    std::string number = std::to_string(nm);
+    commands << AddGraphLabels( thispoint + offset, false, point2D(0,0), labelSize, number, align );
+  }
 
   // plankian white curve
   commands << "0 0.25 0.25 0 K\n";
-  const float start_temp = 1667.0;   // degrees Kelvin
-  const float end_temp = 25000.0;
+  const float start_temp = 1500.0;   // degrees Kelvin
+  const float end_temp = 20000.0;
   const float temp_step = 200.0;
 
   // scan over the planck curve and plot the lines
@@ -575,6 +625,8 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
 
 
 // TODO - determine approximate CCT and add that to label
+// McCamy's approximation may not be good enough
+
 
   if (hasWhite)
     commands << plotXYZTag( whiteTag, "White", basepoint,
