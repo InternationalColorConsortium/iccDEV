@@ -88,11 +88,10 @@ thread launches.
 ## CLI Example: `iccApplyProfiles -threads`
 
 [`iccApplyProfiles`](../Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp)
-exposes the wrapper through a `-threads` flag. Internally it builds the
-CMM with [`CIccConnectCmm::CreateStandard`](icc-connect.md) and then calls
-`pConnect->EnableThreading(nThreads)` — this is the canonical example of
-the connect-side threading pattern, including the row-batched float
-buffer that feeds `Apply(dst, src, nPixels)`.
+exposes the wrapper through a `-threads` flag. The value is forwarded
+into [`CIccConnectCmm::CreateStandard`](icc-connect.md)'s `nThreads`
+parameter; the connect factory installs the `CIccThreadedCmm` wrapper
+when `nThreads != 1` and returns the underlying CMM otherwise.
 
 ```text
 iccApplyProfiles -threads N -cfg config.json
@@ -100,11 +99,10 @@ iccApplyProfiles -threads N -cfg config.json
 
 | Value | Behaviour |
 |-------|-----------|
-| omitted | Defaults to `nThreads = 0` (hardware concurrency). |
+| omitted | Defaults to `nThreads = 1` (no wrapper; underlying CMM is used directly). |
 | `-threads 0` | Use `std::thread::hardware_concurrency()`. |
-| `-threads 1` | Threaded code path with a single worker (row-batched apply, no concurrency). |
+| `-threads 1` | No threaded wrapper. |
 | `-threads N` (N > 1) | Use exactly `N` workers. |
-| `-threads -1` | Disable threading; per-pixel apply on the unwrapped CMM. |
 
 The flag is parsed before `-cfg`, so it must come first.
 
@@ -123,28 +121,37 @@ undefined.
 
 ## Use From IccConnect
 
-When a CMM has been built through [`CIccConnectCmm`](icc-connect.md),
-call `EnableThreading(nThreads)` instead of attaching directly. The
-connect object keeps single ownership and rewraps `m_pCmm` for you, so
-there is no ownership coordination between two wrappers:
+When a CMM is built through [`CIccConnectCmm`](icc-connect.md), pass
+`nThreads` into `CreateStandard` directly — the factory installs the
+wrapper internally and `CIccConnectCmm` keeps single ownership of the
+whole stack:
 
 ```cpp
-CIccConnectCmm *conn = CIccConnectCmm::CreateStandard(cfg.m_profiles);
-if (!conn) { /* error */ }
-if (!conn->EnableThreading(0)) { delete conn; /* error */ }
-conn->GetCmm()->Apply(dst, src, nPixels);
-delete conn;   // tears down the threaded wrapper and the underlying CMM
+std::string sError;
+CIccConnectCmm *conn = CIccConnectCmm::CreateStandard(
+    cfg.m_profiles,
+    /*pEmbeddedData=*/nullptr, /*nEmbeddedLen=*/0,
+    /*nThreads=*/0,                  // 0 = hardware_concurrency, 1 = no wrapper
+    &sError);
+if (!conn) {
+  fprintf(stderr, "%s\n", sError.c_str());
+  return -1;
+}
+
+conn->GetCmm()->Apply(dst, src, nPixels);   // threaded when nThreads != 1
+delete conn;                                 // tears down wrapper + underlying CMM
 ```
 
-`conn->IsThreaded()` reports whether the wrapper has been installed.
-After threading is on, the type-specific accessors `GetNamedCmm()` and
-`GetSearchCmm()` return null — striped apply only fits the standard
-pixel-pipeline use case.
+`conn->IsThreaded()` reports whether the wrapper was installed;
+`conn->GetThreadedCmm()` returns the wrapper directly when needed. The
+type-specific accessors `GetNamedCmm()` and `GetSearchCmm()` return null
+once the threaded wrapper is in place — striped apply only fits the
+standard pixel-pipeline use case.
 
 ## See Also
 
 - [IccConnect library](icc-connect.md) — factory that constructs a
-  `Begin()`-ed CMM from JSON config, with `EnableThreading()` for
-  in-place parallel apply.
+  `Begin()`-ed CMM from JSON config, with an `nThreads` parameter on
+  `CreateStandard` for parallel apply.
 - [CLI tool reference](tools-cli-reference.md) — shared option tables for
   the `iccApply*` tools.

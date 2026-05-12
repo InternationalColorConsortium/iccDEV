@@ -141,6 +141,11 @@
           "default": false,
           "description": "Prefer the V5 sub-profile when present"
         },
+        "useD2BxB2Dx": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prefer DToBx/BToDx multi-processing element tags over AToBx/BToAx tags when both are present. Spectral-only profiles (with a populated spectralPCS) automatically use DToBx without this flag."
+        },
         "interpolation": {
           "$ref": "#/$defs/interpolation",
           "default": "tetrahedral",

@@ -72,6 +72,7 @@
 #include "IccCmm.h"
 #include "IccCmmSearch.h"
 #include <list>
+#include <string>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -94,20 +95,30 @@ public:
   // Creates a named-color CMM from a profile sequence configuration.
   // srcSpace: hint for source color space (icSigUnknownData = auto-detect)
   // bInputProfile: true if the transform starts from a device (input) profile
+  // pErrorMsg (optional): on failure, populated with a human-readable
+  //   description of the first failure encountered (e.g. which profile path
+  //   could not be opened). Callers are responsible for emitting it.
   static CIccConnectCmm* CreateNamed(const CIccCfgProfileSequence& profiles,
                                       icColorSpaceSignature srcSpace = icSigUnknownData,
-                                      bool bInputProfile = true);
+                                      bool bInputProfile = true,
+                                      std::string* pErrorMsg = nullptr);
 
   // Creates a standard CMM from a profile sequence configuration.
   // pEmbeddedData/nEmbeddedLen: when provided and the first profile config has
   // an empty m_iccFile, these embedded ICC profile bytes are used for the first xform.
+  // pErrorMsg (optional): on failure, populated with a human-readable
+  //   description of the first failure encountered.  Callers print it.
   static CIccConnectCmm* CreateStandard(const CIccCfgProfileSequence& profiles,
                                           const unsigned char* pEmbeddedData = nullptr,
                                           unsigned int nEmbeddedLen = 0,
-                                          int nThreads = 1);
+                                          int nThreads = 1,
+                                          std::string* pErrorMsg = nullptr);
 
   // Creates a spectral search CMM from a search apply configuration.
-  static CIccConnectCmm* CreateSearch(const CIccCfgSearchApply& searchApply);
+  // pErrorMsg (optional): on failure, populated with a human-readable
+  //   description of the first failure encountered.  Callers print it.
+  static CIccConnectCmm* CreateSearch(const CIccCfgSearchApply& searchApply,
+                                       std::string* pErrorMsg = nullptr);
 
   // Wraps an already-initialized CMM (takes ownership).
   static CIccConnectCmm* Attach(CIccCmm* pCmm);
@@ -126,10 +137,13 @@ protected:
 
   // Prepares hints and PCC from a profile config entry and calls
   // pCmm->AddXform() via the file path.  pccList holds the PCC profile
-  // pointers until after Begin() is called.
+  // pointers until after Begin() is called.  On failure, sErrorMsg is
+  // populated with a description of the first failed step (file path,
+  // hint allocation, etc.); the caller decides whether to log it.
   static icStatusCMM AddXformFromConfig(CIccCmm* pCmm,
                                          CIccCfgProfile* pCfg,
-                                         IccProfilePtrList& pccList);
+                                         IccProfilePtrList& pccList,
+                                         std::string& sErrorMsg);
 
   static void ReleasePccList(IccProfilePtrList& pccList);
 

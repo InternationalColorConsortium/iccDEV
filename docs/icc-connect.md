@@ -43,9 +43,9 @@ factory methods that load profiles, register hints, attach PCCs, and call
 
 | Factory | Input | Use case |
 |---------|-------|----------|
-| `CreateStandard(profiles, embeddedData=null, embeddedLen=0)` | `CIccCfgProfileSequence` | Standard pixel-pipeline CMM; if `embeddedData` is supplied and the first profile config has an empty `iccFile`, that buffer is loaded as the first xform (e.g. for ICC profiles embedded in TIFF/JPEG). |
-| `CreateNamed(profiles, srcSpace=icSigUnknownData, bInputProfile=true)` | `CIccCfgProfileSequence` | Named-color CMM (`CIccNamedColorCmm`) for named-color workflows. |
-| `CreateSearch(searchApply)` | `CIccCfgSearchApply` | Spectral inverse-search CMM (`CIccCmmSearch`) with weighted PCC attach and optional destination init profile. |
+| `CreateStandard(profiles, embeddedData=null, embeddedLen=0, nThreads=1, pErrorMsg=nullptr)` | `CIccCfgProfileSequence` | Standard pixel-pipeline CMM; if `embeddedData` is supplied and the first profile config has an empty `iccFile`, that buffer is loaded as the first xform (e.g. for ICC profiles embedded in TIFF/JPEG). When `nThreads != 1`, the returned wrapper is a `CIccThreadedCmm` over the underlying CMM. |
+| `CreateNamed(profiles, srcSpace=icSigUnknownData, bInputProfile=true, pErrorMsg=nullptr)` | `CIccCfgProfileSequence` | Named-color CMM (`CIccNamedColorCmm`) for named-color workflows. |
+| `CreateSearch(searchApply, pErrorMsg=nullptr)` | `CIccCfgSearchApply` | Spectral inverse-search CMM (`CIccCmmSearch`) with weighted PCC attach and optional destination init profile. |
 | `Attach(pCmm)` | Any `CIccCmm*` | Wraps an externally constructed CMM; the wrapper takes ownership. |
 
 All factories return `nullptr` on any failure (profile load, hint allocation,
@@ -53,12 +53,34 @@ PCC load, `AddXform`, `Begin`). Loaded PCC profiles are released before
 return whether the call succeeds or fails. Embedded raw profile bytes
 passed to `CreateStandard` are not retained by the library.
 
+### Error Reporting
+
+The library never writes to `stderr`. To learn *why* a factory call
+returned `nullptr`, pass a `std::string*` as the final `pErrorMsg`
+argument. On failure it is populated with a single human-readable line
+describing the first failure encountered, prefixed where applicable with
+the failing stage index. Examples:
+
+```text
+stage 0: unable to open PCC profile 'ICC\Missing.icc' for embedded source profile
+stage 1: unable to open ICC profile 'Data\NotThere.icc'
+stage 2: AddXform failed for 'foo.icc' (status 4)
+Begin() failed (status 14); profile chain is incompatible (srcSpace=0x434d594b dstSpace=0x52474220)
+weighted PCC 0: unable to open or read PCC tags from 'pcc.icc'
+initial-destination: unable to open ICC profile 'final.icc'
+```
+
+The caller decides whether to log the message, surface it in a GUI, or
+discard it. Passing `nullptr` (the default) silently drops the message.
+
 ### Typed accessors
 
 ```cpp
-CIccCmm*           GetCmm()       const;   // wrapped CMM (never null after success)
-CIccNamedColorCmm* GetNamedCmm()  const;   // non-null only for CreateNamed
-CIccCmmSearch*     GetSearchCmm() const;   // non-null only for CreateSearch
+CIccCmm*           GetCmm()         const;   // wrapped CMM (never null after success)
+CIccNamedColorCmm* GetNamedCmm()    const;   // non-null only for CreateNamed
+CIccCmmSearch*     GetSearchCmm()   const;   // non-null only for CreateSearch
+CIccThreadedCmm*   GetThreadedCmm() const;   // non-null when CreateStandard wrapped with nThreads != 1
+bool               IsThreaded()     const;   // shorthand for GetThreadedCmm() != nullptr
 icColorSpaceSignature GetSourceSpace() const;
 icColorSpaceSignature GetDestSpace()   const;
 ```
@@ -66,44 +88,26 @@ icColorSpaceSignature GetDestSpace()   const;
 `~CIccConnectCmm()` deletes the wrapped CMM, so callers own exactly one
 object and free with `delete`.
 
-### Optional Parallel Apply
+### Parallel Apply
 
-After a successful factory call, threading can be enabled in place:
+Threading is selected at construction time via the `nThreads` argument to
+`CreateStandard`. When `nThreads == 0` the factory uses
+`std::thread::hardware_concurrency()`; when `nThreads > 1` it uses that
+many workers; when `nThreads == 1` the underlying CMM is returned without
+the threaded wrapper. See the [threading guide](icc-cmm-threading.md)
+for the apply-time semantics.
 
-```cpp
-bool EnableThreading(int nThreads = 0);   // 0 -> hardware_concurrency
-bool IsThreaded() const;
-```
-
-`EnableThreading` wraps the underlying CMM with `CIccThreadedCmm` (see
-[threading guide](icc-cmm-threading.md)) so subsequent multi-pixel
-`Apply()` calls run in parallel. The wrapper assumes ownership of the
-underlying CMM, so the single-owner contract of `CIccConnectCmm` is
-preserved — callers still free with one `delete`.
-
-Behaviour:
-
-| Condition | Result |
-|-----------|--------|
-| `m_pCmm` is null | Returns `false`. |
-| Already threaded | Returns `true`, no rewrap. |
-| Attach fails | Underlying CMM is destroyed by `CIccThreadedCmm::Attach`, `m_pCmm` becomes null, returns `false`. The connect object should be deleted. |
-| Success | `GetCmm()` returns the threaded wrapper; `IsThreaded()` returns `true`. |
-
-After threading is enabled, `GetNamedCmm()` and `GetSearchCmm()` return
-`nullptr` because the type-specific CMM is hidden behind the wrapper.
-Striped threading is most useful for `CreateStandard` pixel pipelines; if
-you need the named-color or search APIs, call them through the typed
-accessor before enabling threading, or skip `EnableThreading` for those
-factories.
+Because the threaded wrapper hides the type-specific CMM,
+`GetNamedCmm()` and `GetSearchCmm()` return `nullptr` once a threaded
+wrapper is in place. `GetThreadedCmm()` and `IsThreaded()` expose the
+wrapper directly when needed.
 
 For a worked example, see
 [`Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp`](../Tools/CmdLine/IccApplyProfiles/iccApplyProfiles.cpp),
-which builds the CMM with `CreateStandard`, snapshots the underlying
-`CIccCmm*` for metadata queries the wrapper does not forward (e.g.
-`GetLastParentSpace`), calls `EnableThreading(nThreads)`, then drives
-row-batched `Apply(dst, src, nPixels)` calls. The `-threads` CLI flag
-maps straight through to that single argument.
+which calls `CreateStandard(cfgProfiles, pEmbedded, nEmbeddedLen,
+cfgConnect.m_nThreads, &sConnectError)` and drives row-batched
+`Apply(dst, src, nPixels)` calls. The `-threads` CLI flag maps straight
+through to the `nThreads` argument.
 
 ## Per-profile Hints Applied
 
@@ -138,22 +142,26 @@ the appropriate factory. See:
 
 ```cpp
 #include "IccConnect.h"
+#include <string>
 
 CIccCfgApply cfg;
 if (!cfg.fromJson(jsonText)) { /* parse error */ }
 
-CIccConnectCmm *conn = CIccConnectCmm::CreateStandard(cfg.m_profiles);
-if (!conn) { /* failed to build CMM */ }
+std::string sError;
+CIccConnectCmm *conn = CIccConnectCmm::CreateStandard(
+    cfg.m_profiles,
+    /*pEmbeddedData=*/nullptr, /*nEmbeddedLen=*/0,
+    /*nThreads=*/0,                  // 0 = hardware_concurrency, 1 = no wrapper
+    &sError);
 
-// Optional: enable parallel apply.  Ownership stays with conn; the
-// connect object's destructor frees the threaded wrapper, which in turn
-// frees the underlying CMM.
-if (!conn->EnableThreading(/*nThreads=*/0)) {
-  delete conn;
-  /* threading failed; connect is already empty */
+if (!conn) {
+  // sError carries a single human-readable line describing the first
+  // failure (e.g. "stage 1: unable to open ICC profile 'foo.icc'").
+  fprintf(stderr, "%s\n", sError.c_str());
+  return -1;
 }
 
-conn->GetCmm()->Apply(dst, src, nPixels);
+conn->GetCmm()->Apply(dst, src, nPixels);   // threaded path when nThreads != 1
 delete conn;
 ```
 

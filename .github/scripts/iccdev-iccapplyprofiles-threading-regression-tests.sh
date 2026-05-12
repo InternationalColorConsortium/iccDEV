@@ -67,7 +67,9 @@ if [ -z "$SRGB_PROFILE" ]; then
   exit 0
 fi
 
-# Synthesize a deterministic 512x512 sRGB TIFF with the sRGB profile embedded.
+# Synthesize a deterministic 512x512 RGB TIFF.  No embedded profile -- the
+# profile chain below uses explicit iccFile paths so the test stays focused on
+# threading equivalence rather than embedded-profile handling.
 # 512x512 = 262144 pixels: comfortably larger than std::thread::hardware_concurrency()
 # so the threaded apply path actually engages every worker on typical hosts.
 SRC_TIFF="$OUTDIR/threading-equiv-src.tif"
@@ -77,13 +79,11 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 0
 fi
 
-python3 - "$SRC_TIFF" "$SRGB_PROFILE" >"$PY_LOG" 2>&1 <<'PY'
+python3 - "$SRC_TIFF" >"$PY_LOG" 2>&1 <<'PY'
 import sys
 from PIL import Image
 
-out_path, icc_path = sys.argv[1], sys.argv[2]
-with open(icc_path, "rb") as f:
-    icc_bytes = f.read()
+out_path = sys.argv[1]
 
 w, h = 512, 512
 # Deterministic gradient: R = x, G = y, B = (x+y)/2 -- full 8-bit range, no compression.
@@ -97,7 +97,7 @@ for y in range(h):
         data[i + 2] = ((x + y) >> 1) & 0xFF
 
 img = Image.frombytes("RGB", (w, h), bytes(data))
-img.save(out_path, format="TIFF", compression="raw", icc_profile=icc_bytes)
+img.save(out_path, format="TIFF", compression="raw")
 print(f"wrote {out_path} ({w}x{h})")
 PY
 PY_EC=$?
@@ -107,10 +107,11 @@ if [ "$PY_EC" -ne 0 ] || [ ! -s "$SRC_TIFF" ]; then
   exit 0
 fi
 
-# Build a -cfg JSON pointing at the synthetic input. The profile sequence uses
-# the embedded source profile (empty iccFile + iccFile entries) followed by an
-# explicit sRGB destination; this exercises CIccConnectCmm::CreateStandard's
-# embedded-profile branch alongside a normal AddXform call.
+# Build a -cfg JSON pointing at the synthetic input. The profile sequence is
+# sRGB->PCS->sRGB (the same explicit profile twice): a deterministic two-stage
+# chain that exercises CIccConnectCmm::CreateStandard with a normal AddXform
+# call per stage. Embedded-profile handling is intentionally NOT exercised
+# here; this test targets threading equivalence only.
 CFG_JSON="$OUTDIR/threading-equiv.cfg.json"
 cat > "$CFG_JSON" <<EOF
 {
@@ -123,7 +124,7 @@ cat > "$CFG_JSON" <<EOF
     "dstEmbedIcc": false
   },
   "profileSequence": [
-    { "iccFile": "",              "intent": 1, "interpolation": "tetrahedral" },
+    { "iccFile": "$SRGB_PROFILE", "intent": 1, "interpolation": "tetrahedral" },
     { "iccFile": "$SRGB_PROFILE", "intent": 1, "interpolation": "tetrahedral" }
   ]
 }

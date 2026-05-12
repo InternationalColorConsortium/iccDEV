@@ -749,6 +749,7 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
   jsonToValue(j["useBPC"], m_useBPC);
   jsonToValue(j["useHToS"], m_useHToS);
   jsonToValue(j["useV5SubProfile"], m_useV5SubProfile);
+  jsonToValue(j["useD2BxB2Dx"], m_useD2BxB2Dx);
 
   if (jsonToValue(j["interpolation"], str)) {
     int i;
@@ -800,12 +801,14 @@ void CIccCfgProfile::toJson(json& j) const
     j["useHToS"] = m_useHToS;
   if (m_useV5SubProfile)
     j["useV5SubProfile"] = m_useV5SubProfile;
+  if (m_useD2BxB2Dx)
+    j["useD2BxB2Dx"] = m_useD2BxB2Dx;
   int i;
   for (i = 0; icInterpNames[i]; i++)
     if (icInterpValues[i] == m_interpolation)
       break;
   if (icInterpNames[i] && icInterpValues[i] == icInterpLinear)
-    j["interpolation"] = icInterpNames[i];  
+    j["interpolation"] = icInterpNames[i];
 }
 
 CIccCfgProfileSequence::CIccCfgProfileSequence()

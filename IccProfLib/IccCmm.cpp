@@ -559,7 +559,11 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
     case icXformLutColor:
       if (bInput) {
         CIccTag *pTag = NULL;
-        if (bUseD2BTags) {
+        // Spectral-only profiles have no AToBx tag to fall back to; their MPE pipeline
+        // lives in DToBx tags regardless of how the caller set bUseD2BTags. Opening
+        // that path here lets icXformLutColor + a spectral source profile resolve
+        // without the caller having to set useD2BxB2Dx explicitly.
+        if (bUseD2BTags || pProfile->m_Header.spectralPCS) {
           if (nLutType != icXformLutColorimetric &&
               (pProfile->m_Header.spectralPCS || pProfile->m_Header.version >= icVersionNumberV5)) {
             pTag = pProfile->FindTag(icSigDToB0Tag + nTagIntent);
@@ -692,8 +696,10 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         if (nLutType == icXformLutColorimetric && pProfile->m_Header.version >= icVersionNumberV5) {
           bUseD2BTags = false;
         }
-        
-        if (bUseD2BTags) {
+
+        // Spectral-only destination profiles only carry BToDx tags; let icXformLutColor
+        // resolve them without requiring the caller to set useD2BxB2Dx.
+        if (bUseD2BTags || (nLutType != icXformLutColorimetric && pProfile->m_Header.spectralPCS)) {
           pTag = pProfile->FindTag(icSigBToD0Tag + nTagIntent);
 
           //Additional precedence not prescribed by the v4 ICC Specification
@@ -8276,7 +8282,13 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
         nSrcSpace = pProfile->m_Header.colorSpace;
         nParentSpace = pProfile->GetParentColorSpace();
 
-        if (nLutType == icXformLutSpectral || (bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric))
+        // Use spectralPCS as the destination when nLutType explicitly asks for
+        // it, when the caller opted in via bUseD2BxB2DxTags, or when the
+        // profile is spectral-only (no colorimetric pcs) so spectralPCS is the
+        // only valid destination - matches the DToBx fallback in CIccXform::Create.
+        if (nLutType == icXformLutSpectral ||
+            (pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric &&
+             (bUseD2BxB2DxTags || !pProfile->m_Header.pcs)))
           nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
         else
           nDstSpace = pProfile->m_Header.pcs;
@@ -8290,7 +8302,11 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
           nIntent = icPerceptual; // Note: icPerceptualIntent = 0
         }
 
-        if (nLutType == icXformLutSpectral || (bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric))
+        // Symmetric to the bInput branch above: spectral-only destination profiles
+        // accept their spectralPCS as the source space even without bUseD2BxB2DxTags.
+        if (nLutType == icXformLutSpectral ||
+            (pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric &&
+             (bUseD2BxB2DxTags || !pProfile->m_Header.pcs)))
           nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
         else
           nSrcSpace = pProfile->m_Header.pcs;

@@ -388,11 +388,15 @@ int main(int argc, const char* argv[])
     }
   }
 
+  std::string sConnectError;
   std::unique_ptr<CIccConnectCmm> pConnect(
-    CIccConnectCmm::CreateNamed(cfgProfiles, SrcspaceSig, bInputProfile));
+    CIccConnectCmm::CreateNamed(cfgProfiles, SrcspaceSig, bInputProfile, &sConnectError));
 
   if (!pConnect) {
-    printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
+    if (!sConnectError.empty())
+      printf("Error - %s\n", sConnectError.c_str());
+    else
+      printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return -1;
   }
 

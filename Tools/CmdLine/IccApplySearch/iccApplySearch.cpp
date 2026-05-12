@@ -379,10 +379,14 @@ int main(int argc, const char* argv[])
   //Setup source encoding
   srcEncoding = cfgData.m_encoding;
 
-  std::unique_ptr<CIccConnectCmm> pConnect(CIccConnectCmm::CreateSearch(cfgSearchApply));
+  std::string sConnectError;
+  std::unique_ptr<CIccConnectCmm> pConnect(
+    CIccConnectCmm::CreateSearch(cfgSearchApply, &sConnectError));
 
   if (!pConnect) {
-    printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
+    if (!sConnectError.empty())
+      printf("Error - %s\n", sConnectError.c_str());
+    printf("Unable to begin profile application - Possibly invalid or incompatible profiles\n");
     return -1;
   }
 

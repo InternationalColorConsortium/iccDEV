@@ -71,6 +71,7 @@
 #include "IccEnvVar.h"
 #include <memory>
 #include <new>
+#include <sstream>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -154,45 +155,56 @@ static CIccConnectCmm* AttachStandardCmm(std::unique_ptr<CIccCmm>& pCmm,
 
 icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
                                                 CIccCfgProfile* pCfg,
-                                                IccProfilePtrList& pccList)
+                                                IccProfilePtrList& pccList,
+                                                std::string& sErrorMsg)
 {
   CIccProfile* pPcc = nullptr;
   CIccCreateXformHintManager Hint;
 
   if (pCfg->m_useBPC) {
     icStatusCMM stat = AddHintNoThrow(Hint, new (std::nothrow) CIccApplyBPCHint());
-    if (stat != icCmmStatOk)
+    if (stat != icCmmStatOk) {
+      sErrorMsg = "failed to attach BPC hint for '" + pCfg->m_iccFile + "'";
       return stat;
+    }
   }
 
   if (pCfg->m_adjustPcsLuminance) {
     icStatusCMM stat = AddHintNoThrow(Hint, new (std::nothrow) CIccLuminanceMatchingHint());
-    if (stat != icCmmStatOk)
+    if (stat != icCmmStatOk) {
+      sErrorMsg = "failed to attach PCS-luminance hint for '" + pCfg->m_iccFile + "'";
       return stat;
+    }
   }
 
   if (!pCfg->m_pccFile.empty()) {
     // Caller-selected config paths intentionally name ICC/PCC profile files.
     // codeql[cpp/path-injection]
     pPcc = OpenIccProfile(pCfg->m_pccFile.c_str());
-    if (!pPcc)
+    if (!pPcc) {
+      sErrorMsg = "unable to open PCC profile '" + pCfg->m_pccFile + "'";
       return icCmmStatBad;
+    }
     pccList.push_back(pPcc);
   }
 
   if (!pCfg->m_iccEnvVars.empty()) {
     icStatusCMM stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmEnvVarHint(pCfg->m_iccEnvVars));
-    if (stat != icCmmStatOk)
+    if (stat != icCmmStatOk) {
+      sErrorMsg = "failed to attach ICC env-var hint for '" + pCfg->m_iccFile + "'";
       return stat;
+    }
   }
 
   if (!pCfg->m_pccEnvVars.empty()) {
     icStatusCMM stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmPccEnvVarHint(pCfg->m_pccEnvVars));
-    if (stat != icCmmStatOk)
+    if (stat != icCmmStatOk) {
+      sErrorMsg = "failed to attach PCC env-var hint for '" + pCfg->m_iccFile + "'";
       return stat;
+    }
   }
 
-  return pCmm->AddXform(
+  icStatusCMM stat = pCmm->AddXform(
     pCfg->m_iccFile.c_str(),
     pCfg->m_intent < 0 ? icUnknownIntent : (icRenderingIntent)pCfg->m_intent,
     pCfg->m_interpolation,
@@ -202,31 +214,58 @@ icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
     &Hint,
     pCfg->m_useV5SubProfile
   );
+  if (stat == icCmmStatCantOpenProfile) {
+    sErrorMsg = "unable to open ICC profile '" + pCfg->m_iccFile + "'";
+  }
+  else if (stat != icCmmStatOk) {
+    std::ostringstream oss;
+    oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat << ")";
+    sErrorMsg = oss.str();
+  }
+  return stat;
 }
 
 CIccConnectCmm* CIccConnectCmm::CreateNamed(const CIccCfgProfileSequence& profiles,
                                               icColorSpaceSignature srcSpace,
-                                              bool bInputProfile)
+                                              bool bInputProfile,
+                                              std::string* pErrorMsg)
 {
+  std::string localErr;
+  std::string& sErrorMsg = pErrorMsg ? *pErrorMsg : localErr;
+
   IccProfilePtrList pccList;
   auto pCmm = std::unique_ptr<CIccNamedColorCmm>(
     new (std::nothrow) CIccNamedColorCmm(srcSpace, icSigUnknownData, bInputProfile));
-  if (!pCmm)
+  if (!pCmm) {
+    sErrorMsg = "failed to allocate named-color CMM";
     return nullptr;
+  }
 
+  size_t stageIdx = 0;
   for (const auto& profPtr : profiles.m_profiles) {
     CIccCfgProfile* pCfg = profPtr.get();
-    if (!pCfg)
+    if (!pCfg) {
+      ++stageIdx;
       continue;
+    }
 
-    icStatusCMM stat = AddXformFromConfig(pCmm.get(), pCfg, pccList);
+    std::string sStageErr;
+    icStatusCMM stat = AddXformFromConfig(pCmm.get(), pCfg, pccList, sStageErr);
     if (stat != icCmmStatOk) {
+      std::ostringstream oss;
+      oss << "stage " << stageIdx << ": " << sStageErr;
+      sErrorMsg = oss.str();
       ReleasePccList(pccList);
       return nullptr;
     }
+    ++stageIdx;
   }
 
-  if (pCmm->Begin() != icCmmStatOk) {
+  icStatusCMM beginStat = pCmm->Begin();
+  if (beginStat != icCmmStatOk) {
+    std::ostringstream oss;
+    oss << "Begin() failed (status " << (int)beginStat << "); profile chain is incompatible";
+    sErrorMsg = oss.str();
     ReleasePccList(pccList);
     return nullptr;
   }
@@ -238,23 +277,34 @@ CIccConnectCmm* CIccConnectCmm::CreateNamed(const CIccCfgProfileSequence& profil
 CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& profiles,
                                                  const unsigned char* pEmbeddedData,
                                                  unsigned int nEmbeddedLen,
-                                                 int nThreads)
+                                                 int nThreads,
+                                                 std::string* pErrorMsg)
 {
+  std::string localErr;
+  std::string& sErrorMsg = pErrorMsg ? *pErrorMsg : localErr;
+
   IccProfilePtrList pccList;
   auto pCmm = std::unique_ptr<CIccCmm>(
     new (std::nothrow) CIccCmm(icSigUnknownData, icSigUnknownData, true));
-  if (!pCmm)
+  if (!pCmm) {
+    sErrorMsg = "failed to allocate CMM";
     return nullptr;
+  }
 
   bool bFirst = true;
+  size_t stageIdx = 0;
   for (const auto& profPtr : profiles.m_profiles) {
     CIccCfgProfile* pCfg = profPtr.get();
     if (!pCfg) {
+      std::ostringstream oss;
+      oss << "stage " << stageIdx << ": null profile config entry";
+      sErrorMsg = oss.str();
       ReleasePccList(pccList);
       return nullptr;
     }
 
     icStatusCMM stat;
+    std::string sStageErr;
 
     if (bFirst && pCfg->m_iccFile.empty() && pEmbeddedData && nEmbeddedLen) {
       CIccProfile* pPcc = nullptr;
@@ -262,26 +312,42 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
 
       if (pCfg->m_useBPC) {
         stat = AddHintNoThrow(Hint, new (std::nothrow) CIccApplyBPCHint());
-        if (stat != icCmmStatOk) { ReleasePccList(pccList); return nullptr; }
+        if (stat != icCmmStatOk) {
+          sStageErr = "failed to attach BPC hint for embedded source profile";
+          goto stage_failed;
+        }
       }
       if (pCfg->m_adjustPcsLuminance) {
         stat = AddHintNoThrow(Hint, new (std::nothrow) CIccLuminanceMatchingHint());
-        if (stat != icCmmStatOk) { ReleasePccList(pccList); return nullptr; }
+        if (stat != icCmmStatOk) {
+          sStageErr = "failed to attach PCS-luminance hint for embedded source profile";
+          goto stage_failed;
+        }
       }
       if (!pCfg->m_pccFile.empty()) {
         // Caller-selected config paths intentionally name ICC/PCC profile files.
         // codeql[cpp/path-injection]
         pPcc = OpenIccProfile(pCfg->m_pccFile.c_str());
-        if (!pPcc) { ReleasePccList(pccList); return nullptr; }
+        if (!pPcc) {
+          sStageErr = "unable to open PCC profile '" + pCfg->m_pccFile + "' for embedded source profile";
+          stat = icCmmStatBad;
+          goto stage_failed;
+        }
         pccList.push_back(pPcc);
       }
       if (!pCfg->m_iccEnvVars.empty()) {
         stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmEnvVarHint(pCfg->m_iccEnvVars));
-        if (stat != icCmmStatOk) { ReleasePccList(pccList); return nullptr; }
+        if (stat != icCmmStatOk) {
+          sStageErr = "failed to attach ICC env-var hint for embedded source profile";
+          goto stage_failed;
+        }
       }
       if (!pCfg->m_pccEnvVars.empty()) {
         stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmPccEnvVarHint(pCfg->m_pccEnvVars));
-        if (stat != icCmmStatOk) { ReleasePccList(pccList); return nullptr; }
+        if (stat != icCmmStatOk) {
+          sStageErr = "failed to attach PCC env-var hint for embedded source profile";
+          goto stage_failed;
+        }
       }
 
       stat = pCmm->AddXform(
@@ -295,19 +361,36 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
         &Hint,
         pCfg->m_useV5SubProfile
       );
+      if (stat != icCmmStatOk) {
+        std::ostringstream oss;
+        oss << "AddXform failed for embedded source profile (status " << (int)stat << ")";
+        sStageErr = oss.str();
+      }
     }
     else {
-      stat = AddXformFromConfig(pCmm.get(), pCfg, pccList);
+      stat = AddXformFromConfig(pCmm.get(), pCfg, pccList, sStageErr);
     }
 
+  stage_failed:
     if (stat != icCmmStatOk) {
+      std::ostringstream oss;
+      oss << "stage " << stageIdx << ": " << sStageErr;
+      sErrorMsg = oss.str();
       ReleasePccList(pccList);
       return nullptr;
     }
     bFirst = false;
+    ++stageIdx;
   }
 
-  if (pCmm->Begin() != icCmmStatOk) {
+  icStatusCMM beginStat = pCmm->Begin();
+  if (beginStat != icCmmStatOk) {
+    std::ostringstream oss;
+    oss << "Begin() failed (status " << (int)beginStat
+        << "); profile chain is incompatible (srcSpace=0x"
+        << std::hex << (unsigned)pCmm->GetSourceSpace()
+        << " dstSpace=0x" << (unsigned)pCmm->GetDestSpace() << ")";
+    sErrorMsg = oss.str();
     ReleasePccList(pccList);
     return nullptr;
   }
@@ -316,41 +399,62 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
   return AttachStandardCmm(pCmm, nThreads);
 }
 
-CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApply)
+CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApply,
+                                              std::string* pErrorMsg)
 {
+  std::string localErr;
+  std::string& sErrorMsg = pErrorMsg ? *pErrorMsg : localErr;
+
   IccProfilePtrList pccList;
   auto pCmm = std::unique_ptr<CIccCmmSearch>(new (std::nothrow) CIccCmmSearch());
-  if (!pCmm)
+  if (!pCmm) {
+    sErrorMsg = "failed to allocate search CMM";
     return nullptr;
+  }
 
   // Add forward profile chain.  Explicitly scope to CIccCmm::AddXform to bypass
   // CIccCmmSearch's override which is reserved for the reverse/destination profile.
+  size_t stageIdx = 0;
   for (const auto& profPtr : searchApply.m_profiles) {
     CIccCfgProfile* pCfg = profPtr.get();
-    if (!pCfg)
+    if (!pCfg) {
+      ++stageIdx;
       continue;
+    }
 
     CIccProfile* pPcc = nullptr;
     CIccCreateXformHintManager Hint;
+    icStatusCMM stat = icCmmStatOk;
+    std::string sStageErr;
 
     if (!pCfg->m_pccFile.empty()) {
       // Caller-selected config paths intentionally name ICC/PCC profile files.
       // codeql[cpp/path-injection]
       pPcc = OpenIccProfile(pCfg->m_pccFile.c_str());
-      if (!pPcc) { ReleasePccList(pccList); return nullptr; }
+      if (!pPcc) {
+        sStageErr = "unable to open PCC profile '" + pCfg->m_pccFile + "'";
+        stat = icCmmStatBad;
+        goto search_stage_failed;
+      }
       pccList.push_back(pPcc);
     }
 
     if (!pCfg->m_iccEnvVars.empty()) {
-      icStatusCMM stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmEnvVarHint(pCfg->m_iccEnvVars));
-      if (stat != icCmmStatOk) { ReleasePccList(pccList); return nullptr; }
+      stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmEnvVarHint(pCfg->m_iccEnvVars));
+      if (stat != icCmmStatOk) {
+        sStageErr = "failed to attach ICC env-var hint for '" + pCfg->m_iccFile + "'";
+        goto search_stage_failed;
+      }
     }
     if (!pCfg->m_pccEnvVars.empty()) {
-      icStatusCMM stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmPccEnvVarHint(pCfg->m_pccEnvVars));
-      if (stat != icCmmStatOk) { ReleasePccList(pccList); return nullptr; }
+      stat = AddHintNoThrow(Hint, new (std::nothrow) CIccCmmPccEnvVarHint(pCfg->m_pccEnvVars));
+      if (stat != icCmmStatOk) {
+        sStageErr = "failed to attach PCC env-var hint for '" + pCfg->m_iccFile + "'";
+        goto search_stage_failed;
+      }
     }
 
-    icStatusCMM stat = pCmm->CIccCmm::AddXform(
+    stat = pCmm->CIccCmm::AddXform(
       pCfg->m_iccFile.c_str(),
       pCfg->m_intent < 0 ? icUnknownIntent : (icRenderingIntent)pCfg->m_intent,
       pCfg->m_interpolation,
@@ -360,31 +464,58 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       &Hint,
       pCfg->m_useV5SubProfile
     );
+    if (stat == icCmmStatCantOpenProfile) {
+      sStageErr = "unable to open ICC profile '" + pCfg->m_iccFile + "'";
+    }
+    else if (stat != icCmmStatOk) {
+      std::ostringstream oss;
+      oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat << ")";
+      sStageErr = oss.str();
+    }
+
+  search_stage_failed:
     if (stat != icCmmStatOk) {
+      std::ostringstream oss;
+      oss << "stage " << stageIdx << ": " << sStageErr;
+      sErrorMsg = oss.str();
       ReleasePccList(pccList);
       return nullptr;
     }
+    ++stageIdx;
   }
 
   // Attach weighted PCC profiles for spectral search computation.
+  size_t pccIdx = 0;
   for (const auto& pccPtr : searchApply.m_pccWeights) {
     CIccCfgPccWeight* pPccWeight = pccPtr.get();
-    if (!pPccWeight)
+    if (!pPccWeight) {
+      ++pccIdx;
       continue;
+    }
 
     // Caller-selected config paths intentionally name ICC/PCC profile files.
     // codeql[cpp/path-injection]
     CIccProfile* pPcc = OpenIccProfile(pPccWeight->m_pccPath.c_str());
     if (!pPcc || !pPcc->ReadPccTags()) {
+      std::ostringstream oss;
+      oss << "weighted PCC " << pccIdx << ": unable to open or read PCC tags from '"
+          << pPccWeight->m_pccPath << "'";
+      sErrorMsg = oss.str();
+      delete pPcc;
       ReleasePccList(pccList);
       return nullptr;
     }
     pPcc->Detach();
 
     if (pCmm->AttachPCC(pPcc, pPccWeight->m_dWeight) != icCmmStatOk) {
+      std::ostringstream oss;
+      oss << "weighted PCC " << pccIdx << ": AttachPCC failed for '"
+          << pPccWeight->m_pccPath << "'";
+      sErrorMsg = oss.str();
       ReleasePccList(pccList);
       return nullptr;
     }
+    ++pccIdx;
   }
 
   // Set the destination initial profile for the reverse search.
@@ -396,6 +527,7 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
                                             searchApply.m_useV5SubProfileInitial);
     CIccProfile* pPcc = nullptr;
     if (!pProfile) {
+      sErrorMsg = "initial-destination: unable to open ICC profile '" + pLastCfg->m_iccFile + "'";
       ReleasePccList(pccList);
       return nullptr;
     }
@@ -405,6 +537,7 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       // codeql[cpp/path-injection]
       pPcc = OpenIccProfile(pLastCfg->m_pccFile.c_str());
       if (!pPcc) {
+        sErrorMsg = "initial-destination: unable to open PCC profile '" + pLastCfg->m_pccFile + "'";
         delete pProfile;
         ReleasePccList(pccList);
         return nullptr;
@@ -422,7 +555,12 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
     );
   }
 
-  if (pCmm->Begin() != icCmmStatOk) {
+  icStatusCMM beginStat = pCmm->Begin();
+  if (beginStat != icCmmStatOk) {
+    std::ostringstream oss;
+    oss << "Begin() failed (status " << (int)beginStat
+        << "); search-profile chain is incompatible";
+    sErrorMsg = oss.str();
     ReleasePccList(pccList);
     return nullptr;
   }

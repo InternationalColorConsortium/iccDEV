@@ -27015,7 +27015,7 @@
         <ProfileID>1</ProfileID>
         <SpectralPCS>rs0024</SpectralPCS>
         <SpectralRange>
-         <Wavelengths start="380.00000000" end="720.00000000" steps="36"/>
+         <Wavelengths start="380.00000000" end="730.00000000" steps="36"/>
         </SpectralRange>
       </Header>
       <Tags>
