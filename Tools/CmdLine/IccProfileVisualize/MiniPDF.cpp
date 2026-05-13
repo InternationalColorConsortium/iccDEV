@@ -359,12 +359,12 @@ void PDFWriter::AddXObject( Rect2D &bounds, std::string &content, std::string na
 
   PDFXObject *xobjObj = new PDFXObject( content, bounds, group, font, procSet );
   m_objects.emplace_back( xobjObj );
-  
+
   m_xobjects[ name ] = m_objects.size();
 }
 
 /******************************************************************************/
-  
+
 size_t PDFWriter::lookupXObjectByName( std::string name )
 {
   if (name == std::string())
@@ -377,7 +377,7 @@ size_t PDFWriter::lookupXObjectByName( std::string name )
 }
 
 /******************************************************************************/
-  
+
 bool PDFWriter::xobjectExists( std::string name )
 {
   if (name == std::string())

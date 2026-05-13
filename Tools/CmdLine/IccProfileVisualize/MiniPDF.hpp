@@ -300,7 +300,7 @@ protected:
   void WriteObjects( std::ostream &out );
   void WriteXRefs( std::ostream &out );
   void WriteFooter( std::ostream &out );
-  
+
   size_t lookupXObjectByName( std::string name );
 
   PDFPageParent *GetPageParent() {

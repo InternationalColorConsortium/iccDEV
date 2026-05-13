@@ -163,26 +163,26 @@ std::string AddGraphLabels( const point2D &basepoint, bool isVertical,
         TextAlignment align = kTextAlignCenter )
 {
   std::ostringstream commands;
-  
+
   float textWidth = labelSize * 0.6f * text.size(); // very approximate, not using font metrics
   float textHalf = 0.5 * textWidth;
-  
+
   point2D position(0,0);
   switch(align) {
     default:
     case kTextAlignLeft:
         // do nothing
         break;
-    
+
     case kTextAlignCenter:
         position = point2D(-textHalf,0);
         break;
-    
+
     case kTextAlignRight:
         position = point2D(-textWidth,0);
         break;
   }
-  
+
   point2D pt00 = basepoint;
   commands << "BT /F1 " << labelSize << " Tf ";
   if (isVertical) {
@@ -195,7 +195,7 @@ std::string AddGraphLabels( const point2D &basepoint, bool isVertical,
     commands << pt00 << " Td ";
   }
   commands << "(" << text << ") Tj ET\n";
-  
+
   return commands.str();
 }
 
@@ -209,7 +209,7 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
 
   // save gstate
   commands << "q\n";
-  
+
   // grid behind major axes
   commands << "0.05 0 0 0 K\n";
   for (int i = 1; i <= 100; ++i) {
@@ -226,10 +226,10 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   commands << basepoint << " m " << (basepoint+fullLength+range) << " l S\n";
   // end colored grid, grestore, gsave
   commands << "Q q\n";
-  
+
   // main line
   commands << basepoint << " m " << (basepoint+range) << " l S\n";
-  
+
   // big marks for 0.0, 0.5, and 1.0
   point2D start0 = basepoint;
   commands << start0 << " m " << (start0+tickLength) << " l S\n";
@@ -322,43 +322,43 @@ XYColor approx_planck( double t )
     const double c2a = -0.2343589;
     const double c1a =  0.8776956;
     const double c0a =  0.179910;
-    
+
     const double c3b = -3.0258469;
     const double c2b =  2.1070379;
     const double c1b =  0.2226347;
     const double c0b =  0.240390;
-    
+
     const double k3a = -1.1063814;
     const double k2a = -1.34811020;
     const double k1a =  2.18555832;
     const double k0a = -0.20219683;
-    
+
     const double k3b = -0.9549476;
     const double k2b = -1.37418593;
     const double k1b =  2.09137015;
     const double k0b = -0.16748867;
-    
+
     const double k3c =  3.0817580;
     const double k2c = -5.87338670;
     const double k1c =  3.75112997;
     const double k0c = -0.37001483;
-    
+
     double t2 = t*t;
     double t3 = t*t*t;
-    
+
     double x = 0.0;
-    
+
     if (t < 4000.0) {
         x = c3a*(1e9/t3) + c2a*(1e6/t2) + c1a*(1e3/t) + c0a;
     } else {
         x = c3b*(1e9/t3) + c2b*(1e6/t2) + c1b*(1e3/t) + c0b;
     }
-    
+
     double x2 = x*x;
     double x3 = x*x*x;
-    
+
     double y = 0.0;
-    
+
     if (t < 2222.0) {
         y = k3a*x3 + k2a*x2 + k1a*x + k0a;
     } else if (t < 4000.0) {
@@ -366,7 +366,7 @@ XYColor approx_planck( double t )
     } else {
         y = k3c*x3 + k2c*x2 + k1c*x + k0c;
     }
-    
+
     return XYColor(x,y);
 }
 
@@ -406,7 +406,7 @@ point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
         align = kTextAlignLeft;
         return point2D( textSize*0.5, textSize );
     }
-    
+
     // unreachable
 }
 
@@ -416,7 +416,7 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
 {
   std::ostringstream commands;
   float margin = 0.25*inch2point;
-  
+
   // x range [ 0.00364, 0.73469 ]   for 2degree 1931 observer
   // y range [ 0.00529, 0.83409 ]
   const float chromaticityChartScale = 0.85f;
@@ -435,7 +435,7 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
 
   // draw grid
   commands << "q\n";
-  
+
   // vertical fine grid
   commands << "0.05 0 0 0 K\n";
   for (float i = 0.0; i <= chromaticityChartScale; i += fineIncrement) {
@@ -447,7 +447,7 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
     point2D startN = basepoint + i/chromaticityChartScale * rangeY;
     commands << startN << " m " << (startN+rangeX) << " l S\n";
   }
-  
+
   // vertical coarse grid
   commands << "0.1 0 0 0 K\n";
   for (float i = 0.0; i <= chromaticityChartScale; i += coarseIncrement) {
@@ -462,7 +462,7 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
 
   // end colored grid, grestore, gsave
   commands << "Q q\n";
-  
+
   // spectral locus
   commands << "0.5 0.5 0 0 K\n";
   point2D scaling = (rangeX + rangeY) / chromaticityChartScale;
@@ -586,14 +586,14 @@ void CreateABPlotXobject( PDFWriter &pdfout )
   for (float i = chromaIncrement; i <= chromaMax; i += chromaIncrement) {
     commands << plotCirclePDF( center, i*maxRadius/abChartScale );
   }
-  
+
 // TODO - 30 degree hue angles?
-  
+
   // axes
   commands << "0.4 0 0 0 K\n";
   commands << centerX << " m " << (centerX+rangeY) << " l S\n";
   commands << centerY << " m " << (centerY+rangeX) << " l S\n";
-  
+
 // axes labels
   commands << "0.4 0 0 0 k\n";
   float labelSize = 10.0f;
@@ -624,11 +624,11 @@ XYColor xyFromICCXYZ( const icXYZNumber *xyz )
     float X = xyz->X / 65535.0;
     float Y = xyz->Y / 65535.0;
     float Z = xyz->Z / 65535.0;
-    
+
     float sum = X + Y + Z;
     if (sum <= 1e-8)
         return XYColor(0,0);
-    
+
     float x = X / sum;
     float y = Y / sum;
     return XYColor(x,y);
@@ -640,7 +640,7 @@ static
 std::string plotSquarePDF( const point2D &center, float size )
 {
   std::ostringstream commands;
-  
+
   float half = 0.5f * size;
 
   point2D pt0(center.x-half,center.y-half);
@@ -695,7 +695,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   float right = pdffile.PageWidth();
   Rect2D bounds ( left, right, bottom, top );
   float margin = 0.25*inch2point;
-  
+
     // icSigMediaBlackPointTag ????
   auto whiteTag = pIcc->FindTag( icSigMediaWhitePointTag );
   bool hasWhite = (whiteTag != NULL);
@@ -704,7 +704,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   auto greenTag = pIcc->FindTag( icSigGreenColorantTag );
   auto blueTag = pIcc->FindTag( icSigBlueColorantTag );
   bool hasRGB = (redTag && greenTag && blueTag);
-  
+
   // bail if there is nothing to plot
   // NOTE - plotting white alone just seems weird, and produces a lot of noise
   if (!hasRGB)
@@ -720,7 +720,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
 
   // add label
   point2D range( right - left, 0 );
-  point2D labelBase( left, top - 0.2f*inch2point );
+  point2D labelBase( left, top );
   point2D tickLength(0,0);
   commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12, "Chromaticity xy" );
 
@@ -753,7 +753,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
                         scaling, markSize, textSize, &greenPt );
     commands << plotXYZTag( blueTag, "B", basepoint,
                         scaling, markSize, textSize, &bluePt );
-    
+
     // draw lines between points for gamut
     commands << "0 0 0 0.5 K\n";
     commands << redPt << " m " << greenPt << " l\n";
@@ -769,7 +769,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   size_t content = pdffile.ObjectCount();
 
   pdffile.AddPage( content, "xyPlot" );
-  
+
   return 1;
 }
 
@@ -1083,7 +1083,7 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       break;
 
   }   // end switch by type
-  
+
   return 0; // no output created
 
 }   // end output1DLUT()
@@ -1208,7 +1208,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       fprintf(stderr, "Skipping %s: unable to convert LUT\n", sigDesc.c_str());
       return outputCount;
     }
-    
+
     std::string description;
     describe3DLUT( lut, pIcc, description );
 
@@ -1288,7 +1288,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       fprintf(stderr, "Skipping %s: invalid CLUT grid\n", sigDesc.c_str());
       return outputCount;
     }
-    
+
     int tileWidth = 1;
     int tileHeight = 1;
 
@@ -1337,7 +1337,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       fprintf(stderr,"WARNING - tile count overflow.\n");
       tiles = 1;
     }
-      
+
     auto tempResult = std::sqrt(tiles);
     if (tempResult > std::numeric_limits<int>::max()) {
       fprintf(stderr,"ERROR - sqrt bad result!\n");
@@ -1460,7 +1460,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     break;
 
   }   // end switch by type
-  
+
   return 0; // no output was created
 
 }   // end output3DLUT()
@@ -1615,13 +1615,13 @@ int main(int argc, char* argv[])
         printf("Unable to parse '%s' as ICC profile!\n", argv[k]);
         continue;
       }
-      
+
       // DEBUGGING printf("Processing profile '%s'\n", argv[k]);
       auto count = processLuts( pIcc, argv[k] );
       if (!count) {
         printf("Profile %s had no content for output\n", argv[k] );
       }
-      
+
       delete pIcc;
     }   // end try
     catch (const std::exception& e) {
