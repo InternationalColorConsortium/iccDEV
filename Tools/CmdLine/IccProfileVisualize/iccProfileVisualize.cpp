@@ -99,6 +99,15 @@
 
 /******************************************************************************/
 
+#ifndef M_SQRT2
+#define M_SQRT2  1.41421356237309504880168872420969808
+#endif
+#ifndef M_PI
+#define M_PI  3.14159265358979323846264338327950288
+#endif
+
+/******************************************************************************/
+
 #if USE_SVG
 static
 void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
@@ -411,8 +420,8 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   // x range [ 0.00364, 0.73469 ]   for 2degree 1931 observer
   // y range [ 0.00529, 0.83409 ]
   const float chromaticityChartScale = 0.85f;
-  const float fineIncrement = 0.01;
-  const float coarseIncrement = 0.1;
+  const float fineIncrement = 0.01f;
+  const float coarseIncrement = 0.1f;
 
   float bottom = 0.0f;
   float left = 0.0f;
@@ -420,7 +429,7 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   float right = pdfout.PageWidth();
   Rect2D bounds ( left, right, bottom, top );
   point2D basepoint( left+margin, bottom+margin );
-  point2D rangeX( right-bottom-2*margin, 0 );
+  point2D rangeX( right-left-2*margin, 0 );
   point2D rangeY( 0, top-bottom-2*margin );
 
 
@@ -468,7 +477,7 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
 
   // labels for spectral locus
   commands << "0.5 0.5 0 0 k\n";
-  float labelSize = 9;
+  float labelSize = 9.0f;
   int wavelengthOffset = spectralLocus2degree[0].wavelength;
   for (auto &nm : locusLabelWavelengths ) {
     TextAlignment align;
@@ -506,6 +515,109 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
 /******************************************************************************/
 
 static
+std::string plotCirclePDF( const point2D &center, float radius )
+{
+  std::ostringstream commands;
+
+  const float handle_factor = (4.0f * (M_SQRT2 - 1.0f) / 3.0f);
+  const float K = radius * handle_factor;
+  point2D rx(radius,0);
+  point2D kx(K,0);
+  point2D ry(0,radius);
+  point2D ky(0,K);
+
+  commands << center+rx << " m\n";
+  commands << center+rx-ky << " " << center+kx-ry << " " << center-ry << " c\n";
+  commands << center-kx-ry << " " << center-rx-ky << " " << center-rx << " c\n";
+  commands << center-rx+ky << " " << center-kx+ry << " " << center+ry << " c\n";
+  commands << center+kx+ry << " " << center+rx+ky << " " << center+rx << " c s\n";
+
+  return commands.str();
+}
+
+/******************************************************************************/
+
+void CreateABPlotXobject( PDFWriter &pdfout )
+{
+  std::ostringstream commands;
+  float margin = 0.25*inch2point;
+
+// TODO  - full 128+ range is probably excessive for real world use
+// what is an appropriate limit?
+  const float abChartScale = 2 * 130.0f;
+  const float coarseIncrement = 10.0f;
+
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdfout.PageHeight();
+  float right = pdfout.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+  point2D basepoint( left+margin, bottom+margin );
+  point2D rangeX( right-left-2*margin, 0 );
+  point2D rangeY( 0, top-bottom-2*margin );
+  point2D center = 0.5f * (basepoint + point2D(right-margin,top-margin));
+  float maxRadius = std::max( right-left-2*margin, top-bottom-2*margin );
+
+
+  // draw grid
+  commands << "q\n";
+
+  // vertical grid
+  commands << "0.1 0 0 0 K\n";
+  point2D centerX(center.x,bottom+margin);
+  for (float i = coarseIncrement; i <= abChartScale; i += coarseIncrement) {
+    point2D startN = centerX + i/abChartScale * rangeX;
+    commands << startN << " m " << (startN+rangeY) << " l S\n";
+    point2D start2 = centerX - i/abChartScale * rangeX;
+    commands << start2 << " m " << (start2+rangeY) << " l S\n";
+  }
+  // horizontal grid
+  point2D centerY(left+margin,center.y);
+  for (float i = coarseIncrement; i <= abChartScale; i += coarseIncrement) {
+    point2D startN = centerY + i/abChartScale * rangeY;
+    commands << startN << " m " << (startN+rangeX) << " l S\n";
+    point2D start2 = centerY - i/abChartScale * rangeY;
+    commands << start2 << " m " << (start2+rangeX) << " l S\n";
+  }
+
+  // constant chroma circles are helpful
+  float chromaIncrement = 30.0f;
+  float chromaMax = 120.0f;
+  for (float i = chromaIncrement; i <= chromaMax; i += chromaIncrement) {
+    commands << plotCirclePDF( center, i*maxRadius/abChartScale );
+  }
+  
+// TODO - 30 degree hue angles?
+  
+  // axes
+  commands << "0.4 0 0 0 K\n";
+  commands << centerX << " m " << (centerX+rangeY) << " l S\n";
+  commands << centerY << " m " << (centerY+rangeX) << " l S\n";
+  
+// axes labels
+  commands << "0.4 0 0 0 k\n";
+  float labelSize = 10.0f;
+  point2D labelPtYellow(center.x,top-margin);
+  commands << AddGraphLabels( labelPtYellow, false, point2D(0,0), labelSize, "+b Yellow", kTextAlignCenter );
+  point2D labelPtBlue( center.x,bottom+margin+labelSize*1.2f);
+  commands << AddGraphLabels( labelPtBlue, false, point2D(0,0), labelSize, "-b Blue", kTextAlignCenter );
+  point2D labelPtMagenta(right-margin,center.y);
+  commands << AddGraphLabels( labelPtMagenta, false, point2D(0,0), labelSize, "+a Magenta", kTextAlignRight );
+  point2D labelPtTeal(left+margin,center.y);
+  commands << AddGraphLabels( labelPtTeal, false, point2D(0,0), labelSize, "-a Green", kTextAlignLeft );
+
+  // end colored grid, grestore, gsave
+  commands << "Q q\n";
+
+  // grestore
+  commands << "Q\n";
+  std::string commandString = commands.str();
+  pdfout.AddXObject( bounds, commandString, "abPlot" );
+}
+
+/******************************************************************************/
+
+static
 XYColor xyFromICCXYZ( const icXYZNumber *xyz )
 {
     // integers, so don't have to test for NaN or Inf
@@ -525,7 +637,7 @@ XYColor xyFromICCXYZ( const icXYZNumber *xyz )
 /******************************************************************************/
 
 static
-std::string plotSquare( const point2D &center, float size )
+std::string plotSquarePDF( const point2D &center, float size )
 {
   std::ostringstream commands;
   
@@ -558,7 +670,7 @@ std::string plotXYZTag( CIccTag *tag, std::string label, const point2D &basepoin
     if (theXYZ) {
       auto theXY = xyFromICCXYZ( theXYZ );
       point2D thePt = basepoint + scaling * point2D( theXY.x, theXY.y );
-      commands << plotSquare( thePt, symbolSize );
+      commands << plotSquarePDF( thePt, symbolSize );
       point2D textOffset( 0, symbolSize+2+textSize );
       commands << AddGraphLabels( thePt + textOffset, false, point2D(0,0),
                                     textSize, label, kTextAlignLeft );
@@ -594,7 +706,8 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   bool hasRGB = (redTag && greenTag && blueTag);
   
   // bail if there is nothing to plot
-  if (!hasWhite && !hasRGB)
+  // NOTE - plotting white alone just seems weird, and produces a lot of noise
+  if (!hasRGB)
     return 0;
 
 
