@@ -16,7 +16,7 @@ INPUT                  = IccProfLib \
                          IccJSON/CmdLine \
                          Tools \
                          examples/hello-iccdev
-FILE_PATTERNS          = *.h *.cpp
+FILE_PATTERNS          = *.h *.cpp *.md
 RECURSIVE              = YES
 
 # Extraction settings

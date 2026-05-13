@@ -19,7 +19,7 @@
 #     package.json
 #     IccDumpProfile/iccDumpProfile.{js,wasm}
 #     IccToXml/iccToXml.{js,wasm}
-#     ... (16 tool dirs)
+#     ... (17 tool dirs)
 #     IccProfLib/*.a
 #     IccXML/*.a
 #     IccJSON/*.a
@@ -41,9 +41,10 @@ fi
 
 mkdir -p "$STAGE_DIR"
 
-# 16 tools: dir name -> built js basename (camelCase)
+# 17 tools: dir name -> built js basename (camelCase)
 TOOLS=(
     "IccDumpProfile:iccDumpProfile"
+    "IccPawgReport:iccPawgReport"
     "IccToXml:iccToXml"
     "IccFromXml:iccFromXml"
     "IccToJson:iccToJson"
@@ -121,7 +122,7 @@ cp -f "$SCRIPT_DIR/regression.js" "$STAGE_DIR/regression.js"
 
 echo ""
 echo "=== WASM stage summary ==="
-echo "  staged tools:  $STAGED / 16"
+echo "  staged tools:  $STAGED / 17"
 echo "  missing tools: $MISSING"
 echo "  stage dir:     $STAGE_DIR"
 echo "  version:       $VERSION"
@@ -129,6 +130,6 @@ echo ""
 echo "Stage contents (top level):"
 ls -lh "$STAGE_DIR" | sed -n '2,40p'
 
-if [[ $STAGED -lt 16 ]]; then
-    echo "::warning::stage.sh: only $STAGED of 16 tools staged" >&2
+if [[ $STAGED -lt 17 ]]; then
+    echo "::warning::stage.sh: only $STAGED of 17 tools staged" >&2
 fi

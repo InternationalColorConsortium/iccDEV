@@ -1,7 +1,7 @@
 {
   "name": "iccdev",
   "version": "@WASM_PKG_VERSION@",
-  "description": "ICC color profile CLI tools as WebAssembly. 16 Node.js modules. Consumer package only.",
+  "description": "ICC color profile CLI tools as WebAssembly. 17 Node.js modules. Consumer package only.",
   "main": "index.js",
   "files": [
     "README.md",
@@ -10,6 +10,7 @@
     "test.icc",
     "test_all.js",
     "IccDumpProfile/",
+    "IccPawgReport/",
     "IccToXml/",
     "IccFromXml/",
     "IccToJson/",

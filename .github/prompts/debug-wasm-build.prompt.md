@@ -50,8 +50,8 @@ emcmake cmake ../Build/Cmake \
 - CMakeLists.txt has `if(EMSCRIPTEN)` guards that skip ELF-only flags automatically
 
 ### Expected Artifacts (per config)
-- **13 JS modules** (one per CLI tool, excluding IccDumpProfileGui)
-- **13 WASM binaries** (matching .wasm files)
+- **17 JS modules** (one per published WASM CLI tool, excluding IccDumpProfileGui)
+- **17 WASM binaries** (matching .wasm files)
 - Third-party: `libIccProfLib2.a`, `libIccXML2.a`, `libxml2.a`
 
 ### Validation Step

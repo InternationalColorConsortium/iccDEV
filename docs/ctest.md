@@ -90,7 +90,7 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 22 tests:
+Linux currently registers 23 tests:
 
 | Test | Source |
 |------|--------|
@@ -101,6 +101,7 @@ Linux currently registers 22 tests:
 | `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh` |
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
 | `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
+| `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
 | `iccdev.json-parser-regressions` | `.github/scripts/iccdev-json-parser-regression-tests.sh` |
@@ -128,6 +129,11 @@ AFL-minimized crash or hang, embed the smallest stable reproducer in the script
 or generate it under `ICCDEV_TEST_OUTDIR`; do not require local AFL output
 directories or commit generated crash artifacts. Validate both the direct script
 path and the CTest wrapper when changing this suite.
+
+`iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
+checks the 31-item PAWG report structure, verifies summary counts against the
+rendered item lines, runs malformed and malware-signature dynamic inputs, and
+fails on sanitizer findings.
 
 `iccdev.hybrid-pipeline` preserves the full six-phase hybrid spectral/colorimetric
 integration test as a separate `slow` CTest label. Routine CI tool sweeps run

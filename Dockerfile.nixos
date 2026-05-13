@@ -37,7 +37,7 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && echo 'iccdev:x:1000:' >> /etc/group \
  && echo 'iccdev:x:1000:1000:iccdev:/workspace:/bin/sh' >> /etc/passwd \
  && nix-env -iA nixpkgs.coreutils nixpkgs.findutils nixpkgs.gnugrep nixpkgs.gnused \
-      nixpkgs.libtiff nixpkgs.libxml2 nixpkgs.libjpeg nixpkgs.libpng nixpkgs.zlib \
+      nixpkgs.libtiff nixpkgs.libxml2 nixpkgs.libjpeg nixpkgs.libpng nixpkgs.zlib nixpkgs.python3 \
  && chown -R 1000:1000 /workspace \
  && nix-collect-garbage -d \
  && nix store optimise 2>/dev/null || true
@@ -45,6 +45,7 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
 ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccFromXml:\
 /workspace/iccDEV/Build/Tools/IccDumpProfile:\
+/workspace/iccDEV/Build/Tools/IccPawgReport:\
 /workspace/iccDEV/Build/Tools/IccApplyNamedCmm:\
 /workspace/iccDEV/Build/Tools/IccRoundTrip:\
 /workspace/iccDEV/Build/Tools/IccFromCube:\

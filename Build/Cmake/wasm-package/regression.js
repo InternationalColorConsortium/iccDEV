@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// regression.js — Testing/CreateAllProfiles.sh parity gate
+// regression.js - Testing/CreateAllProfiles.sh parity gate
 //
 // Runs the upstream Testing/CreateAllProfiles.sh through MEMFS-backed
-// shims of the 16 published WASM tools, then asserts the produced
+// shims of the 17 published WASM tools, then asserts the produced
 // .icc count matches the native-Linux baseline.
 //
 // Expected baseline (CreateAllProfiles.sh in isolation): 207 .icc
@@ -28,9 +28,9 @@ if (!fs.existsSync(path.join(TESTING, 'CreateAllProfiles.sh'))) {
   process.exit(0);
 }
 
-// 16 published tool dirs (mirrors stage.sh / test_all.js)
+// 17 published tool dirs (mirrors stage.sh / test_all.js)
 const TOOLS = [
-  'iccDumpProfile', 'iccToXml', 'iccFromXml', 'iccToJson', 'iccFromJson',
+  'iccDumpProfile', 'iccPawgReport', 'iccToXml', 'iccFromXml', 'iccToJson', 'iccFromJson',
   'iccRoundTrip', 'iccFromCube', 'iccApplyNamedCmm', 'iccApplyProfiles',
   'iccApplySearch', 'iccApplyToLink', 'iccTiffDump', 'iccJpegDump',
   'iccPngDump', 'iccSpecSepToTiff', 'iccV5DspObsToV4Dsp'
@@ -124,7 +124,7 @@ main().catch(e=>{console.error(e);process.exit(1);});
 // Copy Testing/ into a writable work dir
 const testingWork = path.join(work, 'Testing');
 cp.execFileSync('cp', ['-a', TESTING + '/.', testingWork + '/']);
-// Strip CRLF from any *.sh (defensive — Windows checkouts)
+// Strip CRLF from any *.sh (defensive - Windows checkouts)
 cp.execFileSync('bash', ['-c',
   `find ${JSON.stringify(testingWork)} -name '*.sh' -exec sed -i 's/\\r$//' {} +`]);
 

@@ -44,6 +44,7 @@ function(iccdev_add_check_dependencies)
       iccApplyToLink
       iccDescribeSinkTest
       iccDumpProfile
+      iccPawgReport
       iccFromCube
       iccFromJson
       iccFromXml
@@ -215,6 +216,27 @@ if(WIN32)
     add_dependencies(check iccDumpProfile)
   endif()
 
+  if(TARGET iccPawgReport)
+    add_test(
+      NAME iccdev.windows-pawg-report-smoke
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_NAME=iccdev.windows-pawg-report-smoke"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-windows-pawg-report-smoke"
+        "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DICCDEV_PAWG_EXE=$<TARGET_FILE:iccPawgReport>"
+        "-DICCDEV_PROFILE=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+        "-DICCDEV_EXPECTED_ITEM_COUNT=31"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsPawgReportSmokeTest.cmake"
+    )
+    set_tests_properties(iccdev.windows-pawg-report-smoke PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 60
+      LABELS "iccdev;windows;tools;pawg;report;profile"
+    )
+    add_dependencies(check iccPawgReport)
+  endif()
+
   if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
     add_test(
       NAME iccdev.issue-987-shared-mpe-export
@@ -262,6 +284,7 @@ set(ICCDEV_TOOL_PATHS
   "${ICCDEV_TOOLS_DIR}/IccFromJson"
   "${ICCDEV_TOOLS_DIR}/IccFromXml"
   "${ICCDEV_TOOLS_DIR}/IccJpegDump"
+  "${ICCDEV_TOOLS_DIR}/IccPawgReport"
   "${ICCDEV_TOOLS_DIR}/IccPngDump"
   "${ICCDEV_TOOLS_DIR}/IccRoundTrip"
   "${ICCDEV_TOOLS_DIR}/IccSpecSepToTiff"
@@ -376,6 +399,14 @@ iccdev_add_script_test(
 )
 set_tests_properties(iccdev.dump-profile-header-regression PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
+  iccdev.pawg-report-regressions
+  120
+  "iccdev;pawg;report;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-pawg-report-regression-tests.sh"
 )
 
 iccdev_add_script_test(

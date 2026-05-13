@@ -1,6 +1,6 @@
 # iccdev
 
-ICC color profile CLI tools as WebAssembly. 16 modules, Node.js. Consumer
+ICC color profile CLI tools as WebAssembly. 17 modules, Node.js. Consumer
 package only - no build, no browser UI.
 
 ## Install
@@ -23,7 +23,7 @@ const { IccDumpProfile } = require('iccdev');
 
 ## Modules
 
-`IccDumpProfile`, `IccToXml`, `IccFromXml`, `IccToJson`, `IccFromJson`,
+`IccDumpProfile`, `IccPawgReport`, `IccToXml`, `IccFromXml`, `IccToJson`, `IccFromJson`,
 `IccRoundTrip`, `IccFromCube`, `IccApplyNamedCmm`, `IccApplyProfiles`,
 `IccApplySearch`, `IccApplyToLink`, `IccTiffDump`, `IccJpegDump`,
 `IccPngDump`, `IccSpecSepToTiff`, `IccV5DspObsToV4Dsp`.

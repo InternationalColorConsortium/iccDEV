@@ -1,5 +1,6 @@
 module.exports = {
   IccDumpProfile: require('./IccDumpProfile/iccDumpProfile.js'),
+  IccPawgReport: require('./IccPawgReport/iccPawgReport.js'),
   IccToXml: require('./IccToXml/iccToXml.js'),
   IccFromXml: require('./IccFromXml/iccFromXml.js'),
   IccToJson: require('./IccToJson/iccToJson.js'),

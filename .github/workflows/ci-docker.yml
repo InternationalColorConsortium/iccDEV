@@ -205,7 +205,7 @@ jobs:
           TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
           FAILURES=0
           echo "### Tool Tests (${MATRIX_VARIANT})" >> "$GITHUB_STEP_SUMMARY"
-          for tool in iccToXml iccFromXml iccToJson iccFromJson iccDumpProfile iccRoundTrip; do
+          for tool in iccToXml iccFromXml iccToJson iccFromJson iccDumpProfile iccPawgReport iccRoundTrip; do
             OUT=$(docker run --rm "$TEST_IMAGE" "$tool" 2>&1 || true)
             if grep -qiE "Usage:|IccProfLib" <<< "$OUT"; then
               echo "[OK] $tool" >> "$GITHUB_STEP_SUMMARY"

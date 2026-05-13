@@ -93,7 +93,7 @@ function getTestProfile() {
     mod.callMain(['t.icc', '1', '0']);
   })) pass++; else fail++;
 
-  // Usage tests — tools that need multiple files, verify they load and print usage
+  // Usage tests - tools that need multiple files, verify they load and print usage
   const usageTools = [
     ['IccApplyNamedCmm', 'IccApplyNamedCmm', 'iccApplyNamedCmm.js'],
     ['IccApplyProfiles', 'IccApplyProfiles', 'iccApplyProfiles.js'],
@@ -101,6 +101,7 @@ function getTestProfile() {
     ['IccApplyToLink', 'IccApplyToLink', 'iccApplyToLink.js'],
     ['IccSpecSepToTiff', 'IccSpecSepToTiff', 'iccSpecSepToTiff.js'],
     ['IccFromCube', 'IccFromCube', 'iccFromCube.js'],
+    ['IccPawgReport', 'IccPawgReport', 'iccPawgReport.js'],
   ];
   for (const [name, dir, jsFile] of usageTools) {
     if (await test(name + ' (usage)', require('./' + dir + '/' + jsFile), mod => {
@@ -113,7 +114,7 @@ function getTestProfile() {
     try { mod.callMain([]); } catch (e) { if (e.name !== 'ExitStatus') throw e; }
   })) pass++; else fail++;
 
-  // Image dump tools — usage tests
+  // Image dump tools - usage tests
   for (const [name, dir, jsFile] of [
     ['IccTiffDump', 'IccTiffDump', 'iccTiffDump.js'],
     ['IccJpegDump', 'IccJpegDump', 'iccJpegDump.js'],

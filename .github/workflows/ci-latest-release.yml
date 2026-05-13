@@ -1170,7 +1170,7 @@ jobs:
 
           cd wasm-stage
           if ! node test_all.js; then
-            echo "::error::test_all.js (16-tool smoke) failed in staged WASM bundle"
+            echo "::error::test_all.js (17-tool smoke) failed in staged WASM bundle"
             exit 1
           fi
 

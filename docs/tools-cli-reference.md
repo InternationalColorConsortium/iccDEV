@@ -31,6 +31,7 @@ single index for common command shapes and shared option tables.
 | `iccTiffDump` | Inspect TIFF metadata and embedded ICC | `iccTiffDump image.tif` |
 | `iccPngDump` | Inspect PNG metadata and embedded ICC | `iccPngDump image.png` |
 | `iccJpegDump` | Inspect JPEG metadata and embedded ICC | `iccJpegDump image.jpg` |
+| `iccPawgReport` | Generate an ICC PAWG security, conformance, and quality checklist report | `iccPawgReport profile.icc` |
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs | `iccSpecSepToTiff output.tif 0 0 spectral/spec_ 1 10 1` |
 | `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display | `iccV5DspObsToV4Dsp display.icc observer.icc output.icc` |
 | `iccFromCube` | Convert `.cube` 3D LUT to ICC.2 DeviceLink | `iccFromCube input.cube output.icc` |
