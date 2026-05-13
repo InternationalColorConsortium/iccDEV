@@ -53,7 +53,6 @@ namespace {
 constexpr char kExtensionDescription[] = "iccDEV IIS ISAPI shared-library sample";
 constexpr DWORD kToolTimeoutMs = 30000;
 constexpr size_t kMaxUploadBytes = 16 * 1024 * 1024;
-constexpr size_t kMaxPreviewBytes = 65536;
 
 struct ToolResult {
   std::string name;
@@ -768,6 +767,7 @@ std::string BuildToolSuiteResponse(LPEXTENSION_CONTROL_BLOCK ecb)
     const std::string safeFilename = SanitizeFilename(filename, inputKind == "xml" ? "upload.xml" : "upload.icc");
     const std::vector<ToolResult> tools = RunTopTools(tempDir, inputKind, filename, body);
     WriteWorkspaceIndex(tempDir, inputKind, safeFilename, body.size(), tools);
+    WriteWorkspaceRootIndex(tempDir.parent_path());
     return BuildToolJson(inputKind,
                          safeFilename,
                          body.size(),
@@ -936,10 +936,10 @@ BOOL WINAPI GetExtensionVersion(HSE_VERSION_INFO* versionInfo)
   }
 
   versionInfo->dwExtensionVersion = MAKELONG(HSE_VERSION_MINOR, HSE_VERSION_MAJOR);
-  std::strncpy(versionInfo->lpszExtensionDesc,
-               kExtensionDescription,
-               HSE_MAX_EXT_DLL_NAME_LEN - 1);
-  versionInfo->lpszExtensionDesc[HSE_MAX_EXT_DLL_NAME_LEN - 1] = '\0';
+  const size_t copyLen = std::min(std::strlen(kExtensionDescription),
+                                  static_cast<size_t>(HSE_MAX_EXT_DLL_NAME_LEN - 1));
+  std::memcpy(versionInfo->lpszExtensionDesc, kExtensionDescription, copyLen);
+  versionInfo->lpszExtensionDesc[copyLen] = '\0';
   return TRUE;
 }
 

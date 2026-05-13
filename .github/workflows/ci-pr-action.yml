@@ -224,7 +224,7 @@ jobs:
           fi
 
           run_full=false
-          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" ]]; then
+          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$ci_changed" == "true" ]]; then
             run_full=true
           fi
 

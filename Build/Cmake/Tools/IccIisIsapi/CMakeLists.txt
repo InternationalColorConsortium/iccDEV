@@ -48,7 +48,7 @@ if(ENABLE_ICCJSON)
   target_include_directories(iccIisIsapi PRIVATE
     "${SRC_ROOT}/IccJSON/IccLibJSON")
   target_compile_definitions(iccIisIsapi PRIVATE USE_ICCJSON=1)
-  if(MSVC)
+  if(MSVC AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     # issue #823: anchor an exported IccJSON2 symbol so MSVC link
     # (/OPT:REF,ICF) and any antivirus / parallel-build race on the
     # windows-latest runner cannot silently elide the IccJSON2.dll

@@ -209,7 +209,7 @@ static BOOL IsValidColorType(COLORTYPE ctSpace, icColorSpaceSignature sigSpace)
       }
       break;
 
-    case COLOR_NAMED:  //IccDEVCmm Unsupported color spaace in transform
+    case COLOR_NAMED:  //IccDEVCmm Unsupported color space in transform
     default:
       return FALSE;
   }
@@ -307,7 +307,7 @@ static BOOL IsValidBitmapType(BMFORMAT bmType, icColorSpaceSignature sigSpace)
       }
       break;
 
-    case COLOR_NAMED:  //IccDEVCmm Unsupported color spaace in transform
+    case BM_NAMED_INDEX:  //IccDEVCmm Unsupported color space in transform
     default:
       return FALSE;
   }
@@ -482,18 +482,19 @@ BOOL WINAPI CMCheckColorsInGamut(
 
 BOOL WINAPI CMCheckRGBs(
                         HCMTRANSFORM hcmTransform,
-                        LPBYTE lpSrcBits,
+                        LPVOID lpSrcBits_,
                         BMFORMAT bmInput, 
                         DWORD dwWidth,
                         DWORD dwHeight,
                         DWORD dwStride, 
                         LPBYTE lpaResult, 
                         PBMCALLBACKFN pfnCallback,
-                        ULONG ulCallbackData 
+                        LPARAM ulCallbackData
                         )
 {
   size_t i = (size_t)hcmTransform;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
+  LPBYTE lpSrcBits = (LPBYTE)lpSrcBits_;
 
   if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
     SetLastError(ERROR_INVALID_HANDLE);
@@ -952,8 +953,8 @@ static CIccProfile *GetProfileFromBuf(LPBYTE lpBuf)
 
 HCMTRANSFORM WINAPI CMCreateTransformExt(
                                          LPLOGCOLORSPACEA lpColorSpace,        // color space pointer
-                                         LPBYTE lpDevCharacter,        // device profile
-                                         LPBYTE lpTargetDevCharacter,  // target profile
+                                         LPDEVCHARACTER lpDevCharacter,        // device profile
+                                         LPDEVCHARACTER lpTargetDevCharacter,  // target profile
                                          DWORD dwFlags                         // creation flags
                                         )
 {
@@ -997,7 +998,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
   }
 
   if (lpTargetDevCharacter) {
-    pProfile = GetProfileFromBuf(lpTargetDevCharacter);
+    pProfile = GetProfileFromBuf((LPBYTE)lpTargetDevCharacter);
     if (!pProfile) {
       delete pCmm;
       if (lpSrcProfileBuf)
@@ -1014,7 +1015,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
 
     //If we are connecting a target between and input and output device profile we need to insert the target profile again
     if (lpSrcProfileBuf && lpDevCharacter) {
-      pProfile = GetProfileFromBuf(lpTargetDevCharacter);
+      pProfile = GetProfileFromBuf((LPBYTE)lpTargetDevCharacter);
       if (!pProfile) {
         delete pCmm;
         GlobalFree(lpSrcProfileBuf);
@@ -1030,7 +1031,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
   }
 
   if (lpDevCharacter) {
-    pProfile = GetProfileFromBuf(lpDevCharacter);
+    pProfile = GetProfileFromBuf((LPBYTE)lpDevCharacter);
     if (!pProfile) {
       delete pCmm;
       if (lpSrcProfileBuf)
@@ -1067,8 +1068,8 @@ HCMTRANSFORM WINAPI CMCreateTransformExt(
 
 HCMTRANSFORM WINAPI CMCreateTransformExtW(
                                           LPLOGCOLORSPACEW lpColorSpace,        // color space pointer
-                                          LPBYTE lpDevCharacter,        // device profile
-                                          LPBYTE lpTargetDevCharacter,  // target profile
+                                          LPDEVCHARACTER lpDevCharacter,        // device profile
+                                          LPDEVCHARACTER lpTargetDevCharacter,  // target profile
                                           DWORD dwFlags                         // creation flags
                                          )
 {
@@ -1109,7 +1110,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
   }
 
   if (lpTargetDevCharacter) {
-    pProfile = GetProfileFromBuf(lpTargetDevCharacter);
+    pProfile = GetProfileFromBuf((LPBYTE)lpTargetDevCharacter);
     if (!pProfile) {
       delete pCmm;
       if (lpSrcProfileBuf)
@@ -1126,7 +1127,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
 
     //If we are connecting a target between and input and output device profile we need to insert the target profile again
     if (lpSrcProfileBuf && lpDevCharacter) {
-      pProfile = GetProfileFromBuf(lpTargetDevCharacter);
+      pProfile = GetProfileFromBuf((LPBYTE)lpTargetDevCharacter);
       if (!pProfile) {
         delete pCmm;
         GlobalFree(lpSrcProfileBuf);
@@ -1142,7 +1143,7 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
   }
 
   if (lpDevCharacter) {
-    pProfile = GetProfileFromBuf(lpDevCharacter);
+    pProfile = GetProfileFromBuf((LPBYTE)lpDevCharacter);
     if (!pProfile) {
       delete pCmm;
       if (lpSrcProfileBuf)
@@ -1161,15 +1162,17 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
 
   if (pCmm->Begin()!=icCmmStatOk) {
     delete pCmm;
-    if (lpSrcProfileBuf)
+    if (lpSrcProfileBuf) {
       GlobalFree(lpSrcProfileBuf);
-      return 0;
+    }
+    return 0;
   }
 
-  if (lpSrcProfileBuf)
+  if (lpSrcProfileBuf) {
     GlobalFree(lpSrcProfileBuf);
+  }
 
-    g_Transforms[rv] = pCmm;
+  g_Transforms[rv] = pCmm;
 
   return (HCMTRANSFORM)(rv+256);
 }
@@ -1177,8 +1180,8 @@ HCMTRANSFORM WINAPI CMCreateTransformExtW(
 
 HCMTRANSFORM WINAPI CMCreateTransform(
                                       LPLOGCOLORSPACEA lpColorSpace,       // color space pointer
-                                      LPBYTE lpDevCharacter,       // device profile
-                                      LPBYTE lpTargetDevCharacter  // target profile
+                                      LPDEVCHARACTER lpDevCharacter,       // device profile
+                                      LPDEVCHARACTER lpTargetDevCharacter  // target profile
                                       )
 {
   return CMCreateTransformExt(lpColorSpace, lpDevCharacter, lpTargetDevCharacter, NORMAL_MODE);
@@ -1187,8 +1190,8 @@ HCMTRANSFORM WINAPI CMCreateTransform(
 
 HCMTRANSFORM WINAPI CMCreateTransformW(
                                        LPLOGCOLORSPACEW lpColorSpace,       // color space pointer
-                                       LPBYTE lpDevCharacter,       // device profile
-                                       LPBYTE lpTargetDevCharacter  // target profile
+                                       LPDEVCHARACTER lpDevCharacter,       // device profile
+                                       LPDEVCHARACTER lpTargetDevCharacter  // target profile
                                        )
 {
   return CMCreateTransformExtW(lpColorSpace, lpDevCharacter, lpTargetDevCharacter, NORMAL_MODE);
@@ -1512,20 +1515,22 @@ BOOL WINAPI CMTranslateRGB(
 
 BOOL WINAPI CMTranslateRGBsExt(
                                HCMTRANSFORM hcmTransform, 
-                               LPBYTE lpSrcBits,
+                               LPVOID lpSrcBits_,
                                BMFORMAT bmInput,
                                DWORD dwWidth, 
                                DWORD dwHeight,
                                DWORD dwInputStride, 
-                               LPBYTE lpDestBits,
+                               LPVOID lpDestBits_,
                                BMFORMAT bmOutput, 
                                DWORD dwOutputStride,
                                LPBMCALLBACKFN lpfnCallback,
-                               ULONG ulCallbackData
+                               LPARAM ulCallbackData
                               )
 {
   size_t i = (size_t)hcmTransform;
   icFloatNumber srcPixel[MAX_COLOR_CHANNELS], destPixel[MAX_COLOR_CHANNELS];
+  LPBYTE lpSrcBits = (LPBYTE)lpSrcBits_;
+  LPBYTE lpDestBits = (LPBYTE)lpDestBits_;
 
   if (i<256 || i>=256+AVAILABLE_TRANSFORMS || !g_Transforms[i-256]) {
     SetLastError(ERROR_INVALID_HANDLE);
@@ -2165,12 +2170,12 @@ BOOL WINAPI CMTranslateRGBsExt(
 
 BOOL WINAPI CMTranslateRGBs(
                             HCMTRANSFORM hcmTransform,
-                            LPBYTE lpSrcBits, 
+                            LPVOID lpSrcBits,
                             BMFORMAT bmInput, 
                             DWORD dwWidth, 
                             DWORD dwHeight, 
                             DWORD dwInputStride,
-                            LPBYTE lpDestBits, 
+                            LPVOID lpDestBits,
                             BMFORMAT bmOutput, 
                             DWORD dwTranslateDirection
                            )
@@ -2191,7 +2196,7 @@ BOOL WINAPI CMTranslateRGBs(
     bmOutput,
     0,
     NULL,
-    NULL);
+    0);
 }
 
 
@@ -2313,4 +2318,3 @@ BOOL WINAPI CMGetNamedProfileInfo(
 
   return TRUE;
 }
-

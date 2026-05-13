@@ -116,7 +116,8 @@ iccdev_collect_cache_runtime_path_entries(_runtime_path_entries "${ICCDEV_BUILD_
 list(APPEND _path_entries ${_runtime_path_entries})
 
 list(JOIN _path_entries ";" _path_prefix)
-set(_run_path "${_path_prefix};$ENV{PATH}")
+set(_run_path "${_path_prefix}")
+string(REPLACE ";" "\\;" _run_path_env "${_run_path}")
 
 get_filename_component(_script_name "${ICCDEV_BATCH_SCRIPT}" NAME)
 if(_script_name STREQUAL "CreateAllProfiles.bat")
@@ -157,7 +158,8 @@ endif()
 execute_process(
   COMMAND
     "${CMAKE_COMMAND}" -E env
-    "PATH=${_run_path}"
+    "PATH=${_run_path_env}"
+    "Path=${_run_path_env}"
     "ICCDEV_TOOLS_DIR=${ICCDEV_BUILD_DIR}/Tools"
     "ICCDEV_TESTING_DIR=${ICCDEV_WINDOWS_WORK_DIR}"
     "ICCDEV_BUILD_DIR=${ICCDEV_BUILD_DIR}"

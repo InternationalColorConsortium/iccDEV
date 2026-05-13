@@ -1804,7 +1804,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
 
     if (bInvalidVersionBcd) {
         sReport += icMsgValidateWarning;
-        snprintf(buf, bufSize, "Version number 0x%08X contains non-BCD digit(s).\n", m_Header.version);
+        snprintf(buf, bufSize, "Version number 0x%08X contains non-BCD digit(s).\n", static_cast<unsigned int>(m_Header.version));
         sReport += buf;
         rv = icMaxStatus(rv, icValidateWarning);
     }

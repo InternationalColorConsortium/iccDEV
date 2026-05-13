@@ -294,6 +294,129 @@ jobs:
           "Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
+  clangcl-smoke:
+    name: Windows ClangCL smoke
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
+
+      - name: Install dependencies
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+           Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          tar -xf deps.zip
+
+      - name: Run ClangCL build and CTest check
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $env:GH_NO_UPDATE_NOTIFIER = '1'
+          $env:GH_PROMPT_DISABLED = '1'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+           Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          function Invoke-Native {
+           param(
+             [Parameter(Mandatory = $true)][string] $FilePath,
+             [Parameter(Mandatory = $true)][string[]] $Arguments
+           )
+           & $FilePath @Arguments
+           if ($LASTEXITCODE -ne 0) {
+             throw "$FilePath failed with exit code $LASTEXITCODE"
+           }
+          }
+
+          $buildDir = 'Build\Cmake\build-clangcl-pr-smoke'
+          Invoke-Native cmake @(
+           '-S', 'Build\Cmake',
+           '-B', $buildDir,
+           '-G', 'Visual Studio 17 2022',
+           '-A', 'x64',
+           '-T', 'ClangCL',
+           '-DCMAKE_TOOLCHAIN_FILE=..\..\scripts\buildsystems\vcpkg.cmake',
+           '-DVCPKG_MANIFEST_MODE=OFF',
+           '-DENABLE_TOOLS=ON',
+           '-DENABLE_CMM_TOOLS=ON',
+           '-DENABLE_TESTS=ON',
+           '-Wno-dev'
+          )
+          Invoke-Native cmake @(
+           '--build', $buildDir,
+           '--config', 'Debug',
+           '--parallel'
+          )
+          Invoke-Native cmake @(
+           '--build', $buildDir,
+           '--config', 'Debug',
+           '--target', 'check',
+           '--parallel'
+          )
+
+      - name: GitHub Summary
+        if: always()
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+          GH_JOB_STATUS: ${{ job.status }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          . .github/scripts/sanitize.ps1
+          $summaryLines = @(
+           '### Windows ClangCL smoke',
+           '',
+           '- Generator: ``Visual Studio 17 2022 -T ClangCL``',
+           '- Build scope: ``full configured command-line project plus Windows CMM DLL``',
+           '- Build type: ``Debug``',
+           '- CTest: ``all registered Windows suites``',
+           "- Result: ``$(Sanitize-Line $env:GH_JOB_STATUS)``"
+          )
+          $summaryLines | ForEach-Object {
+            Sanitize-Print $_
+          } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload ClangCL smoke results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-pr-win-clangcl-smoke-results
+          path: Build/Cmake/build-clangcl-pr-smoke/Testing
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+
   mingw-smoke:
     name: MinGW UCRT64 smoke
     runs-on: windows-2022
@@ -400,7 +523,7 @@ jobs:
             '-DENABLE_ICCJSON=ON',
             '-DENABLE_IMAGE_TOOLS=ON',
             '-DENABLE_WXWIDGETS=OFF',
-            '-DENABLE_CMM_TOOLS=OFF',
+            '-DENABLE_CMM_TOOLS=ON',
             '-DENABLE_IIS_TOOLS=OFF',
             '-DENABLE_TESTS=ON',
             '-DENABLE_SHARED_LIBS=OFF',
@@ -426,7 +549,7 @@ jobs:
             '### Windows MinGW UCRT64 smoke',
             '',
             "- Compiler: ``$(Sanitize-Line $compilerLine)``",
-            "- Build scope: ``full configured command-line project``",
+            "- Build scope: ``full configured command-line project plus Windows CMM DLL``",
             "- Build type: ``Release``",
             "- Linkage: ``static``",
             "- CTest: ``all registered MinGW suites``",

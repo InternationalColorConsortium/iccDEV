@@ -93,7 +93,9 @@ set_target_properties(${TARGET_NAME} PROPERTIES
     PDB_OUTPUT_DIRECTORY     "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
 )
 
-# Keep non-path link flags
-target_link_options(${TARGET_NAME} PRIVATE "/DYNAMICBASE:NO" "/NODEFAULTLIB:LIBCMT")
+if(MSVC)
+    # Keep non-path MSVC link flags off MinGW, where ld treats them as files.
+    target_link_options(${TARGET_NAME} PRIVATE "/DYNAMICBASE:NO" "/NODEFAULTLIB:LIBCMT")
+endif()
 
 message(STATUS "RefIccMAX.dll build configuration complete.")
