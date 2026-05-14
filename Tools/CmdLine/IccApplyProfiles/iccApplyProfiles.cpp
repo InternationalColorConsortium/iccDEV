@@ -486,7 +486,7 @@ int main(int argc, const char** argv)
     //Fall through - No break here
 
   case icSigLabData:
-    photo = PHOTO_CIELAB;
+    photo = PHOTO_ICCLAB;
     break;
 
   default:
@@ -567,48 +567,35 @@ int main(int argc, const char** argv)
   int lastPer = -1;
   int curper;
 
+  // Boundary rule (per Max Derhak): TIFF pixel values use a *device encoding*
+  // regardless of color space. Integer formats map linearly to [0, 1] via
+  // division/multiplication by the format's full-scale; floating point passes
+  // through unchanged. Any PCS-encoding bridging is handled inside the CMM's
+  // first/last xforms, so the boundary code here is uniform and does not
+  // depend on TIFF photometric or PCS color-space signatures.
   auto decodePixel = [&](icFloatNumber *pPixel, unsigned char *pSrcBytes) -> bool {
     switch(bps) {
-      case 8:
-        if (sphoto==PHOTO_CIELAB) {
-          unsigned char *pSPixel = pSrcBytes;
-          pPixel[0]=(icFloatNumber)pSPixel[0] / 255.0f;
-          pPixel[1]=(icFloatNumber)(pSPixel[1]-128) / 255.0f;
-          pPixel[2]=(icFloatNumber)(pSPixel[2]-128) / 255.0f;
-        }
-        else {
-          unsigned char *pSPixel = pSrcBytes;
-          for (k=0; k<nSrcColorSamples; k++)
-            pPixel[k] = (icFloatNumber)pSPixel[k] / 255.0f;
-        }
+      case 8: {
+        const icUInt8Number *pSPixel = pSrcBytes;
+        for (k=0; k<nSrcColorSamples; k++)
+          pPixel[k] = (icFloatNumber)pSPixel[k] / 255.0f;
         break;
-
-      case 16:
-        if (sphoto==PHOTO_CIELAB) {
-          unsigned short *pSPixel = (unsigned short*)pSrcBytes;
-          pPixel[0]=(icFloatNumber)pSPixel[0] / 65535.0f;
-          pPixel[1]=(icFloatNumber)(pSPixel[1]-0x8000) / 65535.0f;
-          pPixel[2]=(icFloatNumber)(pSPixel[2]-0x8000) / 65535.0f;
-        }
-        else {
-          unsigned short *pSPixel = (unsigned short*)pSrcBytes;
-          for (k=0; k<nSrcColorSamples; k++)
-            pPixel[k] = (icFloatNumber)pSPixel[k] / 65535.0f;
-        }
+      }
+      case 16: {
+        const icUInt16Number *pSPixel = (const icUInt16Number*)pSrcBytes;
+        for (k=0; k<nSrcColorSamples; k++)
+          pPixel[k] = (icFloatNumber)pSPixel[k] / 65535.0f;
         break;
-
+      }
       case 32:
         if (sizeof(icFloatNumber)==sizeof(icFloat32Number)) {
           memcpy(pPixel, pSrcBytes, nSrcColorSamples * sizeof(icFloat32Number));
         }
         else {
-          icFloat32Number *pSPixel = (icFloat32Number*)pSrcBytes;
+          const icFloat32Number *pSPixel = (const icFloat32Number*)pSrcBytes;
           for (k=0; k<nSrcColorSamples; k++)
             pPixel[k] = (icFloatNumber)pSPixel[k];
         }
-
-        if (sphoto==PHOTO_CIELAB || sphoto==PHOTO_ICCLAB)
-          icLabToPcs(pPixel);
         break;
 
       default:
@@ -616,55 +603,24 @@ int main(int argc, const char** argv)
         return false;
     }
 
-    if (sphoto == PHOTO_CIELAB && SrcspaceSig==icSigXYZData) {
-      icLabFromPcs(pPixel);
-      icLabtoXYZ(pPixel);
-      icXyzToPcs(pPixel);
-    }
-
     return true;
   };
 
   auto encodePixel = [&](unsigned char *pDstBytes, icFloatNumber *pPixel) -> bool {
-    if (photo==PHOTO_CIELAB && DestSpaceSig==icSigXYZData) {
-      icXyzFromPcs(pPixel);
-      icXYZtoLab(pPixel);
-      icLabToPcs(pPixel);
-    }
-
     switch(dbps) {
-      case 8:
-        if (photo==PHOTO_CIELAB) {
-          unsigned char *pDPixel = pDstBytes;
-          pDPixel[0] = UnitClipToUInt8(pPixel[0]);
-          pDPixel[1] = static_cast<icUInt8Number>((UnitClipToUInt8(pPixel[1]) + 128) & 0xFF);
-          pDPixel[2] = static_cast<icUInt8Number>((UnitClipToUInt8(pPixel[2]) + 128) & 0xFF);
-        }
-        else {
-          icUInt8Number *pDPixel = pDstBytes;
-          for (k=0; k<nDestSamples; k++)
-            pDPixel[k] = UnitClipToUInt8(pPixel[k]);
-        }
+      case 8: {
+        icUInt8Number *pDPixel = pDstBytes;
+        for (k=0; k<nDestSamples; k++)
+          pDPixel[k] = UnitClipToUInt8(pPixel[k]);
         break;
-
-      case 16:
-        if (photo==PHOTO_CIELAB) {
-          unsigned short *pDPixel = (unsigned short*)pDstBytes;
-          pDPixel[0] = UnitClipToUInt16(pPixel[0]);
-          pDPixel[1] = static_cast<icUInt16Number>((UnitClipToUInt16(pPixel[1]) + 0x8000) & 0xFFFF);
-          pDPixel[2] = static_cast<icUInt16Number>((UnitClipToUInt16(pPixel[2]) + 0x8000) & 0xFFFF);
-        }
-        else {
-          icUInt16Number *pDPixel = (icUInt16Number*)pDstBytes;
-          for (k=0; k<nDestSamples; k++)
-            pDPixel[k] = UnitClipToUInt16(pPixel[k]);
-        }
+      }
+      case 16: {
+        icUInt16Number *pDPixel = (icUInt16Number*)pDstBytes;
+        for (k=0; k<nDestSamples; k++)
+          pDPixel[k] = UnitClipToUInt16(pPixel[k]);
         break;
-
+      }
       case 32:
-        if (photo==PHOTO_CIELAB || photo==PHOTO_ICCLAB)
-          icLabFromPcs(pPixel);
-
         if (sizeof(icFloatNumber)==sizeof(icFloat32Number)) {
           memcpy(pDstBytes, pPixel, dbpp);
         }
@@ -713,139 +669,24 @@ int main(int argc, const char** argv)
     }
     else {
       for (sptr=pSBuf, dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, sptr+=sbpp, dptr+=dbpp) {
-
-      //Special conversions need to be made to convert CIELAB and CIEXYZ to internal PCS encoding
-      switch(bps) {
-        case 8:
-          if (sphoto==PHOTO_CIELAB) {
-            unsigned char *pSPixel = sptr;
-            icFloatNumber *pPixel = SrcPixel;
-            pPixel[0]=(icFloatNumber)pSPixel[0] / 255.0f;
-            pPixel[1]=(icFloatNumber)(pSPixel[1]-128) / 255.0f;
-            pPixel[2]=(icFloatNumber)(pSPixel[2]-128) / 255.0f;
-          }
-          else {
-            unsigned char *pSPixel = sptr;
-            icFloatNumber *pPixel = SrcPixel;
-            for (k=0; k<nSrcColorSamples; k++) {
-              pPixel[k] = (icFloatNumber)pSPixel[k] / 255.0f;
-            }
-          }
-          break;
-
-        case 16:
-          if (sphoto==PHOTO_CIELAB) {
-            unsigned short *pSPixel = (unsigned short*)sptr;
-            icFloatNumber *pPixel = SrcPixel;
-            pPixel[0]=(icFloatNumber)pSPixel[0] / 65535.0f;
-            pPixel[1]=(icFloatNumber)(pSPixel[1]-0x8000) / 65535.0f;
-            pPixel[2]=(icFloatNumber)(pSPixel[2]-0x8000) / 65535.0f;
-          }
-          else {
-            unsigned short *pSPixel = (unsigned short*)sptr;
-            icFloatNumber *pPixel = SrcPixel;
-            for (k=0; k<nSrcColorSamples; k++) {
-              pPixel[k] = (icFloatNumber)pSPixel[k] / 65535.0f;
-            }
-          }
-          break;
-
-        case 32:
-          {
-            if (sizeof(icFloatNumber)==sizeof(icFloat32Number)) {
-              memcpy(SrcPixel.get(), sptr, sbpp);
-            }
-            else {
-              icFloat32Number *pSPixel = (icFloat32Number*)sptr;
-              icFloatNumber *pPixel = SrcPixel;
-              for (k=0; k<nSrcColorSamples; k++) {
-                pPixel[k] = (icFloatNumber)pSPixel[k];
-              }
-            }
-
-            if (sphoto==PHOTO_CIELAB || sphoto==PHOTO_ICCLAB) {
-              icLabToPcs(SrcPixel);
-            }
-          }
-          break;
-
-        default:
-          printf("Invalid source bit depth\n");
+        if (!decodePixel(SrcPixel, sptr)) {
+          free(pSBuf);
+          free(pDBuf);
+          free(pSrcRowBuf);
+          free(pDstRowBuf);
           return -1;
-      }
-      if (sphoto == PHOTO_CIELAB && SrcspaceSig==icSigXYZData) {
-        icLabFromPcs(SrcPixel);
-        icLabtoXYZ(SrcPixel);
-        icXyzToPcs(SrcPixel);
-      }
+        }
 
-      //Use CMM to convert SrcPixel to DestPixel
-      pTheCmm->Apply(DestPixel, SrcPixel);
+        //Use CMM to convert SrcPixel to DestPixel
+        pTheCmm->Apply(DestPixel, SrcPixel);
 
-      //Special conversions need to be made to convert from internal PCS encoding CIELAB
-      if (photo==PHOTO_CIELAB && DestSpaceSig==icSigXYZData) {
-        icXyzFromPcs(DestPixel);
-        icXYZtoLab(DestPixel);
-        icLabToPcs(DestPixel);
-      }
-      switch(dbps) {
-        case 8:
-          if (photo==PHOTO_CIELAB) {
-            unsigned char *pDPixel = dptr;
-            icFloatNumber *pPixel = DestPixel;
-            pDPixel[0] = UnitClipToUInt8(pPixel[0]);
-            pDPixel[1] = static_cast<icUInt8Number>((UnitClipToUInt8(pPixel[1]) + 128) & 0xFF);
-            pDPixel[2] = static_cast<icUInt8Number>((UnitClipToUInt8(pPixel[2]) + 128) & 0xFF);
-          }
-          else {
-            icUInt8Number *pDPixel = dptr;
-            icFloatNumber *pPixel = DestPixel;
-            for (k=0; k<nDestSamples; k++) {
-              pDPixel[k] = UnitClipToUInt8(pPixel[k]);
-            }
-          }
-          break;
-
-        case 16:
-          if (photo==PHOTO_CIELAB) {
-            unsigned short *pDPixel = (unsigned short*)dptr;
-            icFloatNumber *pPixel = DestPixel;
-            pDPixel[0] = UnitClipToUInt16(pPixel[0]);
-            pDPixel[1] = static_cast<icUInt16Number>((UnitClipToUInt16(pPixel[1]) + 0x8000) & 0xFFFF);
-            pDPixel[2] = static_cast<icUInt16Number>((UnitClipToUInt16(pPixel[2]) + 0x8000) & 0xFFFF);
-          }
-          else {
-            icUInt16Number *pDPixel = (icUInt16Number*)dptr;
-            icFloatNumber *pPixel = DestPixel;
-            for (k=0; k<nDestSamples; k++) {
-              pDPixel[k] = UnitClipToUInt16(pPixel[k]);
-            }
-          }
-          break;
-
-        case 32:
-          {
-            if (photo==PHOTO_CIELAB || photo==PHOTO_ICCLAB) {
-              icLabFromPcs(SrcPixel);
-            }
-
-            if (sizeof(icFloatNumber)==sizeof(icFloat32Number)) {
-              memcpy(dptr, DestPixel.get(), dbpp);
-            }
-            else {
-              icFloat32Number *pDPixel = (icFloat32Number*)dptr;
-              icFloatNumber *pPixel = DestPixel;
-              for (k=0; k<nDestSamples; k++) {
-                pDPixel[k] = static_cast<icFloat32Number>(pPixel[k]);
-              }
-            }
-          }
-          break;
-
-        default:
-          printf("Invalid source bit depth\n");
+        if (!encodePixel(dptr, DestPixel)) {
+          free(pSBuf);
+          free(pDBuf);
+          free(pSrcRowBuf);
+          free(pDstRowBuf);
           return -1;
-      }
+        }
       }
     }
 

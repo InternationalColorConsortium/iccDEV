@@ -1448,7 +1448,13 @@ bool CIccMpeXmlMatrix::ParseXml(xmlNode *pNode, std::string &parseStr)
     m_nInputChannels = nInputChannels; //Fix m_nInputChannels
   }
 
+  // Accept either "ConstantData" (canonical, what ToXml writes) or "OffsetData"
+  // (historical alias used by authored profile XML sources). Silent omission of
+  // the offset/constants vector causes the matrix to apply with all-zero offset,
+  // which can change colorimetric results - explicitly read both names.
   pData = icXmlFindNode(pNode->children, "ConstantData");
+  if (!pData)
+    pData = icXmlFindNode(pNode->children, "OffsetData");
   if (pData) {
     if (!CIccFloatArray::ParseArray(m_pConstants, m_nOutputChannels, pData->children))
       return false;
