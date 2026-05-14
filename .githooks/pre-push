@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Optional local pre-push sanity guard for iccDEV maintainers.
+#
+###############################################################
+set -euo pipefail
+
+REMOTE_NAME="${1:-origin}"
+REMOTE_URL="${2:-}"
+NULL_SHA="0000000000000000000000000000000000000000"
+
+WARNINGS=()
+
+warn() {
+  WARNINGS+=("$1")
+}
+
+first_existing_ref() {
+  local candidate
+  for candidate in "$@"; do
+    if git rev-parse --verify --quiet "$candidate" >/dev/null; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+new_branch_base() {
+  local remote_head remote_branch
+  local candidates=()
+  remote_head="$(git symbolic-ref -q --short "refs/remotes/${REMOTE_NAME}/HEAD" 2>/dev/null || true)"
+  remote_branch="${remote_head#"${REMOTE_NAME}"/}"
+
+  if [ -n "$remote_branch" ]; then
+    candidates+=("${REMOTE_NAME}/${remote_branch}")
+  fi
+  candidates+=(
+    "${REMOTE_NAME}/master" \
+    "${REMOTE_NAME}/main" \
+    "origin/master" \
+    "origin/main"
+  )
+  first_existing_ref "${candidates[@]}" || true
+}
+
+is_tty() {
+  [ -t 0 ] && [ -t 2 ]
+}
+
+current_branch="$(git symbolic-ref -q --short HEAD || true)"
+if [ -z "$current_branch" ]; then
+  warn "Pushing from detached HEAD; confirm the target refs are intentional."
+fi
+
+if [ -n "$current_branch" ] && upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)"; then
+  behind_count="$(git rev-list --count "HEAD..$upstream" 2>/dev/null || echo 0)"
+  if [ "$behind_count" -gt 0 ]; then
+    warn "Current branch is behind $upstream by $behind_count commit(s)."
+  fi
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${local_ref:-}" ] || continue
+
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master|refs/heads/release/*)
+      warn "Direct push targets protected branch $remote_ref."
+      ;;
+  esac
+
+  if [ "$local_sha" = "$NULL_SHA" ]; then
+    continue
+  fi
+
+  if [ "$remote_sha" != "$NULL_SHA" ]; then
+    review_range="$remote_sha..$local_sha"
+    range_label="$remote_ref"
+  else
+    base_ref="$(new_branch_base)"
+    if [ -n "$base_ref" ]; then
+      merge_base="$(git merge-base "$base_ref" "$local_sha" 2>/dev/null || true)"
+      if [ -n "$merge_base" ]; then
+        review_range="$merge_base..$local_sha"
+        range_label="$remote_ref against $base_ref"
+      else
+        review_range="$local_sha"
+        range_label="$remote_ref"
+        warn "Push creates new branch $remote_ref; no merge-base with $base_ref was found."
+      fi
+    else
+      review_range="$local_sha"
+      range_label="$remote_ref"
+      warn "Push creates new branch $remote_ref; default branch not found, inspecting pushed commit only."
+    fi
+  fi
+
+  commit_count="$(git rev-list --count "$review_range" 2>/dev/null || echo 0)"
+  if [ "$commit_count" -gt 1 ]; then
+    warn "Push updates $range_label with $commit_count commits; confirm this is intentional."
+  fi
+
+  if [[ "$review_range" == *..* ]]; then
+    maintainer_changes="$(git diff --name-only "$review_range" -- \
+      '.github/**' \
+      '.githooks/**' \
+      'Build/Cmake/**' \
+      'Testing/**' \
+      'Dockerfile*' \
+      'Dockerfile.*' \
+      'docs/**' 2>/dev/null || true)"
+  else
+    maintainer_changes="$(git diff-tree --no-commit-id --name-only -r "$local_sha" -- \
+      '.github/**' \
+      '.githooks/**' \
+      'Build/Cmake/**' \
+      'Testing/**' \
+      'Dockerfile*' \
+      'Dockerfile.*' \
+      'docs/**' 2>/dev/null || true)"
+  fi
+  if [ -n "$maintainer_changes" ]; then
+    warn "Push changes maintainer-owned infrastructure paths; confirm reviewer coverage."
+  fi
+done
+
+if [ "${#WARNINGS[@]}" -eq 0 ]; then
+  exit 0
+fi
+
+{
+  echo "iccDEV pre-push sanity guard for $REMOTE_NAME ($REMOTE_URL)"
+  echo ""
+  for item in "${WARNINGS[@]}"; do
+    echo "[WARN] $item"
+  done
+  echo ""
+} >&2
+
+if ! is_tty; then
+  echo "[WARN] Non-interactive push; warnings are advisory. Use --no-verify only for deliberate bypasses." >&2
+  exit 0
+fi
+
+printf "Proceed with push? [y/N] " >&2
+read -r answer
+case "$answer" in
+  y|Y|yes|YES) exit 0 ;;
+  *) echo "Push cancelled by pre-push sanity guard." >&2; exit 1 ;;
+esac

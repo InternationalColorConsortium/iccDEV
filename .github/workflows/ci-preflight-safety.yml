@@ -1,0 +1,249 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+## Intent: Pre-flight safety, security, and sanity checks
+#
+###############################################################
+
+name: "ci-preflight-safety"
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/**'
+      - '.githooks/**'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/**'
+      - '.githooks/**'
+  workflow_dispatch:
+
+concurrency:
+  group: "preflight-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  cancel-in-progress: true
+
+jobs:
+  preflight:
+    name: "Pre-flight checks"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout trusted scanner helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout target repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch pre-flight base ref
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        working-directory: target
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source ../trusted/.github/scripts/sanitize-sed.sh
+          git fetch --no-tags --prune origin '+refs/heads/master:refs/remotes/origin/master'
+          git rev-parse --verify origin/master >/dev/null
+
+      - name: Install pre-flight tools
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+
+          python3 -m venv /tmp/iccdev-preflight
+          /tmp/iccdev-preflight/bin/python -m pip install --upgrade pip --quiet
+          /tmp/iccdev-preflight/bin/python -m pip install \
+            'PyYAML>=6,<7' \
+            'yamllint>=1.35,<2' \
+            'zizmor>=1.9,<2' \
+            --quiet
+          echo "/tmp/iccdev-preflight/bin" >> "$GITHUB_PATH"
+
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+          if command -v codeql >/dev/null 2>&1; then
+            dirname "$(command -v codeql)" >> "$GITHUB_PATH"
+          else
+            CODEQL_VER="2.24.1"
+            CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
+            CODEQL_SHA256="9767468e00a505ed022eedcf5813dd47760567a400ead7bf2519ce22f953dde1"
+            CODEQL_URL="https://github.com/github/codeql-action/releases/download"
+            curl -fsSL --retry 3 \
+              -o "${CODEQL_ARCHIVE}" \
+              "${CODEQL_URL}/codeql-bundle-v${CODEQL_VER}/codeql-bundle-linux64.tar.gz"
+            printf '%s  %s\n' "${CODEQL_SHA256}" "${CODEQL_ARCHIVE}" | sha256sum -c -
+            tar xzf "${CODEQL_ARCHIVE}" -C /opt
+            echo "/opt/codeql" >> "$GITHUB_PATH"
+          fi
+
+      - name: Select pre-flight scanner
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          trusted_scanner="$PWD/trusted/.github/scripts/preflight-safety-checks.sh"
+          if [ -f "$trusted_scanner" ]; then
+            echo "PREFLIGHT_SCRIPT=$trusted_scanner" >> "$GITHUB_ENV"
+            echo "PREFLIGHT_TRUST_MODE=trusted-base" >> "$GITHUB_ENV"
+          else
+            echo "[WARN] Base ref lacks preflight-safety-checks.sh; using inline bootstrap validation."
+            echo "PREFLIGHT_TRUST_MODE=bootstrap-inline" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run pre-flight checks
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          PREFLIGHT_BASE_REF: origin/master
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source trusted/.github/scripts/sanitize-sed.sh
+          echo "Pre-flight scanner mode: $(sanitize_line "$PREFLIGHT_TRUST_MODE")"
+          if [ "$PREFLIGHT_TRUST_MODE" = "trusted-base" ]; then
+            PREFLIGHT_SCAN_ROOT="$PWD/target" \
+              "$PREFLIGHT_SCRIPT" --require-tools
+            exit 0
+          fi
+
+          cd target
+          mapfile -t changed_files < <(
+            git diff --name-only --diff-filter=ACMRT origin/master...HEAD -- .github .githooks | sort
+          )
+          mapfile -t workflow_files < <(
+            printf '%s\n' "${changed_files[@]}" |
+              awk '/^\.github\/workflows\/.*\.ya?ml$/'
+          )
+          mapfile -t script_files < <(
+            printf '%s\n' "${changed_files[@]}" |
+              awk '/^\.github\/scripts\/.*\.sh$/ || /^\.githooks\/pre-push$/'
+          )
+
+          failures=0
+          if [ "${#workflow_files[@]}" -gt 0 ]; then
+            python3 - "${workflow_files[@]}" <<'PY'
+          import re
+          import sys
+
+          import yaml
+
+          failures = 0
+
+          for path in sys.argv[1:]:
+              with open(path, "r", encoding="utf-8") as handle:
+                  workflow = yaml.safe_load(handle) or {}
+              print(f"[OK] YAML parse: {path}")
+              if not isinstance(workflow, dict):
+                  continue
+              triggers = workflow.get("on")
+              if triggers is None:
+                  triggers = workflow.get(True)
+              if isinstance(triggers, str):
+                  trigger_names = {triggers}
+              elif isinstance(triggers, list):
+                  trigger_names = {str(trigger) for trigger in triggers}
+              elif isinstance(triggers, dict):
+                  trigger_names = {str(trigger) for trigger in triggers}
+              else:
+                  trigger_names = set()
+              raw = open(path, "r", encoding="utf-8").read()
+              if "pull_request_target" in trigger_names and re.search(r"ref.*pull_request.*head", raw):
+                  print(f"[FAIL] {path}: pull_request_target checks out PR head content", file=sys.stderr)
+                  failures += 1
+              high_risk = {"issue_comment", "repository_dispatch"}
+              for trigger in sorted(trigger_names & high_risk):
+                  print(f"[FAIL] {path}: high-risk event trigger {trigger}", file=sys.stderr)
+                  failures += 1
+              workflow_run_guard = "workflow_run.head_repository.full_name == github.repository"
+              if "workflow_run" in trigger_names and workflow_run_guard not in raw:
+                  print(f"[FAIL] {path}: workflow_run trigger is missing same-repository guard",
+                        file=sys.stderr)
+                  failures += 1
+              jobs = workflow.get("jobs", {})
+              if not isinstance(jobs, dict):
+                  continue
+              for job_name, job in jobs.items():
+                  if not isinstance(job, dict):
+                      continue
+                  steps = job.get("steps", [])
+                  if not isinstance(steps, list):
+                      continue
+                  for index, step in enumerate(steps, start=1):
+                      if not isinstance(step, dict):
+                          continue
+                      uses = str(step.get("uses", ""))
+                      if uses and not uses.startswith("./") and not uses.startswith("docker://"):
+                          if "@" not in uses or not re.search(r"@[0-9a-f]{40}(?:\s|$)", uses):
+                              print(f"[FAIL] {path}: action is not SHA-pinned: {uses}", file=sys.stderr)
+                              failures += 1
+                      if not uses.startswith("actions/checkout@"):
+                          continue
+                      with_block = step.get("with", {})
+                      if not isinstance(with_block, dict):
+                          with_block = {}
+                      persist = with_block.get("persist-credentials")
+                      if persist is False or str(persist).lower() == "false":
+                          continue
+                      print(f"[FAIL] {path}: checkout missing persist-credentials in {job_name}/{index}",
+                            file=sys.stderr)
+                      failures += 1
+
+          raise SystemExit(1 if failures else 0)
+          PY
+            actionlint -no-color "${workflow_files[@]}"
+          yamllint_config='{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}'
+          yamllint -d "$yamllint_config" "${workflow_files[@]}"
+          zizmor "${workflow_files[@]}"
+          else
+            echo "[SKIP] No changed workflow files"
+          fi
+
+          if [ "${#script_files[@]}" -gt 0 ]; then
+            shellcheck "${script_files[@]}"
+          else
+            echo "[SKIP] No changed shell hook/script files"
+          fi
+
+          if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
+            codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+          fi
+
+          exit "$failures"

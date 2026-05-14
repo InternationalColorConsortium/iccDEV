@@ -25,7 +25,6 @@ on:
   push:
     branches:
       - master
-      - ci-codeql-security
     paths:
       - 'IccProfLib/**'
       - 'IccXML/**'
@@ -39,6 +38,7 @@ on:
       - '.github/workflows/ci-codeql-security.yml'
   schedule:
     - cron: '0 6 * * 1'
+  workflow_dispatch:
 concurrency:
   group: "codeql-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
@@ -65,15 +65,27 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Checkout trusted security helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: |
+            .github/scripts
+            .github/codeql-queries
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Install build dependencies
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             cmake clang \
@@ -84,11 +96,12 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if ! command -v codeql >/dev/null 2>&1; then
             CODEQL_VER="2.24.1"
             CODEQL_ARCHIVE="/tmp/codeql-bundle-linux64.tar.gz"
@@ -106,22 +119,25 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+          TRUSTED_CODEQL_QUERIES: ${{ github.workspace }}/trusted/.github/codeql-queries
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          codeql pack install .github/codeql-queries/
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          codeql pack install "$TRUSTED_CODEQL_QUERIES"
 
       - name: Configure iccDEV
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           cmake -S Build/Cmake -B /tmp/iccdev-codeql-build \
             -DCMAKE_BUILD_TYPE=Debug \
             -DENABLE_TOOLS=ON \
@@ -133,11 +149,12 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           NJOBS="$(nproc)"
           codeql database create /tmp/codeql-db \
             --language=cpp \
@@ -149,11 +166,13 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+          TRUSTED_CODEQL_QUERIES: ${{ github.workspace }}/trusted/.github/codeql-queries
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           mkdir -p codeql-results
 
           # Standard security + quality suite
@@ -168,25 +187,26 @@ jobs:
             --format=sarif-latest \
             --output=codeql-results/iccdev-security.sarif \
             --threads=0 \
-            .github/codeql-queries/iccdev-security-suite.qls
+            "$TRUSTED_CODEQL_QUERIES/iccdev-security-suite.qls"
 
           # IccJSON (JsonLib) targeted security queries
           codeql database analyze /tmp/codeql-db \
             --format=sarif-latest \
             --output=codeql-results/iccdev-jsonlib-security.sarif \
             --threads=0 \
-            .github/codeql-queries/iccdev-jsonlib-suite.qls
+            "$TRUSTED_CODEQL_QUERIES/iccdev-jsonlib-suite.qls"
 
       - name: Generate report
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
-          .github/scripts/codeql-report.sh \
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          "$TRUSTED_SCRIPTS/codeql-report.sh" \
             codeql-results/cpp-security-and-quality.sarif \
             codeql-results/iccdev-security.sarif \
             codeql-results/iccdev-jsonlib-security.sarif \

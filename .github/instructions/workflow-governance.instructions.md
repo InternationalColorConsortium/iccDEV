@@ -13,6 +13,17 @@ release packaging, and security automation are maintainer-owned
 infrastructure. General contributors should not edit these areas unless an
 iccDEV maintainer explicitly requests that work.
 
+## Maintainer Security Posture
+
+Maintainer-owned infrastructure should favor conservative review over speed.
+For CI, release, packaging, Docker, and security-automation changes,
+maintainers should run the smallest complete local security battery that matches
+the changed surface, patch confirmed findings, and retest before pushing.
+
+Do not treat scanner output as automatically authoritative. Classify each
+finding as fixed, accepted with a documented rationale, or deferred with an
+owner-visible follow-up. Prefer precise evidence over broad success claims.
+
 ## Shell Hardening
 
 Every Bash `run:` block should use:
@@ -102,9 +113,31 @@ For multiline content, sanitize one line at a time.
 
 `ci-pr-risk-security-analysis.yml` checks workflow governance, including action
 pinning, dangerous triggers, credential hygiene, shell hardening, matrix
-expression injection, output sanitization, permissions, and supply-chain risk.
-It supports both manual `workflow_dispatch` runs and reusable `workflow_call`
-invocation from other CI workflows. Prefer calling it over copying scanner logic.
+expression injection, output sanitization, permissions, Dockerfile security, and
+supply-chain risk.
+It is the required PR security canary for workflow and container risk, and runs
+with read-only permissions against every pull request through the
+`ci-pr-action.yml` risk-gate job. It also supports manual `workflow_dispatch`
+runs and reusable `workflow_call` invocation from other CI workflows. Prefer
+calling it over copying scanner logic, and avoid adding a second direct PR
+trigger unless the caller gate is removed to prevent duplicate checks.
+
+`ci-preflight-safety.yml` runs the local pre-flight script on workflow and hook
+changes. It installs and runs actionlint, yamllint, shellcheck, and zizmor, then
+delegates repository-specific checks to `.github/scripts/preflight-safety-checks.sh`.
+Use that script locally before pushing maintainer-owned infrastructure changes.
+The local script intentionally runs only the deterministic subset of
+`ci-pr-risk-security-analysis.yml`: changed-workflow YAML parsing, actionlint,
+yamllint, zizmor, SHA pin checks, dangerous-trigger checks, run-block expression
+injection checks, checkout credential checks, shellcheck for changed scripts,
+CodeQL query resolution, and the workflow permission audit. Leave the full
+owner-visible report, broad repository scan, and any GitHub-context-specific
+classification to the Actions workflow.
+
+Use tiered CodeQL coverage. CI-only, script-only, and documentation-only changes
+should use the pre-flight workflow's fast CodeQL query resolution. Full CodeQL
+database builds are reserved for C/C++/CMake/query/config changes, scheduled
+runs, the `codeql-ready` PR label, or explicit maintainer `workflow_dispatch`.
 
 ## Full Run Log Audit
 
@@ -137,9 +170,10 @@ Treat these green-run signals as actionable:
 - Static vcpkg triplets linked against the wrong CRT.
 - Matrix configurations that skip smoke tests for non-Debug variants.
 
-Use YAML parsing, `actionlint`, shellcheck, `yamllint`, and the workflow
-permission audit for workflow files. Run CodeQL for related C/C++ or CMake
-changes, not as the workflow YAML checker.
+Use YAML parsing, `actionlint`, shellcheck, `yamllint`, `zizmor`, and the
+workflow permission audit for workflow files. Use `hadolint`, Trivy config, or
+equivalent Dockerfile checks when container files are in scope. Run CodeQL for
+related C/C++ or CMake changes, not as the workflow YAML checker.
 
 Before merging workflow changes, run:
 
@@ -147,7 +181,9 @@ Before merging workflow changes, run:
 python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['.github/workflows/<workflow>.yml']]; print('YAML OK')"
 actionlint -no-color .github/workflows/<workflow>.yml
 yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' .github/workflows/<workflow>.yml
+zizmor .github/workflows/<workflow>.yml
 gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+.github/scripts/preflight-safety-checks.sh
 ```
 
 Also scan changed `run:` blocks for direct `${{ }}` interpolation. Any value
@@ -167,3 +203,16 @@ workflow must still have a deterministic pass/fail condition.
 When profile generation counts change, update the assertions in
 `docs/ctest.md`, `Build/Cmake/Testing/CMakeLists.txt`, and the workflows that
 validate generated-profile totals.
+
+## Optional Pre-Push Hook
+
+Maintainers can install the optional local hook with:
+
+```bash
+.github/scripts/install-git-hooks.sh
+```
+
+The hook warns before pushing multiple commits, detached HEAD state, branches
+behind upstream, protected branch targets, or maintainer-owned infrastructure
+changes. It is advisory for non-interactive pushes and prompts only when stdin
+and stderr are attached to a terminal.

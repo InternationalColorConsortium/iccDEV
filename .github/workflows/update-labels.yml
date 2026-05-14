@@ -14,25 +14,18 @@
 
 name: ci-status-label
 
+# Existing label/status summary strings intentionally exceed the default
+# yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 on:
+  # Intentionally do not use workflow_run: this labeler has pull-requests: write
+  # and updates CI labels from schedule/manual runs instead of reacting to
+  # untrusted workflow completions.
   schedule:
     - cron: '0 */4 * * *'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  workflow_run:
-    workflows:
-      - ci-pr-action
-      - ci-json-roundtrip
-      - ci-json-python
-      - ci-docker
-      - ci-regression-checks
-      - ci-risk-analysis
-      - ci-pr-unix
-      - ci-pr-win
-      - ci-pr-wasm
-      - ci-sanitizer-tests
-      - ci-vcpkg-ports
-    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -41,7 +34,7 @@ permissions:
   checks: read  # Required to evaluate GitHub Actions check runs.
 
 concurrency:
-  group: pr-status-labeler-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.id || 'batch' }}
+  group: pr-status-labeler-${{ github.event.pull_request.number || 'batch' }}
   cancel-in-progress: true
 
 jobs:
@@ -87,14 +80,12 @@ jobs:
           BASH_ENV: /dev/null
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
-          EVENT_WORKFLOW_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
 
           EVENT_PR="${EVENT_PR_NUMBER}"
-          WORKFLOW_PR="${EVENT_WORKFLOW_PR_NUMBER}"
 
           write_github_output() {
             local key="$1"
@@ -120,10 +111,6 @@ jobs:
             write_github_output prs "$EVENT_PR"
             write_github_output mode "single"
             echo "Processing PR from event: #$EVENT_PR"
-          elif [[ "$WORKFLOW_PR" =~ ^[0-9]+$ ]]; then
-            write_github_output prs "$WORKFLOW_PR"
-            write_github_output mode "single"
-            echo "Processing PR from workflow run: #$WORKFLOW_PR"
           else
             # Schedule / dispatch with no number -> scan all open PRs
             OPEN_PRS=$(gh pr list --state open --json number -q '.[].number' | tr '\n' ' ' | sed 's/[[:space:]]*$//')
@@ -361,22 +348,22 @@ jobs:
             echo "| PRs Processed | ${PRS_PROCESSED} |"
             echo "| Labels Applied | ${PRS_LABELED} |"
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
           if [[ "$MODE" == "none" ]]; then
-            echo "No open PRs -- nothing to label." >> "$GITHUB_STEP_SUMMARY"
+            echo "No open PRs -- nothing to label." >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           elif [[ -f "${GITHUB_WORKSPACE}/pr_results.txt" ]]; then
             {
               echo "#### Per-PR Results"
               echo ""
               echo "| PR | Status | Details |"
               echo "|----|--------|---------|"
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
             while IFS='|' read -r pr status details; do
               safe_details=$(sanitize_line "$details")
-              echo "| [#${pr}](https://github.com/${GH_REPO}/pull/${pr}) | \`${status}\` | ${safe_details} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| [#${pr}](https://github.com/${GH_REPO}/pull/${pr}) | \`${status}\` | ${safe_details} |" >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
             done < "${GITHUB_WORKSPACE}/pr_results.txt"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           fi
 
-          echo "[OK] Workflow completed." >> "$GITHUB_STEP_SUMMARY"
+          echo "[OK] Workflow completed." >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

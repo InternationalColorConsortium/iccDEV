@@ -1,21 +1,8 @@
 ###############################################################
 #
-## Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
-##                 https://srd.cx
-##
-## Last Updated:  16-DEC-2025-2025 1400Z by David Hoyt
-#
-## Intent:test-xss-extended-signatures.ps1
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
 #
 ###############################################################
 

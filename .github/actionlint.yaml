@@ -5,3 +5,7 @@ paths:
       - 'SC2001'
       - 'SC2016'
       - 'SC2034'
+
+self-hosted-runner:
+  labels:
+    - windows-2025-vs2026

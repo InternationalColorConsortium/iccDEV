@@ -11,6 +11,10 @@
 
 name: ci-risk-analysis
 
+# This scanner contains long literal detection patterns and report strings.
+# Keep line-length disabled here instead of weakening repository-wide yamllint.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
   pull-requests: read  # Required to analyze PR workflow changes.
@@ -104,11 +108,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      ANALYSIS_TARGET: ${{ inputs.analysis_target }}
-      PR_NUMBER: ${{ inputs.pr_number }}
-      GIT_REF: ${{ inputs.git_ref }}
-      SEVERITY_THRESHOLD: ${{ inputs.severity_threshold }}
-      FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
+      ANALYSIS_TARGET: ${{ github.event.pull_request.number && 'Pull request' || inputs.analysis_target || 'Current branch workflows' }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
+      GIT_REF: ${{ github.event.pull_request.head.sha || inputs.git_ref || github.ref }}
+      SEVERITY_THRESHOLD: ${{ inputs.severity_threshold || 'HIGH' }}
+      FAIL_ON_FINDINGS: ${{ github.event_name == 'pull_request' && 'true' || inputs.fail_on_findings && 'true' || 'false' }}
       SCAN_ROOT: ${{ github.workspace }}/target
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
       RISK_REPORT_PATH: ${{ github.workspace }}/risk-analysis-report-linux.md
@@ -117,7 +121,8 @@ jobs:
       - name: "Checkout trusted scanner helpers"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ github.workflow_sha }}
+          # PR scans use trusted base-branch helpers, not PR-modified scanner code.
+          ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
           path: trusted
           sparse-checkout: .github/scripts
           fetch-depth: 1
@@ -126,7 +131,7 @@ jobs:
       - name: "Checkout target repository"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
           path: target
           fetch-depth: 0
           persist-credentials: false
@@ -139,6 +144,49 @@ jobs:
           path: target
           fetch-depth: 0
           persist-credentials: false
+
+      - name: "Fork PR Maintainer Automation Gate"
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name != github.repository
+        env:
+          BASH_ENV: /dev/null
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            sanitize_line() { printf '%s' "$1"; }
+          fi
+
+          cd "$SCAN_ROOT"
+          git fetch --no-tags --depth=1 origin "$BASE_SHA"
+          mapfile -t changed_files < <(git diff --name-only "$BASE_SHA"...HEAD -- \
+            .github .githooks 'Dockerfile*' 'Dockerfile.*' Build/Cmake 2>/dev/null || true)
+
+          if [ "${#changed_files[@]}" -eq 0 ]; then
+            echo "[OK] Fork PR does not change maintainer-owned automation"
+            exit 0
+          fi
+
+          {
+            echo "## Fork PR Maintainer Automation Gate"
+            echo ""
+            echo "[FAIL] Fork PRs cannot modify maintainer-owned automation in the untrusted PR path."
+            echo ""
+            echo "Open this change from a maintainer branch or split automation changes into a maintainer-owned PR."
+            echo ""
+            echo "Changed maintainer-owned files:"
+            for file in "${changed_files[@]}"; do
+              echo "- \`$(sanitize_line "$file")\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+          exit 1
 
       - name: "Load sanitizer"
         env:
@@ -159,6 +207,66 @@ jobs:
             echo "WARNING: sanitize-sed.sh not found, using inline fallback"
             echo "SANITIZER_AVAILABLE=false" >> "$GITHUB_ENV"
           fi
+          cat > "${RUNNER_TEMP}/workflow-trigger-names.py" <<'PY'
+          import re
+          import sys
+
+          KEY_RE = re.compile(
+              r"^(?P<indent>\s*)(?P<key>'[^']+'|\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(?P<value>[^#]*)"
+          )
+          LIST_RE = re.compile(
+              r"^\s*-\s*(?P<key>'[^']+'|\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_-]*)\s*(?:#.*)?$"
+          )
+
+
+          def clean(value):
+              return value.strip().strip("\"'")
+
+
+          def inline_triggers(value):
+              value = value.split("#", 1)[0].strip()
+              if not value:
+                  return []
+              if value.startswith("[") and "]" in value:
+                  return [clean(part) for part in value[1:value.index("]")].split(",") if clean(part)]
+              if value.startswith("{") and "}" in value:
+                  items = value[1:value.index("}")].split(",")
+                  return [clean(item.split(":", 1)[0]) for item in items if clean(item.split(":", 1)[0])]
+              return [clean(value)]
+
+          with open(sys.argv[1], "r", encoding="utf-8") as handle:
+              lines = handle.readlines()
+
+          triggers = []
+          in_on = False
+          for line in lines:
+              stripped = line.strip()
+              if not stripped or stripped.startswith("#"):
+                  continue
+
+              match = KEY_RE.match(line)
+              if not in_on:
+                  if match and not match.group("indent") and clean(match.group("key")) == "on":
+                      triggers.extend(inline_triggers(match.group("value")))
+                      in_on = True
+                  continue
+
+              if match and not match.group("indent"):
+                  break
+
+              list_match = LIST_RE.match(line)
+              if list_match:
+                  triggers.append(clean(list_match.group("key")))
+              elif match and match.group("indent"):
+                  triggers.append(clean(match.group("key")))
+
+          seen = set()
+          for trigger in triggers:
+              if trigger and trigger not in seen:
+                  print(trigger)
+                  seen.add(trigger)
+          PY
+          echo "WORKFLOW_TRIGGER_HELPER=${RUNNER_TEMP}/workflow-trigger-names.py" >> "$GITHUB_ENV"
 
       - name: "1. Action SHA Pinning Audit"
         if: always()
@@ -310,10 +418,9 @@ jobs:
 
           while IFS= read -r wf; do
             wf_base=$(basename "$wf")
-            # Extract only the YAML on: section (between on: and next top-level key)
-            on_section=$(awk '/^on:/{f=1;print;next} /^[a-zA-Z]/{f=0} f{print}' "$wf")
+            trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$wf")"
 
-            if grep -q 'pull_request_target' <<< "$on_section"; then
+            if grep -qx 'pull_request_target' <<< "$trigger_names"; then
               if grep -q 'ref.*pull_request.*head' "$wf" 2>/dev/null; then
                 DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
                 echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` uses \`pull_request_target\` with PR head checkout" >> "$RISK_REPORT_PATH"
@@ -327,20 +434,20 @@ jobs:
               fi
             fi
 
-            if grep -q 'issue_comment' <<< "$on_section"; then
+            if grep -qx 'issue_comment' <<< "$trigger_names"; then
               DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
               echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses \`issue_comment\` trigger" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
             fi
 
-            if grep -q 'workflow_run' <<< "$on_section"; then
+            if grep -qx 'workflow_run' <<< "$trigger_names"; then
               DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
               echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`workflow_run\` trigger" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
             fi
 
             # C-2: Additional dangerous triggers
-            if grep -qw 'repository_dispatch' <<< "$on_section"; then
+            if grep -qx 'repository_dispatch' <<< "$trigger_names"; then
               DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
               echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses \`repository_dispatch\` trigger" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
@@ -349,14 +456,14 @@ jobs:
             fi
 
             for evt in create delete; do
-              if grep -qE "^\s+${evt}:" <<< "$on_section"; then
+              if grep -qx "$evt" <<< "$trigger_names"; then
                 DANGEROUS_COUNT=$((DANGEROUS_COUNT + 1))
                 echo "[MEDIUM] \`$(sanitize_line "$wf_base")\` uses \`$evt\` trigger" >> "$RISK_REPORT_PATH"
                 echo "" >> "$RISK_REPORT_PATH"
               fi
             done
 
-            if grep -qw 'workflow_call' <<< "$on_section"; then
+            if grep -qx 'workflow_call' <<< "$trigger_names"; then
               echo "[INFO] \`$(sanitize_line "$wf_base")\` accepts \`workflow_call\` (reusable workflow -- safe)" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
             fi
@@ -893,8 +1000,8 @@ jobs:
             wf_base=$(basename "$wf")
             if grep -qE '^\s+id-token:\s*write' "$wf"; then
               ID_TOKEN_WRITE=$((ID_TOKEN_WRITE + 1))
-              on_section=$(awk '/^on:/{f=1;print;next} /^[a-zA-Z]/{f=0} f{print}' "$wf")
-              if grep -qE 'pull_request_target|workflow_run|repository_dispatch' <<< "$on_section"; then
+              trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$wf")"
+              if grep -qE '^(pull_request_target|workflow_run|repository_dispatch)$' <<< "$trigger_names"; then
                 echo "[CRITICAL] \`$(sanitize_line "$wf_base")\` has \`id-token: write\` with dangerous trigger" >> "$RISK_REPORT_PATH"
                 echo "" >> "$RISK_REPORT_PATH"
               fi
@@ -909,8 +1016,8 @@ jobs:
           PUBLISH_GATE_GAPS=0
           while IFS= read -r wf; do
             wf_base=$(basename "$wf")
-            on_section=$(awk '/^on:/{f=1;print;next} /^[a-zA-Z]/{f=0} f{print}' "$wf")
-            if ! grep -q 'workflow_dispatch' <<< "$on_section"; then
+            trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$wf")"
+            if ! grep -qx 'workflow_dispatch' <<< "$trigger_names"; then
               continue
             fi
             if ! grep -qE '^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write' "$wf"; then
@@ -1009,8 +1116,8 @@ jobs:
           # Check 1: pull_request_target (on: section only)
           PRT_COUNT=0
           while IFS= read -r f; do
-            on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$f")
-            if grep -q 'pull_request_target' <<< "$on_section"; then
+            trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$f")"
+            if grep -qx 'pull_request_target' <<< "$trigger_names"; then
               PRT_COUNT=$((PRT_COUNT + 1))
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
@@ -1122,8 +1229,8 @@ jobs:
           while IFS= read -r f; do
             f_base=$(basename "$f")
             [[ "$f_base" == *"ci-pr-risk-security-analysis"* ]] && continue
-            on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$f")
-            if grep -q 'workflow_run' <<< "$on_section"; then
+            trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$f")"
+            if grep -qx 'workflow_run' <<< "$trigger_names"; then
               if grep -q 'download-artifact' "$f" 2>/dev/null; then
                 ARTIFACT_POISON=$((ARTIFACT_POISON + 1))
               fi
@@ -1162,7 +1269,7 @@ jobs:
 
           # Risk level classification
           if [[ $RISK_SCORE -eq 0 ]]; then
-            RISK_LEVEL="EXCELLENT"
+            RISK_LEVEL="None Identified"
             RISK_EMOJI="[OK]"
           elif [[ $RISK_SCORE -le 10 ]]; then
             RISK_LEVEL="LOW"
@@ -1284,8 +1391,8 @@ jobs:
           while IFS= read -r f; do
             f_base=$(basename "$f")
             [[ "$f_base" == "$SELF_WF" ]] && continue
-            on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$f")
-            if grep -q 'pull_request_target' <<< "$on_section"; then
+            trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$f")"
+            if grep -qx 'pull_request_target' <<< "$trigger_names"; then
               if grep -q 'ref.*pull_request.*head' "$f" 2>/dev/null; then
                 PR_CHECKOUT=$((PR_CHECKOUT + 1))
               fi
@@ -1302,8 +1409,8 @@ jobs:
           while IFS= read -r f; do
             f_base=$(basename "$f")
             [[ "$f_base" == "$SELF_WF" ]] && continue
-            on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$f")
-            if grep -q 'workflow_run' <<< "$on_section"; then
+            trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$f")"
+            if grep -qx 'workflow_run' <<< "$trigger_names"; then
               if grep -q 'download-artifact' "$f" 2>/dev/null; then
                 ART_POISON=$((ART_POISON + 1))
                 echo "[HIGH] \`$(sanitize_line "$f_base")\` uses workflow_run + download-artifact (artifact poisoning vector)" >> "$RISK_REPORT_PATH"
@@ -1542,14 +1649,8 @@ jobs:
             while IFS= read -r wf; do
               wf_base=$(basename "$wf")
 
-              # Extract triggers from on: section only
-              triggers=""
-              on_section=$(awk '/^on:/{fl=1;print;next} /^[a-zA-Z]/{fl=0} fl{print}' "$wf")
-              for t in push pull_request pull_request_target workflow_call workflow_dispatch schedule issues issue_comment workflow_run repository_dispatch create delete release; do
-                if grep -Eq "(^on:[[:space:]].*\\b${t}\\b|^[[:space:]]{2}${t}:)" <<< "$on_section" 2>/dev/null; then
-                  triggers="${triggers:+$triggers, }$t"
-                fi
-              done
+              trigger_names="$(python3 "$WORKFLOW_TRIGGER_HELPER" "$wf")"
+              triggers="$(paste -sd ',' <<< "$trigger_names" | sed 's/,/, /g')"
               triggers="${triggers:-none detected}"
 
               # Check permissions
@@ -1622,7 +1723,7 @@ jobs:
           echo "[OK] PR Risk & Security Analysis complete (Linux)"
 
       - name: "12. Enforce Blocking Findings"
-        if: always() && inputs.fail_on_findings
+        if: always() && (github.event_name == 'pull_request' || inputs.fail_on_findings == true)
         env:
           BASH_ENV: /dev/null
         run: |
@@ -1891,7 +1992,7 @@ jobs:
 
             echo "Full detailed evidence is uploaded as the \`risk-analysis-report-linux\` artifact."
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: "Upload Linux Risk Report"
         if: always()
@@ -1910,11 +2011,11 @@ jobs:
     runs-on: windows-2025-vs2026
     timeout-minutes: 15
     env:
-      ANALYSIS_TARGET: ${{ inputs.analysis_target }}
-      PR_NUMBER: ${{ inputs.pr_number }}
-      GIT_REF: ${{ inputs.git_ref }}
-      SEVERITY_THRESHOLD: ${{ inputs.severity_threshold }}
-      FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
+      ANALYSIS_TARGET: ${{ github.event.pull_request.number && 'Pull request' || inputs.analysis_target || 'Current branch workflows' }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number || '' }}
+      GIT_REF: ${{ github.event.pull_request.head.sha || inputs.git_ref || github.ref }}
+      SEVERITY_THRESHOLD: ${{ inputs.severity_threshold || 'HIGH' }}
+      FAIL_ON_FINDINGS: ${{ github.event_name == 'pull_request' && 'true' || inputs.fail_on_findings && 'true' || 'false' }}
       SCAN_ROOT: ${{ github.workspace }}/target
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
       RISK_REPORT_PATH: ${{ github.workspace }}/risk-analysis-report-windows.md
@@ -1925,7 +2026,8 @@ jobs:
       - name: "Checkout trusted scanner helpers"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ github.workflow_sha }}
+          # PR scans use trusted base-branch helpers, not PR-modified scanner code.
+          ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
           path: trusted
           sparse-checkout: .github/scripts
           fetch-depth: 1
@@ -1934,7 +2036,7 @@ jobs:
       - name: "Checkout target repository"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
           path: target
           fetch-depth: 0
           persist-credentials: false
@@ -1967,6 +2069,67 @@ jobs:
           } else {
             Write-Host "[WARN] sanitize.ps1 not found, will use inline fallback"
           }
+          $helperPath = Join-Path $env:RUNNER_TEMP "workflow-trigger-names.py"
+          @'
+          import re
+          import sys
+
+          KEY_RE = re.compile(
+              r"^(?P<indent>\s*)(?P<key>'[^']+'|\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(?P<value>[^#]*)"
+          )
+          LIST_RE = re.compile(
+              r"^\s*-\s*(?P<key>'[^']+'|\"[^\"]+\"|[A-Za-z_][A-Za-z0-9_-]*)\s*(?:#.*)?$"
+          )
+
+
+          def clean(value):
+              return value.strip().strip("\"'")
+
+
+          def inline_triggers(value):
+              value = value.split("#", 1)[0].strip()
+              if not value:
+                  return []
+              if value.startswith("[") and "]" in value:
+                  return [clean(part) for part in value[1:value.index("]")].split(",") if clean(part)]
+              if value.startswith("{") and "}" in value:
+                  items = value[1:value.index("}")].split(",")
+                  return [clean(item.split(":", 1)[0]) for item in items if clean(item.split(":", 1)[0])]
+              return [clean(value)]
+
+          with open(sys.argv[1], "r", encoding="utf-8") as handle:
+              lines = handle.readlines()
+
+          triggers = []
+          in_on = False
+          for line in lines:
+              stripped = line.strip()
+              if not stripped or stripped.startswith("#"):
+                  continue
+
+              match = KEY_RE.match(line)
+              if not in_on:
+                  if match and not match.group("indent") and clean(match.group("key")) == "on":
+                      triggers.extend(inline_triggers(match.group("value")))
+                      in_on = True
+                  continue
+
+              if match and not match.group("indent"):
+                  break
+
+              list_match = LIST_RE.match(line)
+              if list_match:
+                  triggers.append(clean(list_match.group("key")))
+              elif match and match.group("indent"):
+                  triggers.append(clean(match.group("key")))
+
+          seen = set()
+          for trigger in triggers:
+              if trigger and trigger not in seen:
+                  print(trigger)
+                  seen.add(trigger)
+          '@ | Set-Content -Path $helperPath -Encoding utf8
+          "WORKFLOW_TRIGGER_HELPER=$helperPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: "1. Action SHA Pinning Audit (Windows)"
         if: always()
@@ -2086,18 +2249,9 @@ jobs:
 
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue
           foreach ($wf in $workflows) {
-            $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
-            # Extract only the YAML on: section
-            $inOnSection = $false
-            $onLines = @()
-            foreach ($ln in $lines) {
-              if ($ln -match '^on:') { $inOnSection = $true; $onLines += $ln; continue }
-              if ($inOnSection -and $ln -match '^[a-zA-Z]') { $inOnSection = $false }
-              if ($inOnSection) { $onLines += $ln }
-            }
-            $onText = $onLines -join "`n"
+            $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            if ($onText -match 'pull_request_target') {
+            if ($triggerNames -contains 'pull_request_target') {
               if ($content -match 'ref.*pull_request.*head') {
                 $findings += "$($wf.Name): pull_request_target with PR head checkout (CRITICAL)"
               } else {
@@ -2105,19 +2259,19 @@ jobs:
               }
             }
             foreach ($trigger in $dangerousTriggers) {
-              if ($onText -match $trigger) {
+              if ($triggerNames -contains $trigger) {
                 $findings += "$($wf.Name): $trigger"
               }
             }
             # C-2: Medium-severity triggers
             foreach ($evt in $mediumTriggers) {
-              if ($onText -match "^\s+${evt}:") {
+              if ($triggerNames -contains $evt) {
                 $findings += "$($wf.Name): $evt (MEDIUM)"
               }
             }
             # workflow_call is safe (reusable workflow) -- INFO only
             foreach ($evt in $infoTriggers) {
-              if ($onText -match $evt) {
+              if ($triggerNames -contains $evt) {
                 $infoFindings += "$($wf.Name): $evt (INFO -- reusable workflow, safe)"
               }
             }
@@ -2570,14 +2724,10 @@ jobs:
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
             if ($content -match '(?m)^\s+id-token:\s*write') {
               $idTokenWrite++
-              $onSection = ""
-              $inOn = $false
-              foreach ($ln in (Get-Content $wf.FullName)) {
-                if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
-                if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
-                if ($inOn) { $onSection += "$ln`n" }
-              }
-              if ($onSection -match 'pull_request_target|workflow_run|repository_dispatch') {
+              $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
+              if (($triggerNames -contains 'pull_request_target') -or
+                  ($triggerNames -contains 'workflow_run') -or
+                  ($triggerNames -contains 'repository_dispatch')) {
                 $report += "[CRITICAL] ``$(Sanitize-Line $wf.Name)`` has ``id-token: write`` with dangerous trigger"
               }
             }
@@ -2590,14 +2740,8 @@ jobs:
           $publishGateGaps = 0
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            $onSection = ""
-            $inOn = $false
-            foreach ($ln in (Get-Content $wf.FullName)) {
-              if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
-              if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
-              if ($inOn) { $onSection += "$ln`n" }
-            }
-            if ($onSection -notmatch 'workflow_dispatch') { continue }
+            $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
+            if ($triggerNames -notcontains 'workflow_dispatch') { continue }
             if ($content -notmatch '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write') { continue }
             $hasMasterGate = $content -match "github\.ref == 'refs/heads/master'"
             $hasEnvironment = $content -match '(?m)^\s+environment:'
@@ -2709,13 +2853,8 @@ jobs:
           # Check pull_request_target (on: section only)
           $hasPRT = $false
           foreach ($wf in $workflows) {
-            $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
-            $inOnSection = $false
-            foreach ($ln in $lines) {
-              if ($ln -match '^on:') { $inOnSection = $true; continue }
-              if ($inOnSection -and $ln -match '^[a-zA-Z]') { $inOnSection = $false }
-              if ($inOnSection -and $ln -match 'pull_request_target') { $hasPRT = $true; break }
-            }
+            $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
+            if ($triggerNames -contains 'pull_request_target') { $hasPRT = $true }
             if ($hasPRT) { break }
           }
           if ($hasPRT) {
@@ -2794,14 +2933,8 @@ jobs:
           foreach ($wf in $workflows) {
             if ($wf.Name -eq "ci-pr-risk-security-analysis.yml") { continue }
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            $onSection = ""
-            $inOn = $false
-            foreach ($ln in (Get-Content $wf.FullName)) {
-              if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
-              if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
-              if ($inOn) { $onSection += "$ln`n" }
-            }
-            if ($onSection -match 'workflow_run' -and $content -match 'download-artifact') {
+            $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
+            if ($triggerNames -contains 'workflow_run' -and $content -match 'download-artifact') {
               $artPoison++
             }
           }
@@ -2918,22 +3051,15 @@ jobs:
               }
             }
             # Check pull_request_target only in on: section
-            $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
-            $inOnSection = $false
-            $onText = ""
-            foreach ($ln in $lines) {
-              if ($ln -match '^on:') { $inOnSection = $true; $onText += "$ln`n"; continue }
-              if ($inOnSection -and $ln -match '^[a-zA-Z]') { $inOnSection = $false }
-              if ($inOnSection) { $onText += "$ln`n" }
-            }
-            if ($onText -match 'pull_request_target') {
+            $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
+            if ($triggerNames -contains 'pull_request_target') {
               $findings += @{Workflow=$wf.Name; Indicator='pull_request_target trigger'; Severity='INFO'}
               # Check if it also checks out PR head
               if ($content -match 'ref.*pull_request.*head') {
                 $findings += @{Workflow=$wf.Name; Indicator='pull_request_target with PR head checkout'; Severity='CRITICAL'}
               }
             }
-            if ($onText -match 'issue_comment') {
+            if ($triggerNames -contains 'issue_comment') {
               $findings += @{Workflow=$wf.Name; Indicator='issue_comment trigger'; Severity='MEDIUM'}
             }
           }
@@ -2942,14 +3068,8 @@ jobs:
           foreach ($wf in $workflows) {
             if ($wf.Name -eq $selfWf) { continue }
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            $onSection = ""
-            $inOn = $false
-            foreach ($ln in (Get-Content $wf.FullName)) {
-              if ($ln -match '^on:') { $inOn = $true; $onSection += "$ln`n"; continue }
-              if ($inOn -and $ln -match '^[a-zA-Z]') { $inOn = $false }
-              if ($inOn) { $onSection += "$ln`n" }
-            }
-            if ($onSection -match 'workflow_run' -and $content -match 'download-artifact') {
+            $triggerNames = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
+            if ($triggerNames -contains 'workflow_run' -and $content -match 'download-artifact') {
               $findings += @{Workflow=$wf.Name; Indicator='workflow_run + download-artifact (artifact poisoning)'; Severity='HIGH'}
             }
           }
@@ -3114,37 +3234,8 @@ jobs:
           $workflows = Get-ChildItem -Path ".github/workflows" -Filter "*.yml" -ErrorAction SilentlyContinue | Sort-Object Name
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            $lines = Get-Content $wf.FullName -ErrorAction SilentlyContinue
 
-            # Extract top-level workflow events from the on: section.
-            $knownEvents = @(
-              'push', 'pull_request', 'pull_request_target', 'workflow_call',
-              'workflow_dispatch', 'schedule', 'issues', 'issue_comment',
-              'workflow_run', 'repository_dispatch', 'create', 'delete', 'release'
-            )
-            $triggerList = @()
-            $inOn = $false
-            foreach ($ln in $lines) {
-              if ($ln -match '^on:\s*(.*)$') {
-                $inOn = $true
-                $inlineOn = $matches[1]
-                foreach ($eventName in $knownEvents) {
-                  if ($inlineOn -match "(^|[\[,\s])$([regex]::Escape($eventName))($|[\],\s:])" -and $triggerList -notcontains $eventName) {
-                    $triggerList += $eventName
-                  }
-                }
-                continue
-              }
-              if ($inOn) {
-                if ($ln -match '^\S') { break }
-                if ($ln -match '^  ([A-Za-z_][A-Za-z0-9_-]*):') {
-                  $eventName = $matches[1]
-                  if ($knownEvents -contains $eventName -and $triggerList -notcontains $eventName) {
-                    $triggerList += $eventName
-                  }
-                }
-              }
-            }
+            $triggerList = @(python $env:WORKFLOW_TRIGGER_HELPER $wf.FullName)
             $triggers = if ($triggerList.Count -gt 0) { $triggerList -join ", " } else { "unknown" }
 
             # Check permissions
@@ -3233,7 +3324,7 @@ jobs:
           New-Item -ItemType File -Force -Path (Join-Path $env:RUNNER_TEMP "risk-analysis-windows-failed") | Out-Null
 
       - name: "12. Enforce Blocking Findings (Windows)"
-        if: always() && inputs.fail_on_findings
+        if: always() && (github.event_name == 'pull_request' || inputs.fail_on_findings == true)
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
           POWERSHELL_TELEMETRY_OPTOUT: 1
