@@ -347,7 +347,7 @@ void PDFGroup::WriteContent( std::ostream &out )
 
 /******************************************************************************/
 
-void PDFWriter::AddXObject( Rect2D &bounds, std::string &content, std::string name,
+void PDFWriter::AddXObject( const Rect2D &bounds, std::string &content, std::string name,
                 size_t group, size_t font, size_t procSet )
 {
   if (group == 0)

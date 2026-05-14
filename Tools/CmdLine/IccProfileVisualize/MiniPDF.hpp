@@ -237,7 +237,7 @@ public:
 class PDFXObject : public PDFObject
 {
 public:
-  PDFXObject( const std::string &buf, Rect2D &bounds,
+  PDFXObject( const std::string &buf, const Rect2D &bounds,
             size_t group = 0, size_t font = 0, size_t procSet = 0 ) :
     PDFObject(), m_buf(buf), m_bounds(bounds), m_procset(procSet),
     m_font(font), m_group(group)
@@ -279,7 +279,7 @@ public:
 
 public:
 
-  void AddXObject( Rect2D &bounds, std::string &content, std::string name,
+  void AddXObject( const Rect2D &bounds, std::string &content, std::string name,
                 size_t group = 0, size_t font = 0, size_t procSet = 0 );
 
   size_t PageCount() const { return m_pageCount; }
