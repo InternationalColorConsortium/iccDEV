@@ -1529,10 +1529,10 @@ int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description
     point2D colorPt( sample.a*maxRadius/abChartScale, sample.b*maxRadius/abChartScale );
     point2D plotCenter = center + colorPt;
     commands << plotSquarePDF( plotCenter, symbolSize);
-// TODO - names?
     commands << AddGraphLabels( plotCenter+labelOffset, false, point2D(0,0),
                                 labelSize, sample.name, kTextAlignLeft );
   }
+
 
 // TODO - xyPlot as well?
 // TODO - CIECAM16 plot as well?
@@ -1605,7 +1605,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         icFloatNumber labTemp[3];
         icColorantTableEntry *entry = table->GetEntry( i );
         namedLAB tempNamed;
-        tempNamed.name = entry->name;
+        tempNamed.name = std::to_string(i+1) + std::string(" ") + std::string(entry->name);
         if (pcs == icSigXYZData) {
             // XYZ 16 bit integer
             icFloatNumber xyzTemp[3];
