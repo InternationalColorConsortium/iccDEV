@@ -19,6 +19,20 @@ on:
     - cron: '0 */4 * * *'
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  workflow_run:
+    workflows:
+      - ci-pr-action
+      - ci-json-roundtrip
+      - ci-json-python
+      - ci-docker
+      - ci-regression-checks
+      - ci-risk-analysis
+      - ci-pr-unix
+      - ci-pr-win
+      - ci-pr-wasm
+      - ci-sanitizer-tests
+      - ci-vcpkg-ports
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -27,7 +41,7 @@ permissions:
   checks: read  # Required to evaluate GitHub Actions check runs.
 
 concurrency:
-  group: pr-status-labeler-${{ github.event.pull_request.number || github.event.workflow_run.id || 'batch' }}
+  group: pr-status-labeler-${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.id || 'batch' }}
   cancel-in-progress: true
 
 jobs:
@@ -212,7 +226,7 @@ jobs:
                 else
                   [.check_runs[]
                     | select(.name as $name
-                        | ["label-status", "apply-labels", "mark-codeql-ready"]
+                        | ["PR status labeler", "label-status", "apply-labels", "mark-codeql-ready"]
                         | index($name) | not)
                     | if .status != "completed" then "pending"
                       else (.conclusion // "pending") end]
