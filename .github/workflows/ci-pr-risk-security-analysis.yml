@@ -239,6 +239,7 @@ jobs:
 
           triggers = []
           in_on = False
+          trigger_indent = None
           for line in lines:
               stripped = line.strip()
               if not stripped or stripped.startswith("#"):
@@ -254,10 +255,17 @@ jobs:
               if match and not match.group("indent"):
                   break
 
+              indent_len = len(line) - len(line.lstrip(" "))
+              if trigger_indent is None and stripped:
+                  trigger_indent = indent_len
+
+              if trigger_indent is not None and indent_len != trigger_indent:
+                  continue
+
               list_match = LIST_RE.match(line)
               if list_match:
                   triggers.append(clean(list_match.group("key")))
-              elif match and match.group("indent"):
+              elif match:
                   triggers.append(clean(match.group("key")))
 
           seen = set()
@@ -2102,6 +2110,7 @@ jobs:
 
           triggers = []
           in_on = False
+          trigger_indent = None
           for line in lines:
               stripped = line.strip()
               if not stripped or stripped.startswith("#"):
@@ -2117,10 +2126,17 @@ jobs:
               if match and not match.group("indent"):
                   break
 
+              indent_len = len(line) - len(line.lstrip(" "))
+              if trigger_indent is None and stripped:
+                  trigger_indent = indent_len
+
+              if trigger_indent is not None and indent_len != trigger_indent:
+                  continue
+
               list_match = LIST_RE.match(line)
               if list_match:
                   triggers.append(clean(list_match.group("key")))
-              elif match and match.group("indent"):
+              elif match:
                   triggers.append(clean(match.group("key")))
 
           seen = set()

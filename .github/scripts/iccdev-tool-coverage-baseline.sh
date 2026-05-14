@@ -1018,7 +1018,7 @@ fi
 echo ""
 
 # =============================================================================
-# 12. iccPngDump (4 tests)
+# 12. iccPngDump (5 tests)
 # =============================================================================
 echo "--- 12. iccPngDump ---"
 PNGDUMP="$TOOLS/IccPngDump/iccPngDump"
@@ -1043,6 +1043,11 @@ if [ -f "$OUTDIR/tiff_extracted.icc" ] && [ -f "$PNG_CVE" ]; then
   run_test "png-inject" "Inject ICC into PNG" \
     "$PNGDUMP" "$PNG_CVE" --write-icc "$OUTDIR/tiff_extracted.icc" --output "$OUTDIR/png_injected.png"
 fi
+
+PNG_BAD_CHUNK="$OUTDIR/png_invalid_chunk_length.png"
+printf '%b' '\x89PNG\r\n\x1a\n\xff\x00\x00\x0dIHDR' > "$PNG_BAD_CHUNK"
+run_expect_exit "png-invalid-chunk-length" "Reject oversized PNG chunk without signal" \
+  1 "$PNGDUMP" "$PNG_BAD_CHUNK"
 
 echo ""
 
