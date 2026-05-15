@@ -124,8 +124,6 @@ void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &rang
   point2D start2 = basepoint + range*0.5;
   svgfile.AddLine( start2, start2+tickLength );
 
-// TODO - values???  0.1 increments?
-
   // small marks for each tenth that isn't 0.5
   for (int i = 1; i < 10; ++i) {
     if (i == 5) continue;
@@ -396,11 +394,11 @@ point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
     if (nm < 515) {
         // go left
         align = kTextAlignRight;
-        return point2D( -2, 0 );
+        return point2D( -2.0f, 0.0f );
     } else if (nm <= 520) {
         // go up
         align = kTextAlignCenter;
-        return point2D( -3, textSize*1.55 );
+        return point2D( -3.0f, textSize*1.55f );
     } else {
         // go right
         align = kTextAlignLeft;
@@ -412,14 +410,15 @@ point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
 
 /******************************************************************************/
 
+// x range [ 0.00364, 0.73469 ]   for 2degree 1931 observer
+// y range [ 0.00529, 0.83409 ]
+const float chromaticityChartScale = 0.85f;
+
 void CreateXYPlotXobject( PDFWriter &pdfout )
 {
   std::ostringstream commands;
   float margin = 0.25*inch2point;
 
-  // x range [ 0.00364, 0.73469 ]   for 2degree 1931 observer
-  // y range [ 0.00529, 0.83409 ]
-  const float chromaticityChartScale = 0.85f;
   const float fineIncrement = 0.01f;
   const float coarseIncrement = 0.1f;
 
@@ -537,14 +536,15 @@ std::string plotCirclePDF( const point2D &center, float radius )
 
 /******************************************************************************/
 
+// DEFERRED - full 128+ range is probably excessive for real world use
+// what is an appropriate limit?        So far 130 looks fine.
+const float abChartScale = 2 * 130.0f;
+  
 void CreateABPlotXobject( PDFWriter &pdfout )
 {
   std::ostringstream commands;
   float margin = 0.25*inch2point;
 
-// TODO  - full 128+ range is probably excessive for real world use
-// what is an appropriate limit?
-  const float abChartScale = 2 * 130.0f;
   const float coarseIncrement = 10.0f;
 
   const float bottom = 0.0f;
@@ -592,8 +592,6 @@ void CreateABPlotXobject( PDFWriter &pdfout )
     commands << plotCirclePDF( center, i*maxRadius/abChartScale );
   }
 
-// TODO - 30 degree hue angles?
-
   // axes
   commands << "0.4 0 0 0 K\n";
   commands << centerX << " m " << (centerX+rangeY) << " l S\n";
@@ -629,6 +627,24 @@ XYColor xyFromICCXYZ( const icXYZNumber *xyz )
     float X = xyz->X / 65535.0;
     float Y = xyz->Y / 65535.0;
     float Z = xyz->Z / 65535.0;
+
+    float sum = X + Y + Z;
+    if (sum <= 1e-8)
+        return XYColor(0,0);
+
+    float x = X / sum;
+    float y = Y / sum;
+    return XYColor(x,y);
+}
+
+/******************************************************************************/
+
+static
+XYColor xyFromICCXYZ( const icFloatNumber *xyz )
+{
+    float X = xyz[0];
+    float Y = xyz[1];
+    float Z = xyz[2];
 
     float sum = X + Y + Z;
     if (sum <= 1e-8)
@@ -733,7 +749,6 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   // gsave, color black
   commands << "q 0 0 0 1 K\n";
 
-  const float chromaticityChartScale = 0.85f;   // must match CreateXYPlotXobject
   point2D basepoint( left+margin, bottom+margin );
   point2D rangeX( right-bottom-2*margin, 0 );
   point2D rangeY( 0, top-bottom-2*margin );
@@ -936,7 +951,7 @@ void describe1DLUT( CIccTagCurve *curve, std::string &description )
   } else if (size == 1) {
     icFloatNumber value0 = (*curve)[0];
     icFloatNumber dGamma = (icFloatNumber)(value0 * 256.0);
-    description += "Y = X ^ " + std::to_string(dGamma);   // TODO - truncate to 4 decimal places
+    description += "Y = X ^ " + std::to_string(dGamma);
   } else {
     description += "LookupTable[" + std::to_string(size) + "]";
   }
@@ -1038,7 +1053,6 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       }
       break;
 
-    // TODO - might merge below
     case icSigParametricCurveType:
       {
       CIccTagParametricCurve *pCurve = dynamic_cast<CIccTagParametricCurve*> (tag);
@@ -1054,7 +1068,6 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       }
       break;
 
-    // TODO - might merge below
     case icSigSegmentedCurveType:
       {
       CIccTagSegmentedCurve *sCurve = dynamic_cast<CIccTagSegmentedCurve*> (tag);
@@ -1486,8 +1499,68 @@ typedef std::vector<namedLAB> namedLabList;
 
 /******************************************************************************/
 
-int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description,
-                        PDFWriter &pdffile )
+int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &description,
+                        icFloatNumber *XYZIlluminant, PDFWriter &pdffile )
+{
+  std::ostringstream commands;
+
+  const float bottom = 0.0f;
+  const float left = 0.0f;
+  const float top = pdffile.PageHeight();
+  const float right = pdffile.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+  const float margin = 0.25*inch2point;
+  const point2D basepoint( left+margin, bottom+margin );
+  const point2D rangeX( right-left-2*margin, 0 );
+  const point2D rangeY( 0, top-bottom-2*margin );
+  point2D scaling = (rangeX + rangeY) / chromaticityChartScale;
+  float markSize = 4.0f;
+  float textSize = 10.0f;
+
+  // plot on AB grid
+  // if the xyPlot xobject doesn't exist, create it now
+  if (!pdffile.xobjectExists("xyPlot"))
+    CreateXYPlotXobject( pdffile );
+
+  // add the common axes
+  commands << "/xyPlot Do\n";
+
+  // add label
+  point2D range( right - left, 0 );
+  point2D labelBase( left, top );
+  point2D tickLength(0,0);
+  commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12, description );
+
+  point2D labelOffset( 0, markSize + 2 + textSize );
+  for (auto &sample : colorsOut) {
+    icFloatNumber icLAB[3];
+    icFloatNumber xyzOut[3];
+    icLAB[0] = sample.L;
+    icLAB[1] = sample.a;
+    icLAB[2] = sample.b;
+    icLabtoXYZ( xyzOut, icLAB, XYZIlluminant );
+    XYColor theXY = xyFromICCXYZ( xyzOut );
+  
+    point2D plotCenter = basepoint + scaling * point2D( theXY.x, theXY.y );
+    commands << plotSquarePDF( plotCenter, markSize);
+    commands << AddGraphLabels( plotCenter+labelOffset, false, point2D(0,0),
+                                textSize, sample.name, kTextAlignLeft );
+  }
+
+  // and finally create the graphics object and page
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+
+  pdffile.AddPage( content, "xyPlot" );
+
+  return 1;
+}
+
+/******************************************************************************/
+
+int graphNamedColorsABPDF( namedLabList &colorsOut, const std::string &description,
+                        icFloatNumber * /*XYZIlluminant*/, PDFWriter &pdffile )
 {
   std::ostringstream commands;
 
@@ -1503,12 +1576,8 @@ int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description
   const point2D center = 0.5f * (basepoint + point2D(right-margin,top-margin));
   float maxRadius = std::max( right-left-2*margin, top-bottom-2*margin );
 
-// TODO  - full 128+ range is probably excessive for real world use
-// what is an appropriate limit?
-  const float abChartScale = 2 * 130.0f;
-
-    // plot on AB grid
-  // if the xyPlot xobject doesn't exist, create it now
+  // plot on AB grid
+  // if the abPlot xobject doesn't exist, create it now
   if (!pdffile.xobjectExists("abPlot"))
     CreateABPlotXobject( pdffile );
 
@@ -1534,10 +1603,6 @@ int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description
   }
 
 
-// TODO - xyPlot as well?
-// TODO - CIECAM16 plot as well?
-
-
   // and finally create the graphics object and page
   PDFGraphic *graphics = new PDFGraphic( commands.str() );
   pdffile.AddObject( graphics );
@@ -1546,6 +1611,24 @@ int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description
   pdffile.AddPage( content, "abPlot" );
 
   return 1;
+}
+
+/******************************************************************************/
+
+int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description,
+                        icFloatNumber *XYZIlluminant, PDFWriter &pdffile )
+{
+  std::ostringstream commands;
+  int outputObjects = 0;
+  
+  outputObjects += graphNamedColorsABPDF( colorsOut, description, XYZIlluminant, pdffile );
+  
+  outputObjects += graphNamedColorsXYPDF( colorsOut, description, XYZIlluminant, pdffile );
+
+// TODO - CIECAM16 plot as well?
+    //#include "IccCAM.h" -- is CIECAM02
+    
+  return outputObjects;
 }
 
 /******************************************************************************/
@@ -1629,7 +1712,8 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       }
       
       std::string description("Colorant Table: ");
-      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc, pdffile );
+      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
+                        XYZIlluminant, pdffile );
       }
       break;
   
@@ -1691,7 +1775,8 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       }
       
       std::string description("Named Color Table: ");
-      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc, pdffile );
+      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
+                            XYZIlluminant, pdffile );
       }
       break;
     
@@ -1716,7 +1801,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
   }
 
 
-      
   return outputCount;
 }
 
