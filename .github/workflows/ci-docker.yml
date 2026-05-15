@@ -27,7 +27,7 @@ concurrency:
 jobs:
   build:
     name: "Docker (${{ matrix.variant }})"
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/fix-nixos-image-runtime'
     runs-on: ubuntu-latest
     environment: ghcr-publish
     timeout-minutes: 30
@@ -91,6 +91,7 @@ jobs:
           tags: |
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ matrix.suffix == '-nixos' }}
 
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0

@@ -42,7 +42,7 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && GREP_ROOT="$(nix-build '<nixpkgs>' -A gnugrep --no-out-link)" \
  && LDD_ROOT="$(nix-build '<nixpkgs>' -A glibc.bin --no-out-link)" \
  && SED_ROOT="$(nix-build '<nixpkgs>' -A gnused --no-out-link)" \
- && mkdir -p /runtime-root/bin /runtime-root/etc /runtime-root/tmp /runtime-root/workspace/iccDEV \
+ && mkdir -p /runtime-root/bin /runtime-root/etc /runtime-root/tmp /runtime-root/usr/bin /runtime-root/workspace/iccDEV \
  && printf '%s\n' 'iccdev:x:1000:' > /runtime-root/etc/group \
  && printf '%s\n' 'iccdev:x:1000:1000:iccdev:/workspace:/bin/sh' > /runtime-root/etc/passwd \
  && chmod 1777 /runtime-root/tmp \
@@ -61,9 +61,10 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && "$FINDUTILS_ROOT/bin/xargs" -r nix-store -qR < /tmp/runtime-roots | "$COREUTILS_ROOT/bin/sort" -u > /tmp/runtime-closure \
  && "$FINDUTILS_ROOT/bin/xargs" -r -I{} "$COREUTILS_ROOT/bin/cp" -a --parents "{}" /runtime-root < /tmp/runtime-closure \
  && "$COREUTILS_ROOT/bin/ln" -s "$BUSYBOX_ROOT/bin/busybox" /runtime-root/bin/busybox \
- && for tool in sh find wc sort basename ls sed grep cat mkdir rm true false; do \
+ && for tool in sh env find wc sort basename ls sed grep cat mkdir rm true false; do \
       "$COREUTILS_ROOT/bin/ln" -s busybox "/runtime-root/bin/$tool"; \
     done \
+ && "$COREUTILS_ROOT/bin/ln" -s /bin/env /runtime-root/usr/bin/env \
  && if "$FINDUTILS_ROOT/bin/find" /runtime-root/nix/store -maxdepth 1 -name '*-source' -type d -print -quit | "$GREP_ROOT/bin/grep" -q .; then \
       echo 'NixOS runtime root contains /nix/store/*-source paths' >&2; \
       exit 1; \
@@ -101,7 +102,8 @@ ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccV5DspObsToV4Dsp:\
 /workspace/iccDEV/Build/Tools/IccToJson:\
 /workspace/iccDEV/Build/Tools/IccFromJson:\
-/bin"
+/bin:\
+/usr/bin"
 
 ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML:/workspace/iccDEV/Build/IccJSON"
 ENV LANG=C
