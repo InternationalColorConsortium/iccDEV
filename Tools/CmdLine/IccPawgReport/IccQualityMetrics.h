@@ -142,6 +142,10 @@ inline double clamp01(double v) {
   return v;
 }
 
+inline double average_metric(double total, int n) {
+  return n > 0 ? total / static_cast<double>(n) : 0.0;
+}
+
 inline bool finite3(const icFloatNumber *v) {
   return std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]);
 }
@@ -498,8 +502,12 @@ inline bool evaluate_matrix_trc_reverse(const MatrixTrcTransform &xform,
   }
 
   if (xform.channels == 1) {
-    const double denom = (std::fabs(xform.whiteXYZ[1]) > 1e-12) ? xform.whiteXYZ[1] : 1.0;
-    const double y = clamp01(pcsXYZ[1] / denom);
+    double y = pcsXYZ[1];
+    const double whiteY = xform.whiteXYZ[1];
+    if (std::fabs(whiteY) > 1e-12) {
+      y = pcsXYZ[1] / whiteY;
+    }
+    y = clamp01(y);
     device[0] = static_cast<icFloatNumber>(clamp01(find_curve_safe(xform.curves[0], static_cast<icFloatNumber>(y))));
     return std::isfinite(device[0]);
   }
@@ -775,10 +783,10 @@ inline bool measure_cmm_forward_smoothness(CIccProfile *pIcc,
     return false;
   }
 
+  metrics.avgStepDe00 = average_metric(sumStep, stepCount);
   metrics.measured = true;
   metrics.model = "CIccCmm profile transform";
   metrics.samples = stepCount;
-  metrics.avgStepDe00 = sumStep / stepCount;
   return true;
 }
 
@@ -1259,10 +1267,10 @@ inline bool measure_forward_smoothness_matrix_trc(CIccProfile *pIcc,
     return false;
   }
 
+  metrics.avgStepDe00 = average_metric(sumStep, stepCount);
   metrics.measured = true;
   metrics.model = xform.channels == 1 ? "gray matrix/TRC" : "matrix/TRC multi-axis";
   metrics.samples = stepCount;
-  metrics.avgStepDe00 = sumStep / stepCount;
   return true;
 }
 
@@ -1351,10 +1359,10 @@ inline bool measure_forward_smoothness_classic_lut(CIccProfile *pIcc,
     return false;
   }
 
+  metrics.avgStepDe00 = average_metric(sumStep, stepCount);
   metrics.measured = true;
   metrics.model = std::string("classic lut8/lut16 ") + tagLabel;
   metrics.samples = stepCount;
-  metrics.avgStepDe00 = sumStep / stepCount;
   return true;
 }
 
