@@ -1161,7 +1161,7 @@ void CIccProfile::InitHeader()
   m_Header.colorSpace = (icColorSpaceSignature)0;
   m_Header.pcs = icSigLabData;
   
-  struct tm* newtime;
+  struct tm *newtime;
   time_t long_time;
 
   time( &long_time );                /* Get time as long integer. */
