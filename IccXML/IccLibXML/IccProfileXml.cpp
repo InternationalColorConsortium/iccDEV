@@ -240,9 +240,9 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
             // PrivateType - a type that does not belong to the list in the icc specs - custom for vendor.
             if (pTag->m_nReserved) {
               if (!strcmp("PrivateType", tagSig))
-                snprintf(line, bufSize, "<PrivateType type=\"%s\" reserved=\"%08x\">\n", icFixXml(fix, icGetSigStr(buf, bufSize, pTag->GetType())), pTag->m_nReserved);
+                snprintf(line, bufSize, "<PrivateType type=\"%s\" reserved=\"%08x\">\n", icFixXml(fix, icGetSigStr(buf, bufSize, pTag->GetType())), (unsigned int) pTag->m_nReserved);
               else
-                snprintf(line, bufSize, "<%s reserved=\"%08x\">\n", tagSig, pTag->m_nReserved); //parent node is the tag type
+                snprintf(line, bufSize, "<%s reserved=\"%08x\">\n", tagSig, (unsigned int) pTag->m_nReserved); //parent node is the tag type
             }
             else {
               if (!strcmp("PrivateType", tagSig))

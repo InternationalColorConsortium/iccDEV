@@ -689,7 +689,7 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
         break;
 
       case icSigUInt32ArrayType:
-        snprintf(str, strSize, "%u", (icUInt32Number)buf[i]);
+        snprintf(str, strSize, "%u", (unsigned int) buf[i]);
         break;
       
       case icSigUInt64ArrayType:
@@ -760,7 +760,7 @@ icUInt32Number CIccXmlArrayType<T, Tsig>::ParseTextCountNum(const char *szText, 
     else if ( i <= num && !isspace(*szText) ) {
       const size_t lineSize = 100;
       char line[lineSize];
-      snprintf(line, lineSize, "Data '%c' in position %d is not a number. ", *szText, i);
+      snprintf(line, lineSize, "Data '%c' in position %d is not a number. ", *szText, (unsigned int) i );
       parseStr += line;
       return false;
     }
@@ -1219,8 +1219,8 @@ const std::string icGetHeaderFlagsName(icUInt32Number flags, bool bUsesMCS)
   }
 
   if (flags & otherFlags) {
-    snprintf(line, lineSize, " VendorFlags=\"%08x\"", flags & otherFlags);
-    xml += line;  		
+    snprintf(line, lineSize, " VendorFlags=\"%08x\"", (unsigned int) ( flags & otherFlags) );
+    xml += line;
   }
 
   xml += "/>\n";

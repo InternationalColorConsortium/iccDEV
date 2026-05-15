@@ -142,7 +142,7 @@ bool CIccMpeXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";
@@ -241,7 +241,7 @@ bool CIccFormulaCurveSegmentXml::ToXml(std::string &xml, std::string blanks)
   xml += line;
 
   if (m_nReserved) {
-    snprintf(line, bufSize, " Reserved=\"%d\"", m_nReserved);
+    snprintf(line, bufSize, " Reserved=\"%d\"", (unsigned int) m_nReserved);
     xml += line;
   }
   if (m_nReserved2) {
@@ -643,11 +643,11 @@ bool CIccSampledCalculatorCurveXml::ToXml(std::string &xml, std::string blanks)
   snprintf(line, lineSize, " ExtensionType=\"%u\"", m_extensionType);
   xml += line;
 
-  snprintf(line, lineSize, " DesiredSize=\"%u\"", m_nDesiredSize);
+  snprintf(line, lineSize, " DesiredSize=\"%u\"", (unsigned int) m_nDesiredSize);
   xml += line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, lineSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   if (m_nReserved2) {
@@ -752,7 +752,7 @@ bool CIccSingleSampledCurveXml::ToXml(std::string &xml, std::string blanks)
   xml += line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, lineSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   xml += ">\n";
@@ -1232,7 +1232,7 @@ bool CIccMpeXmlCurveSet::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, lineSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   xml += ">\n";
@@ -1365,7 +1365,7 @@ bool CIccMpeXmlMatrix::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + buf;
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";
@@ -1471,7 +1471,7 @@ bool CIccMpeXmlEmissionMatrix::ToXml(std::string &xml, std::string blanks/* = ""
   xml += blanks + buf;
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";
@@ -1594,7 +1594,7 @@ bool CIccMpeXmlInvEmissionMatrix::ToXml(std::string &xml, std::string blanks/* =
   xml += blanks + buf;
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";
@@ -1716,7 +1716,7 @@ bool CIccMpeXmlTintArray::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + buf;
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";
@@ -1839,7 +1839,7 @@ bool CIccXmlToneMapFunc::ToXml(std::string& xml, std::string blanks /* = "" */)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%d\"", m_nReserved);
+    snprintf(line, lineSize, " Reserved=\"%d\"", (unsigned int) m_nReserved);
     xml += line;
   }
   if (m_nReserved2) {
@@ -1912,7 +1912,7 @@ bool CIccMpeXmlToneMap::ToXml(std::string& xml, std::string blanks/* = ""*/)
   xml += blanks + buf;
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";
@@ -2057,7 +2057,7 @@ bool CIccMpeXmlCLUT::ToXml(std::string &xml, std::string blanks/* = ""*/)
   char attrs[bufSize];
 
   if (m_nReserved) {
-    snprintf(attrs, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Reserved=\"%u\"", NumInputChannels(), NumOutputChannels(), m_nReserved);
+    snprintf(attrs, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Reserved=\"%u\"", NumInputChannels(), NumOutputChannels(), (unsigned int) m_nReserved);
   }
   else {
     snprintf(attrs, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\"", NumInputChannels(), NumOutputChannels());
@@ -2093,7 +2093,7 @@ bool CIccMpeXmlExtCLUT::ToXml(std::string &xml, std::string blanks/* = ""*/)
   std::string reserved;
 
   if (m_nReserved) {
-    snprintf(attrs, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(attrs, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     reserved = attrs;
   }
 
@@ -2142,7 +2142,7 @@ bool CIccMpeXmlBAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
 
@@ -2198,7 +2198,7 @@ bool CIccMpeXmlEAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
 
@@ -2352,7 +2352,7 @@ bool CIccMpeXmlJabToXYZ::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, lineSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   xml += ">\n";
@@ -2404,7 +2404,7 @@ bool CIccMpeXmlXYZToJab::ToXml(std::string &xml, std::string blanks/* = ""*/)
     xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, lineSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   xml += ">\n";
@@ -2458,7 +2458,7 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(line, lineSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   xml += ">\n";
@@ -3441,11 +3441,11 @@ bool CIccMpeXmlEmissionCLUT::ToXml(std::string &xml, std::string blanks/* = ""*/
   xml += blanks + "<EmissionCLutElement";
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml +=  buf;
   }
 
-  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%d\" StorageType=\"%d\">\n", NumInputChannels(), NumOutputChannels(), m_flags, m_nStorageType);
+  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%d\" StorageType=\"%d\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags, (unsigned int) m_nStorageType);
   xml += buf;
 
   snprintf(buf, bufSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
@@ -3555,11 +3555,11 @@ bool CIccMpeXmlReflectanceCLUT::ToXml(std::string &xml, std::string blanks/* = "
   xml += blanks + "<ReflectanceCLutElem";
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml +=  buf;
   }
 
-  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%d\">\n", NumInputChannels(), NumOutputChannels(), m_flags);
+  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%d\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags);
   xml += buf;
 
   snprintf(buf, bufSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
@@ -3715,7 +3715,7 @@ bool CIccMpeXmlEmissionObserver::ToXml(std::string &xml, std::string blanks/* = 
   xml += blanks + buf;
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";
@@ -3798,7 +3798,7 @@ bool CIccMpeXmlReflectanceObserver::ToXml(std::string &xml, std::string blanks/*
   xml += blanks + buf;
 
   if (m_nReserved) {
-    snprintf(buf, bufSize, " Reserved=\"%u\"", m_nReserved);
+    snprintf(buf, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += buf;
   }
   xml += ">\n";

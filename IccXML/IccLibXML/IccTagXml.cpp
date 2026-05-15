@@ -725,7 +725,7 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
   int i, j;
   std::string str;
 
-  snprintf(line, bufSize, "<NamedColors VendorFlag=\"%08x\" CountOfDeviceCoords=\"%d\" DeviceEncoding=\"int16\"", m_nVendorFlags, m_nDeviceCoords);
+  snprintf(line, bufSize, "<NamedColors VendorFlag=\"%08x\" CountOfDeviceCoords=\"%d\" DeviceEncoding=\"int16\"", (unsigned int) m_nVendorFlags, (unsigned int) m_nDeviceCoords);
   xml += blanks + line;
 
   snprintf(line, bufSize, " Prefix=\"%s\"", icFixXml(fix, icAnsiToUtf8(str, m_szPrefix)));
@@ -1414,7 +1414,7 @@ bool CIccTagXmlNum<T, A, Tsig>::ToXml(std::string &xml, std::string blanks/* = "
     if (sizeof(T)==16)
       snprintf(buf, bufSize, "%llu", (icUInt64Number)this->m_Num[i]);
     else
-      snprintf(buf, bufSize, "%u", (icUInt32Number)this->m_Num[i]);
+      snprintf(buf, bufSize, "%u", (unsigned int) this->m_Num[i]);
     xml += buf;
   }
 
@@ -2625,7 +2625,7 @@ bool CIccTagXmlCurve::ToXml(std::string &xml, icConvertType nType, std::string b
   }
   else if (IsIdentity()) {
     xml += blanks + "<Curve IdentitySize=\"";
-    snprintf(buf, bufSize, "%d", m_nSize);
+    snprintf(buf, bufSize, "%d", (unsigned int) m_nSize);
     xml += buf;
     xml += "\"/>\n";
   }
@@ -5198,7 +5198,10 @@ bool CIccTagXmlGamutBoundaryDesc::ToXml(std::string &xml, std::string blanks/* =
     xml += blanks + "<Triangles>\n";
 
     for (i=0; i<m_NumberOfTriangles; i++) {
-      snprintf(line, lineSize, " <T>%u %u %u</T>\n", m_Triangles[i].m_VertexNumbers[0], m_Triangles[i].m_VertexNumbers[1], m_Triangles[i].m_VertexNumbers[2]);
+      snprintf(line, lineSize, " <T>%u %u %u</T>\n",
+              (unsigned int) m_Triangles[i].m_VertexNumbers[0],
+              (unsigned int) m_Triangles[i].m_VertexNumbers[1],
+              (unsigned int) m_Triangles[i].m_VertexNumbers[2]);
       xml += blanks + line;
     }
 
@@ -5437,10 +5440,10 @@ bool CIccTagXmlEmbeddedHeightImage::ToXml(std::string &xml, std::string blanks/*
   char buf[bufSize];
 
   xml += blanks + "<HeightImage";
-  snprintf(buf, bufSize, " SeamlessIndicator=\"%d\"", m_nSeamlesIndicator);
+  snprintf(buf, bufSize, " SeamlessIndicator=\"%d\"", (unsigned int) m_nSeamlesIndicator);
   xml += buf;
 
-  snprintf(buf, bufSize, " EncodingFormat=\"%d\"", m_nEncodingFormat);
+  snprintf(buf, bufSize, " EncodingFormat=\"%d\"", (unsigned int) m_nEncodingFormat);
   xml += buf;
 
   snprintf(buf, bufSize, " MetersMinPixelValue=\"%.12f\"", m_fMetersMinPixelValue);
@@ -5537,10 +5540,10 @@ bool CIccTagXmlEmbeddedNormalImage::ToXml(std::string &xml, std::string blanks/*
   char buf[bufSize];
 
   xml += blanks + "<NormalImage";
-  snprintf(buf, bufSize, " SeamlessIndicator=\"%d\"", m_nSeamlesIndicator);
+  snprintf(buf, bufSize, " SeamlessIndicator=\"%d\"", (unsigned int) m_nSeamlesIndicator);
   xml += buf;
 
-  snprintf(buf, bufSize, " EncodingFormat=\"%d\"", m_nEncodingFormat);
+  snprintf(buf, bufSize, " EncodingFormat=\"%d\"", (unsigned int) m_nEncodingFormat);
   xml += buf;
 
   if (!m_nSize) {

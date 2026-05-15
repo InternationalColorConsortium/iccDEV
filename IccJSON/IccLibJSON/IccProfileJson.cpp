@@ -85,7 +85,7 @@ static IccJson icJsonGetHeaderFlags(icUInt32Number flags)
   icUInt32Number other = flags & ~(icUInt32Number)(icEmbeddedProfileTrue | icUseWithEmbeddedDataOnly |
                                                    icExtendedRangePCS | icMCSNeedsSubsetTrue);
   if (other) {
-    char buf[16]; snprintf(buf, sizeof(buf), "%08x", other);
+    char buf[16]; snprintf(buf, sizeof(buf), "%08x", (unsigned int) other);
     j["VendorFlags"] = buf;
   }
   return j;

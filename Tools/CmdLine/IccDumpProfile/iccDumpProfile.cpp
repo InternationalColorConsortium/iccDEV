@@ -136,14 +136,14 @@ void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
       CIccTagMultiProcessElement *pMpe = static_cast<CIccTagMultiProcessElement*>(pTag);
       icUInt32Number nElements = pMpe->NumElements();
       printf("\n  === MPE Element Chain: %u elements, %u->%u channels ===\n",
-             nElements, pMpe->NumInputChannels(), pMpe->NumOutputChannels());
+             (unsigned int) nElements, pMpe->NumInputChannels(), pMpe->NumOutputChannels());
 
       for (icUInt32Number j = 0; j < nElements; j++) {
         CIccMultiProcessElement *pElem = pMpe->GetElement(j);
         if (pElem) {
           icElemTypeSignature elemSig = pElem->GetType();
           printf("  [%u] %s (%s) %u->%u%s\n",
-                 j + 1,
+                 (unsigned int) (j + 1),
                  Fmt.GetElementTypeSigName(elemSig),
                  icGetSig(buf, bufSize, elemSig),
                  pElem->NumInputChannels(),
@@ -411,7 +411,7 @@ int main(int argc, char* argv[])
       printf("Profile ID:         %s\n", Fmt.GetProfileID(&pHdr->profileID));
     else
       printf("Profile ID:         Profile ID not calculated.\n");
-    printf("Size:               %d (0x%x) bytes\n", pHdr->size, pHdr->size);
+    printf("Size:               %d (0x%x) bytes\n", (unsigned int) pHdr->size, (unsigned int) pHdr->size);
 
     // Diagnostic: compare header size vs file stat size
     if (g_bDiagMode) {
@@ -419,7 +419,7 @@ int main(int argc, char* argv[])
       if (stat(argv[nArg], &st) == 0) {
         if ((icUInt32Number)st.st_size != pHdr->size) {
           fprintf(stderr, "[DIAG] *** SIZE MISMATCH: header says %u, file stat says %lld ***\n",
-                  pHdr->size, (long long)st.st_size);
+                  (unsigned int) pHdr->size, (long long)st.st_size);
           if ((icUInt32Number)st.st_size < pHdr->size)
             fprintf(stderr, "[DIAG] File is TRUNCATED (%lld bytes short)\n",
                     (long long)pHdr->size - (long long)st.st_size);
@@ -427,7 +427,7 @@ int main(int argc, char* argv[])
             fprintf(stderr, "[DIAG] File has %lld bytes BEYOND header-declared size\n",
                     (long long)st.st_size - (long long)pHdr->size);
         } else {
-          fprintf(stderr, "[DIAG] Header size matches file stat: %u bytes\n", pHdr->size);
+          fprintf(stderr, "[DIAG] Header size matches file stat: %u bytes\n", (unsigned int) pHdr->size);
         }
       }
       fprintf(stderr, "[DIAG] Load mode: %s | Validation: %s | Verbosity: %d\n",
@@ -535,7 +535,7 @@ int main(int argc, char* argv[])
             pad = closest - i->TagInfo.offset - i->TagInfo.size;
 
         printf("%28s  %s  %8d\t%8d\t%8d\n", Fmt.GetTagSigName(i->TagInfo.sig),
-            icGetSig(buf, bufSize, i->TagInfo.sig, false), i->TagInfo.offset, i->TagInfo.size, pad);
+            icGetSig(buf, bufSize, i->TagInfo.sig, false), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size, pad);
     }
 
     printf("\n");
@@ -592,7 +592,7 @@ int main(int argc, char* argv[])
         if ((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)pHdr->size) {
           sReport += icMsgValidateNonCompliant;
           snprintf(str, strSize, "Tag %s (offset %u, size %u) ends beyond EOF.\n",
-                  Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size);
+                  Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size);
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateNonCompliant);
         }
@@ -615,7 +615,7 @@ int main(int argc, char* argv[])
         if (((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)closest) && (closest < safeProfileSize)) {
           sReport += icMsgValidateWarning;
           snprintf(str, strSize, "Tag %s (offset %d, size %d) overlaps with following tag data starting at offset %d.\n",
-              Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size, closest);
+              Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size, closest);
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateWarning);
         }
@@ -625,7 +625,7 @@ int main(int argc, char* argv[])
           int gapStart = (i->TagInfo.offset + rndup <= (icUInt32Number)INT_MAX) ? (int)(i->TagInfo.offset + rndup) : INT_MAX;
           sReport += icMsgValidateWarning;
           snprintf(str, strSize, "Tag %s (size %d) is followed by %d unnecessary additional bytes (from offset %d).\n",
-              Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, closest - gapStart, gapStart);
+              Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.size, closest - gapStart, gapStart);
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateWarning);
         }
@@ -679,7 +679,7 @@ int main(int argc, char* argv[])
           DIAG("Loading tag %d/%d: %s (offset=%u, size=%u)",
                tagIdx + 1, (int)pIcc->m_Tags.size(),
                Fmt.GetTagSigName(i->TagInfo.sig),
-               i->TagInfo.offset, i->TagInfo.size);
+               (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size);
           CIccTag *pCheck = pIcc->FindTag(*i);
           if (!pCheck) {
             tagLoadFail++;

@@ -644,9 +644,9 @@ void PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const
     printf(" Color Space:      %s\n", Fmt.GetColorSpaceSigName(pHdr->colorSpace));
     printf(" Colorimetric PCS: %s\n", Fmt.GetColorSpaceSigName(pHdr->pcs));
     printf(" Profile Version:  %d.%d.%d\n", 
-           (pHdr->version >> 24) & 0xFF,   // Major version
-           (pHdr->version >> 20) & 0x0F,   // Minor version
-           (pHdr->version >> 16) & 0x0F);  // Sub-minor version
+           (unsigned int) ((pHdr->version >> 24) & 0xFF),   // Major version
+           (unsigned int) ((pHdr->version >> 20) & 0x0F),   // Minor version
+           (unsigned int) ((pHdr->version >> 16) & 0x0F));  // Sub-minor version
 
     delete pProfile;
 

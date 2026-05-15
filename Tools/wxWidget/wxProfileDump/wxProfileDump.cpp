@@ -841,7 +841,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                 if ((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)pHdr->size) {
                     sReport += icMsgValidateNonCompliant;
                     snprintf(str, strSize, "Tag %s (offset %u, size %u) ends beyond EOF.\n",
-                        Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size);
+                        Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size);
                     sReport += str;
                     nStat = icMaxStatus(nStat, icValidateNonCompliant);
                 }
@@ -864,7 +864,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                 if (((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)closest) && (closest < safeProfileSize2)) {
                     sReport += icMsgValidateWarning;
                     snprintf(str, strSize, "Tag %s (offset %u, size %u) overlaps with following tag data starting at offset %d.\n",
-                        Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.offset, i->TagInfo.size, closest);
+                        Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size, closest);
                     sReport += str;
                     nStat = icMaxStatus(nStat, icValidateWarning);
                 }
@@ -877,7 +877,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                     icUInt32Number gapStart = (gapStart64 <= (icUInt64Number)UINT_MAX) ? (icUInt32Number)gapStart64 : UINT_MAX;
                     sReport += icMsgValidateWarning;
                     snprintf(str, strSize, "Tag %s (size %u) is followed by %d unnecessary additional bytes (from offset %u).\n",
-                        Fmt.GetTagSigName(i->TagInfo.sig), i->TagInfo.size, gapBytes, gapStart);
+                        Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.size, gapBytes, (unsigned int) gapStart);
                     sReport += str;
                     nStat = icMaxStatus(nStat, icValidateWarning);
                 }
@@ -891,7 +891,7 @@ MyDialog::MyDialog(wxWindow *pParent, const wxString& title, wxString &profilePa
                 icUInt32Number expectedOffset = (expectedFirstOffset <= (icUInt64Number)UINT_MAX) ? (icUInt32Number)expectedFirstOffset : UINT_MAX;
                 sReport += icMsgValidateNonCompliant;
                 snprintf(str, strSize, "First tag data is at offset %u rather than immediately after tag table (offset %u).\n",
-                    firstOffset, expectedOffset);
+                    (unsigned int) firstOffset, (unsigned int) expectedOffset);
                 sReport += str;
                 nStat = icMaxStatus(nStat, icValidateNonCompliant);
             }

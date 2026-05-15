@@ -209,12 +209,12 @@ int main(int argc, char* argv[])
     printf("\nPRMG Interoperability - Round Trip Results\n");
     printf(  "------------------------------------------------------\n");
 
-    printf("DE <= 1.0 (%8u): %5.1f%%\n", prmg.m_nDE1, (float)prmg.m_nDE1/(float)prmg.m_nTotal*100.0); 
-    printf("DE <= 2.0 (%8u): %5.1f%%\n", prmg.m_nDE2, (float)prmg.m_nDE2/(float)prmg.m_nTotal*100.0);
-    printf("DE <= 3.0 (%8u): %5.1f%%\n", prmg.m_nDE3, (float)prmg.m_nDE3/(float)prmg.m_nTotal*100.0);
-    printf("DE <= 5.0 (%8u): %5.1f%%\n", prmg.m_nDE5, (float)prmg.m_nDE5/(float)prmg.m_nTotal*100.0);
-    printf("DE <=10.0 (%8u): %5.1f%%\n", prmg.m_nDE10, (float)prmg.m_nDE10/(float)prmg.m_nTotal*100.0);
-    printf("Total     (%8u)\n", prmg.m_nTotal);
+    printf("DE <= 1.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE1, (float)prmg.m_nDE1/(float)prmg.m_nTotal*100.0); 
+    printf("DE <= 2.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE2, (float)prmg.m_nDE2/(float)prmg.m_nTotal*100.0);
+    printf("DE <= 3.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE3, (float)prmg.m_nDE3/(float)prmg.m_nTotal*100.0);
+    printf("DE <= 5.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE5, (float)prmg.m_nDE5/(float)prmg.m_nTotal*100.0);
+    printf("DE <=10.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE10, (float)prmg.m_nDE10/(float)prmg.m_nTotal*100.0);
+    printf("Total     (%8u)\n", (unsigned int) prmg.m_nTotal);
   }
   return 0;
 }
