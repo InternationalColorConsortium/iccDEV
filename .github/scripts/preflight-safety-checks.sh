@@ -53,6 +53,62 @@ skip_or_fail() {
   fi
 }
 
+HADOLINT_IMAGE="${PREFLIGHT_HADOLINT_IMAGE:-hadolint/hadolint@sha256:30a8fd2e785ab6176eed53f74769e04f125afb2f74a6c52aef7d463583b6d45e}"
+TRIVY_IMAGE="${PREFLIGHT_TRIVY_IMAGE:-aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b}"
+TRIVY_CACHE_DIR="${PREFLIGHT_TRIVY_CACHE_DIR:-${TMPDIR:-/tmp}/iccdev-trivy-cache-$$}"
+
+run_hadolint() {
+  if command -v hadolint >/dev/null 2>&1; then
+    hadolint "$@"
+    return
+  fi
+  if command -v docker >/dev/null 2>&1; then
+    docker run --rm \
+      -v "$REPO_ROOT":/repo:ro \
+      -w /repo \
+      "$HADOLINT_IMAGE" \
+      hadolint "$@"
+    return
+  fi
+  return 127
+}
+
+run_trivy_config() {
+  if command -v trivy >/dev/null 2>&1; then
+    trivy config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 .
+    return
+  fi
+  if command -v docker >/dev/null 2>&1; then
+    rm -rf "$TRIVY_CACHE_DIR"
+    mkdir -p "$TRIVY_CACHE_DIR"
+    docker run --rm \
+      -v "$REPO_ROOT":/repo:ro \
+      -v "$TRIVY_CACHE_DIR":/root/.cache/ \
+      -w /repo \
+      "$TRIVY_IMAGE" \
+      config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo
+    return
+  fi
+  return 127
+}
+
+run_dockerfile_policy() {
+  local policy_failures=0
+  local dockerfile final_from
+
+  for dockerfile in "$@"; do
+    if grep -qiE '^[[:space:]]*FROM[[:space:]].*nixos/nix' "$dockerfile"; then
+      final_from="$(awk 'BEGIN{IGNORECASE=1} /^[[:space:]]*FROM[[:space:]]/ { line=$0 } END { print line }' "$dockerfile")"
+      if grep -qi 'nixos/nix' <<< "$final_from"; then
+        echo "[FAIL] $dockerfile final stage inherits from nixos/nix; use a minimal runtime stage to avoid channel/source closure leakage" >&2
+        policy_failures=$((policy_failures + 1))
+      fi
+    fi
+  done
+
+  [ "$policy_failures" -eq 0 ]
+}
+
 workflow_trigger_names() {
   local wf="$1"
   python3 - "$wf" <<'PY'
@@ -238,25 +294,36 @@ run_workflow_risk_subset() {
 
 workflow_files=()
 script_files=()
+python_files=()
+docker_files=()
 changed_files=()
 base_ref="${PREFLIGHT_BASE_REF:-origin/master}"
 if git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
   while IFS= read -r file; do
     changed_files+=("$file")
-  done < <(git diff --name-only --diff-filter=ACMRT "$base_ref"...HEAD -- .github .githooks | sort)
+  done < <(git diff --name-only --diff-filter=ACMRT "$base_ref"...HEAD -- \
+    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
   while IFS= read -r file; do
     changed_files+=("$file")
-  done < <(git diff --cached --name-only --diff-filter=ACMRT -- .github .githooks | sort)
+  done < <(git diff --cached --name-only --diff-filter=ACMRT -- \
+    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
   while IFS= read -r file; do
     changed_files+=("$file")
-  done < <(git diff --name-only --diff-filter=ACMRT -- .github .githooks | sort)
+  done < <(git diff --name-only --diff-filter=ACMRT -- \
+    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
   while IFS= read -r file; do
     changed_files+=("$file")
-  done < <(git ls-files --others --exclude-standard -- .github .githooks | sort)
+  done < <(git ls-files --others --exclude-standard -- \
+    .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort)
 else
   while IFS= read -r file; do
     changed_files+=("$file")
-  done < <(find .github .githooks -type f 2>/dev/null | sort)
+  done < <(
+    {
+      find .github .githooks -type f 2>/dev/null
+      find . -maxdepth 1 -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '.dockerignore' \)
+    } | sed 's#^\./##' | sort
+  )
 fi
 
 unique_changed_files=()
@@ -269,8 +336,14 @@ for file in "${unique_changed_files[@]}"; do
     .github/workflows/*.yml|.github/workflows/*.yaml)
       workflow_files+=("$file")
       ;;
-    .github/scripts/*.sh|.githooks/pre-push)
+    .github/scripts/*.sh|.githooks/pre-commit|.githooks/pre-push)
       script_files+=("$file")
+      ;;
+    .github/scripts/*.py)
+      python_files+=("$file")
+      ;;
+    Dockerfile|Dockerfile.*)
+      docker_files+=("$file")
       ;;
   esac
 done
@@ -323,6 +396,32 @@ if [ "${#script_files[@]}" -gt 0 ]; then
   fi
 else
   echo "[SKIP] No changed shell hook/script files"
+  echo ""
+fi
+
+if [ "${#python_files[@]}" -gt 0 ]; then
+  run_check "Python syntax" python3 -m py_compile "${python_files[@]}"
+else
+  echo "[SKIP] No changed Python scripts"
+  echo ""
+fi
+
+if [ "${#docker_files[@]}" -gt 0 ]; then
+  if command -v hadolint >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+    run_check "hadolint" run_hadolint "${docker_files[@]}"
+  else
+    skip_or_fail "hadolint or docker"
+  fi
+
+  if command -v trivy >/dev/null 2>&1 || command -v docker >/dev/null 2>&1; then
+    run_check "Trivy config" run_trivy_config "${docker_files[@]}"
+  else
+    skip_or_fail "trivy or docker"
+  fi
+
+  run_check "Dockerfile runtime policy" run_dockerfile_policy "${docker_files[@]}"
+else
+  echo "[SKIP] No changed Dockerfile files"
   echo ""
 fi
 

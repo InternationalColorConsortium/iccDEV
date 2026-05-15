@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Optional local pre-commit security and workflow sanity gate.
+#
+###############################################################
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
+if git diff --cached --quiet -- .github .githooks Dockerfile 'Dockerfile.*' .dockerignore; then
+  exit 0
+fi
+
+echo "iccDEV pre-commit security gate"
+echo "Changed CI, hook, or container files detected; running preflight checks."
+
+if PREFLIGHT_BASE_REF=HEAD .github/scripts/preflight-safety-checks.sh --require-tools; then
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+[FAIL] Pre-commit security gate failed.
+Fix the reported issue before committing, or use --no-verify only for a
+documented emergency bypass.
+EOF
+exit 1

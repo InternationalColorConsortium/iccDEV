@@ -175,6 +175,11 @@ workflow permission audit for workflow files. Use `hadolint`, Trivy config, or
 equivalent Dockerfile checks when container files are in scope. Run CodeQL for
 related C/C++ or CMake changes, not as the workflow YAML checker.
 
+The pre-flight gate must include Dockerfile paths when container files change.
+Dockerfile checks are blocking for changed container files: avoid advisory-only
+suppression for package pinning, `RUN cd` patterns, missing healthchecks, or
+pipefail findings unless a maintainer records the explicit exception.
+
 Before merging workflow changes, run:
 
 ```bash
@@ -204,15 +209,16 @@ When profile generation counts change, update the assertions in
 `docs/ctest.md`, `Build/Cmake/Testing/CMakeLists.txt`, and the workflows that
 validate generated-profile totals.
 
-## Optional Pre-Push Hook
+## Optional Local Hooks
 
-Maintainers can install the optional local hook with:
+Maintainers can install the optional local hooks with:
 
 ```bash
 .github/scripts/install-git-hooks.sh
 ```
 
-The hook warns before pushing multiple commits, detached HEAD state, branches
-behind upstream, protected branch targets, or maintainer-owned infrastructure
-changes. It is advisory for non-interactive pushes and prompts only when stdin
-and stderr are attached to a terminal.
+The `pre-commit` hook blocks CI, hook, and Dockerfile changes that fail the fast
+preflight gate. The `pre-push` hook warns before pushing multiple commits,
+detached HEAD state, branches behind upstream, protected branch targets, or
+maintainer-owned infrastructure changes. It is advisory for non-interactive
+pushes and prompts only when stdin and stderr are attached to a terminal.

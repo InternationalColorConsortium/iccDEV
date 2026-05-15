@@ -137,7 +137,11 @@ jobs:
           # Quick validation tests
           $unicodeInput = "Hello " + [char]0x4E16 + [char]0x754C
           $tests = @(
-              @{Name="XSS prevention"; Input="<script>alert(1)</script>"; Expected="&lt;script&gt;alert(1)&lt;/script&gt;"},
+              @{
+                  Name="XSS prevention"
+                  Input="<script>alert(1)</script>"
+                  Expected="&lt;script&gt;alert(1)&lt;/script&gt;"
+              },
               @{Name="HTML entities"; Input="A&B"; Expected="A&amp;B"},
               @{Name="Quotes"; Input="'test'"; Expected="&#39;test&#39;"},
               @{Name="Unicode"; Input=$unicodeInput; Expected=$unicodeInput},
@@ -205,7 +209,11 @@ jobs:
           git branch
           git status
           Write-Host "========= Fetching Deps from Releases... ================`n"
-          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          $depsUrl = @(
+            'https://github.com/InternationalColorConsortium/iccDEV/releases/download'
+            'v2.3.1/vcpkg-exported-deps.zip'
+          ) -join '/'
+          Start-BitsTransfer -Source $depsUrl -Destination "deps.zip"
           Write-Host "========= Extracting Dependencies ...    ================`n"
           tar -xf deps.zip
       - name: CMake Configure
@@ -224,7 +232,12 @@ jobs:
           pwd
           cd Build/Cmake
           Write-Host "========= Configuring iccDEV ... ================`n"
-          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Debug  -Wno-dev
+          cmake -B build `
+            -S . `
+            -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_MANIFEST_MODE=OFF `
+            -DCMAKE_BUILD_TYPE=Debug `
+            -Wno-dev
 
       - name: Build iccDEV
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -326,13 +339,19 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
-          Start-BitsTransfer -Source "https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip" -Destination "deps.zip"
+          $depsUrl = @(
+            'https://github.com/InternationalColorConsortium/iccDEV/releases/download'
+            'v2.3.1/vcpkg-exported-deps.zip'
+          ) -join '/'
+          Start-BitsTransfer -Source $depsUrl -Destination "deps.zip"
           tar -xf deps.zip
 
       - name: Run ClangCL build and CTest check
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
+          CLANGCL_C_FLAGS: /D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations
+          CLANGCL_CXX_FLAGS: /D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -356,8 +375,37 @@ jobs:
            }
           }
 
+          function Invoke-NativeLogged {
+           param(
+             [Parameter(Mandatory = $true)][string] $FilePath,
+             [Parameter(Mandatory = $true)][string[]] $Arguments,
+             [Parameter(Mandatory = $true)][string] $LogPath
+           )
+           & $FilePath @Arguments 2>&1 | Tee-Object -FilePath $LogPath -Append
+           if ($LASTEXITCODE -ne 0) {
+             throw "$FilePath failed with exit code $LASTEXITCODE"
+           }
+          }
+
           $buildDir = 'Build\Cmake\build-clangcl-pr-smoke'
-          Invoke-Native cmake @(
+          if (Test-Path -LiteralPath $buildDir) {
+           Remove-Item -Recurse -Force -LiteralPath $buildDir
+          }
+          New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+
+          $expectedNoisePolicy = '/D_CRT_SECURE_NO_WARNINGS /clang:-Wno-deprecated-declarations'
+          if ($env:CLANGCL_C_FLAGS -ne $expectedNoisePolicy) {
+           throw 'Unexpected ClangCL C warning policy'
+          }
+          if ($env:CLANGCL_CXX_FLAGS -ne $expectedNoisePolicy) {
+           throw 'Unexpected ClangCL CXX warning policy'
+          }
+
+          $configureLog = Join-Path $buildDir 'clangcl-configure.log'
+          $buildLog = Join-Path $buildDir 'clangcl-build.log'
+          $checkLog = Join-Path $buildDir 'clangcl-check.log'
+
+          Invoke-NativeLogged cmake @(
            '-S', 'Build\Cmake',
            '-B', $buildDir,
            '-G', 'Visual Studio 17 2022',
@@ -365,21 +413,67 @@ jobs:
            '-T', 'ClangCL',
            '-DCMAKE_TOOLCHAIN_FILE=..\..\scripts\buildsystems\vcpkg.cmake',
            '-DVCPKG_MANIFEST_MODE=OFF',
+           "-DCMAKE_C_FLAGS=$env:CLANGCL_C_FLAGS",
+           "-DCMAKE_CXX_FLAGS=$env:CLANGCL_CXX_FLAGS",
            '-DENABLE_TOOLS=ON',
            '-DENABLE_CMM_TOOLS=ON',
            '-DENABLE_TESTS=ON',
            '-Wno-dev'
-          )
-          Invoke-Native cmake @(
+          ) $configureLog
+          Invoke-NativeLogged cmake @(
            '--build', $buildDir,
            '--config', 'Debug',
            '--parallel'
-          )
-          Invoke-Native cmake @(
+          ) $buildLog
+          Invoke-NativeLogged cmake @(
            '--build', $buildDir,
            '--config', 'Debug',
            '--target', 'check',
            '--parallel'
+          ) $checkLog
+
+      - name: Summarize ClangCL compiler warning signal
+        if: always()
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+           Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          function Invoke-Native {
+           param(
+             [Parameter(Mandatory = $true)][string] $FilePath,
+             [Parameter(Mandatory = $true)][string[]] $Arguments
+           )
+           & $FilePath @Arguments
+           if ($LASTEXITCODE -ne 0) {
+             throw "$FilePath failed with exit code $LASTEXITCODE"
+           }
+          }
+
+          $summaryScript = '.github\scripts\iccdev-compiler-warning-summary.py'
+          $buildLog = 'Build\Cmake\build-clangcl-pr-smoke\clangcl-build.log'
+          $detailsPath = 'Build\Cmake\build-clangcl-pr-smoke\clangcl-warning-signal.md'
+
+          if (-not (Test-Path -LiteralPath $summaryScript)) {
+           Write-Host '[WARN] ClangCL warning summary script is missing'
+           return
+          }
+
+          Invoke-Native python @(
+           $summaryScript,
+           '--log', $buildLog,
+           '--summary', $env:GITHUB_STEP_SUMMARY,
+           '--details', $detailsPath,
+           '--context', 'Windows ClangCL',
+           '--issues', '#1025,#1036'
           )
 
       - name: GitHub Summary
@@ -398,6 +492,7 @@ jobs:
            '### Windows ClangCL smoke',
            '',
            '- Generator: ``Visual Studio 17 2022 -T ClangCL``',
+           '- Warning policy: ``_CRT_SECURE_NO_WARNINGS`` plus ``-Wno-deprecated-declarations``',
            '- Build scope: ``full configured command-line project plus Windows CMM DLL``',
            '- Build type: ``Debug``',
            '- CTest: ``all registered Windows suites``',
@@ -412,7 +507,10 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ci-pr-win-clangcl-smoke-results
-          path: Build/Cmake/build-clangcl-pr-smoke/Testing
+          path: |
+            Build/Cmake/build-clangcl-pr-smoke/Testing
+            Build/Cmake/build-clangcl-pr-smoke/clangcl-*.log
+            Build/Cmake/build-clangcl-pr-smoke/clangcl-warning-signal.md
           if-no-files-found: warn
           retention-days: 14
           compression-level: 9

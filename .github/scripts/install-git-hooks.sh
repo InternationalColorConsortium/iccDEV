@@ -14,9 +14,13 @@ usage() {
   cat <<'EOF'
 Usage: install-git-hooks.sh [--force]
 
-Installs the optional iccDEV pre-push sanity guard into .git/hooks/pre-push.
-The installer is idempotent and refuses to overwrite an existing different
-hook unless --force is provided.
+Installs optional iccDEV git hooks into .git/hooks:
+
+- pre-commit: blocks CI, hook, and Dockerfile changes that fail preflight.
+- pre-push: warns on risky branch, history, and maintainer-path pushes.
+
+The installer is idempotent and refuses to overwrite existing different hooks
+unless --force is provided.
 EOF
 }
 
@@ -31,29 +35,33 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-HOOK_SRC="$REPO_ROOT/.githooks/pre-push"
+HOOK_NAMES=(pre-commit pre-push)
 
 if ! git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   echo "[FAIL] Expected a git checkout" >&2
   exit 1
 fi
 
-if [ ! -f "$HOOK_SRC" ]; then
-  echo "[FAIL] Hook source not found: $HOOK_SRC" >&2
-  exit 1
-fi
-
 HOOK_DIR="$(git -C "$REPO_ROOT" rev-parse --git-path hooks)"
-HOOK_DST="$HOOK_DIR/pre-push"
 mkdir -p "$HOOK_DIR"
 
-if [ -e "$HOOK_DST" ] && ! cmp -s "$HOOK_SRC" "$HOOK_DST"; then
-  if [ "$FORCE" -ne 1 ]; then
-    echo "[FAIL] Existing .git/hooks/pre-push differs; rerun with --force to replace it" >&2
+for hook_name in "${HOOK_NAMES[@]}"; do
+  hook_src="$REPO_ROOT/.githooks/$hook_name"
+  hook_dst="$HOOK_DIR/$hook_name"
+
+  if [ ! -f "$hook_src" ]; then
+    echo "[FAIL] Hook source not found: $hook_src" >&2
     exit 1
   fi
-fi
 
-cp "$HOOK_SRC" "$HOOK_DST"
-chmod 0755 "$HOOK_DST"
-echo "[OK] Installed optional pre-push hook at $HOOK_DST"
+  if [ -e "$hook_dst" ] && ! cmp -s "$hook_src" "$hook_dst"; then
+    if [ "$FORCE" -ne 1 ]; then
+      echo "[FAIL] Existing .git/hooks/$hook_name differs; rerun with --force to replace it" >&2
+      exit 1
+    fi
+  fi
+
+  cp "$hook_src" "$hook_dst"
+  chmod 0755 "$hook_dst"
+  echo "[OK] Installed optional $hook_name hook at $hook_dst"
+done

@@ -15,11 +15,14 @@ the smallest useful evidence.
      `actionlint`, and direct-expression scans;
    - C/C++ or CMake edits: `.github/scripts/run-codeql-local.sh`, or the
      hosted `ci-codeql-security` workflow when local CodeQL is not practical;
+   - Dockerfile or container edits: `hadolint`, Trivy config, image
+     vulnerability/secret scan, and runtime or healthcheck smoke validation;
    - security-sensitive code paths: `code-review-hunting.prompt.md`.
 4. Run dynamic or sanitizer checks for the changed surface:
    - ASAN/UBSAN/IntSan builds for parser, profile, or tool changes;
    - CTest profile gates for generated profile behavior;
-   - release, Docker, WASM, or vcpkg smoke tests for packaging changes.
+   - release, Docker runtime/image-scan, WASM, or vcpkg smoke tests for
+     packaging changes.
 5. Fix every confirmed issue and repeat the relevant checks until the same
    command set is clean.
 6. Produce a golfed handoff: branch, commit, changed surface, command results,

@@ -21,7 +21,7 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] `. .github/scripts/sanitize.ps1` (PowerShell)
 
 ### 4. Expression Injection
-- [ ] No `${{ matrix.* }}` directly in `run:` blocks — must use `env:` passthrough
+- [ ] No `${{ matrix.* }}` directly in `run:` blocks -- must use `env:` passthrough
 - [ ] No `${{ github.event.*.title }}` or other user-controllable contexts in `run:`
 - [ ] No `${{ github.head_ref }}` in `run:` blocks
 - [ ] `pull_request_target` and `workflow_run` jobs do not checkout or execute
@@ -97,6 +97,17 @@ gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
 
 Use CodeQL to validate query packs and C/C++ or CMake-relevant security changes;
 do not treat CodeQL as the workflow YAML parser.
+
+For Dockerfile or container-policy changes, also run:
+
+```bash
+hadolint Dockerfile Dockerfile.*
+trivy config --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 .
+docker build -f Dockerfile -t iccdev-local:ubuntu .
+trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 iccdev-local:ubuntu
+docker build -f Dockerfile.nixos -t iccdev-local:nixos .
+trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 iccdev-local:nixos
+```
 
 ### Full Run Log Grep
 

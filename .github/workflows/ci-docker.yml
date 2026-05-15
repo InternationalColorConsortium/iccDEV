@@ -36,7 +36,6 @@ jobs:
       packages: write  # Required to publish GHCR images.
       id-token: write  # Required for artifact attestation identity.
       attestations: write  # Required to publish build provenance.
-      artifact-metadata: write  # Required to attach artifact metadata attestations.
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -155,6 +154,62 @@ jobs:
           docker pull "${IMAGE_REF}"
           docker tag  "${IMAGE_REF}" "iccdev-${MATRIX_VARIANT}-test:latest"
 
+      - name: Scan test image
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_VARIANT: ${{ matrix.variant }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-image-cache-${MATRIX_VARIANT}"
+          rm -rf "$TRIVY_CACHE"
+          mkdir -p "$TRIVY_CACHE"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$TRIVY_CACHE":/root/.cache/ \
+            "$TRIVY_IMAGE" \
+            image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 "$TEST_IMAGE"
+
+      - name: Verify NixOS image hygiene
+        if: matrix.variant == 'nixos'
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+
+          SOURCE_HITS=$(docker run --rm "$TEST_IMAGE" sh -c \
+            "find /nix/store -maxdepth 1 -name '*-source' -type d | wc -l")
+          if [ "$SOURCE_HITS" -ne 0 ]; then
+            echo "::error::NixOS image contains /nix/store/*-source paths"
+            exit 1
+          fi
+
+          KEY_HITS=$(docker run --rm "$TEST_IMAGE" sh -c "
+            grep -RIlE 'BEGIN .*PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY' \
+              /nix/store /workspace/iccDEV 2>/dev/null | wc -l
+          ")
+          if [ "$KEY_HITS" -ne 0 ]; then
+            echo "::error::NixOS image contains private-key material"
+            exit 1
+          fi
+
+          CHANNEL_HITS=$(docker run --rm "$TEST_IMAGE" sh -c "
+            find /nix/store -maxdepth 1 \
+              \( -name '*-channel-*' -o -name '*manifest.nix' \) \
+              -print 2>/dev/null | wc -l
+          ")
+          if [ "$CHANNEL_HITS" -ne 0 ]; then
+            echo "::error::NixOS image contains channel/profile source artifacts"
+            exit 1
+          fi
+
       - name: Verify tools
         env:
           BASH_ENV: /dev/null
@@ -167,6 +222,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
           TOOL_COUNT=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
             "find ${MATRIX_WORKDIR}/Build/Tools -type f -executable | wc -l")
           echo "Tools built: $TOOL_COUNT"
@@ -182,7 +238,7 @@ jobs:
             exit 1
           fi
           {
-            echo "### Build Results (${MATRIX_VARIANT})"
+            echo "### Build Results (${SAFE_VARIANT})"
             echo "- Tools: $(sanitize_line "$TOOL_COUNT")"
             echo "- Runtime deps: All resolved"
             echo '```'
@@ -191,7 +247,7 @@ jobs:
             sanitize_print "$TOOL_LIST"
             echo ''
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # sanitize_print
 
       - name: Test tool execution
         env:
@@ -203,15 +259,17 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
           FAILURES=0
-          echo "### Tool Tests (${MATRIX_VARIANT})" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Tool Tests (${SAFE_VARIANT})" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
           for tool in iccToXml iccFromXml iccToJson iccFromJson iccDumpProfile iccPawgReport iccRoundTrip; do
+            SAFE_TOOL="$(sanitize_line "$tool")"
             OUT=$(docker run --rm "$TEST_IMAGE" "$tool" 2>&1 || true)
             if grep -qiE "Usage:|IccProfLib" <<< "$OUT"; then
-              echo "[OK] $tool" >> "$GITHUB_STEP_SUMMARY"
+              echo "[OK] $SAFE_TOOL" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
             else
               echo "::error::Tool test failed: $tool"
-              echo "[FAIL] $tool" >> "$GITHUB_STEP_SUMMARY"
+              echo "[FAIL] $SAFE_TOOL" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
               FAILURES=$((FAILURES + 1))
             fi
           done
@@ -232,7 +290,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-          echo "### iccToXml Conversion (${MATRIX_VARIANT})" >> "$GITHUB_STEP_SUMMARY"
+          SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
+          echo "### iccToXml Conversion (${SAFE_VARIANT})" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
           docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c "
             cd ${MATRIX_WORKDIR}
             iccToXml Testing/sRGB_v4_ICC_preference.icc /tmp/sRGB_v4.xml
@@ -246,7 +305,7 @@ jobs:
             sanitize_print "$(cat /tmp/iccToXml-output.txt)"
             echo ''
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # sanitize_print
 
       - name: Cleanup
         if: always()

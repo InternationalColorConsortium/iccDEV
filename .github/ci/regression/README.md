@@ -34,6 +34,7 @@ Test 18 (Regression Bisect).
 | Workflow | Issue | Purpose | Check |
 |----------|-------|---------|-------|
 | `.github/workflows/ci-pr-win.yml` | MinGW toolchain | Keep normal Windows PR CI from regressing MinGW CMake/tool support | Runs a UCRT64 MinGW Release static build and the full registered MinGW CTest set, including `iccdev.windows-icc-dump-profile-smoke` and `iccdev.iccconnect-threaded-cmm` |
+| `.github/workflows/ci-pr-win.yml` | #1025, #1036 | Keep Windows ClangCL warning output focused on source signal instead of known CRT/deprecation noise | Runs the ClangCL smoke build with ClangCL-only noise-control flags, classifies warning categories, and uploads sanitized warning logs |
 
 ## Adding a new PoC
 

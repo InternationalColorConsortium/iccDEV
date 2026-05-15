@@ -21,9 +21,11 @@ updating, or merging an iccDEV PR.
      injection scan;
    - C/C++ or CMake changes: CodeQL local script or hosted CodeQL workflow;
    - parser/profile/tool changes: code-review hunting prompt.
+   - Dockerfile or container changes: `hadolint`, Trivy config, image
+     vulnerability/secret scan, and container smoke or healthcheck validation.
 4. Run dynamic checks:
-   - CTest, sanitizer, CLI smoke, Docker runtime, WASM parity, release assets,
-     or vcpkg consumer smoke as appropriate.
+   - CTest, sanitizer, CLI smoke, Docker runtime/image scan or healthcheck,
+     WASM parity, release assets, or vcpkg consumer smoke as appropriate.
 5. Fix confirmed findings and repeat only affected checks.
 6. Prepare a golfed handoff with commands, run IDs, sentinels, and known skips.
 

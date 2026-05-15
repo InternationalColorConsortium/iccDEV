@@ -9,7 +9,9 @@
 #
 ###############################################################
 
-FROM nixos/nix:2.33.2@sha256:c6ebd12d96b3374ee15e3986c15aa43f5e49310634f17afcaaf4dafe4f6732b2
+FROM nixos/nix:2.33.2@sha256:c6ebd12d96b3374ee15e3986c15aa43f5e49310634f17afcaaf4dafe4f6732b2 AS builder
+RUN ln -s /root/.nix-profile/bin/bash /bin/bash
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 LABEL org.opencontainers.image.title="iccDEV Build Container (NixOS)" \
       org.opencontainers.image.description="iccDEV built with Nix package manager" \
@@ -17,30 +19,70 @@ LABEL org.opencontainers.image.title="iccDEV Build Container (NixOS)" \
       org.opencontainers.image.vendor="International Color Consortium" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
-COPY . /workspace/iccDEV
-RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run ' \
-    export NIX_LDFLAGS="-ltiff $NIX_LDFLAGS" && \
-    cd /workspace/iccDEV && \
-    sed -i "/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /" Build/Cmake/CMakeLists.txt && \
-    cd Build && \
-    rm -f CMakeCache.txt && rm -rf CMakeFiles && \
-    rm -f Cmake/CMakeCache.txt && rm -rf Cmake/CMakeFiles && \
-    cmake -DCMAKE_BUILD_TYPE=Release Cmake && \
-    make -j$(nproc) && \
-    echo "=== Libraries ===" && \
+WORKDIR /workspace/iccDEV
+COPY . .
+
+RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run "\
+    export NIX_LDFLAGS=\"-ltiff \${NIX_LDFLAGS:-}\" && \
+    sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt && \
+    rm -f Build/CMakeCache.txt && rm -rf Build/CMakeFiles && \
+    rm -f Build/Cmake/CMakeCache.txt && rm -rf Build/Cmake/CMakeFiles && \
+    cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build Build --parallel \"\$(nproc)\" && \
+    echo '=== Libraries ===' && \
     ls -lh /workspace/iccDEV/Build/IccProfLib/libIccProfLib2* && \
     ls -lh /workspace/iccDEV/Build/IccXML/libIccXML2* && \
-    (ls -lh /workspace/iccDEV/Build/IccJSON/libIccJSON2* 2>/dev/null || echo "IccJSON: not built") && \
-    echo "=== Tools ===" && \
-    find /workspace/iccDEV/Build/Tools -type f -executable | sort' \
+    (ls -lh /workspace/iccDEV/Build/IccJSON/libIccJSON2* 2>/dev/null || echo 'IccJSON: not built') && \
+    echo '=== Tools ===' && \
+    find /workspace/iccDEV/Build/Tools -type f -executable | sort" \
  && rm -rf /workspace/iccDEV/.git \
- && echo 'iccdev:x:1000:' >> /etc/group \
- && echo 'iccdev:x:1000:1000:iccdev:/workspace:/bin/sh' >> /etc/passwd \
- && nix-env -iA nixpkgs.coreutils nixpkgs.findutils nixpkgs.gnugrep nixpkgs.gnused \
-      nixpkgs.libtiff nixpkgs.libxml2 nixpkgs.libjpeg nixpkgs.libpng nixpkgs.zlib nixpkgs.python3 \
- && chown -R 1000:1000 /workspace \
- && nix-collect-garbage -d \
- && nix store optimise 2>/dev/null || true
+ && BUSYBOX_ROOT="$(nix-build '<nixpkgs>' -A busybox --no-out-link)" \
+ && COREUTILS_ROOT="$(nix-build '<nixpkgs>' -A coreutils --no-out-link)" \
+ && FINDUTILS_ROOT="$(nix-build '<nixpkgs>' -A findutils --no-out-link)" \
+ && GREP_ROOT="$(nix-build '<nixpkgs>' -A gnugrep --no-out-link)" \
+ && LDD_ROOT="$(nix-build '<nixpkgs>' -A glibc.bin --no-out-link)" \
+ && SED_ROOT="$(nix-build '<nixpkgs>' -A gnused --no-out-link)" \
+ && mkdir -p /runtime-root/bin /runtime-root/etc /runtime-root/tmp /runtime-root/workspace/iccDEV \
+ && printf '%s\n' 'iccdev:x:1000:' > /runtime-root/etc/group \
+ && printf '%s\n' 'iccdev:x:1000:1000:iccdev:/workspace:/bin/sh' > /runtime-root/etc/passwd \
+ && chmod 1777 /runtime-root/tmp \
+ && cp -a /workspace/iccDEV/Build /runtime-root/workspace/iccDEV/Build \
+ && cp -a /workspace/iccDEV/Testing /runtime-root/workspace/iccDEV/Testing \
+ && cp -a /workspace/iccDEV/LICENSE.md /workspace/iccDEV/README.md /runtime-root/workspace/iccDEV/ \
+ && { \
+      printf '%s\n' "$BUSYBOX_ROOT"; \
+      find /workspace/iccDEV/Build/Tools /workspace/iccDEV/Build/IccProfLib /workspace/iccDEV/Build/IccXML /workspace/iccDEV/Build/IccJSON \
+        -type f \( -executable -o -name '*.so*' \) -print \
+        | while IFS= read -r file; do \
+            "$LDD_ROOT/bin/ldd" "$file" 2>/dev/null \
+              | "$SED_ROOT/bin/sed" -n 's#^[[:space:]]*\(/nix/store/[^[:space:]]*\).*#\1#p; s#^.*=>[[:space:]]*\(/nix/store/[^[:space:]]*\).*#\1#p'; \
+          done; \
+    } | "$COREUTILS_ROOT/bin/sort" -u > /tmp/runtime-roots \
+ && "$FINDUTILS_ROOT/bin/xargs" -r nix-store -qR < /tmp/runtime-roots | "$COREUTILS_ROOT/bin/sort" -u > /tmp/runtime-closure \
+ && "$FINDUTILS_ROOT/bin/xargs" -r -I{} "$COREUTILS_ROOT/bin/cp" -a --parents "{}" /runtime-root < /tmp/runtime-closure \
+ && "$COREUTILS_ROOT/bin/ln" -s "$BUSYBOX_ROOT/bin/busybox" /runtime-root/bin/busybox \
+ && for tool in sh find wc sort basename ls sed grep cat mkdir rm true false; do \
+      "$COREUTILS_ROOT/bin/ln" -s busybox "/runtime-root/bin/$tool"; \
+    done \
+ && if "$FINDUTILS_ROOT/bin/find" /runtime-root/nix/store -maxdepth 1 -name '*-source' -type d -print -quit | "$GREP_ROOT/bin/grep" -q .; then \
+      echo 'NixOS runtime root contains /nix/store/*-source paths' >&2; \
+      exit 1; \
+    fi \
+ && if "$GREP_ROOT/bin/grep" -RIlE 'BEGIN .*PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY' /runtime-root/nix/store /runtime-root/workspace/iccDEV 2>/dev/null | "$GREP_ROOT/bin/grep" -q .; then \
+      echo 'NixOS runtime root contains private-key material' >&2; \
+      exit 1; \
+    fi \
+ && "$COREUTILS_ROOT/bin/chown" -R 1000:1000 /runtime-root/workspace /runtime-root/tmp
+
+FROM scratch
+
+LABEL org.opencontainers.image.title="iccDEV Build Container (NixOS)" \
+      org.opencontainers.image.description="iccDEV built with Nix package manager" \
+      org.opencontainers.image.licenses="BSD-3-Clause" \
+      org.opencontainers.image.vendor="International Color Consortium" \
+      org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
+
+COPY --from=builder /runtime-root/ /
 
 ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccFromXml:\
@@ -59,11 +101,16 @@ ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccV5DspObsToV4Dsp:\
 /workspace/iccDEV/Build/Tools/IccToJson:\
 /workspace/iccDEV/Build/Tools/IccFromJson:\
-${PATH}"
+/bin"
 
 ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML:/workspace/iccDEV/Build/IccJSON"
+ENV LANG=C
+ENV LC_ALL=C
 
+USER 1000:1000
 WORKDIR /workspace/iccDEV
-USER iccdev
 
-CMD ["sh"]
+HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
+  CMD ["/bin/sh", "-c", "test -x /workspace/iccDEV/Build/Tools/IccDumpProfile/iccDumpProfile"]
+
+CMD ["/bin/sh"]

@@ -20,12 +20,18 @@ on:
     paths:
       - '.github/**'
       - '.githooks/**'
+      - 'Dockerfile'
+      - 'Dockerfile.*'
+      - '.dockerignore'
   pull_request:
     branches:
       - master
     paths:
       - '.github/**'
       - '.githooks/**'
+      - 'Dockerfile'
+      - 'Dockerfile.*'
+      - '.dockerignore'
   workflow_dispatch:
 
 concurrency:
@@ -146,7 +152,8 @@ jobs:
 
           cd target
           mapfile -t changed_files < <(
-            git diff --name-only --diff-filter=ACMRT origin/master...HEAD -- .github .githooks | sort
+            git diff --name-only --diff-filter=ACMRT origin/master...HEAD -- \
+              .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort
           )
           mapfile -t workflow_files < <(
             printf '%s\n' "${changed_files[@]}" |
@@ -154,7 +161,15 @@ jobs:
           )
           mapfile -t script_files < <(
             printf '%s\n' "${changed_files[@]}" |
-              awk '/^\.github\/scripts\/.*\.sh$/ || /^\.githooks\/pre-push$/'
+              awk '/^\.github\/scripts\/.*\.sh$/ || /^\.githooks\/pre-commit$/ || /^\.githooks\/pre-push$/'
+          )
+          mapfile -t python_files < <(
+            printf '%s\n' "${changed_files[@]}" |
+              awk '/^\.github\/scripts\/.*\.py$/'
+          )
+          mapfile -t docker_files < <(
+            printf '%s\n' "${changed_files[@]}" |
+              awk '/^Dockerfile$/ || /^Dockerfile\./'
           )
 
           failures=0
@@ -240,6 +255,54 @@ jobs:
             shellcheck "${script_files[@]}"
           else
             echo "[SKIP] No changed shell hook/script files"
+          fi
+
+          if [ "${#python_files[@]}" -gt 0 ]; then
+            python3 -m py_compile "${python_files[@]}"
+          else
+            echo "[SKIP] No changed Python scripts"
+          fi
+
+          if [ "${#docker_files[@]}" -gt 0 ]; then
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "[FAIL] docker is required for Dockerfile security checks" >&2
+              failures=$((failures + 1))
+            else
+              hadolint_image='hadolint/hadolint@sha256:30a8fd2e785ab6176eed53f74769e04f125afb2f74a6c52aef7d463583b6d45e'
+              trivy_image='aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b'
+              if ! docker run --rm \
+                -v "$PWD":/repo:ro \
+                -w /repo \
+                "$hadolint_image" \
+                hadolint "${docker_files[@]}"; then
+                failures=$((failures + 1))
+              fi
+              rm -rf "${RUNNER_TEMP:-/tmp}/trivy-cache"
+              mkdir -p "${RUNNER_TEMP:-/tmp}/trivy-cache"
+              if ! docker run --rm \
+                -v "$PWD":/repo:ro \
+                -v "${RUNNER_TEMP:-/tmp}/trivy-cache":/root/.cache/ \
+                -w /repo \
+                "$trivy_image" \
+                config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo; then
+                failures=$((failures + 1))
+              fi
+              for dockerfile in "${docker_files[@]}"; do
+                if grep -qiE '^[[:space:]]*FROM[[:space:]].*nixos/nix' "$dockerfile"; then
+                  final_from="$(
+                    awk 'BEGIN{IGNORECASE=1}
+                         /^[[:space:]]*FROM[[:space:]]/ { line=$0 }
+                         END { print line }' "$dockerfile"
+                  )"
+                  if grep -qi 'nixos/nix' <<< "$final_from"; then
+                    echo "[FAIL] $dockerfile final stage inherits from nixos/nix; use a minimal runtime stage" >&2
+                    failures=$((failures + 1))
+                  fi
+                fi
+              done
+            fi
+          else
+            echo "[SKIP] No changed Dockerfile files"
           fi
 
           if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
