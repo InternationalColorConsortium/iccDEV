@@ -340,7 +340,7 @@ int main(int argc, const char** argv)
     cfgConnect.m_nThreads = nThreadArg;
 
   int i, j, k;
-  unsigned int sn, sen, sphoto, photo, bps, dbps;
+  unsigned int sn, sen, photo, bps, dbps;
   CTiffImg SrcImg, DstImg;
   unsigned char *sptr, *dptr;
   const char *last_path = NULL;
@@ -352,7 +352,6 @@ int main(int argc, const char** argv)
   }
   sn = SrcImg.GetSamples();
   sen = SrcImg.GetExtraSamples();
-  sphoto = SrcImg.GetPhoto();
   bps = SrcImg.GetBitsPerSample();
 
   //Setup source encoding based on bits per sample (bps) in source image
