@@ -2259,7 +2259,7 @@ void CIccSampledCalculatorCurve::Describe(std::string &sDescription, int nVerbos
     snprintf(buf, bufSize, "%.8f,", m_lastEntry);
     sDescription += buf;
 
-    snprintf(buf, bufSize, "%u", m_nDesiredSize);
+    snprintf(buf, bufSize, "%u", (unsigned int)m_nDesiredSize);
     sDescription += buf;
 
     snprintf(buf, bufSize, "]\r\n");
@@ -2274,7 +2274,7 @@ void CIccSampledCalculatorCurve::Describe(std::string &sDescription, int nVerbos
     snprintf(buf, bufSize, "%.8f,", m_lastEntry);
     sDescription += buf;
 
-    snprintf(buf, bufSize, "%u", m_nDesiredSize);
+    snprintf(buf, bufSize, "%u", (unsigned int)m_nDesiredSize);
     sDescription += buf;
 
     snprintf(buf, bufSize, "]\r\n");

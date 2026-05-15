@@ -2866,7 +2866,8 @@ bool CIccFuncTokenizer::GetEnvSig(icSigCmmEnvVar &envSig)
 
     icUInt32Number sig = 0;
     if (l==10) {
-      sscanf(szToken+1, "%x", &sig);
+      // this is difficult to format correctly on all platforms, because of pointer and integer size differences
+      sscanf(szToken+1, "%x", &sig );
 
       envSig = (icSigCmmEnvVar)sig;
       return true;
@@ -4761,10 +4762,10 @@ void CIccMpeCalculator::Describe(std::string &sDescription, int nVerboseness)
     if (m_nSubElem && m_SubElem) {
       icUInt32Number i;
       for (i=0; i<m_nSubElem; i++) {
-        snprintf(buf, bufSize, "BEGIN_SUBCALCELEM %u\n", i);
+        snprintf(buf, bufSize, "BEGIN_SUBCALCELEM %u\n", (unsigned int) i);
         sDescription += buf;
         m_SubElem[i]->Describe(sDescription, nVerboseness);
-        snprintf(buf, bufSize, "END_SUBCALCELEM %u\n\n", i);
+        snprintf(buf, bufSize, "END_SUBCALCELEM %u\n\n", (unsigned int) i);
         sDescription += buf;
       }
     }

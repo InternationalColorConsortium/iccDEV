@@ -1198,13 +1198,13 @@ void CIccTagArray::Describe(std::string &sDescription, int nVerboseness)
   for (i=0; i<m_nSize; i++) {
     if (i)
       sDescription += "\n";
-    snprintf(buf, bufSize, "BEGIN INDEX[%u]\n", i);
+    snprintf(buf, bufSize, "BEGIN INDEX[%u]\n", (unsigned int) i);
     sDescription +=  buf;
     
     if (m_TagVals[i].ptr) {
       m_TagVals[i].ptr->Describe(sDescription, nVerboseness);
     }
-    snprintf(buf, bufSize, "END INDEX[%u]\n", i);
+    snprintf(buf, bufSize, "END INDEX[%u]\n", (unsigned int) i);
     sDescription += buf;
   }
 

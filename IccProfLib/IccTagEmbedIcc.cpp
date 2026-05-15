@@ -379,7 +379,7 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
     else
       sDescription += "Profile ID:         Profile ID not calculated.\n";
     sDescription += "Size:               ";
-    snprintf(buf, bufSize, "%u(0x%x) bytes\n", pHdr->size, pHdr->size);
+    snprintf(buf, bufSize, "%u(0x%x) bytes\n", (unsigned int) pHdr->size, (unsigned int) pHdr->size);
     sDescription += buf;
     sDescription += "\nHeader\n";
     sDescription += "------\n";
@@ -477,8 +477,8 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
 
       const size_t tempSize = 20;
       char sOffset[tempSize], sSize[tempSize], sPad[tempSize];
-      snprintf(sOffset, tempSize, "%u", i->TagInfo.offset);
-      snprintf(sSize, tempSize, "%u", i->TagInfo.size);
+      snprintf(sOffset, tempSize, "%u", (unsigned int)i->TagInfo.offset);
+      snprintf(sSize, tempSize, "%u", (unsigned int)i->TagInfo.size);
       snprintf(sPad, tempSize, "%d", pad);
       sDescription += fillColumns(Fmt.GetTagSigName(i->TagInfo.sig), icGetSig(sigbuf, bufSize, i->TagInfo.sig, false), sOffset, sSize, sPad) + "\n";
     }

@@ -538,7 +538,7 @@ void CIccTagUnknown::Describe(std::string &sDescription, int nVerboseness)
   icChar buf[bufSize];
 
   sDescription = "Unknown Tag Type of ";
-  snprintf(buf, bufSize, "%u Bytes.", m_nSize);
+  snprintf(buf, bufSize, "%u Bytes.", (unsigned int) m_nSize);
   sDescription += buf;
 
   if (nVerboseness > 50) {
@@ -1070,7 +1070,7 @@ void CIccTagUtf8Text::Describe(std::string &sDescription, int nVerboseness)
   if (m_szText && *m_szText) {
     const size_t bufSize = 40;
     char buf[bufSize];
-    snprintf(buf, bufSize, "%u bytes\n", m_nBufSize);
+    snprintf(buf, bufSize, "%u bytes\n", (unsigned int) m_nBufSize);
     sDescription += buf;
   }
   else
@@ -1426,7 +1426,7 @@ void CIccTagZipUtf8Text::Describe(std::string &sDescription, int /* nVerboseness
 #else
   const size_t sizeSize = 30;
   char size[sizeSize];
-  snprintf(size, sizeSize, "%u", m_nBufSize);
+  snprintf(size, sizeSize, "%u", (unsigned int) m_nBufSize);
   sDescription += "BEGIN_COMPESSED_DATA[\"";
   sDescription += size;
   sDescription += "]\n";
@@ -1905,7 +1905,7 @@ void CIccTagUtf16Text::Describe(std::string &sDescription, int nVerboseness)
     if (m_szText && *m_szText) {
         const size_t bufSize = 40;
         char buf[bufSize];
-        snprintf(buf, bufSize, "%u bytes\n", m_nBufSize);
+        snprintf(buf, bufSize, "%u bytes\n", (unsigned int) m_nBufSize);
         sDescription += buf;
     }
     else
@@ -3276,7 +3276,7 @@ void CIccTagNamedColor2::Describe(std::string &sDescription, int /* nVerboseness
 
   sDescription.reserve(sDescription.size() + m_nSize*79);
 
-  snprintf(buf, bufSize, "BEGIN_NAMED_COLORS flags=%08x %u %u\n", m_nVendorFlags, m_nSize, m_nDeviceCoords);
+  snprintf(buf, bufSize, "BEGIN_NAMED_COLORS flags=%08x %u %u\n", (unsigned int)m_nVendorFlags, (unsigned int)m_nSize, (unsigned int)m_nDeviceCoords);
   sDescription += buf;
 
   snprintf(buf, bufSize, "Prefix=\"%s\"\n", m_szPrefix);
@@ -3286,7 +3286,7 @@ void CIccTagNamedColor2::Describe(std::string &sDescription, int /* nVerboseness
   sDescription += buf;
 
   for (i=0; i<m_nSize; i++) {
-    snprintf(buf, bufSize, "Color[%u]: %s :", i, pNamedColor->rootName);
+    snprintf(buf, bufSize, "Color[%u]: %s :", (unsigned int)i, pNamedColor->rootName);
     sDescription += buf;
     
     icFloatNumber pcsCoord[3] ={0};
@@ -3933,7 +3933,7 @@ void CIccTagXYZ::Describe(std::string &sDescription, int /* nVerboseness */)
     sDescription.reserve(sDescription.size() + m_nSize*79);
 
     for (i=0; i<m_nSize; i++) {
-      snprintf(buf, bufSize, "value[%u]: X=%.4lf, Y=%.4lf, Z=%.4lf\n", i, icFtoD(m_XYZ[i].X), icFtoD(m_XYZ[i].Y), icFtoD(m_XYZ[i].Z));
+      snprintf(buf, bufSize, "value[%u]: X=%.4lf, Y=%.4lf, Z=%.4lf\n", (unsigned int) i, icFtoD(m_XYZ[i].X), icFtoD(m_XYZ[i].Y), icFtoD(m_XYZ[i].Z));
       sDescription += buf;
     }
   }
@@ -4214,7 +4214,7 @@ void CIccTagChromaticity::Describe(std::string &sDescription, int /* nVerbosenes
   sDescription += buf;
 
   for (i=0; i<m_nChannels; i++) {
-    snprintf(buf, bufSize, "value[%u]: x=%.3lf, y=%.3lf\n", i, icUFtoD(m_xy[i].x), icUFtoD(m_xy[i].y));
+    snprintf(buf, bufSize, "value[%u]: x=%.3lf, y=%.3lf\n", (unsigned int) i, icUFtoD(m_xy[i].x), icUFtoD(m_xy[i].y));
     sDescription += buf;
   }
 
@@ -5711,9 +5711,9 @@ void CIccTagFixedNum<T, Tsig>::Describe(std::string &sDescription, int /* nVerbo
 
     for (i=0; i<m_nSize; i++) {
       if (Tsig==icSigS15Fixed16ArrayType) 
-        snprintf(buf, bufSize, "Value[%u] = %8.4lf\n", i, icFtoD(m_Num[i]));
+        snprintf(buf, bufSize, "Value[%u] = %8.4lf\n", (unsigned int)i, icFtoD(m_Num[i]));
       else
-        snprintf(buf, bufSize, "Value[%u] = %8.4lf\n", i, icUFtoD(m_Num[i]));
+        snprintf(buf, bufSize, "Value[%u] = %8.4lf\n", (unsigned int)i, icUFtoD(m_Num[i]));
       sDescription += buf;
     }
   }
@@ -6826,7 +6826,7 @@ void CIccTagFloatNum<T, Tsig>::Describe(std::string &sDescription, int /* nVerbo
     icUInt32Number i, n;
     sDescription.reserve(sDescription.size() + m_nSize*79);
 
-    snprintf(buf, bufSize, "Begin_Value_Array[%u]\n", m_nSize);
+    snprintf(buf, bufSize, "Begin_Value_Array[%u]\n", (unsigned int) m_nSize);
     sDescription += buf;
 
     if (sizeof(T)!=8)
@@ -9008,12 +9008,12 @@ void CIccTagColorantOrder::Describe(std::string &sDescription, int /* nVerbosene
   const size_t bufSize = 128;
   icChar buf[bufSize];
 
-  snprintf(buf, bufSize, "Colorant Count : %u\n", m_nCount);
+  snprintf(buf, bufSize, "Colorant Count : %u\n", (unsigned int) m_nCount);
   sDescription += buf;
   sDescription += "Order of Colorants:\n";
   
   for (int i=0; i<(int)m_nCount; i++) {
-    snprintf(buf, bufSize, "%u\n", m_pData[i]);
+    snprintf(buf, bufSize, "%u\n", (unsigned int) m_pData[i]);
     sDescription += buf;
   }
 }
@@ -9299,7 +9299,7 @@ void CIccTagColorantTable::Describe(std::string &sDescription, int /* nVerbosene
   icUInt32Number i, nLen, nMaxLen=0;
   icFloatNumber Lab[3] = {0};
 
-  snprintf(buf, bufSize, "BEGIN_COLORANTS %u\n", m_nCount);
+  snprintf(buf, bufSize, "BEGIN_COLORANTS %u\n", (unsigned int) m_nCount);
   sDescription += buf;
 
   for (i=0; i<m_nCount; i++) {
@@ -9318,7 +9318,7 @@ void CIccTagColorantTable::Describe(std::string &sDescription, int /* nVerbosene
     sDescription += buf;
   }
   for (i=0; i<m_nCount; i++) {
-    snprintf(buf, bufSize, "%2u \"%s\"", i, m_pData[i].name);
+    snprintf(buf, bufSize, "%2u \"%s\"", (unsigned int) i, m_pData[i].name);
     sDescription += buf;
     memset(buf, ' ', 128);
     buf[nMaxLen + 1 - strlen(m_pData[i].name)] ='\0';
@@ -10181,13 +10181,13 @@ void CIccTagProfileSeqDesc::Describe(std::string &sDescription, int nVerboseness
   icChar buf[bufSize], buf2[28];
   icUInt32Number count=0;
 
-  snprintf(buf, bufSize, "Number of Profile Description Structures: %u\n", (icUInt32Number)m_Descriptions->size());
+  snprintf(buf, bufSize, "Number of Profile Description Structures: %zu\n", m_Descriptions->size());
   sDescription += buf;
 
   for (i=m_Descriptions->begin(); i!=m_Descriptions->end(); i++, count++) {
     sDescription += "\n";
 
-    snprintf(buf, bufSize, "Profile Description Structure Number [%u] follows:\n", count+1);
+    snprintf(buf, bufSize, "Profile Description Structure Number [%u] follows:\n", (unsigned int)(count+1));
     sDescription += buf;
 
     snprintf(buf, bufSize, "Device Manufacturer Signature: %s\n", icGetSig(buf2, bufSize, i->m_deviceMfg, false));
@@ -10196,7 +10196,7 @@ void CIccTagProfileSeqDesc::Describe(std::string &sDescription, int nVerboseness
     snprintf(buf, bufSize, "Device Model Signature: %s\n", icGetSig(buf2, bufSize, i->m_deviceModel, false));
     sDescription += buf;
 
-    snprintf(buf, bufSize, "Device Attributes: %08x%08x\n", (icUInt32Number)(i->m_attributes >> 32), (icUInt32Number)(i->m_attributes));
+    snprintf(buf, bufSize, "Device Attributes: %08x%08x\n", (unsigned int)(i->m_attributes >> 32), (unsigned int)(i->m_attributes));
     sDescription += buf;
 
     snprintf(buf, bufSize, "Device Technology Signature: %s\n", icGetSig(buf2, bufSize, i->m_technology, false));
@@ -10574,7 +10574,7 @@ void CIccResponseCurveStruct::Describe(std::string &sDescription, int /* nVerbos
       icFtoD(m_maxColorantXYZ[i].X), icFtoD(m_maxColorantXYZ[i].Y), icFtoD(m_maxColorantXYZ[i].Z));
     sDescription += buf;
 
-    snprintf(buf, bufSize, "Number of Measurements for Channel-%d : %u\n", i+1, (icUInt32Number)nResponseList.size());
+    snprintf(buf, bufSize, "Number of Measurements for Channel-%d : %zu\n", i+1, nResponseList.size());
     sDescription += buf;
 
     snprintf(buf, bufSize, "Measurement Data for Channel-%d follows:\n", i+1);
@@ -10887,7 +10887,7 @@ void CIccTagResponseCurveSet16::Describe(std::string &sDescription, int nVerbose
   snprintf(buf, bufSize, "Number of Channels: %u\n", m_nChannels);
   sDescription += buf;
 
-  snprintf(buf, bufSize, "Number of Measurement Types used: %u\n", (icUInt32Number)m_ResponseCurves->size());
+  snprintf(buf, bufSize, "Number of Measurement Types used: %zu\n", m_ResponseCurves->size() );
   sDescription += buf;
 
   int count = 0;
@@ -12409,7 +12409,7 @@ void CIccTagEmbeddedHeightImage::Describe(std::string &sDescription, int /* nVer
   const size_t bufSize = 128;
   icChar buf[bufSize];
 
-  snprintf(buf, bufSize, "\nSeamlessIndicater: %u\n", m_nSeamlesIndicator);
+  snprintf(buf, bufSize, "\nSeamlessIndicater: %u\n", (unsigned int) m_nSeamlesIndicator);
   sDescription += buf;
 
   switch (m_nEncodingFormat) {
@@ -12420,7 +12420,7 @@ void CIccTagEmbeddedHeightImage::Describe(std::string &sDescription, int /* nVer
     strcpy(buf, "EncodingFormat: TIFF\n");
     break;
   default:
-    snprintf(buf, bufSize, "EncodingFormat: %u", m_nEncodingFormat);
+    snprintf(buf, bufSize, "EncodingFormat: %u", (unsigned int) m_nEncodingFormat);
     break;
   }
   sDescription += buf;
@@ -12712,7 +12712,7 @@ void CIccTagEmbeddedNormalImage::Describe(std::string &sDescription, int /* nVer
   const size_t bufSize = 128;
   icChar buf[bufSize];
 
-  snprintf(buf, bufSize, "\nSeamlessIndicater: %u\n", m_nSeamlesIndicator);
+  snprintf(buf, bufSize, "\nSeamlessIndicater: %u\n", (unsigned int)m_nSeamlesIndicator);
   sDescription += buf;
 
   switch (m_nEncodingFormat) {
@@ -12723,7 +12723,7 @@ void CIccTagEmbeddedNormalImage::Describe(std::string &sDescription, int /* nVer
     strcpy(buf, "EncodingFormat: TIFF\n");
     break;
   default:
-    snprintf(buf, bufSize, "EncodingFormat: %u", m_nEncodingFormat);
+    snprintf(buf, bufSize, "EncodingFormat: %u", (unsigned int)m_nEncodingFormat);
     break;
   }
   sDescription += buf;

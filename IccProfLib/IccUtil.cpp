@@ -1089,7 +1089,7 @@ const icChar *icGetSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, bool b
   }
 
   if (bGetHexVal)
-    snprintf(pBuf+5, bufSize-5, "' = %08X", nSig);  // 17 characcter plus NULL
+    snprintf(pBuf+5, bufSize-5, "' = %08X", (unsigned int) nSig);  // 17 characcter plus NULL
   else
     snprintf(pBuf+5, bufSize-5, "'");   // 6 characters plus NULL
 
@@ -1129,7 +1129,7 @@ const icChar *icGetSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig)
   }
 
   if (bGetHexVal)
-    snprintf(pBuf, bufSize, "%08Xh", nSig);
+    snprintf(pBuf, bufSize, "%08Xh", (unsigned int) nSig);
   else
     pBuf[4] = '\0';
 
@@ -1163,7 +1163,7 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
       pBuf[0]='\"';
       pBuf[1] = (icUInt8Number)(sig>>24);
       pBuf[2] = (icUInt8Number)(sig>>16);
-      snprintf(pBuf+3, bufSize-3, "%04X\"", icNumColorSpaceChannels(nSig));
+      snprintf(pBuf+3, bufSize-3, "%04X\"", (unsigned int) icNumColorSpaceChannels(nSig));
       return pBuf;
     
     default:
@@ -1184,9 +1184,9 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
       }
 
       if (bGetHexVal)
-        snprintf(pBuf+5, bufSize-5, "' = %08X", nSig);
+        snprintf(pBuf+5, bufSize-5, "' = %08X", (unsigned int) nSig);
       else if (bNeedHexVal) {
-        snprintf(pBuf, bufSize, "%08Xh", nSig);
+        snprintf(pBuf, bufSize, "%08Xh", (unsigned int) nSig);
       }
       else
         snprintf(pBuf+5, bufSize-5, "'");
@@ -1222,7 +1222,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
 
       pBuf[0] = (icUInt8Number)(sig>>24);
       pBuf[1] = (icUInt8Number)(sig>>16);
-      snprintf(pBuf+2, bufSize-2, "%04X", icNumColorSpaceChannels(nSig));
+      snprintf(pBuf+2, bufSize-2, "%04X", (unsigned int) icNumColorSpaceChannels(nSig));
       return pBuf;
 
     default:
@@ -1248,7 +1248,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
         }
 
         if (bGetHexVal)
-          snprintf(pBuf, bufSize, "%08Xh", nSig);
+          snprintf(pBuf, bufSize, "%08Xh", (unsigned int) nSig);
         else
           pBuf[4] = '\0';
       }
@@ -1359,6 +1359,7 @@ icUInt32Number icGetSigVal(const icChar *pBuf)
                               (((unsigned long)(unsigned char)pBuf[3])));
 
     case 6:  //Channel based color signatures
+      // can't get this format to agree between platforms
       sscanf(pBuf+2, "%x", &v);
 
       return (icUInt32Number)((((unsigned long)(unsigned char)pBuf[0])<<24) +
@@ -1367,6 +1368,7 @@ icUInt32Number icGetSigVal(const icChar *pBuf)
 
     case 8:
     case 9:
+      // can't get this format to agree between platforms
       sscanf(pBuf, "%x", &v);
       return v;
   }
@@ -1507,7 +1509,7 @@ const icChar *CIccInfo::GetVersionName(icUInt32Number val)
 {
   if (!icIsValidBcdByte((val >> 24) & 0xff) ||
       !icIsValidBcdByte((val >> 16) & 0xff)) {
-    snprintf(m_szStr, m_bufSize, "Invalid BCD version 0x%08X", val);
+    snprintf(m_szStr, m_bufSize, "Invalid BCD version 0x%08X", (unsigned int) val);
     return m_szStr;
   }
 
@@ -1523,7 +1525,7 @@ const icChar *CIccInfo::GetSubClassVersionName(icUInt32Number val)
 {
   if (!icIsValidBcdByte((val >> 8) & 0xff) ||
       !icIsValidBcdByte(val & 0xff)) {
-    snprintf(m_szStr, m_bufSize, "Invalid BCD subclass version 0x%04X", val & 0xffff);
+    snprintf(m_szStr, m_bufSize, "Invalid BCD subclass version 0x%04X", (unsigned int) (val & 0xffff) );
     return m_szStr;
   }
 
@@ -1822,33 +1824,33 @@ const icChar *CIccInfo::GetColorSpaceSigName(icColorSpaceSignature sig)
   default:
     switch(icGetColorSpaceType(sig)) {
     case icSigNChannelData:
-      snprintf(m_szStr, m_bufSize, "0x%04XChannelData", icNumColorSpaceChannels(sig));
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     case icSigReflectanceSpectralData:
-      snprintf(m_szStr, m_bufSize, "0x%04XChannelReflectanceData", icNumColorSpaceChannels(sig));
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     case icSigTransmisionSpectralData:
-      snprintf(m_szStr, m_bufSize, "0x%04XChannelTransmissionData", icNumColorSpaceChannels(sig));
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelTransmissionData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     case icSigRadiantSpectralData:
-      snprintf(m_szStr, m_bufSize, "0x%04XChannelRadiantData", icNumColorSpaceChannels(sig));
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelRadiantData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     case icSigBiSpectralReflectanceData:
-      snprintf(m_szStr, m_bufSize, "0x%04XChannelBiDirReflectanceData", icNumColorSpaceChannels(sig));
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelBiDirReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     case icSigSparseMatrixReflectanceData:
-      snprintf(m_szStr, m_bufSize, "0x%04XChannelSparseMatrixReflectanceData", icNumColorSpaceChannels(sig));
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelSparseMatrixReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     default:
       icUInt32Number nChan = icGetSpaceSamples(sig);
       if (nChan>0) {
-        snprintf(m_szStr, m_bufSize, "0x%XColorData", nChan);
+        snprintf(m_szStr, m_bufSize, "0x%XColorData", (unsigned int) nChan);
         return m_szStr;
       }
       return GetUnknownName(sig);
@@ -1863,27 +1865,27 @@ const icChar *CIccInfo::GetSpectralColorSigName(icColorSpaceSignature sig)
     return "NoSpectralData";
 
    case icSigNChannelData:
-     snprintf(m_szStr, m_bufSize, "0x%04XChannelData", icNumColorSpaceChannels(sig));
+     snprintf(m_szStr, m_bufSize, "0x%04XChannelData", (unsigned int) icNumColorSpaceChannels(sig));
      return m_szStr;
 
    case icSigReflectanceSpectralData:
-     snprintf(m_szStr, m_bufSize, "0x%04XChannelReflectanceData", icNumColorSpaceChannels(sig));
+     snprintf(m_szStr, m_bufSize, "0x%04XChannelReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
      return m_szStr;
 
    case icSigTransmisionSpectralData:
-     snprintf(m_szStr, m_bufSize, "0x%04XChannelTransmissionData", icNumColorSpaceChannels(sig));
+     snprintf(m_szStr, m_bufSize, "0x%04XChannelTransmissionData", (unsigned int) icNumColorSpaceChannels(sig));
      return m_szStr;
 
    case icSigRadiantSpectralData:
-     snprintf(m_szStr, m_bufSize, "0x%04XChannelRadiantData", icNumColorSpaceChannels(sig));
+     snprintf(m_szStr, m_bufSize, "0x%04XChannelRadiantData", (unsigned int) icNumColorSpaceChannels(sig));
      return m_szStr;
 
    case icSigBiSpectralReflectanceData:
-     snprintf(m_szStr, m_bufSize, "0x%04XChannelBiSpectralReflectanceData", icNumColorSpaceChannels(sig));
+     snprintf(m_szStr, m_bufSize, "0x%04XChannelBiSpectralReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
      return m_szStr;
 
    case icSigSparseMatrixReflectanceData:
-     snprintf(m_szStr, m_bufSize, "0x%04XChannelSparseMatrixReflectanceData", icNumColorSpaceChannels(sig));
+     snprintf(m_szStr, m_bufSize, "0x%04XChannelSparseMatrixReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
      return m_szStr;
 
   default:

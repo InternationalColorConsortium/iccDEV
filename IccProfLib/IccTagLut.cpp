@@ -6124,10 +6124,10 @@ void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerbosen
     const size_t bufSize = 256;
 	icChar buf[bufSize];
 	
-    snprintf(buf, bufSize, "Number Of Vertices = %d, Number of Triangles = %d\n",m_NumberOfVertices,m_NumberOfTriangles);
+    snprintf(buf, bufSize, "Number Of Vertices = %d, Number of Triangles = %d\n", (int) m_NumberOfVertices, (int) m_NumberOfTriangles);
 	sDescription += buf;
 	
-	snprintf(buf,bufSize, "Number Of Inputs = %d, Number of Outputs = %d\n",m_nPCSChannels,m_nDeviceChannels);
+	snprintf(buf,bufSize, "Number Of Inputs = %d, Number of Outputs = %d\n", (int) m_nPCSChannels, (int) m_nDeviceChannels);
 	sDescription += buf;
 	
     if (nVerboseness > 75) {
@@ -6159,7 +6159,10 @@ void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerbosen
 	
 	    for (int i=0; i<m_NumberOfTriangles; i++)
 	    {
-            snprintf(buf,bufSize, "V1 = %u\tV2 = %u\tV3 = %u\n",m_Triangles[i].m_VertexNumbers[0],m_Triangles[i].m_VertexNumbers[1],m_Triangles[i].m_VertexNumbers[2]);
+            snprintf(buf,bufSize, "V1 = %u\tV2 = %u\tV3 = %u\n",
+                        (unsigned int)m_Triangles[i].m_VertexNumbers[0],
+                        (unsigned int)m_Triangles[i].m_VertexNumbers[1],
+                        (unsigned int)m_Triangles[i].m_VertexNumbers[2] );
 		        sDescription += buf;
 	    }
     }

@@ -289,7 +289,7 @@ void CIccMpeUnknown::Describe(std::string &sDescription, int nVerboseness)
   icChar buf[bufSize], sigbuf[40];
 
   snprintf(buf, bufSize, "Unknown Element(%s) Type of %u Bytes.",
-          icGetSig(sigbuf, 40, m_sig), m_nSize);
+          icGetSig(sigbuf, 40, m_sig), (unsigned int) m_nSize);
   sDescription += buf;
 
   if (nVerboseness > 50) {
