@@ -2516,12 +2516,11 @@ icValidateStatus CIccInfo::CheckData(std::string &sReport, const icDateTimeNumbe
 {
   icValidateStatus rv = icValidateOK;
 
-  struct tm tmStorage;
-  struct tm *newtime = &tmStorage;
+  struct tm *newtime;
   time_t long_time;
 
   time( &long_time );                /* Get time as long integer. */
-  newtime = localtime_r( &long_time, newtime );
+  newtime = localtime( &long_time );
 
   const size_t bufSize = 128;
   icChar buf[bufSize];
@@ -2930,10 +2929,9 @@ icDateTimeNumber icGetDateTimeValue(const icChar *str)
 
   if (!stricmp(str, "now")) {
     time_t rawtime;
-    struct tm tmStorage;
-    struct tm *timeinfo = &tmStorage;
+    struct tm *timeinfo;
     time(&rawtime);
-    timeinfo = localtime_r(&rawtime, timeinfo);
+    timeinfo = localtime(&rawtime);
     year    = timeinfo->tm_year + 1900;
     month   = timeinfo->tm_mon  + 1;
     day     = timeinfo->tm_mday;

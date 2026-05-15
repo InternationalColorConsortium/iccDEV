@@ -166,12 +166,11 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
   CIccProfile* pIcc = new CIccProfile;
   pIcc->m_Header = *pHeader;
 
-  struct tm tmStorage;
-  struct tm* newtime = &tmStorage;
+  struct tm* newtime;
   time_t long_time;
 
   time(&long_time);                /* Get time as long integer. */
-  newtime = gmtime_r(&long_time, newtime);
+  newtime = gmtime(&long_time);
 
   pIcc->m_Header.date.year = newtime->tm_year + 1900;
   pIcc->m_Header.date.month = newtime->tm_mon + 1;
