@@ -78,6 +78,7 @@
 #include "IccUtil.h"
 #include <cstring>
 #include <cstdio>
+#include <cmath>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -367,6 +368,9 @@ bool CIccMatrixMath::SetRange(const icSpectralRange &srcRange, const icSpectralR
   //icFloatNumber dstDiff = dstEnd - dstStart;
   icFloatNumber srcScale = (srcEnd - srcStart) / (srcRange.steps-1);
   icFloatNumber dstScale = (dstEnd - dstStart ) / (dstRange.steps - 1);
+
+  if (!std::isfinite(srcScale) || !std::isfinite(dstScale))
+    return false;
 
   icFloatNumber *data=entry(0);
   size_t dataSize = (size_t)dstRange.steps * srcRange.steps * sizeof(icFloatNumber);
