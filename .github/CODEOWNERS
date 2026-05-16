@@ -2,34 +2,31 @@
 # CODEOWNERS - https://github.com/InternationalColorConsortium
 # ============================================================
 #
-# Updated 2026-05-16 07:12:03 UTC by David Hoyt @xsscx
+# Updated 2026-05-16 07:29:45 UTC by David Hoyt @xsscx
 # Intent: Governance, Transparency, Best Practice
-# Last Modification: Testing Branch Rules & Notification
-# Note: These are temporary changes to permit testing
+# Last Modification: Low-noise transition ownership
+# Note: Temporary transition profile. No wildcard fallback.
+# Note: .github/** and Build/** intentionally unowned for automation elasticity.
 # ============================================================
 
-.github/** @xsscx
-Build/** @xsscx
-Tools/Winnt/IccIisIsapi/** @xsscx
+# Core JSON/config source
+IccJSON/**/*.cpp @maxderhak
+IccJSON/**/*.h @maxderhak
 
-# Test Ownership of Tool Project
-IccJSON/** @maxderhak
+# Core connection source
+IccConnect/**/*.cpp @maxderhak
+IccConnect/**/*.h @maxderhak
 
-# Test Ownership of Library Code
-IccConnect/** @maxderhak
+# Core profile library source
+IccProfLib/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak
+IccProfLib/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak
 
-# Test Ownership of Library Code
-IccProfLib/** @ChrisCoxArt @colourbill-ctrl @maxderhak
+# Core XML library source
+IccXML/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak
+IccXML/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak
 
-# Test Ownership of Library Code
-IccXML/** @ChrisCoxArt @colourbill-ctrl @maxderhak
-
-# Test Ownership of a Tool Project
-Tools/CmdLine/IccProfileVisualize/** @ChrisCoxArt
-
-# Protect the CODEOWNERS file itself
-.github/CODEOWNERS @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
-
-# Governance: protect CODEOWNERS and key security/docs
-SECURITY.md @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
-README.md @maxderhak @dwtza
+# Tool source ownership
+Tools/CmdLine/IccProfileVisualize/**/*.cpp @ChrisCoxArt
+Tools/CmdLine/IccProfileVisualize/**/*.h @ChrisCoxArt
+Tools/Winnt/IccIisIsapi/**/*.cpp @xsscx
+Tools/Winnt/IccIisIsapi/**/*.h @xsscx
