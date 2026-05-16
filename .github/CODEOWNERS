@@ -20,8 +20,8 @@
 
 # High-risk GitHub automation and governance paths
 /.github/workflows/** @dwtza @maxderhak @ChrisCoxArt @xsscx
-/.github/actions/** @xsscx @dwtza @maxderhak @ChrisCoxArt @xsscx
-/.github/scripts/** @xsscx @dwtza @ChrisCoxArt @xsscx
+/.github/actions/** @dwtza @maxderhak @ChrisCoxArt @xsscx
+/.github/scripts/** @dwtza @ChrisCoxArt @xsscx
 /.github/skills/** @dwtza @maxderhak @ChrisCoxArt @xsscx
 /.github/prompts/** @dwtza @maxderhak @ChrisCoxArt @xsscx
 /.github/instructions/** @dwtza @maxderhak @ChrisCoxArt @xsscx
