@@ -121,28 +121,28 @@ void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &rang
   svgfile.AddLine( start0, start0+tickLength );
   point2D start1 = basepoint + range;
   svgfile.AddLine( start1, start1+tickLength );
-  point2D start2 = basepoint + range*0.5;
+  point2D start2 = basepoint + range*0.5f;
   svgfile.AddLine( start2, start2+tickLength );
 
   // small marks for each tenth that isn't 0.5
   for (int i = 1; i < 10; ++i) {
     if (i == 5) continue;
-    point2D startN = basepoint + range*(i/10.0);
-    svgfile.AddLine( startN, startN+tickLength*0.5);
+    point2D startN = basepoint + range*(i/10.0f);
+    svgfile.AddLine( startN, startN+tickLength*0.5f);
   }
 
   // small marks for each hundredth
   for (int i = 1; i < 100; ++i) {
     if ((i % 10) == 0) continue;
-    point2D startN = basepoint + range*(i/100.0);
-    svgfile.AddLine( startN, startN+tickLength*0.25);
+    point2D startN = basepoint + range*(i/100.0f);
+    svgfile.AddLine( startN, startN+tickLength*0.25f);
   }
 
   // label near halfway
   std::string font = "Arial";
   std::string style = "Regular";
   std::string align = "Center";
-  point2D labelPt = basepoint + range*0.5 + tickLength*2.0;
+  point2D labelPt = basepoint + range*0.5f + tickLength*2.0f;
   float rotation = (range.x == 0.0) ? 90 : 0;   // horiz or vertical
   svgfile.AddText( labelPt.x, labelPt.y, label, 14, font, style, align, rotation );
 }
@@ -156,6 +156,7 @@ enum TextAlignment {
     kTextAlignRight = 2
 };
 
+static
 std::string AddGraphLabels( const point2D &basepoint, bool isVertical,
         const point2D &tickLength, float labelSize, const std::string &text,
         TextAlignment align = kTextAlignCenter )
@@ -163,7 +164,7 @@ std::string AddGraphLabels( const point2D &basepoint, bool isVertical,
   std::ostringstream commands;
 
   float textWidth = labelSize * 0.6f * text.size(); // very approximate, not using font metrics
-  float textHalf = 0.5 * textWidth;
+  float textHalf = 0.5f * textWidth;
 
   point2D position(0,0);
   switch(align) {
@@ -212,12 +213,12 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   commands << "0.05 0 0 0 K\n";
   for (int i = 1; i <= 100; ++i) {
     if ((i % 10) == 0) continue;
-    point2D startN = basepoint + range*(i/100.0);
+    point2D startN = basepoint + range*(i/100.0f);
     commands << startN << " m " << (startN+fullLength) << " l S\n";
   }
   commands << "0.1 0 0 0 K\n";
   for (int i = 1; i <= 10; ++i) {
-    point2D startN = basepoint + range*(i/10.0);
+    point2D startN = basepoint + range*(i/10.0f);
     commands << startN << " m " << (startN+fullLength) << " l S\n";
   }
   // identity line
@@ -233,20 +234,20 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   commands << start0 << " m " << (start0+tickLength) << " l S\n";
   point2D start1 = basepoint + range;
   commands << start1 << " m " << (start1+tickLength) << " l S\n";
-  point2D start2 = basepoint + range*0.5;
+  point2D start2 = basepoint + range*0.5f;
   commands << start2 << " m " << (start2+tickLength) << " l S\n";
 
   // small marks for each tenth that isn't 0.5
   for (int i = 1; i < 10; ++i) {
     if (i == 5) continue;
-    point2D startN = basepoint + range*(i/10.0);
+    point2D startN = basepoint + range*(i/10.0f);
     commands << startN << " m " << (startN+tickLength*0.5) << " l S\n";
   }
 
   // small marks for each hundredth
   for (int i = 1; i < 100; ++i) {
     if ((i % 10) == 0) continue;
-    point2D startN = basepoint + range*(i/100.0);
+    point2D startN = basepoint + range*(i/100.0f);
     commands << startN << " m " << (startN+tickLength*0.25) << " l S\n";
   }
 
@@ -256,7 +257,7 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   std::string full("100%");
   bool isVertical = (range.x == 0);
   commands << AddGraphLabels( basepoint, isVertical, tickLength, labelSize, zero );
-  commands << AddGraphLabels( basepoint+0.5*range, isVertical, tickLength, labelSize, half );
+  commands << AddGraphLabels( basepoint+0.5f*range, isVertical, tickLength, labelSize, half );
   commands << AddGraphLabels( basepoint+range, isVertical, tickLength, labelSize, full, kTextAlignRight );
 
   // IO label near 2/3
@@ -270,10 +271,11 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
 
 /******************************************************************************/
 
+static
 void CreateAxesXobject( PDFWriter &pdfout )
 {
   std::string commands;
-  const float margin = 0.5*inch2point;
+  const float margin = 0.5f*inch2point;
   const float tickLength = 12.0f; // pt
 
   const float bottom = 0.0f;
@@ -285,16 +287,16 @@ void CreateAxesXobject( PDFWriter &pdfout )
   // draw axes
   // horizontal
   const point2D basepoint( margin, bottom+margin );
-  const point2D rangeX( right-2*margin, 0.0 );
+  const point2D rangeX( right-2*margin, 0.0f );
   const point2D tickLengthX( 0, -tickLength );
   const point2D fullLengthX( 0, (top-margin) - (bottom+margin) );
-  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, fullLengthX, 12.0, "Input" );
+  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, fullLengthX, 12.0f, "Input" );
 
   // vertical
   const point2D rangeY( 0.0, (top-2*margin) );
   const point2D tickLengthY( -tickLength, 0 );
   const point2D fullLengthY( (right-margin) - (left+margin), 0 );
-  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0, "Output" );
+  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0f, "Output" );
 
   pdfout.AddXObject( bounds, commands, "Axes" );
 }
@@ -386,6 +388,7 @@ std::vector<int> locusLabelWavelengths =
 
 /******************************************************************************/
 
+static
 point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
 {
 // NOTE - Yes, I could create normal vectors from the locus points, etc.
@@ -414,6 +417,7 @@ point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
 // y range [ 0.00529, 0.83409 ]
 const float chromaticityChartScale = 0.85f;
 
+static
 void CreateXYPlotXobject( PDFWriter &pdfout )
 {
   std::ostringstream commands;
@@ -437,24 +441,24 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
 
   // vertical fine grid
   commands << "0.05 0 0 0 K\n";
-  for (float i = 0.0; i <= chromaticityChartScale; i += fineIncrement) {
+  for (float i = 0.0f; i <= chromaticityChartScale; i += fineIncrement) {
     point2D startN = basepoint + i/chromaticityChartScale * rangeX;
     commands << startN << " m " << (startN+rangeY) << " l S\n";
   }
   // horizontal fine grid
-  for (float i = 0.0; i <= chromaticityChartScale; i += fineIncrement) {
+  for (float i = 0.0f; i <= chromaticityChartScale; i += fineIncrement) {
     point2D startN = basepoint + i/chromaticityChartScale * rangeY;
     commands << startN << " m " << (startN+rangeX) << " l S\n";
   }
 
   // vertical coarse grid
   commands << "0.1 0 0 0 K\n";
-  for (float i = 0.0; i <= chromaticityChartScale; i += coarseIncrement) {
+  for (float i = 0.0f; i <= chromaticityChartScale; i += coarseIncrement) {
     point2D startN = basepoint + i/chromaticityChartScale * rangeX;
     commands << startN << " m " << (startN+rangeY) << " l S\n";
   }
   // horizontal coarse grid
-  for (float i = 0.0; i <= chromaticityChartScale; i += coarseIncrement) {
+  for (float i = 0.0f; i <= chromaticityChartScale; i += coarseIncrement) {
     point2D startN = basepoint + i/chromaticityChartScale * rangeY;
     commands << startN << " m " << (startN+rangeX) << " l S\n";
   }
@@ -482,16 +486,17 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
     TextAlignment align;
     point2D offset = spectrumLabelOffset( nm,labelSize, align );
     size_t index = nm - wavelengthOffset;
-    point2D thispoint = basepoint + scaling * point2D( spectralLocus2degree[index].x , spectralLocus2degree[index].y );
+    point2D thispoint = basepoint + scaling * point2D( spectralLocus2degree[index].x,
+                                                       spectralLocus2degree[index].y );
     std::string number = std::to_string(nm);
     commands << AddGraphLabels( thispoint + offset, false, point2D(0,0), labelSize, number, align );
   }
 
   // plankian white curve
   commands << "0 0.25 0.25 0 K\n";
-  const float start_temp = 1500.0;   // degrees Kelvin
-  const float end_temp = 20000.0;
-  const float temp_step = 200.0;
+  const float start_temp = 1500.0f;   // degrees Kelvin
+  const float end_temp = 20000.0f;
+  const float temp_step = 200.0f;
 
   // scan over the planck curve and plot the lines
   XYColor firstXY = approx_planck( start_temp );
@@ -518,7 +523,7 @@ std::string plotCirclePDF( const point2D &center, float radius )
 {
   std::ostringstream commands;
 
-  const float handle_factor = (4.0f * (M_SQRT2 - 1.0f) / 3.0f);
+  const float handle_factor = float(4.0 * (M_SQRT2 - 1.0) / 3.0);
   const float K = radius * handle_factor;
   const point2D rx(radius,0);
   const point2D kx(K,0);
@@ -539,11 +544,12 @@ std::string plotCirclePDF( const point2D &center, float radius )
 // DEFERRED - full 128+ range is probably excessive for real world use
 // what is an appropriate limit?        So far 130 looks fine.
 const float abChartScale = 2 * 130.0f;
-  
+
+static
 void CreateABPlotXobject( PDFWriter &pdfout )
 {
   std::ostringstream commands;
-  float margin = 0.25*inch2point;
+  float margin = 0.25f*inch2point;
 
   const float coarseIncrement = 10.0f;
 
@@ -624,9 +630,9 @@ static
 XYColor xyFromICCXYZ( const icXYZNumber *xyz )
 {
     // integers, so don't have to test for NaN or Inf
-    float X = xyz->X / 65535.0;
-    float Y = xyz->Y / 65535.0;
-    float Z = xyz->Z / 65535.0;
+    float X = xyz->X / 65535.0f;
+    float Y = xyz->Y / 65535.0f;
+    float Z = xyz->Z / 65535.0f;
 
     float sum = X + Y + Z;
     if (sum <= 1e-8)
@@ -715,7 +721,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   float top = pdffile.PageHeight();
   float right = pdffile.PageWidth();
   Rect2D bounds ( left, right, bottom, top );
-  float margin = 0.25*inch2point;
+  float margin = 0.25f*inch2point;
 
     // icSigMediaBlackPointTag ????
   auto whiteTag = pIcc->FindTag( icSigMediaWhitePointTag );
@@ -743,7 +749,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   point2D range( right - left, 0 );
   point2D labelBase( left, top );
   point2D tickLength(0,0);
-  commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12, "Chromaticity xy" );
+  commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12.0f, "Chromaticity xy" );
 
 
   // gsave, color black
@@ -775,9 +781,9 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
         float cct = -449.0f *n3 + 3525.0f *n2 - 6823.3f *n + 5520.33f;  // second eq.
         int32_t cctI = (int32_t)cct; // we want the integer part, don't need precision
         CCTText = std::string("( ~") + std::to_string(cctI) + std::string("K)");
-#endif
       }
     }
+#endif
 
     std::string label = std::string("White") + CCTText;
     commands << plotXYZTag( whiteTag, label, basepoint,
@@ -832,11 +838,11 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
   std::replace( clean_description.begin(), clean_description.end(), '\n', ' ');
   // and wrap our text in CDATA, because SVG doesn't like < > &
   std::string outdescription = "<![CDATA[" + name + " " + clean_description + "]]>";
-  svgfile.AddText( 8*0.5*inch2mm, 0.25*inch2mm, outdescription, 14, font, style, align );
+  svgfile.AddText( 8*0.5*inch2mm, 0.25f*inch2mm, outdescription, 14.0f, font, style, align );
 
   // draw axes
-  point2D basepoint( 0.5*inch2mm, 7.5*inch2mm );
-  point2D rangeX( 7.0*inch2mm, 0.0 );
+  point2D basepoint( 0.5f*inch2mm, 7.5f*inch2mm );
+  point2D rangeX( 7.0f*inch2mm, 0.0f );
   point2D tickLengthX( 0, 5 );
   DrawAxisSVG( svgfile, basepoint, rangeX, tickLengthX, "Input" );
 
@@ -846,15 +852,15 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 
   // draw the curve
   pointList points(steps+1);
-  float scale = (7.5-0.5)*inch2mm;
-  point2D base( 0.5*inch2mm, 7.5*inch2mm );
+  float scale = (7.5f-0.5f)*inch2mm;
+  point2D base( 0.5f*inch2mm, 7.5f*inch2mm );
   for (int i = 0; i <= steps; ++i ) {
     float input = i / (float)steps;
     float output = curve->Apply( input );
     if (std::isnan(output)) output = 0.0;
     if (std::isinf(output)) output = 1.0;
-    if (output > 1.0) output = 1.0;
-    if (output < 0.0) output = 0.0;
+    if (output > 1.0f) output = 1.0f;
+    if (output < 0.0f) output = 0.0f;
     points[i] = point2D( input*scale, -output*scale ) + base;
   }
   svgfile.AddPolyLine( points, false, false );
@@ -865,6 +871,7 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 
 /******************************************************************************/
 
+static
 std::vector<std::string> splitTextLines(const std::string& str)
 {
   const char newline = '\n';
@@ -905,7 +912,7 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
 
   // label (may be a couple of lines)
   std::vector<std::string> lines = splitTextLines( description );
-  float labelSize = 12;     // points
+  float labelSize = 12.0f;     // points
   float leading = labelSize * 1.1f;
   float indent = 0.5f * inch2point;
   commands << "BT /F1 " << labelSize << " Tf ";
@@ -969,7 +976,7 @@ void describe1DLUT( CIccTagCurve *curve, std::string &description )
     description += "Y = X";
   } else if (size == 1) {
     icFloatNumber value0 = (*curve)[0];
-    icFloatNumber dGamma = (icFloatNumber)(value0 * 256.0);
+    icFloatNumber dGamma = (icFloatNumber)(value0 * 256.0f);
     description += "Y = X ^ " + std::to_string(dGamma);
   } else {
     description += "LookupTable[" + std::to_string(size) + "]";
@@ -1518,6 +1525,7 @@ typedef std::vector<namedLAB> namedLabList;
 
 /******************************************************************************/
 
+static
 int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &description,
                         icFloatNumber *XYZIlluminant, PDFWriter &pdffile )
 {
@@ -1528,7 +1536,7 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
   const float top = pdffile.PageHeight();
   const float right = pdffile.PageWidth();
   Rect2D bounds ( left, right, bottom, top );
-  const float margin = 0.25*inch2point;
+  const float margin = 0.25f*inch2point;
   const point2D basepoint( left+margin, bottom+margin );
   const point2D rangeX( right-left-2*margin, 0 );
   const point2D rangeY( 0, top-bottom-2*margin );
@@ -1558,7 +1566,7 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
     icLAB[1] = sample.a;
     icLAB[2] = sample.b;
     icLabtoXYZ( xyzOut, icLAB, XYZIlluminant );
-    XYColor theXY = xyFromICCXYZ( xyzOut );
+    XYColor theXY = xyFromICCXYZFloat( xyzOut );
   
     point2D plotCenter = basepoint + scaling * point2D( theXY.x, theXY.y );
     commands << plotSquarePDF( plotCenter, markSize);
@@ -1578,6 +1586,7 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
 
 /******************************************************************************/
 
+static
 int graphNamedColorsABPDF( namedLabList &colorsOut, const std::string &description,
                         icFloatNumber * /*XYZIlluminant*/, PDFWriter &pdffile )
 {
@@ -1634,6 +1643,7 @@ int graphNamedColorsABPDF( namedLabList &colorsOut, const std::string &descripti
 
 /******************************************************************************/
 
+static
 int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description,
                         icFloatNumber *XYZIlluminant, PDFWriter &pdffile )
 {
@@ -1646,6 +1656,7 @@ int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description
 
 // TODO - CIECAM16 plot as well?
     //#include "IccCAM.h" -- is CIECAM02
+    // would have to add CAM16 code
     
   return outputObjects;
 }
