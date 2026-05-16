@@ -2,23 +2,22 @@
 # CODEOWNERS - https://github.com/InternationalColorConsortium
 # ============================================================
 #
-# Updated 2026-05-12 17:16:37 UTC by David Hoyt @xsscx
+# Updated 2026-05-16 07:12:03 UTC by David Hoyt @xsscx
 # Intent: Governance, Transparency, Best Practice
-# Last Modification: Add Points of Contact
-#
+# Last Modification: Testing Branch Rules & Notification
+# Note: These are temporary changes to permit testing
 # ============================================================
 
-# Notify Default
-# Triage Points of Contact
-* @ChrisCoxArt @xsscx
+.github/** @xsscx
 
-# GitHub Actions workflows & PR automation
-.github/** @xsscx @ChrisCoxArt @dwtza
+IccConnect/** @ChrisCoxArt @colourbill-ctrl @maxderhak
+IccJSON/** @ChrisCoxArt @colourbill-ctrl @maxderhak
+IccProfLib/** @ChrisCoxArt @colourbill-ctrl @maxderhak
+IccXML/** @ChrisCoxArt @colourbill-ctrl @maxderhak
 
 # Protect the CODEOWNERS file itself
 .github/CODEOWNERS @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
 
 # Governance: protect CODEOWNERS and key security/docs
 SECURITY.md @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
-README.md @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
-docs/** @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
+README.md @maxderhak @dwtza
