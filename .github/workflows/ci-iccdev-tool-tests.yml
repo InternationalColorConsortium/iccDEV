@@ -213,4 +213,4 @@ jobs:
             echo "ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
             echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
             echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

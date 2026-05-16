@@ -11,14 +11,18 @@
 
 name: ci-vcpkg-ports
 
+# Existing vcpkg verification rows intentionally exceed the default yamllint
+# line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 on:
   push:
-    branches: [ master ]
+    branches: [master]
     paths:
       - 'ports/**'
       - '.github/workflows/ci-vcpkg-ports.yml'
   pull_request:
-    branches: [ master ]
+    branches: [master]
     paths:
       - 'ports/**'
       - '.github/workflows/ci-vcpkg-ports.yml'
@@ -39,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-2022, ubuntu-24.04, macos-14 ]
+        os: [windows-2022, ubuntu-24.04, macos-14]
 
     steps:
       # Checkout (pinned SHA, no credentials)
@@ -223,7 +227,7 @@ jobs:
             echo "| Libraries | $(ls "$PREFIX/lib/"libIccProfLib2* >/dev/null 2>&1 && echo '[OK]' || echo '[FAIL]') |"
             echo "| CMake config | $([ -f "$PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake" ] || [ -f "$PREFIX/share/reficcmax/RefIccMAXConfig.cmake" ] && echo '[OK]' || echo '[FAIL]') |"
             echo "| Tools | $([ -x "$PREFIX/tools/iccdev/iccDumpProfile" ] && echo '[OK]' || echo '[FAIL]') |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           if [ "$errors" -gt 0 ]; then
             echo "::error::$errors verification checks failed"
             exit 1
@@ -290,7 +294,7 @@ jobs:
           }
           # Summary
           $os = Sanitize-Line "Windows"
-          @"
+          $summary = @"
           ## vcpkg Port Verification - $os
           | Check | Result |
           |-------|--------|
@@ -298,7 +302,8 @@ jobs:
           | Libraries | $(if (Test-Path "$prefix\lib\IccProfLib2-static.lib") {'[OK]'} else {'[FAIL]'}) |
           | CMake config | $(if ($cmakeFound) {'[OK]'} else {'[FAIL]'}) |
           | Tools | $(if (Test-Path "$prefix\tools\iccdev\iccDumpProfile.exe") {'[OK]'} else {'[FAIL]'}) |
-          "@ >> $env:GITHUB_STEP_SUMMARY
+          "@
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
           if ($errors -gt 0) {
             Write-Error "$errors verification checks failed"
             exit 1
@@ -466,11 +471,12 @@ jobs:
             . .github/scripts/sanitize.ps1
           }
           # Summary
-          @"
+          $summary = @"
           ## vcpkg Manifest Mode - Windows
           | Check | Result |
           |-------|--------|
           | CMake configure | [OK] |
           | Build | [OK] |
           | Run | [OK] |
-          "@ >> $env:GITHUB_STEP_SUMMARY
+          "@
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary

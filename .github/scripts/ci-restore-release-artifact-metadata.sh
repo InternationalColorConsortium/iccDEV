@@ -65,6 +65,7 @@ while IFS= read -r -d '' path; do
     fi
 
     if has_dynamic_deps "$path"; then
+      # shellcheck disable=SC2016
       patchelf --set-rpath '$ORIGIN' "$path"
       elf_rpath_updated=$((elf_rpath_updated + 1))
     fi

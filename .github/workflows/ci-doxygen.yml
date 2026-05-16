@@ -64,7 +64,7 @@ jobs:
           {
             printf 'checkout_ref=%s\n' "$checkout_ref"
             printf 'docs_scope=%s\n' "$docs_scope"
-          } >> "$GITHUB_OUTPUT"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
 
   doxygen-iccjson:
     if: >-
@@ -136,7 +136,7 @@ jobs:
             echo "**Visual aids**: Interactive SVG (pan/zoom), class hierarchy browser,"
             echo "call/caller graphs, collaboration diagrams, UML class diagrams,"
             echo "include dependency graphs, treeview navigation, client-side search."
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload IccJSON Documentation
         if: success()
@@ -235,7 +235,7 @@ jobs:
             echo "call/caller graphs, collaboration diagrams, UML class diagrams,"
             echo "include dependency graphs, directory graphs, treeview navigation,"
             echo "client-side search, cross-referenced source browser."
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload Full Project Documentation
         if: success()

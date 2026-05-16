@@ -14,6 +14,10 @@
 
 name: "ci-json-roundtrip"
 
+# Existing profile paths, summary rows, and command strings intentionally exceed
+# the default yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
 
@@ -211,7 +215,7 @@ jobs:
             echo ""
             echo "| Status | Profile | Original | JSON | Round-Trip | Delta |"
             echo "|--------|---------|----------|------|------------|-------|"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
           # Use process substitution to avoid subshell variable scoping
           while IFS= read -r f; do
@@ -348,7 +352,7 @@ jobs:
             echo "**Uploaded profile payloads**: Display/LCDDisplay.icc plus non-PASS profiles, including expected failures"
             echo ""
             echo "**Display/LCDDisplay.icc**: $(sanitize_line "${LCDDISPLAY_STATUS:-not exercised}")"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
           echo "[OK] Round-trip test complete: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} XFAIL=${XFAIL} TOTAL=${TOTAL}"
           echo "[JSON-RT] Results written to ${RESULT_DIR}"
@@ -407,4 +411,4 @@ jobs:
             echo "### CTest JSON Focused Regressions"
             echo ""
             echo "**Command**: $(sanitize_line "ctest -R iccdev.(stdobserver-regressions|mluc-iso-code-regressions)")"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

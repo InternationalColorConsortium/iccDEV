@@ -17,6 +17,10 @@
 
 name: "ci-sanitizer-tests"
 
+# Existing defense-layer table rows intentionally exceed the default yamllint
+# line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
 
@@ -200,7 +204,7 @@ jobs:
             echo "| 4. Canonicalize() + env: block | PowerShell filters control/bidi ranges; env: block prevents shell interpretation | Windows protection without claiming emoji or metacharacter stripping |"
             echo ""
             echo "**Sanitizer version:** \`$(sanitizer_version)\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
   powershell-tests:
     name: PowerShell Sanitizer Tests

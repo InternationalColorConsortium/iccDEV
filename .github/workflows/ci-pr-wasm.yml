@@ -19,6 +19,10 @@
 ###############################################################
 name: "ci-pr-wasm"
 
+# Existing cache keys and command summaries intentionally exceed the default
+# yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
   pull-requests: read  # Required by reusable PR build callers.
@@ -342,7 +346,7 @@ jobs:
             echo "|--------|-------|"
             echo "| Valid .wasm | $(sanitize_line "$VALID") |"
             echo "| Invalid .wasm | $(sanitize_line "$INVALID") |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
           if [[ $INVALID -gt 0 ]]; then
             echo "::error::$INVALID invalid WASM files"
@@ -387,7 +391,7 @@ jobs:
                 echo ""
               done
               echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           else
             echo "::error::test_all.js failed"
             exit 1
@@ -422,7 +426,7 @@ jobs:
                   echo ""
                 done
               echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
           else
             {
               echo "### WASM Parity: FAIL"
@@ -432,7 +436,7 @@ jobs:
                 echo ""
               done
               echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
             echo "::error::WASM parity gate failed"
             exit 1
           fi

@@ -15,6 +15,10 @@
 
 name: "ci-pr-action"
 
+# Existing contributor guidance and summary strings intentionally exceed the
+# default yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
   pull-requests: read  # Required to classify PR scope and summarize metadata.
@@ -130,7 +134,7 @@ jobs:
               printf 'build_config_changed=%s\n' "$build_config_changed"
               printf 'ci_changed=%s\n' "$ci_changed"
               printf 'docs_only=%s\n' "$docs_only"
-            } >> "$GITHUB_OUTPUT"
+          } >> "$GITHUB_OUTPUT"  # elements-sanitized
           }
 
           case "$ci_scope" in
@@ -312,7 +316,7 @@ jobs:
             echo "- [Personal CLA](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)"
             echo "- Corporate CLA: InternationalColorConsortium/.github docs"
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
   setup:
     name: Thank You for the PR
@@ -469,7 +473,7 @@ jobs:
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY}")\`"
             echo ""
             echo "[OK] CI environment successfully initialized and ready for subsequent jobs."
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
   validate-inputs:
     name: Init PR Build Matrix
@@ -838,7 +842,7 @@ jobs:
               echo "[CRITICAL] ${_ref_findings} ref name(s) contain hidden Unicode characters"
             fi
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
           # --- write job status summary ---------------------------------------
           {
@@ -857,4 +861,4 @@ jobs:
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
             echo ""
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

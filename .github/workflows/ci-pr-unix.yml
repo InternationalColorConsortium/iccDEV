@@ -16,6 +16,10 @@
 
 name: "ci-pr-unix"
 
+# Existing workflow-call JSON defaults and shell snippets intentionally exceed
+# the default yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
   pull-requests: read  # Required by reusable PR build callers.
@@ -126,25 +130,34 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          echo "Triggered by:  ${PR_EVENT_NAME}"
-          echo "Base branch:   ${PR_BASE_REF}"
-          echo "Head branch:   ${PR_HEAD_REF}"
-          echo "Commit SHA:    ${PR_HEAD_SHA}"
-          echo "Build Type:    ${PR_BUILD_TYPE}"
-          echo "Compiler:      ${PR_COMPILER}"
-          echo "OS:            ${PR_OS}"
+          source .github/scripts/sanitize-sed.sh
+          safe_event="$(sanitize_line "${PR_EVENT_NAME}")"
+          safe_base="$(sanitize_ref "${PR_BASE_REF}")"
+          safe_head="$(sanitize_ref "${PR_HEAD_REF}")"
+          safe_sha="$(sanitize_line "${PR_HEAD_SHA}")"
+          safe_build_type="$(sanitize_line "${PR_BUILD_TYPE}")"
+          safe_compiler="$(sanitize_line "${PR_COMPILER}")"
+          safe_os="$(sanitize_line "${PR_OS}")"
+
+          echo "Triggered by:  ${safe_event}"
+          echo "Base branch:   ${safe_base}"
+          echo "Head branch:   ${safe_head}"
+          echo "Commit SHA:    ${safe_sha}"
+          echo "Build Type:    ${safe_build_type}"
+          echo "Compiler:      ${safe_compiler}"
+          echo "OS:            ${safe_os}"
 
           {
             echo "### PR Branch Details"
             echo ""
-            echo "**Triggered by:**  ${PR_EVENT_NAME}"
-            echo "**Base branch:**   ${PR_BASE_REF}"
-            echo "**Head branch:**   ${PR_HEAD_REF}"
-            echo "**Commit SHA:**    ${PR_HEAD_SHA}"
-            echo "**Build Type:**    ${PR_BUILD_TYPE}"
-            echo "**Compiler:**      ${PR_COMPILER}"
-            echo "**OS:**            ${PR_OS}"
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "**Triggered by:**  ${safe_event}"
+            echo "**Base branch:**   ${safe_base}"
+            echo "**Head branch:**   ${safe_head}"
+            echo "**Commit SHA:**    ${safe_sha}"
+            echo "**Build Type:**    ${safe_build_type}"
+            echo "**Compiler:**      ${safe_compiler}"
+            echo "**OS:**            ${safe_os}"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
       - name: Install Build Dependencies (Linux)
         if: runner.os == 'Linux'
         shell: bash --noprofile --norc {0}
@@ -341,4 +354,4 @@ jobs:
             echo "- **OS:**         $SANITIZED_OS"
             echo "- **Compiler:**   $SANITIZED_COMPILER"
             echo "- **Build Type:** $SANITIZED_BUILD_TYPE"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
