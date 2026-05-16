@@ -602,7 +602,7 @@ jobs:
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-wasm.yml
     with:
-      expected-icc-count: '207'
+      expected-icc-count: '208'
 
   #############################################################################
   # Example Consumer Project -- verifies build-tree export works

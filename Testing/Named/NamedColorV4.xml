@@ -46,12 +46,12 @@
         <LabNamedColor Name="Violet" L="31.79" a="43.76" b="-43.42">59637 65535 7864 12452</LabNamedColor>
        </NamedColors>
     </namedColor2Type> </namedColor2Tag>
-	
+
 	<XYZType>
       <TagSignature>wtpt</TagSignature>
       <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
     </XYZType>
-	
+
 	<multiLocalizedUnicodeType>
       <TagSignature>cprt</TagSignature>
       <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>

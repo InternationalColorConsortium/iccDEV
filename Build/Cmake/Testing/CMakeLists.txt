@@ -173,7 +173,7 @@ if(WIN32)
       300
       "iccdev;windows;setup;profiles"
       "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
-      EXPECTED_PROFILE_PARSE_COUNT 129
+      EXPECTED_PROFILE_PARSE_COUNT 130
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles

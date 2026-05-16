@@ -112,7 +112,9 @@ in the same change.
    in automated CI.
 5. If the profile affects automated coverage, update the relevant expected
    counts in `docs/ctest.md`, `Build/Cmake/Testing/CMakeLists.txt`, and the
-   workflows that assert CTest or generated-profile totals.
+   workflows that assert CTest or generated-profile totals. For WASM profile
+   parity, also update `Build/Cmake/wasm-package/regression.js`; workflow
+   inputs alone do not change the packaged fallback count.
 
 ## Maintainer CTest Suite Changes
 

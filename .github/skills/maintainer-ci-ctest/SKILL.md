@@ -48,9 +48,12 @@ when practical.
 - Adding checks inside `iccdev-tool-coverage-baseline.sh` does not change that
   count; validate the direct script and `ctest -R '^iccdev\.tool-coverage$'`.
 - Windows currently registers 6 CTest suites.
-- Generated-profile gates currently validate 207 ICC profiles.
-- JSON round-trip profile generation validates 129 profile parses.
-- WASM parity currently expects 207 generated ICC profiles.
+- Generated-profile gates currently validate 208 ICC profiles.
+- Windows and JSON profile generation validate 130 profile parses.
+- WASM parity currently expects 208 generated ICC profiles.
+- WASM generated-profile count changes must update both the workflow inputs and
+  `Build/Cmake/wasm-package/regression.js`; the packaged script is the fallback
+  source used by local and release parity runs.
 - Windows batch CTest runs must use the disposable Testing copy under the build
   tree and must not dirty the source `Testing/` directory.
 - Windows executable tests must receive runtime DLL directories through

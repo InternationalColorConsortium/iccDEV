@@ -228,7 +228,11 @@ For repeatable agent-assisted work, use
    - Linux CTest count in `.github/workflows/ci-iccdev-tool-tests.yml`.
    - Windows profile parse count in `Build/Cmake/Testing/CMakeLists.txt`.
    - JSON profile parse count in `.github/workflows/ci-json-roundtrip.yml`.
-   - WASM expected ICC count in `.github/workflows/ci-tool-tests.yml` when
+     Keep these in sync with `Testing/CreateAllProfiles.sh` and
+     `Testing/CreateAllProfiles.bat`.
+   - WASM expected ICC count in `Build/Cmake/wasm-package/regression.js`,
+     `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`,
+     and `.github/workflows/ci-latest-release.yml` when
      `Testing/CreateAllProfiles.sh` changes the generated-profile set.
 4. Validate locally with CMake configure, build, `ctest -N --no-tests=error`,
    `ctest --output-on-failure --no-tests=error`, and `git diff --check`.

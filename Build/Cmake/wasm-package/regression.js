@@ -5,7 +5,7 @@
 // shims of the 17 published WASM tools, then asserts the produced
 // .icc count matches the native-Linux baseline.
 //
-// Expected baseline (CreateAllProfiles.sh in isolation): 207 .icc
+// Expected baseline (CreateAllProfiles.sh in isolation): 208 .icc
 // Source of truth: native-linux iccDEV/Build/Tools at the same SHA.
 //
 // Exit 0 = parity. Non-zero = drift; prints per-dir distribution diff.
@@ -15,7 +15,7 @@ const path = require('path');
 const os = require('os');
 const cp = require('child_process');
 
-const EXPECTED = parseInt(process.env.ICCDEV_REGRESSION_EXPECTED || '207', 10);
+const EXPECTED = parseInt(process.env.ICCDEV_REGRESSION_EXPECTED || '208', 10);
 const PKG_ROOT = __dirname;
 const TESTING = path.join(PKG_ROOT, 'Testing');
 

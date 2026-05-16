@@ -10,7 +10,7 @@
 # Builds Release-only WASM, stages the npm-shaped consumer bundle
 # via Build/Cmake/wasm-package/stage.sh, and runs:
 #   * test_all.js  (16-tool usage smoke)
-#   * regression.js (Testing/CreateAllProfiles.sh -> 207 ICC parity)
+#   * regression.js (Testing/CreateAllProfiles.sh -> 208 ICC parity)
 #
 # Governance: Hoyt shell prologue on every step, sanitize-sed.sh
 # for GITHUB_STEP_SUMMARY, matrix values via env: block, credential
@@ -33,7 +33,7 @@ on:
       expected-icc-count:
         description: "Expected .icc count from CreateAllProfiles.sh (parity gate)"
         required: false
-        default: "207"
+        default: "208"
         type: string
 
 concurrency:

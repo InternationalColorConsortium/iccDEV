@@ -129,8 +129,8 @@ jobs:
             bash CreateAllProfiles.sh 2>&1 | tee "$CREATE_LOG"
 
           profile_parse_count="$(grep -c 'Profile parsed and saved correctly' "$CREATE_LOG" || true)"
-          if [ "$profile_parse_count" -ne 129 ]; then
-            echo "[FAIL] Expected 129 generated profiles, got ${profile_parse_count}"
+          if [ "$profile_parse_count" -ne 130 ]; then
+            echo "[FAIL] Expected 130 generated profiles, got ${profile_parse_count}"
             exit 1
           fi
           echo "[OK] Generated ${profile_parse_count} test profiles"

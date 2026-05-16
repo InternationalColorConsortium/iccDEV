@@ -567,7 +567,7 @@ void CreateABPlotXobject( PDFWriter &pdfout )
 
   // draw grid
   commands << "q\n";
-  
+
   // clip to chart area
   commands << basepoint << " m " << (basepoint+rangeY) << " l\n";
   commands << (basepoint+rangeY+rangeX) << " l\n";
@@ -1513,7 +1513,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
 struct namedLAB {
     namedLAB() : L(0), a(0), b(0) {}
-    
+
     namedLAB( std::string nn, float LL, float aa, float bb ) :
         name(nn), L(LL), a(aa), b(bb) {}
 
@@ -1567,7 +1567,7 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
     icLAB[2] = sample.b;
     icLabtoXYZ( xyzOut, icLAB, XYZIlluminant );
     XYColor theXY = xyFromICCXYZFloat( xyzOut );
-  
+
     point2D plotCenter = basepoint + scaling * point2D( theXY.x, theXY.y );
     commands << plotSquarePDF( plotCenter, markSize);
     commands << AddGraphLabels( plotCenter+labelOffset, false, point2D(0,0),
@@ -1649,15 +1649,15 @@ int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description
 {
   std::ostringstream commands;
   int outputObjects = 0;
-  
+
   outputObjects += graphNamedColorsABPDF( colorsOut, description, XYZIlluminant, pdffile );
-  
+
   outputObjects += graphNamedColorsXYPDF( colorsOut, description, XYZIlluminant, pdffile );
 
 // TODO - CIECAM16 plot as well?
     //#include "IccCAM.h" -- is CIECAM02
     // would have to add CAM16 code
-    
+
   return outputObjects;
 }
 
@@ -1681,9 +1681,9 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
   }
 
   icTagTypeSignature typeSig = tag->GetType();
-  
+
   switch(typeSig) {
-  
+
     case icSigColorantTableType:    // colorant tables -- name and PCS only
       {
       CIccTagColorantTable *table = dynamic_cast<CIccTagColorantTable*> (tag);
@@ -1691,29 +1691,29 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         fprintf(stderr, "Skipping %s: unable to convert colorantTable\n", sigDesc.c_str());
         return 0;
       }
-      
+
       std::string path("colorantTable");
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
         fprintf(stderr,"WARNING - colorantTable failed validation: %s\n", report.c_str() );
         return 0;
       }
-      
+
       icColorSpaceSignature pcs = pIcc->m_Header.pcs; // table->GetPCS();   // never initialized in table!
-      
+
       if (pcs != icSigXYZData && pcs != icSigLabData) {
         fprintf(stderr,"WARNING - unknown pcs for colorantTable: %s\n",
                             icGetSig(buf, bufSize, pcs) );
         return 0;
       }
-      
+
       icUInt32Number colorCount = table->GetSize();
-      
+
       icFloatNumber XYZIlluminant[3];
       pIcc->getNormIlluminantXYZ( XYZIlluminant );
-      
+
       colorsOut.reserve(colorCount);
-      
+
       for (icUInt32Number i = 0; i < colorCount; ++i) {
         icFloatNumber labTemp[3];
         icColorantTableEntry *entry = table->GetEntry( i );
@@ -1733,20 +1733,20 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
             labTemp[2] = icU16toF( entry->data[2] );
             icLabFromPcs( labTemp );
         }
-        
+
         tempNamed.L = labTemp[0];
         tempNamed.a = labTemp[1];
         tempNamed.b = labTemp[2];
 
         colorsOut.push_back(tempNamed);
       }
-      
+
       std::string description("Colorant Table: ");
       outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
                         XYZIlluminant, pdffile );
       }
       break;
-  
+
     case icSigNamedColor2Type:      // named color - PCS and colorspace (PCS optional?)
       {
       CIccTagNamedColor2 *table = dynamic_cast<CIccTagNamedColor2*> (tag);
@@ -1754,29 +1754,29 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         fprintf(stderr, "Skipping %s: unable to convert namedColorTable\n", sigDesc.c_str());
         return 0;
       }
-      
+
       std::string path("namedColorTable");
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
         fprintf(stderr,"WARNING - namedColorTable failed validation: %s\n", report.c_str() );
         return 0;
       }
-      
+
       icColorSpaceSignature pcs = table->GetPCS();// pIcc->m_Header.pcs;
-      
+
       if (pcs != icSigXYZData && pcs != icSigLabData) {
         fprintf(stderr,"WARNING - unknown pcs for namedColorTable: %s\n",
                             icGetSig(buf, bufSize, pcs) );
         return 0;
       }
-      
+
       icUInt32Number colorCount = table->GetSize();
-      
+
       icFloatNumber XYZIlluminant[3];
       pIcc->getNormIlluminantXYZ( XYZIlluminant );
-      
+
       colorsOut.reserve(colorCount);
-      
+
       std::string prefix = table->GetPrefix();
       std::string suffix = table->GetSufix();
       for (icUInt32Number i = 0; i < colorCount; ++i) {
@@ -1796,20 +1796,20 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
             table->Lab2ToLab4(labTemp,labTemp2);
             icLabFromPcs( labTemp );
         }
-        
+
         tempNamed.L = labTemp[0];
         tempNamed.a = labTemp[1];
         tempNamed.b = labTemp[2];
 
         colorsOut.push_back(tempNamed);
       }
-      
+
       std::string description("Named Color Table: ");
       outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
                             XYZIlluminant, pdffile );
       }
       break;
-    
+
     case icSigTagArrayType:         // v5 only
       {
       CIccTagArray *array = dynamic_cast<CIccTagArray*> (tag);
@@ -1822,7 +1822,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
 
       }
       break;
-  
+
     default:
       printf("Unknown named color type %s for tag %s\n",
          icGetSig(buf, bufSize, typeSig),

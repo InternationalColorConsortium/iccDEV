@@ -58,6 +58,10 @@ Choose the smallest gate that proves the behavior:
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.
+- When changing generated-profile totals, update every assertion source. For
+  WASM parity this includes `Build/Cmake/wasm-package/regression.js`,
+  `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`, and
+  `.github/workflows/ci-latest-release.yml`.
 - For Windows executable tests, keep runtime DLL path handling centralized in
   `Build/Cmake/Testing/WindowsRuntimePaths.cmake`; update docs and skills when
   a test needs vcpkg, Visual Studio LLVM, or MinGW runtime DLLs.
