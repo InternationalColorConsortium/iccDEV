@@ -71,18 +71,20 @@ namespace iccDEV {
 //PC, visual C++
 #if defined(_MSC_VER) && !defined(__MWERKS__) && (defined(_M_IX86) || defined(_M_X64))
 
-  //Define how 64 bit integers are represented
-  #define ICCUINT64 unsigned __int64
-  #define ICCINT64 __int64
-  #define ICUINT64TYPE unsigned __int64
-  #define ICINT64TYPE __int64
+  #include <stdint.h>
 
-  #define ICCUINT32 unsigned long
-  #define ICCINT32  long
-  #define ICUINT32TYPE unsigned long
-  #define ICINT32TYPE  long
+  #define ICCUINT64 uint64_t
+  #define ICCINT64  int64_t
+  #define ICUINT64TYPE uint64_t
+  #define ICINT64TYPE int64_t
 
-  #define ICHALFFLOATTYPE unsigned short
+  //Make sure that 32 bit values are set correctly
+  #define ICCUINT32 uint32_t
+  #define ICCINT32  int32_t
+  #define ICUINT32TYPE uint32_t
+  #define ICINT32TYPE  int32_t
+
+  #define ICHALFFLOATTYPE uint16_t
 
   #define USE_WINDOWS_MB_SUPPORT
   #define WIN32_LEAN_AND_MEAN    // Exclude rarely-used stuff from Windows headers
@@ -110,6 +112,8 @@ namespace iccDEV {
 
 #else // non-PC, perhaps Mac, Linux, or Solaris
 
+  // Using int64_t and uint64_t here will cause more compiler warnings.
+  // because long and longlong have the same size, but different compile signatures
   #define ICCUINT64 unsigned long long
   #define ICCINT64  long long
   #define ICUINT64TYPE unsigned long long
@@ -122,7 +126,7 @@ namespace iccDEV {
   #define ICCINT32  int32_t
   #define ICUINT32TYPE uint32_t
   #define ICINT32TYPE  int32_t
-    
+
   #define ICHALFFLOATTYPE uint16_t
 
   #if defined(__APPLE__)
