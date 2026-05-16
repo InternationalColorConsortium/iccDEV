@@ -9,13 +9,20 @@
 # Note: .github/** and Build/** intentionally unowned for automation elasticity.
 # ============================================================
 
+# Notify Default
+# Triage Points of Contact
+* @xsscx @ChrisCoxArt 
+
+# GitHub Actions workflows & PR automation
+.github/** @xsscx @ChrisCoxArt @dwtza
+
 # Core JSON/config source
-IccJSON/**/*.cpp @maxderhak
-IccJSON/**/*.h @maxderhak
+IccJSON/**/*.cpp@ChrisCoxArt  @maxderhak
+IccJSON/**/*.h @ChrisCoxArt @maxderhak
 
 # Core connection source
-IccConnect/**/*.cpp @maxderhak
-IccConnect/**/*.h @maxderhak
+IccConnect/**/*.cpp @ChrisCoxArt @maxderhak
+IccConnect/**/*.h @ChrisCoxArt @maxderhak
 
 # Core profile library source
 IccProfLib/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak
@@ -30,3 +37,11 @@ Tools/CmdLine/IccProfileVisualize/**/*.cpp @ChrisCoxArt
 Tools/CmdLine/IccProfileVisualize/**/*.h @ChrisCoxArt
 Tools/Winnt/IccIisIsapi/**/*.cpp @xsscx
 Tools/Winnt/IccIisIsapi/**/*.h @xsscx
+
+# Governance: protect key security/docs
+SECURITY.md @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
+README.md @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
+docs/** @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
+
+# Protect the CODEOWNERS file itself
+.github/CODEOWNERS @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
