@@ -96,7 +96,7 @@
       "inherits": "linux-gcc",
       "displayName": "Linux GCC with AddressSanitizer",
       "cacheVariables": {
-        "ENABLE_SANITIZERS": "ON",
+        "ENABLE_ASAN": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     },
@@ -105,7 +105,7 @@
       "inherits": "linux-clang",
       "displayName": "Linux Clang with AddressSanitizer",
       "cacheVariables": {
-        "ENABLE_SANITIZERS": "ON",
+        "ENABLE_ASAN": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     },
