@@ -9,11 +9,23 @@
 # ============================================================
 
 .github/** @xsscx
+Build/** @xsscx
+Tools/Winnt/IccIisIsapi/** @xsscx
 
-IccConnect/** @ChrisCoxArt @colourbill-ctrl @maxderhak
-IccJSON/** @ChrisCoxArt @colourbill-ctrl @maxderhak
+# Test Ownership of Tool Project
+IccJSON/** @maxderhak
+
+# Test Ownership of Library Code
+IccConnect/** @maxderhak
+
+# Test Ownership of Library Code
 IccProfLib/** @ChrisCoxArt @colourbill-ctrl @maxderhak
+
+# Test Ownership of Library Code
 IccXML/** @ChrisCoxArt @colourbill-ctrl @maxderhak
+
+# Test Ownership of a Tool Project
+Tools/CmdLine/IccProfileVisualize/** @ChrisCoxArt
 
 # Protect the CODEOWNERS file itself
 .github/CODEOWNERS @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
