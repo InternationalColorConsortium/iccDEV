@@ -52,26 +52,24 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/labels.yml
+            .github/scripts
           persist-credentials: false
 
-      - name: Ensure status labels exist
+      - name: Ensure repository labels exist
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
 
-          gh label create "passed"  --color "0e8a16" --description "All CI checks passed"    2>/dev/null || true
-          gh label create "failed"  --color "d93f0b" --description "One or more CI checks failed" 2>/dev/null || true
-          gh label create "pending" --color "fbca04" --description "CI checks still running"  2>/dev/null || true
-          gh label create "Merge Ready" \
-            --color "0e8a16" \
-            --description "Approved, mergeable, and all CI checks passed" \
-            2>/dev/null || true
+          .github/scripts/sync-labels.sh
 
       - name: Build PR list
         id: pr_list

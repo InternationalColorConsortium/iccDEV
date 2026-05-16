@@ -10,6 +10,10 @@
 
 name: Labeler
 
+# Existing triage regexes and user-facing issue notes intentionally exceed the
+# default yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 on:
   issues:
     types: [opened, edited, reopened]
@@ -33,6 +37,27 @@ jobs:
       issues: write  # Required to apply issue triage labels and comments.
 
     steps:
+      - name: Check out label taxonomy
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          sparse-checkout: |
+            .github/labels.yml
+            .github/scripts/sync-labels.sh
+          persist-credentials: false
+
+      - name: Ensure repository labels exist
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          .github/scripts/sync-labels.sh
+
       - name: Triage and welcome issue
         shell: bash --noprofile --norc {0}
         env:
@@ -61,33 +86,6 @@ jobs:
             echo "[SKIP] Invalid issue number"
             exit 0
           fi
-
-          ensure_label() {
-            local name="$1"
-            local color="$2"
-            local description="$3"
-            gh label create "$name" \
-              --repo "$GH_REPOSITORY" \
-              --color "$color" \
-              --description "$description" \
-              --force >/dev/null
-          }
-
-          ensure_label "needs-triage" "fbca04" "Maintainer triage required"
-          ensure_label "security" "d73a4a" "Security, sanitizer, or fuzzer-relevant report"
-          ensure_label "bug" "d73a4a" "Confirmed or suspected defect"
-          ensure_label "feature" "a2eeef" "Feature request or enhancement"
-          ensure_label "question" "d4c5f9" "Question or support request"
-          ensure_label "requires:more-information" "fbca04" "More detail is needed before maintainers can act"
-          ensure_label "needs-repro" "fbca04" "Needs a reproducible input, command, or minimal test case"
-          ensure_label "Documentation" "0075ca" "Documentation-only or documentation-related change"
-          ensure_label "CI" "0e8a16" "Continuous integration workflow changes"
-          ensure_label "Build" "0052cc" "Build system, CMake, compiler, or packaging"
-          ensure_label "Testing" "c2e0c6" "CTest, regression, or test coverage"
-          ensure_label "WASM" "0052cc" "WebAssembly or Emscripten build"
-          ensure_label "vcpkg" "0052cc" "vcpkg ports or dependency integration"
-          ensure_label "JSON" "1d76db" "ICC JSON parser, config, or round-trip behavior"
-          ensure_label "Windows" "c5def5" "Windows, MSVC, or PowerShell scope"
 
           text="$(printf '%s\n%s\n%s\n' "$title" "$body" "$labels" | tr '[:upper:]' '[:lower:]')"
           body_compact="$(printf '%s' "$body" | tr -d '[:space:]')"

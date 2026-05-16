@@ -8,6 +8,11 @@
 #
 ###############################################################
 
+# Avoid noisy path labels on tree-wide mechanical refactors. Maintainers can
+# add labels manually when a large change intentionally spans many components.
+max-files-changed: 350
+changed-files-labels-limit: 14
+
 Source:
   - changed-files:
       - any-glob-to-any-file:
@@ -81,7 +86,7 @@ SAST:
           - '.github/codeql-queries/**'
           - '.github/workflows/ci-codeql-security.yml'
 
-Security:
+security:
   - changed-files:
       - any-glob-to-any-file:
           - 'SECURITY.md'
@@ -180,12 +185,27 @@ Unix:
           - '.github/workflows/*unix*.yml'
           - '**/*.sh'
 
+macOS:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/*mac*.yml'
+          - 'Build/Cmake/**/*Mac*'
+          - 'Build/Cmake/**/*macos*'
+          - '**/*.plist'
+
 Labels:
   - changed-files:
       - any-glob-to-any-file:
+          - '.github/labels.yml'
           - '.github/labeler.yml'
           - '.github/workflows/label.yml'
+          - '.github/workflows/pr-labeler.yml'
+          - '.github/workflows/sync-labels.yml'
           - '.github/workflows/update-labels.yml'
+          - '.github/scripts/sync-labels.sh'
+          - 'docs/label-system.md'
+          - '.github/skills/maintainer-label-system/**'
+          - '.github/prompts/maintainer-label-triage.prompt.md'
 
 vcpkg:
   - changed-files:

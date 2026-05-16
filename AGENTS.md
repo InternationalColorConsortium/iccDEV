@@ -23,4 +23,6 @@ Detailed rules live in `.github/copilot-instructions.md` and
 | Issue filing format | `.github/prompts/file-security-issue.prompt.md` |
 | Library hardening | `.github/instructions/icc-library-code.instructions.md` |
 | Workflow hardening | `.github/instructions/workflow-governance.instructions.md` |
+| Maintainer label system | `docs/label-system.md` |
+| Label triage prompt | `.github/prompts/maintainer-label-triage.prompt.md` |
 | Testing details | `.github/instructions/testing.instructions.md` |

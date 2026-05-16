@@ -20,6 +20,7 @@ point to deeper references.
 | Bisect workflow | `docs/bisect.md` |
 | Pre-PR security cycle | `docs/pre-pr-security-cycle.md` and `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Regression workflow updates | `docs/regression-workflow-governance.md` |
+| Maintainer label system | `docs/label-system.md`, `.github/labels.yml`, `.github/labeler.yml`, and `.github/skills/maintainer-label-system/SKILL.md` |
 | CodeQL queries | `.github/codeql-queries/README.md` |
 | Security issue format | `.github/prompts/SECURITY_ISSUE_FORMAT.md` |
 | Agent routing | `.github/copilot-instructions.md` |
@@ -29,6 +30,7 @@ point to deeper references.
 | vcpkg port policy | `.github/instructions/vcpkg-port.instructions.md` |
 | Agent skills | `.github/skills/README.md` |
 | Maintainer CI and CTest workflow | `.github/skills/maintainer-ci-ctest/SKILL.md` and `.github/prompts/maintainer-ci-ctest.prompt.md` |
+| Maintainer label workflow | `.github/skills/maintainer-label-system/SKILL.md` and `.github/prompts/maintainer-label-triage.prompt.md` |
 | IIS sample setup | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` |
 | IIS API reference | `Tools/Winnt/IccIisIsapi/api.md` |
 

@@ -9,6 +9,7 @@ commands here.
 | Pattern | File | Purpose |
 |---------|------|---------|
 | `.github/workflows/**` | `instructions/workflow-governance.instructions.md` | Shell hardening, injection prevention, output sanitization |
+| `.github/labels.yml`, `.github/labeler.yml` | `instructions/workflow-governance.instructions.md` | Maintainer-owned label automation and trusted write workflows |
 | `.github/scripts/**` | `instructions/sanitizer-scripts.instructions.md` | `sanitize-sed.sh` and `sanitize.ps1` APIs |
 | `Build/**` | `instructions/build-system.instructions.md` | CMake, platform notes, sanitizer options, WASM/LTO |
 | `IccProfLib/**`, `IccXML/**`, `Tools/**`, `IccJSON/**` | `instructions/icc-library-code.instructions.md` | Parser hardening and C++ safety patterns |
@@ -66,6 +67,7 @@ Key safety rules:
 | Build/test/coverage | `.github/prompts/build-and-test.prompt.md` |
 | Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
+| Maintainer label triage | `.github/prompts/maintainer-label-triage.prompt.md` |
 | vcpkg debug | `.github/prompts/vcpkg-port-debug.prompt.md` |
 
 ## Skills
@@ -76,4 +78,5 @@ Key safety rules:
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
+| Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |

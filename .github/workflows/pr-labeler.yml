@@ -1,0 +1,54 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Trusted pull request path labeler.
+#
+###############################################################
+
+name: PR Path Labeler
+
+on:
+  pull_request_target:  # zizmor: ignore[dangerous-triggers] metadata-only labeler; never checks out PR head
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to label
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "pr-path-labeler-${{ github.event.pull_request.number || inputs.pr_number }}"
+  cancel-in-progress: true
+
+jobs:
+  apply-path-labels:
+    name: Apply path labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write  # Required to apply existing labels to PRs.
+
+    steps:
+      - name: Check out trusted label config
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          sparse-checkout: .github/labeler.yml
+          persist-credentials: false
+
+      - name: Apply changed-path labels
+        uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213  # v6.1.0
+        with:
+          repo-token: ${{ github.token }}
+          configuration-path: .github/labeler.yml
+          sync-labels: true
+          dot: true
+          pr-number: ${{ github.event.pull_request.number || inputs.pr_number }}

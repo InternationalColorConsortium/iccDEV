@@ -11,6 +11,7 @@ long command references.
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
+| `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |
 | `regression-workflow-governance` | Adding regression gates or updating tool-test workflows. |
 | `vcpkg-export-consumer-debug` | Fixing vcpkg, install/export, uninstall, or packaged consumer CI failures. |
 | `version-bump` | Updating iccDEV release version references. |
