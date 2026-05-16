@@ -2,46 +2,61 @@
 # CODEOWNERS - https://github.com/InternationalColorConsortium
 # ============================================================
 #
-# Updated 2026-05-16 07:29:45 UTC by David Hoyt @xsscx
 # Intent: Governance, Transparency, Best Practice
-# Last Modification: Low-noise transition ownership
-# Note: Temporary transition profile. No wildcard fallback.
-# Note: .github/** and Build/** intentionally unowned for automation elasticity.
+#
+# Maintainer Notes:
+# - CODEOWNERS uses the last matching pattern
+# - Broad fallback rules appear first
+#
+# ICC Lead:  @dwtza @maxderhak
+# Volunteer: @ChrisCoxArt @colourbill-ctrl @xsscx
 # ============================================================
 
-# Notify Default
-# Triage Points of Contact
-* @xsscx @ChrisCoxArt 
+# Fallback triage owner for paths without a more specific rule.
+* @ChrisCoxArt @xsscx
 
-# GitHub Actions workflows & PR automation
-.github/** @xsscx @ChrisCoxArt @dwtza
+# GitHub configuration, Actions workflows & PR automation
+/.github/** @xsscx @ChrisCoxArt @dwtza
+
+# High-risk GitHub automation and governance paths
+/.github/workflows/** @dwtza @maxderhak @ChrisCoxArt @xsscx
+/.github/actions/** @xsscx @dwtza @maxderhak @ChrisCoxArt @xsscx
+/.github/scripts/** @xsscx @dwtza @ChrisCoxArt @xsscx
+/.github/skills/** @dwtza @maxderhak @ChrisCoxArt @xsscx
+/.github/prompts/** @dwtza @maxderhak @ChrisCoxArt @xsscx
+/.github/instructions/** @dwtza @maxderhak @ChrisCoxArt @xsscx
+/.github/labels.yml @dwtza @ChrisCoxArt @xsscx
+/.github/labeler.yml @dwtza @ChrisCoxArt @xsscx
 
 # Core JSON/config source
-IccJSON/**/*.cpp@ChrisCoxArt  @maxderhak
-IccJSON/**/*.h @ChrisCoxArt @maxderhak
+/IccJSON/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
+/IccJSON/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
 
 # Core connection source
-IccConnect/**/*.cpp @ChrisCoxArt @maxderhak
-IccConnect/**/*.h @ChrisCoxArt @maxderhak
+/IccConnect/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
+/IccConnect/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
 
 # Core profile library source
-IccProfLib/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak
-IccProfLib/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak
+/IccProfLib/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
+/IccProfLib/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
 
 # Core XML library source
-IccXML/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak
-IccXML/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak
+/IccXML/**/*.cpp @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
+/IccXML/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
 
-# Tool source ownership
-Tools/CmdLine/IccProfileVisualize/**/*.cpp @ChrisCoxArt
-Tools/CmdLine/IccProfileVisualize/**/*.h @ChrisCoxArt
-Tools/Winnt/IccIisIsapi/**/*.cpp @xsscx
-Tools/Winnt/IccIisIsapi/**/*.h @xsscx
+# Build, testing, packaging, and port configuration
+/Build/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
+/Testing/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
+/ports/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
 
 # Governance: protect key security/docs
-SECURITY.md @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
-README.md @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
-docs/** @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
+/AGENTS.md @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
+/CODE_OF_CONDUCT.md @dwtza @maxderhak
+/CONTRIBUTING.md @dwtza @maxderhak
+/LICENSE.md @dwtza @maxderhak
+/SECURITY.md @maxderhak @dwtza
+/README.md @dwtza @maxderhak
+/docs/** @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt
 
 # Protect the CODEOWNERS file itself
-.github/CODEOWNERS @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
+/.github/CODEOWNERS @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
