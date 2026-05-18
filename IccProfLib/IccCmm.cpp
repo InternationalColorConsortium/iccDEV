@@ -9100,7 +9100,7 @@ icStatusCMM CIccCmm::ToInternalEncoding(icColorSpaceSignature nSpace, icFloatCol
     return icCmmStatBadColorEncoding;
 
 
-  icUInt16Number i;
+  int i;
   CIccPixelBuf pInput(nSamples);
 
   if (!pInput.get())
@@ -9412,7 +9412,7 @@ icStatusCMM CIccCmm::FromInternalEncoding(icColorSpaceSignature nSpace, icFloatC
   if (!nSamples)
     return icCmmStatBadColorEncoding;
 
-  icUInt16Number i;
+  int i;
   CIccPixelBuf pInput(nSamples);
 
   if (!pInput.get())
