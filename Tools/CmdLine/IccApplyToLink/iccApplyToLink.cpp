@@ -82,8 +82,37 @@
 #include "IccTagLut.h"
 #include "IccTagMPE.h"
 #include "IccMpeBasic.h"
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 
+// ============================================================================
+
+static
+FILE* icOpenWriteBinaryFile(const char* szFname)
+{
+  if (!szFname || !szFname[0])
+    return stdout;
+
+#if defined(_WIN32)
+  return fopen(szFname, "wb");
+#else
+  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if (fd < 0)
+    return nullptr;
+
+  FILE* f = fdopen(fd, "wb");
+  if (!f)
+    close(fd);
+
+  return f;
+#endif
+}
+
+// ============================================================================
 
 class ILinkWriter
 {
@@ -172,7 +201,7 @@ public:
       return false;
     }
 
-    m_f = fopen(m_filename.c_str(), "wb");
+    m_f = icOpenWriteBinaryFile(m_filename.c_str());
     if (!m_f) {
       printf("Unable to open '%s'\n", m_filename.c_str());
       return false;

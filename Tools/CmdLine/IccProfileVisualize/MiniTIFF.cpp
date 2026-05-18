@@ -75,6 +75,29 @@
 
 /******************************************************************************/
 
+static
+FILE* icOpenWriteBinaryFile(const char* szFname)
+{
+  if (!szFname || !szFname[0])
+    return stdout;
+
+#if defined(_WIN32)
+  return fopen(szFname, "wb");
+#else
+  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+  if (fd < 0)
+    return nullptr;
+
+  FILE* f = fdopen(fd, "wb");
+  if (!f)
+    close(fd);
+
+  return f;
+#endif
+}
+
+/******************************************************************************/
+
 // NOTE - we don't have to worry about byte order, because the TIFF will always be written in host byte order
 // returns true if the write failed, otherwise false
 static
@@ -191,29 +214,6 @@ bool putIFDLong( uint16_t tag, uint16_t type, uint32_t count, uint32_t value, FI
     return true;
   
   return false;
-}
-
-/******************************************************************************/
-
-static
-FILE* icOpenWriteBinaryFile(const char* szFname)
-{
-  if (!szFname || !szFname[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(szFname, "wb");
-#else
-  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  FILE* f = fdopen(fd, "wb");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
 }
 
 /******************************************************************************/
