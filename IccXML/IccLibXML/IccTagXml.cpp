@@ -114,7 +114,9 @@ bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
       m_pData = NULL;
     }
     if (m_nSize) {
-      m_pData = new icUInt8Number[m_nSize];
+      m_pData = new (std::nothrow) icUInt8Number[m_nSize];
+      if (!m_pData)
+        return false;
 
       if (icXmlGetHexData(m_pData, (const icChar*)pNode->children->content, m_nSize)!=m_nSize)
         return false;
@@ -2211,7 +2213,7 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
       vals.ParseTextArray((icChar*)pChild->children->content);
       if (vals.GetSize()!=m_observerRange.steps*3)
         return false;
-      m_observer = new icFloatNumber[m_observerRange.steps*3];
+      m_observer = new (std::nothrow) icFloatNumber[m_observerRange.steps*3];
       if (!m_observer)
         return false;
       icFloatNumber *pBuf = vals.GetBuf();
@@ -2256,7 +2258,7 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
       vals.ParseTextArray((icChar*)pChild->children->content);
       if (vals.GetSize()!=m_illuminantRange.steps)
         return false;
-      m_illuminant = new icFloatNumber[m_illuminantRange.steps];
+      m_illuminant = new (std::nothrow) icFloatNumber[m_illuminantRange.steps];
       if (!m_illuminant)
         return false;
       icFloatNumber *pBuf = vals.GetBuf();
@@ -3265,7 +3267,7 @@ bool CIccTagXmlSegmentedCurve::ParseXml(xmlNode *pNode, std::string &parseStr )
 {
   xmlNode *pCurveNode = icXmlFindNode(pNode, "SegmentedCurve");
   if (pCurveNode) {
-    CIccSegmentedCurveXml *pCurve = new CIccSegmentedCurveXml();
+    CIccSegmentedCurveXml *pCurve = new (std::nothrow) CIccSegmentedCurveXml();
     
     if (pCurve) {
       if (pCurve->ParseXml(pCurveNode, parseStr)) {
@@ -3432,10 +3434,10 @@ bool icCurvesFromXml(LPIccCurve *pCurve, icUInt32Number nChannels, xmlNode *pNod
     if (pCurveNode->type==XML_ELEMENT_NODE) {
       CIccCurve *pCurveTag = NULL;
       if (!icXmlStrCmp(pCurveNode->name, "Curve")) {
-        pCurveTag = new CIccTagXmlCurve;
+        pCurveTag = new (std::nothrow) CIccTagXmlCurve;
       }
       else if (!icXmlStrCmp(pCurveNode->name, "ParametricCurve")) {
-        pCurveTag = new CIccTagXmlParametricCurve();
+        pCurveTag = new (std::nothrow) CIccTagXmlParametricCurve();
       }
 
       if (pCurveTag) {
@@ -3529,7 +3531,7 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
   icUInt8Number nInput = (icUInt8Number)nIn;
   icUInt16Number nOutput = (icUInt16Number)nOut;
 
-  pCLUT = new CIccCLUT(nInput, nOutput, nPrecision);
+  pCLUT = new (std::nothrow) CIccCLUT(nInput, nOutput, nPrecision);
 
   if (!pCLUT){
     parseStr += "Error in creating CLUT Table. Check values of Precision, InputChannel, or OutputChannels.\n";
@@ -4344,7 +4346,9 @@ bool CIccTagXmlMultiProcessElement::ParseXml(xmlNode *pNode, std::string &parseS
   m_nOutputChannels = atoi(icXmlAttrValue(pOutputChannels));
 
   if (!m_list) {
-    m_list = new CIccMultiProcessElementList();
+    m_list = new (std::nothrow) CIccMultiProcessElementList();
+    if (!m_list)
+      return false;
   }
   else {
     m_list->clear();
@@ -4523,12 +4527,13 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
   for (pNode = icXmlFindNode(pNode, "DictEntry"); pNode; pNode = icXmlFindNode(pNode->next, "DictEntry")) {
     CIccDictEntryPtr ptr;
-    CIccDictEntry *pDesc = new CIccDictEntry();
     xmlAttr *pAttr;
     CIccUTF16String str;
 
+    CIccDictEntry *pDesc = new (std::nothrow) CIccDictEntry();
     if (!pDesc)
       return false;
+    
     ptr.ptr = pDesc;
 
     str = icXmlAttrValue(pNode, "Name", "");
@@ -4549,7 +4554,9 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
       if (pChild->type == XML_ELEMENT_NODE && !icXmlStrCmp(pChild->name, "LocalizedName")) {
         CIccTagMultiLocalizedUnicode *pTag = pDesc->GetNameLocalized();
         if (!pTag) {
-          pTag = new CIccTagMultiLocalizedUnicode();
+          pTag = new (std::nothrow) CIccTagMultiLocalizedUnicode();
+          if (!pTag)
+            return false;
           pDesc->SetNameLocalized(pTag);
         }
 
@@ -4572,7 +4579,9 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
       else if (pChild->type == XML_ELEMENT_NODE && !icXmlStrCmp(pChild->name, "LocalizedValue")) {
         CIccTagMultiLocalizedUnicode *pTag = pDesc->GetValueLocalized();
         if (!pTag) {
-          pTag = new CIccTagMultiLocalizedUnicode();
+          pTag = new (std::nothrow) CIccTagMultiLocalizedUnicode();
+          if (!pTag)
+            return false;
           pDesc->SetValueLocalized(pTag);
         }
 
@@ -5247,7 +5256,7 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
     }
     
     size_t totalSize = (size_t)m_NumberOfVertices * (size_t)m_nPCSChannels;
-    m_PCSValues = new icFloatNumber[totalSize];
+    m_PCSValues = new (std::nothrow) icFloatNumber[totalSize];
 
     if (!m_PCSValues)
       return false;
@@ -5283,7 +5292,7 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
     }
     
     size_t totalSize = (size_t)m_NumberOfVertices * (size_t)m_nDeviceChannels;
-    m_DeviceValues = new icFloatNumber[totalSize];
+    m_DeviceValues = new (std::nothrow) icFloatNumber[totalSize];
 
     if (!m_DeviceValues)
       return false;
@@ -5306,7 +5315,9 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
     }
   }
   m_NumberOfTriangles = nMaxIndex;
-  m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
+  m_Triangles = new (std::nothrow) icGamutBoundaryTriangle[m_NumberOfTriangles];
+  if (!m_Triangles)
+    return false;
 
   n=0; 
   for (subNode = childNode->children; subNode && n<nMaxIndex; subNode = subNode->next) {
@@ -5343,7 +5354,9 @@ bool CIccTagXmlEmbeddedProfile::ParseXml(xmlNode *pNode, std::string &parseStr)
     delete m_pProfile;
   }
 
-  CIccProfileXml *pProfile = new CIccProfileXml();
+  CIccProfileXml *pProfile = new (std::nothrow) CIccProfileXml();
+  if (!pProfile)
+    return false;
   m_pProfile = pProfile;
 
   if (!pProfile->ParseXml(tagNode, parseStr)) {

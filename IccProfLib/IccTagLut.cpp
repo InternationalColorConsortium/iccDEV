@@ -79,6 +79,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <vector>
+#include <new>
 #include "IccProfLibConf.h"
 #ifdef ICC_USE_SSE2
   #include <emmintrin.h>
@@ -1326,7 +1327,9 @@ void CIccTagSegmentedCurve::DumpLut(std::string &sDescription, const icChar *szN
 */
 bool CIccTagSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
 {
-   CIccSegmentedCurve *pCurve = new CIccSegmentedCurve();
+   CIccSegmentedCurve *pCurve = new (std::nothrow) CIccSegmentedCurve();
+   if (!pCurve)
+     return false;
 
    if (pCurve->Read(size, pIO)) {
      SetCurve(pCurve);
@@ -1935,7 +1938,7 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
     return false;
   icUInt32Number nSize = static_cast<icUInt32Number>(nSize64);
 
-  m_pData = new icFloatNumber[nSize];
+  m_pData = new (std::nothrow) icFloatNumber[nSize];
 
   return (m_pData != NULL);
 }
@@ -2528,7 +2531,7 @@ void CIccCLUT::Begin()
 
 CIccApplyCLUT* CIccCLUT::GetNewApply()
 {
-  CIccApplyCLUT* rv = new CIccApplyCLUT();
+  CIccApplyCLUT* rv = new (std::nothrow) CIccApplyCLUT();
 
   if (!rv)
     return NULL;
@@ -4375,7 +4378,9 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
         12u * sizeof(icS15Fixed16Number) > size)
       return false;
 
-    m_Matrix = new CIccMatrix();
+    m_Matrix = new (std::nothrow) CIccMatrix();
+    if (!m_Matrix)
+      return false;
 
     if (pIO->Seek(nStart + Offset[1], icSeekSet)<0)
       return false;
@@ -4426,7 +4431,9 @@ bool CIccTagLutAtoB::Read(icUInt32Number size, CIccIO *pIO)
     if (pIO->Seek(nStart + Offset[3], icSeekSet)<0)
       return false;
 
-    m_CLUT = new CIccCLUT(m_nInput, m_nOutput);
+    m_CLUT = new (std::nothrow) CIccCLUT(m_nInput, m_nOutput);
+    if (!m_CLUT)
+      return false;
 
     if ((size_t)pIO->Tell() > nEnd)
       return false;
@@ -4992,7 +4999,7 @@ bool CIccTagLut8::Read(icUInt32Number size, CIccIO *pIO)
   }
 
   //CLUT
-  m_CLUT = new CIccCLUT(m_nInput, m_nOutput);
+  m_CLUT = new (std::nothrow) CIccCLUT(m_nInput, m_nOutput);
   if (m_CLUT == NULL)
     return false;
 
@@ -5457,7 +5464,9 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
   }
 
   //CLUT
-  m_CLUT = new CIccCLUT(m_nInput, m_nOutput);
+  m_CLUT = new (std::nothrow) CIccCLUT(m_nInput, m_nOutput);
+  if (!m_CLUT)
+    return false;
 
   if ((size_t)pIO->Tell() > nEnd)
     return false;
@@ -6012,14 +6021,14 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
 
   size_t pcsSize = (size_t)m_nPCSChannels * (size_t)m_NumberOfVertices;
   size_t deviceSize = (size_t)m_nDeviceChannels * (size_t)m_NumberOfVertices;
-  m_PCSValues = new icFloatNumber[pcsSize];
+  m_PCSValues = new (std::nothrow) icFloatNumber[pcsSize];
 
   if (!m_PCSValues)
     return false;
 
   if (m_nDeviceChannels > 0)
   {
-    m_DeviceValues = new icFloatNumber[deviceSize];
+    m_DeviceValues = new (std::nothrow) icFloatNumber[deviceSize];
 
     if (!m_DeviceValues)
       return false;
@@ -6032,7 +6041,9 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
   if ((icUInt64Number)m_NumberOfTriangles * sizeof(icGamutBoundaryTriangle) > size)
     return false;
 
-  m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
+  m_Triangles = new (std::nothrow) icGamutBoundaryTriangle[m_NumberOfTriangles];
+  if (!m_Triangles)
+    return false;
 
   icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
 

@@ -76,6 +76,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include "IccTagComposite.h"
 #include "IccStructBasic.h"
 #include "IccUtil.h"
@@ -287,7 +288,9 @@ CIccTagStruct* CIccTagStruct::ParseMem(icUInt8Number *pMem, icUInt32Number size)
   if (!IO.Attach(pMem, size))
     return NULL;
 
-  CIccTagStruct *pTags = new CIccTagStruct;
+  CIccTagStruct *pTags = new (std::nothrow) CIccTagStruct;
+  if (!pTags)
+    return NULL;
 
   if (!pTags->Read(size, &IO)) {
     delete pTags;
@@ -1275,7 +1278,9 @@ bool CIccTagArray::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   if (count) {
-    icPositionNumber *tagPos = new icPositionNumber[count];
+    icPositionNumber *tagPos = new (std::nothrow) icPositionNumber[count];
+    if (!tagPos)
+      return false;
 
     if (!SetSize(count)) {
       delete[] tagPos;
@@ -1381,7 +1386,7 @@ bool CIccTagArray::Write(CIccIO *pIO)
       if (!pIO->Write32(&zero) || !pIO->Write32(&zero))
         return false;
     }
-    icPositionNumber *tagPos = new icPositionNumber[m_nSize];
+    icPositionNumber *tagPos = new (std::nothrow) icPositionNumber[m_nSize];
     if (!tagPos)
       return false;
 
@@ -1444,7 +1449,7 @@ bool CIccTagArray::Write(CIccIO *pIO)
 bool CIccTagArray::SetSize(icUInt32Number nSize)
 {
   if (!m_nSize) {
-    m_TagVals = new IccTagPtr[nSize];
+    m_TagVals = new (std::nothrow) IccTagPtr[nSize];
     if (!m_TagVals) {
       m_nSize = 0;
       return false;
@@ -1458,7 +1463,7 @@ bool CIccTagArray::SetSize(icUInt32Number nSize)
     // We need to grow the array, and keep the existing values.
     // This would be much easier with a std::vector
     auto oldArray = m_TagVals;
-    m_TagVals = new IccTagPtr[nSize];
+    m_TagVals = new (std::nothrow) IccTagPtr[nSize];
     if (!m_TagVals) {
       delete[] oldArray;
       m_nSize = 0;

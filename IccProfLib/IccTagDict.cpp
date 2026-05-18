@@ -78,6 +78,7 @@
 #include <cstdlib>
 //#include <codecvt>
 #include <locale>
+#include <new>
 #include "IccTagDict.h"
 #include "IccUtil.h"
 #include "IccIO.h"
@@ -650,7 +651,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
   std::wstring str;
 
   for (i=0; i<count; i++) {
-    ptr.ptr = new CIccDictEntry();
+    ptr.ptr = new (std::nothrow) CIccDictEntry();
     if (!ptr.ptr)
       return false;
 
@@ -783,7 +784,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
         return false;
       }
 
-      CIccTagMultiLocalizedUnicode *pTag = new CIccTagMultiLocalizedUnicode();
+      CIccTagMultiLocalizedUnicode *pTag = new (std::nothrow) CIccTagMultiLocalizedUnicode();
 
       if (!pTag || !pTag->Read(pos[i].posNameLocalized.size, pIO)) {
         free(pos);
@@ -834,7 +835,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
         return false;
       }
 
-      CIccTagMultiLocalizedUnicode *pTag = new CIccTagMultiLocalizedUnicode();
+      CIccTagMultiLocalizedUnicode *pTag = new (std::nothrow) CIccTagMultiLocalizedUnicode();
 
       if (!pTag || !pTag->Read(pos[i].posValueLocalized.size, pIO)) {
         free(pos);
@@ -1471,7 +1472,9 @@ bool CIccTagDict::Set(std::wstring sName, std::wstring sValue, bool bUnSet)
       return false;
   }
   else {
-    de = new CIccDictEntry;
+    de = new (std::nothrow) CIccDictEntry;
+    if (!de)
+      return false;
     de->GetName() = sName;
 
     CIccDictEntryPtr ptr = {};
@@ -1524,7 +1527,9 @@ bool CIccTagDict::SetNameLocalized(std::wstring sName, CIccTagMultiLocalizedUnic
   CIccDictEntry *de = Get(sName);
 
   if (!de) {
-    de = new CIccDictEntry;
+    de = new (std::nothrow) CIccDictEntry;
+    if (!de)
+      return false;
     de->GetName() = sName;
 
     CIccDictEntryPtr ptr = {};
@@ -1558,7 +1563,9 @@ bool CIccTagDict::SetValueLocalized(std::wstring sName, CIccTagMultiLocalizedUni
   CIccDictEntry *de = Get(sName);
 
   if (!de) {
-    de = new CIccDictEntry;
+    de = new (std::nothrow) CIccDictEntry;
+    if (!de)
+      return false;
     de->GetName() = sName;
 
     CIccDictEntryPtr ptr = {};

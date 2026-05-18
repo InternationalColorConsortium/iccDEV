@@ -80,6 +80,7 @@
 #include "IccIO.h"
 #include "IccMpeFactory.h"
 #include <map>
+#include <new>
 #include "IccUtil.h"
 
 #ifdef USEICCDEVNAMESPACE
@@ -672,7 +673,7 @@ CIccApplyTagMpe::~CIccApplyTagMpe()
 bool CIccApplyTagMpe::AppendElem(CIccMultiProcessElement *pElem)
 {
   if (!m_list)
-    m_list = new CIccApplyMpeList();
+    m_list = new (std::nothrow) CIccApplyMpeList();
 
   if (!m_list)
     return false;
@@ -1020,7 +1021,7 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
   if ( (headerSize + (icUInt64Number)m_nProcElements*sizeof(icPositionNumber)) > size)
     return false;
 
-  m_list = new CIccMultiProcessElementList();
+  m_list = new (std::nothrow) CIccMultiProcessElementList();
 
   if (!m_list)
     return false;
@@ -1415,7 +1416,7 @@ CIccMultiProcessElementList::iterator CIccTagMultiProcessElement::GetLastElem()
 ******************************************************************************/
 CIccApplyTagMpe *CIccTagMultiProcessElement::GetNewApply()
 {
-  CIccApplyTagMpe *pApply = new CIccApplyTagMpe(this);
+  CIccApplyTagMpe *pApply = new (std::nothrow) CIccApplyTagMpe(this);
 
   if (!pApply)
     return NULL;

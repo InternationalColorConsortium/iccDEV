@@ -76,6 +76,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include "IccTagProfSeqId.h"
 #include "IccUtil.h"
 #include "IccIO.h"
@@ -406,7 +407,9 @@ CIccTagProfileSequenceId* CIccTagProfileSequenceId::ParseMem(icUInt8Number *pMem
   if (!IO.Attach(pMem, size))
     return NULL;
 
-  CIccTagProfileSequenceId *pProSeqId = new CIccTagProfileSequenceId;
+  CIccTagProfileSequenceId *pProSeqId = new (std::nothrow) CIccTagProfileSequenceId;
+  if (!pProSeqId)
+    return NULL;
 
   if (!pProSeqId->Read(size, &IO)) {
     delete pProSeqId;
@@ -496,7 +499,7 @@ bool CIccTagProfileSequenceId::Read(icUInt32Number size, CIccIO *pIO)
     return true;
   }
 
-  icPositionNumber *pos = new icPositionNumber[count];
+  icPositionNumber *pos = new (std::nothrow) icPositionNumber[count];
   if (!pos)
     return false;
 
@@ -560,7 +563,7 @@ bool CIccTagProfileSequenceId::Write(CIccIO *pIO)
 
   pIO->Write32(&count);
 
-  icPositionNumber *pos = new icPositionNumber[count];
+  icPositionNumber *pos = new (std::nothrow) icPositionNumber[count];
   if (!pos)
     return false;
 
