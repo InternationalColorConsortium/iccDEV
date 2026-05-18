@@ -447,7 +447,10 @@ public:
       return false;
 
     if (n && t) {
-      OsExtendArgs(n*t);
+      size_t ntSize = (size_t)n * (size_t)t;
+      if (ntSize > size_t(icMaxDataStackSize))
+        return false;
+      OsExtendArgs(ntSize);
 
       icFloatNumber *to = &(*os.pStack)[stackSize];
       icFloatNumber *from = to-n;
@@ -3981,7 +3984,7 @@ icValidateStatus CIccCalculatorFunc::Validate(std::string sigPath, std::string &
     rv = icValidateWarning;
   }
 
-  if (GetMaxTemp()>65535) {
+  if (GetMaxTemp()>icMaxDataStackSize) {
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
     sReport += " accesses illegal temporary channels.\n";

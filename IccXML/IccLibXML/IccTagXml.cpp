@@ -5245,13 +5245,14 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
       parseStr += "Must have at least 4 PCSValues vertices\n";
       return false;
     }
-
-    m_PCSValues = new icFloatNumber[m_NumberOfVertices * m_nPCSChannels];
+    
+    size_t totalSize = (size_t)m_NumberOfVertices * (size_t)m_nPCSChannels;
+    m_PCSValues = new icFloatNumber[totalSize];
 
     if (!m_PCSValues)
       return false;
 
-    memcpy(m_PCSValues, vals.GetBuf(), (size_t)m_NumberOfVertices * m_nPCSChannels*sizeof(icFloatNumber));
+    memcpy(m_PCSValues, vals.GetBuf(), totalSize*sizeof(icFloatNumber));
   }
   else {
     parseStr += "Cannot find PCSValues\n";
@@ -5280,13 +5281,14 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
       parseStr += "Number of Device vertices doesn't match PCS verticies\n";
       return false;
     }
-
-    m_DeviceValues = new icFloatNumber[m_NumberOfVertices * m_nDeviceChannels];
+    
+    size_t totalSize = (size_t)m_NumberOfVertices * (size_t)m_nDeviceChannels;
+    m_DeviceValues = new icFloatNumber[totalSize];
 
     if (!m_DeviceValues)
       return false;
 
-    memcpy(m_DeviceValues, vals.GetBuf(), (size_t)m_NumberOfVertices * m_nDeviceChannels * sizeof(icFloatNumber));
+    memcpy(m_DeviceValues, vals.GetBuf(), totalSize * sizeof(icFloatNumber));
   }
   else if (!m_PCSValues)
     m_NumberOfVertices = 0;

@@ -5799,14 +5799,13 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
  */	
 CIccTagGamutBoundaryDesc::CIccTagGamutBoundaryDesc()
 {	
-	m_NumberOfVertices = 0;
-	m_NumberOfTriangles = 0;
-	m_nPCSChannels = 0;
-	m_nDeviceChannels = 0;
-	m_PCSValues = NULL;
-	m_DeviceValues = NULL;
-	m_Triangles = NULL;
-	
+  m_NumberOfVertices = 0;
+  m_NumberOfTriangles = 0;
+  m_nPCSChannels = 0;
+  m_nDeviceChannels = 0;
+  m_PCSValues = NULL;
+  m_DeviceValues = NULL;
+  m_Triangles = NULL;
 }
 
 /**
@@ -5826,23 +5825,22 @@ CIccTagGamutBoundaryDesc::CIccTagGamutBoundaryDesc()
 
 CIccTagGamutBoundaryDesc::CIccTagGamutBoundaryDesc(icUInt8Number nInputChannels,icInt32Number numberOfVertices, icInt32Number numberOfTriangles, icUInt8Number nOutputChannels)
 {
-	
-	m_NumberOfVertices = numberOfVertices;
-	m_NumberOfTriangles = numberOfTriangles;
-	m_nPCSChannels = nInputChannels;
-	m_nDeviceChannels = nOutputChannels;
-	m_PCSValues = new icFloatNumber[nInputChannels*m_NumberOfVertices];
-	if (nOutputChannels > 0)
-	{
-		m_DeviceValues = new icFloatNumber[nOutputChannels*m_NumberOfVertices];
-	}
-	else
-	{
-		m_DeviceValues = NULL;
-	}
-	m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
-	
-	
+  m_NumberOfVertices = numberOfVertices;
+  m_NumberOfTriangles = numberOfTriangles;
+  m_nPCSChannels = nInputChannels;
+  m_nDeviceChannels = nOutputChannels;
+  size_t inputSize = (size_t)nInputChannels * (size_t)m_NumberOfVertices;
+  m_PCSValues = new icFloatNumber[inputSize];
+  if (nOutputChannels > 0)
+  {
+    size_t outputSize = (size_t)nOutputChannels * (size_t)m_NumberOfVertices;
+    m_DeviceValues = new icFloatNumber[outputSize];
+  }
+  else
+  {
+    m_DeviceValues = NULL;
+  }
+  m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
 }
 
 /**
@@ -5858,27 +5856,28 @@ CIccTagGamutBoundaryDesc::CIccTagGamutBoundaryDesc(icUInt8Number nInputChannels,
  */	
 CIccTagGamutBoundaryDesc::CIccTagGamutBoundaryDesc(const CIccTagGamutBoundaryDesc &InGamutBoundaryTag)
 {
-	m_NumberOfVertices = InGamutBoundaryTag.m_NumberOfVertices;
-	m_NumberOfTriangles = InGamutBoundaryTag.m_NumberOfTriangles;
-	m_nPCSChannels = InGamutBoundaryTag.m_nPCSChannels;
-	m_nDeviceChannels = InGamutBoundaryTag.m_nDeviceChannels;
-	
-	m_PCSValues = new icFloatNumber[m_nPCSChannels*m_NumberOfVertices];
-	
-	if (m_nDeviceChannels > 0)
-	{
-		m_DeviceValues = new icFloatNumber[m_nDeviceChannels*m_NumberOfVertices];
-	}
-	else
-	{
-		m_DeviceValues = NULL;
-	}
-	m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
-	
-	memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,(size_t)m_nPCSChannels*m_NumberOfVertices*sizeof(icFloatNumber));
-	if (m_DeviceValues)
-		memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,(size_t)m_nDeviceChannels*m_NumberOfVertices*sizeof(icFloatNumber));
-	memcpy(m_Triangles,InGamutBoundaryTag.m_Triangles,m_NumberOfTriangles*sizeof(icGamutBoundaryTriangle));
+  m_NumberOfVertices = InGamutBoundaryTag.m_NumberOfVertices;
+  m_NumberOfTriangles = InGamutBoundaryTag.m_NumberOfTriangles;
+  m_nPCSChannels = InGamutBoundaryTag.m_nPCSChannels;
+  m_nDeviceChannels = InGamutBoundaryTag.m_nDeviceChannels;
+  size_t pcsSize = (size_t)m_nPCSChannels * (size_t)m_NumberOfVertices;
+  size_t deviceSize = (size_t)m_nDeviceChannels * (size_t)m_NumberOfVertices;
+  m_PCSValues = new icFloatNumber[pcsSize];
+  if (m_nDeviceChannels > 0) {
+    m_DeviceValues = new icFloatNumber[deviceSize];
+  }
+  else
+  {
+    m_DeviceValues = NULL;
+  }
+  m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
+
+  memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,
+        pcsSize*sizeof(icFloatNumber));
+  if (m_DeviceValues)
+    memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,
+            deviceSize*sizeof(icFloatNumber));
+  memcpy(m_Triangles,InGamutBoundaryTag.m_Triangles,(size_t)m_NumberOfTriangles*sizeof(icGamutBoundaryTriangle));
 }
 
 /**
@@ -5894,32 +5893,36 @@ CIccTagGamutBoundaryDesc::CIccTagGamutBoundaryDesc(const CIccTagGamutBoundaryDes
 
 CIccTagGamutBoundaryDesc &CIccTagGamutBoundaryDesc::operator=(const CIccTagGamutBoundaryDesc& InGamutBoundaryTag)
 {
-	if (&InGamutBoundaryTag == this)
-		return *this;
+  if (&InGamutBoundaryTag == this)
+    return *this;
+
+  m_NumberOfVertices = InGamutBoundaryTag.m_NumberOfVertices;
+  m_NumberOfTriangles = InGamutBoundaryTag.m_NumberOfTriangles;
+  m_nPCSChannels = InGamutBoundaryTag.m_nPCSChannels;
+  m_nDeviceChannels = InGamutBoundaryTag.m_nDeviceChannels;
+
+  size_t pcsSize = (size_t)m_nPCSChannels * (size_t)m_NumberOfVertices;
+  size_t deviceSize = (size_t)m_nDeviceChannels * (size_t)m_NumberOfVertices;
+  m_PCSValues = new icFloatNumber[pcsSize];
 	
-	m_NumberOfVertices = InGamutBoundaryTag.m_NumberOfVertices;
-	m_NumberOfTriangles = InGamutBoundaryTag.m_NumberOfTriangles;
-	m_nPCSChannels = InGamutBoundaryTag.m_nPCSChannels;
-	m_nDeviceChannels = InGamutBoundaryTag.m_nDeviceChannels;
+  if (m_nDeviceChannels > 0)
+  {
+    m_DeviceValues = new icFloatNumber[deviceSize];
+  }
+  else
+  {
+    m_DeviceValues = NULL;
+  }
+  m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
+
+  memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,
+        pcsSize*sizeof(icFloatNumber));
+  if (m_DeviceValues)
+    memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,
+            deviceSize*sizeof(icFloatNumber));
+  memcpy(m_Triangles,InGamutBoundaryTag.m_Triangles,(size_t)m_NumberOfTriangles*sizeof(icGamutBoundaryTriangle));
 	
-	m_PCSValues = new icFloatNumber[m_nPCSChannels*m_NumberOfVertices];
-	
-	if (m_nDeviceChannels > 0)
-	{
-		m_DeviceValues = new icFloatNumber[m_nDeviceChannels*m_NumberOfVertices];
-	}
-	else
-	{
-		m_DeviceValues = NULL;
-	}
-	m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
-	
-	memcpy(m_PCSValues,InGamutBoundaryTag.m_PCSValues,(size_t)m_nPCSChannels*m_NumberOfVertices*sizeof(icFloatNumber));
-	if (m_DeviceValues)
-		memcpy(m_DeviceValues,InGamutBoundaryTag.m_DeviceValues,(size_t)m_nDeviceChannels*m_NumberOfVertices*sizeof(icFloatNumber));
-	memcpy(m_Triangles,InGamutBoundaryTag.m_Triangles,m_NumberOfTriangles*sizeof(icGamutBoundaryTriangle));	
-	
-	return *this;
+  return *this;
 }
 
 /**
@@ -5958,39 +5961,39 @@ CIccTagGamutBoundaryDesc::~CIccTagGamutBoundaryDesc()
  */	
 bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
 {
-	icTagTypeSignature sig;
-	
-	if (sizeof(icTagTypeSignature) + 
-		sizeof(icUInt32Number)*3 +
-		sizeof(icUInt16Number)*2 > size)
-		return false;
-	
-	if (!pIO) {
-		return false;
-	}
-	
-	if (!pIO->Read32(&sig) ||
-		!pIO->Read32(&m_nReserved))
-		return false;
-	
-	if (!pIO->Read16(&m_nPCSChannels) ||
-		!pIO->Read16(&m_nDeviceChannels))
-		return false;
+  icTagTypeSignature sig;
 
-	if (m_nPCSChannels > 3)
-		return false;
-	
-	if (m_nDeviceChannels > 15)
-		return false;
-	
-	if (!pIO->Read32(&m_NumberOfVertices) ||
-		!pIO->Read32(&m_NumberOfTriangles))
-		return false;
-  
+  if (sizeof(icTagTypeSignature) +
+    sizeof(icUInt32Number)*3 +
+    sizeof(icUInt16Number)*2 > size)
+    return false;
+
+  if (!pIO) {
+    return false;
+  }
+
+  if (!pIO->Read32(&sig) ||
+    !pIO->Read32(&m_nReserved))
+    return false;
+
+  if (!pIO->Read16(&m_nPCSChannels) ||
+    !pIO->Read16(&m_nDeviceChannels))
+    return false;
+
+  if (m_nPCSChannels > 3)
+    return false;
+
+  if (m_nDeviceChannels > 15)
+    return false;
+
+  if (!pIO->Read32(&m_NumberOfVertices) ||
+    !pIO->Read32(&m_NumberOfTriangles))
+    return false;
+
   // minimum number to make a solid shape
   if (m_NumberOfVertices < 4 || m_NumberOfTriangles < 4)
     return false;
-  
+
   // maximum count will be enforced by file size and tag size limitations
   if (sizeof(icTagTypeSignature) + 
       sizeof(icUInt32Number)*3 +
@@ -5999,54 +6002,63 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
       (icUInt64Number)m_NumberOfVertices*m_nPCSChannels*sizeof(icFloat32Number) +
       (icUInt64Number)m_NumberOfVertices*m_nDeviceChannels*sizeof(icFloat32Number) > size)
     return false;
-	
-	if (m_PCSValues)
-		delete [] m_PCSValues;
-	if (m_DeviceValues)
-		delete [] m_DeviceValues;
-	if (m_Triangles)
-		delete [] m_Triangles;	
-	
-	m_PCSValues = new icFloatNumber[m_nPCSChannels*m_NumberOfVertices];
+
+  if (m_PCSValues)
+    delete [] m_PCSValues;
+  if (m_DeviceValues)
+    delete [] m_DeviceValues;
+  if (m_Triangles)
+    delete [] m_Triangles;
+
+  size_t pcsSize = (size_t)m_nPCSChannels * (size_t)m_NumberOfVertices;
+  size_t deviceSize = (size_t)m_nDeviceChannels * (size_t)m_NumberOfVertices;
+  m_PCSValues = new icFloatNumber[pcsSize];
 
   if (!m_PCSValues)
     return false;
-	
-	if (m_nDeviceChannels > 0)
-	{
-		m_DeviceValues = new icFloatNumber[m_nDeviceChannels*m_NumberOfVertices];
+
+  if (m_nDeviceChannels > 0)
+  {
+    m_DeviceValues = new icFloatNumber[deviceSize];
 
     if (!m_DeviceValues)
       return false;
-	}
-	else
-	{
-		m_DeviceValues = NULL;
-	}
-	if ((icUInt64Number)m_NumberOfTriangles * sizeof(icGamutBoundaryTriangle) > size)
-		return false;
+  }
+  else
+  {
+    m_DeviceValues = NULL;
+  }
 
-	m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
+  if ((icUInt64Number)m_NumberOfTriangles * sizeof(icGamutBoundaryTriangle) > size)
+    return false;
 
-	icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
+  m_Triangles = new icGamutBoundaryTriangle[m_NumberOfTriangles];
 
-	if (pIO->Read32(m_Triangles, nNum32)!=nNum32)
-		return false;		
+  icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
+
+  if (pIO->Read32(m_Triangles, nNum32)!=nNum32)
+    return false;
+
+  if (pcsSize > (size_t)UINT32_MAX)
+    return false;
+
+  nNum32 = (icUInt32Number) pcsSize;
 	
-	nNum32 = m_nPCSChannels*m_NumberOfVertices;
-	
-	if (pIO->ReadFloat32Float(m_PCSValues, nNum32)!=nNum32)
-		return false;
-	
-	if (m_nDeviceChannels > 0)
-	{
-		nNum32 = m_nDeviceChannels*m_NumberOfVertices;
-		
-		if (pIO->ReadFloat32Float(m_DeviceValues, nNum32)!=nNum32)
-			return false;
-	}	
-	
-	return true;
+  if (pIO->ReadFloat32Float(m_PCSValues, nNum32)!=nNum32)
+    return false;
+
+  if (m_nDeviceChannels > 0)
+  {
+    if (pcsSize > (size_t)UINT32_MAX)
+      return false;
+
+    nNum32 = (icUInt32Number) deviceSize;
+
+    if (pIO->ReadFloat32Float(m_DeviceValues, nNum32)!=nNum32)
+      return false;
+  }
+
+  return true;
 }
 
 /**
