@@ -107,7 +107,28 @@ public:
   //Make sure that when DstPixel==SrcPixel the sizeof DstPixel is less than size of SrcPixel
   virtual icStatusCMM Apply(icFloatNumber* DstPixel, const icFloatNumber* SrcPixel, icUInt32Number nPixels);
 
-protected:
+  // Get the cost associated with applying SrcPixel through the search chain.
+  //
+  // Runs the inverse search to find device values that best match SrcPixel
+  // across the attached Profile Connection Conditions (PCCs), then evaluates
+  // the search's cost function at that found point.
+  //
+  // The cost is the PCC-weighted sum of color differences (a la Euclidean
+  // distance in each PCC's PCS space) between the target appearance and the
+  // appearance the found device values produce under each PCC.  When the
+  // PCC list spans multiple observer/illuminant conditions, this cost is
+  // the unavoidable residual after the optimizer has done its best to find
+  // a non-metameric match; in that role it functions as an index of
+  // metamerism for the input reflectance/PCS value (lower = better match
+  // across all observation conditions; 0 = perfect match everywhere; large
+  // values indicate the target requires a metameric trade-off that the
+  // optimizer cannot fully resolve).
+  //
+  // dCost is set to a non-negative value on success and to -1 on failure.
+  // Returns icCmmStatOk on success.
+  virtual icStatusCMM GetApplyCost(icFloatNumber& dCost, const icFloatNumber* SrcPixel);
+
+  protected:
   CIccApplyCmmSearch(CIccCmm* pCmm);
 
   CIccPixelArray m_mid_data;
@@ -171,6 +192,24 @@ public:
   virtual icUInt32Number GetNumXforms() const { return m_nAttached; }
 
   virtual void IterateXforms(IXformIterator* /*pIterater*/) const {}
+
+
+  // Compute the search cost for SrcPixel through this CMM.
+  //
+  // Convenience wrapper that forwards to the underlying CIccApplyCmmSearch
+  // instance bound to this CMM.  See CIccApplyCmmSearch::GetApplyCost for
+  // the full description: the value returned in dCost is the PCC-weighted
+  // residual after the inverse search has found the best device-value match
+  // for SrcPixel, and for multi-PCC chains it functions as an index of
+  // metamerism (lower = closer match across all observation conditions;
+  // 0 = perfect match everywhere; large values indicate the target requires
+  // a metameric trade-off that no single device value can resolve).
+  //
+  // dCost is set to a non-negative value on success and to -1 on failure.
+  // Returns icCmmStatOk on success, icCmmStatBad if Begin() has not been
+  // called. Not thread-safe — shares state on m_pApply with Apply() and
+  // other entry points; callers must serialize.
+  virtual icStatusCMM GetApplyCost(icFloatNumber& dCost, const icFloatNumber* SrcPixel);
 
 protected:
 

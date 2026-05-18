@@ -208,6 +208,25 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
   return icCmmStatOk;
 }
 
+icStatusCMM CIccApplyCmmSearch::GetApplyCost(icFloatNumber& dCost, const icFloatNumber* SrcPixel)
+{
+  CIccCmmSearch* pCmm = (CIccCmmSearch*)m_pCmm;
+  icUInt32Number nDstSamples = pCmm->GetDestSamples();
+
+  // Find device values that best match the SrcPixel
+  std::vector<icFloatNumber> dstPixel(nDstSamples, 0);
+  icStatusCMM rv = Apply(&dstPixel[0], SrcPixel);
+  if (rv != icCmmStatOk) {
+    dCost = -1;
+    return rv;
+  }
+
+  // costFunc reads m_pixel/m_mid_data/etc. set up by the preceding Apply().
+  // Evaluate it at the found device-value point and return that cost.
+  CIccSearchVec point(dstPixel);
+  dCost = costFunc(point);
+  return icCmmStatOk;
+}
 
 CIccCmmSearch::CIccCmmSearch(bool bUsesBounds, icFloatNumber overBoundsCost, const icFloatVector &minBounds, const icFloatVector &maxBounds)
 {
@@ -457,4 +476,15 @@ icStatusCMM CIccCmmSearch::RemoveAllIO()
   m_mid_to_dst->RemoveAllIO();
 
   return icCmmStatOk;
+}
+
+icStatusCMM CIccCmmSearch::GetApplyCost(icFloatNumber& dCost, const icFloatNumber* SrcPixel)
+{
+  dCost = -1;
+  if (!m_bValid || !m_pApply)
+    return icCmmStatBad;
+
+  CIccApplyCmmSearch* pApply = static_cast<CIccApplyCmmSearch*>(m_pApply);
+
+  return pApply->GetApplyCost(dCost, SrcPixel);
 }
