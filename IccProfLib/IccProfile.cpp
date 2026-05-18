@@ -1161,11 +1161,12 @@ void CIccProfile::InitHeader()
   m_Header.colorSpace = (icColorSpaceSignature)0;
   m_Header.pcs = icSigLabData;
   
-  struct tm *newtime;
+  struct tm timeBuf;
+  struct tm *newtime = &timeBuf;
   time_t long_time;
 
   time( &long_time );                /* Get time as long integer. */
-  newtime = gmtime( &long_time );
+  newtime = gmtime_r( &long_time, newtime );
 
   m_Header.date.year = newtime->tm_year+1900;
   m_Header.date.month = newtime->tm_mon+1;

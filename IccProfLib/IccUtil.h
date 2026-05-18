@@ -286,6 +286,24 @@ inline void icSwab64Array(void *pVoid, size_t num)
 #define icSwab64(flt) icSwab64Ptr(&flt)
 
 
+#if defined(_MSC_VER)
+// compatibility shim, because Microsoft.
+inline
+struct tm *localtime_r( const time_t *source, struct tm *dest )
+{
+  (void)localtime_s( dest, source );
+  return dest;
+}
+
+// compatibility shim, because Microsoft.
+inline
+struct tm *gmtime_r( const time_t *source, struct tm *dest )
+{
+  (void)gmtime_s( dest, source );
+  return dest;
+}
+#endif
+
 /**
  **************************************************************************
  * Type: Class
