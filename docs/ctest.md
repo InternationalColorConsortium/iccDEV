@@ -90,7 +90,7 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 23 tests:
+Linux currently registers 24 tests:
 
 | Test | Source |
 |------|--------|
@@ -101,6 +101,7 @@ Linux currently registers 23 tests:
 | `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh` |
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
 | `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
+| `iccdev.basic-string-regressions` | `.github/scripts/iccdev-basic-string-regression-tests.sh` |
 | `iccdev.pawg-report-regressions` | `.github/scripts/iccdev-pawg-report-regression-tests.sh` |
 | `iccdev.json-cfg` | `.github/scripts/iccdev-json-cfg-tests.sh` |
 | `iccdev.json-cli-exercise` | `.github/scripts/json-cli-exercise.sh` |
@@ -150,6 +151,9 @@ input semantics, and verifies graceful rejection without sanitizer findings.
 `iccdev.dump-profile-header-regression` mutates the ICC header size field to
 `0xffffffff` and verifies `iccDumpProfile -v 100` handles validation reporting
 without signed-conversion sanitizer findings.
+`iccdev.basic-string-regressions` replays the XML conversions from issue #1055
+and fails if `iccFromXml` emits sanitizer diagnostics from string-size
+arithmetic.
 
 Windows full tool builds currently register 5 tests:
 
@@ -226,8 +230,9 @@ For repeatable agent-assisted work, use
      profiles.
 3. Update hard-coded coverage counts when the suite count or generated profile
    count changes:
-   - Linux CTest count in `.github/workflows/ci-tool-tests.yml`.
    - Linux CTest count in `.github/workflows/ci-iccdev-tool-tests.yml`.
+   - Linux CTest count notes in `.github/skills/maintainer-ci-ctest/SKILL.md`
+     and `.github/instructions/testing.instructions.md`.
    - Windows profile parse count in `Build/Cmake/Testing/CMakeLists.txt`.
    - JSON profile parse count in `.github/workflows/ci-json-roundtrip.yml`.
      Keep these in sync with `Testing/CreateAllProfiles.sh` and
@@ -236,6 +241,9 @@ For repeatable agent-assisted work, use
      `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`,
      and `.github/workflows/ci-latest-release.yml` when
      `Testing/CreateAllProfiles.sh` changes the generated-profile set.
+   - Before committing, run
+     `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
+     and update every stale count in the same change.
 4. Validate locally with CMake configure, build, `ctest -N --no-tests=error`,
    `ctest --output-on-failure --no-tests=error`, and `git diff --check`.
    For changes inside `iccdev.tool-coverage`, also run the direct script with

@@ -37,7 +37,7 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
-Linux currently registers 19 CTest suites. Windows full tool builds currently
+Linux currently registers 24 CTest suites. Windows full tool builds currently
 register 5 CTest suites: the IccConnect threaded CMM regression, two
 batch-backed suites through `Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the
 iccDumpProfile smoke suite, and the issue-987 shared export suite. Windows
@@ -127,8 +127,11 @@ CTest or workflow infrastructure directly.
 2. Register the test in `Build/Cmake/Testing/CMakeLists.txt`.
 3. Use `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated
    profiles.
-4. Update Linux CTest count assertions in `ci-iccdev-tool-tests.yml` when
-   adding or removing Linux suites.
+4. Update Linux CTest count assertions in `ci-iccdev-tool-tests.yml` and the
+   maintainer docs/skills when adding or removing Linux suites. Before
+   committing, run
+   `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
+   and update every stale count in the same change.
 5. Update `docs/ctest.md` with the test name, source script, labels, and any
    count changes.
 

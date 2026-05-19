@@ -44,7 +44,10 @@ when practical.
 
 - `check` must exist on every platform.
 - `check` and workflow CTest execution must use `--no-tests=error`.
-- Linux suite count assertions currently expect `Total Tests: 23`.
+- Linux suite count assertions currently expect `Total Tests: 24`.
+- Before committing a CTest suite-count change, run
+  `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
+  and update every stale count in the same change.
 - Adding checks inside `iccdev-tool-coverage-baseline.sh` does not change that
   count; validate the direct script and `ctest -R '^iccdev\.tool-coverage$'`.
 - Windows currently registers 6 CTest suites.

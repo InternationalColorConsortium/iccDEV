@@ -404,6 +404,14 @@ set_tests_properties(iccdev.dump-profile-header-regression PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.basic-string-regressions
+  120
+  "iccdev;xml;basic-string;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-basic-string-regression-tests.sh"
+)
+
+iccdev_add_script_test(
   iccdev.pawg-report-regressions
   120
   "iccdev;pawg;report;regression;asan"
