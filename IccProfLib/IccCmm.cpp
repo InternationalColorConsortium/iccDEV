@@ -3099,6 +3099,7 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
 void CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
+
   CIccPcsXform tmp;
 
   icSpectralRange illuminantRange;
@@ -3293,8 +3294,15 @@ void CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionCondi
     const icFloatNumber *observer = pView->getObserver(observerRange);
 
     //Preserve smallest step size
-    icFloatNumber dPCSStepSize = (icF16toF(pProfile->m_Header.spectralRange.end) - icF16toF(pProfile->m_Header.spectralRange.start))/(icFloatNumber)pProfile->m_Header.spectralRange.steps;
-    icFloatNumber dObsStepSize = (icF16toF(observerRange.end) - icF16toF(observerRange.start)) / (icFloatNumber) observerRange.steps;
+    icFloatNumber spectralSteps = (icFloatNumber)pProfile->m_Header.spectralRange.steps;
+    if (spectralSteps < 1.0)
+        spectralSteps = 1.0;
+    icFloatNumber observerSteps = (icFloatNumber)observerRange.steps;
+    if (observerSteps < 1.0)
+        observerSteps = 1.0;
+    icFloatNumber dPCSStepSize = (icF16toF(pProfile->m_Header.spectralRange.end) -
+                                icF16toF(pProfile->m_Header.spectralRange.start))/spectralSteps;
+    icFloatNumber dObsStepSize = (icF16toF(observerRange.end) - icF16toF(observerRange.start)) / observerSteps;
 
     if (dPCSStepSize<dObsStepSize) {
       icFloatNumber *obs = pView->applyRangeToObserver(pProfile->m_Header.spectralRange);
@@ -3305,7 +3313,6 @@ void CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionCondi
     else {
       pushSpecToRange(pProfile->m_Header.spectralRange, observerRange);
       pushMatrix(3, observerRange.steps, observer);
-
     }
     icFloatNumber k;
     if (bAbsoluteCIEColorimetry) {

@@ -459,7 +459,8 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
     sDescription += fillColumns("Tag", "ID", "Offset", "Size", "Pad") + "\n";
     sDescription += fillColumns("---", "--", "------", "----", "---") + "\n";
 
-    int n, closest, pad;
+    int n, pad;
+    icUInt32Number closest;
     TagEntryList::iterator i, j;
 
     // n is number of Tags in Tag Table
@@ -467,7 +468,7 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
       // Find closest tag after this tag, by scanning all offsets of other tags 
       closest = pHdr->size;
       for (j = m_pProfile->m_Tags.begin(); j != m_pProfile->m_Tags.end(); j++) {
-        if ((i != j) && (i->TagInfo.size <= (0xFFFFFFFF - i->TagInfo.offset)) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && ((int)j->TagInfo.offset <= closest)) {
+        if ((i != j) && (i->TagInfo.size <= (0xFFFFFFFF - i->TagInfo.offset)) && (j->TagInfo.offset >= i->TagInfo.offset + i->TagInfo.size) && (j->TagInfo.offset <= closest)) {
           closest = j->TagInfo.offset;
         }
       }

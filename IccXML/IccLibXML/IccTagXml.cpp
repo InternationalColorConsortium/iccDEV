@@ -1881,10 +1881,9 @@ bool CIccTagXmlColorantOrder::ToXml(std::string &xml, std::string blanks/* = ""*
 {
   const size_t bufSize = 40;
   char buf[bufSize];
-  int i;
 
   xml += blanks + "<ColorantOrder>\n"; //+ blanks + "  ";
-  for (i=0; i<(int)m_nCount; i++) {
+  for (icUInt32Number i=0; i<m_nCount; i++) {
     snprintf(buf, bufSize, "  <n>%d</n>\n", m_pData[i]);
     xml += blanks + buf;
   }
@@ -1919,11 +1918,10 @@ bool CIccTagXmlColorantTable::ToXml(std::string &xml, std::string blanks/* = ""*
   const size_t bufSize = 256;
   char buf[bufSize];
   char fix[bufSize];
-  int i;
   std::string str;
 
   xml += blanks + "<ColorantTable>\n";
-  for (i=0; i<(int)m_nCount; i++) {
+  for (icUInt32Number i=0; i<m_nCount; i++) {
     icFloatNumber lab[3];
     lab[0] = icU16toF(m_pData[i].data[0]);
     lab[1] = icU16toF(m_pData[i].data[1]);

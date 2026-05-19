@@ -271,7 +271,8 @@ done:
 
     FILE* out = icOpenWriteBinaryFile(iccOutPath);
     if (!out) safe_exit("Failed to open output ICC file.");
-    fwrite(iccData.data(), 1, iccData.size(), out);
+    bool failed = fwrite(iccData.data(), 1, iccData.size(), out) != iccData.size();
+    if (failed) safe_exit("Failed to write output ICC file.");
     fclose(out);
 
     printf("[INFO] ICC profile extracted to: %s\n", iccOutPath);

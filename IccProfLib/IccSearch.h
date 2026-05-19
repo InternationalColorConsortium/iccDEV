@@ -110,13 +110,13 @@ namespace iccDEV {
       return val[idx];
     }
 
-    CIccSearchVec operator=(const CIccSearchVec& rhs) {
+    CIccSearchVec& operator=(const CIccSearchVec& rhs) {
       val = rhs.val;
       n = rhs.n;
       return *this;
     }
 
-    CIccSearchVec operator=(const icFloatVector& rhs) {
+    CIccSearchVec& operator=(const icFloatVector& rhs) {
       val = rhs;
       n = (unsigned int)rhs.size();
       return *this;

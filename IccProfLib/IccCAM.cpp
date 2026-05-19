@@ -588,7 +588,8 @@ CIccCamConverter::JabToXYZ (const icFloatNumber*	jab,
 			t = pow (ratio, exp);
 			A = m_AWhite * pow (h_jab[0]/100.0, 1.0/(m_c*m_z));
 
-			p2 = (icFloatNumber) ((A / m_Nbb + 0.305f) * 460.0 / 1403.0);
+            icFloatNumber divisor = (fabs(m_Nbb) > 1e-8) ? m_Nbb : 1e-8f;
+			p2 = (icFloatNumber) ((A / divisor + 0.305f) * 460.0f / 1403.0f);
 
 			if (t < 1.0e-5)
 			{

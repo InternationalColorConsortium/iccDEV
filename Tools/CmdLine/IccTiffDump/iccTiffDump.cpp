@@ -248,9 +248,12 @@ int main(int argc, icChar* argv[])
     if (argc > 2 && pProfMem && nLen > 0) {
       FILE *fp = icOpenWriteBinaryFile(argv[2]);
       if (fp) {
-        fwrite(pProfMem, 1, nLen, fp);
-        fclose(fp);
-        printf("ICC profile saved to: %s\n", argv[2]);
+        bool failed = (fwrite(pProfMem, 1, nLen, fp) != nLen);
+        (void)fclose(fp);   // errors don't matter at this point
+        if (failed)
+          fprintf(stderr, "Failed to write ICC profile to %s\n", argv[2]);
+        else
+          printf("ICC profile saved to: %s\n", argv[2]);
       } else {
         fprintf(stderr, "Failed to write ICC profile to %s\n", argv[2]);
       }
