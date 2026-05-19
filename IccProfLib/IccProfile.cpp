@@ -77,6 +77,7 @@
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
+#include <new>
 #include "IccProfile.h"
 #include "IccTag.h"
 #include "IccArrayBasic.h"
@@ -518,7 +519,7 @@ CIccMemIO* CIccProfile::GetTagIO(icSignature sig)
   IccTagEntry *pEntry = GetTag(sig);
 
   if (pEntry && m_pAttachIO) {
-    CIccMemIO *pIO = new CIccMemIO;
+    CIccMemIO *pIO = new (std::nothrow) CIccMemIO;
 
     if (!pIO)
       return NULL;
@@ -660,7 +661,9 @@ CIccIO* CIccProfile::ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const
       icTagTypeSignature sig=(icTagTypeSignature)0, extra;
 
       if (pIO->Read32(&sig) && pIO->Read32(&extra) && sig == icSigEmbeddedProfileType) {
-        CIccEmbedIO *pEmbedIO = new CIccEmbedIO();
+        CIccEmbedIO *pEmbedIO = new (std::nothrow) CIccEmbedIO();
+        if (!pEmbedIO)
+          return NULL;
         
         if (pEmbedIO->Attach(pIO, i->TagInfo.size - 2 * sizeof(icUInt32Number), bOwnIO))
           return pEmbedIO;
@@ -3432,7 +3435,7 @@ getmediaXYZ:
     icFloatNumber *pWhite;
 
     if (samples && pNumTag->GetNumValues()>=samples) {
-      pWhite=new icFloatNumber[samples];
+      pWhite = new (std::nothrow) icFloatNumber[samples];
       if (pWhite) {
         pNumTag->GetValues(pWhite);
       }
@@ -3494,14 +3497,20 @@ getmediaXYZ:
  */
 CIccProfile* ReadIccProfile(const icChar *szFilename, bool bUseSubProfile/*=false*/)
 {
-  CIccFileIO *pFileIO = new CIccFileIO;
+  CIccFileIO *pFileIO = new (std::nothrow) CIccFileIO;
+  if (!pFileIO)
+    return NULL;
 
   if (!pFileIO->Open(szFilename, "rb")) {
     delete pFileIO;
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
+  if (!pIcc) {
+    delete pFileIO;
+    return NULL;
+  }
 
   if (!pIcc->Read(pFileIO, bUseSubProfile)) {
     delete pIcc;
@@ -3531,14 +3540,20 @@ CIccProfile* ReadIccProfile(const icChar *szFilename, bool bUseSubProfile/*=fals
 */
 CIccProfile* ReadIccProfile(const icWChar *szFilename, bool bUseSubProfile/*=false*/)
 {
-  CIccFileIO *pFileIO = new CIccFileIO;
+  CIccFileIO *pFileIO = new (std::nothrow) CIccFileIO;
+  if (!pFileIO)
+    return NULL;
 
   if (!pFileIO->Open(szFilename, L"rb")) {
     delete pFileIO;
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
+  if (!pIcc) {
+    delete pFileIO;
+    return NULL;
+  }
 
   if (!pIcc->Read(pFileIO)) {
     delete pIcc;
@@ -3569,14 +3584,20 @@ CIccProfile* ReadIccProfile(const icWChar *szFilename, bool bUseSubProfile/*=fal
 */
 CIccProfile* ReadIccProfile(const icUInt8Number *pMem, icUInt32Number nSize, bool /* bUseSubProfile =false*/)
 {
-  CIccMemIO *pMemIO = new CIccMemIO();
+  CIccMemIO *pMemIO = new (std::nothrow) CIccMemIO();
+  if (!pMemIO)
+    return NULL;
 
   if (!pMemIO->Attach((icUInt8Number*)pMem, nSize)) {
     delete pMemIO;
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
+  if (!pIcc) {
+    delete pMemIO;
+    return NULL;
+  }
 
   if (!pIcc->Read(pMemIO)) {
     delete pIcc;
@@ -3607,14 +3628,20 @@ CIccProfile* ReadIccProfile(const icUInt8Number *pMem, icUInt32Number nSize, boo
  */
 CIccProfile* OpenIccProfile(const icChar *szFilename, bool bUseSubProfile/*=false*/)
 {
-  CIccFileIO *pFileIO = new CIccFileIO;
+  CIccFileIO *pFileIO = new (std::nothrow) CIccFileIO;
+  if (!pFileIO)
+    return NULL;
 
   if (!pFileIO->Open(szFilename, "rb")) {
     delete pFileIO;
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
+  if (!pIcc) {
+    delete pFileIO;
+    return NULL;
+  }
 
   if (!pIcc->Attach(pFileIO, bUseSubProfile)) {
     delete pIcc;
@@ -3644,14 +3671,20 @@ CIccProfile* OpenIccProfile(const icChar *szFilename, bool bUseSubProfile/*=fals
 */
 CIccProfile* OpenIccProfile(const icWChar *szFilename, bool bUseSubProfile/*=false*/)
 {
-  CIccFileIO *pFileIO = new CIccFileIO;
+  CIccFileIO *pFileIO = new (std::nothrow) CIccFileIO;
+  if (!pFileIO)
+    return NULL;
 
   if (!pFileIO->Open(szFilename, L"rb")) {
     delete pFileIO;
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
+  if (!pIcc) {
+    delete pFileIO;
+    return NULL;
+  }
 
   if (!pIcc->Attach(pFileIO, bUseSubProfile)) {
     delete pIcc;
@@ -3682,14 +3715,20 @@ CIccProfile* OpenIccProfile(const icWChar *szFilename, bool bUseSubProfile/*=fal
 */
 CIccProfile* OpenIccProfile(const icUInt8Number *pMem, icUInt32Number nSize, bool bUseSubProfile/*=false*/)
 {
-  CIccMemIO *pMemIO = new CIccMemIO;
+  CIccMemIO *pMemIO = new (std::nothrow) CIccMemIO;
+  if (!pMemIO)
+    return NULL;
 
   if (!pMemIO->Attach((icUInt8Number*)pMem, nSize)) {
     delete pMemIO;
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
+  if (!pIcc) {
+    delete pMemIO;
+    return NULL;
+  }
 
   if (!pIcc->Attach(pMemIO, bUseSubProfile)) {
     delete pIcc;
@@ -3769,7 +3808,9 @@ CIccProfile* ValidateIccProfile(CIccIO *pIO, std::string &sReport, icValidateSta
 */
 CIccProfile* ValidateIccProfile(const icWChar *szFilename, std::string &sReport, icValidateStatus &nStatus)
 {
-  CIccFileIO *pFileIO = new CIccFileIO;
+  CIccFileIO *pFileIO = new (std::nothrow) CIccFileIO;
+  if (!pFileIO)
+    return NULL;
 
   if (!pFileIO->Open(szFilename, L"rb")) {
     delete pFileIO;
@@ -3800,7 +3841,9 @@ CIccProfile* ValidateIccProfile(const icWChar *szFilename, std::string &sReport,
 */
 CIccProfile* ValidateIccProfile(const icChar *szFilename, std::string &sReport, icValidateStatus &nStatus)
 {
-  CIccFileIO *pFileIO = new CIccFileIO;
+  CIccFileIO *pFileIO = new (std::nothrow) CIccFileIO;
+  if (!pFileIO)
+    return NULL;
 
   if (!pFileIO->Open(szFilename, "rb")) {
     sReport = icMsgValidateCriticalError;
@@ -3811,8 +3854,7 @@ CIccProfile* ValidateIccProfile(const icChar *szFilename, std::string &sReport, 
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
-
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
   if (!pIcc) {
     delete pFileIO;
     return NULL;
@@ -3854,7 +3896,9 @@ CIccProfile* ValidateIccProfile(const icChar *szFilename, std::string &sReport, 
 */
 CIccProfile* ValidateIccProfile(const icUInt8Number* pMem, icUInt32Number nSize, std::string& sReport, icValidateStatus& nStatus)
 {
-  CIccMemIO* pMemIO = new CIccMemIO;
+  CIccMemIO* pMemIO = new (std::nothrow) CIccMemIO;
+  if (!pMemIO)
+    return NULL;
 
   if (!pMemIO->Attach((icUInt8Number*)pMem, nSize)) {
     sReport = icMsgValidateCriticalError;
@@ -3863,8 +3907,7 @@ CIccProfile* ValidateIccProfile(const icUInt8Number* pMem, icUInt32Number nSize,
     return NULL;
   }
 
-  CIccProfile* pIcc = new CIccProfile;
-
+  CIccProfile* pIcc = new (std::nothrow) CIccProfile;
   if (!pIcc) {
     delete pMemIO;
     return NULL;

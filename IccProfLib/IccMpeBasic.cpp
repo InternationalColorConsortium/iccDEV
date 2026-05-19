@@ -76,6 +76,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include "IccMpeBasic.h"
 #include "IccIO.h"
 #include <map>
@@ -2590,9 +2591,9 @@ CIccCurveSegment* CIccCurveSegment::Create(icCurveSegSignature sig, icFloatNumbe
 {
   switch(sig) {
   case icSigFormulaCurveSeg:
-    return new CIccFormulaCurveSegment(start, end);
+    return new (std::nothrow) CIccFormulaCurveSegment(start, end);
   case icSigSampledCurveSeg:
-    return new CIccSampledCurveSegment(start, end);
+    return new (std::nothrow) CIccSampledCurveSegment(start, end);
   default:
     return NULL;
   }
@@ -3034,11 +3035,11 @@ CIccCurveSetCurve* CIccCurveSetCurve::Create(icCurveElemSignature sig)
 {
   switch (sig) {
   case icSigSegmentedCurve:
-    return new CIccSegmentedCurve();
+    return new (std::nothrow) CIccSegmentedCurve();
   case icSigSingleSampledCurve:
-    return new CIccSingleSampledCurve();
+    return new (std::nothrow) CIccSingleSampledCurve();
   case icSigSampledCalculatorCurve:
-    return new CIccSampledCalculatorCurve();
+    return new (std::nothrow) CIccSampledCalculatorCurve();
   default:
     return NULL;
   }
@@ -4024,7 +4025,7 @@ CIccToneMapFunc& CIccToneMapFunc::operator=(const CIccToneMapFunc& toneMapFunc)
 
 CIccToneMapFunc* CIccToneMapFunc::NewCopy() const
 {
-  CIccToneMapFunc* rv = new CIccToneMapFunc();
+  CIccToneMapFunc* rv = new (std::nothrow) CIccToneMapFunc();
 
   if (rv)
     *rv = *this;
@@ -4616,7 +4617,7 @@ bool CIccMpeToneMap::Read(icUInt32Number size, CIccIO* pIO)
   if (!icValidTagPos(lumPos, headerSize, size))
     return false;
 
-  icPositionNumber* funcPos = new icPositionNumber[m_nOutputChannels];
+  icPositionNumber* funcPos = new (std::nothrow) icPositionNumber[m_nOutputChannels];
   if (!funcPos)
     return false;
 
@@ -5695,7 +5696,7 @@ bool CIccMpeCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (m_nInputChannels > 16 || nPoints > dataSize || nPoints * sizeof (icFloat32Number) > dataSize)
     return false;
 
-  m_pCLUT = new CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
+  m_pCLUT = new (std::nothrow) CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
 
   if (!m_pCLUT)
     return false;
@@ -5904,7 +5905,7 @@ CIccApplyMpe* CIccMpeCLUT::GetNewApply(CIccApplyTagMpe* /* pApplyTag */)
   if (!pApply)
     return NULL;
 
-  CIccApplyMpeCLUT * rv = new CIccApplyMpeCLUT(this, pApply);
+  CIccApplyMpeCLUT * rv = new (std::nothrow) CIccApplyMpeCLUT(this, pApply);
   if (!rv)
     delete pApply;
 
@@ -6107,8 +6108,8 @@ bool CIccMpeExtCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (m_nInputChannels > 16 || nPoints > dataSize)
     return false;
   
-  m_pCLUT = new CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
-
+  m_pCLUT = new (std::nothrow) CIccCLUT((icUInt8Number)m_nInputChannels,
+                                        (icUInt16Number)m_nOutputChannels, 4);
   if (!m_pCLUT)
     return false;
 
@@ -6324,7 +6325,9 @@ bool CIccMpeCAM::Read(icUInt32Number size, CIccIO *pIO)
   if (m_pCAM)
     delete m_pCAM;
 
-  m_pCAM = new CIccCamConverter;
+  m_pCAM = new (std::nothrow) CIccCamConverter;
+  if (!m_pCAM)
+    return false;
 
   m_pCAM->SetParameter_WhitePoint(&param[0]);
   m_pCAM->SetParameter_La(param[3]);

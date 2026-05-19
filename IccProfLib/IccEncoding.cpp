@@ -99,7 +99,7 @@ static IIccEncProfileCacheHandler* g_pEncProfileCacheHandler = NULL;
 IIccEncProfileCacheHandler *IIccEncProfileCacheHandler::GetHandler()
 {
   if (!g_pEncProfileCacheHandler) {
-    g_pEncProfileCacheHandler = new CIccDefaultEncProfileCacheHandler();
+    g_pEncProfileCacheHandler = new (std::nothrow) CIccDefaultEncProfileCacheHandler();
   }
   return g_pEncProfileCacheHandler;
 }
@@ -163,7 +163,10 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
     return icEncConvertBadParams;
   }
 
-  CIccProfile* pIcc = new CIccProfile;
+  CIccProfile* pIcc = new (std::nothrow) CIccProfile;
+  if (!pIcc)
+    return icEncConvertMemoryError;
+
   pIcc->m_Header = *pHeader;
 
   struct tm timeBuf;
@@ -190,7 +193,11 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
   pIcc->m_Header.illuminant.Z = icDtoF(XYZWhite[2]);
 
   //Fill Media White Point tag
-  CIccTagXYZ* pXYZ = new CIccTagXYZ();
+  CIccTagXYZ* pXYZ = new (std::nothrow) CIccTagXYZ();
+  if (!pXYZ) {
+    delete pIcc;
+    return icEncConvertMemoryError;
+  }
   float XYZMedia[3];
   icYxy2XYZVector(XYZMedia, 1.0f, &(*pMediaWhitePt)[0], 1);
   if (!pXYZ->SetSize(1)) {
@@ -392,7 +399,7 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
     pIcc->AttachTag(icSigSpectralViewingConditionsTag, pCond);
 
     icFloatNumber Lsw=pParams->GetElemNumberValue(icSigCeptViewingSurroundMbr, Lw/5.0f - 0.001f);
-    CIccCamConverter *pCstmConvert = new CIccCamConverter();
+    CIccCamConverter *pCstmConvert = new (std::nothrow) CIccCamConverter();
     if (!pCstmConvert) {
       delete pIcc;
       return icEncConvertMemoryError;
@@ -419,7 +426,7 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
       pCstmConvert->SetParameter_F(0.8f);
     }
 
-    CIccCamConverter *pCstmConvert2 = new CIccCamConverter();
+    CIccCamConverter *pCstmConvert2 = new (std::nothrow) CIccCamConverter();
     if (!pCstmConvert2) {
       delete pCstmConvert;
       delete pIcc;
@@ -428,14 +435,14 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
     *pCstmConvert2 = *pCstmConvert;
 
     //By default New CIccCamConverter objects are initialized with default PCS conditions
-    CIccCamConverter *pStdConvert = new CIccCamConverter();
+    CIccCamConverter *pStdConvert = new (std::nothrow) CIccCamConverter();
     if (!pStdConvert) {
       delete pCstmConvert;
       delete pCstmConvert2;
       delete pIcc;
       return icEncConvertMemoryError;
     }
-    CIccCamConverter *pStdConvert2 = new CIccCamConverter();
+    CIccCamConverter *pStdConvert2 = new (std::nothrow) CIccCamConverter();
     if (!pStdConvert2) {
       delete pCstmConvert;
       delete pCstmConvert2;

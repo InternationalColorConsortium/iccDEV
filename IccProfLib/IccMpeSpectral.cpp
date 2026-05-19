@@ -76,6 +76,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include "IccMpeBasic.h"
 #include "IccMpeSpectral.h"
 #include "IccIO.h"
@@ -628,7 +629,7 @@ bool CIccMpeEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiProces
     return false;
 
   //convert m_Matrix emission values to a matrix of XYZ column vectors
-  m_pApplyMtx = new CIccMatrixMath(3,m_nInputChannels);
+  m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3,m_nInputChannels);
 
   if (!m_pApplyMtx)
     return false;
@@ -712,7 +713,7 @@ bool CIccMpeInvEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiPro
   observer.VectorMult(m_xyzOffset, m_pOffset);
 
   //convert m_Matrix emission values to a matrix of XYZ column vectors
-  m_pApplyMtx = new CIccMatrixMath(3,m_nInputChannels);
+  m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3,m_nInputChannels);
 
   if (!m_pApplyMtx)
     return false;
@@ -1060,7 +1061,7 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
     return false;
   }
 
-  m_pCLUT = new CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_Range.steps, 4);
+  m_pCLUT = new (std::nothrow) CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_Range.steps, 4);
 
   if (!m_pCLUT)
     return false;
@@ -1277,7 +1278,7 @@ CIccApplyMpe* CIccMpeSpectralCLUT::GetNewApply(CIccApplyTagMpe* /* pApplyTag */)
   if (!pApply)
     return NULL;
 
-  CIccApplyMpeSpectralCLUT* rv = new CIccApplyMpeSpectralCLUT(this, pApply);
+  CIccApplyMpeSpectralCLUT* rv = new (std::nothrow) CIccApplyMpeSpectralCLUT(this, pApply);
   if (!rv)
     delete pApply;
 
@@ -1485,7 +1486,7 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
   if (m_pApplyCLUT)
     delete m_pApplyCLUT;
 
-  m_pApplyCLUT = new CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
+  m_pApplyCLUT = new (std::nothrow) CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
 
   if (!m_pApplyCLUT) {
     return false;
@@ -1607,7 +1608,7 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   if (m_pApplyCLUT)
     delete m_pApplyCLUT;
 
-  m_pApplyCLUT = new CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
+  m_pApplyCLUT = new (std::nothrow) CIccCLUT((icUInt8Number)m_nInputChannels, (icUInt16Number)m_nOutputChannels, 4);
 
   if (!m_pApplyCLUT) {
     if (pApplyMtx!=&observer)
@@ -2087,7 +2088,7 @@ bool CIccMpeEmissionObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiProc
   if (!pSVC)
     return false;
 
-  m_pApplyMtx = new CIccMatrixMath(3, m_Range.steps);
+  m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3, m_Range.steps);
 
   if (!m_pApplyMtx)
     return false;

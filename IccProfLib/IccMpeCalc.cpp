@@ -76,6 +76,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include "IccMpeBasic.h"
 #include "IccMpeCalc.h"
 #include "IccIO.h"
@@ -4899,7 +4900,7 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
     }
   }  
 
-  m_calcFunc = new CIccCalculatorFunc(this);
+  m_calcFunc = new (std::nothrow) CIccCalculatorFunc(this);
   pos = posvals;
   
   // overreading, references into the header, or not having a calc func would be bad
@@ -5072,7 +5073,7 @@ CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
 {
   //CIccApplyTagMpe *pApplyTagEx = (CIccApplyTagMpe*)pApplyTag;
 
-  CIccApplyMpeCalculator *pApply = new CIccApplyMpeCalculator(this);
+  CIccApplyMpeCalculator *pApply = new (std::nothrow) CIccApplyMpeCalculator(this);
 
   if (!pApply)
     return NULL;
