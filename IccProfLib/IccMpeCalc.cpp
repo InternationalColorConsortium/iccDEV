@@ -3116,8 +3116,14 @@ void CIccCalculatorFunc::DescribeSequence(std::string &sDescription,
         p += nSubOps;
       }
 
-      op += p-1;
-      i += p-1;
+      if (p) {
+        op += p - 1;
+        i += static_cast<icUInt32Number>(p - 1);
+      }
+      else {
+        op--;
+        i--;
+      }
 
       InsertBlanks(funcDesc, nBlanks + 2);
       pos = nBlanks + 2;

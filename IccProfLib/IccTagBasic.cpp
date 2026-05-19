@@ -1959,8 +1959,9 @@ const icChar *CIccTagUtf16Text::GetText(std::string &buf) const
   if (str.size()>2 && (str[0]==0xff && str[1]==0xfe)) {
     c++; c++;
   }
-  for (; c!=str.end(); c++)
-    buf.push_back(*c);
+  if (c != str.end()) {
+    buf.append(reinterpret_cast<const char*>(&*c), static_cast<std::string::size_type>(str.end() - c));
+  }
 
   return buf.c_str();
 }
