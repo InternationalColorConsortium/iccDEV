@@ -363,8 +363,16 @@ void icColorValue(icChar *szValue, size_t nameSize, icFloatNumber nValue,
 static bool icIsS15Fixed16NumberNear(icS15Fixed16Number F, icFloatNumber D)
 {
   //icFloatNumber v=icFtoD(F);
+  
+  if (std::isnan(D) || std::isinf(D))
+    return false;
 
-  return (icUInt32Number)(F*10000.0f + 0.5) == (icUInt32Number)(D*10000.0f + 0.5);
+  icFloatNumber ff = floorf(F*10000.0f/65536.0f + 0.5f);
+  icFloatNumber df = floorf(D*10000.0f + 0.5f);
+  return ff == df;
+
+  // original (wrong) code was
+  //return (icUInt32Number)(F*10000.0f + 0.5) == (icUInt32Number)(D*10000.0f + 0.5);
 }
 
 bool icIsIllumD50(icXYZNumber xyz)
@@ -622,7 +630,9 @@ icU8Fixed8Number icDtoUCF(icFloatNumber num)
 {
   icU8Fixed8Number rv;
 
-  if (std::isnan(num))
+  if (std::isinf(num))
+    num = 255.0;
+  else if (std::isnan(num))
     num = 0;
   else if (num<0)
     num = 0;
@@ -763,8 +773,10 @@ icFloatNumber icU8toF(icUInt8Number num)
 icUInt16Number icFtoU16(icFloatNumber num)
 {
   icUInt16Number rv;
-
-  if (std::isnan(num))
+  
+  if (std::isinf(num))
+    num = 1.0;
+  else if (std::isnan(num))
     num = 0;
   else if (num<0)
     num = 0;
@@ -788,11 +800,11 @@ icUInt8Number icABtoU8(icFloatNumber num)
   icFloatNumber v = num + 128.0f;
   
   if (std::isnan(num))
-    v = 128.0f;
+    return 128.0f;
   else if (v<0)
-    v=0;
+    return 0;
   else if (v>255)
-    v=255;
+    return 255;
 
   return (icUInt8Number)(v + 0.5);
 }
