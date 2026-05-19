@@ -347,18 +347,17 @@ void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
     sDescription += buf;
   }
   else {
-    int i;
-
     snprintf(buf, bufSize, "BEGIN_LUT In_Out 1 1\n");
     sDescription += buf;
 
     if (nVerboseness > 75) {
       sDescription += "IN OUT\n";
 
-      for (i=0; i<(int)m_nSize; i++) {
+      for (icUInt32Number i=0; i<m_nSize; i++) {
         ptr = buf;
-
-        icColorValue(buf, bufSize, (icFloatNumber)i/(m_nSize-1), icSigMCH1Data, 1);
+        
+        icFloatNumber fraction = (m_nSize > 1) ? ((icFloatNumber)i/(m_nSize-1)) : 1.0f;
+        icColorValue(buf, bufSize, fraction, icSigMCH1Data, 1);
         ptr += strlen(buf);
 
         strcpy(ptr, " ");
@@ -422,7 +421,8 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
       for (i=0; i<(int)m_nSize; i++) {
         ptr = buf;
 
-        icColorValue(buf, bufSize, (icFloatNumber)i/(m_nSize-1), csSig, nIndex);
+        icFloatNumber fraction = (m_nSize > 1) ? ((icFloatNumber)i/(m_nSize-1)) : 1.0f;
+        icColorValue(buf, bufSize, fraction, csSig, nIndex);
         ptr += strlen(buf);
 
         strcpy(ptr, " ");
@@ -565,7 +565,8 @@ bool CIccTagCurve::IsIdentity()
 
   icUInt32Number i;
   for (i=0; i<m_nSize; i++) {
-    if (fabs(m_Curve[i]-((icFloatNumber)i/(icFloatNumber)m_nMaxIndex))>VERYSMALLNUM) {
+    icFloatNumber fraction = (m_nMaxIndex > 0) ? ((icFloatNumber)i/m_nMaxIndex) : 1.0f;
+    if (fabs(m_Curve[i]-fraction)>VERYSMALLNUM) {
       return false;
     }
   }

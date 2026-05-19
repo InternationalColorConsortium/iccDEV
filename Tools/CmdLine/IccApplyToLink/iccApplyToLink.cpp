@@ -705,6 +705,11 @@ int main(int argc, icChar* argv[])
   pWriter->setFile(argv[1]);
 
   int nLutSize = atoi(argv[3]);
+  if (nLutSize <= 0) {
+    printf("Invalid LUT sizes\n");
+    return -1;
+  }
+  
   pWriter->setLutSize(nLutSize);
 
   pWriter->setOption(atoi(argv[4]));
@@ -874,12 +879,14 @@ int main(int argc, icChar* argv[])
       else
         break;
     }
-
+ 
     //Display status of how much we have accomplished
-    curPer = (int)((float)(c + 1) * 100.0f / (float)lutCount);
-    if (curPer != lastPer) {
-      printf("\r%d%%", curPer);
-      lastPer = curPer;
+    if (lutCount > 0) {     // explicit check to avoid divide by zero
+        curPer = (int)((float)(c + 1) * 100.0f / (float)lutCount);
+        if (curPer != lastPer) {
+          printf("\r%d%%", curPer);
+          lastPer = curPer;
+        }
     }
   }
   

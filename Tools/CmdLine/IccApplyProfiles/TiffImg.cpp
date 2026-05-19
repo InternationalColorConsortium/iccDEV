@@ -283,7 +283,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
 
     m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)m_nStripSize*m_nStripSamples));
 
-    if (!m_pStripBuf) {
+    if (m_nRowsPerStrip == 0 || !m_pStripBuf) {
       Close();
       return false;
     }
@@ -374,7 +374,7 @@ bool CTiffImg::Open(const char *szFname)
       return false;
     }
     m_nBytesPerSample = m_nBitsPerSample / 8;
-    if (!checkedUInt32Product(m_nWidth, m_nBytesPerSample, m_nBytesPerStripLine)) {
+    if (m_nRowsPerStrip == 0 || !checkedUInt32Product(m_nWidth, m_nBytesPerSample, m_nBytesPerStripLine)) {
       Close();
       return false;
     }

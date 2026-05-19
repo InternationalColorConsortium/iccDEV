@@ -366,6 +366,10 @@ bool CIccMatrixMath::SetRange(const icSpectralRange &srcRange, const icSpectralR
   icFloatNumber dstEnd = icF16toF(dstRange.end);
   //icFloatNumber srcDiff = srcEnd - srcStart;
   //icFloatNumber dstDiff = dstEnd - dstStart;
+
+  if (srcRange.steps <= 1 || dstRange.steps <= 1)
+    return false;
+
   icFloatNumber srcScale = (srcEnd - srcStart) / (srcRange.steps-1);
   icFloatNumber dstScale = (dstEnd - dstStart ) / (dstRange.steps - 1);
 

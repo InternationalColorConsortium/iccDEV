@@ -208,7 +208,7 @@ bool CIccSparseMatrix::Init(icUInt16Number nRows, icUInt16Number nCols, bool bSe
   icUInt32Number coloffset = 2*sizeof(icUInt16Number) + (nRows+1)*sizeof(icUInt32Number);
   icUInt16Number nTypeSize = m_Data->size();
 
-  if (coloffset+(nTypeSize-1) >m_nRawSize) {
+  if (coloffset+(nTypeSize-1) > m_nRawSize || !nTypeSize) {
     m_nRows = 0;
     m_nCols = 0;
     if (bSetData) {
@@ -538,6 +538,8 @@ icUInt32Number CIccSparseMatrix::MaxEntries(icUInt32Number nMemSize, icUInt16Num
 
 icUInt32Number CIccSparseMatrix::MemSize(icUInt32Number nMaxEntries, icUInt16Number nRows, icUInt8Number nTypeSize)
 {
+  if (nTypeSize == 0)
+    return 0;
   icUInt32Number off = ((4 + 4*(nRows+1) + 2*nMaxEntries + (nTypeSize-1))/nTypeSize)*nTypeSize;
   return off + nTypeSize*nMaxEntries;
 }

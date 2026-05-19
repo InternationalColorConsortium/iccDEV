@@ -66,6 +66,7 @@
 #include <vector>
 #include <cmath>
 #include <memory>
+#include <limits>
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -319,7 +320,11 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
     writeFailed |= putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, 1, 0, outfile );
 
   uint32_t resDenom32 = 1000;
+  if ((dpi * resDenom32) > (float) std::numeric_limits<uint32_t>::max()) {
+        dpi = 96.0f;
+  }
   uint32_t resRatio32 = (uint32_t)(dpi * resDenom32);
+  
   writeFailed |= putIFDLong( TIFF_XRESOLUTION, TIFF_RATIO, 1, xres_offset, outfile );
   writeFailed |= putIFDLong( TIFF_YRESOLUTION, TIFF_RATIO, 1, yres_offset, outfile );
   writeFailed |= putIFDLong( TIFF_PLANARCONFIG, TIFF_LONG, 1, 1, outfile );

@@ -5806,8 +5806,10 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccTagFixedNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumber pos,
                                            icUInt32Number nVectorSize, icFloatNumber *zeroVals) const
 {
-  icUInt32Number nVector = m_nSize / nVectorSize;
+  if (nVectorSize == 0 || m_nSize == 0)
+    return false;
 
+  icUInt32Number nVector = m_nSize / nVectorSize;
   if (!nVector)
     return false;
 
@@ -6385,8 +6387,10 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccTagNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumber pos,
                                       icUInt32Number nVectorSize, icFloatNumber *zeroVals) const
 {
-  icUInt32Number nVector = m_nSize / nVectorSize;
+  if (nVectorSize == 0 || m_nSize == 0)
+    return false;
 
+  icUInt32Number nVector = m_nSize / nVectorSize;
   if (!nVector)
     return false;
 
@@ -6968,8 +6972,10 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccTagFloatNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumber pos,
                                       icUInt32Number nVectorSize, icFloatNumber *zeroVals) const
 {
-  icUInt32Number nVector = m_nSize / nVectorSize;
+  if (nVectorSize == 0 || m_nSize == 0)
+    return false;
 
+  icUInt32Number nVector = m_nSize / nVectorSize;
   if (!nVector)
     return false;
 
@@ -9015,7 +9021,7 @@ void CIccTagColorantOrder::Describe(std::string &sDescription, int /* nVerbosene
   sDescription += buf;
   sDescription += "Order of Colorants:\n";
   
-  for (int i=0; i<(int)m_nCount; i++) {
+  for (icUInt32Number i=0; i<m_nCount; i++) {
     snprintf(buf, bufSize, "%u\n", (unsigned int) m_pData[i]);
     sDescription += buf;
   }

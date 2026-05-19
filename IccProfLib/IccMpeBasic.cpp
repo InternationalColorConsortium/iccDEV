@@ -1789,10 +1789,13 @@ bool CIccSingleSampledCurve::Begin(icElemInterp /* nInterp */, CIccTagMultiProce
     return false;
 
   m_range = m_lastEntry - m_firstEntry;
-  m_last = (icFloatNumber)(m_nCount - 1);
-  icFloatNumber stepSize = m_range / m_last;
-
   if (m_range == 0.0)
+    return false;
+  m_last = (icFloatNumber)(m_nCount - 1);
+  if (m_last == 0)
+    return false;
+  icFloatNumber stepSize = m_range / m_last;
+  if (stepSize == 0)
     return false;
 
   switch(m_extensionType) {
@@ -2429,12 +2432,14 @@ bool CIccSampledCalculatorCurve::Begin(icElemInterp nInterp, CIccTagMultiProcess
   SetSize(nSize);
 
   m_range = m_lastEntry - m_firstEntry;
-
   if (m_range == 0.0)
     return false;
-
   m_last = (icFloatNumber)(m_nCount - 1);
+  if (m_last == 0)
+    return false;
   icFloatNumber stepSize = m_range / m_last;
+  if (stepSize == 0)
+    return false;
 
   //Use calculator element to populate lookup table
   CIccApplyMpe *pApply = m_pCalc->GetNewApply(NULL);
@@ -3818,9 +3823,8 @@ bool CIccMpeTintArray::Read(icUInt32Number size, CIccIO *pIO)
   }
 
   icUInt32Number nVals = m_Array->GetNumValues();
-  if (nVals/m_nOutputChannels <2 || (nVals%m_nOutputChannels) != 0) {
+  if ( (nVals/m_nOutputChannels) < 2 || (nVals%m_nOutputChannels) != 0)
     return false;
-  }
 
   return true;
 }
@@ -3876,7 +3880,9 @@ bool CIccMpeTintArray::Begin(icElemInterp /* nInterp */, CIccTagMultiProcessElem
     return false;
 
   icUInt32Number nVals = m_Array->GetNumValues();
-
+  
+  if (m_nOutputChannels == 0)
+    return false;
   if (nVals/m_nOutputChannels<2 || nVals % m_nOutputChannels != 0)
     return false;
 
