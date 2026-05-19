@@ -879,7 +879,7 @@ icValidateStatus CIccTagText::Validate(std::string sigPath, std::string &sReport
       rv = icMaxStatus(rv, icValidateWarning);
     }
     int i;
-    for (i=0; m_szText[i] && i<(int)m_nBufSize; i++) {
+    for (i=0; i<(int)m_nBufSize && m_szText[i]; i++) {
       if (m_szText[i]&0x80) {
         sReport += icMsgValidateWarning;
         sReport += sSigPathName;

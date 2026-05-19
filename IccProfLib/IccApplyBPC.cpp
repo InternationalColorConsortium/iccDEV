@@ -70,6 +70,7 @@ Copyright:  (c) see ICC Software License
 
 #include "IccApplyBPC.h"
 #include <cmath>
+#include <new>
 
 #define IsSpacePCS(x) ((x)==icSigXYZData || (x)==icSigLabData)
 
@@ -85,7 +86,7 @@ Copyright:  (c) see ICC Software License
 */
 IIccAdjustPCSXform* CIccApplyBPCHint::GetNewAdjustPCSXform() const
 {
-	return new CIccApplyBPC();
+	return new (std::nothrow) CIccApplyBPC();
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -546,7 +547,7 @@ bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, ic
 	CIccCmm cmm(SrcSpace, icSigUnknownData, !IsSpacePCS(SrcSpace));
 
 	// first create a copy of the profile because the copy will be owned by the cmm
-	CIccProfile* pICC = new CIccProfile(*pProfile);
+	CIccProfile* pICC = new (std::nothrow) CIccProfile(*pProfile);
 	if (!pICC) return false;
 
 	// add the xform
@@ -580,11 +581,11 @@ bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, ic
 CIccCmm* CIccApplyBPC::getBlackXfm(icRenderingIntent nIntent, const CIccProfile *pProfile) const
 {
 	// create the cmm object
-	CIccCmm* pCmm = new CIccCmm(pProfile->m_Header.pcs, icSigUnknownData, false);
+	CIccCmm* pCmm = new (std::nothrow) CIccCmm(pProfile->m_Header.pcs, icSigUnknownData, false);
 	if (!pCmm) return NULL;
 
 	// first create a copy of the profile because the copy will be owned by the cmm
-	CIccProfile* pICC1 = new CIccProfile(*pProfile);
+	CIccProfile* pICC1 = new (std::nothrow) CIccProfile(*pProfile);
 	if (!pICC1) {
 		delete pCmm;
 		return NULL;
@@ -598,7 +599,7 @@ CIccCmm* CIccApplyBPC::getBlackXfm(icRenderingIntent nIntent, const CIccProfile 
 	}
 
 	// create another copy of the profile because the copy will be owned by the cmm
-	CIccProfile* pICC2 = new CIccProfile(*pProfile);
+	CIccProfile* pICC2 = new (std::nothrow) CIccProfile(*pProfile);
 	if (!pICC2) {
 		delete pCmm;
 		return NULL;

@@ -76,6 +76,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 #include "IccArrayBasic.h"
 #include "IccStructBasic.h"
 #include "IccUtil.h"
@@ -107,7 +108,7 @@ CIccArrayUnknown::~CIccArrayUnknown()
 
 IIccArray* CIccArrayUnknown::NewCopy(CIccTagArray *pTagArray) const
 {
-  CIccArrayUnknown *rv = new CIccArrayUnknown(pTagArray);
+  CIccArrayUnknown *rv = new (std::nothrow) CIccArrayUnknown(pTagArray);
 
   return rv;
 }
@@ -166,7 +167,7 @@ CIccArrayColorantInfo::~CIccArrayColorantInfo()
 
 IIccArray* CIccArrayColorantInfo::NewCopy(CIccTagArray *pTagArray) const
 {
-  CIccArrayColorantInfo *rv = new CIccArrayColorantInfo(pTagArray);
+  CIccArrayColorantInfo *rv = new (std::nothrow) CIccArrayColorantInfo(pTagArray);
 
   return rv;
 }
@@ -241,7 +242,7 @@ CIccArrayNamedColor::~CIccArrayNamedColor()
 
 IIccArray* CIccArrayNamedColor::NewCopy(CIccTagArray *pTagArray) const
 {
-  CIccArrayNamedColor *rv = new CIccArrayNamedColor(pTagArray);
+  CIccArrayNamedColor *rv = new (std::nothrow) CIccArrayNamedColor(pTagArray);
 
   if (rv) {
     rv->m_csPcs = m_csPcs;
@@ -317,7 +318,7 @@ CIccStructNamedColor* CIccArrayNamedColor::FindColor(const icChar *szColor) cons
 
 CIccStructNamedColor* CIccArrayNamedColor::FindDeviceColor(const icFloatNumber *pDevColor) const
 {
-  icFloatNumber *temp = new icFloatNumber[m_nDeviceSamples];
+  icFloatNumber *temp = new (std::nothrow) icFloatNumber[m_nDeviceSamples];
 
   if (!temp)
     return NULL;
@@ -395,7 +396,7 @@ CIccStructNamedColor* CIccArrayNamedColor::FindSpectralColor(const icFloatNumber
   icFloatNumber dCalcRMS, dLeastRMS=dMinRMS;
   CIccStructNamedColor* leastRMSindex = NULL;
 
-  icFloatNumber *temp = new icFloatNumber[m_nSpectralSamples];
+  icFloatNumber *temp = new (std::nothrow) icFloatNumber[m_nSpectralSamples];
 
   if (!temp)
     return NULL;
