@@ -287,6 +287,8 @@ inline void icSwab64Array(void *pVoid, size_t num)
 
 
 #if defined(_MSC_VER)
+#include <time.h>
+
 // compatibility shim, because Microsoft.
 inline
 struct tm *localtime_r( const time_t *source, struct tm *dest )
