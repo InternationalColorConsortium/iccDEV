@@ -404,11 +404,11 @@ jobs:
             --output-on-failure \
             --no-tests=error \
             --output-junit Build/build-json/json-focused-ctest-results.xml \
-            -R 'iccdev\.(stdobserver-regressions|mluc-iso-code-regressions)'
+            -R 'iccdev\.(json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)'
 
           {
             echo ""
             echo "### CTest JSON Focused Regressions"
             echo ""
-            echo "**Command**: $(sanitize_line "ctest -R iccdev.(stdobserver-regressions|mluc-iso-code-regressions)")"
+            echo "**Command**: $(sanitize_line "ctest -R iccdev.(json-parser-regressions|stdobserver-regressions|mluc-iso-code-regressions)")"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

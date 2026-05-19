@@ -1687,7 +1687,7 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, std::string &parseStr)
   return ParseJson(j, icConvertFloat, parseStr);
 }
 
-bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std::string & /*parseStr*/)
+bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std::string &parseStr)
 {
   std::string curveType;
   if (!jGetString(j, "curveType", curveType)) return false;
@@ -1702,10 +1702,12 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std:
       SetSize(0);
     }
   } else if (curveType == "gamma") {
-    SetSize(1);
     double gamma = 1.0;
     jGetValue(j, "gamma", gamma);
-    SetGamma((icFloatNumber)gamma);
+    if (!SetGamma((icFloatNumber)gamma)) {
+      parseStr += "Invalid gamma in curveType\n";
+      return false;
+    }
   } else {
     if (!jsonExistsField(j, "table") || !j["table"].is_array()) return false;
     const IccJson &arr = j["table"];

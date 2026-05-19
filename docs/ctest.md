@@ -128,7 +128,9 @@ existing script without changing the CTest suite count. When a bug is tied to an
 AFL-minimized crash or hang, embed the smallest stable reproducer in the script
 or generate it under `ICCDEV_TEST_OUTDIR`; do not require local AFL output
 directories or commit generated crash artifacts. Validate both the direct script
-path and the CTest wrapper when changing this suite.
+path and the CTest wrapper when changing this suite. The JSON parser suite
+includes malformed curve gamma coverage and must reject out-of-range gamma
+values without sanitizer findings.
 
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 31-item PAWG report structure, verifies summary counts against the

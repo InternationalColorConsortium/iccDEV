@@ -522,13 +522,14 @@ bool CIccTagCurve::SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt/*=i
 */
 bool CIccTagCurve::SetGamma(icFloatNumber gamma)
 {
+  const icFloatNumber maxGamma = (icFloatNumber)(65535.0f / 256.0f);
+  if (!std::isfinite((double)gamma) || gamma < 0.0f || gamma > maxGamma)
+    return false;
+
   if (!SetSize(1, icInitNone))
     return false;
 
-  icInt16Number whole = (icInt16Number)gamma;
-  icFloatNumber frac = gamma - (icFloatNumber)whole;
-
-  m_Curve[0] = (icFloatNumber)((whole * 256) + (frac*256.0)) / (icFloatNumber)65535.0; 
+  m_Curve[0] = (gamma * 256.0f) / (icFloatNumber)65535.0;
   return true;
 }
 
