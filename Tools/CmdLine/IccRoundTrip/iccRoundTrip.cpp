@@ -215,14 +215,12 @@ int main(int argc, char* argv[])
     printf("\nPRMG Interoperability - Round Trip Results\n");
     printf(  "------------------------------------------------------\n");
     
-    if (prmg.m_nTotal >= 0) {
-      float scaling = 100.0f / (float)prmg.m_nTotal;
-      printf("DE <= 1.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE1, scaling*(float)prmg.m_nDE1);
-      printf("DE <= 2.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE2, scaling*(float)prmg.m_nDE2);
-      printf("DE <= 3.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE3, scaling*(float)prmg.m_nDE3);
-      printf("DE <= 5.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE5, scaling*(float)prmg.m_nDE5);
-      printf("DE <=10.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE10, scaling*(float)prmg.m_nDE10);
-    }
+    float scaling = 100.0f / (float)prmg.m_nTotal;
+    printf("DE <= 1.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE1, scaling*(float)prmg.m_nDE1);
+    printf("DE <= 2.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE2, scaling*(float)prmg.m_nDE2);
+    printf("DE <= 3.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE3, scaling*(float)prmg.m_nDE3);
+    printf("DE <= 5.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE5, scaling*(float)prmg.m_nDE5);
+    printf("DE <=10.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE10, scaling*(float)prmg.m_nDE10);
     printf("Total     (%8u)\n", (unsigned int) prmg.m_nTotal);
   }
   return 0;
