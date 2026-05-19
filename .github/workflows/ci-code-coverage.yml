@@ -1,0 +1,918 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Clang source-based code coverage for iccDEV.
+#
+# Builds iccDEV with clang coverage instrumentation, exercises the legacy
+# profile generation and tool paths, then uploads text, HTML, and lcov reports.
+#
+###############################################################
+
+name: "ci-code-coverage"
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/ci-code-coverage.yml'
+      - 'Build/Cmake/**'
+      - 'IccJSON/**'
+      - 'IccProfLib/**'
+      - 'IccXML/**'
+      - 'Testing/**'
+      - 'Tools/**'
+
+concurrency:
+  group: "coverage-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  cancel-in-progress: true
+
+env:
+  BASH_ENV: /dev/null
+  TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+  WORKSPACE_DIR: ${{ github.workspace }}
+
+jobs:
+  coverage:
+    name: "Coverage Report"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Checkout trusted sanitizer helpers"
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: "Install dependencies"
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            clang-18 \
+            cloc \
+            cmake \
+            curl \
+            jq \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libxml2-dev \
+            llvm-18 \
+            nlohmann-json3-dev \
+            zlib1g-dev
+
+      - name: "Show toolchain versions"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          echo "::group::Toolchain versions"
+          printf 'clang: %s\n' "$(clang-18 --version | head -1)"
+          printf 'llvm-cov: %s\n' "$(llvm-cov-18 --version | head -1)"
+          printf 'llvm-profdata: %s\n' "$(llvm-profdata-18 show --version 2>&1 | head -1 || printf unknown)"
+          printf 'cmake: %s\n' "$(cmake --version | head -1)"
+          printf 'runner: %s\n' "$(uname -srm)"
+          echo "::endgroup::"
+
+      - name: "Generate code statistics"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          stats_dir="coverage-report/code-stats"
+          mkdir -p "$stats_dir"
+
+          exclude_dirs="trusted,build-coverage,profraw,coverage-report,opencv,demo-rit,issue-711"
+          scc_version="3.7.0"
+          scc_archive="scc_Linux_x86_64.tar.gz"
+          scc_sha256="3d9d65b00ca874c2b29151abe7e1480736f5229edc3ce8e4b2791460cdfabf5a"
+          scc_dir="${RUNNER_TEMP:-/tmp}/iccdev-scc"
+          scc_url="https://github.com/boyter/scc/releases/download/v${scc_version}/${scc_archive}"
+
+          rm -rf "$scc_dir"
+          mkdir -p "$scc_dir"
+          if curl -fsSL --retry 3 -o "${scc_dir}/${scc_archive}" "$scc_url"; then
+            printf '%s  %s\n' "$scc_sha256" "${scc_dir}/${scc_archive}" | sha256sum -c -
+            tar -xzf "${scc_dir}/${scc_archive}" -C "$scc_dir"
+            chmod +x "${scc_dir}/scc"
+            export PATH="${scc_dir}:${PATH}"
+          else
+            echo "[WARN] scc download failed; continuing with cloc-only statistics"
+          fi
+
+          if command -v scc >/dev/null 2>&1; then
+            scc --version > "${stats_dir}/scc-version.txt"
+            scc --ci --no-cocomo --exclude-dir "$exclude_dirs" --format tabular . \
+              > "${stats_dir}/scc.txt"
+            scc --ci --no-cocomo --exclude-dir "$exclude_dirs" --format json . \
+              > "${stats_dir}/scc.json"
+          else
+            printf 'scc unavailable\n' > "${stats_dir}/scc.txt"
+            printf '[]\n' > "${stats_dir}/scc.json"
+          fi
+
+          cloc --quiet --exclude-dir="$exclude_dirs" --json --out="${stats_dir}/cloc.json" .
+          cloc --quiet --exclude-dir="$exclude_dirs" . > "${stats_dir}/cloc.txt"
+
+          code_stats_files="$(jq -r '.SUM.nFiles // 0' "${stats_dir}/cloc.json")"
+          code_stats_blank="$(jq -r '.SUM.blank // 0' "${stats_dir}/cloc.json")"
+          code_stats_comment="$(jq -r '.SUM.comment // 0' "${stats_dir}/cloc.json")"
+          code_stats_code="$(jq -r '.SUM.code // 0' "${stats_dir}/cloc.json")"
+          code_stats_languages="$(
+            jq -r '[keys[] | select(. != "header" and . != "SUM")] | length' "${stats_dir}/cloc.json"
+          )"
+          code_stats_total="$((code_stats_blank + code_stats_comment + code_stats_code))"
+
+          jq -r '
+            "| Language | Files | Code | Comments | Blanks |",
+            "|----------|------:|-----:|---------:|-------:|",
+            (to_entries
+              | map(select(.key != "header" and .key != "SUM"))
+              | sort_by(.value.code // 0)
+              | reverse
+              | .[:10][]
+              | "| \(.key) | \(.value.nFiles // 0) | \(.value.code // 0) | "
+                + "\(.value.comment // 0) | \(.value.blank // 0) |")
+          ' "${stats_dir}/cloc.json" > "${stats_dir}/top-languages.md"
+
+          {
+            printf 'code_stats_files=%s\n' "$code_stats_files"
+            printf 'code_stats_blank=%s\n' "$code_stats_blank"
+            printf 'code_stats_comment=%s\n' "$code_stats_comment"
+            printf 'code_stats_code=%s\n' "$code_stats_code"
+            printf 'code_stats_languages=%s\n' "$code_stats_languages"
+            printf 'code_stats_total=%s\n' "$code_stats_total"
+          } >> "$GITHUB_ENV"
+
+      - name: "Build with coverage instrumentation"
+        env:
+          CC: clang-18
+          CXX: clang++-18
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          BUILD_DIR="${WORKSPACE_DIR}/build-coverage"
+          mkdir -p "$BUILD_DIR"
+
+          echo "::group::CMake configure"
+          cmake "${WORKSPACE_DIR}/Build/Cmake" \
+            -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DENABLE_COVERAGE=ON \
+            -DENABLE_STATIC_LIBS=ON \
+            -DENABLE_TESTS=ON \
+            -DENABLE_TOOLS=ON \
+            -Wno-dev
+          echo "::endgroup::"
+
+          echo "::group::Compile"
+          cmake --build "$BUILD_DIR" --parallel "$(nproc)"
+          echo "::endgroup::"
+
+          tool="$(find "$BUILD_DIR" -name iccDumpProfile -type f -executable -print -quit)"
+          if [ -z "$tool" ]; then
+            echo "::error title=Build failed::iccDumpProfile binary not found"
+            exit 1
+          fi
+
+          proflib="$(find "$BUILD_DIR" -name 'libIccProfLib2*.so' ! -name '*.so.*' -print -quit)"
+          xmllib="$(find "$BUILD_DIR" -name 'libIccXML2*.so' ! -name '*.so.*' -print -quit)"
+          if [ -z "$proflib" ] || [ -z "$xmllib" ]; then
+            echo "::error title=Build incomplete::Shared libraries not found"
+            exit 1
+          fi
+
+          real_proflib="$(readlink -f "$proflib")"
+          if readelf -S "$real_proflib" 2>/dev/null | grep -q "__llvm_covmap"; then
+            printf 'Coverage instrumentation confirmed in %s\n' "$(basename "$proflib")"
+          else
+            echo "::warning title=Coverage symbols::__llvm_covmap section not found in shared library"
+          fi
+
+          tool_path_dirs=""
+          while IFS= read -r dir; do
+            tool_path_dirs="${dir}:${tool_path_dirs}"
+          done < <(find "$BUILD_DIR" -path '*/Tools/*' -type f -executable -exec dirname {} \; | sort -u)
+
+          library_path_dirs=""
+          while IFS= read -r dir; do
+            library_path_dirs="${dir}:${library_path_dirs}"
+          done < <(find "$BUILD_DIR" -name 'lib*.so' -type f -exec dirname {} \; | sort -u)
+
+          tool_count="$(find "$BUILD_DIR" -path '*/Tools/*' -type f -executable ! -name iccDumpProfileGui | wc -l)"
+          proflib_kb="$(( $(stat -c%s "$(readlink -f "$proflib")" 2>/dev/null || printf 0) / 1024 ))"
+          xmllib_kb="$(( $(stat -c%s "$(readlink -f "$xmllib")" 2>/dev/null || printf 0) / 1024 ))"
+
+          {
+            printf 'tool_path=%s\n' "$tool"
+            printf 'build_dir=%s\n' "$BUILD_DIR"
+            printf 'tool_path_dirs=%s\n' "$tool_path_dirs"
+            printf 'library_path_dirs=%s\n' "$library_path_dirs"
+            printf 'tool_count=%s\n' "$tool_count"
+          } >> "$GITHUB_ENV"
+
+          build_notice="${tool_count} tools, libIccProfLib2=${proflib_kb}KB, libIccXML2=${xmllib_kb}KB"
+          echo "::notice title=Build summary::${build_notice}"
+
+      - name: "Run CI inside stub coverage suite"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/ci-stub-%p-%m.profraw"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+          export ICCDEV_TOOLS_DIR="${build_dir}/Tools"
+          export ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing"
+          export ICCDEV_BUILD_DIR="${build_dir}"
+          mkdir -p "${WORKSPACE_DIR}/profraw" coverage-report/ci-inside-stub
+
+          cd Testing
+          echo "=== Updating PATH ==="
+          for d in "${build_dir}/Tools"/*; do
+            if [ -d "$d" ]; then
+              tool_realpath="$(realpath "$d")"
+              export PATH="${tool_realpath}:$PATH"
+            fi
+          done
+
+          stub_report="${WORKSPACE_DIR}/coverage-report/ci-inside-stub/summary.txt"
+          : > "$stub_report"
+          stub_pass=0
+          stub_fail=0
+          stub_start="$(date +%s)"
+          stub_hybrid_seconds="n/a"
+
+          run_stub_script() {
+            local name="$1"
+            local log
+            shift
+            local start_seconds
+            local end_seconds
+            local elapsed_seconds
+            local rc
+
+            log="${WORKSPACE_DIR}/coverage-report/ci-inside-stub/${name}.log"
+            start_seconds="$(date +%s)"
+            set +e
+            "$@" > "$log" 2>&1
+            rc="$?"
+            set -e
+            end_seconds="$(date +%s)"
+            elapsed_seconds="$((end_seconds - start_seconds))"
+
+            if [ "$name" = "hybrid-build-and-test" ]; then
+              stub_hybrid_seconds="$elapsed_seconds"
+            fi
+
+            printf '%s exit=%s seconds=%s log=%s\n' \
+              "$name" "$rc" "$elapsed_seconds" "$(basename "$log")" \
+              >> "$stub_report"
+
+            if [ "$rc" -eq 0 ]; then
+              stub_pass=$((stub_pass + 1))
+            else
+              stub_fail=$((stub_fail + 1))
+              echo "::group::ci-inside-stub ${name} tail"
+              tail -60 "$log" | while IFS= read -r line; do
+                sanitize_line "$line"
+                printf '\n'
+              done
+              echo "::endgroup::"
+            fi
+          }
+
+          run_stub_script create-all-profiles sh CreateAllProfiles.sh
+          run_stub_script run-tests sh RunTests.sh
+          run_stub_script hdr-mkprofiles sh -c 'cd HDR && sh mkprofiles.sh'
+          run_stub_script hybrid-build-and-test sh -c 'cd hybrid && sh BuildAndTest.sh'
+          run_stub_script calc-invalid-profiles sh -c 'cd CalcTest && sh checkInvalidProfiles.sh'
+          run_stub_script mcs-updateprev sh -c 'cd mcs && sh updateprev.sh'
+          run_stub_script mcs-updateprev-bkgd sh -c 'cd mcs && sh updateprevWithBkgd.sh'
+
+          profile_count="$(find . -name '*.icc' -type f | wc -l)"
+          stub_end="$(date +%s)"
+          stub_elapsed="$((stub_end - stub_start))"
+          stub_exit=0
+          if [ "$stub_fail" -gt 0 ]; then
+            stub_exit=1
+          fi
+          stub_total="$((stub_pass + stub_fail))"
+
+          {
+            printf '\nTotals: pass=%s fail=%s seconds=%s\n' \
+              "$stub_pass" "$stub_fail" "$stub_elapsed"
+            printf 'Large profile hybrid seconds: %s\n' "$stub_hybrid_seconds"
+          } >> "$stub_report"
+
+          {
+            printf 'ci_stub_exit_code=%s\n' "$stub_exit"
+            printf 'ci_stub_pass=%s\n' "$stub_pass"
+            printf 'ci_stub_fail=%s\n' "$stub_fail"
+            printf 'ci_stub_total=%s\n' "$stub_total"
+            printf 'ci_stub_elapsed_seconds=%s\n' "$stub_elapsed"
+            printf 'ci_stub_hybrid_seconds=%s\n' "$stub_hybrid_seconds"
+            printf 'profile_count=%s\n' "$profile_count"
+          } >> "$GITHUB_ENV"
+
+          echo "::notice title=Test profiles::Created ${profile_count} ICC profiles"
+          echo "::group::ci-inside-stub summary"
+          while IFS= read -r line; do
+            sanitize_line "$line"
+            printf '\n'
+          done < "$stub_report"
+          echo "::endgroup::"
+
+          if [ "$stub_fail" -gt 0 ]; then
+            echo "::warning title=ci-inside-stub::${stub_fail} script(s) exited non-zero"
+          fi
+
+      - name: "Run CTest large-profile measurement"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          export PATH="${tool_path_dirs}${PATH}"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+          mkdir -p coverage-report/ctest
+
+          ctest_json="coverage-report/ctest/ctest-tests.json"
+          ctest_log="coverage-report/ctest/ctest-output.txt"
+          ctest_junit="coverage-report/ctest/ctest-junit.xml"
+          ctest_report="coverage-report/ctest/ctest-measurement.txt"
+          ctest_large="coverage-report/ctest/large-profile-test.txt"
+          ctest_filter="iccdev.hybrid-pipeline"
+
+          if ctest --test-dir "$build_dir" -R "$ctest_filter" --show-only=json-v1 \
+              > "$ctest_json" 2>/dev/null; then
+            ctest_test_count="$(jq -r '.tests | length' "$ctest_json")"
+          else
+            ctest_test_count=0
+            printf '{}\n' > "$ctest_json"
+          fi
+
+          start_seconds="$(date +%s)"
+          set +e
+          ctest --test-dir "$build_dir" \
+            -R "$ctest_filter" \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "$ctest_junit" \
+            > "$ctest_log" 2>&1
+          ctest_rc="$?"
+          set -e
+          end_seconds="$(date +%s)"
+          ctest_elapsed="$((end_seconds - start_seconds))"
+
+          ctest_total_line="$(grep -E 'tests failed out of [0-9]+|No tests were found' "$ctest_log" | tail -1 || true)"
+          ctest_time_line="$(grep -E '^Total Test time' "$ctest_log" | tail -1 || true)"
+          large_profile_line="$(grep -E 'iccdev\.hybrid-pipeline' "$ctest_log" | tail -1 || true)"
+          large_profile_seconds="n/a"
+          if [ -n "$large_profile_line" ]; then
+            large_profile_seconds="$(
+              awk '
+                {
+                  for (i = 1; i <= NF; i++) {
+                    if ($i == "sec") {
+                      print $(i - 1)
+                      exit
+                    }
+                  }
+                }
+              ' <<< "$large_profile_line"
+            )"
+            large_profile_seconds="${large_profile_seconds:-n/a}"
+            sanitize_line "$large_profile_line" > "$ctest_large"
+            printf '\n' >> "$ctest_large"
+          else
+            printf 'iccdev.hybrid-pipeline timing not found\n' > "$ctest_large"
+          fi
+
+          {
+            printf 'iccDEV CTest coverage measurement\n'
+            printf '=================================\n\n'
+            printf 'Registered tests: %s\n' "$ctest_test_count"
+            printf 'CTest exit code: %s\n' "$ctest_rc"
+            printf 'Elapsed wall time: %s seconds\n' "$ctest_elapsed"
+            printf 'CTest filter: %s\n' "$ctest_filter"
+            printf 'CTest summary: %s\n' "${ctest_total_line:-n/a}"
+            printf 'CTest timing: %s\n' "${ctest_time_line:-n/a}"
+            printf 'Large profile CTest: %s\n' "${large_profile_line:-n/a}"
+            printf '\n'
+            printf 'Notes:\n'
+            printf '%s\n' '- CTest records timing for the registered hybrid large-profile run.'
+            printf '%s\n' '- ci-inside-stub collects LLVM profraw for the same patching path.'
+          } > "$ctest_report"
+
+          {
+            printf 'ctest_exit_code=%s\n' "$ctest_rc"
+            printf 'ctest_test_count=%s\n' "$ctest_test_count"
+            printf 'ctest_elapsed_seconds=%s\n' "$ctest_elapsed"
+            printf 'ctest_large_profile_seconds=%s\n' "$large_profile_seconds"
+          } >> "$GITHUB_ENV"
+
+          echo "::group::CTest measurement summary"
+          while IFS= read -r line; do
+            sanitize_line "$line"
+            printf '\n'
+          done < "$ctest_report"
+          echo "::endgroup::"
+
+          if [ "$ctest_rc" -ne 0 ]; then
+            echo "::warning title=CTest::CTest exited with code ${ctest_rc}; coverage report still generated"
+          fi
+
+      - name: "Exercise profiles with iccDumpProfile"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/dump-%p-%m.profraw"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+
+          tool="${tool_path}"
+          total=0
+          pass_count=0
+          fail_count=0
+          mkdir -p coverage-report
+          fail_log="coverage-report/dump-failures.txt"
+          : > "$fail_log"
+
+          while IFS= read -r -d '' icc; do
+            total=$((total + 1))
+            if timeout 10s "$tool" "$icc" >/dev/null 2>&1; then
+              pass_count=$((pass_count + 1))
+            else
+              rc="$?"
+              fail_count=$((fail_count + 1))
+              printf '%s  exit=%s\n' "$(basename "$icc")" "$rc" >> "$fail_log"
+            fi
+          done < <(find Testing -name '*.icc' -type f -print0 | sort -z)
+
+          {
+            printf 'dump_total=%s\n' "$total"
+            printf 'dump_pass=%s\n' "$pass_count"
+            printf 'dump_fail=%s\n' "$fail_count"
+          } >> "$GITHUB_ENV"
+
+          printf 'IccDumpProfile: %s tested, %s pass, %s fail\n' "$total" "$pass_count" "$fail_count"
+          if [ "$fail_count" -gt 0 ]; then
+            echo "::warning title=IccDumpProfile::${fail_count} of ${total} profiles failed"
+            echo "::group::IccDumpProfile failed files"
+            while IFS= read -r line; do
+              sanitize_line "$line"
+              printf '\n'
+            done < "$fail_log"
+            echo "::endgroup::"
+          fi
+
+      - name: "Exercise XML round-trip and iccRoundTrip"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          export LLVM_PROFILE_FILE="${WORKSPACE_DIR}/profraw/xml-%p-%m.profraw"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+
+          to_xml="$(find "$build_dir" -name iccToXml -type f -executable -print -quit)"
+          from_xml="$(find "$build_dir" -name iccFromXml -type f -executable -print -quit)"
+          roundtrip="$(find "$build_dir" -name iccRoundTrip -type f -executable -print -quit)"
+
+          printf 'iccToXml: %s\n' "${to_xml:-NOT FOUND}"
+          printf 'iccFromXml: %s\n' "${from_xml:-NOT FOUND}"
+          printf 'iccRoundTrip: %s\n' "${roundtrip:-NOT FOUND}"
+
+          mkdir -p coverage-report
+          xml_fail_log="coverage-report/xml-roundtrip-failures.txt"
+          xml_from_fail_log="coverage-report/xml-fromxml-failures.txt"
+          rt_fail_log="coverage-report/icc-roundtrip-failures.txt"
+          : > "$xml_fail_log"
+          : > "$xml_from_fail_log"
+          : > "$rt_fail_log"
+
+          converted=0
+          xml_fail=0
+          from_xml_fail=0
+          mapfile -d '' -t icc_files < <(find Testing -name '*.icc' -type f -print0 | sort -z)
+          printf 'XML round-trip: testing %s profiles\n' "${#icc_files[@]}"
+
+          for icc in "${icc_files[@]}"; do
+            base="$(sanitize_filename "$(basename "$icc" .icc)")"
+            if [ -z "$base" ]; then
+              base="profile-$(sha256sum "$icc" | awk '{print $1}')"
+            fi
+            xml_out="/tmp/${base}.xml"
+            icc_out="/tmp/${base}-rt.icc"
+
+            if [ -n "$to_xml" ] && timeout 10s "$to_xml" "$icc" "$xml_out" >/dev/null 2>&1; then
+              converted=$((converted + 1))
+              if [ -n "$from_xml" ]; then
+                set +e
+                timeout 10s "$from_xml" "$xml_out" "$icc_out" >/dev/null 2>&1
+                rc="$?"
+                set -e
+                if [ "$rc" -ne 0 ]; then
+                  from_xml_fail=$((from_xml_fail + 1))
+                  printf '%s  exit=%s\n' "$(basename "$icc")" "$rc" >> "$xml_from_fail_log"
+                fi
+              else
+                from_xml_fail=$((from_xml_fail + 1))
+                printf '%s  exit=127\n' "$(basename "$icc")" >> "$xml_from_fail_log"
+              fi
+            else
+              rc="$?"
+              xml_fail=$((xml_fail + 1))
+              printf '%s  exit=%s\n' "$(basename "$icc")" "$rc" >> "$xml_fail_log"
+            fi
+            rm -f "$xml_out" "$icc_out"
+          done
+
+          printf 'XML round-trip: %s converted, %s iccToXml failures, %s non-blocking iccFromXml exits\n' \
+            "$converted" "$xml_fail" "$from_xml_fail"
+          {
+            printf 'xml_converted=%s\n' "$converted"
+            printf 'xml_failed=%s\n' "$xml_fail"
+            printf 'xml_from_failed=%s\n' "$from_xml_fail"
+          } >> "$GITHUB_ENV"
+
+          if [ "$xml_fail" -gt 0 ]; then
+            echo "::notice title=XML round-trip::${xml_fail} profiles failed iccToXml conversion"
+          fi
+          if [ "$from_xml_fail" -gt 0 ]; then
+            echo "::notice title=XML round-trip::${from_xml_fail} non-blocking iccFromXml exits"
+          fi
+
+          rt_pass=0
+          rt_fail=0
+          rt_exercised=0
+          rt_total=0
+          rt_suitable=0
+          roundtrip_classes="mntr prtr scnr"
+
+          if [ -n "$roundtrip" ]; then
+            for icc in "${icc_files[@]}"; do
+              rt_total=$((rt_total + 1))
+              profile_class=""
+              if [ -f "$icc" ] && [ "$(stat -c%s "$icc" 2>/dev/null || printf 0)" -ge 128 ]; then
+                profile_class="$(dd if="$icc" bs=1 skip=12 count=4 2>/dev/null | tr -d '\0 ')"
+              fi
+
+              if timeout 15s "$roundtrip" "$icc" >/dev/null 2>&1; then
+                rc=0
+              else
+                rc="$?"
+              fi
+
+              is_suitable=false
+              for cls in $roundtrip_classes; do
+                if [ "$profile_class" = "$cls" ]; then
+                  is_suitable=true
+                  break
+                fi
+              done
+
+              if [ "$is_suitable" = true ]; then
+                rt_suitable=$((rt_suitable + 1))
+                if [ "$rc" -eq 0 ]; then
+                  rt_pass=$((rt_pass + 1))
+                else
+                  rt_fail=$((rt_fail + 1))
+                  printf '%s  class=%s  exit=%s\n' "$(basename "$icc")" "$profile_class" "$rc" >> "$rt_fail_log"
+                fi
+              else
+                rt_exercised=$((rt_exercised + 1))
+              fi
+            done
+          fi
+
+          {
+            printf 'rt_pass=%s\n' "$rt_pass"
+            printf 'rt_fail=%s\n' "$rt_fail"
+            printf 'rt_suitable=%s\n' "$rt_suitable"
+            printf 'rt_exercised=%s\n' "$rt_exercised"
+            printf 'rt_total=%s\n' "$rt_total"
+          } >> "$GITHUB_ENV"
+
+          printf 'IccRoundTrip: %s suitable, %s pass, %s fail, %s others exercised\n' \
+            "$rt_suitable" "$rt_pass" "$rt_fail" "$rt_exercised"
+          if [ "$rt_fail" -gt 0 ]; then
+            echo "::notice title=IccRoundTrip::${rt_fail} non-blocking exits from ${rt_suitable} suitable profiles"
+          fi
+
+          review_report="coverage-report/coverage-exercise-review.txt"
+          append_review_section() {
+            local title="$1"
+            local path="$2"
+
+            {
+              printf '\n## %s\n\n' "$title"
+              if [ -s "$path" ]; then
+                cat "$path"
+              else
+                printf 'none\n'
+              fi
+            } >> "$review_report"
+          }
+
+          {
+            printf 'iccDEV coverage exercise review\n'
+            printf '================================\n\n'
+            printf 'This report lists non-blocking coverage exercise exits for maintainer review.\n'
+            printf 'The coverage workflow remains green when these exits are expected for coverage-only paths.\n\n'
+            printf 'iccToXml conversion failures: %s\n' "$xml_fail"
+            printf 'iccFromXml non-blocking exits: %s\n' "$from_xml_fail"
+            printf 'iccRoundTrip non-blocking exits: %s of %s suitable profiles\n' "$rt_fail" "$rt_suitable"
+            printf 'Other profiles exercised by iccRoundTrip for coverage only: %s\n' "$rt_exercised"
+          } > "$review_report"
+          append_review_section "iccToXml conversion failures" "$xml_fail_log"
+          append_review_section "iccFromXml non-blocking exits" "$xml_from_fail_log"
+          append_review_section "iccRoundTrip non-blocking exits" "$rt_fail_log"
+
+      - name: "Merge profdata and generate reports"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          mkdir -p coverage-report
+          profraw_count="$(find "${WORKSPACE_DIR}/profraw" -name '*.profraw' 2>/dev/null | wc -l)"
+          if [ "$profraw_count" -eq 0 ]; then
+            echo "::error title=No coverage data::No profraw files generated"
+            exit 1
+          fi
+
+          printf 'Merging %s profraw files...\n' "$profraw_count"
+          find "${WORKSPACE_DIR}/profraw" -name '*.profraw' -print0 \
+            | xargs -0 --no-run-if-empty llvm-profdata-18 merge -sparse \
+              -o coverage-report/merged.profdata
+
+          profdata_kb="$(( $(stat -c%s coverage-report/merged.profdata) / 1024 ))"
+          printf 'profraw_count=%s\n' "$profraw_count" >> "$GITHUB_ENV"
+          echo "::notice title=Profdata::Merged ${profdata_kb}KB from ${profraw_count} profraw files"
+
+          main_bin="${tool_path}"
+          object_args=()
+          while IFS= read -r -d '' bin; do
+            if [ "$bin" != "$main_bin" ]; then
+              object_args+=("-object=$bin")
+            fi
+          done < <(find "$build_dir" -path '*/Tools/*' -type f -executable ! -name iccDumpProfileGui -print0 | sort -z)
+          while IFS= read -r -d '' lib; do
+            object_args+=("-object=$lib")
+          done < <(find "$build_dir" -name 'lib*.so' \( -type f -o -type l \) -print0 2>/dev/null | sort -z)
+
+          echo "::group::llvm-cov object list"
+          printf 'Primary binary: %s\n' "$main_bin"
+          printf '%s\n' "${object_args[@]}" | sed 's/^-object=/  /'
+          echo "::endgroup::"
+
+          echo "::group::llvm-cov report"
+          llvm-cov-18 report \
+            "$main_bin" "${object_args[@]}" \
+            -instr-profile=coverage-report/merged.profdata \
+            -ignore-filename-regex='(third_party|/usr/|test)' \
+            2>coverage-report/llvm-cov-stderr.txt \
+            | tee coverage-report/coverage-summary.txt
+          echo "::endgroup::"
+
+          mismatch="$(
+            grep -oE '[0-9]+ functions have mismatched data' coverage-report/llvm-cov-stderr.txt 2>/dev/null \
+              | awk '{print $1}' \
+              | head -1
+          )"
+          mismatch="${mismatch:-0}"
+          if [ "$mismatch" -gt 0 ]; then
+            echo "::notice title=Mismatched functions::${mismatch} template-instantiation duplicates"
+          fi
+          printf 'mismatch_count=%s\n' "$mismatch" >> "$GITHUB_ENV"
+
+          total_line="$(grep '^TOTAL' coverage-report/coverage-summary.txt | head -1 || true)"
+          region_pct="n/a"
+          func_pct="n/a"
+          line_pct="n/a"
+          branch_pct="n/a"
+          if [ -n "$total_line" ]; then
+            coverage_pct() {
+              local index="$1"
+              awk -v wanted="$index" '
+                {
+                  count = 0
+                  for (i = 1; i <= NF; i++) {
+                    if ($i ~ /%$/) {
+                      count++
+                      if (count == wanted) {
+                        print $i
+                        exit
+                      }
+                    }
+                  }
+                }
+              ' <<< "$total_line"
+            }
+            region_pct="$(coverage_pct 1)"
+            func_pct="$(coverage_pct 2)"
+            line_pct="$(coverage_pct 3)"
+            branch_pct="$(coverage_pct 4)"
+          fi
+          {
+            printf 'region_pct=%s\n' "$region_pct"
+            printf 'func_pct=%s\n' "$func_pct"
+            printf 'line_pct=%s\n' "$line_pct"
+            printf 'branch_pct=%s\n' "$branch_pct"
+          } >> "$GITHUB_ENV"
+
+          printf 'Coverage: regions=%s functions=%s lines=%s branches=%s\n' \
+            "$region_pct" "$func_pct" "$line_pct" "$branch_pct"
+
+          echo "Generating HTML report..."
+          set +e
+          llvm-cov-18 show \
+            "$main_bin" "${object_args[@]}" \
+            -instr-profile=coverage-report/merged.profdata \
+            -format=html \
+            -output-dir=coverage-report/html \
+            -show-line-counts-or-regions \
+            -show-expansions \
+            -show-branches=count \
+            -ignore-filename-regex='(third_party|/usr/|test)' \
+            > coverage-report/html-stdout.txt \
+            2> coverage-report/html-stderr.txt
+          html_rc="$?"
+          set -e
+          if [ "$html_rc" -ne 0 ]; then
+            echo "::warning title=HTML report::llvm-cov show failed with exit code ${html_rc}"
+          fi
+          html_mismatch="$(
+            grep -oE '[0-9]+ functions have mismatched data' coverage-report/html-stderr.txt 2>/dev/null \
+              | awk '{print $1}' \
+              | head -1
+          )"
+          html_mismatch="${html_mismatch:-0}"
+          if [ "$html_mismatch" -gt 0 ]; then
+            echo "::notice title=HTML mismatched functions::${html_mismatch} template-instantiation duplicates"
+          fi
+
+          html_count="$(find coverage-report/html -name '*.html' 2>/dev/null | wc -l)"
+          printf 'html_count=%s\n' "$html_count" >> "$GITHUB_ENV"
+          echo "::notice title=HTML report::${html_count} pages generated"
+
+          set +e
+          llvm-cov-18 export \
+            "$main_bin" "${object_args[@]}" \
+            -instr-profile=coverage-report/merged.profdata \
+            -format=lcov \
+            -ignore-filename-regex='(third_party|/usr/|test)' \
+            > coverage-report/lcov.info \
+            2>coverage-report/lcov-stderr.txt
+          lcov_rc="$?"
+          set -e
+          if [ "$lcov_rc" -ne 0 ]; then
+            : > coverage-report/lcov.info
+            echo "::warning title=LCOV export::llvm-cov export failed with exit code ${lcov_rc}"
+          fi
+
+          lcov_records="$(grep -c '^SF:' coverage-report/lcov.info 2>/dev/null || printf 0)"
+          printf 'lcov_records=%s\n' "$lcov_records" >> "$GITHUB_ENV"
+          printf 'LCOV export: %s source file records\n' "$lcov_records"
+
+      - name: "Write workflow summary"
+        if: always()
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          summary_line() {
+            sanitize_line "$1" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+          }
+
+          summary_pre_line() {
+            sanitize_print "$1" >> "$GITHUB_STEP_SUMMARY"
+            printf '\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+          }
+
+          summary_line "## Code Coverage Report"
+          summary_line ""
+          summary_line "### Coverage"
+          summary_line "| Metric | Coverage |"
+          summary_line "|--------|----------|"
+          summary_line "| Regions | ${region_pct:-n/a} |"
+          summary_line "| Functions | ${func_pct:-n/a} |"
+          summary_line "| Lines | ${line_pct:-n/a} |"
+          summary_line "| Branches | ${branch_pct:-n/a} |"
+          summary_line ""
+          summary_line "Mismatched function records: ${mismatch_count:-0}"
+          summary_line ""
+          summary_line "### Test Execution"
+          summary_line "| Step | Result | Details |"
+          summary_line "|------|--------|---------|"
+          summary_line "| ICC profiles created | ${profile_count:-n/a} | ci-inside-stub |"
+          summary_line \
+            "| ci-inside-stub | ${ci_stub_pass:-0}/${ci_stub_total:-0} pass | ${ci_stub_elapsed_seconds:-0}s |"
+          summary_line \
+            "| Stub hybrid | ${ci_stub_hybrid_seconds:-n/a}s | Testing/hybrid/BuildAndTest.sh |"
+          summary_line \
+            "| CTest | exit ${ctest_exit_code:-n/a} | ${ctest_test_count:-0} tests, ${ctest_elapsed_seconds:-0}s |"
+          summary_line \
+            "| Large profile CTest | ${ctest_large_profile_seconds:-n/a}s | iccdev.hybrid-pipeline |"
+          summary_line "| iccDumpProfile | ${dump_pass:-0}/${dump_total:-0} pass | ${dump_fail:-0} failures |"
+          summary_line "| XML to ICC | ${xml_converted:-0} converted | ${xml_failed:-0} iccToXml failures |"
+          summary_line "| iccFromXml | ${xml_from_failed:-0} non-blocking exits | see exercise review |"
+          summary_line \
+            "| iccRoundTrip | ${rt_pass:-0}/${rt_suitable:-0} suitable pass | ${rt_fail:-0} non-blocking exits |"
+          summary_line "| Other profiles | ${rt_exercised:-0} exercised | coverage only |"
+          summary_line ""
+          summary_line "### Build"
+          summary_line "| Component | Value |"
+          summary_line "|-----------|-------|"
+          summary_line "| Compiler | clang-18 source-based coverage |"
+          summary_line "| Tools built | ${tool_count:-n/a} |"
+          summary_line "| Profraw files | ${profraw_count:-n/a} |"
+          summary_line "| HTML pages | ${html_count:-n/a} |"
+          summary_line "| LCOV source records | ${lcov_records:-n/a} |"
+          summary_line ""
+          summary_line "### Code Statistics"
+          summary_line "| Metric | Value |"
+          summary_line "|--------|------:|"
+          summary_line "| Languages | ${code_stats_languages:-n/a} |"
+          summary_line "| Files | ${code_stats_files:-n/a} |"
+          summary_line "| Code lines | ${code_stats_code:-n/a} |"
+          summary_line "| Comment lines | ${code_stats_comment:-n/a} |"
+          summary_line "| Blank lines | ${code_stats_blank:-n/a} |"
+          summary_line "| Total lines | ${code_stats_total:-n/a} |"
+          summary_line ""
+          if [ -f coverage-report/code-stats/top-languages.md ]; then
+            while IFS= read -r line; do
+              summary_line "$line"
+            done < coverage-report/code-stats/top-languages.md
+            summary_line ""
+          fi
+          summary_line "### Artifacts"
+          summary_line "The coverage-report artifact contains HTML, lcov, CTest data, code stats,"
+          summary_line "review data, and failure logs."
+          summary_line ""
+          summary_line "### llvm-cov Text Report"
+          printf '<pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+          if [ -f coverage-report/coverage-summary.txt ]; then
+            while IFS= read -r line; do
+              summary_pre_line "$line"
+            done < coverage-report/coverage-summary.txt
+          else
+            summary_pre_line "No coverage data available"
+          fi
+          printf '</pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: "Upload coverage report"
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: coverage-report
+          path: coverage-report/
+          retention-days: 30
+          if-no-files-found: warn
