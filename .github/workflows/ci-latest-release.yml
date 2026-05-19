@@ -9,7 +9,7 @@
 #
 ## Last Updated: 2026-03-26 by David Hoyt / Copilot
 #                Add push-to-master trigger
-#                Add release job: zip + publish to GitHub Releases (rolling 'latest')
+#                Add release job: zip + publish to GitHub Releases (latest release)
 #                Pin softprops/action-gh-release@v2 and actions/download-artifact@v4
 #                Elevate permissions to contents: write for release creation
 #                Add WASM Release build (Emscripten) to release packaging
@@ -1281,7 +1281,7 @@ jobs:
     environment: release
     timeout-minutes: 15
     permissions:
-      contents: write  # Required to replace the rolling latest release.
+      contents: write  # Required to publish the latest release.
       id-token: write  # Required for artifact attestation identity.
       attestations: write  # Required to publish release archive provenance.
     steps:
@@ -1405,19 +1405,6 @@ jobs:
         with:
           subject-checksums: release-assets/SHA256SUMS
 
-      - name: Delete existing latest tag
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git config --global --add safe.directory "$PWD"
-          git config --global credential.helper ""
-
-          # Delete existing 'latest' release and tag if they exist
-          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-
       - name: Create latest release
         shell: bash --noprofile --norc {0}
         env:
@@ -1432,11 +1419,15 @@ jobs:
           set -euo pipefail
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          release_tag="ci-latest-${GH_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
 
           body_file="$(mktemp)"
           {
             echo "## Rolling Latest Build"
             echo ""
+            echo "**Tag:** ${release_tag}"
             echo "**Commit:** ${GH_SHA}"
             echo "**Branch:** ${GH_REF_NAME}"
             echo "**Event:** ${GH_EVENT_NAME}"
@@ -1471,7 +1462,7 @@ jobs:
             echo "*Auto-published by ci-latest-release.*"
           } > "$body_file"
 
-          gh release create latest \
+          gh release create "$release_tag" \
             release-assets/*.zip \
             release-assets/SHA256SUMS \
             release-assets/SHA512SUMS \
@@ -1491,10 +1482,11 @@ jobs:
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          release_tag="ci-latest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
           {
             echo "### Release Summary"
             echo ""
-            echo "- Tag: \`latest\`"
+            echo "- Tag: \`${release_tag}\`"
             echo "- Commit: \`${GITHUB_SHA:0:7}\`"
             zip_count=$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l)
             echo "- Assets uploaded: ${zip_count} zip files"
