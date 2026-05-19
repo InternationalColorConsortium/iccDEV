@@ -286,7 +286,7 @@ inline void icSwab64Array(void *pVoid, size_t num)
 #define icSwab64(flt) icSwab64Ptr(&flt)
 
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) || defined(__MINGW32__)
 #include <time.h>
 
 // compatibility shim, because Microsoft.
