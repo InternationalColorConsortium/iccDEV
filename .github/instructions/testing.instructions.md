@@ -38,12 +38,13 @@ cmake --build out/vs2022-x64 --config Release --target check
 ```
 
 Linux currently registers 24 CTest suites. Windows full tool builds currently
-register 5 CTest suites: the IccConnect threaded CMM regression, two
+register 6 CTest suites: the IccConnect threaded CMM regression, two
 batch-backed suites through `Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the
-iccDumpProfile smoke suite, and the issue-987 shared export suite. Windows
-feature-disabled builds register the subset whose targets are available. The
-Windows batch wrapper runs scripts from a disposable copy of `Testing/` under
-the build tree and must not dirty the source `Testing/` directory.
+iccDumpProfile smoke suite, the issue-987 shared export suite, and the PAWG
+report smoke suite. Windows feature-disabled builds register the subset whose
+targets are available. The Windows batch wrapper runs scripts from a disposable
+copy of `Testing/` under the build tree and must not dirty the source
+`Testing/` directory.
 
 Windows CTest wrappers source runtime DLL directories from `CMakeCache.txt`
 through `Build/Cmake/Testing/WindowsRuntimePaths.cmake`. Keep that helper in

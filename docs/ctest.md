@@ -155,7 +155,7 @@ without signed-conversion sanitizer findings.
 and fails if `iccFromXml` emits sanitizer diagnostics from string-size
 arithmetic.
 
-Windows full tool builds currently register 5 tests:
+Windows full tool builds currently register 6 tests:
 
 | Test | Source |
 |------|--------|
@@ -164,6 +164,7 @@ Windows full tool builds currently register 5 tests:
 | `iccdev.windows-legacy-run-tests` | `Testing/RunTests.bat` |
 | `iccdev.windows-icc-dump-profile-smoke` | `Build/Cmake/Testing/RunWindowsDumpProfileSmokeTest.cmake` |
 | `iccdev.issue-987-shared-mpe-export` | `Build/Cmake/Testing/RunWindowsSharedExportTest.cmake` |
+| `iccdev.windows-pawg-report-smoke` | `Build/Cmake/Testing/RunWindowsPawgReportSmokeTest.cmake` |
 
 The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
@@ -246,6 +247,8 @@ For repeatable agent-assisted work, use
      and update every stale count in the same change.
 4. Validate locally with CMake configure, build, `ctest -N --no-tests=error`,
    `ctest --output-on-failure --no-tests=error`, and `git diff --check`.
+   Use `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
+   to catch stale count and workflow-name references before opening a PR.
    For changes inside `iccdev.tool-coverage`, also run the direct script with
    explicit `ICCDEV_TOOLS_DIR`, `ICCDEV_TESTING_DIR`, and
    `ICCDEV_TEST_OUTDIR`, plus `ctest -R '^iccdev\.tool-coverage$'`.

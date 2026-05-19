@@ -59,6 +59,8 @@ Choose the smallest gate that proves the behavior:
   `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
   before committing and update every stale workflow, docs, skill, and
   instruction count in the same change.
+- Run `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
+  before handoff to catch stale count and workflow-name references.
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.

@@ -16,8 +16,7 @@ where it belongs.
 |------|----------|---------|
 | Focused reusable regression scripts | `.github/scripts/` | Scripted checks shared by one or more workflows. |
 | Regression PoC inventory | `.github/ci/regression/README.md` | Maps regression inputs and scripts to issues. |
-| Main tool gate | `.github/workflows/ci-tool-tests.yml` | ASAN/UBSAN tool coverage, JSON gates, and regression scripts. |
-| Comprehensive tool gate | `.github/workflows/ci-iccdev-tool-tests.yml` | Broad generated-profile and CLI coverage. |
+| Tool test gate | `.github/workflows/ci-iccdev-tool-tests.yml` | ASAN/UBSAN tool coverage, JSON gates, regression scripts, and broad generated-profile CLI coverage. |
 | CTest registration | `Build/Cmake/Testing/CMakeLists.txt` | CTest names, labels, fixtures, timeouts, and check target. |
 | CTest process guide | `docs/ctest.md` | Local commands, registered suites, and add-test workflow. |
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |

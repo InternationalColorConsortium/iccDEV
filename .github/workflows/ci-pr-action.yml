@@ -64,6 +64,7 @@ jobs:
       ci_scope: ${{ steps.diffcheck.outputs.ci_scope }}
       source_changed: ${{ steps.diffcheck.outputs.source_changed }}
       build_config_changed: ${{ steps.diffcheck.outputs.build_config_changed }}
+      testing_changed: ${{ steps.diffcheck.outputs.testing_changed }}
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
 
@@ -124,14 +125,16 @@ jobs:
             local run_full="$1"
             local source_changed="$2"
             local build_config_changed="$3"
-            local ci_changed="$4"
-            local docs_only="$5"
+            local testing_changed="$4"
+            local ci_changed="$5"
+            local docs_only="$6"
 
             {
               printf 'src_changed=%s\n' "$run_full"
               printf 'ci_scope=%s\n' "$ci_scope"
               printf 'source_changed=%s\n' "$source_changed"
               printf 'build_config_changed=%s\n' "$build_config_changed"
+              printf 'testing_changed=%s\n' "$testing_changed"
               printf 'ci_changed=%s\n' "$ci_changed"
               printf 'docs_only=%s\n' "$docs_only"
           } >> "$GITHUB_OUTPUT"  # elements-sanitized
@@ -139,15 +142,15 @@ jobs:
 
           case "$ci_scope" in
             full|source)
-              write_scope_outputs true true true false false
+              write_scope_outputs true true true true false false
               exit 0
               ;;
             governance)
-              write_scope_outputs false false false true false
+              write_scope_outputs false false false false true false
               exit 0
               ;;
             docs)
-              write_scope_outputs false false false false true
+              write_scope_outputs false false false false false true
               exit 0
               ;;
           esac
@@ -167,7 +170,7 @@ jobs:
 
           if ! validate_sha "$head_sha"; then
             echo "Warning: invalid or missing head commit sha; assuming source changed for safety" >&2
-            write_scope_outputs true true true false false
+            write_scope_outputs true true true true false false
             exit 0
           fi
 
@@ -178,7 +181,7 @@ jobs:
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
-              write_scope_outputs false false false false false
+              write_scope_outputs false false false false false false
               exit 0
               ;;
           esac
@@ -192,7 +195,7 @@ jobs:
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
             echo "Warning: no merge base found; assuming source changed for safety" >&2
-            write_scope_outputs true true true false false
+            write_scope_outputs true true true true false false
             exit 0
           fi
 
@@ -205,6 +208,7 @@ jobs:
 
           source_changed=false
           build_config_changed=false
+          testing_changed=false
           ci_changed=false
           docs_only=false
 
@@ -214,6 +218,10 @@ jobs:
 
           if has_changed_file '(^|/)(CMakeLists\.txt|[^/]+\.cmake)$|^Build/Cmake/|^cmake/'; then
             build_config_changed=true
+          fi
+
+          if has_changed_file '^(Testing/|\.github/ci/regression/)'; then
+            testing_changed=true
           fi
 
           if has_changed_file '^\.github/(workflows|scripts|actions|codeql-queries)/'; then
@@ -228,11 +236,11 @@ jobs:
           fi
 
           run_full=false
-          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$ci_changed" == "true" ]]; then
+          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$ci_changed" == "true" ]]; then
             run_full=true
           fi
 
-          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$ci_changed" "$docs_only"
+          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$docs_only"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -248,6 +256,7 @@ jobs:
           CI_SCOPE: ${{ steps.diffcheck.outputs.ci_scope }}
           SOURCE_CHANGED: ${{ steps.diffcheck.outputs.source_changed }}
           BUILD_CONFIG_CHANGED: ${{ steps.diffcheck.outputs.build_config_changed }}
+          TESTING_CHANGED: ${{ steps.diffcheck.outputs.testing_changed }}
           CI_CHANGED: ${{ steps.diffcheck.outputs.ci_changed }}
           DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
@@ -298,6 +307,7 @@ jobs:
             echo "- **Run full build matrix:** \`$(sanitize_line "${RUN_FULL_BUILD:-false}")\`"
             echo "- **Source changed:** \`$(sanitize_line "${SOURCE_CHANGED:-false}")\`"
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED:-false}")\`"
+            echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED:-false}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED:-false}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY:-false}")\`"
             echo ""
@@ -354,6 +364,7 @@ jobs:
           CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope }}
           SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed }}
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed }}
+          TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only }}
         run: |
@@ -397,6 +408,7 @@ jobs:
           echo "CI scope: $(sanitize_print "$CI_SCOPE")"
           echo "Source files changed: $(sanitize_print "$SOURCE_CHANGED")"
           echo "Build config changed: $(sanitize_print "$BUILD_CONFIG_CHANGED")"
+          echo "Testing/regression changed: $(sanitize_print "$TESTING_CHANGED")"
           echo "CI/governance changed: $(sanitize_print "$CI_CHANGED")"
           echo "Docs only: $(sanitize_print "$DOCS_ONLY")"
 
@@ -414,6 +426,7 @@ jobs:
           CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'auto' }}
           SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed || 'false' }}
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
+          TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed || 'false' }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed || 'false' }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only || 'false' }}
         run: |
@@ -451,6 +464,7 @@ jobs:
           : "${CI_SCOPE:=auto}"
           : "${SOURCE_CHANGED:=false}"
           : "${BUILD_CONFIG_CHANGED:=false}"
+          : "${TESTING_CHANGED:=false}"
           : "${CI_CHANGED:=false}"
           : "${DOCS_ONLY:=false}"
 
@@ -469,6 +483,7 @@ jobs:
             echo "- **Run full build matrix:** \`$(sanitize_line "${SRC_CHANGED}")\`"
             echo "- **Source files changed:** \`$(sanitize_line "${SOURCE_CHANGED}")\`"
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED}")\`"
+            echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY}")\`"
             echo ""
@@ -762,7 +777,9 @@ jobs:
           UNIX_RESULT="${UNIX_RESULT:-success}"
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
+          TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
+          WASM_RESULT="${WASM_RESULT:-success}"
           EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
 
@@ -781,13 +798,15 @@ jobs:
           UNIX_RESULT="$(trim_and_norm "$UNIX_RESULT")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
+          TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
+          WASM_RESULT="$(trim_and_norm "$WASM_RESULT")"
           EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$WIN_RESULT" "$EXAMPLE_RESULT"; do
+          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$WASM_RESULT" "$EXAMPLE_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
