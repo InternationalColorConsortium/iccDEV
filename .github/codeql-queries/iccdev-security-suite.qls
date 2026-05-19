@@ -1,4 +1,4 @@
-- description: "iccDEV comprehensive security query suite (excludes IccJSON-only queries)"
+- description: "iccDEV comprehensive security query suite (excludes JSON/Connect-focused queries)"
 - queries: .
 - exclude:
     query path:

@@ -22,7 +22,10 @@ import cpp
 class JsonSizeCall extends FunctionCall {
   JsonSizeCall() {
     this.getTarget().getName() = "size" and
-    this.getFile().getRelativePath().matches("%IccJSON%")
+    (
+      this.getFile().getRelativePath().matches("%IccJSON%") or
+      this.getFile().getRelativePath().matches("%IccConnect%")
+    )
   }
 }
 

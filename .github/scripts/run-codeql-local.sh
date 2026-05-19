@@ -14,7 +14,7 @@
 ## Usage:
 ##   .github/scripts/run-codeql-local.sh              # full analysis
 ##   .github/scripts/run-codeql-local.sh --custom-only # iccDEV core queries only
-##   .github/scripts/run-codeql-local.sh --jsonlib-only # IccJSON queries only
+##   .github/scripts/run-codeql-local.sh --jsonlib-only # IccJSON/IccConnect queries only
 ##   .github/scripts/run-codeql-local.sh --skip-build  # reuse existing DB
 ##   .github/scripts/run-codeql-local.sh --help
 ##
@@ -44,7 +44,7 @@ Run CodeQL security analysis on iccDEV and generate a report.
 
 Options:
   --custom-only   Run only the custom iccDEV core security queries
-  --jsonlib-only  Run only the IccJSON targeted security queries
+  --jsonlib-only  Run only the IccJSON/IccConnect targeted security queries
   --standard-only Run only the standard cpp-security-and-quality suite
   --skip-build    Skip database creation (reuse existing at $DB_DIR)
   --db-dir DIR    Use custom database directory (default: $DB_DIR)
@@ -55,7 +55,7 @@ Options:
 Output:
   codeql-results/cpp-security-and-quality.sarif   Standard suite results
   codeql-results/iccdev-security.sarif            Custom query results
-  codeql-results/iccdev-jsonlib-security.sarif     IccJSON query results
+  codeql-results/iccdev-jsonlib-security.sarif     IccJSON/IccConnect query results
   codeql-results/report.txt                       Human-readable report
 
 Build configuration:
@@ -75,7 +75,7 @@ Examples:
   # Custom core queries only, fast iteration
   $(basename "$0") --skip-build --custom-only
 
-  # IccJSON queries only, fast iteration
+  # IccJSON/IccConnect queries only, fast iteration
   $(basename "$0") --skip-build --jsonlib-only
 EOF
     exit 0
@@ -186,15 +186,15 @@ if [ "$STANDARD_ONLY" -eq 0 ] && [ "$JSONLIB_ONLY" -eq 0 ]; then
     echo "[OK] Custom suite complete"
 fi
 
-# IccJSON suite
+# IccJSON/IccConnect suite
 if [ "$STANDARD_ONLY" -eq 0 ] && [ "$CUSTOM_ONLY" -eq 0 ]; then
-    echo "  Running IccJSON targeted security queries..."
+    echo "  Running IccJSON/IccConnect targeted security queries..."
     gh codeql database analyze "$DB_DIR" \
         --format=sarif-latest \
         --output="$RESULTS_DIR/iccdev-jsonlib-security.sarif" \
         --threads=0 \
         .github/codeql-queries/iccdev-jsonlib-suite.qls
-    echo "[OK] IccJSON suite complete"
+    echo "[OK] IccJSON/IccConnect suite complete"
 fi
 
 # Generate report

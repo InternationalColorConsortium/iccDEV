@@ -29,6 +29,7 @@ on:
       - 'IccProfLib/**'
       - 'IccXML/**'
       - 'IccJSON/**'
+      - 'IccConnect/**'
       - 'Tools/**'
       - 'examples/**'
       - '.github/codeql-queries/**'
@@ -189,7 +190,7 @@ jobs:
             --threads=0 \
             "$TRUSTED_CODEQL_QUERIES/iccdev-security-suite.qls"
 
-          # IccJSON (JsonLib) targeted security queries
+          # IccJSON/IccConnect targeted security queries
           codeql database analyze /tmp/codeql-db \
             --format=sarif-latest \
             --output=codeql-results/iccdev-jsonlib-security.sarif \
@@ -226,7 +227,7 @@ jobs:
           sarif_file: codeql-results/iccdev-security.sarif
           category: iccdev-custom-security
 
-      - name: Upload IccJSON custom SARIF
+      - name: Upload IccJSON/IccConnect custom SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e  # v4
         with:

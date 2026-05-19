@@ -72,7 +72,10 @@ from JsonGetCall getCall
 where
   not isInTryBlock(getCall) and
   not hasTypeGuard(getCall) and
-  getCall.getFile().getRelativePath().matches("%IccJSON%")
+  (
+    getCall.getFile().getRelativePath().matches("%IccJSON%") or
+    getCall.getFile().getRelativePath().matches("%IccConnect%")
+  )
 select getCall,
   ".get<T>() called without a prior type guard (.is_number(), .is_string(), etc.) " +
   "or try-catch. Untrusted JSON input may cause nlohmann::json::type_error " +

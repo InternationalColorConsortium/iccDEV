@@ -4,7 +4,7 @@
  *              Flatten, SetElem on Calculator/MPE/Tag classes recursively
  *              invoke themselves (directly or via mutual recursion) without
  *              an explicit depth or visited-set guard. Untrusted input can
- *              drive unbounded recursion → stack-exhaustion crash (CWE-674).
+ *              drive unbounded recursion to stack-exhaustion crash (CWE-674).
  *              See PRs #413, #406, #684, #cce5f9b, #798be59.
  * @kind problem
  * @problem.severity warning
@@ -58,7 +58,7 @@ where
   isParseLike(f) and
   selfRecursive(f) and
   not hasDepthGuard(f) and
-  f.getFile().getRelativePath().regexpMatch("(IccProfLib|IccXML|IccJSON)/.*")
+  f.getFile().getRelativePath().regexpMatch("(IccProfLib|IccXML|IccJSON|IccConnect)/.*")
 select f,
   "Recursive '" + f.getDeclaringType().getName() + "::" + f.getName() +
   "' has no visible depth or visited-set guard. Untrusted nested input may exhaust the stack."

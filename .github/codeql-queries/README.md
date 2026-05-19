@@ -45,6 +45,9 @@ toolchain.
 .github/scripts/run-codeql-local.sh --skip-build
 ```
 
+The `iccdev-jsonlib-security.sarif` output covers the IccJSON library and
+IccConnect JSON configuration code.
+
 Results are written to `codeql-results/`:
 
 - `cpp-security-and-quality.sarif`

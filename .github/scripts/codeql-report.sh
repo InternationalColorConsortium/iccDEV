@@ -155,6 +155,10 @@ def main():
             by_component["IccProfLib"] += 1
         elif f.startswith("IccXML/IccLibXML/"):
             by_component["IccLibXML"] += 1
+        elif f.startswith("IccJSON/IccLibJSON/"):
+            by_component["IccLibJSON"] += 1
+        elif f.startswith("IccConnect/IccLibConnect/"):
+            by_component["IccLibConnect"] += 1
         elif f.startswith("IccXML/CmdLine/"):
             by_component["IccXML Tools"] += 1
         elif f.startswith("Tools/CmdLine/"):
