@@ -129,8 +129,8 @@ AFL-minimized crash or hang, embed the smallest stable reproducer in the script
 or generate it under `ICCDEV_TEST_OUTDIR`; do not require local AFL output
 directories or commit generated crash artifacts. Validate both the direct script
 path and the CTest wrapper when changing this suite. The JSON parser suite
-includes malformed curve gamma coverage and must reject out-of-range gamma
-values without sanitizer findings.
+includes malformed curve gamma and out-of-range numeric narrowing coverage, and
+must reject invalid numeric fields before conversion without sanitizer findings.
 
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
 checks the 31-item PAWG report structure, verifies summary counts against the

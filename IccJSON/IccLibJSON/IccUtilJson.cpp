@@ -61,10 +61,13 @@
 #include "IccUtil.h"
 #include "IccTagLut.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <sstream>
 #include <iomanip>
+#include <limits>
+#include <sstream>
+#include <type_traits>
 
 // Library-wide flag: off by default (library/service/WASM contexts).
 // The iccFromJson CLI tool sets this to true after argument parsing so
@@ -309,7 +312,74 @@ template <typename T>
 bool jsonToValue(const IccJson &j, T &value)
 {
   try {
-    if (j.is_number()) {
+    if (!j.is_number()) {
+      return false;
+    }
+
+    if constexpr (std::is_integral<T>::value) {
+      if (j.is_number_float()) {
+        double d = j.get<double>();
+        if (!std::isfinite(d)) {
+          return false;
+        }
+
+        if constexpr (std::is_unsigned<T>::value) {
+          if (d < 0.0 || d > (double)std::numeric_limits<T>::max()) {
+            return false;
+          }
+        }
+        else {
+          if (d < (double)std::numeric_limits<T>::lowest() ||
+              d > (double)std::numeric_limits<T>::max()) {
+            return false;
+          }
+        }
+
+        value = static_cast<T>(d);
+        return true;
+      }
+
+      if (j.is_number_unsigned()) {
+        IccJson::number_unsigned_t v = j.get<IccJson::number_unsigned_t>();
+        if (v > (IccJson::number_unsigned_t)std::numeric_limits<T>::max()) {
+          return false;
+        }
+
+        value = static_cast<T>(v);
+        return true;
+      }
+
+      if (j.is_number_integer()) {
+        IccJson::number_integer_t v = j.get<IccJson::number_integer_t>();
+        if constexpr (std::is_unsigned<T>::value) {
+          if (v < 0 ||
+              (IccJson::number_unsigned_t)v > (IccJson::number_unsigned_t)std::numeric_limits<T>::max()) {
+            return false;
+          }
+        }
+        else {
+          if (v < (IccJson::number_integer_t)std::numeric_limits<T>::lowest() ||
+              v > (IccJson::number_integer_t)std::numeric_limits<T>::max()) {
+            return false;
+          }
+        }
+
+        value = static_cast<T>(v);
+        return true;
+      }
+    }
+    else if constexpr (std::is_floating_point<T>::value) {
+      double d = j.get<double>();
+      if (!std::isfinite(d) ||
+          d < (double)std::numeric_limits<T>::lowest() ||
+          d > (double)std::numeric_limits<T>::max()) {
+        return false;
+      }
+
+      value = static_cast<T>(d);
+      return true;
+    }
+    else {
       value = j.get<T>();
       return true;
     }

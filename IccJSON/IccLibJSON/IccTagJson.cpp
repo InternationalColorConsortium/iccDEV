@@ -1703,7 +1703,11 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std:
     }
   } else if (curveType == "gamma") {
     double gamma = 1.0;
-    jGetValue(j, "gamma", gamma);
+    if (!jGetValue(j, "gamma", gamma)) {
+      parseStr += "Invalid gamma in curveType\n";
+      return false;
+    }
+
     if (!SetGamma((icFloatNumber)gamma)) {
       parseStr += "Invalid gamma in curveType\n";
       return false;
