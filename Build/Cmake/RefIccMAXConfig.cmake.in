@@ -25,7 +25,7 @@
 #   target_link_libraries(myapp PRIVATE RefIccMAX::IccProfLib2)
 #   target_link_libraries(myapp PRIVATE RefIccMAX::IccXML2)
 #
-# Namespaced targets (recommended — include dirs propagate automatically):
+# Namespaced targets (recommended - include dirs propagate automatically):
 #   RefIccMAX::IccProfLib2        - Core ICC profile library
 #   RefIccMAX::IccXML2            - XML serialization library (links IccProfLib2 transitively)
 #   RefIccMAX::IccProfLib2-static - Static version
@@ -47,6 +47,8 @@ set(REFICCMAX_VERSION @REFICCMAX_VERSION@)
 
 include(CMakeFindDependencyMacro)
 
+find_dependency(Threads)
+
 set(_REFICCMAX_ENABLE_ICCXML "@ENABLE_ICCXML@")
 set(_REFICCMAX_ENABLE_ICCJSON "@ENABLE_ICCJSON@")
 
@@ -58,7 +60,7 @@ if(_REFICCMAX_ENABLE_ICCJSON)
   find_dependency(nlohmann_json CONFIG)
 endif()
 
-# Load exported targets — this creates RefIccMAX::IccProfLib2, RefIccMAX::IccXML2, etc.
+# Load exported targets - this creates RefIccMAX::IccProfLib2, RefIccMAX::IccXML2, etc.
 # with all include directories, link dependencies, and compile features pre-configured.
 include("${CMAKE_CURRENT_LIST_DIR}/RefIccMAXTargets.cmake")
 

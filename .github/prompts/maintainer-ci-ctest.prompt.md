@@ -20,6 +20,7 @@ governance, or security automation.
 Confirm that the work is maintainer-owned before editing:
 
 - `.github/**`
+- `Dockerfile*`
 - `Build/Cmake/Testing/**`
 - workflow count assertions
 - CPack, release packaging, installer, or artifact publishing logic
@@ -53,6 +54,9 @@ Choose the smallest gate that proves the behavior:
 - Update `.github/instructions/testing.instructions.md` when the test becomes
   standard policy.
 - Update `docs/regression-workflow-governance.md` for workflow process changes.
+- Update `docs/build.md` and `docs/regression-workflow-governance.md` when
+  changing maintainer Dockerfiles, container dependencies, GHCR publish flow, or
+  pinned regression image digests.
 - Update `.github/skills/README.md` or a skill when the process becomes a
   repeatable maintainer workflow.
 - For CTest suite-count changes, run
@@ -94,6 +98,18 @@ ICCDEV_TEST_OUTDIR=/tmp/iccdev-tool-output \
   .github/scripts/iccdev-tool-coverage-baseline.sh --asan --quick
 ctest --test-dir build -R '^iccdev\.tool-coverage$' --output-on-failure
 ```
+
+For `Dockerfile*` updates:
+
+```bash
+docker build -t iccdev-container-check -f <Dockerfile> .
+docker run --rm iccdev-container-check <smoke-command>
+```
+
+For `Dockerfile.ci-regression`, use a no-cache build and smoke `clang-18`,
+`clang++-18`, `cmake`, and `/usr/bin/time`. If the image must be published,
+allow the branch in the `ghcr-publish` environment before triggering deployment,
+then pin the published digest in `ci-iccdev-tool-tests.yml`.
 
 Workflow YAML:
 

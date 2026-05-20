@@ -137,6 +137,29 @@
       }
     },
     {
+      "name": "linux-raspi",
+      "inherits": "default-base",
+      "displayName": "Linux Raspberry Pi (GCC, Release, no GUI)",
+      "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "ENABLE_WXWIDGETS": "OFF",
+        "ENABLE_CMM_TOOLS": "OFF",
+        "ENABLE_IIS_TOOLS": "OFF",
+        "ENABLE_LTO": "OFF"
+      }
+    },
+    {
+      "name": "linux-raspi-debug",
+      "inherits": "linux-raspi",
+      "displayName": "Linux Raspberry Pi (GCC, Debug)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
       "name": "macos-xcode",
       "inherits": "default-base",
       "displayName": "macOS (Xcode)",

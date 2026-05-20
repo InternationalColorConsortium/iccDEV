@@ -23,6 +23,8 @@ where it belongs.
 | Maintainer CI prompt | `.github/prompts/maintainer-ci-ctest.prompt.md` | Structured planning prompt for maintainer-owned infrastructure changes. |
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
+| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
+| Regression container publisher | `.github/workflows/ci-regression-container.yml` | Builds and publishes `Dockerfile.ci-regression` through `ghcr-publish`. |
 
 ## When to Add a Script
 
@@ -148,6 +150,27 @@ When adding a gate, update the smallest useful index:
 
 Do not update root `README.md` or `CONTRIBUTING.md` for branch-specific
 regression changes unless ICC approval explicitly covers those root documents.
+
+## Maintainer Dockerfile Changes
+
+All `Dockerfile*` changes are maintainer-owned because they affect release
+artifacts, runner trust, or pinned dependency envelopes. Keep container changes
+separate from general source changes when practical.
+
+| File | Owner intent | Required local checks |
+|------|--------------|-----------------------|
+| `Dockerfile` | Ubuntu release/runtime image for the published `iccdev` container. | Build locally, run at least one installed tool, and check the healthcheck target. |
+| `Dockerfile.nixos` | NixOS/scratch runtime image and closure minimization. | Build locally, run one tool, and confirm closure/secret checks remain active. |
+| `Dockerfile.ci-regression` | Dependency image for ASAN/UBSAN CTest and hybrid timing gates. | Run a no-cache build and smoke `clang-18`, `clang++-18`, `cmake`, and `/usr/bin/time`. |
+
+For `Dockerfile.ci-regression` publishing:
+
+1. Add the branch to the `ghcr-publish` environment deployment branch policy if
+   the branch is not already allowed.
+2. Trigger `ci-regression-container` and wait for maintainer deployment approval.
+3. Read the pushed GHCR digest from the run log or summary.
+4. Pin `ci-iccdev-tool-tests.yml` to that digest and rerun the regression gate.
+5. Remove temporary branch policy entries after the branch is no longer needed.
 
 ## Local Validation
 

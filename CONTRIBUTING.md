@@ -130,6 +130,7 @@ Maintainer-owned areas include:
 
 - `.github/**`, including workflows, actions policy, CodeQL configuration,
   sanitizer helpers, prompts, and repository instructions.
+- `Dockerfile*` and container publishing workflows.
 - CTest registration and CI gate logic under `Build/Cmake/Testing/`.
 - CPack, release packaging, installer, and artifact publishing logic.
 - vcpkg port maintenance and release verification.

@@ -16,6 +16,7 @@ name: ci-vcpkg-ports
 # yamllint disable rule:line-length
 
 on:
+  workflow_dispatch:
   push:
     branches: [master]
     paths:

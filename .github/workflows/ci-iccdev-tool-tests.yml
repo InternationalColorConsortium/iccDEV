@@ -14,9 +14,86 @@ name: ci-regression-checks
 
 permissions:
   contents: read
+  packages: read
 
 on:
   workflow_call:
+    inputs:
+      run_hybrid_timing:
+        description: 'Run the hybrid iccApplyProfiles timing matrix'
+        required: false
+        default: false
+        type: boolean
+      hybrid_timing_threads:
+        description: 'Comma-separated iccApplyProfiles thread variants'
+        required: false
+        default: 'baseline,2,4,8'
+        type: string
+      hybrid_timing_timeout:
+        description: 'Timeout in seconds for each timing variant'
+        required: false
+        default: '60'
+        type: string
+      hybrid_timing_cases:
+        description: 'Comma-separated hybrid timing cases'
+        required: false
+        default: 'cmykw,kw-mcs'
+        type: string
+      hybrid_timing_band_rows:
+        description: 'Optional row band height for hybrid timing'
+        required: false
+        default: ''
+        type: string
+      hybrid_timing_instrument:
+        description: 'Emit iccApplyProfiles and CMM timing instrumentation'
+        required: false
+        default: false
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      run_hybrid_timing:
+        description: 'Run the hybrid iccApplyProfiles timing matrix'
+        required: false
+        default: true
+        type: boolean
+      hybrid_timing_threads:
+        description: 'Comma-separated iccApplyProfiles thread variants'
+        required: false
+        default: 'baseline,2,4,8'
+        type: string
+      hybrid_timing_timeout:
+        description: 'Timeout in seconds for each timing variant'
+        required: false
+        default: '60'
+        type: string
+      hybrid_timing_cases:
+        description: 'Comma-separated hybrid timing cases'
+        required: false
+        default: 'cmykw,kw-mcs'
+        type: string
+      hybrid_timing_band_rows:
+        description: 'Optional row band height for hybrid timing'
+        required: false
+        default: ''
+        type: string
+      hybrid_timing_instrument:
+        description: 'Emit iccApplyProfiles and CMM timing instrumentation'
+        required: false
+        default: false
+        type: boolean
+      thread_linkage_build_type:
+        description: 'Build type for the manual RefIccMAX thread linkage check'
+        required: true
+        default: Release
+        type: choice
+        options:
+          - Release
+          - RelWithDebInfo
+      thread_linkage_ipo:
+        description: 'Enable CMAKE_INTERPROCEDURAL_OPTIMIZATION for the manual check'
+        required: true
+        default: true
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -26,6 +103,14 @@ jobs:
   tool-tests:
     name: "iccDEV Tools - CTest ASAN+UBSAN"
     runs-on: ubuntu-24.04
+    container:
+      # yamllint disable rule:line-length
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression@sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76
+      # yamllint enable rule:line-length
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
     timeout-minutes: 45
     defaults:
       run:
@@ -55,21 +140,18 @@ jobs:
           echo "Ref:    ${WORKFLOW_REF}"
           echo "Commit: ${WORKFLOW_SHA}"
 
-      - name: Install build dependencies
+      - name: Verify regression container dependencies
         env:
           BASH_ENV: /dev/null
-          DEBIAN_FRONTEND: noninteractive
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          bash .github/scripts/ci-safe-apt-update.sh
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake \
-            clang-18 clang++-18 llvm-18 \
-            libxml2-dev libtiff-dev libjpeg-dev libpng-dev \
-            zlib1g-dev liblzma-dev nlohmann-json3-dev \
-            libwxgtk3.2-dev wx-common libssl-dev libclang-rt-18-dev
+
+          clang-18 --version | sed -n '1p'
+          clang++-18 --version | sed -n '1p'
+          cmake --version | sed -n '1p'
+          /usr/bin/time --version | sed -n '1p'
 
       - name: Configure iccDEV CTest build
         env:
@@ -150,6 +232,33 @@ jobs:
             --no-tests=error \
             --output-junit "${BUILD_DIR}/ctest-results.xml"
 
+      - name: Run hybrid iccApplyProfiles timing matrix
+        if: ${{ inputs.run_hybrid_timing }}
+        env:
+          BASH_ENV: /dev/null
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          HYBRID_TIMING_THREADS_INPUT: ${{ inputs.hybrid_timing_threads || 'baseline,2,4,8' }}
+          HYBRID_TIMING_TIMEOUT_INPUT: ${{ inputs.hybrid_timing_timeout || '60' }}
+          HYBRID_TIMING_CASES_INPUT: ${{ inputs.hybrid_timing_cases || 'cmykw,kw-mcs' }}
+          HYBRID_TIMING_BAND_ROWS_INPUT: ${{ inputs.hybrid_timing_band_rows || '' }}
+          HYBRID_TIMING_INSTRUMENT_INPUT: ${{ inputs.hybrid_timing_instrument && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          ICCDEV_TOOLS_DIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools" \
+          ICCDEV_TESTING_DIR="$GITHUB_WORKSPACE/Testing" \
+          ICCDEV_TEST_OUTDIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing" \
+          HYBRID_TIMING_THREADS="$HYBRID_TIMING_THREADS_INPUT" \
+          HYBRID_TIMING_TIMEOUT="$HYBRID_TIMING_TIMEOUT_INPUT" \
+          HYBRID_TIMING_CASES="$HYBRID_TIMING_CASES_INPUT" \
+          HYBRID_TIMING_BAND_ROWS="$HYBRID_TIMING_BAND_ROWS_INPUT" \
+          HYBRID_TIMING_INSTRUMENT="$HYBRID_TIMING_INSTRUMENT_INPUT" \
+            .github/scripts/iccdev-hybrid-applyprofiles-timing.sh
+
       - name: Upload CTest logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -189,6 +298,9 @@ jobs:
           fi
 
           test_cmd="ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
+          timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
+          container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression@"
+          container_ref+="sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76"
 
           {
             echo "### iccDEV CTest Tool Suites"
@@ -196,6 +308,7 @@ jobs:
             echo "| Component | Value |"
             echo "|-----------|-------|"
             echo "| Runner | ubuntu-24.04 |"
+            echo "| Container | \`$(sanitize_line "$container_ref")\` |"
             echo "| Compiler | $(sanitize_line "$(clang-18 --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
@@ -213,4 +326,163 @@ jobs:
             echo "ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
             echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
             echo '```'
+            if [ -f "$timing_report" ]; then
+              echo ""
+              echo "## Hybrid \`iccApplyProfiles\` Timing"
+              echo ""
+              date -u '+%Y-%m-%d %H:%M:%S UTC'
+              echo ""
+              printf '| %-10s | %-8s | %-7s | %-6s | %-9s | %-6s | %-8s | %-6s | %-13s | %-7s | %-9s |\n' \
+                "Case" "Threads" "Command" "Status" "Elapsed s" "User s" \
+                "System s" "RSS KB" "Minor faults" "Vol ctx" "Invol ctx"
+              printf '%s%s\n' \
+                '|------------|----------|---------|--------|-----------|--------|' \
+                '-----------|--------|---------------|----------|------------|'
+              tail -n +2 "$timing_report" | while IFS=$'\t' read -r \
+                case_name threads command_name status elapsed_s user_s system_s \
+                rss faults vol_ctx invol_ctx _log_path; do
+                printf '| %-10s | %-8s | %-7s | %-6s | %-9s | %-6s | %-8s | %-6s | %-13s | %-7s | %-9s |\n' \
+                  "$(sanitize_line "$case_name")" \
+                  "$(sanitize_line "$threads")" \
+                  "$(sanitize_line "$command_name")" \
+                  "$(sanitize_line "$status")" \
+                  "$(sanitize_line "$elapsed_s")" \
+                  "$(sanitize_line "$user_s")" \
+                  "$(sanitize_line "$system_s")" \
+                  "$(sanitize_line "$rss")" \
+                  "$(sanitize_line "$faults")" \
+                  "$(sanitize_line "$vol_ctx")" \
+                  "$(sanitize_line "$invol_ctx")"
+              done
+            fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+  thread-linkage:
+    name: "RefIccMAX thread linkage - manual"
+    if: ${{ inputs.thread_linkage_build_type != '' && inputs.thread_linkage_ipo != '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    env:
+      BASH_ENV: /dev/null
+      BUILD_DIR: build-thread-linkage
+      THREAD_LINKAGE_BUILD_TYPE: ${{ inputs.thread_linkage_build_type }}
+      THREAD_LINKAGE_IPO: ${{ inputs.thread_linkage_ipo }}
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        env:
+          BASH_ENV: /dev/null
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          bash .github/scripts/ci-safe-apt-update.sh
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake \
+            clang-18 clang++-18 llvm-18 \
+            libxml2-dev libtiff-dev libjpeg-dev libpng-dev \
+            zlib1g-dev liblzma-dev nlohmann-json3-dev
+
+      - name: Check RefIccMAX thread linkage
+        env:
+          BASH_ENV: /dev/null
+          CC: clang-18
+          CXX: clang++-18
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          run_case() {
+            local label="$1"
+            shift
+            echo "[START] ${label}"
+            timeout 60s "$@"
+            echo "[PASS] ${label}"
+          }
+
+          case "${THREAD_LINKAGE_BUILD_TYPE}" in
+            Release|RelWithDebInfo)
+              ;;
+            *)
+              echo "::error title=Invalid build type::${THREAD_LINKAGE_BUILD_TYPE}"
+              exit 1
+              ;;
+          esac
+
+          case "${THREAD_LINKAGE_IPO}" in
+            true|True|TRUE|ON|on|1)
+              ipo_value=ON
+              ;;
+            false|False|FALSE|OFF|off|0)
+              ipo_value=OFF
+              ;;
+            *)
+              echo "::error title=Invalid IPO value::${THREAD_LINKAGE_IPO}"
+              exit 1
+              ;;
+          esac
+
+          run_case "configure ${THREAD_LINKAGE_BUILD_TYPE} ipo=${ipo_value}" \
+            cmake -S Build/Cmake -B "${BUILD_DIR}" \
+              -DCMAKE_BUILD_TYPE="${THREAD_LINKAGE_BUILD_TYPE}" \
+              -DCMAKE_C_COMPILER=clang-18 \
+              -DCMAKE_CXX_COMPILER=clang++-18 \
+              -DCMAKE_INTERPROCEDURAL_OPTIMIZATION="${ipo_value}" \
+              -DENABLE_LTO="${ipo_value}" \
+              -DENABLE_SANITIZERS=OFF \
+              -DENABLE_ASAN=OFF \
+              -DENABLE_UBSAN=OFF \
+              -DENABLE_INTEGER_SANITIZER=OFF \
+              -DENABLE_FLOAT_SANITIZER=OFF \
+              -DENABLE_TSAN=OFF \
+              -DENABLE_MSAN=OFF \
+              -DENABLE_LSAN=OFF \
+              -DENABLE_TOOLS=ON \
+              -DENABLE_TESTS=OFF \
+              -DENABLE_WXWIDGETS=OFF \
+              -DENABLE_SHARED_LIBS=ON \
+              -DENABLE_STATIC_LIBS=ON \
+              -Wno-dev
+
+          run_case "build shared/static IccProfLib2 and iccApplyProfiles" \
+            cmake --build "${BUILD_DIR}" \
+              --target IccProfLib2 IccProfLib2-static iccApplyProfiles \
+              --parallel "$(nproc)"
+
+          run_case "inspect generated thread link interface" \
+            grep -q 'INTERFACE_LINK_LIBRARIES "Threads::Threads"' \
+              "${BUILD_DIR}/RefIccMAXTargets.cmake"
+
+          run_case "inspect shared library link command" \
+            grep -q 'IccCmmThread.cpp.o' \
+              "${BUILD_DIR}/IccProfLib/CMakeFiles/IccProfLib2.dir/link.txt"
+
+          run_case "inspect tool link command" \
+            grep -q 'libIccProfLib2' \
+              "${BUILD_DIR}/Tools/IccApplyProfiles/CMakeFiles/iccApplyProfiles.dir/link.txt"
+
+          if grep -q -- '-pthread' \
+              "${BUILD_DIR}/IccProfLib/CMakeFiles/IccProfLib2.dir/link.txt" \
+              "${BUILD_DIR}/Tools/IccApplyProfiles/CMakeFiles/iccApplyProfiles.dir/link.txt"; then
+            echo "[PASS] pthread flag expanded into generated link.txt"
+          elif grep -q '^CMAKE_HAVE_LIBC_PTHREAD:INTERNAL=1$' "${BUILD_DIR}/CMakeCache.txt"; then
+            echo "[PASS] pthread symbols resolved by libc; Threads::Threads remains exported"
+          else
+            echo "::error title=Thread linkage::No -pthread flag or libc pthread resolution found"
+            exit 1
+          fi
+
+          echo "[PASS] RefIccMAX thread linkage check complete"

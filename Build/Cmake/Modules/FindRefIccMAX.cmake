@@ -1,10 +1,10 @@
 ###############################################################
 #
-# Copyright (©) 2026 International Color Consortium.
+# Copyright (c) 2026 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
-# FindRefIccMAX.cmake — Find module for RefIccMAX / iccDEV libraries
+# FindRefIccMAX.cmake - Find module for RefIccMAX / iccDEV libraries
 #
 # Copy this File to CMAKE_MODULE_PATH and call:
 #
@@ -15,14 +15,14 @@
 #   2. Fall back to manual header/library search
 #
 # Imported targets created on success:
-#   RefIccMAX::IccProfLib2  — Core ICC profile library
-#   RefIccMAX::IccXML2      — XML serialization (links IccProfLib2 transitively)
+#   RefIccMAX::IccProfLib2  - Core ICC profile library
+#   RefIccMAX::IccXML2      - XML serialization (links IccProfLib2 transitively)
 #
 # Legacy variables set on success:
-#   REFICCMAX_FOUND         — TRUE
-#   REFICCMAX_INCLUDE_DIRS  — Header search paths
-#   REFICCMAX_LIBRARIES     — Libraries to link
-#   REFICCMAX_VERSION       — Version string
+#   REFICCMAX_FOUND         - TRUE
+#   REFICCMAX_INCLUDE_DIRS  - Header search paths
+#   REFICCMAX_LIBRARIES     - Libraries to link
+#   REFICCMAX_VERSION       - Version string
 #
 ###############################################################
 
@@ -30,7 +30,7 @@
 find_package(RefIccMAX CONFIG QUIET)
 
 if(RefIccMAX_FOUND)
-  # CONFIG already created targets and set variables — nothing more to do
+  # CONFIG already created targets and set variables - nothing more to do
   return()
 endif()
 
@@ -119,6 +119,7 @@ if(RefIccMAX_FOUND)
 
   # IccXML2 needs libxml2 for transitive linking
   find_package(LibXml2 QUIET)
+  find_package(Threads REQUIRED)
 
   # ---- Create IMPORTED targets ----
 
@@ -128,6 +129,7 @@ if(RefIccMAX_FOUND)
     set_target_properties(RefIccMAX::IccProfLib2 PROPERTIES
       IMPORTED_LOCATION "${REFICCMAX_ICCPROFLIB_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_ICCPROFLIB_INCLUDE_DIR}"
+      INTERFACE_LINK_LIBRARIES "Threads::Threads"
       INTERFACE_COMPILE_FEATURES "cxx_std_17"
     )
   endif()
@@ -138,6 +140,7 @@ if(RefIccMAX_FOUND)
     set_target_properties(RefIccMAX::IccProfLib2-static PROPERTIES
       IMPORTED_LOCATION "${REFICCMAX_ICCPROFLIB_STATIC_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${REFICCMAX_ICCPROFLIB_INCLUDE_DIR}"
+      INTERFACE_LINK_LIBRARIES "Threads::Threads"
       INTERFACE_COMPILE_FEATURES "cxx_std_17"
     )
   endif()

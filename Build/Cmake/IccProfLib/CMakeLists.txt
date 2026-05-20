@@ -148,6 +148,12 @@ IF(APPLE)
   SET(EXTRA_LIBS_CS ${CARBON_LIBRARY} ${IOKIT_LIBRARY})
 ENDIF()
 
+# IccCmmThread.cpp uses pthread_create. On Linux/aarch64 with Clang the
+# pthread library must be linked explicitly; GCC typically pulls it in
+# transitively but relying on that is fragile and trips up Clang-based builds.
+find_package(Threads REQUIRED)
+list(APPEND EXTRA_LIBS Threads::Threads)
+
 IF(ENABLE_SHARED_LIBS)
   ADD_LIBRARY(${TARGET_NAME} SHARED ${SOURCES})
 

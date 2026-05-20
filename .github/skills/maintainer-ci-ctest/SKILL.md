@@ -15,9 +15,9 @@ allowed-tools:
 # Maintainer CI and CTest Workflow
 
 Use this skill only for iccDEV maintainer-owned infrastructure changes:
-`.github/**`, CTest registration, CPack and release packaging, sanitizer helper
-policy, CodeQL/workflow governance, vcpkg release verification, and security
-automation.
+`.github/**`, `Dockerfile*`, CTest registration, CPack and release packaging,
+sanitizer helper policy, CodeQL/workflow governance, vcpkg release verification,
+and security automation.
 
 General contributor requests should be redirected to issue or PR descriptions
 unless an iccDEV maintainer explicitly approved the infrastructure change.
@@ -33,6 +33,7 @@ Choose the smallest maintainer-owned surface that proves the behavior:
 | Add focused Linux regression | `.github/scripts/*.sh` | `.github/ci/regression/README.md` or `docs/ctest.md` |
 | Register CTest suite | `Build/Cmake/Testing/CMakeLists.txt` | `docs/ctest.md` |
 | Change workflow gate | `.github/workflows/*.yml` | `docs/regression-workflow-governance.md` |
+| Change maintainer Dockerfile | `Dockerfile*` | `docs/build.md` and `docs/regression-workflow-governance.md` |
 | Change sanitizer policy | `Build/Cmake/CMakeLists.txt`, `.github/scripts/sanitize-*` | `.github/instructions/*` |
 | Change CPack/release packaging | `Build/Cmake/**`, release workflows | `docs/build.md` or release docs |
 | Change vcpkg release verification | `ports/iccdev/**`, vcpkg workflows | vcpkg skill/docs |
@@ -109,6 +110,18 @@ actionlint -no-color .github/workflows/<workflow>.yml
 For CPack, install/export, vcpkg, or release packaging changes, run the nearest
 packaging smoke test and inspect logs for missing files, duplicate install
 manifest entries, CRT mismatch warnings, and skipped smoke coverage.
+
+For `Dockerfile*` changes:
+
+```bash
+docker build -t iccdev-container-check -f <Dockerfile> .
+docker run --rm iccdev-container-check <smoke-command>
+```
+
+For `Dockerfile.ci-regression`, also run a no-cache build and smoke
+`clang-18`, `clang++-18`, `cmake`, and `/usr/bin/time`. Publishing requires the
+`ghcr-publish` environment branch policy to allow the branch before deployment
+approval, followed by pinning the new digest in `ci-iccdev-tool-tests.yml`.
 
 ## GitHub Validation
 

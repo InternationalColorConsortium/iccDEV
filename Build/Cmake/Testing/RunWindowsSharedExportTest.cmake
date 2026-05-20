@@ -141,7 +141,7 @@ if(NOT (
 endif()
 
 file(WRITE "${_consumer_src_dir}/CMakeLists.txt" [=[
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.18...3.29)
 project(Issue987SharedMpeConsumer LANGUAGES CXX)
 
 add_library(IccProfLib2Runtime SHARED IMPORTED GLOBAL)

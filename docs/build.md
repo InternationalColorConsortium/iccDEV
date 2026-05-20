@@ -1,7 +1,7 @@
 # Building iccDEV
 
-iccDEV requires C++17, CMake 3.21 or newer, and the image/XML/JSON dependencies
-listed below. Maintainer-level sanitizer and CMake policy details live in
+iccDEV requires C++17, CMake 3.18 or newer, and the image/XML/JSON dependencies
+listed below. Maintainer-level sanitizer, Docker, and CMake policy details live in
 `.github/instructions/build-system.instructions.md`.
 
 ## Compiler Requirements
@@ -19,6 +19,11 @@ listed below. Maintainer-level sanitizer and CMake policy details live in
 | Ubuntu | `libpng-dev libjpeg-dev libtiff-dev libxml2-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
 | macOS | `libpng jpeg-turbo libtiff libxml2 wxwidgets nlohmann-json` |
 | Windows | MSVC 2022 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `wxwidgets`, `nlohmann-json` |
+
+Thread support is provided by the platform C/C++ runtime and CMake's
+`Threads::Threads` imported target; no separate Ubuntu package is required.
+Maintainer sanitizer/regression containers add pinned CI-only packages such as
+`clang-18`, `llvm-18`, `libclang-rt-18-dev`, `libssl-dev`, and GNU `time`.
 
 Windows examples include both `cmd.exe` and PowerShell forms where shell syntax
 differs. If CMake reports `No such preset`, fetch and switch to a branch that
@@ -181,6 +186,22 @@ cmake --build out/vs2022-x64 --config Release --target check
 
 See [CTest tool suites](ctest.md) for the registered tests, fixtures, logs, and
 add-test process.
+
+## Maintainer Dockerfiles
+
+`Dockerfile*` files are maintainer-owned release and CI infrastructure. General
+source builds should use the platform package lists above; only maintainers
+should change container package pins, published image tags, or GHCR workflows.
+
+| File | Maintainer purpose | Publish/validation path |
+|------|--------------------|-------------------------|
+| `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Built by `ci-docker`; validate with a local Docker build and tool smoke test. |
+| `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Built by the NixOS container path in `ci-docker`; validate the runtime closure and secret scan. |
+| `Dockerfile.ci-regression` | Pinned Ubuntu 24.04 dependency image for `ci-regression-checks`. | Built by `ci-regression-container`; publishing uses the `ghcr-publish` environment and the consumer workflow pins the resulting digest. |
+
+Before publishing a branch-specific regression image, maintainers must allow the
+branch in the `ghcr-publish` environment branch policy, approve the deployment,
+then update `ci-iccdev-tool-tests.yml` to the newly published digest.
 
 ## vcpkg Consumers
 

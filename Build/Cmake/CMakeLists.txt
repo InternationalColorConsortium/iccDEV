@@ -30,7 +30,12 @@ endif()
 # Global CMake Project Setup
 # ----------------------------------------------------------------------
 
-cmake_minimum_required(VERSION 3.21 FATAL_ERROR)  # Modern minimum for policy safety
+cmake_minimum_required(VERSION 3.18...3.29)
+# VERSION 3.18: minimum for Raspberry Pi OS Bullseye and other embedded Linux
+# distributions shipping cmake 3.18.4.  The ...3.29 upper bound activates all
+# modern policies automatically when a newer cmake is available, so CI and
+# developer machines with cmake 3.21+ continue to get full policy enforcement
+# without any source change.  FATAL_ERROR is not needed with range syntax.
 
 # Adopt modern behavior for scoped scripts and alias linking
 # cmake_policy(SET CMP0112 NEW)  # Respect parent scope in script mode
@@ -45,7 +50,12 @@ set(CMAKE_WARN_DEPRECATED TRUE)
 # Suppress redundant regeneration messages (less CLI noise)
 # set(CMAKE_SUPPRESS_REGENERATION ON)
 
-cmake_policy(SET CMP0135 NEW)
+# CMP0135: controls FetchContent/ExternalProject URL download timestamps.
+# Introduced in cmake 3.24 -- guard so cmake 3.18/3.19/3.20/3.21/3.22/3.23
+# do not fatal-error on an unknown policy name.
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24")
+  cmake_policy(SET CMP0135 NEW)
+endif()
 # set(CMAKE_SUPPRESS_DEVELOPER_ERRORS TRUE)
 # set(CMAKE_WARN_DEPRECATED TRUE)
 
@@ -448,6 +458,11 @@ option(ENABLE_SPECTRE_MITIGATION  "Enable /Qspectre on MSVC for Spectre V1 mitig
 option(SANITIZER_RECOVER          "Allow sanitizer violations to continue (runtime control)" OFF)
 set(UBSAN_IGNORELIST "" CACHE STRING "Path to UBSAN ignorelist file for compile-time suppression")
 option(ENABLE_USEICCDEVNAMESPACE  "Use iccDEV namespace wrapping"                       OFF)
+option(ENABLE_LTO                 "Enable Link-Time Optimization for Release builds"     ON)
+# Pass -DENABLE_LTO=OFF to disable without needing to know the internal
+# CMAKE_INTERPROCEDURAL_OPTIMIZATION variable.  Useful on Raspberry Pi,
+# constrained build environments, or when linking against third-party
+# archives that do not carry LTO bitcode.
 
 # ----------------------------------------------------------------------
 # Third-Party Dependencies
@@ -625,6 +640,7 @@ message(STATUS "ENABLE_COVERAGE            = ${ENABLE_COVERAGE}")
 message(STATUS "ENABLE_PROFILING           = ${ENABLE_PROFILING}")
 message(STATUS "ENABLE_SPECTRE_MITIGATION  = ${ENABLE_SPECTRE_MITIGATION}")
 message(STATUS "SANITIZER_RECOVER          = ${SANITIZER_RECOVER}")
+message(STATUS "ENABLE_LTO                 = ${ENABLE_LTO}")
 if(UBSAN_IGNORELIST)
   message(STATUS "UBSAN_IGNORELIST           = ${UBSAN_IGNORELIST}")
 endif()
@@ -852,11 +868,29 @@ endif()
 # (.a files) with a linker that does not support LLVM bitcode (e.g. /usr/bin/ld).
 
 include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output)
+include(CheckCXXCompilerFlag)
+
+# Helper: probe a compiler flag and add it only if truly accepted without warning/error.
+# Uses -Werror=unused-command-line-argument during the probe so that flags which
+# Clang silently accepts but marks as "unused" (e.g. -fstack-clash-protection on
+# aarch64 Clang 11) are correctly rejected rather than added to the build.
+# VAR is a unique cache variable name used to memoize the probe result.
+macro(_iccdev_add_cxx_flag_if_supported FLAG VAR)
+  set(CMAKE_REQUIRED_FLAGS "-Werror=unused-command-line-argument")
+  check_cxx_compiler_flag("${FLAG}" ${VAR})
+  unset(CMAKE_REQUIRED_FLAGS)
+  if(${VAR})
+    add_compile_options("${FLAG}")
+  endif()
+endmacro()
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output LANGUAGES CXX)
 
 if(DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
   # User explicitly set LTO preference via -D flag; respect it unconditionally
   message(STATUS ">>> Link-Time Optimization (LTO): ${CMAKE_INTERPROCEDURAL_OPTIMIZATION} (user override)")
+elseif(NOT ENABLE_LTO)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+  message(STATUS ">>> Link-Time Optimization (LTO) disabled: ENABLE_LTO=OFF")
 elseif(DEFINED VCPKG_TARGET_TRIPLET AND ENABLE_STATIC_LIBS AND NOT ENABLE_SHARED_LIBS)
   # Packaged static vcpkg builds are consumed by non-Clang toolchains and linkers.
   # Keep these archives free of LLVM bitcode even when the port forgets to pass
@@ -1104,9 +1138,12 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
     -Wsign-compare
     -Wnon-virtual-dtor
     -Wuninitialized
-    -fstack-protector-strong
-    -fstack-clash-protection
   )
+  # Hardening flags probed individually: constrained toolchains (e.g. Clang 11
+  # on Raspberry Pi aarch64) may not support all flags and would emit warnings
+  # that confuse non-technical users.  Only add what the compiler accepts.
+  _iccdev_add_cxx_flag_if_supported(-fstack-protector-strong _ICCDEV_HAVE_STACK_PROTECTOR_STRONG)
+  _iccdev_add_cxx_flag_if_supported(-fstack-clash-protection _ICCDEV_HAVE_STACK_CLASH_PROTECTION)
 
   # Strict warning tier: requires GCC 15+ or Clang 14+ so all contributors and
   # CI see the same diagnostics. Older toolchains still build; they get the

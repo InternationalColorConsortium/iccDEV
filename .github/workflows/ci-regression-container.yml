@@ -1,0 +1,163 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Build and publish ci-regression-checks dependency image.
+#
+###############################################################
+
+name: ci-regression-container
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'Dockerfile.ci-regression'
+      - '.github/workflows/ci-regression-container.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: "regression-container-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "Build regression dependency image"
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-cmake-raspi-testing'
+    runs-on: ubuntu-24.04
+    environment: ghcr-publish
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Resolve image name
+        id: image
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          if [[ ! "$owner" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+            echo "Invalid repository owner for image name" >&2
+            exit 1
+          fi
+
+          printf 'name=ghcr.io/%s/iccdev-ci-regression\n' "$owner" >> "$GITHUB_OUTPUT"  # elements-sanitized
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121  # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build-push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f  # v7.1.0
+        with:
+          context: .
+          file: ./Dockerfile.ci-regression
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275  # v3.2.0
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Smoke test image
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          docker run --rm "$IMAGE_REF" bash -lc '
+            set -euo pipefail
+            clang-18 --version | sed -n "1p"
+            clang++-18 --version | sed -n "1p"
+            cmake --version | sed -n "1p"
+            /usr/bin/time --version | sed -n "1p"
+          '
+
+      - name: Scan test image
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-regression-container-cache"
+          rm -rf "$TRIVY_CACHE"
+          mkdir -p "$TRIVY_CACHE"
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$TRIVY_CACHE":/root/.cache/ \
+            "$TRIVY_IMAGE" \
+            image --scanners vuln,secret --ignore-unfixed \
+            --severity HIGH,CRITICAL --exit-code 1 "$IMAGE_REF"
+
+      - name: Generate summary
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_NAME: ${{ steps.image.outputs.name }}
+          IMAGE_DIGEST: ${{ steps.build-push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          {
+            echo "### ci-regression container"
+            echo ""
+            echo "| Component | Value |"
+            echo "|-----------|-------|"
+            echo "| Image | \`${IMAGE_NAME}\` |"
+            echo "| Digest | \`${IMAGE_DIGEST}\` |"
+            echo "| Dockerfile | \`Dockerfile.ci-regression\` |"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

@@ -21,6 +21,7 @@ name: "ci-pr-action"
 
 permissions:
   contents: read
+  packages: read
   pull-requests: read  # Required to classify PR scope and summarize metadata.
   # Avoid unnecessary permissions; do not add write permissions.
 

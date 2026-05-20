@@ -45,9 +45,9 @@
 /IccXML/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
 
 # Build, testing, packaging, and port configuration
-/Build/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
-/Testing/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
-/ports/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
+/Build/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
+/Testing/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
+/ports/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
 
 # Governance: protect key security/docs
 /AGENTS.md @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
@@ -56,7 +56,7 @@
 /LICENSE.md @dwtza @maxderhak
 /SECURITY.md @maxderhak @dwtza
 /README.md @dwtza @maxderhak
-/docs/** @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt
+/docs/** @maxderhak @dwtza @colourbill-ctrl @ChrisCoxArt @xsscx
 
 # Protect the CODEOWNERS file itself
 /.github/CODEOWNERS @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
