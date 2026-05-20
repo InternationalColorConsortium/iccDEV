@@ -968,10 +968,18 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
 /******************************************************************************/
 
 static
-void describe1DLUT( CIccTagCurve *curve, std::string &description )
+bool describe1DLUT( CIccTagCurve *curve, std::string &description, const std::string &sigDesc )
 {
+  std::string path(":");
+  path += sigDesc;
+  std::string report;
+  if (curve->Validate(path, report, NULL) > icValidateWarning) {
+    fprintf(stderr,"WARNING - curve failed validation: %s\n", report.c_str() );
+    description = "simpleCurve";
+    return true;
+  }
+  
   auto size = curve->GetSize();
-
   if (size == 0) {
     description += "Y = X";
   } else if (size == 1) {
@@ -981,66 +989,76 @@ void describe1DLUT( CIccTagCurve *curve, std::string &description )
   } else {
     description += "LookupTable[" + std::to_string(size) + "]";
   }
+  
+  return false;
 }
 
 /******************************************************************************/
 
 static
-void describe1DLUT( CIccTagParametricCurve *curve, std::string &description )
+bool describe1DLUT( CIccTagParametricCurve *curve, std::string &description, const std::string &sigDesc )
 {
-  std::string path("parametricCurve");
+  std::string path(":");
+  path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
     fprintf(stderr,"WARNING - curve failed validation: %s\n", report.c_str() );
     description = "parametric";
-    return;
+    return true;
   }
   curve->Describe( description, 100 );
+  return false;
 }
 
 /******************************************************************************/
 
 static
-void describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description )
+bool describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description, const std::string &sigDesc )
 {
-  std::string path("segmentedCurve");
+  std::string path(":");
+  path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
     fprintf(stderr,"WARNING - curve failed validation: %s\n", report.c_str() );
     description = "segmented";
-    return;
+    return true;
   }
   curve->Describe( description, 100 );
+  return false;
 }
 
 /******************************************************************************/
 
 static
-void describe1DLUT( CIccCurve *curve, std::string &description )
+bool describe1DLUT( CIccCurve *curve, std::string &description, const std::string &sigDesc )
 {
-  std::string path("unknownCurve");
+  std::string path(":");
+  path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
     fprintf(stderr,"WARNING - curve failed validation: %s\n", report.c_str() );
     description = "unknown";
-    return;
+    return true;
   }
   curve->Describe( description, 100 );
+  return false;
 }
 
 /******************************************************************************/
 
 static
-void describe3DLUT( CIccMBB *curve, CIccProfile *pIcc, std::string &description )
+bool describe3DLUT( CIccMBB *curve, CIccProfile *pIcc, std::string &description, const std::string &sigDesc )
 {
-  std::string path("MBBLut");
+  std::string path(":");
+  path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, pIcc ) > icValidateWarning) {
-    fprintf(stderr,"WARNING - table failed validation: %s\n", report.c_str() );
+    fprintf(stderr,"WARNING - 3D table failed validation: %s\n", report.c_str() );
     description = "MBBLut";
-    return;
+    return true;
   }
   curve->Describe( description, 100 );
+  return false;
 }
 
 /******************************************************************************/
@@ -1067,7 +1085,9 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       CIccTagCurve *curve = dynamic_cast<CIccTagCurve*> (tag);
       if (curve) {
         std::string description;
-        describe1DLUT(curve, description);
+        if (describe1DLUT(curve, description, sigDesc)) {
+          return 0;
+        }
         int size = curve->GetSize();
         int steps = std::max( 1000, size );
 #if USE_SVG
@@ -1084,7 +1104,9 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       CIccTagParametricCurve *pCurve = dynamic_cast<CIccTagParametricCurve*> (tag);
       if (pCurve) {
         std::string description;
-        describe1DLUT(pCurve, description);
+        if (describe1DLUT(pCurve, description, sigDesc)) {
+          return 0;
+        }
 #if USE_SVG
         graph1DLUTSVG( pCurve, sigDesc, description, svgfile, 1000 );
 #endif
@@ -1099,7 +1121,9 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       CIccTagSegmentedCurve *sCurve = dynamic_cast<CIccTagSegmentedCurve*> (tag);
       if (sCurve) {
         std::string description;
-        describe1DLUT(sCurve, description);
+        if (describe1DLUT(sCurve, description, sigDesc)) {
+          return 0;
+        }
 #if USE_SVG
         graph1DLUTSVG( sCurve, sigDesc, description, svgfile, 1000 );
 #endif
@@ -1116,7 +1140,9 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       CIccCurve *uCurve = dynamic_cast<CIccCurve*> (tag);
       if (uCurve) {
         std::string description;
-        describe1DLUT( uCurve, description );
+        if (describe1DLUT( uCurve, description, sigDesc )) {
+          return 0;
+        }
 #if USE_SVG
         graph1DLUTSVG( uCurve, sigDesc, description, svgfile, 1000 );
 #endif
@@ -1254,7 +1280,9 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     }
 
     std::string description;
-    describe3DLUT( lut, pIcc, description );
+    if (describe3DLUT( lut, pIcc, description, sigDesc)) {
+      return outputCount;
+    }
 
     // output input and output curves
     CIccCurve **curveA = lut->GetCurvesA();
@@ -1692,7 +1720,8 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         return 0;
       }
 
-      std::string path("colorantTable");
+      std::string path(":");
+      path += sigDesc;
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
         fprintf(stderr,"WARNING - colorantTable failed validation: %s\n", report.c_str() );
@@ -1755,7 +1784,8 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         return 0;
       }
 
-      std::string path("namedColorTable");
+      std::string path(":");
+      path += sigDesc;
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
         fprintf(stderr,"WARNING - namedColorTable failed validation: %s\n", report.c_str() );
