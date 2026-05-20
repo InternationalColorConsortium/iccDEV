@@ -331,11 +331,11 @@ void CIccCfgDataApply::toJson(json& j) const
     j["srcSpace"] = icGetColorSigStr(buf, 30, m_srcSpace);
   }
 
-  if (m_srcFile.size())
+  if (m_srcFile.size() != size_t(0))
     j["srcFile"] = m_srcFile;
 
   jsonSetValue(j, "dstType", m_dstType);
-  if (m_dstFile.size())
+  if (m_dstFile.size() != size_t(0))
     j["dstFile"] = m_dstFile;
 
   if (m_dstEncoding != icEncodeValue)
@@ -460,9 +460,9 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
 
 void CIccCfgImageApply::toJson(json& j) const
 {
-  if (m_srcImgFile.size())
+  if (m_srcImgFile.size() != size_t(0))
     j["srcImageFile"] = m_srcImgFile;
-  if (m_dstImgFile.size())
+  if (m_dstImgFile.size() != size_t(0))
     j["dstImageFile"] = m_dstImgFile;
 
   if (m_dstEncoding != icEncode8Bit)
@@ -599,7 +599,7 @@ bool CIccCfgCreateLink::fromJson(json j, bool bReset)
 
 void CIccCfgCreateLink::toJson(json& j) const
 {
-  if (m_linkFile.size())
+  if (m_linkFile.size() != size_t(0))
     j["linkFile"] = m_linkFile;
 
   switch (m_linkType) {
@@ -778,7 +778,7 @@ static bool jsonFromEnvMap(json& j, const icCmmEnvSigMap& map)
 
 void CIccCfgProfile::toJson(json& j) const
 {
-  if (m_iccFile.size())
+  if (m_iccFile.size() != size_t(0))
     j["iccFile"] = m_iccFile;
   else
     j["iccFile"] = nullptr;
@@ -788,7 +788,7 @@ void CIccCfgProfile::toJson(json& j) const
   json iccMap;
   if (jsonFromEnvMap(iccMap, m_iccEnvVars))
     j["iccEnvVars"] = iccMap;
-  if (m_pccFile.size())
+  if (m_pccFile.size() != size_t(0))
     j["pccFile"] = m_pccFile;
   json pccMap;
   if (jsonFromEnvMap(pccMap, m_pccEnvVars))
@@ -1271,11 +1271,11 @@ bool CIccCfgSearchApply::fromJsonInit(json j)
 
 void CIccCfgSearchApply::toJson(json& j) const
 {
-  if (m_profiles.size())
+  if (m_profiles.size() != size_t(0))
     toJsonProfiles(j["profileSequence"]);
   if (m_bInitialized)
     toJsonInit(j["initial"]);
-  if (m_pccWeights.size())
+  if (m_pccWeights.size() != size_t(0))
     toJsonPccWeights(j["pccWeights"]);
 }
 
@@ -1322,7 +1322,7 @@ public:
     while (!isEOF()) {
       int c = m_f->get();
       if (c < 0) {
-        if (str.size())
+        if (str.size() != size_t(0))
           line.push_back(str);
         if (!line.size())
           return false;
@@ -1331,7 +1331,7 @@ public:
       else if (c == '\n' || c == '\r') {
         if (c == '\r' && m_f->peek() == '\n')
           m_f->get();
-        if (str.size() || bHasField)
+        if ((str.size() != size_t(0)) || bHasField)
           line.push_back(str);
         break;
       }
@@ -1349,7 +1349,7 @@ public:
 
   bool parseNextLine(std::vector<std::string>& line) {
     while (parseLine(line)) {
-      if (line.size())
+      if (line.size() != size_t(0))
         return true;
     }
     return false;
@@ -1558,6 +1558,8 @@ typedef std::vector<CIccIndexValue> icValueVector;
 
 static void setSampleIndex(std::vector<icValueVector>& samples, int index, const char* szFmt, const char** szChannels)
 {
+  if (samples.size() < 1)
+    return;
   size_t nPos = samples.size() - 1;
   for (size_t i = 0; i < samples[nPos].size(); i++) {
     if (!strcmp(szFmt, szChannels[i])) {
@@ -1702,9 +1704,11 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
         if (szFmt) {
           szFmt++;
           size_t nChannel = (size_t)atoi(szFmt);
-          size_t last = samples.size() - 1;
-          if (nChannel > 0 && samples[last].size() >= nChannel) {
-            samples[samples.size() - 1][nChannel - 1].nIndex = index;
+          if (samples.size() > 1) {
+            size_t last = samples.size() - 1;
+            if (nChannel > 0 && samples[last].size() >= nChannel) {
+              samples[samples.size() - 1][nChannel - 1].nIndex = index;
+            }
           }
         }
       }
@@ -1830,7 +1834,10 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       }
     }
 
-    if (pData->m_values.size() || pData->m_srcValues.size() || pData->m_name.size() || pData->m_srcName.size())
+    if (   pData->m_values.size() != size_t(0)
+        || pData->m_srcValues.size() != size_t(0)
+        || pData->m_name.size() != size_t(0)
+        || pData->m_srcName.size() != size_t(0))
       m_data.push_back(pData);
     else
       pData.reset();
@@ -1924,7 +1931,7 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     CIccCfgProfile* pProf = pIter->get();
     if (!pProf)
       continue;
-    if (pProf->m_pccFile.size()) {
+    if (pProf->m_pccFile.size() != size_t(0)) {
       fprintf(f, "; %s -PCC %s\n", pProf->m_iccFile.c_str(), pProf->m_pccFile.c_str());
     }
     else {
@@ -1938,13 +1945,13 @@ fprintf(f, "\n");
     if (!pData)
       continue;
 
-    if (bShowDebug && pData->m_debugInfo.size()) {
+    if (bShowDebug && pData->m_debugInfo.size() != size_t(0)) {
       for (auto l = pData->m_debugInfo.begin(); l != pData->m_debugInfo.end(); l++) {
         fprintf(f, "; %s\n", l->c_str());
       }
     }
 
-    if (pData->m_name.size()) {
+    if (pData->m_name.size() != size_t(0)) {
       fprintf(f, "{ \"%s\" }\t;", pData->m_name.c_str());
     }
     else {
@@ -1954,7 +1961,7 @@ fprintf(f, "\n");
       fprintf(f, "\t;");
     }
 
-    if (pData->m_srcName.size()) {
+    if (pData->m_srcName.size() != size_t(0)) {
       fprintf(f,"{ \"%s\" }", pData->m_srcName.c_str());
       if (pData->m_srcValues.size() && pData->m_srcValues[0] != 1.0) {
         if (!writeFloat(pData->m_srcValues[0])) { if (f != stdout) fclose(f); return false; }
@@ -2074,7 +2081,7 @@ void CIccCfgColorData::addFields(std::string& dataFormat, int& nFields, int& nSa
 
 bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt8Number nPrecision)
 {
-  if (!m_data.size())
+  if (m_data.size() == size_t(0))
     return false;
 
   FILE* f;
@@ -2101,7 +2108,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     bShowIndex = true;
   }
 
-  if (pEntry->m_label.size()) {
+  if (pEntry->m_label.size() != size_t(0)) {
     if (nFields) dataFormat+="\t";
     dataFormat += "SAMPLE_ID";
     nFields++;
@@ -2110,7 +2117,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
 
   bool bSameSpace = spaceName(m_space) == spaceName(m_srcSpace);
 
-  if (pEntry->m_name.size()) {
+  if (pEntry->m_name.size() != size_t(0)) {
     if (nFields) dataFormat += "\t";
     dataFormat += "NAME";
     nFields++;
@@ -2123,7 +2130,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
       bShowValues = true;
   }
 
-  if (pEntry->m_srcName.size()) {
+  if (pEntry->m_srcName.size() != size_t(0)) {
     if (nFields) dataFormat += "\t";
     if (bSameSpace)
       dataFormat += "SRC_";
@@ -2174,7 +2181,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     }
 
     if (bShowLabel) {
-      if (line.size()) line += "\t";
+      if (line.size() != size_t(0)) line += "\t";
       if (!pCurEntry->m_label.size())
         line += "\"\"";
       else
@@ -2182,7 +2189,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     }
 
     if (bShowName) {
-      if (line.size()) line += "\t";
+      if (line.size() != size_t(0)) line += "\t";
       if (!pCurEntry->m_name.size())
         line += "\"\"";
       else
@@ -2190,7 +2197,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     }
 
     if (bShowValues) {
-      if (line.size()) line += "\t";
+      if (line.size() != size_t(0)) line += "\t";
       for (size_t i = 0; i < (size_t)nDstSamples; i++) {
         icFloatNumber v = (i >= pCurEntry->m_values.size()) ? 0 : pCurEntry->m_values[i];
         if (!icFormatFloatValue(buf, bufSize, nDigits, nPrecision, v)) {
@@ -2204,7 +2211,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     }
 
     if (bShowSrcName) {
-      if (line.size()) line += "\t";
+      if (line.size() != size_t(0)) line += "\t";
       if (!pCurEntry->m_srcName.size())
         line += "\"\"";
       else
@@ -2212,7 +2219,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
     }
 
     if (bShowSrcValues) {
-      if (line.size()) line += "\t";
+      if (line.size() != size_t(0)) line += "\t";
       for (size_t i = 0; i < (size_t)nSrcSamples; i++) {
         icFloatNumber v = (i >= pCurEntry->m_srcValues.size()) ? 0 : pCurEntry->m_srcValues[i];
         if (!icFormatFloatValue(buf, bufSize, nDigits, nPrecision, v)) {
@@ -2255,7 +2262,7 @@ void CIccCfgColorData::toJson(json& obj) const
     if (entry.is_object())
       data.push_back(entry);
   }
-  if (data.is_array() && data.size()) {
+  if (data.is_array() && data.size() != size_t(0)) {
     obj["data"] = data;
   }
 }
@@ -2300,23 +2307,23 @@ bool CIccCfgDataEntry::fromJson(json j, bool bReset)
 
 void CIccCfgDataEntry::toJson(json& obj)
 {
-  if (m_name.size())
+  if (m_name.size() != size_t(0))
     obj["n"] = m_name;
-  if (m_values.size())
+  if (m_values.size() != size_t(0))
     obj["v"] = m_values;
 
-  if (m_srcName.size())
+  if (m_srcName.size() != size_t(0))
     obj["sn"] = m_srcName;
-  if (m_srcValues.size())
+  if (m_srcValues.size() != size_t(0))
     obj["sv"] = m_srcValues;
 
-  if (m_label.size())
+  if (m_label.size() != size_t(0))
     obj["l"] = m_label;
 
   if (m_index >= 0)
     obj["i"] = m_index;
 
-  if (m_debugInfo.size())
+  if (m_debugInfo.size() != size_t(0))
     obj["d"] = m_debugInfo;
 }
 

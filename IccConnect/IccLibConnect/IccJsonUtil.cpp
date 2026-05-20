@@ -429,7 +429,7 @@ bool jsonToColorSpace(const json& j, icColorSpaceSignature& sig)
 {
   std::string str;
   if (jsonToValue(j, str)) {
-    if (str.size())
+    if (str.size() != size_t(0))
       sig = (icColorSpaceSignature)icGetSigVal(str.c_str());
     else
       sig = icSigUnknownData;
