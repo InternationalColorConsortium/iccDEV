@@ -3766,7 +3766,7 @@ CIccProfile* ValidateIccProfile(CIccIO *pIO, std::string &sReport, icValidateSta
     return NULL;
   }
 
-  CIccProfile *pIcc = new CIccProfile;
+  CIccProfile *pIcc = new (std::nothrow) CIccProfile;
 
   if (!pIcc) {
     delete pIO;

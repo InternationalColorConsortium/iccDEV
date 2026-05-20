@@ -1822,7 +1822,7 @@ bool CIccMpeXmlTintArray::ParseXml(xmlNode *pNode, std::string &parseStr)
 
 CIccToneMapFunc* CIccXmlToneMapFunc::NewCopy() const
 {
-  CIccToneMapFunc* rv = new CIccXmlToneMapFunc();
+  CIccToneMapFunc* rv = new (std::nothrow) CIccXmlToneMapFunc();
 
   if (rv)
     *rv = *this;
