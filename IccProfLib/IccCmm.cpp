@@ -7818,14 +7818,10 @@ CIccApplyCmm::~CIccApplyCmm()
 //   if (m_pPCS)
 //     delete m_pPCS;
 
-  if (m_Pixel)
-    free(m_Pixel);
-  if (m_Pixel2)
-    free(m_Pixel2);
-  if (m_ChunkBuf[0])
-    free(m_ChunkBuf[0]);
-  if (m_ChunkBuf[1])
-    free(m_ChunkBuf[1]);
+  free(m_Pixel);
+  free(m_Pixel2);
+  free(m_ChunkBuf[0]);
+  free(m_ChunkBuf[1]);
 }
 
 // Chunk size for transform-sequential multi-pixel apply (pixels per batch).
@@ -11305,8 +11301,7 @@ CIccMruCache<T>::~CIccMruCache()
   if (m_cache)
     delete[] m_cache;
 
-  if (m_pixelData)
-    free(m_pixelData);
+  free(m_pixelData);
 }
 
 /**

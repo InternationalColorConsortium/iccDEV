@@ -124,7 +124,7 @@ ICCPROFLIB_API const char* icMsgValidateInformation = "Information - ";
   else
     nptr = malloc(size);
 
-  if (!nptr && ptr)
+  if (!nptr)
     free(ptr);
 
   return nptr;

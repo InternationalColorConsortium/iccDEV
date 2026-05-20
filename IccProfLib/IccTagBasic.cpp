@@ -1321,8 +1321,7 @@ CIccTagZipUtf8Text &CIccTagZipUtf8Text::operator=(const CIccTagZipUtf8Text &ITT)
  */
 CIccTagZipUtf8Text::~CIccTagZipUtf8Text()
 {
-  if (m_pZipBuf)
-    free(m_pZipBuf);
+  free(m_pZipBuf);
 }
 
 /**
@@ -1632,10 +1631,8 @@ icUChar *CIccTagZipUtf8Text::AllocBuffer(icUInt32Number nSize)
 {
   if (m_nBufSize != nSize) {
     if (!nSize) {
-      if (m_pZipBuf) {
-        free(m_pZipBuf);
-        m_pZipBuf = NULL;
-      }
+      free(m_pZipBuf);
+      m_pZipBuf = NULL;
 
       m_nBufSize = nSize;
       return NULL;
@@ -1647,7 +1644,6 @@ icUChar *CIccTagZipUtf8Text::AllocBuffer(icUInt32Number nSize)
       m_pZipBuf = (icUChar*)icRealloc(m_pZipBuf, nSize);
 
     m_nBufSize = nSize;
-
   }
 
   return m_pZipBuf;
@@ -2216,8 +2212,7 @@ CIccTagTextDescription &CIccTagTextDescription::operator=(const CIccTagTextDescr
   m_nScriptSize = TextDescTag.m_nScriptSize;
   m_nScriptCode = TextDescTag.m_nScriptCode;
 
-  if (m_szText)
-    free(m_szText);
+  free(m_szText);
   if (m_nASCIISize) {
     m_szText = (icChar*)calloc(m_nASCIISize, sizeof(icChar));
     memcpy(m_szText, TextDescTag.m_szText, m_nASCIISize*sizeof(icChar));
@@ -2228,8 +2223,7 @@ CIccTagTextDescription &CIccTagTextDescription::operator=(const CIccTagTextDescr
     m_szText[0] = '\0';
   }
 
-  if (m_uzUnicodeText)
-    free(m_uzUnicodeText);
+  free(m_uzUnicodeText);
   if (m_nUnicodeSize) {
     m_uzUnicodeText = (icUInt16Number*)calloc(m_nUnicodeSize, sizeof(icUInt16Number));
     memcpy(m_uzUnicodeText, TextDescTag.m_uzUnicodeText, m_nUnicodeSize*sizeof(icUInt16Number));
@@ -2994,8 +2988,7 @@ CIccTagNamedColor2 &CIccTagNamedColor2::operator=(const CIccTagNamedColor2 &Name
   memcpy(m_szPrefix, NamedColor2Tag.m_szPrefix, sizeof(m_szPrefix));
   memcpy(m_szSufix, NamedColor2Tag.m_szSufix, sizeof(m_szSufix));
 
-  if (m_NamedColor)
-    free(m_NamedColor);
+  free(m_NamedColor);
   m_NamedColor = (SIccNamedColorEntry*)calloc(m_nSize, m_nColorEntrySize);
   memcpy(m_NamedColor, NamedColor2Tag.m_NamedColor, (size_t)m_nColorEntrySize*m_nSize);
 
@@ -3015,8 +3008,7 @@ CIccTagNamedColor2 &CIccTagNamedColor2::operator=(const CIccTagNamedColor2 &Name
  */
 CIccTagNamedColor2::~CIccTagNamedColor2()
 {
-  if (m_NamedColor)
-    free(m_NamedColor);
+  free(m_NamedColor);
 
   if (m_NamedLab)
     delete [] m_NamedLab;
@@ -3807,8 +3799,7 @@ CIccTagXYZ &CIccTagXYZ::operator=(const CIccTagXYZ &XYZTag)
 
   m_nSize = XYZTag.m_nSize;
 
-  if (m_XYZ)
-    free(m_XYZ);
+  free(m_XYZ);
   m_XYZ = (icXYZNumber*)calloc(m_nSize, sizeof(icXYZNumber));
   memcpy(m_XYZ, XYZTag.m_XYZ, sizeof(icXYZNumber)*m_nSize);
 
@@ -3826,8 +3817,7 @@ CIccTagXYZ &CIccTagXYZ::operator=(const CIccTagXYZ &XYZTag)
  */
 CIccTagXYZ::~CIccTagXYZ()
 {
-  if (m_XYZ)
-    free(m_XYZ);
+  free(m_XYZ);
 }
 
 
@@ -4069,8 +4059,7 @@ CIccTagChromaticity &CIccTagChromaticity::operator=(const CIccTagChromaticity &C
 
   m_nChannels = ChromTag.m_nChannels;
 
-  if (m_xy)
-    free(m_xy);
+  free(m_xy);
   m_xy = (icChromaticityNumber*)calloc(m_nChannels, sizeof(icChromaticityNumber));
   memcpy(m_xy, ChromTag.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
 
@@ -4088,8 +4077,7 @@ CIccTagChromaticity &CIccTagChromaticity::operator=(const CIccTagChromaticity &C
  */
 CIccTagChromaticity::~CIccTagChromaticity()
 {
-  if (m_xy)
-    free(m_xy);
+  free(m_xy);
 }
 
 
@@ -4737,8 +4725,7 @@ CIccTagSparseMatrixArray &CIccTagSparseMatrixArray::operator=(const CIccTagSpars
   m_nSize = ITSMA.m_nSize;
   m_nChannelsPerMatrix = ITSMA.m_nChannelsPerMatrix;
 
-  if (m_RawData)
-    free(m_RawData);
+  free(m_RawData);
   m_RawData = (icUInt8Number*)calloc(m_nSize, GetBytesPerMatrix());
   memcpy(m_RawData, ITSMA.m_RawData, (size_t)m_nSize*GetBytesPerMatrix());
 
@@ -4759,8 +4746,7 @@ CIccTagSparseMatrixArray &CIccTagSparseMatrixArray::operator=(const CIccTagSpars
  */
 CIccTagSparseMatrixArray::~CIccTagSparseMatrixArray()
 {
-  if (m_RawData)
-    free(m_RawData);
+  free(m_RawData);
 }
 
 
@@ -5557,8 +5543,7 @@ CIccTagFixedNum<T, Tsig> &CIccTagFixedNum<T, Tsig>::operator=(const CIccTagFixed
 
   m_nSize = ITFN.m_nSize;
 
-  if (m_Num)
-    free(m_Num);
+  free(m_Num);
   m_Num = (T*)calloc(m_nSize, sizeof(T));
   memcpy(m_Num, ITFN.m_Num, m_nSize*sizeof(T));
 
@@ -5578,8 +5563,7 @@ CIccTagFixedNum<T, Tsig> &CIccTagFixedNum<T, Tsig>::operator=(const CIccTagFixed
 template <class T, icTagTypeSignature Tsig>
 CIccTagFixedNum<T, Tsig>::~CIccTagFixedNum()
 {
-  if (m_Num)
-    free(m_Num);
+  free(m_Num);
 }
 
 /**
@@ -6038,8 +6022,7 @@ CIccTagNum<T, Tsig> &CIccTagNum<T, Tsig>::operator=(const CIccTagNum<T, Tsig> &I
 template <class T, icTagTypeSignature Tsig>
 CIccTagNum<T, Tsig>::~CIccTagNum()
 {
-  if (m_Num)
-    free(m_Num);
+  free(m_Num);
 }
 
 /**
@@ -6652,8 +6635,7 @@ CIccTagFloatNum<T, Tsig> &CIccTagFloatNum<T, Tsig>::operator=(const CIccTagFloat
 template <class T, icTagTypeSignature Tsig>
 CIccTagFloatNum<T, Tsig>::~CIccTagFloatNum()
 {
-  if (m_Num)
-    free(m_Num);
+  free(m_Num);
 }
 
 /**
@@ -7408,8 +7390,7 @@ CIccLocalizedUnicode &CIccLocalizedUnicode::operator=(const CIccLocalizedUnicode
  */
 CIccLocalizedUnicode::~CIccLocalizedUnicode()
 {
-  if (m_pBuf)
-    free(m_pBuf);
+  free(m_pBuf);
 }
 
 static bool icIsValidUtf16(const icUInt16Number *pBuf, icUInt32Number nLength)
@@ -8366,8 +8347,7 @@ CIccTagData &CIccTagData::operator=(const CIccTagData &DataTag)
   m_nDataFlag = DataTag.m_nDataFlag;
   m_nSize = DataTag.m_nSize;
 
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   memcpy(m_pData, DataTag.m_pData, sizeof(icUInt8Number)*m_nSize);
 
@@ -8385,8 +8365,7 @@ CIccTagData &CIccTagData::operator=(const CIccTagData &DataTag)
  */
 CIccTagData::~CIccTagData()
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 }
 
 
@@ -8888,8 +8867,7 @@ CIccTagColorantOrder &CIccTagColorantOrder::operator=(const CIccTagColorantOrder
 
   m_nCount = ColorantOrderTag.m_nCount;
 
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nCount, sizeof(icUInt8Number));
   memcpy(m_pData, ColorantOrderTag.m_pData, sizeof(icUInt8Number)*m_nCount);
 
@@ -8907,8 +8885,7 @@ CIccTagColorantOrder &CIccTagColorantOrder::operator=(const CIccTagColorantOrder
  */
 CIccTagColorantOrder::~CIccTagColorantOrder()
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 }
 
 
@@ -9162,8 +9139,7 @@ CIccTagColorantTable &CIccTagColorantTable::operator=(const CIccTagColorantTable
   m_PCS = ColorantTableTag.m_PCS;
   m_nCount = ColorantTableTag.m_nCount;
 
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
   m_pData = (icColorantTableEntry*)calloc(m_nCount, sizeof(icColorantTableEntry));
   memcpy(m_pData, ColorantTableTag.m_pData, m_nCount*sizeof(icColorantTableEntry));
 
@@ -9181,8 +9157,7 @@ CIccTagColorantTable &CIccTagColorantTable::operator=(const CIccTagColorantTable
  */
 CIccTagColorantTable::~CIccTagColorantTable()
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 }
 
 
@@ -10390,9 +10365,7 @@ CIccResponseCurveStruct &CIccResponseCurveStruct::operator=(const CIccResponseCu
   m_nChannels = RespCurveStruct.m_nChannels;
   m_measurementUnitSig = RespCurveStruct.m_measurementUnitSig;
 
-  if (m_maxColorantXYZ)
-    free(m_maxColorantXYZ);
-
+  free(m_maxColorantXYZ);
   m_maxColorantXYZ = (icXYZNumber*)calloc(m_nChannels, sizeof(icXYZNumber));
   memcpy(m_maxColorantXYZ, RespCurveStruct.m_maxColorantXYZ, m_nChannels*sizeof(icXYZNumber));
 
@@ -10416,8 +10389,7 @@ CIccResponseCurveStruct &CIccResponseCurveStruct::operator=(const CIccResponseCu
  */
 CIccResponseCurveStruct::~CIccResponseCurveStruct()
 {
-  if (m_maxColorantXYZ)
-    free(m_maxColorantXYZ);
+  free(m_maxColorantXYZ);
 
   if (m_Response16ListArray)
     delete [] m_Response16ListArray;
@@ -12282,8 +12254,7 @@ CIccTagEmbeddedHeightImage &CIccTagEmbeddedHeightImage::operator=(const CIccTagE
   m_fMetersMaxPixelValue = HeightImageTag.m_fMetersMaxPixelValue;
   m_nSize = HeightImageTag.m_nSize;
 
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   memcpy(m_pData, HeightImageTag.m_pData, sizeof(icUInt8Number)*m_nSize);
 
@@ -12301,8 +12272,7 @@ CIccTagEmbeddedHeightImage &CIccTagEmbeddedHeightImage::operator=(const CIccTagE
 */
 CIccTagEmbeddedHeightImage::~CIccTagEmbeddedHeightImage()
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 }
 
 
@@ -12599,8 +12569,7 @@ CIccTagEmbeddedNormalImage &CIccTagEmbeddedNormalImage::operator=(const CIccTagE
   m_nEncodingFormat = NormalImageTag.m_nEncodingFormat;
   m_nSize = NormalImageTag.m_nSize;
 
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
   memcpy(m_pData, NormalImageTag.m_pData, sizeof(icUInt8Number)*m_nSize);
 
@@ -12618,8 +12587,7 @@ CIccTagEmbeddedNormalImage &CIccTagEmbeddedNormalImage::operator=(const CIccTagE
 */
 CIccTagEmbeddedNormalImage::~CIccTagEmbeddedNormalImage()
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 }
 
 

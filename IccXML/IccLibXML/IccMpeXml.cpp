@@ -306,9 +306,7 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (args.GetSize()<m_nParameters)
     return false;
 
-  if (m_params) {
-    free(m_params);
-  }
+  free(m_params);
 
   if (m_nParameters) {
     m_params = (icFloatNumber*)malloc(m_nParameters * sizeof(icFloatNumber));
@@ -1886,9 +1884,7 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
   if (args.GetSize() < m_nParameters)
     return false;
 
-  if (m_params) {
-    free(m_params);
-  }
+  free(m_params);
 
   if (m_nParameters) {
     m_params = (icFloatNumber*)malloc(m_nParameters * sizeof(icFloatNumber));
@@ -3508,8 +3504,7 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  if (m_pWhite)
-    free(m_pWhite);
+  free(m_pWhite);
 
   m_pWhite = (icFloatNumber *)malloc(m_Range.steps*sizeof(icFloatNumber));
   if (!m_pWhite) {
@@ -3622,8 +3617,7 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  if (m_pWhite)
-    free(m_pWhite);
+  free(m_pWhite);
 
   m_pWhite = (icFloatNumber *)malloc(m_Range.steps*sizeof(icFloatNumber));
   if (!m_pWhite) {

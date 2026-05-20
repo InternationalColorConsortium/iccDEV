@@ -198,8 +198,7 @@ CIccTagCurve &CIccTagCurve::operator=(const CIccTagCurve &CurveTag)
   m_nSize = CurveTag.m_nSize;
   m_nMaxIndex = CurveTag.m_nMaxIndex;
 
-  if (m_Curve)
-    free(m_Curve);
+  free(m_Curve);
   m_Curve = NULL;
   
   if (m_nSize > 0) {
@@ -221,8 +220,7 @@ CIccTagCurve &CIccTagCurve::operator=(const CIccTagCurve &CurveTag)
 */
 CIccTagCurve::~CIccTagCurve()
 {
-  if (m_Curve)
-    free(m_Curve);
+  free(m_Curve);
 }
 
 
@@ -459,10 +457,8 @@ bool CIccTagCurve::SetSize(icUInt32Number nSize, icTagCurveSizeInit nSizeOpt/*=i
     return true;
 
   if (!nSize) {
-    if (m_Curve) {
-      free(m_Curve);
-      m_Curve = NULL;
-    }
+    free(m_Curve);
+    m_Curve = NULL;
     m_nSize = 0;
     return true;
   }
@@ -1691,14 +1687,10 @@ CIccApplyCLUT::CIccApplyCLUT()
 */
 CIccApplyCLUT::~CIccApplyCLUT()
 {
-  if (m_df)
-    free(m_df);
-  if (m_s)
-    free(m_s);
-  if (m_g)
-    free(m_g);
-  if (m_ig)
-    free(m_ig);
+  free(m_df);
+  free(m_s);
+  free(m_g);
+  free(m_ig);
 }
 
 

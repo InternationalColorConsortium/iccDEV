@@ -153,8 +153,7 @@ CIccFormulaCurveSegment::CIccFormulaCurveSegment(const CIccFormulaCurveSegment &
  ******************************************************************************/
 CIccFormulaCurveSegment &CIccFormulaCurveSegment::operator=(const CIccFormulaCurveSegment &seg)
 {
-  if (m_params)
-    free(m_params);
+  free(m_params);
 
   m_nReserved = seg.m_nReserved;
   m_nReserved2 = seg.m_nReserved2;
@@ -187,9 +186,7 @@ CIccFormulaCurveSegment &CIccFormulaCurveSegment::operator=(const CIccFormulaCur
  ******************************************************************************/
 CIccFormulaCurveSegment::~CIccFormulaCurveSegment()
 {
-  if (m_params) {
-    free(m_params);
-  }
+  free(m_params);
 }
 
 /**
@@ -339,8 +336,7 @@ void CIccFormulaCurveSegment::Describe(std::string &sDescription, int /* nVerbos
  ******************************************************************************/
 void CIccFormulaCurveSegment::SetFunction(icUInt16Number functionType, icUInt8Number num_parameters, icFloatNumber *parameters)
 {
-  if (m_params)
-    free(m_params);
+  free(m_params);
 
   if (num_parameters) {
     m_params = (icFloatNumber*)malloc(num_parameters * sizeof(icFloatNumber));
@@ -392,10 +388,8 @@ bool CIccFormulaCurveSegment::Read(size_t size, CIccIO *pIO)
   if (!pIO->Read16(&m_nReserved2))
     return false;
 
-  if (m_params) {
-    free(m_params);
-    m_params = NULL;
-  }
+  free(m_params);
+  m_params = NULL;
 
   switch(m_nFunctionType) {
     case 0x0000:
@@ -926,8 +920,7 @@ CIccSampledCurveSegment::CIccSampledCurveSegment(const CIccSampledCurveSegment &
  ******************************************************************************/
 CIccSampledCurveSegment &CIccSampledCurveSegment::operator=(const CIccSampledCurveSegment &curve)
 {
-  if (m_pSamples)
-    free(m_pSamples);
+  free(m_pSamples);
 
   m_nReserved = curve.m_nReserved;
   m_startPoint = curve.m_startPoint;
@@ -962,8 +955,7 @@ CIccSampledCurveSegment &CIccSampledCurveSegment::operator=(const CIccSampledCur
  ******************************************************************************/
 CIccSampledCurveSegment::~CIccSampledCurveSegment()
 {
-  if (m_pSamples)
-    free(m_pSamples);
+  free(m_pSamples);
 }
 
 /**
@@ -986,16 +978,12 @@ CIccSampledCurveSegment::~CIccSampledCurveSegment()
  ******************************************************************************/
 bool CIccSampledCurveSegment::SetSize(icUInt32Number nCount, bool bZeroAlloc/*=true*/)
 {
+  free(m_pSamples);
+  m_pSamples = NULL;
+
   if (!nCount) {
-    if (m_pSamples)
-      free(m_pSamples);
-    m_pSamples = NULL;
     m_nCount = nCount;
     return true;
-  }
-
-  if (m_pSamples) {
-    free(m_pSamples);
   }
 
   if (bZeroAlloc)
@@ -1366,8 +1354,7 @@ CIccSingleSampledCurve::CIccSingleSampledCurve(const CIccSingleSampledCurve &cur
 ******************************************************************************/
 CIccSingleSampledCurve &CIccSingleSampledCurve::operator=(const CIccSingleSampledCurve &curve)
 {
-  if (m_pSamples)
-    free(m_pSamples);
+  free(m_pSamples);
 
   m_nReserved = curve.m_nReserved;
   m_nCount = curve.m_nCount;
@@ -1410,8 +1397,7 @@ CIccSingleSampledCurve &CIccSingleSampledCurve::operator=(const CIccSingleSample
 ******************************************************************************/
 CIccSingleSampledCurve::~CIccSingleSampledCurve()
 {
-  if (m_pSamples)
-    free(m_pSamples);
+  free(m_pSamples);
 }
 
 /**
@@ -1507,16 +1493,12 @@ bool CIccSingleSampledCurve::SetStorageType(icUInt16Number nStorateType)
 ******************************************************************************/
 bool CIccSingleSampledCurve::SetSize(icUInt32Number nCount, bool bZeroAlloc/*=true*/)
 {
+  free(m_pSamples);
+  m_pSamples = NULL;
+    
   if (!nCount) {
-    if (m_pSamples)
-      free(m_pSamples);
-    m_pSamples = NULL;
     m_nCount = nCount;
     return true;
-  }
-
-  if (m_pSamples) {
-    free(m_pSamples);
   }
 
   if (bZeroAlloc)
@@ -2032,8 +2014,7 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
     delete m_pCalc;
   }
 
-  if (m_pSamples)
-    free(m_pSamples);
+  free(m_pSamples);
 
   m_nReserved = curve.m_nReserved;
   m_nReserved2 = curve.m_nReserved2;
@@ -2087,8 +2068,7 @@ CIccSampledCalculatorCurve &CIccSampledCalculatorCurve::operator=(const CIccSamp
 ******************************************************************************/
 CIccSampledCalculatorCurve::~CIccSampledCalculatorCurve()
 {
-  if (m_pSamples)
-    free(m_pSamples);
+  free(m_pSamples);
 
   if (m_pCalc) {
     m_pCalc->SetParentObject(nullptr);
@@ -2215,16 +2195,12 @@ bool CIccSampledCalculatorCurve::SetRecommendedSize(icUInt32Number nSize)
 ******************************************************************************/
 bool CIccSampledCalculatorCurve::SetSize(icUInt32Number nCount, bool bZeroAlloc/*=true*/)
 {
+  free(m_pSamples);
+  m_pSamples = NULL;
+    
   if (nCount<2) {
-    if (m_pSamples)
-      free(m_pSamples);
-    m_pSamples = NULL;
     m_nCount = nCount;
     return nCount == 0;
-  }
-
-  if (m_pSamples) {
-    free(m_pSamples);
   }
 
   if (bZeroAlloc)
@@ -3132,9 +3108,7 @@ CIccMpeCurveSet &CIccMpeCurveSet::operator=(const CIccMpeCurveSet &curveSet)
 {
   m_nReserved = curveSet.m_nReserved;
 
-  if (m_curve) {
-    free(m_curve);
-  }
+  free(m_curve);
 
   if (curveSet.m_nInputChannels) {
     int i;
@@ -3205,10 +3179,9 @@ bool CIccMpeCurveSet::SetSize(int nNewSize)
     free(m_curve);
     m_curve = NULL;
   }
-  if (m_position) {
-    free(m_position);
-    m_position = NULL;
-  }
+
+  free(m_position);
+  m_position = NULL;
 
   if (nNewSize) {
     m_curve = (icCurveSetCurvePtr*)calloc(nNewSize, sizeof(icCurveSetCurvePtr));
@@ -4001,8 +3974,7 @@ CIccToneMapFunc::CIccToneMapFunc()
 
 CIccToneMapFunc::~CIccToneMapFunc()
 {
-  if (m_params)
-    free(m_params);
+  free(m_params);
 }
 
 CIccToneMapFunc& CIccToneMapFunc::operator=(const CIccToneMapFunc& toneMapFunc)
@@ -4013,8 +3985,7 @@ CIccToneMapFunc& CIccToneMapFunc::operator=(const CIccToneMapFunc& toneMapFunc)
   m_nFunctionType = toneMapFunc.m_nFunctionType;
   m_nParameters = toneMapFunc.m_nParameters;
   
-  if (m_params)
-    free(m_params);
+  free(m_params);
   if (toneMapFunc.m_nParameters && toneMapFunc.m_params) {
     m_params = (icFloatNumber*)malloc(m_nParameters * sizeof(icFloatNumber));
     if (m_params)
@@ -4050,8 +4021,7 @@ bool CIccToneMapFunc::SetFunction(icUInt16Number nFunc, icUInt8Number nParams, i
 {
   m_nFunctionType = nFunc;
 
-  if (m_params)
-    free(m_params);
+  free(m_params);
 
   int nArgs = NumArgs();
   m_nParameters = (icUInt8Number)icIntMin(nParams, NumArgs());
@@ -4122,9 +4092,7 @@ bool CIccToneMapFunc::Read(icUInt32Number size, CIccIO* pIO)
   if (!pIO->Read16(&m_nReserved2))
     return false;
 
-  if (m_params) {
-    free(m_params);
-  }
+  free(m_params);
 
   m_nParameters = (icUInt8Number)((size - headerSize)/sizeof(icFloatNumber));
 
@@ -5024,8 +4992,7 @@ CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
   m_nInputChannels = matrix.m_nInputChannels;
   m_nOutputChannels = matrix.m_nOutputChannels;
 
-  if (m_pMatrix)
-    free(m_pMatrix);
+  free(m_pMatrix);
 
   m_size = matrix.m_size;
   if (matrix.m_pMatrix) {
@@ -5036,8 +5003,7 @@ CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
   else
     m_pMatrix = NULL;
 
-  if (m_pConstants)
-    free(m_pConstants);
+  free(m_pConstants);
 
   if (matrix.m_pConstants) {
     int num = m_nOutputChannels*sizeof(icFloatNumber);
@@ -5064,11 +5030,8 @@ CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
  ******************************************************************************/
 CIccMpeMatrix::~CIccMpeMatrix()
 {
-  if (m_pMatrix)
-    free(m_pMatrix);
-
-  if (m_pConstants)
-    free(m_pConstants);
+  free(m_pMatrix);
+  free(m_pConstants);
 }
 
 /**
@@ -5083,14 +5046,11 @@ CIccMpeMatrix::~CIccMpeMatrix()
  ******************************************************************************/
 bool CIccMpeMatrix::SetSize(icUInt16Number nInputChannels, icUInt16Number nOutputChannels, bool bUseConstants)
 {
-  if (m_pMatrix) {
-    free(m_pMatrix);
-    m_pMatrix = NULL;
-  }
-  if (m_pConstants) {
-    free(m_pConstants);
-    m_pConstants = NULL;
-  }
+  free(m_pMatrix);
+  m_pMatrix = NULL;
+
+  free(m_pConstants);
+  m_pConstants = NULL;
 
   m_size = (icUInt32Number)nInputChannels * nOutputChannels;
 

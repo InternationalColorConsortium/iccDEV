@@ -565,9 +565,7 @@ CIccXmlArrayType<T, Tsig>::CIccXmlArrayType()
 template <class T, icTagTypeSignature Tsig>
 CIccXmlArrayType<T, Tsig>::~CIccXmlArrayType()
 {
-  if (m_pBuf) {
-    free(m_pBuf);
-  }
+  free(m_pBuf);
 }
 
 template <class T, icTagTypeSignature Tsig>
@@ -973,9 +971,7 @@ bool CIccXmlArrayType<T, Tsig>::ParseArray(T* pBuf, icUInt32Number nSize, xmlNod
 template <class T, icTagTypeSignature Tsig>
 bool CIccXmlArrayType<T, Tsig>::SetSize(icUInt32Number nSize)
 {
-  if (m_pBuf) {
-    free(m_pBuf);
-  }
+  free(m_pBuf);
   m_pBuf = (T*)malloc(nSize * sizeof(T));
   if (!m_pBuf) {
     m_nSize = 0;

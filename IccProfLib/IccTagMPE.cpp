@@ -208,23 +208,22 @@ CIccMpeUnknown::CIccMpeUnknown(const CIccMpeUnknown &elem)
  ******************************************************************************/
 CIccMpeUnknown &CIccMpeUnknown::operator=(const CIccMpeUnknown &elem)
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 
-   m_sig = elem.m_sig;
-   m_nReserved = elem.m_nReserved;
-   m_nInputChannels = elem.m_nInputChannels;
-   m_nOutputChannels = elem.m_nOutputChannels;
-   m_nSize = elem.m_nSize;
-   if (m_nSize) {
-     m_pData = (icUInt8Number*)malloc(m_nSize);
-     if (m_pData)
+  m_sig = elem.m_sig;
+  m_nReserved = elem.m_nReserved;
+  m_nInputChannels = elem.m_nInputChannels;
+  m_nOutputChannels = elem.m_nOutputChannels;
+  m_nSize = elem.m_nSize;
+  if (m_nSize) {
+    m_pData = (icUInt8Number*)malloc(m_nSize);
+    if (m_pData)
        memcpy(m_pData, elem.m_pData, m_nSize);
-   }
-   else
-     m_pData = NULL;
+  }
+  else
+    m_pData = NULL;
 
-   return (*this);
+  return (*this);
 }
 
 /**
@@ -239,8 +238,7 @@ CIccMpeUnknown &CIccMpeUnknown::operator=(const CIccMpeUnknown &elem)
  ******************************************************************************/
 CIccMpeUnknown::~CIccMpeUnknown()
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 }
 
 /**
@@ -313,8 +311,7 @@ void CIccMpeUnknown::Describe(std::string &sDescription, int nVerboseness)
 bool CIccMpeUnknown::SetDataSize(icUInt32Number nSize, bool /* bZeroData =true */)
 {
   bool rv = true;
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 
   // Prevent excessive allocation - limit to 256MB for unknown MPE data
   const icUInt32Number MAX_MPE_UNKNOWN_SIZE = 268435456; // 256 MB
@@ -588,14 +585,12 @@ CIccDblPixelBuffer::~CIccDblPixelBuffer()
  ******************************************************************************/
 void CIccDblPixelBuffer::Clean()
 {
-  if (m_pixelBuf1) {
-    free(m_pixelBuf1);
-    m_pixelBuf1 = NULL;
-  }
-  if (m_pixelBuf2) {
-    free(m_pixelBuf2);
-    m_pixelBuf2 = NULL;
-  }
+  free(m_pixelBuf1);
+  m_pixelBuf1 = NULL;
+
+  free(m_pixelBuf2);
+  m_pixelBuf2 = NULL;
+    
   m_nMaxChannels = 0;
   m_nLastNumChannels = 0;
 }
@@ -858,10 +853,8 @@ void CIccTagMultiProcessElement::Clean()
     m_list = NULL;
   }
 
-  if (m_position) {
-    free(m_position);
-    m_position = NULL;
-  }
+  free(m_position);
+  m_position = NULL;
 
   m_nProcElements = 0;
 }
@@ -1131,10 +1124,7 @@ bool CIccTagMultiProcessElement::Write(CIccIO *pIO)
   if (m_nProcElements) {
     size_t offsetPos = pIO->Tell();
 
-    if (m_position) {
-      free(m_position);
-    }
-
+    free(m_position);
     m_position = (icPositionNumber*)calloc(m_nProcElements, sizeof(icPositionNumber));
 
     if (!m_position)

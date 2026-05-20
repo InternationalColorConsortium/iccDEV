@@ -110,8 +110,7 @@ CIccMpeAcs::CIccMpeAcs()
 ******************************************************************************/
 CIccMpeAcs::~CIccMpeAcs()
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 }
 
 /**
@@ -304,8 +303,7 @@ icValidateStatus CIccMpeAcs::Validate(std::string sigPath, std::string &sReport,
 ******************************************************************************/
 bool CIccMpeAcs::AllocData(size_t size)
 {
-  if (m_pData)
-    free(m_pData);
+  free(m_pData);
 
   if (size) {
     m_pData = (icUInt8Number*)malloc(size);
