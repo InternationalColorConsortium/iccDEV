@@ -188,6 +188,23 @@ def main():
             print("  {:60s} {:>5d}".format(cwe, count))
         print()
 
+    # Denominator and divide-by-zero findings deserve their own section because
+    # malformed ICC fields often become derived state before the final division.
+    divzero = [
+        r for r in all_results
+        if r["rule_id"] == "iccdev/division-by-zero-profile" or "CWE-369" in r["cwe"]
+    ]
+    if divzero:
+        print("=" * 72)
+        print("DENOMINATOR / DIVIDE-BY-ZERO FINDINGS")
+        print("=" * 72)
+        for r in sorted(divzero, key=lambda x: (x["file"], x["line"], x["rule_id"])):
+            print()
+            print("  Rule: {}".format(r["rule_id"]))
+            print("  Location: {}".format(r["location"]))
+            print("  {}".format(r["message"][:240]))
+        print()
+
     # Detailed error-level findings
     errors = [r for r in all_results if r["level"] == "error"]
     if errors:

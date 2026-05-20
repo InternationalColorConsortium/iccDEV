@@ -22,6 +22,7 @@ Test 18 (Regression Bisect).
 | `.github/scripts/iccdev-mluc-setter-regression-tests.sh` | #928 | `multiLocalizedUnicodeType` setters included safety terminators in serialized `mluc` string lengths | Rebuilds `sRGB_D65_MAT.icc` and `NamedColor.icc` from XML and verifies canonical `desc`/`mluc` sizes |
 | `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh` | #928 follow-up | `multiLocalizedUnicodeType` reader accepted malformed record lengths, string offsets, and UTF-16 surrogate data | Mutates `sRGB_D65_MAT.icc` in `/tmp` and verifies malformed `mluc` records are rejected without sanitizer findings |
 | `.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh` | #958 | Non-standard PCC viewing-condition illuminant XYZ with zero Y divided by zero or fell back to D50 | Compiles a small PCC helper and verifies zero-Y custom illuminants are rejected without sanitizer findings or D50 substitution |
+| `.github/scripts/iccdev-cam-degenerate-regression-tests.sh` | `fix-dbz-fcam-cam` | Degenerate CAM/FCAM conversion state could divide by zero or produce non-finite appearance values | Compiles a small CAM helper and verifies degenerate forward and inverse conversions complete without sanitizer findings |
 | `.github/scripts/iccdev-calculator-regression-tests.sh` | `bisect-ce59fa8-calculator` | Calculator round/truncate/select casts and if/else offset arithmetic accepted malformed profile data without sanitizer-safe guards | Rebuilds `srgbCalcTest`, exercises calculator debug apply, and verifies malformed CalcTest operator fixtures reject without sanitizer findings |
 | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` | #955 | `lut16Type` write path took `&curve[0]` for zero-entry curves, binding a reference through a null curve buffer | Compiles a small `CIccTagLut16` writer and verifies invalid table counts are rejected without sanitizer findings |
 | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` | AFL apply namedColor2 | `CIccXformNamedColor::Apply` copied more than 16 device coordinates and accepted negative lookup results | Builds a small helper that verifies valid lookup, color-not-found, and too-many-device-coordinate paths without sanitizer findings |
@@ -40,5 +41,5 @@ Test 18 (Regression Bisect).
 
 1. Minimize the crash file (smallest reproducer)
 2. Name: `poc-{issue}-{short-description}.icc`
-3. Add a regression sub-test in `ci-iccdev-tool-tests.yml` Test 18
+3. Add a focused script or CTest gate through `ci-iccdev-tool-tests.yml`
 4. Verify: the PoC must trigger the bug on unpatched code and pass cleanly on patched code

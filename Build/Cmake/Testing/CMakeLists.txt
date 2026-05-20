@@ -508,6 +508,14 @@ set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.cam-degenerate-regressions
+  300
+  "iccdev;cam;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-cam-degenerate-regression-tests.sh"
+)
+
+iccdev_add_script_test(
   iccdev.calculator-regressions
   300
   "iccdev;calculator;regression;asan"

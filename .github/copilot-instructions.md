@@ -31,6 +31,7 @@ Canonical regression scripts:
 - `.github/scripts/iccdev-stdobserver-regression-tests.sh`
 - `.github/scripts/iccdev-mluc-setter-regression-tests.sh`
 - `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh`
+- `.github/scripts/iccdev-cam-degenerate-regression-tests.sh`
 - `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh`
 - `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh`
 

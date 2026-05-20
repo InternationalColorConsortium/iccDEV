@@ -511,8 +511,20 @@ CIccCamConverter::XYZToJab (const icFloatNumber*	xyz,
 	h_xyz = xyz;
 	h_jab = jab;
 
+	const bool validCam = std::isfinite((double)m_AWhite) && m_AWhite != 0.0f;
+
 	for (k=0;k<nbr;k++)
 	{
+		if (!validCam) {
+			h_jab[0] = 0.0f;
+			h_jab[1] = 0.0f;
+			h_jab[2] = 0.0f;
+
+			h_xyz += 3;
+			h_jab += 3;
+			continue;
+		}
+
 		Multiply_vect_by_mx (h_xyz, rgb, m_mFor);
 
 		// clipping to the HPE triangle
@@ -572,8 +584,25 @@ CIccCamConverter::JabToXYZ (const icFloatNumber*	jab,
 	h_jab = jab;
 	h_xyz = xyz;
 
+	const bool validCam = std::isfinite((double)m_AWhite) &&
+	                      std::isfinite((double)m_Fl) && m_Fl != 0.0f &&
+	                      std::isfinite((double)m_factor) && m_factor != 0.0f &&
+	                      std::isfinite((double)m_Nbb) && m_Nbb != 0.0f &&
+	                      std::isfinite((double)m_c) && m_c != 0.0f &&
+	                      std::isfinite((double)m_z) && m_z != 0.0f;
+
 	for (i=0;i<nbr;i++)
 	{
+		if (!validCam) {
+			h_xyz[0] = 0.0f;
+			h_xyz[1] = 0.0f;
+			h_xyz[2] = 0.0f;
+
+			h_jab += 3;
+			h_xyz += 3;
+			continue;
+		}
+
 		if (h_jab[0] < 1.0e-5)
 		{
 			rgbP[0] = 0.1f;
@@ -588,8 +617,7 @@ CIccCamConverter::JabToXYZ (const icFloatNumber*	jab,
 			t = pow (ratio, exp);
 			A = m_AWhite * pow (h_jab[0]/100.0, 1.0/(m_c*m_z));
 
-            icFloatNumber divisor = (fabs(m_Nbb) > 1e-8) ? m_Nbb : 1e-8f;
-			p2 = (icFloatNumber) ((A / divisor + 0.305f) * 460.0f / 1403.0f);
+			p2 = (icFloatNumber) ((A / m_Nbb + 0.305f) * 460.0 / 1403.0);
 
 			if (t < 1.0e-5)
 			{

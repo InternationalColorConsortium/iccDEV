@@ -1,8 +1,9 @@
 /**
  * @name Division without zero check on profile data
  * @description Division operations where the divisor comes from ICC profile
- *              fields (steps, count, channel count) without a zero check.
- *              Malformed profiles can have zero values in these fields.
+ *              fields or derived color-appearance state without a zero or
+ *              finite check. Malformed profiles can drive these values to
+ *              zero, NaN, or infinity.
  * @kind problem
  * @problem.severity error
  * @precision medium
@@ -14,35 +15,64 @@
 
 import cpp
 
-from DivExpr div
-where
-  // The divisor is not a constant
-  not div.getRightOperand() instanceof Literal and
-  // The divisor involves a field access or variable that could be profile-derived
-  (
-    exists(FieldAccess fa |
-      fa = div.getRightOperand().getAChild*() and
-      fa.getTarget().getName().regexpMatch("(?i).*(steps|count|num|size|channels|nInput|nOutput|m_n|denom).*")
-    )
-    or
-    exists(VariableAccess va |
-      va = div.getRightOperand() and
-      va.getTarget().getName().regexpMatch("(?i).*(steps|count|num|size|channels|nInput|nOutput|denom|divisor).*")
-    )
-  ) and
-  // No zero check in the preceding 5 lines
-  not exists(IfStmt check |
-    check.getLocation().getStartLine() >= div.getLocation().getStartLine() - 5 and
+private predicate isIccSource(File f) {
+  f.getRelativePath().regexpMatch(".*(?:IccProfLib|IccXML|IccJSON|IccConnect|Tools|examples)/.*") and
+  not f.getRelativePath().regexpMatch("(?i).*(^|/)(test|tests|Testing)(/|$).*")
+}
+
+bindingset[name]
+private predicate isProfileDenominatorName(string name) {
+  name.regexpMatch(
+    "(?i).*(steps|count|num|size|channels|nInput|nOutput|denom|divisor|scale|range|" +
+    "m_n|m_AWhite|AWhite|m_Fl|m_Nbb|m_factor|m_c|m_z).*"
+  )
+}
+
+private predicate isProfileDerivedDenominator(Expr e) {
+  exists(FieldAccess fa |
+    fa = e.getAChild*() and
+    isProfileDenominatorName(fa.getTarget().getName())
+  )
+  or
+  exists(VariableAccess va |
+    va = e.getAChild*() and
+    isProfileDenominatorName(va.getTarget().getName())
+  )
+}
+
+private predicate isGuardCondition(Expr e) {
+  e.toString().regexpMatch("(?i).*(validCam|safe|checked).*")
+  or
+  exists(VariableAccess va |
+    va = e.getAChild*() and
+    va.getTarget().getName().regexpMatch("(?i).*(validCam|safe|checked).*")
+  )
+}
+
+private predicate hasNearbyZeroOrFiniteCheck(DivExpr div) {
+  exists(IfStmt check |
+    check.getEnclosingFunction() = div.getEnclosingFunction() and
     check.getLocation().getStartLine() <= div.getLocation().getStartLine() and
     (
-      check.getCondition().toString().matches("%== 0%") or
-      check.getCondition().toString().matches("%!= 0%") or
-      check.getCondition().toString().matches("%> 0%") or
-      check.getCondition().toString().matches("%< 1%")
+      isGuardCondition(check.getCondition()) or
+      (
+        check.getLocation().getStartLine() >= div.getLocation().getStartLine() - 8 and
+        (
+          check.getCondition().toString().regexpMatch("(?i).*((==|!=|<=|>=|<|>).*(0|0\\.0|0\\.0f)).*") or
+          check.getCondition().toString().regexpMatch("(?i).*(isfinite|isnan|isinf).*")
+        ) and
+        isProfileDerivedDenominator(check.getCondition())
+      )
     )
-  ) and
-  // In ICC source files
-  div.getFile().getRelativePath().regexpMatch(".*(?:Icc|icc).*") and
-  not div.getFile().getRelativePath().matches("%test%")
+  )
+}
+
+from DivExpr div
+where
+  not div.getRightOperand() instanceof Literal and
+  isProfileDerivedDenominator(div.getRightOperand()) and
+  not hasNearbyZeroOrFiniteCheck(div) and
+  isIccSource(div.getFile())
 select div,
-  "Division where divisor may be zero from malformed profile data. Add a zero check (CWE-369)."
+  "Division by '" + div.getRightOperand().toString() +
+  "' may use a zero or non-finite profile/CAM-derived denominator. Add explicit finite and non-zero validation (CWE-369)."

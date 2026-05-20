@@ -90,7 +90,7 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 24 tests:
+Linux currently registers 25 tests:
 
 | Test | Source |
 |------|--------|
@@ -111,6 +111,7 @@ Linux currently registers 24 tests:
 | `iccdev.mluc-read-utf16-regressions` | `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh` |
 | `iccdev.mluc-iso-code-regressions` | `.github/scripts/iccdev-mluc-iso-code-regression-tests.sh` |
 | `iccdev.pcc-zero-illuminant-regressions` | `.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh` |
+| `iccdev.cam-degenerate-regressions` | `.github/scripts/iccdev-cam-degenerate-regression-tests.sh` |
 | `iccdev.calculator-regressions` | `.github/scripts/iccdev-calculator-regression-tests.sh` |
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
@@ -137,6 +138,11 @@ must reject invalid numeric fields before conversion without sanitizer findings.
 checks the 31-item PAWG report structure, verifies summary counts against the
 rendered item lines, runs malformed and malware-signature dynamic inputs, and
 fails on sanitizer findings.
+
+`iccdev.cam-degenerate-regressions` compiles a small helper from
+`.github/ci/regression/cam-degenerate.cpp` and exercises degenerate CAM forward
+and inverse conversions. It guards against divide-by-zero and non-finite
+appearance state regressions without committing generated profiles.
 
 `iccdev.hybrid-pipeline` preserves the full six-phase hybrid spectral/colorimetric
 integration test as a separate `slow` CTest label. Routine CI tool sweeps run
