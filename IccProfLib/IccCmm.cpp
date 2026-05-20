@@ -1444,79 +1444,84 @@ icStatusCMM CIccXform::Begin()
   }
 
 	// set up for any needed PCS adjustment
-	if (m_nIntent == icAbsoluteColorimetric && 
-		  (m_MediaXYZ.X != illXYZ.X ||
-		   m_MediaXYZ.Y != illXYZ.Y ||
-		   m_MediaXYZ.Z != illXYZ.Z)) {
+  if (m_nIntent == icAbsoluteColorimetric &&
+        (m_MediaXYZ.X != illXYZ.X ||
+        m_MediaXYZ.Y != illXYZ.Y ||
+        m_MediaXYZ.Z != illXYZ.Z)) {
 
-			icColorSpaceSignature Space = m_pProfile->m_Header.pcs;
+    icColorSpaceSignature Space = m_pProfile->m_Header.pcs;
 
-			if (IsSpacePCS(Space)) {
-				m_bAdjustPCS = true;				// turn ON PCS adjustment
+    if (IsSpacePCS(Space)) {
+      m_bAdjustPCS = true;				// turn ON PCS adjustment
 
-				// scale factors depend upon media white point
-				// set up for input transform
-        if (!m_bInput) {
-          m_PCSScale[0] = illumXYZ[0] / mediaXYZ[0];	
-          m_PCSScale[1] = illumXYZ[1] / mediaXYZ[1];
-          m_PCSScale[2] = illumXYZ[2] / mediaXYZ[2];
-        }
-        else {
-          m_PCSScale[0] = mediaXYZ[0] / illumXYZ[0];	
-          m_PCSScale[1] = mediaXYZ[1] / illumXYZ[1];
-          m_PCSScale[2] = mediaXYZ[2] / illumXYZ[2];
+      // scale factors depend upon media white point
+      // set up for input transform
+      if (!m_bInput) {
+        m_PCSScale[0] = illumXYZ[0] / mediaXYZ[0];
+        m_PCSScale[1] = illumXYZ[1] / mediaXYZ[1];
+        m_PCSScale[2] = illumXYZ[2] / mediaXYZ[2];
+      }
+      else {
+        m_PCSScale[0] = mediaXYZ[0] / illumXYZ[0];
+        m_PCSScale[1] = mediaXYZ[1] / illumXYZ[1];
+        m_PCSScale[2] = mediaXYZ[2] / illumXYZ[2];
+      }
+      
+      if (m_PCSScale[0] == 0.0f || m_PCSScale[1] == 0.0f || m_PCSScale[2] == 0.0f)
+        return icCmmStatInvalidProfile;
 
-        }
+      m_PCSOffset[0] = 0.0;
+      m_PCSOffset[1] = 0.0;
+      m_PCSOffset[2] = 0.0;
+    }
+  }
+  else if (m_nIntent == icPerceptual && (IsVersion2() || !HasPerceptualHandling())) {
+      icColorSpaceSignature Space = m_pProfile->m_Header.pcs;
 
-				m_PCSOffset[0] = 0.0;
-				m_PCSOffset[1] = 0.0;
-				m_PCSOffset[2] = 0.0;
-			}
-	}
-	else if (m_nIntent == icPerceptual && (IsVersion2() || !HasPerceptualHandling())) {
-		icColorSpaceSignature Space = m_pProfile->m_Header.pcs;
+    if (IsSpacePCS(Space) && m_pProfile->m_Header.deviceClass!=icSigAbstractClass) {
+      m_bAdjustPCS = true;				// turn ON PCS adjustment
 
-		if (IsSpacePCS(Space) && m_pProfile->m_Header.deviceClass!=icSigAbstractClass) {
-			m_bAdjustPCS = true;				// turn ON PCS adjustment
+      // set up for input transform, which needs version 2 black point to version 4
+      m_PCSScale[0] = (icFloatNumber) (1.0 - icPerceptualRefBlackX / icPerceptualRefWhiteX);	// scale factors
+      m_PCSScale[1] = (icFloatNumber) (1.0 - icPerceptualRefBlackY / icPerceptualRefWhiteY);
+      m_PCSScale[2] = (icFloatNumber) (1.0 - icPerceptualRefBlackZ / icPerceptualRefWhiteZ);
+      
+      if (m_PCSScale[0] == 0.0f || m_PCSScale[1] == 0.0f || m_PCSScale[2] == 0.0f)
+        return icCmmStatInvalidProfile;
 
-			// set up for input transform, which needs version 2 black point to version 4
-			m_PCSScale[0] = (icFloatNumber) (1.0 - icPerceptualRefBlackX / icPerceptualRefWhiteX);	// scale factors
-			m_PCSScale[1] = (icFloatNumber) (1.0 - icPerceptualRefBlackY / icPerceptualRefWhiteY);
-			m_PCSScale[2] = (icFloatNumber) (1.0 - icPerceptualRefBlackZ / icPerceptualRefWhiteZ);
+      m_PCSOffset[0] = (icFloatNumber) (icPerceptualRefBlackX * 32768.0 / 65535.0);	// offset factors
+      m_PCSOffset[1] = (icFloatNumber) (icPerceptualRefBlackY * 32768.0 / 65535.0);
+      m_PCSOffset[2] = (icFloatNumber) (icPerceptualRefBlackZ * 32768.0 / 65535.0);
 
-			m_PCSOffset[0] = (icFloatNumber) (icPerceptualRefBlackX * 32768.0 / 65535.0);	// offset factors
-			m_PCSOffset[1] = (icFloatNumber) (icPerceptualRefBlackY * 32768.0 / 65535.0);
-			m_PCSOffset[2] = (icFloatNumber) (icPerceptualRefBlackZ * 32768.0 / 65535.0);
+      if (!m_bInput) {				// output transform must convert version 4 black point to version 2
+        m_PCSScale[0] = (icFloatNumber) 1.0 / m_PCSScale[0];	// invert scale factors
+        m_PCSScale[1] = (icFloatNumber) 1.0 / m_PCSScale[1];
+        m_PCSScale[2] = (icFloatNumber) 1.0 / m_PCSScale[2];
 
-			if (!m_bInput) {				// output transform must convert version 4 black point to version 2
-				m_PCSScale[0] = (icFloatNumber) 1.0 / m_PCSScale[0];	// invert scale factors
-				m_PCSScale[1] = (icFloatNumber) 1.0 / m_PCSScale[1];
-				m_PCSScale[2] = (icFloatNumber) 1.0 / m_PCSScale[2];
-
-				m_PCSOffset[0] = - m_PCSOffset[0] * m_PCSScale[0];	// negate offset factors
-				m_PCSOffset[1] = - m_PCSOffset[1] * m_PCSScale[1];
-				m_PCSOffset[2] = - m_PCSOffset[2] * m_PCSScale[2];
-			}
-		}
-	}
-
-
-	if (m_pAdjustPCS) {
-		CIccProfile ProfileCopy(*m_pProfile);
-
-		// need to read in all the tags, so that a copy of the profile can be made
-		if (!ProfileCopy.ReadTags(m_pProfile)) {
-			return icCmmStatInvalidProfile;
-		}
-		
-		if (!m_pAdjustPCS->CalcFactors(&ProfileCopy, this, m_PCSScale, m_PCSOffset)) {
-			return icCmmStatIncorrectApply;
+        m_PCSOffset[0] = - m_PCSOffset[0] * m_PCSScale[0];	// negate offset factors
+        m_PCSOffset[1] = - m_PCSOffset[1] * m_PCSScale[1];
+        m_PCSOffset[2] = - m_PCSOffset[2] * m_PCSScale[2];
+      }
+    }
   }
 
-		m_bAdjustPCS = true;
-		delete m_pAdjustPCS;
-		m_pAdjustPCS = NULL;
-	}
+
+  if (m_pAdjustPCS) {
+    CIccProfile ProfileCopy(*m_pProfile);
+
+    // need to read in all the tags, so that a copy of the profile can be made
+    if (!ProfileCopy.ReadTags(m_pProfile)) {
+      return icCmmStatInvalidProfile;
+    }
+		
+    if (!m_pAdjustPCS->CalcFactors(&ProfileCopy, this, m_PCSScale, m_PCSOffset)) {
+      return icCmmStatIncorrectApply;
+    }
+
+    m_bAdjustPCS = true;
+    delete m_pAdjustPCS;
+    m_pAdjustPCS = NULL;
+  }
 
   return icCmmStatOk;
 }

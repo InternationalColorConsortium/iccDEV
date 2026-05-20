@@ -3016,6 +3016,9 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
 
           if (szSize && *szSize) {
             icUInt32Number nSize = (icUInt32Number)atol(szSize);
+            if (nSize <= 1)
+              return false;
+            
             SetSize(nSize);
 
             if (m_nSize == nSize) {
@@ -3062,6 +3065,9 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
 
           if (szSize && *szSize) {
             icUInt32Number nSize = (icUInt32Number)atol(szSize);
+            if (nSize <= 1)
+              return false;
+            
             SetSize(nSize);
 
             if (m_nSize == nSize) {
@@ -3101,6 +3107,8 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
 
           if (szSize && *szSize) {
             icUInt32Number nSize = (icUInt32Number)atol(szSize);
+            if (nSize <= 1)
+              return false;
 
             SetSize(nSize);
 

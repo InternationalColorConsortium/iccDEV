@@ -83,14 +83,8 @@ public:
 
   void Compare(icFloatNumber *pixel, icFloatNumber *deviceLab, icFloatNumber *lab1, icFloatNumber *lab2);
 
-  icFloatNumber GetMean1() { if (fabs(num1) < 1e-8)
-                              return 0.0;
-                            else
-                              return sum1 / num1; }
-  icFloatNumber GetMean2() { if (fabs(num2) < 1e-8)
-                              return 0.0;
-                            else
-                              return sum2 / num2; }
+  icFloatNumber GetMean1() { if (num1 == 0.0) return 0.0; return sum1 / num1; }
+  icFloatNumber GetMean2() { if (num2 == 0.0) return 0.0; else return sum2 / num2; }
 
   icFloatNumber minDE1, minDE2;
   icFloatNumber maxDE1, maxDE2;

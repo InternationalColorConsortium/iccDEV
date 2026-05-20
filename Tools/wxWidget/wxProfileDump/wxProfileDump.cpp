@@ -949,8 +949,8 @@ public:
 
   void Compare(icFloatNumber *pixel, icFloatNumber *deviceLab, icFloatNumber *lab1, icFloatNumber *lab2);
 
-  icFloatNumber GetMean1() { return sum1 / num1; }
-  icFloatNumber GetMean2() { return sum2 / num2; }
+  icFloatNumber GetMean1() { if (num1 == 0.0) return 0.0; else return sum1 / num1; }
+  icFloatNumber GetMean2() { if (num2 == 0.0) return 0.0; else return sum2 / num2; }
 
   icFloatNumber minDE1, minDE2;
   icFloatNumber maxDE1, maxDE2;
@@ -1064,7 +1064,10 @@ wxString AnalyzeRoundTrip(wxString &profilePath, icRenderingIntent nIntent, bool
   report += wxString::Format("   Min DeltaE:    %8.2" ICFLOATSFX "\n", eval.minDE2);
   report += wxString::Format("   Mean DeltaE:   %8.2" ICFLOATSFX "\n", eval.GetMean2());
   report += wxString::Format("   Max DeltaE:    %8.2" ICFLOATSFX "\n", eval.maxDE2);
-  report += wxString::Format("   DE <= 1.0 (%8u): %5.1f%%\n\n", eval.num3, (float)eval.num3 / (float)eval.m_nTotal*100.0);
+  float scaleEval = 0.0f;
+  if (eval.m_nTotal > 0)
+    scaleEval = 100.0f / (float)eval.m_nTotal;
+  report += wxString::Format("   DE <= 1.0 (%8u): %5.1f%%\n\n", eval.num3, scaleEval*(float)eval.num3);
 
   report += wxString::Format("   Max L, a, b:   " ICFLOATFMT ", " ICFLOATFMT ", " ICFLOATFMT "\n", eval.maxLab2[0], eval.maxLab2[1], eval.maxLab2[2]);
 
@@ -1072,11 +1075,12 @@ wxString AnalyzeRoundTrip(wxString &profilePath, icRenderingIntent nIntent, bool
     report += wxString::Format("\n   PRMG Interoperability - Round Trip Results\n");
     report += wxString::Format(  "   ------------------------------------------------------\n");
 
-    report += wxString::Format("   DE <= 1.0 (%8u): %5.1f%%\n", prmg.m_nDE1, (float)prmg.m_nDE1/(float)prmg.m_nTotal*100.0); 
-    report += wxString::Format("   DE <= 2.0 (%8u): %5.1f%%\n", prmg.m_nDE2, (float)prmg.m_nDE2/(float)prmg.m_nTotal*100.0);
-    report += wxString::Format("   DE <= 3.0 (%8u): %5.1f%%\n", prmg.m_nDE3, (float)prmg.m_nDE3/(float)prmg.m_nTotal*100.0);
-    report += wxString::Format("   DE <= 5.0 (%8u): %5.1f%%\n", prmg.m_nDE5, (float)prmg.m_nDE5/(float)prmg.m_nTotal*100.0);
-    report += wxString::Format("   DE <=10.0 (%8u): %5.1f%%\n", prmg.m_nDE10, (float)prmg.m_nDE10/(float)prmg.m_nTotal*100.0);
+    float scaling = 100.0f / (float)prmg.m_nTotal;
+    report += wxString::Format("   DE <= 1.0 (%8u): %5.1f%%\n", prmg.m_nDE1, scaling*(float)prmg.m_nDE1);
+    report += wxString::Format("   DE <= 2.0 (%8u): %5.1f%%\n", prmg.m_nDE2, scaling*(float)prmg.m_nDE2);
+    report += wxString::Format("   DE <= 3.0 (%8u): %5.1f%%\n", prmg.m_nDE3, scaling*(float)prmg.m_nDE3);
+    report += wxString::Format("   DE <= 5.0 (%8u): %5.1f%%\n", prmg.m_nDE5, scaling*(float)prmg.m_nDE5);
+    report += wxString::Format("   DE <=10.0 (%8u): %5.1f%%\n", prmg.m_nDE10, scaling*(float)prmg.m_nDE10);
     report += wxString::Format("   Total     (%8u)\n", prmg.m_nTotal);
   }
 
