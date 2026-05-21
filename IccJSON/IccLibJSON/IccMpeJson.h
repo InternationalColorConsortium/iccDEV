@@ -65,7 +65,7 @@ Copyright:  (c) see Software License
 #include "IccMpeACS.h"
 #include "IccMpeCalc.h"
 #include "IccMpeSpectral.h"
-#include "../../IccProfLib/IccJsonTypes.h"
+#include "IccJsonTypes.h"
 #include <map>
 #include <list>
 #include <string>

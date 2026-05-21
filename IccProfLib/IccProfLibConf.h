@@ -167,10 +167,20 @@ namespace iccDEV {
 #define MAKE_A_DLL
 #endif
 
-#ifdef MAKE_A_DLL
-#define REFICCMAXEXPORT __declspec( dllexport)
+#if defined(MAKE_A_DLL)
+  #if defined(_MSC_VER)
+    #define REFICCMAXEXPORT __declspec(dllexport)
+  #elif defined(__GNUC__) || defined(__clang__)
+    #define REFICCMAXEXPORT __attribute__((visibility("default")))
+  #else
+    #define REFICCMAXEXPORT
+  #endif
 #else
-#define REFICCMAXEXPORT __declspec( dllimport)
+  #if defined(_MSC_VER)
+    #define REFICCMAXEXPORT __declspec(dllimport)
+  #else
+    #define REFICCMAXEXPORT
+  #endif
 #endif
 
 // Uncomment below if you wish to utilize ZLIB for compressed text tag types

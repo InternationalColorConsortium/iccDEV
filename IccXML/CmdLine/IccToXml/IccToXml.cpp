@@ -8,6 +8,7 @@
 #include "IccIO.h"
 #include "IccProfLibVer.h"
 #include "IccLibXMLVer.h"
+#include <cstdlib>
 
 int main(int argc, char* argv[])
 {
@@ -25,12 +26,12 @@ int main(int argc, char* argv[])
 
   if (!srcIO.Open(argv[1], "r")) {
     printf("Unable to open '%s'\n", argv[1]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!profile.Read(&srcIO)) {
     printf("Unable to read '%s'\n", argv[1]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   std::string xml;
@@ -38,22 +39,22 @@ int main(int argc, char* argv[])
 
   if (!profile.ToXml(xml)) {
     printf("Unable to convert '%s' to xml\n", argv[1]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!dstIO.Open(argv[2], "wb")) {
     printf("unable to open '%s'\n", argv[2]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (dstIO.Write8((char*)xml.c_str(), xml.size()) != xml.size() ||
       !dstIO.Flush() ||
       !dstIO.CloseFile()) {
     printf("Unable to write '%s'\n", argv[2]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   printf("XML successfully created\n");
 
-  return 0;
+  return EXIT_SUCCESS;
 }

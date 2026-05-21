@@ -10,6 +10,7 @@
 #include "IccProfLibVer.h"
 #include "IccLibXMLVer.h"
 #include "IccXmlConfig.h"
+#include <cstdlib>
 #include <cstring> /* C strings strcpy, memcpy ... */
 
 int main(int argc, char* argv[])
@@ -79,7 +80,7 @@ int main(int argc, char* argv[])
     printf("\n");
 #endif
     printf("Unable to Parse '%s'\n", argv[1]);
-    return 1;
+    return EXIT_FAILURE;
   }
 
   std::string valid_report;
@@ -94,7 +95,7 @@ int main(int argc, char* argv[])
     }
     else {
       printf("Unable to save profile as '%s'\n", argv[2]);
-      return 1;
+      return EXIT_FAILURE;
     }
   }
   else {
@@ -107,11 +108,11 @@ int main(int argc, char* argv[])
     }
     else {
       printf("Unable to save profile - profile is invalid!\n");
-      return 1;
+      return EXIT_FAILURE;
     }
     printf("%s", valid_report.c_str());
   }
 
   printf("\n");
-  return 0;
+  return EXIT_SUCCESS;
 }

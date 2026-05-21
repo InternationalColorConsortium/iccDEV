@@ -1,0 +1,80 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Orchestrator: Cross-platform build, test, and package iccDEV
+#
+# Calls reusable workflows for each platform:
+#   _build-test-unix.yml   -- Linux/macOS Python package gates
+#   _build-test-windows.yml -- Windows (MSVC + vcpkg)
+#
+# Last Updated: 2026-04-07 by David Hoyt
+#
+# Governance: xsscx/governance/actions
+#   - All actions SHA-pinned
+#   - Reusable workflows source sanitize-sed.sh / sanitize.ps1
+#   - No matrix/event expressions in run: blocks
+#   - All governance rules enforced in callee workflows
+#
+###############################################################
+
+name: "ci-json-python"
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - pip-install-iccdev
+  workflow_dispatch:
+
+concurrency:
+  group: "ci-json-python-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------
+  # Python versions: cover declared min, current, and max supported.
+  # ---------------------------------------------------------------
+  # ---------------------------------------------------------------
+  # Linux: Python package build + light native smoke
+  # ---------------------------------------------------------------
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12", "3.13"]
+    uses: ./.github/workflows/_build-test-unix.yml
+    with:
+      os: ubuntu-latest
+      python-version: ${{ matrix.python-version }}
+      run-full-tests: false
+
+  # ---------------------------------------------------------------
+  # macOS: Build + light tests (CreateAllProfiles only)
+  # ---------------------------------------------------------------
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12", "3.13"]
+    uses: ./.github/workflows/_build-test-unix.yml
+    with:
+      os: macos-latest
+      python-version: ${{ matrix.python-version }}
+      run-full-tests: false
+
+  # ---------------------------------------------------------------
+  # Windows: Build + Python wheel + MCP
+  # ---------------------------------------------------------------
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12", "3.13"]
+    uses: ./.github/workflows/_build-test-windows.yml
+    with:
+      python-version: ${{ matrix.python-version }}

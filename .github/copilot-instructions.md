@@ -12,10 +12,12 @@ commands here.
 | `.github/labels.yml`, `.github/labeler.yml` | `instructions/workflow-governance.instructions.md` | Maintainer-owned label automation and trusted write workflows |
 | `.github/scripts/**` | `instructions/sanitizer-scripts.instructions.md` | `sanitize-sed.sh` and `sanitize.ps1` APIs |
 | `Build/**` | `instructions/build-system.instructions.md` | CMake, platform notes, sanitizer options, WASM/LTO |
-| `IccProfLib/**`, `IccXML/**`, `Tools/**`, `IccJSON/**` | `instructions/icc-library-code.instructions.md` | Parser hardening and C++ safety patterns |
+| `IccProfLib/**`, `IccXML/**`, `Tools/**`, `IccJSON/**`, `IccConnect/**` | `instructions/icc-library-code.instructions.md` | Parser hardening and C++ safety patterns |
 | `Testing/**` | `instructions/testing.instructions.md` | Test scripts, profile directories, regression flow |
 | `IccProfLib/icProfileHeader.h` | `instructions/icc-specification.instructions.md` | ICC header, tag, and color-space rules |
 | `ports/**` | `instructions/vcpkg-port.instructions.md` | vcpkg overlay port and CI |
+| `python/**` | `instructions/python-bindings.instructions.md` | Cython build, tests, and `ICCDEV_BUILD_DIR` |
+| `matlab/**` | `instructions/matlab-mex.instructions.md` | MEX gateway, OOP layer, and `build_mex.m` |
 | `Tools/Winnt/IccIisIsapi/**` | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS ISAPI setup and hardening |
 
 ## Current JSON/Config Regression Gate
@@ -70,6 +72,8 @@ Key safety rules:
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
 | Maintainer label triage | `.github/prompts/maintainer-label-triage.prompt.md` |
 | vcpkg debug | `.github/prompts/vcpkg-port-debug.prompt.md` |
+| Debug MCP subprocess | `.github/prompts/debug-mcp-subprocess.prompt.md` |
+| Debug Python/Cython bindings | `.github/prompts/debug-python-bindings.prompt.md` |
 
 ## Skills
 
@@ -81,3 +85,5 @@ Key safety rules:
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |
+| Python bindings tests | `.github/skills/python-bindings-test/SKILL.md` |
+| WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |

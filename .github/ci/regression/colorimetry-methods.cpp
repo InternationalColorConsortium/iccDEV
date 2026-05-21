@@ -66,6 +66,15 @@ double rangeStep(double startNm, double endNm, int steps)
   return steps > 1 ? (endNm - startNm) / (steps - 1) : 0.0;
 }
 
+std::vector<icFloatNumber> makeFilled(size_t count, icFloatNumber value)
+{
+  std::vector<icFloatNumber> v;
+  v.reserve(count);
+  for (size_t i = 0; i < count; ++i)
+    v.push_back(value);
+  return v;
+}
+
 // Smooth, strictly-positive synthetic colour-matching functions on [startNm,endNm]
 // at the given step count: three offset Gaussians filling 3*steps as xbar,ybar,zbar.
 std::vector<icFloatNumber> makeObserver(double startNm, double endNm, int steps)
@@ -133,7 +142,8 @@ void testResample()
   {
     icSpectralRange src = makeRange(400, 700, 31);   // 10 nm
     icSpectralRange dst = makeRange(400, 700, 61);   // 5 nm
-    std::vector<icFloatNumber> in(31, (icFloatNumber)0.7), out(61);
+    std::vector<icFloatNumber> in = makeFilled(31, (icFloatNumber)0.7);
+    std::vector<icFloatNumber> out(61);
     const icSpectralInterpMethod methods[3] =
       { icSpectralInterpLinear, icSpectralInterpCubic, icSpectralInterpSprague };
     for (int m = 0; m < 3; m++) {
@@ -222,7 +232,7 @@ void testSameGrid()
   check(ds < TOL_EXACT, "same-grid: DirectSum == SpragueTo1nm", ds);
 
   // Perfect diffuser -> Y == 1 on this grid too.
-  std::vector<icFloatNumber> white(31, (icFloatNumber)1.0);
+  std::vector<icFloatNumber> white = makeFilled(31, (icFloatNumber)1.0);
   icFloatNumber wp[3];
   if (reduce(g, obs, g, ill, g, icXYZCalcDirectSum, white, wp))
     check(std::fabs((double)wp[1] - 1.0) < TOL_EXACT, "same-grid: perfect diffuser Y==1",
@@ -243,7 +253,7 @@ void testDifferingGrids()
   const char *names[3] = { "DirectSum", "Weighting", "SpragueTo1nm" };
 
   // C1: perfect diffuser -> Y == 1 exactly, for every method, despite resampling.
-  std::vector<icFloatNumber> white(61, (icFloatNumber)1.0);
+  std::vector<icFloatNumber> white = makeFilled(61, (icFloatNumber)1.0);
   for (int m = 0; m < 3; m++) {
     icFloatNumber xyz[3];
     if (reduce(obsR, obs, illR, ill, measR, methods[m], white, xyz)) {
@@ -305,7 +315,7 @@ void testWeightingFreeFunctions()
   if (!built) return;
 
   // Perfect diffuser through the raw table -> Y == 1.
-  std::vector<icFloatNumber> white(61, (icFloatNumber)1.0);
+  std::vector<icFloatNumber> white = makeFilled(61, (icFloatNumber)1.0);
   icFloatNumber xyzW[3];
   icApplyWeightingTable(measR, &wt[0], &white[0], xyzW);
   check(std::fabs((double)xyzW[1] - 1.0) < TOL_EXACT, "weighting table: perfect diffuser Y==1",
@@ -374,7 +384,7 @@ void testStandardAccessors()
               && calc.Prepare(obsR, icXYZCalcDirectSum);
     check(ready, "D50 anchor: standard obs/illum prepared on built-in grid", 0.0);
     if (ready) {
-      std::vector<icFloatNumber> white(obsR.steps, (icFloatNumber)1.0);
+      std::vector<icFloatNumber> white = makeFilled(obsR.steps, (icFloatNumber)1.0);
       icFloatNumber xyz[3] = { 0, 0, 0 };
       calc.ReflectanceToXYZ(&white[0], xyz);
       std::printf("[colorimetry-methods] D50/1931 white point = %.5f %.5f %.5f\n",
@@ -431,7 +441,7 @@ void testRegistryWeightingTables()
     check(grid, "registry table present on 380-780@10nm grid", 0.0);
     if (!grid) continue;
 
-    std::vector<icFloatNumber> diffuser(r.steps, (icFloatNumber)1.0);
+    std::vector<icFloatNumber> diffuser = makeFilled(r.steps, (icFloatNumber)1.0);
     icFloatNumber xyz[3];
     icApplyWeightingTable(r, w, &diffuser[0], xyz);
     std::printf("[colorimetry-methods] registry %-11s perfect-diffuser XYZ = %8.4f %8.4f %8.4f\n",
@@ -530,7 +540,7 @@ void testInputGuards()
   // zeroes XYZ and returns. (Without the guard this dereferences null and crashes.)
   {
     icSpectralRange r = makeRange(400, 700, 31);
-    std::vector<icFloatNumber> white(31, (icFloatNumber)1.0);
+    std::vector<icFloatNumber> white = makeFilled(31, (icFloatNumber)1.0);
     icFloatNumber xyz[3] = { 999, 999, 999 };
     icApplyWeightingTable(r, NULL, &white[0], xyz);
     check(xyz[0] == 0 && xyz[1] == 0 && xyz[2] == 0, "apply(null weights) -> XYZ=0, no deref", 0.0);
@@ -546,7 +556,7 @@ void testInputGuards()
     bool built = icComputeWeightingTable(g, &obs[0], g, &ill[0], g, &wt[0], icSpectralInterpLinear);
     check(built, "apply-NaN setup: weighting table built", 0.0);
     if (built) {
-      std::vector<icFloatNumber> refl(31, (icFloatNumber)0.5);
+      std::vector<icFloatNumber> refl = makeFilled(31, (icFloatNumber)0.5);
       refl[5] = (icFloatNumber)NAN;
       icFloatNumber xyz[3] = { 0, 0, 0 };
       icApplyWeightingTable(g, &wt[0], &refl[0], xyz);
@@ -558,7 +568,8 @@ void testInputGuards()
   // H3: icSpectralResample rejects non-finite input rather than propagating it.
   {
     icSpectralRange g = makeRange(400, 700, 31);
-    std::vector<icFloatNumber> in(31, (icFloatNumber)0.5), out(31);
+    std::vector<icFloatNumber> in = makeFilled(31, (icFloatNumber)0.5);
+    std::vector<icFloatNumber> out(31);
     in[10] = (icFloatNumber)NAN;
     check(!icSpectralResample(g, &in[0], g, &out[0]), "resample(NaN input) -> false", 0.0);
   }
@@ -568,7 +579,8 @@ void testInputGuards()
   {
     icSpectralRange bad = makeRange(700, 400, 31);   // inverted endpoints
     icSpectralRange good = makeRange(400, 700, 31);
-    std::vector<icFloatNumber> in(31, (icFloatNumber)0.5), out(31);
+    std::vector<icFloatNumber> in = makeFilled(31, (icFloatNumber)0.5);
+    std::vector<icFloatNumber> out(31);
     check(!icSpectralResample(bad, &in[0], good, &out[0]), "resample(inverted src range) -> false", 0.0);
 
     CIccColorimetricCalculator calc;
@@ -604,7 +616,7 @@ void testInputGuards()
   {
     icSpectralRange g = makeRange(400, 700, 31);
     std::vector<icFloatNumber> obs = makeObserver(400, 700, 31);
-    std::vector<icFloatNumber> white(31, (icFloatNumber)1.0);
+    std::vector<icFloatNumber> white = makeFilled(31, (icFloatNumber)1.0);
     obs[0] = (icFloatNumber)NAN;
     CIccColorimetricCalculator calc;
     bool set = calc.SetObserver(g, &obs[0]) && calc.SetEmissiveWhite(g, &white[0]);
@@ -621,7 +633,8 @@ void testInputGuards()
   {
     icSpectralRange infStart = makeRange(-INFINITY, 700, 31);  // start = float16 -Inf
     icSpectralRange good = makeRange(400, 700, 31);
-    std::vector<icFloatNumber> in(31, (icFloatNumber)0.5), out(31);
+    std::vector<icFloatNumber> in = makeFilled(31, (icFloatNumber)0.5);
+    std::vector<icFloatNumber> out(31);
     check(!icSpectralResample(infStart, &in[0], good, &out[0]),
           "resample(non-finite src endpoint) -> false", 0.0);
     check(!icSpectralResample(good, &in[0], infStart, &out[0]),
@@ -710,7 +723,7 @@ void testLoadedWeightingTable()
     check(!calc.LoadWeightingTable(g, NULL), "loaded I4: null weights -> false", 0.0);
 
     icSpectralRange g1 = makeRange(500, 500, 1);
-    std::vector<icFloatNumber> one(3, (icFloatNumber)0.1);
+    std::vector<icFloatNumber> one = makeFilled(3, (icFloatNumber)0.1);
     check(!calc.LoadWeightingTable(g1, &one[0]), "loaded I4: < 2 samples -> false", 0.0);
 
     std::vector<icFloatNumber> nan = base; nan[5] = (icFloatNumber)NAN;
@@ -764,7 +777,7 @@ void testLoadedWeightingTable()
     bool ready = calc.Prepare(lr, icXYZCalcLoadedTable);
     check(ready, "loaded I6: matching grid -> Prepare ok", 0.0);
     if (ready) {
-      std::vector<icFloatNumber> diffuser(lr.steps, (icFloatNumber)1.0);
+      std::vector<icFloatNumber> diffuser = makeFilled(lr.steps, (icFloatNumber)1.0);
       icFloatNumber viaCalc[3] = { 0, 0, 0 }, viaApply[3] = { 0, 0, 0 };
       calc.ReflectanceToXYZ(&diffuser[0], viaCalc);
       icApplyWeightingTable(lr, lw, &diffuser[0], viaApply);

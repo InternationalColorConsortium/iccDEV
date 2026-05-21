@@ -1,13 +1,54 @@
 # Prevent local build artifacts from breaking Docker builds
-# Only exclude generated cmake outputs, not cmake source configuration
+.git
+
+# Local dependency exports and build products
+.vcpkg-root
+.venv/
+.venv-*/
+deps.zip
+installed/
+out/
+scripts/
+
+# Python package outputs
+**/__pycache__/
+*.py[cod]
+.coverage
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+coverage.xml
+htmlcov/
+python/build/
+python/dist/
+python/*.egg-info/
+python/wheelhouse/
+
+# Local sanitizer, profiling, and crash outputs
+*.profraw
+*.profdata
+asan.log*
+crash-*
+oom-*
+slow-unit-*
+
+# Only exclude generated CMake build outputs, not CMake source configuration
+Build/*
+!Build/Cmake/
+!Build/Cmake/**
+!Build/XCode/
+!Build/XCode/**
+
+# Re-exclude generated CMake outputs and built artifacts.
 Build/Cmake/CMakeCache.txt
 Build/Cmake/CMakeFiles/
 Build/Cmake/Makefile
 Build/Cmake/cmake_install.cmake
-# Exclude built libraries and binaries (will be rebuilt in Docker)
 Build/Cmake/IccProfLib/*.so*
 Build/Cmake/IccProfLib/*.a
 Build/Cmake/IccXML/*.so*
 Build/Cmake/IccXML/*.a
 Build/Cmake/IccJSON/*.so*
 Build/Cmake/IccJSON/*.a
+Build/Cmake/IccConnect/*.so*
+Build/Cmake/IccConnect/*.a

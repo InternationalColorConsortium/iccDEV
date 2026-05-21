@@ -20,6 +20,14 @@ permissions:
   pull-requests: read  # Required to analyze PR workflow changes.
 
 on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   workflow_call:
     inputs:
       analysis_target:
@@ -47,6 +55,7 @@ on:
         required: false
         type: boolean
         default: false
+  #checkov:skip=CKV_GHA_7: Maintainer-only manual dispatch uses constrained inputs for targeted risk scans.
   workflow_dispatch:
     inputs:
       analysis_target:
@@ -129,10 +138,20 @@ jobs:
           persist-credentials: false
 
       - name: "Checkout target repository"
+        if: inputs.analysis_target != 'Specific PR number' && github.event_name != 'pull_request'
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
-          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '' && format('refs/pull/{0}/head', inputs.pr_number) || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Checkout PR head (if PR mode)"
+        if: (inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '') || github.event_name == 'pull_request'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: refs/pull/${{ inputs.pr_number || github.event.pull_request.number }}/head
           path: target
           fetch-depth: 0
           persist-credentials: false
@@ -1113,33 +1132,57 @@ jobs:
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
-          # H-6: privileged cache boundaries must not mix PR/release cache namespaces.
+          # H-6: workflow cache use is prohibited in every boundary.
           CACHE_BOUNDARY_GAPS=0
           while IFS= read -r wf; do
             wf_base=$(basename "$wf")
-            has_write=false
-            if grep -qE '^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write' "$wf"; then
-              has_write=true
+            if [[ "$wf_base" == "ci-pr-risk-security-analysis.yml" ]]; then
+              continue
             fi
-            if [[ "$has_write" == "true" ]] && grep -qE 'cache-to:\s*type=gha|restore-keys:' "$wf"; then
-              if ! grep -q "github.ref == 'refs/heads/master'" "$wf"; then
+            findings=$(python3 - "$wf" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          lines = path.read_text(encoding="utf-8").splitlines()
+          findings = []
+
+          def clean(value):
+              return value.strip().strip("'\"").lower()
+
+          for index, line in enumerate(lines, start=1):
+              code = line.split("#", 1)[0]
+              if re.search(r"uses:\s*actions/cache@", code):
+                  findings.append(f"{path.name}:{index}: actions/cache")
+              if re.search(r"uses:\s*msys2/setup-msys2@", code):
+                  window = "\n".join(lines[index:index + 25])
+                  if not re.search(r"(?m)^\s+cache:\s*(false|0|no|off)\s*$", window, re.I):
+                      findings.append(f"{path.name}:{index}: msys2/setup-msys2 cache not disabled")
+              if re.search(r"cache-(from|to):\s*\S|restore-keys:\s*\S|save-always:\s*\S", code):
+                  findings.append(f"{path.name}:{index}: cache input")
+              match = re.search(r"^\s+cache:\s*(\S.*)$", code)
+              if match and clean(match.group(1)) not in {"false", "0", "no", "off"}:
+                  findings.append(f"{path.name}:{index}: cache input")
+
+          print("\n".join(findings))
+          PY
+          )
+            if [[ -n "$findings" ]]; then
+              while IFS= read -r finding; do
+                [[ -n "$finding" ]] || continue
                 CACHE_BOUNDARY_GAPS=$((CACHE_BOUNDARY_GAPS + 1))
-                echo "[HIGH] \`$(sanitize_line "$wf_base")\` combines write credentials with GHA cache usage without a master-only gate" >> "$RISK_REPORT_PATH"
+                echo "[HIGH] Workflow cache prohibited: \`$(sanitize_line "$finding")\`" >> "$RISK_REPORT_PATH"
                 echo "" >> "$RISK_REPORT_PATH"
-              fi
-            fi
-            if [[ "$wf_base" == "ci-latest-release.yml" ]] && grep -q 'restore-keys:' "$wf"; then
-              CACHE_BOUNDARY_GAPS=$((CACHE_BOUNDARY_GAPS + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` release workflow uses broad cache restore keys" >> "$RISK_REPORT_PATH"
-              echo "" >> "$RISK_REPORT_PATH"
+              done <<< "$findings"
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
           if [[ $CACHE_BOUNDARY_GAPS -eq 0 ]]; then
-            echo "[OK] Privileged cache boundaries are isolated from PR/release namespace mixing" >> "$RISK_REPORT_PATH"
+            echo "[OK] No workflow cache use detected" >> "$RISK_REPORT_PATH"
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
-          # H-7: publish workflows must not consume mutable cache or broad artifact intake.
+          # H-7: publish workflows must not consume broad artifact intake.
           PUBLISH_BOUNDARY_GAPS=0
           while IFS= read -r wf; do
             wf_base=$(basename "$wf")
@@ -1156,16 +1199,6 @@ jobs:
             if [[ "$has_publish_boundary" != "true" ]]; then
               continue
             fi
-            if grep -qE 'uses:\s*actions/cache@' "$wf"; then
-              PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses actions/cache in a publish/write workflow boundary" >> "$RISK_REPORT_PATH"
-              echo "" >> "$RISK_REPORT_PATH"
-            fi
-            if grep -qE 'cache-(from|to):\s*type=gha' "$wf"; then
-              PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses Docker Buildx GHA cache in a publish/write workflow boundary" >> "$RISK_REPORT_PATH"
-              echo "" >> "$RISK_REPORT_PATH"
-            fi
             if grep -q 'download-artifact' "$wf" && ! grep -qE '^\s+(name|pattern):\s*' "$wf"; then
               PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
               echo "[HIGH] \`$(sanitize_line "$wf_base")\` publish workflow downloads artifacts without an explicit name or pattern" >> "$RISK_REPORT_PATH"
@@ -1178,7 +1211,7 @@ jobs:
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
           if [[ $PUBLISH_BOUNDARY_GAPS -eq 0 ]]; then
-            echo "[OK] Publish workflows do not use Actions cache, Buildx GHA cache, or broad artifact intake" >> "$RISK_REPORT_PATH"
+            echo "[OK] Publish workflows do not use broad artifact intake" >> "$RISK_REPORT_PATH"
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
@@ -1240,7 +1273,152 @@ jobs:
           fi
           echo "" >> "$RISK_REPORT_PATH"
 
-      - name: "8. Supply-Chain Risk Score"
+      # preflight: allow-package-install reason=security-tool-bootstrap
+      - name: "8. zizmor GitHub Actions SAST"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          # shellcheck shell=bash
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          echo "## 8. zizmor GitHub Actions SAST" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Runs pinned zizmor offline against workflow and composite-action definitions." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+
+          ZIZMOR_VERSION="1.24.1"
+          ZIZMOR_VENV="${RUNNER_TEMP}/zizmor-venv"
+          ZIZMOR_JSON="${RUNNER_TEMP}/zizmor-findings.json"
+          ZIZMOR_LOG="${RUNNER_TEMP}/zizmor.log"
+          ZIZMOR_MD="${RUNNER_TEMP}/zizmor-report.md"
+          ZIZMOR_INPUTS=(.github/workflows)
+          if [[ -d .github/actions ]]; then
+            ZIZMOR_INPUTS+=(.github/actions)
+          fi
+
+          python3 -m venv "$ZIZMOR_VENV"
+          "$ZIZMOR_VENV/bin/python" -m pip install --upgrade "pip>=24.0,<26" > "$ZIZMOR_LOG" 2>&1
+          "$ZIZMOR_VENV/bin/python" -m pip install "zizmor==${ZIZMOR_VERSION}" >> "$ZIZMOR_LOG" 2>&1
+
+          {
+            echo "| Tool | Version |"
+            echo "|------|---------|"
+            echo "| zizmor | $(sanitize_line "$ZIZMOR_VERSION") |"
+            echo ""
+            echo "<details><summary>zizmor Python environment</summary>"
+            echo ""
+            echo '```'
+          } >> "$RISK_REPORT_PATH"
+          "$ZIZMOR_VENV/bin/python" -m pip freeze | while IFS= read -r dep; do
+            sanitize_line "$dep" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          done
+          {
+            echo '```'
+            echo "</details>"
+            echo ""
+          } >> "$RISK_REPORT_PATH"
+
+          if ! "$ZIZMOR_VENV/bin/zizmor" \
+            --offline \
+            --min-severity high \
+            --format json \
+            --no-progress \
+            --color never \
+            --no-exit-codes \
+            "${ZIZMOR_INPUTS[@]}" > "$ZIZMOR_JSON" 2>> "$ZIZMOR_LOG"; then
+            echo "[FAIL] zizmor scanner failed" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            echo '```' >> "$RISK_REPORT_PATH"
+            sed -n '1,120p' "$ZIZMOR_LOG" | while IFS= read -r line; do
+              sanitize_line "$line" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+            done
+            echo '```' >> "$RISK_REPORT_PATH"
+            exit 1
+          fi
+
+          python3 - "$ZIZMOR_JSON" "$ZIZMOR_MD" <<'PY'
+          import html
+          import json
+          import sys
+
+          json_path, md_path = sys.argv[1], sys.argv[2]
+
+          with open(json_path, "r", encoding="utf-8") as fh:
+              findings = json.load(fh)
+
+          def esc(value):
+              return html.escape(str(value), quote=True)
+
+          def pick(mapping, *names, default="unknown"):
+              if not isinstance(mapping, dict):
+                  return default
+              for name in names:
+                  value = mapping.get(name)
+                  if value not in (None, "", []):
+                      return value
+              return default
+
+          def location_text(finding):
+              locations = pick(finding, "locations", "location", default=[])
+              if isinstance(locations, list) and locations:
+                  loc = locations[0]
+              elif isinstance(locations, dict):
+                  loc = locations
+              else:
+                  loc = {}
+              path = pick(loc, "path", "file", "uri", default="unknown")
+              line = pick(loc, "line", "start_line", default="")
+              if line != "":
+                  return f"{path}:{line}"
+              return str(path)
+
+          with open(md_path, "w", encoding="utf-8") as out:
+              if not findings:
+                  out.write("[OK] zizmor found no HIGH severity workflow findings\n\n")
+              else:
+                  out.write(f"[HIGH] zizmor found {len(findings)} HIGH severity workflow finding(s)\n\n")
+                  out.write("| Audit | Location | Message | Confidence |\n")
+                  out.write("|-------|----------|---------|------------|\n")
+                  for finding in findings:
+                      audit = pick(finding, "audit", "rule", "check", "ident", "id", default="zizmor")
+                      message = pick(finding, "message", "title", "summary", default="No message")
+                      confidence = pick(finding, "confidence", default="unknown")
+                      out.write(
+                          "| "
+                          + esc(audit)
+                          + " | `"
+                          + esc(location_text(finding))
+                          + "` | "
+                          + esc(message)
+                          + " | "
+                          + esc(confidence)
+                          + " |\n"
+                      )
+                  out.write("\n")
+          PY
+          cat "$ZIZMOR_MD" >> "$RISK_REPORT_PATH"
+
+      - name: "9. Dockerfile Security Audit"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -1264,7 +1442,157 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 8. Supply-Chain Risk Score" >> "$RISK_REPORT_PATH"
+          echo "## 9. Dockerfile Security Audit" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Audits Dockerfiles for immutable bases, remote-exec anti-patterns," >> "$RISK_REPORT_PATH"
+          echo "secret material, and non-root runtime posture." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+
+          mapfile -t dockerfiles < <(find . \
+            -path './.git' -prune -o \
+            -type f \( -name 'Dockerfile' -o -name 'Dockerfile.*' \) \
+            -print | sort)
+
+          if [[ ${#dockerfiles[@]} -eq 0 ]]; then
+            echo "[INFO] No Dockerfiles found." >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            exit 0
+          fi
+
+          total_from=0
+          pinned_from=0
+          critical_findings=0
+          high_findings=0
+          advisory_findings=0
+
+          echo "| Dockerfile | FROM digests | Final USER | Notes |" >> "$RISK_REPORT_PATH"
+          echo "|------------|--------------|------------|-------|" >> "$RISK_REPORT_PATH"
+
+          for dockerfile in "${dockerfiles[@]}"; do
+            rel="${dockerfile#./}"
+            from_total=$(grep -cE '^[[:space:]]*FROM[[:space:]]+' "$dockerfile" || true)
+            from_re='^[[:space:]]*FROM[[:space:]]+('
+            from_re+='scratch|[^[:space:]]+@sha256:[0-9a-f]{64})([[:space:]]|$)'
+            from_pinned=$(grep -cE "$from_re" "$dockerfile" || true)
+            total_from=$((total_from + from_total))
+            pinned_from=$((pinned_from + from_pinned))
+
+            final_user=$(awk '
+              /^[[:space:]]*USER[[:space:]]+/ { user=$2 }
+              END { print user }
+            ' "$dockerfile")
+            final_user="${final_user:-root}"
+            notes=()
+
+            if [[ "$from_total" -ne "$from_pinned" ]]; then
+              high_findings=$((high_findings + 1))
+              {
+                echo "[HIGH] Dockerfile \`$(sanitize_line "$rel")\` has mutable"
+                echo "or unpinned FROM reference(s)"
+              } >> "$RISK_REPORT_PATH"
+              notes+=("unpinned FROM")
+            fi
+
+            remote_exec_re='(curl|wget)[^|]*\|[[:space:]]*(ba)?sh'
+            remote_exec_re+='|Invoke-WebRequest.*Invoke-Expression|iwr.*iex'
+            remote_exec=$({ grep -nE "$remote_exec_re" "$dockerfile" 2>/dev/null || true; } | wc -l)
+            if [[ "$remote_exec" -gt 0 ]]; then
+              critical_findings=$((critical_findings + 1))
+              {
+                echo "[CRITICAL] Dockerfile \`$(sanitize_line "$rel")\` contains"
+                echo "remote script execution pattern(s)"
+              } >> "$RISK_REPORT_PATH"
+              notes+=("remote exec")
+            fi
+
+            remote_add_re='^[[:space:]]*ADD[[:space:]]+https?://'
+            remote_add=$({ grep -nE "$remote_add_re" "$dockerfile" 2>/dev/null || true; } | wc -l)
+            if [[ "$remote_add" -gt 0 ]]; then
+              high_findings=$((high_findings + 1))
+              echo "[HIGH] Dockerfile \`$(sanitize_line "$rel")\` uses ADD with remote URL(s)" >> "$RISK_REPORT_PATH"
+              notes+=("remote ADD")
+            fi
+
+            secret_re='^[[:space:]]*(ARG|ENV)[[:space:]]+.*'
+            secret_re+='(TOKEN|SECRET|PASSWORD|PRIVATE_KEY|ACCESS_KEY)'
+            secret_refs=$({ grep -nE "$secret_re" "$dockerfile" 2>/dev/null || true; } | wc -l)
+            if [[ "$secret_refs" -gt 0 ]]; then
+              high_findings=$((high_findings + 1))
+              {
+                echo "[HIGH] Dockerfile \`$(sanitize_line "$rel")\` declares"
+                echo "secret-like ARG/ENV name(s)"
+              } >> "$RISK_REPORT_PATH"
+              notes+=("secret-like ARG/ENV")
+            fi
+
+            if [[ "$final_user" == "root" || "$final_user" == "0" ]]; then
+              advisory_findings=$((advisory_findings + 1))
+              echo "[WARN] Dockerfile \`$(sanitize_line "$rel")\` final stage runs as root" >> "$RISK_REPORT_PATH"
+              notes+=("root runtime")
+            fi
+
+            if grep -qE 'apt-get[[:space:]]+install' "$dockerfile" &&
+               ! grep -q -- '--no-install-recommends' "$dockerfile"; then
+              advisory_findings=$((advisory_findings + 1))
+              {
+                echo "[WARN] Dockerfile \`$(sanitize_line "$rel")\` uses"
+                echo "apt-get install without --no-install-recommends"
+              } >> "$RISK_REPORT_PATH"
+              notes+=("apt recommends")
+            fi
+
+            if [[ ${#notes[@]} -eq 0 ]]; then
+              notes+=("[OK]")
+            fi
+            note_text=$(IFS=', '; echo "${notes[*]}")
+            safe_rel=$(sanitize_line "$rel")
+            safe_user=$(sanitize_line "$final_user")
+            safe_note=$(sanitize_line "$note_text")
+            safe_from="$(sanitize_line "$from_pinned")/$(sanitize_line "$from_total")"
+            echo "| \`${safe_rel}\` | ${safe_from} | \`${safe_user}\` | ${safe_note} |" >> "$RISK_REPORT_PATH"
+          done
+
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "| Metric | Count |" >> "$RISK_REPORT_PATH"
+          echo "|--------|-------|" >> "$RISK_REPORT_PATH"
+          echo "| Dockerfiles | $(sanitize_line "${#dockerfiles[@]}") |" >> "$RISK_REPORT_PATH"
+          safe_from_total="$(sanitize_line "$pinned_from")/$(sanitize_line "$total_from")"
+          echo "| Pinned FROM references | ${safe_from_total} |" >> "$RISK_REPORT_PATH"
+          echo "| Critical findings | $(sanitize_line "$critical_findings") |" >> "$RISK_REPORT_PATH"
+          echo "| High findings | $(sanitize_line "$high_findings") |" >> "$RISK_REPORT_PATH"
+          echo "| Advisory findings | $(sanitize_line "$advisory_findings") |" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+
+          if [[ "$critical_findings" -eq 0 && "$high_findings" -eq 0 ]]; then
+            echo "[OK] Dockerfile gate found no blocking container security findings" >> "$RISK_REPORT_PATH"
+          fi
+          echo "" >> "$RISK_REPORT_PATH"
+
+      - name: "10. Supply-Chain Risk Score"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          echo "## 10. Supply-Chain Risk Score" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
           echo "Composite risk assessment based on TanStack, Trivy, cache-isolation, and OIDC compromise indicators." >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
@@ -1471,7 +1799,7 @@ jobs:
           fi
           echo "" >> "$RISK_REPORT_PATH"
 
-      - name: "9. Trivy-Specific Indicator Check"
+      - name: "11. Trivy-Specific Indicator Check"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -1495,7 +1823,7 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          echo "## 9. Trivy-Specific Indicator Check" >> "$RISK_REPORT_PATH"
+          echo "## 11. Trivy-Specific Indicator Check" >> "$RISK_REPORT_PATH"
           echo "" >> "$RISK_REPORT_PATH"
           echo "Checks for patterns matching the Trivy supply-chain attack (March 2026):" >> "$RISK_REPORT_PATH"
           echo "credential exfiltration, tag rewriting, pull_request_target abuse." >> "$RISK_REPORT_PATH"
@@ -1700,7 +2028,7 @@ jobs:
           fi
           echo "" >> "$RISK_REPORT_PATH"
 
-      - name: "10. Ref Name Security Validation"
+      - name: "12. Ref Name Security Validation"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -1722,7 +2050,7 @@ jobs:
           fi
 
           {
-            echo "## 10. Ref Name Security Validation"
+            echo "## 12. Ref Name Security Validation"
             echo ""
             echo "Validates branch/ref names for hidden Unicode characters"
             echo "(BOM, bidi overrides, zero-width chars) that enable Trojan Source"
@@ -1834,7 +2162,7 @@ jobs:
             echo ""
           } >> "$RISK_REPORT_PATH"
 
-      - name: "11. Workflow Inventory & Final Report"
+      - name: "13. Workflow Inventory & Final Report"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -1863,7 +2191,7 @@ jobs:
           {
             echo "---"
             echo ""
-            echo "## 11. Workflow Inventory"
+            echo "## 13. Workflow Inventory"
             echo ""
             echo "| Workflow | Triggers | Explicit Permissions | SHA-Pinned |"
             echo "|----------|----------|-------------|------------|"
@@ -1937,6 +2265,7 @@ jobs:
             echo "- [OpenSSF Scorecard](https://securityscorecards.dev/)"
             echo "- [GitHub Actions Security Hardening](https://docs.github.com/en/actions/reference/security/secure-use)"
             echo "- [GitHub App installation token format changelog](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/)"
+            echo "- [zizmor GitHub Actions SAST](https://github.com/zizmorcore/zizmor)"
             echo "- [xsscx/governance/actions](https://github.com/xsscx/governance/tree/main/actions)"
             echo "- \`.github/instructions/workflow-governance\`"
             echo "- \`.github/scripts/sanitize-sed.sh\` (${SAFE_SANITIZER_VERSION})"
@@ -1980,8 +2309,10 @@ jobs:
             '^\[CRITICAL\].*curl/wget\|bash'
             '^\[CRITICAL\].*checkout PR head code with elevated permissions'
             '^\[CRITICAL\].*id-token: write'
+            '^\[CRITICAL\].*Dockerfile'
             '^\[CRITICAL\].*hidden Unicode'
             '^\*\*\[CRITICAL\].*hidden Unicode'
+            '^\[HIGH\].*Dockerfile'
             '^\[HIGH\] Missing BASH_ENV'
             '^\[HIGH\].*git force-push/tag-rewrite'
             '^\[HIGH\].*workflow_run \+ download-artifact'
@@ -1992,9 +2323,11 @@ jobs:
             '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
             '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
             '^\[HIGH\] Absolute cache policy violation'
+            '^\[HIGH\] Workflow cache prohibited:'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'
+            '^\[HIGH\] zizmor found'
           )
 
           rca_for_finding() {
@@ -2020,6 +2353,10 @@ jobs:
               *"id-token: write"*)
                 cause="OIDC federation is available in a context that can be influenced by untrusted workflow triggers."
                 remediation="Restrict id-token: write to master-only release/publish jobs protected by a GitHub environment."
+                ;;
+              *"Dockerfile"*)
+                cause="A container build file contains a mutable base, remote execution, remote ADD, or secret-like ARG/ENV pattern."
+                remediation="Pin base images by digest, avoid remote script execution and remote ADD, and keep secrets out of Docker build inputs."
                 ;;
               *"hidden Unicode"*)
                 cause="A ref or workflow value contains invisible Unicode that can hide intent or confuse review."
@@ -2061,6 +2398,10 @@ jobs:
                 cause="A workflow contains a cache primitive or does not explicitly disable an implicit cache control."
                 remediation="Remove cache primitives and set supported implicit cache toggles such as cache:false, cache-binary:false, or no-cache:true."
                 ;;
+              *"Workflow cache prohibited"*)
+                cause="A workflow can read or write mutable GitHub Actions cache state."
+                remediation="Remove workflow cache use entirely, or explicitly disable cache-capable setup actions with cache: false."
+                ;;
               *"downloads artifacts without an explicit name or pattern"*)
                 cause="A publish workflow can ingest unintended artifacts from the same run."
                 remediation="Download only explicit artifact names or constrained patterns and verify the expected artifact manifest before packaging."
@@ -2072,6 +2413,10 @@ jobs:
               *"GitHub token format assumption"*)
                 cause="A workflow or helper may assume GitHub App installation tokens are short opaque strings."
                 remediation="Accept stateless ghs_ JWT-format tokens around 520 characters, avoid truncation/fixed-length regexes, and validate enabled/disabled override-header paths."
+                ;;
+              *"zizmor found"*)
+                cause="zizmor reported high-severity GitHub Actions static-analysis findings."
+                remediation="Review the zizmor finding table, remove the unsafe workflow pattern, and rerun risk analysis."
                 ;;
               *)
                 cause="A blocking governance rule matched this workflow state."
@@ -2088,7 +2433,7 @@ jobs:
           rca_file="$(mktemp)"
           {
             echo ""
-            echo "## 12. Enforcement Gate"
+            echo "## 14. Enforcement Gate"
             echo ""
             echo "Composite supply-chain score and privileged automation inventory are advisory."
             echo ""
@@ -2141,7 +2486,7 @@ jobs:
           unset GITHUB_TOKEN || true
           touch "${RUNNER_TEMP}/risk-analysis-linux-failed"
 
-      - name: "13. Executive Risk Summary"
+      - name: "15. Executive Risk Summary"
         if: always()
         env:
           BASH_ENV: /dev/null
@@ -2183,8 +2528,10 @@ jobs:
             '^\[CRITICAL\].*curl/wget\|bash'
             '^\[CRITICAL\].*checkout PR head code with elevated permissions'
             '^\[CRITICAL\].*id-token: write'
+            '^\[CRITICAL\].*Dockerfile'
             '^\[CRITICAL\].*hidden Unicode'
             '^\*\*\[CRITICAL\].*hidden Unicode'
+            '^\[HIGH\].*Dockerfile'
             '^\[HIGH\] Missing BASH_ENV'
             '^\[HIGH\].*git force-push/tag-rewrite'
             '^\[HIGH\].*workflow_run \+ download-artifact'
@@ -2195,9 +2542,11 @@ jobs:
             '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
             '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
             '^\[HIGH\] Absolute cache policy violation'
+            '^\[HIGH\] Workflow cache prohibited:'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'
+            '^\[HIGH\] zizmor found'
           )
 
           audit_failed=false
@@ -2296,10 +2645,20 @@ jobs:
           persist-credentials: false
 
       - name: "Checkout target repository"
+        if: inputs.analysis_target != 'Specific PR number' && github.event_name != 'pull_request'
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
-          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '' && format('refs/pull/{0}/head', inputs.pr_number) || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
+          path: target
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Checkout PR head (if PR mode)"
+        if: (inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '') || github.event_name == 'pull_request'
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: refs/pull/${{ inputs.pr_number || github.event.pull_request.number }}/head
           path: target
           fetch-depth: 0
           persist-credentials: false
@@ -3016,27 +3375,44 @@ jobs:
             $report += "[OK] Privileged workflow_dispatch publish jobs are master/environment gated"
           }
 
-          # H-6: privileged cache boundaries must not mix PR/release cache namespaces.
+          # H-6: workflow cache use is prohibited in every boundary.
           $cacheBoundaryGaps = 0
           foreach ($wf in $workflows) {
+            if ($wf.Name -eq "ci-pr-risk-security-analysis.yml") { continue }
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            $hasWrite = $content -match '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write'
-            if ($hasWrite -and $content -match 'cache-to:\s*type=gha|restore-keys:') {
-              if ($content -notmatch "github\.ref == 'refs/heads/master'") {
+            $lines = @($content -split "`r?`n")
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              $code = ($lines[$i] -split '#', 2)[0]
+              if ($code -match 'uses:\s*actions/cache@') {
                 $cacheBoundaryGaps++
-                $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` combines write credentials with GHA cache usage without a master-only gate"
+                $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): actions/cache")``"
               }
-            }
-            if ($wf.Name -eq "ci-latest-release.yml" -and $content -match 'restore-keys:') {
-              $cacheBoundaryGaps++
-              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` release workflow uses broad cache restore keys"
+              if ($code -match 'uses:\s*msys2/setup-msys2@') {
+                $end = [Math]::Min($lines.Count - 1, $i + 25)
+                $window = ($lines[$i..$end] -join "`n")
+                if ($window -notmatch '(?m)^\s+cache:\s*(false|0|no|off)\s*$') {
+                  $cacheBoundaryGaps++
+                  $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): msys2/setup-msys2 cache not disabled")``"
+                }
+              }
+              if ($code -match 'cache-(from|to):\s*\S|restore-keys:\s*\S|save-always:\s*\S') {
+                $cacheBoundaryGaps++
+                $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): cache input")``"
+              }
+              if ($code -match '^\s+cache:\s*(\S.*)$') {
+                $cacheValue = $Matches[1].Trim().Trim("'`"").ToLowerInvariant()
+                if (@('false', '0', 'no', 'off') -notcontains $cacheValue) {
+                  $cacheBoundaryGaps++
+                  $report += "[HIGH] Workflow cache prohibited: ``$(Sanitize-Line "$($wf.Name):$($i + 1): cache input")``"
+                }
+              }
             }
           }
           if ($cacheBoundaryGaps -eq 0) {
-            $report += "[OK] Privileged cache boundaries are isolated from PR/release namespace mixing"
+            $report += "[OK] No workflow cache use detected"
           }
 
-          # H-7: publish workflows must not consume mutable cache or broad artifact intake.
+          # H-7: publish workflows must not consume broad artifact intake.
           $publishBoundaryGaps = 0
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
@@ -3051,14 +3427,6 @@ jobs:
               $hasPublishBoundary = $true
             }
             if (-not $hasPublishBoundary) { continue }
-            if ($content -match 'uses:\s*actions/cache@') {
-              $publishBoundaryGaps++
-              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses actions/cache in a publish/write workflow boundary"
-            }
-            if ($content -match 'cache-(from|to):\s*type=gha') {
-              $publishBoundaryGaps++
-              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses Docker Buildx GHA cache in a publish/write workflow boundary"
-            }
             if (($content -match 'download-artifact') -and ($content -notmatch '(?m)^\s+(name|pattern):\s*')) {
               $publishBoundaryGaps++
               $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` publish workflow downloads artifacts without an explicit name or pattern"
@@ -3069,7 +3437,7 @@ jobs:
             }
           }
           if ($publishBoundaryGaps -eq 0) {
-            $report += "[OK] Publish workflows do not use Actions cache, Buildx GHA cache, or broad artifact intake"
+            $report += "[OK] Publish workflows do not use broad artifact intake"
           }
 
           # H-8: GitHub App installation tokens are moving to longer stateless ghs_ JWTs.
@@ -3325,7 +3693,11 @@ jobs:
           $report = @()
           $report += "## 8. Supply-Chain Risk Score (Windows Validation)"
           $report += ""
-          $report += "**Score: $(Sanitize-Line "$score")/100 (Grade: $(Sanitize-Line "$grade"))**"
+          if ($score -eq 100) {
+            $report += "[OK] Supply-Chain Risk: None Identified"
+          } else {
+            $report += "[WARN] Supply-Chain Risk: Score $(Sanitize-Line "$score")/100 (Grade: $(Sanitize-Line "$grade"))"
+          }
           $report += ""
           $report += "Composite score excludes approved privileged automation. The enforcement gate fails only objective blocking findings."
           $report += ""
@@ -3336,7 +3708,7 @@ jobs:
               $report += "| $(Sanitize-Line $d) |  |"
             }
           } else {
-            $report += "[OK] Perfect supply-chain security score"
+            $report += "[OK] No Windows validation deductions"
           }
           if ($advisories.Count -gt 0) {
             $report += ""
@@ -3762,10 +4134,7 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact',
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
-            '^\[HIGH\].*write credentials with GHA cache',
-            '^\[HIGH\].*release workflow uses broad cache restore keys',
-            '^\[HIGH\].*actions/cache in a publish/write workflow boundary',
-            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary',
+            '^\[HIGH\] Workflow cache prohibited:',
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
             '^\[HIGH\].*allows missing release artifacts',
             '^\[HIGH\] GitHub token format assumption'
@@ -3808,15 +4177,9 @@ jobs:
             } elseif ($Finding -like "*privileged workflow_dispatch publish permissions*") {
               $cause = "Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
               $remediation = "Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
-            } elseif ($Finding -like "*write credentials with GHA cache*") {
-              $cause = "A write-capable job shares mutable GitHub Actions cache state without a master-only trust boundary."
-              $remediation = "Namespace caches by workflow role and restrict write-capable cache producers to master-only jobs."
-            } elseif ($Finding -like "*release workflow uses broad cache restore keys*") {
-              $cause = "Release builds can restore cache entries from broader or lower-trust cache namespaces."
-              $remediation = "Use exact release-specific cache keys with pinned dependency versions and no broad restore prefixes."
-            } elseif (($Finding -like "*actions/cache in a publish/write workflow boundary*") -or ($Finding -like "*Buildx GHA cache in a publish/write workflow boundary*")) {
-              $cause = "A publish or write-capable workflow can consume mutable GitHub Actions cache state before producing packages, releases, images, or attestations."
-              $remediation = "Remove Actions cache and Buildx GHA cache from publish paths; rebuild release inputs from pinned refs and verified checksums."
+            } elseif ($Finding -like "*Workflow cache prohibited*") {
+              $cause = "A workflow can read or write mutable GitHub Actions cache state."
+              $remediation = "Remove workflow cache use entirely, or explicitly disable cache-capable setup actions with cache: false."
             } elseif ($Finding -like "*downloads artifacts without an explicit name or pattern*") {
               $cause = "A publish workflow can ingest unintended artifacts from the same run."
               $remediation = "Download only explicit artifact names or constrained patterns and verify the expected artifact manifest before packaging."
@@ -3937,10 +4300,7 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact',
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
-            '^\[HIGH\].*write credentials with GHA cache',
-            '^\[HIGH\].*release workflow uses broad cache restore keys',
-            '^\[HIGH\].*actions/cache in a publish/write workflow boundary',
-            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary',
+            '^\[HIGH\] Workflow cache prohibited:',
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
             '^\[HIGH\].*allows missing release artifacts',
             '^\[HIGH\] GitHub token format assumption'

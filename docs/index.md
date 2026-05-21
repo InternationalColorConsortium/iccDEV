@@ -7,6 +7,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 
 - [Install](install.md): package and container quickstart
 - [Build](build.md): build from source on Linux, macOS, and Windows
+- [Python packaging release](python-packaging-release.md): Python PR, merge, and production PyPI release steps
 - [CTest tool suites](ctest.md): local CTest commands, registered suites, and add-test process
 - [CLI tool reference](tools-cli-reference.md): command-line tool summary and shared options
 - [IccJSON guide](iccjson.md): JSON conversion workflow

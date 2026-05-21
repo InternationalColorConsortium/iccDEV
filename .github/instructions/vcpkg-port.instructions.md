@@ -67,12 +67,12 @@ an immutable `REF` commit and matching `SHA512`. Refresh both together.
 |---------|---------|-------------|-------------|
 | `tools` | OFF | `ENABLE_TOOLS` | nlohmann-json |
 | `xml` | OFF | `ENABLE_ICCXML` | libxml2 |
-| `json` | OFF | `ENABLE_ICCJSON` | nlohmann-json |
+| `json` | OFF | `ENABLE_ICCJSON` | nlohmann-json; also builds IccConnect |
 
 ## Installed Artifacts
 
 - **Headers**: `include/RefIccMAX/IccProfLib2/*.h` (52 files)
-- **Libraries**: `lib/IccProfLib2-static.lib` plus feature libraries
+- **Libraries**: `lib/IccProfLib2-static.lib` plus feature libraries, including `IccConnect2-static` when JSON/tools are enabled
 - **CMake config**: `share/RefIccMAX/RefIccMAXConfig.cmake`
 - **Tools**: installed only with the `tools` feature; XML/JSON conversion
   tools are copied only when their matching feature is enabled
@@ -85,8 +85,9 @@ an immutable `REF` commit and matching `SHA512`. Refresh both together.
 - macos-14 (arm64-osx, Apple Clang)
 
 Verification checks: headers present, static libs exist, CMake config
-resolves, and six tools execute: iccDumpProfile, iccRoundTrip, iccFromXml,
-iccToXml, iccFromJson, and iccToJson.
+resolves, and core/XML/JSON/connect tools execute: iccDumpProfile,
+iccRoundTrip, iccFromXml, iccToXml, iccFromJson, iccToJson, and
+iccApplyNamedCmm.
 
 ## Version Bumps
 

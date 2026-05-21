@@ -63,7 +63,7 @@
 #include "IccUtil.h"
 #include "IccTag.h"
 #include "IccJsonConfig.h"
-#include "../../IccProfLib/IccJsonTypes.h"
+#include "IccJsonTypes.h"
 #include <string>
 #include <vector>
 

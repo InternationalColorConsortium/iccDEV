@@ -316,6 +316,33 @@ Before using a branch-specific regression image, maintainers should publish it
 through the maintainer-controlled container release path, record the branch or
 SHA tag, then pass that tag to `ci-iccdev-tool-tests.yml`.
 
+## Python Wheel Validation
+
+The `python/` package supports local editable installs, source distributions,
+platform wheels, and cibuildwheel matrix validation:
+
+```bash
+python -m pip install -e "./python[dev]"
+python -m pytest --rootdir . --import-mode=importlib python/tests -v --tb=short -m "not parity"
+ICCDEV_BUILD_DIR=/path/to/Build python -m pytest --rootdir . --import-mode=importlib python/tests -v --tb=short -m parity
+cd python
+python -m build
+python -m twine check dist/*.whl dist/*.tar.gz
+python -m cibuildwheel --print-build-identifiers --platform linux
+python -m cibuildwheel --print-build-identifiers --platform macos
+python -m cibuildwheel --print-build-identifiers --platform windows
+```
+
+On Windows, run from a Developer Command Prompt or another shell where `cl.exe`
+is already available. The package build reuses that environment instead of
+launching another `vcvarsall.bat`, which avoids failures from very long
+developer `PATH` values. Native-backed parity tests use the built iccDEV tools
+for ProfileLib, XML, and JSON parity; cibuildwheel keeps using the lightweight
+`not parity` subset so isolated wheel tests do not require repository build
+artifacts.
+For Python packaging PR gates, merge criteria, and production PyPI release
+steps, see [Python packaging PR, merge, and production release](python-packaging-release.md).
+
 ## vcpkg Consumers
 
 The `ports/iccdev/` overlay port builds core static libraries and CLI tools.

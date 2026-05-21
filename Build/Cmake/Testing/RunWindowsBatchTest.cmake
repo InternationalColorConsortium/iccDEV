@@ -51,6 +51,15 @@ endif()
 list(APPEND _candidate_configs Release RelWithDebInfo Debug MinSizeRel)
 list(REMOVE_DUPLICATES _candidate_configs)
 
+function(_iccdev_append_existing_path out_var)
+  foreach(_path IN LISTS ARGN)
+    if(NOT "${_path}" STREQUAL "" AND EXISTS "${_path}")
+      list(APPEND ${out_var} "${_path}")
+    endif()
+  endforeach()
+  set(${out_var} "${${out_var}}" PARENT_SCOPE)
+endfunction()
+
 set(_resolved_config "")
 set(_resolved_tool_suffix "")
 set(_resolved_runtime_dir "")
@@ -113,13 +122,14 @@ set(_tool_dirs
 
 set(_path_entries)
 if(NOT "${_resolved_runtime_dir}" STREQUAL "")
-  list(APPEND _path_entries "${_resolved_runtime_dir}")
+  _iccdev_append_existing_path(_path_entries "${_resolved_runtime_dir}")
   set(_tools_dir_env "${_resolved_runtime_dir}")
 else()
   foreach(_tool_dir IN LISTS _tool_dirs)
-    list(APPEND _path_entries "${ICCDEV_BUILD_DIR}/Tools/${_tool_dir}${_resolved_tool_suffix}")
+    _iccdev_append_existing_path(_path_entries
+      "${ICCDEV_BUILD_DIR}/Tools/${_tool_dir}${_resolved_tool_suffix}")
   endforeach()
-  list(APPEND _path_entries
+  _iccdev_append_existing_path(_path_entries
     "${ICCDEV_BUILD_DIR}/IccProfLib${_resolved_tool_suffix}"
     "${ICCDEV_BUILD_DIR}/IccXML${_resolved_tool_suffix}"
     "${ICCDEV_BUILD_DIR}/IccJSON${_resolved_tool_suffix}"
@@ -127,12 +137,23 @@ else()
   )
   set(_tools_dir_env "${ICCDEV_BUILD_DIR}/Tools")
 endif()
-list(REMOVE_DUPLICATES _path_entries)
 
 iccdev_collect_cache_runtime_path_entries(_runtime_path_entries "${ICCDEV_BUILD_DIR}")
-list(APPEND _path_entries ${_runtime_path_entries})
-list(REMOVE_DUPLICATES _path_entries)
+_iccdev_append_existing_path(_path_entries ${_runtime_path_entries})
 
+_iccdev_append_existing_path(_path_entries
+  "${_source_repo_root}/installed/x64-windows/debug/bin"
+  "${_source_repo_root}/installed/x64-windows/bin"
+  "$ENV{SystemRoot}/System32"
+  "$ENV{SystemRoot}"
+  "C:/Windows/System32"
+  "C:/Windows")
+
+if(DEFINED ENV{ICCDEV_WINDOWS_EXTRA_PATH} AND NOT "$ENV{ICCDEV_WINDOWS_EXTRA_PATH}" STREQUAL "")
+  list(APPEND _path_entries "$ENV{ICCDEV_WINDOWS_EXTRA_PATH}")
+endif()
+
+list(REMOVE_DUPLICATES _path_entries)
 list(JOIN _path_entries ";" _path_prefix)
 set(_run_path "${_path_prefix}")
 string(REPLACE ";" "\\;" _run_path_env "${_run_path}")

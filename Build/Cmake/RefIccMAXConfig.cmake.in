@@ -24,12 +24,18 @@
 #   find_package(RefIccMAX CONFIG REQUIRED)
 #   target_link_libraries(myapp PRIVATE RefIccMAX::IccProfLib2)
 #   target_link_libraries(myapp PRIVATE RefIccMAX::IccXML2)
+#   target_link_libraries(myapp PRIVATE RefIccMAX::IccJSON2)
+#   target_link_libraries(myapp PRIVATE RefIccMAX::IccConnect2)
 #
 # Namespaced targets (recommended - include dirs propagate automatically):
 #   RefIccMAX::IccProfLib2        - Core ICC profile library
 #   RefIccMAX::IccXML2            - XML serialization library (links IccProfLib2 transitively)
+#   RefIccMAX::IccJSON2           - JSON serialization library (links IccProfLib2 transitively)
+#   RefIccMAX::IccConnect2        - JSON-configurable CMM connection library
 #   RefIccMAX::IccProfLib2-static - Static version
 #   RefIccMAX::IccXML2-static     - Static version
+#   RefIccMAX::IccJSON2-static    - Static version
+#   RefIccMAX::IccConnect2-static - Static version
 #
 # Legacy variables (backward compatibility):
 #   REFICCMAX_FOUND        - True if RefIccMAX found
@@ -78,9 +84,11 @@ foreach(_rim_target
     RefIccMAX::IccProfLib2
     RefIccMAX::IccXML2
     RefIccMAX::IccJSON2
+    RefIccMAX::IccConnect2
     RefIccMAX::IccProfLib2-static
     RefIccMAX::IccXML2-static
-    RefIccMAX::IccJSON2-static)
+    RefIccMAX::IccJSON2-static
+    RefIccMAX::IccConnect2-static)
   if(TARGET ${_rim_target})
     get_target_property(_rim_configs ${_rim_target} IMPORTED_CONFIGURATIONS)
     if(_rim_configs)
@@ -132,6 +140,12 @@ if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
       INTERFACE_LINK_LIBRARIES "RefIccMAX::IccJSON2-static"
     )
   endif()
+  if(NOT TARGET RefIccMAX::IccConnect2 AND TARGET RefIccMAX::IccConnect2-static)
+    add_library(RefIccMAX::IccConnect2 INTERFACE IMPORTED)
+    set_target_properties(RefIccMAX::IccConnect2 PROPERTIES
+      INTERFACE_LINK_LIBRARIES "RefIccMAX::IccConnect2-static"
+    )
+  endif()
 
   # Build legacy include/library lists from the exported targets
   set(REFICCMAX_INCLUDE_DIRS "")
@@ -163,6 +177,12 @@ if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
     list(APPEND REFICCMAX_LIBRARIES RefIccMAX::IccJSON2-static)
   endif()
 
+  if(TARGET RefIccMAX::IccConnect2)
+    list(APPEND REFICCMAX_LIBRARIES RefIccMAX::IccConnect2)
+  elseif(TARGET RefIccMAX::IccConnect2-static)
+    list(APPEND REFICCMAX_LIBRARIES RefIccMAX::IccConnect2-static)
+  endif()
+
   if(REFICCMAX_INCLUDE_DIRS)
     list(REMOVE_DUPLICATES REFICCMAX_INCLUDE_DIRS)
   endif()
@@ -177,6 +197,9 @@ if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
   if(TARGET RefIccMAX::IccJSON2 AND NOT TARGET IccJSON2)
     add_library(IccJSON2 ALIAS RefIccMAX::IccJSON2)
   endif()
+  if(TARGET RefIccMAX::IccConnect2 AND NOT TARGET IccConnect2)
+    add_library(IccConnect2 ALIAS RefIccMAX::IccConnect2)
+  endif()
   if(TARGET RefIccMAX::IccProfLib2-static AND NOT TARGET IccProfLib2-static)
     add_library(IccProfLib2-static ALIAS RefIccMAX::IccProfLib2-static)
   endif()
@@ -185,5 +208,8 @@ if(RefIccMAX_FOUND OR REFICCMAX_FOUND)
   endif()
   if(TARGET RefIccMAX::IccJSON2-static AND NOT TARGET IccJSON2-static)
     add_library(IccJSON2-static ALIAS RefIccMAX::IccJSON2-static)
+  endif()
+  if(TARGET RefIccMAX::IccConnect2-static AND NOT TARGET IccConnect2-static)
+    add_library(IccConnect2-static ALIAS RefIccMAX::IccConnect2-static)
   endif()
 endif()

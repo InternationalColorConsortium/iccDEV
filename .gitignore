@@ -105,3 +105,23 @@ Build/Cmake/Tools/**/wxProfileDump
 Testing/**/*.icc
 docs/generated/
 build-test/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.pyd
+python/iccdev/_iccdev.cpp
+python/iccdev/_iccdev.c
+python/vendor/
+python/wheelhouse/
+
+# MATLAB / Octave
+*.mex*
+*.mexa64
+*.mexmaci64
+*.mexw64
+*.oct

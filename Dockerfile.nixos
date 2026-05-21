@@ -52,6 +52,7 @@ RUN nix-shell -E 'with import <nixpkgs> {}; stdenv.mkDerivation { name = "iccdev
     ls -lh /workspace/iccDEV/Build/IccProfLib/libIccProfLib2* && \
     ls -lh /workspace/iccDEV/Build/IccXML/libIccXML2* && \
     (ls -lh /workspace/iccDEV/Build/IccJSON/libIccJSON2* 2>/dev/null || echo 'IccJSON: not built') && \
+    (ls -lh /workspace/iccDEV/Build/IccConnect/libIccConnect2* 2>/dev/null || echo 'IccConnect: not built') && \
     echo '=== Tools ===' && \
     find /workspace/iccDEV/Build/Tools -type f -executable | sort" \
  && rm -rf /workspace/iccDEV/.git \
@@ -76,7 +77,7 @@ RUN nix-shell -E 'with import <nixpkgs> {}; stdenv.mkDerivation { name = "iccdev
  && { \
       printf '%s\n' "$BUSYBOX_ROOT"; \
       printf '%s\n' "$LLVM_ROOT"; \
-      find /workspace/iccDEV/Build/Tools /workspace/iccDEV/Build/IccProfLib /workspace/iccDEV/Build/IccXML /workspace/iccDEV/Build/IccJSON \
+      find /workspace/iccDEV/Build/Tools /workspace/iccDEV/Build/IccProfLib /workspace/iccDEV/Build/IccXML /workspace/iccDEV/Build/IccJSON /workspace/iccDEV/Build/IccConnect \
         -type f \( -executable -o -name '*.so*' \) -print \
         | while IFS= read -r file; do \
             "$LDD_ROOT/bin/ldd" "$file" 2>/dev/null \
@@ -132,7 +133,7 @@ ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /bin:\
 /usr/bin"
 
-ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML:/workspace/iccDEV/Build/IccJSON"
+ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML:/workspace/iccDEV/Build/IccJSON:/workspace/iccDEV/Build/IccConnect"
 ENV ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer"
 ENV ICCDEV_ROOT="/workspace/iccDEV"
 ENV LANG=C

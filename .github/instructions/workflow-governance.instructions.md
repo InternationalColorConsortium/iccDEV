@@ -16,7 +16,7 @@ iccDEV maintainer explicitly requests that work.
 ## Maintainer Security Posture
 
 Maintainer-owned infrastructure should favor conservative review over speed.
-For CI, release, packaging, Docker, and security-automation changes,
+For CI, release, packaging, Docker, MCP, and security-automation changes,
 maintainers should run the smallest complete local security battery that matches
 the changed surface, patch confirmed findings, and retest before pushing.
 
@@ -263,6 +263,7 @@ actionlint -no-color .github/workflows/<workflow>.yml
 yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' .github/workflows/<workflow>.yml
 zizmor .github/workflows/<workflow>.yml
 gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+gh codeql resolve queries .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls
 .github/scripts/preflight-safety-checks.sh
 ```
 

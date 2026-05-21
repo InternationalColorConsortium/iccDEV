@@ -22,9 +22,10 @@ Key arguments:
 
 | Argument | Values |
 |----------|--------|
-| `link_type` | `0` writes an ICC DeviceLink profile; `1` writes a `.cube` text LUT. |
+| `link_type` | `0` writes an ICC DeviceLink profile; `1` writes a `.cube` text LUT. Other values are rejected. |
+| `lut_size` | Integer grid size from `2` through `255`. |
 | `option` with `link_type=0` | `0` writes a version 4 profile; `1` writes a version 5 profile. |
-| `option` with `link_type=1` | Digits of precision for `.cube` output. |
+| `option` with `link_type=1` | Digits of precision for `.cube` output, from `0` through `20`. |
 | `first_transform` | `0` uses the destination transform from the first profile; `1` uses the source transform from the first profile. |
 | `interp` | `0` linear interpolation; `1` tetrahedral interpolation. |
 

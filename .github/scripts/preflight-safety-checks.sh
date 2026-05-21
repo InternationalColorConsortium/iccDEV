@@ -441,6 +441,7 @@ reviewed_pr_script_exceptions = 0
 yaml_anchor_canaries = 0
 package_install_canaries = 0
 reviewed_package_install_exceptions = 0
+workflow_cache_canaries = 0
 
 all_workflows = {}
 for workflow_path in sorted(Path(".github/workflows").glob("*.yml")) + sorted(Path(".github/workflows").glob("*.yaml")):
@@ -508,33 +509,52 @@ for path in sys.argv[1:]:
             pr_context = bool(workflow_triggers(workflow) & {"pull_request", "pull_request_target"})
 
             if uses.startswith("actions/cache@"):
-                print(f"[FAIL] {label}: actions/cache is banned", file=sys.stderr)
+                print(f"[FAIL] {label}: actions/cache is prohibited", file=sys.stderr)
                 failures += 1
-                cache_publish += 1
+                workflow_cache_canaries += 1
 
             if uses.startswith("docker/build-push-action@"):
                 for key in ("cache-from", "cache-to"):
-                    if "type=gha" in str(block.get(key, "")):
-                        print(f"[FAIL] {label}: Docker Buildx {key}=type=gha is banned",
+                    if str(block.get(key, "")).strip():
+                        print(f"[FAIL] {label}: Docker Buildx {key} is prohibited",
                               file=sys.stderr)
                         failures += 1
-                        cache_publish += 1
-                if str(block.get("no-cache", "")).lower() == "false":
-                    print(f"[FAIL] {label}: Docker Buildx no-cache:false is banned",
+                        workflow_cache_canaries += 1
+
+            if uses.startswith("msys2/setup-msys2@"):
+                if str(block.get("cache", "")).strip().lower() not in {"false", "0", "no", "off"}:
+                    print(f"[FAIL] {label}: msys2/setup-msys2 cache must be disabled with cache: false",
                           file=sys.stderr)
                     failures += 1
-                    cache_publish += 1
+                    workflow_cache_canaries += 1
 
-            for key in ("cache", "cache-binary"):
-                if key in block and str(block.get(key, "")).lower() != "false":
-                    print(f"[FAIL] {label}: {key} must be false", file=sys.stderr)
-                    failures += 1
-                    cache_publish += 1
-
-            if "cache-dependency-path" in block:
-                print(f"[FAIL] {label}: cache-dependency-path is banned", file=sys.stderr)
+            for cache_key in ("cache", "restore-keys", "save-always"):
+                if cache_key not in block:
+                    continue
+                cache_value = str(block.get(cache_key, "")).strip().lower()
+                if cache_key == "cache" and cache_value in {"", "false", "0", "no", "off"}:
+                    continue
+                print(f"[FAIL] {label}: workflow cache input {cache_key} is prohibited",
+                      file=sys.stderr)
                 failures += 1
-                cache_publish += 1
+                workflow_cache_canaries += 1
+
+            for cache_key in ("cache-binary", "cache-dependency-path"):
+                if cache_key not in block:
+                    continue
+                cache_value = str(block.get(cache_key, "")).strip().lower()
+                if cache_key == "cache-binary" and cache_value in {"", "false", "0", "no", "off"}:
+                    continue
+                print(f"[FAIL] {label}: workflow cache input {cache_key} is prohibited",
+                      file=sys.stderr)
+                failures += 1
+                workflow_cache_canaries += 1
+
+            if str(block.get("no-cache", "")).strip().lower() == "false":
+                print(f"[FAIL] {label}: Docker Buildx no-cache:false is prohibited",
+                      file=sys.stderr)
+                failures += 1
+                workflow_cache_canaries += 1
 
             if uses.startswith("actions/download-artifact@") and publish_context:
                 if "name" not in block and "pattern" not in block:
@@ -610,6 +630,7 @@ for path in sys.argv[1:]:
                     package_install_canaries += 1
 
 print(f"cache publish canaries: {cache_publish}")
+print(f"workflow cache canaries: {workflow_cache_canaries}")
 print(f"artifact intake canaries: {artifact_intake}")
 print(f"artifact publish canaries: {artifact_publish}")
 print(f"untrusted PR artifact canaries: {untrusted_artifacts}")
@@ -1062,8 +1083,16 @@ fi
 if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
   if command -v codeql >/dev/null 2>&1; then
     run_check "CodeQL query resolution" codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+    if [ -f .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls ]; then
+      run_check "CodeQL MCP query resolution" \
+        codeql resolve queries .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls
+    fi
   elif command -v gh >/dev/null 2>&1 && gh codeql version >/dev/null 2>&1; then
     run_check "CodeQL query resolution" gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+    if [ -f .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls ]; then
+      run_check "CodeQL MCP query resolution" \
+        gh codeql resolve queries .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls
+    fi
   else
     skip_or_fail "codeql or gh codeql"
   fi

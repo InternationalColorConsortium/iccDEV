@@ -127,7 +127,7 @@ bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
   if (m_nThreads <= 0) {
     return false;
   }
-  
+
   m_workers.clear();
   m_workers.reserve((size_t)m_nThreads);
 

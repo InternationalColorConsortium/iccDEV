@@ -309,21 +309,33 @@ void CIccMpeSpectralMatrix::Describe(std::string &sDescription, int /* nVerbosen
   snprintf(buf, bufSize, "RANGE %f %f %d\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
   sDescription += buf;
 
+  const size_t kMaxDescribeSamples = 4096;
+  size_t rangeSteps = static_cast<size_t>(m_Range.steps);
+  size_t describeSteps = rangeSteps < kMaxDescribeSamples ? rangeSteps : kMaxDescribeSamples;
+
   sDescription += "White\n";
-  for (j=0; j<(int)m_Range.steps; j++) {
-    if (j)
-      sDescription += " ";
-    snprintf(buf, bufSize, "%12.8lf", m_pWhite[j]);
-    sDescription += buf;
+  if (m_pWhite) {
+    for (j=0; j<(int)describeSteps; j++) {
+      if (j)
+        sDescription += " ";
+      snprintf(buf, bufSize, "%12.8lf", m_pWhite[j]);
+      sDescription += buf;
+    }
+    if (describeSteps < rangeSteps)
+      sDescription += " ...";
   }
   sDescription += "\n";
 
   sDescription += "BLACK_OFFSET\n";
-  for (j=0; j<(int)m_Range.steps; j++) {
-    if (j)
-      sDescription += " ";
-    snprintf(buf, bufSize, "%12.8lf", m_pOffset[j]);
-    sDescription += buf;
+  if (m_pOffset) {
+    for (j=0; j<(int)describeSteps; j++) {
+      if (j)
+        sDescription += " ";
+      snprintf(buf, bufSize, "%12.8lf", m_pOffset[j]);
+      sDescription += buf;
+    }
+    if (describeSteps < rangeSteps)
+      sDescription += " ...";
   }
   sDescription += "\n";
 
@@ -331,8 +343,13 @@ void CIccMpeSpectralMatrix::Describe(std::string &sDescription, int /* nVerbosen
     icUInt16Number nVectors = numVectors();
 
     sDescription += "CHANNEL_DATA\n";
-    for (j=0; j<(int)nVectors; j++) {
-      for (i=0; i<(int)m_Range.steps; i++) {
+    // SetSize allocates numVectors() * range.steps floats in row-major order.
+    icFloatNumber *end = m_pMatrix + m_size;
+    size_t steps = rangeSteps;
+    for (j=0; j<(int)nVectors && data < end; j++) {
+      size_t remaining = static_cast<size_t>(end - data);
+      size_t rowCount = remaining < steps ? remaining : steps;
+      for (i=0; i<(int)rowCount; i++) {
         if (i)
           sDescription += " ";
         snprintf(buf, bufSize, "%12.8lf", data[i]);
@@ -1799,11 +1816,13 @@ void CIccMpeSpectralObserver::Describe(std::string &sDescription, int /* nVerbos
   sDescription += buf;
 
   sDescription += "White\n";
-  for (j=0; j<(int)m_Range.steps; j++) {
-    if (j)
-      sDescription += " ";
-    snprintf(buf, bufSize, "%12.8lf", m_pWhite[j]);
-    sDescription += buf;
+  if (m_pWhite) {
+    for (j=0; j<(int)m_Range.steps; j++) {
+      if (j)
+        sDescription += " ";
+      snprintf(buf, bufSize, "%12.8lf", m_pWhite[j]);
+      sDescription += buf;
+    }
   }
   sDescription += "\n";
 

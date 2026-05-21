@@ -1,0 +1,443 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Reusable workflow: Build + Test iccDEV on Windows (MSVC)
+#
+# Uses vcpkg dependencies from the v2.3.1 release,
+# PowerShell sanitizer for GITHUB_STEP_SUMMARY.
+#
+###############################################################
+
+name: "_build-test-windows"
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        description: "Python version"
+        type: string
+        default: "3.12"
+
+jobs:
+  build-test:
+    name: "Build + Test (windows-2022, Python ${{ inputs.python-version }})"
+    runs-on: windows-2022
+    timeout-minutes: 30
+
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      # ---------------------------------------------------------------
+      # Phase 1: Checkout + Python
+      # ---------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      # ---------------------------------------------------------------
+      # Phase 2: Fetch vcpkg dependencies
+      # ---------------------------------------------------------------
+      - name: Fetch vcpkg dependencies
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          Write-Host "Fetching vcpkg dependencies from release..."
+          $depsUrl = @(
+            "https://github.com/InternationalColorConsortium/iccDEV/releases/download"
+            "v2.3.1/vcpkg-exported-deps.zip"
+          ) -join "/"
+          Invoke-WebRequest `
+            -Uri $depsUrl `
+            -OutFile "deps.zip"
+          Write-Host "Extracting dependencies..."
+          tar -xf deps.zip
+          Remove-Item deps.zip
+          Write-Host "[OK] Dependencies extracted"
+
+      # ---------------------------------------------------------------
+      # Phase 3: Build iccDEV C++ tools (MSVC)
+      # ---------------------------------------------------------------
+      - name: Build iccDEV C++ tools
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          Write-Host "Configuring iccDEV..."
+          cmake -B out\vs2022-vcpkg -S Build\Cmake `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_MANIFEST_MODE=OFF `
+            -DENABLE_TOOLS=ON `
+            -DENABLE_TESTS=ON `
+            -Wno-dev
+          if ($LASTEXITCODE -ne 0) {
+            throw "CMake configure failed with exit code $LASTEXITCODE"
+          }
+
+          Write-Host "Building iccDEV..."
+          cmake --build out\vs2022-vcpkg --config Release --parallel
+          if ($LASTEXITCODE -ne 0) {
+            throw "CMake build failed with exit code $LASTEXITCODE"
+          }
+
+          Write-Host ""
+          Write-Host "=== Built tools ==="
+          Get-ChildItem -Recurse -File -Include "icc*.exe" -Path .\out\vs2022-vcpkg\Tools\ |
+            Where-Object { $_.FullName -notmatch 'CMakeFiles' } |
+            ForEach-Object { Write-Host $_.FullName }
+
+      # ---------------------------------------------------------------
+      # Phase 4: Run CTest gate
+      # ---------------------------------------------------------------
+      - name: Run Windows CTest gate
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          New-Item -ItemType Directory -Force -Path "out\vs2022-vcpkg\Testing\ci" | Out-Null
+
+          Write-Host "Building CTest helper binaries..."
+          cmake --build out\vs2022-vcpkg --config Release --target build-test-binaries --parallel
+          if ($LASTEXITCODE -ne 0) {
+            throw "CTest helper binary build failed with exit code $LASTEXITCODE"
+          }
+
+          Write-Host "Discovering CTest suites..."
+          $ctestList = ctest --test-dir out\vs2022-vcpkg -C Release -N --no-tests=error 2>&1
+          $ctestList | Tee-Object -FilePath "out\vs2022-vcpkg\Testing\ci\ctest-list.txt"
+          if ($LASTEXITCODE -ne 0) {
+            throw "CTest discovery failed with exit code $LASTEXITCODE"
+          }
+
+          Write-Host "Running CTest suites..."
+          ctest --test-dir out\vs2022-vcpkg -C Release `
+            --output-on-failure `
+            --no-tests=error `
+            --output-junit "out\vs2022-vcpkg\Testing\ci\ctest-results.xml"
+          if ($LASTEXITCODE -ne 0) {
+            throw "CTest execution failed with exit code $LASTEXITCODE"
+          }
+
+          Write-Host "Running check target..."
+          cmake --build out\vs2022-vcpkg --config Release --target check --parallel
+          if ($LASTEXITCODE -ne 0) {
+            throw "check target failed with exit code $LASTEXITCODE"
+          }
+
+      # ---------------------------------------------------------------
+      # Phase 5: Build Python wheel
+      # ---------------------------------------------------------------
+      # preflight: allow-package-install reason=python-wheel-ci
+      - name: Build Python wheel
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          python -m pip install --upgrade pip
+          python -m pip install `
+            'build>=1.2,<1.4' `
+            'cython>=3.0,<3.2' `
+            'setuptools>=64,<81' `
+            'wheel>=0.46.2,<0.47'
+
+          cd python
+          $env:ICCDEV_BUILD_DIR = "$env:GITHUB_WORKSPACE\out\vs2022-vcpkg"
+          python -m build --wheel
+          python -m pip freeze | Sort-Object | Out-File -FilePath dist\python-build-env-windows.txt -Encoding ascii
+
+          Write-Host ""
+          Write-Host "=== Built wheels ==="
+          Get-ChildItem dist\*.whl | ForEach-Object {
+            Write-Host "$($_.Name) ($([math]::Round($_.Length / 1KB)) KB)"
+          }
+
+      # ---------------------------------------------------------------
+      # Phase 6: Install + test Python bindings
+      # ---------------------------------------------------------------
+      # preflight: allow-package-install reason=python-bindings-ci
+      - name: Install and test Python bindings
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          python -m pip install `
+            "pytest>=7.0,<9; python_version < '3.10'" `
+            "pytest>=9.0.3,<10; python_version >= '3.10'" `
+            'numpy>=1.23,<3'
+
+          $wheel = (Get-ChildItem python\dist\*.whl | Select-Object -First 1).FullName
+          python -m pip install $wheel
+          python -m pip show -f iccdev
+
+          python -c "import iccdev; print('iccdev version:', iccdev.__version__)"
+          python -c "from iccdev import ColorSpace; print('ColorSpace.RGB:', hex(ColorSpace.RGB))"
+
+          $env:ICCDEV_REQUIRE_INSTALLED_PACKAGE = '1'
+          $env:ICCDEV_BUILD_DIR = "$env:GITHUB_WORKSPACE\out\vs2022-vcpkg"
+          $env:ICCDEV_TOOLS_DIR = "$env:GITHUB_WORKSPACE\out\vs2022-vcpkg\Tools"
+          $result = python -m pytest --rootdir . --import-mode=importlib `
+            .\python\tests -v --tb=short -m "not parity" 2>&1
+          $result | ForEach-Object { Write-Host $_ }
+
+          if ($LASTEXITCODE -eq 5) {
+            Write-Host "No tests collected -- extension may not be loadable"
+          } elseif ($LASTEXITCODE -ne 0) {
+            Write-Host "WARN: pytest exited $LASTEXITCODE"
+            throw "pytest failed with exit code $LASTEXITCODE"
+          }
+
+          $parity = python -m pytest --rootdir . --import-mode=importlib .\python\tests -v --tb=short -m parity 2>&1
+          $parity | ForEach-Object { Write-Host $_ }
+          if ($LASTEXITCODE -ne 0) {
+            throw "Python parity tests failed with exit code $LASTEXITCODE"
+          }
+
+      # ---------------------------------------------------------------
+      # Phase 7: cibuildwheel native smoke + matrix validation
+      # ---------------------------------------------------------------
+      # preflight: allow-package-install reason=python-wheel-ci
+      - name: Validate Python wheel matrix
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+          PYTHON_VERSION: ${{ inputs.python-version }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          if ($env:PYTHON_VERSION -notmatch '^3\.(9|12|13)$') {
+            throw "Unsupported Python version for cibuildwheel smoke: $env:PYTHON_VERSION"
+          }
+
+          python -m pip install 'cibuildwheel>=2.23,<3' 'twine>=5.0,<7'
+          cd python
+          $distArtifacts = Get-ChildItem -Path dist\* -Include *.whl,*.tar.gz -File
+          if (-not $distArtifacts) {
+            throw "No Python distribution artifacts found in python\dist"
+          }
+          & python -m twine check @($distArtifacts.FullName)
+          Get-ChildItem dist\*.whl | ForEach-Object {
+            python -m zipfile -l $_.FullName
+          }
+
+          Write-Host "=== cibuildwheel configured identifiers ==="
+          python -m cibuildwheel --print-build-identifiers --platform windows
+          python -m cibuildwheel --print-build-identifiers --platform linux
+          python -m cibuildwheel --print-build-identifiers --platform macos
+
+          $pyTag = "cp$($env:PYTHON_VERSION.Replace('.', ''))"
+          $env:CIBW_BUILD = "$pyTag-*"
+          $env:CIBW_ARCHS_WINDOWS = "auto"
+          Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
+          Get-ChildItem -Path iccdev\*.pyd,iccdev\*.so -ErrorAction SilentlyContinue |
+            Remove-Item -Force
+          Copy-Item ..\LICENSE.md LICENSE.md
+          python vendor_iccproflib.py
+          try {
+            python -m cibuildwheel --output-dir wheelhouse
+            if ($LASTEXITCODE -ne 0) {
+              throw "cibuildwheel failed with exit code $LASTEXITCODE"
+            }
+          } finally {
+            python vendor_iccproflib.py --clean
+            Remove-Item -Force LICENSE.md -ErrorAction SilentlyContinue
+            Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
+            Get-ChildItem -Path iccdev\*.pyd,iccdev\*.so -ErrorAction SilentlyContinue |
+              Remove-Item -Force
+          }
+
+      # ---------------------------------------------------------------
+      # Phase 8: Install + verify MCP server
+      # ---------------------------------------------------------------
+      # preflight: allow-package-install reason=mcp-package-ci
+      - name: Install and verify MCP server
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+          PYTHON_VERSION: ${{ inputs.python-version }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          if ($env:PYTHON_VERSION -eq '3.9') {
+            Write-Host (
+              "[SKIP] iccdev-mcp requires Python >=3.10; " +
+              "skipping MCP verification on Python $env:PYTHON_VERSION"
+            )
+            exit 0
+          }
+
+          pip install ".\iccdev-mcp\"
+          python -c "from iccdev_mcp import server; print('MCP server module loaded')"
+          python -c @"
+          try:
+              from iccdev_mcp import rest_api
+              print('REST API module loaded')
+          except ImportError as e:
+              print('REST API optional deps not installed (expected):', e)
+          "@
+
+          Write-Host "[OK] MCP server verification complete"
+
+      # ---------------------------------------------------------------
+      # Phase 9: Upload artifacts
+      # ---------------------------------------------------------------
+      - name: Upload Python wheel
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: "iccdev-python-packages-windows-2022-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"
+          path: |
+            python/dist/*.whl
+            python/wheelhouse/*.whl
+          retention-days: 30
+
+      - name: Upload CTest logs
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: "iccdev-ctest-windows-2022-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"
+          path: |
+            out/vs2022-vcpkg/Testing/ci/
+            out/vs2022-vcpkg/Testing/Temporary/
+            out/vs2022-vcpkg/Testing/ctest-output/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ---------------------------------------------------------------
+      # Phase 10: Step summary (sources sanitize.ps1)
+      # ---------------------------------------------------------------
+      - name: Generate summary
+        if: always()
+        continue-on-error: true
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          # --- Load sanitizer (source sanitize.ps1 with inline fallback) ---
+          if (Test-Path ".github/scripts/sanitize.ps1") {
+            . .github/scripts/sanitize.ps1
+          } else {
+            function Sanitize-Line ([string]$s) {
+              $s = $s -replace '&','&amp;'
+              $s = $s -replace '<','&lt;'
+              $s = $s -replace '>','&gt;'
+              return $s
+            }
+          }
+
+          try {
+            $profileItems = @(
+              Get-ChildItem -Path out\vs2022-vcpkg\Testing\ctest-output\windows-testing `
+                -Filter "*.icc" -Recurse -File -ErrorAction SilentlyContinue
+            )
+            $profileCount = $profileItems.Count
+            $wheelItems = @(
+              Get-ChildItem -Path python\dist -Filter "*.whl" -ErrorAction SilentlyContinue
+              Get-ChildItem -Path python\wheelhouse -Filter "*.whl" -ErrorAction SilentlyContinue
+            )
+            $wheelCount = $wheelItems.Count
+            $pyVer = [string]::Join("`n", @(python --version 2>&1))
+
+            try {
+              $iccdevVer = [string]::Join("`n", @(python -c "import iccdev; print(iccdev.__version__)" 2>&1))
+            } catch {
+              $iccdevVer = "not installed"
+            }
+
+            $summary = @(
+              "### Build + Test: Windows"
+              ""
+              "| Metric | Value |"
+              "|--------|-------|"
+              "| OS | Windows |"
+              "| Python | $(Sanitize-Line $pyVer) |"
+              "| iccdev version | $(Sanitize-Line $iccdevVer) |"
+              "| Wheels built | $wheelCount |"
+              "| Test profiles | $profileCount |"
+            ) -join [Environment]::NewLine
+            Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $summary
+          } catch {
+            Write-Warning "Unable to generate Windows build summary: $($_.Exception.Message)"
+          }

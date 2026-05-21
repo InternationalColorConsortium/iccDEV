@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=64,<81", "cython>=3.0,<3.2", "wheel>=0.46.2,<0.47"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "iccdev"
+version = "0.1.0"
+description = "Python bindings for RefIccMAX (iccDEV) - ICC color profile library"
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.9"
+authors = [
+    { name = "International Color Consortium" },
+]
+keywords = ["icc", "color", "profile", "cmm", "color-management", "cython"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Cython",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering",
+]
+
+[project.optional-dependencies]
+numpy = ["numpy>=1.23,<3"]
+dev = [
+    "build>=1.2,<1.4",
+    "cibuildwheel>=2.23,<3",
+    "cython>=3.0,<3.2",
+    "numpy>=1.23,<3",
+    "pytest>=7.0,<9; python_version < '3.10'",
+    "pytest>=9.0.3,<10; python_version >= '3.10'",
+    "twine>=5.0,<7",
+    "wheel>=0.46.2,<0.47",
+]
+
+[project.urls]
+Homepage = "https://github.com/InternationalColorConsortium/iccDEV"
+Documentation = "https://github.com/InternationalColorConsortium/iccDEV/tree/master/python"
+Issues = "https://github.com/InternationalColorConsortium/iccDEV/issues"
+
+[tool.setuptools.packages.find]
+include = ["iccdev*"]
+
+[tool.setuptools.package-data]
+iccdev = ["py.typed", "_iccdev.pyi", "*.pxd"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-v", "--tb=short"]
+markers = [
+    "parity: native-backed parity tests that require built iccDEV tools or generated profiles",
+    "cli: parity tests that execute iccDEV command-line tools",
+    "proflib: tests covering IccProfLib/profile/CMM behavior",
+    "xml: tests covering ICC XML conversion behavior",
+    "json: tests covering ICC JSON conversion/config behavior",
+    "slow: broader generated-profile sweeps",
+]
+
+[tool.cibuildwheel]
+build = "cp39-* cp310-* cp311-* cp312-* cp313-*"
+skip = "*-musllinux_i686 *-win32"
+test-requires = []
+test-command = "python -c \"import iccdev, pathlib; p=pathlib.Path(iccdev.__file__).resolve(); print('iccdev cibuildwheel smoke:', iccdev.__version__, p); assert 'site-packages' in str(p), p\""
+environment = { ICCDEV_REQUIRE_INSTALLED_PACKAGE = "1" }
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64"]
+before-build = "pip install \"cython>=3.0,<3.2\""
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64", "universal2"]
+before-build = "pip install \"cython>=3.0,<3.2\""
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64", "ARM64"]
+before-build = "pip install \"cython>=3.0,<3.2\""

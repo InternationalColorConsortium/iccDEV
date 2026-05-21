@@ -37,7 +37,9 @@ cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
 cmake --build build --target build-test-binaries --parallel "$(nproc)"
 ctest --test-dir build --output-on-failure --no-tests=error
+ctest --test-dir build --label-exclude slow --output-on-failure --no-tests=error
 cmake --build build --target check
+cmake --build build --target check-fast
 ```
 
 Windows Visual Studio multi-config generators:
@@ -106,8 +108,8 @@ cannot pass as a green no-op.
 The default `all` build intentionally excludes CTest-only helper binaries such as
 `iccFileIoSeekTellTest` and `iccParserRestoreCallsTest`. Build the
 `build-test-binaries` target before running filtered CTest commands directly, or
-use the `check` target to build tool and test dependencies before running the
-full suite.
+use the `check` / `check-fast` targets to build tool and test dependencies
+before running the suite.
 
 ## Registered Suites
 
@@ -117,7 +119,10 @@ full suite.
 | `iccdev.embedio-read8-bounds` | `.github/ci/regression/embedio-read8-bounds.cpp` |
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
+| `iccdev.iccconnect-config-parser` | `.github/ci/regression/iccconnect-config-parser.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.applytolink-invalid-decoded-intent` | `Build/Cmake/Testing/CMakeLists.txt` |
+| `iccdev.xform-abstorel-adjust` | `.github/ci/regression/xform-abstorel-adjust.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
@@ -178,10 +183,11 @@ and inverse conversions. It guards against divide-by-zero and non-finite
 appearance state regressions without committing generated profiles.
 
 `iccdev.hybrid-pipeline` preserves the full six-phase hybrid spectral/colorimetric
-integration test as a separate `slow` CTest label. Routine CI tool sweeps use
-the fast lane with `--label-exclude slow --label-exclude calculator`; run full
-CTest or the hybrid gate explicitly when the slow and calculator suites are in
-scope:
+integration test as a separate `slow` CTest label. The maintainer `check` target
+runs the full suite, including `slow`. Routine CI tool sweeps use the fast lane
+with `--label-exclude slow --label-exclude calculator`, and the `check-fast`
+target runs with `--label-exclude slow`; run full CTest or the hybrid gate
+explicitly when the slow and calculator suites are in scope:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
 Use a standalone CTest row for focused crash regressions that need clear
@@ -210,8 +216,9 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
 | `iccdev.windows-legacy-run-tests` | `Testing/RunTests.bat` |
 | `iccdev.windows-icc-dump-profile-smoke` | `Build/Cmake/Testing/RunWindowsDumpProfileSmokeTest.cmake` |
-| `iccdev.issue-987-shared-mpe-export` | `Build/Cmake/Testing/RunWindowsSharedExportTest.cmake` |
 | `iccdev.windows-pawg-report-smoke` | `Build/Cmake/Testing/RunWindowsPawgReportSmokeTest.cmake` |
+| `iccdev.issue-987-shared-mpe-export` | `Build/Cmake/Testing/RunWindowsSharedExportTest.cmake` |
+| `iccdev.issue-1009-iccjson-profilejson-export` | `Build/Cmake/Testing/RunWindowsIccJsonExportTest.cmake` |
 
 The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
@@ -229,9 +236,10 @@ directory when it is present, so Debug helper binaries and DLLs can run on CI
 machines that do not have `msvcp140d.dll` or `vcruntime140d.dll` on the system
 `PATH`. This keeps CTest execution independent of a developer's interactive
 `PATH` for tools such as `libxml2.dll`, `libwinpthread-1.dll`, or the MSVC
-Debug CRT. MinGW builds still need the UCRT64 `bin` directory on the invoking
-shell `PATH` because GCC launches runtime-dependent compiler subprocesses during
-the build.
+Debug CRT by building a bounded runtime `PATH` from tool, DLL, vcpkg, MSVC CRT,
+and Windows system directories.
+MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
+because GCC launches runtime-dependent compiler subprocesses during the build.
 
 Feature-disabled Windows builds register the tests whose targets are available.
 For example, `mingw-core-x64` does not build XML conversion tools, so it skips
@@ -249,7 +257,9 @@ build-tree DLL and import library. `iccdev.windows-iccdevcmm-smoke` loads the
 Windows ICM CMM DLL directly, verifies the required `CM*` exports and `ICCD`
 CMM identity, validates `sRGB_v4_ICC_preference.icc`, then creates, translates
 through, and deletes a two-profile RGB transform without registering the CMM
-globally.
+globally. `iccdev.issue-1009-iccjson-profilejson-export` checks that
+`IccJSON2.dll` exports `CIccProfileJson::~CIccProfileJson` for MSVC ABI
+consumers.
 
 ## Fixtures and Logs
 
@@ -265,10 +275,12 @@ CTest logs and per-suite output are written under:
 ```
 
 The CI workflows upload those paths with `ctest-results.xml` and
-`ctest-list.txt` inside the developer report artifact. For the reusable Linux
-tool workflow, the artifact is named `iccdev-developer-report-<BuildType>` and
-contains a presentation `index.html`, CTest data, optional hybrid timing data,
-and optional all-tool FlameGraph data/SVGs.
+`ctest-list.txt`, and the routine fast-gate discovery log
+`ctest-list-routine.txt` inside the developer report artifact. For the reusable
+Linux tool workflow, the artifact is named
+`iccdev-developer-report-<BuildType>` and contains a presentation `index.html`,
+CTest data, optional hybrid timing data, and optional all-tool FlameGraph
+data/SVGs.
 
 ## Maintainer Add-Test Process
 
@@ -299,7 +311,10 @@ For repeatable agent-assisted work, use
      and `.github/workflows/ci-latest-release.yml` when
      `Testing/CreateAllProfiles.sh` changes the generated-profile set.
 4. Validate locally with CMake configure, build, `ctest -N --no-tests=error`,
-   `ctest --output-on-failure --no-tests=error`, and `git diff --check`.
+   `ctest --output-on-failure --no-tests=error`, `cmake --build <build>
+   --target check`, and `git diff --check`.
+   Use `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
+   to catch stale count and workflow-name references before opening a PR.
    For changes inside `iccdev.tool-coverage`, also run the direct script with
    explicit `ICCDEV_TOOLS_DIR`, `ICCDEV_TESTING_DIR`, and
    `ICCDEV_TEST_OUTDIR`, plus `ctest -R '^iccdev\.tool-coverage$'`.
@@ -307,3 +322,18 @@ For repeatable agent-assisted work, use
 Do not let a workflow keep `|| true` around profile generation, CTest
 discovery, or regression execution. Expected skips should be explicit in the
 script output and still leave a deterministic pass/fail condition.
+
+## CI Coverage
+
+The `ci-json-python` orchestrator calls the reusable Unix and Windows build
+workflows. The Windows reusable workflow runs CTest discovery, asserts the
+7 registered Windows suites, executes CTest with JUnit output, and then runs
+the `check` target. The Unix reusable workflow runs the Linux CTest gate for
+full-test jobs and asserts the expected 25-suite discovery line before
+execution.
+
+Python packaging CI builds source and wheel artifacts, validates metadata with
+`twine check`, prints the configured cibuildwheel identifiers for Windows,
+Linux, and macOS, and runs a native cibuildwheel smoke build on each hosted
+platform. Cross-architecture identifiers are validated by configuration; actual
+ARM wheel execution requires an ARM runner or emulator-backed cibuildwheel job.

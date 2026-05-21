@@ -72,15 +72,7 @@ if (MSVC)
     set_target_properties(${TARGET_NAME} PROPERTIES
         MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}")
 
-    # Precompiled header: create with stdafx.cpp, use for other .cpp files
-    set_source_files_properties("${OS_SPECIFIC_SOURCES}/stdafx.cpp"
-        PROPERTIES COMPILE_FLAGS "/Ycstdafx.h /Fp${_iccdevcmm_pch_directory}/RefIccMAX.pch")
-    foreach(SRC ${SOURCES})
-        if (NOT SRC STREQUAL "${OS_SPECIFIC_SOURCES}/stdafx.cpp" AND SRC MATCHES "^.*\\.cpp$")
-            set_source_files_properties("${SRC}"
-                PROPERTIES COMPILE_FLAGS "/Yustdafx.h /Fp${_iccdevcmm_pch_directory}/RefIccMAX.pch")
-        endif()
-    endforeach()
+    target_precompile_headers(${TARGET_NAME} PRIVATE "${OS_SPECIFIC_SOURCES}/stdafx.h")
     set_source_files_properties("${OS_SPECIFIC_SOURCES}/IccDEVCmm.rc" PROPERTIES COMPILE_FLAGS "")
 endif()
 

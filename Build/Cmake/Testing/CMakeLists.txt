@@ -49,6 +49,21 @@ function(iccdev_add_regression_executable TARGET_NAME)
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
+add_custom_target(check-fast
+  COMMAND "${CMAKE_CTEST_COMMAND}"
+          ${ICCDEV_CTEST_CONFIG_ARGS}
+          --label-exclude slow
+          --output-on-failure
+          --no-tests=error
+  WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
+  COMMENT "Run iccDEV CTest suite excluding slow tests"
+  VERBATIM
+)
+add_dependencies(check-fast build-test-binaries)
+if(TARGET iccdev-stage-windows-runtime)
+  add_dependencies(check-fast iccdev-stage-windows-runtime)
+endif()
+
 function(iccdev_add_check_dependencies)
   foreach(_target
       iccApplyNamedCmm
@@ -73,6 +88,7 @@ function(iccdev_add_check_dependencies)
   )
     if(TARGET "${_target}")
       add_dependencies(check "${_target}")
+      add_dependencies(check-fast "${_target}")
     endif()
   endforeach()
 endfunction()
@@ -129,6 +145,54 @@ function(iccdev_add_iccconnect_thread_test)
     endforeach()
     set_tests_properties(iccdev.iccconnect-threaded-cmm PROPERTIES
       ENVIRONMENT_MODIFICATION "${_iccconnect_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+function(iccdev_add_iccconnect_config_parser_test)
+  if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccConnectConfigParserTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccconnect-config-parser.cpp"
+  )
+  target_compile_features(iccConnectConfigParserTest PRIVATE cxx_std_17)
+  target_link_libraries(iccConnectConfigParserTest PRIVATE ${TARGET_LIB_ICCCONNECT})
+
+  add_dependencies(check iccConnectConfigParserTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.iccconnect-config-parser
+      COMMAND "$<TARGET_FILE:iccConnectConfigParserTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.iccconnect-config-parser
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccConnectConfigParserTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.iccconnect-config-parser PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccconnect;config;cli;json;regression"
+  )
+  if(WIN32)
+    set(_iccconnect_config_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccConnectConfigParserTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCCONNECT}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccconnect_config_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccconnect-config-parser PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccconnect_config_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -541,6 +605,41 @@ function(iccdev_add_xform_create_tag_ownership_test)
   endif()
 endfunction()
 
+function(iccdev_add_xform_abstorel_adjust_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXformAbsToRelAdjustTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xform-abstorel-adjust.cpp"
+  )
+  target_link_libraries(iccXformAbsToRelAdjustTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccXformAbsToRelAdjustTest)
+
+  add_test(
+    NAME iccdev.xform-abstorel-adjust
+    COMMAND "$<TARGET_FILE:iccXformAbsToRelAdjustTest>"
+  )
+  set_tests_properties(iccdev.xform-abstorel-adjust PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;xform;issue-1662;regression"
+  )
+  if(WIN32)
+    set(_xform_abstorel_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXformAbsToRelAdjustTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xform_abstorel_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xform-abstorel-adjust PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xform_abstorel_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the IccColorimetry spectral->XYZ reduction module (#1475): the registry-
 # aligned reduction methods (icXYZCalcDirectSum / icXYZCalcWeighting /
 # icXYZCalcSpragueTo1nm) and their range-reconciliation primitives
@@ -897,6 +996,47 @@ function(iccdev_add_iccprofileplot_exitcode_test)
           "${_exitcode_windows_env_mods};PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfilePlot>"
       )
     endif()
+  endif()
+endfunction()
+
+function(iccdev_add_applytolink_invalid_arg_test)
+  if(NOT TARGET iccApplyToLink)
+    return()
+  endif()
+
+  add_dependencies(check iccApplyToLink)
+  add_dependencies(check-fast iccApplyToLink)
+
+  add_test(
+    NAME iccdev.applytolink-invalid-decoded-intent
+    COMMAND "$<TARGET_FILE:iccApplyToLink>"
+      "${ICCDEV_TEST_OUTDIR}/applytolink-invalid-intent.icc"
+      0 2 1 InvalidIntent 0 1 0 0
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc" 9
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc" 0
+  )
+  set_tests_properties(iccdev.applytolink-invalid-decoded-intent PROPERTIES
+    WILL_FAIL TRUE
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tools;applytolink;cli;exitcode;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    set(_applytolink_invalid_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyToLink>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _applytolink_invalid_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(
+      iccdev.applytolink-invalid-decoded-intent
+      PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_applytolink_invalid_windows_env_mods}"
+    )
   endif()
 endfunction()
 
@@ -1295,7 +1435,29 @@ if(WIN32)
     add_dependencies(check IccProfLib2)
   endif()
 
+  if(ENABLE_SHARED_LIBS AND TARGET IccJSON2)
+    add_test(
+      NAME iccdev.issue-1009-iccjson-profilejson-export
+      COMMAND
+        "${CMAKE_COMMAND}"
+        "-DICCDEV_TEST_NAME=iccdev.issue-1009-iccjson-profilejson-export"
+        "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-issue-1009-iccjson-profilejson-export"
+        "-DICCDEV_ICCJSON_DLL=$<TARGET_FILE:IccJSON2>"
+        "-DICCDEV_ICCJSON_IMPLIB=$<TARGET_LINKER_FILE:IccJSON2>"
+        "-DICCDEV_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+        "-DICCDEV_OBJDUMP=${CMAKE_OBJDUMP}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsIccJsonExportTest.cmake"
+    )
+    set_tests_properties(iccdev.issue-1009-iccjson-profilejson-export PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 60
+      LABELS "iccdev;windows;shared;issue-1009"
+    )
+    add_dependencies(check IccJSON2)
+  endif()
+
   iccdev_add_iccconnect_thread_test()
+  iccdev_add_iccconnect_config_parser_test()
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
@@ -1310,6 +1472,7 @@ if(WIN32)
   iccdev_add_mpecalc_matrix_overflow_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
+  iccdev_add_xform_abstorel_adjust_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_gbd_zero_pcs_test()
@@ -1318,6 +1481,7 @@ if(WIN32)
   iccdev_add_iccprofileplot_clut_oob_test()
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
+  iccdev_add_applytolink_invalid_arg_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -1490,6 +1654,7 @@ set(ICCDEV_TEST_ENV
 )
 
 iccdev_add_iccconnect_thread_test()
+iccdev_add_iccconnect_config_parser_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
@@ -1504,6 +1669,7 @@ iccdev_add_pawg_q1q3_relative_intent_test()
 iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
+iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_gbd_zero_pcs_test()

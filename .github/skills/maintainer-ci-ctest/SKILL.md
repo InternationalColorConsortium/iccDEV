@@ -53,6 +53,8 @@ when practical.
 - Windows full builds include focused executable regressions, batch-backed
   suites, dump/profile smoke coverage, shared-export coverage, and PAWG report
   coverage.
+- Use `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
+  before PR handoff to catch stale count and workflow-name references.
 - Generated-profile gates currently validate 208 ICC profiles.
 - Windows and JSON profile generation validate 130 profile parses.
 - WASM parity currently expects 208 generated ICC profiles.

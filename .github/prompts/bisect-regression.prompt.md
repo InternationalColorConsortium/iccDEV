@@ -31,7 +31,7 @@ make -j"$(nproc)"
 # CRITICAL: Verify ASAN is linked (must be > 0)
 nm Tools/IccDumpProfile/iccDumpProfile | grep -c __asan
 
-export LD_LIBRARY_PATH=$PWD/IccProfLib:$PWD/IccXML
+export LD_LIBRARY_PATH=$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON:$PWD/IccConnect
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
 
 # Run the failing test
@@ -57,7 +57,7 @@ git bisect good <known_good_tag_or_sha>
 # Automated:
 git bisect run bash -c '
   cd Build && make -j"$(nproc)" 2>/dev/null &&
-  export LD_LIBRARY_PATH=$PWD/IccProfLib:$PWD/IccXML &&
+  export LD_LIBRARY_PATH=$PWD/IccProfLib:$PWD/IccXML:$PWD/IccJSON:$PWD/IccConnect &&
   export ASAN_OPTIONS=halt_on_error=1,detect_leaks=0 &&
   <test_command>
 '

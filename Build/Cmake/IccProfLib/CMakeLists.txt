@@ -57,6 +57,7 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccXformFactory.cpp
     ${SRC_PATH}/IccProfLib/IccMD5.cpp
     ${SRC_PATH}/IccProfLib/IccCmmSearch.cpp
+    ${SRC_PATH}/IccProfLib/IccWrapper.cpp
    )
 
 # Public headers - defined unconditionally for target_sources / install
@@ -74,6 +75,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccEnvVar.h
   ${SRC_PATH}/IccProfLib/IccEval.h
   ${SRC_PATH}/IccProfLib/IccIO.h
+  ${SRC_PATH}/IccProfLib/IccJsonTypes.h
   ${SRC_PATH}/IccProfLib/IccMatrixMath.h
   ${SRC_PATH}/IccProfLib/IccMpeACS.h
   ${SRC_PATH}/IccProfLib/IccMpeBasic.h
@@ -185,6 +187,20 @@ IF(ENABLE_SHARED_LIBS)
   if(MSVC)
     set_target_properties(${TARGET_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
   endif()
+
+  # Cross-platform symbol visibility for shared library
+  # On MSVC, WINDOWS_EXPORT_ALL_SYMBOLS handles exports automatically.
+  # On GCC/Clang, define ICCPROFLIBDLL_EXPORTS so ICCPROFLIB_API resolves
+  # to __attribute__((visibility("default"))) for annotated symbols.
+  if(NOT MSVC)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
+  endif()
+  # NOTE: -fvisibility=hidden is intentionally NOT used here.
+  # IccProfLib has incomplete ICCPROFLIB_API annotations (~308 partial uses
+  # across 43 headers), and IccXML has zero export annotations. Hidden
+  # visibility causes undefined references when linking tools against the
+  # shared libraries. Until complete export annotations are added, all
+  # symbols remain at default visibility for shared builds.
 
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)

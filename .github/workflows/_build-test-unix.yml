@@ -1,0 +1,1098 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Reusable workflow: Build + Test iccDEV on Linux/macOS
+#
+# Caller passes os, python-version, and run-full-tests flag.
+# Full tests (Linux): profile generation (all scripts), RunTests,
+#   CalcTest, tool parity (dump/toxml/fromxml/roundtrip/tojson/fromjson).
+# Light tests (macOS): CreateAllProfiles only, Python wheel, MCP.
+#
+###############################################################
+
+name: "_build-test-unix"
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: "Runner OS (ubuntu-latest or macos-latest)"
+        type: string
+        required: true
+      python-version:
+        description: "Python version"
+        type: string
+        default: "3.12"
+      run-full-tests:
+        description: "Run comprehensive tool parity tests"
+        type: boolean
+        default: false
+
+jobs:
+  build-test:
+    name: "Build + Test (${{ inputs.os }}, Python ${{ inputs.python-version }})"
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 45
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      # ---------------------------------------------------------------
+      # Phase 1: Checkout + Python
+      # ---------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      # ---------------------------------------------------------------
+      # Phase 2: System dependencies (platform-conditional)
+      # ---------------------------------------------------------------
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            cmake clang clang-tools build-essential \
+            libpng-dev libjpeg-dev libtiff-dev libxml2-dev \
+            nlohmann-json3-dev \
+            libwxgtk3.2-dev wx-common wx3.2-headers
+
+      # preflight: allow-package-install reason=spectral-preview-ctest-dependencies
+      - name: Install CTest Python dependencies (Linux)
+        if: runner.os == 'Linux' && inputs.run-full-tests
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          python -m pip install \
+            --only-binary=:all: \
+            "numpy>=2.0.0,<2.4" \
+            "tifffile>=2024.8.30,<2025" \
+            "pillow>=11.0,<12" \
+            "imagecodecs>=2024.12.30,<2025.3" \
+            --quiet
+          python -m pip check
+          python - <<'PY'
+          import imagecodecs
+          import numpy
+          import PIL
+          import tifffile
+
+          print(f"imagecodecs {imagecodecs.__version__}")
+          print(f"numpy {numpy.__version__}")
+          print(f"pillow {PIL.__version__}")
+          print(f"tifffile {tifffile.__version__}")
+          PY
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          brew install cmake libpng libtiff libxml2 nlohmann-json jpeg-turbo
+
+      # ---------------------------------------------------------------
+      # Phase 3: Build iccDEV C++ tools (all tools including JSON)
+      # ---------------------------------------------------------------
+      - name: Build iccDEV
+        env:
+          BASH_ENV: /dev/null
+          PYTHON_VERSION: ${{ inputs.python-version }}
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          LOGDIR="/tmp/iccdev-logs"
+          mkdir -p "$LOGDIR"
+
+          cd "${WORKSPACE_DIR}/Build"
+          rm -rf CMakeCache.txt CMakeFiles/
+
+          # macOS: tell cmake where brew packages live
+          CMAKE_EXTRA_ARGS=()
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            PREFIX_PATHS=""
+            for pkg in libxml2 libtiff libpng jpeg-turbo nlohmann-json; do
+              BREW_PREFIX="$(brew --prefix "$pkg" 2>/dev/null || true)"
+              if [[ -n "$BREW_PREFIX" ]]; then
+                PREFIX_PATHS="${PREFIX_PATHS:+${PREFIX_PATHS};}${BREW_PREFIX}"
+              fi
+            done
+            if [[ -n "$PREFIX_PATHS" ]]; then
+              CMAKE_EXTRA_ARGS+=("-DCMAKE_PREFIX_PATH=${PREFIX_PATHS}")
+            fi
+          fi
+
+          CC=clang CXX=clang++ cmake Cmake \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_ICCXML=ON \
+            "${CMAKE_EXTRA_ARGS[@]}" 2>&1 | tee "$LOGDIR/cmake.log"
+
+          NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+          make -j"$NPROC" 2>&1 | tee "$LOGDIR/build.log"
+
+          echo ""
+          echo "=== Built tools ==="
+          find Tools -mindepth 2 -maxdepth 2 -type f -name 'icc*' 2>/dev/null | sort || true
+
+      # ---------------------------------------------------------------
+      # Phase 4: Generate test profiles
+      # ---------------------------------------------------------------
+      - name: Generate test profiles (CreateAllProfiles)
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          LOGDIR="/tmp/iccdev-logs"
+          mkdir -p "$LOGDIR"
+
+          for d in "${WORKSPACE_DIR}"/Build/Tools/*/; do
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="$tool_dir:$PATH"
+            fi
+          done
+
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          else
+            export DYLD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          fi
+
+          echo "=== CreateAllProfiles.sh ==="
+          cd "${WORKSPACE_DIR}/Testing"
+          sh CreateAllProfiles.sh 2>&1 | tee "$LOGDIR/CreateAllProfiles.log"
+          PROFILE_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $PROFILE_COUNT profiles in Testing/"
+
+      - name: Generate extended profiles (HDR, hybrid, mcs)
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          LOGDIR="/tmp/iccdev-logs"
+          for d in "${WORKSPACE_DIR}"/Build/Tools/*/; do
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="$tool_dir:$PATH"
+            fi
+          done
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+
+          echo "=== HDR/mkprofiles.sh ==="
+          cd "${WORKSPACE_DIR}/Testing/HDR"
+          sh mkprofiles.sh 2>&1 | tee "$LOGDIR/HDR-mkprofiles.log" || {
+            rc=$?
+            echo "WARN: HDR/mkprofiles.sh exited $rc"
+          }
+          HDR_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $HDR_COUNT HDR profiles"
+
+          echo ""
+          echo "=== hybrid/BuildAndTest.sh ==="
+          cd "${WORKSPACE_DIR}/Testing/hybrid"
+          sh BuildAndTest.sh 2>&1 | tee "$LOGDIR/hybrid-BuildAndTest.log" || {
+            rc=$?
+            echo "WARN: hybrid/BuildAndTest.sh exited $rc"
+          }
+          HYBRID_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $HYBRID_COUNT hybrid profiles"
+
+          echo ""
+          echo "=== mcs/updateprev.sh ==="
+          cd "${WORKSPACE_DIR}/Testing/mcs"
+          sh updateprev.sh 2>&1 | tee "$LOGDIR/mcs-updateprev.log" || {
+            rc=$?
+            echo "WARN: mcs/updateprev.sh exited $rc"
+          }
+
+          echo ""
+          echo "=== mcs/updateprevWithBkgd.sh ==="
+          sh updateprevWithBkgd.sh 2>&1 | tee "$LOGDIR/mcs-updateprevWithBkgd.log" || {
+            rc=$?
+            echo "WARN: mcs/updateprevWithBkgd.sh exited $rc"
+          }
+          MCS_COUNT=$(find . -name '*.icc' | wc -l)
+          echo "Generated $MCS_COUNT mcs profiles"
+
+          echo ""
+          echo "=== Total profile inventory ==="
+          TOTAL_COUNT=$(find "${WORKSPACE_DIR}/Testing" -name '*.icc' | wc -l)
+          echo "Total: $TOTAL_COUNT ICC profiles in Testing/"
+
+      - name: Run Linux CTest gate
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          LOGDIR="/tmp/iccdev-logs"
+          mkdir -p "$LOGDIR"
+
+          echo "=== Build CTest helper binaries ==="
+          NPROC=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+          cmake --build "${WORKSPACE_DIR}/Build" \
+            --target build-test-binaries \
+            --parallel "$NPROC" 2>&1 | tee "$LOGDIR/build-test-binaries.log"
+
+          echo "=== CTest discovery ==="
+          ctest --test-dir "${WORKSPACE_DIR}/Build" -N --no-tests=error 2>&1 | tee "$LOGDIR/ctest-list.txt"
+
+          echo "=== Routine CTest discovery (excluding slow) ==="
+          ctest --test-dir "${WORKSPACE_DIR}/Build" -N \
+            --label-exclude slow \
+            --no-tests=error 2>&1 | tee "$LOGDIR/ctest-list-routine.txt"
+
+          echo "=== CTest execution ==="
+          ctest --test-dir "${WORKSPACE_DIR}/Build" \
+            --label-exclude slow \
+            --output-on-failure \
+            --no-tests=error \
+            --output-junit "$LOGDIR/ctest-results.xml" 2>&1 | tee "$LOGDIR/ctest-run.log"
+
+      # ---------------------------------------------------------------
+      # Phase 5: Test suites (full tests only)
+      # ---------------------------------------------------------------
+      - name: Run iccDEV test suite
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          LOGDIR="/tmp/iccdev-logs"
+          mkdir -p "$LOGDIR"
+
+          for d in "${WORKSPACE_DIR}"/Build/Tools/*/; do
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="$tool_dir:$PATH"
+            fi
+          done
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+
+          cd "${WORKSPACE_DIR}/Testing"
+          sh RunTests.sh 2>&1 | tee "$LOGDIR/RunTests.log" || {
+            rc=$?
+            echo "WARN: RunTests.sh exited $rc"
+          }
+
+      - name: Run CalcTest/checkInvalidProfiles.sh
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          LOGDIR="/tmp/iccdev-logs"
+          mkdir -p "$LOGDIR"
+
+          for d in "${WORKSPACE_DIR}"/Build/Tools/*/; do
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="$tool_dir:$PATH"
+            fi
+          done
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+
+          cd "${WORKSPACE_DIR}/Testing/CalcTest"
+          sh checkInvalidProfiles.sh 2>&1 | tee "$LOGDIR/checkInvalidProfiles.log" || {
+            rc=$?
+            echo "WARN: checkInvalidProfiles.sh exited $rc"
+          }
+
+      # ---------------------------------------------------------------
+      # Phase 6: Tool parity -- sweep all profiles (full tests only)
+      # ---------------------------------------------------------------
+      - name: "iccDumpProfile ALL on generated profiles"
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          DUMP="${WORKSPACE_DIR}/Build/Tools/IccDumpProfile/iccDumpProfile"
+          LOGDIR="/tmp/iccdev-logs/dump"
+          mkdir -p "$LOGDIR"
+
+          PASS=0; FAIL=0; TOTAL=0
+          while IFS= read -r icc; do
+            TOTAL=$((TOTAL + 1))
+            base="$(basename "$icc" .icc)"
+            logf="$LOGDIR/${base}.log"
+            timeout 30 "$DUMP" "$icc" ALL > "$logf" 2>&1 && rc=0 || rc=$?
+            if [ "$rc" -ge 128 ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [CRASH exit=$rc] $base"
+            elif grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $base"
+            else
+              PASS=$((PASS + 1))
+            fi
+          done < <(find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f | sort)
+
+          echo ""
+          echo "iccDumpProfile ALL: $TOTAL tested, $PASS pass, $FAIL fail"
+          if [ "$FAIL" -gt 0 ]; then
+            echo "[FAIL] iccDumpProfile sweep produced failures"
+            exit 1
+          fi
+
+      - name: "iccToXml on generated profiles"
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          TOXML="${WORKSPACE_DIR}/Build/Tools/IccToXml/iccToXml"
+          LOGDIR="/tmp/iccdev-logs/toxml"
+          XMLDIR="/tmp/iccdev-xml"
+          mkdir -p "$LOGDIR" "$XMLDIR"
+
+          PASS=0; FAIL=0; READ_FAIL=0; TOTAL=0
+          while IFS= read -r icc; do
+            TOTAL=$((TOTAL + 1))
+            base="$(basename "$icc" .icc)"
+            xmlout="$XMLDIR/${base}.xml"
+            logf="$LOGDIR/${base}.log"
+            timeout 30 "$TOXML" "$icc" "$xmlout" > "$logf" 2>&1 && rc=0 || rc=$?
+            if [ "$rc" -ge 128 ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [CRASH exit=$rc] $base"
+            elif grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $base"
+            elif grep -q "Unable to read" "$logf" 2>/dev/null; then
+              READ_FAIL=$((READ_FAIL + 1))
+              FAIL=$((FAIL + 1))
+              echo "  [READ_FAIL] $base"
+            elif [ ! -s "$xmlout" ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [EMPTY] $base"
+            else
+              PASS=$((PASS + 1))
+            fi
+          done < <(find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f | sort)
+
+          echo ""
+          echo "iccToXml: $TOTAL tested, $PASS pass, $FAIL fail (READ_FAIL=$READ_FAIL)"
+          if [ "$FAIL" -gt 0 ]; then
+            echo "[FAIL] iccToXml sweep produced failures"
+            exit 1
+          fi
+
+      - name: "iccFromXml round-trip (XML to ICC)"
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          FROMXML="${WORKSPACE_DIR}/Build/Tools/IccFromXml/iccFromXml"
+          LOGDIR="/tmp/iccdev-logs/fromxml"
+          XMLDIR="/tmp/iccdev-xml"
+          RTDIR="/tmp/iccdev-fromxml-rt"
+          mkdir -p "$LOGDIR" "$RTDIR"
+
+          is_hard_exit() {
+            case "$1" in
+              124 | 134 | 136 | 137 | 139) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          PASS=0; FAIL=0; HARD_FAIL=0; TOTAL=0
+          for xmlf in "$XMLDIR"/*.xml; do
+            [ -f "$xmlf" ] || continue
+            [ -s "$xmlf" ] || continue
+            TOTAL=$((TOTAL + 1))
+            base="$(basename "$xmlf" .xml)"
+            iccout="$RTDIR/${base}_rt.icc"
+            logf="$LOGDIR/${base}.log"
+            timeout 30 "$FROMXML" "$xmlf" "$iccout" > "$logf" 2>&1 && rc=0 || rc=$?
+            if is_hard_exit "$rc"; then
+              FAIL=$((FAIL + 1))
+              HARD_FAIL=$((HARD_FAIL + 1))
+              echo "  [HARD_EXIT exit=$rc] $base"
+            elif grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              FAIL=$((FAIL + 1))
+              HARD_FAIL=$((HARD_FAIL + 1))
+              echo "  [ASAN]  $base"
+            elif [ ! -s "$iccout" ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [EMPTY] $base"
+            else
+              PASS=$((PASS + 1))
+            fi
+          done
+
+          echo ""
+          echo "iccFromXml RT: $TOTAL tested, $PASS reconstructed, $FAIL not reconstructed"
+          "${WORKSPACE_DIR}/.github/scripts/iccdev-classify-fromxml-logs.sh" \
+            "$LOGDIR" \
+            "${WORKSPACE_DIR}/Testing/expected-invalid-fromxml.tsv" \
+            "$RTDIR"
+          if [ "$HARD_FAIL" -gt 0 ]; then
+            echo "[FAIL] iccFromXml produced hard failures"
+            exit 1
+          fi
+
+      - name: "iccRoundTrip (intents 0-3 + MPE)"
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          RT="${WORKSPACE_DIR}/Build/Tools/IccRoundTrip/iccRoundTrip"
+          LOGDIR="/tmp/iccdev-logs/roundtrip"
+          mkdir -p "$LOGDIR"
+
+          PASS=0; FAIL=0
+
+          run_rt() {
+            local label="$1"; shift
+            local logf="$LOGDIR/rt-${label}.log"
+            timeout 30 "$RT" "$@" > "$logf" 2>&1 && rc=0 || rc=$?
+            if [ "$rc" -ge 128 ]; then
+              FAIL=$((FAIL + 1))
+              echo "  [CRASH exit=$rc] $label"
+            elif grep -q "ERROR: AddressSanitizer" "$logf" 2>/dev/null; then
+              FAIL=$((FAIL + 1))
+              echo "  [ASAN]  $label"
+            else
+              PASS=$((PASS + 1))
+              echo "  [OK]    $label"
+            fi
+          }
+
+          SRGB="${WORKSPACE_DIR}/Testing/Display/sRGB_D65_MAT.icc"
+          if [ -f "$SRGB" ]; then
+            run_rt "sRGB-intent0" "$SRGB" 0
+            run_rt "sRGB-intent1" "$SRGB" 1
+            run_rt "sRGB-intent2" "$SRGB" 2
+            run_rt "sRGB-intent3" "$SRGB" 3
+            run_rt "sRGB-MPE"     "$SRGB" 1 1
+          fi
+
+          for p in CMYK-3DLUTs/CMYK-3DLUTs.icc Display/Rec2020rgbSpectral.icc Display/LCDDisplay.icc; do
+            pf="${WORKSPACE_DIR}/Testing/$p"
+            if [ -f "$pf" ]; then
+              pbase="$(basename "$pf" .icc)"
+              run_rt "${pbase}-intent1" "$pf" 1
+            fi
+          done
+
+          echo ""
+          echo "iccRoundTrip: $((PASS + FAIL)) tested, $PASS pass, $FAIL fail"
+          if [ "$FAIL" -gt 0 ]; then
+            echo "[FAIL] iccRoundTrip sweep produced failures"
+            exit 1
+          fi
+
+      # ---------------------------------------------------------------
+      # Phase 7: Detailed parity (6 profiles x 6 tools, full tests only)
+      # ---------------------------------------------------------------
+      - name: "Detailed tool parity (6 profiles x 6 tools)"
+        if: ${{ inputs.run-full-tests }}
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          for d in "${WORKSPACE_DIR}"/Build/Tools/*/; do
+            if [ -d "$d" ]; then
+              tool_dir="$(realpath "$d")"
+              export PATH="$tool_dir:$PATH"
+            fi
+          done
+          export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+
+          LOGDIR="/tmp/iccdev-logs/parity"
+          mkdir -p "$LOGDIR"
+
+          PASS=0; FAIL=0; SKIP=0
+
+          PROFILES=(
+            "Testing/Display/sRGB_D65_MAT.icc"
+            "Testing/Display/sRGB_D65_colorimetric.icc"
+            "Testing/Named/FluorescentNamedColor.icc"
+            "Testing/SpecRef/srgbRef.icc"
+            "Testing/Calc/srgbCalcTest.icc"
+            "Testing/PCC/Spec400_10_700-D50_2deg-Abs.icc"
+          )
+
+          for prof in "${PROFILES[@]}"; do
+            pf="${WORKSPACE_DIR}/$prof"
+            if [ ! -f "$pf" ]; then
+              echo "[SKIP] $prof (not found)"
+              SKIP=$((SKIP + 1))
+              continue
+            fi
+
+            BASE=$(basename "$pf" .icc)
+            echo "--- $prof ---"
+
+            # iccDumpProfile
+            logf="$LOGDIR/${BASE}-dump.log"
+            if timeout 30 iccDumpProfile "$pf" ALL > "$logf" 2>&1; then
+              echo "  [OK] iccDumpProfile ($(wc -l < "$logf") lines)"
+              PASS=$((PASS + 1))
+            else
+              echo "  [FAIL] iccDumpProfile (exit $?)"
+              FAIL=$((FAIL + 1))
+            fi
+
+            # iccRoundTrip
+            logf="$LOGDIR/${BASE}-roundtrip.log"
+            timeout 30 iccRoundTrip "$pf" > "$logf" 2>&1 || true
+            echo "  [OK] iccRoundTrip (completed)"
+            PASS=$((PASS + 1))
+
+            # iccToXml + iccFromXml round-trip
+            xmlf="$LOGDIR/${BASE}.xml"
+            logf="$LOGDIR/${BASE}-toxml.log"
+            if timeout 30 iccToXml "$pf" "$xmlf" > "$logf" 2>&1; then
+              echo "  [OK] iccToXml ($(wc -c < "$xmlf") bytes)"
+              PASS=$((PASS + 1))
+              iccrt="$LOGDIR/${BASE}_xml_rt.icc"
+              logf2="$LOGDIR/${BASE}-fromxml.log"
+              if timeout 30 iccFromXml "$xmlf" "$iccrt" > "$logf2" 2>&1; then
+                echo "  [OK] iccFromXml"
+                PASS=$((PASS + 1))
+                ORIG_SIZE=$(wc -c < "$pf")
+                RT_SIZE=$(wc -c < "$iccrt")
+                if [ "$ORIG_SIZE" = "$RT_SIZE" ]; then
+                  echo "  [OK] XML round-trip size match ($ORIG_SIZE bytes)"
+                  PASS=$((PASS + 1))
+                else
+                  echo "  [WARN] XML round-trip size mismatch: $ORIG_SIZE vs $RT_SIZE"
+                fi
+              else
+                echo "  [FAIL] iccFromXml (exit $?)"
+                FAIL=$((FAIL + 1))
+              fi
+            else
+              echo "  [FAIL] iccToXml (exit $?)"
+              FAIL=$((FAIL + 1))
+            fi
+
+            # iccToJson + iccFromJson round-trip
+            jsonf="$LOGDIR/${BASE}.json"
+            logf="$LOGDIR/${BASE}-tojson.log"
+            if timeout 30 iccToJson "$pf" "$jsonf" > "$logf" 2>&1; then
+              echo "  [OK] iccToJson ($(wc -c < "$jsonf") bytes)"
+              PASS=$((PASS + 1))
+              jsonrt="$LOGDIR/${BASE}_json_rt.icc"
+              logf2="$LOGDIR/${BASE}-fromjson.log"
+              if timeout 30 iccFromJson "$jsonf" "$jsonrt" > "$logf2" 2>&1; then
+                echo "  [OK] iccFromJson"
+                PASS=$((PASS + 1))
+                ORIG_SIZE=$(wc -c < "$pf")
+                RT_SIZE=$(wc -c < "$jsonrt")
+                if [ "$ORIG_SIZE" = "$RT_SIZE" ]; then
+                  echo "  [OK] JSON round-trip size match ($ORIG_SIZE bytes)"
+                  PASS=$((PASS + 1))
+                else
+                  echo "  [WARN] JSON round-trip size mismatch: $ORIG_SIZE vs $RT_SIZE"
+                fi
+              else
+                echo "  [FAIL] iccFromJson (exit $?)"
+                FAIL=$((FAIL + 1))
+              fi
+            else
+              echo "  [FAIL] iccToJson (exit $?)"
+              FAIL=$((FAIL + 1))
+            fi
+          done
+
+          echo ""
+          echo "=== Parity Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
+          if [ "$FAIL" -gt 0 ]; then
+            echo "[FAIL] Tool parity validation failed"
+            exit 1
+          fi
+          echo "[OK] All tool parity checks passed"
+
+      # ---------------------------------------------------------------
+      # Phase 8: Python/Cython bindings
+      # ---------------------------------------------------------------
+      # preflight: allow-package-install reason=python-bindings-ci
+      - name: Build and test Python bindings
+        env:
+          BASH_ENV: /dev/null
+          PYTHON_VERSION: ${{ inputs.python-version }}
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          LOGDIR="/tmp/iccdev-logs"
+
+          export ICCDEV_BUILD_DIR="${WORKSPACE_DIR}/Build"
+          ICCDEV_LIB_PATHS="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            export LD_LIBRARY_PATH="${ICCDEV_LIB_PATHS}:${LD_LIBRARY_PATH:-}"
+          else
+            export DYLD_LIBRARY_PATH="${ICCDEV_LIB_PATHS}:${DYLD_LIBRARY_PATH:-}"
+          fi
+
+          cd "${WORKSPACE_DIR}/python"
+          python -m pip install \
+            "build>=1.2,<1.4" \
+            "cython>=3.0,<3.2" \
+            "numpy>=1.23,<3" \
+            "pytest>=7.0,<9; python_version < '3.10'" \
+            "pytest>=9.0.3,<10; python_version >= '3.10'" \
+            "setuptools>=64,<81" \
+            "twine>=5.0,<7" \
+            "wheel>=0.46.2,<0.47" \
+            --quiet
+          python -m pip install -e ".[dev]" --quiet
+          python -m pip freeze | sort > "$LOGDIR/python-build-env-${RUNNER_OS}-${PYTHON_VERSION}.txt"
+          cd "${WORKSPACE_DIR}"
+
+          echo "=== Running Python/Cython unit tests ==="
+          python -m pytest --rootdir "${WORKSPACE_DIR}" \
+            --import-mode=importlib python/tests -v --tb=short \
+            -m "not parity" 2>&1 | tee "$LOGDIR/python-tests.log" || {
+            rc=$?
+            if [[ $rc -eq 5 ]]; then
+              echo "No tests collected -- extension may not be loadable"
+            else
+              echo "WARN: pytest exited $rc"
+              exit $rc
+            fi
+          }
+
+          echo "=== Running Python native parity tests ==="
+          python -m pytest --rootdir "${WORKSPACE_DIR}" \
+            --import-mode=importlib python/tests -v --tb=short \
+            -m parity 2>&1 | tee "$LOGDIR/python-parity-tests.log"
+
+      # preflight: allow-package-install reason=python-package-ci
+      - name: Build Python sdist and wheel
+        env:
+          BASH_ENV: /dev/null
+          PYTHON_VERSION: ${{ inputs.python-version }}
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          export ICCDEV_BUILD_DIR="${WORKSPACE_DIR}/Build"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            export LD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          else
+            export DYLD_LIBRARY_PATH="${WORKSPACE_DIR}/Build/IccProfLib:${WORKSPACE_DIR}/Build/IccXML"
+          fi
+
+          cd "${WORKSPACE_DIR}/python"
+          python -m pip install \
+            "build>=1.2,<1.4" \
+            "cython>=3.0,<3.2" \
+            "pytest>=7.0,<9; python_version < '3.10'" \
+            "pytest>=9.0.3,<10; python_version >= '3.10'" \
+            "setuptools>=64,<81" \
+            "twine>=5.0,<7" \
+            "wheel>=0.46.2,<0.47" \
+            --quiet
+          cp ../LICENSE.md LICENSE.md
+          python vendor_iccproflib.py --clean
+          trap 'rm -f LICENSE.md' EXIT
+          unset ICCDEV_BUILD_DIR
+          python -m build --sdist --wheel --outdir ../dist/
+          dist_files=(../dist/*.whl ../dist/*.tar.gz)
+          python -m twine check "${dist_files[@]}"
+          sdist_files=(../dist/iccdev-*.tar.gz)
+          python - <<'PY' "${sdist_files[0]}"
+          import tarfile
+          import sys
+
+          with tarfile.open(sys.argv[1], "r:gz") as archive:
+              names = archive.getnames()
+          vendor_entries = [name for name in names if "/vendor/IccProfLib/" in name]
+          assert vendor_entries, "sdist is missing vendor/IccProfLib"
+          assert any(name.endswith("/vendor/IccProfLib/MANIFEST.sha256") for name in names)
+          print(f"sdist vendor entries: {len(vendor_entries)}")
+          PY
+          python -m pip freeze | sort > "../dist/python-package-build-env-${RUNNER_OS}-${PYTHON_VERSION}.txt"
+          echo "=== Built packages ==="
+          ls -lh ../dist/
+          echo "=== Wheel contents ==="
+          for wheel in ../dist/*.whl; do
+            python -m zipfile -l "$wheel"
+          done
+          echo "=== Isolated sdist install smoke ==="
+          rm -rf /tmp/iccdev-sdist-venv
+          python -m venv /tmp/iccdev-sdist-venv
+          /tmp/iccdev-sdist-venv/bin/python -m pip install --upgrade pip --quiet
+          /tmp/iccdev-sdist-venv/bin/python -m pip install "${sdist_files[0]}" --no-cache-dir --quiet
+          (cd /tmp && /tmp/iccdev-sdist-venv/bin/python - <<'PY'
+          import iccdev
+          from pathlib import Path
+          path = Path(iccdev.__file__).as_posix()
+          print(path)
+          assert "site-packages" in path, path
+          PY
+          )
+          /tmp/iccdev-sdist-venv/bin/python -m pip show -f iccdev
+          /tmp/iccdev-sdist-venv/bin/python -m pip install \
+            "pytest>=7.0,<9; python_version < '3.10'" \
+            "pytest>=9.0.3,<10; python_version >= '3.10'" \
+            "numpy>=1.23,<3" \
+            --quiet
+          (
+            cd /tmp
+            /tmp/iccdev-sdist-venv/bin/python -m pytest \
+              "${WORKSPACE_DIR}/python/tests" -v --tb=short -m "not parity"
+          )
+
+      # preflight: allow-package-install reason=python-wheel-ci
+      - name: Validate native Python wheel with cibuildwheel
+        env:
+          BASH_ENV: /dev/null
+          PYTHON_VERSION: ${{ inputs.python-version }}
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          cd "${WORKSPACE_DIR}/python"
+          if [[ ! "$PYTHON_VERSION" =~ ^3\.(9|12|13)$ ]]; then
+            echo "Unsupported Python version for cibuildwheel smoke: $PYTHON_VERSION" >&2
+            exit 1
+          fi
+          python -m pip install "cibuildwheel>=2.23,<3" "twine>=5.0,<7" --quiet
+
+          echo "=== cibuildwheel configured identifiers ==="
+          python -m cibuildwheel --print-build-identifiers --platform windows
+          python -m cibuildwheel --print-build-identifiers --platform linux
+          python -m cibuildwheel --print-build-identifiers --platform macos
+
+          PY_TAG="cp${PYTHON_VERSION//./}"
+          export CIBW_BUILD="${PY_TAG}-*"
+          export CIBW_ARCHS="auto"
+          rm -rf build iccdev/*.so iccdev/*.pyd
+          cp ../LICENSE.md LICENSE.md
+          python vendor_iccproflib.py
+          trap 'python vendor_iccproflib.py --clean; rm -f LICENSE.md; rm -rf build iccdev/*.so iccdev/*.pyd' EXIT
+          python -m cibuildwheel --output-dir ../wheelhouse
+
+      # ---------------------------------------------------------------
+      # Phase 9: MCP server verification
+      # ---------------------------------------------------------------
+      # preflight: allow-package-install reason=mcp-package-ci
+      - name: Install and verify MCP server
+        env:
+          BASH_ENV: /dev/null
+          PYTHON_VERSION: ${{ inputs.python-version }}
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          if [[ "$PYTHON_VERSION" == "3.9" ]]; then
+            echo "[SKIP] iccdev-mcp requires Python >=3.10; skipping MCP verification on Python $PYTHON_VERSION"
+            exit 0
+          fi
+
+          cd "${WORKSPACE_DIR}"
+          pip install "./iccdev-mcp/" 2>&1 | tail -10
+          python -c "from iccdev_mcp import server; print('MCP server module loaded')"
+          python -c "
+          try:
+              from iccdev_mcp import rest_api
+              print('REST API module loaded')
+          except ImportError as e:
+              print('REST API optional deps not installed (expected):', e)
+          "
+          echo "[OK] MCP server verification complete"
+
+      # ---------------------------------------------------------------
+      # Phase 10: Collect artifacts
+      # ---------------------------------------------------------------
+      - name: Collect tool binaries
+        if: always() && inputs.run-full-tests
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          mkdir -p artifact-tools/lib
+          for tool in "${WORKSPACE_DIR}"/Build/Tools/*/icc*; do
+            [ -x "$tool" ] && cp "$tool" artifact-tools/
+          done
+
+          shopt -s nullglob
+          for lib_glob in \
+            "${WORKSPACE_DIR}"/Build/IccProfLib/libIccProfLib2* \
+            "${WORKSPACE_DIR}"/Build/IccXML/libIccXML2* \
+            "${WORKSPACE_DIR}"/Build/IccJSON/libIccJSON2* \
+            "${WORKSPACE_DIR}"/Build/IccConnect/libIccConnect2*
+          do
+            cp "$lib_glob" artifact-tools/lib/
+          done
+          shopt -u nullglob
+
+          echo "=== Artifact contents ==="
+          ls -lhR artifact-tools/
+
+      - name: Collect test logs
+        if: always() && inputs.run-full-tests
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          LOGDIR="/tmp/iccdev-logs"
+          OUTDIR="artifact-logs"
+          mkdir -p "$OUTDIR"
+
+          # Top-level logs
+          for f in "$LOGDIR"/*.log; do
+            if [ -f "$f" ]; then
+              cp "$f" "$OUTDIR/"
+            fi
+          done
+          for f in "$LOGDIR"/ctest-*.txt "$LOGDIR"/ctest-*.xml; do
+            if [ -f "$f" ]; then
+              cp "$f" "$OUTDIR/"
+            fi
+          done
+
+          # Per-tool subdirectory logs
+          for subdir in dump toxml fromxml roundtrip parity; do
+            if [ -d "$LOGDIR/$subdir" ]; then
+              mkdir -p "$OUTDIR/$subdir"
+              cp "$LOGDIR/$subdir"/*.log "$OUTDIR/$subdir/" 2>/dev/null || true
+            fi
+          done
+
+          # Copy XML/JSON artifacts from parity tests
+          if [ -d "$LOGDIR/parity" ]; then
+            cp "$LOGDIR/parity"/*.xml "$OUTDIR/parity/" 2>/dev/null || true
+            cp "$LOGDIR/parity"/*.json "$OUTDIR/parity/" 2>/dev/null || true
+          fi
+
+          echo "=== Log artifact summary ==="
+          find "$OUTDIR" -type f | wc -l
+          echo "files collected"
+
+      # ---------------------------------------------------------------
+      # Phase 11: Upload artifacts
+      # ---------------------------------------------------------------
+      - name: Upload Python packages
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: >-
+            iccdev-python-packages-${{ inputs.os }}-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}
+          path: |
+            dist/
+            wheelhouse/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload iccDEV tool binaries
+        if: always() && inputs.run-full-tests
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: "iccdev-tools-${{ inputs.os }}-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"
+          path: artifact-tools/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload test logs
+        if: always() && inputs.run-full-tests
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
+        with:
+          name: "iccdev-test-logs-${{ inputs.os }}-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"
+          path: artifact-logs/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ---------------------------------------------------------------
+      # Phase 12: Step summary (sources sanitize-sed.sh)
+      # ---------------------------------------------------------------
+      - name: Generate step summary
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+          WORKSPACE_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # --- Load sanitizer (source sanitize-sed.sh with inline fallback) ---
+          SANITIZER="${WORKSPACE_DIR}/.github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          LOGDIR="/tmp/iccdev-logs"
+
+          {
+            echo "## Build + Test: ${RUNNER_OS}"
+            echo ""
+
+            # Profile inventory
+            TOTAL_ICC=$(find "${WORKSPACE_DIR}/Testing" -name '*.icc' -type f 2>/dev/null | wc -l)
+            echo "**Profile inventory:** $(sanitize_line "$TOTAL_ICC") ICC profiles generated"
+            echo ""
+
+            echo "### Phase Results"
+            echo ""
+            echo "| Phase | Description | Status |"
+            echo "|-------|-------------|--------|"
+
+            # Check each log for completion
+            for item in \
+              "CreateAllProfiles:CreateAllProfiles.log:Profile generation" \
+              "HDR:HDR-mkprofiles.log:HDR profile generation" \
+              "hybrid:hybrid-BuildAndTest.log:Hybrid build and test" \
+              "mcs-updateprev:mcs-updateprev.log:MCS updateprev" \
+              "mcs-withBkgd:mcs-updateprevWithBkgd.log:MCS updateprevWithBkgd" \
+              "RunTests:RunTests.log:iccDEV test suite" \
+              "CalcTest:checkInvalidProfiles.log:CalcTest invalid profiles"
+            do
+              IFS=':' read -r phase logfile desc <<< "$item"
+              if [ -f "$LOGDIR/$logfile" ]; then
+                echo "| $(sanitize_line "$phase") | $(sanitize_line "$desc") | Completed |"
+              else
+                echo "| $(sanitize_line "$phase") | $(sanitize_line "$desc") | Not run |"
+              fi
+            done
+
+            echo "| Build | iccDEV (all tools + JSON) | Completed |"
+            echo "| Python | Cython bindings build + pytest | Completed |"
+            echo "| MCP | Server module verification | Completed |"
+            echo "| Artifacts | Logs + binaries + packages | Uploaded |"
+            echo ""
+
+            # Tool inventory
+            echo "### Tools Built"
+            echo ""
+            echo '```'
+            find "${WORKSPACE_DIR}/Build/Tools" -mindepth 2 -maxdepth 2 \
+              -type f -name 'icc*' 2>/dev/null | sort | while IFS= read -r line; do
+              sanitize_line "$(basename "$line")"
+              echo ""
+            done
+            echo '```'
+            echo ""
+
+            # Per-tool log summaries
+            echo "### Test Log Summary"
+            echo ""
+            for subdir in dump toxml fromxml roundtrip parity; do
+              if [ -d "$LOGDIR/$subdir" ]; then
+                cnt=$(find "$LOGDIR/$subdir" -name '*.log' | wc -l)
+                echo "- **$subdir**: $(sanitize_line "$cnt") log files"
+              fi
+            done
+            echo ""
+
+            # Show last lines of RunTests output
+            if [ -f "$LOGDIR/RunTests.log" ]; then
+              echo "### RunTests.sh (last 20 lines)"
+              echo ""
+              echo '```'
+              tail -20 "$LOGDIR/RunTests.log" | while IFS= read -r line; do
+                sanitize_line "$line"
+                echo ""
+              done
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

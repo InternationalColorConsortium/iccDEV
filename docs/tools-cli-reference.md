@@ -26,8 +26,10 @@ single index for common command shapes and shared option tables.
 
 For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
 selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
-`.cube` text LUT and `option` is the precision. `first_transform=1` uses the
-source transform from the first profile; `0` uses its destination transform.
+`.cube` text LUT and `option` is the precision (`0` through `20`). Other
+`link_type` values are rejected. `lut_size` must be `2` through `255`.
+`first_transform=1` uses the source transform from the first profile; `0` uses
+its destination transform.
 
 ## Image and Specialty Tools
 

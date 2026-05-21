@@ -72,8 +72,8 @@
 #include <list>
 #include <string>
 #include <vector>
-#include "../../IccProfLib/IccDefs.h"
-#include "../../IccProfLib/IccJsonTypes.h"
+#include "IccDefs.h"
+#include "IccJsonTypes.h"
 
 using json = iccJson::json;
 

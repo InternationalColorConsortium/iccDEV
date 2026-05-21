@@ -64,7 +64,7 @@ Copyright:  (c) see Software License
 #include "IccTag.h"
 #include "IccTagMPE.h"
 #include "IccJsonConfig.h"
-#include "../../IccProfLib/IccJsonTypes.h"
+#include "IccJsonTypes.h"
 
 using IccJson = iccJson::json;
 

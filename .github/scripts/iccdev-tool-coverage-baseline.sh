@@ -822,10 +822,25 @@ fi
 echo ""
 
 # =============================================================================
-# 7. iccApplyToLink (6 tests)
+# 7. iccApplyToLink (13 tests)
 # =============================================================================
 echo "--- 7. iccApplyToLink ---"
 APPLYLINK="$TOOLS/IccApplyToLink/iccApplyToLink"
+
+run_expect_exit "link-00" "Reject invalid link_type=2" 1 \
+  "$APPLYLINK" "$OUTDIR/link_invalid.cube" 2 2 3 "invalid-link-type" 0.0 1.0 1 0 "$SRGB" 1
+run_expect_exit "link-00b" "Reject non-numeric LUT size" 255 \
+  "$APPLYLINK" "$OUTDIR/link_invalid_lut.cube" 1 2junk 3 "invalid-lut-size" 0.0 1.0 1 0 "$SRGB" 1
+run_expect_exit "link-00c" "Reject invalid DeviceLink option=2" 1 \
+  "$APPLYLINK" "$OUTDIR/link_invalid_option.icc" 0 2 2 "invalid-device-option" 0.0 1.0 1 0 "$SRGB" 1
+run_expect_exit "link-00d" "Reject non-numeric input range" 1 \
+  "$APPLYLINK" "$OUTDIR/link_invalid_range.cube" 1 2 3 "invalid-range" foo 1.0 1 0 "$SRGB" 1
+run_expect_exit "link-00e" "Reject invalid first_transform=2" 1 \
+  "$APPLYLINK" "$OUTDIR/link_invalid_first.cube" 1 2 3 "invalid-first-transform" 0.0 1.0 2 0 "$SRGB" 1
+run_expect_exit "link-00f" "Reject invalid interpolation=2" 1 \
+  "$APPLYLINK" "$OUTDIR/link_invalid_interp.cube" 1 2 3 "invalid-interp" 0.0 1.0 1 2 "$SRGB" 1
+run_expect_exit "link-00g" "Reject non-numeric rendering intent" 1 \
+  "$APPLYLINK" "$OUTDIR/link_invalid_intent.cube" 1 2 3 "invalid-intent" 0.0 1.0 1 0 "$SRGB" junk
 
 if [ "$QUICK_MODE" -eq 0 ]; then
   # Device Link (type=0) with varying LUT sizes

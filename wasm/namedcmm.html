@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Apply named color ICC transforms in the browser using iccApplyNamedCmm compiled to WebAssembly.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%23005a9c%27/%3E%3Ctext x=%2716%27 y=%2721%27 font-size=%2716%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27monospace%27%3EICC%3C/text%3E%3C/svg%3E">
+  <title>iccApplyNamedCmm -- WASM</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <div class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="index.html">iccDEV WASM Tools</a> / iccApplyNamedCmm</nav>
+    <header>
+      <h1>iccApplyNamedCmm</h1>
+      <p class="subtitle">Apply ICC color transforms using named color management configuration.</p>
+    </header>
+
+    <main id="main-content">
+    <div class="status-bar" role="status" aria-live="polite">
+      <div class="status-indicator" id="indicator"></div>
+      <span class="status-text" id="status">Initializing...</span>
+    </div>
+
+    <div class="controls">
+      <h2>Input</h2>
+      <div class="field">
+        <label for="file-input">JSON Configuration File</label>
+        <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="File drop zone">
+          <div class="icon" aria-hidden="true">&#128196;</div>
+          <div>Drop a JSON config file here or click to browse</div>
+          <div class="filename" id="filename"></div>
+          <input type="file" id="file-input" accept=".json,.JSON,.txt">
+        </div>
+      </div>
+      <div class="field">
+        <label>ICC Profiles (referenced by config)</label>
+        <div class="drop-zone" id="drop-zone-profiles" tabindex="0" role="button" aria-label="Profiles drop zone" style="border-color: var(--accent);">
+          <div class="icon" aria-hidden="true">&#128196;</div>
+          <div>Drop ICC profiles referenced by the config</div>
+          <div class="filename" id="profile-names"></div>
+          <input type="file" accept=".icc,.icm,.ICC,.ICM" multiple>
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="run-btn" disabled>Apply Named CMM</button>
+        <button class="btn" id="download-btn">Download Output</button>
+        <button class="btn" id="clear-btn">Clear</button>
+      </div>
+    </div>
+
+    <div class="output-panel" role="region" aria-label="Tool output">
+      <div class="output-header"><h3>Output</h3></div>
+      <div class="output-content empty" id="output-container" role="log" aria-live="polite">
+        <pre id="output">Upload a config and profiles, then click Apply.</pre>
+      </div>
+    </div>
+
+    </main>
+    <footer>
+      <a href="https://github.com/InternationalColorConsortium/iccDEV">iccDEV</a>
+      &mdash; All processing runs locally in your browser.
+    </footer>
+  </div>
+
+  <script src="sanitize.js"></script>
+  <script src="app.js"></script>
+  <script>
+    var profileFiles = [];
+
+    const app = new IccWasmApp('iccApplyNamedCmm', {
+      getArgs: function(inputPath) {
+        return [inputPath];
+      }
+    });
+
+    // Handle profile uploads
+    var dzP = document.getElementById('drop-zone-profiles');
+    var pInput = dzP.querySelector('input[type="file"]');
+    dzP.addEventListener('click', function() { pInput.click(); });
+    dzP.addEventListener('dragover', function(e) { e.preventDefault(); dzP.classList.add('dragover'); });
+    dzP.addEventListener('dragleave', function() { dzP.classList.remove('dragover'); });
+    dzP.addEventListener('drop', function(e) {
+      e.preventDefault(); dzP.classList.remove('dragover');
+      profileFiles = Array.from(e.dataTransfer.files);
+      document.getElementById('profile-names').textContent =
+        profileFiles.map(function(f) { return iccSanitize.sanitizeFilename(f.name); }).join(', ');
+    });
+    pInput.addEventListener('change', function(e) {
+      profileFiles = Array.from(e.target.files);
+      document.getElementById('profile-names').textContent =
+        profileFiles.map(function(f) { return iccSanitize.sanitizeFilename(f.name); }).join(', ');
+    });
+
+    // Write profiles to FS before running
+    var origRun = app.run.bind(app);
+    document.getElementById('run-btn').removeEventListener('click', origRun);
+    document.getElementById('run-btn').addEventListener('click', async function() {
+      if (app.module) {
+        for (var pf of profileFiles) {
+          var buf = await pf.arrayBuffer();
+          app.module.FS.writeFile('/' + iccSanitize.sanitizeFilename(pf.name), new Uint8Array(buf));
+        }
+      }
+      await origRun();
+    });
+
+    app.init();
+  </script>
+</body>
+</html>

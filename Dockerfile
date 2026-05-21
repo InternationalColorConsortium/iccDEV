@@ -13,6 +13,7 @@ FROM ubuntu:26.04@sha256:fed6ddb82c61194e1814e93b59cfcb6759e5aa33c4e41bb3782313c
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Package versions are pinned to the digest-pinned Ubuntu base validated on master.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     build-essential=12.12ubuntu2 \
@@ -64,6 +65,7 @@ RUN echo "=== Libraries ===" \
  && ls -lh /opt/iccdev/Build/IccProfLib/libIccProfLib2* \
  && ls -lh /opt/iccdev/Build/IccXML/libIccXML2* \
  && (ls -lh /opt/iccdev/Build/IccJSON/libIccJSON2* 2>/dev/null || echo "IccJSON: not built (nlohmann-json may be missing)") \
+ && ls -lh /opt/iccdev/Build/IccConnect/libIccConnect2* \
  && echo "=== Tools ===" \
  && find /opt/iccdev/Build/Tools -type f -executable | sort
 
@@ -77,6 +79,7 @@ LABEL org.opencontainers.image.title="iccDEV Build Container" \
       org.opencontainers.image.vendor="International Color Consortium" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
+# Package versions are pinned to the digest-pinned Ubuntu base validated on master.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6=2.43-2ubuntu2 \
     libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
@@ -118,13 +121,12 @@ RUN groupadd -r iccdev \
 ENV ICCDEV_ROOT="/opt/iccdev"
 ENV ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest"
 ENV PATH="/opt/iccdev/Build/Tools/IccToXml:/opt/iccdev/Build/Tools/IccFromXml:/opt/iccdev/Build/Tools/IccDumpProfile:/opt/iccdev/Build/Tools/IccProfileVisualize:/opt/iccdev/Build/Tools/IccPawgReport:/opt/iccdev/Build/Tools/IccApplyNamedCmm:/opt/iccdev/Build/Tools/IccRoundTrip:/opt/iccdev/Build/Tools/IccFromCube:/opt/iccdev/Build/Tools/IccApplyProfiles:/opt/iccdev/Build/Tools/IccApplySearch:/opt/iccdev/Build/Tools/IccApplyToLink:/opt/iccdev/Build/Tools/IccJpegDump:/opt/iccdev/Build/Tools/IccPngDump:/opt/iccdev/Build/Tools/IccSpecSepToTiff:/opt/iccdev/Build/Tools/IccTiffDump:/opt/iccdev/Build/Tools/IccV5DspObsToV4Dsp:/opt/iccdev/Build/Tools/IccToJson:/opt/iccdev/Build/Tools/IccFromJson:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/iccdev/Build/IccProfLib:/opt/iccdev/Build/IccXML:/opt/iccdev/Build/IccJSON"
+ENV LD_LIBRARY_PATH="/opt/iccdev/Build/IccProfLib:/opt/iccdev/Build/IccXML:/opt/iccdev/Build/IccJSON:/opt/iccdev/Build/IccConnect"
 ENV ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer-21"
 
 USER iccdev
 WORKDIR /opt/iccdev
-
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD test -x /opt/iccdev/Build/Tools/IccDumpProfile/iccDumpProfile || exit 1
+    CMD test -x /opt/iccdev/Build/Tools/IccDumpProfile/iccDumpProfile || exit 1
 
 CMD ["bash"]

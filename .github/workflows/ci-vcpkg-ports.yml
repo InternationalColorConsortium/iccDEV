@@ -207,7 +207,7 @@ jobs:
             errors=$((errors + 1))
           fi
           # Check libraries
-          for lib in libIccProfLib2 libIccXML2 libIccJSON2; do
+          for lib in libIccProfLib2 libIccXML2 libIccJSON2 libIccConnect2; do
             if ls "$PREFIX/lib/"${lib}* 1>/dev/null 2>&1; then
               echo "[OK] $lib found"
             else
@@ -224,7 +224,7 @@ jobs:
             errors=$((errors + 1))
           fi
           # Check tools
-          for tool in iccDumpProfile iccRoundTrip iccFromXml iccToXml iccFromJson iccToJson; do
+          for tool in iccDumpProfile iccRoundTrip iccApplyNamedCmm iccFromXml iccToXml iccFromJson iccToJson; do
             if [ -x "$PREFIX/tools/iccdev/$tool" ]; then
               echo "[OK] Tool $tool found"
             else
@@ -281,7 +281,7 @@ jobs:
             $errors++
           }
           # Check libraries
-          foreach ($lib in @('IccProfLib2-static.lib','IccXML2-static.lib','IccJSON2-static.lib')) {
+          foreach ($lib in @('IccProfLib2-static.lib','IccXML2-static.lib','IccJSON2-static.lib','IccConnect2-static.lib')) {
             if (Test-Path "$prefix\lib\$lib") {
               Write-Host "[OK] $lib found"
             } else {
@@ -299,7 +299,7 @@ jobs:
             $errors++
           }
           # Check tools
-          foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccFromXml.exe','iccToXml.exe','iccFromJson.exe','iccToJson.exe')) {
+          foreach ($tool in @('iccDumpProfile.exe','iccRoundTrip.exe','iccApplyNamedCmm.exe','iccFromXml.exe','iccToXml.exe','iccFromJson.exe','iccToJson.exe')) {
             if (Test-Path "$prefix\tools\iccdev\$tool") {
               Write-Host "[OK] Tool $tool found"
             } else {
@@ -379,7 +379,12 @@ jobs:
             "name": "iccdev-manifest-test",
             "version-string": "1.0.0",
             "builtin-baseline": "$baseline",
-            "dependencies": [ "iccdev" ],
+            "dependencies": [
+              {
+                "name": "iccdev",
+                "features": [ "json" ]
+              }
+            ],
             "overrides": [
               { "name": "iccdev", "version": "2.3.2.2" }
             ]
@@ -395,6 +400,8 @@ jobs:
           add_executable(test-iccdev test.cpp)
           target_link_libraries(test-iccdev PRIVATE
               RefIccMAX::IccProfLib2
+              RefIccMAX::IccJSON2
+              RefIccMAX::IccConnect2
           )
           "@ | Set-Content "$testDir\CMakeLists.txt" -Encoding UTF8
           # Minimal test source
@@ -402,6 +409,9 @@ jobs:
           #include <cstdio>
           #include "IccProfile.h"
           #include "IccProfLibVer.h"
+          #include "IccProfileJson.h"
+          #include "IccConnect.h"
+          #include "IccJsonUtil.h"
           int main() {
               std::printf("IccProfLib: %s\n", ICCPROFLIBVER);
               CIccProfile p; p.InitHeader();

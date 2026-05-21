@@ -7,6 +7,12 @@
 - [ ] Signed all Commits in PR
 - [ ] Built locally according to `docs/build.md`
 - [ ] Followed the guidelines in [Contributing](https://github.com/InternationalColorConsortium/iccDEV/blob/master/CONTRIBUTING.md) document
+- [ ] Ran relevant CTest/profile tests from `docs/ctest.md`
+- [ ] Updated documentation for user-visible behavior changes
+- [ ] Ran sanitizer coverage for memory-safety or parser changes
+- [ ] Added or updated regression coverage for behavior changes
+- [ ] For Python package changes, followed `docs/python-packaging-release.md` for PR and merge requirements
+- [ ] Did not change maintainer-owned workflow, CTest, CPack, sanitizer, release, or security infrastructure unless requested by an iccDEV maintainer
 - [ ] New source files include the ICC copyright and BSD 3-Clause license header
 - [ ] Code style matches nearby code: 2-space indent, K&R braces, `m_` members
 

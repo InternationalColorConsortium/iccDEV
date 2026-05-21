@@ -61,7 +61,7 @@ Copyright:  (c) see Software License
 #define _ICCPROFILEJSON_H
 
 #include "IccProfile.h"
-#include "../../IccProfLib/IccJsonTypes.h"
+#include "IccJsonTypes.h"
 #include <map>
 #include <unordered_map>
 #include <string>
@@ -80,7 +80,7 @@ public:
   CIccProfileJson(const CIccProfileJson &profile) : CIccProfile(profile) {}
   virtual CIccProfile* NewCopy() const { return new CIccProfileJson(*this); }
   virtual CIccProfile* NewProfile() const { return new CIccProfileJson(); }
-  virtual ~CIccProfileJson() {}
+  virtual ~CIccProfileJson();
 
   virtual const char *GetClassName() const { return "CIccProfileJson"; }
 

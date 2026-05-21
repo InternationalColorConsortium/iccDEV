@@ -398,7 +398,7 @@ icStatusCMM CIccCmmSearch::Begin(bool /* bAllocNewApply */, bool /* bUsePcsConve
 
     //dst_to_mid
     cmm = CIccCmmPtr(new CIccCmm);
-    rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pDstPcc, m_nSrcLutType, m_bDstUseD2BxB2DxTags);
+    rv = cmm->AddXform(*m_pDstProfile, m_nDstIntent, m_nDstInterp, m_pcc.size() ? m_pcc[0] : m_pDstPcc, m_nDstLutType, m_bDstUseD2BxB2DxTags);
     checkCmmStatus(rv);
 
     rv = cmm->AddXform(*m_pSrcProfile, m_nSrcIntent, m_nSrcInterp, m_pcc.size() ? m_pcc[0] : m_pSrcPcc, m_nSrcLutType, m_bSrcUseD2BxB2DxTags);

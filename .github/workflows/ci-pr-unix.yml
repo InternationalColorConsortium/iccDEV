@@ -315,7 +315,8 @@ jobs:
           fi
           for lib in Build/IccProfLib/libIccProfLib2-static${STATIC_POSTFIX}.a \
                      Build/IccXML/libIccXML2-static${STATIC_POSTFIX}.a \
-                     Build/IccJSON/libIccJSON2-static${STATIC_POSTFIX}.a; do
+                     Build/IccJSON/libIccJSON2-static${STATIC_POSTFIX}.a \
+                     Build/IccConnect/libIccConnect2-static${STATIC_POSTFIX}.a; do
             if [ ! -f "$lib" ]; then
               echo "::error title=Missing Static Library::$lib not found"
               exit 1

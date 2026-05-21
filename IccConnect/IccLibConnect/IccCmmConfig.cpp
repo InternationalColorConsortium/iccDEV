@@ -68,6 +68,8 @@
 #include "IccCmmConfig.h"
 #include "IccCmmThread.h"
 
+#include <cmath>
+#include <cstdlib>
 #include <errno.h>
 #include <limits.h>
 #include <cstdio>
@@ -201,7 +203,7 @@ static bool icIsJsonColorEncoding(int v)
   return false;
 }
 
-static bool icParseIntArg(const char* arg, int& n)
+static bool icParseIntArg(const char* arg, int& n, bool bAllowColon=false)
 {
   char* end = NULL;
   long value;
@@ -213,10 +215,27 @@ static bool icParseIntArg(const char* arg, int& n)
   value = strtol(arg, &end, 10);
   if (errno || end == arg || value < INT_MIN || value > INT_MAX)
     return false;
-  if (*end && *end != ':')
+  if (*end && !(bAllowColon && *end == ':'))
     return false;
 
   n = (int)value;
+  return true;
+}
+
+static bool icParseFloatArg(const char* arg, icFloatNumber& n)
+{
+  char* end = NULL;
+  double value;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  value = strtod(arg, &end);
+  if (errno || end == arg || *end || !std::isfinite(value))
+    return false;
+
+  n = (icFloatNumber)value;
   return true;
 }
 
@@ -349,7 +368,7 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
 
   //Setup destination encoding
   int nDstEncoding;
-  if (!icParseIntArg(args[1], nDstEncoding))
+  if (!icParseIntArg(args[1], nDstEncoding, true))
     return 0;
 
   // Range-check the parsed integer while it is still an int.  Casting an
@@ -888,12 +907,16 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
     return false;
 
   std::string str;
-  if (jsonToValue(j["transform"], str)) {
+  if (j.contains("transform") && !jsonToValue(j["transform"], str))
+    return false;
+  if (!str.empty()) {
     int i;
     for (i = 0; icTranNames[i]; i++) {
       if (str == icTranNames[i])
         break;
     }
+    if (!icTranNames[i])
+      return false;
     parsed.m_transform = (icXformLutType)icTranValues[i];
     // Pull the overprint variant from the same row.  For non-named names
     // this is always icNamedColorOverWhite, so behaviour is unchanged
@@ -914,12 +937,17 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
   jsonToValue(j["useV5SubProfile"], parsed.m_useV5SubProfile);
   jsonToValue(j["useD2BxB2Dx"], parsed.m_useD2BxB2Dx);
 
-  if (jsonToValue(j["interpolation"], str)) {
+  str.clear();
+  if (j.contains("interpolation") && !jsonToValue(j["interpolation"], str))
+    return false;
+  if (!str.empty()) {
     int i;
     for (i = 0; icInterpNames[i]; i++) {
       if (str == icInterpNames[i])
         break;
     }
+    if (!icInterpNames[i])
+      return false;
     parsed.m_interpolation = icInterpValues[i];
   }
 
@@ -996,7 +1024,9 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
   icXformInterp interpolation = icInterpTetrahedral;
 
   if (nArg > 1) {
-    int nInterpVal = atoi(args[0]);
+    int nInterpVal;
+    if (!icParseIntArg(args[0], nInterpVal) || nInterpVal < 0 || nInterpVal > 1)
+      return 0;
     interpolation = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
     args++;
     nArg--;
@@ -1009,7 +1039,9 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
 
     while (nArg >= 2 && !strnicmp(args[0], "-ENV:", 5)) {  //check for -ENV: to allow for Cmm Environment variables to be defined for next transform
       icSignature sig = icGetSigVal(args[0] + 5);
-      icFloatNumber val = (icFloatNumber)atof(args[1]);
+      icFloatNumber val;
+      if (!icParseFloatArg(args[1], val))
+        return 0;
       args += 2;
       nArg -= 2;
       nUsed += 2;
@@ -1026,7 +1058,9 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
         }
         bFirst = false;
       }
-      int nIntent = atoi(args[1]);
+      int nIntent;
+      if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
+        return 0;
 
       pProf->m_useD2BxB2Dx = true;
       // Overprint variant for NamedColor xforms is encoded as the millions
@@ -1071,10 +1105,10 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       
       // pin decoded values to valid range
       if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
-        nIntent = icPerceptual;
+        return 0;
       
       if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
-       nType = icXformLutColor;
+        return 0;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
       pProf->m_transform = (icXformLutType)nType;
@@ -1158,7 +1192,8 @@ int CIccCfgPccWeight::fromArgs(const char** args, int nArg, bool bReset)
 
   if (nArg >= 2) {
     m_pccPath = args[0];
-    m_dWeight = (icFloatNumber)atof(args[1]);
+    if (!icParseFloatArg(args[1], m_dWeight))
+      return 0;
 
 //    args += 2;    // static analysis says value unread
     nUsed += 2;
@@ -1175,8 +1210,12 @@ bool CIccCfgPccWeight::fromJson(json j, bool bReset)
   if (bReset)
     reset();
 
-  jsonToValue(j["pccFile"], m_pccPath);
-  jsonToValue(j["weight"], m_dWeight);
+  if (!j.contains("pccFile") || !jsonToValue(j["pccFile"], m_pccPath) || m_pccPath.empty())
+    return false;
+  if (!j.contains("weight") || !jsonToValue(j["weight"], m_dWeight))
+    return false;
+  if (!std::isfinite(m_dWeight))
+    return false;
   
   return true;
 }
@@ -1214,7 +1253,9 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
   icXformInterp interpolation = icInterpTetrahedral;
 
   if (nArg > 1) {
-    int nInterpVal = atoi(args[0]);
+    int nInterpVal;
+    if (!icParseIntArg(args[0], nInterpVal) || nInterpVal < 0 || nInterpVal > 1)
+      return 0;
     interpolation = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
     args++;
     nArg--;
@@ -1231,7 +1272,9 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
 
     while (nArg >= 2 && !strnicmp(args[0], "-ENV:", 5)) {  //check for -ENV: to allow for Cmm Environment variables to be defined for next transform
       icSignature sig = icGetSigVal(args[0] + 5);
-      icFloatNumber val = (icFloatNumber)atof(args[1]);
+      icFloatNumber val;
+      if (!icParseFloatArg(args[1], val))
+        return 0;
       args += 2;
       nArg -= 2;
       nUsed += 2;
@@ -1249,7 +1292,9 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
         bFirst = false;
       }
       int nType;
-      int nIntent = atoi(args[1]);
+      int nIntent;
+      if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
+        return 0;
 
       pProf->m_useD2BxB2Dx = true;
       // Overprint variant for NamedColor xforms is encoded as the millions
@@ -1287,10 +1332,10 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       
       // pin decoded values to valid range
       if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
-        nIntent = icPerceptual;
+        return 0;
       
       if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
-       nType = icXformLutColor;
+        return 0;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
       pProf->m_transform = (icXformLutType)nType;
@@ -1311,8 +1356,10 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
   }
 
   if (nArg >= 2 && !strcmp(args[0], "-INIT")) {
-    int nIntent = atoi(args[1]);
+    int nIntent;
     int nType;
+    if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
+      return 0;
 
     m_bInitialized = true;
 
@@ -1335,10 +1382,10 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       
     // pin decoded values to valid range
     if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
-      nIntent = icPerceptual;
+      return 0;
       
     if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
-      nType = icXformLutColor;
+      return 0;
 
     m_intentInitial = (icRenderingIntent)nIntent;
     m_transformInitial = (icXformLutType)nType;
@@ -1352,7 +1399,8 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
   while (nArg >= 2) {
     CIccCfgPccWeightPtr pPccWeight = CIccCfgPccWeightPtr(new CIccCfgPccWeight());
     pPccWeight->m_pccPath = args[0];
-    pPccWeight->m_dWeight = (icFloatNumber)atof(args[1]);
+    if (!icParseFloatArg(args[1], pPccWeight->m_dWeight))
+      return 0;
 
     m_pccWeights.push_back(pPccWeight);
 
@@ -1370,15 +1418,12 @@ bool CIccCfgSearchApply::fromJsonProfiles(json j)
     return false;
 
   for (auto p = j.begin(); p != j.end(); p++) {
-    if (p->is_object()) {
-      CIccCfgProfilePtr pProf(new CIccCfgProfile);
-      if (pProf->fromJson(*p)) {
-        m_profiles.push_back(pProf);
-      }
-      else {
-        pProf.reset();
-      }
-    }
+    if (!p->is_object())
+      return false;
+    CIccCfgProfilePtr pProf(new CIccCfgProfile);
+    if (!pProf->fromJson(*p))
+      return false;
+    m_profiles.push_back(pProf);
   }
 
   return true;
@@ -1405,15 +1450,12 @@ bool CIccCfgSearchApply::fromJsonPccWeights(json j)
     return false;
 
   for (auto p = j.begin(); p != j.end(); p++) {
-    if (p->is_object()) {
-      CIccCfgPccWeightPtr pPccWeight(new CIccCfgPccWeight);
-      if (pPccWeight->fromJson(*p)) {
-        m_pccWeights.push_back(pPccWeight);
-      }
-      else {
-        pPccWeight.reset();
-      }
-    }
+    if (!p->is_object())
+      return false;
+    CIccCfgPccWeightPtr pPccWeight(new CIccCfgPccWeight);
+    if (!pPccWeight->fromJson(*p))
+      return false;
+    m_pccWeights.push_back(pPccWeight);
   }
 
   return true;
@@ -1467,27 +1509,34 @@ bool CIccCfgSearchApply::fromJsonInit(json j)
   }
 
   std::string str;
-  if (jsonToValue(j["transform"], str)) {
+  if (j.contains("transform") && !jsonToValue(j["transform"], str))
+    return false;
+  if (!str.empty()) {
     int i;
     for (i = 0; icTranNames[i]; i++) {
       if (str == icTranNames[i])
         break;
     }
-    if (icTranNames[i])
-      m_transformInitial = (icXformLutType)icTranValues[i];
+    if (!icTranNames[i])
+      return false;
+    m_transformInitial = (icXformLutType)icTranValues[i];
   }
 
   jsonToValue(j["adjustPcsLuminance"], m_adjustPcsLuminanceInitial);
   jsonToValue(j["useV5SubProfile"], m_useV5SubProfileInitial);
 
-  if (jsonToValue(j["interpolation"], str)) {
+  str.clear();
+  if (j.contains("interpolation") && !jsonToValue(j["interpolation"], str))
+    return false;
+  if (!str.empty()) {
     int i;
     for (i = 0; icInterpNames[i]; i++) {
       if (str == icInterpNames[i])
         break;
     }
-    if (icInterpNames[i])
-      m_interpolationInitial = icInterpValues[i];
+    if (!icInterpNames[i])
+      return false;
+    m_interpolationInitial = icInterpValues[i];
   }
 
   return true;

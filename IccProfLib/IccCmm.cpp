@@ -1523,7 +1523,12 @@ icStatusCMM CIccXform::Begin()
   icFloatNumber mediaXYZ[3];
   icFloatNumber illumXYZ[3];
 
-  if (m_nIntent==icAbsoluteColorimetric) {
+  const bool bUseAbsTagAsRel = m_bAbsToRel &&
+    m_nTagIntent == icAbsoluteColorimetric &&
+    m_nIntent != icAbsoluteColorimetric;
+  const bool bNeedAbsAdjust = m_nIntent == icAbsoluteColorimetric || bUseAbsTagAsRel;
+
+  if (bNeedAbsAdjust) {
     if (pCond) {
       pCond->getMediaWhiteXYZ(mediaXYZ);
 
@@ -1561,7 +1566,7 @@ icStatusCMM CIccXform::Begin()
   }
 
 	// set up for any needed PCS adjustment
-  if (m_nIntent == icAbsoluteColorimetric &&
+  if (bNeedAbsAdjust &&
         (m_MediaXYZ.X != illXYZ.X ||
         m_MediaXYZ.Y != illXYZ.Y ||
         m_MediaXYZ.Z != illXYZ.Z)) {
@@ -1571,9 +1576,8 @@ icStatusCMM CIccXform::Begin()
     if (IsSpacePCS(Space)) {
       m_bAdjustPCS = true;				// turn ON PCS adjustment
 
-      // scale factors depend upon media white point
-      // set up for input transform
-      if (!m_bInput) {
+      const bool bConvertAbsToRel = (m_nIntent == icAbsoluteColorimetric) ? !m_bInput : m_bInput;
+      if (bConvertAbsToRel) {
         if (mediaXYZ[0] == 0.0f || mediaXYZ[1] == 0.0f || mediaXYZ[2] == 0.0f)
           return icCmmStatInvalidProfile;
         

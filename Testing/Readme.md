@@ -52,3 +52,17 @@ run the included PATH Scripts:
 
 - Windows run `path.bat` then `CreateAllProfiles.bat`
 - Unix run `./path.sh` then `./CreateAllProfiles.sh`
+
+## CI Round-Trip Classification
+
+The Linux CI sweep separates clean reconstruction from expected negative
+fixtures during `iccFromXml` XML-to-ICC round-trip testing.
+
+- Clean profiles must reconstruct and save without validation errors.
+- Known invalid fixtures are listed in `expected-invalid-fromxml.tsv`.
+- New parse failures, sanitizer findings, or unclassified validation diagnostics
+  fail CI until a maintainer fixes the behavior or classifies the fixture.
+
+Use this split when interpreting CI output: the generated corpus includes both
+spec-valid examples and negative regression profiles that intentionally exercise
+ICC/iccMAX validation failures.

@@ -320,6 +320,9 @@ jobs:
           if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
             codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
           fi
+          if [ -f .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls ]; then
+            codeql resolve queries .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls
+          fi
 
           exit "$failures"
 

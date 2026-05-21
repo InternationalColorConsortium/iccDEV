@@ -105,6 +105,7 @@ ls $PREFIX/include/RefIccMAX/IccProfLib2/*.h | wc -l  # expect ~52
 ls $PREFIX/lib/libIccProfLib2*   # expect libIccProfLib2-static.a
 ls $PREFIX/lib/libIccXML2*       # present only with the xml feature
 ls $PREFIX/lib/libIccJSON2*      # present only with the json feature
+ls $PREFIX/lib/libIccConnect2*   # present with json/tools features
 
 # CMake config
 cat $PREFIX/share/RefIccMAX/RefIccMAXConfig.cmake
@@ -116,6 +117,7 @@ $PREFIX/tools/iccdev/iccFromXml --help
 $PREFIX/tools/iccdev/iccToXml --help
 $PREFIX/tools/iccdev/iccFromJson --help
 $PREFIX/tools/iccdev/iccToJson --help
+$PREFIX/tools/iccdev/iccApplyNamedCmm --help
 ```
 
 ## Key Files

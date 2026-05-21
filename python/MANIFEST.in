@@ -1,0 +1,11 @@
+# Include Cython source and type stubs
+include iccdev/_iccdev.pyx
+include iccdev/_iccdev.pyi
+include iccdev/cicc_wrapper.pxd
+include iccdev/py.typed
+
+# Include vendored IccProfLib source (standalone builds)
+recursive-include vendor/IccProfLib *.cpp *.h *.sha256
+
+# Include documentation
+include README.md

@@ -25,6 +25,9 @@ security automation.
   pass.
 - Identify whether the change is contributor code, maintainer infrastructure,
   or both.
+- For maintainer infrastructure, prefer a conservative security-review loop:
+  run the relevant local scanners, patch confirmed findings, retest, and record
+  any accepted scanner noise with a clear rationale.
 
 ## Loop
 
@@ -41,13 +44,13 @@ security automation.
 
 | Change | Required static checks |
 |--------|------------------------|
-| Workflow YAML | Workflow governance prompt, YAML parse, `actionlint`, CodeQL Actions analysis, expression-in-run scan |
+| Workflow YAML | Workflow governance prompt, YAML parse, `actionlint`, `zizmor`, CodeQL Actions analysis, expression-in-run scan |
 | Python script | Python syntax check and CodeQL Python analysis |
-| Shell script | ShellCheck; CodeQL Actions covers inline workflow `run:` blocks, not standalone shell scripts |
+| Shell script | ShellCheck and `zizmor`; CodeQL Actions covers inline workflow `run:` blocks, not standalone shell scripts |
 | C/C++ or CMake security path | CodeQL local script or hosted `ci-codeql-security` |
 | Parser/profile/tool behavior | Code review hunting prompt plus sanitizer build where practical |
 | Release, WASM, vcpkg | Governance prompt plus package/runtime smoke logs |
-| Dockerfile or container policy | `hadolint`, Trivy config, image scan, and Docker runtime smoke |
+| Dockerfile or container image | `hadolint`, Trivy config/image scan, Dockle/Grype/Syft when practical |
 
 CodeQL does not replace YAML, shell, or permissions review.
 

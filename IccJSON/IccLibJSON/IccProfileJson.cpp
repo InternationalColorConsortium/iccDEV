@@ -71,6 +71,10 @@
 
 typedef std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 
+CIccProfileJson::~CIccProfileJson()
+{
+}
+
 // ---------------------------------------------------------------------------
 // JSON-specific header flags / device attributes helpers
 // ---------------------------------------------------------------------------

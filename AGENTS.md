@@ -26,3 +26,9 @@ Detailed rules live in `.github/copilot-instructions.md` and
 | Maintainer label system | `docs/label-system.md` |
 | Label triage prompt | `.github/prompts/maintainer-label-triage.prompt.md` |
 | Testing details | `.github/instructions/testing.instructions.md` |
+| Python bindings | `.github/instructions/python-bindings.instructions.md` |
+| MATLAB MEX bindings | `.github/instructions/matlab-mex.instructions.md` |
+| Python binding tests | `.github/skills/python-bindings-test/SKILL.md` |
+| WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |
+| MCP subprocess debug | `.github/prompts/debug-mcp-subprocess.prompt.md` |
+| Python/Cython debug | `.github/prompts/debug-python-bindings.prompt.md` |

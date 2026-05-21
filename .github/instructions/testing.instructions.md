@@ -42,10 +42,11 @@ bounds, FileIO length-position, FileIO seek/tell, parser restore-call, and
 profile write failure regressions, two batch-backed suites through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the
 iccDumpProfile smoke suite, the IccDEVCmm DLL smoke suite, the issue-987 shared
-export suite, and the PAWG report smoke suite. Windows feature-disabled builds
-register the subset whose targets are available. The Windows batch wrapper runs
-scripts from a disposable copy of `Testing/` under the build tree and must not
-dirty the source `Testing/` directory.
+export suite, the issue-1009 IccJson export suite, and the PAWG report smoke
+suite. Windows
+feature-disabled builds register the subset whose targets are available. The
+Windows batch wrapper runs scripts from a disposable copy of `Testing/` under
+the build tree and must not dirty the source `Testing/` directory.
 
 Windows CTest wrappers source runtime DLL directories from `CMakeCache.txt`
 through `Build/Cmake/Testing/WindowsRuntimePaths.cmake`. Keep that helper in
@@ -53,6 +54,8 @@ sync when adding Windows tests that execute build-tree tools, especially for
 vcpkg DLLs, MSVC Debug CRT DLLs, and MinGW runtime DLLs such as
 `libwinpthread-1.dll`. MinGW compiler builds still require the UCRT64 `bin`
 directory on the invoking shell `PATH`.
+The Windows wrapper builds a bounded runtime `PATH` for tool execution instead
+of inheriting an unbounded developer environment.
 
 See `docs/ctest.md` for the complete suite list, expected counts, fixtures, and
 add-test process.
@@ -146,4 +149,27 @@ Parse the overall status with:
 
 ```bash
 iccDumpProfile -v profile.icc ALL 2>&1 | grep --text -A 3 "^Validation Report"
+```
+
+## JSON and Python Testing
+
+`iccToJson` and `iccFromJson` round-trip tests should match the XML
+round-trip output for the same profile after the tools recalculate the profile
+ID on save.
+
+```bash
+iccToJson Testing/Display/sRGB_D65_MAT.icc /tmp/rt.json
+iccFromJson /tmp/rt.json /tmp/rt-json.icc
+iccToXml Testing/Display/sRGB_D65_MAT.icc /tmp/rt.xml
+iccFromXml /tmp/rt.xml /tmp/rt-xml.icc
+diff <(xxd /tmp/rt-json.icc) <(xxd /tmp/rt-xml.icc)
+```
+
+For Python bindings, point `ICCDEV_BUILD_DIR` at a configured iccDEV build and
+run the package tests:
+
+```bash
+export ICCDEV_BUILD_DIR=$PWD/Build
+python -m pip install -e "./python[dev]"
+python -m pytest --rootdir . --import-mode=importlib python/tests -v
 ```

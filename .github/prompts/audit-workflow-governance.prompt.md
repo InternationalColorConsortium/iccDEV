@@ -2,6 +2,11 @@
 
 Use this prompt to audit any GitHub Actions workflow for compliance.
 
+For maintainer-owned CI, release, packaging, Docker, MCP, and security
+automation, prefer conservative evidence over speed: run the applicable local
+security battery, patch confirmed findings, retest, and document accepted
+scanner noise with a rationale.
+
 ## Audit Checklist
 
 For EVERY `run:` step in the workflow, verify:
@@ -44,7 +49,13 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] `concurrency:` group defined for PR/push workflows
 - [ ] `cancel-in-progress: true` for PR workflows
 
-### 8. Full Run Log Audit
+### 8. Docker and Container Security
+- [ ] Dockerfiles use digest-pinned `FROM` references
+- [ ] No `curl|bash`, `wget|bash`, remote `ADD`, or secret-like `ARG`/`ENV`
+- [ ] Runtime images use non-root users unless explicitly justified
+- [ ] Container changes have runtime smoke and image/config scan evidence
+
+### 9. Full Run Log Audit
 - [ ] Full log archive downloaded with `gh api /repos/OWNER/REPO/actions/runs/RUN_ID/logs`
 - [ ] Runtime diagnostics grepped across every job, not only failed jobs
 - [ ] Echoed shell source filtered out before classifying findings
@@ -57,7 +68,9 @@ For EVERY `run:` step in the workflow, verify:
 
 ### Automated (preferred)
 
-Trigger the 10-check governance scanner:
+The cross-platform governance scanner runs automatically on every pull request
+as the read-only PR security canary. For branch, ref, or focused maintainer
+review, trigger it manually:
 
 ```bash
 gh workflow run ci-pr-risk-security-analysis.yml \
@@ -67,8 +80,8 @@ gh workflow run ci-pr-risk-security-analysis.yml \
 
 The scanner checks: SHA pinning, dangerous triggers, credential hygiene,
 shell hardening, matrix injection, output sanitization, permissions,
-trusted-base helper boundaries, supply-chain score, trivy indicators, and
-workflow inventory.
+trusted-base helper boundaries, Dockerfile security, supply-chain score,
+Trivy/TanStack indicators, ref-name security, and workflow inventory.
 PowerShell-only workflows with `defaults.run.shell: pwsh ...` are exempt from
 the bash-specific BASH_ENV check.
 
@@ -97,11 +110,16 @@ grep -c 'credential.helper' "$FILE"  # should equal number of run: blocks
 python3 -c "import yaml; yaml.safe_load(open('$FILE')); print('YAML OK')"
 actionlint -no-color "$FILE"
 yamllint -d '{extends: default, rules: {document-start: disable, truthy: disable, line-length: {max: 120}}}' "$FILE"
+zizmor "$FILE"
+hadolint Dockerfile*
+trivy config --severity HIGH,CRITICAL .
 gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
 ```
 
 Use CodeQL to validate query packs and C/C++ or CMake-relevant security changes;
-do not treat CodeQL as the workflow YAML parser.
+do not treat CodeQL as the workflow YAML parser. Use Dockerfile/image scanners
+for container surfaces; document accepted findings such as intentionally
+interactive images or scanner false positives.
 
 For Dockerfile or container-policy changes, also run:
 
@@ -138,6 +156,7 @@ rg -n '##\[error\]|##\[warning\]|::error|::warning|CMake Warning|File ".+" does 
 | **HIGH** | No credential reduction | Missing `unset GITHUB_TOKEN` |
 | **HIGH** | Green-run missing-file diagnostic | `-- File "... " does not exist.` |
 | **HIGH** | Duplicate install manifest path | Same installed path removed twice |
+| **HIGH** | Mutable Dockerfile base | `FROM ubuntu:26.04` without digest |
 | **HIGH** | Skipped matrix smoke coverage | Release variants do not run consumer smoke |
 | **MEDIUM** | Package/cache warning in green job | apt cache permission or Homebrew annotation |
 | **MEDIUM** | Excessive permissions | `contents: write` when read suffices |

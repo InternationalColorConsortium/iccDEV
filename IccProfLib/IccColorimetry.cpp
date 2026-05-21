@@ -69,6 +69,17 @@
 namespace iccDEV {
 #endif
 
+template <typename T>
+static void icAssignFilled(std::vector<T>& out, int count, T value)
+{
+  out.clear();
+  if (count <= 0)
+    return;
+  out.reserve((size_t)count);
+  for (int i = 0; i < count; ++i)
+    out.push_back(value);
+}
+
 //==========================================================================
 // Internal numeric core. All math is performed in double precision (CIE/WP56
 // note that finite precision limits achievable accuracy); the public API
@@ -178,7 +189,7 @@ static void resampleCore(const Grid &src, const std::vector<double> &v,
                          const Grid &dst, std::vector<double> &out,
                          icSpectralInterpMethod interp, icSpectralExtendMethod extend) {
   int n = src.n;
-  out.assign(dst.n, 0.0);
+  icAssignFilled(out, dst.n, 0.0);
   // Sprague interpolation needs a 6-point-extended copy of v; build it once up
   // front, and only when Sprague is actually the active method.
   std::vector<double> ext;
@@ -725,8 +736,12 @@ bool icComputeWeightingTable(const icSpectralRange &obsRange, const icFloatNumbe
   // For each coarse sample, the reconstruction basis b_m on the fine grid is the
   // resampling of a unit coarse impulse (triangular for linear, CIE 167 kernel
   // for Sprague). W_c[m] = k * sum_lambda Pc(lambda) * b_m(lambda).
-  std::vector<double> impulse(nc, 0.0), basis;
-  std::vector<double> wx(nc, 0.0), wy(nc, 0.0), wz(nc, 0.0);
+  std::vector<double> impulse, basis;
+  std::vector<double> wx, wy, wz;
+  icAssignFilled(impulse, nc, 0.0);
+  icAssignFilled(wx, nc, 0.0);
+  icAssignFilled(wy, nc, 0.0);
+  icAssignFilled(wz, nc, 0.0);
   icSpectralInterpMethod use = interp;
   if (use == icSpectralInterpSprague && nc < 6)
     use = (nc >= 4) ? icSpectralInterpCubic : icSpectralInterpLinear;
@@ -1031,7 +1046,7 @@ bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZ
   if (!m_obs.size() || !m_illum.size())
     return false;
   m_measRange = measRange;
-  m_M.assign(3*nm, 0.0f);
+  icAssignFilled(m_M, 3*nm, 0.0f);
 
   if (method == icXYZCalcDirectSum) {
     // Baseline: rectangular sum at the measurement interval (current iccDEV
@@ -1089,7 +1104,7 @@ bool CIccColorimetricCalculator::PrepareEmissive(const icSpectralRange &measRang
     return false;
   int nm = (int)measRange.steps;
   m_measRange = measRange;
-  m_M.assign(3*nm, 0.0f);
+  icAssignFilled(m_M, 3*nm, 0.0f);
 
   // Emissive/radiant colorimetry: the spectrum IS the stimulus, so there is no
   // illuminant factor (cf. the reflectance path's R*S). Mirror

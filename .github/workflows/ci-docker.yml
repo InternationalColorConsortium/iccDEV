@@ -21,6 +21,15 @@ permissions:
   contents: read
 
 on:
+  push:
+    branches:
+      - master
+      - ci-qa-flags
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.nixos"
+      - "Dockerfile.ci-regression"
+      - ".github/workflows/ci-docker.yml"
   workflow_dispatch:
 
 concurrency:
@@ -580,7 +589,12 @@ jobs:
             command -v iccDumpProfile
             test -d "$ICCDEV_BUILD_DIR"
             cmake --build "$ICCDEV_BUILD_DIR" --target iccDumpProfile --parallel "$(nproc)"
-            git branch && echo "---" && git log --oneline -1
+            git branch && echo "---"
+            if git rev-parse --verify HEAD >/dev/null 2>&1; then
+              git log --oneline -1
+            else
+              echo "Synthetic Docker source tree has no local commits"
+            fi
             git status --short | sed -n "1,20p"
             git fetch --dry-run origin
             banner="$(/usr/local/bin/iccdev-banner)"

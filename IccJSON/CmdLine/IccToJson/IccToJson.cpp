@@ -8,6 +8,7 @@
 #include "IccIO.h"
 #include "IccProfLibVer.h"
 #include "IccLibJSONVer.h"
+#include <cstdlib>
 #include <fstream>
 
 // Recursively sort JSON object keys for deterministic output.
@@ -73,12 +74,12 @@ int main(int argc, char* argv[])
 
   if (!srcIO.Open(argv[1], "r")) {
     printf("Unable to open '%s'\n", argv[1]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (!profile.Read(&srcIO)) {
     printf("Unable to read '%s'\n", argv[1]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   std::string jsonStr;
@@ -87,7 +88,7 @@ int main(int argc, char* argv[])
       IccJson j;
       if (!profile.ToJson(j)) {
         printf("Unable to convert '%s' to JSON\n", argv[1]);
-        return -1;
+        return EXIT_FAILURE;
       }
       IccJson wrapper;
       wrapper["IccProfile"] = j;
@@ -97,13 +98,13 @@ int main(int argc, char* argv[])
     else {
       if (!profile.ToJson(jsonStr, indent)) {
         printf("Unable to convert '%s' to JSON\n", argv[1]);
-        return -1;
+        return EXIT_FAILURE;
       }
     }
   }
   catch (const std::exception &e) {
     printf("JSON serialization error for '%s': %s\n", argv[1], e.what());
-    return -1;
+    return EXIT_FAILURE;
   }
 
   CIccFileIO outFile;
@@ -112,16 +113,16 @@ int main(int argc, char* argv[])
   // codeql[cpp/path-injection]
   if (!outFile.Open(argv[2], "wb")) {
     printf("Unable to open '%s' for writing\n", argv[2]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   if (outFile.Write8((void*)jsonStr.c_str(), jsonStr.size()) != jsonStr.size() ||
       !outFile.Flush() ||
       !outFile.CloseFile()) {
     printf("Unable to write '%s'\n", argv[2]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   printf("JSON successfully created\n");
-  return 0;
+  return EXIT_SUCCESS;
 }

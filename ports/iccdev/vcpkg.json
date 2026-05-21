@@ -19,7 +19,7 @@
   ],
   "features": {
     "json": {
-      "description": "Build IccJSON2 JSON serialization library and JSON conversion tools when tools are enabled",
+      "description": "Build IccJSON2 and IccConnect2 JSON libraries plus JSON conversion tools when tools are enabled",
       "dependencies": [
         "nlohmann-json"
       ]

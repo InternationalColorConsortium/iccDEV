@@ -727,8 +727,8 @@ int main()
     std::cerr << "pcc weight failed initial parse\n";
     failures++;
   }
-  if (!weight.fromJson(json::object(), true)) {
-    std::cerr << "pcc weight failed reset parse\n";
+  if (weight.fromJson(json::object(), true)) {
+    std::cerr << "pcc weight accepted empty object\n";
     failures++;
   }
   if (!weight.m_pccPath.empty() || std::fabs(weight.m_dWeight) > 0.000001) {

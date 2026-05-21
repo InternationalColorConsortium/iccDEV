@@ -19,6 +19,8 @@ Test 18 (Regression Bisect).
 
 | CTest | Issue | Bug | Check |
 |-------|-------|-----|-------|
+| `iccdev.iccconnect-config-parser` | #1662 | IccConnect CLI/JSON config parsing silently coerced malformed interpolation, intent, transform, and weight fields | Compiles a focused parser harness that verifies malformed legacy args and JSON fields fail closed |
+| `iccdev.xform-abstorel-adjust` | #1662 | Relative-intent transforms that fell back to absolute AToB3 tags set `bAbsToRel` but did not apply absolute-to-relative PCS scaling | Compiles an in-memory AToB3-only profile and verifies the relative CMM output is media-white adjusted |
 | `iccdev.parser-restore-calls` | Parser IO hardening | Parser call sites ignored failed cursor restore or read after failed seek | Compiles a focused `CIccIO` harness that verifies `ReadTags()` fails on restore failure and `ConnectSubProfile()` does not read after a failed seek |
 
 | Script | Issue | Bug | Check |

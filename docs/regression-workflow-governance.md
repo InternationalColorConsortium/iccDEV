@@ -74,11 +74,19 @@ Every edited workflow `run:` block must keep these properties:
 
 For reusable governance coverage, call
 `.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the
-scanner logic in a new CI workflow.
+scanner logic in a new CI workflow. The risk-analysis workflow is the PR
+security canary for workflow and container changes, runs on every pull request
+with read-only permissions, and fails blocking findings when PR-triggered.
 
-Local review should include YAML parsing, `actionlint`, `yamllint`, CodeQL
-Actions analysis, direct `${{ }}` interpolation scans for `run:` blocks, and
-CodeQL query-pack resolution when CodeQL workflows or queries are touched.
+Maintainer-owned workflow, release, packaging, Docker, MCP, and security
+automation changes should use a conservative review loop. Run the applicable
+local security tools, patch confirmed findings, retest, and document accepted
+scanner noise with a clear rationale.
+
+Local review should include YAML parsing, `actionlint`, `yamllint`, direct
+`${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec
+checks when container files are in scope, CodeQL Actions analysis, and CodeQL
+query-pack resolution when CodeQL workflows or queries are touched.
 
 See `.github/instructions/workflow-governance.instructions.md` for the full
 checklist and `docs/workflow-security-trust-boundaries.md` for the visual trust

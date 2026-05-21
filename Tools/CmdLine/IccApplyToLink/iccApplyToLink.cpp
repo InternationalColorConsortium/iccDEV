@@ -69,8 +69,11 @@
 //////////////////////////////////////////////////////////////////////
 
 
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
 #include <string>
 #include <vector>
 #include <list>
@@ -677,6 +680,48 @@ void Usage()
 
 //===================================================
 
+static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
+{
+  char *end = NULL;
+  long parsed;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  parsed = strtol(arg, &end, 10);
+
+  if (errno == ERANGE || end == arg || *end != '\0' ||
+      parsed < minValue || parsed > maxValue ||
+      parsed < INT_MIN || parsed > INT_MAX) {
+    return false;
+  }
+
+  value = (int)parsed;
+  return true;
+}
+
+static bool ParseFloatArg(const char *arg, icFloatNumber &value)
+{
+  char *end = NULL;
+  double parsed;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  parsed = strtod(arg, &end);
+
+  if (errno == ERANGE || end == arg || *end != '\0' || !std::isfinite(parsed)) {
+    return false;
+  }
+
+  value = (icFloatNumber)parsed;
+  return std::isfinite(value);
+}
+
+//===================================================
+
 typedef std::vector<CIccProfile*> IccProfilePtrList;
 
 // The tool owns every -PCC profile it opens until cmm.Begin() has consumed the
@@ -711,8 +756,14 @@ int main(int argc, icChar* argv[])
 
   nNumProfiles = temp/2;
 
+  int nLinkType = 0;
+  if (!ParseIntArg(argv[2], 0, 1, nLinkType)) {
+    printf("Invalid link_type '%s': expected 0 (Device Link) or 1 (.cube text file)\n", argv[2]);
+    return 1;
+  }
+
   ILinkWriter* pLinkWriter;
-  if (atoi(argv[2]) != 0) {
+  if (nLinkType == 1) {
     pLinkWriter = new CCubeWriter();
   }
   else {
@@ -728,25 +779,37 @@ int main(int argc, icChar* argv[])
 
   pWriter->setFile(argv[1]);
 
-  int nLutSize = atoi(argv[3]);
-  if (nLutSize < 2 || nLutSize > 255) {
-    printf("Invalid LUT size (%d), needs to be between 2 and 255\n", nLutSize );
+  int nLutSize = 0;
+  if (!ParseIntArg(argv[3], 2, 255, nLutSize)) {
+    printf("Invalid LUT size '%s': expected an integer between 2 and 255\n", argv[3]);
     return -1;
   }
   
   pWriter->setLutSize(nLutSize);
 
-  int precision = atoi(argv[4]);
-  if (precision < 0)
-    precision = 0;
-  if (precision > 20)
-    precision = 20;
-  pWriter->setOption(precision);
+  int nOption = 0;
+  if (nLinkType == 0) {
+    if (!ParseIntArg(argv[4], 0, 1, nOption)) {
+      printf("Invalid option '%s': DeviceLink option must be 0 (v4) or 1 (v5)\n", argv[4]);
+      return 1;
+    }
+  }
+  else {
+    if (!ParseIntArg(argv[4], 0, 20, nOption)) {
+      printf("Invalid option '%s': .cube precision must be between 0 and 20\n", argv[4]);
+      return 1;
+    }
+  }
+  pWriter->setOption(nOption);
 
   pWriter->setTitle(argv[5]);
 
-  icFloatNumber loRange = (icFloatNumber)atof(argv[6]);
-  icFloatNumber hiRange = (icFloatNumber)atof(argv[7]);
+  icFloatNumber loRange;
+  icFloatNumber hiRange;
+  if (!ParseFloatArg(argv[6], loRange) || !ParseFloatArg(argv[7], hiRange)) {
+    printf("Invalid input range: range_min and range_max must be finite numbers\n");
+    return 1;
+  }
   icFloatNumber sizeRange = hiRange - loRange;
   PrintRangeDiagnostic(loRange, hiRange, sizeRange);
   if (!std::isfinite(loRange) || !std::isfinite(hiRange) || !std::isfinite(sizeRange)) {
@@ -756,8 +819,17 @@ int main(int argc, icChar* argv[])
   pWriter->setInputRange(loRange, hiRange);
 
   //Retrieve command line arguments
-  bool bFirstTransform = atoi(argv[8]) != 0;
-  int nInterpVal = atoi(argv[9]);
+  int nFirstTransform = 0;
+  if (!ParseIntArg(argv[8], 0, 1, nFirstTransform)) {
+    printf("Invalid first_transform '%s': expected 0 or 1\n", argv[8]);
+    return 1;
+  }
+  bool bFirstTransform = nFirstTransform != 0;
+  int nInterpVal = 0;
+  if (!ParseIntArg(argv[9], 0, 1, nInterpVal)) {
+    printf("Invalid interp '%s': expected 0 (linear) or 1 (tetrahedral)\n", argv[9]);
+    return 1;
+  }
   icXformInterp nInterp = (nInterpVal == 0) ? icInterpLinear : icInterpTetrahedral;
 
   int nIntent, nType, nLuminance;
@@ -786,13 +858,22 @@ int main(int argc, icChar* argv[])
     if (!strncasecmp(argv[nCount], "-ENV:", 5)) {
 #endif
       icSignature sig = icGetSigVal(argv[nCount]+5);
-      icFloatNumber val = (icFloatNumber)atof(argv[nCount+1]);
+      icFloatNumber val;
+      if (!ParseFloatArg(argv[nCount+1], val)) {
+        printf("Invalid environment value '%s' for %s: expected a finite number\n", argv[nCount+1], argv[nCount]);
+        releasePccList(pccList);
+        return 1;
+      }
 
       sigMap[sig]=val;
     }
     else if (stricmp(argv[nCount], "-PCC")) { //Attach profile while ignoring -PCC (this are handled below as profiles are attached)
       bUseD2BxB2DxTags = true;
-      nIntent = atoi(argv[nCount+1]);
+      if (!ParseIntArg(argv[nCount+1], INT_MIN, INT_MAX, nIntent)) {
+        printf("Invalid rendering intent '%s': expected an integer code\n", argv[nCount+1]);
+        releasePccList(pccList);
+        return 1;
+      }
       bUseSubProfile = (nIntent / 1000) > 0;
       nIntent = nIntent % 1000;
       nLuminance = nIntent / 100;
@@ -816,12 +897,17 @@ int main(int argc, icChar* argv[])
         break;
       }
       
-      // pin decoded values to valid range
-      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
-        nIntent = icPerceptual;
+      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric) {
+        printf("Invalid rendering intent '%s': decoded intent is out of range\n", argv[nCount+1]);
+        releasePccList(pccList);
+        return 1;
+      }
       
-      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
-       nType = icXformLutColor;
+      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum) {
+        printf("Invalid rendering intent '%s': decoded transform type is out of range\n", argv[nCount+1]);
+        releasePccList(pccList);
+        return 1;
+      }
 
       if (nLuminance) {
         Hint.AddHint(new CIccLuminanceMatchingHint());

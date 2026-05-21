@@ -207,8 +207,11 @@ CIccApplyHandle* IccCmmGetApply(CIccCmmHandle *pCmm)
     return NULL;
 
   CIccCmm *pCmmPtr = (CIccCmm*)pCmm;
+  icStatusCMM status;
 
-  return (CIccApplyHandle*)pCmmPtr->GetApply();
+  // GetNewApplyCmm allocates a new apply object the caller must delete.
+  // GetApply() returns the CMM's internal m_pApply - deleting it corrupts the CMM.
+  return (CIccApplyHandle*)pCmmPtr->GetNewApplyCmm(status);
 }
 
 icStatusCMM IccCmmGetInfo(CIccCmmHandle *pCmm, SIccCmmStruct *pCmmInfo)
@@ -306,7 +309,7 @@ icBoolean IccProfileGetHeader(CIccProfileHandle *pProfile, icHeader *pHeader)
 void IccProfileFree(CIccProfileHandle *pProfile)
 {
   if (pProfile) {
-    CIccProfileHandle *pProfilePtr = (CIccProfileHandle*)pProfile;
+    CIccProfile *pProfilePtr = (CIccProfile*)pProfile;
     delete pProfilePtr;
   }
 }

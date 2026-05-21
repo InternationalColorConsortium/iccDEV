@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Convert 3D LUT cube files to ICC profiles in the browser using iccFromCube compiled to WebAssembly.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%23005a9c%27/%3E%3Ctext x=%2716%27 y=%2721%27 font-size=%2716%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27monospace%27%3EICC%3C/text%3E%3C/svg%3E">
+  <title>iccFromCube -- WASM</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <div class="container">
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href="index.html">iccDEV WASM Tools</a> / iccFromCube</nav>
+    <header>
+      <h1>iccFromCube</h1>
+      <p class="subtitle">Create an ICC profile from a .cube 3D LUT file.</p>
+    </header>
+
+    <main id="main-content">
+    <div class="status-bar" role="status" aria-live="polite">
+      <div class="status-indicator" id="indicator"></div>
+      <span class="status-text" id="status">Initializing...</span>
+    </div>
+
+    <div class="controls">
+      <h2>Input</h2>
+      <div class="field">
+        <label for="file-input">.cube LUT File</label>
+        <div class="drop-zone" id="drop-zone" tabindex="0" role="button" aria-label="File drop zone">
+          <div class="icon" aria-hidden="true">&#128196;</div>
+          <div>Drop a .cube file here or click to browse</div>
+          <div class="filename" id="filename"></div>
+          <input type="file" id="file-input" accept=".cube,.CUBE">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="run-btn" disabled>Create ICC Profile</button>
+        <button class="btn" id="download-icc-btn">Download ICC</button>
+        <button class="btn" id="clear-btn">Clear</button>
+      </div>
+    </div>
+
+    <div class="output-panel" role="region" aria-label="Tool output">
+      <div class="output-header">
+        <h3>Build Output</h3>
+      </div>
+      <div class="output-content empty" id="output-container" role="log" aria-live="polite">
+        <pre id="output">Upload a .cube file and click Create to build an ICC profile.</pre>
+      </div>
+    </div>
+
+    </main>
+    <footer>
+      <a href="https://github.com/InternationalColorConsortium/iccDEV">iccDEV</a>
+      &mdash; All processing runs locally in your browser.
+    </footer>
+  </div>
+
+  <script src="sanitize.js"></script>
+  <script src="app.js"></script>
+  <script>
+    const app = new IccWasmApp('iccFromCube', {
+      getArgs: function(inputPath) {
+        return [inputPath, '/output.icc'];
+      }
+    });
+
+    const origRun = app.run.bind(app);
+    document.getElementById('run-btn').removeEventListener('click', origRun);
+    document.getElementById('run-btn').addEventListener('click', async function() {
+      await origRun();
+      if (app.module) {
+        try {
+          app._iccOutput = app.module.FS.readFile('/output.icc');
+          var el = document.getElementById('output');
+          el.textContent += '\n[ICC profile generated: ' + app._iccOutput.length + ' bytes]';
+        } catch (e) { /* build may have failed */ }
+      }
+    });
+
+    document.getElementById('download-icc-btn').addEventListener('click', function() {
+      if (app._iccOutput) {
+        app.downloadBinary(app._iccOutput,
+          iccSanitize.sanitizeFilename(
+            (app.fileName || 'lut').replace(/\.[^.]+$/, '') + '.icc'));
+      }
+    });
+
+    app.init();
+  </script>
+</body>
+</html>
