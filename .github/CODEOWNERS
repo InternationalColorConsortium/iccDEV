@@ -45,9 +45,9 @@
 /IccXML/**/*.h @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
 
 # Build, testing, packaging, and port configuration
-/Build/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
-/Testing/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
-/ports/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak @xsscx
+/Build/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
+/Testing/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
+/ports/** @xsscx @ChrisCoxArt @colourbill-ctrl @maxderhak
 
 # Governance: protect key security/docs
 /AGENTS.md @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
