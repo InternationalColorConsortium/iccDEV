@@ -9181,12 +9181,6 @@ bool CIccTagColorantOrder::SetSize(icUInt16Number nSize, bool bZeroNew/*=true*/)
   if (m_nCount == nSize)
     return true;
 
-  if (nSize > 65535) {
-    free(m_pData);
-    m_nCount = 0;
-    return false;
-  }
-
   m_pData = (icUInt8Number*)icRealloc(m_pData, nSize*sizeof(icUInt8Number));
   if (!m_pData) {
     m_nCount = 0;
@@ -9512,12 +9506,6 @@ bool CIccTagColorantTable::SetSize(icUInt16Number nSize, bool bZeroNew/*=true*/)
 {
   if (m_nCount == nSize)
     return true;
-    
-  if (nSize > 65535) {
-    free(m_pData);
-    m_nCount = 0;
-    return false;
-  }
 
   m_pData = (icColorantTableEntry*)icRealloc(m_pData, nSize*sizeof(icColorantTableEntry));
   if (!m_pData) {
