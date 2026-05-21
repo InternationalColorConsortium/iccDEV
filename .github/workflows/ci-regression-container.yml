@@ -38,7 +38,6 @@ jobs:
       packages: write
       id-token: write
       attestations: write
-      artifact-metadata: write
     defaults:
       run:
         shell: bash --noprofile --norc {0}
