@@ -3043,6 +3043,9 @@ CIccMpeCurveSet::CIccMpeCurveSet(int nSize/*=0*/)
     m_nInputChannels = m_nOutputChannels = nSize;
     m_curve = (icCurveSetCurvePtr*)calloc(nSize, sizeof(icCurveSetCurvePtr));
     m_position = (icPositionNumber*)calloc(nSize, sizeof(icPositionNumber));
+    if (!m_curve || !m_position) {
+      m_nInputChannels = m_nOutputChannels = 0;
+    }
   }
   else {
     m_nInputChannels = m_nOutputChannels = 0;
@@ -3073,6 +3076,10 @@ CIccMpeCurveSet::CIccMpeCurveSet(const CIccMpeCurveSet &curveSet)
     m_nInputChannels = m_nOutputChannels = curveSet.m_nInputChannels;
     m_curve = (icCurveSetCurvePtr*)calloc(m_nInputChannels, sizeof(icCurveSetCurvePtr));
     m_position = (icPositionNumber*)calloc(m_nInputChannels, sizeof(icPositionNumber));
+    if (!m_curve || !m_position) {
+      m_nInputChannels = m_nOutputChannels = 0;
+      return;
+    }
 
     icCurveMap map;
     for (i=0; i<m_nInputChannels; i++) {
@@ -3116,6 +3123,10 @@ CIccMpeCurveSet &CIccMpeCurveSet::operator=(const CIccMpeCurveSet &curveSet)
     m_nInputChannels = m_nOutputChannels = curveSet.m_nInputChannels;
     m_curve = (icCurveSetCurvePtr*)calloc(m_nInputChannels, sizeof(icCurveSetCurvePtr));
     m_position = (icPositionNumber*)calloc(m_nInputChannels, sizeof(icPositionNumber));
+    if (!m_curve || !m_position) {
+      m_nInputChannels = m_nOutputChannels = 0;
+      return *this;
+    }
 
     icCurveMap map;
     for (i=0; i<m_nInputChannels; i++) {
@@ -4433,6 +4444,8 @@ void CIccMpeToneMap::SetNumOutputChannels(icUInt16Number nVectorSize)
   m_nOutputChannels = nVectorSize;
   if (m_nOutputChannels) {
     m_pToneFuncs = (CIccToneMapFunc**)calloc(m_nOutputChannels, sizeof(CIccToneMapFunc*));
+    if (!m_pToneFuncs)
+      m_nOutputChannels = 0;
   }
   m_nFunc = 0;
 }
@@ -4955,7 +4968,8 @@ CIccMpeMatrix::CIccMpeMatrix(const CIccMpeMatrix &matrix)
   if(matrix.m_pMatrix) {
     size_t num = static_cast<size_t>(m_size) * sizeof(icFloatNumber);
     m_pMatrix = (icFloatNumber*)malloc(num);
-    memcpy(m_pMatrix, matrix.m_pMatrix, num);
+    if (m_pMatrix)
+      memcpy(m_pMatrix, matrix.m_pMatrix, num);
   }
   else
     m_pMatrix = NULL;
@@ -4963,7 +4977,8 @@ CIccMpeMatrix::CIccMpeMatrix(const CIccMpeMatrix &matrix)
   if (matrix.m_pConstants) {
     int num = m_nOutputChannels*sizeof(icFloatNumber);
     m_pConstants = (icFloatNumber*)malloc(num);
-    memcpy(m_pConstants, matrix.m_pConstants, num);
+    if (m_pConstants)
+      memcpy(m_pConstants, matrix.m_pConstants, num);
   }
   else
     m_pConstants = NULL;
@@ -4998,7 +5013,8 @@ CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
   if (matrix.m_pMatrix) {
     size_t num = static_cast<size_t>(m_size) * sizeof(icFloatNumber);
     m_pMatrix = (icFloatNumber*)malloc(num);
-    memcpy(m_pMatrix, matrix.m_pMatrix, num);
+    if (m_pMatrix)
+      memcpy(m_pMatrix, matrix.m_pMatrix, num);
   }
   else
     m_pMatrix = NULL;
@@ -5008,7 +5024,8 @@ CIccMpeMatrix &CIccMpeMatrix::operator=(const CIccMpeMatrix &matrix)
   if (matrix.m_pConstants) {
     int num = m_nOutputChannels*sizeof(icFloatNumber);
     m_pConstants = (icFloatNumber*)malloc(num);
-    memcpy(m_pConstants, matrix.m_pConstants, num);
+    if (m_pConstants)
+      memcpy(m_pConstants, matrix.m_pConstants, num);
   }
   else
     m_pConstants = NULL;
@@ -5062,7 +5079,6 @@ bool CIccMpeMatrix::SetSize(icUInt16Number nInputChannels, icUInt16Number nOutpu
 
   if (bUseConstants) {
     m_pConstants = (icFloatNumber*)calloc(nOutputChannels, sizeof(icFloatNumber));
-
     if (!m_pConstants)
       return false;
   }

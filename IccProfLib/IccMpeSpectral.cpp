@@ -141,7 +141,8 @@ CIccMpeSpectralMatrix::CIccMpeSpectralMatrix(const CIccMpeSpectralMatrix &matrix
   if(matrix.m_pMatrix) {
     int num = m_size * sizeof(icFloatNumber);
     m_pMatrix = (icFloatNumber*)malloc(num);
-    memcpy(m_pMatrix, matrix.m_pMatrix, num);
+    if (m_pMatrix)
+      memcpy(m_pMatrix, matrix.m_pMatrix, num);
   }
   else
     m_pMatrix = NULL;
@@ -149,7 +150,8 @@ CIccMpeSpectralMatrix::CIccMpeSpectralMatrix(const CIccMpeSpectralMatrix &matrix
   if (matrix.m_pOffset) {
     int num = m_Range.steps * sizeof(icFloatNumber);
     m_pOffset = (icFloatNumber*)malloc(num);
-    memcpy(m_pOffset, matrix.m_pOffset, num);
+    if (m_pOffset)
+      memcpy(m_pOffset, matrix.m_pOffset, num);
   }
   else
     m_pOffset = NULL;
@@ -157,7 +159,8 @@ CIccMpeSpectralMatrix::CIccMpeSpectralMatrix(const CIccMpeSpectralMatrix &matrix
   if (matrix.m_pWhite) {
     int num = m_Range.steps * sizeof(icFloatNumber);
     m_pWhite = (icFloatNumber*)malloc(num);
-    memcpy(m_pWhite, matrix.m_pWhite, num);
+    if (m_pWhite)
+      memcpy(m_pWhite, matrix.m_pWhite, num);
   }
   else
     m_pWhite = NULL;
@@ -191,7 +194,8 @@ void CIccMpeSpectralMatrix::copyData(const CIccMpeSpectralMatrix &matrix)
   if (matrix.m_pMatrix) {
     int num = m_size * sizeof(icFloatNumber);
     m_pMatrix = (icFloatNumber*)malloc(num);
-    memcpy(m_pMatrix, matrix.m_pMatrix, num);
+    if (m_pMatrix)
+      memcpy(m_pMatrix, matrix.m_pMatrix, num);
   }
   else
     m_pMatrix = NULL;
@@ -201,7 +205,8 @@ void CIccMpeSpectralMatrix::copyData(const CIccMpeSpectralMatrix &matrix)
   if (matrix.m_pOffset) {
     int num = m_Range.steps * sizeof(icFloatNumber);
     m_pOffset = (icFloatNumber*)malloc(num);
-    memcpy(m_pOffset, matrix.m_pOffset, num);
+    if (m_pOffset)
+      memcpy(m_pOffset, matrix.m_pOffset, num);
   }
   else
     m_pOffset = NULL;
@@ -211,7 +216,8 @@ void CIccMpeSpectralMatrix::copyData(const CIccMpeSpectralMatrix &matrix)
   if (matrix.m_pWhite) {
     int num = m_Range.steps * sizeof(icFloatNumber);
     m_pWhite = (icFloatNumber*)malloc(num);
-    memcpy(m_pWhite, matrix.m_pWhite, num);
+    if (m_pWhite)
+      memcpy(m_pWhite, matrix.m_pWhite, num);
   }
   else
     m_pWhite = NULL;
@@ -838,7 +844,8 @@ CIccMpeSpectralCLUT::CIccMpeSpectralCLUT(const CIccMpeSpectralCLUT &clut)
 
   if (clut.m_pWhite) {
     m_pWhite = (icFloatNumber *)malloc((int)clut.m_Range.steps*sizeof(icFloatNumber));
-    memcpy(m_pWhite, clut.m_pWhite, clut.m_Range.steps*sizeof(icFloatNumber));
+    if (m_pWhite)
+      memcpy(m_pWhite, clut.m_pWhite, clut.m_Range.steps*sizeof(icFloatNumber));
   }
   else
     m_pWhite = NULL;
@@ -884,7 +891,8 @@ void CIccMpeSpectralCLUT::copyData(const CIccMpeSpectralCLUT &clut)
 
   if (clut.m_pWhite) {
     m_pWhite = (icFloatNumber *)malloc((int)clut.m_Range.steps*sizeof(icFloatNumber));
-    memcpy(m_pWhite, clut.m_pWhite, clut.m_Range.steps*sizeof(icFloatNumber));
+    if (m_pWhite)
+      memcpy(m_pWhite, clut.m_pWhite, clut.m_Range.steps*sizeof(icFloatNumber));
   }
   else
     m_pWhite = NULL;
@@ -1694,7 +1702,8 @@ CIccMpeSpectralObserver::CIccMpeSpectralObserver(const CIccMpeSpectralObserver &
   if (matrix.m_pWhite) {
     int num = m_Range.steps*sizeof(icFloatNumber);
     m_pWhite = (icFloatNumber*)malloc(num);
-    memcpy(m_pWhite, matrix.m_pWhite, num);
+    if (m_pWhite)
+      memcpy(m_pWhite, matrix.m_pWhite, num);
   }
   else
     m_pWhite = NULL;
@@ -1726,7 +1735,8 @@ void CIccMpeSpectralObserver::copyData(const CIccMpeSpectralObserver &matrix)
   if (matrix.m_pWhite) {
     int num = m_Range.steps*sizeof(icFloatNumber);
     m_pWhite = (icFloatNumber*)malloc(num);
-    memcpy(m_pWhite, matrix.m_pWhite, num);
+    if (m_pWhite)
+      memcpy(m_pWhite, matrix.m_pWhite, num);
   }
   else
     m_pWhite = NULL;

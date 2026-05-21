@@ -2959,7 +2959,10 @@ CIccCalculatorFunc::CIccCalculatorFunc(const CIccCalculatorFunc &func)
 
   if (m_nOps) {
     m_Op = (SIccCalcOp*)malloc(m_nOps * sizeof(SIccCalcOp));
-    memcpy(m_Op, func.m_Op, m_nOps*sizeof(SIccCalcOp));
+    if (m_Op)
+      memcpy(m_Op, func.m_Op, m_nOps*sizeof(SIccCalcOp));
+    else
+      m_nOps = 0;
   }
   else
     m_Op = NULL;
@@ -2987,7 +2990,10 @@ CIccCalculatorFunc &CIccCalculatorFunc::operator=(const CIccCalculatorFunc &func
 
   if (m_nOps) {
     m_Op = (SIccCalcOp*)malloc(m_nOps * sizeof(SIccCalcOp));
-    memcpy(m_Op, func.m_Op, m_nOps*sizeof(SIccCalcOp));
+    if (m_Op)
+      memcpy(m_Op, func.m_Op, m_nOps*sizeof(SIccCalcOp));
+    else
+      m_nOps = 0;
   }
   else
     m_Op = NULL;
@@ -3496,10 +3502,13 @@ icFuncParseStatus CIccCalculatorFunc::SetFunction(CIccCalcOpList &opList, std::s
     int j;
 
     m_Op = (SIccCalcOp*)calloc(m_nOps , sizeof(SIccCalcOp));
-
-    for (i=opList.begin(), j=0; i!= opList.end(); i++, j++) {
-      m_Op[j] = *i;
+    if (m_Op) {
+      for (i=opList.begin(), j=0; i!= opList.end(); i++, j++) {
+        m_Op[j] = *i;
+      }
     }
+    else
+      m_nOps = 0;
   }
   else {
     return icFuncParseEmptyFunction;

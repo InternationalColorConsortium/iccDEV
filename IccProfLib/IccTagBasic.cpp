@@ -563,8 +563,12 @@ void CIccTagUnknown::Describe(std::string &sDescription, int nVerboseness)
 CIccTagText::CIccTagText()
 {
   m_szText = (icChar*)malloc(1);
-  m_szText[0] = '\0';
-  m_nBufSize = 1;
+  if (m_szText) {
+    m_szText[0] = '\0';
+    m_nBufSize = 1;
+  }
+  else
+   m_nBufSize = 0;
 }
 
 /**
@@ -580,9 +584,13 @@ CIccTagText::CIccTagText()
 CIccTagText::CIccTagText(const CIccTagText &ITT)
 {
   m_szText = (icChar*)malloc(1);
-  m_szText[0] = '\0';
-  m_nBufSize = 1;
-  SetText(ITT.m_szText);
+  if (m_szText) {
+    m_szText[0] = '\0';
+    m_nBufSize = 1;
+    SetText(ITT.m_szText);
+  }
+  else
+   m_nBufSize = 0;
 }
 
 /**
@@ -601,9 +609,13 @@ CIccTagText &CIccTagText::operator=(const CIccTagText &TextTag)
     return *this;
 
   m_szText = (icChar*)malloc(1);
-  m_szText[0] = '\0';
-  m_nBufSize = 1;
-  SetText(TextTag.m_szText);
+  if (m_szText) {
+    m_szText[0] = '\0';
+    m_nBufSize = 1;
+    SetText(TextTag.m_szText);
+  }
+  else
+   m_nBufSize = 0;
 
   return *this;
 }
@@ -807,7 +819,6 @@ icChar *CIccTagText::GetBuffer(icUInt32Number nSize)
 {
   if (m_nBufSize < nSize) {
     m_szText = (icChar*)icRealloc(m_szText, nSize+1);
-
     if (m_szText) {
       m_szText[nSize] = '\0';
       m_nBufSize = nSize;
@@ -833,7 +844,10 @@ void CIccTagText::Release()
 
   if (nSize < m_nBufSize-1) {
     m_szText=(icChar*)icRealloc(m_szText, nSize+1);
-    m_nBufSize = nSize+1;
+    if (m_szText)
+      m_nBufSize = nSize+1;
+    else
+      m_nBufSize = 0;
   }
 }
 
@@ -912,8 +926,12 @@ icValidateStatus CIccTagText::Validate(std::string sigPath, std::string &sReport
 CIccTagUtf8Text::CIccTagUtf8Text()
 {
   m_szText = (icUChar*)malloc(1);
-  m_szText[0] = '\0';
-  m_nBufSize = 1;
+  if (m_szText) {
+    m_szText[0] = '\0';
+    m_nBufSize = 1;
+  }
+  else
+    m_nBufSize = 0;
 }
 
 /**
@@ -929,9 +947,13 @@ CIccTagUtf8Text::CIccTagUtf8Text()
 CIccTagUtf8Text::CIccTagUtf8Text(const CIccTagUtf8Text &ITT)
 {
   m_szText = (icUChar*)malloc(1);
-  m_szText[0] = '\0';
-  m_nBufSize = 1;
-  SetText(ITT.m_szText);
+  if (m_szText) {
+    m_szText[0] = '\0';
+    m_nBufSize = 1;
+    SetText(ITT.m_szText);
+  }
+  else
+    m_nBufSize = 0;
 }
 
 /**
@@ -950,9 +972,14 @@ CIccTagUtf8Text &CIccTagUtf8Text::operator=(const CIccTagUtf8Text &TextTag)
     return *this;
 
   m_szText = (icUChar*)malloc(1);
-  m_szText[0] = '\0';
-  m_nBufSize = 1;
   SetText(TextTag.m_szText);
+  if (m_szText) {
+    m_szText[0] = '\0';
+    m_nBufSize = 1;
+    SetText(TextTag.m_szText);
+  }
+  else
+    m_nBufSize = 0;
 
   return *this;
 }
@@ -1186,7 +1213,6 @@ icUChar *CIccTagUtf8Text::GetBuffer(icUInt32Number nSize)
 {
   if (m_nBufSize < nSize) {
     m_szText = (icUChar*)icRealloc(m_szText, nSize+1);
-
     if (m_szText) {
       m_szText[nSize] = '\0';
       m_nBufSize = nSize;
@@ -1213,7 +1239,10 @@ void CIccTagUtf8Text::Release()
 
   if (nSize < m_nBufSize-1) {
     m_szText=(icUChar*)icRealloc(m_szText, nSize+1);
-    m_nBufSize = nSize+1;
+    if (m_szText)
+      m_nBufSize = nSize+1;
+    else
+      m_nBufSize = 0;
   }
 }
 
@@ -1633,8 +1662,7 @@ icUChar *CIccTagZipUtf8Text::AllocBuffer(icUInt32Number nSize)
     if (!nSize) {
       free(m_pZipBuf);
       m_pZipBuf = NULL;
-
-      m_nBufSize = nSize;
+      m_nBufSize = 0;
       return NULL;
     }
 
@@ -1643,7 +1671,10 @@ icUChar *CIccTagZipUtf8Text::AllocBuffer(icUInt32Number nSize)
     else
       m_pZipBuf = (icUChar*)icRealloc(m_pZipBuf, nSize);
 
-    m_nBufSize = nSize;
+    if (m_pZipBuf)
+      m_nBufSize = nSize;
+    else
+      m_nBufSize = 0;
   }
 
   return m_pZipBuf;
@@ -1718,8 +1749,12 @@ icValidateStatus CIccTagZipUtf8Text::Validate(std::string sigPath, std::string &
 CIccTagUtf16Text::CIccTagUtf16Text()
 {
   m_szText = (icUChar16*)malloc(1*sizeof(icUChar16));
-  m_szText[0] = 0;
-  m_nBufSize = 1;
+  if (m_szText) {
+    m_szText[0] = 0;
+    m_nBufSize = 1;
+  }
+  else
+    m_nBufSize = 0;
 }
 
 /**
@@ -1735,9 +1770,13 @@ CIccTagUtf16Text::CIccTagUtf16Text()
 CIccTagUtf16Text::CIccTagUtf16Text(const CIccTagUtf16Text &ITT)
 {
   m_szText = (icUChar16*)malloc(1*sizeof(icUChar16));
-  m_szText[0] = 0;
-  m_nBufSize = 1;
-  SetText(ITT.m_szText);
+  if (m_szText) {
+    m_szText[0] = 0;
+    m_nBufSize = 1;
+    SetText(ITT.m_szText);
+  }
+  else
+    m_nBufSize = 0;
 }
 
 /**
@@ -1756,9 +1795,13 @@ CIccTagUtf16Text &CIccTagUtf16Text::operator=(const CIccTagUtf16Text &TextTag)
     return *this;
 
   m_szText = (icUChar16*)malloc(1*sizeof(icUChar16));
-  m_szText[0] = '\0';
-  m_nBufSize = 1;
-  SetText(TextTag.m_szText);
+  if (m_szText) {
+    m_szText[0] = '\0';
+    m_nBufSize = 1;
+    SetText(TextTag.m_szText);
+  }
+  else
+    m_nBufSize = 0;
 
   return *this;
 }
@@ -2060,10 +2103,13 @@ icUChar16 *CIccTagUtf16Text::GetBuffer(icUInt32Number nSize)
 {
   if (m_nBufSize < nSize) {
     m_szText = (icUChar16*)icRealloc(m_szText, (nSize+1)*sizeof(icUChar16));
-
-    m_szText[nSize] = 0;
-
-    m_nBufSize = nSize;
+    if (m_szText) {
+      m_szText[nSize] = 0;
+      m_nBufSize = nSize;
+    }
+    else {
+      m_nBufSize = 0;
+    }
   }
 
   return m_szText;
@@ -2083,7 +2129,10 @@ void CIccTagUtf16Text::Release()
 
   if (nSize < m_nBufSize-1) {
     m_szText=(icUChar16*)icRealloc(m_szText, (nSize+1)*sizeof(icUChar16));
-    m_nBufSize = nSize+1;
+    if (m_szText)
+      m_nBufSize = nSize+1;
+    else
+      m_nBufSize = 0;
   }
 }
 
@@ -2132,12 +2181,20 @@ icValidateStatus CIccTagUtf16Text::Validate(std::string sigPath, std::string &sR
 CIccTagTextDescription::CIccTagTextDescription()
 {
   m_szText = (icChar*)malloc(1);
-  m_szText[0] = '\0';
-  m_nASCIISize = 1;
+  if (m_szText) {
+    m_szText[0] = 0;
+    m_nASCIISize = 1;
+  }
+  else
+    m_nASCIISize = 0;
 
   m_uzUnicodeText = (icUInt16Number*)malloc(sizeof(icUInt16Number));
-  m_uzUnicodeText[0] = 0;
-  m_nUnicodeSize = 1;
+  if (m_uzUnicodeText) {
+    m_uzUnicodeText[0] = 0;
+    m_nUnicodeSize = 1;
+  } else
+    m_nUnicodeSize = 0;
+
   m_nUnicodeLanguageCode = 0;
 
   m_nScriptSize = 0;
@@ -2167,22 +2224,34 @@ CIccTagTextDescription::CIccTagTextDescription(const CIccTagTextDescription &ITT
 
   if (m_nASCIISize) {
     m_szText = (icChar*)malloc(m_nASCIISize * sizeof(icChar));
-    memcpy(m_szText, ITTD.m_szText, m_nASCIISize*sizeof(icChar));
+    if (m_szText)
+      memcpy(m_szText, ITTD.m_szText, m_nASCIISize*sizeof(icChar));
+    else
+      m_nASCIISize = 0;
   }
   else {
     m_nASCIISize = 1;
     m_szText = (icChar*)calloc(m_nASCIISize, sizeof(icChar));
-    m_szText[0] = '\0';
+    if (m_szText)
+      m_szText[0] = '\0';
+    else
+      m_nASCIISize = 0;
   }
 
   if (m_nUnicodeSize) {
     m_uzUnicodeText = (icUInt16Number*)malloc((m_nUnicodeSize) * sizeof(icUInt16Number));
-    memcpy(m_uzUnicodeText, ITTD.m_uzUnicodeText, m_nUnicodeSize*sizeof(icUInt16Number));
+    if (m_uzUnicodeText)
+      memcpy(m_uzUnicodeText, ITTD.m_uzUnicodeText, m_nUnicodeSize*sizeof(icUInt16Number));
+    else
+      m_nUnicodeSize = 0;
   }
   else {
     m_nUnicodeSize = 1;
     m_uzUnicodeText = (icUInt16Number*)calloc(m_nUnicodeSize, sizeof(icUInt16Number));
-    m_uzUnicodeText[0] = 0;
+    if (m_uzUnicodeText)
+      m_uzUnicodeText[0] = 0;
+    else
+      m_nUnicodeSize = 0;
   }
 
   memcpy(m_szScriptText, ITTD.m_szScriptText, sizeof(m_szScriptText));
@@ -2215,23 +2284,35 @@ CIccTagTextDescription &CIccTagTextDescription::operator=(const CIccTagTextDescr
   free(m_szText);
   if (m_nASCIISize) {
     m_szText = (icChar*)calloc(m_nASCIISize, sizeof(icChar));
-    memcpy(m_szText, TextDescTag.m_szText, m_nASCIISize*sizeof(icChar));
-  } 
+    if (m_szText)
+      memcpy(m_szText, TextDescTag.m_szText, m_nASCIISize*sizeof(icChar));
+    else
+      m_nASCIISize = 0;
+  }
   else {
     m_nASCIISize = 1;
     m_szText = (icChar*)calloc(m_nASCIISize, sizeof(icChar));
-    m_szText[0] = '\0';
+    if (m_szText)
+      m_szText[0] = '\0';
+    else
+      m_nASCIISize = 0;
   }
 
   free(m_uzUnicodeText);
   if (m_nUnicodeSize) {
     m_uzUnicodeText = (icUInt16Number*)calloc(m_nUnicodeSize, sizeof(icUInt16Number));
-    memcpy(m_uzUnicodeText, TextDescTag.m_uzUnicodeText, m_nUnicodeSize*sizeof(icUInt16Number));
+    if (m_uzUnicodeText)
+      memcpy(m_uzUnicodeText, TextDescTag.m_uzUnicodeText, m_nUnicodeSize*sizeof(icUInt16Number));
+    else
+      m_nUnicodeSize = 0;
   }
   else {
     m_nUnicodeSize = 1;
     m_uzUnicodeText = (icUInt16Number*)calloc(m_nUnicodeSize, sizeof(icUInt16Number));
-    m_uzUnicodeText[0] = 0;
+    if (m_uzUnicodeText)
+      m_uzUnicodeText[0] = 0;
+    else
+      m_nUnicodeSize = 0;
   }
 
   memcpy(m_szScriptText, TextDescTag.m_szScriptText, sizeof(m_szScriptText));
@@ -2477,8 +2558,8 @@ void CIccTagTextDescription::SetText(const icChar *szText)
 
   icUInt32Number len=(icUInt32Number)strlen(szText) + 1;
   icChar *szBuf = GetBuffer(len);
-
-  strcpy(szBuf, szText);
+  if (szBuf)
+    strcpy(szBuf, szText);
   Release();
 }
 
@@ -2517,10 +2598,12 @@ icChar *CIccTagTextDescription::GetBuffer(icUInt32Number nSize)
 {
   if (m_nASCIISize < (nSize+1)) {
     m_szText = (icChar*)icRealloc(m_szText, (nSize+1));
-
-    m_szText[nSize] = '\0';
-
-    m_nASCIISize = (nSize+1); // include NULL termination!
+    if (m_szText) {
+      m_szText[nSize] = '\0';
+      m_nASCIISize = (nSize+1); // include NULL termination!
+    }
+    else
+      m_nASCIISize = 0;
   }
 
   return m_szText;
@@ -2540,7 +2623,10 @@ void CIccTagTextDescription::Release()
 
   if (nSize < m_nASCIISize-1) {
     m_szText=(icChar*)icRealloc(m_szText, nSize+1);
-    m_nASCIISize = nSize+1;
+    if (m_szText)
+      m_nASCIISize = nSize+1;
+    else
+      m_nASCIISize = 0;
   }
 }
 
@@ -2561,11 +2647,13 @@ icUInt16Number *CIccTagTextDescription::GetUnicodeBuffer(icUInt32Number nSize)
 {
   if (m_nUnicodeSize < (nSize+2)) { // test for existing size must include the NULL termination!
     m_uzUnicodeText = (icUInt16Number*)icRealloc(m_uzUnicodeText, (nSize+2)*sizeof(icUInt16Number));
-
-    m_uzUnicodeText[nSize] = 0;
-    m_uzUnicodeText[nSize+1] = 0;
-
-    m_nUnicodeSize = nSize+2;
+    if (m_uzUnicodeText) {
+      m_uzUnicodeText[nSize] = 0;
+      m_uzUnicodeText[nSize+1] = 0;
+      m_nUnicodeSize = nSize+2;
+    }
+    else
+      m_nUnicodeSize = 0;
   }
 
   return m_uzUnicodeText;
@@ -2591,9 +2679,13 @@ void CIccTagTextDescription::ReleaseUnicode()
   // but don't reallocate because of the NULLs
   if (nSize < (m_nUnicodeSize-2)) {
     m_uzUnicodeText=(icUInt16Number*)icRealloc(m_uzUnicodeText, (nSize+2)*sizeof(icUInt16Number));
-    m_uzUnicodeText[nSize] = 0;
-    m_uzUnicodeText[nSize+1] = 0;
-    m_nUnicodeSize = nSize+2;
+    if (m_uzUnicodeText) {
+      m_uzUnicodeText[nSize] = 0;
+      m_uzUnicodeText[nSize+1] = 0;
+      m_nUnicodeSize = nSize+2;
+    }
+    else
+      m_nUnicodeSize = 0;
   }
 }
 
@@ -2927,6 +3019,8 @@ CIccTagNamedColor2::CIccTagNamedColor2(int nSize/*=1*/, int nDeviceCoords/*=0*/)
   m_nColorEntrySize = 32/*rootName*/ + (3/*PCS*/ + 1/*iAny*/ + nDeviceCoords)*sizeof(icFloatNumber);
 
   m_NamedColor = (SIccNamedColorEntry*)calloc(nSize, m_nColorEntrySize);
+  if (!m_NamedColor)
+    nSize = 0;
 
   m_NamedLab = NULL;
 }
@@ -2956,7 +3050,10 @@ CIccTagNamedColor2::CIccTagNamedColor2(const CIccTagNamedColor2 &ITNC)
   memcpy(m_szSufix, ITNC.m_szSufix, sizeof(m_szSufix));
 
   m_NamedColor = (SIccNamedColorEntry*)calloc(m_nSize, m_nColorEntrySize);
-  memcpy(m_NamedColor, ITNC.m_NamedColor, (size_t)m_nColorEntrySize*m_nSize);
+  if (m_NamedColor)
+    memcpy(m_NamedColor, ITNC.m_NamedColor, (size_t)m_nColorEntrySize*m_nSize);
+  else
+    m_nSize = 0;
 
   m_NamedLab = NULL;
 }
@@ -2990,7 +3087,10 @@ CIccTagNamedColor2 &CIccTagNamedColor2::operator=(const CIccTagNamedColor2 &Name
 
   free(m_NamedColor);
   m_NamedColor = (SIccNamedColorEntry*)calloc(m_nSize, m_nColorEntrySize);
-  memcpy(m_NamedColor, NamedColor2Tag.m_NamedColor, (size_t)m_nColorEntrySize*m_nSize);
+  if (m_NamedColor)
+    memcpy(m_NamedColor, NamedColor2Tag.m_NamedColor, (size_t)m_nColorEntrySize*m_nSize);
+  else
+    m_nSize = 0;
 
   m_NamedLab = NULL;
 
@@ -3777,7 +3877,10 @@ CIccTagXYZ::CIccTagXYZ(const CIccTagXYZ &ITXYZ)
   m_nSize = ITXYZ.m_nSize;
 
   m_XYZ = (icXYZNumber*)calloc(m_nSize, sizeof(icXYZNumber));
-  memcpy(m_XYZ, ITXYZ.m_XYZ, sizeof(icXYZNumber)*m_nSize);
+  if (m_XYZ)
+    memcpy(m_XYZ, ITXYZ.m_XYZ, sizeof(icXYZNumber)*m_nSize);
+  else
+    m_nSize = 0;
 }
 
 
@@ -3801,7 +3904,10 @@ CIccTagXYZ &CIccTagXYZ::operator=(const CIccTagXYZ &XYZTag)
 
   free(m_XYZ);
   m_XYZ = (icXYZNumber*)calloc(m_nSize, sizeof(icXYZNumber));
-  memcpy(m_XYZ, XYZTag.m_XYZ, sizeof(icXYZNumber)*m_nSize);
+  if (m_XYZ)
+    memcpy(m_XYZ, XYZTag.m_XYZ, sizeof(icXYZNumber)*m_nSize);
+  else
+    m_nSize = 0;
 
   return *this;
 }
@@ -3949,8 +4055,13 @@ bool CIccTagXYZ::SetSize(icUInt32Number nSize, bool bZeroNew/*=true*/)
   if (nSize==m_nSize)
     return true;
 
-  m_XYZ = (icXYZNumber*)icRealloc(m_XYZ, nSize*sizeof(icXYZNumber));
+  if (nSize > 65536) {
+    free(m_XYZ);
+    m_nSize = 0;
+    return false;
+  }
 
+  m_XYZ = (icXYZNumber*)icRealloc(m_XYZ, nSize*sizeof(icXYZNumber));
   if (!m_XYZ) {
     m_nSize = 0;
     return false;
@@ -4038,7 +4149,8 @@ CIccTagChromaticity::CIccTagChromaticity(const CIccTagChromaticity &ITCh)
   m_nChannels = ITCh.m_nChannels;
 
   m_xy = (icChromaticityNumber*)calloc(m_nChannels, sizeof(icChromaticityNumber));
-  memcpy(m_xy, ITCh.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
+  if (m_xy)
+    memcpy(m_xy, ITCh.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
 }
 
 
@@ -4061,7 +4173,8 @@ CIccTagChromaticity &CIccTagChromaticity::operator=(const CIccTagChromaticity &C
 
   free(m_xy);
   m_xy = (icChromaticityNumber*)calloc(m_nChannels, sizeof(icChromaticityNumber));
-  memcpy(m_xy, ChromTag.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
+  if (m_xy)
+    memcpy(m_xy, ChromTag.m_xy, sizeof(icChromaticityNumber)*m_nChannels);
 
   return *this;  
 }
@@ -4229,7 +4342,6 @@ bool CIccTagChromaticity::SetSize(icUInt16Number nSize, bool bZeroNew/*=true*/)
     return true;
 
   m_xy = (icChromaticityNumber*)icRealloc(m_xy, nSize*sizeof(icChromaticityNumber));
-
   if (!m_xy) {
     m_nChannels = 0;
     return false;
@@ -4672,6 +4784,8 @@ CIccTagSparseMatrixArray::CIccTagSparseMatrixArray(int nNumMatrices/* =1 */, int
     m_nChannelsPerMatrix = 4;
 
   m_RawData = (icUInt8Number*)calloc(m_nSize, GetBytesPerMatrix());
+  if (!m_RawData)
+    m_nSize = 0;
 
   m_bNonZeroPadding = false;
 }
@@ -4727,7 +4841,10 @@ CIccTagSparseMatrixArray &CIccTagSparseMatrixArray::operator=(const CIccTagSpars
 
   free(m_RawData);
   m_RawData = (icUInt8Number*)calloc(m_nSize, GetBytesPerMatrix());
-  memcpy(m_RawData, ITSMA.m_RawData, (size_t)m_nSize*GetBytesPerMatrix());
+  if (m_RawData)
+    memcpy(m_RawData, ITSMA.m_RawData, (size_t)m_nSize*GetBytesPerMatrix());
+  else
+    m_nSize = 0;
 
   m_bNonZeroPadding = ITSMA.m_bNonZeroPadding;
 
@@ -5503,6 +5620,8 @@ CIccTagFixedNum<T, Tsig>::CIccTagFixedNum(int nSize/*=1*/)
   if (m_nSize <1)
     m_nSize = 1;
   m_Num = (T*)calloc(nSize, sizeof(T));
+  if (!m_Num)
+    m_nSize = 0;
 }
 
 
@@ -5521,7 +5640,10 @@ CIccTagFixedNum<T, Tsig>::CIccTagFixedNum(const CIccTagFixedNum<T, Tsig> &ITFN)
 {
   m_nSize = ITFN.m_nSize;
   m_Num = (T*)calloc(m_nSize, sizeof(T));
-  memcpy(m_Num, ITFN.m_Num, m_nSize*sizeof(T));
+  if (m_Num)
+    memcpy(m_Num, ITFN.m_Num, m_nSize*sizeof(T));
+  else
+    m_nSize = 0;
 }
 
 
@@ -5545,7 +5667,10 @@ CIccTagFixedNum<T, Tsig> &CIccTagFixedNum<T, Tsig>::operator=(const CIccTagFixed
 
   free(m_Num);
   m_Num = (T*)calloc(m_nSize, sizeof(T));
-  memcpy(m_Num, ITFN.m_Num, m_nSize*sizeof(T));
+  if (m_Num)
+    memcpy(m_Num, ITFN.m_Num, m_nSize*sizeof(T));
+  else
+    m_nSize = 0;
 
   return *this;
 }
@@ -5725,7 +5850,6 @@ bool CIccTagFixedNum<T, Tsig>::SetSize(icUInt32Number nSize, bool bZeroNew/*=tru
     return true;
 
   m_Num = (T*)icRealloc(m_Num, nSize*sizeof(T));
-
   if (!m_Num) {
     m_nSize = 0;
     return false;
@@ -5962,6 +6086,8 @@ CIccTagNum<T, Tsig>::CIccTagNum(int nSize/*=1*/)
   if (m_nSize <1)
     m_nSize = 1;
   m_Num = (T*)calloc(nSize, sizeof(T));
+  if (!m_Num)
+    m_nSize = 0;
 }
 
 
@@ -5981,7 +6107,10 @@ CIccTagNum<T, Tsig>::CIccTagNum(const CIccTagNum<T, Tsig> &ITNum)
   m_nSize = ITNum.m_nSize;
 
   m_Num = (T*)calloc(m_nSize, sizeof(T));
-  memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  if (m_Num)
+    memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  else
+    m_nSize = 0;
 }
 
 
@@ -6004,7 +6133,10 @@ CIccTagNum<T, Tsig> &CIccTagNum<T, Tsig>::operator=(const CIccTagNum<T, Tsig> &I
   m_nSize = ITNum.m_nSize;
 
   m_Num = (T*)calloc(m_nSize, sizeof(T));
-  memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  if (m_Num)
+    memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  else
+    m_nSize = 0;
 
   return *this;
 }
@@ -6289,7 +6421,6 @@ bool CIccTagNum<T, Tsig>::SetSize(icUInt32Number nSize, bool bZeroNew/*=true*/)
     return true;
 
   m_Num = (T*)icRealloc(m_Num, nSize*sizeof(T));
-
   if (!m_Num) {
     m_nSize = 0;
     return false;
@@ -6575,6 +6706,8 @@ CIccTagFloatNum<T, Tsig>::CIccTagFloatNum(int nSize/*=1*/)
   if (m_nSize <1)
     m_nSize = 1;
   m_Num = (T*)calloc(nSize, sizeof(T));
+  if (!m_Num)
+    m_nSize = 0;
 }
 
 
@@ -6594,7 +6727,10 @@ CIccTagFloatNum<T, Tsig>::CIccTagFloatNum(const CIccTagFloatNum<T, Tsig> &ITNum)
   m_nSize = ITNum.m_nSize;
 
   m_Num = (T*)calloc(m_nSize, sizeof(T));
-  memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  if (m_Num)
+    memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  else
+    m_nSize = 0;
 }
 
 
@@ -6617,7 +6753,10 @@ CIccTagFloatNum<T, Tsig> &CIccTagFloatNum<T, Tsig>::operator=(const CIccTagFloat
   m_nSize = ITNum.m_nSize;
 
   m_Num = (T*)calloc(m_nSize, sizeof(T));
-  memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  if (m_Num)
+    memcpy(m_Num, ITNum.m_Num, m_nSize * sizeof(T));
+  else
+    m_nSize = 0;
 
   return *this;
 }
@@ -6865,7 +7004,6 @@ bool  CIccTagFloatNum<T, Tsig>::SetSize(icUInt32Number nSize, bool bZeroNew/*=tr
     return true;
 
   m_Num = (T*)icRealloc(m_Num, nSize*sizeof(T));
-
   if (!m_Num) {
     m_nSize = 0;
     return false;
@@ -7325,7 +7463,9 @@ icValidateStatus CIccTagMeasurement::Validate(std::string sigPath, std::string &
 CIccLocalizedUnicode::CIccLocalizedUnicode()
 {
   m_pBuf = (icUInt16Number*)malloc(1*sizeof(icUInt16Number));
-  *m_pBuf = 0;
+  if (m_pBuf)
+    *m_pBuf = 0;
+
   m_nLength = 0;
   m_nLanguageCode = icLanguageCodeEnglish;
   m_nCountryCode = icCountryCodeUSA;
@@ -7346,10 +7486,15 @@ CIccLocalizedUnicode::CIccLocalizedUnicode(const CIccLocalizedUnicode& ILU)
 {
   m_nLength = ILU.GetLength();
   m_pBuf = (icUInt16Number*)malloc((m_nLength+2) * sizeof(icUInt16Number));
-  if (m_nLength)
-    memcpy(m_pBuf, ILU.GetBuf(), m_nLength*sizeof(icUInt16Number));
-  m_pBuf[m_nLength] = 0;    // safety against malformed unicode
-  m_pBuf[m_nLength+1] = 0;  // safety against malformed unicode
+  if (m_pBuf) {
+    if (m_nLength)
+      memcpy(m_pBuf, ILU.GetBuf(), m_nLength*sizeof(icUInt16Number));
+    m_pBuf[m_nLength] = 0;    // safety against malformed unicode
+    m_pBuf[m_nLength+1] = 0;  // safety against malformed unicode
+  }
+  else
+    m_nLength = 0;
+
   m_nLanguageCode = ILU.m_nLanguageCode;
   m_nCountryCode = ILU.m_nCountryCode;
 }
@@ -7571,7 +7716,6 @@ bool CIccLocalizedUnicode::SetSize(icUInt32Number nSize)
   // Do the size math in 64-bit defensively, even with the cap above.
   size_t nBytes = (static_cast<size_t>(nSize) + 2u) * sizeof(icUInt16Number);
   m_pBuf = (icUInt16Number*)icRealloc(m_pBuf, nBytes);
-
   if (!m_pBuf) {
     m_nLength = 0;
     return false;
@@ -8305,6 +8449,8 @@ CIccTagData::CIccTagData(int nSize/*=1*/)
   if (m_nSize <1)
     m_nSize = 1;
   m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  if (!m_pData)
+    m_nSize = 0;
   m_nDataFlag = icAsciiData;
 }
 
@@ -8325,7 +8471,10 @@ CIccTagData::CIccTagData(const CIccTagData &ITD)
   m_nSize = ITD.m_nSize;
 
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
-  memcpy(m_pData, ITD.m_pData, sizeof(icUInt8Number)*m_nSize);
+  if (m_pData)
+    memcpy(m_pData, ITD.m_pData, sizeof(icUInt8Number)*m_nSize);
+  else
+    m_nSize = 0;
 }
 
 
@@ -8349,7 +8498,10 @@ CIccTagData &CIccTagData::operator=(const CIccTagData &DataTag)
 
   free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
-  memcpy(m_pData, DataTag.m_pData, sizeof(icUInt8Number)*m_nSize);
+  if (m_pData)
+    memcpy(m_pData, DataTag.m_pData, sizeof(icUInt8Number)*m_nSize);
+  else
+    m_nSize = 0;
 
   return *this;
 }
@@ -8540,7 +8692,6 @@ bool CIccTagData::SetSize(icUInt32Number nSize, bool bZeroNew/*=true*/)
     return true;
 
   m_pData = (icUInt8Number*)icRealloc(m_pData, nSize*sizeof(icUInt8Number));
-
   if (!m_pData) {
     m_nSize = 0;
     return false;
@@ -8827,6 +8978,8 @@ CIccTagColorantOrder::CIccTagColorantOrder(int nsize/*=1*/)
   if (m_nCount <1)
     m_nCount = 1;
   m_pData = (icUInt8Number*)calloc(nsize, sizeof(icUInt8Number));
+  if (!m_pData)
+    m_nCount = 0;
 }
 
 
@@ -8846,7 +8999,10 @@ CIccTagColorantOrder::CIccTagColorantOrder(const CIccTagColorantOrder &ITCO)
   m_nCount = ITCO.m_nCount;
 
   m_pData = (icUInt8Number*)calloc(m_nCount, sizeof(icUInt8Number));
-  memcpy(m_pData, ITCO.m_pData, sizeof(icUInt8Number)*m_nCount);
+  if (m_pData)
+    memcpy(m_pData, ITCO.m_pData, sizeof(icUInt8Number)*m_nCount);
+  else
+    m_nCount = 0;
 }
 
 
@@ -8869,7 +9025,10 @@ CIccTagColorantOrder &CIccTagColorantOrder::operator=(const CIccTagColorantOrder
 
   free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nCount, sizeof(icUInt8Number));
-  memcpy(m_pData, ColorantOrderTag.m_pData, sizeof(icUInt8Number)*m_nCount);
+  if (m_pData)
+    memcpy(m_pData, ColorantOrderTag.m_pData, sizeof(icUInt8Number)*m_nCount);
+  else
+    m_nCount = 0;
 
   return *this;
 }
@@ -9022,8 +9181,13 @@ bool CIccTagColorantOrder::SetSize(icUInt16Number nSize, bool bZeroNew/*=true*/)
   if (m_nCount == nSize)
     return true;
 
-  m_pData = (icUInt8Number*)icRealloc(m_pData, nSize*sizeof(icUInt8Number));
+  if (nSize > 65535) {
+    free(m_pData);
+    m_nCount = 0;
+    return false;
+  }
 
+  m_pData = (icUInt8Number*)icRealloc(m_pData, nSize*sizeof(icUInt8Number));
   if (!m_pData) {
     m_nCount = 0;
     return false;
@@ -9098,6 +9262,8 @@ CIccTagColorantTable::CIccTagColorantTable(int nSize/*=1*/)
     m_nCount = 1;
 
   m_pData = (icColorantTableEntry*)calloc(nSize, sizeof(icColorantTableEntry));
+  if (!m_pData)
+    m_nCount = 0;
 }
 
 
@@ -9117,7 +9283,10 @@ CIccTagColorantTable::CIccTagColorantTable(const CIccTagColorantTable &ITCT)
   m_nCount = ITCT.m_nCount;
 
   m_pData = (icColorantTableEntry*)calloc(m_nCount, sizeof(icColorantTableEntry));
-  memcpy(m_pData, ITCT.m_pData, m_nCount*sizeof(icColorantTableEntry));
+  if (m_pData)
+    memcpy(m_pData, ITCT.m_pData, m_nCount*sizeof(icColorantTableEntry));
+  else
+    m_nCount = 0;
 }
 
 
@@ -9141,7 +9310,10 @@ CIccTagColorantTable &CIccTagColorantTable::operator=(const CIccTagColorantTable
 
   free(m_pData);
   m_pData = (icColorantTableEntry*)calloc(m_nCount, sizeof(icColorantTableEntry));
-  memcpy(m_pData, ColorantTableTag.m_pData, m_nCount*sizeof(icColorantTableEntry));
+  if (m_pData)
+    memcpy(m_pData, ColorantTableTag.m_pData, m_nCount*sizeof(icColorantTableEntry));
+  else
+    m_nCount = 0;
 
   return *this;
 }
@@ -9340,9 +9512,14 @@ bool CIccTagColorantTable::SetSize(icUInt16Number nSize, bool bZeroNew/*=true*/)
 {
   if (m_nCount == nSize)
     return true;
+    
+  if (nSize > 65535) {
+    free(m_pData);
+    m_nCount = 0;
+    return false;
+  }
 
   m_pData = (icColorantTableEntry*)icRealloc(m_pData, nSize*sizeof(icColorantTableEntry));
-
   if (!m_pData) {
     m_nCount = 0;
     return false;
@@ -10339,7 +10516,8 @@ CIccResponseCurveStruct::CIccResponseCurveStruct(const CIccResponseCurveStruct &
   m_measurementUnitSig = IRCS.m_measurementUnitSig;
 
   m_maxColorantXYZ = (icXYZNumber*)calloc(m_nChannels, sizeof(icXYZNumber));
-  memcpy(m_maxColorantXYZ, IRCS.m_maxColorantXYZ, m_nChannels*sizeof(icXYZNumber));
+  if (m_maxColorantXYZ)
+    memcpy(m_maxColorantXYZ, IRCS.m_maxColorantXYZ, m_nChannels*sizeof(icXYZNumber));
 
   m_Response16ListArray = new CIccResponse16List[m_nChannels];
   for (icUInt32Number i=0; i<m_nChannels; i++)
@@ -10367,7 +10545,8 @@ CIccResponseCurveStruct &CIccResponseCurveStruct::operator=(const CIccResponseCu
 
   free(m_maxColorantXYZ);
   m_maxColorantXYZ = (icXYZNumber*)calloc(m_nChannels, sizeof(icXYZNumber));
-  memcpy(m_maxColorantXYZ, RespCurveStruct.m_maxColorantXYZ, m_nChannels*sizeof(icXYZNumber));
+  if (m_maxColorantXYZ)
+    memcpy(m_maxColorantXYZ, RespCurveStruct.m_maxColorantXYZ, m_nChannels*sizeof(icXYZNumber));
 
   if (m_Response16ListArray)
     delete [] m_Response16ListArray;
@@ -11801,15 +11980,17 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
   int n = newRange.steps*3;
   icFloatNumber *rv = (icFloatNumber*)malloc(n*sizeof(icFloatNumber));
 
-  CIccMatrixMath *range = CIccMatrixMath::rangeMap(m_observerRange, newRange);
-  if (range) {
-    range->VectorMult(rv, m_observer);
-    range->VectorMult(&rv[newRange.steps], &m_observer[m_observerRange.steps]);
-    range->VectorMult(&rv[newRange.steps*2], &m_observer[m_observerRange.steps*2]);
-    delete range;
-  }
-  else {
-    memcpy(rv, m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
+  if (rv) {
+    CIccMatrixMath *range = CIccMatrixMath::rangeMap(m_observerRange, newRange);
+    if (range) {
+      range->VectorMult(rv, m_observer);
+      range->VectorMult(&rv[newRange.steps], &m_observer[m_observerRange.steps]);
+      range->VectorMult(&rv[newRange.steps*2], &m_observer[m_observerRange.steps*2]);
+      delete range;
+    }
+    else {
+      memcpy(rv, m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
+    }
   }
 
   return rv;
@@ -12203,6 +12384,8 @@ CIccTagEmbeddedHeightImage::CIccTagEmbeddedHeightImage(int nSize/*=1*/)
   if (m_nSize <1)
     m_nSize = 1;
   m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  if (!m_pData)
+    m_nSize = 0;
   m_nSeamlesIndicator = 0;
   m_nEncodingFormat = icPngImageType;
   m_fMetersMinPixelValue = 0;
@@ -12229,7 +12412,10 @@ CIccTagEmbeddedHeightImage::CIccTagEmbeddedHeightImage(const CIccTagEmbeddedHeig
   m_nSize = IEHI.m_nSize;
 
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
-  memcpy(m_pData, IEHI.m_pData, sizeof(icUInt8Number)*m_nSize);
+  if (m_pData)
+    memcpy(m_pData, IEHI.m_pData, sizeof(icUInt8Number)*m_nSize);
+  else
+    m_nSize = 0;
 }
 
 
@@ -12256,7 +12442,10 @@ CIccTagEmbeddedHeightImage &CIccTagEmbeddedHeightImage::operator=(const CIccTagE
 
   free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
-  memcpy(m_pData, HeightImageTag.m_pData, sizeof(icUInt8Number)*m_nSize);
+  if (m_pData)
+    memcpy(m_pData, HeightImageTag.m_pData, sizeof(icUInt8Number)*m_nSize);
+  else
+    m_nSize = 0;
 
   return *this;
 }
@@ -12444,7 +12633,6 @@ bool CIccTagEmbeddedHeightImage::SetSize(icUInt32Number nSize, bool bZeroNew/*=t
     return true;
 
   m_pData = (icUInt8Number*)icRealloc(m_pData, nSize * sizeof(icUInt8Number));
-
   if (!m_pData) {
     m_nSize = 0;
     return false;
@@ -12524,6 +12712,8 @@ CIccTagEmbeddedNormalImage::CIccTagEmbeddedNormalImage(int nSize/*=1*/)
   if (m_nSize < 1)
     m_nSize = 1;
   m_pData = (icUInt8Number*)calloc(nSize, sizeof(icUInt8Number));
+  if (!m_pData)
+    m_nSize = 0;
   m_nSeamlesIndicator = 0;
   m_nEncodingFormat = icPngImageType;
 }
@@ -12546,7 +12736,10 @@ CIccTagEmbeddedNormalImage::CIccTagEmbeddedNormalImage(const CIccTagEmbeddedNorm
   m_nSize = IENI.m_nSize;
 
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
-  memcpy(m_pData, IENI.m_pData, sizeof(icUInt8Number)*m_nSize);
+  if (m_pData)
+    memcpy(m_pData, IENI.m_pData, sizeof(icUInt8Number)*m_nSize);
+  else
+    m_nSize = 0;
 }
 
 
@@ -12571,7 +12764,10 @@ CIccTagEmbeddedNormalImage &CIccTagEmbeddedNormalImage::operator=(const CIccTagE
 
   free(m_pData);
   m_pData = (icUInt8Number*)calloc(m_nSize, sizeof(icUInt8Number));
-  memcpy(m_pData, NormalImageTag.m_pData, sizeof(icUInt8Number)*m_nSize);
+  if (m_pData)
+    memcpy(m_pData, NormalImageTag.m_pData, sizeof(icUInt8Number)*m_nSize);
+  else
+    m_nSize = 0;
 
   return *this;
 }
@@ -12742,7 +12938,6 @@ bool CIccTagEmbeddedNormalImage::SetSize(icUInt32Number nSize, bool bZeroNew/*=t
     return true;
 
   m_pData = (icUInt8Number*)icRealloc(m_pData, nSize * sizeof(icUInt8Number));
-
   if (!m_pData) {
     m_nSize = 0;
     return false;
