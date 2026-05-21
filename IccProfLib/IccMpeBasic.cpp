@@ -4561,6 +4561,8 @@ bool CIccMpeToneMap::Read(icUInt32Number size, CIccIO* pIO)
 
   m_nInputChannels = nInputChannels;
   SetNumOutputChannels(nOutputChannels);
+  if (!m_pToneFuncs || m_nOutputChannels == 0)
+    return false;
 
   //setup to read luminance curve based on position
   icPositionNumber lumPos;

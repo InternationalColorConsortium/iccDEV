@@ -2619,15 +2619,18 @@ icChar *CIccTagTextDescription::GetBuffer(icUInt32Number nSize)
  */
 void CIccTagTextDescription::Release()
 {
-  icUInt32Number nSize = (icUInt32Number)strlen(m_szText);
-
-  if (nSize < m_nASCIISize-1) {
-    m_szText=(icChar*)icRealloc(m_szText, nSize+1);
-    if (m_szText)
-      m_nASCIISize = nSize+1;
-    else
-      m_nASCIISize = 0;
+  if (m_szText) {
+    icUInt32Number nSize = (icUInt32Number)strlen(m_szText);
+    if (nSize < m_nASCIISize-1) {
+      m_szText=(icChar*)icRealloc(m_szText, nSize+1);
+      if (m_szText)
+        m_nASCIISize = nSize+1;
+      else
+        m_nASCIISize = 0;
+    }
   }
+  else
+    m_nASCIISize = 0;
 }
 
 /**
@@ -3020,7 +3023,7 @@ CIccTagNamedColor2::CIccTagNamedColor2(int nSize/*=1*/, int nDeviceCoords/*=0*/)
 
   m_NamedColor = (SIccNamedColorEntry*)calloc(nSize, m_nColorEntrySize);
   if (!m_NamedColor)
-    nSize = 0;
+    m_nSize = 0;
 
   m_NamedLab = NULL;
 }

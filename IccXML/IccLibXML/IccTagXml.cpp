@@ -4561,8 +4561,11 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
         CIccTagMultiLocalizedUnicode *pTag = pDesc->GetNameLocalized();
         if (!pTag) {
           pTag = new (std::nothrow) CIccTagMultiLocalizedUnicode();
-          if (!pTag)
+          if (!pTag) {
+            delete pDesc;
+            ptr.ptr = NULL;
             return false;
+          }
           pDesc->SetNameLocalized(pTag);
         }
 
@@ -4586,8 +4589,11 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
         CIccTagMultiLocalizedUnicode *pTag = pDesc->GetValueLocalized();
         if (!pTag) {
           pTag = new (std::nothrow) CIccTagMultiLocalizedUnicode();
-          if (!pTag)
+          if (!pTag) {
+            delete pDesc;
+            ptr.ptr = NULL;
             return false;
+          }
           pDesc->SetValueLocalized(pTag);
         }
 

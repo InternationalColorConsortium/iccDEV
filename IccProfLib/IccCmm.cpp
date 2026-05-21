@@ -343,8 +343,10 @@ bool CIccCreateXformHintManager::AddHint(IIccCreateXformHint* pHint)
 {
   if (!m_pList) {
     m_pList = new (std::nothrow) IIccCreateXformHintList;
-    if (!m_pList)
+    if (!m_pList) {
+      delete pHint; // don't leave the pointer hanging
       return false;
+    }
   }
 
   if (pHint) {
@@ -825,7 +827,6 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         if (pHintManager) {
           pHintManager->AddHint(pNamedColorHint);
           rv = CIccXformCreator::CreateXform(icXformTypeNamedColor, pTag, pHintManager);
-//	      pHintManager->DeleteHint(pNamedColorHint);    // hint manager takes ownership, we should not delete
         }
         else {
           CIccCreateXformHintManager HintManager;
