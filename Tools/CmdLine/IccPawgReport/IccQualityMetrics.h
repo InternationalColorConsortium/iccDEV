@@ -1430,9 +1430,10 @@ inline void append_mbb_curve_targets(std::vector<std::pair<std::string, CIccCurv
   const int mCurves = mbb->IsInputMatrix() ? mbb->InputChannels() : mbb->OutputChannels();
   const int bCurves = mbb->IsInputB() ? mbb->InputChannels() : mbb->OutputChannels();
 
-  if (aCurves < 0 || aCurves > kMaxQualityChannels ||
-      mCurves < 0 || mCurves > kMaxQualityChannels ||
-      bCurves < 0 || bCurves > kMaxQualityChannels) {
+  // they can't be negative when copied from unsigned values
+  if (aCurves > kMaxQualityChannels ||
+      mCurves > kMaxQualityChannels ||
+      bCurves > kMaxQualityChannels) {
     return;
   }
 

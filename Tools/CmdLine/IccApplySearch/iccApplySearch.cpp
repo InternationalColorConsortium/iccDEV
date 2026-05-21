@@ -267,7 +267,7 @@ int main(int argc, const char* argv[])
   CIccCfgSearchApply cfgSearchApply;
   CIccCfgColorData cfgData;
 
-  if (argc > 2 && !stricmp(argv[1], "-cfg")) {
+  if (!stricmp(argv[1], "-cfg")) {
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
       printf("Unable to read configuration from '%s'\n", argv[2]);

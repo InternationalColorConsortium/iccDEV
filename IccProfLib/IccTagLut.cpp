@@ -5463,7 +5463,7 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
     if (!pCurve->SetSize(nInputEntries))
       return false;
 
-    if ((nInputEntries > 0) && pIO->ReadUInt16Float(&(*pCurve)[0], nInputEntries) != nInputEntries)
+    if (pIO->ReadUInt16Float(&(*pCurve)[0], nInputEntries) != nInputEntries)
       return false;
   }
 
@@ -5495,7 +5495,7 @@ bool CIccTagLut16::Read(icUInt32Number size, CIccIO *pIO)
     if (!pCurve->SetSize(nOutputEntries))
       return false;
 
-    if ((nOutputEntries > 0) && pIO->ReadUInt16Float(&(*pCurve)[0], nOutputEntries) != nOutputEntries)
+    if (pIO->ReadUInt16Float(&(*pCurve)[0], nOutputEntries) != nOutputEntries)
       return false;
   }
   return true;
