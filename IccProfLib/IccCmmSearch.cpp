@@ -240,17 +240,10 @@ CIccCmmSearch::CIccCmmSearch(bool bUsesBounds, icFloatNumber overBoundsCost, con
 
 CIccCmmSearch::~CIccCmmSearch()
 {
-  if (m_pSrcProfile)
-    delete m_pSrcProfile;
-
-  if (m_pMidProfile)
-    delete m_pMidProfile;
-
-  if (m_pDstProfile)
-    delete m_pDstProfile;
-
-  if (m_pDstInitProfile)
-    delete m_pDstInitProfile;
+  delete m_pSrcProfile;
+  delete m_pMidProfile;
+  delete m_pDstProfile;
+  delete m_pDstInitProfile;
 
   for (auto pPcc : m_pcc) {
     delete pPcc;

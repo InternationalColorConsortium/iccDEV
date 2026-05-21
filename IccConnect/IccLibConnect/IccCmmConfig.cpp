@@ -1315,11 +1315,10 @@ class CIccIt8Parser
 {
 public:
   CIccIt8Parser() { m_f = nullptr; }
-  ~CIccIt8Parser() { if (m_f) delete m_f; }
+  ~CIccIt8Parser() { delete m_f; }
 
   bool open(const char* szFilename) {
-    if (m_f)
-      delete m_f;
+    delete m_f;
     m_f = new (std::nothrow) std::ifstream(szFilename);
     if (!m_f || !m_f->is_open()) {
       delete m_f;

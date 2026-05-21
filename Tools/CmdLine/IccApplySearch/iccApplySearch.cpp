@@ -547,8 +547,7 @@ int main(int argc, const char* argv[])
     return -1;
   }
 
-  if (pMruCmm)
-    delete pMruCmm;
+  delete pMruCmm;
 
   return 0;
 }

@@ -107,9 +107,7 @@ IIccEncProfileCacheHandler *IIccEncProfileCacheHandler::GetHandler()
 void IIccEncProfileCacheHandler::SetEncCacheHandler(IIccEncProfileCacheHandler *pHandler)
 {
   if (pHandler) {
-    if (g_pEncProfileCacheHandler) {
-      delete g_pEncProfileCacheHandler;
-    }
+    delete g_pEncProfileCacheHandler;
     g_pEncProfileCacheHandler = pHandler;
   }
 }
@@ -538,9 +536,7 @@ IIccEncProfileConverter *IIccEncProfileConverter::GetHandler()
 void IIccEncProfileConverter::SetEncProfileConverter(IIccEncProfileConverter *pConverter)
 {
   if (pConverter) {
-    if (g_pEncProfileConverter) {
-      delete g_pEncProfileConverter;
-    }
+    delete g_pEncProfileConverter;
     g_pEncProfileConverter = pConverter;
   }
 }

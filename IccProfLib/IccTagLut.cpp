@@ -724,8 +724,7 @@ CIccTagParametricCurve &CIccTagParametricCurve::operator=(const CIccTagParametri
   m_nFunctionType = ParamCurveTag.m_nFunctionType;
   m_nNumParam = ParamCurveTag.m_nNumParam;
 
-  if (m_dParam)
-    delete [] m_dParam;
+  delete [] m_dParam;
   m_dParam = new icFloatNumber[m_nNumParam];
   memcpy(m_dParam, ParamCurveTag.m_dParam, m_nNumParam*sizeof(icFloatNumber));
 
@@ -743,8 +742,7 @@ CIccTagParametricCurve &CIccTagParametricCurve::operator=(const CIccTagParametri
 */
 CIccTagParametricCurve::~CIccTagParametricCurve()
 {
-  if (m_dParam)
-    delete [] m_dParam;
+  delete [] m_dParam;
 }
 
 
@@ -1014,8 +1012,7 @@ bool CIccTagParametricCurve::SetFunctionType(icUInt16Number nFunctionType)
       nNumParam = 0;
   }
 
-  if (m_dParam)
-    delete [] m_dParam;
+  delete [] m_dParam;
   m_nNumParam = nNumParam;
   m_nFunctionType = nFunctionType;
 
@@ -1284,8 +1281,7 @@ CIccTagSegmentedCurve &CIccTagSegmentedCurve::operator=(const CIccTagSegmentedCu
 */
 CIccTagSegmentedCurve::~CIccTagSegmentedCurve()
 {
-  if (m_pCurve)
-    delete m_pCurve;
+  delete m_pCurve;
 }
 
 /**
@@ -1374,9 +1370,7 @@ bool CIccTagSegmentedCurve::Write(CIccIO *pIO)
 */
 void CIccTagSegmentedCurve::SetCurve(CIccSegmentedCurve *pCurve)
 {
-  if (m_pCurve)
-    delete m_pCurve;
-
+  delete m_pCurve;
   m_pCurve = pCurve;
 }
 
@@ -1820,8 +1814,7 @@ CIccCLUT &CIccCLUT::operator=(const CIccCLUT &CLUTTag)
   memcpy(m_nReserved2, &CLUTTag.m_nReserved2, sizeof(m_nReserved2));
 
   int num;
-  if (m_pData)
-    delete [] m_pData;
+  delete [] m_pData;
   num = NumPoints()*m_nOutput;
   m_pData = new icFloatNumber[num];
   memcpy(m_pData, CLUTTag.m_pData, num*sizeof(icFloatNumber));
@@ -1843,12 +1836,8 @@ CIccCLUT &CIccCLUT::operator=(const CIccCLUT &CLUTTag)
  */
 CIccCLUT::~CIccCLUT()
 {
-  if (m_pData)
-    delete [] m_pData;
-
-  if (m_nOffset)
-    delete [] m_nOffset;
-
+  delete [] m_pData;
+  delete [] m_nOffset;
 }
 
 /**
@@ -1909,10 +1898,8 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
       return false;
   }
 
-  if (m_pData) {
-    delete [] m_pData;
-    m_pData = NULL;
-  }
+  delete [] m_pData;
+  m_pData = NULL;
 
   int i = m_nInput-1;
 
@@ -2363,8 +2350,7 @@ void CIccCLUT::Begin()
     m_nPower[count] = (1<<(m_nInput-1-count));
   }
 
-  if (m_nOffset)
-    delete [] m_nOffset;
+  delete [] m_nOffset;
 
   m_nOffset = new icUInt32Number[m_nNodes];
 
@@ -3597,18 +3583,16 @@ void CIccMBB::Cleanup()
 
   if (IsInputMatrix()) {
     if (m_CurvesB) {
-      for (i=0; i<m_nInput; i++) 
-        if (m_CurvesB[i])
-          delete m_CurvesB[i];
+      for (i=0; i<m_nInput; i++)
+        delete m_CurvesB[i];
 
       delete [] m_CurvesB;
       m_CurvesB = NULL;
     }
 
     if (m_CurvesM) {
-      for (i=0; i<m_nInput; i++) 
-        if (m_CurvesM[i])
-          delete m_CurvesM[i];
+      for (i=0; i<m_nInput; i++)
+        delete m_CurvesM[i];
 
       delete [] m_CurvesM;
       m_CurvesM = NULL;
@@ -3616,9 +3600,8 @@ void CIccMBB::Cleanup()
 
 
     if (m_CurvesA) {
-      for (i=0; i<m_nOutput; i++) 
-        if (m_CurvesA[i])
-          delete m_CurvesA[i];
+      for (i=0; i<m_nOutput; i++)
+        delete m_CurvesA[i];
 
       delete [] m_CurvesA;
       m_CurvesA = NULL;
@@ -3627,42 +3610,35 @@ void CIccMBB::Cleanup()
   }
   else {
     if (m_CurvesA) {
-      for (i=0; i<m_nInput; i++) 
-        if (m_CurvesA[i])
-          delete m_CurvesA[i];
+      for (i=0; i<m_nInput; i++)
+        delete m_CurvesA[i];
 
       delete [] m_CurvesA;
       m_CurvesA = NULL;
     }
 
     if (m_CurvesM) {
-      for (i=0; i<m_nOutput; i++) 
-        if (m_CurvesM[i])
-          delete m_CurvesM[i];
+      for (i=0; i<m_nOutput; i++)
+        delete m_CurvesM[i];
 
       delete [] m_CurvesM;
       m_CurvesM = NULL;
     }
 
     if (m_CurvesB) {
-      for (i=0; i<m_nOutput; i++) 
-        if (m_CurvesB[i])
-          delete m_CurvesB[i];
+      for (i=0; i<m_nOutput; i++)
+        delete m_CurvesB[i];
 
       delete [] m_CurvesB;
       m_CurvesB = NULL;
     }
   }
 
-  if (m_Matrix) {
-    delete m_Matrix;
-    m_Matrix = NULL;
-  }
+  delete m_Matrix;
+  m_Matrix = NULL;
 
-  if (m_CLUT) {
-    delete m_CLUT;
-    m_CLUT = NULL;
-  }
+  delete m_CLUT;
+  m_CLUT = NULL;
 }
 
 /**
@@ -4183,10 +4159,7 @@ CIccCLUT *CIccMBB::SetCLUT(CIccCLUT *clut)
     return NULL;
   }
 
-  if (m_CLUT) {
-    delete m_CLUT;
-  }
-
+  delete m_CLUT;
   m_CLUT = clut;
   return clut;
 }
@@ -5947,15 +5920,10 @@ CIccTagGamutBoundaryDesc &CIccTagGamutBoundaryDesc::operator=(const CIccTagGamut
  *****************************************************************************
  */	
 CIccTagGamutBoundaryDesc::~CIccTagGamutBoundaryDesc()
-{	
-	if (m_PCSValues)
-		delete [] m_PCSValues;
-	
-	if (m_DeviceValues)
-		delete [] m_DeviceValues;
-	
-	if (m_Triangles)
-		delete [] m_Triangles;		
+{
+  delete [] m_PCSValues;
+  delete [] m_DeviceValues;
+  delete [] m_Triangles;
 }
 
 /**
@@ -6016,12 +5984,9 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
       (icUInt64Number)m_NumberOfVertices*m_nDeviceChannels*sizeof(icFloat32Number) > size)
     return false;
 
-  if (m_PCSValues)
-    delete [] m_PCSValues;
-  if (m_DeviceValues)
-    delete [] m_DeviceValues;
-  if (m_Triangles)
-    delete [] m_Triangles;
+  delete [] m_PCSValues;
+  delete [] m_DeviceValues;
+  delete [] m_Triangles;
 
   size_t pcsSize = (size_t)m_nPCSChannels * (size_t)m_NumberOfVertices;
   if (pcsSize > (size_t)UINT32_MAX)

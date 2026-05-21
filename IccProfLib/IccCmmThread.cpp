@@ -232,7 +232,7 @@ CIccThreadedCmm::CIccThreadedCmm() : CIccCmm()
  */
 CIccThreadedCmm::~CIccThreadedCmm()
 {
-  if (m_pCmm && m_bDeleteCmm)
+  if (m_bDeleteCmm)
     delete m_pCmm;
 }
 

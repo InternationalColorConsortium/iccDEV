@@ -1335,12 +1335,14 @@ void CIccMpeJsonCalculator::clean()
   m_macroLocalMap.clear();
 
   for (auto &mp : m_mpeList) {
-    if (mp.m_ptr) { delete mp.m_ptr; mp.m_ptr = nullptr; }
+    delete mp.m_ptr;
+    mp.m_ptr = nullptr;
   }
   m_mpeList.clear();
 
   for (auto &kv : m_mpeMap) {
-    if (kv.second.m_ptr) { delete kv.second.m_ptr; kv.second.m_ptr = nullptr; }
+    delete kv.second.m_ptr;
+    kv.second.m_ptr = nullptr;
   }
   m_mpeMap.clear();
 

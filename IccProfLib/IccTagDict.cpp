@@ -1037,8 +1037,7 @@ void CIccTagDict::Cleanup()
   CIccNameValueDict::iterator i;
 
   for (i=m_Dict->begin(); i!=m_Dict->end(); i++) {
-    if (i->ptr)
-      delete i->ptr;
+    delete i->ptr;
   }
   m_Dict->clear();
 }
@@ -1393,7 +1392,6 @@ bool CIccTagDict::Remove(std::wstring sName)
   for (i=m_Dict->begin(); i!=m_Dict->end(); i++) {
     if (i->ptr->GetName() == sName) {
       delete i->ptr;
-
       m_Dict->erase(i);
       return true;
     }

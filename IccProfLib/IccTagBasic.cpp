@@ -421,8 +421,7 @@ CIccTagUnknown &CIccTagUnknown::operator=(const CIccTagUnknown &UnknownTag)
   m_nSize = UnknownTag.m_nSize;
   m_nType = UnknownTag.m_nType;
 
-  if (m_pData)
-    delete [] m_pData;
+  delete [] m_pData;
   m_pData = new icUInt8Number[m_nSize];
   memcpy(m_pData, UnknownTag.m_pData, sizeof(icUInt8Number)*m_nSize);
 
@@ -438,8 +437,7 @@ CIccTagUnknown &CIccTagUnknown::operator=(const CIccTagUnknown &UnknownTag)
  */
 CIccTagUnknown::~CIccTagUnknown()
 {
-  if (m_pData)
-    delete [] m_pData;
+  delete [] m_pData;
 }
 
 
@@ -459,10 +457,8 @@ CIccTagUnknown::~CIccTagUnknown()
  */
 bool CIccTagUnknown::Read(icUInt32Number size, CIccIO *pIO)
 {
-  if (m_pData) {
-    delete [] m_pData;
-    m_pData = NULL;
-  }
+  delete [] m_pData;
+  m_pData = NULL;
 
   if (size<sizeof(icTagTypeSignature) || !pIO) {
     return false;
@@ -3112,9 +3108,7 @@ CIccTagNamedColor2 &CIccTagNamedColor2::operator=(const CIccTagNamedColor2 &Name
 CIccTagNamedColor2::~CIccTagNamedColor2()
 {
   free(m_NamedColor);
-
-  if (m_NamedLab)
-    delete [] m_NamedLab;
+  delete [] m_NamedLab;
 }
 
 /**
@@ -3470,10 +3464,8 @@ icInt32Number CIccTagNamedColor2::FindRootColor(const icChar *szRootColor) const
  */
 void CIccTagNamedColor2::ResetPCSCache()
 {
-  if (m_NamedLab) {
-    delete [] m_NamedLab;
-    m_NamedLab = NULL;
-  }
+  delete [] m_NamedLab;
+  m_NamedLab = NULL;
 }
 
 /**
@@ -10539,8 +10531,7 @@ CIccResponseCurveStruct &CIccResponseCurveStruct::operator=(const CIccResponseCu
   if (m_maxColorantXYZ)
     memcpy(m_maxColorantXYZ, RespCurveStruct.m_maxColorantXYZ, m_nChannels*sizeof(icXYZNumber));
 
-  if (m_Response16ListArray)
-    delete [] m_Response16ListArray;
+  delete [] m_Response16ListArray;
   m_Response16ListArray = new CIccResponse16List[m_nChannels];
   for (icUInt32Number i=0; i<m_nChannels; i++)
     m_Response16ListArray[i] = RespCurveStruct.m_Response16ListArray[i];
@@ -10560,9 +10551,7 @@ CIccResponseCurveStruct &CIccResponseCurveStruct::operator=(const CIccResponseCu
 CIccResponseCurveStruct::~CIccResponseCurveStruct()
 {
   free(m_maxColorantXYZ);
-
-  if (m_Response16ListArray)
-    delete [] m_Response16ListArray;
+  delete [] m_Response16ListArray;
 }
 
 
@@ -11634,11 +11623,8 @@ CIccTagSpectralViewingConditions &CIccTagSpectralViewingConditions::operator=(co
  */
 CIccTagSpectralViewingConditions::~CIccTagSpectralViewingConditions()
 {
-  if (m_observer)
-    delete [] m_observer;
-
-  if (m_illuminant)
-    delete [] m_illuminant;
+  delete [] m_observer;
+  delete [] m_illuminant;
 }
 
 
@@ -11684,10 +11670,8 @@ bool CIccTagSpectralViewingConditions::Read(icUInt32Number size, CIccIO *pIO)
 
   icUInt32Number vals;
 
-  if (m_observer) {
-    delete [] m_observer;
-    m_observer = NULL;
-  }
+  delete [] m_observer;
+  m_observer = NULL;
 
   icUInt32Number observerSize = 0;
 
@@ -11720,10 +11704,8 @@ bool CIccTagSpectralViewingConditions::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
 
-  if (m_illuminant) {
-    delete [] m_illuminant;
-    m_illuminant = NULL;
-  }
+  delete [] m_illuminant;
+  m_illuminant = NULL;
 
   icUInt32Number illuminantSize = 0;
 
@@ -12092,10 +12074,8 @@ bool CIccTagSpectralViewingConditions::setIlluminant(icIlluminant illumId, const
   m_stdIlluminant = illumId;
   m_colorTemperature = illumCCT;
 
-  if (m_illuminant) {
-    delete[] m_illuminant;
-    m_illuminant = nullptr;
-  }
+  delete[] m_illuminant;
+  m_illuminant = nullptr;
 
   m_illuminantRange = illumRange;
 
@@ -12255,9 +12235,7 @@ bool CIccTagSpectralViewingConditions::setObserver(icStandardObserver observerId
 {
   m_stdObserver = observerId;
   m_observerRange = observerRange;
-  if (m_observer) {
-    delete [] m_observer;
-  }
+  delete [] m_observer;
 
   if (observerRange.steps && observer) {
     icUInt32Number size = observerRange.steps * 3;

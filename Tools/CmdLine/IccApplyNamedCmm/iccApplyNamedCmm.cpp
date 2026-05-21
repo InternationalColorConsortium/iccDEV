@@ -630,8 +630,7 @@ int main(int argc, const char* argv[])
     return EXIT_FAILURE;
   }
 
-  if (pMruCmm)
-    delete pMruCmm;
+  delete pMruCmm;
 
   return 0;
 }

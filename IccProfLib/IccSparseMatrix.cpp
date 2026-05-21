@@ -69,8 +69,7 @@ CIccSparseMatrix::CIccSparseMatrix(const CIccSparseMatrix &mtx)
 
 CIccSparseMatrix::~CIccSparseMatrix(void)
 {
-  if (m_Data)
-    delete m_Data;
+  delete m_Data;
 }
 
 CIccSparseMatrix &CIccSparseMatrix::operator=(const CIccSparseMatrix &mtx)
@@ -80,8 +79,7 @@ CIccSparseMatrix &CIccSparseMatrix::operator=(const CIccSparseMatrix &mtx)
   m_nType = mtx.m_nType;
 
   if (mtx.m_Data) {
-    if (m_Data)
-      delete m_Data;
+    delete m_Data;
 
     switch (m_nType) {
     case icSparseMatrixUInt8:
@@ -118,8 +116,7 @@ CIccSparseMatrix &CIccSparseMatrix::operator=(const CIccSparseMatrix &mtx)
 
 bool CIccSparseMatrix::Reset(void *pMatrix, size_t nSize, icSparseMatrixType nType, bool bInitFromData/*=true*/)
 {
-  if (m_Data)
-    delete m_Data;
+  delete m_Data;
 
   m_pMatrix = (unsigned char*)pMatrix;
   m_nRawSize = nSize;
@@ -166,8 +163,7 @@ bool CIccSparseMatrix::Init(icUInt16Number nRows, icUInt16Number nCols, bool bSe
 
   icUInt16Number *Dim = (icUInt16Number*)m_pMatrix;
 
-  if (m_Data)
-    delete m_Data;
+  delete m_Data;
 
   switch (m_nType) {
     case icSparseMatrixUInt8:

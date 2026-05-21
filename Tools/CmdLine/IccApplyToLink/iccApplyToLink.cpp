@@ -290,8 +290,7 @@ public:
   CDevLinkWriter() { }
   virtual ~CDevLinkWriter()
   {
-    if (m_pProfile)
-      delete m_pProfile;
+    delete m_pProfile;
   }
 
   virtual bool setFile(const char* szOutputFile)

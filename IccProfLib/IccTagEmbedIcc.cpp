@@ -131,8 +131,7 @@ CIccTagEmbeddedProfile &CIccTagEmbeddedProfile::operator=(const CIccTagEmbeddedP
   if (&ITEP == this)
     return *this;
 
-  if (m_pProfile)
-    delete m_pProfile;
+  delete m_pProfile;
 
   if (ITEP.m_pProfile)
     m_pProfile = ITEP.m_pProfile->NewCopy();
@@ -151,8 +150,7 @@ CIccTagEmbeddedProfile &CIccTagEmbeddedProfile::operator=(const CIccTagEmbeddedP
 */
 CIccTagEmbeddedProfile::~CIccTagEmbeddedProfile()
 {
-  if (m_pProfile)
-    delete m_pProfile;
+  delete m_pProfile;
 }
 
 
@@ -166,7 +164,7 @@ CIccTagEmbeddedProfile::~CIccTagEmbeddedProfile()
 void CIccTagEmbeddedProfile::SetProfile(CIccProfile* pProfile)
 {
   //delete old profile as appropriate
-  if (pProfile != m_pProfile && m_pProfile) {
+  if (pProfile != m_pProfile) {
     delete m_pProfile;
     m_pProfile = NULL;
   }
@@ -241,8 +239,7 @@ bool CIccTagEmbeddedProfile::Read(icUInt32Number size, CIccIO *pIO, CIccProfile 
     return false;
   }
 
-  if (m_pProfile)
-    delete m_pProfile;
+  delete m_pProfile;
 
   m_pProfile = pProfile ? pProfile->NewProfile() : new CIccProfile();
 

@@ -254,7 +254,7 @@ CIccProfile::~CIccProfile()
  */
 void CIccProfile::Cleanup()
 {
-  if (m_pAttachIO && !m_bSharedIO) {
+  if (!m_bSharedIO) {
     delete m_pAttachIO;
   }
   m_pAttachIO = nullptr;
@@ -262,9 +262,7 @@ void CIccProfile::Cleanup()
   TagPtrList::iterator i;
 
   for (i=m_TagVals.begin(); i!=m_TagVals.end(); i++) {
-    if (i->ptr != nullptr) {
-      delete i->ptr;
-    }
+    delete i->ptr;
   }
   m_Tags.clear();
   m_TagVals.clear();

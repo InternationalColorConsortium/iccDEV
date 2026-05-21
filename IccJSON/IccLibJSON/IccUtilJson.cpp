@@ -540,7 +540,8 @@ CIccJsonArrayType<T, Tsig>::~CIccJsonArrayType()
 template <class T, icTagTypeSignature Tsig>
 bool CIccJsonArrayType<T, Tsig>::SetSize(icUInt32Number nSize)
 {
-  if (m_pBuf) { delete[] m_pBuf; m_pBuf = NULL; }
+  delete[] m_pBuf;
+  m_pBuf = NULL;
   m_nSize = nSize;
   if (nSize) {
     m_pBuf = new T[nSize];

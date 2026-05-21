@@ -109,10 +109,9 @@ bool CIccTagXmlUnknown::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
   if (pNode && pNode->children && pNode->children->content) {
     m_nSize = icXmlGetHexDataSize((const icChar*)pNode->children->content);
 
-    if (m_pData) {
-      delete [] m_pData;
-      m_pData = NULL;
-    }
+    delete [] m_pData;
+    m_pData = NULL;
+
     if (m_nSize) {
       m_pData = new (std::nothrow) icUInt8Number[m_nSize];
       if (!m_pData)
@@ -5368,9 +5367,7 @@ bool CIccTagXmlEmbeddedProfile::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (!tagNode)
     return false;
 
-  if (m_pProfile) {
-    delete m_pProfile;
-  }
+  delete m_pProfile;
 
   CIccProfileXml *pProfile = new (std::nothrow) CIccProfileXml();
   if (!pProfile)

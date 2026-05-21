@@ -662,8 +662,7 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
 MyChild::~MyChild()
 {
     my_children.DeleteObject(this);
-	if (m_pIcc)
-		delete m_pIcc;
+    delete m_pIcc;
 }
 
 wxSizer *MyChild::CreateSizerWithText(const wxString &labelText, wxStaticText **ppText)

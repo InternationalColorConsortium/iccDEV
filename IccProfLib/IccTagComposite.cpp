@@ -244,9 +244,7 @@ CIccTagStruct::~CIccTagStruct()
 
   delete m_ElemEntries;
   delete m_ElemVals;
-
-  if (m_pStruct)
-    delete m_pStruct;
+  delete m_pStruct;
 }
 
 
@@ -262,8 +260,7 @@ CIccTagStruct::~CIccTagStruct()
  ******************************************************************************/
 bool CIccTagStruct::SetTagStructType(icStructSignature sig)
 {
-  if (m_pStruct)
-    delete m_pStruct;
+  delete m_pStruct;
 
   m_sigStructType = sig;
   m_pStruct = CIccStructCreator::CreateStruct(m_sigStructType, this);
@@ -576,8 +573,7 @@ void CIccTagStruct::Cleanup()
   m_ElemEntries->clear();
   m_ElemVals->clear();
 
-  if (m_pStruct)
-    delete m_pStruct;
+  delete m_pStruct;
   m_pStruct = NULL;
   m_sigStructType = icSigUndefinedStruct;
 }
@@ -1138,8 +1134,7 @@ CIccTagArray::~CIccTagArray()
 ******************************************************************************/
 bool CIccTagArray::SetTagArrayType(icArraySignature sig)
 {
-  if (m_pArray)
-    delete m_pArray;
+  delete m_pArray;
 
   m_sigArrayType = sig;
   m_pArray = CIccArrayCreator::CreateArray(m_sigArrayType, this);
@@ -1557,15 +1552,12 @@ void CIccTagArray::Cleanup()
     }
   }
 
-  if (m_TagVals)
-    delete[] m_TagVals;
+  delete[] m_TagVals;
   m_TagVals = nullptr;
 
   m_nSize = 0;
 
-  if (m_pArray)
-    delete m_pArray;
-
+  delete m_pArray;
   m_pArray = NULL;
   m_sigArrayType = icSigUndefinedArray;
 }

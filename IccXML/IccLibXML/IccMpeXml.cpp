@@ -1806,8 +1806,7 @@ bool CIccMpeXmlTintArray::ParseXml(xmlNode *pNode, std::string &parseStr)
       parseStr += "\" (";
       parseStr += nodeName;
       parseStr += ") Tint Tag\n";
-      if (pTag)
-        delete pTag;
+      delete pTag;
       return false;
     }
   }
@@ -3247,15 +3246,13 @@ void CIccMpeXmlCalculator::clean()
 
   MpePtrList::iterator ml;
   for (ml = m_mpeList.begin(); ml != m_mpeList.end(); ml++) {
-    if (ml->m_ptr)
-      delete ml->m_ptr;
+    delete ml->m_ptr;
   }
   m_mpeList.clear();
 
   MpePtrMap::iterator mm;
   for (mm = m_mpeMap.begin(); mm != m_mpeMap.end(); mm++) {
-    if (mm->second.m_ptr)
-      delete mm->second.m_ptr;
+    delete mm->second.m_ptr;
   }
   m_mpeMap.clear();
   m_nNextVar = 0;
@@ -3528,15 +3525,11 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     parseStr += "Missing White Data";
   }
 
-  if (m_pCLUT) {
-    delete m_pCLUT;
-    m_pCLUT = NULL;
-  }
+  delete m_pCLUT;
+  m_pCLUT = NULL;
 
-  if (m_pApplyCLUT) {
-    delete m_pApplyCLUT;
-    m_pApplyCLUT = NULL;
-  }
+  delete m_pApplyCLUT;
+  m_pApplyCLUT = NULL;
 
   CIccCLUT *pCLut = icCLutFromXml(pNode, m_nInputChannels, m_Range.steps, icConvertFloat, parseStr);
   if (pCLut) {
@@ -3641,15 +3634,11 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
     parseStr += "Missing WhiteData";
   }
 
-  if (m_pCLUT) {
-    delete m_pCLUT;
-    m_pCLUT = NULL;
-  }
+  delete m_pCLUT;
+  m_pCLUT = NULL;
 
-  if (m_pApplyCLUT) {
-    delete m_pApplyCLUT;
-    m_pApplyCLUT = NULL;
-  }
+  delete m_pApplyCLUT;
+  m_pApplyCLUT = NULL;
 
   CIccCLUT *pCLut = icCLutFromXml(pNode, m_nInputChannels, m_Range.steps, icConvertFloat, parseStr);
   if (pCLut) {

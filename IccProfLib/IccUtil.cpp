@@ -2725,7 +2725,7 @@ CIccPixelBuf::CIccPixelBuf(int nChan/* =icDefaultPixelBufSize */) : m_buf{}
 
 CIccPixelBuf::~CIccPixelBuf()
 {
-  if (m_pixel && m_pixel!=m_buf)
+  if (m_pixel!=m_buf)
     delete [] m_pixel;
 }
 

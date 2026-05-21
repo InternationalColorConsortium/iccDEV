@@ -139,8 +139,7 @@ CIccMatrixMath::CIccMatrixMath(const CIccMatrixMath &matrix)
 */
 CIccMatrixMath::~CIccMatrixMath()
 {
-  if (m_vals)
-    delete[] m_vals;
+  delete[] m_vals;
 }
 
 

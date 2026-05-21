@@ -2171,9 +2171,7 @@ int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson)
 
   if (bJson) {
     PrintJsonReport(szFilename, raw, pIcc, items);
-    if (pIcc) {
-      delete pIcc;
-    }
+    delete pIcc;
     return HasFail(items) ? 1 : 0;
   }
 
@@ -2207,9 +2205,7 @@ int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson)
                         : "REPORT - no PAWG failures; review WARN/GAP/NOT RUN items");
   printf("\n");
 
-  if (pIcc) {
-    delete pIcc;
-  }
+  delete pIcc;
 
   return HasFail(items) ? 1 : 0;
 }

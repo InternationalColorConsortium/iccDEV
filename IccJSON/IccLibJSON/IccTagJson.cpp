@@ -196,7 +196,8 @@ bool CIccTagJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
   if (jGetString(j, "unknownData", hex)) {
     m_nSize = icJsonGetHexDataSize(hex.c_str());
     if (m_nSize > kMaxUnknownTagBytes) return false;
-    if (m_pData) { delete[] m_pData; m_pData = NULL; }
+    delete[] m_pData;
+    m_pData = NULL;
     if (m_nSize) {
       m_pData = new(std::nothrow) icUInt8Number[m_nSize];
       if (!m_pData) { m_nSize = 0; return false; }
@@ -678,7 +679,7 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
         parseStr += "ObserverFuncs data size mismatch\n";
         return false;
       }
-      if (m_observer) { delete[] m_observer; }
+      delete[] m_observer;
       m_observer = new(std::nothrow) icFloatNumber[nExpected];
       if (!m_observer) { parseStr += "Allocation failed for observer\n"; return false; }
       for (icUInt32Number i = 0; i < nExpected; i++) {
@@ -728,7 +729,7 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
         parseStr += "IlluminantSPD data size mismatch\n";
         return false;
       }
-      if (m_illuminant) { delete[] m_illuminant; }
+      delete[] m_illuminant;
       m_illuminant = new(std::nothrow) icFloatNumber[steps];
       if (!m_illuminant) { parseStr += "Allocation failed for illuminant\n"; return false; }
       for (int i = 0; i < steps; i++) {
@@ -3022,7 +3023,7 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
     parseStr += "Must have at least 4 PCSValues vertices\n";
     return false;
   }
-  if (m_PCSValues) { delete[] m_PCSValues; }
+  delete[] m_PCSValues;
   icUInt64Number nPCSAlloc = (icUInt64Number)m_NumberOfVertices * m_nPCSChannels;
   if (nPCSAlloc > 0x7FFFFFFF) { parseStr += "PCSValues allocation overflow\n"; return false; }
   m_PCSValues = new(std::nothrow) icFloatNumber[(size_t)nPCSAlloc];
@@ -3064,7 +3065,7 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
       parseStr += "Number of Device vertices doesn't match PCS vertices\n";
       return false;
     }
-    if (m_DeviceValues) { delete[] m_DeviceValues; }
+    delete[] m_DeviceValues;
     icUInt64Number nDevAlloc = (icUInt64Number)m_NumberOfVertices * m_nDeviceChannels;
     if (nDevAlloc > 0x7FFFFFFF) { parseStr += "DeviceValues allocation overflow\n"; return false; }
     m_DeviceValues = new(std::nothrow) icFloatNumber[(size_t)nDevAlloc];
@@ -3091,7 +3092,7 @@ bool CIccTagJsonGamutBoundaryDesc::ParseJson(const IccJson &j, std::string &pars
     parseStr += "Too many Triangles entries\n";
     return false;
   }
-  if (m_Triangles) { delete[] m_Triangles; }
+  delete[] m_Triangles;
   m_Triangles = new(std::nothrow) icGamutBoundaryTriangle[m_NumberOfTriangles];
   if (!m_Triangles) { parseStr += "Allocation failed for Triangles\n"; return false; }
   for (icInt32Number i = 0; i < m_NumberOfTriangles; i++) {

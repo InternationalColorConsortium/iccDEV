@@ -549,7 +549,7 @@ bool CIccStructNamedColor::GetTint(icFloatNumber *dstColor,
 
   bool rv = pData->Interpolate(dstColor, pos, nSamples, zeroVals);
 
-  if (zeroVals && zeroVals!=vals)
+  if (zeroVals!=vals)
     delete [] zeroVals;
 
   return rv;

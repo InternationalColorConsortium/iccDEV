@@ -317,16 +317,15 @@ void CIccPCSUtil::Lab4ToLab2(icFloatNumber *Dst, const icFloatNumber *Src)
 */
 CIccCreateXformHintManager::~CIccCreateXformHintManager()
 {
-	if (m_pList) {
-		IIccCreateXformHintList::iterator i;
+  if (m_pList) {
+    IIccCreateXformHintList::iterator i;
 
-		for (i=m_pList->begin(); i!=m_pList->end(); i++) {
-			if (i->ptr)
-				delete i->ptr;
-		}
+    for (i=m_pList->begin(); i!=m_pList->end(); i++) {
+      delete i->ptr;
+    }
 
-		delete m_pList;
-	}
+    delete m_pList;
+  }
 }
 
 /**
@@ -479,16 +478,13 @@ CIccXform::CIccXform()
  */
 CIccXform::~CIccXform()
 {
-  if (m_pProfile && m_bOwnsProfile)
+  if (m_bOwnsProfile)
     delete m_pProfile;
 
-	if (m_pAdjustPCS) {
-		delete m_pAdjustPCS;
-	}
+  delete m_pAdjustPCS;
 
-  if (m_pCmmEnvVarLookup && m_bDeleteEnvLooup) {
+  if (m_bDeleteEnvLooup)
     delete m_pCmmEnvVarLookup;
-  }
 
 }
 
@@ -1881,8 +1877,7 @@ CIccApplyNDLutXform::CIccApplyNDLutXform(CIccXformNDLut* pXform, CIccApplyCLUT *
 */
 CIccApplyNDLutXform::~CIccApplyNDLutXform()
 {
-  if (m_pApply)
-    delete m_pApply;
+  delete m_pApply;
 }
 
 
@@ -1915,17 +1910,13 @@ CIccApplyPcsXform::~CIccApplyPcsXform()
   if (m_list) {
     CIccApplyPcsStepList::iterator i;
     for (i=m_list->begin(); i!=m_list->end(); i++) {
-      if (i->ptr)
-        delete i->ptr;
+      delete i->ptr;
     }
-
     delete m_list;
   }
 
-  if (m_temp1)
-    delete [] m_temp1;
-  if (m_temp2)
-    delete [] m_temp2;
+  delete [] m_temp1;
+  delete [] m_temp2;
 }
 
 /**
@@ -1993,10 +1984,8 @@ CIccPcsXform::~CIccPcsXform()
   if (m_list) {
     CIccPcsStepList::iterator step;
     for (step=m_list->begin(); step!=m_list->end(); step++) {
-      if (step->ptr) {
-        delete step->ptr;
-        step->ptr = NULL;
-      }
+      delete step->ptr;
+      step->ptr = NULL;
     }
     delete m_list;
   }
@@ -3676,10 +3665,8 @@ CIccPcsStepRouteMcs::CIccPcsStepRouteMcs(CIccTagArray *pSrcChannels, CIccTagArra
 */
 CIccPcsStepRouteMcs::~CIccPcsStepRouteMcs()
 {
-  if (m_Index)
-    delete [] m_Index;
-  if (m_Defaults)
-    delete [] m_Defaults;
+  delete [] m_Index;
+  delete [] m_Defaults;
 }
 
 
@@ -4193,8 +4180,7 @@ CIccPcsStepOffset::CIccPcsStepOffset(icUInt16Number nChannels)
 */
 CIccPcsStepOffset::~CIccPcsStepOffset()
 {
-  if (m_vals)
-    delete [] m_vals;
+  delete [] m_vals;
 }
 
 
@@ -4333,8 +4319,7 @@ CIccPcsStepScale::CIccPcsStepScale(icUInt16Number nChannels)
 */
 CIccPcsStepScale::~CIccPcsStepScale()
 {
-  if (m_vals)
-    delete [] m_vals;
+  delete [] m_vals;
 }
 
 /**
@@ -4691,8 +4676,7 @@ CIccPcsStepMpe::CIccPcsStepMpe(CIccTagMultiProcessElement *pMpe)
 */
 CIccPcsStepMpe::~CIccPcsStepMpe()
 {
-  if (m_pMpe)
-    delete m_pMpe;
+  delete m_pMpe;
 }
 
 
@@ -4859,8 +4843,7 @@ CIccPcsStepSrcMatrix::CIccPcsStepSrcMatrix(icUInt16Number nRows, icUInt16Number 
 */
 CIccPcsStepSrcMatrix::~CIccPcsStepSrcMatrix()
 {
-  if (m_vals)
-    delete[] m_vals;
+  delete[] m_vals;
 }
 
 
@@ -4936,8 +4919,7 @@ CIccPcsStepSparseMatrix::CIccPcsStepSparseMatrix(icUInt16Number nRows, icUInt16N
 */
 CIccPcsStepSparseMatrix::~CIccPcsStepSparseMatrix()
 {
-  if (m_vals)
-    delete [] m_vals;
+  delete [] m_vals;
 }
 
 
@@ -5007,8 +4989,7 @@ CIccPcsStepSrcSparseMatrix::CIccPcsStepSrcSparseMatrix(icUInt16Number nRows, icU
 */
 CIccPcsStepSrcSparseMatrix::~CIccPcsStepSrcSparseMatrix()
 {
-  if (m_vals)
-    delete [] m_vals;
+  delete [] m_vals;
 }
 
 
@@ -5075,7 +5056,7 @@ CIccXformMonochrome::CIccXformMonochrome()
 */
 CIccXformMonochrome::~CIccXformMonochrome()
 {
-	if (m_bFreeCurve && m_Curve) {
+	if (m_bFreeCurve) {
 		delete m_Curve;
 	}
 }
@@ -5347,12 +5328,9 @@ CIccXformMatrixTRC::CIccXformMatrixTRC() : m_e{}
 CIccXformMatrixTRC::~CIccXformMatrixTRC()
 {
   if (m_bFreeCurve) {
-    if (m_Curve[0])
-      delete m_Curve[0];
-    if (m_Curve[1])
-      delete m_Curve[1];
-    if (m_Curve[2])
-      delete m_Curve[2];
+    delete m_Curve[0];
+    delete m_Curve[1];
+    delete m_Curve[2];
   }
 }
 
@@ -7238,7 +7216,7 @@ CIccXformMpe::CIccXformMpe(CIccTag *pTag)
 */
 CIccXformMpe::~CIccXformMpe()
 {
-  if (m_pAppliedPCC && m_bDeleteAppliedPCC)
+  if (m_bDeleteAppliedPCC)
     delete m_pAppliedPCC;
 }
 
@@ -7569,7 +7547,7 @@ IIccProfileConnectionConditions *CIccXformMpe::GetConnectionConditions() const
 void CIccXformMpe::SetAppliedCC(IIccProfileConnectionConditions *pPCC)
 {
   if (!pPCC) {
-    if (m_pAppliedPCC && m_bDeleteAppliedPCC) {
+    if (m_bDeleteAppliedPCC) {
       delete m_pAppliedPCC;
     }
     m_pAppliedPCC = NULL;
@@ -7788,8 +7766,7 @@ CIccApplyXformMpe::CIccApplyXformMpe(CIccXformMpe *pXform) : CIccApplyXform(pXfo
 */
 CIccApplyXformMpe::~CIccApplyXformMpe()
 {
-  if (m_pApply)
-    delete m_pApply;
+  delete m_pApply;
 }
 
 
@@ -7832,15 +7809,13 @@ CIccApplyCmm::~CIccApplyCmm()
     CIccApplyXformList::iterator i;
 
     for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
-      if (i->ptr)
-        delete i->ptr;
+      delete i->ptr;
     }
 
     delete m_Xforms;
   }
 
-//   if (m_pPCS)
-//     delete m_pPCS;
+//  delete m_pPCS;
 
   free(m_Pixel);
   free(m_Pixel2);
@@ -8103,15 +8078,13 @@ CIccCmm::~CIccCmm()
     CIccXformList::iterator i;
 
     for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
-      if (i->ptr)
-        delete i->ptr;
+      delete i->ptr;
     }
 
     delete m_Xforms;
   }
 
-  if (m_pApply)
-    delete m_pApply;
+  delete m_pApply;
 }
 
 const icChar* CIccCmm::GetStatusText(icStatusCMM stat)
@@ -11220,7 +11193,7 @@ CIccMruCmm::CIccMruCmm()
 */
 CIccMruCmm::~CIccMruCmm()
 {
-   if (m_pCmm && m_bDeleteCmm)
+   if (m_bDeleteCmm)
      delete m_pCmm;
 }
 
@@ -11322,8 +11295,7 @@ CIccMruCache<T>::CIccMruCache()
 template<class T>
 CIccMruCache<T>::~CIccMruCache()
 {
-  if (m_cache)
-    delete[] m_cache;
+  delete[] m_cache;
 
   free(m_pixelData);
 }
@@ -11480,9 +11452,7 @@ CIccApplyMruCmm::CIccApplyMruCmm(CIccMruCmm *pCmm) : CIccApplyCmm(pCmm)
 */
 CIccApplyMruCmm::~CIccApplyMruCmm()
 {
-  if (m_pCache)
-    delete m_pCache;
-
+  delete m_pCache;
 }
 
 /**
