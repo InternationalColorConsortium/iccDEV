@@ -21,49 +21,67 @@ private predicate isIccSource(File f) {
 }
 
 bindingset[name]
-private predicate isProfileDenominatorName(string name) {
+private predicate isProfileFieldDenominatorName(string name) {
   name.regexpMatch(
-    "(?i).*(steps|count|num|size|channels|nInput|nOutput|denom|divisor|scale|range|" +
-    "m_n|m_AWhite|AWhite|m_Fl|m_Nbb|m_factor|m_c|m_z).*"
+    "(?i)^(m_n.*|.*Steps|.*Count|.*Size|.*Channels|.*nInput.*|.*nOutput.*|" +
+    ".*Denom.*|.*Divisor.*|.*Scale.*|.*Range.*|m_AWhite|AWhite|m_Fl|m_Nbb|" +
+    "m_factor|m_c|m_cc|m_z|m_x0)$"
+  )
+}
+
+bindingset[name]
+private predicate isProfileLocalDenominatorName(string name) {
+  name.regexpMatch(
+    "(?i)^(denom.*|.*Denom.*|divisor.*|.*Divisor.*|stepSize|.*Steps|" +
+    ".*Scale|.*Range|.*Channels|nInput.*|nOutput.*|n(Type|Vector|Device|Pcs|Spectral)Size)$"
   )
 }
 
 private predicate isProfileDerivedDenominator(Expr e) {
   exists(FieldAccess fa |
     fa = e.getAChild*() and
-    isProfileDenominatorName(fa.getTarget().getName())
+    isProfileFieldDenominatorName(fa.getTarget().getName())
   )
   or
   exists(VariableAccess va |
     va = e.getAChild*() and
-    isProfileDenominatorName(va.getTarget().getName())
+    isProfileLocalDenominatorName(va.getTarget().getName())
   )
 }
 
-private predicate isGuardCondition(Expr e) {
-  e.toString().regexpMatch("(?i).*(validCam|safe|checked).*")
+private predicate mentionsSameDenominator(Expr guard, Expr denom) {
+  exists(FieldAccess guardAccess, FieldAccess denomAccess |
+    guardAccess = guard.getAChild*() and
+    denomAccess = denom.getAChild*() and
+    guardAccess.getTarget() = denomAccess.getTarget()
+  )
   or
-  exists(VariableAccess va |
-    va = e.getAChild*() and
-    va.getTarget().getName().regexpMatch("(?i).*(validCam|safe|checked).*")
+  exists(VariableAccess guardAccess, VariableAccess denomAccess |
+    guardAccess = guard.getAChild*() and
+    denomAccess = denom.getAChild*() and
+    guardAccess.getTarget() = denomAccess.getTarget()
   )
 }
 
-private predicate hasNearbyZeroOrFiniteCheck(DivExpr div) {
+private predicate isZeroOrFiniteCheck(Expr guard) {
+  guard.toString().regexpMatch("(?i).*(isfinite|isnan|isinf).*")
+  or
+  guard.toString().regexpMatch(
+    "(?i).*((==|!=|<=|>=|<|>)\\s*(-?0(\\.0f?)?|1e-[0-9]+|1E-[0-9]+)([^0-9.]|$)).*"
+  )
+  or
+  guard.toString().regexpMatch(
+    "(?i).*(fabs|std::fabs|abs|std::abs).*((<|<=)\\s*(1e-[0-9]+|1E-[0-9]+|-?0(\\.0f?)?)([^0-9.]|$)).*"
+  )
+}
+
+private predicate hasNearbyZeroOrFiniteCheckForDenominator(DivExpr div) {
   exists(IfStmt check |
     check.getEnclosingFunction() = div.getEnclosingFunction() and
     check.getLocation().getStartLine() <= div.getLocation().getStartLine() and
-    (
-      isGuardCondition(check.getCondition()) or
-      (
-        check.getLocation().getStartLine() >= div.getLocation().getStartLine() - 8 and
-        (
-          check.getCondition().toString().regexpMatch("(?i).*((==|!=|<=|>=|<|>).*(0|0\\.0|0\\.0f)).*") or
-          check.getCondition().toString().regexpMatch("(?i).*(isfinite|isnan|isinf).*")
-        ) and
-        isProfileDerivedDenominator(check.getCondition())
-      )
-    )
+    check.getLocation().getStartLine() >= div.getLocation().getStartLine() - 12 and
+    mentionsSameDenominator(check.getCondition(), div.getRightOperand()) and
+    isZeroOrFiniteCheck(check.getCondition())
   )
 }
 
@@ -71,7 +89,7 @@ from DivExpr div
 where
   not div.getRightOperand() instanceof Literal and
   isProfileDerivedDenominator(div.getRightOperand()) and
-  not hasNearbyZeroOrFiniteCheck(div) and
+  not hasNearbyZeroOrFiniteCheckForDenominator(div) and
   isIccSource(div.getFile())
 select div,
   "Division by '" + div.getRightOperand().toString() +

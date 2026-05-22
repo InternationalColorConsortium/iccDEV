@@ -6489,8 +6489,17 @@ CIccMpeJabToXYZ::~CIccMpeJabToXYZ()
 
 void CIccMpeJabToXYZ::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (m_pCAM)
-    m_pCAM->JabToXYZ(srcPixel, dstPixel, 1);
+  if (!dstPixel || !srcPixel)
+    return;
+
+  if (!m_pCAM || m_nInputChannels != 3 || m_nOutputChannels != 3) {
+    if (m_nOutputChannels > 0 && m_nOutputChannels <= 3) {
+      memset(dstPixel, 0, m_nOutputChannels * sizeof(icFloatNumber));
+    }
+    return;
+  }
+
+  m_pCAM->JabToXYZ(srcPixel, dstPixel, 1);
 }
 
 CIccMpeXYZToJab::CIccMpeXYZToJab() : CIccMpeCAM()
@@ -6547,8 +6556,17 @@ CIccMpeXYZToJab::~CIccMpeXYZToJab()
 
 void CIccMpeXYZToJab::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, const icFloatNumber *srcPixel) const
 {
-  if (m_pCAM)
-    m_pCAM->XYZToJab(srcPixel, dstPixel, 1);
+  if (!dstPixel || !srcPixel)
+    return;
+
+  if (!m_pCAM || m_nInputChannels != 3 || m_nOutputChannels != 3) {
+    if (m_nOutputChannels > 0 && m_nOutputChannels <= 3) {
+      memset(dstPixel, 0, m_nOutputChannels * sizeof(icFloatNumber));
+    }
+    return;
+  }
+
+  m_pCAM->XYZToJab(srcPixel, dstPixel, 1);
 }
 
 

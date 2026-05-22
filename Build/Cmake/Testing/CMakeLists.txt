@@ -608,6 +608,17 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1097-applyprofiles-hbo
+  120
+  "iccdev;tools;applyprofiles;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1097-applyprofiles-hbo.sh"
+)
+set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
+  SKIP_RETURN_CODE 77
+)
+
+iccdev_add_script_test(
   iccdev.calculator-regressions
   300
   "iccdev;calculator;regression;asan"
