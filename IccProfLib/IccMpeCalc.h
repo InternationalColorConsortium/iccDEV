@@ -431,7 +431,7 @@ class ICCPROFLIB_API CIccSubCalcApply
 {
 public:
   CIccSubCalcApply(CIccApplyMpe *pApplyMpe) { m_pApply = pApplyMpe; }
-  ~CIccSubCalcApply() { if (m_pApply) delete m_pApply; }
+  ~CIccSubCalcApply() { delete m_pApply; }
 
   icUInt16Number NumInputChannels() { return m_pApply->GetElem()->NumInputChannels(); }
   icUInt16Number NumOutputChannels() { return m_pApply->GetElem()->NumOutputChannels(); }
