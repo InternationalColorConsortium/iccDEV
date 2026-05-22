@@ -25,8 +25,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  cache-policy:
+    name: "Validate workflow cache policy"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Assert no GitHub Actions cache primitives
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          .github/scripts/check-workflow-cache-policy.sh .github/workflows/ci-docker.yml
+
   build:
     name: "Docker (${{ matrix.variant }})"
+    needs: cache-policy
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/fix-nixos-image-runtime'
     runs-on: ubuntu-latest
     environment: ghcr-publish
@@ -109,8 +133,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           provenance: mode=max
           sbom: true
 
@@ -331,6 +353,7 @@ jobs:
       matrix:
         package: [iccdev, iccdev-nixos]
     steps:
+      # preflight: allow-token-exposure reason=ghcr-package-prune
       - name: Delete old package versions
         env:
           BASH_ENV: /dev/null

@@ -19,8 +19,8 @@
 ###############################################################
 name: "ci-pr-wasm"
 
-# Existing cache keys and command summaries intentionally exceed the default
-# yamllint line length. Keep the disable local to this workflow.
+# Existing command summaries intentionally exceed the default yamllint line
+# length. Keep the disable local to this workflow.
 # yamllint disable rule:line-length
 
 permissions:
@@ -35,6 +35,13 @@ on:
         required: false
         default: "208"
         type: string
+  workflow_dispatch:
+    inputs:
+      validate_cache_policy_only:
+        description: "Only validate that this workflow does not use Actions cache primitives"
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: pr-wasm-${{ github.event.pull_request.number || github.ref }}
@@ -46,8 +53,33 @@ env:
   GH_PROMPT_DISABLED: 1
 
 jobs:
+  cache-policy:
+    name: "Validate workflow cache policy"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Assert no GitHub Actions cache primitives
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          .github/scripts/check-workflow-cache-policy.sh .github/workflows/ci-pr-wasm.yml
+
   wasm-build-and-validate:
     name: "WASM Release Build + Parity"
+    needs: cache-policy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
@@ -78,16 +110,6 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-      - name: Restore Emscripten SDK cache
-        id: emsdk-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: |
-            emsdk
-            ~/.emscripten
-            ~/.emscripten_cache
-          key: iccdev-pr-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.EMSDK_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
-
       - name: Install Emscripten SDK
         env:
           BASH_ENV: /dev/null
@@ -109,17 +131,9 @@ jobs:
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
 
-      - name: Restore WASM third-party dependency cache
-        id: wasm-deps-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: third_party
-          key: iccdev-pr-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-${{ env.ZLIB_REF }}-${{ env.LIBTIFF_REF }}-${{ env.LIBXML2_REF }}-${{ env.NLOHMANN_JSON_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
-
       - name: Build third-party dependencies (zlib, libpng, libjpeg, libtiff, libxml2, nlohmann-json)
         env:
           BASH_ENV: /dev/null
-          WASM_DEPS_CACHE_HIT: ${{ steps.wasm-deps-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -143,20 +157,8 @@ jobs:
               exit 1
             fi
           }
-          deps_ready() {
-            [[ -f "$THIRD_PARTY/zlib/out/lib/libz.a" ]] &&
-            [[ -f "$THIRD_PARTY/libpng/out/lib/libpng16.a" ]] &&
-            [[ -f "$THIRD_PARTY/libjpeg/out/lib/libjpeg.a" ]] &&
-            [[ -f "$THIRD_PARTY/libtiff/out/lib/libtiff.a" ]] &&
-            [[ -f "$THIRD_PARTY/libxml2/out/lib/libxml2.a" ]] &&
-            [[ -d "$THIRD_PARTY/nlohmann-json/out/share/cmake/nlohmann_json" ]]
-          }
 
-          if deps_ready; then
-            echo "Using cached WASM third-party dependencies from $THIRD_PARTY"
-            echo "WASM dependency cache hit: ${WASM_DEPS_CACHE_HIT:-false}"
-          else
-          echo "WASM third-party cache is missing or incomplete; rebuilding dependencies."
+          echo "WASM third-party cache is disabled for PR validation; rebuilding dependencies."
           rm -rf "$THIRD_PARTY"
           mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
 
@@ -255,7 +257,6 @@ jobs:
 
           find "$THIRD_PARTY" -type d -name .git -prune -print0 | xargs -0r rm -rf
           touch "$THIRD_PARTY/.ci-pr-wasm-deps-complete"
-          fi
 
       - name: Configure and Build iccDEV-WASM (Release)
         env:
@@ -440,12 +441,3 @@ jobs:
             echo "::error::WASM parity gate failed"
             exit 1
           fi
-
-      - name: Upload staged WASM bundle
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: wasm-pr-bundle
-          path: wasm-stage/
-          retention-days: 7
-          if-no-files-found: warn

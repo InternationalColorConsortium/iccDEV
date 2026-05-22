@@ -21,6 +21,9 @@ name: "ci-json-roundtrip"
 permissions:
   contents: read
 
+env:
+  TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+
 concurrency:
   group: "json-roundtrip-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}"
   cancel-in-progress: true
@@ -135,6 +138,15 @@ jobs:
           fi
           echo "[OK] Generated ${profile_parse_count} test profiles"
 
+      - name: Refresh trusted sanitizer helpers for round-trip
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: JSON round-trip test
         env:
           BASH_ENV: /dev/null
@@ -143,7 +155,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [ -f "$SANITIZER" ]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"
@@ -347,9 +359,9 @@ jobs:
             echo ""
             echo "**Summary**: PASS=${PASS} DIFF=${FAIL} SKIP=${SKIP} XFAIL=${XFAIL} TOTAL=${TOTAL}"
             echo ""
-            echo "**Artifact manifest**: Build/json-roundtrip-results/json-roundtrip-results.tsv"
+            echo "**Local manifest**: Build/json-roundtrip-results/json-roundtrip-results.tsv"
             echo ""
-            echo "**Uploaded profile payloads**: Display/LCDDisplay.icc plus non-PASS profiles, including expected failures"
+            echo "**Profile payload capture**: retained only inside the job workspace for PR safety"
             echo ""
             echo "**Display/LCDDisplay.icc**: $(sanitize_line "${LCDDISPLAY_STATUS:-not exercised}")"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
@@ -368,14 +380,14 @@ jobs:
             exit 1
           fi
 
-      - name: Upload JSON round-trip artifacts
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - name: Refresh trusted sanitizer helpers for CTest
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
-          name: json-roundtrip-results
-          path: Build/json-roundtrip-results
-          if-no-files-found: error
-          retention-days: 14
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: CTest JSON focused regressions
         env:
@@ -386,7 +398,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
           if [ -f "$SANITIZER" ]; then
             # shellcheck disable=SC1090
             source "$SANITIZER"

@@ -29,49 +29,8 @@ permissions:
   contents: read
 
 jobs:
-  resolve-target:
-    name: Resolve Documentation Target
-    runs-on: ubuntu-24.04
-    outputs:
-      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
-      docs_scope: ${{ steps.resolve.outputs.docs_scope }}
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-    steps:
-      - name: Resolve checkout ref
-        id: resolve
-        env:
-          BASH_ENV: /dev/null
-          DEFAULT_REF: ${{ github.ref }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          checkout_ref="$DEFAULT_REF"
-          docs_scope="both"
-
-          case "$docs_scope" in
-            iccjson|full|both)
-              ;;
-            *)
-              echo "Invalid docs_scope: $docs_scope" >&2
-              exit 1
-              ;;
-          esac
-
-          {
-            printf 'checkout_ref=%s\n' "$checkout_ref"
-            printf 'docs_scope=%s\n' "$docs_scope"
-          } >> "$GITHUB_OUTPUT"  # elements-sanitized
-
   doxygen-iccjson:
-    if: >-
-      needs.resolve-target.outputs.docs_scope == 'iccjson' ||
-      needs.resolve-target.outputs.docs_scope == 'both'
     name: IccJSON Docs
-    needs: [resolve-target]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -82,7 +41,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ needs.resolve-target.outputs.checkout_ref }}
           persist-credentials: false
 
       - name: Install Doxygen and Graphviz
@@ -147,11 +105,7 @@ jobs:
           retention-days: 30
 
   doxygen-full:
-    if: >-
-      needs.resolve-target.outputs.docs_scope == 'full' ||
-      needs.resolve-target.outputs.docs_scope == 'both'
     name: Full Project Docs
-    needs: [resolve-target]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
@@ -162,7 +116,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ needs.resolve-target.outputs.checkout_ref }}
           persist-credentials: false
 
       - name: Install Doxygen and Graphviz

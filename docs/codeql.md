@@ -14,3 +14,10 @@ Run local analysis with:
 ```bash
 .github/scripts/run-codeql-local.sh
 ```
+
+Workflow and Python-script governance uses the preflight CodeQL gates instead
+of the C/C++ database runner:
+
+```bash
+PREFLIGHT_BASE_REF=origin/master .github/scripts/preflight-safety-checks.sh --require-tools
+```

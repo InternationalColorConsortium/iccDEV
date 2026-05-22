@@ -138,6 +138,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           PREFLIGHT_BASE_REF: origin/master
+          PREFLIGHT_OUTPUT: ${{ runner.temp }}/preflight-output.log
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -145,9 +146,12 @@ jobs:
           source trusted/.github/scripts/sanitize-sed.sh
           echo "Pre-flight scanner mode: $(sanitize_line "$PREFLIGHT_TRUST_MODE")"
           if [ "$PREFLIGHT_TRUST_MODE" = "trusted-base" ]; then
+            set +e
             PREFLIGHT_SCAN_ROOT="$PWD/target" \
-              "$PREFLIGHT_SCRIPT" --require-tools
-            exit 0
+              "$PREFLIGHT_SCRIPT" --require-tools 2>&1 | tee "$PREFLIGHT_OUTPUT"
+            preflight_status="${PIPESTATUS[0]}"
+            set -e
+            exit "$preflight_status"
           fi
 
           cd target
@@ -156,8 +160,8 @@ jobs:
               .github .githooks Dockerfile 'Dockerfile.*' .dockerignore | sort
           )
           mapfile -t workflow_files < <(
-            printf '%s\n' "${changed_files[@]}" |
-              awk '/^\.github\/workflows\/.*\.ya?ml$/'
+            find .github/workflows -maxdepth 1 -type f \
+              \( -name '*.yml' -o -name '*.yaml' \) | sort
           )
           mapfile -t script_files < <(
             printf '%s\n' "${changed_files[@]}" |
@@ -310,3 +314,129 @@ jobs:
           fi
 
           exit "$failures"
+
+      - name: Write pre-flight summary
+        if: always()
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          GH_SHA: ${{ github.sha }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_SERVER_URL: ${{ github.server_url }}
+          JOB_STATUS: ${{ job.status }}
+          PREFLIGHT_BASE_REF: origin/master
+          PREFLIGHT_OUTPUT: ${{ runner.temp }}/preflight-output.log
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          TRUSTED_SANITIZER="$GITHUB_WORKSPACE/trusted/.github/scripts/sanitize-sed.sh"
+          if [[ -f "$TRUSTED_SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}"
+              s="${s//</&lt;}"
+              s="${s//>/&gt;}"
+              s="${s//\"/&quot;}"
+              s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+            sanitize_print() { escape_html "$1"; }
+          fi
+
+          summary_status="${JOB_STATUS:-failure}"
+          summary_label="[FAIL]"
+          summary_message="Pre-flight safety checks require maintainer review."
+          if [[ "$summary_status" == "success" ]]; then
+            summary_label="[PASS]"
+            summary_message="Pre-flight safety checks completed successfully."
+          elif [[ "$summary_status" == "cancelled" ]]; then
+            summary_label="[CANCELLED]"
+            summary_message="Pre-flight safety checks were cancelled before completion."
+          fi
+
+          run_url="${GH_SERVER_URL}/${GH_REPOSITORY}/actions/runs/${GH_RUN_ID}"
+          short_sha="${GH_SHA:0:12}"
+          output_file="${PREFLIGHT_OUTPUT:-}"
+
+          extract_metric() {
+            local label="$1"
+            local value="unavailable"
+            if [[ -n "$output_file" && -f "$output_file" ]]; then
+              value="$(grep -E "^${label}: " "$output_file" | tail -n 1 | sed -E "s/^${label}: //" || true)"
+              if [[ -z "$value" ]]; then
+                value="unavailable"
+              fi
+            fi
+            sanitize_line "$value"
+          }
+
+          {
+            echo "## Pre-flight Safety Summary"
+            echo ""
+            echo "> **$(sanitize_line "$summary_label")** $(sanitize_line "$summary_message")"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            printf "| Workflow result | \`%s\` |\n" "$(sanitize_line "$summary_status")"
+            printf "| Scanner mode | \`%s\` |\n" "$(sanitize_line "${PREFLIGHT_TRUST_MODE:-unavailable}")"
+            printf "| Event | \`%s\` |\n" "$(sanitize_line "${GH_EVENT_NAME:-unknown}")"
+            printf "| Repository | \`%s\` |\n" "$(sanitize_line "${GH_REPOSITORY:-unknown}")"
+            printf "| Ref | \`%s\` |\n" "$(sanitize_line "${GH_REF_NAME:-unknown}")"
+            printf "| Base ref | \`%s\` |\n" "$(sanitize_line "${PREFLIGHT_BASE_REF:-unknown}")"
+            printf "| Commit | \`%s\` |\n" "$(sanitize_line "${short_sha:-unknown}")"
+            printf "| Run | [\`%s\`](%s) |\n" "$(sanitize_line "${GH_RUN_ID:-unknown}")" "$(sanitize_line "$run_url")"
+            echo ""
+            echo "### Workflow Security Canary Summary"
+            echo ""
+            echo "| Canary | Count |"
+            echo "|--------|-------|"
+            printf "| Cache publish canaries | \`%s\` |\n" "$(extract_metric "cache publish canaries")"
+            printf "| Artifact intake canaries | \`%s\` |\n" "$(extract_metric "artifact intake canaries")"
+            printf "| Artifact publish canaries | \`%s\` |\n" "$(extract_metric "artifact publish canaries")"
+            printf "| Untrusted PR artifact canaries | \`%s\` |\n" "$(extract_metric "untrusted PR artifact canaries")"
+            printf "| Auth/accounting canaries | \`%s\` |\n" "$(extract_metric "auth/accounting canaries")"
+            printf "| PR-controlled script execution canaries | \`%s\` |\n" \
+              "$(extract_metric "PR-controlled script execution canaries")"
+            printf "| Reviewed untrusted PR artifact exceptions | \`%s\` |\n" \
+              "$(extract_metric "reviewed untrusted PR artifact exceptions")"
+            printf "| Reviewed token exposure exceptions | \`%s\` |\n" \
+              "$(extract_metric "reviewed token exposure exceptions")"
+            printf "| Reviewed PR-controlled script exceptions | \`%s\` |\n" \
+              "$(extract_metric "reviewed PR-controlled script exceptions")"
+            printf "| Workflow canary warnings | \`%s\` |\n" "$(extract_metric "workflow canary warnings")"
+            printf "| CodeQL Actions raw results | \`%s\` |\n" "$(extract_metric "CodeQL Actions raw results")"
+            printf "| CodeQL Actions findings | \`%s\` |\n" "$(extract_metric "CodeQL Actions findings")"
+            printf "| Reviewed CodeQL Actions exceptions | \`%s\` |\n" \
+              "$(extract_metric "reviewed CodeQL Actions exceptions")"
+            printf "| CodeQL Python raw results | \`%s\` |\n" "$(extract_metric "CodeQL Python raw results")"
+            printf "| CodeQL Python findings | \`%s\` |\n" "$(extract_metric "CodeQL Python findings")"
+            printf "| Reviewed CodeQL Python exceptions | \`%s\` |\n" \
+              "$(extract_metric "reviewed CodeQL Python exceptions")"
+            echo ""
+            if [[ -n "$output_file" && -f "$output_file" ]] &&
+              grep -q '^\[OK\].*reviewed .* exception reason=' "$output_file"; then
+              echo "### Reviewed Exceptions"
+              echo ""
+              grep '^\[OK\].*reviewed .* exception reason=' "$output_file" |
+                sed -n '1,12p' |
+                while IFS= read -r exception_line; do
+                  printf -- "- \`%s\`\n" "$(sanitize_line "$exception_line")"
+                done
+              echo ""
+            fi
+            if [[ "$summary_status" == "success" ]]; then
+              echo "Maintainer action: review the pre-flight log only if additional assurance is required."
+            else
+              echo "Maintainer action: inspect the failed pre-flight step and full workflow logs before merging."
+            fi
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

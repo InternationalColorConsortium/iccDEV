@@ -13,7 +13,7 @@
 #                Pin softprops/action-gh-release@v2 and actions/download-artifact@v4
 #                Elevate permissions to contents: write for release creation
 #                Add WASM Release build (Emscripten) to release packaging
-#                Add WASM dependency caches for Emscripten SDK and third-party libs
+#                Remove WASM dependency caches for release hardening
 #                Use safe apt source handling for Linux release dependencies
 #                Governance: sanitize-sed.sh on all GITHUB_STEP_SUMMARY writes
 #
@@ -23,9 +23,8 @@
 
 name: ci-latest-release
 
-# Existing cache keys, release commands, and summary strings intentionally
-# exceed the default yamllint line length. Keep the disable local to this
-# workflow.
+# Existing release commands and summary strings intentionally exceed the default
+# yamllint line length. Keep the disable local to this workflow.
 # yamllint disable rule:line-length
 
 permissions:
@@ -33,14 +32,46 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      validate_cache_policy_only:
+        description: "Only validate that this workflow does not use Actions cache primitives"
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
 jobs:
+  cache-policy:
+    name: "Validate workflow cache policy"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Assert no GitHub Actions cache primitives
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          .github/scripts/check-workflow-cache-policy.sh .github/workflows/ci-latest-release.yml
+
   linux:
     name: "Linux ${{ matrix.compiler }}"
+    needs: cache-policy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -225,7 +256,7 @@ jobs:
         with:
           name: iccdev-linux-${{ matrix.compiler }}
           path: staging
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Summary Report
         if: always()
@@ -246,6 +277,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
   macos:
     name: "macOS Clang"
+    needs: cache-policy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -439,7 +472,7 @@ jobs:
         with:
           name: iccdev-macos-clang
           path: staging
-          if-no-files-found: warn
+          if-no-files-found: error
       - name: Summary Report
         if: always()
         shell: bash --noprofile --norc {0}
@@ -458,6 +491,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
   windows:
     name: "Windows MSVC"
+    needs: cache-policy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: windows-2022
     timeout-minutes: 45
     env:
@@ -681,7 +716,7 @@ jobs:
         with:
           name: iccdev-windows-msvc
           path: staging
-          if-no-files-found: warn
+          if-no-files-found: error
       - name: Host System Info
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
@@ -716,6 +751,8 @@ jobs:
 
   wasm:
     name: "WASM Release (Emscripten)"
+    needs: cache-policy
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -734,16 +771,6 @@ jobs:
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
           persist-credentials: false
-
-      - name: Restore Emscripten SDK cache
-        id: emsdk-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: |
-            emsdk
-            ~/.emscripten
-            ~/.emscripten_cache
-          key: iccdev-release-wasm-emsdk-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.EMSDK_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
 
       - name: Install Emscripten SDK
         env:
@@ -767,17 +794,9 @@ jobs:
           ./emsdk install "$EMSDK_VERSION"
           ./emsdk activate "$EMSDK_VERSION"
 
-      - name: Restore WASM third-party dependency cache
-        id: wasm-deps-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: third_party
-          key: iccdev-release-wasm-deps-${{ runner.os }}-${{ env.EMSDK_VERSION }}-${{ env.WASM_DEPS_CACHE_VERSION }}-${{ env.ZLIB_REF }}-${{ env.LIBTIFF_REF }}-${{ env.LIBXML2_REF }}-${{ env.NLOHMANN_JSON_REF }}-${{ hashFiles('.github/workflows/ci-latest-release.yml', '.github/workflows/ci-pr-wasm.yml') }}
-
       - name: Build third-party dependencies
         env:
           BASH_ENV: /dev/null
-          WASM_DEPS_CACHE_HIT: ${{ steps.wasm-deps-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -802,22 +821,9 @@ jobs:
               exit 1
             fi
           }
-          deps_ready() {
-            [[ -f "$THIRD_PARTY/zlib/out/lib/libz.a" ]] &&
-            [[ -f "$THIRD_PARTY/libpng/out/lib/libpng16.a" ]] &&
-            [[ -f "$THIRD_PARTY/libjpeg/out/lib/libjpeg.a" ]] &&
-            [[ -f "$THIRD_PARTY/libtiff/out/lib/libtiff.a" ]] &&
-            [[ -f "$THIRD_PARTY/libxml2/out/lib/libxml2.a" ]] &&
-            [[ -d "$THIRD_PARTY/nlohmann-json/out/share/cmake/nlohmann_json" ]]
-          }
-
-          if deps_ready; then
-            echo "Using cached WASM third-party dependencies from $THIRD_PARTY"
-            CACHE_ACTION="reused"
-          else
-            echo "WASM third-party cache is missing or incomplete; rebuilding dependencies."
-            rm -rf "$THIRD_PARTY"
-            mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
+          echo "WASM third-party cache is disabled for release; rebuilding dependencies."
+          rm -rf "$THIRD_PARTY"
+          mkdir -p "$THIRD_PARTY" && cd "$THIRD_PARTY"
 
             # zlib
             fetch_pinned_dep zlib https://github.com/madler/zlib.git "$ZLIB_REF"
@@ -914,9 +920,8 @@ jobs:
             emmake make install
             cd "$THIRD_PARTY"
 
-            find "$THIRD_PARTY" -type d -name .git -prune -print0 | xargs -0r rm -rf
-            touch "$THIRD_PARTY/.ci-latest-release-wasm-deps-complete"
-          fi
+          find "$THIRD_PARTY" -type d -name .git -prune -print0 | xargs -0r rm -rf
+          touch "$THIRD_PARTY/.ci-latest-release-wasm-deps-complete"
           cd "$GITHUB_WORKSPACE"
 
           # --- Sanitized step summary ---
@@ -938,7 +943,7 @@ jobs:
             echo "### Third-party dependencies (WASM)"
             echo "| Field | Value |"
             echo "|-------|-------|"
-            echo "| cache hit | $(sanitize_line "${WASM_DEPS_CACHE_HIT:-false}") |"
+            echo "| cache policy | disabled for release |"
             echo "| action | $(sanitize_line "$CACHE_ACTION") |"
             echo ""
             echo '```'
@@ -1276,7 +1281,7 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm]
-    if: github.ref == 'refs/heads/master'
+    if: ${{ github.ref == 'refs/heads/master' && (github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true) }}
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 15
@@ -1290,10 +1295,35 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download all artifacts
+      - name: Download Linux GCC artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          path: artifacts
+          name: iccdev-linux-gcc
+          path: artifacts/iccdev-linux-gcc
+
+      - name: Download Linux Clang artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-linux-clang
+          path: artifacts/iccdev-linux-clang
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-macos-clang
+          path: artifacts/iccdev-macos-clang
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-windows-msvc
+          path: artifacts/iccdev-windows-msvc
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-wasm-release
+          path: artifacts/iccdev-wasm-release
 
       - name: Restore release artifact metadata
         shell: bash --noprofile --norc {0}
@@ -1308,6 +1338,20 @@ jobs:
           bash .github/scripts/ci-safe-apt-update.sh
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             patchelf
+
+          expected=(
+            iccdev-linux-gcc
+            iccdev-linux-clang
+            iccdev-macos-clang
+            iccdev-windows-msvc
+            iccdev-wasm-release
+          )
+          for artifact in "${expected[@]}"; do
+            if [ ! -d "artifacts/$artifact" ]; then
+              echo "::error::Missing expected release artifact: $artifact"
+              exit 1
+            fi
+          done
 
           chmod +x .github/scripts/ci-restore-release-artifact-metadata.sh
           .github/scripts/ci-restore-release-artifact-metadata.sh artifacts
@@ -1405,6 +1449,7 @@ jobs:
         with:
           subject-checksums: release-assets/SHA256SUMS
 
+      # preflight: allow-token-exposure reason=github-release-publish
       - name: Create latest release
         shell: bash --noprofile --norc {0}
         env:

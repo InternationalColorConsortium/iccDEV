@@ -77,6 +77,14 @@ out or execute PR-controlled content. Use trusted workflow metadata only, pass
 IDs through `env:`, and mutate PR state with least-privilege `issues: write` or
 `pull-requests: write` permissions.
 
+For `pull_request` workflows that must build or test PR code, keep repo-local
+workflow helpers trusted: check out `.github/scripts` from
+`${{ github.event.pull_request.base.sha || github.sha }}` into a separate
+trusted path and source helpers from that path, not from the PR workspace. Any
+intentional PR-controlled `.github/scripts` or `.github/tests` execution must be
+read-only, test-only, and marked on the step with
+`# preflight: allow-pr-script-execution reason=<short-reason>`.
+
 ## SIGPIPE Avoidance
 
 Under `set -o pipefail`, avoid `echo "$value" | grep -q pattern`. Prefer:
@@ -109,6 +117,57 @@ For multiline content, sanitize one line at a time.
 - Remove `GITHUB_TOKEN` from the environment unless the step truly needs it.
 - PR workflows should use concurrency groups with `cancel-in-progress: true`.
 
+## Cache, Artifact, and Publish Boundaries
+
+Treat cache, artifact, and release boundaries as security boundaries. GitHub's
+secure-use guidance favors least-privilege tokens, SHA-pinned actions, explicit
+environment protection for secrets, and manually reviewed logs for secret
+exposure. The Wiz GitHub Actions guidance highlights the same practical risks:
+credential theft, poisoned pipeline execution, artifact handling, and cache or
+tooling state crossing into release or package publishing.
+
+Do not use `actions/cache` or Docker Buildx `type=gha` cache in jobs that publish
+packages, containers, attestations, or GitHub Releases. Release and publishing
+jobs must rebuild trusted inputs from pinned refs or verified checksums instead
+of restoring mutable cache state.
+
+Publishing jobs must download artifacts by explicit `name:` or constrained
+`pattern:` and validate the expected artifact set before packaging, attestation,
+or release upload. Release-producing `upload-artifact` steps must use
+`if-no-files-found: error`; optional artifacts belong in non-publishing jobs.
+
+Pull request workflows, and reusable workflows reachable from pull request
+workflows, must not upload artifacts produced from PR-controlled code. Keep
+package-shaped outputs, coverage HTML trees, CTest directories, binaries, and
+logs inside the job workspace. Prefer sanitized `GITHUB_STEP_SUMMARY` content
+for maintainer triage. A rare sanitized-text artifact exception must be
+reviewed by a maintainer and marked on the upload step with
+`# preflight: allow-untrusted-artifact reason=<short-reason>`.
+
+Publish or package-maintenance jobs should expose `GITHUB_TOKEN` only in the
+single step that needs it, never at workflow or job scope. Each reviewed
+exception must be marked directly before the step with
+`# preflight: allow-token-exposure reason=<short-reason>` so unexpected token
+exposure still appears in preflight output.
+
+Use preflight canaries for indicators of compromise and auth/accounting drift:
+cache use in publish jobs, broad artifact intake, missing release artifacts,
+untrusted PR artifact uploads, `secrets: inherit`, token exposure in
+write-permission jobs, dangerous triggers, direct expression interpolation, and
+checkout credential persistence. Treat token-exposure canaries in
+write-permission jobs as advisory until reviewed and explicitly marked;
+publishing cache, broad artifact intake, and untrusted PR artifact upload
+canaries are blocking.
+
+GitHub App installation tokens, including Actions `GITHUB_TOKEN`, are moving to
+a stateless `ghs_` format that can be about 520 characters and JWT-like with two
+dots. Do not validate tokens with fixed-length assumptions, narrow `ghs_`
+regular expressions, truncation, or storage/header limits below 520 characters.
+When maintaining GitHub Apps that create installation tokens, validate both the
+temporary `X-GitHub-Stateless-S2S-Token: enabled` and `disabled` request-header
+paths described in GitHub's changelog, then remove the override header after
+both token formats are accepted end-to-end.
+
 ## Automated Scanner
 
 `ci-pr-risk-security-analysis.yml` checks workflow governance, including action
@@ -123,21 +182,29 @@ calling it over copying scanner logic, and avoid adding a second direct PR
 trigger unless the caller gate is removed to prevent duplicate checks.
 
 `ci-preflight-safety.yml` runs the local pre-flight script on workflow and hook
-changes. It installs and runs actionlint, yamllint, shellcheck, and zizmor, then
-delegates repository-specific checks to `.github/scripts/preflight-safety-checks.sh`.
+changes. When any workflow changes, workflow scanners run against the full
+`.github/workflows/` set so changed reusable callers cannot hide risk in
+unchanged callees. It installs and runs actionlint, yamllint, shellcheck, zizmor,
+CodeQL Actions analysis, and CodeQL query resolution, then delegates repository-specific checks to
+`.github/scripts/preflight-safety-checks.sh`. Dockerfile changes are checked
+with hadolint and Trivy config scanning when those tools or Docker are available.
 Use that script locally before pushing maintainer-owned infrastructure changes.
 The local script intentionally runs only the deterministic subset of
 `ci-pr-risk-security-analysis.yml`: changed-workflow YAML parsing, actionlint,
 yamllint, zizmor, SHA pin checks, dangerous-trigger checks, run-block expression
 injection checks, checkout credential checks, shellcheck for changed scripts,
-CodeQL query resolution, and the workflow permission audit. Leave the full
-owner-visible report, broad repository scan, and any GitHub-context-specific
-classification to the Actions workflow.
+cache/artifact publish-boundary canaries, CodeQL Actions analysis for workflow
+changes, CodeQL Python analysis for changed Python scripts, CodeQL query
+resolution, and the workflow permission audit. Shell scripts have no CodeQL
+extractor; keep ShellCheck as the required standalone shell-script SAST while
+CodeQL Actions covers inline workflow `run:` blocks. Leave the full
+owner-visible report, broad repository scan, DAST/runtime review, and any
+GitHub-context-specific classification to the Actions workflow.
 
-Use tiered CodeQL coverage. CI-only, script-only, and documentation-only changes
-should use the pre-flight workflow's fast CodeQL query resolution. Full CodeQL
-database builds are reserved for C/C++/CMake/query/config changes, scheduled
-runs, the `codeql-ready` PR label, or explicit maintainer `workflow_dispatch`.
+Use tiered CodeQL coverage. Workflow and Python script changes must run the
+pre-flight CodeQL Actions/Python analysis. C/C++/CMake/query/config changes use
+the full CodeQL database workflow through scheduled runs, the `codeql-ready` PR
+label, or explicit maintainer `workflow_dispatch`.
 
 ## Full Run Log Audit
 

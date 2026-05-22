@@ -616,6 +616,8 @@ jobs:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: WASM Build & Parity (npm-shaped)
     needs: [setup, detect-src, validate-inputs]
+    # PR source is untrusted; the reusable WASM workflow must validate in-place
+    # and must not upload npm-shaped bundles as artifacts.
     uses: ./.github/workflows/ci-pr-wasm.yml
     with:
       expected-icc-count: '208'

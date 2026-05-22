@@ -44,6 +44,7 @@ jobs:
             .github/scripts/sync-labels.sh
           persist-credentials: false
 
+      # preflight: allow-token-exposure reason=label-taxonomy-sync
       - name: Synchronize labels
         shell: bash --noprofile --norc {0}
         env:

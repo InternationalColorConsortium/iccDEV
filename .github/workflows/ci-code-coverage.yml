@@ -893,9 +893,9 @@ jobs:
             done < coverage-report/code-stats/top-languages.md
             summary_line ""
           fi
-          summary_line "### Artifacts"
-          summary_line "The coverage-report artifact contains HTML, lcov, CTest data, code stats,"
-          summary_line "review data, and failure logs."
+          summary_line "### PR Artifact Policy"
+          summary_line "Coverage HTML, lcov, CTest data, code stats, review data, and failure logs"
+          summary_line "remain inside the job workspace for PR safety and are not uploaded as artifacts."
           summary_line ""
           summary_line "### llvm-cov Text Report"
           printf '<pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
@@ -907,12 +907,3 @@ jobs:
             summary_pre_line "No coverage data available"
           fi
           printf '</pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
-
-      - name: "Upload coverage report"
-        if: always()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
-        with:
-          name: coverage-report
-          path: coverage-report/
-          retention-days: 30
-          if-no-files-found: warn

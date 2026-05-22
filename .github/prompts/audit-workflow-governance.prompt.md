@@ -17,8 +17,9 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] `unset GITHUB_TOKEN || true` (bash) or `Remove-Item env:GITHUB_TOKEN` (PowerShell)
 
 ### 3. Sanitizer Loaded
-- [ ] `source .github/scripts/sanitize-sed.sh` (bash) with inline fallback
-- [ ] `. .github/scripts/sanitize.ps1` (PowerShell)
+- [ ] PR workflows source sanitizers from a trusted base checkout, not PR content
+- [ ] `source "$TRUSTED_SCRIPTS/sanitize-sed.sh"` (bash) with inline fallback
+- [ ] `. "$env:TRUSTED_SCRIPTS\sanitize.ps1"` (PowerShell)
 
 ### 4. Expression Injection
 - [ ] No `${{ matrix.* }}` directly in `run:` blocks -- must use `env:` passthrough
@@ -26,6 +27,9 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] No `${{ github.head_ref }}` in `run:` blocks
 - [ ] `pull_request_target` and `workflow_run` jobs do not checkout or execute
       PR-controlled code before mutating labels, comments, releases, or checks
+- [ ] `pull_request` jobs that execute PR code do not source `.github/scripts`
+      or `.github/tests` from the PR checkout unless the step is a reviewed
+      test-only exception with `preflight: allow-pr-script-execution`
 
 ### 5. Output Sanitization
 - [ ] All `GITHUB_STEP_SUMMARY` writes use `sanitize_line`/`Sanitize-Line`
@@ -63,7 +67,8 @@ gh workflow run ci-pr-risk-security-analysis.yml \
 
 The scanner checks: SHA pinning, dangerous triggers, credential hygiene,
 shell hardening, matrix injection, output sanitization, permissions,
-supply-chain score, trivy indicators, and workflow inventory.
+trusted-base helper boundaries, supply-chain score, trivy indicators, and
+workflow inventory.
 PowerShell-only workflows with `defaults.run.shell: pwsh ...` are exempt from
 the bash-specific BASH_ENV check.
 
@@ -140,12 +145,15 @@ rg -n '##\[error\]|##\[warning\]|::error|::warning|CMake Warning|File ".+" does 
 
 ## CodeQL Boundary
 
-CodeQL is required for related C/C++ or CMake changes, but it is not the YAML
-workflow linter. Pair CodeQL with YAML parsing, `actionlint`, shellcheck,
-`yamllint`, and the workflow permission audit.
+CodeQL Actions analysis is required for workflow changes. CodeQL Python
+analysis is required for changed Python scripts. Full CodeQL C/C++ remains
+required for related C/C++ or CMake changes. Pair CodeQL with YAML parsing,
+`actionlint`, ShellCheck, `yamllint`, and the workflow permission audit because
+no single scanner covers the full CI threat model.
 
 ## Reference Workflows
 
 - **Bash gold standard**: `.github/workflows/ci-pr-action.yml`
 - **PowerShell gold standard**: `.github/workflows/ci-pr-win.yml`
 - **Cross-platform release**: `.github/workflows/ci-latest-release.yml`
+- **Trust-boundary visual aid**: `../../docs/workflow-security-trust-boundaries.md`

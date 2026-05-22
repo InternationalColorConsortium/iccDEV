@@ -233,11 +233,3 @@ jobs:
         with:
           sarif_file: codeql-results/iccdev-jsonlib-security.sarif
           category: iccdev-jsonlib-security
-
-      - name: Upload report artifact
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: codeql-security-report
-          path: codeql-results/
-          retention-days: 30

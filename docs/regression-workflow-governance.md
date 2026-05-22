@@ -22,6 +22,7 @@ where it belongs.
 | Maintainer CI skill | `.github/skills/maintainer-ci-ctest/SKILL.md` | Repeatable maintainer workflow for CI, CTest, CPack, sanitizer, and release gates. |
 | Maintainer CI prompt | `.github/prompts/maintainer-ci-ctest.prompt.md` | Structured planning prompt for maintainer-owned infrastructure changes. |
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
+| Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
 | Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
 | Regression container publisher | `.github/workflows/ci-regression-container.yml` | Builds and publishes `Dockerfile.ci-regression` through `ghcr-publish`. |
@@ -68,17 +69,21 @@ Every edited workflow `run:` block must keep these properties:
 - Least-privilege permissions.
 - `pull_request_target` and `workflow_run` automation must not checkout or run
   PR-controlled code before mutating trusted state such as labels or checks.
+- `pull_request` workflows that build PR code must source `.github/scripts`
+  helpers and sanitizers from a trusted base checkout, not from PR-controlled
+  content, unless a test-only exception is explicitly marked for preflight.
 
 For reusable governance coverage, call
 `.github/workflows/ci-pr-risk-security-analysis.yml` instead of duplicating the
 scanner logic in a new CI workflow.
 
-Local review should include YAML parsing, `actionlint`, `yamllint`, direct
-`${{ }}` interpolation scans for `run:` blocks, and CodeQL query-pack resolution
-when CodeQL workflows or queries are touched.
+Local review should include YAML parsing, `actionlint`, `yamllint`, CodeQL
+Actions analysis, direct `${{ }}` interpolation scans for `run:` blocks, and
+CodeQL query-pack resolution when CodeQL workflows or queries are touched.
 
 See `.github/instructions/workflow-governance.instructions.md` for the full
-checklist.
+checklist and `docs/workflow-security-trust-boundaries.md` for the visual trust
+boundary model.
 
 ## Full Log Audit Requirements
 

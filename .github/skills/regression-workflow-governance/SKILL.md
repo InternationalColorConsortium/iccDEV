@@ -34,7 +34,8 @@ Use this skill when adding regression coverage or changing
    - Other workflows only when they own the affected platform or feature.
 4. Label the sub-test with the issue number and a short technical purpose.
 5. Keep `run:` blocks compliant with workflow governance: `set -euo pipefail`,
-   credential cleanup, no direct `${{ }}` in shell, and sanitized summary output.
+   credential cleanup, no direct `${{ }}` in shell, trusted-base helpers for PR
+   workflows, and sanitized summary output.
 6. Update `.github/ci/regression/README.md` or the relevant docs so future
    maintainers can find the gate.
 7. If a GitHub Actions run URL is involved, download the full run log archive
@@ -94,6 +95,7 @@ If CMake or C++ changed, also run:
 - ASAN/UBSAN findings are treated as failures except for documented benign
   suppressions.
 - Workflow changes follow `.github/instructions/workflow-governance.instructions.md`.
+- PR workflow helper trust boundaries follow `docs/workflow-security-trust-boundaries.md`.
 - Green workflow runs were checked for hidden log diagnostics, not only failed
   annotations.
 - Any duplicate install manifest, missing-file uninstall, vcpkg CRT, vcpkg root,
@@ -103,6 +105,7 @@ If CMake or C++ changed, also run:
 ## References
 
 - `../../../docs/regression-workflow-governance.md`
+- `../../../docs/workflow-security-trust-boundaries.md`
 - `../../instructions/workflow-governance.instructions.md`
 - `../../instructions/testing.instructions.md`
 - `../../prompts/add-regression-workflow.prompt.md`

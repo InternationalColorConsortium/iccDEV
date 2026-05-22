@@ -131,16 +131,8 @@ jobs:
       - name: "Checkout target repository"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
-          path: target
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: "Checkout PR head (if PR mode)"
-        if: inputs.analysis_target == 'Specific PR number' && inputs.pr_number != ''
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          ref: refs/pull/${{ inputs.pr_number }}/head
+          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '' && format('refs/pull/{0}/head', inputs.pr_number) || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
           path: target
           fetch-depth: 0
           persist-credentials: false
@@ -1076,6 +1068,95 @@ jobs:
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
+          # H-7: publish workflows must not consume mutable cache or broad artifact intake.
+          PUBLISH_BOUNDARY_GAPS=0
+          while IFS= read -r wf; do
+            wf_base=$(basename "$wf")
+            has_publish_boundary=false
+            if grep -qE '^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write' "$wf"; then
+              has_publish_boundary=true
+            fi
+            if grep -qE '^\s+environment:\s*(release|ghcr-publish|publish|deploy|prod)' "$wf"; then
+              has_publish_boundary=true
+            fi
+            if grep -qE 'docker/build-push-action@|gh[[:space:]]+release[[:space:]]+(create|upload|edit|delete)|actions/attest-' "$wf"; then
+              has_publish_boundary=true
+            fi
+            if [[ "$has_publish_boundary" != "true" ]]; then
+              continue
+            fi
+            if grep -qE 'uses:\s*actions/cache@' "$wf"; then
+              PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses actions/cache in a publish/write workflow boundary" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+            fi
+            if grep -qE 'cache-(from|to):\s*type=gha' "$wf"; then
+              PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses Docker Buildx GHA cache in a publish/write workflow boundary" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+            fi
+            if grep -q 'download-artifact' "$wf" && ! grep -qE '^\s+(name|pattern):\s*' "$wf"; then
+              PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` publish workflow downloads artifacts without an explicit name or pattern" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+            fi
+            if grep -qE 'if-no-files-found:\s*(warn|ignore)' "$wf"; then
+              PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` publish workflow allows missing release artifacts" >> "$RISK_REPORT_PATH"
+              echo "" >> "$RISK_REPORT_PATH"
+            fi
+          done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
+          if [[ $PUBLISH_BOUNDARY_GAPS -eq 0 ]]; then
+            echo "[OK] Publish workflows do not use Actions cache, Buildx GHA cache, or broad artifact intake" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          fi
+
+          # H-8: GitHub App installation tokens are moving to longer stateless ghs_ JWTs.
+          TOKEN_FORMAT_GAPS=0
+          while IFS= read -r finding; do
+            [[ -n "$finding" ]] || continue
+            TOKEN_FORMAT_GAPS=$((TOKEN_FORMAT_GAPS + 1))
+            echo "[HIGH] GitHub token format assumption: \`$(sanitize_line "$finding")\`" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          done < <(python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          patterns = [
+              re.compile(r"ghs_\\[A-Za-z0-9\\]\\{[0-9,]+\\}"),
+              re.compile(r"ghs_\\[A-Za-z0-9_\\]\\{[0-9,]+\\}"),
+              re.compile(r"ghs_\[A-Za-z0-9\][{][0-9,]+[}]"),
+              re.compile(r"gh[opsur]_\[A-Za-z0-9\][{][0-9,]+[}]"),
+              re.compile(r"ghs_[^\\s'\"]*\\{36\\}"),
+              re.compile(r"(GITHUB_TOKEN|GH_TOKEN|installation token|app token).{0,80}(length|characters|chars).{0,40}(40|64|255)", re.I),
+              re.compile(r"(length|characters|chars).{0,40}(40|64|255).{0,80}(GITHUB_TOKEN|GH_TOKEN|installation token|app token)", re.I),
+              re.compile(r"(GITHUB_TOKEN|GH_TOKEN).{0,80}(cut -c|head -c|substr|substring)", re.I),
+              re.compile(r"(cut -c|head -c|substr|substring).{0,80}(GITHUB_TOKEN|GH_TOKEN)", re.I),
+          ]
+
+          roots = [Path(".github/workflows"), Path(".github/scripts")]
+          for root in roots:
+              if not root.exists():
+                  continue
+              for path in sorted(p for p in root.rglob("*") if p.is_file()):
+                  if path.name == "ci-pr-risk-security-analysis.yml":
+                      continue
+                  try:
+                      lines = path.read_text(encoding="utf-8").splitlines()
+                  except UnicodeDecodeError:
+                      continue
+                  for number, line in enumerate(lines, start=1):
+                      if path.name == "preflight-safety-checks.sh" and "re.compile(" in line:
+                          continue
+                      if any(pattern.search(line) for pattern in patterns):
+                          print(f"{path}:{number}: {line.strip()}")
+          PY
+          )
+          if [[ $TOKEN_FORMAT_GAPS -eq 0 ]]; then
+            echo "[OK] No hardcoded GitHub token length or prefix assumptions found" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          fi
+
           # H-6: CODEOWNERS coverage check for workflow directory
           if [[ -f .github/CODEOWNERS ]]; then
             if grep -qE '\.github/(workflows|actions|\*\*)' .github/CODEOWNERS; then
@@ -1430,6 +1511,68 @@ jobs:
             TRIVY_INDICATORS=$((TRIVY_INDICATORS + ART_POISON))
           fi
 
+          # C-3a: Untrusted PR-context artifact upload.
+          PR_ARTIFACT_UPLOADS=0
+          while IFS= read -r finding; do
+            [[ -n "$finding" ]] || continue
+            PR_ARTIFACT_UPLOADS=$((PR_ARTIFACT_UPLOADS + 1))
+            echo "[HIGH] Untrusted PR artifact upload: \`$(sanitize_line "$finding")\`" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+          done < <(python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          self_name = "ci-pr-risk-security-analysis.yml"
+
+          def pr_triggered(raw):
+              return bool(re.search(r"(?m)^\s+pull_request(_target)?:\s*$", raw))
+
+          def callees(raw):
+              return set(re.findall(r"(?m)^\s+uses:\s*\./\.github/workflows/([^/\s]+\.ya?ml)\s*$", raw))
+
+          def allowlisted(raw):
+              lines = raw.splitlines()
+              for index, line in enumerate(lines):
+                  if "uses:" not in line or "actions/upload-artifact@" not in line:
+                      continue
+                  context = "\n".join(lines[max(0, index - 8):index])
+                  if re.search(r"preflight:\s*allow-untrusted-artifact\s+reason=\S+", context):
+                      return True
+              return False
+
+          workflows = {}
+          for path in sorted(Path(".github/workflows").glob("*.yml")) + sorted(Path(".github/workflows").glob("*.yaml")):
+              if path.name == self_name:
+                  continue
+              try:
+                  raw = path.read_text(encoding="utf-8")
+              except (OSError, UnicodeDecodeError):
+                  continue
+              workflows[path.name] = raw
+
+          pr_context = {
+              name for name, raw in workflows.items()
+              if pr_triggered(raw)
+          }
+          changed = True
+          while changed:
+              changed = False
+              for name in list(pr_context):
+                  for callee in callees(workflows.get(name, "")):
+                      if callee in workflows and callee not in pr_context:
+                          pr_context.add(callee)
+                          changed = True
+
+          for name in sorted(pr_context):
+              raw = workflows.get(name, "")
+              if "actions/upload-artifact@" in raw and not allowlisted(raw):
+                  print(name)
+          PY
+          )
+          if [[ $PR_ARTIFACT_UPLOADS -gt 0 ]]; then
+            TRIVY_INDICATORS=$((TRIVY_INDICATORS + PR_ARTIFACT_UPLOADS))
+          fi
+
           # C-3b: Artifact name injection (attacker-controllable artifact names)
           # Only flag github.head_ref and PR/issue title/body (attacker-controlled)
           # Exclude inputs.* (reusable workflow / workflow_dispatch -- collaborator-controlled)
@@ -1722,6 +1865,7 @@ jobs:
             echo "- [Nx Supply-Chain Attack (Feb 2025)](https://nx.dev/blog/security-incident-feb-2025)"
             echo "- [OpenSSF Scorecard](https://securityscorecards.dev/)"
             echo "- [GitHub Actions Security Hardening](https://docs.github.com/en/actions/reference/security/secure-use)"
+            echo "- [GitHub App installation token format changelog](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/)"
             echo "- [xsscx/governance/actions](https://github.com/xsscx/governance/tree/main/actions)"
             echo "- \`.github/instructions/workflow-governance\`"
             echo "- \`.github/scripts/sanitize-sed.sh\` (${SAFE_SANITIZER_VERSION})"
@@ -1770,9 +1914,15 @@ jobs:
             '^\[HIGH\] Missing BASH_ENV'
             '^\[HIGH\].*git force-push/tag-rewrite'
             '^\[HIGH\].*workflow_run \+ download-artifact'
+            '^\[HIGH\].*[Uu]ntrusted PR artifact upload'
             '^\[HIGH\].*privileged workflow_dispatch publish permissions'
             '^\[HIGH\].*write credentials with GHA cache'
             '^\[HIGH\].*release workflow uses broad cache restore keys'
+            '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
+            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
+            '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
+            '^\[HIGH\].*allows missing release artifacts'
+            '^\[HIGH\] GitHub token format assumption'
           )
 
           rca_for_finding() {
@@ -1815,6 +1965,10 @@ jobs:
                 cause="A privileged workflow can consume artifacts from a less-trusted workflow boundary."
                 remediation="Verify artifact provenance and never execute or trust artifacts from untrusted workflows."
                 ;;
+              *"Untrusted PR artifact upload"*|*"untrusted PR artifact upload"*)
+                cause="A pull_request workflow, or a reusable workflow reachable from pull_request, uploads artifacts produced from untrusted PR-controlled code."
+                remediation="Remove PR artifact uploads, or restrict to a reviewed sanitized-text exception with a documented preflight allow-untrusted-artifact reason."
+                ;;
               *"privileged workflow_dispatch publish permissions"*)
                 cause="Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
                 remediation="Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
@@ -1826,6 +1980,22 @@ jobs:
               *"release workflow uses broad cache restore keys"*)
                 cause="Release builds can restore cache entries from broader or lower-trust cache namespaces."
                 remediation="Use exact release-specific cache keys with pinned dependency versions and no broad restore prefixes."
+                ;;
+              *"actions/cache in a publish/write workflow boundary"*|*"Buildx GHA cache in a publish/write workflow boundary"*)
+                cause="A publish or write-capable workflow can consume mutable GitHub Actions cache state before producing packages, releases, images, or attestations."
+                remediation="Remove Actions cache and Buildx GHA cache from publish paths; rebuild release inputs from pinned refs and verified checksums."
+                ;;
+              *"downloads artifacts without an explicit name or pattern"*)
+                cause="A publish workflow can ingest unintended artifacts from the same run."
+                remediation="Download only explicit artifact names or constrained patterns and verify the expected artifact manifest before packaging."
+                ;;
+              *"allows missing release artifacts"*)
+                cause="A release-producing artifact upload can succeed despite missing expected files."
+                remediation="Use if-no-files-found: error for release artifacts and validate all expected artifacts before attestation or release upload."
+                ;;
+              *"GitHub token format assumption"*)
+                cause="A workflow or helper may assume GitHub App installation tokens are short opaque strings."
+                remediation="Accept stateless ghs_ JWT-format tokens around 520 characters, avoid truncation/fixed-length regexes, and validate enabled/disabled override-header paths."
                 ;;
               *)
                 cause="A blocking governance rule matched this workflow state."
@@ -1942,9 +2112,15 @@ jobs:
             '^\[HIGH\] Missing BASH_ENV'
             '^\[HIGH\].*git force-push/tag-rewrite'
             '^\[HIGH\].*workflow_run \+ download-artifact'
+            '^\[HIGH\].*[Uu]ntrusted PR artifact upload'
             '^\[HIGH\].*privileged workflow_dispatch publish permissions'
             '^\[HIGH\].*write credentials with GHA cache'
             '^\[HIGH\].*release workflow uses broad cache restore keys'
+            '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
+            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
+            '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
+            '^\[HIGH\].*allows missing release artifacts'
+            '^\[HIGH\] GitHub token format assumption'
           )
 
           audit_failed=false
@@ -2004,6 +2180,7 @@ jobs:
 
       - name: "Upload Linux Risk Report"
         if: always()
+        # preflight: allow-untrusted-artifact reason=sanitized-risk-report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: risk-analysis-report-linux
@@ -2044,16 +2221,8 @@ jobs:
       - name: "Checkout target repository"
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
-          path: target
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: "Checkout PR head (if PR mode)"
-        if: inputs.analysis_target == 'Specific PR number' && inputs.pr_number != ''
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          ref: refs/pull/${{ inputs.pr_number }}/head
+          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
+          ref: ${{ github.event.pull_request.head.sha || inputs.analysis_target == 'Specific PR number' && inputs.pr_number != '' && format('refs/pull/{0}/head', inputs.pr_number) || inputs.analysis_target == 'Specific git ref' && inputs.git_ref || github.ref }}
           path: target
           fetch-depth: 0
           persist-credentials: false
@@ -2790,7 +2959,87 @@ jobs:
             $report += "[OK] Privileged cache boundaries are isolated from PR/release namespace mixing"
           }
 
-          # H-6: CODEOWNERS coverage
+          # H-7: publish workflows must not consume mutable cache or broad artifact intake.
+          $publishBoundaryGaps = 0
+          foreach ($wf in $workflows) {
+            $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
+            $hasPublishBoundary = $false
+            if ($content -match '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write') {
+              $hasPublishBoundary = $true
+            }
+            if ($content -match '(?m)^\s+environment:\s*(release|ghcr-publish|publish|deploy|prod)') {
+              $hasPublishBoundary = $true
+            }
+            if ($content -match 'docker/build-push-action@|gh\s+release\s+(create|upload|edit|delete)|actions/attest-') {
+              $hasPublishBoundary = $true
+            }
+            if (-not $hasPublishBoundary) { continue }
+            if ($content -match 'uses:\s*actions/cache@') {
+              $publishBoundaryGaps++
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses actions/cache in a publish/write workflow boundary"
+            }
+            if ($content -match 'cache-(from|to):\s*type=gha') {
+              $publishBoundaryGaps++
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses Docker Buildx GHA cache in a publish/write workflow boundary"
+            }
+            if (($content -match 'download-artifact') -and ($content -notmatch '(?m)^\s+(name|pattern):\s*')) {
+              $publishBoundaryGaps++
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` publish workflow downloads artifacts without an explicit name or pattern"
+            }
+            if ($content -match 'if-no-files-found:\s*(warn|ignore)') {
+              $publishBoundaryGaps++
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` publish workflow allows missing release artifacts"
+            }
+          }
+          if ($publishBoundaryGaps -eq 0) {
+            $report += "[OK] Publish workflows do not use Actions cache, Buildx GHA cache, or broad artifact intake"
+          }
+
+          # H-8: GitHub App installation tokens are moving to longer stateless ghs_ JWTs.
+          $tokenCanaryScript = @'
+          import re
+          from pathlib import Path
+
+          patterns = [
+              re.compile(r"ghs_\\[A-Za-z0-9\\]\\{[0-9,]+\\}"),
+              re.compile(r"ghs_\\[A-Za-z0-9_\\]\\{[0-9,]+\\}"),
+              re.compile(r"ghs_\[A-Za-z0-9\][{][0-9,]+[}]"),
+              re.compile(r"gh[opsur]_\[A-Za-z0-9\][{][0-9,]+[}]"),
+              re.compile(r"ghs_[^\\s'\"]*\\{36\\}"),
+              re.compile(r"(GITHUB_TOKEN|GH_TOKEN|installation token|app token).{0,80}(length|characters|chars).{0,40}(40|64|255)", re.I),
+              re.compile(r"(length|characters|chars).{0,40}(40|64|255).{0,80}(GITHUB_TOKEN|GH_TOKEN|installation token|app token)", re.I),
+              re.compile(r"(GITHUB_TOKEN|GH_TOKEN).{0,80}(cut -c|head -c|substr|substring)", re.I),
+              re.compile(r"(cut -c|head -c|substr|substring).{0,80}(GITHUB_TOKEN|GH_TOKEN)", re.I),
+          ]
+
+          roots = [Path(".github/workflows"), Path(".github/scripts")]
+          for root in roots:
+              if not root.exists():
+                  continue
+              for path in sorted(p for p in root.rglob("*") if p.is_file()):
+                  if path.name == "ci-pr-risk-security-analysis.yml":
+                      continue
+                  try:
+                      lines = path.read_text(encoding="utf-8").splitlines()
+                  except UnicodeDecodeError:
+                      continue
+                  for number, line in enumerate(lines, start=1):
+                      if path.name == "preflight-safety-checks.sh" and "re.compile(" in line:
+                          continue
+                      if any(pattern.search(line) for pattern in patterns):
+                          print(f"{path}:{number}: {line.strip()}")
+          '@
+          $tokenFindings = @($tokenCanaryScript | python -)
+          if ($tokenFindings.Count -eq 0) {
+            $report += "[OK] No hardcoded GitHub token length or prefix assumptions found"
+          } else {
+            foreach ($finding in $tokenFindings) {
+              if ([string]::IsNullOrWhiteSpace($finding)) { continue }
+              $report += "[HIGH] GitHub token format assumption: ``$(Sanitize-Line $finding)``"
+            }
+          }
+
+          # H-9: CODEOWNERS coverage
           if (Test-Path ".github/CODEOWNERS") {
             $coContent = Get-Content ".github/CODEOWNERS" -Raw -ErrorAction SilentlyContinue
             if ($coContent -match '\.github/(workflows|actions|\*\*)') {
@@ -3090,6 +3339,62 @@ jobs:
             }
           }
 
+          # C-3a: Untrusted PR-context artifact upload.
+          $prArtifactScript = @'
+          import re
+          from pathlib import Path
+
+          self_name = "ci-pr-risk-security-analysis.yml"
+
+          def pr_triggered(raw):
+              return bool(re.search(r"(?m)^\s+pull_request(_target)?:\s*$", raw))
+
+          def callees(raw):
+              return set(re.findall(r"(?m)^\s+uses:\s*\./\.github/workflows/([^/\s]+\.ya?ml)\s*$", raw))
+
+          def allowlisted(raw):
+              lines = raw.splitlines()
+              for index, line in enumerate(lines):
+                  if "uses:" not in line or "actions/upload-artifact@" not in line:
+                      continue
+                  context = "\n".join(lines[max(0, index - 8):index])
+                  if re.search(r"preflight:\s*allow-untrusted-artifact\s+reason=\S+", context):
+                      return True
+              return False
+
+          workflows = {}
+          for path in sorted(Path(".github/workflows").glob("*.yml")) + sorted(Path(".github/workflows").glob("*.yaml")):
+              if path.name == self_name:
+                  continue
+              try:
+                  raw = path.read_text(encoding="utf-8")
+              except (OSError, UnicodeDecodeError):
+                  continue
+              workflows[path.name] = raw
+
+          pr_context = {
+              name for name, raw in workflows.items()
+              if pr_triggered(raw)
+          }
+          changed = True
+          while changed:
+              changed = False
+              for name in list(pr_context):
+                  for callee in callees(workflows.get(name, "")):
+                      if callee in workflows and callee not in pr_context:
+                          pr_context.add(callee)
+                          changed = True
+
+          for name in sorted(pr_context):
+              raw = workflows.get(name, "")
+              if "actions/upload-artifact@" in raw and not allowlisted(raw):
+                  print(name)
+          '@
+          foreach ($artifactWorkflow in @($prArtifactScript | python -)) {
+            if ([string]::IsNullOrWhiteSpace($artifactWorkflow)) { continue }
+            $findings += @{Workflow=$artifactWorkflow; Indicator='untrusted PR artifact upload'; Severity='HIGH'}
+          }
+
           # C-5: Dependabot configuration audit
           if (-not (Test-Path ".github/dependabot.yml") -and -not (Test-Path ".github/dependabot.yaml")) {
             $findings += @{Workflow='(repo)'; Indicator='No .github/dependabot.yml found'; Severity='MEDIUM'}
@@ -3320,6 +3625,7 @@ jobs:
           $report += "- [Nx Supply-Chain Attack (Feb 2025)](https://nx.dev/blog/security-incident-feb-2025)"
           $report += "- [OpenSSF Scorecard](https://securityscorecards.dev/)"
           $report += "- [GitHub Actions Security Hardening](https://docs.github.com/en/actions/reference/security/secure-use)"
+          $report += "- [GitHub App installation token format changelog](https://github.blog/changelog/2026-05-15-github-app-installation-tokens-per-request-override-header/)"
           $report += "- [xsscx/governance/actions](https://github.com/xsscx/governance/tree/main/actions)"
           $report += "- ``.github/instructions/workflow-governance``"
           $report += "- ``.github/scripts/sanitize.ps1`` (PowerShell sanitizer)"
@@ -3377,9 +3683,15 @@ jobs:
             '^\[HIGH\] Missing BASH_ENV',
             '^\[HIGH\].*git force-push/tag-rewrite',
             '^\[HIGH\].*workflow_run \+ download-artifact',
+            '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
             '^\[HIGH\].*write credentials with GHA cache',
-            '^\[HIGH\].*release workflow uses broad cache restore keys'
+            '^\[HIGH\].*release workflow uses broad cache restore keys',
+            '^\[HIGH\].*actions/cache in a publish/write workflow boundary',
+            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary',
+            '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
+            '^\[HIGH\].*allows missing release artifacts',
+            '^\[HIGH\] GitHub token format assumption'
           )
 
           function Get-RootCause {
@@ -3413,6 +3725,9 @@ jobs:
             } elseif ($Finding -like "*workflow_run + download-artifact*") {
               $cause = "A privileged workflow can consume artifacts from a less-trusted workflow boundary."
               $remediation = "Verify artifact provenance and never execute or trust artifacts from untrusted workflows."
+            } elseif (($Finding -like "*Untrusted PR artifact upload*") -or ($Finding -like "*untrusted PR artifact upload*")) {
+              $cause = "A pull_request workflow, or a reusable workflow reachable from pull_request, uploads artifacts produced from untrusted PR-controlled code."
+              $remediation = "Remove PR artifact uploads, or restrict to a reviewed sanitized-text exception with a documented preflight allow-untrusted-artifact reason."
             } elseif ($Finding -like "*privileged workflow_dispatch publish permissions*") {
               $cause = "Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
               $remediation = "Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
@@ -3422,6 +3737,18 @@ jobs:
             } elseif ($Finding -like "*release workflow uses broad cache restore keys*") {
               $cause = "Release builds can restore cache entries from broader or lower-trust cache namespaces."
               $remediation = "Use exact release-specific cache keys with pinned dependency versions and no broad restore prefixes."
+            } elseif (($Finding -like "*actions/cache in a publish/write workflow boundary*") -or ($Finding -like "*Buildx GHA cache in a publish/write workflow boundary*")) {
+              $cause = "A publish or write-capable workflow can consume mutable GitHub Actions cache state before producing packages, releases, images, or attestations."
+              $remediation = "Remove Actions cache and Buildx GHA cache from publish paths; rebuild release inputs from pinned refs and verified checksums."
+            } elseif ($Finding -like "*downloads artifacts without an explicit name or pattern*") {
+              $cause = "A publish workflow can ingest unintended artifacts from the same run."
+              $remediation = "Download only explicit artifact names or constrained patterns and verify the expected artifact manifest before packaging."
+            } elseif ($Finding -like "*allows missing release artifacts*") {
+              $cause = "A release-producing artifact upload can succeed despite missing expected files."
+              $remediation = "Use if-no-files-found: error for release artifacts and validate all expected artifacts before attestation or release upload."
+            } elseif ($Finding -like "*GitHub token format assumption*") {
+              $cause = "A workflow or helper may assume GitHub App installation tokens are short opaque strings."
+              $remediation = "Accept stateless ghs_ JWT-format tokens around 520 characters, avoid truncation/fixed-length regexes, and validate enabled/disabled override-header paths."
             }
             return [pscustomobject]@{ Cause = $cause; Remediation = $remediation }
           }
@@ -3531,9 +3858,15 @@ jobs:
             '^\[HIGH\] Missing BASH_ENV',
             '^\[HIGH\].*git force-push/tag-rewrite',
             '^\[HIGH\].*workflow_run \+ download-artifact',
+            '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
             '^\[HIGH\].*write credentials with GHA cache',
-            '^\[HIGH\].*release workflow uses broad cache restore keys'
+            '^\[HIGH\].*release workflow uses broad cache restore keys',
+            '^\[HIGH\].*actions/cache in a publish/write workflow boundary',
+            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary',
+            '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
+            '^\[HIGH\].*allows missing release artifacts',
+            '^\[HIGH\] GitHub token format assumption'
           )
 
           $findings = New-Object System.Collections.Generic.List[string]
@@ -3591,6 +3924,7 @@ jobs:
 
       - name: "Upload Windows Risk Report"
         if: always()
+        # preflight: allow-untrusted-artifact reason=sanitized-risk-report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: risk-analysis-report-windows

@@ -41,13 +41,21 @@ security automation.
 
 | Change | Required static checks |
 |--------|------------------------|
-| Workflow YAML or shell | Workflow governance prompt, YAML parse, `actionlint`, expression-in-run scan |
+| Workflow YAML | Workflow governance prompt, YAML parse, `actionlint`, CodeQL Actions analysis, expression-in-run scan |
+| Python script | Python syntax check and CodeQL Python analysis |
+| Shell script | ShellCheck; CodeQL Actions covers inline workflow `run:` blocks, not standalone shell scripts |
 | C/C++ or CMake security path | CodeQL local script or hosted `ci-codeql-security` |
 | Parser/profile/tool behavior | Code review hunting prompt plus sanitizer build where practical |
 | Release, WASM, vcpkg | Governance prompt plus package/runtime smoke logs |
 | Dockerfile or container policy | `hadolint`, Trivy config, image scan, and Docker runtime smoke |
 
 CodeQL does not replace YAML, shell, or permissions review.
+
+For workflow changes, also review
+`../../../docs/workflow-security-trust-boundaries.md`. PR workflows that build
+PR code must use trusted-base `.github/scripts` helpers for sanitizers,
+summaries, and reusable workflow logic; any PR-controlled helper execution must
+be test-only and explicitly visible in preflight output.
 
 ## Dynamic Checks
 
@@ -73,6 +81,7 @@ Report only merge-relevant evidence:
 - commands or workflow run IDs;
 - pass/fail conclusion and key sentinel counts;
 - known skips, suppressions, warnings, or deferred follow-ups;
+- reviewed cache/artifact/token/script exceptions and trust-boundary notes;
 - whether the PR is merge-ready.
 
 Prefer a short human-golfed report over raw logs.
@@ -80,6 +89,7 @@ Prefer a short human-golfed report over raw logs.
 ## References
 
 - `../../../docs/pre-pr-security-cycle.md`
+- `../../../docs/workflow-security-trust-boundaries.md`
 - `../../../docs/build.md`
 - `../../../docs/ctest.md`
 - `../../../docs/codeql.md`

@@ -24,7 +24,7 @@ on:
   # untrusted workflow completions.
   schedule:
     - cron: '0 */4 * * *'
-  pull_request:
+  pull_request_target:  # zizmor: ignore[dangerous-triggers] trusted labeler; never checks out PR head
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
@@ -52,11 +52,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
           sparse-checkout: |
             .github/labels.yml
             .github/scripts
           persist-credentials: false
 
+      # preflight: allow-token-exposure reason=pr-label-maintenance
+      # preflight: allow-pr-script-execution reason=trusted-base-label-script
       - name: Ensure repository labels exist
         shell: bash --noprofile --norc {0}
         env:
@@ -71,6 +74,7 @@ jobs:
 
           .github/scripts/sync-labels.sh
 
+      # preflight: allow-token-exposure reason=pr-status-query
       - name: Build PR list
         id: pr_list
         shell: bash --noprofile --norc {0}
@@ -127,6 +131,7 @@ jobs:
             fi
           fi
 
+      # preflight: allow-token-exposure reason=pr-status-label-maintenance
       - name: Evaluate and label PRs
         id: process
         if: steps.pr_list.outputs.prs != ''
@@ -301,6 +306,7 @@ jobs:
           # Pass results file path for summary step
           cp "$RESULTS_FILE" "${GITHUB_WORKSPACE}/pr_results.txt"
 
+      # preflight: allow-pr-script-execution reason=trusted-base-summary-sanitizer
       - name: Generate summary report
         if: always()
         shell: bash --noprofile --norc {0}

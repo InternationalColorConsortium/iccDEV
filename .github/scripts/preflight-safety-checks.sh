@@ -175,6 +175,513 @@ for job_name, job in jobs.items():
 PY
 }
 
+workflow_security_canaries() {
+  python3 - "${workflow_files[@]}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+import yaml
+
+
+WRITE_SCOPES = {
+    "actions",
+    "attestations",
+    "checks",
+    "contents",
+    "deployments",
+    "id-token",
+    "issues",
+    "packages",
+    "pages",
+    "pull-requests",
+    "security-events",
+    "statuses",
+}
+
+
+def as_bool(value):
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() == "true"
+
+
+def env_name(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return str(value.get("name", ""))
+    return ""
+
+
+def has_write_permission(value):
+    if isinstance(value, str):
+        return value == "write-all"
+    if not isinstance(value, dict):
+        return False
+    for key, permission in value.items():
+        if str(key) in WRITE_SCOPES and str(permission).lower() == "write":
+            return True
+    return False
+
+
+def step_uses(step):
+    return str(step.get("uses", ""))
+
+
+def step_run(step):
+    return str(step.get("run", ""))
+
+
+def with_block(step):
+    block = step.get("with", {})
+    return block if isinstance(block, dict) else {}
+
+
+def clean_text(value):
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(value))
+
+
+def workflow_triggers(workflow):
+    triggers = workflow.get("on")
+    if triggers is None:
+        triggers = workflow.get(True)
+    if isinstance(triggers, str):
+        return {triggers}
+    if isinstance(triggers, list):
+        return {str(trigger) for trigger in triggers}
+    if isinstance(triggers, dict):
+        return {str(trigger) for trigger in triggers}
+    return set()
+
+
+def reusable_callees(workflow):
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        return set()
+    callees = set()
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        uses = str(job.get("uses", ""))
+        match = re.match(r"\./\.github/workflows/([^/]+\.ya?ml)$", uses)
+        if match:
+            callees.add(match.group(1))
+    return callees
+
+
+def artifact_allowlist_reason(raw):
+    lines = raw.splitlines()
+    for index, line in enumerate(lines):
+        if "uses:" not in line or "actions/upload-artifact@" not in line:
+            continue
+        start = max(0, index - 8)
+        context = "\n".join(lines[start:index])
+        match = re.search(r"preflight:\s*allow-untrusted-artifact\s+reason=(\S+)", context)
+        if match:
+            return clean_text(match.group(1))
+    return ""
+
+
+def token_exposure_allowlist_reason(raw, step_name):
+    lines = raw.splitlines()
+    step_pattern = re.compile(rf"^\s*-\s+name:\s*[\"']?{re.escape(str(step_name))}[\"']?\s*$")
+    for index, line in enumerate(lines):
+        if not step_pattern.match(line):
+            continue
+        context = "\n".join(lines[max(0, index - 8):index])
+        match = re.search(r"preflight:\s*allow-token-exposure\s+reason=(\S+)", context)
+        if match:
+            return clean_text(match.group(1))
+    return ""
+
+
+def pr_script_allowlist_reason(raw, step_name):
+    lines = raw.splitlines()
+    step_pattern = re.compile(rf"^\s*-\s+name:\s*[\"']?{re.escape(str(step_name))}[\"']?\s*$")
+    for index, line in enumerate(lines):
+        if not step_pattern.match(line):
+            continue
+        context = "\n".join(lines[max(0, index - 8):index])
+        match = re.search(r"preflight:\s*allow-pr-script-execution\s+reason=(\S+)", context)
+        if match:
+            return clean_text(match.group(1))
+    return ""
+
+
+def reviewed_exception(label, category, reason):
+    print(f"[OK] {label}: reviewed {category} exception reason={reason}")
+
+
+def step_label(path, job_name, index, step):
+    step_name = clean_text(step.get("name", f"step {index}"))
+    return f"{path}: job {job_name}, step {index} ({step_name})"
+
+
+def publish_like_step(step):
+    uses = step_uses(step)
+    run = step_run(step)
+    block = with_block(step)
+    if uses.startswith("docker/build-push-action@") and as_bool(block.get("push", False)):
+        return True
+    if uses.startswith("actions/attest-build-provenance@"):
+        return True
+    if uses.startswith("actions/attest-sbom@"):
+        return True
+    if re.search(r"\bgh\s+release\s+(create|upload|edit|delete)\b", run):
+        return True
+    if re.search(r"\bgh\s+api\b.*\b/packages/\b", run, re.S):
+        return True
+    return False
+
+
+def job_context(workflow, job):
+    workflow_permissions = workflow.get("permissions", {})
+    job_permissions = job.get("permissions", workflow_permissions)
+    environment = env_name(job.get("environment", ""))
+    steps = job.get("steps", [])
+    if not isinstance(steps, list):
+        steps = []
+
+    write_permissions = has_write_permission(job_permissions)
+    protected_environment = bool(re.search(
+        r"(release|publish|deploy|prod|ghcr)",
+        environment,
+        re.I,
+    ))
+    publishes = any(isinstance(step, dict) and publish_like_step(step) for step in steps)
+    return write_permissions or protected_environment or publishes
+
+
+failures = 0
+warnings = 0
+cache_publish = 0
+artifact_intake = 0
+artifact_publish = 0
+auth_canaries = 0
+untrusted_artifacts = 0
+reviewed_artifact_exceptions = 0
+reviewed_token_exceptions = 0
+pr_script_canaries = 0
+reviewed_pr_script_exceptions = 0
+
+all_workflows = {}
+for workflow_path in sorted(Path(".github/workflows").glob("*.yml")) + sorted(Path(".github/workflows").glob("*.yaml")):
+    try:
+        workflow_raw = workflow_path.read_text(encoding="utf-8")
+        workflow_data = yaml.safe_load(workflow_raw) or {}
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        continue
+    if isinstance(workflow_data, dict):
+        all_workflows[workflow_path.name] = workflow_data
+
+pr_context_workflows = {
+    name for name, workflow in all_workflows.items()
+    if workflow_triggers(workflow) & {"pull_request", "pull_request_target"}
+}
+changed = True
+while changed:
+    changed = False
+    for name in list(pr_context_workflows):
+        for callee in reusable_callees(all_workflows.get(name, {})):
+            if callee not in pr_context_workflows:
+                pr_context_workflows.add(callee)
+                changed = True
+
+for path in sys.argv[1:]:
+    with open(path, "r", encoding="utf-8") as handle:
+        raw = handle.read()
+    workflow = yaml.safe_load(raw) or {}
+    if not isinstance(workflow, dict):
+        continue
+    jobs = workflow.get("jobs", {})
+    if not isinstance(jobs, dict):
+        continue
+
+    if not workflow.get("permissions"):
+        print(f"[WARN] {path}: workflow root permissions are not explicit")
+        warnings += 1
+
+    for job_name, job in jobs.items():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get("steps", [])
+        if not isinstance(steps, list):
+            continue
+        publish_context = job_context(workflow, job)
+
+        if job.get("secrets") == "inherit":
+            print(f"[WARN] {path}: job {job_name} uses secrets: inherit")
+            warnings += 1
+            auth_canaries += 1
+
+        for index, step in enumerate(steps, start=1):
+            if not isinstance(step, dict):
+                continue
+            uses = step_uses(step)
+            run = step_run(step)
+            block = with_block(step)
+            label = step_label(path, job_name, index, step)
+            pr_context = bool(workflow_triggers(workflow) & {"pull_request", "pull_request_target"})
+
+            if uses.startswith("actions/cache@"):
+                if publish_context:
+                    print(f"[FAIL] {label}: actions/cache in release/publish/write context", file=sys.stderr)
+                    failures += 1
+                    cache_publish += 1
+                else:
+                    print(f"[WARN] {label}: actions/cache use requires cache-poisoning review")
+                    warnings += 1
+
+            if uses.startswith("docker/build-push-action@") and publish_context:
+                for key in ("cache-from", "cache-to"):
+                    if "type=gha" in str(block.get(key, "")):
+                        print(f"[FAIL] {label}: Docker Buildx {key}=type=gha in publish context",
+                              file=sys.stderr)
+                        failures += 1
+                        cache_publish += 1
+
+            if uses.startswith("actions/download-artifact@") and publish_context:
+                if "name" not in block and "pattern" not in block:
+                    print(f"[FAIL] {label}: publish job downloads artifacts without an explicit name/pattern",
+                          file=sys.stderr)
+                    failures += 1
+                    artifact_intake += 1
+
+            if uses.startswith("actions/upload-artifact@"):
+                if Path(path).name in pr_context_workflows:
+                    artifact_reason = artifact_allowlist_reason(raw)
+                    if artifact_reason:
+                        reviewed_exception(label, "untrusted PR artifact", artifact_reason)
+                        reviewed_artifact_exceptions += 1
+                    else:
+                        print(f"[FAIL] {label}: untrusted PR-context workflow uploads artifacts",
+                              file=sys.stderr)
+                        failures += 1
+                        untrusted_artifacts += 1
+                if_no_files = str(block.get("if-no-files-found", "")).lower()
+                artifact_name = str(block.get("name", ""))
+                release_artifact = path.endswith("ci-latest-release.yml") and artifact_name.startswith("iccdev-")
+                if (publish_context or release_artifact) and if_no_files in {"warn", "ignore"}:
+                    print(f"[FAIL] {label}: release/publish artifact upload allows missing files",
+                          file=sys.stderr)
+                    failures += 1
+                    artifact_publish += 1
+
+            env = step.get("env", {})
+            if publish_context and isinstance(env, dict):
+                env_text = "\n".join(f"{key}: {value}" for key, value in env.items())
+                if "secrets.GITHUB_TOKEN" in env_text or "github.token" in env_text:
+                    token_reason = token_exposure_allowlist_reason(raw, step.get("name", f"step {index}"))
+                    if token_reason:
+                        reviewed_exception(label, "token exposure", token_reason)
+                        reviewed_token_exceptions += 1
+                        continue
+                    print(f"[WARN] {label}: token is exposed to publish/write step environment")
+                    warnings += 1
+                    auth_canaries += 1
+
+            if pr_context and run:
+                pr_script_pattern = re.compile(
+                    r"(^|[\s\"'])("
+                    r"(source|\.)\s+[\"']?(\$GITHUB_WORKSPACE/)?\.github/(scripts|tests)/"
+                    r"|"
+                    r"(bash|pwsh|powershell)\s+[\"']?(\$GITHUB_WORKSPACE/)?\.github/(scripts|tests)/"
+                    r"|"
+                    r"(\$GITHUB_WORKSPACE/)?\.github/(scripts|tests)/[^\s\"'|&;]+\.(sh|ps1)"
+                    r")",
+                    re.I,
+                )
+                if pr_script_pattern.search(run):
+                    script_reason = pr_script_allowlist_reason(raw, step.get("name", f"step {index}"))
+                    if script_reason:
+                        reviewed_exception(label, "PR-controlled script execution", script_reason)
+                        reviewed_pr_script_exceptions += 1
+                    else:
+                        print(f"[FAIL] {label}: pull_request workflow executes .github scripts/tests from PR checkout",
+                              file=sys.stderr)
+                        failures += 1
+                        pr_script_canaries += 1
+
+print(f"cache publish canaries: {cache_publish}")
+print(f"artifact intake canaries: {artifact_intake}")
+print(f"artifact publish canaries: {artifact_publish}")
+print(f"untrusted PR artifact canaries: {untrusted_artifacts}")
+print(f"auth/accounting canaries: {auth_canaries}")
+print(f"PR-controlled script execution canaries: {pr_script_canaries}")
+print(f"reviewed untrusted PR artifact exceptions: {reviewed_artifact_exceptions}")
+print(f"reviewed token exposure exceptions: {reviewed_token_exceptions}")
+print(f"reviewed PR-controlled script exceptions: {reviewed_pr_script_exceptions}")
+print(f"workflow canary warnings: {warnings}")
+
+raise SystemExit(1 if failures else 0)
+PY
+}
+
+token_format_canaries() {
+  local scan_files=()
+  local token_failures=0
+
+  scan_files+=("${workflow_files[@]}")
+  scan_files+=("${script_files[@]}")
+  scan_files+=("${python_files[@]}")
+
+  if [ "${#scan_files[@]}" -eq 0 ]; then
+    echo "GitHub token format canaries: 0"
+    return 0
+  fi
+
+  while IFS= read -r match; do
+    [ -n "$match" ] || continue
+    echo "[FAIL] GitHub token format canary: $match" >&2
+    token_failures=$((token_failures + 1))
+  done < <(python3 - "${scan_files[@]}" <<'PY'
+import re
+import sys
+
+
+patterns = [
+    re.compile(r"ghs_\\[A-Za-z0-9\\]\\{[0-9,]+\\}"),
+    re.compile(r"ghs_\\[A-Za-z0-9_\\]\\{[0-9,]+\\}"),
+    re.compile(r"ghs_\[A-Za-z0-9\][{][0-9,]+[}]"),
+    re.compile(r"gh[opsur]_\[A-Za-z0-9\][{][0-9,]+[}]"),
+    re.compile(r"ghs_[^\\s'\"]*\\{36\\}"),
+    re.compile(r"(GITHUB_TOKEN|GH_TOKEN|installation token|app token).{0,80}(length|characters|chars).{0,40}(40|64|255)"),
+    re.compile(r"(length|characters|chars).{0,40}(40|64|255).{0,80}(GITHUB_TOKEN|GH_TOKEN|installation token|app token)"),
+    re.compile(r"(GITHUB_TOKEN|GH_TOKEN).{0,80}(cut -c|head -c|substr|substring)"),
+    re.compile(r"(cut -c|head -c|substr|substring).{0,80}(GITHUB_TOKEN|GH_TOKEN)"),
+]
+
+for path in sys.argv[1:]:
+    try:
+        lines = open(path, "r", encoding="utf-8").read().splitlines()
+    except UnicodeDecodeError:
+        continue
+    for number, line in enumerate(lines, start=1):
+        if "GitHub token format canary" in line:
+            continue
+        if path.endswith("preflight-safety-checks.sh") and "re.compile(" in line:
+            continue
+        if path.endswith("ci-pr-risk-security-analysis.yml") and "re.compile(" in line:
+            continue
+        if any(pattern.search(line) for pattern in patterns):
+            print(f"{path}:{number}: {line.strip()}")
+PY
+  )
+
+  echo "GitHub token format canaries: $token_failures"
+  [ "$token_failures" -eq 0 ]
+}
+
+parse_codeql_sarif() {
+  local sarif="$1"
+  local label="$2"
+  local marker="$3"
+  shift 3
+
+  python3 - "$sarif" "$label" "$marker" "$@" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+
+sarif_path = Path(sys.argv[1])
+label = sys.argv[2]
+marker = re.escape(sys.argv[3])
+included = {arg.replace("\\", "/") for arg in sys.argv[4:]}
+
+with sarif_path.open("r", encoding="utf-8") as handle:
+    sarif = json.load(handle)
+
+raw_results = 0
+unreviewed = 0
+reviewed = 0
+
+for run in sarif.get("runs", []):
+    for result in run.get("results", []):
+        locations = result.get("locations") or []
+        if not locations:
+            continue
+        physical = locations[0].get("physicalLocation") or {}
+        artifact = physical.get("artifactLocation") or {}
+        path = str(artifact.get("uri", "")).replace("\\", "/")
+        if included and path not in included:
+            continue
+
+        raw_results += 1
+        region = physical.get("region") or {}
+        line = int(region.get("startLine") or 1)
+        rule = str(result.get("ruleId", "unknown"))
+        message = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(
+            result.get("message", {}).get("text", "")
+        )).replace("\n", " ")
+
+        reason = ""
+        try:
+            lines = Path(path).read_text(encoding="utf-8").splitlines()
+            start = max(0, line - 12)
+            end = min(len(lines), line + 8)
+            context = "\n".join(lines[start:end])
+            match = re.search(rf"preflight:\s*allow-{marker}\s+reason=(\S+)", context)
+            if match:
+                reason = match.group(1)
+        except (OSError, UnicodeDecodeError):
+            reason = ""
+
+        if reason:
+            print(f"[OK] {path}:{line}: reviewed CodeQL {label} exception "
+                  f"reason={reason} rule={rule}")
+            reviewed += 1
+        else:
+            print(f"[FAIL] {path}:{line}: CodeQL {label} finding {rule}: {message}",
+                  file=sys.stderr)
+            unreviewed += 1
+
+print(f"CodeQL {label} raw results: {raw_results}")
+print(f"CodeQL {label} findings: {unreviewed}")
+print(f"reviewed CodeQL {label} exceptions: {reviewed}")
+
+raise SystemExit(1 if unreviewed else 0)
+PY
+}
+
+run_codeql_actions_analysis() {
+  local tmp_dir db_dir sarif
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-codeql-actions.XXXXXX")"
+  db_dir="$tmp_dir/db"
+  sarif="$tmp_dir/actions.sarif"
+
+  codeql pack download codeql/actions-queries
+  codeql database create "$db_dir" --language=actions --source-root "$REPO_ROOT" --overwrite
+  codeql database analyze "$db_dir" \
+    codeql/actions-queries:codeql-suites/actions-security-extended.qls \
+    --format=sarif-latest \
+    --output "$sarif"
+  local status=0
+  parse_codeql_sarif "$sarif" "Actions" "codeql-actions" "${workflow_files[@]}" || status=$?
+  rm -rf "$tmp_dir"
+  return "$status"
+}
+
+run_codeql_python_analysis() {
+  local tmp_dir db_dir sarif
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/iccdev-codeql-python.XXXXXX")"
+  db_dir="$tmp_dir/db"
+  sarif="$tmp_dir/python.sarif"
+
+  codeql pack download codeql/python-queries
+  codeql database create "$db_dir" --language=python --source-root "$REPO_ROOT" --overwrite
+  codeql database analyze "$db_dir" \
+    codeql/python-queries:codeql-suites/python-security-extended.qls \
+    --format=sarif-latest \
+    --output "$sarif"
+  local status=0
+  parse_codeql_sarif "$sarif" "Python" "codeql-python" "${python_files[@]}" || status=$?
+  rm -rf "$tmp_dir"
+  return "$status"
+}
+
 run_workflow_risk_subset() {
   local risk_failures=0
   local total_actions=0
@@ -331,11 +838,16 @@ while IFS= read -r file; do
   unique_changed_files+=("$file")
 done < <(printf '%s\n' "${changed_files[@]}" | awk 'NF && !seen[$0]++')
 
+while IFS= read -r file; do
+  workflow_files+=("$file")
+done < <(
+  find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null |
+    sed 's#^\./##' |
+    sort
+)
+
 for file in "${unique_changed_files[@]}"; do
   case "$file" in
-    .github/workflows/*.yml|.github/workflows/*.yaml)
-      workflow_files+=("$file")
-      ;;
     .github/scripts/*.sh|.githooks/pre-commit|.githooks/pre-push)
       script_files+=("$file")
       ;;
@@ -382,7 +894,14 @@ PY
     skip_or_fail "zizmor"
   fi
 
+  run_check "workflow security canaries" workflow_security_canaries
+  run_check "GitHub token format canaries" token_format_canaries
   run_check "local ci-risk-analysis subset" run_workflow_risk_subset
+  if command -v codeql >/dev/null 2>&1; then
+    run_check "CodeQL Actions analysis" run_codeql_actions_analysis
+  else
+    skip_or_fail "codeql"
+  fi
 else
   echo "[SKIP] No changed workflow files"
   echo ""
@@ -401,6 +920,11 @@ fi
 
 if [ "${#python_files[@]}" -gt 0 ]; then
   run_check "Python syntax" python3 -m py_compile "${python_files[@]}"
+  if command -v codeql >/dev/null 2>&1; then
+    run_check "CodeQL Python analysis" run_codeql_python_analysis
+  else
+    skip_or_fail "codeql"
+  fi
 else
   echo "[SKIP] No changed Python scripts"
   echo ""
@@ -425,12 +949,17 @@ else
   echo ""
 fi
 
-if command -v codeql >/dev/null 2>&1; then
-  run_check "CodeQL query resolution" codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
-elif command -v gh >/dev/null 2>&1 && gh codeql version >/dev/null 2>&1; then
-  run_check "CodeQL query resolution" gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+if [ -f .github/codeql-queries/iccdev-security-suite.qls ]; then
+  if command -v codeql >/dev/null 2>&1; then
+    run_check "CodeQL query resolution" codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+  elif command -v gh >/dev/null 2>&1 && gh codeql version >/dev/null 2>&1; then
+    run_check "CodeQL query resolution" gh codeql resolve queries .github/codeql-queries/iccdev-security-suite.qls
+  else
+    skip_or_fail "codeql or gh codeql"
+  fi
 else
-  skip_or_fail "codeql or gh codeql"
+  echo "[SKIP] No CodeQL query suite found"
+  echo ""
 fi
 
 if [ -f .github/scripts/audit-workflow-permissions.py ]; then

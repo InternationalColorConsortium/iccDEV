@@ -502,19 +502,6 @@ jobs:
             Sanitize-Print $_
           } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-      - name: Upload ClangCL smoke results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ci-pr-win-clangcl-smoke-results
-          path: |
-            Build/Cmake/build-clangcl-pr-smoke/Testing
-            Build/Cmake/build-clangcl-pr-smoke/clangcl-*.log
-            Build/Cmake/build-clangcl-pr-smoke/clangcl-warning-signal.md
-          if-no-files-found: warn
-          retention-days: 14
-          compression-level: 9
-
   mingw-smoke:
     name: MinGW UCRT64 smoke
     runs-on: windows-2022
@@ -656,13 +643,3 @@ jobs:
           $summaryLines | ForEach-Object {
             Sanitize-Print $_
           } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-      - name: Upload MinGW smoke results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: ci-pr-win-mingw-smoke-results
-          path: Build/Cmake/build-mingw-pr-smoke/Testing
-          if-no-files-found: warn
-          retention-days: 14
-          compression-level: 9

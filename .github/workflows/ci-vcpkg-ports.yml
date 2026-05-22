@@ -30,6 +30,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+
 concurrency:
   group: "ci-vcpkg-ports-${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
@@ -154,6 +157,16 @@ jobs:
             throw "vcpkg install failed with exit code $LASTEXITCODE"
           }
           Write-Host "::endgroup::"
+
+      - name: Refresh trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       # Verify installed artifacts
       - name: Verify installed artifacts (Unix)
         if: runner.os != 'Windows'
@@ -166,9 +179,10 @@ jobs:
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # Load sanitizers (prefer script, inline fallback for shallow clones)
-          if [ -f .github/scripts/sanitize-sed.sh ]; then
-            source .github/scripts/sanitize-sed.sh
+          # Load sanitizers from trusted base checkout.
+          if [ -f "$TRUSTED_SCRIPTS/sanitize-sed.sh" ]; then
+            # shellcheck disable=SC1090
+            source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           else
             escape_html() {
               local s="$1"
@@ -246,9 +260,9 @@ jobs:
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
-          # Load sanitizer (prefer script, inline fallback for shallow clones)
-          if (Test-Path ".github/scripts/sanitize.ps1") {
-            . .github/scripts/sanitize.ps1
+          # Load sanitizer from trusted base checkout.
+          if (Test-Path "$env:TRUSTED_SCRIPTS\sanitize.ps1") {
+            . "$env:TRUSTED_SCRIPTS\sanitize.ps1"
           } else {
             function Sanitize-Line([string]$s) {
               $s = $s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;'
@@ -447,6 +461,16 @@ jobs:
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           cmake --build "$env:RUNNER_TEMP\manifest-test\build" --config Release
           if ($LASTEXITCODE -ne 0) { throw "Build failed" }
+
+      - name: Refresh trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Run test executable
         timeout-minutes: 1
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -459,6 +483,10 @@ jobs:
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          # Load sanitizer before running the PR-built executable.
+          if (Test-Path "$env:TRUSTED_SCRIPTS\sanitize.ps1") {
+            . "$env:TRUSTED_SCRIPTS\sanitize.ps1"
+          }
           $exe = "$env:RUNNER_TEMP\manifest-test\build\Release\test-iccdev.exe"
           if (-not (Test-Path $exe)) { throw "test-iccdev.exe not found" }
           $output = (& $exe 2>&1) -join "`n"
@@ -467,10 +495,6 @@ jobs:
           if ($output -notmatch "IccProfLib") { throw "Missing IccProfLib version output" }
           if ($output -notmatch "OK") { throw "Missing OK output" }
           Write-Host "[OK] Manifest mode test passed"
-          # Load sanitizer for summary output
-          if (Test-Path ".github/scripts/sanitize.ps1") {
-            . .github/scripts/sanitize.ps1
-          }
           # Summary
           $summary = @"
           ## vcpkg Manifest Mode - Windows

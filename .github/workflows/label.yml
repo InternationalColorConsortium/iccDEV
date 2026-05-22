@@ -45,6 +45,7 @@ jobs:
             .github/scripts/sync-labels.sh
           persist-credentials: false
 
+      # preflight: allow-token-exposure reason=issue-label-maintenance
       - name: Ensure repository labels exist
         shell: bash --noprofile --norc {0}
         env:
@@ -58,6 +59,7 @@ jobs:
 
           .github/scripts/sync-labels.sh
 
+      # preflight: allow-token-exposure reason=issue-triage-labels
       - name: Triage and welcome issue
         shell: bash --noprofile --norc {0}
         env:

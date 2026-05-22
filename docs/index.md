@@ -17,6 +17,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 - [Linear stack workflow](linear-stack-workflow.md): rebase feature branches and stack commits without merge commits
 - [Pre-PR security cycle](pre-pr-security-cycle.md): maintainer loop for build/test, SAST, CodeQL, dynamic checks, and fixes
 - [Regression workflow governance](regression-workflow-governance.md): adding regression gates and tool-test workflow updates
+- [Workflow security trust boundaries](workflow-security-trust-boundaries.md): trusted-base helper model, PR workflow canaries, and visual review aids
 - [Maintainer label system](label-system.md): label taxonomy, path labeler, issue triage, and PR status labels
 - [CodeQL security analysis](codeql.md): custom query overview
 - [Documentation maintenance](documentation-maintenance.md): canonical sources and review checklist
