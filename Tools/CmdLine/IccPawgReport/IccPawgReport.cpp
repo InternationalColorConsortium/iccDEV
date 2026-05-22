@@ -61,7 +61,8 @@
 
 #include <cstdio>
 #include <cstring>
-
+#include <string>
+#include <exception>
 #include "IccProfLibVer.h"
 #include "PawgReport.h"
 
@@ -79,28 +80,54 @@ int main(int argc, char *argv[])
 {
   bool bUseRead = false;
   bool bJson = false;
+  std::string profilePath;
 
   for (int k = 1; k < argc; k++) {
-    if (strcmp(argv[k], "--read") == 0) {
+  
+    if (strcasecmp(argv[k], "--read") == 0) {
       bUseRead = true;
-      for (int m = k; m < argc - 1; m++)
-        argv[m] = argv[m + 1];
-      argc--;
-      k--;
     }
-    else if (strcmp(argv[k], "--json") == 0) {
+    else if (strcasecmp(argv[k], "--json") == 0) {
       bJson = true;
-      for (int m = k; m < argc - 1; m++)
-        argv[m] = argv[m + 1];
-      argc--;
-      k--;
     }
-  }
+    else if ( strcasecmp( argv[k], "-V" ) == 0
+            || strcasecmp( argv[k], "--V" ) == 0
+            || strcasecmp( argv[k], "-help" ) == 0
+            || strcasecmp( argv[k], "--help" ) == 0
+            || strcasecmp( argv[k], "-version" ) == 0
+            ) {
+      // they're asking for help or version - print and return success
+      printUsage();
+      return 0;
+    }  else if (argv[k][0] == '-') {
+       // unrecognized switch/option, document and return error
+       printf("Unknown option \"%s\"\n\n", argv[k] );
+       printUsage();
+       return 1;
+    } else {
+      profilePath = argv[k];
+    }
 
-  if (argc != 2) {
+  } // end loop over command line arguments
+
+
+  // if no profile path was given, print usage and return an error
+  if (profilePath == std::string()) {
     printUsage();
-    return argc <= 1 ? 0 : -1;
+    return 1;
   }
 
-  return DumpPawgReport(argv[1], bUseRead, bJson);
+
+  try {
+    return DumpPawgReport(profilePath.c_str(), bUseRead, bJson);
+  }
+  catch (const std::exception& e) {
+    fprintf(stderr, "ERROR - exception while processing PAWG report for '%s': %s\n", profilePath.c_str(), e.what() );
+  }
+  catch (...) {
+    printf("ERROR - Unknown exception while preparing PAWG report for '%s'\n", profilePath.c_str() );
+  }
+  
+  // we only get here if an exception was thrown during report generation
+  return 1;
 }
