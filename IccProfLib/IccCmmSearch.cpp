@@ -110,6 +110,7 @@ icFloatNumber CIccApplyCmmSearch::costFunc(CIccSearchVec& point)
 {
   CIccCmmSearch* pCmm = (CIccCmmSearch*)m_pCmm;
   icFloatNumber sum = 0.0;
+  icFloatNumber div = 0.0;
   for (size_t i = 0; i < m_nApply; i++) {
     pCmm->m_dst_to_mid[i]->Apply(&m_pixel[0], &point.vec()[0]);
 
@@ -122,8 +123,9 @@ icFloatNumber CIccApplyCmmSearch::costFunc(CIccSearchVec& point)
       difSum += sq(m_pixel[j] - m_mid_data[i][j]);
     }
     sum += sqrt(difSum) * pCmm->m_weight[i];
+    div += pCmm->m_weight[i];
   }
-  return sum;
+  return sum / div;
 }
 
 bool CIccApplyCmmSearch::boundsCheck(const CIccSearchVec& point, icFloatNumber& boundsCost) const
@@ -216,10 +218,8 @@ icStatusCMM CIccApplyCmmSearch::GetApplyCost(icFloatNumber& dCost, const icFloat
   // Find device values that best match the SrcPixel
   std::vector<icFloatNumber> dstPixel(nDstSamples, 0);
   icStatusCMM rv = Apply(&dstPixel[0], SrcPixel);
-  if (rv != icCmmStatOk) {
-    dCost = -1;
+  if (rv != icCmmStatOk) 
     return rv;
-  }
 
   // costFunc reads m_pixel/m_mid_data/etc. set up by the preceding Apply().
   // Evaluate it at the found device-value point and return that cost.
