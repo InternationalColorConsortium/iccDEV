@@ -90,7 +90,7 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 25 tests:
+Linux currently registers 26 tests:
 
 | Test | Source |
 |------|--------|
@@ -111,6 +111,7 @@ Linux currently registers 25 tests:
 | `iccdev.mluc-read-utf16-regressions` | `.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh` |
 | `iccdev.mluc-iso-code-regressions` | `.github/scripts/iccdev-mluc-iso-code-regression-tests.sh` |
 | `iccdev.pcc-zero-illuminant-regressions` | `.github/scripts/iccdev-pcc-zero-illuminant-regression-tests.sh` |
+| `iccdev.iccconnect-search-cost-regressions` | `.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh` |
 | `iccdev.cam-degenerate-regressions` | `.github/scripts/iccdev-cam-degenerate-regression-tests.sh` |
 | `iccdev.calculator-regressions` | `.github/scripts/iccdev-calculator-regression-tests.sh` |
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |

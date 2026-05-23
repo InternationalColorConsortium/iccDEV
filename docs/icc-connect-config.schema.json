@@ -186,7 +186,8 @@
         },
         "weight": {
           "type": "number",
-          "description": "Relative weight used during spectral PCC search"
+          "exclusiveMinimum": 0,
+          "description": "Positive relative weight used during spectral PCC search"
         }
       }
     },

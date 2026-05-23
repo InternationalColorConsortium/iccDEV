@@ -113,7 +113,7 @@ public:
   // across the attached Profile Connection Conditions (PCCs), then evaluates
   // the search's cost function at that found point.
   //
-  // The cost is the PCC-weighted sum of color differences (a la Euclidean
+  // The cost is the PCC-weighted average of color differences (a la Euclidean
   // distance in each PCC's PCS space) between the target appearance and the
   // appearance the found device values produce under each PCC.  When the
   // PCC list spans multiple observer/illuminant conditions, this cost is
@@ -176,7 +176,7 @@ public:
     icXformLutType nLutType,
     bool bUseD2BxB2DxTags);
 
-  //Note ownership of pPCC object is passed to the CMM (it will delete these objects)
+  //Note ownership of pPCC object is passed to the CMM on success (it will delete these objects)
   icStatusCMM AttachPCC(IIccProfileConnectionConditions* pPCC, icFloatNumber dWeight);
 
   //The Begin function should be called before Apply or GetNewApplyCmm()
@@ -199,7 +199,7 @@ public:
   // Convenience wrapper that forwards to the underlying CIccApplyCmmSearch
   // instance bound to this CMM.  See CIccApplyCmmSearch::GetApplyCost for
   // the full description: the value returned in dCost is the PCC-weighted
-  // residual after the inverse search has found the best device-value match
+  // average residual after the inverse search has found the best device-value match
   // for SrcPixel, and for multi-PCC chains it functions as an index of
   // metamerism (lower = closer match across all observation conditions;
   // 0 = perfect match everywhere; large values indicate the target requires

@@ -508,6 +508,17 @@ set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.iccconnect-search-cost-regressions
+  300
+  "iccdev;iccconnect;search;cost;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh"
+)
+set_tests_properties(iccdev.iccconnect-search-cost-regressions PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
   iccdev.cam-degenerate-regressions
   300
   "iccdev;cam;regression;asan"

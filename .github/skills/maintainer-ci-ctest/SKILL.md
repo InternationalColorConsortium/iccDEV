@@ -45,7 +45,7 @@ when practical.
 
 - `check` must exist on every platform.
 - `check` and workflow CTest execution must use `--no-tests=error`.
-- Linux suite count assertions currently expect `Total Tests: 25`.
+- Linux suite count assertions currently expect `Total Tests: 26`.
 - Before committing a CTest suite-count change, run
   `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
   and update every stale count in the same change.

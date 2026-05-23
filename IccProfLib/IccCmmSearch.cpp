@@ -70,6 +70,8 @@
 
 #include "IccCmmSearch.h"
 
+#include <cmath>
+
 
 CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCmm)
 {
@@ -154,7 +156,7 @@ bool CIccApplyCmmSearch::boundsCheck(const CIccSearchVec& point, icFloatNumber& 
       }
       else if (v > m_maxBounds[i]) {
         rv = true;
-        boundsCost += sq(m_maxBounds[i] - 1.0f);
+        boundsCost += sq(v - m_maxBounds[i]);
       }
     }
   }
@@ -325,6 +327,9 @@ void CIccCmmSearch::SetDstInitProfile(CIccProfile* pProfile,
 
 icStatusCMM CIccCmmSearch::AttachPCC(IIccProfileConnectionConditions* pPCC, icFloatNumber dWeight)
 {
+  if (!pPCC || !std::isfinite(dWeight) || dWeight <= 0.0f)
+    return icCmmStatBadXform;
+
   m_pcc.push_back(pPCC);
   m_weight.push_back(dWeight);
 

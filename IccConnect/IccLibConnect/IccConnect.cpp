@@ -512,6 +512,7 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       oss << "weighted PCC " << pccIdx << ": AttachPCC failed for '"
           << pPccWeight->m_pccPath << "'";
       sErrorMsg = oss.str();
+      delete pPcc;
       ReleasePccList(pccList);
       return nullptr;
     }

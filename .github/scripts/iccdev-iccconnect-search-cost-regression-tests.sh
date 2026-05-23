@@ -1,17 +1,17 @@
 #!/bin/bash
 ###############################################################################
-# iccDEV CIccCmmSearch::GetApplyCost smoke regression
+# iccDEV CIccCmmSearch search-cost weight regression
 ###############################################################################
 #
-# Exercises CIccCmmSearch::GetApplyCost (the API used as an index of
-# metamerism for inverse-search chains) via a small C++ helper that links
-# IccProfLib2 and runs the function against a sample chain built from
-# Testing/ profiles.
+# Exercises CIccCmmSearch PCC weight validation via a small C++ helper that
+# links IccProfLib2.  This guards the weighted-average search-cost denominator
+# introduced by CIccApplyCmmSearch::costFunc().
 #
 # What is asserted:
-#   - GetApplyCost returns icCmmStatOk for a successful Begin()-ed chain
-#   - The returned cost is finite and >= 0
-#   - The -1 failure sentinel is not left in place on success
+#   - positive PCC weights are accepted
+#   - zero PCC weights are rejected before they can produce 0 / 0
+#   - negative PCC weights are rejected before weights can cancel out
+#   - non-finite PCC weights are rejected before NaN/Inf reaches costFunc
 #
 # Environment variables (set by CI workflow):
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools/ (sibling of IccProfLib)
@@ -44,7 +44,7 @@ export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=1,print_stacktrace=1}"
 
 PASS=0
 FAIL=0
-TOTAL=1
+TOTAL=4
 
 find_library_file() {
   local dir="$1"
@@ -68,33 +68,29 @@ if [ -z "$BUILD_ROOT" ] || [ ! -d "$BUILD_ROOT/IccProfLib" ]; then
   exit 0
 fi
 
-# Pick profiles that are available in the iccDEV Testing tree.  The hybrid
-# spectral/Lab profiles are the natural fit but require Testing/hybrid to have
-# been built; fall back to a single-profile sanity chain when only the
-# committed sRGB profile is available.
-FWD=""
-INIT=""
+# Pick profiles that are available in the iccDEV Testing tree.  Generate the
+# small hybrid fixtures on demand so this regression is not only a skip unless
+# the full hybrid pipeline has already run.
+HYBRID_ICC="$TESTING_DIR/hybrid/ICC"
+FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
+if [ -x "$FROMXML" ] && [ -d "$TESTING_DIR/hybrid/Data" ]; then
+  mkdir -p "$HYBRID_ICC"
+  [ -f "$HYBRID_ICC/Lab_float-D50_2deg.icc" ] ||
+    "$FROMXML" "$TESTING_DIR/hybrid/Data/Lab_float-D50_2deg.xml" \
+               "$HYBRID_ICC/Lab_float-D50_2deg.icc" >/dev/null 2>&1 || true
+fi
+
 PCC=""
 for candidate in \
-    "$TESTING_DIR/hybrid/ICC/Spec380_10_730-D50_2deg.icc" \
-    "$TESTING_DIR/hybrid/ICC/MultSpectralRGB.icc"; do
-  if [ -f "$candidate" ]; then FWD="$candidate"; break; fi
-done
-for candidate in \
     "$TESTING_DIR/hybrid/ICC/Lab_float-D50_2deg.icc" \
-    "$TESTING_DIR/hybrid/ICC/Lab_float-illumA_2deg-MAT.icc" \
-    "$TESTING_DIR/sRGB_v4_ICC_preference.icc"; do
-  if [ -f "$candidate" ]; then INIT="$candidate"; break; fi
-done
-for candidate in \
-    "$TESTING_DIR/hybrid/ICC/Lab_float-D50_2deg.icc" \
+    "$TESTING_DIR/PCC/Lab_float-D50_2deg.icc" \
     "$TESTING_DIR/hybrid/ICC/Lab_float-IllumA_2deg-MAT.icc"; do
   if [ -f "$candidate" ]; then PCC="$candidate"; break; fi
 done
 
-if [ -z "$FWD" ] || [ -z "$INIT" ] || [ -z "$PCC" ]; then
-  echo "  [SKIP] required search-chain profiles not present under $TESTING_DIR"
-  echo "         (need hybrid spectral + Lab PCC profiles; run Testing/hybrid/BuildAndTest.sh first)"
+if [ -z "$PCC" ]; then
+  echo "  [SKIP] required PCC profile not present under $TESTING_DIR"
+  echo "         (need Lab PCC profile)"
   exit 0
 fi
 
@@ -130,24 +126,38 @@ compile_ec=0
   "$PROFLIB" \
   -o "$HELPER_BIN" > "$HELPER_LOG" 2>&1 || compile_ec=$?
 
+run_helper_case() {
+  local label="$1"
+  shift
+  local case_log="$OUTDIR/${label}.log"
+  local run_ec=0
+
+  "$HELPER_BIN" "$PCC" "$@" > "$case_log" 2>&1 || run_ec=$?
+  cat "$case_log" >> "$HELPER_LOG"
+  if grep -q "ERROR: AddressSanitizer\\|runtime error:" "$case_log" 2>/dev/null; then
+    echo "  [FAIL] $label produced sanitizer findings"
+    sed -n '1,60p' "$case_log"
+    FAIL=$((FAIL + 1))
+  elif [ "$run_ec" -ne 0 ]; then
+    echo "  [FAIL] $label failed"
+    sed -n '1,60p' "$case_log"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  [PASS] $label"
+    sed -n '$p' "$case_log"
+    PASS=$((PASS + 1))
+  fi
+}
+
 if [ "$compile_ec" -ne 0 ]; then
   echo "  [FAIL] helper build failed"
   sed -n '1,30p' "$HELPER_LOG"
   FAIL=$((FAIL + 1))
-elif "$HELPER_BIN" "$FWD" "$INIT" "$PCC" >> "$HELPER_LOG" 2>&1; then
-  if grep -q "ERROR: AddressSanitizer\\|runtime error:" "$HELPER_LOG" 2>/dev/null; then
-    echo "  [FAIL] helper produced sanitizer findings"
-    sed -n '1,60p' "$HELPER_LOG"
-    FAIL=$((FAIL + 1))
-  else
-    echo "  [PASS] GetApplyCost returns finite non-negative cost"
-    sed -n '$p' "$HELPER_LOG"
-    PASS=$((PASS + 1))
-  fi
 else
-  echo "  [FAIL] helper runtime failed"
-  sed -n '1,60p' "$HELPER_LOG"
-  FAIL=$((FAIL + 1))
+  run_helper_case "AttachPCC accepts positive weight" 1 expect-accept
+  run_helper_case "AttachPCC rejects zero weight" 0 expect-reject
+  run_helper_case "AttachPCC rejects negative weight" -1 expect-reject
+  run_helper_case "AttachPCC rejects non-finite weight" nan expect-reject
 fi
 
 rm -f "$HELPER_BIN"
