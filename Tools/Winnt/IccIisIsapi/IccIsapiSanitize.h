@@ -11,12 +11,12 @@
  *  .github/scripts/sanitize.ps1 (V1), adapted from shell to C++17.
  *
  *  Every function in this header is designed for untrusted input:
- *  - HTML entity encoding  (& < > " ')          — XSS prevention
- *  - JSON string encoding  (RFC 8259 + solidus)  — injection prevention
- *  - URL percent decoding  (null-byte rejection)  — truncation prevention
- *  - Control-char stripping (C0, DEL, ANSI ESC)   — log spoofing prevention
- *  - Filename sanitization (alphanumeric + ._-)    — path traversal prevention
- *  - Query string parsing  (safe tokenization)     — parameter injection prevention
+ *  - HTML entity encoding  (& < > " ')          - XSS prevention
+ *  - JSON string encoding  (RFC 8259 + solidus)  - injection prevention
+ *  - URL percent decoding  (null-byte rejection)  - truncation prevention
+ *  - Control-char stripping (C0, DEL, ANSI ESC)   - log spoofing prevention
+ *  - Filename sanitization (alphanumeric + ._-)    - path traversal prevention
+ *  - Query string parsing  (safe tokenization)     - parameter injection prevention
  *
  *  Reference CWEs addressed:
  *    CWE-79   Cross-Site Scripting (XSS)
@@ -69,15 +69,16 @@ namespace iccIsapi {
 
 /// Escape all 5 HTML-sensitive characters plus strip C0 control chars and DEL.
 /// Mirrors: escape_html() in sanitize-sed.sh, Escape-Html in sanitize.ps1.
-/// Entities: & → &amp;  < → &lt;  > → &gt;  " → &quot;  ' → &#39;
+/// Entities: ampersand, less-than, greater-than, double quote, single quote.
 /// Control chars 0x00-0x1F (except TAB 0x09 and LF 0x0A) and DEL 0x7F are
-/// silently dropped — mirrors _strip_ctrl_keep_newlines in sanitize-sed.sh.
+/// silently dropped to mirror _strip_ctrl_keep_newlines in sanitize-sed.sh.
 std::string HtmlEscape(const std::string& value);
 
 /// RFC 8259 JSON string escaping with solidus.
-/// Escapes: " \ / BS FF LF CR TAB and all C0 as \uXXXX.
-/// The solidus escape (\/) prevents </script> injection when JSON is
-/// embedded inside HTML <script> blocks.
+/// Escapes JSON quote, backslash, solidus, BS, FF, LF, CR, TAB, and all C0
+/// controls as JSON Unicode escape sequences.
+/// The solidus escape prevents closing-script injection when JSON is embedded
+/// inside HTML script blocks.
 std::string JsonEscape(const std::string& value);
 
 /// Decode percent-encoded URL components (RFC 3986).
@@ -90,7 +91,7 @@ std::string UrlDecode(const std::string& value);
 std::string GetQueryValue(const char* query, const char* key);
 
 /// Check if a query string contains an exact key=value pair.
-/// No URL-decoding — expects literal match (safe for known enum values).
+/// No URL-decoding - expects literal match (safe for known enum values).
 bool QueryHasValue(const char* query, const char* key, const char* value);
 
 /// Produce a filename-safe string: only [A-Za-z0-9._-] are kept.

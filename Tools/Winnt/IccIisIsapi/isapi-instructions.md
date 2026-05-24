@@ -1,4 +1,4 @@
-# IIS `iccIisIsapi.dll` Instructions
+# IIS iccIisIsapi.dll Instructions
 
 This repository includes a Windows IIS ISAPI sample that proves `iccIisIsapi.dll`
 can load `IccProfLib2.dll` and `IccXML2.dll` inside an IIS worker process.

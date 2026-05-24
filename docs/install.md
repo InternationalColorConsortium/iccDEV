@@ -31,4 +31,4 @@ Run each tool without arguments for usage help.
 
 Build instructions are available in [Build](build.md). The WebAssembly/NPM
 package is documented in
-[Build/Cmake/wasm-package/README.md](../Build/Cmake/wasm-package/README.md).
+[Build/Cmake/wasm-package/README.md](https://github.com/InternationalColorConsortium/iccDEV/blob/master/Build/Cmake/wasm-package/README.md).

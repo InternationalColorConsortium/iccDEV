@@ -21,7 +21,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 - [Maintainer label system](label-system.md): label taxonomy, path labeler, issue triage, and PR status labels
 - [CodeQL security analysis](codeql.md): custom query overview
 - [Documentation maintenance](documentation-maintenance.md): canonical sources and review checklist
-- [Agent skills](../.github/skills/README.md): repeatable repository workflows
+- [Agent skills](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/skills/README.md): repeatable repository workflows
 
 ## Libraries
 

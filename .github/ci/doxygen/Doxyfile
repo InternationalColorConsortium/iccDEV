@@ -1,0 +1,136 @@
+# Doxyfile -- Full iccDEV project documentation
+#
+# Generates HTML-only API documentation for the full iccDEV source tree,
+# including IccProfLib, IccXML, IccJSON/IccLibJSON, IccConnect/IccLibConnect,
+# command-line tools such as IccPawgReport and IccProfileVisualize, Winnt tools
+# such as IccIisIsapi, the hello-iccdev example app source, and Testing docs.
+# Visual aids include interactive SVG call/caller graphs, class hierarchy,
+# collaboration diagrams, include graphs, directory graphs, treeview navigation,
+# client-side search, and source browsing.
+
+PROJECT_NAME           = "iccDEV"
+PROJECT_NUMBER         = "2.3.2.0"
+PROJECT_BRIEF          = "ICC Color Profile Library - ProfLib, XML, JSON, Connect, CLI, Winnt Tools, and Examples"
+OUTPUT_DIRECTORY       = docs/generated
+HTML_OUTPUT            = html
+
+INPUT                  = README.md \
+                         IccProfLib \
+                         IccXML/IccLibXML \
+                         IccXML/CmdLine \
+                         IccJSON/IccLibJSON \
+                         IccJSON/CmdLine \
+                         IccConnect/IccLibConnect \
+                         Tools/CmdLine \
+                         Tools/Winnt \
+                         Tools/wxWidget \
+                         examples/hello-iccdev/hello-iccdev.cpp \
+                         docs \
+                         Testing/Readme.md
+USE_MDFILE_AS_MAINPAGE = README.md
+FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md
+RECURSIVE              = YES
+EXCLUDE                = docs/generated \
+                         Build \
+                         .git
+EXCLUDE_PATTERNS       = */Build/* \
+                         */build/* \
+                         */CMakeFiles/* \
+                         */.git/*
+STRIP_FROM_PATH        = .
+
+INCLUDE_PATH           = IccProfLib \
+                         IccXML/IccLibXML \
+                         IccJSON/IccLibJSON \
+                         IccConnect/IccLibConnect \
+                         IccXML/CmdLine \
+                         IccJSON/CmdLine \
+                         Tools/CmdLine/IccPawgReport \
+                         Tools/CmdLine/IccProfileVisualize \
+                         Tools/Winnt/IccIisIsapi \
+                         examples/hello-iccdev \
+                         /usr/include
+
+# Extraction settings
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+EXTRACT_LOCAL_METHODS  = YES
+EXTRACT_ANON_NSPACES   = YES
+
+# Build settings
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+BRIEF_MEMBER_DESC      = YES
+REPEAT_BRIEF           = YES
+SORT_BRIEF_DOCS        = YES
+SORT_MEMBERS_CTORS_1ST = YES
+
+# Input processing
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+PREDEFINED             = ICCPROFLIB_API= \
+                         ICCPROFLIB_EXTERN=extern \
+                         ICCLIBXML_API= \
+                         ICCLIBJSON_API= \
+                         ICCLIBCONNECT_API= \
+                         USEICCDEVNAMESPACE \
+                         __cplusplus=1 \
+                         ICC_JSON_ORDERED=0
+
+# HTML-only output formats
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_RTF           = NO
+GENERATE_MAN           = NO
+GENERATE_XML           = NO
+GENERATE_DOCBOOK       = NO
+GENERATE_AUTOGEN_DEF   = NO
+GENERATE_PERLMOD       = NO
+
+# HTML settings -- interactive navigation and search
+HTML_COLORSTYLE        = AUTO_LIGHT
+HTML_DYNAMIC_SECTIONS  = YES
+HTML_INDEX_NUM_ENTRIES = 100
+DISABLE_INDEX          = NO
+GENERATE_TREEVIEW      = YES
+TREEVIEW_WIDTH         = 300
+FULL_SIDEBAR           = NO
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
+
+# Graphs -- interactive SVG with pan/zoom and full call hierarchy
+HAVE_DOT               = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+GROUP_GRAPHS           = YES
+UML_LOOK               = YES
+UML_LIMIT_NUM_FIELDS   = 25
+TEMPLATE_RELATIONS     = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = YES
+CALLER_GRAPH           = YES
+GRAPHICAL_HIERARCHY    = YES
+DIRECTORY_GRAPH        = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_GRAPH_MAX_NODES    = 1000
+MAX_DOT_GRAPH_DEPTH    = 0
+DOT_MULTI_TARGETS      = YES
+DOT_NUM_THREADS        = 0
+
+# Source browsing -- clickable cross-referenced source
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = YES
+STRIP_CODE_COMMENTS    = NO
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+VERBATIM_HEADERS       = YES
+
+# Warnings
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+WARN_LOGFILE           = docs/generated/doxygen-warnings.log
+QUIET                  = YES

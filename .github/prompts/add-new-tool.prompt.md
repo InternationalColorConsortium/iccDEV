@@ -123,7 +123,7 @@ Add the same to `Testing/RunTests.bat` for Windows.
 
 - Add `Tools/CmdLine/IccNewTool/Readme.md` with purpose, usage, and output notes
 - Add tool description and example to `docs/tools-cli-reference.md`
-- Confirm `Doxyfile.full` includes Markdown so `Tools/CmdLine/*/Readme.md` files are generated
+- Confirm `.github/ci/doxygen/Doxyfile` includes Markdown so `Tools/CmdLine/*/Readme.md` files are generated
 - Add tool description to `docs/index.md` under "Tools based upon these libraries"
 - Add to `docs/install.md` Docker examples if applicable
 - Update `.github/copilot-instructions.md` project structure table

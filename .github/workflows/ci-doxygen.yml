@@ -1,26 +1,42 @@
+---
 ###############################################################################
 # ci-doxygen.yml -- iccDEV API documentation generation
 #
-# Generates Doxygen HTML docs for IccJSON (focused) and the full iccDEV
-# project (IccProfLib + IccXML + IccJSON + Tools). Both sets are uploaded
-# as separate workflow artifacts. Documentation is NEVER committed.
+# Generates HTML-only Doxygen documentation for the full iccDEV project:
+# IccProfLib, IccXML, IccJSON/IccLibJSON, IccConnect/IccLibConnect, command-line
+# tools including IccPawgReport and IccProfileVisualize, Winnt tools including
+# IccIisIsapi, wxWidget tools, examples, docs, and Testing notes.
+# Documentation is uploaded as a workflow artifact and is NEVER committed.
+# This workflow intentionally does not use dependency caches and does not run
+# on pull_request or pull_request_target. Generated HTML can include source
+# comments and should only be uploaded through the protected doxygen-publish
+# environment from the canonical repository on trusted master pushes or
+# explicit maintainer-dispatched branch test runs.
 #
 # Copyright (c) 2024-2026 The International Color Consortium.
 ###############################################################################
 
 name: iccDEV Doxygen Docs
 
-on:
+'on':
+  workflow_dispatch:
   push:
     branches: [master]
     paths:
+      - 'README.md'
       - 'IccProfLib/**'
       - 'IccXML/**'
       - 'IccJSON/**'
+      - 'IccConnect/**'
       - 'Tools/**'
       - 'examples/**'
-      - 'Doxyfile'
-      - 'Doxyfile.full'
+      - 'docs/**'
+      - 'Testing/**'
+      - '.github/ci/doxygen/**'
+      - '.github/scripts/check-workflow-cache-policy.sh'
+      - '.github/scripts/sanitize-sed.sh'
+      - '.github/workflows/ci-doxygen.yml'
+
 concurrency:
   group: "doxygen-${{ github.workflow }}-${{ github.ref_name }}"
   cancel-in-progress: true
@@ -29,17 +45,51 @@ permissions:
   contents: read
 
 jobs:
-  doxygen-iccjson:
-    name: IccJSON Docs
+  cache-policy:
+    name: Validate workflow cache policy
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Assert no GitHub Actions cache primitives
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          .github/scripts/check-workflow-cache-policy.sh \
+            .github/workflows/ci-doxygen.yml
+
+  doxygen:
+    name: Full Project HTML Docs
+    needs: cache-policy
+    if: >-
+      ${{
+        github.event_name != 'pull_request' &&
+        github.event_name != 'pull_request_target'
+      }}
+    runs-on: ubuntu-24.04
+    environment: doxygen-publish
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash --noprofile --norc {0}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           persist-credentials: false
 
@@ -50,98 +100,25 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+
           sudo apt-get update -qq
           sudo apt-get install -y -qq doxygen graphviz
 
-      - name: Generate IccJSON Documentation
+      - name: Generate HTML Documentation
         env:
           BASH_ENV: /dev/null
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          doxygen Doxyfile
-          echo "IccJSON Doxygen generation complete"
-          find docs/generated/html -maxdepth 1 -printf '%M %u %g %s %TY-%Tm-%Td %TH:%TM %p\n' |
+
+          doxygen .github/ci/doxygen/Doxyfile
+          echo "Full iccDEV Doxygen HTML generation complete"
+          find docs/generated/html -maxdepth 1 -printf '%p\n' |
             sort |
             sed -n '1,5p'
 
-      - name: Report IccJSON Summary
-        if: success()
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          html_dir="docs/generated/html"
-          total_files=$(find "$html_dir" -type f | wc -l)
-          svg_files=$(find "$html_dir" -name '*.svg' | wc -l)
-          html_files=$(find "$html_dir" -name '*.html' | wc -l)
-          total_size=$(du -sh "$html_dir" | cut -f1)
-
-          {
-            echo "### IccLibJSON Doxygen Documentation"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| Total files | ${total_files} |"
-            echo "| HTML pages | ${html_files} |"
-            echo "| SVG graphs | ${svg_files} |"
-            echo "| Total size | ${total_size} |"
-            echo ""
-            echo "**Visual aids**: Interactive SVG (pan/zoom), class hierarchy browser,"
-            echo "call/caller graphs, collaboration diagrams, UML class diagrams,"
-            echo "include dependency graphs, treeview navigation, client-side search."
-          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
-
-      - name: Upload IccJSON Documentation
-        if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: iccjson-doxygen-html
-          path: docs/generated/html/
-          retention-days: 30
-
-  doxygen-full:
-    name: Full Project Docs
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          persist-credentials: false
-
-      - name: Install Doxygen and Graphviz
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq doxygen graphviz
-
-      - name: Generate Full Project Documentation
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          doxygen Doxyfile.full
-          echo "Full iccDEV Doxygen generation complete"
-          find docs/generated-full/html -maxdepth 1 -printf '%M %u %g %s %TY-%Tm-%Td %TH:%TM %p\n' |
-            sort |
-            sed -n '1,5p'
-
-      - name: Report Full Project Summary
+      - name: Report Documentation Summary
         if: success()
         env:
           BASH_ENV: /dev/null
@@ -164,15 +141,20 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          html_dir="docs/generated-full/html"
+          html_dir="docs/generated/html"
+          warnings_file="docs/generated/doxygen-warnings.log"
           total_files=$(find "$html_dir" -type f | wc -l)
           svg_files=$(find "$html_dir" -name '*.svg' | wc -l)
           html_files=$(find "$html_dir" -name '*.html' | wc -l)
           class_count=$(find "$html_dir" -name 'class*.html' | wc -l)
           total_size=$(du -sh "$html_dir" | cut -f1)
+          warning_count=0
+          if [ -s "$warnings_file" ]; then
+            warning_count=$(grep -c 'warning:' "$warnings_file" || true)
+          fi
 
           {
-            echo "### Full iccDEV Doxygen Documentation"
+            echo "### Full iccDEV Doxygen HTML Documentation"
             echo ""
             echo "| Metric | Value |"
             echo "|--------|-------|"
@@ -180,20 +162,40 @@ jobs:
             echo "| HTML pages | $(sanitize_line "${html_files}") |"
             echo "| Class pages | $(sanitize_line "${class_count}") |"
             echo "| SVG graphs | $(sanitize_line "${svg_files}") |"
+            echo "| Doxygen warnings | $(sanitize_line "${warning_count}") |"
             echo "| Total size | $(sanitize_line "${total_size}") |"
             echo ""
-            echo "**Coverage**: IccProfLib, IccLibXML, IccLibJSON, 17 CLI Tools"
+            echo "**Coverage**: IccProfLib, IccXML,"
+            echo "IccJSON/IccLibJSON, IccConnect/IccLibConnect,"
+            echo "CLI tools including IccPawgReport and"
+            echo "IccProfileVisualize, Winnt tools including"
+            echo "IccIisIsapi, wxWidget tools, hello-iccdev,"
+            echo "docs, and Testing notes."
             echo ""
-            echo "**Visual aids**: Interactive SVG (pan/zoom), class hierarchy browser,"
-            echo "call/caller graphs, collaboration diagrams, UML class diagrams,"
-            echo "include dependency graphs, directory graphs, treeview navigation,"
-            echo "client-side search, cross-referenced source browser."
+            echo "**Visual aids**: Interactive SVG (pan/zoom),"
+            echo "class hierarchy browser, call/caller graphs,"
+            echo "collaboration diagrams, UML class diagrams,"
+            echo "include dependency graphs, directory graphs,"
+            echo "treeview navigation, client-side search,"
+            echo "and cross-referenced inline source browser."
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
-      - name: Upload Full Project Documentation
-        if: success()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - name: Upload HTML Documentation
+        if: >-
+          ${{
+            success() &&
+            github.repository == 'InternationalColorConsortium/iccDEV' &&
+            (
+              github.event_name == 'workflow_dispatch' ||
+              (
+                github.event_name == 'push' &&
+                github.ref == 'refs/heads/master'
+              )
+            )
+          }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: iccdev-full-doxygen-html
-          path: docs/generated-full/html/
+          name: iccdev-doxygen-html
+          path: docs/generated/html/
+          if-no-files-found: error
           retention-days: 30

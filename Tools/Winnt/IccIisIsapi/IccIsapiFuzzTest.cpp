@@ -14,7 +14,7 @@
  *       /Fe:out\IccIsapiFuzzTest.exe
  *
  *  Run:
- *    out\IccIsapiFuzzTest.exe E:\xss\fuzz
+ *    out/IccIsapiFuzzTest.exe E:/xss/fuzz
  *
  *  Copyright (c) International Color Consortium.  BSD 3-Clause.
  */
@@ -354,7 +354,7 @@ static void testFuzzDir(const fs::path& root, const std::string& relDir)
       if (entry.file_size() > 20 * 1024) continue;
 
       auto ext = entry.path().extension().string();
-      // Require a known text extension — AFL minimized crash PoCs (no
+      // Require a known text extension - AFL minimized crash PoCs (no
       // extension) and binary formats cause /GS violations when their
       // raw bytes are fed through the sanitizer string functions.
       if (!isTextExtension(ext)) continue;
@@ -408,7 +408,7 @@ int main(int argc, char* argv[])
       "json", "callback", "custom", "meta", "svg",
       "lfi-local-file-system-harvesting",
       "ascii", "css", "email", "referer", "sqlinjection", "ssi",
-      "xml"  // xml last — contains ICC crash PoCs with large embedded data
+      "xml"  // xml last - contains ICC crash PoCs with large embedded data
     };
     for (const char* dir : kDirs) {
       testFuzzDir(fuzzRoot, dir);

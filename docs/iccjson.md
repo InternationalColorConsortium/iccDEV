@@ -775,9 +775,9 @@ The [`examples/hello-iccdev/`](../examples/hello-iccdev/) directory contains a
 minimal standalone project that links IccProfLib2, IccXML2, and IccJSON2. When
 built with `USE_ICCJSON=1` it demonstrates JSON round-tripping via the
 `CIccProfileJson::ToJson()` and `ParseJson()` APIs, factory registration, and
-library version reporting. See
-[`examples/hello-iccdev/README.md`](../examples/hello-iccdev/README.md) for
-build instructions.
+library version reporting. See the
+[`examples/hello-iccdev` README](https://github.com/InternationalColorConsortium/iccDEV/blob/master/examples/hello-iccdev/README.md)
+for build instructions.
 
 ### IIS ISAPI server-side integration
 

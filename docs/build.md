@@ -206,8 +206,8 @@ then update `ci-iccdev-tool-tests.yml` to the newly published digest.
 ## vcpkg Consumers
 
 The `ports/iccdev/` overlay port builds core static libraries and CLI tools.
-For a complete consuming-project example, see
-[`examples/hello-iccdev`](../examples/hello-iccdev/README.md).
+For a complete consuming-project example, see the
+[`examples/hello-iccdev` README](https://github.com/InternationalColorConsortium/iccDEV/blob/master/examples/hello-iccdev/README.md).
 
 ```cmake
 find_package(RefIccMAX CONFIG REQUIRED)
