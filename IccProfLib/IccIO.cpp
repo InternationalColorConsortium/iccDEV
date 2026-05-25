@@ -76,7 +76,11 @@
 #include <cmath>
 #include <limits>
 
-#ifdef WIN32
+#if defined(_WIN32) || defined(WIN32)
+#define ICC_FILEIO_WINDOWS_SEEK
+#endif
+
+#ifdef ICC_FILEIO_WINDOWS_SEEK
 #define icFileSeek64 _fseeki64
 #define icFileTell64 _ftelli64
 #else
@@ -120,7 +124,7 @@ static int icFileSeek(FILE *f, int64_t nOffset, icSeekVal pos)
   if (!icGetSeekOrigin(pos, origin))
     return -1;
 
-#ifdef WIN32
+#ifdef ICC_FILEIO_WINDOWS_SEEK
   return icFileSeek64(f, nOffset, origin);
 #else
   return icFileSeek64(f, (off_t)nOffset, origin);
