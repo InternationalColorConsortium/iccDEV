@@ -138,6 +138,18 @@ static bool GetFloatRowByteCount(unsigned int nWidth, int nSamples, size_t& nByt
 #endif
 }
 
+static bool AddPixelBufSlack(size_t& nBytes)
+{
+  const size_t nMaxSize = (size_t)-1;
+  const size_t nSlackBytes = 16 * sizeof(icFloatNumber);
+
+  if (nBytes > nMaxSize - nSlackBytes)
+    return false;
+
+  nBytes += nSlackBytes;
+  return true;
+}
+
 static icFloatNumber UnitClip(icFloatNumber v)
 {
   if (std::isnan(v))
@@ -542,15 +554,17 @@ int main(int argc, const char** argv)
     size_t nDstRowBytes = 0;
 
     if (!GetFloatRowByteCount(SrcImg.GetWidth(), nSrcColorSamples, nSrcRowBytes) ||
-        !GetFloatRowByteCount(SrcImg.GetWidth(), nDestSamples, nDstRowBytes)) {
+        !GetFloatRowByteCount(SrcImg.GetWidth(), nDestSamples, nDstRowBytes) ||
+        !AddPixelBufSlack(nSrcRowBytes) ||
+        !AddPixelBufSlack(nDstRowBytes)) {
       printf("Invalid row buffer size!\n");
       free(pSBuf);
       free(pDBuf);
       return -1;
     }
 
-    pSrcRowBuf = (icFloatNumber*)malloc(nSrcRowBytes);
-    pDstRowBuf = (icFloatNumber*)malloc(nDstRowBytes);
+    pSrcRowBuf = (icFloatNumber*)calloc(1, nSrcRowBytes);
+    pDstRowBuf = (icFloatNumber*)calloc(1, nDstRowBytes);
     if (!pSrcRowBuf || !pDstRowBuf) {
       printf("Out of Memory!\n");
       free(pSBuf);
