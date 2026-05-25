@@ -265,6 +265,53 @@ function(iccdev_add_profile_write_failure_test)
   endif()
 endfunction()
 
+function(iccdev_add_parser_restore_calls_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  add_executable(iccParserRestoreCallsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/parser-restore-calls.cpp"
+  )
+  target_compile_features(iccParserRestoreCallsTest PRIVATE cxx_std_17)
+  target_link_libraries(iccParserRestoreCallsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccParserRestoreCallsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.parser-restore-calls
+      COMMAND "$<TARGET_FILE:iccParserRestoreCallsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.parser-restore-calls
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccParserRestoreCallsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.parser-restore-calls PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;profile;parser;io;regression"
+  )
+  if(WIN32)
+    set(_parser_restore_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccParserRestoreCallsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _parser_restore_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.parser-restore-calls PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_parser_restore_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -417,6 +464,7 @@ if(WIN32)
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
+  iccdev_add_parser_restore_calls_test()
 
   return()
 endif()
@@ -471,6 +519,7 @@ iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
+iccdev_add_parser_restore_calls_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

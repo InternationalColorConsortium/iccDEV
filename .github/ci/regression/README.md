@@ -17,6 +17,10 @@ Test 18 (Regression Bisect).
 
 ## Script-based regressions
 
+| CTest | Issue | Bug | Check |
+|-------|-------|-----|-------|
+| `iccdev.parser-restore-calls` | Parser IO hardening | Parser call sites ignored failed cursor restore or read after failed seek | Compiles a focused `CIccIO` harness that verifies `ReadTags()` fails on restore failure and `ConnectSubProfile()` does not read after a failed seek |
+
 | Script | Issue | Bug | Check |
 |--------|-------|-----|-------|
 | `.github/scripts/iccdev-mluc-setter-regression-tests.sh` | #928 | `multiLocalizedUnicodeType` setters included safety terminators in serialized `mluc` string lengths | Rebuilds `sRGB_D65_MAT.icc` and `NamedColor.icc` from XML and verifies canonical `desc`/`mluc` sizes |

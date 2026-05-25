@@ -528,7 +528,10 @@ CIccMemIO* CIccProfile::GetTagIO(icSignature sig)
       return NULL;
     }
 
-    m_pAttachIO->Seek(pEntry->TagInfo.offset, icSeekSet);
+    if (m_pAttachIO->Seek(pEntry->TagInfo.offset, icSeekSet) != pEntry->TagInfo.offset) {
+      delete pIO;
+      return NULL;
+    }
     
     const size_t expected_length = pIO->GetLength();
     size_t read_length = m_pAttachIO->Read8(pIO->GetData(), expected_length);
@@ -652,11 +655,15 @@ bool CIccProfile::DeleteTag(icSignature sig)
 */
 CIccIO* CIccProfile::ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const
 {
+  if (!pIO)
+    return NULL;
+
   TagEntryList::const_iterator i;
 
   for (i = m_Tags.begin(); i != m_Tags.end(); i++) {
     if (i->TagInfo.sig == icSigEmbeddedV5ProfileTag && i->TagInfo.size>2*sizeof(icUInt32Number)) {
-      pIO->Seek(i->TagInfo.offset, icSeekSet);
+      if (pIO->Seek(i->TagInfo.offset, icSeekSet) != i->TagInfo.offset)
+        return NULL;
       icTagTypeSignature sig=(icTagTypeSignature)0, extra;
 
       if (pIO->Read32(&sig) && pIO->Read32(&extra) && sig == icSigEmbeddedProfileType) {
@@ -822,7 +829,9 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
 		return true;
 	}
 
-	size_t pos = pIO->Tell();
+  int64_t pos = pIO->Tell();
+  if (pos < 0)
+    return false;
 
 	for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
 		if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO, true)) {
@@ -831,9 +840,7 @@ bool CIccProfile::ReadTags(CIccProfile* pProfile)
 		}
 	}
 
-	pIO->Seek(pos, icSeekSet);
-
-	return true;
+	return pIO->Seek(pos, icSeekSet) >= 0;
 }
 
 /**
@@ -1248,14 +1255,19 @@ bool CIccProfile::ReadBasic(CIccIO *pIO)
   // field + profileID hash before being rejected.
   {
     icInt64Number startPos = pIO->Tell();
+    if (startPos < 0)
+      return false;
+
     icUInt32Number magic = 0;
     if (pIO->Seek(startPos + 36, icSeekSet) < 0 ||
         !pIO->Read32(&magic) ||
         magic != icMagicNumber) {
-      pIO->Seek(startPos, icSeekSet);
+      if (pIO->Seek(startPos, icSeekSet) < 0)
+        return false;
       return false;
     }
-    pIO->Seek(startPos, icSeekSet);
+    if (pIO->Seek(startPos, icSeekSet) < 0)
+      return false;
   }
 
   //Read Header
@@ -3020,18 +3032,31 @@ icValidateStatus CIccProfile::CheckRequiredTags(std::string &sReport, const CIcc
  */
 bool CIccProfile::CheckFileSize(CIccIO *pIO) const
 {
-  size_t FileSize;
-  size_t curPos = pIO->Tell();
-
-  if (!pIO->Seek(0, icSeekEnd))
+  if (!pIO)
     return false;
 
-  FileSize = pIO->Tell();
+  int64_t curPos = pIO->Tell();
+  if (curPos < 0)
+    return false;
+
+  if (pIO->Seek(0, icSeekEnd) < 0)
+    return false;
+
+  int64_t endPos = pIO->Tell();
+  if (endPos < 0) {
+    pIO->Seek(curPos, icSeekSet);
+    return false;
+  }
+
+  if (pIO->Seek(curPos, icSeekSet) < 0)
+    return false;
+
+  if ((uint64_t)endPos > (uint64_t)std::numeric_limits<size_t>::max())
+    return false;
+
+  size_t FileSize = (size_t)endPos;
 
   if (!FileSize)
-    return false;
-
-  if (!pIO->Seek(curPos, icSeekSet))
     return false;
 
   if (FileSize != m_Header.size)
@@ -4069,18 +4094,28 @@ void CalcProfileID(CIccIO *pIO, icProfileID *pProfileID)
   MD5_CTX context;
   icUInt8Number buffer[1024] = {0};
 
+  if (!pIO || !pProfileID)
+    return;
+  memset(pProfileID, 0, sizeof(*pProfileID));
+
   //remember where we are
-  size_t pos = pIO->Tell();
+  int64_t pos = pIO->Tell();
+  if (pos < 0)
+    return;
 
   //Get length and set up to read entire file
   size_t len = pIO->GetLength();
-  pIO->Seek(0, icSeekSet);
+  if (pIO->Seek(0, icSeekSet) < 0) {
+    pIO->Seek(pos, icSeekSet);
+    return;
+  }
 
   //read file updating checksum as we go
   icMD5Init(&context);
   nBlock = 0;
   while(len) {
-    size_t num = pIO->Read8(&buffer[0],1024);
+    size_t request = len < sizeof(buffer) ? len : sizeof(buffer);
+    size_t num = pIO->Read8(&buffer[0], request);
     if (num == 0)
         break;              // can't give a useful error here, but we need to break the infinite loop
     if (!nBlock) {  // Zero out 3 header contents in Profile ID calculation

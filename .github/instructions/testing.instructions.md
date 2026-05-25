@@ -38,8 +38,8 @@ cmake --build out/vs2022-x64 --config Release --target check
 ```
 
 Windows full tool builds register the IccConnect threaded CMM, EmbedIO Read8
-bounds, FileIO length-position, FileIO seek/tell, and profile write failure
-regressions, two batch-backed suites through
+bounds, FileIO length-position, FileIO seek/tell, parser restore-call, and
+profile write failure regressions, two batch-backed suites through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the
 iccDumpProfile smoke suite, the issue-987 shared export suite, and the PAWG
 report smoke suite. Windows feature-disabled builds register the subset whose
