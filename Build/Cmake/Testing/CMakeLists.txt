@@ -168,6 +168,7 @@ function(iccdev_add_fileio_getlength_position_test)
     COMMAND
       "$<TARGET_FILE:iccFileIoGetLengthPositionTest>"
       "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      "${ICCDEV_TEST_OUTDIR}/fileio-getlength-roundtrip.icc"
   )
   set_tests_properties(iccdev.fileio-getlength-preserves-position PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
