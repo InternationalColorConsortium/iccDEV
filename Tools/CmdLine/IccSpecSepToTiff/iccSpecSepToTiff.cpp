@@ -260,7 +260,10 @@ int main(int argc, char* argv[]) {
         tptr += bytesPerSample;
       }
     }
-    outfile.WriteLine(outbuf);
+    if (!outfile.WriteLine(outbuf)) {
+      printf("Error writing line %d\n", i);
+      return -1;
+    }
   }
   
   // We need to close output first, to use all pointer data before buffers are destructed.

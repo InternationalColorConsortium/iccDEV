@@ -180,6 +180,9 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   Close();
   m_bRead = false;
 
+  if (bCompress && nBPS != 8 && nBPS != 16 && nBPS != 32)
+    return false;
+
   m_nWidth = nWidth;
   m_nHeight = nHeight;
   m_nBitsPerSample = (icUInt16Number)nBPS;
