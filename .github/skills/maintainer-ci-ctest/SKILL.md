@@ -45,9 +45,14 @@ when practical.
 
 - `check` must exist on every platform.
 - `check` and workflow CTest execution must use `--no-tests=error`.
+- Before committing a CTest suite-count change, run
+  `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
+  and update every stale count in the same change.
 - Adding checks inside `iccdev-tool-coverage-baseline.sh` does not change that
   count; validate the direct script and `ctest -R '^iccdev\.tool-coverage$'`.
-- Windows currently registers 6 CTest suites.
+- Windows full builds include focused executable regressions, batch-backed
+  suites, dump/profile smoke coverage, shared-export coverage, and PAWG report
+  coverage.
 - Generated-profile gates currently validate 208 ICC profiles.
 - Windows and JSON profile generation validate 130 profile parses.
 - WASM parity currently expects 208 generated ICC profiles.

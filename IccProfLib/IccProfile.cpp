@@ -78,6 +78,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <new>
+#include <limits>
 #include "IccProfile.h"
 #include "IccTag.h"
 #include "IccArrayBasic.h"
@@ -995,43 +996,47 @@ icValidateStatus CIccProfile::ReadValidate(CIccIO *pIO, std::string &sReport)
  */
 bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
 {
-  //Write Header
-  pIO->Seek(0, icSeekSet);
+  if (!pIO)
+    return false;
 
-  pIO->Write32(&m_Header.size);
-  pIO->Write32(&m_Header.cmmId);
-  pIO->Write32(&m_Header.version);
-  pIO->Write32(&m_Header.deviceClass);
-  pIO->Write32(&m_Header.colorSpace);
-  pIO->Write32(&m_Header.pcs);
-  pIO->Write16(&m_Header.date.year);
-  pIO->Write16(&m_Header.date.month);
-  pIO->Write16(&m_Header.date.day);
-  pIO->Write16(&m_Header.date.hours);
-  pIO->Write16(&m_Header.date.minutes);
-  pIO->Write16(&m_Header.date.seconds);
-  pIO->Write32(&m_Header.magic);
-  pIO->Write32(&m_Header.platform);
-  pIO->Write32(&m_Header.flags);
-  pIO->Write32(&m_Header.manufacturer);
-  pIO->Write32(&m_Header.model);
-  pIO->Write64(&m_Header.attributes);
-  pIO->Write32(&m_Header.renderingIntent);
-  pIO->Write32(&m_Header.illuminant.X);
-  pIO->Write32(&m_Header.illuminant.Y);
-  pIO->Write32(&m_Header.illuminant.Z);
-  pIO->Write32(&m_Header.creator);
-  pIO->Write8(&m_Header.profileID, sizeof(m_Header.profileID));
-  pIO->Write32(&m_Header.spectralPCS);
-  pIO->Write16(&m_Header.spectralRange.start);
-  pIO->Write16(&m_Header.spectralRange.end);
-  pIO->Write16(&m_Header.spectralRange.steps);
-  pIO->Write16(&m_Header.biSpectralRange.start);
-  pIO->Write16(&m_Header.biSpectralRange.end);
-  pIO->Write16(&m_Header.biSpectralRange.steps);
-  pIO->Write32(&m_Header.mcs);
-  pIO->Write32(&m_Header.deviceSubClass);
-  pIO->Write8(&m_Header.reserved[0], sizeof(m_Header.reserved));
+  //Write Header
+  if (pIO->Seek(0, icSeekSet)<0 ||
+      !pIO->Write32(&m_Header.size) ||
+      !pIO->Write32(&m_Header.cmmId) ||
+      !pIO->Write32(&m_Header.version) ||
+      !pIO->Write32(&m_Header.deviceClass) ||
+      !pIO->Write32(&m_Header.colorSpace) ||
+      !pIO->Write32(&m_Header.pcs) ||
+      !pIO->Write16(&m_Header.date.year) ||
+      !pIO->Write16(&m_Header.date.month) ||
+      !pIO->Write16(&m_Header.date.day) ||
+      !pIO->Write16(&m_Header.date.hours) ||
+      !pIO->Write16(&m_Header.date.minutes) ||
+      !pIO->Write16(&m_Header.date.seconds) ||
+      !pIO->Write32(&m_Header.magic) ||
+      !pIO->Write32(&m_Header.platform) ||
+      !pIO->Write32(&m_Header.flags) ||
+      !pIO->Write32(&m_Header.manufacturer) ||
+      !pIO->Write32(&m_Header.model) ||
+      !pIO->Write64(&m_Header.attributes) ||
+      !pIO->Write32(&m_Header.renderingIntent) ||
+      !pIO->Write32(&m_Header.illuminant.X) ||
+      !pIO->Write32(&m_Header.illuminant.Y) ||
+      !pIO->Write32(&m_Header.illuminant.Z) ||
+      !pIO->Write32(&m_Header.creator) ||
+      pIO->Write8(&m_Header.profileID, sizeof(m_Header.profileID))!=sizeof(m_Header.profileID) ||
+      !pIO->Write32(&m_Header.spectralPCS) ||
+      !pIO->Write16(&m_Header.spectralRange.start) ||
+      !pIO->Write16(&m_Header.spectralRange.end) ||
+      !pIO->Write16(&m_Header.spectralRange.steps) ||
+      !pIO->Write16(&m_Header.biSpectralRange.start) ||
+      !pIO->Write16(&m_Header.biSpectralRange.end) ||
+      !pIO->Write16(&m_Header.biSpectralRange.steps) ||
+      !pIO->Write32(&m_Header.mcs) ||
+      !pIO->Write32(&m_Header.deviceSubClass) ||
+      pIO->Write8(&m_Header.reserved[0], sizeof(m_Header.reserved))!=sizeof(m_Header.reserved)) {
+    return false;
+  }
 
   TagEntryList::iterator i, j;
   icUInt32Number count;
@@ -1041,9 +1046,12 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
       count++;
   }
 
-  pIO->Write32(&count);
+  if (!pIO->Write32(&count))
+    return false;
 
   size_t dirpos = pIO->GetLength();
+  if (dirpos > (size_t)std::numeric_limits<int64_t>::max())
+    return false;
 
   //Write Unintialized TagDir
   for (i=m_Tags.begin(); i!= m_Tags.end(); i++) {
@@ -1051,9 +1059,10 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
       i->TagInfo.offset = 0;
       i->TagInfo.size = 0;
 
-      pIO->Write32(&i->TagInfo.sig);
-      pIO->Write32(&i->TagInfo.offset);
-      pIO->Write32(&i->TagInfo.size);
+      if (!pIO->Write32(&i->TagInfo.sig) ||
+          !pIO->Write32(&i->TagInfo.offset) ||
+          !pIO->Write32(&i->TagInfo.size))
+        return false;
     }
   }
 
@@ -1066,11 +1075,22 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
       }
 
       if (i==j) {
-        i->TagInfo.offset = (icUInt32Number) pIO->GetLength();
-        i->pTag->Write(pIO);
-        i->TagInfo.size = (icUInt32Number)( pIO->GetLength() - i->TagInfo.offset );
+        size_t tagOffset = pIO->GetLength();
+        if (tagOffset > (size_t)std::numeric_limits<icUInt32Number>::max())
+          return false;
 
-        pIO->Align32();
+        i->TagInfo.offset = (icUInt32Number)tagOffset;
+        if (!i->pTag->Write(pIO))
+          return false;
+
+        size_t tagEnd = pIO->GetLength();
+        if (tagEnd < tagOffset ||
+            tagEnd - tagOffset > (size_t)std::numeric_limits<icUInt32Number>::max())
+          return false;
+        i->TagInfo.size = (icUInt32Number)(tagEnd - tagOffset);
+
+        if (!pIO->Align32())
+          return false;
       }
       else {
         i->TagInfo.offset = j->TagInfo.offset;
@@ -1079,21 +1099,27 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
     }
   }
 
-  pIO->Seek(dirpos, icSeekSet);
+  if (pIO->Seek((int64_t)dirpos, icSeekSet)<0)
+    return false;
 
   //Write TagDir with offsets and sizes
   for (i=m_Tags.begin(); i!= m_Tags.end(); i++) {
     if (i->pTag) {
-      pIO->Write32(&i->TagInfo.sig);
-      pIO->Write32(&i->TagInfo.offset);
-      pIO->Write32(&i->TagInfo.size);
+      if (!pIO->Write32(&i->TagInfo.sig) ||
+          !pIO->Write32(&i->TagInfo.offset) ||
+          !pIO->Write32(&i->TagInfo.size))
+        return false;
     }
   }
 
   //Update header with size
-  m_Header.size = (icUInt32Number) pIO->GetLength();
-  pIO->Seek(0, icSeekSet);
-  pIO->Write32(&m_Header.size);
+  size_t profileSize = pIO->GetLength();
+  if (profileSize > (size_t)std::numeric_limits<icUInt32Number>::max())
+    return false;
+  m_Header.size = (icUInt32Number)profileSize;
+  if (pIO->Seek(0, icSeekSet)<0 ||
+      !pIO->Write32(&m_Header.size))
+    return false;
 
   bool bWriteId;
 
@@ -1115,8 +1141,9 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
   //Write the profile ID if version 4 profile
   if(bWriteId) {
     CalcProfileID(pIO, &m_Header.profileID);
-    pIO->Seek(84, icSeekSet);
-    pIO->Write8(&m_Header.profileID, sizeof(m_Header.profileID));
+    if (pIO->Seek(84, icSeekSet)<0 ||
+        pIO->Write8(&m_Header.profileID, sizeof(m_Header.profileID))!=sizeof(m_Header.profileID))
+      return false;
   }
 
   return true;

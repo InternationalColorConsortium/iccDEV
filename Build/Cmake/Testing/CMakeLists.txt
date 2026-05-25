@@ -194,6 +194,41 @@ function(iccdev_add_fileio_getlength_position_test)
   endif()
 endfunction()
 
+function(iccdev_add_profile_write_failure_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  add_executable(iccProfileWriteFailureTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/profile-write-failure.cpp"
+  )
+  target_link_libraries(iccProfileWriteFailureTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccProfileWriteFailureTest)
+
+  add_test(
+    NAME iccdev.profile-write-failure
+    COMMAND "$<TARGET_FILE:iccProfileWriteFailureTest>"
+  )
+  set_tests_properties(iccdev.profile-write-failure PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;profile;write;regression"
+  )
+  if(WIN32)
+    set(_profile_write_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfileWriteFailureTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _profile_write_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.profile-write-failure PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_profile_write_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -344,6 +379,7 @@ if(WIN32)
   iccdev_add_iccconnect_thread_test()
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_fileio_getlength_position_test()
+  iccdev_add_profile_write_failure_test()
 
   return()
 endif()
@@ -396,6 +432,7 @@ set(ICCDEV_TEST_ENV
 iccdev_add_iccconnect_thread_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
+iccdev_add_profile_write_failure_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
