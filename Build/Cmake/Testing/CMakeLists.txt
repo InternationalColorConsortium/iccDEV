@@ -194,6 +194,43 @@ function(iccdev_add_fileio_getlength_position_test)
   endif()
 endfunction()
 
+function(iccdev_add_fileio_seek_tell_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  add_executable(iccFileIoSeekTellTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/fileio-seek-tell.cpp"
+  )
+  target_link_libraries(iccFileIoSeekTellTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccFileIoSeekTellTest)
+
+  add_test(
+    NAME iccdev.fileio-seek-tell
+    COMMAND
+      "$<TARGET_FILE:iccFileIoSeekTellTest>"
+      "${ICCDEV_TEST_OUTDIR}/fileio-seek-tell-scratch.bin"
+  )
+  set_tests_properties(iccdev.fileio-seek-tell PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;fileio;regression"
+  )
+  if(WIN32)
+    set(_fileio_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFileIoSeekTellTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _fileio_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.fileio-seek-tell PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_fileio_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_profile_write_failure_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -380,6 +417,7 @@ if(WIN32)
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
+  iccdev_add_fileio_seek_tell_test()
 
   return()
 endif()
@@ -433,6 +471,7 @@ iccdev_add_iccconnect_thread_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
+iccdev_add_fileio_seek_tell_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

@@ -76,6 +76,14 @@
 #include <cmath>
 #include <limits>
 
+#ifdef WIN32
+#define icFileSeek64 _fseeki64
+#define icFileTell64 _ftelli64
+#else
+#define icFileSeek64 fseeko
+#define icFileTell64 ftello
+#endif
+
 
 #ifndef __max
 #define __max(a,b)  (((a) > (b)) ? (a) : (b))
@@ -87,6 +95,46 @@
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
+
+static bool icGetSeekOrigin(icSeekVal pos, int &origin)
+{
+  switch (pos) {
+  case icSeekSet:
+    origin = SEEK_SET;
+    return true;
+  case icSeekCur:
+    origin = SEEK_CUR;
+    return true;
+  case icSeekEnd:
+    origin = SEEK_END;
+    return true;
+  default:
+    origin = SEEK_SET;
+    return false;
+  }
+}
+
+static int icFileSeek(FILE *f, int64_t nOffset, icSeekVal pos)
+{
+  int origin;
+  if (!icGetSeekOrigin(pos, origin))
+    return -1;
+
+#ifdef WIN32
+  return icFileSeek64(f, nOffset, origin);
+#else
+  return icFileSeek64(f, (off_t)nOffset, origin);
+#endif
+}
+
+static int64_t icFileTell(FILE *f)
+{
+  if (!f)
+    return -1;
+
+  int64_t pos = (int64_t)icFileTell64(f);
+  return pos >= 0 ? pos : -1;
+}
 
 //////////////////////////////////////////////////////////////////////
 // Class CIccIO
@@ -543,11 +591,21 @@ size_t CIccFileIO::GetLength()
   if (!m_fFile)
     return 0;
 
-  size_t current = ftell(m_fFile);
-  fseek (m_fFile, 0, SEEK_END);
-  size_t end = ftell(m_fFile);
-  fseek (m_fFile, current, SEEK_SET);
-  return end;
+  int64_t current = Tell();
+  if (current < 0)
+    return 0;
+
+  if (Seek(0, icSeekEnd) < 0)
+    return 0;
+
+  int64_t end = Tell();
+  if (Seek(current, icSeekSet) < 0 || end < 0)
+    return 0;
+
+  if ((uint64_t)end > (uint64_t)std::numeric_limits<size_t>::max())
+    return 0;
+
+  return (size_t)end;
 }
 
 
@@ -556,7 +614,7 @@ int64_t CIccFileIO::Seek(int64_t nOffset, icSeekVal pos)
   if (!m_fFile)
     return -1;
 
-  return !fseek(m_fFile, nOffset, pos) ? ftell(m_fFile) : -1;
+  return !icFileSeek(m_fFile, nOffset, pos) ? Tell() : -1;
 }
 
 
@@ -565,7 +623,7 @@ int64_t CIccFileIO::Tell()
   if (!m_fFile)
     return -1;
 
-  return ftell(m_fFile);
+  return icFileTell(m_fFile);
 }
 
 
