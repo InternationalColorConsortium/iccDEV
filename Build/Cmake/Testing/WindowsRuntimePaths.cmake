@@ -54,6 +54,13 @@ function(iccdev_collect_cache_runtime_path_entries OUT_VAR BUILD_DIR)
     endif()
   endforeach()
 
+  foreach(_compiler_path IN ITEMS "${CMAKE_C_COMPILER}" "${CMAKE_CXX_COMPILER}")
+    if(NOT "${_compiler_path}" STREQUAL "" AND EXISTS "${_compiler_path}")
+      get_filename_component(_compiler_dir "${_compiler_path}" DIRECTORY)
+      iccdev_add_existing_path_entry(_runtime_path_entries "${_compiler_dir}")
+    endif()
+  endforeach()
+
   foreach(_library_cache_name
       LIBXML2_LIBRARY
       PNG_LIBRARY
