@@ -543,7 +543,6 @@ size_t CIccFileIO::GetLength()
   if (!m_fFile)
     return 0;
 
-  fflush(m_fFile);
   size_t current = ftell(m_fFile);
   fseek (m_fFile, 0, SEEK_END);
   size_t end = ftell(m_fFile);

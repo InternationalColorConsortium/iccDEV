@@ -207,7 +207,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          EXPECTED_CTEST_TOTAL=27
+          EXPECTED_CTEST_TOTAL=28
           CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
           ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
           if ! grep -q "^Total Tests: ${EXPECTED_CTEST_TOTAL}$" "${CTEST_LIST}"; then

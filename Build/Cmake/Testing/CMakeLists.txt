@@ -152,6 +152,47 @@ function(iccdev_add_embedio_read8_bounds_test)
   endif()
 endfunction()
 
+function(iccdev_add_fileio_getlength_position_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  add_executable(iccFileIoGetLengthPositionTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/fileio-getlength-position.cpp"
+  )
+  target_link_libraries(iccFileIoGetLengthPositionTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccFileIoGetLengthPositionTest)
+
+  add_test(
+    NAME iccdev.fileio-getlength-preserves-position
+    COMMAND
+      "$<TARGET_FILE:iccFileIoGetLengthPositionTest>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.fileio-getlength-preserves-position PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;fileio;issue-987;regression"
+  )
+  if(WIN32)
+    set(_fileio_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccFileIoGetLengthPositionTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _fileio_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.fileio-getlength-preserves-position PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_fileio_windows_env_mods}"
+    )
+  else()
+    set_tests_properties(iccdev.fileio-getlength-preserves-position PROPERTIES
+      ENVIRONMENT "${ICCDEV_TEST_ENV}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -301,6 +342,7 @@ if(WIN32)
 
   iccdev_add_iccconnect_thread_test()
   iccdev_add_embedio_read8_bounds_test()
+  iccdev_add_fileio_getlength_position_test()
 
   return()
 endif()
@@ -352,6 +394,7 @@ set(ICCDEV_TEST_ENV
 
 iccdev_add_iccconnect_thread_test()
 iccdev_add_embedio_read8_bounds_test()
+iccdev_add_fileio_getlength_position_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

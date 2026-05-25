@@ -1,0 +1,597 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Issue #987 Unicolour and MinGW compatibility gate
+#
+# This workflow keeps the issue visible with explicit before/after jobs.
+# The before job builds the known pre-fix ref and records the observed
+# ReadIccProfile()/iccDumpProfile behavior for the attached FOGRA39 profile.
+# The after job builds the pushed branch and requires the fixed behavior.
+#
+###############################################################
+
+name: ci-issue-987-compatibility
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - issue-987
+  workflow_dispatch:
+    inputs:
+      before_ref:
+        description: 'iccDEV ref used by the Before job'
+        required: false
+        default: '5f679e32a4ec7c6c5fd1e20b6422a3bd90d9c0d1'
+        type: string
+      unicolour_ref:
+        description: 'waacton/Unicolour branch, tag, or SHA to test'
+        required: false
+        default: 'main'
+        type: string
+
+concurrency:
+  group: issue-987-compatibility-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  GH_NO_UPDATE_NOTIFIER: 1
+  GH_PROMPT_DISABLED: 1
+
+jobs:
+  validate-inputs:
+    name: "Validate Issue #987 Inputs"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    outputs:
+      before_ref: ${{ steps.validate.outputs.before_ref }}
+      unicolour_ref: ${{ steps.validate.outputs.unicolour_ref }}
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate workflow_dispatch inputs
+        id: validate
+        env:
+          BASH_ENV: /dev/null
+          RAW_BEFORE_REF: ${{ github.event.inputs.before_ref || '5f679e32a4ec7c6c5fd1e20b6422a3bd90d9c0d1' }}
+          RAW_UNICOLOUR_REF: ${{ github.event.inputs.unicolour_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          source .github/scripts/sanitize-sed.sh
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          validate_ref() {
+            local ref="$1"
+            local label="$2"
+
+            if [[ "$ref" =~ ^[0-9A-Fa-f]{7,40}$ ]]; then
+              :
+            elif [[ ! "$ref" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$ ]]; then
+              echo "::error title=Invalid ${label} ref::Rejected ref $(sanitize_line "$ref")"
+              exit 1
+            fi
+
+            case "$ref" in
+              */.|*/..|-*|*//*|*@\{*|*.lock|*/|*..*|refs/*)
+                echo "::error title=Invalid ${label} ref::Rejected ref $(sanitize_line "$ref")"
+                exit 1
+                ;;
+            esac
+
+            local safe_ref
+            safe_ref="$(sanitize_ref "$ref")"
+            if [[ "$safe_ref" != "$ref" ]]; then
+              echo "::error title=Invalid ${label} ref::Rejected ref $(sanitize_line "$ref")"
+              exit 1
+            fi
+
+            printf '%s\n' "$safe_ref"
+          }
+
+          before_ref="$(validate_ref "$RAW_BEFORE_REF" "iccDEV before")"
+          unicolour_ref="$(validate_ref "$RAW_UNICOLOUR_REF" "Unicolour")"
+
+          printf 'before_ref=%s\n' "$before_ref" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          printf 'unicolour_ref=%s\n' "$unicolour_ref" >> "$GITHUB_OUTPUT"  # elements-sanitized
+
+          {
+            echo "### Issue #987 input validation"
+            echo ""
+            echo "- Before ref: \`$(sanitize_line "$before_ref")\`"
+            echo "- After ref: \`$(sanitize_line "$GITHUB_SHA")\`"
+            echo "- Unicolour ref: \`$(sanitize_line "$unicolour_ref")\`"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+  mingw-before-repro:
+    name: "Before: Issue #987 MinGW repro"
+    needs: validate-inputs
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup MSYS2 UCRT64 MinGW
+        id: setup-msys2
+        uses: msys2/setup-msys2@40677d36a502eb2cf0fb808cc9dec31bf6152638  # v2.28.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-nlohmann-json
+
+      - name: Run before repro
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          BEFORE_REF: ${{ needs.validate-inputs.outputs.before_ref }}
+          MSYS2_LOCATION: ${{ steps.setup-msys2.outputs.msys2-location }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github/scripts/sanitize.ps1
+          git fetch --no-tags --depth=1 origin $env:BEFORE_REF
+          git checkout --detach FETCH_HEAD
+          . .github/scripts/sanitize.ps1
+
+          $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
+          $ucrtBin = Join-Path $msysRoot 'ucrt64\bin'
+          $usrBin = Join-Path $msysRoot 'usr\bin'
+          $env:PATH = "$ucrtBin;$usrBin;$env:PATH"
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
+          $sourceDir = Join-Path $workspace 'Build\Cmake'
+          $buildDir = Join-Path $sourceDir 'build-mingw-issue987-before'
+          $reproDir = Join-Path $buildDir 'Testing\issue-987-before'
+
+          $cmake = Join-Path $ucrtBin 'cmake.exe'
+          $ctest = Join-Path $ucrtBin 'ctest.exe'
+          $gcc = Join-Path $ucrtBin 'x86_64-w64-mingw32-gcc.exe'
+          $gxx = Join-Path $ucrtBin 'x86_64-w64-mingw32-g++.exe'
+
+          foreach ($tool in @($cmake, $ctest, $gcc, $gxx)) {
+            if (-not (Test-Path -LiteralPath $tool)) {
+              throw "Required MinGW tool missing: $(Sanitize-Line $tool)"
+            }
+          }
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments
+            )
+            & $FilePath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "$(Sanitize-Line $FilePath) failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          if (Test-Path -LiteralPath $buildDir) {
+            Remove-Item -Recurse -Force -LiteralPath $buildDir
+          }
+
+          Invoke-Native $cmake @(
+            '-S', $sourceDir,
+            '-B', $buildDir,
+            '-G', 'Ninja',
+            '-DCMAKE_BUILD_TYPE=Debug',
+            "-DCMAKE_C_COMPILER=$gcc",
+            "-DCMAKE_CXX_COMPILER=$gxx",
+            '-DENABLE_TOOLS=ON',
+            '-DENABLE_ICCXML=ON',
+            '-DENABLE_ICCJSON=OFF',
+            '-DENABLE_IMAGE_TOOLS=OFF',
+            '-DENABLE_WXWIDGETS=OFF',
+            '-DENABLE_CMM_TOOLS=OFF',
+            '-DENABLE_IIS_TOOLS=OFF',
+            '-DENABLE_TESTS=ON',
+            '-DENABLE_SHARED_LIBS=ON',
+            '-DENABLE_STATIC_LIBS=ON'
+          )
+          Invoke-Native $cmake @(
+            '--build', $buildDir,
+            '--target', 'iccDumpProfile', 'IccProfLib2',
+            '--parallel'
+          )
+
+          New-Item -ItemType Directory -Force -Path $reproDir | Out-Null
+          $profileZip = Join-Path $reproDir 'Coated_Fogra39L_VIGC_300.zip'
+          $profileUrl = 'https://github.com/user-attachments/files/27490581/Coated_Fogra39L_VIGC_300.zip'
+          Invoke-WebRequest -Uri $profileUrl -OutFile $profileZip
+          Expand-Archive -LiteralPath $profileZip -DestinationPath $reproDir -Force
+          $profile = Get-ChildItem -LiteralPath $reproDir -Recurse -File -Filter 'Coated_Fogra39L_VIGC_300.icc' |
+            Select-Object -First 1
+          if (-not $profile) {
+            throw "Issue #987 attached profile was not found after extraction"
+          }
+          $profileHash = (Get-FileHash -LiteralPath $profile.FullName -Algorithm SHA256).Hash
+          $expectedHash = '6DF43849A84D2632E7900A125F657BD09364ED56775BC4740C1E39A5492D47E3'
+          if ($profileHash -ne $expectedHash) {
+            throw "Issue #987 profile SHA256 mismatch: $(Sanitize-Line $profileHash)"
+          }
+          if ($profile.Length -ne 8652444) {
+            throw "Issue #987 profile size mismatch: $($profile.Length)"
+          }
+
+          $dumpTool = Join-Path $buildDir 'Tools\IccDumpProfile\iccDumpProfile.exe'
+          $toolStdout = Join-Path $reproDir 'iccDumpProfile-before.stdout.log'
+          $toolStderr = Join-Path $reproDir 'iccDumpProfile-before.stderr.log'
+          & $dumpTool --read --diag 1 $profile.FullName > $toolStdout 2> $toolStderr
+          $exitCode = $LASTEXITCODE
+          $stdoutText = Get-Content -Raw -Path $toolStdout
+          $stderrText = Get-Content -Raw -Path $toolStderr
+          $badSizeObserved = (($stdoutText -match '1936077618') -or ($stderrText -match '1936077618'))
+          $parseFailed = (($exitCode -ne 0) -or ($stdoutText -match 'Unable to parse'))
+          $issueReproduced = ($badSizeObserved -or $parseFailed)
+
+          @(
+            "Issue #987 MinGW before repro",
+            "Before ref: $($env:BEFORE_REF)",
+            "Profile bytes: $($profile.Length)",
+            "Profile SHA256: $profileHash",
+            "Command: iccDumpProfile --read --diag 1 $($profile.Name)",
+            "Exit code: $exitCode",
+            "Parse failed: $parseFailed",
+            "Reported bad TagInfo.size 1936077618 observed: $badSizeObserved",
+            "Issue reproduced: $issueReproduced"
+          ) | Set-Content -LiteralPath (Join-Path $reproDir 'issue-987-before-summary.txt') -Encoding ascii
+
+          $summaryLines = @(
+            "### Before: Issue #987 MinGW repro",
+            "",
+            "- Before ref: ``$(Sanitize-Line $env:BEFORE_REF)``",
+            "- Profile: ``Coated_Fogra39L_VIGC_300.icc``",
+            "- Profile bytes: ``$($profile.Length)``",
+            "- Tool exit code: ``$exitCode``",
+            "- Parse failed: ``$parseFailed``",
+            "- Bad TagInfo.size ``1936077618`` observed: ``$badSizeObserved``",
+            "- Issue reproduced: ``$issueReproduced``"
+          )
+          $summaryLines | ForEach-Object {
+            Sanitize-Print $_
+          } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload before repro logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: issue-987-before-mingw-results
+          path: Build/Cmake/build-mingw-issue987-before/Testing/issue-987-before
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+
+  mingw-after-fixed:
+    name: "After: Issue #987 MinGW fixed behavior"
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout iccDEV after ref
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup MSYS2 UCRT64 MinGW
+        id: setup-msys2
+        uses: msys2/setup-msys2@40677d36a502eb2cf0fb808cc9dec31bf6152638  # v2.28.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-nlohmann-json
+
+      - name: Run after fixed behavior
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          MSYS2_LOCATION: ${{ steps.setup-msys2.outputs.msys2-location }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github/scripts/sanitize.ps1
+
+          $msysRoot = [System.IO.Path]::GetFullPath($env:MSYS2_LOCATION)
+          $ucrtBin = Join-Path $msysRoot 'ucrt64\bin'
+          $usrBin = Join-Path $msysRoot 'usr\bin'
+          $env:PATH = "$ucrtBin;$usrBin;$env:PATH"
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
+          $sourceDir = Join-Path $workspace 'Build\Cmake'
+          $buildDir = Join-Path $sourceDir 'build-mingw-issue987-after'
+          $reproDir = Join-Path $buildDir 'Testing\issue-987-after'
+
+          $cmake = Join-Path $ucrtBin 'cmake.exe'
+          $ctest = Join-Path $ucrtBin 'ctest.exe'
+          $gcc = Join-Path $ucrtBin 'x86_64-w64-mingw32-gcc.exe'
+          $gxx = Join-Path $ucrtBin 'x86_64-w64-mingw32-g++.exe'
+
+          foreach ($tool in @($cmake, $ctest, $gcc, $gxx)) {
+            if (-not (Test-Path -LiteralPath $tool)) {
+              throw "Required MinGW tool missing: $(Sanitize-Line $tool)"
+            }
+          }
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments
+            )
+            & $FilePath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "$(Sanitize-Line $FilePath) failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          if (Test-Path -LiteralPath $buildDir) {
+            Remove-Item -Recurse -Force -LiteralPath $buildDir
+          }
+
+          Invoke-Native $cmake @(
+            '-S', $sourceDir,
+            '-B', $buildDir,
+            '-G', 'Ninja',
+            '-DCMAKE_BUILD_TYPE=Debug',
+            "-DCMAKE_C_COMPILER=$gcc",
+            "-DCMAKE_CXX_COMPILER=$gxx",
+            '-DENABLE_TOOLS=ON',
+            '-DENABLE_ICCXML=ON',
+            '-DENABLE_ICCJSON=OFF',
+            '-DENABLE_IMAGE_TOOLS=OFF',
+            '-DENABLE_WXWIDGETS=OFF',
+            '-DENABLE_CMM_TOOLS=OFF',
+            '-DENABLE_IIS_TOOLS=OFF',
+            '-DENABLE_TESTS=ON',
+            '-DENABLE_SHARED_LIBS=ON',
+            '-DENABLE_STATIC_LIBS=ON'
+          )
+          Invoke-Native $cmake @(
+            '--build', $buildDir,
+            '--target', 'iccDumpProfile', 'IccProfLib2', 'iccFileIoGetLengthPositionTest',
+            '--parallel'
+          )
+          Invoke-Native $ctest @(
+            '--test-dir', $buildDir,
+            '-R', '^iccdev\.fileio-getlength-preserves-position$',
+            '--output-on-failure',
+            '--no-tests=error'
+          )
+
+          New-Item -ItemType Directory -Force -Path $reproDir | Out-Null
+          $profileZip = Join-Path $reproDir 'Coated_Fogra39L_VIGC_300.zip'
+          $profileUrl = 'https://github.com/user-attachments/files/27490581/Coated_Fogra39L_VIGC_300.zip'
+          Invoke-WebRequest -Uri $profileUrl -OutFile $profileZip
+          Expand-Archive -LiteralPath $profileZip -DestinationPath $reproDir -Force
+          $profile = Get-ChildItem -LiteralPath $reproDir -Recurse -File -Filter 'Coated_Fogra39L_VIGC_300.icc' |
+            Select-Object -First 1
+          if (-not $profile) {
+            throw "Issue #987 attached profile was not found after extraction"
+          }
+          $profileHash = (Get-FileHash -LiteralPath $profile.FullName -Algorithm SHA256).Hash
+          $expectedHash = '6DF43849A84D2632E7900A125F657BD09364ED56775BC4740C1E39A5492D47E3'
+          if ($profileHash -ne $expectedHash) {
+            throw "Issue #987 profile SHA256 mismatch: $(Sanitize-Line $profileHash)"
+          }
+          if ($profile.Length -ne 8652444) {
+            throw "Issue #987 profile size mismatch: $($profile.Length)"
+          }
+
+          $dumpTool = Join-Path $buildDir 'Tools\IccDumpProfile\iccDumpProfile.exe'
+          $toolStdout = Join-Path $reproDir 'iccDumpProfile-after.stdout.log'
+          $toolStderr = Join-Path $reproDir 'iccDumpProfile-after.stderr.log'
+          & $dumpTool --read --diag 1 $profile.FullName > $toolStdout 2> $toolStderr
+          if ($LASTEXITCODE -ne 0) {
+            throw "MinGW iccDumpProfile --read --diag failed with exit code $LASTEXITCODE"
+          }
+
+          $stdoutLines = Get-Content -Path $toolStdout
+          $stderrText = Get-Content -Raw -Path $toolStderr
+          if ($stdoutLines -match 'Unable to parse') {
+            throw "Issue #987 fixed behavior failed: MinGW iccDumpProfile could not parse the FOGRA39 profile"
+          }
+          if (-not ($stdoutLines -match 'Size:\s+8652444')) {
+            throw "Issue #987 fixed behavior missing expected profile size"
+          }
+          if (-not ($stdoutLines -match 'Profile Tags \(14\)')) {
+            throw "Issue #987 fixed behavior missing expected tag count"
+          }
+          $chadPattern = "'chad'\s+520\s+44"
+          if (-not ($stdoutLines -match $chadPattern)) {
+            throw "Issue #987 fixed behavior missing expected chad tag offset/size"
+          }
+          if (($stdoutLines -match '1936077618') -or ($stderrText -match '1936077618')) {
+            throw "Issue #987 fixed behavior detected the reported invalid TagInfo.size value"
+          }
+
+          $chadLine = ($stdoutLines | Select-String -Pattern $chadPattern |
+            Select-Object -First 1).Line
+          @(
+            "Issue #987 MinGW after fixed behavior",
+            "Profile bytes: $($profile.Length)",
+            "Profile SHA256: $profileHash",
+            "Command: iccDumpProfile --read --diag 1 $($profile.Name)",
+            "Expected result: ReadIccProfile succeeds, 14 tags, chad offset=520 size=44",
+            "Observed chad line: $chadLine",
+            "Reported bad TagInfo.size 1936077618 observed: no"
+          ) | Set-Content -LiteralPath (Join-Path $reproDir 'issue-987-after-summary.txt') -Encoding ascii
+
+          $summaryLines = @(
+            "### After: Issue #987 MinGW fixed behavior",
+            "",
+            "- Profile: ``Coated_Fogra39L_VIGC_300.icc``",
+            "- Profile bytes: ``$($profile.Length)``",
+            "- ReadIccProfile result: ``OK``",
+            "- Tag count: ``14``",
+            "- chad tag: ``$(Sanitize-Line $chadLine)``",
+            "- Bad TagInfo.size ``1936077618`` observed: ``no``"
+          )
+          $summaryLines | ForEach-Object {
+            Sanitize-Print $_
+          } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload after repro logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: issue-987-after-mingw-results
+          path: Build/Cmake/build-mingw-issue987-after/Testing/issue-987-after
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
+
+  unicolour-after-tests:
+    name: "After: Issue #987 Unicolour ICC tests"
+    needs: validate-inputs
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7  # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run Unicolour FOGRA39 test
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: 1
+          POWERSHELL_UPDATECHECK: Off
+          UNICOLOUR_REF: ${{ needs.validate-inputs.outputs.unicolour_ref }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
+          $env:NUGET_XMLDOC_MODE = 'skip'
+
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github/scripts/sanitize.ps1
+
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
+          git clone --filter=blob:none --no-checkout https://github.com/waacton/Unicolour.git unicolour
+          git -C unicolour fetch --no-tags --depth=1 origin $env:UNICOLOUR_REF
+          git -C unicolour checkout --detach FETCH_HEAD
+          $unicolourDir = [System.IO.Path]::GetFullPath((Join-Path $workspace 'unicolour'))
+          if (-not $unicolourDir.StartsWith($workspace, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Unicolour checkout escaped workspace"
+          }
+          if (-not (Test-Path -LiteralPath $unicolourDir)) {
+            throw "Unicolour checkout missing"
+          }
+
+          $origin = git -C $unicolourDir config --get remote.origin.url
+          if ($origin -notmatch 'github\.com[:/]waacton/Unicolour(\.git)?$') {
+            throw "Unexpected Unicolour origin: $(Sanitize-Line $origin)"
+          }
+
+          $cpu = [Environment]::ProcessorCount
+          $testProject = Join-Path $unicolourDir 'Unicolour.Tests\Unicolour.Tests.csproj'
+          $testResults = Join-Path $unicolourDir 'Unicolour.Tests\TestResults'
+          New-Item -ItemType Directory -Force -Path $testResults | Out-Null
+
+          dotnet restore $testProject
+          dotnet build $testProject --no-restore --configuration Debug --tl:off `
+            -p:UseSharedCompilation=false
+          dotnet test $testProject --no-build --no-restore --configuration Debug `
+            --tl:off --logger "trx;LogFileName=issue-987-unicolour.trx" `
+            --filter "FullyQualifiedName~IccProfileTests.Fogra39" `
+            --blame-hang-timeout 5m --blame-hang-dump-type mini -- `
+            "NUnit.NumberOfTestWorkers=$cpu"
+
+          $trxPath = Join-Path $testResults 'issue-987-unicolour.trx'
+          if (-not (Test-Path -LiteralPath $trxPath)) {
+            throw "TRX result missing: $(Sanitize-Line $trxPath)"
+          }
+
+          [xml]$trx = Get-Content -Raw -Path $trxPath
+          $counters = $trx.TestRun.ResultSummary.Counters
+          $total = [int]$counters.total
+          $passed = [int]$counters.passed
+          $failed = [int]$counters.failed
+          $errors = [int]$counters.error
+          $timeouts = [int]$counters.timeout
+          $aborted = [int]$counters.aborted
+
+          if ($total -le 0) {
+            throw "Unicolour test suite did not execute tests"
+          }
+          if (($failed + $errors + $timeouts + $aborted) -ne 0) {
+            throw "Unicolour test suite reported failures"
+          }
+          if ($passed -ne $total) {
+            throw "Unicolour test suite did not pass every executed test"
+          }
+
+          $summaryLines = @(
+            "### After: Issue #987 Unicolour ICC compatibility",
+            "",
+            "- Repository: ``waacton/Unicolour``",
+            "- Ref: ``$(Sanitize-Line $env:UNICOLOUR_REF)``",
+            "- Total tests: ``$total``",
+            "- Passed tests: ``$passed``",
+            "- Issue #987 signal: ``IccProfileTests.Fogra39`` passed",
+            "- Workers: ``$cpu``"
+          )
+          $summaryLines | ForEach-Object {
+            Sanitize-Print $_
+          } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload Unicolour test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: issue-987-unicolour-after-results
+          path: unicolour/Unicolour.Tests/TestResults
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 9
