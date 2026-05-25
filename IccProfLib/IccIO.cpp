@@ -621,10 +621,15 @@ size_t CIccEmbedIO::Read8(void *pBuf, size_t nNum)
     return 0;
 
   if (m_nSize > 0) {
-    size_t nPos = m_pIO->Tell();
-    size_t nOffset = nPos - m_nStartPos;
+    int64_t nPos = m_pIO->Tell();
+    if (nPos < m_nStartPos)
+      return 0;
 
-    if (nOffset + nNum > m_nSize)
+    size_t nOffset = (size_t)(nPos - m_nStartPos);
+    if (nOffset > m_nSize)
+      return 0;
+
+    if (nNum > m_nSize - nOffset)
       nNum = m_nSize - nOffset;
   }
 

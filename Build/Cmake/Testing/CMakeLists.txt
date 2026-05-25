@@ -117,6 +117,41 @@ function(iccdev_add_iccconnect_thread_test)
   endif()
 endfunction()
 
+function(iccdev_add_embedio_read8_bounds_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  add_executable(iccEmbedIoRead8BoundsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedio-read8-bounds.cpp"
+  )
+  target_link_libraries(iccEmbedIoRead8BoundsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEmbedIoRead8BoundsTest)
+
+  add_test(
+    NAME iccdev.embedio-read8-bounds
+    COMMAND "$<TARGET_FILE:iccEmbedIoRead8BoundsTest>"
+  )
+  set_tests_properties(iccdev.embedio-read8-bounds PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;embedio;regression"
+  )
+  if(WIN32)
+    set(_embedio_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEmbedIoRead8BoundsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _embedio_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.embedio-read8-bounds PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_embedio_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -265,6 +300,7 @@ if(WIN32)
   endif()
 
   iccdev_add_iccconnect_thread_test()
+  iccdev_add_embedio_read8_bounds_test()
 
   return()
 endif()
@@ -315,6 +351,7 @@ set(ICCDEV_TEST_ENV
 )
 
 iccdev_add_iccconnect_thread_test()
+iccdev_add_embedio_read8_bounds_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

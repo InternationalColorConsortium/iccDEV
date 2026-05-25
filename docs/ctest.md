@@ -90,11 +90,12 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 26 tests:
+Linux currently registers 27 tests:
 
 | Test | Source |
 |------|--------|
 | `iccdev.create-profiles` | `Testing/CreateAllProfiles.sh` |
+| `iccdev.embedio-read8-bounds` | `.github/ci/regression/embedio-read8-bounds.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.legacy-run-tests` | `Testing/RunTests.sh` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |
@@ -162,10 +163,11 @@ without signed-conversion sanitizer findings.
 and fails if `iccFromXml` emits sanitizer diagnostics from string-size
 arithmetic.
 
-Windows full tool builds currently register 6 tests:
+Windows full tool builds currently register 7 tests:
 
 | Test | Source |
 |------|--------|
+| `iccdev.embedio-read8-bounds` | `.github/ci/regression/embedio-read8-bounds.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
 | `iccdev.windows-legacy-run-tests` | `Testing/RunTests.bat` |

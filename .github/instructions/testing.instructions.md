@@ -37,8 +37,9 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
-Linux currently registers 26 CTest suites. Windows full tool builds currently
-register 6 CTest suites: the IccConnect threaded CMM regression, two
+Linux currently registers 27 CTest suites. Windows full tool builds currently
+register 7 CTest suites: the IccConnect threaded CMM regression, the EmbedIO
+Read8 bounds regression, two
 batch-backed suites through `Build/Cmake/Testing/RunWindowsBatchTest.cmake`, the
 iccDumpProfile smoke suite, the issue-987 shared export suite, and the PAWG
 report smoke suite. Windows feature-disabled builds register the subset whose
