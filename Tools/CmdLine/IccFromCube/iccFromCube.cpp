@@ -111,16 +111,15 @@ public:
       long pos = ftell(m_f);
       std::string line = getNextLine();
 
-      if (line[0] == '-' || line[0] == '.' || (line[0] >= '0' && line[0] <= '9')) {
-        //undo getNextLine so it can be 3D table can be parsed
-        fseek(m_f, pos, SEEK_SET);
-        break;
-      }
-
-      if (!line.size()) {
+      if (line.empty()) {
         if (m_comments.size()) {
           bAddBlankLine = true;
         }
+      }
+      else if (line[0] == '-' || line[0] == '.' || (line[0] >= '0' && line[0] <= '9')) {
+        //undo getNextLine so it can be 3D table can be parsed
+        fseek(m_f, pos, SEEK_SET);
+        break;
       }
       else if (line.substr(0, 6) == "TITLE ") {
         if (m_title.size()) {
@@ -235,7 +234,7 @@ public:
       std::string line = getNextLine();
 
       //Skip empty and commented lines
-      if (line[0] == '#' || line.size() == 0)
+      if (line.empty() || line[0] == '#')
         continue;
       *toLut++ = (icFloatNumber)atof(line.c_str());
       next = getNext(line.c_str());
@@ -291,7 +290,7 @@ protected:
     while (*str && *str != ' ') str++;
     while (*str && *str == ' ') str++;
 
-    return str;
+    return *str ? str : nullptr;
   }
 
   std::string toEnd(const char* str)
@@ -312,15 +311,15 @@ protected:
   {
     std::string rv;
     for (int n=0; n<MAX_LINE_LEN && !isEOF(); n++) {
-      char c = fgetc(m_f);
+      int c = fgetc(m_f);
 
-      if ((c < 0 && feof(m_f)) || c == '\n')
+      if (c == EOF || c == '\n')
         break;
 
       if (c == '\r') //skip unsupported carriage returns
         continue;
 
-      rv += (unsigned char)c;
+      rv += static_cast<char>(static_cast<unsigned char>(c));
     }
 
     return rv;
