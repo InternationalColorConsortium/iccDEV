@@ -11668,15 +11668,13 @@ bool CIccTagSpectralViewingConditions::Read(icUInt32Number size, CIccIO *pIO)
       !pIO->Read16(&m_reserved2))
     return false;
 
-  icUInt32Number vals;
-
   delete [] m_observer;
   m_observer = NULL;
 
   icUInt32Number observerSize = 0;
 
   if (m_observerRange.steps) {
-    vals = m_observerRange.steps * 3;
+    icUInt32Number vals = m_observerRange.steps * 3;
 
     observerSize = vals * sizeof(icFloat32Number);
 
@@ -11710,7 +11708,7 @@ bool CIccTagSpectralViewingConditions::Read(icUInt32Number size, CIccIO *pIO)
   icUInt32Number illuminantSize = 0;
 
   if (m_illuminantRange.steps) {
-    vals = m_illuminantRange.steps;
+    icUInt32Number vals = m_illuminantRange.steps;
 
     illuminantSize = vals * sizeof(icFloat32Number);
 

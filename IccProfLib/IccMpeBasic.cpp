@@ -1495,6 +1495,9 @@ bool CIccSingleSampledCurve::SetSize(icUInt32Number nCount, bool bZeroAlloc/*=tr
 {
   free(m_pSamples);
   m_pSamples = NULL;
+  
+  if (nCount > 65535)
+    return false;
     
   if (!nCount) {
     m_nCount = nCount;
@@ -1632,6 +1635,9 @@ bool CIccSingleSampledCurve::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   if (!pIO->Read32(&m_nCount))
+    return false;
+
+  if (m_nCount > 65535)
     return false;
 
   if (!pIO->ReadFloat32Float(&m_firstEntry))

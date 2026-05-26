@@ -3563,6 +3563,11 @@ bool CIccCalculatorFunc::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&m_nOps))
     return false;
 
+  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (m_nOps >= MAX_CALC_ELEMENTS)
+    return false;
+
   if ((icUInt64Number)m_nOps * sizeof(icUInt32Number) * 2 > (icUInt64Number)size - headerSize)
     return false;
 

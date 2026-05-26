@@ -1011,6 +1011,11 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&m_nProcElements))
     return false;
 
+  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (m_nProcElements >= MAX_CALC_ELEMENTS)
+    return false;
+
   if ( (headerSize + (icUInt64Number)m_nProcElements*sizeof(icPositionNumber)) > size)
     return false;
 
