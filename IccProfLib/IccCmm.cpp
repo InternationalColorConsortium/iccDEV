@@ -8962,6 +8962,13 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
   if (rv != icCmmStatOk && rv!=icCmmStatIdentityXform)
     return rv;
 
+  if (m_Xforms && !m_Xforms->empty()) {
+    CIccXform *pLastXform = m_Xforms->rbegin()->ptr;
+    if (!pLastXform ||
+        icGetSpaceSamples(m_nDestSpace) != pLastXform->GetNumDstSamples())
+      return icCmmStatBadXform;
+  }
+
   if (bAllocApplyCmm) {
     m_pApply = GetNewApplyCmm(rv);
   }
