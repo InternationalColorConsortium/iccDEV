@@ -30,6 +30,8 @@ line and call `sanitize_line` for each line.
 | Function | Purpose |
 |----------|---------|
 | `Escape-Html` | Encode HTML entities |
+| `Strip-AnsiSequences` | Strip terminal escape sequences |
+| `Strip-UnicodeControl` | Strip Unicode formatting controls |
 | `Strip-CtrlKeepNewlines` | Remove C0 controls except LF/CR/TAB |
 | `Strip-CtrlRemoveNewlines` | Remove all C0 controls |
 | `Trim-Whitespace` | Collapse whitespace |

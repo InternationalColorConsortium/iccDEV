@@ -90,8 +90,6 @@ cannot pass as a green no-op.
 
 ## Registered Suites
 
-Linux currently registers 27 tests:
-
 | Test | Source |
 |------|--------|
 | `iccdev.create-profiles` | `Testing/CreateAllProfiles.sh` |
@@ -238,11 +236,7 @@ For repeatable agent-assisted work, use
    - Set labels and a timeout.
    - Add `FIXTURES_REQUIRED iccdev_profiles` when the test needs generated
      profiles.
-3. Update hard-coded coverage counts when the suite count or generated profile
-   count changes:
-   - Linux CTest count in `.github/workflows/ci-iccdev-tool-tests.yml`.
-   - Linux CTest count notes in `.github/skills/maintainer-ci-ctest/SKILL.md`
-     and `.github/instructions/testing.instructions.md`.
+3. Update hard-coded coverage counts when generated profile counts change:
    - Windows profile parse count in `Build/Cmake/Testing/CMakeLists.txt`.
    - JSON profile parse count in `.github/workflows/ci-json-roundtrip.yml`.
      Keep these in sync with `Testing/CreateAllProfiles.sh` and
@@ -251,13 +245,8 @@ For repeatable agent-assisted work, use
      `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`,
      and `.github/workflows/ci-latest-release.yml` when
      `Testing/CreateAllProfiles.sh` changes the generated-profile set.
-   - Before committing, run
-     `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
-     and update every stale count in the same change.
 4. Validate locally with CMake configure, build, `ctest -N --no-tests=error`,
    `ctest --output-on-failure --no-tests=error`, and `git diff --check`.
-   Use `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
-   to catch stale count and workflow-name references before opening a PR.
    For changes inside `iccdev.tool-coverage`, also run the direct script with
    explicit `ICCDEV_TOOLS_DIR`, `ICCDEV_TESTING_DIR`, and
    `ICCDEV_TEST_OUTDIR`, plus `ctest -R '^iccdev\.tool-coverage$'`.

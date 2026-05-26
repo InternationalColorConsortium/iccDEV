@@ -49,8 +49,8 @@ Choose the smallest gate that proves the behavior:
 
 ## Required Updates
 
-- Update `docs/ctest.md` for CTest names, fixtures, expected suite counts,
-  profile parse counts, or add-test process changes.
+- Update `docs/ctest.md` for CTest names, fixtures, profile parse counts, or
+  add-test process changes.
 - Update `.github/instructions/testing.instructions.md` when the test becomes
   standard policy.
 - Update `docs/regression-workflow-governance.md` for workflow process changes.
@@ -59,12 +59,6 @@ Choose the smallest gate that proves the behavior:
   pinned regression image digests.
 - Update `.github/skills/README.md` or a skill when the process becomes a
   repeatable maintainer workflow.
-- For CTest suite-count changes, run
-  `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
-  before committing and update every stale workflow, docs, skill, and
-  instruction count in the same change.
-- Run `rg "Total Tests:|currently register|ci[-]tool[-]tests[.]yml" docs .github`
-  before handoff to catch stale count and workflow-name references.
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.

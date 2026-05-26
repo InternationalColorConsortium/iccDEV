@@ -54,7 +54,7 @@ see http://www.color.org/.
 #>
 
 ###############################################################
-# Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+# Copyright (c) 2024-2025 David H Hoyt. All rights reserved.
 ###############################################################
 #                 https://srd.cx
 #
@@ -111,6 +111,59 @@ function Escape-Html {
 
 <#
 .SYNOPSIS
+    Strips ANSI escape sequences.
+
+.DESCRIPTION
+    Removes CSI, OSC, and bare ESC sequences before summary or output writes.
+
+.PARAMETER InputString
+    The string to process.
+#>
+function Strip-AnsiSequences {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [AllowEmptyString()]
+        [string]$InputString = ""
+    )
+
+    $esc = [regex]::Escape([string][char]0x1B)
+    $bel = [regex]::Escape([string][char]0x07)
+    $st = "${esc}\\"
+    $result = $InputString
+    $result = [regex]::Replace($result, "${esc}\[[0-9;?]*[ -/]*[@-~]", "")
+    $result = [regex]::Replace($result, "${esc}\][\s\S]*?(${bel}|${st})", "")
+    $result = [regex]::Replace($result, $esc, "")
+    return $result
+}
+
+<#
+.SYNOPSIS
+    Strips Unicode formatting and separator controls.
+
+.DESCRIPTION
+    Removes Unicode format controls used by Trojan Source, invisible padding,
+    and log-spoofing attacks while preserving ordinary Unicode letters.
+
+.PARAMETER InputString
+    The string to process.
+#>
+function Strip-UnicodeControl {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [AllowEmptyString()]
+        [string]$InputString = ""
+    )
+
+    $result = $InputString
+    $result = [regex]::Replace($result, '\p{Cf}', '')
+    $result = [regex]::Replace($result, '[\u2028-\u202F\uFFF9-\uFFFB]', '')
+    return $result
+}
+
+<#
+.SYNOPSIS
     Strips control characters but keeps newlines.
 
 .DESCRIPTION
@@ -127,7 +180,8 @@ function Strip-CtrlKeepNewlines {
         [string]$InputString = ""
     )
 
-    $result = $InputString
+    $result = Strip-AnsiSequences -InputString $InputString
+    $result = Strip-UnicodeControl -InputString $result
     $result = $result -replace "`r", ""
 
     $cleanChars = @()
@@ -158,14 +212,15 @@ function Strip-CtrlRemoveNewlines {
         [string]$InputString = ""
     )
 
-    $result = $InputString
+    $result = Strip-AnsiSequences -InputString $InputString
+    $result = Strip-UnicodeControl -InputString $result
     $result = $result -replace "`r", ""
     $result = $result -replace "`n", " "
 
     $cleanChars = @()
     foreach ($char in $result.ToCharArray()) {
         $codePoint = [int]$char
-        if ($codePoint -eq 0x09 -or ($codePoint -ge 0x20 -and $codePoint -le 0x7E) -or $codePoint -ge 0xA0) {
+        if (($codePoint -ge 0x20 -and $codePoint -le 0x7E) -or $codePoint -ge 0xA0) {
             $cleanChars += $char
         }
     }
@@ -308,7 +363,9 @@ function Sanitize-Ref {
         [string]$InputString = ""
     )
 
-    $result = $InputString -replace "`0", ""
+    $result = Strip-AnsiSequences -InputString $InputString
+    $result = Strip-UnicodeControl -InputString $result
+    $result = $result -replace "`0", ""
     $result = $result -replace "`r", ""
     $result = $result -replace "`n", ""
     $result = $result -replace "[^A-Za-z0-9._/-]", "-"
