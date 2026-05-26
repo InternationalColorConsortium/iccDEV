@@ -619,8 +619,6 @@ jobs:
     # PR source is untrusted; the reusable WASM workflow must validate in-place
     # and must not upload npm-shaped bundles as artifacts.
     uses: ./.github/workflows/ci-pr-wasm.yml
-    with:
-      expected-icc-count: '208'
 
   #############################################################################
   # Example Consumer Project -- verifies build-tree export works

@@ -10,7 +10,7 @@
 # Builds Release-only WASM, stages the npm-shaped consumer bundle
 # via Build/Cmake/wasm-package/stage.sh, and runs:
 #   * test_all.js  (16-tool usage smoke)
-#   * regression.js (Testing/CreateAllProfiles.sh -> 208 ICC parity)
+#   * regression.js (Testing/CreateAllProfiles.sh ICC output parity)
 #
 # Governance: Hoyt shell prologue on every step, sanitize-sed.sh
 # for GITHUB_STEP_SUMMARY, matrix values via env: block, credential
@@ -29,12 +29,6 @@ permissions:
 
 on:
   workflow_call:
-    inputs:
-      expected-icc-count:
-        description: "Expected .icc count from CreateAllProfiles.sh (parity gate)"
-        required: false
-        default: "208"
-        type: string
   workflow_dispatch:
     inputs:
       validate_cache_policy_only:
@@ -401,7 +395,6 @@ jobs:
       - name: WASM parity gate (Testing/CreateAllProfiles.sh)
         env:
           BASH_ENV: /dev/null
-          ICCDEV_REGRESSION_EXPECTED: ${{ inputs.expected-icc-count }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""

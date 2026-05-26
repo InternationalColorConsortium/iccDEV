@@ -1193,7 +1193,6 @@ jobs:
       - name: Parity gate (Testing/CreateAllProfiles.sh -> regression.js)
         env:
           BASH_ENV: /dev/null
-          ICCDEV_REGRESSION_EXPECTED: '208'
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -1230,7 +1229,7 @@ jobs:
               done
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
-            echo "::error::WASM regression.js parity gate failed (expected 208 .icc)"
+            echo "::error::WASM regression.js parity gate failed"
             exit 1
           fi
 

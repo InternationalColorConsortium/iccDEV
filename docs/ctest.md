@@ -241,10 +241,12 @@ For repeatable agent-assisted work, use
    - JSON profile parse count in `.github/workflows/ci-json-roundtrip.yml`.
      Keep these in sync with `Testing/CreateAllProfiles.sh` and
      `Testing/CreateAllProfiles.bat`.
-   - WASM expected ICC count in `Build/Cmake/wasm-package/regression.js`,
-     `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`,
-     and `.github/workflows/ci-latest-release.yml` when
-     `Testing/CreateAllProfiles.sh` changes the generated-profile set.
+   - WASM parity derives the expected ICC output set from
+     `Testing/CreateAllProfiles.sh` and retained fixture profiles; do not add
+     hardcoded WASM profile totals when the generated-profile set changes.
+   - Before committing, run
+     `rg "Total Tests:|Linux currently registers|Linux suite count assertions" .github docs`
+     and update every stale count in the same change.
 4. Validate locally with CMake configure, build, `ctest -N --no-tests=error`,
    `ctest --output-on-failure --no-tests=error`, and `git diff --check`.
    For changes inside `iccdev.tool-coverage`, also run the direct script with
