@@ -74,6 +74,7 @@ jobs:
           git fetch --no-tags --prune origin '+refs/heads/master:refs/remotes/origin/master'
           git rev-parse --verify origin/master >/dev/null
 
+      # preflight: allow-package-install reason=security-tool-bootstrap
       - name: Install pre-flight tools
         shell: bash --noprofile --norc {0}
         env:

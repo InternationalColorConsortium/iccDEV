@@ -54,7 +54,7 @@
 #------------------------------------------------------------------------------
 
 ###############################################################
-# Copyright (©) 2024-2025 David H Hoyt. All rights reserved.
+# Copyright (c) 2024-2025 David H Hoyt. All rights reserved.
 ###############################################################
 #                 https://srd.cx
 #
@@ -103,7 +103,7 @@ escape_html() {
 # invisible padding, and homoglyph attacks:
 #   - Bidi overrides/embeddings (U+202A-202E, U+2066-2069)
 #   - Zero-width chars (U+200B-200F, U+2060, U+FEFF)
-#   - Tag characters (U+E0001-E007F) — used in emoji but abusable
+#   - Tag characters (U+E0001-E007F) - used in emoji but abusable
 # Uses perl for reliable multi-byte removal; falls back to sed byte patterns.
 _strip_unicode_control() {
   local s="$1"
@@ -112,6 +112,7 @@ _strip_unicode_control() {
       s/[\x{200B}-\x{200F}]//g;
       s/[\x{2028}-\x{202F}]//g;
       s/[\x{2060}-\x{2069}]//g;
+      s/[\x{E0001}-\x{E007F}]//g;
       s/[\x{FEFF}]//g;
       s/[\x{FFF9}-\x{FFFB}]//g;
     ')"
@@ -121,6 +122,7 @@ _strip_unicode_control() {
       s/\xe2\x80[\x8b-\x8f]//g;
       s/\xe2\x80[\xa8-\xaf]//g;
       s/\xe2\x81[\xa0-\xa9]//g;
+      s/\xf3\xa0[\x80-\x81][\x80-\xbf]//g;
       s/\xef\xbb\xbf//g;
       s/\xef\xbf[\xb9-\xbb]//g;
     ')"
@@ -333,6 +335,12 @@ detect_hidden_chars() {
   # Check for line/paragraph separators (U+2028-2029 = E2 80 A8-A9)
   if printf '%s' "$input" | LC_ALL=C grep -qP '[\xe2][\x80][\xa8-\xa9]' 2>/dev/null; then
     details="${details}  - U+2028-2029 (Line/Paragraph Separator)\n"
+    found=0
+  fi
+
+  # Check for tag characters (U+E0001-E007F = F3 A0 80 81 through F3 A0 81 BF)
+  if printf '%s' "$input" | LC_ALL=C grep -qP '\xf3\xa0[\x80-\x81][\x80-\xbf]' 2>/dev/null; then
+    details="${details}  - U+E0001-E007F (Tag Character)\n"
     found=0
   fi
 

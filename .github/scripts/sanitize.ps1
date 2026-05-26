@@ -341,7 +341,7 @@ function Sanitize-Print {
 
 <#
 .SYNOPSIS
-    Sanitizes branch, tag or ref names for filenames/concurrency groups.
+    Sanitizes branch, tag or ref names.
 
 .DESCRIPTION
     - Replaces disallowed chars with '-'
@@ -353,7 +353,7 @@ function Sanitize-Print {
 
 .EXAMPLE
     Sanitize-Ref "feature/my-branch"
-    Returns "feature-my-branch"
+    Returns "feature/my-branch"
 #>
 function Sanitize-Ref {
     [CmdletBinding()]

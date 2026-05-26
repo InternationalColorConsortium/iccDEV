@@ -112,6 +112,10 @@ run_test "Zero-width characters (stripped by v3)" \
   "$(printf 'test\xe2\x80\x8bzero\xe2\x80\x8cwidth\xe2\x80\x8bchars')" \
   "testzerowidthchars"
 
+run_test "Unicode tag characters stripped" \
+  "$(printf 'tag\xf3\xa0\x81\xa1char')" \
+  "tagchar"
+
 # =============================================================================
 # Control Character and Injection Tests
 # =============================================================================

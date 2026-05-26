@@ -309,6 +309,68 @@ def pr_script_allowlist_reason(raw, step_name):
     return ""
 
 
+def package_install_allowlist_reason(raw, step_name):
+    lines = raw.splitlines()
+    step_pattern = re.compile(rf"^\s*-\s+name:\s*[\"']?{re.escape(str(step_name))}[\"']?\s*$")
+    for index, line in enumerate(lines):
+        if not step_pattern.match(line):
+            continue
+        context = "\n".join(lines[max(0, index - 8):index])
+        match = re.search(r"preflight:\s*allow-package-install\s+reason=(\S+)", context)
+        if match:
+            return clean_text(match.group(1))
+    return ""
+
+
+def yaml_anchor_hits(raw):
+    hits = []
+    block_indent = None
+    anchor_re = re.compile(r"(^|[\s\[{,:])(&[A-Za-z0-9_-]+|\*[A-Za-z0-9_-]+)(?=$|[\s\]},#])")
+    merge_re = re.compile(r"^\s*<<\s*:")
+    block_re = re.compile(r":\s*[|>][-+0-9]*\s*(#.*)?$")
+
+    for number, line in enumerate(raw.splitlines(), start=1):
+        if block_indent is not None:
+            indent = len(line) - len(line.lstrip(" "))
+            if not line.strip() or indent > block_indent:
+                continue
+            block_indent = None
+
+        stripped = line.lstrip(" ")
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        code = line.split("#", 1)[0]
+        if merge_re.search(code):
+            hits.append((number, "<<:"))
+        for match in anchor_re.finditer(code):
+            hits.append((number, match.group(2)))
+
+        if block_re.search(code):
+            block_indent = len(line) - len(line.lstrip(" "))
+
+    return hits
+
+
+def has_package_lifecycle_command(run):
+    command_re = re.compile(
+        r"(^|[;&|()\s])("
+        r"(?:\S*/)?python[0-9.]*\s+-m\s+pip|"
+        r"pip|go|npm|pnpm|yarn|npx|cargo|twine|cibuildwheel"
+        r")\s+(install|ci|publish|build)\b",
+        re.I,
+    )
+    for line in run.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if re.match(r"^(echo|printf|cat)\b", stripped):
+            continue
+        if command_re.search(stripped):
+            return True
+    return False
+
+
 def reviewed_exception(label, category, reason):
     print(f"[OK] {label}: reviewed {category} exception reason={reason}")
 
@@ -364,6 +426,9 @@ reviewed_artifact_exceptions = 0
 reviewed_token_exceptions = 0
 pr_script_canaries = 0
 reviewed_pr_script_exceptions = 0
+yaml_anchor_canaries = 0
+package_install_canaries = 0
+reviewed_package_install_exceptions = 0
 
 all_workflows = {}
 for workflow_path in sorted(Path(".github/workflows").glob("*.yml")) + sorted(Path(".github/workflows").glob("*.yaml")):
@@ -401,6 +466,12 @@ for path in sys.argv[1:]:
     if not workflow.get("permissions"):
         print(f"[WARN] {path}: workflow root permissions are not explicit")
         warnings += 1
+
+    for line_number, token in yaml_anchor_hits(raw):
+        print(f"[FAIL] {path}:{line_number}: YAML anchor/alias/merge syntax is banned ({token})",
+              file=sys.stderr)
+        failures += 1
+        yaml_anchor_canaries += 1
 
     for job_name, job in jobs.items():
         if not isinstance(job, dict):
@@ -503,15 +574,29 @@ for path in sys.argv[1:]:
                         failures += 1
                         pr_script_canaries += 1
 
+            if run and has_package_lifecycle_command(run):
+                package_reason = package_install_allowlist_reason(raw, step.get("name", f"step {index}"))
+                if package_reason:
+                    reviewed_exception(label, "package lifecycle command", package_reason)
+                    reviewed_package_install_exceptions += 1
+                else:
+                    print(f"[FAIL] {label}: package lifecycle command requires reviewed pinning/isolation rationale",
+                          file=sys.stderr)
+                    failures += 1
+                    package_install_canaries += 1
+
 print(f"cache publish canaries: {cache_publish}")
 print(f"artifact intake canaries: {artifact_intake}")
 print(f"artifact publish canaries: {artifact_publish}")
 print(f"untrusted PR artifact canaries: {untrusted_artifacts}")
 print(f"auth/accounting canaries: {auth_canaries}")
 print(f"PR-controlled script execution canaries: {pr_script_canaries}")
+print(f"YAML anchor canaries: {yaml_anchor_canaries}")
+print(f"package lifecycle canaries: {package_install_canaries}")
 print(f"reviewed untrusted PR artifact exceptions: {reviewed_artifact_exceptions}")
 print(f"reviewed token exposure exceptions: {reviewed_token_exceptions}")
 print(f"reviewed PR-controlled script exceptions: {reviewed_pr_script_exceptions}")
+print(f"reviewed package lifecycle exceptions: {reviewed_package_install_exceptions}")
 print(f"workflow canary warnings: {warnings}")
 
 raise SystemExit(1 if failures else 0)

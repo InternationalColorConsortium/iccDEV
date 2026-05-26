@@ -72,12 +72,16 @@ Assert-Eq "Line separator stripped" `
     "linebreak" `
     (Sanitize-Line -InputString "line$([char]0x2028)break")
 
+Assert-Eq "Tag character stripped" `
+    "tagchar" `
+    (Sanitize-Line -InputString "tag$([char]::ConvertFromUtf32(0xE0061))char")
+
 Assert-Eq "Tab stripped from line" `
     "col1col2 Line2" `
     (Sanitize-Line -InputString "col1`tcol2`nLine2")
 
 Assert-Eq "Ref hidden chars stripped and metacharacters neutralized" `
-    "feature-refs-test" `
+    "feature/-refs-test" `
     (Sanitize-Ref -InputString "feature/$([char]0x202E)`$(refs)test")
 
 Assert-Eq "Filename path separators neutralized" `

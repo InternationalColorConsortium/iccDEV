@@ -85,6 +85,11 @@ intentional PR-controlled `.github/scripts` or `.github/tests` execution must be
 read-only, test-only, and marked on the step with
 `# preflight: allow-pr-script-execution reason=<short-reason>`.
 
+Do not use YAML anchors, aliases, or merge keys in workflow files. They make
+review non-local and can outpace static analyzers when the GitHub Actions parser
+changes. Keep repeated policy explicit unless it is moved into a trusted reusable
+workflow.
+
 ## SIGPIPE Avoidance
 
 Under `set -o pipefail`, avoid `echo "$value" | grep -q pattern`. Prefer:
@@ -154,7 +159,10 @@ Use preflight canaries for indicators of compromise and auth/accounting drift:
 cache use in publish jobs, broad artifact intake, missing release artifacts,
 untrusted PR artifact uploads, `secrets: inherit`, token exposure in
 write-permission jobs, dangerous triggers, direct expression interpolation, and
-checkout credential persistence. Treat token-exposure canaries in
+checkout credential persistence. Package install/build/publish commands in
+workflow `run:` blocks must either use locked, checksummed inputs or be isolated
+to an unprivileged scanner/bootstrap step marked with
+`# preflight: allow-package-install reason=<short-reason>`. Treat token-exposure canaries in
 write-permission jobs as advisory until reviewed and explicitly marked;
 publishing cache, broad artifact intake, and untrusted PR artifact upload
 canaries are blocking.
