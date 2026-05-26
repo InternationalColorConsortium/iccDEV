@@ -1524,6 +1524,13 @@ icStatusCMM CIccXform::Begin()
     m_pAdjustPCS = NULL;
   }
 
+  if (m_bAdjustPCS) {
+    if ((m_bInput && GetNumDstSamples() < 3) ||
+        (!m_bInput && GetNumSrcSamples() < 3)) {
+      return icCmmStatInvalidProfile;
+    }
+  }
+
   return icCmmStatOk;
 }
 
@@ -8961,13 +8968,6 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
   rv = CheckPCSConnections(bUsePCSConversions);
   if (rv != icCmmStatOk && rv!=icCmmStatIdentityXform)
     return rv;
-
-  if (m_Xforms && !m_Xforms->empty()) {
-    CIccXform *pLastXform = m_Xforms->rbegin()->ptr;
-    if (!pLastXform ||
-        icGetSpaceSamples(m_nDestSpace) != pLastXform->GetNumDstSamples())
-      return icCmmStatBadXform;
-  }
 
   if (bAllocApplyCmm) {
     m_pApply = GetNewApplyCmm(rv);
