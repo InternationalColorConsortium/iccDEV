@@ -937,7 +937,7 @@ fi
 echo ""
 
 # =============================================================================
-# 10. iccTiffDump (6 tests)
+# 10. iccTiffDump (9 tests)
 # =============================================================================
 echo "--- 10. iccTiffDump ---"
 TIFFDUMP="$TOOLS/IccTiffDump/iccTiffDump"
@@ -984,6 +984,40 @@ fi
 if [ -f "$SPECTRAL_TIFF" ]; then
   run_test "tdump-07" "Dump spectral TIFF (81 channels)" \
     "$TIFFDUMP" "$SPECTRAL_TIFF"
+fi
+
+if [ -f "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" ]; then
+  # shellcheck disable=SC2016
+  run_test "tdump-08" "Escape controlled ICC description text" \
+    bash -c 'set -euo pipefail
+      sample="$1"; tool="$2"; outdir="$3"
+      mutated="$outdir/tiffdump-mutated-desc.tif"
+      log="$outdir/tiffdump-mutated-desc.out"
+      cp "$sample" "$mutated"
+      perl -0pi -e '"'"'s/Dot Gain 20%/bad\n\e[31mX!!/g'"'"' "$mutated"
+      "$tool" "$mutated" > "$log" 2>&1
+      grep -Fq "Description:      bad\\n\\x1B[31mX!!" "$log"
+      ! grep -q "$(printf '"'"'\033'"'"')" "$log"
+    ' _ "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" "$TIFFDUMP" "$OUTDIR"
+
+  # shellcheck disable=SC2016
+  run_test "tdump-09" "Escape controlled TIFF input/output paths" \
+    bash -c 'set -euo pipefail
+      sample="$1"; tool="$2"; outdir="$3"
+      odd="$outdir/name_with_
+newline.tif"
+      dst="$outdir/export_with_
+newline.icc"
+      log="$outdir/tiffdump-paths.out"
+      cp "$sample" "$odd"
+      "$tool" "$odd" "$dst" > "$log" 2>&1
+      [ -s "$dst" ]
+      grep -Fq "Filename:          $outdir/name_with_\\nnewline.tif" "$log"
+      grep -Fq "Profile extracted to: $outdir/export_with_\\nnewline.icc" "$log"
+    ' _ "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" "$TIFFDUMP" "$OUTDIR"
+else
+  skip_test "tdump-08" "Escape controlled ICC description text" "TShirtDesignKW TIFF fixture unavailable"
+  skip_test "tdump-09" "Escape controlled TIFF input/output paths" "TShirtDesignKW TIFF fixture unavailable"
 fi
 
 echo ""

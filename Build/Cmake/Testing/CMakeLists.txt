@@ -609,6 +609,17 @@ set_tests_properties(iccdev.dump-profile-header-regression PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.tiffdump-output-hardening
+  120
+  "iccdev;tiffdump;output;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tiffdump-output-hardening-tests.sh"
+)
+set_tests_properties(iccdev.tiffdump-output-hardening PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
   iccdev.basic-string-regressions
   120
   "iccdev;xml;basic-string;regression;asan"
