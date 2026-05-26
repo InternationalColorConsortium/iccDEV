@@ -4235,11 +4235,8 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
 
       op[i].Describe(opDesc, 100); // TODO - propogate nVerboseness
       sReport += "Stack underflow at operation \"" + opDesc + "\" in \"";
-      f=i-2;
-      if (f<0) f=0;
-      l=i+2;
-      if (l>nOps-1)
-        l=nOps-1;
+      f = (i < 2) ? 0 : (icInt32Number)(i - 2);
+      l = (nOps - i > 2) ? i + 2 : nOps - 1;
       for (j=(icUInt32Number)f; j<=l; j++) {
         op[j].Describe(opDesc, 100); // TODO - propogate nVerboseness
         if (j!=(icUInt32Number)f)
