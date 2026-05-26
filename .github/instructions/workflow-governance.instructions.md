@@ -281,10 +281,11 @@ Do not mask profile generation, CTest discovery, or regression execution with
 workflow must still have a deterministic pass/fail condition.
 
 When profile generation counts change, update the assertions in
-`docs/ctest.md`, `Build/Cmake/Testing/CMakeLists.txt`, and generated-profile
-workflows that still validate fixed totals. WASM parity derives its expected
-ICC output set from `Testing/CreateAllProfiles.sh` and retained fixture
-profiles; do not add hardcoded WASM profile totals.
+`docs/ctest.md`, `Build/Cmake/Testing/CMakeLists.txt`, the generated-profile
+workflows, and packaged regression scripts that validate generated-profile
+totals. For WASM parity, keep `Build/Cmake/wasm-package/regression.js`,
+`.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`, and
+`.github/workflows/ci-latest-release.yml` in sync.
 
 ## Optional Local Hooks
 
