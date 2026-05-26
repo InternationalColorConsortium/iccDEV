@@ -30,11 +30,12 @@ fi
 FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
 DUMP="$TOOLS_DIR/IccDumpProfile/iccDumpProfile"
 APPLYNCM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
-ISSUE_1103_CALC_UNDERFLOW_URL="https://github.com/xsscx/fuzz/raw/refs/heads/master/graphics/icc/uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238.icc"
+ISSUE_1103_CALC_UNDERFLOW_PROFILE="$TESTING_DIR/CalcTest/uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238.icc"
 ISSUE_1103_CALC_UNDERFLOW_SHA256="e482d1defb841192735881d80b4b7ca0540f5b859164153f0be2080ce6167800"
 
-export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0,detect_leaks=0}"
-export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"
+export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0:detect_leaks=0}"
+export LSAN_OPTIONS="${LSAN_OPTIONS:-detect_leaks=0}"
+export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0:print_stacktrace=1}"
 
 PASS=0
 FAIL=0
@@ -209,26 +210,16 @@ run_reject_profile() {
 
 run_issue_1103_dump_profile_regression() {
   local name="issue-1103-calculator-window-underflow"
-  local profile="$OUTDIR/uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238.icc"
+  local profile="$ISSUE_1103_CALC_UNDERFLOW_PROFILE"
   local log="$OUTDIR/${name}.log"
   local digest=""
   local exit_code=0
 
   TOTAL=$((TOTAL + 1))
-  rm -f "$profile" "$log"
+  rm -f "$log"
 
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$ISSUE_1103_CALC_UNDERFLOW_URL" -o "$profile" > "$log" 2>&1 || exit_code=$?
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$profile" "$ISSUE_1103_CALC_UNDERFLOW_URL" > "$log" 2>&1 || exit_code=$?
-  else
-    fail_case "$name" "curl or wget is required to fetch the regression profile"
-    return
-  fi
-
-  if [ "$exit_code" -ne 0 ] || [ ! -s "$profile" ]; then
-    fail_case "$name" "failed to fetch regression profile"
-    sed -n '1,20p' "$log"
+  if [ ! -s "$profile" ]; then
+    fail_case "$name" "missing regression profile: $profile"
     return
   fi
 
