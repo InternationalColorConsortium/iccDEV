@@ -1462,16 +1462,22 @@ icStatusCMM CIccXform::Begin()
       // scale factors depend upon media white point
       // set up for input transform
       if (!m_bInput) {
+        if (mediaXYZ[0] == 0.0f || mediaXYZ[1] == 0.0f || mediaXYZ[2] == 0.0f)
+          return icCmmStatInvalidProfile;
+        
         m_PCSScale[0] = illumXYZ[0] / mediaXYZ[0];
         m_PCSScale[1] = illumXYZ[1] / mediaXYZ[1];
         m_PCSScale[2] = illumXYZ[2] / mediaXYZ[2];
       }
       else {
+        if (illumXYZ[0] == 0.0f || illumXYZ[1] == 0.0f || illumXYZ[2] == 0.0f)
+          return icCmmStatInvalidProfile;
+        
         m_PCSScale[0] = mediaXYZ[0] / illumXYZ[0];
         m_PCSScale[1] = mediaXYZ[1] / illumXYZ[1];
         m_PCSScale[2] = mediaXYZ[2] / illumXYZ[2];
       }
-      
+
       if (m_PCSScale[0] == 0.0f || m_PCSScale[1] == 0.0f || m_PCSScale[2] == 0.0f)
         return icCmmStatInvalidProfile;
 
