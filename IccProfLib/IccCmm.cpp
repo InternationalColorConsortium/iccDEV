@@ -8662,7 +8662,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
     return icCmmStatAllocErr;
 
   //borrow the caller's AttachIO to perform the AddXform
-  pProfile->CopyAttach(&Profile);
+  pProfile->CopyAttach(&Profile, true);
 
   // CFL-078: Save deviceClass before AddXform - cenc ownership transfer
   icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
