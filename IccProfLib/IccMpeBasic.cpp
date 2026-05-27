@@ -3783,7 +3783,7 @@ bool CIccMpeTintArray::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read16(&nOutputChannels))
     return false;
 
-  if (nInputChannels != 1 || !nOutputChannels)
+  if (nInputChannels != 1 || nOutputChannels == 0)
     return false;
 
   m_nInputChannels = nInputChannels;

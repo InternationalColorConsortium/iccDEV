@@ -2095,6 +2095,19 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
       m_dstSpace = icGetColorSpaceType(m_dstSpace);
 
     m_nDstSamples = pToXform->GetNumSrcSamples();
+    
+    // make sure these are not zero, because we will divide by them later in the process
+    if (!std::isfinite(pFromXform->m_PCSScale[0]) || !std::isfinite(pFromXform->m_PCSScale[1])
+        || !std::isfinite(pFromXform->m_PCSScale[2])
+        || pFromXform->m_PCSScale[0] == 0.0f || pFromXform->m_PCSScale[1] == 0.0f
+        || pFromXform->m_PCSScale[2] == 0.0f )
+      return icCmmStatBadXform;
+    
+    if (!std::isfinite(pToXform->m_PCSScale[0]) || !std::isfinite(pToXform->m_PCSScale[1])
+        || !std::isfinite(pToXform->m_PCSScale[2])
+        || pToXform->m_PCSScale[0] == 0.0f || pToXform->m_PCSScale[1] == 0.0f
+        || pToXform->m_PCSScale[2] == 0.0f )
+      return icCmmStatBadXform;
 
     switch (m_srcSpace) {
       case icSigLabPcsData:
@@ -3339,7 +3352,11 @@ void CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionCondi
       k = 683;
     }
     else {
-      k = 1.0f / pPcc->getObserverWhiteScaleFactor(illuminant, illuminantRange);
+      auto temp = pPcc->getObserverWhiteScaleFactor(illuminant, illuminantRange);
+      if (fabs(temp) > 1e-8)
+        k = 1.0f / temp;
+      else
+        k = 1.0;
     }
     pushScale3(k, k, k);
   }
