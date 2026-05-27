@@ -534,6 +534,14 @@ set_tests_properties(iccdev.json-parser-regressions PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1079-fromjson-soft-failure
+  60
+  "iccdev;json;fromjson;issue-1079;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1079-fromjson-soft-failure.sh"
+)
+
+iccdev_add_script_test(
   iccdev.stdobserver-regressions
   300
   "iccdev;xml;json;regression;asan"
