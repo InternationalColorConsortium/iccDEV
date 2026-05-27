@@ -1695,7 +1695,8 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std:
     int size = 0;
     jGetValue(j, "size", size);
     if (size >= 2) {
-      if (!SetSize((icUInt32Number)size)) return false;
+      if (!SetSize((icUInt32Number)size) || !m_Curve || m_nSize != (icUInt32Number)size)
+        return false;
       for (int i = 0; i < size; i++)
         m_Curve[i] = (icFloatNumber)i / (icFloatNumber)(size - 1);
     } else {
@@ -1717,7 +1718,8 @@ bool CIccTagJsonCurve::ParseJson(const IccJson &j, icConvertType /*nType*/, std:
     const IccJson &arr = j["table"];
     bool sizeOverflow = false;
     icUInt32Number nValues = icJsonSafeU32(arr.size(), &sizeOverflow);
-    if (sizeOverflow || !SetSize(nValues)) return false;
+    if (sizeOverflow || !SetSize(nValues) || (nValues && (!m_Curve || m_nSize != nValues)))
+      return false;
     int precision = 0;
     jGetValue(j, "precision", precision);
     for (icUInt32Number i = 0; i < nValues; i++) {
