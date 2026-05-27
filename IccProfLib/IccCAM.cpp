@@ -199,11 +199,14 @@ CIccCamConverter::HyperbolicInv (icFloatNumber y)
 	{
 		if (-y <= (m_cc * m_x0))
 		{
-			x = y / m_cc;
+			x = (m_cc == 0.0f) ? 0.0f : y / m_cc;
 		}
 		else
 		{
-			h_y = (- y / F_Function (m_Fl) + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
+			icFloatNumber fFl = F_Function (m_Fl);
+			if (fFl == 0.0f)
+				return 0.0f;
+			h_y = (- y / fFl + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
 			x = - H_FunctionInv (h_y);
 		}
 	}
@@ -211,11 +214,14 @@ CIccCamConverter::HyperbolicInv (icFloatNumber y)
 	{
 		if (y <= (m_cc * m_x0))
 		{
-			x = y / m_cc;
+			x = (m_cc == 0.0f) ? 0.0f : y / m_cc;
 		}
 		else
 		{
-			h_y = (y / F_Function (m_Fl) + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
+			icFloatNumber fFl = F_Function (m_Fl);
+			if (fFl == 0.0f)
+				return 0.0f;
+			h_y = (y / fFl + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
 			x = H_FunctionInv (h_y);
 		}
 	}
@@ -317,12 +323,16 @@ CIccCamConverter::CalcCoefficients ()
 	m_x0 = (icFloatNumber) (m_Fl * 4.00 / 255.0);
 
 	// CFL-077: Guard against division by zero when m_Fl==0 or m_x0==0
-	double h_fl = H_Function (m_Fl);
-	if (!std::isfinite((double)m_x0) || m_x0 == 0.0f ||
-	    !std::isfinite(h_fl) || h_fl == 0.0) {
+	double x0 = (double)m_x0;
+	double h_fl = (double)H_Function (m_Fl);
+	double h_x0 = std::isfinite(x0) ? (double)H_Function ((icFloatNumber)x0) : 0.0;
+	double f_fl = (double)F_Function (m_Fl);
+	if (!std::isfinite(x0) || x0 == 0.0 ||
+	    !std::isfinite(h_fl) || h_fl == 0.0 ||
+	    !std::isfinite(h_x0) || !std::isfinite(f_fl)) {
 		m_cc = 0.0f;
 	} else {
-		m_cc = (icFloatNumber)(((1.0 + (double)m_alfa) * (double)H_Function(m_x0) / h_fl - (double)m_alfa) * (double)F_Function(m_Fl) / (double)m_x0);
+		m_cc = (icFloatNumber)(((1.0 + (double)m_alfa) * h_x0 / h_fl - (double)m_alfa) * f_fl / x0);
 	}
 
 	rgbP[0] = Hyperbolic (m_Fl * rgbP[0] / 100) + 0.1f;

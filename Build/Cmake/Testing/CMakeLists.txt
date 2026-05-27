@@ -512,6 +512,14 @@ set_tests_properties(iccdev.json-cfg PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1166-cam-hyperbolicinv-regression
+  60
+  "iccdev;json;cfg;cam;issue-1166;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1166-cam-hyperbolicinv-regression.sh"
+)
+
+iccdev_add_script_test(
   iccdev.json-cli-exercise
   300
   "iccdev;json;cli;asan"
@@ -542,6 +550,14 @@ iccdev_add_script_test(
 )
 set_tests_properties(iccdev.cam-impact-surround-regression PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
+  iccdev.issue-1079-fromjson-soft-failure
+  60
+  "iccdev;json;fromjson;issue-1079;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1079-fromjson-soft-failure.sh"
 )
 
 iccdev_add_script_test(
@@ -627,6 +643,22 @@ iccdev_add_script_test(
 )
 set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
   SKIP_RETURN_CODE 77
+)
+
+iccdev_add_script_test(
+  iccdev.issue-1167-jpegdump-byte-regression
+  120
+  "iccdev;tools;jpegdump;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1167-jpegdump-byte-regression.sh"
+)
+
+iccdev_add_script_test(
+  iccdev.issue-1168-pawg-calculator-hbo
+  120
+  "iccdev;tools;pawg;calculator;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1168-pawg-calculator-hbo.sh"
 )
 
 iccdev_add_script_test(
