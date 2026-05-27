@@ -619,6 +619,14 @@ set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1167-jpegdump-byte-regression
+  120
+  "iccdev;tools;jpegdump;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1167-jpegdump-byte-regression.sh"
+)
+
+iccdev_add_script_test(
   iccdev.calculator-regressions
   300
   "iccdev;calculator;regression;asan"
