@@ -321,7 +321,7 @@ CIccCamConverter::CalcCoefficients ()
 	if (m_x0 == 0.0f || h_fl == 0.0) {
 		m_cc = 0.0f;
 	} else {
-		m_cc = ((1 + m_alfa) * H_Function (m_x0) / h_fl - m_alfa) * F_Function (m_Fl) / m_x0;
+		m_cc = (icFloatNumber)(((1.0 + (double)m_alfa) * (double)H_Function(m_x0) / h_fl - (double)m_alfa) * (double)F_Function(m_Fl) / (double)m_x0);
 	}
 
 	rgbP[0] = Hyperbolic (m_Fl * rgbP[0] / 100) + 0.1f;
@@ -559,7 +559,7 @@ CIccCamConverter::XYZToJab (const icFloatNumber*	xyz,
 
 		A = (icFloatNumber)((2.0 * rgbP[0] + rgbP[1] + rgbP[2] / 20.0 - 0.305) * m_Nbb);
 
-		J = (icFloatNumber)(100.0 * pow (A / m_AWhite, m_c * m_z));
+		J = (icFloatNumber)(100.0 * pow ((double)A / (double)m_AWhite, (double)m_c * (double)m_z));
 
 		et = (icFloatNumber)((cos(lhr + 2.0) + 3.8) / 4.0);
 		t = (icFloatNumber)(50.0 * lchroma * 100 * et  * 10.0/13.0 * m_Nc * m_Nbb / (rgbP[0]+rgbP[1]+21.0/20.0*rgbP[2]));
@@ -644,7 +644,7 @@ CIccCamConverter::JabToXYZ (const icFloatNumber*	jab,
 
 				et = (icFloatNumber)((cos ((double)lhr + 2.0) + 3.8) / 4.0);
 
-				p1 = (icFloatNumber)((50000.0f / 13.0f) * m_Nc * m_Nbb * et / t);
+				p1 = (icFloatNumber)((50000.0 / 13.0) * (double)m_Nc * (double)m_Nbb * (double)et / (double)t);
 				p3 = 21.0f / 20.0f;
 
 				numerator = p2 * (2.0f + p3);

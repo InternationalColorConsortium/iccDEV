@@ -70,6 +70,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <cmath>
 #include <new>
 
 static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
@@ -1262,6 +1263,10 @@ static bool icCAMParamsFromJson(const IccJson &j, std::string &parseStr, CIccCam
 
   if (!icJsonGetRequiredFloat(jCAM, "impactSurround", param, parseStr, "colorAppearanceParams"))
     return false;
+  if (!std::isfinite((double)param) || param < 0.0f || param > 1.0f) {
+    parseStr += "impactSurround in colorAppearanceParams must be in [0.0, 1.0]\n";
+    return false;
+  }
   pCAM->SetParameter_C(param);
 
   if (!icJsonGetRequiredFloat(jCAM, "chromaticInductionFactor", param, parseStr, "colorAppearanceParams"))
