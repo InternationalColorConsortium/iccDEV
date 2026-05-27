@@ -1751,10 +1751,10 @@ bool CIccCfgColorData::fromIt8(const char* filename, bool bReset)
       break;
     CIccCfgDataEntryPtr pData(new CIccCfgDataEntry);
 
-    if (nId >= 0 && nId < (int)line.size()) {
+    if (nId >= 0 && (size_t)nId < line.size()) {
       pData->m_index = atoi(line[nId].c_str());
     }
-    else if (nLabel >= 0 && nLabel < (int)line.size()) {
+    else if (nLabel >= 0 && (size_t)nLabel < line.size()) {
       pData->m_label = line[nLabel];
     }
 
@@ -1979,7 +1979,7 @@ fprintf(f, "\n");
 
     if (pData->m_srcName.size() != size_t(0)) {
       fprintf(f,"{ \"%s\" }", pData->m_srcName.c_str());
-      if (pData->m_srcValues.size() && pData->m_srcValues[0] != 1.0) {
+      if (pData->m_srcValues.size() > 0 && pData->m_srcValues[0] != 1.0) {
         if (!writeFloat(pData->m_srcValues[0])) { if (f != stdout) fclose(f); return false; }
       }
     }
@@ -2177,7 +2177,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   fprintf(f, "BEGIN_DATA_FORMAT\n");
   fprintf(f, "%s\n", dataFormat.c_str());
   fprintf(f, "END_DATA_FORMAT\n");
-  fprintf(f, "NUMBER_OF_SETS\t%d\n", (int)m_data.size());
+  fprintf(f, "NUMBER_OF_SETS\t%zu\n", m_data.size());
 
   CIccCfgDataEntry blank;
   const size_t bufSize = 256;
@@ -2198,7 +2198,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
 
     if (bShowLabel) {
       if (line.size() != size_t(0)) line += "\t";
-      if (!pCurEntry->m_label.size())
+      if (pCurEntry->m_label.size() == 0)
         line += "\"\"";
       else
         line += pCurEntry->m_label;
@@ -2206,7 +2206,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
 
     if (bShowName) {
       if (line.size() != size_t(0)) line += "\t";
-      if (!pCurEntry->m_name.size())
+      if (pCurEntry->m_name.size() == 0)
         line += "\"\"";
       else
         line += pCurEntry->m_name;
@@ -2228,7 +2228,7 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
 
     if (bShowSrcName) {
       if (line.size() != size_t(0)) line += "\t";
-      if (!pCurEntry->m_srcName.size())
+      if (pCurEntry->m_srcName.size() == 0)
         line += "\"\"";
       else
         line += pCurEntry->m_srcName;
