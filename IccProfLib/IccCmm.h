@@ -454,6 +454,8 @@ protected:
   void CheckDstAbs(icFloatNumber *Pixel) const;
 	void AdjustPCS(icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;
 
+  bool CheckForInvalidPCSScale() const;
+  
   virtual bool HasPerceptualHandling() { return true; }
 
   CIccProfile *m_pProfile;
