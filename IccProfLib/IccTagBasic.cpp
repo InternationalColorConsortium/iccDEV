@@ -968,14 +968,15 @@ CIccTagUtf8Text &CIccTagUtf8Text::operator=(const CIccTagUtf8Text &TextTag)
     return *this;
 
   m_szText = (icUChar*)malloc(1);
-  SetText(TextTag.m_szText);
   if (m_szText) {
     m_szText[0] = '\0';
     m_nBufSize = 1;
     SetText(TextTag.m_szText);
   }
-  else
+  else {
+    SetText("");
     m_nBufSize = 0;
+  }
 
   return *this;
 }

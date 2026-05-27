@@ -74,6 +74,7 @@ Copyright:  (c) see ICC Software License
 #include "IccEval.h"
 #include "IccPrmg.h"
 #include "IccProfLibVer.h"
+#include <cmath>
 #include <vector>
 #include <unordered_map>
 #include <algorithm>
@@ -1070,7 +1071,7 @@ wxString AnalyzeRoundTrip(wxString &profilePath, icRenderingIntent nIntent, bool
 
   report += wxString::Format("   Max L, a, b:   " ICFLOATFMT ", " ICFLOATFMT ", " ICFLOATFMT "\n", eval.maxLab2[0], eval.maxLab2[1], eval.maxLab2[2]);
 
-  if (prmg.m_nTotal) {
+  if (prmg.m_nTotal > 0) {
     report += wxString::Format("\n   PRMG Interoperability - Round Trip Results\n");
     report += wxString::Format(  "   ------------------------------------------------------\n");
 

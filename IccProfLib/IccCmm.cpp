@@ -74,6 +74,7 @@
 #pragma warning( disable: 4786) //disable warning in <list.h>
 #endif
 
+#include <cmath>
 #include <new>
 #include "IccXformFactory.h"
 #include "IccTag.h"
@@ -1516,6 +1517,10 @@ icStatusCMM CIccXform::Begin()
     }
   }
 
+  // make sure these are not zero, because we will divide by them later in the process
+  if (!std::isfinite(m_PCSScale[0]) || !std::isfinite(m_PCSScale[1]) || !std::isfinite(m_PCSScale[2])
+      || m_PCSScale[0] == 0.0f || m_PCSScale[1] == 0.0f || m_PCSScale[2] == 0.0f)
+    return icCmmStatInvalidProfile;
 
   if (m_pAdjustPCS) {
     CIccProfile ProfileCopy(*m_pProfile);
@@ -2091,7 +2096,6 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
     m_nDstSamples = pToXform->GetNumSrcSamples();
 
-    // ERROR - many values for case here are not defined as part of the enum!
     switch (m_srcSpace) {
       case icSigLabPcsData:
         switch (m_dstSpace) {

@@ -428,6 +428,7 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
       for (i=0; i<(int)m_nSize; i++) {
         ptr = buf;
 
+        // m_nSize is guaranteed to be > 1 here
         icFloatNumber fraction = (icFloatNumber)i/(m_nSize-1);
         icColorValue(buf, bufSize, fraction, csSig, nIndex);
         ptr += strlen(buf);
