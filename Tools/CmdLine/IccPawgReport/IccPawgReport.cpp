@@ -66,6 +66,11 @@
 #include "IccProfLibVer.h"
 #include "PawgReport.h"
 
+#ifdef _WIN32
+// work around Windows non-standard headers
+  #define strcasecmp _stricmp
+#endif
+
 static void printUsage()
 {
   printf("Usage: iccPawgReport {--read} {--json} profile\n");
