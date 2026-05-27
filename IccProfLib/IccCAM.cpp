@@ -318,7 +318,8 @@ CIccCamConverter::CalcCoefficients ()
 
 	// CFL-077: Guard against division by zero when m_Fl==0 or m_x0==0
 	double h_fl = H_Function (m_Fl);
-	if (m_x0 == 0.0f || h_fl == 0.0) {
+	if (!std::isfinite((double)m_x0) || m_x0 == 0.0f ||
+	    !std::isfinite(h_fl) || h_fl == 0.0) {
 		m_cc = 0.0f;
 	} else {
 		m_cc = (icFloatNumber)(((1.0 + (double)m_alfa) * (double)H_Function(m_x0) / h_fl - (double)m_alfa) * (double)F_Function(m_Fl) / (double)m_x0);
@@ -559,7 +560,15 @@ CIccCamConverter::XYZToJab (const icFloatNumber*	xyz,
 
 		A = (icFloatNumber)((2.0 * rgbP[0] + rgbP[1] + rgbP[2] / 20.0 - 0.305) * m_Nbb);
 
-		J = (icFloatNumber)(100.0 * pow ((double)A / (double)m_AWhite, (double)m_c * (double)m_z));
+		double camWhite = (double)m_AWhite;
+		double responseA = (double)A;
+		if (!std::isfinite(camWhite) || camWhite == 0.0) {
+			J = 0.0f;
+		} else if (!std::isfinite(responseA)) {
+			J = 0.0f;
+		} else {
+			J = (icFloatNumber)(100.0 * pow (responseA / camWhite, (double)m_c * (double)m_z));
+		}
 
 		et = (icFloatNumber)((cos(lhr + 2.0) + 3.8) / 4.0);
 		t = (icFloatNumber)(50.0 * lchroma * 100 * et  * 10.0/13.0 * m_Nc * m_Nbb / (rgbP[0]+rgbP[1]+21.0/20.0*rgbP[2]));
