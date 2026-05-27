@@ -700,16 +700,16 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  m_spectralRange.start = icFtoF16((icUInt16Number)atof(icXmlAttrValue(pChild, "start")));
-  m_spectralRange.end = icFtoF16((icUInt16Number)atof(icXmlAttrValue(pChild, "end")));
+  m_spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
+  m_spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
   m_spectralRange.steps = (icUInt16Number)atoi(icXmlAttrValue(pChild, "steps"));
 
   pChild = icXmlFindNode(pNode, "BiSpectralRange");
 
   if (pChild) {
     if ((pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
-      m_biSpectralRange.start = icFtoF16((icUInt16Number)atof(icXmlAttrValue(pChild, "start")));
-      m_biSpectralRange.end = icFtoF16((icUInt16Number)atof(icXmlAttrValue(pChild, "end")));
+      m_biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
+      m_biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
       m_biSpectralRange.steps = (icUInt16Number)atoi(icXmlAttrValue(pChild, "steps"));
     }
   }
