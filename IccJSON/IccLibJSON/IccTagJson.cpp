@@ -1288,8 +1288,10 @@ bool CIccTagJsonMultiLocalizedUnicode::ParseJson(const IccJson &j, std::string &
     while (lang.size()    < 2) lang    += ' ';
     while (country.size() < 2) country += ' ';
 
-    icLanguageCode  langCode = (icLanguageCode) ((lang[0] << 8)    | lang[1]);
-    icCountryCode countryCode= (icCountryCode) ((country[0] << 8) | country[1]);
+    icLanguageCode  langCode = (icLanguageCode)(((icUInt32Number)(icUInt8Number)lang[0] << 8) |
+                                                 (icUInt8Number)lang[1]);
+    icCountryCode countryCode= (icCountryCode)(((icUInt32Number)(icUInt8Number)country[0] << 8) |
+                                                (icUInt8Number)country[1]);
 
     CIccUTF16String wstr(text.c_str());
     SetText(wstr.c_str(), langCode, countryCode);
@@ -1505,8 +1507,10 @@ bool CIccTagJsonProfileSequenceId::ParseJson(const IccJson &j, std::string & /*p
         while (lang.size()    < 2) lang    += ' ';
         while (country.size() < 2) country += ' ';
 
-        icLanguageCode langCode    = (icLanguageCode)((lang[0]    << 8) | lang[1]);
-        icCountryCode  countryCode = (icCountryCode) ((country[0] << 8) | country[1]);
+        icLanguageCode langCode = (icLanguageCode)(((icUInt32Number)(icUInt8Number)lang[0] << 8) |
+                                                   (icUInt8Number)lang[1]);
+        icCountryCode countryCode = (icCountryCode)(((icUInt32Number)(icUInt8Number)country[0] << 8) |
+                                                    (icUInt8Number)country[1]);
 
         CIccUTF16String wstr(text.c_str());
         desc.m_desc.SetText(wstr.c_str(), langCode, countryCode);
@@ -2446,8 +2450,10 @@ static CIccTagMultiLocalizedUnicode *dictLocalizedFromJson(const IccJson &arr)
     jGetString(loc, "text", text);
     while (lang.size()    < 2) lang    += ' ';
     while (country.size() < 2) country += ' ';
-    icLanguageCode langCode    = (icLanguageCode)((lang[0]    << 8) | lang[1]);
-    icCountryCode  countryCode = (icCountryCode) ((country[0] << 8) | country[1]);
+    icLanguageCode langCode = (icLanguageCode)(((icUInt32Number)(icUInt8Number)lang[0] << 8) |
+                                               (icUInt8Number)lang[1]);
+    icCountryCode countryCode = (icCountryCode)(((icUInt32Number)(icUInt8Number)country[0] << 8) |
+                                                (icUInt8Number)country[1]);
     CIccUTF16String wstr(text.c_str());
     pTag->SetText(wstr.c_str(), langCode, countryCode);
   }
