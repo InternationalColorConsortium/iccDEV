@@ -3790,7 +3790,9 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
   if (nOps > 0x80000000UL)
     return false;
 
-  for (os.idx=0; os.idx<os.nOps; os.idx++) {
+  icUInt32Number pc = 0;
+  while (pc < os.nOps) {
+    os.idx = pc;
     op = &ops[os.idx];
 
     if (g_pDebugger)
@@ -3854,23 +3856,23 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         return false;
       }
       
-      size_t defOffset = (size_t)os.idx + 1 + op->extra;
-      if (defOffset > std::numeric_limits<icUInt32Number>::max())
+      icUInt32Number nDefOff = 0;
+      if (!icCalcAddUInt32(os.idx, 1, nDefOff) ||
+          !icCalcAddUInt32(nDefOff, op->extra, nDefOff))
         return false;
-
-      icUInt32Number nDefOff = (icUInt32Number)defOffset;
       if (nDefOff >= nOps)
         return false;
 
       if (nSel<0 || (icUInt32Number)nSel>=op->extra) {
 
         if (ops[nDefOff].sig==icSigDefaultOp) {
-          size_t offset = (size_t)os.idx + 1 + ops[nDefOff].extra;
-          if (offset > nOps || offset > std::numeric_limits<icUInt32Number>::max())
+          icUInt32Number offset = 0;
+          if (!icCalcAddUInt32(os.idx, 1, offset) ||
+              !icCalcAddUInt32(offset, ops[nDefOff].extra, offset))
             return false;
 
           icUInt32Number dataSize = ops[nDefOff].data.size;
-          if (!icCalcSubSequenceFits((icUInt32Number)offset, dataSize, nOps))
+          if (!icCalcSubSequenceFits(offset, dataSize, nOps))
             return false;
           
           if (!ApplySequence(pApply, dataSize, &ops[offset], nDepth + 1))
@@ -3878,20 +3880,20 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         }
       }
       else {
-        size_t caseOffset = (size_t)os.idx + 1 + (icUInt32Number)nSel;
-        if (caseOffset > std::numeric_limits<icUInt32Number>::max())
+        icUInt32Number nOff = 0;
+        if (!icCalcAddUInt32(os.idx, 1, nOff) ||
+            !icCalcAddUInt32(nOff, (icUInt32Number)nSel, nOff))
           return false;
-
-        icUInt32Number nOff = (icUInt32Number)caseOffset;
 
         if (nOff >= nOps) 
           return false;
 
         icUInt32Number dataSize = ops[nOff].data.size;
-        size_t offset = (size_t)os.idx + 1 + ops[nOff].extra;
-        if (offset > nOps || offset > std::numeric_limits<icUInt32Number>::max())
+        icUInt32Number offset = 0;
+        if (!icCalcAddUInt32(os.idx, 1, offset) ||
+            !icCalcAddUInt32(offset, ops[nOff].extra, offset))
           return false;
-        if (!icCalcSubSequenceFits((icUInt32Number)offset, dataSize, nOps))
+        if (!icCalcSubSequenceFits(offset, dataSize, nOps))
           return false;
         
         if (!ApplySequence(pApply, dataSize, &ops[offset], nDepth + 1))
@@ -3900,25 +3902,29 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
 
       if (ops[nDefOff].sig==icSigDefaultOp) {
         icUInt32Number dataSize = ops[nDefOff].data.size;
-        size_t nextIndex = (size_t)os.idx + ops[nDefOff].extra + dataSize;
-        if (nextIndex > nOps || nextIndex > std::numeric_limits<icUInt32Number>::max() ||
-            nextIndex + 1 > nOps)
+        icUInt32Number nextIndex = 0;
+        if (!icCalcAddUInt32(os.idx, ops[nDefOff].extra, nextIndex) ||
+            !icCalcAddUInt32(nextIndex, dataSize, nextIndex) ||
+            nextIndex >= nOps)
           return false;
 
-        os.idx = (icUInt32Number)nextIndex;
+        os.idx = nextIndex;
       }
       else if (op->extra) {
-        size_t nOff = (size_t)os.idx + op->extra;
+        icUInt32Number nOff = 0;
+        if (!icCalcAddUInt32(os.idx, op->extra, nOff))
+          return false;
         if (nOff >= nOps)
           return false;
 
         icUInt32Number dataSize = ops[nOff].data.size;
-        size_t nextIndex = (size_t)os.idx + ops[nOff].extra + dataSize;
-        if (nextIndex > nOps || nextIndex > std::numeric_limits<icUInt32Number>::max() ||
-            nextIndex + 1 > nOps)
+        icUInt32Number nextIndex = 0;
+        if (!icCalcAddUInt32(os.idx, ops[nOff].extra, nextIndex) ||
+            !icCalcAddUInt32(nextIndex, dataSize, nextIndex) ||
+            nextIndex >= nOps)
           return false;
 
-        os.idx = (icUInt32Number)nextIndex;
+        os.idx = nextIndex;
       }
       else 
         return false;
@@ -3931,6 +3937,9 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
     if (g_pDebugger) {
       g_pDebugger->AfterOp(op, os, ops);
     }
+
+    if (!icCalcAddUInt32(os.idx, 1, pc))
+      return false;
   }
   return true;
 }
