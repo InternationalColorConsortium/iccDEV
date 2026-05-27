@@ -11480,7 +11480,7 @@ icValidateStatus CIccTagSpectralDataInfo::Validate(std::string sigPath, std::str
   std::string sSigPathName = Info.GetSigPathName(sigPath);
   icSignature sig = icGetFirstSigPathSig(sigPath);
 
-  if (sig==icSigSpectralDataInfoTag && pProfile->m_Header.spectralPCS) {
+  if (sig==icSigSpectralDataInfoTag && pProfile && pProfile->m_Header.spectralPCS) {
     const icHeader *pHdr = &pProfile->m_Header;
 
     if (m_nSig != pHdr->spectralPCS ||
