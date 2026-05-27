@@ -1515,12 +1515,8 @@ icStatusCMM CIccXform::Begin()
         m_PCSOffset[2] = - m_PCSOffset[2] * m_PCSScale[2];
       }
     }
-  }
 
-  // make sure these are not zero, because we will divide by them later in the process
-  if (!std::isfinite(m_PCSScale[0]) || !std::isfinite(m_PCSScale[1]) || !std::isfinite(m_PCSScale[2])
-      || m_PCSScale[0] == 0.0f || m_PCSScale[1] == 0.0f || m_PCSScale[2] == 0.0f)
-    return icCmmStatInvalidProfile;
+  }
 
   if (m_pAdjustPCS) {
     CIccProfile ProfileCopy(*m_pProfile);
@@ -1540,6 +1536,12 @@ icStatusCMM CIccXform::Begin()
   }
 
   if (m_bAdjustPCS) {
+
+    // make sure these are not zero, because we will divide by them later in the process
+    if (!std::isfinite(m_PCSScale[0]) || !std::isfinite(m_PCSScale[1]) || !std::isfinite(m_PCSScale[2])
+        || m_PCSScale[0] == 0.0f || m_PCSScale[1] == 0.0f || m_PCSScale[2] == 0.0f)
+      return icCmmStatInvalidProfile;
+    
     if ((m_bInput && GetNumDstSamples() < 3) ||
         (!m_bInput && GetNumSrcSamples() < 3)) {
       return icCmmStatInvalidProfile;
