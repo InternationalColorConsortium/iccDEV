@@ -7148,7 +7148,7 @@ bool CIccTagFloatNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumb
   if (!lo) {
     if (zeroVals) {
       for (i = 0; i < nVectorSize; i++) {
-        DstVector[i] = (icFloatNumber)(zeroVals[i] * invx + hi[i] * x);
+        DstVector[i] = (icFloatNumber)((double)zeroVals[i] * (double)invx + (double)hi[i] * (double)x);
       }
     }
     else {
@@ -7159,7 +7159,7 @@ bool CIccTagFloatNum<T, Tsig>::Interpolate(icFloatNumber *DstVector, icFloatNumb
   }
   else {
     for (i=0; i<nVectorSize; i++) {
-      DstVector[i] = (icFloatNumber)(lo[i]*invx + hi[i]*x);
+      DstVector[i] = (icFloatNumber)((double)lo[i] * (double)invx + (double)hi[i] * (double)x);
     }
   }
   return true;

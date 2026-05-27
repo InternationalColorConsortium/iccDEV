@@ -6364,7 +6364,8 @@ bool CIccMpeCAM::Write(CIccIO *pIO)
 bool CIccMpeCAM::Begin(icElemInterp /* nInterp */, CIccTagMultiProcessElement * /* pMPE */ )
 {
   if (m_pCAM) {
-    return true;
+    icFloatNumber surround = m_pCAM->GetParameter_C();
+    return std::isfinite((double)surround) && surround >= 0.0f && surround <= 1.0f;
   }
   return false;
 }
@@ -6431,6 +6432,13 @@ icValidateStatus CIccMpeCAM::Validate(std::string /* sigPath */, std::string &sR
     sReport += icMsgValidateCriticalError;
     sReport += "Invalid CAM";
     return icMaxStatus(icValidateCriticalError, rv);
+  }
+
+  icFloatNumber surround = m_pCAM->GetParameter_C();
+  if (!std::isfinite((double)surround) || surround < 0.0f || surround > 1.0f) {
+    sReport += icMsgValidateCriticalError;
+    sReport += "CAM Element Impact Surround must be in [0.0, 1.0]\n";
+    rv = icMaxStatus(icValidateCriticalError, rv);
   }
 
   return rv;

@@ -71,6 +71,7 @@
 #include <algorithm>
 #include <new>     /* std::nothrow */
 #include <cstring> /* C strings strcpy, memcpy ... */
+#include <cmath>
 
 #ifdef WIN32
 #include <windows.h>
@@ -2320,7 +2321,12 @@ static bool icXmlParseColorAppearanceParams(xmlNode *pNode, std::string &parseSt
      parseStr += "Invalid CAM ImpactSurround\n";
      return false;
    }
-   pCam->SetParameter_C((icFloatNumber)atof((const char*)pChild->children->content));
+   icFloatNumber impactSurround = (icFloatNumber)atof((const char*)pChild->children->content);
+   if (!std::isfinite((double)impactSurround) || impactSurround < 0.0f || impactSurround > 1.0f) {
+     parseStr += "CAM ImpactSurround must be in [0.0, 1.0]\n";
+     return false;
+   }
+   pCam->SetParameter_C(impactSurround);
 
    pChild = icXmlFindNode(pNode, "ChromaticInductionFactor");
    if (!pChild || !pChild->children || !pChild->children->content) {
