@@ -2752,7 +2752,7 @@ bool CIccSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
 
     pIO->Seek(pos, icSeekSet);
 
-    if (!pSeg->Read(size-(pos-startPos), pIO)) {
+    if (pos < startPos || (icUInt32Number)(pos-startPos) > size || !pSeg->Read(size-(icUInt32Number)(pos-startPos), pIO)) {
       delete pSeg;
       return false;
     }
@@ -2796,7 +2796,7 @@ bool CIccSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
         return false;
       }
 
-      if (!pSeg->Read(size-(pos-startPos), pIO)) {
+      if (pos < startPos || (icUInt32Number)(pos-startPos) > size || !pSeg->Read(size-(icUInt32Number)(pos-startPos), pIO)) {
         delete pSeg;
         free(breakpoints);
         return false;
