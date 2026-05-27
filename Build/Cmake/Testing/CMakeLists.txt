@@ -512,6 +512,14 @@ set_tests_properties(iccdev.json-cfg PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1121-json-envvars-regression
+  60
+  "iccdev;json;cfg;envvars;issue-1121;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1121-json-envvars-regression.sh"
+)
+
+iccdev_add_script_test(
   iccdev.json-cli-exercise
   300
   "iccdev;json;cli;asan"

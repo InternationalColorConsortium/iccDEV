@@ -705,16 +705,27 @@ bool jsonToValue(const json& j, icCmmEnvSigMap& v)
   if (!j.is_array())
     return false;
 
+  icCmmEnvSigMap envVars;
   for (auto e = j.begin(); e != j.end(); e++) {
     if (e->is_object()) {
+      auto nameIt = e->find("name");
+      auto valueIt = e->find("value");
+      if (nameIt == e->end() || valueIt == e->end())
+        return false;
+
       std::string name;
       icFloatNumber value;
-      if (jsonToValue((*e)["name"], name) && jsonToValue((*e)["value"], value)) {
+      if (jsonToValue(*nameIt, name) && jsonToValue(*valueIt, value)) {
         icColorSpaceSignature sig = (icColorSpaceSignature)icGetSigVal(name.c_str());
-        v[sig]=value;
+        envVars[sig]=value;
       }
+      else
+        return false;
     }
+    else
+      return false;
   }
+  v = envVars;
   return true;
 }
 
@@ -723,12 +734,13 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
   if (!j.is_object())
     return false;
 
-  if (bReset)
-    reset();
+  CIccCfgProfile parsed;
+  if (!bReset)
+    parsed = *this;
 
-  jsonToValue(j["iccFile"], m_iccFile);
+  jsonToValue(j["iccFile"], parsed.m_iccFile);
 
-  icGetJsonRenderingIntent(j["intent"], m_intent);
+  icGetJsonRenderingIntent(j["intent"], parsed.m_intent);
 
   std::string str;
   if (jsonToValue(j["transform"], str)) {
@@ -737,19 +749,21 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
       if (str == icTranNames[i])
         break;
     }
-    m_transform = (icXformLutType)icTranValues[i];
+    parsed.m_transform = (icXformLutType)icTranValues[i];
   }
 
-  jsonToValue(j["iccEnvVars"], m_iccEnvVars);
+  if (j.contains("iccEnvVars") && !jsonToValue(j["iccEnvVars"], parsed.m_iccEnvVars))
+    return false;
 
-  jsonToValue(j["pccFile"], m_pccFile);
-  jsonToValue(j["pccEnvVars"], m_pccEnvVars);
+  jsonToValue(j["pccFile"], parsed.m_pccFile);
+  if (j.contains("pccEnvVars") && !jsonToValue(j["pccEnvVars"], parsed.m_pccEnvVars))
+    return false;
 
-  jsonToValue(j["adjustPcsLuminance"], m_adjustPcsLuminance);
-  jsonToValue(j["useBPC"], m_useBPC);
-  jsonToValue(j["useHToS"], m_useHToS);
-  jsonToValue(j["useV5SubProfile"], m_useV5SubProfile);
-  jsonToValue(j["useD2BxB2Dx"], m_useD2BxB2Dx);
+  jsonToValue(j["adjustPcsLuminance"], parsed.m_adjustPcsLuminance);
+  jsonToValue(j["useBPC"], parsed.m_useBPC);
+  jsonToValue(j["useHToS"], parsed.m_useHToS);
+  jsonToValue(j["useV5SubProfile"], parsed.m_useV5SubProfile);
+  jsonToValue(j["useD2BxB2Dx"], parsed.m_useD2BxB2Dx);
 
   if (jsonToValue(j["interpolation"], str)) {
     int i;
@@ -757,9 +771,10 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
       if (str == icInterpNames[i])
         break;
     }
-    m_interpolation = icInterpValues[i];
+    parsed.m_interpolation = icInterpValues[i];
   }
 
+  *this = parsed;
   return true;
 }
 
@@ -913,21 +928,23 @@ bool CIccCfgProfileSequence::fromJson(json j, bool bReset)
   if (!j.is_array())
     return false;
 
-  if (bReset)
-    reset();
+  CIccCfgProfileArray profiles = bReset ? CIccCfgProfileArray() : m_profiles;
 
   for (auto p = j.begin(); p != j.end(); p++) {
     if (p->is_object()) {
       CIccCfgProfilePtr pProf(new CIccCfgProfile);
       if (pProf->fromJson(*p)) {
-        m_profiles.push_back(pProf);
+        profiles.push_back(pProf);
       }
       else {
-        pProf.reset();
+        return false;
       }
     }
+    else
+      return false;
   }
 
+  m_profiles.swap(profiles);
   return true;
 }
 
