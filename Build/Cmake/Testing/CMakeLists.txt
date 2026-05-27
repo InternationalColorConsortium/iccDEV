@@ -619,6 +619,14 @@ set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1168-pawg-calculator-hbo
+  120
+  "iccdev;tools;pawg;calculator;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1168-pawg-calculator-hbo.sh"
+)
+
+iccdev_add_script_test(
   iccdev.calculator-regressions
   300
   "iccdev;calculator;regression;asan"
