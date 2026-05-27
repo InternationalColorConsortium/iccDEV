@@ -817,14 +817,19 @@ icFloatNumber icU8toAB(icUInt8Number num)
 ICCPROFLIB_API icFloatNumber icD50XYZ[3] = { 0.9642f, 1.0000f, 0.8249f };
 ICCPROFLIB_API icFloatNumber icD50XYZxx[3] = { 96.42f, 100.00f, 82.49f };
 
+static icFloatNumber icSafeXYZRatio(icFloatNumber value, icFloatNumber white)
+{
+  return icNotZero(white) ? value / white : 0.0f;
+}
+
 void icNormXyz(icFloatNumber *XYZ, icFloatNumber *WhiteXYZ)
 {
   if (!WhiteXYZ)
     WhiteXYZ = icD50XYZ;
 
-  XYZ[0] = XYZ[0] / WhiteXYZ[0];
-  XYZ[1] = XYZ[1] / WhiteXYZ[1];
-  XYZ[2] = XYZ[2] / WhiteXYZ[2];
+  XYZ[0] = icSafeXYZRatio(XYZ[0], WhiteXYZ[0]);
+  XYZ[1] = icSafeXYZRatio(XYZ[1], WhiteXYZ[1]);
+  XYZ[2] = icSafeXYZRatio(XYZ[2], WhiteXYZ[2]);
 }
 
 void icDeNormXyz(icFloatNumber *XYZ, icFloatNumber *WhiteXYZ)
@@ -888,9 +893,9 @@ void icXYZtoLab(icFloatNumber *Lab, const icFloatNumber *XYZ /*=NULL*/, const ic
   if (!WhiteXYZ)
     WhiteXYZ = icD50XYZ;
 
-  Xn = icCubeth(XYZ[0] / WhiteXYZ[0]);
-  Yn = icCubeth(XYZ[1] / WhiteXYZ[1]);
-  Zn = icCubeth(XYZ[2] / WhiteXYZ[2]);
+  Xn = icCubeth(icSafeXYZRatio(XYZ[0], WhiteXYZ[0]));
+  Yn = icCubeth(icSafeXYZRatio(XYZ[1], WhiteXYZ[1]));
+  Zn = icCubeth(icSafeXYZRatio(XYZ[2], WhiteXYZ[2]));
 
   Lab[0] = (icFloatNumber)(116.0 * Yn - 16.0);
   Lab[1] = (icFloatNumber)(500.0 * (Xn - Yn));
