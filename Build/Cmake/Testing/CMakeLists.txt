@@ -619,6 +619,14 @@ set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1151-pngdump-icc-injection
+  60
+  "iccdev;tools;pngdump;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1151-pngdump-icc-injection.sh"
+)
+
+iccdev_add_script_test(
   iccdev.calculator-regressions
   300
   "iccdev;calculator;regression;asan"

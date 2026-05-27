@@ -80,6 +80,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <limits>
 #include <vector>
 #include <cstdio>
 #include <cstdlib>
@@ -335,12 +336,29 @@ static FILE* OpenPngOutputFile(const std::string& outputPng)
     if (fd < 0) {
         return NULL;
     }
+
     FILE* fp = fdopen(fd, "wb");
     if (!fp) {
         close(fd);
     }
     return fp;
 #endif
+}
+
+static bool ReadBinaryStream(std::istream& in, std::vector<unsigned char>& data)
+{
+    unsigned char buffer[4096];
+
+    data.clear();
+    while (in) {
+        in.read(reinterpret_cast<char*>(buffer), sizeof(buffer));
+        std::streamsize bytesRead = in.gcount();
+        if (bytesRead > 0) {
+            data.insert(data.end(), buffer, buffer + bytesRead);
+        }
+    }
+
+    return in.eof() && !in.bad();
 }
 
 /**
@@ -360,8 +378,15 @@ bool InjectIccProfile(const std::string& inputPng,
         return false;
     }
 
-    std::vector<unsigned char> iccData((std::istreambuf_iterator<char>(iccIn)),
-                                       std::istreambuf_iterator<char>());
+    std::vector<unsigned char> iccData;
+    if (!ReadBinaryStream(iccIn, iccData)) {
+        LOG_ERROR("Failed to read ICC profile file.");
+        return false;
+    }
+    if (iccData.empty() || iccData.size() > std::numeric_limits<png_uint_32>::max()) {
+        LOG_ERROR("Invalid ICC profile size for PNG iCCP chunk.");
+        return false;
+    }
 
     FILE* fpIn = fopen(inputPng.c_str(), "rb");
     if (!fpIn) {
@@ -443,7 +468,6 @@ bool InjectIccProfile(const std::string& inputPng,
                  png_get_filter_type(png_ptr, info_ptr));
 
     // only now is it safe to attach ICC
-    // TODO - this should have a size check to make sure the profile is less than 2 Gig (32 bit api limit)
     png_set_iCCP(write_ptr, write_info_ptr, "icc", 0, iccData.data(), static_cast<png_uint_32>(iccData.size()));
 
     // finally write header
