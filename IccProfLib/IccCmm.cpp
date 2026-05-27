@@ -106,6 +106,11 @@ static __inline bool IsSpaceSpectralPCS(icUInt32Number sig)
          sig==icSigSparseMatrixSpectralPcsData;
 }
 
+static __inline bool IsValidXformIntent(icRenderingIntent intent)
+{
+  return intent >= icPerceptual && intent <= icAbsoluteColorimetric;
+}
+
 #define IsSpaceDevicePCS(x) ((x)==icSigDevXYZData || (x)==icSigDevLabData)
 #define IsSpaceColorimetricPCS(x) ((x)==icSigXYZPcsData || (x)==icSigLabPcsData)
 #define IsSpaceNChannel(x) (icGetColorSpaceType(x)==icSigNChannelData)
@@ -557,6 +562,9 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
   if (nTagIntent == icUnknownIntent)
     nTagIntent = icPerceptual;
+
+  if (!IsValidXformIntent(nTagIntent))
+    return NULL;
 
 // TODO -  there are too many layers in the switch, making it very difficult to understand the code
 // it should be broken into functions for improved readability
@@ -7279,6 +7287,9 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
   if (nTagIntent == icUnknownIntent)
     nTagIntent = icPerceptual;
+
+  if (!IsValidXformIntent(nTagIntent))
+    return NULL;
 
   switch (nUseLutType) {
     case icXformLutColor:
