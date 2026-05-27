@@ -3017,6 +3017,17 @@ void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
     g3 = 0.0;
   if (g4 < 0)
     g4 = 0.0;
+    
+  if (g0 > m0)
+    g0 = m0;
+  if (g1 > m1)
+    g1 = m1;
+  if (g2 > m2)
+    g2 = m2;
+  if (g3 > m3)
+    g3 = m3;
+  if (g4 > m4)
+    g4 = m4;
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -3145,6 +3156,19 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
     g4 = 0.0;
   if (g5 < 0)
     g5 = 0.0;
+    
+  if (g0 > m0)
+    g0 = m0;
+  if (g1 > m1)
+    g1 = m1;
+  if (g2 > m2)
+    g2 = m2;
+  if (g3 > m3)
+    g3 = m3;
+  if (g4 > m4)
+    g4 = m4;
+  if (g5 > m5)
+    g5 = m5;
 
   icUInt32Number ig0 = (icUInt32Number)g0;
   icUInt32Number ig1 = (icUInt32Number)g1;
@@ -3294,6 +3318,8 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
     g[i] = m_UnitClipFunc(srcPixel[i]) * m_MaxGridPoint[i];
     if (g[i] < 0)
       g[i] = 0.0;
+    if (g[i] > m_MaxGridPoint[i])
+      g[i] = m_MaxGridPoint[i];
     ig[i] = (icUInt32Number)g[i];
     s[m_nInput-1-i] = g[i] - ig[i];
     if (ig[i]==m_MaxGridPoint[i]) {

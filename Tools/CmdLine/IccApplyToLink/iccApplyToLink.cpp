@@ -881,7 +881,7 @@ int main(int argc, icChar* argv[])
  
     //Display status of how much we have accomplished
     if (lutCount > 0) {     // explicit check to avoid divide by zero
-        curPer = (int)((float)(c + 1) * 100.0f / (float)lutCount);
+        curPer = ((c + 1) * 100) / lutCount;
         if (curPer != lastPer) {
           printf("\r%d%%", curPer);
           lastPer = curPer;
