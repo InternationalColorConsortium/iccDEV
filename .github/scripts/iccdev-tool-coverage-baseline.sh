@@ -723,7 +723,7 @@ run_test "ncm-03" "sRGB: 8-bit RGB data, encoding=2 (UnitFloat)" \
 run_test "ncm-04" "sRGB: 8-bit RGB data, encoding=3 (Float)" \
   "$APPLYNCM" "$SRGB_CALC_DATA" 3 0 "$SRGB" 1
 
-run_expect_exit "ncm-05" "Reject final encoding=4 (8Bit)" 255 \
+run_expect_exit "ncm-05" "Reject final encoding=4 (8Bit)" 1 \
   "$APPLYNCM" "$SRGB_CALC_DATA" 4 0 "$SRGB" 1
 
 run_test "ncm-06" "sRGB: 8-bit RGB data, encoding=5 (16Bit)" \
