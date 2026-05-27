@@ -93,9 +93,12 @@ void
 CIccCamConverter::ReferenceConditions (icFloatNumber	*rgb,
 											 icFloatNumber	*rgbC)
 {
-	rgbC[0] = (icFloatNumber)((m_D * m_WhitePoint[1] / m_rgbWhite[0] + 1.0 - m_D) * rgb[0]);
-	rgbC[1] = (icFloatNumber)((m_D * m_WhitePoint[1] / m_rgbWhite[1] + 1.0 - m_D) * rgb[1]);
-	rgbC[2] = (icFloatNumber)((m_D * m_WhitePoint[1] / m_rgbWhite[2] + 1.0 - m_D) * rgb[2]);
+	for (int i=0; i<3; i++) {
+		if (m_rgbWhite[i] == 0.0f)
+			rgbC[i] = 0.0f;
+		else
+			rgbC[i] = (icFloatNumber)((m_D * m_WhitePoint[1] / m_rgbWhite[i] + 1.0 - m_D) * rgb[i]);
+	}
 }
 
 /*---------------------------------------------------------------------------------*/
@@ -104,9 +107,15 @@ void
 CIccCamConverter::ReferenceConditionsInv (icFloatNumber *rgbC,
 												 icFloatNumber *rgb)
 {
-	rgb[0] = (icFloatNumber)(rgbC[0] / (m_D * m_WhitePoint[1] / m_rgbWhite[0] + 1.0 - m_D));
-	rgb[1] = (icFloatNumber)(rgbC[1] / (m_D * m_WhitePoint[1] / m_rgbWhite[1] + 1.0 - m_D));
-	rgb[2] = (icFloatNumber)(rgbC[2] / (m_D * m_WhitePoint[1] / m_rgbWhite[2] + 1.0 - m_D));
+	for (int i=0; i<3; i++) {
+		if (m_rgbWhite[i] == 0.0f) {
+			rgb[i] = 0.0f;
+		}
+		else {
+			icFloatNumber denom = (icFloatNumber)(m_D * m_WhitePoint[1] / m_rgbWhite[i] + 1.0 - m_D);
+			rgb[i] = (denom == 0.0f) ? 0.0f : (icFloatNumber)(rgbC[i] / denom);
+		}
+	}
 }
 
 /*---------------------------------------------------------------------------------------*/
@@ -149,6 +158,7 @@ icFloatNumber
 CIccCamConverter::Hyperbolic (icFloatNumber	x)
 {
 	icFloatNumber	y;
+	icFloatNumber hFl = H_Function (m_Fl);
 
 	if (x < 0)
 	{
@@ -158,7 +168,8 @@ CIccCamConverter::Hyperbolic (icFloatNumber	x)
 		}
 		else
 		{
-			y = - ((1 + m_alfa) * H_Function (-x) / H_Function (m_Fl) - m_alfa) * F_Function (m_Fl);
+			y = (hFl == 0.0f) ? 0.0f :
+				- ((1 + m_alfa) * H_Function (-x) / hFl - m_alfa) * F_Function (m_Fl);
 		}
 	}
 	else
@@ -169,7 +180,8 @@ CIccCamConverter::Hyperbolic (icFloatNumber	x)
 		}
 		else
 		{
-			y = ((1 + m_alfa) * H_Function (x) / H_Function (m_Fl) - m_alfa) * F_Function (m_Fl);
+			y = (hFl == 0.0f) ? 0.0f :
+				((1 + m_alfa) * H_Function (x) / hFl - m_alfa) * F_Function (m_Fl);
 		}
 	}
 
