@@ -199,11 +199,14 @@ CIccCamConverter::HyperbolicInv (icFloatNumber y)
 	{
 		if (-y <= (m_cc * m_x0))
 		{
-			x = y / m_cc;
+			x = (m_cc == 0.0f) ? 0.0f : y / m_cc;
 		}
 		else
 		{
-			h_y = (- y / F_Function (m_Fl) + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
+			icFloatNumber fFl = F_Function (m_Fl);
+			if (fFl == 0.0f)
+				return 0.0f;
+			h_y = (- y / fFl + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
 			x = - H_FunctionInv (h_y);
 		}
 	}
@@ -211,11 +214,14 @@ CIccCamConverter::HyperbolicInv (icFloatNumber y)
 	{
 		if (y <= (m_cc * m_x0))
 		{
-			x = y / m_cc;
+			x = (m_cc == 0.0f) ? 0.0f : y / m_cc;
 		}
 		else
 		{
-			h_y = (y / F_Function (m_Fl) + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
+			icFloatNumber fFl = F_Function (m_Fl);
+			if (fFl == 0.0f)
+				return 0.0f;
+			h_y = (y / fFl + m_alfa) / (1 + m_alfa) * H_Function (m_Fl);
 			x = H_FunctionInv (h_y);
 		}
 	}

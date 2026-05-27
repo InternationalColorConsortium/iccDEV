@@ -512,6 +512,14 @@ set_tests_properties(iccdev.json-cfg PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1166-cam-hyperbolicinv-regression
+  60
+  "iccdev;json;cfg;cam;issue-1166;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1166-cam-hyperbolicinv-regression.sh"
+)
+
+iccdev_add_script_test(
   iccdev.json-cli-exercise
   300
   "iccdev;json;cli;asan"
