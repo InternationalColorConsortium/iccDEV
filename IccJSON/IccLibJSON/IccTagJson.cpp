@@ -1682,7 +1682,7 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
             arr.push_back(icFtoU8(m_Curve[i])); break;
           case icConvert16Bit:
           case icConvertVariable:
-            arr.push_back(icFtoU16(m_Curve[i]); break;
+            arr.push_back(icFtoU16(m_Curve[i])); break;
           default:
             arr.push_back((double)m_Curve[i]); break;
         }

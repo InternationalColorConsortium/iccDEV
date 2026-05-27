@@ -182,10 +182,10 @@ bool icCLUTDataToJson(IccJson &j, CIccCLUT *pCLUT, icConvertType nType, bool bSa
   for (icUInt32Number k = 0; k < nTotal; k++) {
     switch (nType) {
       case icConvert8Bit:
-        data.push_back((int)(pData[k] * 255.0f + 0.5f));
+        data.push_back(icFtoU8(pData[k]));
         break;
       case icConvert16Bit:
-        data.push_back((int)(pData[k] * 65535.0f + 0.5f));
+        data.push_back(icFtoU16(pData[k]));
         break;
       default:
         data.push_back((double)pData[k]);
