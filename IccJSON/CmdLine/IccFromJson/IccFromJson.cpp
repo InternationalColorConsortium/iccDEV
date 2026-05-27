@@ -10,6 +10,7 @@
 #include "IccProfLibVer.h"
 #include "IccLibJSONVer.h"
 #include <cstring>
+#include <cstdlib>
 
 #ifdef _WIN32
   #define ICC_STRICMP _stricmp
@@ -41,7 +42,7 @@ int main(int argc, char* argv[])
   if (!profile.LoadJson(argv[1], &reason)) {
     printf("%s", reason.c_str());
     printf("Unable to Parse '%s'\n", argv[1]);
-    return -1;
+    return EXIT_FAILURE;
   }
 
   std::string valid_report;
@@ -57,7 +58,7 @@ int main(int argc, char* argv[])
     }
     else {
       printf("Unable to save profile as '%s'\n", argv[2]);
-      return -1;
+      return EXIT_FAILURE;
     }
   }
   else {
@@ -71,7 +72,7 @@ int main(int argc, char* argv[])
     }
     else {
       printf("Unable to save profile - profile is invalid!\n");
-      return -1;
+      return EXIT_FAILURE;
     }
     printf("%s", valid_report.c_str());
   }

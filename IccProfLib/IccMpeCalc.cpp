@@ -133,6 +133,12 @@ static bool icCalcTempSpan(icUInt32Number pos, icUInt32Number countMinusOne,
   return true;
 }
 
+static bool icCalcSubSequenceFits(icUInt32Number start, icUInt32Number count,
+                                  icUInt32Number nOps)
+{
+  return start <= nOps && count <= nOps - start;
+}
+
 
 class CIccConsoleDebugger : public IIccCalcDebugger
 {
@@ -3736,8 +3742,12 @@ bool CIccCalculatorFunc::InitSelectOp(SIccCalcOp *ops, icUInt32Number nOps)
   }
   pos = n;
   for (i=1; i<=n && pos<nOps; i++) {
+    icUInt32Number start = 0;
     ops[i].extra = pos;
-    pos += ops[i].data.size;
+    if (!icCalcAddUInt32(pos, 1, start) ||
+        !icCalcSubSequenceFits(start, ops[i].data.size, nOps) ||
+        !icCalcAddUInt32(pos, ops[i].data.size, pos))
+      return false;
   }
 
   if (i<=n)
@@ -3780,7 +3790,9 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
   if (nOps > 0x80000000UL)
     return false;
 
-  for (os.idx=0; os.idx<os.nOps; os.idx++) {
+  icUInt32Number pc = 0;
+  while (pc < os.nOps) {
+    os.idx = pc;
     op = &ops[os.idx];
 
     if (g_pDebugger)
@@ -3794,12 +3806,9 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         os.idx++;
         if (a1>=0.5) {
           icUInt32Number dataSize = op->data.size;
-          if (dataSize >= nOps)       // check first in case of overflow
-            return false;
           icUInt32Number ifEnd = 0;
           if (!icCalcAddUInt32(os.idx, 1, ifEnd) ||
-              !icCalcAddUInt32(ifEnd, dataSize, ifEnd) ||
-              ifEnd >= nOps)
+              !icCalcSubSequenceFits(ifEnd, dataSize, nOps))
             return false;
 
           if (!ApplySequence(pApply, dataSize, &ops[os.idx+1], nDepth + 1))
@@ -3812,9 +3821,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
           if (!icCalcAddUInt32(os.idx, 1, newOpIndex) ||
               !icCalcAddUInt32(newOpIndex, dataSize, newOpIndex))
             return false;
-          if (nNewOps > nOps || dataSize > nOps || newOpIndex > nOps)   // check first in case of overflow
-            return false;
-          if (nNewOps > nOps - newOpIndex)  // now add and test the real limit
+          if (!icCalcSubSequenceFits(newOpIndex, nNewOps, nOps))
             return false;
 
           if (!ApplySequence(pApply, nNewOps, &ops[newOpIndex], nDepth + 1))
@@ -3828,11 +3835,9 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
       else {
         if (a1>=0.5) {
           icUInt32Number dataSize = op->data.size;
-          if (dataSize >= nOps)       // check first in case of overflow
-            return false;
           icUInt32Number ifEnd = 0;
-          if (!icCalcAddUInt32(os.idx, dataSize, ifEnd) ||
-              ifEnd >= nOps)
+          if (!icCalcAddUInt32(os.idx, 1, ifEnd) ||
+              !icCalcSubSequenceFits(ifEnd, dataSize, nOps))
             return false;
 
           if (!ApplySequence(pApply, op->data.size, &ops[os.idx+1], nDepth + 1))
@@ -3851,25 +3856,23 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         return false;
       }
       
-      size_t defOffset = (size_t)os.idx + 1 + op->extra;
-      if (defOffset > std::numeric_limits<icUInt32Number>::max())
+      icUInt32Number nDefOff = 0;
+      if (!icCalcAddUInt32(os.idx, 1, nDefOff) ||
+          !icCalcAddUInt32(nDefOff, op->extra, nDefOff))
         return false;
-
-      icUInt32Number nDefOff = (icUInt32Number)defOffset;
       if (nDefOff >= nOps)
         return false;
 
       if (nSel<0 || (icUInt32Number)nSel>=op->extra) {
 
         if (ops[nDefOff].sig==icSigDefaultOp) {
-          size_t offset = (size_t)os.idx + 1 + ops[nDefOff].extra;
-          if (offset >= nOps)
+          icUInt32Number offset = 0;
+          if (!icCalcAddUInt32(os.idx, 1, offset) ||
+              !icCalcAddUInt32(offset, ops[nDefOff].extra, offset))
             return false;
 
           icUInt32Number dataSize = ops[nDefOff].data.size;
-          if (dataSize >= nOps)       // check first in case of overflow
-            return false;
-          if ((nDefOff + dataSize) >= nOps)
+          if (!icCalcSubSequenceFits(offset, dataSize, nOps))
             return false;
           
           if (!ApplySequence(pApply, dataSize, &ops[offset], nDepth + 1))
@@ -3877,23 +3880,20 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
         }
       }
       else {
-        size_t caseOffset = (size_t)os.idx + 1 + (icUInt32Number)nSel;
-        if (caseOffset > std::numeric_limits<icUInt32Number>::max())
+        icUInt32Number nOff = 0;
+        if (!icCalcAddUInt32(os.idx, 1, nOff) ||
+            !icCalcAddUInt32(nOff, (icUInt32Number)nSel, nOff))
           return false;
-
-        icUInt32Number nOff = (icUInt32Number)caseOffset;
 
         if (nOff >= nOps) 
           return false;
 
         icUInt32Number dataSize = ops[nOff].data.size;
-        if (dataSize >= nOps)       // check first in case of overflow
+        icUInt32Number offset = 0;
+        if (!icCalcAddUInt32(os.idx, 1, offset) ||
+            !icCalcAddUInt32(offset, ops[nOff].extra, offset))
           return false;
-        if ((nOff + dataSize) >= nOps)
-          return false;
-
-        size_t offset = (size_t)os.idx + 1 + ops[nOff].extra;
-        if (offset >= nOps)
+        if (!icCalcSubSequenceFits(offset, dataSize, nOps))
           return false;
         
         if (!ApplySequence(pApply, dataSize, &ops[offset], nDepth + 1))
@@ -3902,29 +3902,29 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
 
       if (ops[nDefOff].sig==icSigDefaultOp) {
         icUInt32Number dataSize = ops[nDefOff].data.size;
-        if (dataSize >= nOps)       // check first in case of overflow
-          return false;
-        size_t nextIndex = (size_t)os.idx + ops[nDefOff].extra + dataSize;
-        if (nextIndex > nOps || nextIndex > std::numeric_limits<icUInt32Number>::max() ||
-            nextIndex + 1 > nOps)
+        icUInt32Number nextIndex = 0;
+        if (!icCalcAddUInt32(os.idx, ops[nDefOff].extra, nextIndex) ||
+            !icCalcAddUInt32(nextIndex, dataSize, nextIndex) ||
+            nextIndex >= nOps)
           return false;
 
-        os.idx = (icUInt32Number)nextIndex;
+        os.idx = nextIndex;
       }
       else if (op->extra) {
-        size_t nOff = (size_t)os.idx + op->extra;
+        icUInt32Number nOff = 0;
+        if (!icCalcAddUInt32(os.idx, op->extra, nOff))
+          return false;
         if (nOff >= nOps)
           return false;
 
         icUInt32Number dataSize = ops[nOff].data.size;
-        if (dataSize >= nOps)       // check first in case of overflow
-          return false;
-        size_t nextIndex = (size_t)os.idx + ops[nOff].extra + dataSize;
-        if (nextIndex > nOps || nextIndex > std::numeric_limits<icUInt32Number>::max() ||
-            nextIndex + 1 > nOps)
+        icUInt32Number nextIndex = 0;
+        if (!icCalcAddUInt32(os.idx, ops[nOff].extra, nextIndex) ||
+            !icCalcAddUInt32(nextIndex, dataSize, nextIndex) ||
+            nextIndex >= nOps)
           return false;
 
-        os.idx = (icUInt32Number)nextIndex;
+        os.idx = nextIndex;
       }
       else 
         return false;
@@ -3937,6 +3937,9 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
     if (g_pDebugger) {
       g_pDebugger->AfterOp(op, os, ops);
     }
+
+    if (!icCalcAddUInt32(os.idx, 1, pc))
+      return false;
   }
   return true;
 }
@@ -4093,9 +4096,10 @@ bool CIccCalculatorFunc::NeedTempReset(icUInt8Number *tempUsage, icUInt32Number 
 ******************************************************************************/
 bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nOps, icUInt8Number *tempUsage, icUInt32Number nMaxTemp)
 {
-  icUInt32Number i, j;
+  icUInt32Number pc = 0, j;
 
-  for (i=0; i<nOps; i++) {
+  while (pc < nOps) {
+    icUInt32Number i = pc;
     icSigCalcOp sig = op[i].sig;
     if (sig==icSigTempGetChanOp) {
       icUInt32Number p = op[i].data.select.v1;
@@ -4139,9 +4143,17 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
         free(ifTemps);
         return true;
       }
-      rv = rv || SequenceNeedTempReset(&op[p], icIntMin(nOps-p, op[i].data.size), ifTemps, nMaxTemp);
+      if (!icCalcSubSequenceFits(p, op[i].data.size, nOps)) {
+        free(ifTemps);
+        return true;
+      }
+      rv = rv || SequenceNeedTempReset(&op[p], op[i].data.size, ifTemps, nMaxTemp);
 
-      if (i<nOps && op[i+1].sig==icSigElseOp) {
+      icUInt32Number elseIndex = 0;
+      bool hasElse = icCalcAddUInt32(i, 1, elseIndex) &&
+                     elseIndex < nOps &&
+                     op[elseIndex].sig==icSigElseOp;
+      if (hasElse) {
         icUInt8Number *elseTemps = (icUInt8Number *)malloc(nMaxTemp);
         if (!elseTemps) {
           free(ifTemps);
@@ -4161,7 +4173,12 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
           free(elseTemps);
           return true;
         }
-        rv = rv || SequenceNeedTempReset(&op[p], icIntMin(nOps-p, op[i+1].data.size), elseTemps, nMaxTemp);
+        if (!icCalcSubSequenceFits(p, op[elseIndex].data.size, nOps)) {
+          free(ifTemps);
+          free(elseTemps);
+          return true;
+        }
+        rv = rv || SequenceNeedTempReset(&op[p], op[elseIndex].data.size, elseTemps, nMaxTemp);
 
         if (!rv) {
           for (j=0; j<nMaxTemp; j++) {
@@ -4174,12 +4191,12 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
         icUInt32Number nextI = 0;
         icUInt32Number advance = 0;
         if (!icCalcAddUInt32(1, op[i].data.size, advance) ||
-            !icCalcAddUInt32(advance, op[i+1].data.size, advance) ||
+            !icCalcAddUInt32(advance, op[elseIndex].data.size, advance) ||
             !icCalcAddUInt32(i, advance, nextI)) {
           free(ifTemps);
           return true;
         }
-        i = nextI;
+        pc = nextI;
       }
       else {
         icUInt32Number nextI = 0;
@@ -4187,7 +4204,7 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
           free(ifTemps);
           return true;
         }
-        i = nextI;
+        pc = nextI;
       }
 
       free(ifTemps);
@@ -4196,7 +4213,7 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
         return true;
     }
 
-    if (i == std::numeric_limits<icUInt32Number>::max())
+    if (!icCalcAddUInt32(pc, 1, pc))
       return true;
   }
   return false;
@@ -4215,11 +4232,12 @@ bool CIccCalculatorFunc::SequenceNeedTempReset(SIccCalcOp *op, icUInt32Number nO
 ******************************************************************************/
 int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nOps, int nArgs, bool bCheckUnderflow, std::string &sReport) const
 {
-  icUInt32Number i, p;
+  icUInt32Number pc = 0, p;
   int nIfArgs, nElseArgs, nSelArgs, nCaseArgs;
 
 
-  for (i=0; i<nOps; i++) {
+  while (pc<nOps) {
+    icUInt32Number i = pc;
     int nArgsUsed = op[i].ArgsUsed(m_pCalc);
 
 #if 0
@@ -4260,7 +4278,9 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
           return -1;
         if (p > nOps)
           return -1;
-        nIfArgs = CheckUnderflowOverflow(&op[p], icIntMin(nOps-p, op[i].data.size), nArgs, bCheckUnderflow, sReport);
+        if (!icCalcSubSequenceFits(p, op[i].data.size, nOps))
+          return -1;
+        nIfArgs = CheckUnderflowOverflow(&op[p], op[i].data.size, nArgs, bCheckUnderflow, sReport);
         if (nIfArgs<0)
           return -1;
         incI = op[i].data.size;
@@ -4271,15 +4291,17 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
           return -1;
         if (p > nOps)
           return -1;
-        nElseArgs = CheckUnderflowOverflow(&op[p], icIntMin(nOps-p, op[i+1].data.size), nArgs, bCheckUnderflow, sReport);
+        if (!icCalcSubSequenceFits(p, op[i+1].data.size, nOps))
+          return -1;
+        nElseArgs = CheckUnderflowOverflow(&op[p], op[i+1].data.size, nArgs, bCheckUnderflow, sReport);
         if (nElseArgs<0)
           return -1;
         if (!icCalcAddUInt32(incI, op[i+1].data.size, incI))
           return -1;
 
         nArgs = bCheckUnderflow ? icIntMin(nIfArgs, nElseArgs) : icIntMax(nIfArgs, nElseArgs) ;
-        i++;
-        if (!icCalcAddUInt32(i, incI, i))
+        if (!icCalcAddUInt32(i, 1, pc) ||
+            !icCalcAddUInt32(pc, incI, pc))
           return -1;
       }
       else {
@@ -4287,12 +4309,14 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
           return -1;
         if (p > nOps)
           return -1;
-        nIfArgs = CheckUnderflowOverflow(&op[p], icIntMin(nOps-p, op[i].data.size), nArgs, bCheckUnderflow, sReport);
+        if (!icCalcSubSequenceFits(p, op[i].data.size, nOps))
+          return -1;
+        nIfArgs = CheckUnderflowOverflow(&op[p], op[i].data.size, nArgs, bCheckUnderflow, sReport);
         if (nIfArgs<0)
           return -1;
         nArgs = bCheckUnderflow ? icIntMin(nArgs, nIfArgs) : icIntMax(nArgs, nIfArgs);
 
-        if (!icCalcAddUInt32(i, op[i].data.size, i))
+        if (!icCalcAddUInt32(i, op[i].data.size, pc))
           return -1;
       }
     }
@@ -4327,7 +4351,9 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
 
         if (pos > nOps)
           return -1;
-        nCaseArgs = CheckUnderflowOverflow(&op[pos], icIntMin(nOps-pos, len), nArgs, bCheckUnderflow, sReport);
+        if (!icCalcSubSequenceFits(pos, len, nOps))
+          return -1;
+        nCaseArgs = CheckUnderflowOverflow(&op[pos], len, nArgs, bCheckUnderflow, sReport);
         if (nCaseArgs<0)
           return -1;
 
@@ -4341,8 +4367,12 @@ int CIccCalculatorFunc::CheckUnderflowOverflow(SIccCalcOp *op, icUInt32Number nO
       }
       nArgs = nSelArgs;
 
-      i = pos - 1;
+      pc = pos;
+      continue;
     }
+
+    if (!icCalcAddUInt32(pc, 1, pc))
+      return -1;
   }
 
   return nArgs;
