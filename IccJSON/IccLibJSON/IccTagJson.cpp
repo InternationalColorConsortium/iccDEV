@@ -569,14 +569,24 @@ bool CIccTagJsonSpectralDataInfo::ParseJson(const IccJson &j, std::string & /*pa
     jsonToArray(j["spectralRange"], r, 3);
     m_spectralRange.start = icFtoF16((icFloat32Number)r[0]);
     m_spectralRange.end   = icFtoF16((icFloat32Number)r[1]);
-    m_spectralRange.steps = (icUInt16Number)r[2];
+    double temp = r[2];
+    if (temp < 0.0)
+      temp = 0.0;
+    if (temp > 65535.0)
+      temp = 65535.0;
+    m_spectralRange.steps = (icUInt16Number)temp;
   }
   if (jsonExistsField(j, "biSpectralRange") && j["biSpectralRange"].is_array() && j["biSpectralRange"].size() >= 3) {
     double r[3] = {0, 0, 0};
     jsonToArray(j["biSpectralRange"], r, 3);
     m_biSpectralRange.start = icFtoF16((icFloat32Number)r[0]);
     m_biSpectralRange.end   = icFtoF16((icFloat32Number)r[1]);
-    m_biSpectralRange.steps = (icUInt16Number)r[2];
+    double temp = r[2];
+    if (temp < 0.0)
+      temp = 0.0;
+    if (temp > 65535.0)
+      temp = 65535.0;
+    m_biSpectralRange.steps = (icUInt16Number)temp;
   }
   return true;
 }
@@ -1669,10 +1679,10 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
       for (icUInt32Number i = 0; i < m_nSize; i++) {
         switch (nType) {
           case icConvert8Bit:
-            arr.push_back((int)(m_Curve[i] * 255.0f + 0.5f)); break;
+            arr.push_back(icFtoU8(m_Curve[i])); break;
           case icConvert16Bit:
           case icConvertVariable:
-            arr.push_back((int)(m_Curve[i] * 65535.0f + 0.5f)); break;
+            arr.push_back(icFtoU16(m_Curve[i]); break;
           default:
             arr.push_back((double)m_Curve[i]); break;
         }

@@ -9098,9 +9098,8 @@ icStatusCMM CIccCmm::RemoveAllIO()
  **
  ** Purpose:
  **  Function to check if internal representation of gamut is in gamut.  Note
- **  since gamut table is 8 bit and a color is considered to be in out of gamut
- **  if the value is not zero.  Then we need to check where the 8 bit representation
- **  of the internal value is not zero.
+ **  that the gamut table is 8 bit and a color is considered to be out of gamut
+ **  if the value is not zero.
  **
  **  Args:
  **   pInternal = internal pixel representation of gamut value
@@ -9110,7 +9109,8 @@ icStatusCMM CIccCmm::RemoveAllIO()
  **************************************************************************/
 bool CIccCmm::IsInGamut(icFloatNumber *pInternal)
 {
-  if (!((unsigned int)((*pInternal)*255.0)))
+  // replace float->int conversion with simple float comparison
+  if (*pInternal < (1.0f/255.0f))
     return true;
   return false;
 }
