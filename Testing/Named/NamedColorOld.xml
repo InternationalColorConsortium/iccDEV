@@ -26,12 +26,12 @@
       <TagSignature>desc</TagSignature>
       <LocalizedText LanguageCountry="enUS"><![CDATA[Extended Named Color Example]]></LocalizedText>
     </multiLocalizedUnicodeType>
-	
+
 	<tagArrayType>
 	  <TagSignature>ncl2</TagSignature>
 	  <ArraySignature>nmcl</ArraySignature>
 	  <ArrayTags>
-	  
+
 	    <tagStructureType>
 		  <StructureSignature>tnt0</StructureSignature>
 		  <MemberTags>
@@ -47,7 +47,7 @@
 			</float16NumberType>
 		  </MemberTags>
 		</tagStructureType>
-		
+
 		<tagStructureType>
 		  <StructureSignature>nmcl</StructureSignature>
 		  <MemberTags>
@@ -65,7 +65,7 @@
 			    0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2 0.2
 			  </Data>
 			</float16NumberType>
-			
+
 			<!-- Example brdfColorimetricParams sub-tag
 			<tagStructureType>
 				<TagSignature>bcpr</TagSignature>
@@ -96,10 +96,10 @@
 				</MemberTags>
 			</tagStructureType>
 			-->
-			
+
 		  </MemberTags>
 		</tagStructureType>
-		
+
 	  <tagStructureType>
 		  <StructureSignature>nmcl</StructureSignature>
 		  <MemberTags>
@@ -117,7 +117,7 @@
 			<float16NumberType>
 			  <TagSignature>pcs </TagSignature>
 			  <Data>
-				  100 0 0 
+				  100 0 0
 				  0 0 0
 			  </Data>
 			</float16NumberType>
@@ -130,7 +130,7 @@
 			</float16NumberType>
 		  </MemberTags>
 		</tagStructureType>
-		
+
 	    <tagStructureType>
 		  <StructureSignature>nmcl</StructureSignature>
 		  <MemberTags>
@@ -164,7 +164,7 @@
 			</float16NumberType>
 		  </MemberTags>
 		</tagStructureType>
-		
+
 	    <tagStructureType>
 		  <StructureSignature>nmcl</StructureSignature>
 		  <MemberTags>
@@ -204,7 +204,7 @@
 			</float16NumberType>
 		  </MemberTags>
 		</tagStructureType>
-		
+
 	    <tagStructureType>
 		  <StructureSignature>nmcl</StructureSignature>
 		  <MemberTags>
@@ -246,7 +246,7 @@
 		</tagStructureType>
 	  </ArrayTags>
 	</tagArrayType>
-	
+
 	<spectralViewingConditionsType>
 	  <TagSignature>svcn</TagSignature>
       <StdObserver>CIE 1931 standard colorimetric observer</StdObserver>
@@ -263,19 +263,19 @@
 	  </IlluminantSPD>
 	  <SurroundXYZ X="0.96420288" Y="1.00000000" Z="0.82490540"/>
     </spectralViewingConditionsType>
-    
+
 	<XYZType>
       <TagSignature>wtpt</TagSignature>
       <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
     </XYZType>
-	
+
 	<float16NumberType>
 		<TagSignature>swpt</TagSignature>
 		<Data>
 		 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000
 		</Data>
 	</float16NumberType>
-    
+
 	<multiLocalizedUnicodeType>
       <TagSignature>cprt</TagSignature>
       <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2011 International Color Consortium]]></LocalizedText>
