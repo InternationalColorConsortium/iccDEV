@@ -10,6 +10,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `argv-unchecked-index` | CWE-125, CWE-787 | CmdLine tool indexes argv without bound check |
 | `describe-without-validate` | CWE-476 | `Describe()` called without prior `Validate()` check |
 | `signed-offset-overflow` | CWE-190 | Profile-derived offset used in pointer arithmetic |
+| `signed-char-byte-conversion` | CWE-704 | Signed char data assigned to unsigned byte without explicit cast |
 | `unchecked-file-io` | CWE-252 | Ignored `fopen`, `fread`, or `fwrite` results |
 | `unsafe-header-cast` | CWE-681 | Header field cast to narrower type |
 | `snprintf-size-mismatch` | CWE-120 | Buffer smaller than formatted output |
@@ -20,6 +21,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `world-writable-output` | CWE-732 | File created with world-writable mode |
 | `unsafe-tag-downcast` | CWE-843 | `FindTag()` result cast without type check |
 | `tainted-format-string` | CWE-134 | Variable used as a `printf` format string |
+| `tell-subtraction-underflow` | CWE-191, CWE-681 | Tell-derived offset subtraction narrowed without bounds check |
 | `factory-bare-new` | CWE-252, CWE-755 | Factory allocation without `std::nothrow` |
 | `fixedpoint-type-confusion` | CWE-681, CWE-197 | Fixed-point conversion function called with wrong type |
 | `ignored-save-profile-result` | CWE-252 | `SaveIccProfile()` result ignored before reporting output success |
