@@ -251,7 +251,7 @@ public:
 #endif
     } select;
   }data;
-  unsigned long extra;
+  icUInt32Number extra;
   IIccOpDef *def;
 
   void Describe(std::string &desc, int nVerboseness=100);
