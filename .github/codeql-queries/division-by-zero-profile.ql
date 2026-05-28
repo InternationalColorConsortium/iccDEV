@@ -91,6 +91,11 @@ private predicate isOneLiteral(Expr e) {
   e.toString().regexpMatch("(?i)^1([uUlL]*)?$")
 }
 
+private predicate isZeroLiteral(Expr e) {
+  e instanceof Literal and
+  e.toString().regexpMatch("(?i)^-?0(\\.0f?)?$")
+}
+
 private predicate denominatorSubtractsOne(Expr denom) {
   exists(SubExpr sub |
     (sub = denom or sub = denom.getAChild*()) and
@@ -161,12 +166,47 @@ private predicate hasPriorFailClosedZeroOrFiniteCheckForDenominator(DivExpr div)
   )
 }
 
+private predicate conditionTrueMeansZero(Expr condition, Expr denom) {
+  exists(EQExpr eq, Expr lit |
+    (eq = condition or eq = condition.getAChild*()) and
+    eq.hasOperands(_, lit) and
+    isZeroLiteral(lit) and
+    mentionsSameDenominator(eq, denom)
+  )
+}
+
+private predicate conditionTrueMeansNonZero(Expr condition, Expr denom) {
+  exists(NEExpr ne, Expr lit |
+    (ne = condition or ne = condition.getAChild*()) and
+    ne.hasOperands(_, lit) and
+    isZeroLiteral(lit) and
+    mentionsSameDenominator(ne, denom)
+  )
+}
+
+private predicate hasConditionalZeroGuardForDenominator(DivExpr div) {
+  exists(ConditionalExpr conditional |
+    (
+      (div = conditional.getElse() or div = conditional.getElse().getAChild*()) and
+      isZeroLiteral(conditional.getThen()) and
+      conditionTrueMeansZero(conditional.getCondition(), div.getRightOperand())
+    )
+    or
+    (
+      (div = conditional.getThen() or div = conditional.getThen().getAChild*()) and
+      isZeroLiteral(conditional.getElse()) and
+      conditionTrueMeansNonZero(conditional.getCondition(), div.getRightOperand())
+    )
+  )
+}
+
 from DivExpr div
 where
   not div.getRightOperand() instanceof Literal and
   isProfileDerivedDenominator(div.getRightOperand()) and
   not hasNearbyZeroOrFiniteCheckForDenominator(div) and
   not hasPriorFailClosedZeroOrFiniteCheckForDenominator(div) and
+  not hasConditionalZeroGuardForDenominator(div) and
   isIccSource(div.getFile())
 select div,
   "Division by '" + div.getRightOperand().toString() +
