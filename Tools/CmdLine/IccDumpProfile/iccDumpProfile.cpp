@@ -532,7 +532,7 @@ int main(int argc, char* argv[])
             pad = (overlap > (icUInt64Number)INT_MAX) ? INT_MIN : -(int)overlap;
         }
         else
-            pad = closest - i->TagInfo.offset - i->TagInfo.size;
+            pad = (int)(closest - tagEnd);
 
         printf("%28s  %s  %8d\t%8d\t%8d\n", Fmt.GetTagSigName(i->TagInfo.sig),
             icGetSig(buf, bufSize, i->TagInfo.sig, false), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size, pad);
