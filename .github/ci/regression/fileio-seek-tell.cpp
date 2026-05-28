@@ -2,16 +2,13 @@
 
 #include <cstdio>
 
-int main(int argc, char **argv)
+int main()
 {
-  if (argc != 2) {
-    std::printf("usage: fileio-seek-tell <scratch-file>\n");
-    return 2;
-  }
+  const char scratch_file[] = "fileio-seek-tell-scratch.bin";
 
   CIccFileIO io;
-  if (!io.Open(argv[1], "w+b")) {
-    std::printf("open failed: %s\n", argv[1]);
+  if (!io.Open(scratch_file, "w+b")) {
+    std::printf("open failed: %s\n", scratch_file);
     return 1;
   }
 
@@ -56,5 +53,7 @@ int main(int argc, char **argv)
 
   std::printf("CIccFileIO seek/tell/length OK: length=%zu position=%lld\n",
               io.GetLength(), (long long)io.Tell());
+  io.Close();
+  std::remove(scratch_file);
   return 0;
 }

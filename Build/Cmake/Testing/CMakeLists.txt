@@ -209,10 +209,9 @@ function(iccdev_add_fileio_seek_tell_test)
     NAME iccdev.fileio-seek-tell
     COMMAND
       "$<TARGET_FILE:iccFileIoSeekTellTest>"
-      "${ICCDEV_TEST_OUTDIR}/fileio-seek-tell-scratch.bin"
   )
   set_tests_properties(iccdev.fileio-seek-tell PROPERTIES
-    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
     TIMEOUT 60
     LABELS "iccdev;fileio;regression"
   )
