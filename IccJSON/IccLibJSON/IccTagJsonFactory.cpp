@@ -70,59 +70,59 @@ namespace iccDEV {
 CIccTag* CIccTagJsonFactory::CreateTag(icTagTypeSignature tagSig)
 {
   switch (tagSig) {
-  case icSigSignatureType:           return new CIccTagJsonSignature;
-  case icSigTextType:                return new CIccTagJsonText;
-  case icSigXYZArrayType:            return new CIccTagJsonXYZ;
-  case icSigCicpType:                return new CIccTagJsonCicp;
-  case icSigUInt8ArrayType:          return new CIccTagJsonUInt8;
-  case icSigUInt16ArrayType:         return new CIccTagJsonUInt16;
-  case icSigUInt32ArrayType:         return new CIccTagJsonUInt32;
-  case icSigUInt64ArrayType:         return new CIccTagJsonUInt64;
-  case icSigS15Fixed16ArrayType:     return new CIccTagJsonS15Fixed16;
-  case icSigFloat16ArrayType:        return new CIccTagJsonFloat16;
-  case icSigFloat32ArrayType:        return new CIccTagJsonFloat32;
-  case icSigFloat64ArrayType:        return new CIccTagJsonFloat64;
-  case icSigGamutBoundaryDescType:   return new CIccTagJsonGamutBoundaryDesc;
-  case icSigCurveType:               return new CIccTagJsonCurve;
-  case icSigSegmentedCurveType:      return new CIccTagJsonSegmentedCurve;
-  case icSigMeasurementType:         return new CIccTagJsonMeasurement;
-  case icSigMultiLocalizedUnicodeType: return new CIccTagJsonMultiLocalizedUnicode;
-  case icSigMultiProcessElementType: return new CIccTagJsonMultiProcessElement;
-  case icSigParametricCurveType:     return new CIccTagJsonParametricCurve;
-  case icSigLutAtoBType:             return new CIccTagJsonLutAtoB;
-  case icSigLutBtoAType:             return new CIccTagJsonLutBtoA;
-  case icSigLut16Type:               return new CIccTagJsonLut16;
-  case icSigLut8Type:                return new CIccTagJsonLut8;
-  case icSigTextDescriptionType:     return new CIccTagJsonTextDescription;
-  case icSigNamedColor2Type:         return new CIccTagJsonNamedColor2;
-  case icSigChromaticityType:        return new CIccTagJsonChromaticity;
-  case icSigDataType:                return new CIccTagJsonTagData;
-  case icSigDateTimeType:            return new CIccTagJsonDateTime;
-  case icSigColorantOrderType:       return new CIccTagJsonColorantOrder;
-  case icSigColorantTableType:       return new CIccTagJsonColorantTable;
-  case icSigSparseMatrixArrayType:   return new CIccTagJsonSparseMatrixArray;
-  case icSigViewingConditionsType:   return new CIccTagJsonViewingConditions;
-  case icSigSpectralViewingConditionsType: return new CIccTagJsonSpectralViewingConditions;
-  case icSigSpectralDataInfoType:    return new CIccTagJsonSpectralDataInfo;
-  case icSigProfileSequenceDescType: return new CIccTagJsonProfileSeqDesc;
-  case icSigResponseCurveSet16Type:  return new CIccTagJsonResponseCurveSet16;
-  case icSigProfileSequceIdType:     return new CIccTagJsonProfileSequenceId;
-  case icSigDictType:                return new CIccTagJsonDict;
-  case icSigTagStructType:           return new CIccTagJsonStruct;
-  case icSigTagArrayType:            return new CIccTagJsonArray;
-  case icSigUtf8TextType:            return new CIccTagJsonUtf8Text;
-  case icSigZipUtf8TextType:         return new CIccTagJsonZipUtf8Text;
-  case icSigZipXmlType:              return new CIccTagJsonZipXml;
-  case icSigUtf16TextType:           return new CIccTagJsonUtf16Text;
-  case icSigEmbeddedProfileType:     return new CIccTagJsonEmbeddedProfile;
-  case icSigEmbeddedHeightImageType: return new CIccTagJsonEmbeddedHeightImage;
-  case icSigEmbeddedNormalImageType: return new CIccTagJsonEmbeddedNormalImage;
+  case icSigSignatureType:           return new (std::nothrow) CIccTagJsonSignature;
+  case icSigTextType:                return new (std::nothrow) CIccTagJsonText;
+  case icSigXYZArrayType:            return new (std::nothrow) CIccTagJsonXYZ;
+  case icSigCicpType:                return new (std::nothrow) CIccTagJsonCicp;
+  case icSigUInt8ArrayType:          return new (std::nothrow) CIccTagJsonUInt8;
+  case icSigUInt16ArrayType:         return new (std::nothrow) CIccTagJsonUInt16;
+  case icSigUInt32ArrayType:         return new (std::nothrow) CIccTagJsonUInt32;
+  case icSigUInt64ArrayType:         return new (std::nothrow) CIccTagJsonUInt64;
+  case icSigS15Fixed16ArrayType:     return new (std::nothrow) CIccTagJsonS15Fixed16;
+  case icSigFloat16ArrayType:        return new (std::nothrow) CIccTagJsonFloat16;
+  case icSigFloat32ArrayType:        return new (std::nothrow) CIccTagJsonFloat32;
+  case icSigFloat64ArrayType:        return new (std::nothrow) CIccTagJsonFloat64;
+  case icSigGamutBoundaryDescType:   return new (std::nothrow) CIccTagJsonGamutBoundaryDesc;
+  case icSigCurveType:               return new (std::nothrow) CIccTagJsonCurve;
+  case icSigSegmentedCurveType:      return new (std::nothrow) CIccTagJsonSegmentedCurve;
+  case icSigMeasurementType:         return new (std::nothrow) CIccTagJsonMeasurement;
+  case icSigMultiLocalizedUnicodeType: return new (std::nothrow) CIccTagJsonMultiLocalizedUnicode;
+  case icSigMultiProcessElementType: return new (std::nothrow) CIccTagJsonMultiProcessElement;
+  case icSigParametricCurveType:     return new (std::nothrow) CIccTagJsonParametricCurve;
+  case icSigLutAtoBType:             return new (std::nothrow) CIccTagJsonLutAtoB;
+  case icSigLutBtoAType:             return new (std::nothrow) CIccTagJsonLutBtoA;
+  case icSigLut16Type:               return new (std::nothrow) CIccTagJsonLut16;
+  case icSigLut8Type:                return new (std::nothrow) CIccTagJsonLut8;
+  case icSigTextDescriptionType:     return new (std::nothrow) CIccTagJsonTextDescription;
+  case icSigNamedColor2Type:         return new (std::nothrow) CIccTagJsonNamedColor2;
+  case icSigChromaticityType:        return new (std::nothrow) CIccTagJsonChromaticity;
+  case icSigDataType:                return new (std::nothrow) CIccTagJsonTagData;
+  case icSigDateTimeType:            return new (std::nothrow) CIccTagJsonDateTime;
+  case icSigColorantOrderType:       return new (std::nothrow) CIccTagJsonColorantOrder;
+  case icSigColorantTableType:       return new (std::nothrow) CIccTagJsonColorantTable;
+  case icSigSparseMatrixArrayType:   return new (std::nothrow) CIccTagJsonSparseMatrixArray;
+  case icSigViewingConditionsType:   return new (std::nothrow) CIccTagJsonViewingConditions;
+  case icSigSpectralViewingConditionsType: return new (std::nothrow) CIccTagJsonSpectralViewingConditions;
+  case icSigSpectralDataInfoType:    return new (std::nothrow) CIccTagJsonSpectralDataInfo;
+  case icSigProfileSequenceDescType: return new (std::nothrow) CIccTagJsonProfileSeqDesc;
+  case icSigResponseCurveSet16Type:  return new (std::nothrow) CIccTagJsonResponseCurveSet16;
+  case icSigProfileSequceIdType:     return new (std::nothrow) CIccTagJsonProfileSequenceId;
+  case icSigDictType:                return new (std::nothrow) CIccTagJsonDict;
+  case icSigTagStructType:           return new (std::nothrow) CIccTagJsonStruct;
+  case icSigTagArrayType:            return new (std::nothrow) CIccTagJsonArray;
+  case icSigUtf8TextType:            return new (std::nothrow) CIccTagJsonUtf8Text;
+  case icSigZipUtf8TextType:         return new (std::nothrow) CIccTagJsonZipUtf8Text;
+  case icSigZipXmlType:              return new (std::nothrow) CIccTagJsonZipXml;
+  case icSigUtf16TextType:           return new (std::nothrow) CIccTagJsonUtf16Text;
+  case icSigEmbeddedProfileType:     return new (std::nothrow) CIccTagJsonEmbeddedProfile;
+  case icSigEmbeddedHeightImageType: return new (std::nothrow) CIccTagJsonEmbeddedHeightImage;
+  case icSigEmbeddedNormalImageType: return new (std::nothrow) CIccTagJsonEmbeddedNormalImage;
 
   case icSigScreeningType:
   case icSigUcrBgType:
   case icSigCrdInfoType:
   default:
-    return new CIccTagJsonUnknown(tagSig);
+    return new (std::nothrow) CIccTagJsonUnknown(tagSig);
   }
 }
 

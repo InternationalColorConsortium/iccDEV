@@ -58,6 +58,7 @@ Copyright:  (c) see Software License
  */
 
 #include "IccIoJson.h"
+#include <new>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -65,8 +66,8 @@ namespace iccDEV {
 
 CIccIO *CIccJsonStandardFileIO::OpenFile(const icChar *szFilename, const char *szAttr)
 {
-  CIccFileIO *file = new CIccFileIO();
-  if (!file->Open(szFilename, szAttr)) {
+  CIccFileIO *file = new (std::nothrow) CIccFileIO();
+  if (file && !file->Open(szFilename, szAttr)) {
     delete file;
     return nullptr;
   }

@@ -838,6 +838,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           if (!pNamedColorHint)
             return NULL;
         }
+
         pNamedColorHint->csPcs = pProfile->m_Header.pcs;
         pNamedColorHint->csDevice = pProfile->m_Header.colorSpace;
         pNamedColorHint->csSpectralPcs = pProfile->m_Header.spectralPCS;
@@ -1400,9 +1401,11 @@ CIccXform *CIccXform::Create(CIccProfile &Profile,
 														 bool bUseD2BxB2DxTags/* =true */,
                              CIccCreateXformHintManager *pHintManager/* =NULL */)
 {
-  CIccProfile *pProfile = new CIccProfile(Profile);
-  CIccXform *pXform = Create(pProfile, bInput, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
+  CIccProfile *pProfile = new (std::nothrow) CIccProfile(Profile);
+  if (!pProfile)
+    return NULL;
 
+  CIccXform *pXform = Create(pProfile, bInput, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
   if (!pXform)
     delete pProfile;
 
@@ -3653,7 +3656,7 @@ void CIccPcsXform::Apply(CIccApplyXform *pXform, icFloatNumber *DstPixel, const 
 */
 CIccApplyPcsStep* CIccPcsStep::GetNewApply()
 {
-  return new CIccApplyPcsStep(this);
+  return new (std::nothrow) CIccApplyPcsStep(this);
 }
 
 
@@ -3892,12 +3895,12 @@ CIccPcsStep *CIccPcsStepLabToXYZ::concat(CIccPcsStep *pNext) const
     if (pNext->GetType() == icPcsStepXYZToLab) {
       CIccPcsLabStep* pStep = (CIccPcsLabStep*)pNext;
       if (pStep->isSameWhite(m_xyzWhite))
-        return new CIccPcsStepIdentity(3);
+        return new (std::nothrow) CIccPcsStepIdentity(3);
     }
     else if (pNext->GetType() == icPcsStepXYZToLab2) {
       CIccPcsLabStep* pStep = (CIccPcsLabStep*)pNext;
       if (pStep->isSameWhite(m_xyzWhite))
-        return new CIccPcsStepLabToLab2();
+        return new (std::nothrow) CIccPcsStepLabToLab2();
     }
   }
   return NULL;
@@ -3971,7 +3974,7 @@ CIccPcsStep *CIccPcsStepXYZToLab::concat(CIccPcsStep *pNext) const
   if (pNext && pNext->GetType()==icPcsStepLabToXYZ) {
     CIccPcsLabStep *pStep = (CIccPcsLabStep *)pNext;
     if (pStep->isSameWhite(m_xyzWhite))
-      return new CIccPcsStepIdentity(3);
+      return new (std::nothrow) CIccPcsStepIdentity(3);
   }
   return NULL;
 }
@@ -4046,12 +4049,12 @@ CIccPcsStep *CIccPcsStepLab2ToXYZ::concat(CIccPcsStep *pNext) const
     if (pNext->GetType() == icPcsStepXYZToLab2) {
       CIccPcsLabStep* pStep = (CIccPcsLabStep*)pNext;
       if (pStep->isSameWhite(m_xyzWhite))
-        return new CIccPcsStepIdentity(3);
+        return new (std::nothrow) CIccPcsStepIdentity(3);
     }
     else if (pNext->GetType() == icPcsStepXYZToLab) {
       CIccPcsLabStep* pStep = (CIccPcsLabStep*)pNext;
       if (pStep->isSameWhite(m_xyzWhite))
-        return new CIccPcsStepLab2ToLab();
+        return new (std::nothrow) CIccPcsStepLab2ToLab();
     }
   }
 
@@ -4126,7 +4129,7 @@ CIccPcsStep *CIccPcsStepXYZToLab2::concat(CIccPcsStep *pNext) const
   if (pNext && pNext->GetType()==icPcsStepLab2ToXYZ) {
     CIccPcsLabStep *pStep = (CIccPcsLabStep *)pNext;
     if (pStep->isSameWhite(m_xyzWhite))
-      return new CIccPcsStepIdentity(3);
+      return new (std::nothrow) CIccPcsStepIdentity(3);
   }
   return NULL;
 }
@@ -4174,7 +4177,7 @@ void CIccPcsStepLabToLab2::dump(std::string& str) const
 CIccPcsStep* CIccPcsStepLabToLab2::concat(CIccPcsStep* pNext) const
 {
   if (pNext && pNext->GetType() == icPcsStepLab2ToLab) {
-    return new CIccPcsStepIdentity(3);
+    return new (std::nothrow) CIccPcsStepIdentity(3);
   }
   return NULL;
 }
@@ -4223,7 +4226,7 @@ void CIccPcsStepLab2ToLab::dump(std::string& str) const
 CIccPcsStep* CIccPcsStepLab2ToLab::concat(CIccPcsStep* pNext) const
 {
   if (pNext && pNext->GetType() == icPcsStepLabToLab2) {
-    return new CIccPcsStepIdentity(3);
+    return new (std::nothrow) CIccPcsStepIdentity(3);
   }
   return NULL;
 }
@@ -4764,7 +4767,7 @@ CIccPcsStepMpe::~CIccPcsStepMpe()
 */
 CIccApplyPcsStep* CIccPcsStepMpe::GetNewApply()
 {
-  CIccApplyPcsStepMpe *rv = new CIccApplyPcsStepMpe(this, m_pMpe->GetNewApply());
+  CIccApplyPcsStepMpe *rv = new (std::nothrow) CIccApplyPcsStepMpe(this, m_pMpe->GetNewApply());
 
   return rv;
 }
@@ -5338,9 +5341,11 @@ LPIccCurve* CIccXformMonochrome::ExtractInputCurves()
 {
 	if (m_bInput) {
 		if (m_Curve) {
-			LPIccCurve* Curve = new LPIccCurve[1];
-			Curve[0] = (LPIccCurve)(m_Curve->NewCopy());
-			m_ApplyCurvePtr = NULL;
+			LPIccCurve* Curve = new (std::nothrow) LPIccCurve[1];
+            if (Curve) {
+			  Curve[0] = (LPIccCurve)(m_Curve->NewCopy());
+			  m_ApplyCurvePtr = NULL;
+            }
 			return Curve;
 		}
 	}
@@ -5366,9 +5371,11 @@ LPIccCurve* CIccXformMonochrome::ExtractOutputCurves()
 {
 	if (!m_bInput) {
 		if (m_Curve) {
-			LPIccCurve* Curve = new LPIccCurve[1];
-			Curve[0] = (LPIccCurve)(m_Curve->NewCopy());
-			m_ApplyCurvePtr = NULL;
+			LPIccCurve* Curve = new (std::nothrow) LPIccCurve[1];
+            if (Curve) {
+			  Curve[0] = (LPIccCurve)(m_Curve->NewCopy());
+			  m_ApplyCurvePtr = NULL;
+            }
 			return Curve;
 		}
 	}
@@ -5691,11 +5698,13 @@ LPIccCurve* CIccXformMatrixTRC::ExtractInputCurves()
 {
   if (m_bInput) {
     if (m_Curve[0]) {
-			LPIccCurve* Curve = new LPIccCurve[3];
-			Curve[0] = (LPIccCurve)(m_Curve[0]->NewCopy());
-			Curve[1] = (LPIccCurve)(m_Curve[1]->NewCopy());
-			Curve[2] = (LPIccCurve)(m_Curve[2]->NewCopy());
-      m_ApplyCurvePtr = NULL;
+      LPIccCurve* Curve = new (std::nothrow) LPIccCurve[3];
+      if (Curve) {
+        Curve[0] = (LPIccCurve)(m_Curve[0]->NewCopy());
+        Curve[1] = (LPIccCurve)(m_Curve[1]->NewCopy());
+        Curve[2] = (LPIccCurve)(m_Curve[2]->NewCopy());
+        m_ApplyCurvePtr = NULL;
+      }
       return Curve;
     }
   }
@@ -5721,11 +5730,13 @@ LPIccCurve* CIccXformMatrixTRC::ExtractOutputCurves()
 {
   if (!m_bInput) {
     if (m_Curve[0]) {
-			LPIccCurve* Curve = new LPIccCurve[3];
-			Curve[0] = (LPIccCurve)(m_Curve[0]->NewCopy());
-			Curve[1] = (LPIccCurve)(m_Curve[1]->NewCopy());
-			Curve[2] = (LPIccCurve)(m_Curve[2]->NewCopy());
-      m_ApplyCurvePtr = NULL;
+      LPIccCurve* Curve = new (std::nothrow) LPIccCurve[3];
+      if (Curve) {
+        Curve[0] = (LPIccCurve)(m_Curve[0]->NewCopy());
+        Curve[1] = (LPIccCurve)(m_Curve[1]->NewCopy());
+        Curve[2] = (LPIccCurve)(m_Curve[2]->NewCopy());
+        m_ApplyCurvePtr = NULL;
+      }
       return Curve;
     }
   }
@@ -6037,21 +6048,25 @@ LPIccCurve* CIccXform3DLut::ExtractInputCurves()
   if (m_bInput) {
     if (m_pTag->m_bInputMatrix) {
       if (m_pTag->m_CurvesB) {
-        LPIccCurve* Curve = new LPIccCurve[3];
-				Curve[0] = (LPIccCurve)(m_pTag->m_CurvesB[0]->NewCopy());
-				Curve[1] = (LPIccCurve)(m_pTag->m_CurvesB[1]->NewCopy());
-				Curve[2] = (LPIccCurve)(m_pTag->m_CurvesB[2]->NewCopy());
-        m_ApplyCurvePtrB = NULL;
+        LPIccCurve* Curve = new (std::nothrow) LPIccCurve[3];
+        if (Curve) {
+          Curve[0] = (LPIccCurve)(m_pTag->m_CurvesB[0]->NewCopy());
+          Curve[1] = (LPIccCurve)(m_pTag->m_CurvesB[1]->NewCopy());
+          Curve[2] = (LPIccCurve)(m_pTag->m_CurvesB[2]->NewCopy());
+          m_ApplyCurvePtrB = NULL;
+        }
         return Curve;
       }
     }
     else {
       if (m_pTag->m_CurvesA) {
-        LPIccCurve* Curve = new LPIccCurve[3];
-				Curve[0] = (LPIccCurve)(m_pTag->m_CurvesA[0]->NewCopy());
-				Curve[1] = (LPIccCurve)(m_pTag->m_CurvesA[1]->NewCopy());
-				Curve[2] = (LPIccCurve)(m_pTag->m_CurvesA[2]->NewCopy());
-        m_ApplyCurvePtrA = NULL;
+        LPIccCurve* Curve = new (std::nothrow) LPIccCurve[3];
+        if (Curve) {
+          Curve[0] = (LPIccCurve)(m_pTag->m_CurvesA[0]->NewCopy());
+          Curve[1] = (LPIccCurve)(m_pTag->m_CurvesA[1]->NewCopy());
+          Curve[2] = (LPIccCurve)(m_pTag->m_CurvesA[2]->NewCopy());
+          m_ApplyCurvePtrA = NULL;
+        }
         return Curve;
       }
     }
@@ -6079,21 +6094,25 @@ LPIccCurve* CIccXform3DLut::ExtractOutputCurves()
   if (!m_bInput) {
     if (m_pTag->m_bInputMatrix) {
       if (m_pTag->m_CurvesA) {
-        LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nOutput];
-				for (int i=0; i<m_pTag->m_nOutput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
-				}
-        m_ApplyCurvePtrA = NULL;
+        LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nOutput];
+        if (Curve) {
+          for (int i=0; i<m_pTag->m_nOutput; i++) {
+            Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
+          }
+          m_ApplyCurvePtrA = NULL;
+        }
         return Curve;
       }
     }
     else {
       if (m_pTag->m_CurvesB) {
-        LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nOutput];
-				for (int i=0; i<m_pTag->m_nOutput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
-				}
-        m_ApplyCurvePtrB = NULL;
+        LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nOutput];
+        if (Curve) {
+          for (int i=0; i<m_pTag->m_nOutput; i++) {
+            Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
+          }
+          m_ApplyCurvePtrB = NULL;
+        }
         return Curve;
       }
     }
@@ -6378,30 +6397,34 @@ void CIccXform4DLut::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, cons
 */
 LPIccCurve* CIccXform4DLut::ExtractInputCurves()
 {
-	if (m_bInput) {
-		if (m_pTag->m_bInputMatrix) {
-			if (m_pTag->m_CurvesB) {
-				LPIccCurve* Curve = new LPIccCurve[4];
-				Curve[0] = (LPIccCurve)(m_pTag->m_CurvesB[0]->NewCopy());
-				Curve[1] = (LPIccCurve)(m_pTag->m_CurvesB[1]->NewCopy());
-				Curve[2] = (LPIccCurve)(m_pTag->m_CurvesB[2]->NewCopy());
-				Curve[3] = (LPIccCurve)(m_pTag->m_CurvesB[3]->NewCopy());
-				m_ApplyCurvePtrB = NULL;
-				return Curve;
-			}
-		}
-		else {
-			if (m_pTag->m_CurvesA) {
-				LPIccCurve* Curve = new LPIccCurve[4];
-				Curve[0] = (LPIccCurve)(m_pTag->m_CurvesA[0]->NewCopy());
-				Curve[1] = (LPIccCurve)(m_pTag->m_CurvesA[1]->NewCopy());
-				Curve[2] = (LPIccCurve)(m_pTag->m_CurvesA[2]->NewCopy());
-				Curve[3] = (LPIccCurve)(m_pTag->m_CurvesA[3]->NewCopy());
-				m_ApplyCurvePtrA = NULL;
-				return Curve;
-			}
-		}
-	}
+  if (m_bInput) {
+    if (m_pTag->m_bInputMatrix) {
+      if (m_pTag->m_CurvesB) {
+        LPIccCurve* Curve = new (std::nothrow) LPIccCurve[4];
+        if (Curve) {
+          Curve[0] = (LPIccCurve)(m_pTag->m_CurvesB[0]->NewCopy());
+          Curve[1] = (LPIccCurve)(m_pTag->m_CurvesB[1]->NewCopy());
+          Curve[2] = (LPIccCurve)(m_pTag->m_CurvesB[2]->NewCopy());
+          Curve[3] = (LPIccCurve)(m_pTag->m_CurvesB[3]->NewCopy());
+          m_ApplyCurvePtrB = NULL;
+        }
+      return Curve;
+      }
+    }
+    else {
+      if (m_pTag->m_CurvesA) {
+        LPIccCurve* Curve = new (std::nothrow) LPIccCurve[4];
+        if (Curve) {
+          Curve[0] = (LPIccCurve)(m_pTag->m_CurvesA[0]->NewCopy());
+          Curve[1] = (LPIccCurve)(m_pTag->m_CurvesA[1]->NewCopy());
+          Curve[2] = (LPIccCurve)(m_pTag->m_CurvesA[2]->NewCopy());
+          Curve[3] = (LPIccCurve)(m_pTag->m_CurvesA[3]->NewCopy());
+          m_ApplyCurvePtrA = NULL;
+        }
+        return Curve;
+      }
+    }
+  }
 
   return NULL;
 }
@@ -6425,21 +6448,25 @@ LPIccCurve* CIccXform4DLut::ExtractOutputCurves()
 	if (!m_bInput) {
 		if (m_pTag->m_bInputMatrix) {
 			if (m_pTag->m_CurvesA) {
-				LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nOutput];
-				for (int i=0; i<m_pTag->m_nOutput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
-				}
-				m_ApplyCurvePtrA = NULL;
+				LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nOutput];
+                if (Curve) {
+                    for (int i=0; i<m_pTag->m_nOutput; i++) {
+                        Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
+                    }
+                    m_ApplyCurvePtrA = NULL;
+                }
 				return Curve;
 			}
 		}
 		else {
 			if (m_pTag->m_CurvesB) {
-				LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nOutput];
-				for (int i=0; i<m_pTag->m_nOutput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
-				}
-				m_ApplyCurvePtrB = NULL;
+				LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nOutput];
+                if (Curve) {
+                    for (int i=0; i<m_pTag->m_nOutput; i++) {
+                        Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
+                    }
+                    m_ApplyCurvePtrB = NULL;
+                }
 				return Curve;
 			}
 		}
@@ -6793,21 +6820,25 @@ LPIccCurve* CIccXformNDLut::ExtractInputCurves()
 	if (m_bInput) {
 		if (m_pTag->m_bInputMatrix) {
 			if (m_pTag->m_CurvesB) {
-				LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nInput];
-				for (int i=0; i<m_pTag->m_nInput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
-				}
-				m_ApplyCurvePtrB = NULL;
+				LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nInput];
+                if (Curve) {
+                    for (int i=0; i<m_pTag->m_nInput; i++) {
+                        Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
+                    }
+                    m_ApplyCurvePtrB = NULL;
+                }
 				return Curve;
 			}
 		}
 		else {
 			if (m_pTag->m_CurvesA) {
-				LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nInput];
-				for (int i=0; i<m_pTag->m_nInput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
-				}
-				m_ApplyCurvePtrA = NULL;
+				LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nInput];
+                if (Curve) {
+                    for (int i=0; i<m_pTag->m_nInput; i++) {
+                        Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
+                    }
+                    m_ApplyCurvePtrA = NULL;
+                }
 				return Curve;
 			}
 		}
@@ -6835,21 +6866,25 @@ LPIccCurve* CIccXformNDLut::ExtractOutputCurves()
 	if (!m_bInput) {
 		if (m_pTag->m_bInputMatrix) {
 			if (m_pTag->m_CurvesA) {
-				LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nOutput];
-				for (int i=0; i<m_pTag->m_nOutput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
-				}
-				m_ApplyCurvePtrA = NULL;
+				LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nOutput];
+                if (Curve) {
+                    for (int i=0; i<m_pTag->m_nOutput; i++) {
+                        Curve[i] = (LPIccCurve)(m_pTag->m_CurvesA[i]->NewCopy());
+                    }
+                    m_ApplyCurvePtrA = NULL;
+                }
 				return Curve;
 			}
 		}
 		else {
 			if (m_pTag->m_CurvesB) {
-				LPIccCurve* Curve = new LPIccCurve[m_pTag->m_nOutput];
-				for (int i=0; i<m_pTag->m_nOutput; i++) {
-					Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
-				}
-				m_ApplyCurvePtrB = NULL;
+				LPIccCurve* Curve = new (std::nothrow) LPIccCurve[m_pTag->m_nOutput];
+                if (Curve) {
+                    for (int i=0; i<m_pTag->m_nOutput; i++) {
+                        Curve[i] = (LPIccCurve)(m_pTag->m_CurvesB[i]->NewCopy());
+                    }
+                    m_ApplyCurvePtrB = NULL;
+                }
 				return Curve;
 			}
 		}
@@ -7403,13 +7438,13 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
         if (!pTag) {
           if (bUseColorimeticTags && pProfile->m_Header.colorSpace == icSigRgbData && pProfile->m_Header.version < icVersionNumberV5) {
-            rv = new CIccXformMatrixTRC();
+            rv = new (std::nothrow) CIccXformMatrixTRC();
           }
           else
             return NULL;
         }
         else if (pTag->GetType()==icSigMultiProcessElementType) {
-          rv = new CIccXformMpe(pTag);
+          rv = new (std::nothrow) CIccXformMpe(pTag);
         }
         else {
           switch(pProfile->m_Header.colorSpace) {
@@ -7423,16 +7458,16 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
             case icSigHlsData:
             case icSigCmyData:
             case icSig3colorData:
-              rv = new CIccXform3DLut(pTag);
+              rv = new (std::nothrow) CIccXform3DLut(pTag);
               break;
 
             case icSigCmykData:
             case icSig4colorData:
-              rv = new CIccXform4DLut(pTag);
+              rv = new (std::nothrow) CIccXform4DLut(pTag);
               break;
 
             default:
-              rv = new CIccXformNDLut(pTag);
+              rv = new (std::nothrow) CIccXformNDLut(pTag);
               break;
           }
         }
@@ -7479,20 +7514,20 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
         if (!pTag) {
           if (bUseColorimeticTags && pProfile->m_Header.colorSpace == icSigRgbData && pProfile->m_Header.version<icVersionNumberV5) {
-            rv = new CIccXformMatrixTRC();
+            rv = new (std::nothrow) CIccXformMatrixTRC();
           }
           else
             return NULL;
         }
 
         if (pTag && pTag->GetType()==icSigMultiProcessElementType) {
-          rv = new CIccXformMpe(pTag);
+          rv = new (std::nothrow) CIccXformMpe(pTag);
         }
         else {
           switch(pProfile->m_Header.pcs) {
             case icSigXYZData:
             case icSigLabData:
-              rv = new CIccXform3DLut(pTag);
+              rv = new (std::nothrow) CIccXform3DLut(pTag);
               break;
 
             default:
@@ -7508,7 +7543,7 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
         if (!pTag)
           return NULL;
 
-        rv = new CIccXformNamedColor(pTag, pProfile->m_Header.pcs, pProfile->m_Header.colorSpace,
+        rv = new (std::nothrow) CIccXformNamedColor(pTag, pProfile->m_Header.pcs, pProfile->m_Header.colorSpace,
                                      pProfile->m_Header.spectralPCS,
                                      &pProfile->m_Header.spectralRange,
                                      &pProfile->m_Header.biSpectralRange);
@@ -7529,7 +7564,7 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
           switch(pProfile->m_Header.pcs) {
             case icSigXYZData:
             case icSigLabData:
-              rv = new CIccXform3DLut(pTag);
+              rv = new (std::nothrow) CIccXform3DLut(pTag);
               break;
 
             default:
@@ -7550,7 +7585,7 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
           switch(pProfile->m_Header.pcs) {
             case icSigXYZData:
             case icSigLabData:
-              rv = new CIccXform3DLut(pTag);
+              rv = new (std::nothrow) CIccXform3DLut(pTag);
               break;
 
             default:
@@ -11142,22 +11177,21 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
  */
  CIccApplyCmm *CIccNamedColorCmm::GetNewApplyCmm(icStatusCMM &status)
  {
-  CIccApplyCmm *pApply = new CIccApplyNamedColorCmm(this);
+  CIccApplyCmm *pApply = new (std::nothrow) CIccApplyNamedColorCmm(this);
 
-  CIccXformList::iterator i;
-
-  for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
-    CIccApplyXform *pXform = i->ptr->GetNewApply(status);
-    if (status != icCmmStatOk || !pXform) {
-      delete pApply;
-      return NULL;
+  if (pApply) {
+    for (CIccXformList::iterator i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
+      CIccApplyXform *pXform = i->ptr->GetNewApply(status);
+      if (status != icCmmStatOk || !pXform) {
+        delete pApply;
+        return NULL;
+      }
+      pApply->AppendApplyXform(pXform);
     }
-    pApply->AppendApplyXform(pXform);
+
+    m_bValid = true;
+    status = icCmmStatOk;
   }
-
-  m_bValid = true;
-
-  status = icCmmStatOk;
   return pApply;
 }
 

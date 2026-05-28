@@ -84,13 +84,13 @@ IIccArray* CIccBasicArrayFactory::CreateArray(icArraySignature arrayTypeSig, CIc
 {
   switch(arrayTypeSig) {
     case icSigNamedColorArray:
-      return new CIccArrayNamedColor(pTagArray);
+      return new (std::nothrow) CIccArrayNamedColor(pTagArray);
 
     case icSigColorantInfoArray:
-      return new CIccArrayColorantInfo(pTagArray);
+      return new (std::nothrow) CIccArrayColorantInfo(pTagArray);
 
     default:
-      return new CIccArrayUnknown(pTagArray, arrayTypeSig);
+      return new (std::nothrow) CIccArrayUnknown(pTagArray, arrayTypeSig);
   }
 }
 

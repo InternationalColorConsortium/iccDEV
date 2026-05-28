@@ -70,24 +70,24 @@ namespace iccDEV {
 CIccMultiProcessElement* CIccMpeJsonFactory::CreateElement(icElemTypeSignature elemTypeSig)
 {
   switch (elemTypeSig) {
-  case icSigMatrixElemType:             return new CIccMpeJsonMatrix();
-  case icSigCurveSetElemType:           return new CIccMpeJsonCurveSet();
-  case icSigCLutElemType:               return new CIccMpeJsonCLUT();
-  case icSigExtCLutElemType:            return new CIccMpeJsonExtCLUT();
-  case icSigCalculatorElemType:         return new CIccMpeJsonCalculator();
-  case icSigTintArrayElemType:          return new CIccMpeJsonTintArray();
-  case icSigToneMapElemType:            return new CIccMpeJsonToneMap();
-  case icSigXYZToJabElemType:           return new CIccMpeJsonXYZToJab();
-  case icSigJabToXYZElemType:           return new CIccMpeJsonJabToXYZ();
-  case icSigEmissionMatrixElemType:     return new CIccMpeJsonEmissionMatrix();
-  case icSigInvEmissionMatrixElemType:  return new CIccMpeJsonInvEmissionMatrix();
-  case icSigEmissionCLUTElemType:       return new CIccMpeJsonEmissionCLUT();
-  case icSigReflectanceCLUTElemType:    return new CIccMpeJsonReflectanceCLUT();
-  case icSigEmissionObserverElemType:   return new CIccMpeJsonEmissionObserver();
-  case icSigReflectanceObserverElemType: return new CIccMpeJsonReflectanceObserver();
-  case icSigBAcsElemType:               return new CIccMpeJsonBAcs();
-  case icSigEAcsElemType:               return new CIccMpeJsonEAcs();
-  default:                              return new CIccMpeJsonUnknown();
+  case icSigMatrixElemType:             return new (std::nothrow) CIccMpeJsonMatrix();
+  case icSigCurveSetElemType:           return new (std::nothrow) CIccMpeJsonCurveSet();
+  case icSigCLutElemType:               return new (std::nothrow) CIccMpeJsonCLUT();
+  case icSigExtCLutElemType:            return new (std::nothrow) CIccMpeJsonExtCLUT();
+  case icSigCalculatorElemType:         return new (std::nothrow) CIccMpeJsonCalculator();
+  case icSigTintArrayElemType:          return new (std::nothrow) CIccMpeJsonTintArray();
+  case icSigToneMapElemType:            return new (std::nothrow) CIccMpeJsonToneMap();
+  case icSigXYZToJabElemType:           return new (std::nothrow) CIccMpeJsonXYZToJab();
+  case icSigJabToXYZElemType:           return new (std::nothrow) CIccMpeJsonJabToXYZ();
+  case icSigEmissionMatrixElemType:     return new (std::nothrow) CIccMpeJsonEmissionMatrix();
+  case icSigInvEmissionMatrixElemType:  return new (std::nothrow) CIccMpeJsonInvEmissionMatrix();
+  case icSigEmissionCLUTElemType:       return new (std::nothrow) CIccMpeJsonEmissionCLUT();
+  case icSigReflectanceCLUTElemType:    return new (std::nothrow) CIccMpeJsonReflectanceCLUT();
+  case icSigEmissionObserverElemType:   return new (std::nothrow) CIccMpeJsonEmissionObserver();
+  case icSigReflectanceObserverElemType: return new (std::nothrow) CIccMpeJsonReflectanceObserver();
+  case icSigBAcsElemType:               return new (std::nothrow) CIccMpeJsonBAcs();
+  case icSigEAcsElemType:               return new (std::nothrow) CIccMpeJsonEAcs();
+  default:                              return new (std::nothrow) CIccMpeJsonUnknown();
   }
 }
 

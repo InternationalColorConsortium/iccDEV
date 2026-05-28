@@ -86,58 +86,58 @@ CIccMultiProcessElement* CIccBasicMpeFactory::CreateElement(icElemTypeSignature 
 {
   switch(elemTypeSig) {
     case icSigCurveSetElemType:
-      return new CIccMpeCurveSet();
+      return new (std::nothrow) CIccMpeCurveSet();
 
     case icSigMatrixElemType:
-      return new CIccMpeMatrix();
+      return new (std::nothrow) CIccMpeMatrix();
 
     case icSigCLutElemType:
-      return new CIccMpeCLUT();
+      return new (std::nothrow) CIccMpeCLUT();
 
     case icSigExtCLutElemType:
-      return new CIccMpeExtCLUT();
+      return new (std::nothrow) CIccMpeExtCLUT();
 
     case icSigCalculatorElemType:
-      return new CIccMpeCalculator();
+      return new (std::nothrow) CIccMpeCalculator();
 
     case icSigTintArrayElemType:
-      return new CIccMpeTintArray();
+      return new (std::nothrow) CIccMpeTintArray();
 
     case icSigToneMapElemType:
-      return new CIccMpeToneMap();
+      return new (std::nothrow) CIccMpeToneMap();
 
     case icSigJabToXYZElemType:
-      return new CIccMpeJabToXYZ();
+      return new (std::nothrow) CIccMpeJabToXYZ();
 
     case icSigXYZToJabElemType:
-      return new CIccMpeXYZToJab();
+      return new (std::nothrow) CIccMpeXYZToJab();
 
     case icSigEmissionMatrixElemType:
-      return new CIccMpeEmissionMatrix();
+      return new (std::nothrow) CIccMpeEmissionMatrix();
 
     case icSigInvEmissionMatrixElemType:
-      return new CIccMpeInvEmissionMatrix();
+      return new (std::nothrow) CIccMpeInvEmissionMatrix();
 
     case icSigEmissionCLUTElemType:
-      return new CIccMpeEmissionCLUT();
+      return new (std::nothrow) CIccMpeEmissionCLUT();
 
     case icSigReflectanceCLUTElemType:
-      return new CIccMpeReflectanceCLUT();
+      return new (std::nothrow) CIccMpeReflectanceCLUT();
 
     case icSigEmissionObserverElemType:
-      return new CIccMpeEmissionObserver();
+      return new (std::nothrow) CIccMpeEmissionObserver();
 
     case icSigReflectanceObserverElemType:
-      return new CIccMpeReflectanceObserver();
+      return new (std::nothrow) CIccMpeReflectanceObserver();
 
     case icSigBAcsElemType:
-      return new CIccMpeBAcs();
+      return new (std::nothrow) CIccMpeBAcs();
 
     case icSigEAcsElemType:
-      return new CIccMpeEAcs();
+      return new (std::nothrow) CIccMpeEAcs();
 
     default:
-      return new CIccMpeUnknown();
+      return new (std::nothrow) CIccMpeUnknown();
   }
 }
 
