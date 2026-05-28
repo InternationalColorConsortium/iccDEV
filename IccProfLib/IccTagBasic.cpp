@@ -7632,7 +7632,7 @@ bool CIccLocalizedUnicode::GetText(std::string &sText)
 
   icUInt16Number* str = m_pBuf;
   icUInt16Number *str_end = m_pBuf + m_nLength;
-  while ( (str < str_end) && *str ) {
+  while (str < str_end) {
     icUInt32Number code32 = 0x0;
 
     //UTF-16 to UTF-32
@@ -7870,19 +7870,32 @@ bool CIccLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text,
                                    icCountryCode nRegionCode/* = icCountryCodeUSA*/)
 {
   icUInt16Number empty[1] = { 0 };
-
   if (!sszUnicode16Text)
     sszUnicode16Text = &empty[0];
 
   const icUInt16Number *pBuf=sszUnicode16Text;
-  int len;
+  icUInt32Number len;
 
   for (len=0; *pBuf; len++, pBuf++);
 
-  if (!SetSize(len))
+  return SetText(sszUnicode16Text, len, nLanguageCode, nRegionCode);
+}
+
+bool CIccLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text,
+                                   icUInt32Number nLength,
+                                   icLanguageCode nLanguageCode/* = icLanguageCodeEnglish*/,
+                                   icCountryCode nRegionCode/* = icCountryCodeUSA*/)
+{
+  if (!sszUnicode16Text && nLength)
     return false;
-  if (len)
-    memcpy(m_pBuf, sszUnicode16Text, len*sizeof(icUInt16Number));
+
+  if (sszUnicode16Text && !icIsValidUtf16(sszUnicode16Text, nLength))
+    return false;
+
+  if (!SetSize(nLength))
+    return false;
+  if (nLength)
+    memcpy(m_pBuf, sszUnicode16Text, nLength*sizeof(icUInt16Number));
 
   m_nLanguageCode = nLanguageCode;
   m_nCountryCode = nRegionCode;
@@ -8384,16 +8397,32 @@ void CIccTagMultiLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Tex
                                            icLanguageCode nLanguageCode /* = icLanguageCodeEnglish */,
                                            icCountryCode nRegionCode /* = icCountryCodeUSA */)
 {
+  const icUInt16Number *pBuf = sszUnicode16Text;
+  icUInt32Number len = 0;
+  if (pBuf) {
+    for (; *pBuf; len++, pBuf++);
+  }
+  SetText(sszUnicode16Text, len, nLanguageCode, nRegionCode);
+}
+
+bool CIccTagMultiLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text,
+                                           icUInt32Number nLength,
+                                           icLanguageCode nLanguageCode /* = icLanguageCodeEnglish */,
+                                           icCountryCode nRegionCode /* = icCountryCodeUSA */)
+{
   CIccLocalizedUnicode *pText = Find(nLanguageCode, nRegionCode);
 
   if (!pText) {
     CIccLocalizedUnicode newText;
-    newText.SetText(sszUnicode16Text, nLanguageCode, nRegionCode);
+    if (!newText.SetText(sszUnicode16Text, nLength, nLanguageCode, nRegionCode))
+      return false;
     m_Strings->push_back(newText);
   }
   else {
-    pText->SetText(sszUnicode16Text, nLanguageCode, nRegionCode);
+    if (!pText->SetText(sszUnicode16Text, nLength, nLanguageCode, nRegionCode))
+      return false;
   }
+  return true;
 }
 
 /**

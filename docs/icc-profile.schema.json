@@ -453,12 +453,17 @@
 
     "LocalizedString": {
       "type": "object",
-      "description": "Language/country code pair with localized text",
-      "required": ["language", "country", "text"],
+      "description": "Language/country code pair with localized text, or hex-encoded text when the UTF-8 payload is not safe to emit as JSON text",
+      "required": ["language", "country"],
+      "oneOf": [
+        { "required": ["text"], "not": { "required": ["textHex"] } },
+        { "required": ["textHex"], "not": { "required": ["text"] } }
+      ],
       "properties": {
         "language": { "type": "string", "minLength": 2, "maxLength": 2 },
         "country":  { "type": "string", "minLength": 2, "maxLength": 2 },
-        "text":     { "type": "string" }
+        "text":     { "type": "string" },
+        "textHex":  { "$ref": "#/$defs/HexString" }
       }
     },
 

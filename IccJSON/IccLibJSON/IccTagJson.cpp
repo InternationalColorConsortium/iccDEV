@@ -170,6 +170,20 @@ static bool icJsonGetLocalizedText(const IccJson &j, std::string &text)
   return jGetString(j, "text", text);
 }
 
+static bool icJsonSetLocalizedUtf8(CIccTagMultiLocalizedUnicode &tag,
+                                   const std::string &text,
+                                   icLanguageCode langCode,
+                                   icCountryCode countryCode)
+{
+  CIccUTF16String wstr;
+  const char *src = text.empty() ? "" : text.data();
+  if (!wstr.FromUtf8(src, text.size()))
+    return false;
+  if (wstr.Size() > (size_t)((icUInt32Number)-1))
+    return false;
+  return tag.SetText(wstr.c_str(), (icUInt32Number)wstr.Size(), langCode, countryCode);
+}
+
 static std::string icJsonFixedAsciiString(const icChar *szText, size_t nMaxLen)
 {
   std::string text;
@@ -1349,8 +1363,8 @@ bool CIccTagJsonMultiLocalizedUnicode::ParseJson(const IccJson &j, std::string &
     icCountryCode countryCode= (icCountryCode)(((icUInt32Number)(icUInt8Number)country[0] << 8) |
                                                 (icUInt8Number)country[1]);
 
-    CIccUTF16String wstr(text.c_str());
-    SetText(wstr.c_str(), langCode, countryCode);
+    if (!icJsonSetLocalizedUtf8(*this, text, langCode, countryCode))
+      return false;
   }
   return true;
 }
@@ -1569,8 +1583,8 @@ bool CIccTagJsonProfileSequenceId::ParseJson(const IccJson &j, std::string & /*p
         icCountryCode countryCode = (icCountryCode)(((icUInt32Number)(icUInt8Number)country[0] << 8) |
                                                     (icUInt8Number)country[1]);
 
-        CIccUTF16String wstr(text.c_str());
-        desc.m_desc.SetText(wstr.c_str(), langCode, countryCode);
+        if (!icJsonSetLocalizedUtf8(desc.m_desc, text, langCode, countryCode))
+          return false;
       }
     }
 
@@ -2516,8 +2530,10 @@ static CIccTagMultiLocalizedUnicode *dictLocalizedFromJson(const IccJson &arr)
                                                (icUInt8Number)lang[1]);
     icCountryCode countryCode = (icCountryCode)(((icUInt32Number)(icUInt8Number)country[0] << 8) |
                                                 (icUInt8Number)country[1]);
-    CIccUTF16String wstr(text.c_str());
-    pTag->SetText(wstr.c_str(), langCode, countryCode);
+    if (!icJsonSetLocalizedUtf8(*pTag, text, langCode, countryCode)) {
+      delete pTag;
+      return nullptr;
+    }
   }
   return pTag;
 }
@@ -2590,13 +2606,21 @@ bool CIccTagJsonDict::ParseJson(const IccJson &j, std::string &parseStr)
       return false;
 
     // Name: UTF-8 -> UTF-16 -> wstring
-    CIccUTF16String wname(name.c_str());
+    CIccUTF16String wname;
+    if (!wname.FromUtf8(name.empty() ? "" : name.data(), name.size())) {
+      delete pDesc;
+      return false;
+    }
     wname.ToWString(pDesc->GetName());
 
     // Optional value
     std::string val;
     if (jGetString(entry, "value", val)) {
-      CIccUTF16String wval(val.c_str());
+      CIccUTF16String wval;
+      if (!wval.FromUtf8(val.empty() ? "" : val.data(), val.size())) {
+        delete pDesc;
+        return false;
+      }
       std::wstring wvalStr;
       wval.ToWString(wvalStr);
       pDesc->SetValue(wvalStr);

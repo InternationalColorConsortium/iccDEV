@@ -23,6 +23,9 @@ mkdir -p "$OUTDIR"
 
 DUMP="$TOOLS_DIR/IccDumpProfile/iccDumpProfile"
 TOXML="$TOOLS_DIR/IccToXml/iccToXml"
+FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
+TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
+FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
 BASE_PROFILE="$TESTING_DIR/Display/sRGB_D65_MAT.icc"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=1,detect_leaks=0}"
@@ -49,7 +52,7 @@ pass_case() {
 check_tools() {
   local missing=0
 
-  for tool in "$DUMP" "$TOXML"; do
+  for tool in "$DUMP" "$TOXML" "$FROMXML" "$TOJSON" "$FROMJSON"; do
     if [ ! -x "$tool" ]; then
       echo "  [FAIL] missing tool: $tool"
       missing=1
@@ -109,6 +112,11 @@ for idx in range(tag_count):
         struct.pack_into(">I", data, rec + 4, 4)
         struct.pack_into(">H", data, off + first_off, 0xD83D)
         struct.pack_into(">H", data, off + first_off + 2, 0xDE00)
+    elif mode == "embedded-nul":
+        struct.pack_into(">I", data, rec + 4, 6)
+        struct.pack_into(">H", data, off + first_off, 0x0041)
+        struct.pack_into(">H", data, off + first_off + 2, 0x0000)
+        struct.pack_into(">H", data, off + first_off + 4, 0x0042)
     else:
         raise SystemExit(f"unknown mode: {mode}")
 
@@ -119,6 +127,135 @@ for idx in range(tag_count):
 else:
     raise SystemExit("desc tag not found")
 PY
+}
+
+check_mluc_payload() {
+  local icc="$1"
+  local expected_hex="$2"
+
+  python3 - "$icc" "$expected_hex" <<'PY'
+import binascii
+import struct
+import sys
+
+path, expected_hex = sys.argv[1], sys.argv[2]
+expected = binascii.unhexlify(expected_hex)
+data = open(path, "rb").read()
+tag_count = struct.unpack_from(">I", data, 128)[0]
+
+for idx in range(tag_count):
+    entry = 132 + idx * 12
+    sig, off, size = struct.unpack_from(">4sII", data, entry)
+    if sig != b"desc":
+        continue
+    if data[off:off + 4] != b"mluc":
+        raise SystemExit("desc tag is not mluc")
+    rec = off + 16
+    first_len = struct.unpack_from(">I", data, rec + 4)[0]
+    first_off = struct.unpack_from(">I", data, rec + 8)[0]
+    payload = data[off + first_off:off + first_off + first_len]
+    if payload != expected:
+        raise SystemExit(
+            f"mluc payload {payload.hex()} != expected {expected.hex()}"
+        )
+    break
+else:
+    raise SystemExit("desc tag not found")
+PY
+}
+
+json_has_text_hex() {
+  local json="$1"
+  local expected="$2"
+
+  python3 - "$json" "$expected" <<'PY'
+import json
+import sys
+
+path, expected = sys.argv[1], sys.argv[2]
+
+def walk(value):
+    if isinstance(value, dict):
+        if value.get("textHex") == expected:
+            return True
+        return any(walk(v) for v in value.values())
+    if isinstance(value, list):
+        return any(walk(v) for v in value)
+    return False
+
+with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+if not walk(data):
+    raise SystemExit(f"textHex {expected} not found")
+PY
+}
+
+run_expect_preserve_embedded_nul() {
+  local name="mluc-embedded-nul-roundtrip"
+  local icc="$OUTDIR/$name.icc"
+  local xml="$OUTDIR/$name.xml"
+  local json="$OUTDIR/$name.json"
+  local xml_icc="$OUTDIR/$name-from-xml.icc"
+  local json_icc="$OUTDIR/$name-from-json.icc"
+  local meta="$OUTDIR/$name.meta"
+  local log="$OUTDIR/$name.log"
+
+  TOTAL=$((TOTAL + 1))
+
+  if ! make_mluc_case "embedded-nul" "$icc" > "$meta" 2>&1; then
+    fail_case "$name" "failed to create valid embedded-NUL mluc profile"
+    cat "$meta"
+    return 1
+  fi
+
+  if ! check_mluc_payload "$icc" "004100000042" > "$log" 2>&1; then
+    fail_case "$name" "source mluc payload mismatch"
+    cat "$log"
+    return 1
+  fi
+
+  if ! "$TOXML" "$icc" "$xml" >> "$log" 2>&1; then
+    fail_case "$name" "iccToXml rejected valid embedded-NUL mluc"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  if ! grep -q "<HexTextData>" "$xml" || ! grep -q "410042" "$xml"; then
+    fail_case "$name" "XML did not preserve embedded NUL as HexTextData"
+    sed -n '1,80p' "$xml"
+    return 1
+  fi
+
+  if ! "$FROMXML" "$xml" "$xml_icc" >> "$log" 2>&1 ||
+     ! check_mluc_payload "$xml_icc" "004100000042" >> "$log" 2>&1; then
+    fail_case "$name" "iccFromXml did not round-trip embedded-NUL mluc"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  if ! "$TOJSON" "$icc" "$json" >> "$log" 2>&1 ||
+     ! json_has_text_hex "$json" "410042" >> "$log" 2>&1; then
+    fail_case "$name" "iccToJson did not preserve embedded NUL as textHex"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  if ! "$FROMJSON" "$json" "$json_icc" >> "$log" 2>&1 ||
+     ! check_mluc_payload "$json_icc" "004100000042" >> "$log" 2>&1; then
+    fail_case "$name" "iccFromJson did not round-trip embedded-NUL mluc"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  if grep -q "ERROR: AddressSanitizer\\|runtime error:" "$log" 2>/dev/null; then
+    fail_case "$name" "sanitizer finding during embedded-NUL round-trip"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  pass_case "$name" "embedded-NUL mluc preserved through XML and JSON round-trips"
+  return 0
 }
 
 run_expect_reject() {
@@ -232,6 +369,7 @@ run_expect_reject "mluc-unpaired-high-surrogate" "unpaired-high-surrogate"
 run_expect_decode "mluc-two-byte-utf8" "two-byte-utf8"
 run_expect_decode "mluc-three-byte-utf8" "three-byte-utf8"
 run_expect_decode "mluc-four-byte-utf8" "four-byte-utf8"
+run_expect_preserve_embedded_nul
 
 echo "mluc read/UTF-16 validation regression: $PASS passed, $FAIL failed, $TOTAL total"
 

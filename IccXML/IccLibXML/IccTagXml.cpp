@@ -239,6 +239,20 @@ static bool icXmlParseLocalizedText(xmlNode *pNode, std::string &text)
   return haveText;
 }
 
+static bool icXmlSetLocalizedUtf8(CIccTagMultiLocalizedUnicode &tag,
+                                  const std::string &text,
+                                  icLanguageCode langCode,
+                                  icCountryCode countryCode)
+{
+  CIccUTF16String wstr;
+  const char *src = text.empty() ? "" : text.data();
+  if (!wstr.FromUtf8(src, text.size()))
+    return false;
+  if (wstr.Size() > (size_t)((icUInt32Number)-1))
+    return false;
+  return tag.SetText(wstr.c_str(), (icUInt32Number)wstr.Size(), langCode, countryCode);
+}
+
 bool CIccTagXmlText::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   return icXmlDumpTextData(xml, blanks, m_szText);
@@ -1859,9 +1873,8 @@ bool CIccTagXmlMultiLocalizedUnicode::ParseXml(xmlNode *pNode, std::string & /*p
 
       if (icXmlParseLocalizedText(pNode, text)) {
         icUInt32Number lc = icGetSigVal(icXmlAttrValue(langCode));
-        CIccUTF16String str(text.c_str());
-
-        SetText(str.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
+        if (!icXmlSetLocalizedUtf8(*this, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff)))
+          return false;
         n++;
       }
       else {
@@ -4511,8 +4524,8 @@ bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string & /* pars
 
           if (icXmlParseLocalizedText(pSubNode, text)) {
             icUInt32Number lc = icGetSigVal(icXmlAttrValue(langCode));
-            CIccUTF16String str(text.c_str());
-            desc.m_desc.SetText(str.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
+            if (!icXmlSetLocalizedUtf8(desc.m_desc, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff)))
+              return false;
           }
           else {
             desc.m_desc.SetText("");
@@ -4632,9 +4645,11 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           icUInt32Number lc = icGetSigVal(icXmlAttrValue(pAttr));
 
           if (icXmlParseLocalizedText(pChild, text)) {
-            CIccUTF16String localStr(text.c_str());
-
-            pTag->SetText(localStr.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
+            if (!icXmlSetLocalizedUtf8(*pTag, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff))) {
+              delete pDesc;
+              ptr.ptr = NULL;
+              return false;
+            }
           }
           else {
             pTag->SetText("");
@@ -4658,8 +4673,11 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           icUInt32Number lc = icGetSigVal(icXmlAttrValue(pAttr));
 
           if (icXmlParseLocalizedText(pChild, text)) {
-            CIccUTF16String localStr(text.c_str());
-            pTag->SetText(localStr.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
+            if (!icXmlSetLocalizedUtf8(*pTag, text, (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff))) {
+              delete pDesc;
+              ptr.ptr = NULL;
+              return false;
+            }
           }
           else {
             pTag->SetText("");

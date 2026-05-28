@@ -2758,31 +2758,14 @@ CIccUTF16String::CIccUTF16String(const icUInt16Number *uzStr)
 
 CIccUTF16String::CIccUTF16String(const char *szStr)
 {
-  size_t sizeSrc = strlen(szStr);
-  if (sizeSrc) {
-    m_alloc = AllocSize(sizeSrc * 2);
-    m_str = (UTF16*)calloc(m_alloc, sizeof(icUInt16Number));
-    if (!m_str) {
-      m_alloc = 0;
-      m_len = 0;
-      return;
-    }
-    UTF16 *szDest = m_str;
-    icConvertUTF8toUTF16((const UTF8**)&szStr, (const UTF8*)&szStr[sizeSrc], &szDest, &szDest[m_alloc], lenientConversion);
-    if (m_str[0] == 0xfeff) {
-      size_t i;
-      for (i = 1; m_str[i]; i++) m_str[i-1] = m_str[i];
-      m_str[i-1] = 0;
-    }
-    m_len = WStrlen(m_str);
-  } else {
-    m_alloc = 64;
-    m_len = 0;
-    m_str = (icUInt16Number*)calloc(m_alloc, sizeof(icUInt16Number));
-    if (!m_str) {
-      m_alloc = 0;
-    }
+  m_alloc = 64;
+  m_len = 0;
+  m_str = (icUInt16Number*)calloc(m_alloc, sizeof(icUInt16Number));
+  if (!m_str) {
+    m_alloc = 0;
+    return;
   }
+  FromUtf8(szStr, 0);
 }
 
 CIccUTF16String::CIccUTF16String(const CIccUTF16String &str)
@@ -2871,27 +2854,46 @@ CIccUTF16String& CIccUTF16String::operator=(const icUInt16Number *uzStr)
 
 bool CIccUTF16String::FromUtf8(const char *szStr, size_t sizeSrc)
 {
-  if (!sizeSrc) sizeSrc = strlen(szStr);
+  if (!szStr) {
+    szStr = "";
+    sizeSrc = 0;
+  }
+  else if (!sizeSrc) {
+    sizeSrc = strlen(szStr);
+  }
+
+  if (!m_str) {
+    m_alloc = 64;
+    m_str = (icUInt16Number*)calloc(m_alloc, sizeof(icUInt16Number));
+    if (!m_str) {
+      m_alloc = 0;
+      m_len = 0;
+      return false;
+    }
+  }
+
   if (sizeSrc) {
     size_t nAlloc = AllocSize(sizeSrc * 2);
     if (m_alloc <= nAlloc) {
       m_str = (icUInt16Number*)icRealloc(m_str, nAlloc * sizeof(icUInt16Number));
+      if (!m_str) {
+        m_alloc = 0;
+        m_len = 0;
+        return false;
+      }
       m_alloc = nAlloc;
     }
-    if (m_str) {
-      memset(m_str, 0, m_alloc * sizeof(icUInt16Number));
-      UTF16 *szDest = m_str;
-      icConvertUTF8toUTF16((const UTF8**)&szStr, (const UTF8*)&szStr[sizeSrc], &szDest, &szDest[m_alloc], lenientConversion);
-      if (m_str[0] == 0xfeff) {
-        size_t i;
-        for (i = 1; m_str[i]; i++) m_str[i-1] = m_str[i];
-        m_str[i-1] = 0;
-      }
-      m_len = WStrlen(m_str);
-    } else {
-      m_len = 0;
-      return false;
+
+    memset(m_str, 0, m_alloc * sizeof(icUInt16Number));
+    UTF16 *szDest = m_str;
+    const UTF8 *srcStart = (const UTF8*)szStr;
+    icConvertUTF8toUTF16(&srcStart, (const UTF8*)&szStr[sizeSrc], &szDest, &szDest[m_alloc - 1], lenientConversion);
+    m_len = (size_t)(szDest - m_str);
+    if (m_len && m_str[0] == 0xfeff) {
+      memmove(m_str, m_str + 1, (m_len - 1) * sizeof(icUInt16Number));
+      m_len--;
     }
+    m_str[m_len] = 0;
   } else {
     m_len = 0;
     m_str[0] = 0;
@@ -2914,15 +2916,27 @@ const wchar_t *CIccUTF16String::ToWString(std::wstring &buf)
 
 const char *icUtf16ToUtf8(std::string &buf, const icUInt16Number *szSrc, int sizeSrc)
 {
+  if (!szSrc) {
+    buf.clear();
+    return buf.c_str();
+  }
   if (!sizeSrc)
     sizeSrc = (int)CIccUTF16String::WStrlen(szSrc);
-  int n = sizeSrc * 4;
+  if (sizeSrc < 0) {
+    buf.clear();
+    return buf.c_str();
+  }
+  size_t n = (size_t)sizeSrc * 4u;
   if (n) {
     char *szBuf = (char*)malloc(n + 1);
+    if (!szBuf) {
+      buf.clear();
+      return buf.c_str();
+    }
     char *szDest = szBuf;
-    icConvertUTF16toUTF8(&szSrc, &szSrc[sizeSrc], (UTF8**)&szDest, (UTF8*)&szDest[n + 1], lenientConversion);
+    icConvertUTF16toUTF8(&szSrc, &szSrc[sizeSrc], (UTF8**)&szDest, (UTF8*)&szBuf[n], lenientConversion);
     *szDest = '\0';
-    buf = szBuf;
+    buf.assign(szBuf, (size_t)(szDest - szBuf));
     free(szBuf);
   } else {
     buf.clear();
