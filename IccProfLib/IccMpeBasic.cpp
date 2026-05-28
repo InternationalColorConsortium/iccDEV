@@ -3300,7 +3300,7 @@ static bool icGetWritePosition(int64_t base, int64_t start, int64_t end, icPosit
 {
   const int64_t maxU32 = 0xffffffffLL;
 
-  if (base < 0 || start < base || end < start)
+  if (base < 0 || start < base || end <= start)
     return false;
   if (start - base > maxU32 || end - start > maxU32)
     return false;

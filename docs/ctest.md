@@ -125,6 +125,7 @@ cannot pass as a green no-op.
 | `iccdev.profile-visualize-regressions` | `.github/scripts/iccdev-profile-visualize-tests.sh` |
 | `iccdev.issue-1148-writer-device-regression` | `.github/scripts/iccdev-issue-1148-writer-device-regression.sh` |
 | `iccdev.issue-1150-output-failure-regression` | `.github/scripts/iccdev-issue-1150-output-failure-regression.sh` |
+| `iccdev.issue-1178-fromcube-devnull` | `.github/scripts/iccdev-issue-1178-fromcube-devnull-regression.sh` |
 | `iccdev.describe-sink-api` | `.github/ci/regression/iccDescribeSinkTest.cpp` |
 
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.

@@ -836,6 +836,14 @@ set_tests_properties(iccdev.issue-1150-output-failure-regression PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1178-fromcube-devnull
+  60
+  "iccdev;tools;fromcube;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1178-fromcube-devnull-regression.sh"
+)
+
+iccdev_add_script_test(
   iccdev.calculator-regressions
   300
   "iccdev;calculator;regression;asan"

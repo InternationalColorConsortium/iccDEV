@@ -463,9 +463,8 @@ int main(int argc, char* argv[])
   }
   else {
     printf("Unable to save profile '%s'\n", argv[2]);
-    return -5;
+    return 5;
   }
 
   return 0;
 }
-
