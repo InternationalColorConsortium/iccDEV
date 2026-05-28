@@ -68,6 +68,7 @@ Copyright:  (c) see Software License
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include <map>
+#include <string>
 
 class ICCPROFLIB_API CIccMpeXml : public IIccExtensionMpe
 {
@@ -264,7 +265,24 @@ public:
   int m_nIndex;
 };
 
-typedef std::map<std::string, CIccMpePtr> MpePtrMap;
+struct CIccXmlStringLess {
+  bool operator()(const std::string &a, const std::string &b) const
+  {
+    std::string::const_iterator ai = a.begin();
+    std::string::const_iterator bi = b.begin();
+
+    for (; ai != a.end() && bi != b.end(); ++ai, ++bi) {
+      if (std::char_traits<char>::lt(*ai, *bi))
+        return true;
+      if (std::char_traits<char>::lt(*bi, *ai))
+        return false;
+    }
+
+    return ai == a.end() && bi != b.end();
+  }
+};
+
+typedef std::map<std::string, CIccMpePtr, CIccXmlStringLess> MpePtrMap;
 typedef std::list<CIccMpePtr> MpePtrList;
 
 class CIccTempVar
@@ -276,10 +294,10 @@ public:
   icUInt16Number m_size;
 };
 
-typedef std::map<std::string, CIccTempVar> TempVarMap;
+typedef std::map<std::string, CIccTempVar, CIccXmlStringLess> TempVarMap;
 typedef std::list<CIccTempVar> TempVarList;
 typedef std::pair<int, int> IndexSizePair;
-typedef std::map<std::string, IndexSizePair> ChanVarMap;
+typedef std::map<std::string, IndexSizePair, CIccXmlStringLess> ChanVarMap;
 
 class CIccTempDeclVar
 {
@@ -293,9 +311,9 @@ public:
   TempVarList m_members;
 };
 
-typedef std::map<std::string, CIccTempDeclVar> TempDeclVarMap;
+typedef std::map<std::string, CIccTempDeclVar, CIccXmlStringLess> TempDeclVarMap;
 
-typedef std::map<std::string, std::string> MacroMap;
+typedef std::map<std::string, std::string, CIccXmlStringLess> MacroMap;
 
 class ICCPROFLIB_API CIccMpeXmlCalculator : public CIccMpeCalculator, public CIccMpeXml
 {

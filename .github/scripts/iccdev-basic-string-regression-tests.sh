@@ -116,6 +116,10 @@ run_fromxml_success_test \
   "rec2100-hlg-full" \
   "$TESTING_DIR/Display/Rec2100HlgFull.xml"
 
+run_fromxml_success_test \
+  "refincw-specref" \
+  "$TESTING_DIR/SpecRef/RefIncW.xml"
+
 echo ""
 echo "basic_string sanitizer regression summary:"
 echo "  Total:  $TOTAL"
