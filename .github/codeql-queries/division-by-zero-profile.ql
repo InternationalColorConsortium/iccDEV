@@ -52,18 +52,29 @@ private predicate isProfileDerivedDenominator(Expr e) {
 private predicate mentionsSameDenominator(Expr guard, Expr denom) {
   exists(FieldAccess guardAccess, FieldAccess denomAccess |
     guardAccess = guard.getAChild*() and
-    denomAccess = denom.getAChild*() and
+    (denomAccess = denom or denomAccess = denom.getAChild*()) and
     guardAccess.getTarget() = denomAccess.getTarget()
   )
   or
   exists(VariableAccess guardAccess, VariableAccess denomAccess |
     guardAccess = guard.getAChild*() and
-    denomAccess = denom.getAChild*() and
+    (denomAccess = denom or denomAccess = denom.getAChild*()) and
     guardAccess.getTarget() = denomAccess.getTarget()
   )
 }
 
 private predicate isZeroOrFiniteCheck(Expr guard) {
+  exists(FunctionCall call |
+    (call = guard or call = guard.getAChild*()) and
+    call.getTarget().getName().regexpMatch("(?i)^(isfinite|isnan|isinf)$")
+  )
+  or
+  exists(ComparisonOperation cmp, Literal lit |
+    (cmp = guard or cmp = guard.getAChild*()) and
+    cmp.hasOperands(_, lit) and
+    lit.toString().regexpMatch("(?i)^-?(0(\\.0f?)?|1e-[0-9]+|1E-[0-9]+)$")
+  )
+  or
   guard.toString().regexpMatch("(?i).*(isfinite|isnan|isinf).*")
   or
   guard.toString().regexpMatch(
@@ -75,13 +86,78 @@ private predicate isZeroOrFiniteCheck(Expr guard) {
   )
 }
 
+private predicate isOneLiteral(Expr e) {
+  e instanceof Literal and
+  e.toString().regexpMatch("(?i)^1([uUlL]*)?$")
+}
+
+private predicate denominatorSubtractsOne(Expr denom) {
+  exists(SubExpr sub |
+    (sub = denom or sub = denom.getAChild*()) and
+    isOneLiteral(sub.getRightOperand())
+  )
+}
+
+private predicate isZeroOrFiniteCheckForDenominator(Expr guard, Expr denom) {
+  isZeroOrFiniteCheck(guard)
+  or
+  (
+    denominatorSubtractsOne(denom) and
+    exists(ComparisonOperation cmp, Expr lit |
+      (cmp = guard or cmp = guard.getAChild*()) and
+      cmp.hasOperands(_, lit) and
+      isOneLiteral(lit)
+    )
+  )
+}
+
 private predicate hasNearbyZeroOrFiniteCheckForDenominator(DivExpr div) {
   exists(IfStmt check |
     check.getEnclosingFunction() = div.getEnclosingFunction() and
     check.getLocation().getStartLine() <= div.getLocation().getStartLine() and
     check.getLocation().getStartLine() >= div.getLocation().getStartLine() - 12 and
     mentionsSameDenominator(check.getCondition(), div.getRightOperand()) and
-    isZeroOrFiniteCheck(check.getCondition())
+    isZeroOrFiniteCheckForDenominator(check.getCondition(), div.getRightOperand())
+  )
+}
+
+private predicate denominatorVariable(Expr denom, Variable v) {
+  exists(VariableAccess access |
+    (access = denom or access = denom.getAChild*()) and
+    access.getTarget() = v
+  )
+}
+
+private predicate returnFailsClosed(ReturnStmt ret) {
+  ret.getExpr().toString().regexpMatch("(?i)^(false|0|null|nullptr)$")
+}
+
+private predicate failClosedBranch(IfStmt check) {
+  exists(ReturnStmt ret |
+    (ret = check.getThen() or ret = check.getThen().getAChild*()) and
+    returnFailsClosed(ret)
+  )
+}
+
+private predicate reassignedBetween(IfStmt check, DivExpr div, Variable v) {
+  exists(AssignExpr assign, VariableAccess access |
+    assign.getEnclosingFunction() = div.getEnclosingFunction() and
+    access = assign.getLValue().getAChild*() and
+    access.getTarget() = v and
+    assign.getLocation().getStartLine() > check.getLocation().getStartLine() and
+    assign.getLocation().getStartLine() < div.getLocation().getStartLine()
+  )
+}
+
+private predicate hasPriorFailClosedZeroOrFiniteCheckForDenominator(DivExpr div) {
+  exists(IfStmt check, Variable v |
+    check.getEnclosingFunction() = div.getEnclosingFunction() and
+    check.getLocation().getStartLine() < div.getLocation().getStartLine() and
+    mentionsSameDenominator(check.getCondition(), div.getRightOperand()) and
+    isZeroOrFiniteCheckForDenominator(check.getCondition(), div.getRightOperand()) and
+    failClosedBranch(check) and
+    denominatorVariable(div.getRightOperand(), v) and
+    not reassignedBetween(check, div, v)
   )
 }
 
@@ -90,6 +166,7 @@ where
   not div.getRightOperand() instanceof Literal and
   isProfileDerivedDenominator(div.getRightOperand()) and
   not hasNearbyZeroOrFiniteCheckForDenominator(div) and
+  not hasPriorFailClosedZeroOrFiniteCheckForDenominator(div) and
   isIccSource(div.getFile())
 select div,
   "Division by '" + div.getRightOperand().toString() +
