@@ -134,7 +134,12 @@ static bool icJsonIsSafeLocalizedText(const std::string &text)
       return false;
   }
 
-  if (!text.empty() && isLegalUTF8String((const UTF8*)text.c_str(), (int)text.size()) == 0)
+  bool lengthOverflow = false;
+  int textLen = icJsonSafeInt(text.size(), &lengthOverflow);
+  if (lengthOverflow)
+    return false;
+
+  if (!text.empty() && isLegalUTF8String((const UTF8*)text.c_str(), textLen) == 0)
     return false;
 
   return true;
