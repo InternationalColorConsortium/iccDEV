@@ -164,15 +164,16 @@ IF(ENABLE_SHARED_LIBS)
   )
 
   # Shared library symbol visibility:
-  # - On Linux/macOS: ICCPROFLIBDLL_EXPORTS activates visibility("default")
-  #   on classes/functions marked ICCPROFLIB_API (see IccProfLibConf.h)
-  # - On Windows: WINDOWS_EXPORT_ALL_SYMBOLS handles exports; do NOT define
-  #   ICCPROFLIBDLL_EXPORTS (several headers have __declspec placement issues)
-  if(NOT WIN32)
+  # - On MSVC: WINDOWS_EXPORT_ALL_SYMBOLS handles exports automatically.
+  # - On GCC/Clang: ICCPROFLIBDLL_EXPORTS activates visibility("default")
+  #   on classes/functions marked ICCPROFLIB_API (see IccProfLibConf.h).
+  # - Do not add -fvisibility=hidden here. IccProfLib export annotations are
+  #   still incomplete, so shared builds intentionally keep default visibility.
+  if(NOT MSVC)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
   endif()
 
-  if(WIN32)
+  if(MSVC)
     set_target_properties(${TARGET_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
   endif()
 

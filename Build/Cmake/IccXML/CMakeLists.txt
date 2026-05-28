@@ -103,13 +103,15 @@ IF(ENABLE_SHARED_LIBS)
       SOVERSION "${${PROJECT_UP_NAME}_MAJOR_VERSION}"
   )
 
-  # Shared library symbol visibility (IccXML uses ICCPROFLIB_API from IccProfLibConf.h)
-  # Linux/macOS only; Windows uses WINDOWS_EXPORT_ALL_SYMBOLS instead.
-  if(NOT WIN32)
+  # Shared library symbol visibility (IccXML uses ICCPROFLIB_API from
+  # IccProfLibConf.h). MSVC uses automatic exports; GCC/Clang get explicit
+  # default visibility for annotated symbols. Do not use -fvisibility=hidden
+  # until IccXML's shared-library export surface is completely annotated.
+  if(NOT MSVC)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
   endif()
 
-  if(WIN32)
+  if(MSVC)
     set_target_properties(${TARGET_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
   endif()
 
