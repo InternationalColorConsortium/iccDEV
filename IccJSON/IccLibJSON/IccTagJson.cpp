@@ -62,6 +62,7 @@
 #include "IccIoJson.h"
 #include "IccUtil.h"
 #include "IccUtilJson.h"
+#include "IccConvertUTF.h"
 #include "IccSparseMatrix.h"
 #include "IccProfileJson.h"
 #include "IccStructFactory.h"
@@ -124,6 +125,44 @@ static inline icUInt16Number icJsonSafeU16(size_t n)
   if (n > (size_t)0xFFFF)
     return 0;
   return (icUInt16Number)n;
+}
+
+static bool icJsonIsSafeLocalizedText(const std::string &text)
+{
+  for (unsigned char ch : text) {
+    if (ch < 0x20 && ch != '\n' && ch != '\t')
+      return false;
+  }
+
+  if (!text.empty() && isLegalUTF8String((const UTF8*)text.c_str(), (int)text.size()) == 0)
+    return false;
+
+  return true;
+}
+
+static void icJsonSetLocalizedText(IccJson &j, const std::string &text)
+{
+  if (icJsonIsSafeLocalizedText(text))
+    j["text"] = text;
+  else
+    j["textHex"] = icJsonDumpHexData(text.data(), text.size());
+}
+
+static bool icJsonGetLocalizedText(const IccJson &j, std::string &text)
+{
+  std::string hex;
+  if (jGetString(j, "textHex", hex)) {
+    icUInt32Number hexSize = icJsonGetHexDataSize(hex.c_str());
+    text.clear();
+    if (hexSize) {
+      text.resize(hexSize);
+      if (icJsonGetHexData(&text[0], hex.c_str(), hexSize) != hexSize)
+        return false;
+    }
+    return true;
+  }
+
+  return jGetString(j, "text", text);
 }
 
 static std::string icJsonFixedAsciiString(const icChar *szText, size_t nMaxLen)
@@ -1278,7 +1317,7 @@ bool CIccTagJsonMultiLocalizedUnicode::ToJson(IccJson &j)
       std::string text;
       if (i->GetBuf() && i->GetLength() > 0)
         icUtf16ToUtf8(text, i->GetBuf(), (int)i->GetLength());
-      loc["text"] = text;
+      icJsonSetLocalizedText(loc, text);
       locales.push_back(loc);
     }
   }
@@ -1294,7 +1333,8 @@ bool CIccTagJsonMultiLocalizedUnicode::ParseJson(const IccJson &j, std::string &
     std::string lang = "  ", country = "  ", text;
     jGetString(loc, "language", lang);
     jGetString(loc, "country",  country);
-    jGetString(loc, "text",     text);
+    if (!icJsonGetLocalizedText(loc, text))
+      return false;
 
     while (lang.size()    < 2) lang    += ' ';
     while (country.size() < 2) country += ' ';
@@ -1513,7 +1553,8 @@ bool CIccTagJsonProfileSequenceId::ParseJson(const IccJson &j, std::string & /*p
         std::string lang = "  ", country = "  ", text;
         jGetString(loc, "language", lang);
         jGetString(loc, "country",  country);
-        jGetString(loc, "text",     text);
+        if (!icJsonGetLocalizedText(loc, text))
+          return false;
 
         while (lang.size()    < 2) lang    += ' ';
         while (country.size() < 2) country += ' ';
@@ -2440,7 +2481,7 @@ static IccJson dictLocalizedToJson(const CIccTagMultiLocalizedUnicode *pTag)
     IccJson loc;
     loc["language"] = lang;
     loc["country"]  = country;
-    loc["text"]     = text;
+    icJsonSetLocalizedText(loc, text);
     arr.push_back(loc);
   }
   return arr;
@@ -2460,7 +2501,10 @@ static CIccTagMultiLocalizedUnicode *dictLocalizedFromJson(const IccJson &arr)
     std::string text;
     jGetString(loc, "language", lang);
     jGetString(loc, "country", country);
-    jGetString(loc, "text", text);
+    if (!icJsonGetLocalizedText(loc, text)) {
+      delete pTag;
+      return nullptr;
+    }
     while (lang.size()    < 2) lang    += ' ';
     while (country.size() < 2) country += ' ';
     icLanguageCode langCode = (icLanguageCode)(((icUInt32Number)(icUInt8Number)lang[0] << 8) |

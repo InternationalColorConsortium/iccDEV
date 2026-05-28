@@ -131,12 +131,10 @@ static bool isTextLegalCDATA( const char *szText )
   if (szText[0] == 0)
     return true;
 
-// XML says CR and other control characters are legal inside a CDATA block...
-// W3C also says XML normalizes the file by removing CR before parsing.  https://www.w3.org/TR/REC-xml/#sec-line-ends
-// In order to preserve data, we either have to hex encode, or escape all CR
-  // scan for any CR
-  if (strchr(szText,'\r'))
-    return false;
+  for (const unsigned char *ptr = (const unsigned char *)szText; *ptr; ptr++) {
+    if (*ptr < 0x20 && *ptr != '\n' && *ptr != '\t')
+      return false;
+  }
 
   // scan for XML tags that would make this an invalid text block
   if ( strstr(szText, "]]>") )
@@ -170,6 +168,75 @@ static bool icXmlDumpTextData(std::string &xml, std::string blanks, const char *
   }
 
   return true;
+}
+
+static void icXmlDumpLocalizedText(std::string &xml, const std::string &blanks,
+                                   const char *elementName, const char *languageCountry,
+                                   const std::string &text)
+{
+  std::string fix;
+
+  xml += blanks + "<";
+  xml += elementName;
+  xml += " LanguageCountry=\"";
+  xml += icFixXml(fix, languageCountry);
+  xml += "\">";
+
+  if (text.find('\0') != std::string::npos || !isTextLegalCDATA(text.c_str())) {
+    xml += "\n";
+    xml += blanks + "  <HexTextData>";
+    icXmlDumpHexData(xml, blanks + "   ", (void*)text.data(), text.size());
+    xml += blanks + "  </HexTextData>\n";
+    xml += blanks;
+  }
+  else {
+    xml += "<![CDATA[";
+    xml += icFixXml(fix, text.c_str());
+    xml += "]]>";
+  }
+
+  xml += "</";
+  xml += elementName;
+  xml += ">\n";
+}
+
+static xmlAttr *icXmlFindLanguageCountryAttr(xmlNode *pNode)
+{
+  xmlAttr *pAttr = icXmlFindAttr(pNode, "LanguageCountry");
+  if (!pAttr)
+    pAttr = icXmlFindAttr(pNode, "languageCountry");
+  if (!pAttr)
+    pAttr = icXmlFindAttr(pNode, "LanguangeCountry");
+  return pAttr;
+}
+
+static bool icXmlParseLocalizedText(xmlNode *pNode, std::string &text)
+{
+  bool haveText = false;
+  text.clear();
+
+  for (xmlNode *pText = pNode ? pNode->children : NULL; pText; pText = pText->next) {
+    if (pText->type == XML_ELEMENT_NODE && !icXmlStrCmp(pText->name, "HexTextData") &&
+        pText->children && pText->children->content) {
+      CIccUInt8Array buf;
+      icUInt32Number hexSize = icXmlGetHexDataSize((const icChar*)pText->children->content);
+      if (!buf.SetSize(hexSize+2) ||
+          icXmlGetHexData(buf.GetBuf(), (const icChar*)pText->children->content, hexSize)!=hexSize)
+        return false;
+
+      uint8_t *strPtr = buf.GetBuf();
+      strPtr[hexSize] = 0;
+      strPtr[hexSize+1] = 0;
+      text.assign((char*)strPtr, hexSize);
+      return true;
+    }
+    if (!haveText && (pText->type == XML_TEXT_NODE || pText->type == XML_CDATA_SECTION_NODE)) {
+      text = (const char*)pText->content;
+      haveText = true;
+    }
+  }
+
+  return haveText;
 }
 
 bool CIccTagXmlText::ToXml(std::string &xml, std::string blanks/* = ""*/)
@@ -1764,7 +1831,6 @@ bool CIccTagXmlMeasurement::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
 bool CIccTagXmlMultiLocalizedUnicode::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
-  std::string xmlbuf;
   char data[256];
   std::string bufstr;
   CIccMultiLocalizedUnicode::iterator i;
@@ -1773,11 +1839,10 @@ bool CIccTagXmlMultiLocalizedUnicode::ToXml(std::string &xml, std::string blanks
     return false;
 
   for (i=m_Strings->begin(); i!=m_Strings->end(); i++) {
-    xml += blanks + "<LocalizedText LanguageCountry=\"";
-    xml += icFixXml(xmlbuf, icGetSigStr(data, 256, (i->m_nLanguageCode<<16) + i->m_nCountryCode));
-    xml += "\"><![CDATA[";
-    xml += icFixXml(xmlbuf, icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength()));
-    xml += "]]></LocalizedText>\n";
+    icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+    icXmlDumpLocalizedText(xml, blanks, "LocalizedText",
+                           icGetSigStr(data, 256, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                           bufstr);
   }
   return true;
 }
@@ -1789,17 +1854,12 @@ bool CIccTagXmlMultiLocalizedUnicode::ParseXml(xmlNode *pNode, std::string & /*p
   int n = 0;
 
   for (pNode = icXmlFindNode(pNode, "LocalizedText"); pNode; pNode = icXmlFindNode(pNode->next, "LocalizedText")) {    
-    if ((langCode = icXmlFindAttr(pNode, "LanguageCountry"))) {
-      xmlNode *pText;
+    if ((langCode = icXmlFindLanguageCountryAttr(pNode))) {
+      std::string text;
 
-      for (pText = pNode->children; pText; pText = pText->next) {
-        if (pText->type == XML_TEXT_NODE || pText->type == XML_CDATA_SECTION_NODE)
-          break;
-      }
-
-      if (pText) {
+      if (icXmlParseLocalizedText(pNode, text)) {
         icUInt32Number lc = icGetSigVal(icXmlAttrValue(langCode));
-        CIccUTF16String str((const char*)pText->content);
+        CIccUTF16String str(text.c_str());
 
         SetText(str.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
         n++;
@@ -4396,7 +4456,6 @@ bool CIccTagXmlProfileSequenceId::ToXml(std::string &xml, std::string blanks/* =
     const size_t bufSize = 256;
     char buf[bufSize];
     char data[bufSize];
-    char fix[bufSize];
     std::string bufstr;
     int n;
 
@@ -4412,11 +4471,10 @@ bool CIccTagXmlProfileSequenceId::ToXml(std::string &xml, std::string blanks/* =
       CIccMultiLocalizedUnicode::iterator i;
 
       for (i=pid->m_desc.m_Strings->begin(); i!=pid->m_desc.m_Strings->end(); i++) {
-        snprintf(buf, bufSize, "<LocalizedText LanguangeCountry=\"%s\"", icFixXml(fix, icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode)));
-        xml += blanks + buf;
-
-        snprintf(buf, bufSize, ">%s</LocalizedText>\n", icFixXml(fix, icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength())));
-        xml += buf;
+        icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+        icXmlDumpLocalizedText(xml, blanks + " ", "LocalizedText",
+                               icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                               bufstr);
       }
     }
     xml += blanks + " </ProfileIdDesc>\n";
@@ -4447,15 +4505,13 @@ bool CIccTagXmlProfileSequenceId::ParseXml(xmlNode *pNode, std::string & /* pars
 
     xmlNode* pSubNode;
     for (pSubNode = icXmlFindNode(pNode, "LocalizedText"); pSubNode; pSubNode = icXmlFindNode(pSubNode->next, "LocalizedText")) {
-      if ((langCode = icXmlFindAttr(pSubNode, "languageCountry")) &&
+      if ((langCode = icXmlFindLanguageCountryAttr(pSubNode)) &&
         pSubNode->children) {
-          xmlNode *pText;
+          std::string text;
 
-          for (pText = pSubNode->children; pText && pText->type != XML_TEXT_NODE; pText = pText->next);
-
-          if (pText) {
+          if (icXmlParseLocalizedText(pSubNode, text)) {
             icUInt32Number lc = icGetSigVal(icXmlAttrValue(langCode));
-            CIccUTF16String str((const char*)pText->content);
+            CIccUTF16String str(text.c_str());
             desc.m_desc.SetText(str.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
           }
           else {
@@ -4482,7 +4538,6 @@ bool CIccTagXmlDict::ToXml(std::string &xml, std::string blanks/* = ""*/)
       continue;
       
     const size_t bufSize = 256;
-    char buf[bufSize];
     char data[bufSize];
     char fix[bufSize];
     std::string bufstr;
@@ -4507,22 +4562,20 @@ bool CIccTagXmlDict::ToXml(std::string &xml, std::string blanks/* = ""*/)
         CIccMultiLocalizedUnicode::iterator i;
 
         for (i=nv->GetNameLocalized()->m_Strings->begin(); i!=nv->GetNameLocalized()->m_Strings->end(); i++) {
-          snprintf(buf, bufSize, "  <LocalizedName LanguageCountry=\"%s\"", icFixXml(fix, icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode)));
-          xml += blanks + buf;
-
-          snprintf(buf, bufSize, "><![CDATA[%s]]></LocalizedName>\n", icFixXml(fix, icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength())));
-          xml += buf;
+          icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+          icXmlDumpLocalizedText(xml, blanks + "  ", "LocalizedName",
+                                 icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                                 bufstr);
         }
       }
       if (nv->GetValueLocalized()) {
         CIccMultiLocalizedUnicode::iterator i;
 
         for (i=nv->GetValueLocalized()->m_Strings->begin(); i!=nv->GetValueLocalized()->m_Strings->end(); i++) {
-          snprintf(buf, bufSize, "  <LocalizedValue LanguageCountry=\"%s\"", icFixXml(fix, icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode)));
-          xml += blanks + buf;
-
-          snprintf(buf, bufSize, "><![CDATA[%s]]></LocalizedValue>\n", icFixXml(fix, icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength())));
-          xml += buf;
+          icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+          icXmlDumpLocalizedText(xml, blanks + "  ", "LocalizedValue",
+                                 icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                                 bufstr);
         }
       }
       xml += blanks + " </DictEntry>\n";
@@ -4574,14 +4627,12 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           pDesc->SetNameLocalized(pTag);
         }
 
-        if ((pAttr = icXmlFindAttr(pChild, "LanguageCountry")) && pChild->children) {
-          xmlNode *pText;
+        if ((pAttr = icXmlFindLanguageCountryAttr(pChild)) && pChild->children) {
+          std::string text;
           icUInt32Number lc = icGetSigVal(icXmlAttrValue(pAttr));
 
-          for (pText = pChild->children; pText && pText->type != XML_TEXT_NODE && pText->type != XML_CDATA_SECTION_NODE; pText = pText->next);
-
-          if (pText) {
-            CIccUTF16String localStr((const char*)pText->content);
+          if (icXmlParseLocalizedText(pChild, text)) {
+            CIccUTF16String localStr(text.c_str());
 
             pTag->SetText(localStr.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
           }
@@ -4602,14 +4653,12 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           pDesc->SetValueLocalized(pTag);
         }
 
-        if ((pAttr = icXmlFindAttr(pChild, "LanguageCountry")) && pChild->children) {
-          xmlNode *pText;
+        if ((pAttr = icXmlFindLanguageCountryAttr(pChild)) && pChild->children) {
+          std::string text;
           icUInt32Number lc = icGetSigVal(icXmlAttrValue(pAttr));
 
-          for (pText = pChild->children; pText && pText->type != XML_TEXT_NODE && pText->type != XML_CDATA_SECTION_NODE; pText = pText->next);
-
-          if (pText) {
-            CIccUTF16String localStr((const char*)pText->content);
+          if (icXmlParseLocalizedText(pChild, text)) {
+            CIccUTF16String localStr(text.c_str());
             pTag->SetText(localStr.c_str(), (icLanguageCode)(lc>>16), (icCountryCode)(lc & 0xffff));
           }
           else {

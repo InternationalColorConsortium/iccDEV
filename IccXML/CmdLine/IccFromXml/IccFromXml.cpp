@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
     printf("\n");
 #endif
     printf("Unable to Parse '%s'\n", argv[1]);
-    return -1;
+    return 1;
   }
 
   std::string valid_report;
@@ -94,7 +94,7 @@ int main(int argc, char* argv[])
     }
     else {
       printf("Unable to save profile as '%s'\n", argv[2]);
-      return -1;
+      return 1;
     }
   }
   else {
@@ -107,7 +107,7 @@ int main(int argc, char* argv[])
     }
     else {
       printf("Unable to save profile - profile is invalid!\n");
-      return -1;
+      return 1;
     }
     printf("%s", valid_report.c_str());
   }
@@ -115,4 +115,3 @@ int main(int argc, char* argv[])
   printf("\n");
   return 0;
 }
-

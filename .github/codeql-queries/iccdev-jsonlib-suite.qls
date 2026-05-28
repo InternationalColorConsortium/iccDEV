@@ -3,3 +3,4 @@
 - query: json-recursive-parse.ql
 - query: json-size-overflow.ql
 - query: json-unchecked-type-access.ql
+- query: localized-text-unsafe-serialization.ql
