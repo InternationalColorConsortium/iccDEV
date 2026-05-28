@@ -792,10 +792,10 @@ void CIccTagText::SetText(const icChar *szText)
  * Return: A pointer to the string assigned to the tag.
  *****************************************************************************
  */
-const icChar *CIccTagText::operator=(const icChar *szText)
+CIccTagText &CIccTagText::operator=(const icChar *szText)
 {
   SetText(szText);
-  return m_szText;
+  return *this;
 }
 
 /**
@@ -1187,10 +1187,10 @@ void CIccTagUtf8Text::SetText(const icUChar16 *szText)
  * Return: A pointer to the string assigned to the tag.
  *****************************************************************************
  */
-const icUChar *CIccTagUtf8Text::operator=(const icUChar *szText)
+CIccTagUtf8Text& CIccTagUtf8Text::operator=(const icUChar *szText)
 {
   SetText(szText);
-  return (icUChar*)m_szText;
+  return *this;
 }
 
 /**
@@ -2077,10 +2077,10 @@ void CIccTagUtf16Text::SetText(const icUChar *szText)
  * Return: A pointer to the string assigned to the tag.
  *****************************************************************************
  */
-const icUChar16 *CIccTagUtf16Text::operator=(const icUChar16 *szText)
+CIccTagUtf16Text& CIccTagUtf16Text::operator=(const icUChar16 *szText)
 {
   SetText(szText);
-  return (icUChar16*)m_szText;
+  return *this;
 }
 
 /**
@@ -2572,10 +2572,10 @@ void CIccTagTextDescription::SetText(const icChar *szText)
  * Return: A pointer to the string assigned to the tag.
  *****************************************************************************
  */
-const icChar *CIccTagTextDescription::operator=(const icChar *szText)
+CIccTagTextDescription& CIccTagTextDescription::operator=(const icChar *szText)
 {
   SetText(szText);
-  return m_szText;
+  return *this;
 }
 
 /**

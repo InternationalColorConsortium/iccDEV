@@ -413,7 +413,7 @@ public:
 
   const icChar *GetText() const { return m_szText; }
   void SetText(const icChar *szText);
-  const icChar *operator=(const icChar *szText);
+  CIccTagText &operator=(const icChar *szText);
 
   icChar *GetBuffer(icUInt32Number nSize);
   void Release();
@@ -455,8 +455,8 @@ public:
   void SetText(const icUChar *szText);
   void SetText(const icChar *szText) { SetText((icUChar*)szText); }
   
-  const icUChar *operator=(const icUChar *szText);
-  const icChar *operator=(const icChar *szText) { return (const icChar*)operator=((icUChar*)szText); }
+  CIccTagUtf8Text& operator=(const icUChar *szText);
+  CIccTagUtf8Text& operator=(const icChar *szText) { return operator=((icUChar*)szText); }
 
   icUChar *GetBuffer(icUInt32Number nSize);
   void Release();
@@ -570,7 +570,7 @@ public:
 
   icUInt32Number GetLength() const;
 
-  const icUChar16 *operator=(const icUChar16 *szText);
+  CIccTagUtf16Text& operator=(const icUChar16 *szText);
 
   icUChar16 *GetBuffer(icUInt32Number nSize);
   void Release();
@@ -610,7 +610,7 @@ public:
 
   const icChar *GetText() const { return m_szText; }
   void SetText(const icChar *szText);
-  const icChar *operator=(const icChar *szText);
+  CIccTagTextDescription& operator=(const icChar *szText);
 
   icChar *GetBuffer(icUInt32Number nSize);
   void Release();
@@ -667,7 +667,7 @@ public:
 
   icUInt32Number GetValue() const { return m_nSig; }
   void SetValue(icUInt32Number sig) { m_nSig = sig; }
-  icUInt32Number operator=(icUInt32Number sig) { SetValue(sig); return m_nSig; }
+  CIccTagSignature& operator=(icUInt32Number sig) { SetValue(sig); return *this; }
   virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
 
 protected:
@@ -1311,9 +1311,9 @@ public: //member functions
                icLanguageCode nLanguageCode = icLanguageCodeEnglish,
                icCountryCode nRegionCode = icCountryCodeUSA);
 
-  const icChar *operator=(const icChar *szText) { SetText(szText); return szText; }
-  const icUInt16Number *operator=(const icUInt16Number *sszText) { SetText(sszText); return sszText; }
-  const icUInt32Number *operator=(const icUInt32Number *sszText) { SetText(sszText); return sszText; }
+  CIccLocalizedUnicode& operator=(const icChar *szText) { SetText(szText); return *this; }
+  CIccLocalizedUnicode& operator=(const icUInt16Number *sszText) { SetText(sszText); return *this; }
+  CIccLocalizedUnicode& operator=(const icUInt32Number *sszText) { SetText(sszText); return *this; }
 
   //Data
   icLanguageCode m_nLanguageCode;
