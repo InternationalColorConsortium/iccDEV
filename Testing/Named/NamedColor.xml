@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <IccProfile>
   <Header>
-    <PreferredCMMType>NULL</PreferredCMMType>
-    <ProfileVersion>5.00</ProfileVersion>
+    <PreferredCMMType></PreferredCMMType>
+    <ProfileVersion>5.10</ProfileVersion>
     <ProfileDeviceClass>nmcl</ProfileDeviceClass>
-    <DataColourSpace>NULL</DataColourSpace>
+    <DataColourSpace></DataColourSpace>
     <PCS>Lab </PCS>
     <CreationDateTime>2026-02-20T16:22:34</CreationDateTime>
     <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="false"/>
@@ -13,7 +13,7 @@
     <PCSIlluminant>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </PCSIlluminant>
-    <ProfileCreator>NULL</ProfileCreator>
+    <ProfileCreator></ProfileCreator>
     <ProfileID>9892A2BC20C0E95CFF91D2D45393083D</ProfileID>
     <SpectralPCS>rs0024</SpectralPCS>
     <SpectralRange>
@@ -218,7 +218,7 @@
     </tagArrayType> </namedColor2Tag>
 
     <spectralViewingConditionsTag> <spectralViewingConditionsType>
-      <StdObserver>CIE 1931 standard observer</StdObserver>
+      <StdObserver>CIE 1931 (two degree) standard observer</StdObserver>
 			<IlluminantXYZ X="482.1227825641230" Y="500.0000000000000" Z="412.3395470459833"/>
       <StdIlluminant>Illuminant D50</StdIlluminant>
       <ColorTemperature>5000.000000000000</ColorTemperature>
