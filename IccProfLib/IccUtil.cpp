@@ -2873,6 +2873,13 @@ bool CIccUTF16String::FromUtf8(const char *szStr, size_t sizeSrc)
   }
 
   if (sizeSrc) {
+    const size_t maxUnits = ((size_t)-1) / sizeof(icUInt16Number);
+    if (sizeSrc > (maxUnits - 64) / 2) {
+      m_len = 0;
+      m_str[0] = 0;
+      return false;
+    }
+
     size_t nAlloc = AllocSize(sizeSrc * 2);
     if (m_alloc <= nAlloc) {
       m_str = (icUInt16Number*)icRealloc(m_str, nAlloc * sizeof(icUInt16Number));
@@ -2887,7 +2894,14 @@ bool CIccUTF16String::FromUtf8(const char *szStr, size_t sizeSrc)
     memset(m_str, 0, m_alloc * sizeof(icUInt16Number));
     UTF16 *szDest = m_str;
     const UTF8 *srcStart = (const UTF8*)szStr;
-    icConvertUTF8toUTF16(&srcStart, (const UTF8*)&szStr[sizeSrc], &szDest, &szDest[m_alloc - 1], lenientConversion);
+    icUtfConversionResult conv = icConvertUTF8toUTF16(&srcStart, (const UTF8*)&szStr[sizeSrc],
+                                                      &szDest, &szDest[m_alloc - 1],
+                                                      strictConversion);
+    if (conv != conversionOK || srcStart != (const UTF8*)&szStr[sizeSrc]) {
+      m_len = 0;
+      m_str[0] = 0;
+      return false;
+    }
     m_len = (size_t)(szDest - m_str);
     if (m_len && m_str[0] == 0xfeff) {
       memmove(m_str, m_str + 1, (m_len - 1) * sizeof(icUInt16Number));
@@ -2946,7 +2960,8 @@ const char *icUtf16ToUtf8(std::string &buf, const icUInt16Number *szSrc, int siz
 
 const unsigned short *icUtf8ToUtf16(CIccUTF16String &buf, const char *szSrc, int sizeSrc)
 {
-  buf.FromUtf8(szSrc, sizeSrc);
+  if (!buf.FromUtf8(szSrc, sizeSrc))
+    return NULL;
   return buf.c_str();
 }
 

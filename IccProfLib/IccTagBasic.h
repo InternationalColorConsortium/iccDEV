@@ -1367,7 +1367,7 @@ public:
   void SetText(const icChar *szText,
                icLanguageCode nLanguageCode = icLanguageCodeEnglish,
                icCountryCode nRegionCode = icCountryCodeUSA);
-  void SetText(const icUInt16Number *sszUnicode16Text,
+  bool SetText(const icUInt16Number *sszUnicode16Text,
                icLanguageCode nLanguageCode = icLanguageCodeEnglish,
                icCountryCode nRegionCode = icCountryCodeUSA);
   bool SetText(const icUInt16Number *sszUnicode16Text,

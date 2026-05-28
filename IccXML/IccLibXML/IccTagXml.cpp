@@ -572,7 +572,14 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
       m_szText[0] = '\0';
 
     // set Unicode String
-    CIccUTF16String wstr(buf);
+    CIccUTF16String wstr;
+    if (!wstr.FromUtf8(buf, fileLength)) {
+      parseStr += "'";
+      parseStr += filename;
+      parseStr += "' is not valid UTF-8.\n";
+      delete file;
+      return false;
+    }
 
     nStrSize = (icUInt32Number)wstr.Size();
     m_uzUnicodeText = GetUnicodeBuffer(nStrSize);
@@ -634,7 +641,11 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
 
           // *pRegion may not have value.
           if (pRegion && /* *pRegion && */pNode->children && pNode->children->content) {
-            CIccUTF16String wstr((const char*)pNode->children->content);
+            CIccUTF16String wstr;
+            if (!wstr.FromUtf8((const char*)pNode->children->content)) {
+              parseStr += "Invalid UTF-8 in Unicode text.\n";
+              return false;
+            }
 
             nSize = (icUInt32Number)wstr.Size();
 

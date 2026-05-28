@@ -8393,7 +8393,7 @@ void CIccTagMultiLocalizedUnicode::SetText(const icChar *szText,
 *  RegionCode
 *****************************************************************************
 */
-void CIccTagMultiLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text, 
+bool CIccTagMultiLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text,
                                            icLanguageCode nLanguageCode /* = icLanguageCodeEnglish */,
                                            icCountryCode nRegionCode /* = icCountryCodeUSA */)
 {
@@ -8402,7 +8402,7 @@ void CIccTagMultiLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Tex
   if (pBuf) {
     for (; *pBuf; len++, pBuf++);
   }
-  SetText(sszUnicode16Text, len, nLanguageCode, nRegionCode);
+  return SetText(sszUnicode16Text, len, nLanguageCode, nRegionCode);
 }
 
 bool CIccTagMultiLocalizedUnicode::SetText(const icUInt16Number *sszUnicode16Text,

@@ -258,6 +258,94 @@ run_expect_preserve_embedded_nul() {
   return 0
 }
 
+run_expect_reject_invalid_text_hex() {
+  local name="mluc-invalid-utf8-hex-input"
+  local icc="$OUTDIR/$name.icc"
+  local xml="$OUTDIR/$name.xml"
+  local json="$OUTDIR/$name.json"
+  local bad_xml="$OUTDIR/$name-bad.xml"
+  local bad_json="$OUTDIR/$name-bad.json"
+  local xml_icc="$OUTDIR/$name-from-xml.icc"
+  local json_icc="$OUTDIR/$name-from-json.icc"
+  local meta="$OUTDIR/$name.meta"
+  local log="$OUTDIR/$name.log"
+  local xml_ec=0
+  local json_ec=0
+
+  TOTAL=$((TOTAL + 1))
+
+  rm -f "$xml_icc" "$json_icc" "$log"
+
+  if ! make_mluc_case "embedded-nul" "$icc" > "$meta" 2>&1 ||
+     ! "$TOXML" "$icc" "$xml" > "$log" 2>&1 ||
+     ! "$TOJSON" "$icc" "$json" >> "$log" 2>&1; then
+    fail_case "$name" "failed to create valid hex-encoded XML/JSON fixtures"
+    cat "$meta"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  python3 - "$xml" "$bad_xml" "$json" "$bad_json" <<'PY'
+import json
+import re
+import sys
+
+xml_in, xml_out, json_in, json_out = sys.argv[1:5]
+
+xml = open(xml_in, "r", encoding="utf-8").read()
+xml, count = re.subn(r"(<HexTextData>)[0-9A-Fa-f]*(</HexTextData>)", r"\1ff\2", xml, count=1)
+if count != 1:
+    raise SystemExit("HexTextData fixture not found")
+open(xml_out, "w", encoding="utf-8").write(xml)
+
+with open(json_in, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+def replace_text_hex(value):
+    if isinstance(value, dict):
+        if "textHex" in value:
+            value["textHex"] = "ff"
+            return True
+        return any(replace_text_hex(v) for v in value.values())
+    if isinstance(value, list):
+        return any(replace_text_hex(v) for v in value)
+    return False
+
+if not replace_text_hex(data):
+    raise SystemExit("textHex fixture not found")
+
+with open(json_out, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+
+  "$FROMXML" "$bad_xml" "$xml_icc" >> "$log" 2>&1
+  xml_ec=$?
+  "$FROMJSON" "$bad_json" "$json_icc" >> "$log" 2>&1
+  json_ec=$?
+
+  if grep -q "ERROR: AddressSanitizer\\|runtime error:" "$log" 2>/dev/null; then
+    fail_case "$name" "sanitizer finding while rejecting invalid UTF-8 hex"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  if [ "$xml_ec" -eq 0 ] || [ -s "$xml_icc" ]; then
+    fail_case "$name" "iccFromXml accepted invalid UTF-8 HexTextData (exit=$xml_ec)"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  if [ "$json_ec" -eq 0 ] || [ -s "$json_icc" ]; then
+    fail_case "$name" "iccFromJson accepted invalid UTF-8 textHex (exit=$json_ec)"
+    sed -n '1,80p' "$log"
+    return 1
+  fi
+
+  pass_case "$name" "invalid UTF-8 HexTextData/textHex rejected without sanitizer findings"
+  return 0
+}
+
 run_expect_reject() {
   local name="$1"
   local mode="$2"
@@ -370,6 +458,7 @@ run_expect_decode "mluc-two-byte-utf8" "two-byte-utf8"
 run_expect_decode "mluc-three-byte-utf8" "three-byte-utf8"
 run_expect_decode "mluc-four-byte-utf8" "four-byte-utf8"
 run_expect_preserve_embedded_nul
+run_expect_reject_invalid_text_hex
 
 echo "mluc read/UTF-16 validation regression: $PASS passed, $FAIL failed, $TOTAL total"
 
