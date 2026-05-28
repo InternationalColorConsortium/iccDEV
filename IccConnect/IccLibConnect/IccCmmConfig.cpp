@@ -1404,7 +1404,7 @@ public:
       if (c < 0) {
         if (str.size() != size_t(0))
           line.push_back(str);
-        if (!line.size())
+        if (line.size() == size_t(0))
           return false;
         break;
       }
