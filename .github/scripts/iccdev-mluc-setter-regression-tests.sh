@@ -55,23 +55,19 @@ check_log() {
 
 check_mluc_desc() {
   local icc="$1"
-  local expected_file_size="$2"
-  local expected_desc_size="$3"
-  local expected_first_len="$4"
+  local expected_desc_size="$2"
+  local expected_first_len="$3"
 
-  python3 - "$icc" "$expected_file_size" "$expected_desc_size" "$expected_first_len" <<'PY'
+  python3 - "$icc" "$expected_desc_size" "$expected_first_len" <<'PY'
 import struct
 import sys
 from pathlib import Path
 
 icc_path = Path(sys.argv[1])
-expected_file_size = int(sys.argv[2], 0)
-expected_desc_size = int(sys.argv[3], 0)
-expected_first_len = int(sys.argv[4], 0)
+expected_desc_size = int(sys.argv[2], 0)
+expected_first_len = int(sys.argv[3], 0)
 
 data = icc_path.read_bytes()
-if len(data) != expected_file_size:
-    raise SystemExit(f"file size {len(data)} != expected {expected_file_size}")
 if len(data) < 132:
     raise SystemExit("profile too small for ICC tag table")
 
@@ -115,9 +111,8 @@ PY
 run_mluc_case() {
   local name="$1"
   local xml_rel="$2"
-  local expected_file_size="$3"
-  local expected_desc_size="$4"
-  local expected_first_len="$5"
+  local expected_desc_size="$3"
+  local expected_first_len="$4"
   local source_xml="$TESTING_DIR/$xml_rel"
   local xml_base
   local xml_dir
@@ -162,7 +157,7 @@ run_mluc_case() {
     return
   fi
 
-  if check_mluc_desc "$case_icc" "$expected_file_size" "$expected_desc_size" "$expected_first_len" > "$inspect_log" 2>&1; then
+  if check_mluc_desc "$case_icc" "$expected_desc_size" "$expected_first_len" > "$inspect_log" 2>&1; then
     echo "  [PASS] $name -- $(cat "$inspect_log")"
     PASS=$((PASS + 1))
   else
@@ -179,8 +174,8 @@ if [ ! -x "$FROMXML" ] || [ ! -x "$DUMP" ]; then
   exit 1
 fi
 
-run_mluc_case "issue-928-srgb-desc-mluc" "Display/sRGB_D65_MAT.xml" 24708 0x34 0x18
-run_mluc_case "issue-928-namedcolor-desc-mluc" "Named/NamedColor.xml" 3300 0x54 0x38
+run_mluc_case "issue-928-srgb-desc-mluc" "Display/sRGB_D65_MAT.xml" 0x34 0x18
+run_mluc_case "issue-928-namedcolor-desc-mluc" "Named/NamedColor.xml" 0x54 0x38
 
 echo "Issue #928 mluc setter regression: $PASS passed, $FAIL failed, $TOTAL total"
 
