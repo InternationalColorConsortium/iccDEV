@@ -157,6 +157,8 @@ public:
 
   bool Attach(FILE *f);
   void Detach();
+  bool Flush();
+  bool CloseFile();
 
   virtual void Close();
 

@@ -563,12 +563,34 @@ void CIccFileIO::Detach()
 }
 
 
-void CIccFileIO::Close()
+bool CIccFileIO::Flush()
 {
+  if (!m_fFile)
+    return true;
+
+  if (fflush(m_fFile))
+    return false;
+
+  return ferror(m_fFile) == 0;
+}
+
+
+bool CIccFileIO::CloseFile()
+{
+  bool rv = true;
+
   if (m_fFile) {
-    fclose(m_fFile);
+    rv = fclose(m_fFile) == 0;
     m_fFile = NULL;
   }
+
+  return rv;
+}
+
+
+void CIccFileIO::Close()
+{
+  CloseFile();
 }
 
 

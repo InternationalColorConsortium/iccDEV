@@ -261,12 +261,20 @@ public:
 
   virtual bool finish()
   {
-    if (m_f)
-      fclose(m_f);
+    bool rv = true;
+
+    if (m_f) {
+      if (fflush(m_f))
+        rv = false;
+      if (ferror(m_f))
+        rv = false;
+      if (fclose(m_f))
+        rv = false;
+    }
 
     m_f = nullptr;
 
-    return true;
+    return rv;
   }
 
 protected:
@@ -898,8 +906,8 @@ int main(int argc, icChar* argv[])
   }
   else {
     printf("\nUnable to write LUT to '%s'\n", argv[1]);
+    return -1;
   }
 
   return 0;
 }
-

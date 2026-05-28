@@ -22,6 +22,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `tainted-format-string` | CWE-134 | Variable used as a `printf` format string |
 | `factory-bare-new` | CWE-252, CWE-755 | Factory allocation without `std::nothrow` |
 | `fixedpoint-type-confusion` | CWE-681, CWE-197 | Fixed-point conversion function called with wrong type |
+| `ignored-save-profile-result` | CWE-252 | `SaveIccProfile()` result ignored before reporting output success |
 | `json-raw-normalized-value` | CWE-682 | JSON serialization of raw normalized ICC value |
 | `json-recursive-parse` | CWE-674, CWE-400 | Recursive JSON structure without depth limit |
 | `json-size-overflow` | CWE-680, CWE-190 | JSON array size cast to narrow integer without bounds check |

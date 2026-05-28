@@ -4004,6 +4004,16 @@ bool SaveIccProfile(const icChar *szFilename, CIccProfile *pIcc, icProfileIDSave
   }
 
   if (!pIcc->Write(&FileIO, nWriteId)) {
+    FileIO.Close();
+    return false;
+  }
+
+  if (!FileIO.Flush()) {
+    FileIO.Close();
+    return false;
+  }
+
+  if (!FileIO.CloseFile()) {
     return false;
   }
 
@@ -4038,6 +4048,10 @@ bool SaveIccProfile(FILE *f, CIccProfile *pIcc, icProfileIDSaveMethod nWriteId)
     return false;
   }
 
+  if (!FileIO.Flush()) {
+    return false;
+  }
+
   FileIO.Detach();
 
   return true;
@@ -4069,6 +4083,16 @@ bool SaveIccProfile(const icWChar *szFilename, CIccProfile *pIcc, icProfileIDSav
   }
 
   if (!pIcc->Write(&FileIO, nWriteId)) {
+    FileIO.Close();
+    return false;
+  }
+
+  if (!FileIO.Flush()) {
+    FileIO.Close();
+    return false;
+  }
+
+  if (!FileIO.CloseFile()) {
     return false;
   }
 

@@ -133,7 +133,8 @@ static bool WriteEmbeddedIccProfile(const char* szFname, const unsigned char *pP
     return false;
 
   bool failed = (fwrite(pProfMem, 1, nLen, fp) != nLen);
-  (void)fclose(fp);
+  if (fclose(fp))
+    failed = true;
 
   return !failed;
 }
@@ -278,6 +279,9 @@ int main(int argc, icChar* argv[])
         }
         else {
           printf("\nUnable to extract profile\n");
+          delete pProfile;
+          SrcImg.Close();
+          return -1;
         }
       }
       delete pProfile;
@@ -289,6 +293,8 @@ int main(int argc, icChar* argv[])
       }
       else {
         fprintf(stderr, "Failed to write ICC profile to %s\n", dstName.c_str());
+        SrcImg.Close();
+        return -1;
       }
     }
   } else {

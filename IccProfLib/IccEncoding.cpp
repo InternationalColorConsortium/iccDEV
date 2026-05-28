@@ -516,7 +516,8 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
   }
 
 #if 1 && defined(_DEBUG)
-  SaveIccProfile("WEncConv.icc", pIcc);
+  bool savedDebugProfile = SaveIccProfile("WEncConv.icc", pIcc);
+  (void)savedDebugProfile;
 #endif
 
   newIcc = pIcc;

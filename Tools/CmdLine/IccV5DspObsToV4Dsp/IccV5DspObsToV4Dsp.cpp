@@ -246,9 +246,13 @@ int main(int argc, char* argv[])
   (*primaryXYZ)[0] = icDtoF(out[0]); (*primaryXYZ)[1] = icDtoF(out[1]); (*primaryXYZ)[2] = icDtoF(out[2]);
   pIcc->AttachTag(icSigBlueColorantTag, primaryXYZ); // pointer ownership is passed to the profile
 
-  SaveIccProfile(argv[3], pIcc);
+  if (!SaveIccProfile(argv[3], pIcc)) {
+    printf("Unable to create %s\n", argv[3]);
+    delete pIcc;
+    return -1;
+  }
   printf("%s successfully created\n", argv[3]);
+  delete pIcc;
 
   return 0;
  }
-
