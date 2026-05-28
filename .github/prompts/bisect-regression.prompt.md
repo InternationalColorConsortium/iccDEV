@@ -18,11 +18,14 @@ ASAN findings, or UBSAN findings that were not present before.
 
 ```bash
 cd Build
-rm -f CMakeCache.txt
-CC=clang CXX=clang++ \
-  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
-  LDFLAGS="-fsanitize=address,undefined,integer" \
-  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
+rm -rf CMakeCache.txt CMakeFiles/
+CC=clang CXX=clang++ cmake Cmake \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DENABLE_TOOLS=ON \
+  -DENABLE_ASAN=ON \
+  -DENABLE_UBSAN=ON \
+  -DENABLE_INTEGER_SANITIZER=ON \
+  -DENABLE_FLOAT_SANITIZER=ON
 make -j"$(nproc)"
 
 # CRITICAL: Verify ASAN is linked (must be > 0)
@@ -38,8 +41,9 @@ cd ../Testing/<test_dir>
 
 ### cmake cache gotcha
 
-cmake retains `ENABLE_SANITIZERS=OFF` from prior builds silently.
-Always delete `CMakeCache.txt` and verify `nm | grep __asan > 0`.
+cmake retains compiler and instrumentation settings from prior builds silently.
+Always delete `CMakeCache.txt` plus `CMakeFiles/`, use `CC=clang` not
+`C=clang`, and verify `nm | grep __asan > 0`.
 Also: `Build/Cmake/` is git-tracked; `rm -rf Build/` requires
 `git checkout -- Build/` to restore cmake sources.
 

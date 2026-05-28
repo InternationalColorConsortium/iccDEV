@@ -21,10 +21,13 @@ gh api "repos/InternationalColorConsortium/iccDEV/security-advisories/GHSA-xxxx-
 
 ```bash
 cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ \
-  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
-  LDFLAGS="-fsanitize=address,undefined,integer" \
-  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
+CC=clang CXX=clang++ cmake Cmake \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DENABLE_TOOLS=ON \
+  -DENABLE_ASAN=ON \
+  -DENABLE_UBSAN=ON \
+  -DENABLE_INTEGER_SANITIZER=ON \
+  -DENABLE_FLOAT_SANITIZER=ON
 make -j"$(nproc)"
 
 # CRITICAL: Verify ASAN is linked (must be > 0)
@@ -33,7 +36,9 @@ nm Tools/IccDumpProfile/iccDumpProfile | grep -c __asan
 
 **Note**: `-fsanitize=integer` detects unsigned integer overflow (wrapping),
 which is well-defined per C/C++ standard and NOT caught by `undefined` alone.
-Issue #769 required this flag. MSVC does not support it.
+Issue #769 required this flag. MSVC does not support it. Do not add coverage
+flags or `-DENABLE_COVERAGE=ON` when reproducing sanitizer findings; coverage
+instrumentation can mask a bug.
 
 ## Step 3: Reproduce
 

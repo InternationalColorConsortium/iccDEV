@@ -31,10 +31,13 @@ produce silent NaN corruption (DeltaE=0) instead of UBSAN output.
 Build with float sanitizer:
 ```bash
 cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ \
-  CXXFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero -fno-omit-frame-pointer -g -O1" \
-  LDFLAGS="-fsanitize=address,undefined,integer,float-divide-by-zero" \
-  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
+CC=clang CXX=clang++ cmake Cmake \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DENABLE_TOOLS=ON \
+  -DENABLE_ASAN=ON \
+  -DENABLE_UBSAN=ON \
+  -DENABLE_INTEGER_SANITIZER=ON \
+  -DENABLE_FLOAT_SANITIZER=ON
 make -j"$(nproc)"
 ```
 

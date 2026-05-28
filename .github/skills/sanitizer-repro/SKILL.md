@@ -36,13 +36,14 @@ manual findings involving iccDEV command-line tools.
 
 ```bash
 cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" LDFLAGS="-fsanitize=address,undefined,integer" cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
+CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON
 make -j"$(nproc)"
 nm Tools/IccDumpProfile/iccDumpProfile | grep -c __asan
 ```
 
-Add `float-divide-by-zero,float-cast-overflow` when investigating floating-point
-semantic bugs; those are not covered by `undefined`.
+Use `CC=clang`, not `C=clang`; after any failed compiler configure, delete both
+`CMakeCache.txt` and `CMakeFiles/` before retrying. Do not enable coverage for a
+sanitizer reproduction because coverage instrumentation can mask findings.
 
 ## References
 

@@ -32,20 +32,66 @@ User-facing build details live in `docs/build.md`.
 
 | Option | Default | Purpose |
 |--------|---------|---------|
-| `ENABLE_SANITIZERS` | OFF | ASan + UBSan + IntegerSan combined |
+| `ENABLE_SANITIZERS` | OFF | ASan + UBSan + IntegerSan + float sanitizer combined |
 | `ENABLE_ASAN` | OFF | AddressSanitizer only |
 | `ENABLE_UBSAN` | OFF | UndefinedBehaviorSanitizer only |
 | `ENABLE_INTEGER_SANITIZER` | OFF | IntegerSanitizer for unsigned overflow |
+| `ENABLE_FLOAT_SANITIZER` | OFF | `float-divide-by-zero,float-cast-overflow` |
 | `ENABLE_TSAN` | OFF | ThreadSanitizer |
 | `ENABLE_MSAN` | OFF | MemorySanitizer (Clang only) |
 | `ENABLE_LSAN` | OFF | LeakSanitizer standalone |
+| `ENABLE_COVERAGE` | OFF | Clang source coverage or GCC gcov |
+| `ENABLE_PROFILING` | OFF | gprof/perf `-pg` profiling |
 
 `-fsanitize=undefined` does not catch unsigned overflow or float division by
 zero. For numeric bug hunting, use IntegerSanitizer plus
 `float-divide-by-zero,float-cast-overflow`.
 
-Before changing sanitizer flags in an existing tree, delete
-`Build/CMakeCache.txt` and `Build/CMakeFiles/`.
+Before changing compiler, sanitizer, coverage, or profiling flags in an existing
+tree, delete `Build/CMakeCache.txt` and `Build/CMakeFiles/`. Use `CC=clang`
+and `CXX=clang++` for environment compiler selection; `C=clang` is ignored by
+CMake and can leave a stale `/usr/bin/cc` cache entry after a failed configure.
+
+## Canonical Linux Instrumentation Configure Lines
+
+Run these from the repository root. They intentionally use CMake options instead
+of hand-written sanitizer flags so compile and link flags stay synchronized.
+
+```bash
+# ASan only
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_ASAN=ON
+
+# UBSan + IntSan + float checks, no ASan
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON
+
+# Security repro default: ASan + UBSan + IntSan + float checks, no coverage
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON
+
+# Equivalent combined security build
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_SANITIZERS=ON
+
+# ThreadSanitizer only; do not combine with ASan, LSan, fuzzing, or ENABLE_SANITIZERS
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_TSAN=ON
+
+# MemorySanitizer only; Clang-only and incompatible with other sanitizers here
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_MSAN=ON
+
+# Source coverage; keep separate from sanitizer reproduction attempts
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_COVERAGE=ON
+
+# gprof/perf profiling; keep separate from sanitizer reproduction attempts
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_PROFILING=ON
+```
+
+Build after configure with:
+
+```bash
+make -j"$(nproc)"
+```
+
+For sanitizer bug reproduction, do not add `-DENABLE_COVERAGE=ON` or
+`-fprofile-instr-generate -fcoverage-mapping`; coverage instrumentation can
+change optimizer and sanitizer behavior enough to mask a finding.
 
 TSan conflicts with ASan, LSan, fuzzing, and `ENABLE_SANITIZERS`. MSan conflicts
 with ASan, TSan, LSan, fuzzing, and `ENABLE_SANITIZERS`. CMake should reject

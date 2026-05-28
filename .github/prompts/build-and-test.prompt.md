@@ -14,10 +14,13 @@ make -j"$(nproc)"
 
 ```bash
 cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ \
-  CXXFLAGS="-fsanitize=address,undefined,integer -fno-omit-frame-pointer -g -O1" \
-  LDFLAGS="-fsanitize=address,undefined,integer" \
-  cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON
+CC=clang CXX=clang++ cmake Cmake \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DENABLE_TOOLS=ON \
+  -DENABLE_ASAN=ON \
+  -DENABLE_UBSAN=ON \
+  -DENABLE_INTEGER_SANITIZER=ON \
+  -DENABLE_FLOAT_SANITIZER=ON
 make -j"$(nproc)"
 ```
 
@@ -26,7 +29,8 @@ make -j"$(nproc)"
 The `integer` group adds: `unsigned-integer-overflow`,
 `implicit-unsigned-integer-truncation`, `implicit-signed-integer-truncation`,
 `implicit-integer-sign-change`. Issue #769 is ONLY detectable with this flag.
-MSVC does not support `-fsanitize=integer` -- Clang only.
+MSVC does not support `-fsanitize=integer` -- Clang only. Do not enable coverage
+for sanitizer reproduction because coverage instrumentation can mask findings.
 
 Run with sanitizers:
 ```bash
@@ -79,12 +83,15 @@ Testing/RunTests.sh
 | Option | Purpose |
 |--------|---------|
 | `-DENABLE_TESTS=ON` | Build test targets |
-| `-DENABLE_SANITIZERS=ON` | ASan + UBSan + IntSan |
+| `-DENABLE_SANITIZERS=ON` | ASan + UBSan + IntSan + float checks |
 | `-DENABLE_ASAN=ON` | AddressSanitizer only |
 | `-DENABLE_UBSAN=ON` | UBSan only |
 | `-DENABLE_INTEGER_SANITIZER=ON` | IntegerSanitizer (unsigned overflow, Clang only) |
+| `-DENABLE_FLOAT_SANITIZER=ON` | `float-divide-by-zero,float-cast-overflow` |
 | `-DENABLE_TSAN=ON` | ThreadSanitizer (conflicts with ASan) |
+| `-DENABLE_MSAN=ON` | MemorySanitizer (Clang only, conflicts with other sanitizers) |
 | `-DENABLE_COVERAGE=ON` | LLVM source-based coverage |
+| `-DENABLE_PROFILING=ON` | gprof/perf `-pg` profiling |
 | `-DENABLE_FUZZING=ON` | LibFuzzer harnesses |
 | `-DENABLE_ICCXML=ON` | IccXML library |
 
@@ -113,7 +120,8 @@ See `ports/iccdev/portfile.cmake` for the full build configuration.
 ## Coverage Report
 
 ```bash
-cmake Cmake -DCMAKE_CXX_COMPILER=clang++ -DENABLE_COVERAGE=ON
+cd Build && rm -rf CMakeCache.txt CMakeFiles/
+CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_COVERAGE=ON
 make -j"$(nproc)"
 LLVM_PROFILE_FILE=iccdev_%m.profraw Testing/RunTests.sh
 llvm-profdata merge -sparse *.profraw -o merged.profdata

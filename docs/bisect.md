@@ -15,6 +15,13 @@ generation, validation, conversion, or tool behavior.
 Build instructions are in [build.md](build.md). Maintainer sanitizer details are
 in `.github/instructions/build-system.instructions.md`.
 
+For sanitizer bisects, configure without coverage instrumentation:
+
+```bash
+cd Build && rm -rf CMakeCache.txt CMakeFiles && CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON -DENABLE_FLOAT_SANITIZER=ON
+make -j"$(nproc)"
+```
+
 ## Reproduce
 
 Run the smallest command that demonstrates the failure. For profile-suite

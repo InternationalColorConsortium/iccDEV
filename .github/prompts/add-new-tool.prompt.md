@@ -101,7 +101,8 @@ LD_LIBRARY_PATH=IccProfLib:IccXML \
   Tools/IccNewTool/iccNewTool ../Testing/Display/sRGB_D65_MAT.icc
 
 # Test with sanitizers
-cmake Cmake -DCMAKE_CXX_COMPILER=clang++ -DENABLE_SANITIZERS=ON
+rm -rf CMakeCache.txt CMakeFiles/
+CC=clang CXX=clang++ cmake Cmake -DCMAKE_BUILD_TYPE=Debug -DENABLE_TOOLS=ON -DENABLE_SANITIZERS=ON
 make -j"$(nproc)"
 ASAN_OPTIONS=halt_on_error=0,detect_leaks=0 \
 LD_LIBRARY_PATH=IccProfLib:IccXML \
