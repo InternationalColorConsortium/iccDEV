@@ -3181,7 +3181,12 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
 
 void CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
+  if (!pPcc)
+    return;
+
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
+  if (!pView)
+    return; // need a way to report errors
 
   CIccPcsXform tmp;
 
