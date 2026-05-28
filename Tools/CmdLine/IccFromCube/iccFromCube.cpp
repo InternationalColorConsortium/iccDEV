@@ -109,6 +109,10 @@ public:
     bool bAddBlankLine = false;
     while (!isEOF()) {
       long pos = ftell(m_f);
+      if (pos < 0) {
+        printf("header parsing error\n");
+        return false;
+      }
       std::string line = getNextLine();
 
       if (line.empty()) {
@@ -118,7 +122,11 @@ public:
       }
       else if (line[0] == '-' || line[0] == '.' || (line[0] >= '0' && line[0] <= '9')) {
         //undo getNextLine so it can be 3D table can be parsed
-        fseek(m_f, pos, SEEK_SET);
+        int result = fseek(m_f, pos, SEEK_SET);
+        if (result < 0) {
+          printf("header parsing error\n");
+          return false;
+        }
         break;
       }
       else if (line.substr(0, 6) == "TITLE ") {
@@ -264,7 +272,9 @@ protected:
       m_f = fopen(m_sFilename.c_str(), "rb");
     }
     else {
-      fseek(m_f, 0, SEEK_SET);
+      int result = fseek(m_f, 0, SEEK_SET);
+      if (result < 0)
+        return false;
     }
     return m_f != nullptr;
   }

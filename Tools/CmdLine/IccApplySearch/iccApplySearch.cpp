@@ -380,8 +380,11 @@ int main(int argc, const char* argv[])
 
 
         std::string jsonText = cfgJson.dump(1);
-        fwrite(jsonText.c_str(), 1, jsonText.size(), f);
-        fclose(f);
+        size_t n = fwrite(jsonText.c_str(), 1, jsonText.size(), f);
+        if (n != jsonText.size()) {
+          printf("Error writing json config file '%s'\n", exportFile.c_str());
+        }
+        (void)fclose(f);
       }
       else {
         printf("Unable to export config file '%s'\n", exportFile.c_str());

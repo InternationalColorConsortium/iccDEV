@@ -314,6 +314,11 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   writeFailed |= putIFDLong( TIFF_ROWSPERSTRIP, TIFF_LONG, 1, uint32_t(rowsPerStrip), outfile );
 
   long byteCountOffset = ftell( outfile );
+  if (byteCountOffset < 0) {
+    fprintf(stderr, "ERROR: TIFF ftell failed\n");
+    (void)fclose(outfile);
+    return false;
+  }
   if (stripCount > 1)
     writeFailed |= putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, uint32_t(stripCount), stripByteCount_offset, outfile );
   else

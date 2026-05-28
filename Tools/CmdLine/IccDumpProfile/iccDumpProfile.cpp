@@ -159,7 +159,7 @@ void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
       contents = validateReport;
     else
       pTag->Describe(contents, nVerboseness);
-    fwrite(contents.c_str(), contents.length(), 1, stdout);
+    (void)fwrite(contents.c_str(), contents.length(), 1, stdout);
   }
   else {
     printf("Tag (%s) not found in profile\n", icGetSig(buf, bufSize, sig));
@@ -734,7 +734,7 @@ int main(int argc, char* argv[])
   printf("\n\n");
 
   sReport += "\n";
-  fwrite(sReport.c_str(), sReport.length(), 1, stdout);
+  (void)fwrite(sReport.c_str(), sReport.length(), 1, stdout);
 
   delete pIcc;
 
