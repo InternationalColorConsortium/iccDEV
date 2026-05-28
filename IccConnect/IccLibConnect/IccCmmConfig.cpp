@@ -643,6 +643,7 @@ void CIccCfgProfile::reset()
   m_useHToS = false;
   m_useV5SubProfile = false;
   m_interpolation = icInterpTetrahedral;
+  m_nOverprint = icNamedColorOverWhite;
 }
 
 static const char* icIntentNames[] = { "perceptual", "relative", "saturation", "absolute" };
@@ -679,16 +680,40 @@ static const char* icGetRenderingIntentName(int nIntent)
   return "unknown";
 }
 
-static const char* icTranNames[] = { "default", "named", "colorimetric", "spectral",
+// Transform names exposed by JSON and the (transform, overprint) pair they
+// resolve to.  The "namedOnBlack" / "namedOnGray" variants pick alternate
+// spectral array members on a v5 NamedColor profile; the overprint value is
+// ignored for non-named transforms.  Keep all three arrays in lock-step.
+static const char* icTranNames[] = { "default",
+                                     "named", "namedOnBlack", "namedOnGray",
+                                     "colorimetric", "spectral",
                                      "MCS", "preview", "gamut", "brdfParam",
                                      "brdfDirect", "brdfMcsParam" , nullptr };
 
-static icXformLutType icTranValues[] = { icXformLutColor, icXformLutNamedColor, icXformLutColorimetric, icXformLutSpectral,
+static icXformLutType icTranValues[] = { icXformLutColor,
+                                         icXformLutNamedColor, icXformLutNamedColor, icXformLutNamedColor,
+                                         icXformLutColorimetric, icXformLutSpectral,
                                          icXformLutMCS, icXformLutPreview, icXformLutGamut, icXformLutBRDFParam,
                                          icXformLutBRDFDirect, icXformLutBRDFMcsParam, icXformLutColor };
 
-static const char* icGetTransformName(int nTransform)
+static icNamedColorOverprintType icTranOverprint[] = { icNamedColorOverWhite,
+                                                       icNamedColorOverWhite, icNamedColorOverBlack, icNamedColorOverGray,
+                                                       icNamedColorOverWhite, icNamedColorOverWhite,
+                                                       icNamedColorOverWhite, icNamedColorOverWhite, icNamedColorOverWhite, icNamedColorOverWhite,
+                                                       icNamedColorOverWhite, icNamedColorOverWhite, icNamedColorOverWhite };
+
+static const char* icGetTransformName(int nTransform,
+                                      icNamedColorOverprintType nOverprint = icNamedColorOverWhite)
 {
+  // Two-key lookup: for non-named transforms nOverprint is OverWhite by
+  // construction so the row matches the same way it did before this field
+  // existed.
+  for (int i = 0; icTranNames[i]; i++) {
+    if (nTransform == icTranValues[i] && nOverprint == icTranOverprint[i])
+      return icTranNames[i];
+  }
+  // Fallback: match transform alone (for safety if a caller passes an
+  // unexpected overprint value with a non-named transform).
   for (int i = 0; icTranNames[i]; i++) {
     if (nTransform == icTranValues[i])
       return icTranNames[i];
@@ -750,6 +775,10 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
         break;
     }
     parsed.m_transform = (icXformLutType)icTranValues[i];
+    // Pull the overprint variant from the same row.  For non-named names
+    // this is always icNamedColorOverWhite, so behaviour is unchanged
+    // for existing configs.
+    parsed.m_nOverprint = icTranOverprint[i];
   }
 
   if (j.contains("iccEnvVars") && !jsonToValue(j["iccEnvVars"], parsed.m_iccEnvVars))
@@ -799,7 +828,10 @@ void CIccCfgProfile::toJson(json& j) const
     j["iccFile"] = nullptr;
 
   j["intent"] = icGetRenderingIntentName(m_intent);
-  j["transform"] = icGetTransformName(m_transform);
+  // Pass the overprint so "namedOnBlack"/"namedOnGray" round-trip; for
+  // non-named transforms the overprint is OverWhite and the writer picks
+  // the same row it would have without this argument.
+  j["transform"] = icGetTransformName(m_transform, m_nOverprint);
   json iccMap;
   if (jsonFromEnvMap(iccMap, m_iccEnvVars))
     j["iccEnvVars"] = iccMap;
@@ -878,6 +910,22 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       int nIntent = atoi(args[1]);
 
       pProf->m_useD2BxB2Dx = true;
+      // Overprint variant for NamedColor xforms is encoded as the millions
+      // digit of the intent code:
+      //   +1000000 -> icNamedColorOverBlack (spcb)
+      //   +2000000 -> icNamedColorOverGray  (spcg)
+      // Anything else leaves the default icNamedColorOverWhite (spec).
+      // Strip the field before the existing decimal-coded flags are read.
+      {
+        int overprintCode = nIntent / 1000000;
+        if (overprintCode == 1)
+          pProf->m_nOverprint = icNamedColorOverBlack;
+        else if (overprintCode == 2)
+          pProf->m_nOverprint = icNamedColorOverGray;
+        else
+          pProf->m_nOverprint = icNamedColorOverWhite;
+        nIntent = nIntent % 1000000;
+      }
       pProf->m_useHToS = (nIntent / 100000) != 0;
       pProf->m_useV5SubProfile = (nIntent / 10000) != 0;
       nIntent = nIntent % 10000;
@@ -1078,6 +1126,22 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       int nIntent = atoi(args[1]);
 
       pProf->m_useD2BxB2Dx = true;
+      // Overprint variant for NamedColor xforms is encoded as the millions
+      // digit of the intent code:
+      //   +1000000 -> icNamedColorOverBlack (spcb)
+      //   +2000000 -> icNamedColorOverGray  (spcg)
+      // Anything else leaves the default icNamedColorOverWhite (spec).
+      // Strip the field before the existing decimal-coded flags are read.
+      {
+        int overprintCode = nIntent / 1000000;
+        if (overprintCode == 1)
+          pProf->m_nOverprint = icNamedColorOverBlack;
+        else if (overprintCode == 2)
+          pProf->m_nOverprint = icNamedColorOverGray;
+        else
+          pProf->m_nOverprint = icNamedColorOverWhite;
+        nIntent = nIntent % 1000000;
+      }
       pProf->m_useHToS = (nIntent / 100000) != 0;
       pProf->m_useV5SubProfile = (nIntent / 10000) != 0;
       nIntent = nIntent % 10000;

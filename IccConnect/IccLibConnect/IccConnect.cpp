@@ -204,6 +204,35 @@ icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
     }
   }
 
+  // Attach a CIccCreateNamedColorXformHint carrying m_nOverprint whenever
+  // the caller asked for anything other than the OverWhite default.  This
+  // covers both:
+  //  - JSON "namedOnBlack"/"namedOnGray" (which also sets m_transform =
+  //    icXformLutNamedColor)
+  //  - the legacy CLI +1000000/+2000000 high-bit (which leaves m_transform
+  //    at icXformLutColor and relies on the CMM's deviceClass-based
+  //    auto-dispatch to the named-color branch in CIccNamedColorCmm
+  //    or CIccCmm).
+  // The CMM's named-color branch fills in the header-derived color-space
+  // fields after the profile is opened (via the Layer 2 changes that honor
+  // a pre-attached hint).  When the profile turns out not to be a
+  // NamedColor xform, the hint is simply unused.
+  if (pCfg->m_nOverprint != icNamedColorOverWhite ||
+      pCfg->m_transform == icXformLutNamedColor) {
+    CIccCreateNamedColorXformHint* pNCHint =
+        new (std::nothrow) CIccCreateNamedColorXformHint();
+    if (!pNCHint) {
+      sErrorMsg = "failed to allocate NamedColor hint for '" + pCfg->m_iccFile + "'";
+      return icCmmStatAllocErr;
+    }
+    pNCHint->nOverprintType = pCfg->m_nOverprint;
+    icStatusCMM stat = AddHintNoThrow(Hint, pNCHint);
+    if (stat != icCmmStatOk) {
+      sErrorMsg = "failed to attach NamedColor hint for '" + pCfg->m_iccFile + "'";
+      return stat;
+    }
+  }
+
   icStatusCMM stat = pCmm->AddXform(
     pCfg->m_iccFile.c_str(),
     pCfg->m_intent < 0 ? icUnknownIntent : (icRenderingIntent)pCfg->m_intent,

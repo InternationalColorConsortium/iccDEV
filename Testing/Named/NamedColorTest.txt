@@ -20,3 +20,5 @@ icEncodeValue	; Encoding
 { "Blue" } .25
 { "Blue" } .75
 { "Blue" } 1
+
+{ "Silver" } 1

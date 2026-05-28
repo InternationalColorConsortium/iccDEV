@@ -63,4 +63,23 @@ These values are used by `iccApplyNamedCmm` and `iccApplySearch`.
 | `2` | Saturation |
 | `3` | ICC-absolute colorimetric |
 
+Variant flags add to the base intent value as decimal-coded high digits.
+Each tool's `Readme.md` documents which flags it surfaces; the full set
+parsed by the shared `CIccCfgProfile::fromArgs` is:
+
+| Add | Effect |
+|----:|--------|
+| `+10`–`+13` | Base intent without D2Bx/B2Dx tags |
+| `+1000` | Use luminance-based PCS adjustment |
+| `+10000` | Use V5 sub-profile if present |
+| `+100000` | Use HToS tag if present |
+| `+1000000` | NamedColor over-black (`icSigNmclSpectralOverBlackMbr`, `'spcb'`) |
+| `+2000000` | NamedColor over-gray (`icSigNmclSpectralOverGrayMbr`, `'spcg'`) |
+
+The over-black / over-gray flags only affect chains that include a v5
+NamedColor profile. JSON callers prefer the `transform` field values
+`"named"`, `"namedOnBlack"`, `"namedOnGray"` — see
+[`docs/icc-connect-config.schema.json`](icc-connect-config.schema.json)
+and [`Tools/CmdLine/IccApplyNamedCmm/Readme.md`](../Tools/CmdLine/IccApplyNamedCmm/Readme.md).
+
 Tool-specific details remain in each `Tools/CmdLine/*/Readme.md` file.

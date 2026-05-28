@@ -121,9 +121,36 @@ requests them:
 | `adjustPcsLuminance` | `CIccLuminanceMatchingHint` |
 | `iccEnvVars` (non-empty) | `CIccCmmEnvVarHint` |
 | `pccEnvVars` (non-empty) | `CIccCmmPccEnvVarHint` |
+| `transform` ∈ {`namedOnBlack`, `namedOnGray`} *or* `transform = named` | `CIccCreateNamedColorXformHint` with `nOverprintType` set from the JSON `transform` name (or from the legacy CLI's `+1000000`/`+2000000` high-bit) |
 
 `pccFile` is opened once per profile entry, passed through as the PCC for
 that xform, and deleted after `Begin()` returns.
+
+### NamedColor Overprint Selection
+
+For v5 NamedColor profiles that carry the optional over-black /
+over-gray array members (`icSigNmclSpectralOverBlackMbr` 'spcb',
+`icSigNmclSpectralOverGrayMbr` 'spcg'), the JSON `transform` field
+selects which spectral array member is read by
+`CIccArrayNamedColor::GetSpectralTint`:
+
+| `transform` value | Array member read | Maps to `icNamedColorOverprintType` |
+|-------------------|-------------------|-------------------------------------|
+| `"named"` (default) | `icSigNmclSpectralDataMbr` ('spec', over-white) | `icNamedColorOverWhite` |
+| `"namedOnBlack"` | `icSigNmclSpectralOverBlackMbr` ('spcb') | `icNamedColorOverBlack` |
+| `"namedOnGray"` | `icSigNmclSpectralOverGrayMbr` ('spcg') | `icNamedColorOverGray` |
+
+The legacy argv form (`CIccCfgProfileSequence::fromArgs`) carries the
+same selection in the millions digit of the intent code:
+`intent + 1000000` → over-black; `intent + 2000000` → over-gray;
+anything else stays at over-white.
+
+If the profile lacks the requested member for any named color encountered
+during apply, `CIccArrayNamedColor::GetSpectralTint` returns false and
+the apply fails with `icCmmStatBadTintXform` rather than silently falling
+back to the over-white member. This makes misconfigurations visible.
+See [the iccApplyNamedCmm Readme](../Tools/CmdLine/IccApplyNamedCmm/Readme.md#named-color-overprint-variants)
+for end-to-end usage examples.
 
 ## JSON Configuration
 

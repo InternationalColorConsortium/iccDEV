@@ -137,6 +137,10 @@ public:
 	std::string m_iccFile;
 	int m_intent;
 	icXformLutType m_transform;
+	// Selected by the "namedOnBlack" / "namedOnGray" transform names in
+	// JSON or by the +1000000 / +2000000 high-bit on the legacy CLI intent
+	// code.  Only consulted for icXformLutNamedColor xforms.
+	icNamedColorOverprintType m_nOverprint;
 	icCmmEnvSigMap m_iccEnvVars;
 	std::string m_pccFile;
 	icCmmEnvSigMap m_pccEnvVars;

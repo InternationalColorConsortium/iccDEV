@@ -98,9 +98,10 @@ CIccXform* CIccBaseXformFactory::CreateXform(icXformType xformSig, CIccTag *pTag
 			 if (pHint) {
 				 CIccCreateNamedColorXformHint *pNCHint = (CIccCreateNamedColorXformHint*)pHint;
 				 return new(std::nothrow) CIccXformNamedColor(pTag, pNCHint->csPcs, pNCHint->csDevice,
-                                        pNCHint->csSpectralPcs, 
+                                        pNCHint->csSpectralPcs,
                                         &pNCHint->spectralRange,
-                                        &pNCHint->biSpectralRange);
+                                        &pNCHint->biSpectralRange,
+                                        pNCHint->nOverprintType);
 			 }
      }
 		 return NULL;

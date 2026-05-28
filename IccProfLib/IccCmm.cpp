@@ -822,15 +822,31 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         if (!pTag)
           return NULL;
 
-        CIccCreateNamedColorXformHint* pNamedColorHint = new CIccCreateNamedColorXformHint();
+        // If the caller pre-attached a NamedColor hint (e.g. to set
+        // nOverprintType), honor it and only fill in the header-derived
+        // color-space fields it would not know.  Otherwise allocate a
+        // fresh hint with header-derived defaults and the standard
+        // icNamedColorOverWhite overprint.
+        CIccCreateNamedColorXformHint* pCallerHint =
+            pHintManager ? (CIccCreateNamedColorXformHint*)
+              pHintManager->GetHint("CIccCreateNamedColorXformHint")
+                         : nullptr;
+
+        CIccCreateNamedColorXformHint* pNamedColorHint = pCallerHint;
+        if (!pNamedColorHint) {
+          pNamedColorHint = new (std::nothrow) CIccCreateNamedColorXformHint();
+          if (!pNamedColorHint)
+            return NULL;
+        }
         pNamedColorHint->csPcs = pProfile->m_Header.pcs;
         pNamedColorHint->csDevice = pProfile->m_Header.colorSpace;
         pNamedColorHint->csSpectralPcs = pProfile->m_Header.spectralPCS;
         pNamedColorHint->spectralRange = pProfile->m_Header.spectralRange;
         pNamedColorHint->biSpectralRange = pProfile->m_Header.biSpectralRange;
-        
+
         if (pHintManager) {
-          pHintManager->AddHint(pNamedColorHint);
+          if (!pCallerHint)
+            pHintManager->AddHint(pNamedColorHint);
           rv = CIccXformCreator::CreateXform(icXformTypeNamedColor, pTag, pHintManager);
         }
         else {
@@ -6855,14 +6871,16 @@ LPIccCurve* CIccXformNDLut::ExtractOutputCurves()
  *  csDevice = Device color space 
  **************************************************************************
  */
-CIccXformNamedColor::CIccXformNamedColor(CIccTag *pTag, icColorSpaceSignature csPcs, icColorSpaceSignature csDevice, 
+CIccXformNamedColor::CIccXformNamedColor(CIccTag *pTag, icColorSpaceSignature csPcs, icColorSpaceSignature csDevice,
                                          icColorSpaceSignature csSpectralPcs/* =icSigNoSpectralData */,
                                          const icSpectralRange *pSpectralRange /* = NULL */,
-                                         const icSpectralRange *pBiSpectralRange /* = NULL */)
+                                         const icSpectralRange *pBiSpectralRange /* = NULL */,
+                                         icNamedColorOverprintType nOverprintType /* = icNamedColorOverWhite */)
 {
   m_nApplyInterface = icApplyPixel2Pixel; // was uninitialized
   m_pTag = NULL;
   m_pArray = NULL;
+  m_nOverprintType = nOverprintType;
   if (pTag) {
     if (pTag->GetType()==icSigNamedColor2Type) {
       m_pTag = (CIccTagNamedColor2*)pTag;
@@ -7083,7 +7101,18 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icFloatNum
 
     if (IsDestPCS()) {
       if (IsSpaceSpectralPCS(m_nDestSpace)) {
-        if (!pArray->GetSpectralTint(DstPixel, pColor, tint))
+        // Map the configured overprint to the corresponding NamedColor
+        // array member.  Order matches icNamedColorOverprintType (0,1,2).
+        static const icNamedColorlMemberSignature kOverprintSig[] = {
+          icSigNmclSpectralDataMbr,        // OverWhite -> 'spec'
+          icSigNmclSpectralOverBlackMbr,   // OverBlack -> 'spcb'
+          icSigNmclSpectralOverGrayMbr,    // OverGray  -> 'spcg'
+        };
+        const int idx = (int)m_nOverprintType;
+        const icNamedColorlMemberSignature sig =
+            (idx >= 0 && idx < (int)(sizeof(kOverprintSig)/sizeof(kOverprintSig[0])))
+              ? kOverprintSig[idx] : icSigNmclSpectralDataMbr;
+        if (!pArray->GetSpectralTint(DstPixel, pColor, tint, sig))
           return icCmmStatBadTintXform;
       }
       else {

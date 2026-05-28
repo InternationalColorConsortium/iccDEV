@@ -1,0 +1,4 @@
+'nmcl'	; Data Format
+icEncodeValue	; Encoding
+
+{ "Silver" } 1

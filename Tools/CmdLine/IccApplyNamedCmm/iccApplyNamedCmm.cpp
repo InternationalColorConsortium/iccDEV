@@ -249,9 +249,11 @@ void Usage()
   printf("     80 - MCS connection\n");
   printf("     90 + Intent - Colorimetric Only\n");
   printf("    100 + Intent - Spectral Only\n");
-  printf("  +1000 - Use Luminance based PCS adjustment\n");
-  printf(" +10000 - Use V5 sub-profile if present\n");
-  printf("+100000 - Use HToS tag if present\n");
+  printf("    +1000 - Use Luminance based PCS adjustment\n");
+  printf("   +10000 - Use V5 sub-profile if present\n");
+  printf("  +100000 - Use HToS tag if present\n");
+  printf(" +1000000 - NamedColor over black (icSigNmclSpectralOverBlackMbr 'spcb')\n");
+  printf(" +2000000 - NamedColor over gray  (icSigNmclSpectralOverGrayMbr 'spcg')\n");
 }
 
 

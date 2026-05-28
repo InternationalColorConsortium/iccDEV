@@ -208,6 +208,21 @@ private:
 	IIccCreateXformHintList* m_pList;
 };
 
+// Selects which spectral-data member of a NamedColor profile's color array
+// is consulted by CIccXformNamedColor::Apply.  Maps directly to the
+// 'spec' / 'spcb' / 'spcg' member signatures defined in icProfileHeader.h:
+//   icNamedColorOverWhite -> icSigNmclSpectralDataMbr        ('spec')
+//   icNamedColorOverBlack -> icSigNmclSpectralOverBlackMbr   ('spcb')
+//   icNamedColorOverGray  -> icSigNmclSpectralOverGrayMbr    ('spcg')
+// Only meaningful for v5 NamedColor profiles that carry the optional
+// over-black / over-gray members; profiles without the requested member
+// will surface as icCmmStatBadTintXform from Apply.
+typedef enum {
+  icNamedColorOverWhite = 0,
+  icNamedColorOverBlack = 1,
+  icNamedColorOverGray  = 2,
+} icNamedColorOverprintType;
+
 /**
 **************************************************************************
 * Type: Class
@@ -223,6 +238,7 @@ public:
     csSpectralPcs = icSigNoSpectralData;
     memset(&spectralRange, 0, sizeof(spectralRange));
     memset(&biSpectralRange, 0, sizeof(biSpectralRange));
+    nOverprintType = icNamedColorOverWhite;
   }
 
 	virtual const char *GetHintType() const {return "CIccCreateNamedColorXformHint";}
@@ -230,6 +246,7 @@ public:
 	icColorSpaceSignature csPcs;
 	icColorSpaceSignature csDevice;
   icColorSpaceSignature csSpectralPcs;
+  icNamedColorOverprintType nOverprintType;
   icSpectralRange spectralRange;
   icSpectralRange biSpectralRange;
 };
@@ -1364,10 +1381,11 @@ class ICCPROFLIB_API CIccArrayNamedColor;
 class ICCPROFLIB_API CIccXformNamedColor : public CIccXform
 {
 public:
-  CIccXformNamedColor(CIccTag *pTag, icColorSpaceSignature csPcs, icColorSpaceSignature csDevice, 
+  CIccXformNamedColor(CIccTag *pTag, icColorSpaceSignature csPcs, icColorSpaceSignature csDevice,
                       icColorSpaceSignature csSpectralPcs=icSigNoSpectralData,
                       const icSpectralRange *pSpectralRange = NULL,
-                      const icSpectralRange *pBiSPectralRange = NULL);
+                      const icSpectralRange *pBiSPectralRange = NULL,
+                      icNamedColorOverprintType nOverprintType = icNamedColorOverWhite);
   virtual ~CIccXformNamedColor();
 
   virtual icXformType GetXformType() const { return icXformTypeNamedColor; }
@@ -1410,6 +1428,12 @@ protected:
   icApplyInterface m_nApplyInterface;
   icColorSpaceSignature m_nSrcSpace;
   icColorSpaceSignature m_nDestSpace;
+  // Selects which spectral-data member of m_pArray's named-color struct
+  // is read by Apply (over-white = 'spec', over-black = 'spcb',
+  // over-gray = 'spcg').  Only meaningful when m_pArray is populated and
+  // the destination space is a spectral PCS; unused for the legacy
+  // m_pTag (NamedColor2Type) path.
+  icNamedColorOverprintType m_nOverprintType;
 };
 
 

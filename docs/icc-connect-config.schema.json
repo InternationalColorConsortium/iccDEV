@@ -28,10 +28,12 @@
 
     "transform": {
       "type": "string",
-      "description": "Xform LUT type to use for a profile",
+      "description": "Xform LUT type to use for a profile. The 'namedOnBlack' and 'namedOnGray' variants are NamedColor xforms that read the alternate spectral array members (icSigNmclSpectralOverBlackMbr 'spcb' / icSigNmclSpectralOverGrayMbr 'spcg') of a v5 NamedColor profile instead of the default 'spec' over-white member. They only differ from 'named' for profiles that carry the corresponding member; otherwise the transform fails to bind and AddXform returns icCmmStatBadTintXform.",
       "enum": [
         "default",
         "named",
+        "namedOnBlack",
+        "namedOnGray",
         "colorimetric",
         "spectral",
         "MCS",
