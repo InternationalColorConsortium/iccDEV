@@ -4824,6 +4824,20 @@ void CIccMpeCalculator::Describe(std::string &sDescription, int nVerboseness)
 typedef std::map<icUInt32Number, CIccCalculatorFunc*> icChannelFuncOffsetMap;
 typedef std::map<CIccCalculatorFunc*, icPositionNumber> icChannelFuncPtrMap;
 
+static bool icGetWritePosition(int64_t base, int64_t start, int64_t end, icPositionNumber &position)
+{
+  const int64_t maxU32 = 0xffffffffLL;
+
+  if (base < 0 || start < base || end < start)
+    return false;
+  if (start - base > maxU32 || end - start > maxU32)
+    return false;
+
+  position.offset = (icUInt32Number)(start - base);
+  position.size = (icUInt32Number)(end - start);
+  return true;
+}
+
 /**
  ******************************************************************************
  * Name: CIccMpeCalculator::Read
@@ -4975,7 +4989,9 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   if (!pIO)
     return false;
 
-  size_t elemStart = pIO->Tell();
+  int64_t elemStart = pIO->Tell();
+  if (elemStart < 0)
+    return false;
 
   if (!pIO->Write32(&sig))
     return false;
@@ -4992,13 +5008,20 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   if (!pIO->Write32(&m_nSubElem))
     return false;
 
+  if (m_nSubElem == 0xffffffffU)
+    return false;
+
   icUInt32Number nPos = m_nSubElem + 1;
 
   icPositionNumber *pos, *posvals = (icPositionNumber*)calloc(nPos, sizeof(icPositionNumber));
   if (!posvals) {
     return false;
   }
-  size_t nPositionStart = pIO->Tell();
+  int64_t nPositionStart = pIO->Tell();
+  if (nPositionStart < elemStart) {
+    free(posvals);
+    return false;
+  }
 
   size_t n, np = nPos * (sizeof(icPositionNumber)/sizeof(icUInt32Number));
   if (pIO->Write32(posvals, np)!=np) {
@@ -5007,13 +5030,24 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   }
 
   if (m_calcFunc) {
-    posvals[0].offset = (icUInt32Number)(pIO->Tell() - elemStart);
+    int64_t start = pIO->Tell();
+    if (start < elemStart) {
+      free(posvals);
+      return false;
+    }
     if (!m_calcFunc->Write(pIO)) {
       free(posvals);
       return false;
     }
-    posvals[0].size = (icUInt32Number)(pIO->Tell() - elemStart - posvals[nPos-1].offset );
-    pIO->Align32();
+    int64_t end = pIO->Tell();
+    if (!icGetWritePosition(elemStart, start, end, posvals[0])) {
+      free(posvals);
+      return false;
+    }
+    if (!pIO->Align32()) {
+      free(posvals);
+      return false;
+    }
   }
 
   pos = &posvals[1];
@@ -5021,20 +5055,38 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   if (m_nSubElem) {
     for(n=0; n<m_nSubElem; n++) {
       if (m_SubElem[n]) {
-        pos->offset = (icUInt32Number)( pIO->Tell()-elemStart );
+        int64_t start = pIO->Tell();
+        if (start < elemStart) {
+          free(posvals);
+          return false;
+        }
         if (!m_SubElem[n]->Write(pIO)) {
           free(posvals);
           return false;
         }
-        pos->size = (icUInt32Number)(pIO->Tell()-elemStart - pos->offset);
-        pIO->Align32();
+        int64_t end = pIO->Tell();
+        if (!icGetWritePosition(elemStart, start, end, *pos)) {
+          free(posvals);
+          return false;
+        }
+        if (!pIO->Align32()) {
+          free(posvals);
+          return false;
+        }
       }
       pos++;
     }
   }
-  size_t endPos = pIO->Tell();
+  int64_t endPos = pIO->Tell();
+  if (endPos < nPositionStart) {
+    free(posvals);
+    return false;
+  }
 
-  pIO->Seek(nPositionStart, icSeekSet);
+  if (pIO->Seek(nPositionStart, icSeekSet)<0) {
+    free(posvals);
+    return false;
+  }
 
   if (pIO->Write32(posvals, np)!=np) {
     free(posvals);
@@ -5042,7 +5094,8 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   }
   free(posvals);
 
-  pIO->Seek(endPos, icSeekSet);
+  if (pIO->Seek(endPos, icSeekSet)<0)
+    return false;
 
   return true;
 }

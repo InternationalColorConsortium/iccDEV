@@ -825,6 +825,21 @@ CIccTagMultiProcessElement::~CIccTagMultiProcessElement()
 
 typedef std::map<CIccMultiProcessElement*, icPositionNumber> CIccLutPtrMap;
 typedef std::map<icUInt32Number, CIccMultiProcessElement*> CIccLutOffsetMap;
+
+static bool icGetWritePosition(int64_t base, int64_t start, int64_t end, icPositionNumber &position)
+{
+  const int64_t maxU32 = 0xffffffffLL;
+
+  if (base < 0 || start < base || end < start)
+    return false;
+  if (start - base > maxU32 || end - start > maxU32)
+    return false;
+
+  position.offset = (icUInt32Number)(start - base);
+  position.size = (icUInt32Number)(end - start);
+  return true;
+}
+
 /**
  ******************************************************************************
  * Name: CIccTagMultiProcessElement::Clean
@@ -994,7 +1009,9 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
 
   Clean();
 
-  size_t tagStart = pIO->Tell();
+  int64_t tagStart = pIO->Tell();
+  if (tagStart < 0)
+    return false;
 
   if (!pIO->Read32(&sig))
     return false;
@@ -1102,7 +1119,9 @@ bool CIccTagMultiProcessElement::Write(CIccIO *pIO)
   if (!pIO)
     return false;
 
-  size_t tagStart = pIO->Tell();
+  int64_t tagStart = pIO->Tell();
+  if (tagStart < 0)
+    return false;
 
   if (!pIO->Write32(&sig))
     return false;
@@ -1127,7 +1146,9 @@ bool CIccTagMultiProcessElement::Write(CIccIO *pIO)
     return false;
 
   if (m_nProcElements) {
-    size_t offsetPos = pIO->Tell();
+    int64_t offsetPos = pIO->Tell();
+    if (offsetPos < tagStart)
+      return false;
 
     free(m_position);
     m_position = (icPositionNumber*)calloc(m_nProcElements, sizeof(icPositionNumber));
@@ -1149,25 +1170,28 @@ bool CIccTagMultiProcessElement::Write(CIccIO *pIO)
     //Write out each process element
     for (j=0, i=m_list->begin(); i!=m_list->end(); i++, j++) {
       if (map.find(i->ptr)==map.end()) {
-        size_t start = pIO->Tell();
+        int64_t start = pIO->Tell();
+        if (start < tagStart)
+          return false;
 
         if (!i->ptr->Write(pIO))
           return false;
 
-        size_t end = pIO->Tell();
+        int64_t end = pIO->Tell();
+        if (!icGetWritePosition(tagStart, start, end, position))
+          return false;
 
         if (!pIO->Align32())
           return false;
-
-        position.offset = (icUInt32Number)(start - tagStart);
-        position.size = (icUInt32Number)(end - start);
 
         map[i->ptr] = position;
       }
       m_position[j] = map[i->ptr];
     }
 
-    size_t endPos = pIO->Tell();
+    int64_t endPos = pIO->Tell();
+    if (endPos < offsetPos)
+      return false;
 
     if (pIO->Seek(offsetPos, icSeekSet)<0)
       return false;

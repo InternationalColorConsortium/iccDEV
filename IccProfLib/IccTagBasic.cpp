@@ -7751,7 +7751,7 @@ bool CIccLocalizedUnicode::SetText(const icChar *szText,
   {
     unsigned long uni;
     size_t todo;
-    unsigned char ch = szText[i++];
+    unsigned char ch = static_cast<unsigned char>(szText[i++]);
     if (ch <= 0x7F)
     {
       uni = ch;
@@ -7791,13 +7791,14 @@ bool CIccLocalizedUnicode::SetText(const icChar *szText,
         break;
       }
       else {
-        unsigned char ch2 = szText[i];
+        unsigned char ch2 = static_cast<unsigned char>(szText[i]);
         if (ch2 < 0x80 || ch2 > 0xBF) {
           //not a UTF-8 string so use question mark
           uni = '?';
           break;
         }
         else {
+          i++;
           uni <<= 6;
           uni += ch2 & 0x3F;
         }

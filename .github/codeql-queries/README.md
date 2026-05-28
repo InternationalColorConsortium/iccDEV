@@ -31,6 +31,8 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `null-after-read` | CWE-476 | Pointer dereferenced after `Read()` / `ParseXml()` without null check |
 | `recursive-parse-no-depth-limit` | CWE-674 | Recursive parse/read/apply call lacks depth guard |
 | `rule-of-three-violation` | CWE-415, CWE-416 | Destructor frees member without copy constructor / assignment operator |
+| `signed-char-byte-conversion` | CWE-704 | UTF-8 byte parser assigns signed `char` data to unsigned bytes without an explicit cast |
+| `tell-subtraction-underflow` | CWE-191, CWE-681 | Writer offset/size field computed from unchecked `Tell()` subtraction and narrowed to `icUInt32Number` |
 | `u8fixed8-reconstruction-error` | CWE-682 | Incorrect u8Fixed8Number reconstruction from normalized float |
 | `unterminated-ucs2-settext` | CWE-125, CWE-170 | Unterminated UCS-2 buffer passed to `SetText()` |
 

@@ -42,7 +42,7 @@ BASE_PROFILE="$OUTDIR/calcExercizeOps.icc"
 POC_PROFILE="$OUTDIR/hbo-CIccCalculatorFunc-CIccCalculatorFunc-IccMpeCalc_cpp-Line3789.icc"
 FROMXML_LOG="$OUTDIR/fromxml.log"
 PAWG_LOG="$OUTDIR/pawg.log"
-EXPECTED_SHA256="5f2c7b3705eb12661c363f59a38c4e12a471c51d5c2265c2cdabca2250b284da"
+EXPECTED_SHA256="dc5d5e6e9d93c806ca4586700d3afd74e9b8bb66d7278c0dfa245d93924e2b9b"
 
 fail() {
   echo "  [FAIL] issue-1168-pawg-calculator-hbo -- $1"

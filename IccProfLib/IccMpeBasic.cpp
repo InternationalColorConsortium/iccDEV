@@ -3296,6 +3296,20 @@ void CIccMpeCurveSet::Describe(std::string &sDescription, int nVerboseness)
 typedef std::map<icUInt32Number, CIccCurveSetCurve*> icCurveOffsetMap;
 typedef std::map<CIccCurveSetCurve*, icPositionNumber> icCurvePtrMap;
 
+static bool icGetWritePosition(int64_t base, int64_t start, int64_t end, icPositionNumber &position)
+{
+  const int64_t maxU32 = 0xffffffffLL;
+
+  if (base < 0 || start < base || end < start)
+    return false;
+  if (start - base > maxU32 || end - start > maxU32)
+    return false;
+
+  position.offset = (icUInt32Number)(start - base);
+  position.size = (icUInt32Number)(end - start);
+  return true;
+}
+
 /**
  ******************************************************************************
  * Name: CIccMpeCurveSet::Read
@@ -3421,7 +3435,9 @@ bool CIccMpeCurveSet::Write(CIccIO *pIO)
   if (!pIO)
     return false;
 
-  size_t elemStart = pIO->Tell();
+  int64_t elemStart = pIO->Tell();
+  if (elemStart < 0)
+    return false;
 
   if (!pIO->Write32(&sig))
     return false;
@@ -3438,11 +3454,13 @@ bool CIccMpeCurveSet::Write(CIccIO *pIO)
   if (m_curve && m_nInputChannels) {
     int i;
     icCurvePtrMap map;
-    size_t start, end;
+    int64_t start, end;
     icUInt32Number zeros[2] = { 0, 0};
     icPositionNumber position;
 
-    size_t startTable = pIO->Tell();
+    int64_t startTable = pIO->Tell();
+    if (startTable < elemStart)
+      return false;
 
     //First write empty position table
     for (i=0; i<m_nInputChannels; i++) {
@@ -3455,20 +3473,27 @@ bool CIccMpeCurveSet::Write(CIccIO *pIO)
       if (m_curve[i]) {
         if (map.find(m_curve[i])==map.end()) {
           start = pIO->Tell();
-          m_curve[i]->Write(pIO);
+          if (start < elemStart)
+            return false;
+          if (!m_curve[i]->Write(pIO))
+            return false;
           end = pIO->Tell();
-          pIO->Align32();
-          position.offset = (icUInt32Number)(start - elemStart);
-          position.size = (icUInt32Number)(end - start);
+          if (!icGetWritePosition(elemStart, start, end, position))
+            return false;
+          if (!pIO->Align32())
+            return false;
           map[m_curve[i]] = position;
         }
         m_position[i] = map[m_curve[i]];
       }
     }
     end = pIO->Tell();
+    if (end < startTable)
+      return false;
     
     //Back fill position table
-    pIO->Seek(startTable, icSeekSet);
+    if (pIO->Seek(startTable, icSeekSet)<0)
+      return false;
     for (i=0; i<m_nInputChannels; i++) {
       if (!pIO->Write32(&m_position[i].offset))
         return false;
@@ -3476,7 +3501,8 @@ bool CIccMpeCurveSet::Write(CIccIO *pIO)
         return false;
     }
 
-    pIO->Seek(end, icSeekSet);
+    if (pIO->Seek(end, icSeekSet)<0)
+      return false;
   }
   
   return true;
