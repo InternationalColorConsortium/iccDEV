@@ -219,6 +219,17 @@ instrumentation can change optimizer and sanitizer behavior enough to mask a
 bug. Maintainer-level details live in
 `.github/instructions/build-system.instructions.md`.
 
+Preset equivalents are available for the same modes:
+
+```bash
+cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
+cmake --preset linux-clang-ubsan-int-float -S Build/Cmake -B out/linux-clang-ubsan-int-float
+cmake --preset linux-clang-tsan -S Build/Cmake -B out/linux-clang-tsan
+cmake --preset linux-clang-msan -S Build/Cmake -B out/linux-clang-msan
+cmake --preset linux-clang-coverage -S Build/Cmake -B out/linux-clang-coverage
+cmake --preset linux-clang-profiling -S Build/Cmake -B out/linux-clang-profiling
+```
+
 ## Maintainer Dockerfiles
 
 `Dockerfile*` files are maintainer-owned release and CI infrastructure. General

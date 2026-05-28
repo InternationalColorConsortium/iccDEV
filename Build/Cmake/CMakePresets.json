@@ -97,7 +97,7 @@
       "displayName": "Linux GCC with AddressSanitizer",
       "cacheVariables": {
         "ENABLE_ASAN": "ON",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -106,7 +106,27 @@
       "displayName": "Linux Clang with AddressSanitizer",
       "cacheVariables": {
         "ENABLE_ASAN": "ON",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-clang-sanitizers",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with ASan, UBSan, IntSan, and float sanitizers",
+      "cacheVariables": {
+        "ENABLE_SANITIZERS": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-clang-ubsan-int-float",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with UBSan, IntSan, and float sanitizers",
+      "cacheVariables": {
+        "ENABLE_UBSAN": "ON",
+        "ENABLE_INTEGER_SANITIZER": "ON",
+        "ENABLE_FLOAT_SANITIZER": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -115,7 +135,7 @@
       "displayName": "Linux Clang with ThreadSanitizer",
       "cacheVariables": {
         "ENABLE_TSAN": "ON",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -124,7 +144,7 @@
       "displayName": "Linux Clang with MemorySanitizer",
       "cacheVariables": {
         "ENABLE_MSAN": "ON",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
@@ -133,7 +153,25 @@
       "displayName": "Linux Clang with UBSanitizer",
       "cacheVariables": {
         "ENABLE_UBSAN": "ON",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-clang-coverage",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with source coverage",
+      "cacheVariables": {
+        "ENABLE_COVERAGE": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "linux-clang-profiling",
+      "inherits": "linux-clang",
+      "displayName": "Linux Clang with gprof/perf profiling",
+      "cacheVariables": {
+        "ENABLE_PROFILING": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {

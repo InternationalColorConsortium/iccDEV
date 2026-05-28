@@ -89,6 +89,26 @@ Build after configure with:
 make -j"$(nproc)"
 ```
 
+Preset equivalents live in `Build/Cmake/CMakePresets.json`:
+
+| Preset | Purpose |
+|--------|---------|
+| `linux-clang-asan` | ASan-only Debug tool build |
+| `linux-clang-ubsan` | UBSan-only Debug tool build |
+| `linux-clang-ubsan-int-float` | UBSan + IntSan + float checks, no ASan |
+| `linux-clang-sanitizers` | ASan + UBSan + IntSan + float checks |
+| `linux-clang-tsan` | TSan-only Debug tool build |
+| `linux-clang-msan` | MSan-only Debug tool build |
+| `linux-clang-coverage` | Clang source coverage |
+| `linux-clang-profiling` | gprof/perf `-pg` profiling |
+
+Example:
+
+```bash
+cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
+cmake --build out/linux-clang-sanitizers -j"$(nproc)"
+```
+
 For sanitizer bug reproduction, do not add `-DENABLE_COVERAGE=ON` or
 `-fprofile-instr-generate -fcoverage-mapping`; coverage instrumentation can
 change optimizer and sanitizer behavior enough to mask a finding.
