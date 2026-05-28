@@ -868,6 +868,17 @@ set_tests_properties(iccdev.v5-namedcmm-regressions PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.namedcolor-overprint-regressions
+  300
+  "iccdev;namedcolor;overprint;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh"
+)
+set_tests_properties(iccdev.namedcolor-overprint-regressions PROPERTIES
+  FIXTURES_REQUIRED iccdev_profiles
+)
+
+iccdev_add_script_test(
   iccdev.version-bcd-regressions
   300
   "iccdev;version;bcd;regression;asan"

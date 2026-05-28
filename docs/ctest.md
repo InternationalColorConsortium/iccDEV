@@ -120,6 +120,7 @@ cannot pass as a green no-op.
 | `iccdev.lut16-zero-curve-regressions` | `.github/scripts/iccdev-lut16-zero-curve-regression-tests.sh` |
 | `iccdev.namedcolor-apply-regressions` | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` |
 | `iccdev.v5-namedcmm-regressions` | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` |
+| `iccdev.namedcolor-overprint-regressions` | `.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh` |
 | `iccdev.version-bcd-regressions` | `.github/scripts/iccdev-version-bcd-regression-tests.sh` |
 | `iccdev.profile-visualize-regressions` | `.github/scripts/iccdev-profile-visualize-tests.sh` |
 | `iccdev.issue-1148-writer-device-regression` | `.github/scripts/iccdev-issue-1148-writer-device-regression.sh` |
