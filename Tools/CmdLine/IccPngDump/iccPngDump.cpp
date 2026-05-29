@@ -90,6 +90,7 @@
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccProfLibVer.h"
+#include "../IccCmdLineUtil.h"
 #include <zlib.h>
 #if !defined(_WIN32)
 #include <fcntl.h>
@@ -157,7 +158,7 @@ bool InjectIccProfile(const std::string& inputPng,
  * @param nLen     Size of ICC data.
  * @param outputFile Path to write ICC (optional).
  */
-void PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const char *outputFile);
+bool PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const char *outputFile);
 
 /**
  * Prints information about a given PNG file.
@@ -276,7 +277,12 @@ if (injectIccFile) {
     unsigned char *pProfMem = NULL;
     unsigned int nLen = 0;
     if (ExtractIccProfile(png_ptr, info_ptr, &pProfMem, &nLen)) {
-        PrintIccProfileInfo(pProfMem, nLen, outputIccFile);
+        if (!PrintIccProfileInfo(pProfMem, nLen, outputIccFile)) {
+            free(pProfMem);
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            fclose(fp);
+            safe_exit("Failed to save extracted ICC profile.");
+        }
         free(pProfMem);
     } else {
         printf("[INFO] No embedded ICC Profile found.\n");
@@ -329,20 +335,7 @@ void Usage() {
 // =====================================================================
 static FILE* OpenPngOutputFile(const std::string& outputPng)
 {
-#if defined(_WIN32)
-    return fopen(outputPng.c_str(), "wb");
-#else
-    int fd = open(outputPng.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (fd < 0) {
-        return NULL;
-    }
-
-    FILE* fp = fdopen(fd, "wb");
-    if (!fp) {
-        close(fd);
-    }
-    return fp;
-#endif
+    return icOpenRegularWriteBinaryFile(outputPng.c_str());
 }
 
 static bool ReadBinaryStream(std::istream& in, std::vector<unsigned char>& data)
@@ -527,7 +520,10 @@ bool InjectIccProfile(const std::string& inputPng,
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
     png_destroy_write_struct(&write_ptr, &write_info_ptr);
     fclose(fpIn);
-    fclose(fpOut);
+    if (!icFlushAndClose(fpOut)) {
+        LOG_ERROR("Failed to close output PNG file.");
+        return false;
+    }
     return true;
 }
 
@@ -650,7 +646,7 @@ void PrintPngInfo(png_structp png_ptr, png_infop info_ptr) {
  * @param nLen       Length of the ICC profile data in bytes.
  * @param outputFile Path to the output file for saving the ICC profile (optional).
  */
-void PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const char *outputFile) {
+bool PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const char *outputFile) {
     printf("--------------------> ICC Profile Information <---------------------------\n");
     printf("Profile Size:      %u bytes\n", nLen);
 
@@ -658,7 +654,7 @@ void PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const
     CIccProfile *pProfile = OpenIccProfile(pProfMem, nLen);
     if (!pProfile) {
         LOG_ERROR("Failed to parse ICC Profile.");
-        return;
+        return false;
     }
 
     // Extract ICC header details
@@ -667,7 +663,7 @@ void PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const
 
     printf(" Color Space:      %s\n", Fmt.GetColorSpaceSigName(pHdr->colorSpace));
     printf(" Colorimetric PCS: %s\n", Fmt.GetColorSpaceSigName(pHdr->pcs));
-    printf(" Profile Version:  %d.%d.%d\n", 
+    printf(" Profile Version:  %u.%u.%u\n",
            (unsigned int) ((pHdr->version >> 24) & 0xFF),   // Major version
            (unsigned int) ((pHdr->version >> 20) & 0x0F),   // Minor version
            (unsigned int) ((pHdr->version >> 16) & 0x0F));  // Sub-minor version
@@ -679,16 +675,20 @@ void PrintIccProfileInfo(const unsigned char *pProfMem, unsigned int nLen, const
         FILE *outFile = OpenPngOutputFile(outputFile);
         if (!outFile) {
             LOG_ERROR("Unable to open output file for writing.");
-            return;
+            return false;
         }
         if (fwrite(pProfMem, 1, nLen, outFile) != nLen) {
             LOG_ERROR("Failed to write ICC profile.");
             fclose(outFile);
-            return;
+            return false;
         }
-        fclose(outFile);
+        if (!icFlushAndClose(outFile)) {
+            LOG_ERROR("Failed to close ICC profile output file.");
+            return false;
+        }
         printf("[INFO] ICC Profile saved to: %s\n", outputFile);
     }
     
     printf("--------------------------------------------------------------------\n");
+    return true;
 }

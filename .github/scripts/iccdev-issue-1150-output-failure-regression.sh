@@ -43,9 +43,19 @@ export LLVM_PROFILE_FILE="${LLVM_PROFILE_FILE:-/dev/null}"
 V5DSP="$TOOLS_DIR/IccV5DspObsToV4Dsp/iccV5DspObsToV4Dsp"
 TIFFDUMP="$TOOLS_DIR/IccTiffDump/iccTiffDump"
 APPLYLINK="$TOOLS_DIR/IccApplyToLink/iccApplyToLink"
+JPEGDUMP="$TOOLS_DIR/IccJpegDump/iccJpegDump"
+PNGDUMP="$TOOLS_DIR/IccPngDump/iccPngDump"
+TOXML="$TOOLS_DIR/IccToXml/iccToXml"
+TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
+APPLYPROFILES="$TOOLS_DIR/IccApplyProfiles/iccApplyProfiles"
+APPLYNAMED="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
+APPLYSEARCH="$TOOLS_DIR/IccApplySearch/iccApplySearch"
 DISPLAY="$TESTING_DIR/Display/LCDDisplay.icc"
 OBSERVER="$TESTING_DIR/ICS/XYZ_float-D65_2deg-Part1.icc"
+SRGB="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 TIFF="$TESTING_DIR/hybrid/Data/smCows380_5_780.tif"
+PNG="$TESTING_DIR/hybrid/Data/MS-Sensors.png"
+DATA="$TESTING_DIR/ApplyDataFiles/rgb-cmykhues.txt"
 
 fail() {
   echo "  [FAIL] issue-1150-output-failure -- $1"
@@ -102,7 +112,7 @@ run_expect_output_failure() {
     sed -n '1,80p' "$logfile"
     fail "$name reported success for a failed output path"
   fi
-  if grep -qiE "successfully created|successfully written|extracted to:|saved to:" "$logfile"; then
+  if grep -qiE "successfully created|successfully written|saved successfully|extracted to:|saved to:" "$logfile"; then
     sed -n '1,80p' "$logfile"
     fail "$name printed a success message for a failed output path"
   fi
@@ -111,23 +121,92 @@ run_expect_output_failure() {
 require_tool "$V5DSP"
 require_tool "$TIFFDUMP"
 require_tool "$APPLYLINK"
-require_file "$DISPLAY"
-require_file "$OBSERVER"
+require_tool "$JPEGDUMP"
+require_tool "$PNGDUMP"
+require_tool "$TOXML"
+require_tool "$TOJSON"
+require_tool "$APPLYPROFILES"
+require_tool "$APPLYNAMED"
+require_tool "$APPLYSEARCH"
+require_file "$SRGB"
 require_file "$TIFF"
+require_file "$PNG"
+require_file "$DATA"
 
-run_expect_output_failure v5-missing-dir \
-  "$V5DSP" "$DISPLAY" "$OBSERVER" "$OUTDIR/no-such-dir/out.icc"
+HAVE_V5_FIXTURES=1
+for v5_fixture in "$DISPLAY" "$OBSERVER"; do
+  if [ ! -f "$v5_fixture" ]; then
+    echo "  [SKIP] issue-1150-output-failure -- missing V5 fixture: $v5_fixture"
+    HAVE_V5_FIXTURES=0
+  fi
+done
 
-run_expect_output_failure v5-dev-full \
-  "$V5DSP" "$DISPLAY" "$OBSERVER" /dev/full
+if [ "$HAVE_V5_FIXTURES" -eq 1 ]; then
+  run_expect_output_failure v5-missing-dir \
+    "$V5DSP" "$DISPLAY" "$OBSERVER" "$OUTDIR/no-such-dir/out.icc"
+
+  run_expect_output_failure v5-dev-full \
+    "$V5DSP" "$DISPLAY" "$OBSERVER" /dev/full
+
+  run_expect_output_failure v5-dev-null \
+    "$V5DSP" "$DISPLAY" "$OBSERVER" /dev/null
+fi
 
 run_expect_output_failure tiffdump-dev-full \
   "$TIFFDUMP" "$TIFF" /dev/full
 
+run_expect_output_failure tiffdump-dev-null \
+  "$TIFFDUMP" "$TIFF" /dev/null
+
+run_expect_output_failure jpegdump-dev-full \
+  "$JPEGDUMP" "$SRGB" /dev/full
+
+run_expect_output_failure jpegdump-dev-null \
+  "$JPEGDUMP" "$SRGB" /dev/null
+
+run_expect_output_failure pngdump-inject-dev-full \
+  "$PNGDUMP" "$PNG" --write-icc "$SRGB" --output /dev/full
+
+run_expect_output_failure pngdump-inject-dev-null \
+  "$PNGDUMP" "$PNG" --write-icc "$SRGB" --output /dev/null
+
+run_expect_output_failure toxml-dev-full \
+  "$TOXML" "$SRGB" /dev/full
+
+run_expect_output_failure toxml-dev-null \
+  "$TOXML" "$SRGB" /dev/null
+
+run_expect_output_failure tojson-dev-full \
+  "$TOJSON" "$SRGB" /dev/full
+
+run_expect_output_failure tojson-dev-null \
+  "$TOJSON" "$SRGB" /dev/null
+
 run_expect_output_failure applylink-devlink-dev-full \
-  "$APPLYLINK" /dev/full 0 5 0 "issue-1150-devlink" 0.0 1.0 0 0 "$DISPLAY" 1
+  "$APPLYLINK" /dev/full 0 5 0 "issue-1150-devlink" 0.0 1.0 0 0 "$SRGB" 1
+
+run_expect_output_failure applylink-devlink-dev-null \
+  "$APPLYLINK" /dev/null 0 5 0 "issue-1150-devlink" 0.0 1.0 0 0 "$SRGB" 1
 
 run_expect_output_failure applylink-cube-dev-full \
-  "$APPLYLINK" /dev/full 1 5 4 "issue-1150-cube" 0.0 1.0 0 0 "$DISPLAY" 1
+  "$APPLYLINK" /dev/full 1 5 4 "issue-1150-cube" 0.0 1.0 0 0 "$SRGB" 1
+
+run_expect_output_failure applyprofiles-exportcfg-dev-full \
+  "$APPLYPROFILES" -exportcfg /dev/full "$TIFF" "$OUTDIR/applyprofiles.tif" 0 0 0 0 0 "$SRGB" 0
+
+run_expect_output_failure applyprofiles-exportcfg-dev-null \
+  "$APPLYPROFILES" -exportcfg /dev/null "$TIFF" "$OUTDIR/applyprofiles.tif" 0 0 0 0 0 "$SRGB" 0
+
+run_expect_output_failure applynamed-exportcfg-dev-full \
+  "$APPLYNAMED" -exportcfg /dev/full "$DATA" 0 0 "$SRGB" 0
+
+run_expect_output_failure applynamed-exportcfg-dev-null \
+  "$APPLYNAMED" -exportcfg /dev/null "$DATA" 0 0 "$SRGB" 0
+
+run_expect_output_failure applysearch-exportcfg-dev-full \
+  "$APPLYSEARCH" -exportcfg /dev/full "$DATA" 0 0 "$SRGB" 0 "$SRGB" 0 -INIT 0 "$SRGB" 1
+
+run_expect_output_failure applysearch-exportcfg-dev-null \
+  "$APPLYSEARCH" -exportcfg /dev/null "$DATA" 0 0 "$SRGB" 0 "$SRGB" 0 -INIT 0 "$SRGB" 1
 
 echo "  [OK] issue-1150-output-failure -- failed outputs return non-zero without success text"

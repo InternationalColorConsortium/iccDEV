@@ -82,6 +82,7 @@
 #include "IccTagLut.h"
 #include "IccTagMPE.h"
 #include "IccMpeBasic.h"
+#include "../IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -94,22 +95,7 @@
 static
 FILE* icOpenWriteBinaryFile(const char* szFname)
 {
-  if (!szFname || !szFname[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(szFname, "wb");
-#else
-  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  FILE* f = fdopen(fd, "wb");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
+  return icOpenRegularWriteBinaryFile(szFname);
 }
 
 // ============================================================================

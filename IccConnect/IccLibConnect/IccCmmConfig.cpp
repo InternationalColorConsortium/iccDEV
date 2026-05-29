@@ -93,9 +93,18 @@ static FILE* icOpenWriteTextFile(const char* filename)
 #if defined(_WIN32)
   return fopen(filename, "wt");
 #else
+  struct stat st;
+  if (stat(filename, &st) == 0 && !S_ISREG(st.st_mode))
+    return nullptr;
+
   int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if (fd < 0)
     return nullptr;
+
+  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+    close(fd);
+    return nullptr;
+  }
 
   FILE* f = fdopen(fd, "w");
   if (!f)
@@ -103,6 +112,22 @@ static FILE* icOpenWriteTextFile(const char* filename)
 
   return f;
 #endif
+}
+
+static bool icCloseWriteTextFile(FILE* f)
+{
+  if (!f)
+    return false;
+
+  bool failed = (fflush(f) != 0) || (ferror(f) != 0);
+
+  if (f == stdout)
+    return !failed;
+
+  if (fclose(f) != 0)
+    failed = true;
+
+  return !failed;
 }
 
 static bool icFormatFloatValue(char* buf, size_t bufSize, int nDigits, int nPrecision, icFloatNumber v)
@@ -2055,8 +2080,8 @@ fprintf(f, "\n");
     fprintf(f, "\n");
   }
 
-  if (f != stdout)
-    fclose(f);
+  if (!icCloseWriteTextFile(f))
+    return false;
 
   return true;
 }
@@ -2316,8 +2341,8 @@ bool CIccCfgColorData::toIt8(const char* filename, icUInt8Number nDigits, icUInt
   }
   fprintf(f, "END_DATA\n");
 
-  if (f != stdout)
-    fclose(f);
+  if (!icCloseWriteTextFile(f))
+    return false;
 
   return true;
 }

@@ -76,6 +76,7 @@
 #include "IccProfLibVer.h"
 #include "IccSearch.h"
 #include "IccConnect.h"
+#include "../IccCmdLineUtil.h"
 #include <memory>
 #include <vector>
 #if !defined(_WIN32)
@@ -90,22 +91,7 @@
 static
 FILE* icOpenWriteTextFile(const char* szFname)
 {
-  if (!szFname || !szFname[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(szFname, "wt");
-#else
-  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  FILE* f = fdopen(fd, "wt");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
+  return icOpenRegularWriteTextFile(szFname);
 }
 
 // ============================================================================
@@ -383,11 +369,17 @@ int main(int argc, const char* argv[])
         size_t n = fwrite(jsonText.c_str(), 1, jsonText.size(), f);
         if (n != jsonText.size()) {
           printf("Error writing json config file '%s'\n", exportFile.c_str());
+          fclose(f);
+          return -1;
         }
-        (void)fclose(f);
+        if (!icFlushAndClose(f)) {
+          printf("Error closing json config file '%s'\n", exportFile.c_str());
+          return -1;
+        }
       }
       else {
         printf("Unable to export config file '%s'\n", exportFile.c_str());
+        return -1;
       }
     }
 

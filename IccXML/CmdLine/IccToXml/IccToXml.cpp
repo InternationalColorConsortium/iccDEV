@@ -46,16 +46,14 @@ int main(int argc, char* argv[])
     return -1;
   }
 
-  if (dstIO.Write8((char*)xml.c_str(), xml.size())== xml.size()) {
-    printf("XML successfully created\n");
-  }
-  else {
+  if (dstIO.Write8((char*)xml.c_str(), xml.size()) != xml.size() ||
+      !dstIO.Flush() ||
+      !dstIO.CloseFile()) {
     printf("Unable to write '%s'\n", argv[2]);
     return -1;
   }
 
-  dstIO.Close();
+  printf("XML successfully created\n");
 
   return 0;
 }
-

@@ -93,9 +93,18 @@ static FILE* icOpenWriteBinaryFile(const char* szFname)
 #if defined(_WIN32)
   return fopen(szFname, "wb");
 #else
+  struct stat st;
+  if (stat(szFname, &st) == 0 && !S_ISREG(st.st_mode))
+    return nullptr;
+
   int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if (fd < 0)
     return nullptr;
+
+  if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+    close(fd);
+    return nullptr;
+  }
 
   FILE* f = fdopen(fd, "wb");
   if (!f)
@@ -103,6 +112,22 @@ static FILE* icOpenWriteBinaryFile(const char* szFname)
 
   return f;
 #endif
+}
+
+static bool icCloseWriteBinaryFile(FILE* f)
+{
+  if (!f)
+    return false;
+
+  bool failed = (fflush(f) != 0) || (ferror(f) != 0);
+
+  if (f == stdout)
+    return !failed;
+
+  if (fclose(f) != 0)
+    failed = true;
+
+  return !failed;
 }
 
 template <typename T>
@@ -467,8 +492,8 @@ bool saveJsonAs(const json& j, const char* szFname, int indent)
     if (fwrite(str.c_str(), 1, str.size(), f) == str.size())
       rv = true;
 
-    if (f!=stdout)
-      fclose(f);
+    if (!icCloseWriteBinaryFile(f))
+      rv = false;
   }
 
   return rv;

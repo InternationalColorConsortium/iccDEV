@@ -133,7 +133,7 @@ static bool WriteEmbeddedIccProfile(const char* szFname, const unsigned char *pP
     return false;
 
   bool failed = (fwrite(pProfMem, 1, nLen, fp) != nLen);
-  if (fclose(fp))
+  if (!icFlushAndClose(fp))
     failed = true;
 
   return !failed;
@@ -211,22 +211,7 @@ void DumpProfileInfo(CIccProfile* pProfile, std::string prefix)
 static
 FILE* icOpenWriteBinaryFile(const char* szFname)
 {
-  if (!szFname || !szFname[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(szFname, "wb");
-#else
-  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  FILE* f = fdopen(fd, "wb");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
+  return icOpenRegularWriteBinaryFile(szFname);
 }
 
 //===================================================

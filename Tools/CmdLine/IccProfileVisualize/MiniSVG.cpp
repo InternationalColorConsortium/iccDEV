@@ -68,6 +68,7 @@
 #include <vector>
 #include <cmath>
 #include "MiniSVG.hpp"
+#include "../IccCmdLineUtil.h"
 
 /******************************************************************************/
 
@@ -101,7 +102,16 @@ void SVGOut::CloseFile()
   if (!m_filename.empty()) {
     if (m_pageCount > 0) {
       try  {
-        std::ofstream out(m_filename);
+        FILE* checkFile = icOpenRegularWriteTextFile(m_filename.c_str());
+        if (!checkFile || !icFlushAndClose(checkFile)) {
+          fprintf(stderr, "SVG writing error in '%s': unable to open regular output file\n", m_filename.c_str());
+          m_filename.clear();
+          return;
+        }
+
+        std::ofstream out;
+        out.exceptions(std::ios::badbit | std::ios::failbit);
+        out.open(m_filename);
         WriteHeader(out);
         out << m_buf.str();
         WriteFooter(out);

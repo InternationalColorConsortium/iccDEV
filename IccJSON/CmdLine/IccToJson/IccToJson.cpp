@@ -101,18 +101,18 @@ int main(int argc, char* argv[])
     return -1;
   }
 
-  std::ofstream outFile(argv[2]);
-  if (!outFile.is_open()) {
+  CIccFileIO outFile;
+  if (!outFile.Open(argv[2], "wb")) {
     printf("Unable to open '%s' for writing\n", argv[2]);
     return -1;
   }
 
-  outFile << jsonStr;
-  if (outFile.fail()) {
+  if (outFile.Write8((void*)jsonStr.c_str(), jsonStr.size()) != jsonStr.size() ||
+      !outFile.Flush() ||
+      !outFile.CloseFile()) {
     printf("Unable to write '%s'\n", argv[2]);
     return -1;
   }
-  outFile.close();
 
   printf("JSON successfully created\n");
   return 0;

@@ -84,6 +84,7 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include "../IccCmdLineUtil.h"
 #if defined(_WIN32)
   #include <winsock2.h>
 #else
@@ -149,22 +150,7 @@ void Usage() {
 static
 FILE* icOpenWriteBinaryFile(const char* szFname)
 {
-  if (!szFname || !szFname[0])
-    return stdout;
-
-#if defined(_WIN32)
-  return fopen(szFname, "wb");
-#else
-  int fd = open(szFname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  FILE* f = fdopen(fd, "wb");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
+  return icOpenRegularWriteBinaryFile(szFname);
 }
 
 static bool ReadBinaryStream(std::istream& input, std::vector<unsigned char>& data)
@@ -292,7 +278,7 @@ done:
     if (!out) safe_exit("Failed to open output ICC file.");
     bool failed = fwrite(iccData.data(), 1, iccData.size(), out) != iccData.size();
     if (failed) safe_exit("Failed to write output ICC file.");
-    fclose(out);
+    if (!icFlushAndClose(out)) safe_exit("Failed to close output ICC file.");
 
     printf("[INFO] ICC profile extracted to: %s\n", iccOutPath);
     return true;
@@ -352,7 +338,8 @@ bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* o
     }
     if (soi[0] != 0xFF || soi[1] != 0xD8)
         safe_exit("Not a valid JPEG file.");
-    fwrite(soi, 1, 2, out);
+    if (fwrite(soi, 1, 2, out) != 2)
+        safe_exit("Failed to write JPEG SOI marker.");
 
     // ------------------------------------------------------------------------
     // Write APP2 segment with ICC header and payload
@@ -368,22 +355,29 @@ bool InjectIccIntoJpeg(const char* inputPath, const char* iccPath, const char* o
     unsigned short markerLen = 2 + sig.size() + 1 + 2 + iccData.size(); // length includes itself
     unsigned short markerBE = htons(markerLen);
 
-    fputc(0xFF, out); fputc(0xE2, out);                   // APP2
-    fwrite(&markerBE, 2, 1, out);                         // segment length
-    fwrite(sig.c_str(), 1, sig.size(), out);              // "ICC_PROFILE"
-    fputc(0x00, out);                                     // null terminator
-    fputc(1, out); fputc(1, out);                         // sequence 1 of 1
-    fwrite(iccData.data(), 1, iccData.size(), out);       // profile payload
+    if (fputc(0xFF, out) == EOF || fputc(0xE2, out) == EOF ||
+        fwrite(&markerBE, 2, 1, out) != 1 ||
+        fwrite(sig.c_str(), 1, sig.size(), out) != sig.size() ||
+        fputc(0x00, out) == EOF ||
+        fputc(1, out) == EOF || fputc(1, out) == EOF ||
+        fwrite(iccData.data(), 1, iccData.size(), out) != iccData.size()) {
+        safe_exit("Failed to write ICC APP2 segment.");
+    }
 
     // ------------------------------------------------------------------------
     // Append remainder of JPEG file unmodified
     // ------------------------------------------------------------------------
     unsigned char buf[4096];
     size_t n;
-    while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
-        fwrite(buf, 1, n, out);
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
+        if (fwrite(buf, 1, n, out) != n)
+            safe_exit("Failed to write JPEG output.");
+    }
 
-    fclose(in); fclose(out); icc.close();
+    fclose(in);
+    if (!icFlushAndClose(out))
+        safe_exit("Failed to close output JPEG file.");
+    icc.close();
     return true;
 }
 

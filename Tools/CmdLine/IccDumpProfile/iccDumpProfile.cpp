@@ -112,8 +112,21 @@ static const char* GetLateBindingNote(icElemTypeSignature sig)
   }
 }
 
+static bool WriteStringToStdout(const std::string &contents)
+{
+  if (contents.empty())
+    return true;
+
+  if (fwrite(contents.c_str(), 1, contents.length(), stdout) != contents.length()) {
+    fprintf(stderr, "Unable to write report to stdout\n");
+    return false;
+  }
+
+  return true;
+}
+
 // adds MPE element type detail for v5 profiles
-void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
+bool DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
 {
   const size_t bufSize = 64;
   char buf[bufSize];
@@ -159,26 +172,29 @@ void DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
       contents = validateReport;
     else
       pTag->Describe(contents, nVerboseness);
-    (void)fwrite(contents.c_str(), contents.length(), 1, stdout);
+    if (!WriteStringToStdout(contents))
+      return false;
   }
   else {
     printf("Tag (%s) not found in profile\n", icGetSig(buf, bufSize, sig));
     DIAG("Tag '%s' -- FindTag returned NULL (LoadTag failure or tag not present)", icGetSig(buf, bufSize, sig));
   }
+
+  return true;
 }
 
 // This does a search of all tags, slow
-void DumpTagSig(CIccProfile *pIcc, icTagSignature sig, int nVerboseness)
+bool DumpTagSig(CIccProfile *pIcc, icTagSignature sig, int nVerboseness)
 {
   CIccTag *pTag = pIcc->FindTag(sig);
-  DumpTagCore( pTag, sig, nVerboseness );
+  return DumpTagCore(pTag, sig, nVerboseness);
 }
 
 // This directly accesses the tag data, does not need to search
-void DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
+bool DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
 {
   CIccTag *pTag = pIcc->FindTag(entry);
-  DumpTagCore( pTag, entry.TagInfo.sig, nVerboseness );
+  return DumpTagCore(pTag, entry.TagInfo.sig, nVerboseness);
 }
 
 void printUsage(void)
@@ -411,7 +427,7 @@ int main(int argc, char* argv[])
       printf("Profile ID:         %s\n", Fmt.GetProfileID(&pHdr->profileID));
     else
       printf("Profile ID:         Profile ID not calculated.\n");
-    printf("Size:               %d (0x%x) bytes\n", (unsigned int) pHdr->size, (unsigned int) pHdr->size);
+    printf("Size:               %u (0x%x) bytes\n", (unsigned int) pHdr->size, (unsigned int) pHdr->size);
 
     // Diagnostic: compare header size vs file stat size
     if (g_bDiagMode) {
@@ -534,7 +550,7 @@ int main(int argc, char* argv[])
         else
             pad = (int)(closest - tagEnd);
 
-        printf("%28s  %s  %8d\t%8d\t%8d\n", Fmt.GetTagSigName(i->TagInfo.sig),
+        printf("%28s  %s  %8u\t%8u\t%8d\n", Fmt.GetTagSigName(i->TagInfo.sig),
             icGetSig(buf, bufSize, i->TagInfo.sig, false), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size, pad);
     }
 
@@ -614,7 +630,7 @@ int main(int argc, char* argv[])
         // Check if closest tag after this tag is less than offset+size - in which case it overlaps!
         if (((icUInt64Number)i->TagInfo.offset + i->TagInfo.size > (icUInt64Number)closest) && (closest < safeProfileSize)) {
           sReport += icMsgValidateWarning;
-          snprintf(str, strSize, "Tag %s (offset %d, size %d) overlaps with following tag data starting at offset %d.\n",
+          snprintf(str, strSize, "Tag %s (offset %u, size %u) overlaps with following tag data starting at offset %d.\n",
               Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.offset, (unsigned int) i->TagInfo.size, closest);
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateWarning);
@@ -624,7 +640,7 @@ int main(int argc, char* argv[])
         if ((icUInt64Number)closest > (icUInt64Number)i->TagInfo.offset + rndup) {
           int gapStart = (i->TagInfo.offset + rndup <= (icUInt32Number)INT_MAX) ? (int)(i->TagInfo.offset + rndup) : INT_MAX;
           sReport += icMsgValidateWarning;
-          snprintf(str, strSize, "Tag %s (size %d) is followed by %d unnecessary additional bytes (from offset %d).\n",
+          snprintf(str, strSize, "Tag %s (size %u) is followed by %d unnecessary additional bytes (from offset %d).\n",
               Fmt.GetTagSigName(i->TagInfo.sig), (unsigned int) i->TagInfo.size, closest - gapStart, gapStart);
           sReport += str;
           nStatus = icMaxStatus(nStatus, icValidateWarning);
@@ -672,6 +688,8 @@ int main(int argc, char* argv[])
     }
 
     if (argc > nArg + 1) {
+      bool bOutputOk = true;
+
       if (!stricmp(argv[nArg + 1], "ALL")) {
         int tagIdx = 0;
         int tagLoadFail = 0;
@@ -685,7 +703,10 @@ int main(int argc, char* argv[])
             tagLoadFail++;
             DIAG("*** Tag %s: FindTag/LoadTag FAILED ***", Fmt.GetTagSigName(i->TagInfo.sig));
           }
-          DumpTagEntry(pIcc, *i, verbosity);
+          if (!DumpTagEntry(pIcc, *i, verbosity)) {
+            bOutputOk = false;
+            break;
+          }
         }
         if (g_bDiagMode && tagLoadFail > 0) {
           fprintf(stderr, "[DIAG] === %d of %d tags failed to load ===\n",
@@ -693,7 +714,12 @@ int main(int argc, char* argv[])
         }
       }
       else {
-        DumpTagSig(pIcc, (icTagSignature)icGetSigVal(argv[nArg + 1]), verbosity);
+        bOutputOk = DumpTagSig(pIcc, (icTagSignature)icGetSigVal(argv[nArg + 1]), verbosity);
+      }
+
+      if (!bOutputOk) {
+        delete pIcc;
+        return -3;
       }
     }
   }
@@ -734,7 +760,10 @@ int main(int argc, char* argv[])
   printf("\n\n");
 
   sReport += "\n";
-  (void)fwrite(sReport.c_str(), sReport.length(), 1, stdout);
+  if (!WriteStringToStdout(sReport)) {
+    delete pIcc;
+    return -3;
+  }
 
   delete pIcc;
 

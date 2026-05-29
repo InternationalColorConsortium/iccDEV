@@ -68,6 +68,7 @@
 #include <vector>
 #include <cmath>
 #include "MiniPDF.hpp"
+#include "../IccCmdLineUtil.h"
 
 
 /******************************************************************************/
@@ -149,7 +150,16 @@ void PDFWriter::CloseFile() {
   if (!m_filename.empty()) {
     if (PageCount() > 0) {
         try  {
-          std::ofstream out(m_filename);
+          FILE* checkFile = icOpenRegularWriteTextFile(m_filename.c_str());
+          if (!checkFile || !icFlushAndClose(checkFile)) {
+            fprintf(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
+            m_filename.clear();
+            return;
+          }
+
+          std::ofstream out;
+          out.exceptions(std::ios::badbit | std::ios::failbit);
+          out.open(m_filename);
           WriteHeader(out);
           WriteObjects(out);
           WriteXRefs(out);

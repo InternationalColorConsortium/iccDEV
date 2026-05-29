@@ -79,6 +79,7 @@
 #include "IccConnect.h"
 #include "TiffImg.h"
 #include "IccProfLibVer.h"
+#include "../IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -87,23 +88,9 @@
 
 static FILE* OpenWriteTextFile(const std::string& path)
 {
-#if defined(_WIN32)
   // Export config paths are intentional caller-selected output files.
   // codeql[cpp/path-injection]
-  return fopen(path.c_str(), "wt");
-#else
-  // Export config paths are intentional caller-selected output files.
-  // codeql[cpp/path-injection]
-  int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-  if (fd < 0)
-    return nullptr;
-
-  FILE* f = fdopen(fd, "w");
-  if (!f)
-    close(fd);
-
-  return f;
-#endif
+  return icOpenRegularWriteTextFile(path.c_str());
 }
 
 static bool GetFloatRowByteCount(unsigned int nWidth, int nSamples, size_t& nBytes)
@@ -339,11 +326,17 @@ int main(int argc, const char** argv)
         std::string jsonText = cfgJson.dump(1);
         if (fwrite(jsonText.c_str(), 1, jsonText.size(), f) != jsonText.size()) {
           printf("Unable to write complete config file '%s'\n", exportFile.c_str());
+          fclose(f);
+          return -1;
         }
-        fclose(f);
+        if (!icFlushAndClose(f)) {
+          printf("Unable to close config file '%s'\n", exportFile.c_str());
+          return -1;
+        }
       }
       else {
         printf("Unable to export config file '%s'\n", exportFile.c_str());
+        return -1;
       }
     }
   }
@@ -451,14 +444,14 @@ int main(int argc, const char** argv)
     //Allow color management to ignore extra samples when non extra samples match samples in profile
     if (sen != 0) {
       if (nSrcSamples != (int)(sn - sen)) {
-        printf("Number of non-extra samples %d in image[%s] doesn't match device samples %d in first profile\n", sn - sen, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+        printf("Number of non-extra samples %u in image[%s] doesn't match device samples %d in first profile\n", sn - sen, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
         return -1;
       }
       else
         nSrcSamples = sn;
     }
     else {
-      printf("Number of samples %d in image[%s] doesn't match device samples %d in first profile\n", sn, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
+      printf("Number of samples %u in image[%s] doesn't match device samples %d in first profile\n", sn, cfgApply.m_srcImgFile.c_str(), nSrcSamples);
       return -1;
     }
   }

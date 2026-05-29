@@ -76,6 +76,11 @@
 #include <cmath>
 #include <limits>
 
+#if !defined(_WIN32) && !defined(WIN32)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #if defined(_WIN32) || defined(WIN32)
 #define ICC_FILEIO_WINDOWS_SEEK
 #endif
@@ -98,6 +103,22 @@
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
+#endif
+
+#if !defined(_WIN32) && !defined(WIN32)
+static bool icFileModeCanWrite(const icChar *szAttr)
+{
+  return szAttr && (strchr(szAttr, 'w') || strchr(szAttr, 'a') || strchr(szAttr, '+'));
+}
+
+static bool icFileIsRegular(FILE *f)
+{
+  if (!f)
+    return false;
+
+  struct stat st;
+  return fstat(fileno(f), &st) == 0 && S_ISREG(st.st_mode);
+}
 #endif
 
 static bool icGetSeekOrigin(icSeekVal pos, int &origin)
@@ -518,7 +539,22 @@ bool CIccFileIO::Open(const icChar *szFilename, const icChar *szAttr)
   if (m_fFile)
     fclose(m_fFile);
 
+#if !defined(_WIN32) && !defined(WIN32)
+  if (icFileModeCanWrite(szAttr)) {
+    struct stat st;
+    if (stat(szFilename, &st) == 0 && !S_ISREG(st.st_mode))
+      return false;
+  }
+#endif
+
   m_fFile = fopen(szFilename, szAttr);
+
+#if !defined(_WIN32) && !defined(WIN32)
+  if (m_fFile && icFileModeCanWrite(szAttr) && !icFileIsRegular(m_fFile)) {
+    fclose(m_fFile);
+    m_fFile = NULL;
+  }
+#endif
 
   return m_fFile != NULL;
 }

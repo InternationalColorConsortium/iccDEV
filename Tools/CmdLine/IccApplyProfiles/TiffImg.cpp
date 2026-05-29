@@ -75,6 +75,10 @@
 #include <limits>
 #include "TiffImg.h"
 
+#if !defined(_WIN32)
+#include <sys/stat.h>
+#endif
+
 
 #if false && defined(_DEBUG)
 #undef THIS_FILE
@@ -96,6 +100,19 @@ bool checkedUInt32(icUInt64Number value, unsigned int &result)
 bool checkedUInt32Product(unsigned int a, unsigned int b, unsigned int &result)
 {
   return checkedUInt32(static_cast<icUInt64Number>(a) * b, result);
+}
+
+bool canCreateRegularOutput(const char* szFname)
+{
+#if defined(_WIN32)
+  return true;
+#else
+  struct stat st;
+  if (stat(szFname, &st) != 0)
+    return true;
+
+  return S_ISREG(st.st_mode);
+#endif
 }
 
 bool calcBytesPerLine(unsigned int width, unsigned int bitsPerSample,
@@ -226,6 +243,11 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   case PHOTO_ICCLAB:
     m_nPhoto = PHOTOMETRIC_ICCLAB;
     break;
+  }
+
+  if (!canCreateRegularOutput(szFname)) {
+    TIFFError(szFname,"Output image must be a regular file");
+    return false;
   }
 
   m_hTif = TIFFOpen(szFname, "w");
