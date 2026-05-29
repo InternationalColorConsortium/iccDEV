@@ -64,6 +64,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <cmath>
@@ -77,6 +78,22 @@ std::ostream& operator<<( std::ostream &os, const Rect2D &r )
 {
   // llx lly urx ury
   return os << r.left << " " << r.bottom << " " << r.right << " " << r.top;
+}
+
+static bool WritePdfTextFile(FILE* outFile, const std::string& text)
+{
+  bool failed = false;
+
+  if (!outFile)
+    return false;
+
+  if (!text.empty() && fwrite(text.data(), 1, text.size(), outFile) != text.size())
+    failed = true;
+
+  if (!icFlushAndClose(outFile))
+    failed = true;
+
+  return !failed;
 }
 
 /******************************************************************************/
@@ -150,21 +167,23 @@ void PDFWriter::CloseFile() {
   if (!m_filename.empty()) {
     if (PageCount() > 0) {
         try  {
-          FILE* checkFile = icOpenRegularWriteTextFile(m_filename.c_str());
-          if (!checkFile || !icFlushAndClose(checkFile)) {
+          std::ostringstream out;
+          out.exceptions(std::ios::badbit | std::ios::failbit);
+          WriteHeader(out);
+          WriteObjects(out);
+          WriteXRefs(out);
+          WriteFooter(out);
+
+          // PDF export paths are intentional caller-selected output files after regular-file validation.
+
+          // codeql[cpp/path-injection]
+          FILE* outFile = icOpenRegularWriteTextFile(m_filename.c_str());
+          if (!WritePdfTextFile(outFile, out.str())) {
             fprintf(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
             m_filename.clear();
             return;
           }
 
-          std::ofstream out;
-          out.exceptions(std::ios::badbit | std::ios::failbit);
-          out.open(m_filename);
-          WriteHeader(out);
-          WriteObjects(out);
-          WriteXRefs(out);
-          WriteFooter(out);
-          out.close();
           m_objects.clear();
         }
         catch (const std::exception& e) {

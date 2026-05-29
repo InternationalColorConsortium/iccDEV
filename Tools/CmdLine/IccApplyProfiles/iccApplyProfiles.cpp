@@ -89,6 +89,7 @@
 static FILE* OpenWriteTextFile(const std::string& path)
 {
   // Export config paths are intentional caller-selected output files.
+
   // codeql[cpp/path-injection]
   return icOpenRegularWriteTextFile(path.c_str());
 }

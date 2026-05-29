@@ -102,6 +102,9 @@ int main(int argc, char* argv[])
   }
 
   CIccFileIO outFile;
+  // IccToJson intentionally writes to a caller-selected output path after CIccFileIO regular-file validation.
+
+  // codeql[cpp/path-injection]
   if (!outFile.Open(argv[2], "wb")) {
     printf("Unable to open '%s' for writing\n", argv[2]);
     return -1;

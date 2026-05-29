@@ -335,6 +335,9 @@ void Usage() {
 // =====================================================================
 static FILE* OpenPngOutputFile(const std::string& outputPng)
 {
+    // PNG export paths are intentional caller-selected output files after regular-file validation.
+
+    // codeql[cpp/path-injection]
     return icOpenRegularWriteBinaryFile(outputPng.c_str());
 }
 
