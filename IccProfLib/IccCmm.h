@@ -131,7 +131,26 @@ typedef enum {
   icXformLutMCS                = 0x8,
   icXformLutColorimetric       = 0x9,
   icXformLutSpectral           = 0xA,
+  icXformLutNamedColorimetric  = 0xB,
+  icXformLutNamedSpectral      = 0xC,
+  icXformLutNamedDevice        = 0xD,
  } icXformLutType;
+
+  // Note: Named-color variants that pin which member of a v5 NamedColor
+  // array the name->space apply path reads:
+  //   icXformLutNamedColorimetric -- reads icSigNmclPcsDataMbr; fails
+  //     with icCmmStatBadTintXform if the matched entry has none.
+  //   icXformLutNamedSpectral     -- reads the spectral member chosen
+  //     by the overprint hint ('spec' / 'spcb' / 'spcg'); fails with
+  //     icCmmStatBadTintXform if that member is absent.
+  //   icXformLutNamedDevice       -- reads icSigNmclDeviceDataMbr; the
+  //     xform's destination is the profile's colorSpace.  Fails with
+  //     icCmmStatBadTintXform if the matched entry has no device
+  //     member, or if the profile declares no colorSpace.
+  // Plain icXformLutNamedColor leaves the colorimetric/spectral choice
+  // to the bUseD2BxB2Dx / spectralPCS-presence heuristic in
+  // CIccNamedColorCmm::AddXform.
+
 
 #define icPerceptualRefBlackX 0.00336
 #define icPerceptualRefBlackY 0.0034731
@@ -339,6 +358,7 @@ public:
 
 //forward reference to CIccXform used by CIccApplyXform
 class CIccApplyXform;
+class CIccMatrixMath;
 
 /**
  **************************************************************************

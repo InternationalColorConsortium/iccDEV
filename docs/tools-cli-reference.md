@@ -77,8 +77,10 @@ parsed by the shared `CIccCfgProfile::fromArgs` is:
 | `+2000000` | NamedColor over-gray (`icSigNmclSpectralOverGrayMbr`, `'spcg'`) |
 
 The over-black / over-gray flags only affect chains that include a v5
-NamedColor profile. JSON callers prefer the `transform` field values
-`"named"`, `"namedOnBlack"`, `"namedOnGray"` — see
+NamedColor profile. JSON callers prefer the `transform` field values,
+which combine an output-side stem (`named` / `namedColorimetric` /
+`namedSpectral` / `namedDevice`) with an overprint suffix
+(`OnBlack` / `OnGray`, only meaningful on the spectral path) — see
 [`docs/icc-connect-config.schema.json`](icc-connect-config.schema.json)
 and [`Tools/CmdLine/IccApplyNamedCmm/Readme.md`](../Tools/CmdLine/IccApplyNamedCmm/Readme.md).
 

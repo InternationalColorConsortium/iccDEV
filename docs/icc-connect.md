@@ -121,34 +121,52 @@ requests them:
 | `adjustPcsLuminance` | `CIccLuminanceMatchingHint` |
 | `iccEnvVars` (non-empty) | `CIccCmmEnvVarHint` |
 | `pccEnvVars` (non-empty) | `CIccCmmPccEnvVarHint` |
-| `transform` ∈ {`namedOnBlack`, `namedOnGray`} *or* `transform = named` | `CIccCreateNamedColorXformHint` with `nOverprintType` set from the JSON `transform` name (or from the legacy CLI's `+1000000`/`+2000000` high-bit) |
+| `transform` ∈ any `named*` variant (`named`, `namedOnBlack`, `namedOnGray`, `namedColorimetric{,OnBlack,OnGray}`, `namedSpectral{,OnBlack,OnGray}`, `namedDevice`) *or* overprint set via the legacy CLI high-bit | `CIccCreateNamedColorXformHint` with `nOverprintType` set from the JSON `transform` name (or from the legacy CLI's `+1000000`/`+2000000` high-bit) |
 
 `pccFile` is opened once per profile entry, passed through as the PCC for
 that xform, and deleted after `Begin()` returns.
 
-### NamedColor Overprint Selection
+### NamedColor Transform Variants
 
-For v5 NamedColor profiles that carry the optional over-black /
-over-gray array members (`icSigNmclSpectralOverBlackMbr` 'spcb',
-`icSigNmclSpectralOverGrayMbr` 'spcg'), the JSON `transform` field
-selects which spectral array member is read by
-`CIccArrayNamedColor::GetSpectralTint`:
+The JSON `transform` field for a NamedColor stage has two independent
+axes that mirror the non-named `color` / `colorimetric` / `spectral`
+triad, plus a `namedDevice` stem for reading the device-side member.
 
-| `transform` value | Array member read | Maps to `icNamedColorOverprintType` |
-|-------------------|-------------------|-------------------------------------|
-| `"named"` (default) | `icSigNmclSpectralDataMbr` ('spec', over-white) | `icNamedColorOverWhite` |
-| `"namedOnBlack"` | `icSigNmclSpectralOverBlackMbr` ('spcb') | `icNamedColorOverBlack` |
-| `"namedOnGray"` | `icSigNmclSpectralOverGrayMbr` ('spcg') | `icNamedColorOverGray` |
+**Output-side axis** — picks which array member the named lookup
+reads (and, equivalently, which space the xform exposes downstream):
 
-The legacy argv form (`CIccCfgProfileSequence::fromArgs`) carries the
-same selection in the millions digit of the intent code:
+| Stem | Member read | Output-side space | Behaviour when the member is absent for an entry |
+|------|-------------|-------------------|--------------------------------------------------|
+| `named` | Auto-selected | Auto-selected | Heuristic: if `useD2BxB2Dx` is true and the profile declares `spectralPCS`, the xform's output space is `spectralPCS` (reads the spectral member); otherwise it is the profile's colorimetric PCS (reads `nmclPcsDataMbr`). Preserves legacy behaviour. |
+| `namedColorimetric` | `nmclPcsDataMbr` | Profile's PCS (XYZ/Lab) | Fail with `icCmmStatBadTintXform`. No silent fall-back to spectral or device. |
+| `namedSpectral` | Spectral member (selected by the overprint axis below) | Profile's `spectralPCS` | Fail with `icCmmStatBadTintXform`. No silent fall-back to the over-white member or to `nmclPcsDataMbr`. |
+| `namedDevice` | `nmclDeviceDataMbr` (v5 array) or `deviceCoords` struct field (v4 `CIccTagNamedColor2`) | Profile's `colorSpace` | Fail with `icCmmStatBadTintXform`. No silent fall-back to PCS or spectral. |
+
+**Overprint axis** — only meaningful on the spectral path. The suffix
+selects which spectral array member is read (neither `nmclPcsDataMbr`
+nor `nmclDeviceDataMbr` varies by substrate, so the suffix is a no-op
+on `namedColorimetric*` and is not accepted on `namedDevice`):
+
+| Suffix | Spectral array member | Maps to `icNamedColorOverprintType` |
+|--------|-----------------------|-------------------------------------|
+| (none) | `icSigNmclSpectralDataMbr` ('spec', over-white) | `icNamedColorOverWhite` |
+| `OnBlack` | `icSigNmclSpectralOverBlackMbr` ('spcb') | `icNamedColorOverBlack` |
+| `OnGray` | `icSigNmclSpectralOverGrayMbr` ('spcg') | `icNamedColorOverGray` |
+
+The two axes combine into the following set of JSON `transform` values:
+`named`, `namedOnBlack`, `namedOnGray`, `namedColorimetric`,
+`namedColorimetricOnBlack`, `namedColorimetricOnGray`, `namedSpectral`,
+`namedSpectralOnBlack`, `namedSpectralOnGray`, `namedDevice`.
+
+The legacy argv form (`CIccCfgProfileSequence::fromArgs`) carries only
+the overprint axis, in the millions digit of the intent code:
 `intent + 1000000` → over-black; `intent + 2000000` → over-gray;
-anything else stays at over-white.
+anything else stays at over-white. The output-side axis is JSON-only.
 
-If the profile lacks the requested member for any named color encountered
-during apply, `CIccArrayNamedColor::GetSpectralTint` returns false and
-the apply fails with `icCmmStatBadTintXform` rather than silently falling
-back to the over-white member. This makes misconfigurations visible.
+If the profile lacks the requested array member for any named color
+encountered during apply (output-side stem or overprint suffix), `Apply`
+fails with `icCmmStatBadTintXform` rather than silently falling back to
+another member. This surfaces misconfigurations.
 See [the iccApplyNamedCmm Readme](../Tools/CmdLine/IccApplyNamedCmm/Readme.md#named-color-overprint-variants)
 for end-to-end usage examples.
 

@@ -493,11 +493,19 @@ int main(int argc, const char* argv[])
 
       const char* szName = pData->m_name.c_str();
       icFloatNumber tint;
-      
+
       if (pData->m_values.size())
         tint = pData->m_values[0];
       else
         tint = 1.0;
+
+      // For named-color input the tint lives in pData->m_values (the
+      // JSON "v" field), not pData->m_srcValues; mirror the pixel-input
+      // branch below so the dump can echo the tint the caller supplied.
+      // When the caller omitted "v" entirely we leave m_srcValues empty
+      // rather than synthesise a 1.0 the caller did not write.
+      if (pData->m_values.size())
+        out->m_srcValues = pData->m_values;
 
       switch(pNamedCmm->GetInterface()) {
         case icApplyNamed2Pixel:

@@ -10892,6 +10892,23 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
       break;
   }
 
+  // namedColorimetric / namedSpectral / namedDevice pin which v5 named
+  // array member the name->space apply path reads (nmclPcsDataMbr /
+  // spectral / nmclDeviceDataMbr respectively); plain icXformLutNamedColor
+  // leaves the colorimetric-vs-spectral choice to the bUseD2BxB2Dx /
+  // spectralPCS-presence heuristic below.  Outside the named-color
+  // branch the colorimetric/spectral variants collapse to their non-
+  // named counterparts; namedDevice collapses to icXformLutColor (auto).
+  const bool bExplicitNamed   = (nLutType == icXformLutNamedColor ||
+                                 nLutType == icXformLutNamedColorimetric ||
+                                 nLutType == icXformLutNamedSpectral ||
+                                 nLutType == icXformLutNamedDevice);
+  const bool bWantSpectral    = (nLutType == icXformLutSpectral ||
+                                 nLutType == icXformLutNamedSpectral);
+  const bool bWantColorimetric = (nLutType == icXformLutColorimetric ||
+                                 nLutType == icXformLutNamedColorimetric);
+  const bool bWantDevice      = (nLutType == icXformLutNamedDevice);
+
   Xform.ptr = NULL;
   switch (nUseLutType) {
     //Automatically choose which one
@@ -10899,14 +10916,21 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
     case icXformLutColorimetric:
     case icXformLutSpectral:
     case icXformLutNamedColor:
+    case icXformLutNamedColorimetric:
+    case icXformLutNamedSpectral:
+    case icXformLutNamedDevice:
     {
       CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
 
-      if (pTag && (pProfile->m_Header.deviceClass==icSigNamedColorClass || nLutType == icXformLutNamedColor)) {
+      if (pTag && (pProfile->m_Header.deviceClass==icSigNamedColorClass || bExplicitNamed)) {
         if (bInput) {
           nSrcSpace = icSigNamedData;
         }
-        else if (nLutType == icXformLutSpectral || ((bUseD2BxB2DxTags || !pProfile->m_Header.pcs) && pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric)) {
+        else if (bWantDevice) {
+          // name <- device direction: source is the profile's colorSpace.
+          nSrcSpace = pProfile->m_Header.colorSpace;
+        }
+        else if (bWantSpectral || (!bWantColorimetric && (bUseD2BxB2DxTags || !pProfile->m_Header.pcs) && pProfile->m_Header.spectralPCS)) {
           nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
           bUseD2BxB2DxTags = true;
         }
@@ -10932,8 +10956,16 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
         }
 
         if (nSrcSpace==icSigNamedData) {
-          if (nLutType == icXformLutSpectral || (bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric)) {
-            nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS; 
+          if (bWantDevice) {
+            // name -> device direction: dst is the profile's colorSpace.
+            // Apply routes through CIccArrayNamedColor::GetDeviceTint
+            // (v5 array) or memcpy of pTag->GetEntry(j)->deviceCoords
+            // (v4 NamedColor2Tag), both of which surface
+            // icCmmStatBadTintXform if no device member is available.
+            nDstSpace = pProfile->m_Header.colorSpace;
+          }
+          else if (bWantSpectral || (!bWantColorimetric && bUseD2BxB2DxTags && pProfile->m_Header.spectralPCS)) {
+            nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
             bUseD2BxB2DxTags = true;
           }
           else {
@@ -10961,14 +10993,17 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
       }
       else {
         //It isn't named color so make we will use color lut.
-        if (nUseLutType==icXformLutNamedColor)
+        if (nUseLutType==icXformLutNamedColor ||
+            nUseLutType==icXformLutNamedColorimetric ||
+            nUseLutType==icXformLutNamedSpectral ||
+            nUseLutType==icXformLutNamedDevice)
           nUseLutType = icXformLutColor;
 
         //Check pProfile if nIntent and input can be found.
         if (bInput) {
           nSrcSpace = pProfile->m_Header.colorSpace;
 
-          if (nLutType == icXformLutSpectral || ((bUseD2BxB2DxTags || !pProfile->m_Header.pcs) && pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric)) {
+          if (bWantSpectral || (!bWantColorimetric && (bUseD2BxB2DxTags || !pProfile->m_Header.pcs) && pProfile->m_Header.spectralPCS)) {
             nDstSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
             bUseD2BxB2DxTags = true;
           }
@@ -10984,7 +11019,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
             nIntent = icPerceptual; // Note: icPerceptualIntent = 0
           }
 
-          if (nLutType == icXformLutSpectral || ((bUseD2BxB2DxTags || !pProfile->m_Header.pcs) && pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric)) {
+          if (bWantSpectral || (!bWantColorimetric && (bUseD2BxB2DxTags || !pProfile->m_Header.pcs) && pProfile->m_Header.spectralPCS)) {
             nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.spectralPCS;
             bUseD2BxB2DxTags = true;
           }

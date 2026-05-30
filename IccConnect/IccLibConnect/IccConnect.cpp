@@ -205,20 +205,23 @@ icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
   }
 
   // Attach a CIccCreateNamedColorXformHint carrying m_nOverprint whenever
-  // the caller asked for anything other than the OverWhite default.  This
-  // covers both:
-  //  - JSON "namedOnBlack"/"namedOnGray" (which also sets m_transform =
-  //    icXformLutNamedColor)
-  //  - the legacy CLI +1000000/+2000000 high-bit (which leaves m_transform
-  //    at icXformLutColor and relies on the CMM's deviceClass-based
-  //    auto-dispatch to the named-color branch in CIccNamedColorCmm
-  //    or CIccCmm).
-  // The CMM's named-color branch fills in the header-derived color-space
-  // fields after the profile is opened (via the Layer 2 changes that honor
-  // a pre-attached hint).  When the profile turns out not to be a
-  // NamedColor xform, the hint is simply unused.
+  // the caller asked for anything other than the OverWhite default, or
+  // whenever the JSON explicitly selected one of the named-color transform
+  // variants (so the named-color factory path in CIccXform::Create gets a
+  // pre-built hint regardless of profile device class).  Covers:
+  //  - JSON "named*OnBlack"/"named*OnGray" (m_nOverprint != OverWhite)
+  //  - JSON "named", "namedColorimetric", "namedSpectral" (the m_transform
+  //    check below; m_nOverprint is OverWhite)
+  //  - the legacy CLI +1000000/+2000000 high-bit (leaves m_transform at
+  //    icXformLutColor and relies on the CMM's deviceClass-based
+  //    auto-dispatch into the named-color branch).
+  // When the profile turns out not to be a NamedColor xform the hint is
+  // simply unused.
   if (pCfg->m_nOverprint != icNamedColorOverWhite ||
-      pCfg->m_transform == icXformLutNamedColor) {
+      pCfg->m_transform == icXformLutNamedColor ||
+      pCfg->m_transform == icXformLutNamedColorimetric ||
+      pCfg->m_transform == icXformLutNamedSpectral ||
+      pCfg->m_transform == icXformLutNamedDevice) {
     CIccCreateNamedColorXformHint* pNCHint =
         new (std::nothrow) CIccCreateNamedColorXformHint();
     if (!pNCHint) {

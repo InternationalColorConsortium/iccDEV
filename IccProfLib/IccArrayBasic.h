@@ -174,9 +174,9 @@ public:
                        icFloatNumber tint=1.0f,
                        icNamedColorlMemberSignature sig=icSigNmclSpectralDataMbr) const;
 
-  icUInt32Number GetDeviceSamples() { return m_nDeviceSamples; }
-  icUInt32Number GetPcsSamples() { return m_nPcsSamples; }
-  icUInt32Number GetSpectralSamples() { return m_nSpectralSamples; }
+  icUInt32Number GetDeviceSamples() const { return m_nDeviceSamples; }
+  icUInt32Number GetPcsSamples() const { return m_nPcsSamples; }
+  icUInt32Number GetSpectralSamples() const { return m_nSpectralSamples; }
 
 protected:
   bool GetTint(icFloatNumber *dstColor,

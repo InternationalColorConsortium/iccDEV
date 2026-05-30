@@ -28,12 +28,19 @@
 
     "transform": {
       "type": "string",
-      "description": "Xform LUT type to use for a profile. The 'namedOnBlack' and 'namedOnGray' variants are NamedColor xforms that read the alternate spectral array members (icSigNmclSpectralOverBlackMbr 'spcb' / icSigNmclSpectralOverGrayMbr 'spcg') of a v5 NamedColor profile instead of the default 'spec' over-white member. They only differ from 'named' for profiles that carry the corresponding member; otherwise the transform fails to bind and AddXform returns icCmmStatBadTintXform.",
+      "description": "Xform LUT type to use for a profile. The named-color variants pin which v5 NamedColor array member the name->space apply path reads, on two axes that mirror the non-named 'color' / 'colorimetric' / 'spectral' triad and add a 'device' stem. PCS-side stem: 'named' is the auto/legacy stem (colorimetric or spectral chosen by useD2BxB2Dx plus whether the profile declares spectralPCS); 'namedColorimetric' pins reads to nmclPcsDataMbr; 'namedSpectral' pins reads to the overprint-correct spectral array member; 'namedDevice' pins reads to nmclDeviceDataMbr and sets the xform's destination to the profile's colorSpace (works against v4 NamedColor2 profiles too, where it reads the entry's deviceCoords struct field). All three pinned stems fail with icCmmStatBadTintXform when the matched entry lacks the requested member -- no silent fall-back between members. Overprint axis (only meaningful for the spectral path -- a no-op on the other stems since neither nmclPcsDataMbr nor nmclDeviceDataMbr varies by substrate): suffix '' / 'OnBlack' / 'OnGray' selects icSigNmclSpectralDataMbr 'spec' / icSigNmclSpectralOverBlackMbr 'spcb' / icSigNmclSpectralOverGrayMbr 'spcg'. namedDevice does not take an overprint suffix.",
       "enum": [
         "default",
         "named",
         "namedOnBlack",
         "namedOnGray",
+        "namedColorimetric",
+        "namedColorimetricOnBlack",
+        "namedColorimetricOnGray",
+        "namedSpectral",
+        "namedSpectralOnBlack",
+        "namedSpectralOnGray",
+        "namedDevice",
         "colorimetric",
         "spectral",
         "MCS",
