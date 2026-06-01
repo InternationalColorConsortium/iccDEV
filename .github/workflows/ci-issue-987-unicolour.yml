@@ -135,7 +135,7 @@ jobs:
 
       - name: Setup MSYS2 UCRT64 MinGW
         id: setup-msys2
-        uses: msys2/setup-msys2@40677d36a502eb2cf0fb808cc9dec31bf6152638  # v2.28.0
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c  # v2.31.1
         with:
           msystem: UCRT64
           update: true
@@ -307,7 +307,7 @@ jobs:
 
       - name: Setup MSYS2 UCRT64 MinGW
         id: setup-msys2
-        uses: msys2/setup-msys2@40677d36a502eb2cf0fb808cc9dec31bf6152638  # v2.28.0
+        uses: msys2/setup-msys2@e9898307ac31d1a803454791be09ab9973336e1c  # v2.31.1
         with:
           msystem: UCRT64
           update: true
