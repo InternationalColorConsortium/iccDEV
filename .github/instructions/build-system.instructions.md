@@ -8,7 +8,7 @@ applyTo: "Build/**"
 
 Primary build file: `Build/Cmake/CMakeLists.txt`
 
-- Project: RefIccMAX v2.3.2.0
+- Project: RefIccMAX v2.3.2.1
 - Minimum CMake: 3.21
 - C++ standard: C++17
 - Compiler floor: GCC 11+, Clang 10+, MSVC 19.30+

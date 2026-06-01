@@ -70,7 +70,7 @@ jobs:
           unset GITHUB_TOKEN || true
           # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
-          git -C "$RUNNER_TEMP/vcpkg" checkout 1940ee77e81573713c0d364c42f5990172198be1
+          git -C "$RUNNER_TEMP/vcpkg" checkout eae1680538b86f962455c27abca2aad0dc304a4d
           "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
       - name: Bootstrap vcpkg (Windows)
@@ -87,7 +87,7 @@ jobs:
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           # Pin vcpkg to builtin-baseline from vcpkg.json for reproducibility
           git clone https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
-          git -C "$env:RUNNER_TEMP\vcpkg" checkout 1940ee77e81573713c0d364c42f5990172198be1
+          git -C "$env:RUNNER_TEMP\vcpkg" checkout eae1680538b86f962455c27abca2aad0dc304a4d
           & "$env:RUNNER_TEMP\vcpkg\bootstrap-vcpkg.bat" -disableMetrics
           Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$env:RUNNER_TEMP\vcpkg"
       # Install port via overlay
@@ -381,7 +381,7 @@ jobs:
             "builtin-baseline": "$baseline",
             "dependencies": [ "iccdev" ],
             "overrides": [
-              { "name": "iccdev", "version": "2.3.2.0" }
+              { "name": "iccdev", "version": "2.3.2.1" }
             ]
           }
           "@ | Set-Content "$testDir\vcpkg.json" -Encoding UTF8

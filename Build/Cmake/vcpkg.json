@@ -1,8 +1,8 @@
 {
   "name": "iccdev",
-  "version": "2.3.2.0",
+  "version": "2.3.2.1",
   "description": "Developer tools for ICC color profiles",
-  "builtin-baseline": "1940ee77e81573713c0d364c42f5990172198be1",
+  "builtin-baseline": "eae1680538b86f962455c27abca2aad0dc304a4d",
   "dependencies": [
     "vcpkg-cmake",
     "vcpkg-cmake-config",
