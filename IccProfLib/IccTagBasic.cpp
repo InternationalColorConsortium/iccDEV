@@ -6826,7 +6826,7 @@ template <class T, icTagTypeSignature Tsig>
 const icChar *CIccTagFloatNum<T, Tsig>::GetClassName() const
 {
   if (Tsig==icSigFloat16ArrayType)
-    return "CIccFlaot16";
+    return "CIccFloat16";
   if (Tsig==icSigFloat32ArrayType)
     return "CIccFloat32";
   else if (Tsig==icSigFloat64ArrayType)
