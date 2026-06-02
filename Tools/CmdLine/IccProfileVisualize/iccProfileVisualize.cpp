@@ -1815,7 +1815,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
 {
   const size_t bufSize = 64;
   char buf[bufSize];
-  char buf2[bufSize];
   namedLabList colorsOut;
 
   int outputCount = 0;
@@ -1994,6 +1993,8 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         if (!thisItem)
             continue;
 
+        tempColorValues.clear();
+
         auto structType = thisItem->GetTagStructType();
         
         switch (structType) {
@@ -2001,6 +2002,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
           case icSigTintZeroStruct:
           case icSigNamedColorStruct:
             {
+            // look for PCS and name info
             CIccTagStruct *structPtr = dynamic_cast<CIccTagStruct*> (thisItem);
             if (!structPtr)
               continue;
@@ -2188,7 +2190,7 @@ CIccPcsXform::pushRef2Xyz
         
         
       } // end loop over items in array
- 
+
       // make sure we found some usable colors and names
       if (colorsOut.size() == 0)
         return 0;
