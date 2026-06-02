@@ -162,8 +162,8 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
 
 /******************************************************************************/
 
-void PDFWriter::CloseFile() {
-
+void PDFWriter::CloseFile()
+{
   if (!m_filename.empty()) {
     if (PageCount() > 0) {
         try  {

@@ -77,6 +77,14 @@ const float inch2point = 72.0f;              // 72 points per inch, DTP and W3C 
 struct point2D {
   point2D(float xx, float yy) : x(xx), y(yy) {}
   point2D() : x(0.0), y(0.0) {}
+  
+  bool operator<(const point2D& o) const {
+  if (x == o.x)
+    return y < o.y;
+  else
+    return x < o.x;
+  }
+
   float x, y;
 };
 

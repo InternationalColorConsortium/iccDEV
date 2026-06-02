@@ -108,6 +108,54 @@
 
 /******************************************************************************/
 
+// Cross product 2 vectors from O to A and B
+// Returns a positive value, if OAB makes a counter-clockwise turn,
+// negative for clockwise turn, and zero if the points are collinear.
+float cross(const point2D &O, const point2D &A, const point2D &B)
+{
+  return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+}
+
+/******************************************************************************/
+
+// Returns a list of points on the convex hull from the set of input points.
+// Duplicate points and colinear points are removed.
+// Monotone chain algorithm  O(NlogN+2N)
+// NOTE - Could be abstracted to any random access container
+template <typename P>
+std::vector<P> convex_hull2D(std::vector<P> points_in)
+{
+  size_t n = points_in.size();
+
+  if (n <= 3)
+    return points_in;
+
+  std::vector<P> result(2*n); // worst case storage
+
+  // Sort points
+  std::sort( points_in.begin(), points_in.end() );
+
+  // Build lower hull
+  size_t k = 0;
+  for (size_t i = 0; i < n; ++i) {
+    while (k >= 2 && cross(result[k-2], result[k-1], points_in[i]) <= 0)
+      k--;
+    result[k++] = points_in[i];
+  }
+
+  // Build upper hull
+  for (size_t i = n-1, t = k+1; i > 0; --i) {
+    while (k >= t && cross(result[k-2], result[k-1], points_in[i-1]) <= 0)
+      k--;
+    result[k++] = points_in[i-1];
+  }
+
+  result.resize(k-1);
+  return result;
+}
+
+/******************************************************************************/
+
 #if USE_SVG
 static
 void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
@@ -305,11 +353,26 @@ void CreateAxesXobject( PDFWriter &pdfout )
 
 struct XYColor
 {
-    XYColor (float xx, float yy) : x(xx), y(yy) {}
+  XYColor (float xx, float yy) : x(xx), y(yy) {}
 
-    float x;
-    float y;
+  bool operator<(const XYColor& o) const {
+    if (x == o.x)
+      return y < o.y;
+    else
+      return x < o.x;
+  }
+
+public:
+  float x;
+  float y;
 };
+
+float cross(const XYColor &O, const XYColor &A, const XYColor &B)
+{
+  return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+}
+
+/******************************************************************************/
 
 // https://en.wikipedia.org/wiki/Planckian_locus
 // Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho; Youngsun Kim (December 2002).
@@ -318,56 +381,56 @@ struct XYColor
 static
 XYColor approx_planck( double t )
 {
-    const double c3a = -0.2661239;
-    const double c2a = -0.2343589;
-    const double c1a =  0.8776956;
-    const double c0a =  0.179910;
+  const double c3a = -0.2661239;
+  const double c2a = -0.2343589;
+  const double c1a =  0.8776956;
+  const double c0a =  0.179910;
 
-    const double c3b = -3.0258469;
-    const double c2b =  2.1070379;
-    const double c1b =  0.2226347;
-    const double c0b =  0.240390;
+  const double c3b = -3.0258469;
+  const double c2b =  2.1070379;
+  const double c1b =  0.2226347;
+  const double c0b =  0.240390;
 
-    const double k3a = -1.1063814;
-    const double k2a = -1.34811020;
-    const double k1a =  2.18555832;
-    const double k0a = -0.20219683;
+  const double k3a = -1.1063814;
+  const double k2a = -1.34811020;
+  const double k1a =  2.18555832;
+  const double k0a = -0.20219683;
 
-    const double k3b = -0.9549476;
-    const double k2b = -1.37418593;
-    const double k1b =  2.09137015;
-    const double k0b = -0.16748867;
+  const double k3b = -0.9549476;
+  const double k2b = -1.37418593;
+  const double k1b =  2.09137015;
+  const double k0b = -0.16748867;
 
-    const double k3c =  3.0817580;
-    const double k2c = -5.87338670;
-    const double k1c =  3.75112997;
-    const double k0c = -0.37001483;
+  const double k3c =  3.0817580;
+  const double k2c = -5.87338670;
+  const double k1c =  3.75112997;
+  const double k0c = -0.37001483;
 
-    double t2 = t*t;
-    double t3 = t*t*t;
+  double t2 = t*t;
+  double t3 = t*t*t;
 
-    double x = 0.0;
+  double x = 0.0;
 
-    if (t < 4000.0) {
-        x = c3a*(1e9/t3) + c2a*(1e6/t2) + c1a*(1e3/t) + c0a;
-    } else {
-        x = c3b*(1e9/t3) + c2b*(1e6/t2) + c1b*(1e3/t) + c0b;
-    }
+  if (t < 4000.0) {
+    x = c3a*(1e9/t3) + c2a*(1e6/t2) + c1a*(1e3/t) + c0a;
+  } else {
+    x = c3b*(1e9/t3) + c2b*(1e6/t2) + c1b*(1e3/t) + c0b;
+  }
 
-    double x2 = x*x;
-    double x3 = x*x*x;
+  double x2 = x*x;
+  double x3 = x*x*x;
 
-    double y = 0.0;
+  double y = 0.0;
 
-    if (t < 2222.0) {
-        y = k3a*x3 + k2a*x2 + k1a*x + k0a;
-    } else if (t < 4000.0) {
-        y = k3b*x3 + k2b*x2 + k1b*x + k0b;
-    } else {
-        y = k3c*x3 + k2c*x2 + k1c*x + k0c;
-    }
+  if (t < 2222.0) {
+    y = k3a*x3 + k2a*x2 + k1a*x + k0a;
+  } else if (t < 4000.0) {
+    y = k3b*x3 + k2b*x2 + k1b*x + k0b;
+  } else {
+    y = k3c*x3 + k2c*x2 + k1c*x + k0c;
+  }
 
-    return XYColor(x,y);
+  return XYColor(x,y);
 }
 
 /******************************************************************************/
@@ -378,12 +441,12 @@ sorta, kinda evenly spaced, plus endpoints
  */
 std::vector<int> locusLabelWavelengths =
 {
-    360,
-    460, 450,
-    470, 475, 480, 485, 490, 495, 500, 505, 510, 515,
-    520, 530, 540, 550, 560, 570, 580, 590, 600, 610, 620,
-    640,
-    700
+  360,
+  460, 450,
+  470, 475, 480, 485, 490, 495, 500, 505, 510, 515,
+  520, 530, 540, 550, 560, 570, 580, 590, 600, 610, 620,
+  640,
+  700
 };
 
 /******************************************************************************/
@@ -394,21 +457,21 @@ point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
 // NOTE - Yes, I could create normal vectors from the locus points, etc.
 // but this looks better with less math, and is much easier to debug.
 
-    if (nm < 515) {
-        // go left
-        align = kTextAlignRight;
-        return point2D( -2.0f, 0.0f );
-    } else if (nm <= 520) {
-        // go up
-        align = kTextAlignCenter;
-        return point2D( -3.0f, textSize*1.55f );
-    } else {
-        // go right
-        align = kTextAlignLeft;
-        return point2D( textSize*0.5, textSize );
-    }
+  if (nm < 515) {
+    // go left
+    align = kTextAlignRight;
+    return point2D( -2.0f, 0.0f );
+  } else if (nm <= 520) {
+    // go up
+    align = kTextAlignCenter;
+    return point2D( -3.0f, textSize*1.55f );
+  } else {
+    // go right
+    align = kTextAlignLeft;
+    return point2D( textSize*0.5, textSize );
+  }
 
-    // unreachable
+  // unreachable
 }
 
 /******************************************************************************/
@@ -503,9 +566,9 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   firstPoint = basepoint + scaling * point2D( firstXY.x, firstXY.y );
   commands << firstPoint << " m\n";
   for (float temp = start_temp+temp_step; temp <= end_temp; temp += temp_step ) {
-        XYColor thisXY = approx_planck( temp );
-        point2D thispoint = basepoint + scaling * point2D( thisXY.x, thisXY.y );
-        commands << thispoint << " l\n";
+    XYColor thisXY = approx_planck( temp );
+    point2D thispoint = basepoint + scaling * point2D( thisXY.x, thisXY.y );
+    commands << thispoint << " l\n";
   }
   // stroke the curve
   commands << "S\n";
@@ -629,18 +692,18 @@ void CreateABPlotXobject( PDFWriter &pdfout )
 static
 XYColor xyFromICCXYZ( const icXYZNumber *xyz )
 {
-    // integers, so don't have to test for NaN or Inf
-    float X = xyz->X / 65535.0f;
-    float Y = xyz->Y / 65535.0f;
-    float Z = xyz->Z / 65535.0f;
+// integers, so don't have to test for NaN or Inf
+  float X = xyz->X / 65535.0f;
+  float Y = xyz->Y / 65535.0f;
+  float Z = xyz->Z / 65535.0f;
 
-    float sum = X + Y + Z;
-    if (sum <= 1e-8)
-        return XYColor(0,0);
+  float sum = X + Y + Z;
+  if (sum <= 1e-8)
+    return XYColor(0,0);
 
-    float x = X / sum;
-    float y = Y / sum;
-    return XYColor(x,y);
+  float x = X / sum;
+  float y = Y / sum;
+  return XYColor(x,y);
 }
 
 /******************************************************************************/
@@ -648,17 +711,17 @@ XYColor xyFromICCXYZ( const icXYZNumber *xyz )
 static
 XYColor xyFromICCXYZFloat( const icFloatNumber *xyz )
 {
-    float X = xyz[0];
-    float Y = xyz[1];
-    float Z = xyz[2];
+  float X = xyz[0];
+  float Y = xyz[1];
+  float Z = xyz[2];
 
-    float sum = X + Y + Z;
-    if (sum <= 1e-8)
-        return XYColor(0,0);
+  float sum = X + Y + Z;
+  if (sum <= 1e-8)
+    return XYColor(0,0);
 
-    float x = X / sum;
-    float y = Y / sum;
-    return XYColor(x,y);
+  float x = X / sum;
+  float y = Y / sum;
+  return XYColor(x,y);
 }
 
 /******************************************************************************/
@@ -1847,9 +1910,125 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         fprintf(stderr, "Skipping %s: unable to convert named color array\n", sigDesc.c_str());
         return 0;
       }
+      
+      auto arrayType = array->GetTagArrayType();
+      if (arrayType != icSigColorantInfoArray
+        && arrayType != icSigNamedColorArray)
+        return 0;
 
-// TODO - dissect structure, figure out LAB values for colors
+      std::string path(":");
+      path += sigDesc;
+      std::string report;
+      if (array->Validate(path, report, NULL) > icValidateWarning) {
+        fprintf(stderr,"WARNING - named color array failed validation: %s\n", report.c_str() );
+        return 0;
+      }
 
+      std::vector<float> tempColorValues;
+
+      icUInt32Number items = array->GetSize();
+
+      for (icUInt32Number i = 0; i < items; ++i) {
+        CIccTag *thisItem = array->GetIndex(i);
+        if (!thisItem)
+            continue;
+        
+        tempColorValues.clear();
+
+        auto structType = thisItem->GetTagStructType();
+        
+        switch (structType) {
+          case icSigColorantInfoStruct:
+          case icSigTintZeroStruct:
+          case icSigNamedColorStruct:
+            {
+            // look for PCS and name info
+            CIccTagStruct *structPtr = dynamic_cast<CIccTagStruct*> (thisItem);
+            if (!structPtr)
+              continue;
+
+// TODO - can we easily convert spectra to PCS? Probably not without specifying viewing conditions.
+            CIccTag *pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
+            if (!pcsElem)
+              continue;
+            
+            icTagTypeSignature pcsDataType = pcsElem->GetType();
+            switch( pcsDataType) {
+              case icSigFloat16ArrayType:
+                {
+                CIccTagFloat16 *flt16 = dynamic_cast<CIccTagFloat16*> (pcsElem);
+                if (!flt16)
+                  continue;
+                icUInt32Number dataCount = flt16->GetSize();
+                int colorCount = dataCount / 3;
+
+// TODO - store PCS values
+                }
+                break;
+            
+              case icSigFloat32ArrayType:
+                {
+                CIccTagFloat32 *flt32 = dynamic_cast<CIccTagFloat32*> (pcsElem);
+                if (!flt32)
+                  continue;
+                icUInt32Number dataCount = flt32->GetSize();
+                int colorCount = dataCount / 3;
+
+// TODO - store PCS values
+                }
+                break;
+                
+              case icSigFloat64ArrayType:
+                {
+                CIccTagFloat64 *flt64 = dynamic_cast<CIccTagFloat64*> (pcsElem);
+                if (!flt64)
+                  continue;
+                icUInt32Number dataCount = flt64->GetSize();
+                int colorCount = dataCount / 3;
+
+// TODO - store PCS values
+                }
+                break;
+            
+              default:
+                printf("Unknown named color struct data type %s for tag %s\n",
+                        icGetSig(buf, bufSize, pcsDataType),
+                        sigDesc.c_str() );
+                break;
+            }   // end switch by data type
+            
+            
+// we have a PCS value list!, now we need name or localized name to go with them
+
+// convert PCS value as needed
+// add name and value to list
+            
+            }
+            break;
+        
+          default:
+            printf("Unknown named color struct %s for tag %s\n",
+                    icGetSig(buf, bufSize, structType),
+                    sigDesc.c_str() );
+            break;
+        } // end switch struct type
+        
+        // extract name and PCS value from this struct
+        // if no PCS, bail
+        
+        
+      } // end loop over items in array
+ 
+      // make sure we found usable colors and names
+      if (colorsOut.size() == 0)
+        return 0;
+
+      icFloatNumber XYZIlluminant[3];
+      pIcc->getNormIlluminantXYZ( XYZIlluminant );
+ 
+      std::string description("Colorant Array: ");
+      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
+                        XYZIlluminant, pdffile );
       }
       break;
 
@@ -1863,7 +2042,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
 
   return outputCount;
 }
-
 
 /******************************************************************************/
 
@@ -1956,12 +2134,24 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
       case icSigNamedColor2Tag:
       case icSigColorantTableTag:
       case icSigColorantTableOutTag:
+      case icSigColorantInfoTag:
+      case icSigColorantInfoOutTag:
        {
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
         outputItems += outputNamedColors(pIcc, pTag, sigDesc, pdffile );
        }
         break;
+
+// TODO - embedded height image
+// TODO - embedded normal image
+// TODO - BRDF images?
+// TODO - LUT content from MPE tags
+// TODO - spectral viewing conditions
+// TODO - all XYZ type tags?
+// TODO - curveSetElement
+// TODO - singleSampledCurve
+// TODO - segmentedCurve
 
       // ignore everything else
       default:
