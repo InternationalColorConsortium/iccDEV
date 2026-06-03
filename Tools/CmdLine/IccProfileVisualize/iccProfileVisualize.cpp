@@ -1773,6 +1773,17 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
 
   icTagTypeSignature typeSig = tag->GetType();
 
+  icFloatNumber XYZIlluminant[3];
+  pIcc->getNormIlluminantXYZ( XYZIlluminant );
+  
+  icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
+  if (pcs != icSigXYZData && pcs != icSigLabData) {
+    fprintf(stderr,"WARNING - unknown pcs for colors: %s\n",
+                        icGetSig(buf, bufSize, pcs) );
+    return 0;
+  }
+
+
   switch(typeSig) {
 
     case icSigColorantTableType:    // colorant tables -- name and PCS only
@@ -1790,19 +1801,15 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         fprintf(stderr,"WARNING - colorantTable failed validation: %s\n", report.c_str() );
         return 0;
       }
-
-      icColorSpaceSignature pcs = pIcc->m_Header.pcs; // table->GetPCS();   // never initialized in table!
-
-      if (pcs != icSigXYZData && pcs != icSigLabData) {
-        fprintf(stderr,"WARNING - unknown pcs for colorantTable: %s\n",
+      
+      icColorSpaceSignature table_pcs = table->GetPCS();
+      if (pcs != table_pcs) {
+        fprintf(stderr,"WARNING - bad pcs for colorant table: %s\n",
                             icGetSig(buf, bufSize, pcs) );
         return 0;
       }
 
       icUInt32Number colorCount = table->GetSize();
-
-      icFloatNumber XYZIlluminant[3];
-      pIcc->getNormIlluminantXYZ( XYZIlluminant );
 
       colorsOut.reserve(colorCount);
 
@@ -1854,19 +1861,15 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         fprintf(stderr,"WARNING - namedColorTable failed validation: %s\n", report.c_str() );
         return 0;
       }
-
-      icColorSpaceSignature pcs = table->GetPCS();// pIcc->m_Header.pcs;
-
-      if (pcs != icSigXYZData && pcs != icSigLabData) {
-        fprintf(stderr,"WARNING - unknown pcs for namedColorTable: %s\n",
+      
+      icColorSpaceSignature table_pcs = table->GetPCS();
+      if (pcs != table_pcs) {
+        fprintf(stderr,"WARNING - bad pcs for namedColorTable: %s\n",
                             icGetSig(buf, bufSize, pcs) );
         return 0;
       }
 
       icUInt32Number colorCount = table->GetSize();
-
-      icFloatNumber XYZIlluminant[3];
-      pIcc->getNormIlluminantXYZ( XYZIlluminant );
 
       colorsOut.reserve(colorCount);
 
@@ -1924,7 +1927,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         return 0;
       }
 
-      std::vector<float> tempColorValues;
+      namedLabList tempColorValues;
 
       icUInt32Number items = array->GetSize();
 
@@ -1932,8 +1935,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         CIccTag *thisItem = array->GetIndex(i);
         if (!thisItem)
             continue;
-        
-        tempColorValues.clear();
 
         auto structType = thisItem->GetTagStructType();
         
@@ -1942,7 +1943,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
           case icSigTintZeroStruct:
           case icSigNamedColorStruct:
             {
-            // look for PCS and name info
             CIccTagStruct *structPtr = dynamic_cast<CIccTagStruct*> (thisItem);
             if (!structPtr)
               continue;
@@ -1951,42 +1951,46 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
             CIccTag *pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
             if (!pcsElem)
               continue;
+        
+            tempColorValues.clear();
             
             icTagTypeSignature pcsDataType = pcsElem->GetType();
             switch( pcsDataType) {
+              case icSigFloat64ArrayType:
+              case icSigFloat32ArrayType:
               case icSigFloat16ArrayType:
                 {
-                CIccTagFloat16 *flt16 = dynamic_cast<CIccTagFloat16*> (pcsElem);
+                CIccTagNumArray *flt16 = dynamic_cast<CIccTagNumArray*> (pcsElem);
                 if (!flt16)
                   continue;
-                icUInt32Number dataCount = flt16->GetSize();
-                int colorCount = dataCount / 3;
+                icUInt32Number dataCount = flt16->GetNumValues();
+                icUInt32Number colorCount = dataCount / 3; // ignoring any partials
 
-// TODO - store PCS values
+                // loop over count, convert to LAB as needed
+                for (icUInt32Number k = 0; k < colorCount; ++k) {
+                    icFloatNumber valueTemp[3];
+                    icFloatNumber labTemp[3];
+                    
+                    flt16->GetValues(valueTemp, k*3, 3);
+                    
+                    if (pcs == icSigXYZData) {
+                        // XYZ float
+                        icXYZtoLab( labTemp, valueTemp, XYZIlluminant );
+                    } else {
+                        //  LAB float
+                        labTemp[0] = valueTemp[0];
+                        labTemp[1] = valueTemp[1];
+                        labTemp[2] = valueTemp[2];
+                        // assume LAB directly coded as float (as seen in examples)
+                    }
+
+                    namedLAB tempNamed;     // leaving name empty for now
+                    tempNamed.L = labTemp[0];
+                    tempNamed.a = labTemp[1];
+                    tempNamed.b = labTemp[2];
+                    tempColorValues.push_back( tempNamed );
                 }
-                break;
-            
-              case icSigFloat32ArrayType:
-                {
-                CIccTagFloat32 *flt32 = dynamic_cast<CIccTagFloat32*> (pcsElem);
-                if (!flt32)
-                  continue;
-                icUInt32Number dataCount = flt32->GetSize();
-                int colorCount = dataCount / 3;
 
-// TODO - store PCS values
-                }
-                break;
-                
-              case icSigFloat64ArrayType:
-                {
-                CIccTagFloat64 *flt64 = dynamic_cast<CIccTagFloat64*> (pcsElem);
-                if (!flt64)
-                  continue;
-                icUInt32Number dataCount = flt64->GetSize();
-                int colorCount = dataCount / 3;
-
-// TODO - store PCS values
                 }
                 break;
             
@@ -1994,14 +1998,114 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
                 printf("Unknown named color struct data type %s for tag %s\n",
                         icGetSig(buf, bufSize, pcsDataType),
                         sigDesc.c_str() );
+                continue;
                 break;
-            }   // end switch by data type
+            }   // end switch by PCS data type
             
             
-// we have a PCS value list!, now we need name or localized name to go with them
+            // now we try to find names to match the colors
+            CIccTag *nameElem = structPtr->FindElem(icSigCinfNameMbr);
+            if (!nameElem)      // fallback to other tag type
+              nameElem = structPtr->FindElem(icSigCinfLocalizedNameMbr);        // unused so far?
+            
+            // if we don't have names, just skip it and still plot the color valuess
+            if (nameElem) {
+              icTagTypeSignature nameDataType = nameElem->GetType();
+              std::string nameString;
+              switch( nameDataType) {
+                case icSigUtf8TextType:
+                  {
+                  CIccTagUtf8Text *nameUTF8 = dynamic_cast<CIccTagUtf8Text*> (nameElem);
+                  if (nameUTF8)
+                    nameString = std::string( (char *)nameUTF8->GetText() );
+                  }
+                  break;
+                
+                case icSigUtf16TextType:
+                  {
+                  CIccTagUtf16Text *nameUTF16 = dynamic_cast<CIccTagUtf16Text*> (nameElem);
+                  if (nameUTF16) {
+                    std::string buffer;
+                    nameString = std::string( (char *)nameUTF16->GetText(buffer) );   // GetText converts to UTF8
+                    }
+                  }
+                  break;
+                
+                case icSigTextType:
+                  {
+                  CIccTagText *nameText = dynamic_cast<CIccTagText*> (nameElem);
+                  if (nameText)
+                    nameString = std::string( (char *)nameText->GetText() );
+                  }
+                  break;
+                  
+                case icSigDictType: // supposed to be multiLocalizedUnicodeType, but so far unused?
+                case icSigMultiLocalizedUnicodeType:
+                  {
+                  CIccTagMultiLocalizedUnicode *nameDict = dynamic_cast<CIccTagMultiLocalizedUnicode*> (nameElem);
+                  if (nameDict) {
+                        // has language and first entry fallbacks
+                    CIccLocalizedUnicode *uniText = nameDict->Find( icLanguageCodeEnglish, icCountryCodeUSA );
+                    if (uniText)
+                      uniText->GetText(nameString);
+                    }
+                  }
+                  break;
+                
+                default:
+                  printf("Unknown named color struct name type %s for tag %s\n",
+                        icGetSig(buf, bufSize, nameDataType),
+                        sigDesc.c_str() );
+                  break;
+              }
+              
+              if (nameString.size() > 0) {
+                for (auto &color: tempColorValues)
+                  color.name = nameString;
+              }
+            
+            } // end name element handling
 
-// convert PCS value as needed
-// add name and value to list
+
+            // now try to match tint values and append to name, if present
+            CIccTag *tintElem = structPtr->FindElem(icSigNmclTintMbr);
+            if (tintElem) {
+                icTagTypeSignature tintDataType = tintElem->GetType();
+                switch( tintDataType) {
+                  case icSigFloat64ArrayType:
+                  case icSigFloat32ArrayType:
+                  case icSigFloat16ArrayType:
+                    {
+                    CIccTagNumArray *flt16 = dynamic_cast<CIccTagNumArray*> (tintElem);
+                    if (!flt16)
+                      continue;
+                    icUInt32Number dataCount = flt16->GetNumValues();
+                    if (dataCount <= tempColorValues.size()) {
+                      for (icUInt32Number k = 0; k < dataCount; ++k) {
+                        icFloatNumber valueTemp;
+                        flt16->GetValues(&valueTemp, k, 1);
+                        int percent = (int)round(valueTemp * 100.0f);
+                        tempColorValues[k].name += std::string("(") + std::to_string(percent) + std::string("%)");
+                      }
+                    }
+
+                    }
+                    break;
+                
+                  default:
+                    printf("Unknown named color tint data type %s for tag %s\n",
+                            icGetSig(buf, bufSize, tintDataType),
+                            sigDesc.c_str() );
+                    continue;
+                    break;
+                }   // end switch by PCS data type
+              
+            }   // end tint value handling
+            
+
+            // add temp values to our list
+            if (tempColorValues.size() > 0)
+              colorsOut.insert( colorsOut.end(), tempColorValues.begin(), tempColorValues.end() );
             
             }
             break;
@@ -2022,9 +2126,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       // make sure we found usable colors and names
       if (colorsOut.size() == 0)
         return 0;
-
-      icFloatNumber XYZIlluminant[3];
-      pIcc->getNormIlluminantXYZ( XYZIlluminant );
  
       std::string description("Colorant Array: ");
       outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
