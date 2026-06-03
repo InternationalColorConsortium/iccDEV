@@ -2002,7 +2002,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
           case icSigTintZeroStruct:
           case icSigNamedColorStruct:
             {
-            // look for PCS and name info
             CIccTagStruct *structPtr = dynamic_cast<CIccTagStruct*> (thisItem);
             if (!structPtr)
               continue;
@@ -2169,7 +2168,6 @@ CIccPcsXform::pushRef2Xyz
                 }   // end switch by PCS data type
               
             }   // end tint value handling
-            
 
             // add temp values to our list
             if (tempColorValues.size() > 0)
