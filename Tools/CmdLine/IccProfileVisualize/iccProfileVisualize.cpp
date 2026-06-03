@@ -1778,7 +1778,8 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
   
   icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
   if (pcs != icSigXYZData && pcs != icSigLabData) {
-    fprintf(stderr,"WARNING - unknown pcs for colors: %s\n",
+    if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
+      fprintf(stderr,"WARNING - unknown pcs for colors: %s\n",
                         icGetSig(buf, bufSize, pcs) );
     return 0;
   }
@@ -1948,6 +1949,12 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
               continue;
 
 // TODO - can we easily convert spectra to PCS? Probably not without specifying viewing conditions.
+/*
+CIccPcsXform::pushRef2Xyz
+ CIccPcsXform::pushRad2Xyz
+ CIccPcsXform::pushBiRef2Xyz
+
+ */
             CIccTag *pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
             if (!pcsElem)
               continue;
