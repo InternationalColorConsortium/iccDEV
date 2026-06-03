@@ -1971,8 +1971,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         && arrayType != icSigNamedColorArray) {
         fprintf(stderr,"%s: WARNING - unknown color array type: %s for tag %s\n",
                         filename.c_str(),
-                        icGetSig(buf, bufSize, arrayType),
-                        sigDesc.c_str() );
         return 0;
       }
 
