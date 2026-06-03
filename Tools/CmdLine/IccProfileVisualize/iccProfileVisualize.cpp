@@ -1915,10 +1915,14 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         return 0;
       }
       
-      auto arrayType = array->GetTagArrayType();
+      icArraySignature arrayType = array->GetTagArrayType();
       if (arrayType != icSigColorantInfoArray
-        && arrayType != icSigNamedColorArray)
+        && arrayType != icSigNamedColorArray) {
+        fprintf(stderr,"WARNING - unknown color array type: %s for tag %s\n",
+                        icGetSig(buf, bufSize, arrayType),
+                        sigDesc.c_str() );
         return 0;
+      }
 
       std::string path(":");
       path += sigDesc;
@@ -1953,7 +1957,6 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
 CIccPcsXform::pushRef2Xyz
  CIccPcsXform::pushRad2Xyz
  CIccPcsXform::pushBiRef2Xyz
-
  */
             CIccTag *pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
             if (!pcsElem)
@@ -2130,7 +2133,7 @@ CIccPcsXform::pushRef2Xyz
         
       } // end loop over items in array
  
-      // make sure we found usable colors and names
+      // make sure we found some usable colors and names
       if (colorsOut.size() == 0)
         return 0;
  
@@ -2245,6 +2248,7 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
       case icSigColorantInfoTag:
       case icSigColorantInfoOutTag:
        {
+// TODO - plot named spectra as graphs?
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
         outputItems += outputNamedColors(pIcc, pTag, sigDesc, pdffile );
