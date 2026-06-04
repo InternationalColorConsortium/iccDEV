@@ -3140,7 +3140,7 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
   int64_t savePos = pIO->Tell();
   if (savePos >= 0 && pIO->Seek(0, icSeekEnd) >= 0) {
     int64_t endPos = pIO->Tell();
-    if (endPos >= 0)
+    if (endPos >= 0 && (uint64_t)endPos <= (uint64_t)std::numeric_limits<size_t>::max())
       fileSize = (size_t)endPos;
     pIO->Seek(savePos, icSeekSet);
   }
@@ -3163,7 +3163,9 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
   std::sort(ents.begin(), ents.end(),
             [](const LayoutEntry &a, const LayoutEntry &b) { return a.offset < b.offset; });
 
-  icUInt32Number maxEnd = tagDirEnd;
+  // prevEnd tracks the furthest byte occupied so far (the "frontier"), not just
+  // the previous tag's end, so a tag fully contained within an earlier one does
+  // not move the reference boundary backwards and skew later gap/overlap checks.
   icUInt32Number prevEnd = tagDirEnd;
   std::string prevName = "the tag directory";
 
@@ -3186,8 +3188,10 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
         sReport += buf;
         rv = icMaxStatus(rv, icValidateWarning);
       }
-      // Padding bytes must be zero.
-      if (fileSize && (size_t)off <= fileSize && pIO->Seek((int64_t)prevEnd, icSeekSet) >= 0) {
+      // Padding bytes must be zero. Spec-allowed padding is at most three bytes;
+      // larger gaps are already reported above, so don't scan a potentially huge
+      // region one byte at a time.
+      if (gap <= 3 && fileSize && (size_t)off <= fileSize && pIO->Seek((int64_t)prevEnd, icSeekSet) >= 0) {
         bool nonZero = false;
         for (icUInt32Number g = 0; g < gap; ++g) {
           icUInt8Number b = 0;
@@ -3210,17 +3214,18 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
       rv = icMaxStatus(rv, icValidateNonCompliant);
     }
 
-    if (end > maxEnd)
-      maxEnd = end;
-    prevEnd = end;
-    prevName = name;
+    // Advance the frontier only when this tag extends it (see prevEnd note).
+    if (end > prevEnd) {
+      prevEnd = end;
+      prevName = name;
+    }
   }
 
   // Unused data after the last tag (allow up to three bytes of final padding).
-  if (fileSize > (size_t)maxEnd + 3) {
+  if (fileSize > (size_t)prevEnd + 3) {
     sReport += icMsgValidateWarning;
     snprintf(buf, sizeof(buf), " - %lu bytes of data after the last tag.\n",
-             (unsigned long)(fileSize - maxEnd));
+             (unsigned long)(fileSize - prevEnd));
     sReport += buf;
     rv = icMaxStatus(rv, icValidateWarning);
   }
