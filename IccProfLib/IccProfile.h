@@ -236,6 +236,7 @@ protected:
                    icStructSignature structSig=icSigUndefinedStruct,
                    icArraySignature arraySig=icSigUndefinedArray) const;
   bool CheckFileSize(CIccIO *pIO) const;
+  icValidateStatus CheckTagLayout(CIccIO *pIO, std::string &sReport) const;
 
 
 public:

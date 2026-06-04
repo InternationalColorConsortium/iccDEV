@@ -980,6 +980,10 @@ icValidateStatus CIccProfile::ReadValidate(CIccIO *pIO, std::string &sReport)
     }
   }
 
+  // Structural layout checks (inter-tag padding, overlaps, trailing data) that
+  // the per-tag and header checks don't cover.
+  rv = icMaxStatus(rv, CheckTagLayout(pIO, sReport));
+
   if (rv==icValidateCriticalError)
     Cleanup();
 
@@ -1956,10 +1960,13 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
             || (!compare_float(Z, 0.8249f, 0.0004f))
             )
         ){
-      sReport += icMsgValidateNonCompliant;
+      // Non-D50 here is non-critical: the PCS is D50-adapted by definition, so
+      // the illuminant header field is informational and a CMM can ignore a
+      // non-D50 value. Report as a warning rather than non-compliant.
+      sReport += icMsgValidateWarning;
       sReport += "Non D50 Illuminant XYZ values";
       sReport +="\r\n";
-      rv = icMaxStatus(rv, icValidateNonCompliant);
+      rv = icMaxStatus(rv, icValidateWarning);
     }
   }
 
@@ -2095,31 +2102,62 @@ icValidateStatus CIccProfile::CheckTagTypes(std::string &sReport) const
   CIccInfo Info;
   
   TagEntryList::const_iterator i;
+  bool bV2TypeInV4 = false;
   for (i = m_Tags.begin(); i != m_Tags.end(); ++i) {
     icTagSignature tagsig = i->TagInfo.sig;
-    
+
     icTagTypeSignature typesig = icSigUnknownType;
     icStructSignature structSig = icSigUnknownStruct;
     icArraySignature arraySig = icSigUnknownArray;
-    
+
     // missing the internal tag data would cause a problem, issue #322
     if (i->pTag) {
       typesig = i->pTag->GetType();
       structSig = i->pTag->GetTagStructType();
       arraySig = i->pTag->GetTagArrayType();
     }
-    
+
     snprintf(buf, bufSize, "%s", Info.GetSigName(tagsig));
     if (!IsTypeValid(tagsig, typesig, structSig, arraySig)) {
-      sReport += icMsgValidateNonCompliant;
-      sReport += buf;
-      snprintf(buf,bufSize, " %s: Invalid tag type (Might be critical!).\n", Info.GetTagTypeSigName(typesig));
-      sReport += buf;
-      rv = icMaxStatus(rv, icValidateNonCompliant);
+      // An invalid tag type that is actually an ICC v2-era type appearing in a
+      // profile declaring v4 or later almost always means the version number is
+      // wrong (a v2 profile mislabeled as v4), not that the tag data is corrupt.
+      // The data is usable, so report it as a warning with version context
+      // rather than flagging it non-compliant.
+      bool bVersionLegacyType =
+        (m_Header.version >= icVersionNumberV4) &&
+        (typesig == icSigTextDescriptionType ||
+         (typesig == icSigTextType && tagsig == icSigCopyrightTag));
+
+      if (bVersionLegacyType) {
+        sReport += icMsgValidateWarning;
+        sReport += buf;
+        snprintf(buf, bufSize, " %s: ICC v2 tag type not valid in the declared profile version.\n",
+                 Info.GetTagTypeSigName(typesig));
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateWarning);
+        bV2TypeInV4 = true;
+      }
+      else {
+        sReport += icMsgValidateNonCompliant;
+        sReport += buf;
+        snprintf(buf,bufSize, " %s: Invalid tag type (Might be critical!).\n", Info.GetTagTypeSigName(typesig));
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
     }
   }
 
-  return rv;  
+  if (bV2TypeInV4) {
+    snprintf(buf, bufSize,
+             " - Profile declares version %s but uses ICC v2 tag types; the profile version number may be incorrect.\n",
+             Info.GetVersionName(m_Header.version));
+    sReport += icMsgValidateWarning;
+    sReport += buf;
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+
+  return rv;
 }
 
 
@@ -3066,6 +3104,131 @@ bool CIccProfile::CheckFileSize(CIccIO *pIO) const
     return false;
 
   return true;
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::CheckTagLayout
+ *
+ * Purpose: Validate the structural layout of the tag table — areas the header
+ *  and per-tag checks do not cover: padding between tags (which must be no more
+ *  than three zero bytes), overlapping tag data, and unused data after the last
+ *  tag. These are non-critical: the profile is usable, but its layout deviates
+ *  from the specification.
+ *
+ * Args:
+ *  pIO - IO object positioned on the profile (used to inspect pad bytes and to
+ *        determine the file size)
+ *  sReport - string to append validation findings to
+ *
+ * Return:
+ *  icValidateOK, or a warning / non-compliant status.
+ *****************************************************************************
+ */
+icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) const
+{
+  icValidateStatus rv = icValidateOK;
+  if (!pIO || m_Tags.empty())
+    return rv;
+
+  CIccInfo Info;
+  char buf[256];
+
+  // File size (save/restore IO position so we don't disturb the caller).
+  size_t fileSize = 0;
+  int64_t savePos = pIO->Tell();
+  if (savePos >= 0 && pIO->Seek(0, icSeekEnd) >= 0) {
+    int64_t endPos = pIO->Tell();
+    if (endPos >= 0)
+      fileSize = (size_t)endPos;
+    pIO->Seek(savePos, icSeekSet);
+  }
+
+  // End of the tag directory: 128-byte header + 4-byte tag count + 12 bytes per
+  // directory entry. Tag data must not overlap this region and the first tag
+  // should follow it with minimal padding.
+  icUInt32Number tagCount = (icUInt32Number)m_Tags.size();
+  icUInt32Number tagDirEnd = 128 + 4 + tagCount * 12;
+
+  // Sort entries by offset: the directory order is not guaranteed ascending, so
+  // consecutive-entry comparisons need an offset-ordered view.
+  struct LayoutEntry { icUInt32Number offset; icUInt32Number size; icTagSignature sig; };
+  std::vector<LayoutEntry> ents;
+  ents.reserve(tagCount);
+  for (TagEntryList::const_iterator i = m_Tags.begin(); i != m_Tags.end(); ++i) {
+    LayoutEntry e = { i->TagInfo.offset, i->TagInfo.size, i->TagInfo.sig };
+    ents.push_back(e);
+  }
+  std::sort(ents.begin(), ents.end(),
+            [](const LayoutEntry &a, const LayoutEntry &b) { return a.offset < b.offset; });
+
+  icUInt32Number maxEnd = tagDirEnd;
+  icUInt32Number prevEnd = tagDirEnd;
+  std::string prevName = "the tag directory";
+
+  for (size_t k = 0; k < ents.size(); ++k) {
+    icUInt32Number off = ents[k].offset;
+    icUInt32Number sz  = ents[k].size;
+    // Clamp instead of wrapping if a (malformed) tag claims data past 4 GB so
+    // the layout comparisons below stay monotonic. A wrapped end could only
+    // mislead a report message, never index memory, but clamping keeps it sane.
+    icUInt32Number end = (sz > 0xFFFFFFFFu - off) ? 0xFFFFFFFFu : off + sz;
+    std::string name = Info.GetTagSigName(ents[k].sig);
+
+    if (off > prevEnd) {
+      icUInt32Number gap = off - prevEnd;
+      // Padding between tagged elements must be no more than three bytes.
+      if (gap > 3) {
+        sReport += icMsgValidateWarning;
+        snprintf(buf, sizeof(buf), " - %u bytes of unexpected data between %s and %s.\n",
+                 gap, prevName.c_str(), name.c_str());
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateWarning);
+      }
+      // Padding bytes must be zero.
+      if (fileSize && (size_t)off <= fileSize && pIO->Seek((int64_t)prevEnd, icSeekSet) >= 0) {
+        bool nonZero = false;
+        for (icUInt32Number g = 0; g < gap; ++g) {
+          icUInt8Number b = 0;
+          if (pIO->Read8(&b, 1) != 1) break;
+          if (b) { nonZero = true; break; }
+        }
+        if (nonZero) {
+          sReport += icMsgValidateWarning;
+          snprintf(buf, sizeof(buf), " - Non-zero padding bytes after %s.\n", prevName.c_str());
+          sReport += buf;
+          rv = icMaxStatus(rv, icValidateWarning);
+        }
+      }
+    }
+    else if (off < prevEnd) {
+      // Tag data overlaps the preceding element (or the tag directory).
+      sReport += icMsgValidateNonCompliant;
+      snprintf(buf, sizeof(buf), " - %s overlaps %s.\n", name.c_str(), prevName.c_str());
+      sReport += buf;
+      rv = icMaxStatus(rv, icValidateNonCompliant);
+    }
+
+    if (end > maxEnd)
+      maxEnd = end;
+    prevEnd = end;
+    prevName = name;
+  }
+
+  // Unused data after the last tag (allow up to three bytes of final padding).
+  if (fileSize > (size_t)maxEnd + 3) {
+    sReport += icMsgValidateWarning;
+    snprintf(buf, sizeof(buf), " - %lu bytes of data after the last tag.\n",
+             (unsigned long)(fileSize - maxEnd));
+    sReport += buf;
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+
+  if (savePos >= 0)
+    pIO->Seek(savePos, icSeekSet);
+
+  return rv;
 }
 
 

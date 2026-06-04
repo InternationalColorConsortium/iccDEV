@@ -663,6 +663,24 @@ icValidateStatus CIccTagCurve::Validate(std::string sigPath, std::string &sRepor
         }
       }
     }
+    else if (m_nSize==1) {
+      // A single-entry curve encodes a gamma value (Y = X^gamma). A gamma of
+      // zero collapses the response to a constant, and a gamma pinned at the
+      // maximum encodable value (~256) collapses it to a near-step function;
+      // both produce an unusable TRC. The specification does not explicitly
+      // forbid these, so report them as warnings rather than non-compliant.
+      if (m_Curve && (m_Curve[0]<=0.0 || m_Curve[0]>=1.0)) {
+        icChar gbuf[160];
+        icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0);
+        snprintf(gbuf, sizeof(gbuf),
+                 " - Degenerate gamma value (%.1f) produces an unusable tone response curve.\n",
+                 (double)dGamma);
+        sReport += icMsgValidateWarning;
+        sReport += sSigPathName;
+        sReport += gbuf;
+        rv = icMaxStatus(rv, icValidateWarning);
+      }
+    }
   }
 
   return rv;
