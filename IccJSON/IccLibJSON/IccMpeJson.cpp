@@ -1574,7 +1574,10 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number vo = 0, vs = 1;
-          p2.GetIndex(vo, vs, 0, 1);
+          if (!p2.GetIndex(vo, vs, 0, 1)) {
+            parseStr += "Invalid index for local '" + ref + "' in macro '" + macroName + "'\n";
+            return false;
+          }
           voffset = vo; vsize = vs + 1;
         }
         if (voffset + vsize > (int)nLocalSize) {
@@ -1640,7 +1643,10 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number vo = 0, vs = 1;
-          p2.GetIndex(vo, vs, 0, 1);
+          if (!p2.GetIndex(vo, vs, 0, 1)) {
+            parseStr += "Invalid index for variable '" + ref + "'\n";
+            return false;
+          }
           voffset = vo; vsize = vs + 1;
         }
         if (voffset + vsize > var->second.m_size) {
@@ -1713,7 +1719,10 @@ bool CIccMpeJsonCalculator::UpdateLocals(std::string &func, std::string sFunc,
       std::string op = parse.GetName();
       CIccFuncTokenizer p2(tok + 4);
       icUInt16Number vo = 0, vs = 1;
-      p2.GetIndex(vo, vs, 0, 1);
+      if (!p2.GetIndex(vo, vs, 0, 1)) {
+        parseStr += "Invalid local variable index\n";
+        return false;
+      }
       int voffset = vo + nLocalsOffset;
       int vsize   = vs + 1;
       if (voffset + vsize > 65535) {
@@ -1826,7 +1835,15 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
             return false;
           }
           icUInt16Number msize = 0, extra = 0;
-          parse.GetIndex(msize, extra, 1, 0);
+          const char *idx = parse.GetPos();
+          while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+            idx++;
+          if (*idx == '[' || *idx == '(') {
+            if (!parse.GetIndex(msize, extra, 1, 0)) {
+              parseStr += "Invalid size index for member '" + mname + "' in variable '" + name + "'\n";
+              return false;
+            }
+          }
           msize++;
           if (msize < 1) msize = 1;
           var.m_members.push_back(CIccTempVar(mname, off, msize));
@@ -1876,7 +1893,15 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
             return false;
           }
           icUInt16Number lsize = 0, extra = 0;
-          parse.GetIndex(lsize, extra, 1, 0);
+          const char *idx = parse.GetPos();
+          while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+            idx++;
+          if (*idx == '[' || *idx == '(') {
+            if (!parse.GetIndex(lsize, extra, 1, 0)) {
+              parseStr += "Invalid size index for local '" + lname + "' in macro '" + name + "'\n";
+              return false;
+            }
+          }
           lsize++;
           if (lsize < 1) lsize = 1;
           var.m_members.push_back(CIccTempVar(lname, off, lsize));

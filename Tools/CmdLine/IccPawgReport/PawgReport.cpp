@@ -2046,7 +2046,8 @@ const char *SectionName(char prefix)
 std::string JsonEscape(const std::string &s)
 {
   std::ostringstream oss;
-  for (unsigned char ch : s) {
+  for (size_t i = 0; i < s.size(); i++) {
+    unsigned char ch = static_cast<unsigned char>(s[i]);
     switch (ch) {
       case '\\':
         oss << "\\\\";

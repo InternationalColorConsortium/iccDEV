@@ -129,7 +129,8 @@ static inline icUInt16Number icJsonSafeU16(size_t n)
 
 static bool icJsonIsSafeLocalizedText(const std::string &text)
 {
-  for (unsigned char ch : text) {
+  for (size_t i = 0; i < text.size(); i++) {
+    unsigned char ch = static_cast<unsigned char>(text[i]);
     if (ch < 0x20 && ch != '\n' && ch != '\t')
       return false;
   }

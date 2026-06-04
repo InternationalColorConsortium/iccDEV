@@ -2822,6 +2822,7 @@ bool CIccFuncTokenizer::GetIndex(icUInt16Number &v1, icUInt16Number &v2, icUInt1
 {
   unsigned int iv1, iv2;
   const char *pos = GetPos();
+  int nParsed = 0;
 
   if (!GetNext(true))
     return false;
@@ -2831,22 +2832,29 @@ bool CIccFuncTokenizer::GetIndex(icUInt16Number &v1, icUInt16Number &v2, icUInt1
   if (*szToken=='[' || *szToken=='(') {
     if (strchr(szToken, ',')) {
       if (*szToken=='(') 
-        sscanf(m_token->c_str(), "(%u,%u)", &iv1, &iv2);
+        nParsed = sscanf(m_token->c_str(), "(%u,%u)", &iv1, &iv2);
       else 
-        sscanf(m_token->c_str(), "[%u,%u]", &iv1, &iv2);
+        nParsed = sscanf(m_token->c_str(), "[%u,%u]", &iv1, &iv2);
+      if (nParsed != 2)
+        return false;
     }
     else {
       if (*szToken=='(')
-        sscanf(m_token->c_str(), "(%u)", &iv1);
+        nParsed = sscanf(m_token->c_str(), "(%u)", &iv1);
       else 
-        sscanf(m_token->c_str(), "[%u]", &iv1);
+        nParsed = sscanf(m_token->c_str(), "[%u]", &iv1);
+      if (nParsed != 1)
+        return false;
     }
   }
   else {
     SetPos(pos); //Undo get token
   }
-  v1 = (icUInt16Number)iv1 - initV1;
-  v2 = (icUInt16Number)iv2 - initV2;
+  if (iv1 > 0xffff || iv2 > 0xffff || iv1 < initV1 || iv2 < initV2)
+    return false;
+
+  v1 = (icUInt16Number)(iv1 - initV1);
+  v2 = (icUInt16Number)(iv2 - initV2);
 
   return true;
 }

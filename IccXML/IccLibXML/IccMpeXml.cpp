@@ -2643,7 +2643,15 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                   return false;
                 }
                 size = 0; extra = 0;
-                parse.GetIndex(size, extra, 1, 0);
+                const char *idx = parse.GetPos();
+                while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+                  idx++;
+                if (*idx == '[' || *idx == '(') {
+                  if (!parse.GetIndex(size, extra, 1, 0)) {
+                    parseStr += "Invalid size index for member '" + member + "' in calc element variable '" + name + "'\n";
+                    return false;
+                  }
+                }
                 size++;
                 if (size < 1) 
                   size = 1;
@@ -2708,7 +2716,15 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                   return false;
                 }
                 size = 0; extra = 0;
-                parse.GetIndex(size, extra, 1, 0);
+                const char *idx = parse.GetPos();
+                while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+                  idx++;
+                if (*idx == '[' || *idx == '(') {
+                  if (!parse.GetIndex(size, extra, 1, 0)) {
+                    parseStr += "Invalid size index for local '" + member + "' in calc element macro '" + name + "'\n";
+                    return false;
+                  }
+                }
                 size++;
                 if (size < 1)
                   size = 1;
@@ -3026,7 +3042,10 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number _voffset = 0, _vsize = 1;
-          p2.GetIndex(_voffset, _vsize, 0, 1);
+          if (!p2.GetIndex(_voffset, _vsize, 0, 1)) {
+            parseStr += "Invalid index for local '" + ref + "' in macro '" + macroName + "'\n";
+            return false;
+          }
           voffset = _voffset;
           vsize = _vsize + 1;
         }
@@ -3121,7 +3140,10 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number _voffset = 0, _vsize = 1;
-          p2.GetIndex(_voffset, _vsize, 0, 1);
+          if (!p2.GetIndex(_voffset, _vsize, 0, 1)) {
+            parseStr += "Invalid index for variable '" + ref + "'\n";
+            return false;
+          }
           voffset = _voffset;
           vsize = _vsize + 1;
         }
@@ -3207,7 +3229,10 @@ bool CIccMpeXmlCalculator::UpdateLocals(std::string &func, std::string sFunc, st
 
       CIccFuncTokenizer p2(tok+4);
       icUInt16Number _voffset = 0, _vsize = 1;
-      p2.GetIndex(_voffset, _vsize, 0, 1);
+      if (!p2.GetIndex(_voffset, _vsize, 0, 1)) {
+        parseStr += "Invalid local variable index\n";
+        return false;
+      }
       voffset = _voffset + nLocalsOffset;
       vsize = _vsize + 1;
 
