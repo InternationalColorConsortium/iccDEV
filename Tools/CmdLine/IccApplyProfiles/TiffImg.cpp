@@ -199,6 +199,9 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   Close();
   m_bRead = false;
 
+  if (nBPS % 8)
+    return false;
+
   if (bCompress && nBPS != 8 && nBPS != 16 && nBPS != 32)
     return false;
 

@@ -72,12 +72,15 @@
 
 
 #include <cstdlib>
+#include <cerrno>
+#include <climits>
 #include <cstdio>
 #include <cstring>
 #include <cmath>
 #include <iostream>
 #include <vector>
 #include <memory>
+#include <limits>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
@@ -116,6 +119,30 @@ void Usage(const char *name)
 
 //===================================================
 
+static bool parseIntArg(const char *text, int &value)
+{
+  char *end = NULL;
+  errno = 0;
+  long parsed = strtol(text, &end, 10);
+
+  if (errno || !text[0] || *end || parsed < INT_MIN || parsed > INT_MAX)
+    return false;
+
+  value = (int)parsed;
+  return true;
+}
+
+static bool checkedSizeProduct(size_t a, size_t b, size_t &result)
+{
+  if (a && b > std::numeric_limits<size_t>::max() / a)
+    return false;
+
+  result = a * b;
+  return true;
+}
+
+//===================================================
+
 int main(int argc, char* argv[]) {
   const int minargs = 8; // argc = 8 without profile, 9 with profile
   
@@ -127,9 +154,16 @@ int main(int argc, char* argv[]) {
   bool bCompress = atoi(argv[2]) != 0;
   bool bSep = atoi(argv[3]) != 0;
 
-  int start = atoi(argv[5]);
-  int end = atoi(argv[6]);
-  int step = atoi(argv[7]);
+  int start = 0;
+  int end = 0;
+  int step = 0;
+
+  if (!parseIntArg(argv[5], start) ||
+      !parseIntArg(argv[6], end) ||
+      !parseIntArg(argv[7], step)) {
+    printf("Invalid channel range: %s, %s, %s\n", argv[5], argv[6], argv[7]);
+    return -1;
+  }
 
   if (step == 0) {
     printf("Error: increment cannot be zero.\n");
@@ -137,28 +171,33 @@ int main(int argc, char* argv[]) {
   }
 
   // we do allow end < start, when step is negative
-  if ( ((end < start) && (step > 0))
-    || ((end > start) && (step < 0)) ) {
+  long long range = (long long)end - (long long)start;
+
+  if ( ((range < 0) && (step > 0))
+    || ((range > 0) && (step < 0)) ) {
     printf("Bad steps values would overflow: %d, %d, %d\n", start, end, step );
     return -1;
   }
 
-  int nSamples = std::abs(end - start) / step + 1;  // Safe to perform division now
+  long long absRange = range < 0 ? -range : range;
+  long long absStep = step < 0 ? -(long long)step : (long long)step;
+  size_t nSamples = (size_t)(absRange / absStep) + 1;
 
-  if (nSamples < 1) {  // just in case
-    printf("Zero samples specified: %d, %d, %d\n", start, end, step );
+  if (nSamples < 1 ||
+      nSamples > (size_t)std::numeric_limits<icUInt16Number>::max()) {
+    printf("Invalid sample count specified: %d, %d, %d\n", start, end, step );
     return -1;
   }
 
   // open ALL input files
   std::vector<CTiffImg> infile(nSamples);
 
-  for (int i=0; i<nSamples; i++) {
+  for (size_t i=0; i<nSamples; i++) {
     const int max_path_length = 510;
     char filename[ max_path_length ];
     
-    int channelNum = i*step + start;
-    snprintf(filename, max_path_length, "%s%d", argv[4], channelNum);
+    long long channelNum = (long long)start + (long long)i * (long long)step;
+    snprintf(filename, max_path_length, "%s%lld", argv[4], channelNum);
     if (!infile[i].Open(filename)) {
       printf("Cannot open input %s\n", filename);
       return -1;
@@ -191,7 +230,7 @@ int main(int argc, char* argv[]) {
   // since we made sure all inputs match basic format.
   CTiffImg *f = &infile[0];
 
-  long bytePerLine = f->GetBytesPerLine();
+  size_t bytePerLine = f->GetBytesPerLine();
   
   bool invert = false;
   if (f->GetPhoto()==PHOTO_MINISWHITE)
@@ -201,11 +240,25 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  long bytesPerSample = f->GetBitsPerSample()/8;
+  if (f->GetBitsPerSample() % 8) {
+    printf("Input bits per sample must be byte aligned: %u\n", f->GetBitsPerSample());
+    return -1;
+  }
+
+  size_t bytesPerSample = f->GetBitsPerSample()/8;
+  size_t inputSize = 0;
+  size_t outSize = 0;
+  size_t outWidthSize = 0;
+
+  if (!checkedSizeProduct(bytePerLine, nSamples, inputSize) ||
+      !checkedSizeProduct(f->GetWidth(), bytesPerSample, outWidthSize) ||
+      !checkedSizeProduct(outWidthSize, nSamples, outSize)) {
+    printf("Image row size is too large\n");
+    return -1;
+  }
   
   // use unique_ptr to automatically free the buffers
-  std::unique_ptr<icUInt8Number[]> inbufffer( new icUInt8Number[ bytePerLine*nSamples ] );
-  size_t outSize = f->GetWidth() * bytesPerSample * nSamples;
+  std::unique_ptr<icUInt8Number[]> inbufffer( new icUInt8Number[ inputSize ] );
   std::unique_ptr<icUInt8Number[]> outbuffer( new icUInt8Number[ outSize ] );
   icUInt8Number *inbuf = inbufffer.get();
   icUInt8Number *outbuf = outbuffer.get();
@@ -240,21 +293,21 @@ int main(int argc, char* argv[]) {
 
   for (unsigned int i=0; i<f->GetHeight(); i++) {
     icUInt8Number *sptr, *tptr;
-    for (int j=0; j<nSamples; j++) {
+    for (size_t j=0; j<nSamples; j++) {
       sptr = inbuf + j*bytePerLine;
       if (!infile[j].ReadLine(sptr)) {
-        printf("Error reading line %d of file %d\n", i, j);
+        printf("Error reading line %u of file %zu\n", i, j);
         return -1;
       }
       if (invert) {     // NOTE - this will not work for floating point data, but that should never be inverted anyway
-        for (long k=0; k<bytePerLine; k++) {
+        for (size_t k=0; k<bytePerLine; k++) {
           sptr[k] ^= 0xff;
         }
       }
     }
     tptr = outbuf;
     for (unsigned int k=0; k<f->GetWidth(); k++) {
-      for (int j=0; j<nSamples; j++) {
+      for (size_t j=0; j<nSamples; j++) {
         sptr = inbuf + j*bytePerLine + k*bytesPerSample;
         memcpy(tptr, sptr, bytesPerSample);
         tptr += bytesPerSample;
