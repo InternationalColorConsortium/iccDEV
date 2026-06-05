@@ -2106,7 +2106,7 @@ CIccPcsXform::pushRef2Xyz
                     printf("Unknown named color tint data type %s for tag %s\n",
                             icGetSig(buf, bufSize, tintDataType),
                             sigDesc.c_str() );
-                    continue;
+                    // skipping this still allows colors and names, even if we don't have tint percentages
                     break;
                 }   // end switch by PCS data type
               
@@ -2116,7 +2116,6 @@ CIccPcsXform::pushRef2Xyz
             // add temp values to our list
             if (tempColorValues.size() > 0)
               colorsOut.insert( colorsOut.end(), tempColorValues.begin(), tempColorValues.end() );
-            
             }
             break;
         
@@ -2137,7 +2136,7 @@ CIccPcsXform::pushRef2Xyz
       if (colorsOut.size() == 0)
         return 0;
  
-      std::string description("Colorant Array: ");
+      std::string description("Color Array: ");
       outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
                         XYZIlluminant, pdffile );
       }
@@ -2258,8 +2257,8 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
 // TODO - embedded height image
 // TODO - embedded normal image
 // TODO - BRDF images?
-// TODO - LUT content from MPE tags
-// TODO - spectral viewing conditions
+// TODO - LUT content from MPE tags?
+// TODO - spectral viewing conditions?
 // TODO - all XYZ type tags?
 // TODO - curveSetElement
 // TODO - singleSampledCurve
