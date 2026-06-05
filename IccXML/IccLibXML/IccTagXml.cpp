@@ -2288,6 +2288,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     if (attr) {
       m_reserved2 = (icUInt16Number)atoi(icXmlAttrValue(attr));
     }
+    
+    // if these are not set correctly, then later allocations and calculations WILL fail
+    if (m_observerRange.start == 0 || m_observerRange.end == 0 || m_observerRange.steps == 0)
+      return false;
 
     if (pChild->children && pChild->children->content) {
       CIccFloatArray vals;
@@ -2298,6 +2302,8 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
       if (!m_observer)
         return false;
       icFloatNumber *pBuf = vals.GetBuf();
+      if (!pBuf)
+        return false;
       memcpy(m_observer, pBuf, m_observerRange.steps*3*sizeof(icFloatNumber));
     }
     else {
@@ -2333,8 +2339,12 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     if (attr) {
       m_reserved3 = (icUInt16Number)atoi(icXmlAttrValue(attr));
     }
+    
+    // if these are not set correctly, then later allocations and calculations WILL fail
+    if (m_illuminantRange.start == 0 || m_illuminantRange.end == 0 || m_illuminantRange.steps == 0)
+      return false;
 
-    if (pChild->children && pChild->children->content && m_illuminantRange.steps) {
+    if (pChild->children && pChild->children->content) {
       CIccFloatArray vals;
       vals.ParseTextArray((icChar*)pChild->children->content);
       if (vals.GetSize()!=m_illuminantRange.steps)
@@ -2343,6 +2353,8 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
       if (!m_illuminant)
         return false;
       icFloatNumber *pBuf = vals.GetBuf();
+      if (!pBuf)
+        return false;
       memcpy(m_illuminant, pBuf, m_illuminantRange.steps * sizeof(icFloatNumber));
     }
     else {
