@@ -88,6 +88,8 @@ static char THIS_FILE[]=__FILE__;
 
 namespace {
 
+const icUInt16Number kMaxTiffSamples = std::numeric_limits<icUInt16Number>::max();
+
 bool checkedUInt32(icUInt64Number value, unsigned int &result)
 {
   if (value > static_cast<icUInt64Number>(std::numeric_limits<unsigned int>::max()))
@@ -198,6 +200,9 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   m_bRead = false;
 
   if (bCompress && nBPS != 8 && nBPS != 16 && nBPS != 32)
+    return false;
+
+  if (nSamples == 0 || nSamples > kMaxTiffSamples || nExtraSamples > nSamples)
     return false;
 
   m_nWidth = nWidth;
@@ -352,7 +357,8 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetField(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
   
   if (m_nWidth == 0 || m_nHeight == 0 || m_nRowsPerStrip == 0 ||
-      m_nSamples == 0 || m_nBitsPerSample == 0) {
+      m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
+      m_nExtraSamples > m_nSamples || m_nBitsPerSample == 0) {
     // Corrupt parameters - can't read the file
     // If the file is uncompressed, we might guess some of the values,
     // but it would take a bit of testing to get right.  Probably not worth it.
@@ -446,7 +452,9 @@ bool CTiffImg::Open(const char *szFname)
 
 bool CTiffImg::ReadLine(unsigned char *pBuf)
 {
-  if (!m_bRead || m_nRowsPerStrip == 0)
+  if (!m_bRead || m_nRowsPerStrip == 0 ||
+      m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
+      m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
     return false;
 
   unsigned int nStrip = m_nCurLine / m_nRowsPerStrip;
@@ -497,7 +505,9 @@ bool CTiffImg::ReadLine(unsigned char *pBuf)
 
 bool CTiffImg::WriteLine(unsigned char *pBuf)
 {
-  if (m_bRead)
+  if (m_bRead ||
+      m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
+      m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
     return false;
 
   if (m_nCurStrip < m_nHeight) { //Contig to Sep
