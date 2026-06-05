@@ -2282,7 +2282,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "steps");
     if (attr) {
-      m_observerRange.steps = (icUInt16Number)atoi(icXmlAttrValue(attr));
+      int tempSteps = atoi(icXmlAttrValue(attr));
+      if (tempSteps <= 0 || tempSteps > 0xffff)
+        return false;
+      m_observerRange.steps = (icUInt16Number)tempSteps;
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
@@ -2333,7 +2336,10 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "steps");
     if (attr) {
-      m_illuminantRange.steps = (icUInt16Number)atoi(icXmlAttrValue(attr));
+      int tempSteps = atoi(icXmlAttrValue(attr));
+      if (tempSteps <= 0 || tempSteps > 0xffff)
+        return false;
+      m_illuminantRange.steps = (icUInt16Number)tempSteps;
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
