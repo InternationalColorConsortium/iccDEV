@@ -360,9 +360,14 @@ void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
     if (nVerboseness > 75) {
       sDescription += "IN OUT\n";
 
+      // CWE-400/834: SetSize() caps m_nSize at 65536 and allocates m_Curve to
+      // match; assert that bound locally so the table walk has an explicit limit.
+      if (m_nSize > 65536)
+        return;
+
       for (icUInt32Number i=0; i<m_nSize; i++) {
         ptr = buf;
-        
+
         icFloatNumber fraction = (m_nSize > 1) ? ((icFloatNumber)i/(m_nSize-1)) : 1.0f;
         icColorValue(buf, bufSize, fraction, icSigMCH1Data, 1);
         ptr += strlen(buf);
@@ -424,6 +429,11 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
       sDescription += "IN OUT\n";
 
       sDescription.reserve(sDescription.size() + m_nSize * 20);
+
+      // CWE-400/834: SetSize() caps m_nSize at 65536 and allocates m_Curve to
+      // match; assert that bound locally so the table walk has an explicit limit.
+      if (m_nSize > 65536)
+        return;
 
       for (i=0; i<(int)m_nSize; i++) {
         ptr = buf;
@@ -570,6 +580,11 @@ bool CIccTagCurve::IsIdentity()
   if (m_nSize==1) {
     return  IsUnity(icFloatNumber(m_Curve[0]*65535.0/256.0));
   }
+
+  // CWE-400/834: SetSize() caps m_nSize at 65536 and allocates m_Curve to match;
+  // assert that bound locally so the table walk has an explicit upper limit.
+  if (m_nSize > 65536)
+    return false;
 
   icUInt32Number i;
   for (i=0; i<m_nSize; i++) {
@@ -2359,6 +2374,11 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
 void CIccCLUT::Begin()
 {
   int i;
+  // CWE-400/834: m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/
+  // m_nPower arrays and drives m_nNodes = (1<<m_nInput). Init() already rejects
+  // m_nInput>16 on load; assert the bound locally so it is explicit at point of use.
+  if (m_nInput > 16)
+    return;
   for (i=0; i<m_nInput; i++) {
     m_MaxGridPoint[i] = m_GridPoints[i] - 1;
   }
@@ -2687,6 +2707,11 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  // CWE-400/834: m_nOutput controls the destPixel write loop below. Valid LUT
+  // profiles cap output channels at <=16 (the read path rejects larger); guard
+  // locally so the bound is explicit even if the field is corrupted in memory.
+  if (m_nOutput > 16)
+    return;
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
@@ -3332,6 +3357,12 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
   icFloatNumber* s = pApply->m_s;
   icUInt32Number* ig = pApply->m_ig;
 
+  // CWE-400/834: m_nInput drives the grid loop below and m_nNodes = (1<<m_nInput)
+  // used for the df[] loop. Input channels are capped at <=16 by Init() on load;
+  // guard locally so both bounds are explicit at point of use.
+  if (m_nInput > 16)
+    return;
+
   for (i=0; i<m_nInput; i++) {
     g[i] = m_UnitClipFunc(srcPixel[i]) * m_MaxGridPoint[i];
     if (g[i] < 0)
@@ -3626,9 +3657,15 @@ void CIccMBB::Cleanup()
 {
   int i;
 
+  // CWE-400/834: the curve-pointer arrays are allocated to m_nInput/m_nOutput at
+  // load (both capped at <=16 by the lut tag read path). Clamp the delete loops to
+  // the array bound so a corrupted channel count can never walk past the allocation.
+  int nIn  = (m_nInput  > 16) ? 16 : m_nInput;
+  int nOut = (m_nOutput > 16) ? 16 : m_nOutput;
+
   if (IsInputMatrix()) {
     if (m_CurvesB) {
-      for (i=0; i<m_nInput; i++)
+      for (i=0; i<nIn; i++)
         delete m_CurvesB[i];
 
       delete [] m_CurvesB;
@@ -3636,7 +3673,7 @@ void CIccMBB::Cleanup()
     }
 
     if (m_CurvesM) {
-      for (i=0; i<m_nInput; i++)
+      for (i=0; i<nIn; i++)
         delete m_CurvesM[i];
 
       delete [] m_CurvesM;
@@ -3645,7 +3682,7 @@ void CIccMBB::Cleanup()
 
 
     if (m_CurvesA) {
-      for (i=0; i<m_nOutput; i++)
+      for (i=0; i<nOut; i++)
         delete m_CurvesA[i];
 
       delete [] m_CurvesA;
@@ -3655,7 +3692,7 @@ void CIccMBB::Cleanup()
   }
   else {
     if (m_CurvesA) {
-      for (i=0; i<m_nInput; i++)
+      for (i=0; i<nIn; i++)
         delete m_CurvesA[i];
 
       delete [] m_CurvesA;
@@ -3663,7 +3700,7 @@ void CIccMBB::Cleanup()
     }
 
     if (m_CurvesM) {
-      for (i=0; i<m_nOutput; i++)
+      for (i=0; i<nOut; i++)
         delete m_CurvesM[i];
 
       delete [] m_CurvesM;
@@ -3671,7 +3708,7 @@ void CIccMBB::Cleanup()
     }
 
     if (m_CurvesB) {
-      for (i=0; i<m_nOutput; i++)
+      for (i=0; i<nOut; i++)
         delete m_CurvesB[i];
 
       delete [] m_CurvesB;
@@ -6194,6 +6231,10 @@ void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerbosen
 		    sDescription += buf;
 	    }
 	
+	    // CWE-400/834: m_Triangles is allocated to m_NumberOfTriangles at load and
+	    // the read path bounds that count by the tag size (sizeof(triangle)*count
+	    // <= tag size). Guard against a failed nothrow allocation before walking it.
+	    if (m_Triangles)
 	    for (int i=0; i<m_NumberOfTriangles; i++)
 	    {
             snprintf(buf,bufSize, "V1 = %u\tV2 = %u\tV3 = %u\n",

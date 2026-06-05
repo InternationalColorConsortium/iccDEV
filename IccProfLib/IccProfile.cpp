@@ -2150,7 +2150,7 @@ icValidateStatus CIccProfile::CheckTagTypes(std::string &sReport) const
 
   if (bV2TypeInV4) {
     snprintf(buf, bufSize,
-             " - Profile declares version %s but uses ICC v2 tag types; the profile version number may be incorrect.\n",
+             "Profile declares version %s but uses ICC v2 tag types; the profile version number may be incorrect.\n",
              Info.GetVersionName(m_Header.version));
     sReport += icMsgValidateWarning;
     sReport += buf;
@@ -3183,7 +3183,7 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
       // Padding between tagged elements must be no more than three bytes.
       if (gap > 3) {
         sReport += icMsgValidateWarning;
-        snprintf(buf, sizeof(buf), " - %u bytes of unexpected data between %s and %s.\n",
+        snprintf(buf, sizeof(buf), "%u bytes of unexpected data between %s and %s.\n",
                  gap, prevName.c_str(), name.c_str());
         sReport += buf;
         rv = icMaxStatus(rv, icValidateWarning);
