@@ -1234,6 +1234,7 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
 // output graphic representation of response curve 1D LUTs
 //     or would, if I could find any example of profiles using response curves...
 // return number of output items created
+
 static
 int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
                         PDFWriter &pdffile, const std::string &filename )
@@ -1267,6 +1268,7 @@ int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::stri
 
     curveIter = curves->GetNextCurves();
   }
+
 
   return 0; // no output created
 
@@ -1971,6 +1973,8 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
         && arrayType != icSigNamedColorArray) {
         fprintf(stderr,"%s: WARNING - unknown color array type: %s for tag %s\n",
                         filename.c_str(),
+                        icGetSig(buf, bufSize, arrayType),
+                        sigDesc.c_str() );
         return 0;
       }
 
