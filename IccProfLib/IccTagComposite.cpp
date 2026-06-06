@@ -77,6 +77,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <new>
+#include <map>
 #include "IccTagComposite.h"
 #include "IccStructBasic.h"
 #include "IccUtil.h"
@@ -151,31 +152,70 @@ CIccTagStruct::CIccTagStruct(const CIccTagStruct &subTags)
   m_ElemEntries = new(TagEntryList);
   m_ElemVals = new(TagPtrList);
 
-  if (!subTags.m_ElemEntries->empty()) {
-    TagEntryList::const_iterator i;
-    IccTagEntry entry;
-    for (i=subTags.m_ElemEntries->begin(); i!=subTags.m_ElemEntries->end(); i++) {
-      entry.pTag = i->pTag->NewCopy();
-      memcpy(&entry.TagInfo, &i->TagInfo, sizeof(icTag));
-      m_ElemEntries->push_back(entry);
-    }
-  }
-
-  if (!subTags.m_ElemVals->empty()) {
-    TagPtrList::const_iterator i;
-    IccTagPtr tagptr;
-    for (i=subTags.m_ElemVals->begin(); i!=subTags.m_ElemVals->end(); i++) {
-      tagptr.ptr = i->ptr->NewCopy();
-      m_ElemVals->push_back(tagptr);
-      tagptr.ptr->SetParentObject(this);
-    }
-  }
+  CopyElems(subTags);
 
   if (subTags.m_pStruct) {
     m_pStruct = subTags.m_pStruct->NewCopy(this);
   }
   else {
     m_pStruct = NULL;
+  }
+}
+
+/**
+ ******************************************************************************
+ * Name: CIccTagStruct::CopyElems
+ *
+ * Purpose: Deep-copy the element entry and value lists from another struct,
+ *  preserving the ownership invariant that an entry's pTag aliases the
+ *  matching (owned) m_ElemVals pointer.  m_ElemVals owns the tag objects;
+ *  copying each list independently would create a second set of objects
+ *  that Cleanup() never frees.
+ *
+ * Args:
+ *  subTags - source struct to copy elements from
+ ******************************************************************************/
+void CIccTagStruct::CopyElems(const CIccTagStruct &subTags)
+{
+  // Map each source value pointer to its owned copy so the entry list can
+  // alias the same copies instead of allocating leaked duplicates.
+  std::map<CIccTag*, CIccTag*> copyMap;
+
+  if (!subTags.m_ElemVals->empty()) {
+    TagPtrList::const_iterator i;
+    for (i=subTags.m_ElemVals->begin(); i!=subTags.m_ElemVals->end(); i++) {
+      IccTagPtr tagptr;
+      tagptr.ptr = i->ptr ? i->ptr->NewCopy() : NULL;
+      m_ElemVals->push_back(tagptr);
+      copyMap[i->ptr] = tagptr.ptr;
+      if (tagptr.ptr)
+        tagptr.ptr->SetParentObject(this);
+    }
+  }
+
+  if (!subTags.m_ElemEntries->empty()) {
+    TagEntryList::const_iterator i;
+    for (i=subTags.m_ElemEntries->begin(); i!=subTags.m_ElemEntries->end(); i++) {
+      IccTagEntry entry;
+      std::map<CIccTag*, CIccTag*>::iterator f = copyMap.find(i->pTag);
+      if (f != copyMap.end()) {
+        entry.pTag = f->second;   // alias the already-copied (owned) object
+      }
+      else {
+        // Entry not present in the value list; make an owned copy and
+        // register it so Cleanup() frees it.
+        entry.pTag = i->pTag ? i->pTag->NewCopy() : NULL;
+        if (entry.pTag) {
+          IccTagPtr tagptr;
+          tagptr.ptr = entry.pTag;
+          m_ElemVals->push_back(tagptr);
+          copyMap[i->pTag] = entry.pTag;
+          entry.pTag->SetParentObject(this);
+        }
+      }
+      memcpy(&entry.TagInfo, &i->TagInfo, sizeof(icTag));
+      m_ElemEntries->push_back(entry);
+    }
   }
 }
 
@@ -198,27 +238,7 @@ CIccTagStruct &CIccTagStruct::operator=(const CIccTagStruct &subTags)
 
   m_sigStructType = subTags.m_sigStructType;
 
-  if (!subTags.m_ElemEntries->empty()) {
-    m_ElemEntries->clear();
-    TagEntryList::const_iterator i;
-    IccTagEntry entry;
-    for (i=subTags.m_ElemEntries->begin(); i!=subTags.m_ElemEntries->end(); i++) {
-      entry.pTag = i->pTag->NewCopy();
-      memcpy(&entry.TagInfo, &i->TagInfo, sizeof(icTag));
-      m_ElemEntries->push_back(entry);
-    }
-  }
-
-  if (!subTags.m_ElemVals->empty()) {
-    m_ElemVals->clear();
-    TagPtrList::const_iterator i;
-    IccTagPtr tagptr;
-    for (i=subTags.m_ElemVals->begin(); i!=subTags.m_ElemVals->end(); i++) {
-      tagptr.ptr = i->ptr->NewCopy();
-      m_ElemVals->push_back(tagptr);
-      tagptr.ptr->SetParentObject(this);
-    }
-  }
+  CopyElems(subTags);
 
   if (subTags.m_pStruct)
     m_pStruct = subTags.m_pStruct->NewCopy(this);

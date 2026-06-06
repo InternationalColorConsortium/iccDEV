@@ -7673,12 +7673,16 @@ IIccProfileConnectionConditions *CIccXformMpe::GetConnectionConditions() const
 */
 void CIccXformMpe::SetAppliedCC(IIccProfileConnectionConditions *pPCC)
 {
+  // Release any previously-owned applied PCC before reassigning below.
+  // SetAppliedCC can be invoked more than once per xform (e.g. from
+  // CIccCmm::SetLateBindingCC), and without this a prior combined PCC leaks.
+  if (m_bDeleteAppliedPCC) {
+    delete m_pAppliedPCC;
+  }
+  m_pAppliedPCC = NULL;
+  m_bDeleteAppliedPCC = false;
+
   if (!pPCC) {
-    if (m_bDeleteAppliedPCC) {
-      delete m_pAppliedPCC;
-    }
-    m_pAppliedPCC = NULL;
-    m_bDeleteAppliedPCC = false;
     return;
   }
 

@@ -4694,6 +4694,7 @@ bool CIccMpeToneMap::Read(icUInt32Number size, CIccIO* pIO)
   //keep track of functions read in
   m_nFunc = m_nOutputChannels;
 
+  delete[] funcPos;
   return true;
 }
 

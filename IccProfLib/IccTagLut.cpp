@@ -1375,6 +1375,7 @@ bool CIccTagSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
      return true;
    }
 
+   delete pCurve;
    return false;
 }
 
