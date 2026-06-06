@@ -4020,7 +4020,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nInput!=nInput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of input channels.\n";
+        sReport += " - Incorrect number of input channels (";
+        sReport += std::to_string(nInput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nInput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -4028,7 +4032,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nOutput!=nOutput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of output channels.\n";
+        sReport += " - Incorrect number of output channels (";
+        sReport += std::to_string(nOutput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nOutput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -4043,7 +4051,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nInput!=nInput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of input channels.\n";
+        sReport += " - Incorrect number of input channels (";
+        sReport += std::to_string(nInput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nInput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -4051,7 +4063,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nOutput!=nOutput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of output channels.\n";
+        sReport += " - Incorrect number of output channels (";
+        sReport += std::to_string(nOutput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nOutput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -4066,7 +4082,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
     if (m_nInput != nInput) {
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
-      sReport += " - Incorrect number of input channels.\n";
+      sReport += " - Incorrect number of input channels (";
+      sReport += std::to_string(nInput);
+      sReport += ", expected ";
+      sReport += std::to_string(m_nInput);
+      sReport += " from tag).\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
 
@@ -4074,7 +4094,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
     if (m_nOutput != nOutput) {
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
-      sReport += " - Incorrect number of output channels.\n";
+      sReport += " - Incorrect number of output channels (";
+      sReport += std::to_string(nOutput);
+      sReport += ", expected ";
+      sReport += std::to_string(m_nOutput);
+      sReport += " from tag).\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
 
@@ -4086,7 +4110,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nInput!=nInput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of input channels.\n";
+        sReport += " - Incorrect number of input channels (";
+        sReport += std::to_string(nInput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nInput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -4094,7 +4122,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nOutput!=nOutput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of output channels.\n";
+        sReport += " - Incorrect number of output channels (";
+        sReport += std::to_string(nOutput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nOutput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -5802,7 +5834,9 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
               if (nCurveEntries < 2 || nCurveEntries > 4096) {
                 sReport += icMsgValidateCriticalError;
                 sReport += sSigPathName;
-                sReport += " - lut16Type input tables require 2 to 4096 entries.\n";
+                sReport += " - lut16Type input tables require 2 to 4096 entries, not ";
+                sReport += std::to_string(nCurveEntries);
+                sReport += "\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
               }
             }
@@ -5844,7 +5878,9 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
               if (nCurveEntries < 2 || nCurveEntries > 4096) {
                 sReport += icMsgValidateCriticalError;
                 sReport += sSigPathName;
-                sReport += " - lut16Type output tables require 2 to 4096 entries.\n";
+                sReport += " - lut16Type output tables require 2 to 4096 entries, not ";
+                sReport += std::to_string(nCurveEntries);
+                sReport += "\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
               }
             }
