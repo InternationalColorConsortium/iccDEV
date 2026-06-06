@@ -2641,11 +2641,19 @@ icStatusCMM CIccPcsXform::Optimize()
         if (!ptr.ptr->isIdentity()) {
           newSteps.push_back(ptr);
         }
+        else {
+          // Identity steps are dropped from the optimized chain; delete them
+          // so the CIccPcsStep object (and its data buffer) is not leaked.
+          delete ptr.ptr;
+        }
         ptr.ptr = next->ptr;
       }
     }
     if (!ptr.ptr->isIdentity()) {
       newSteps.push_back(ptr);
+    }
+    else {
+      delete ptr.ptr;
     }
 
     steps = newSteps;
