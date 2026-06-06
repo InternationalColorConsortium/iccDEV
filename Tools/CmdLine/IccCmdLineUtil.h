@@ -73,6 +73,8 @@
 #include <unistd.h>
 #endif
 
+/******************************************************************************/
+
 inline std::string icSanitizeConsoleText(const char* szText)
 {
   static const char hex[] = "0123456789ABCDEF";
@@ -115,6 +117,51 @@ inline std::string icSanitizeConsoleText(const std::string& text)
   return icSanitizeConsoleText(text.c_str());
 }
 
+/******************************************************************************/
+
+// NOTE - we cannot filter out path characters /\ without breaking output
+// But we can remove non-ASCII and high ASCII that cause problems
+inline std::string icSanitizeFileName(const char* szText)
+{
+  std::string result;
+
+  if (!szText)
+    return result;
+
+  for (const unsigned char *p = (const unsigned char*)szText; *p; p++) {
+    unsigned char ch = *p;
+
+    switch (ch) {
+    case '\n':
+      result += "N";
+      break;
+    case '\r':
+      result += "R";
+      break;
+    case '\t':
+      result += "T";
+      break;
+    default:
+      if (ch < 0x20 || (ch >= 0x7f && ch <= 0xff)) {
+        result += "_";
+      }
+      else {
+        result += (char)ch;
+      }
+      break;
+    }
+  }
+
+  return result;
+}
+
+inline std::string icSanitizeFileName(const std::string& text)
+{
+  return icSanitizeFileName(text.c_str());
+}
+
+/******************************************************************************/
+
 inline FILE* icOpenRegularWriteFile(const char* szFname, const char* szMode)
 {
   if (!szFname || !szFname[0])
@@ -154,6 +201,8 @@ inline FILE* icOpenRegularWriteTextFile(const char* szFname)
   return icOpenRegularWriteFile(szFname, "wt");
 }
 
+/******************************************************************************/
+
 inline bool icFlushAndClose(FILE* f)
 {
   if (!f)
@@ -169,5 +218,7 @@ inline bool icFlushAndClose(FILE* f)
 
   return !failed;
 }
+
+/******************************************************************************/
 
 #endif
