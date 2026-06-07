@@ -673,6 +673,10 @@ CIccIO* CIccProfile::ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const
         
         if (pEmbedIO->Attach(pIO, i->TagInfo.size - 2 * sizeof(icUInt32Number), bOwnIO))
           return pEmbedIO;
+
+        // Attach failed; release the IO wrapper so it is not leaked. The
+        // CIccEmbedIO destructor handles pIO per the ownership flag set in Attach.
+        delete pEmbedIO;
       }
     }
   }
@@ -870,8 +874,14 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
     return false;
   }
 
+  // Transient sub-profile IO wrapper. ConnectSubProfile is called here with
+  // bOwnIO=false, so this wrapper does not own pIO; it only proxies reads while
+  // the (embedded) tags are loaded into memory. It must be deleted before every
+  // return below, otherwise the wrapper object itself is leaked.
+  CIccIO *pSubIO = NULL;
+
   if (bUseSubProfile) {
-    CIccIO *pSubIO = ConnectSubProfile(pIO, false);
+    pSubIO = ConnectSubProfile(pIO, false);
 
     if (pSubIO) {
       icColorSpaceSignature parentColorSpace = m_Header.colorSpace;
@@ -879,6 +889,7 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
       m_parentColorSpace = parentColorSpace;
       if (!ReadBasic(pSubIO)) {
         Cleanup();
+        delete pSubIO;
         return false;
       }
       pIO = pSubIO;
@@ -890,10 +901,12 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
   for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO)) {
       Cleanup();
+      delete pSubIO;
       return false;
     }
   }
 
+  delete pSubIO;
   return true;
 }
 
