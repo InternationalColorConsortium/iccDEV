@@ -114,21 +114,18 @@
 
 /******************************************************************************/
 
-// command line option
+// command line option to disable warning and error reports
 bool gRunSilent = false;
 
 // internal option - should only be used by client code that wants to display errors separately
 bool gLogErrorsToText = false;
 
 // global storage of accumulated error reports
-// abstracted because this can easily become more complicated in the future
+// abstracted below because this can easily become more complicated in the future
 std::string gErrorLogs;
-
-typedef std::vector<std::string> filename_list;
 
 /******************************************************************************/
 
-static
 void ClearErrorLogs()
 {
   gErrorLogs.clear();
@@ -136,23 +133,22 @@ void ClearErrorLogs()
 
 /******************************************************************************/
 
-static
-std::string GetErrorLogs()
+std::string &GetErrorLogs()
 {
   return gErrorLogs;
 }
 
 /******************************************************************************/
 
-static
-void AddErrorString(const std::string &input)
+void AddErrorStringToLog(const std::string &input)
 {
   gErrorLogs += input;
 }
 
 /******************************************************************************/
 
-static
+// this needs to be exported to fileIO code as well!
+
 void ErrorLog(FILE *stream, const char* format, ...)
 {
   if (gLogErrorsToText) {
@@ -162,9 +158,9 @@ void ErrorLog(FILE *stream, const char* format, ...)
     char buf[bufSize];
     auto len = std::vsnprintf(buf, bufSize, format, args);
     if (len > 0)
-      AddErrorString( buf );
+      AddErrorStringToLog( buf );
     else
-      AddErrorString( "Error while formatting: " + std::string(format) );
+      AddErrorStringToLog( "Internal buffer error while formatting: \"" + std::string(format) + "\"\n" );
     va_end(args);
     return;
   }
@@ -2433,6 +2429,8 @@ void printUsage(void)
 
 /******************************************************************************/
 
+typedef std::vector<std::string> filename_list;
+
 static
 filename_list parse_arguments( int argc, char *argv[] )
 {
@@ -2521,7 +2519,7 @@ int main(int argc, char* argv[])
       ErrorLog(stderr, "%s: ERROR: unknown exception\n", file.c_str()  );
     }
     
-    // consume error logs here if needed
+    // NOTE - consume error logs here if needed, so exceptions are included
 
   } // end for argc
 
