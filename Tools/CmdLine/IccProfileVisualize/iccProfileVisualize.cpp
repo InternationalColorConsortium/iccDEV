@@ -1218,37 +1218,8 @@ std::string channelName(int index, bool isInputMatrix, icColorSpaceSignature inp
 
 /******************************************************************************/
 
-static
-uint8_t ClipU8( const icFloatNumber &input )
-{
-  if (std::isnan(input))
-    return 0;
-  if (std::isinf(input))
-    return 255;
-  if (input < 0)
-    return 0;
-  if (input > 255)
-    return 255;
-  return (uint8_t)input;
-}
-
-/******************************************************************************/
-
-static
-uint16_t ClipU16( const icFloatNumber &input )
-{
-  if (std::isnan(input))
-    return 0;
-  if (std::isinf(input))
-    return 65535;
-  if (input < 0)
-    return 0;
-  if (input > 65535)
-    return 65535;
-  return (uint16_t)input;
-}
-
-/******************************************************************************/
+// (ClipU8/ClipU16 removed in Phase C: the CLUT flatten that used them now
+//  lives in the shared IccVizModel, which carries its own clamp helpers.)
 
 // output graphic representation of nD LUTs
 // return count of output objects created, 0 if none
