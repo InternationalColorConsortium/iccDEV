@@ -3207,11 +3207,30 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
       }
     }
     else if (off < prevEnd) {
-      // Tag data overlaps the preceding element (or the tag directory).
-      sReport += icMsgValidateNonCompliant;
-      snprintf(buf, sizeof(buf), " - %s overlaps %s.\n", name.c_str(), prevName.c_str());
-      sReport += buf;
-      rv = icMaxStatus(rv, icValidateNonCompliant);
+      // Multiple tag directory entries are permitted to share a single block of
+      // tag data (e.g. AToB0/AToB1/AToB2 pointing at one common LUT). Per
+      // ICC.1:2022 section 7.3.1: "The tag table may contain multiple tags
+      // signatures that all reference the same tag data element offset, allowing
+      // efficient reuse of tag data elements. In such cases, both the offset and
+      // size of the tag data elements in the tag table shall be the same." Such
+      // an entry re-occupies an already-counted extent rather than overlapping a
+      // different one, so it is compliant. A partial overlap (same start but a
+      // different size, or a straddling offset) is not shared data and remains
+      // non-compliant.
+      bool bSharedData = false;
+      for (size_t j = 0; j < k; ++j) {
+        if (ents[j].offset == off && ents[j].size == sz) {
+          bSharedData = true;
+          break;
+        }
+      }
+      if (!bSharedData) {
+        // Tag data overlaps the preceding element (or the tag directory).
+        sReport += icMsgValidateNonCompliant;
+        snprintf(buf, sizeof(buf), " - %s overlaps %s.\n", name.c_str(), prevName.c_str());
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
     }
 
     // Advance the frontier only when this tag extends it (see prevEnd note).

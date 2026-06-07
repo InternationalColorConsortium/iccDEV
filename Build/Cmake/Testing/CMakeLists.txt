@@ -152,6 +152,41 @@ function(iccdev_add_embedio_read8_bounds_test)
   endif()
 endfunction()
 
+function(iccdev_add_tag_layout_shared_data_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  add_executable(iccTagLayoutSharedDataTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tag-layout-shared-data.cpp"
+  )
+  target_link_libraries(iccTagLayoutSharedDataTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccTagLayoutSharedDataTest)
+
+  add_test(
+    NAME iccdev.tag-layout-shared-data
+    COMMAND "$<TARGET_FILE:iccTagLayoutSharedDataTest>"
+  )
+  set_tests_properties(iccdev.tag-layout-shared-data PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;layout;regression"
+  )
+  if(WIN32)
+    set(_tag_layout_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTagLayoutSharedDataTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tag_layout_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tag-layout-shared-data PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tag_layout_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -465,6 +500,7 @@ if(WIN32)
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
   iccdev_add_parser_restore_calls_test()
+  iccdev_add_tag_layout_shared_data_test()
 
   return()
 endif()
@@ -520,6 +556,7 @@ iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
 iccdev_add_parser_restore_calls_test()
+iccdev_add_tag_layout_shared_data_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
