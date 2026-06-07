@@ -7,6 +7,7 @@
  */
 
 #include "IccVizModel.hpp"
+#include "IccVizMath.hpp"     // shared XYZ→xy + planckian math (also used by iccProfileVisualize)
 
 #include "IccProfile.h"
 #include "IccTag.h"
@@ -33,39 +34,12 @@ std::string sigStr(icTagSignature sig) {
   return std::string(icGetSigStr(buf, sizeof buf, static_cast<icUInt32Number>(sig)));
 }
 
-// ── colour helpers (ported verbatim from iccProfileVisualize.cpp) ────────────
-
-struct XY { float x, y; };
-
-XY xyFromICCXYZ(const icXYZNumber* xyz) {
-  float X = xyz->X / 65535.0f, Y = xyz->Y / 65535.0f, Z = xyz->Z / 65535.0f;
-  float sum = X + Y + Z;
-  if (sum <= 1e-8f) return {0.0f, 0.0f};
-  return {X / sum, Y / sum};
-}
-
-XY xyFromXYZFloat(const icFloatNumber* xyz) {
-  float sum = xyz[0] + xyz[1] + xyz[2];
-  if (sum <= 1e-8f) return {0.0f, 0.0f};
-  return {xyz[0] / sum, xyz[1] / sum};
-}
-
-// Planckian locus approximation (Kang et al. 2002), ported verbatim.
-XY approxPlanck(double t) {
-  const double c3a=-0.2661239,c2a=-0.2343589,c1a=0.8776956,c0a=0.179910;
-  const double c3b=-3.0258469,c2b=2.1070379,c1b=0.2226347,c0b=0.240390;
-  const double k3a=-1.1063814,k2a=-1.34811020,k1a=2.18555832,k0a=-0.20219683;
-  const double k3b=-0.9549476,k2b=-1.37418593,k1b=2.09137015,k0b=-0.16748867;
-  const double k3c=3.0817580,k2c=-5.87338670,k1c=3.75112997,k0c=-0.37001483;
-  double t2=t*t, t3=t*t*t, x;
-  if (t < 4000.0) x = c3a*(1e9/t3)+c2a*(1e6/t2)+c1a*(1e3/t)+c0a;
-  else            x = c3b*(1e9/t3)+c2b*(1e6/t2)+c1b*(1e3/t)+c0b;
-  double x2=x*x, x3=x*x*x, y;
-  if (t < 2222.0)      y = k3a*x3+k2a*x2+k1a*x+k0a;
-  else if (t < 4000.0) y = k3b*x3+k2b*x2+k1b*x+k0b;
-  else                 y = k3c*x3+k2c*x2+k1c*x+k0c;
-  return {static_cast<float>(x), static_cast<float>(y)};
-}
+// ── colour helpers — single-sourced in IccVizMath.hpp (shared with the
+//    iccProfileVisualize renderer so the XYZ→xy + planckian math can't drift).
+using iccvizmath::XY;
+using iccvizmath::xyFromICCXYZ;
+using iccvizmath::xyFromXYZFloat;
+using iccvizmath::approxPlanck;
 
 // Curated wavelength labels along the spectral locus (from iccProfileVisualize).
 const int kLocusLabels[] = {
