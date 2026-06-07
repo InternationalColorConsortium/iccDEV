@@ -1234,7 +1234,6 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
 // output graphic representation of response curve 1D LUTs
 //     or would, if I could find any example of profiles using response curves...
 // return number of output items created
-
 static
 int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
                         PDFWriter &pdffile, const std::string &filename )
