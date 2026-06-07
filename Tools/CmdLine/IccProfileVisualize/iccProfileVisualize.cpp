@@ -79,6 +79,7 @@
 #include "MiniSVG.hpp"
 #include "MiniPDF.hpp"
 #include "spectralLocus.hpp"
+#include "IccVizModel.hpp"   // shared data-first visualization model (single source of the plot/raster math)
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -1339,7 +1340,10 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
 
     // write nD Data to TIFF
-    int bytes = lut->GetPrecision();    // currently only 1 or 2
+    // The CLUT-lattice geometry + flatten now lives ONLY in the shared
+    // IccVizModel (iccviz::RenderRaster); this renderer just writes the
+    // returned ICC-normalized samples to TIFF. The duplicated flatten that
+    // used to live here has been removed (single-source per PR #1253 review).
     CIccCLUT *clut = lut->GetCLUT();
     if (!clut) {
       // clut is optional in mAB and mBA tags - only report if it isn't one of those
@@ -1351,172 +1355,19 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       return outputCount;
     }
 
-    // validate is called back before the Describe call
-    clut->Begin();  // initialize some grid information
-
-    int gridPoints = clut->GridPoints(); // gridSize[0]
-    int tiles = gridPoints;
-    if (gridPoints <= 0) {
-      fprintf(stderr, "Skipping %s: invalid CLUT grid\n", sigDesc.c_str());
+    iccviz::RasterResult rr = iccviz::RenderRaster( pIcc, "clut:" + sigDesc );
+    if (!rr.ok) {
+      fprintf(stderr, "Skipping %s: %s\n", sigDesc.c_str(), rr.error.c_str());
       return outputCount;
     }
 
-    int tileWidth = 1;
-    int tileHeight = 1;
-
-    if (inputChannels >= 2) {
-      tileWidth = clut->GridPoint(1);
-      if (tileWidth <= 0) {
-        fprintf(stderr, "Skipping %s: invalid CLUT width\n", sigDesc.c_str());
-        return outputCount;
-      }
+    std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
+    int tiffColor = TIFFColorModelFromICCModel( outputSpace );
+    if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, rr.raster.samples.data(),
+                      rr.raster.width, rr.raster.height,
+                      rr.raster.channels, rr.raster.bitsPerChannel )) {
+      fprintf(stderr, "Failed to write TIFF: %s\n", tiffPath2.c_str());
     }
-
-    if (inputChannels >= 3) {
-      tileHeight = clut->GridPoint(2);
-      if (tileHeight <= 0) {
-        fprintf(stderr, "Skipping %s: invalid CLUT height\n", sigDesc.c_str());
-        return outputCount;
-      }
-    }
-
-    if (inputChannels > 3) {
-      for (int i = 3; i < inputChannels; ++i) {
-        int extraGridPoints = clut->GridPoint(i);
-        if (extraGridPoints <= 0) {
-          fprintf(stderr, "Skipping %s: invalid CLUT tile count\n", sigDesc.c_str());
-          return outputCount;
-        }
-        tiles *= extraGridPoints;
-      }
-    }
-
-      // special case for single dimensional LUT
-    if (inputChannels == 1) {
-      tileWidth = tiles;
-      tiles = 1;
-      tileHeight = 1;
-    }
-
-      // special case for 2 dimensional LUT
-    if (inputChannels == 2) {
-      tileHeight = tiles;
-      tiles = 1;
-    }
-
-      // find tile arrangement closest to a square
-    if (tiles <= 0) {
-      fprintf(stderr,"WARNING - tile count overflow.\n");
-      tiles = 1;
-    }
-
-    auto tempResult = std::sqrt(tiles);
-    if (tempResult > std::numeric_limits<int>::max()) {
-      fprintf(stderr,"ERROR - sqrt bad result!\n");
-      tempResult = tiles/2;
-    }
-    int tilesWide = (int)tempResult;
-
-    // some odd counts need a tweak to align and look more sane
-    if (inputChannels > 3 && (inputChannels & 1)) {
-      auto oldValue = tilesWide;
-      // round down to a multiple of the grid size to better align rows
-      tilesWide -= (tilesWide % (gridPoints*tileWidth));
-      if (tilesWide == 0) {
-        // this does happen -- should I round up in some cases?
-        tilesWide = oldValue;
-      }
-    }
-
-    int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
-
-    // multiply out by tile size
-    int imageWidth = tilesWide * tileWidth;
-    int imageHeight = tilesHigh * tileHeight;
-    if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
-      fprintf(stderr, "Skipping %s: invalid image geometry\n", sigDesc.c_str());
-      return outputCount;
-    }
-
-    //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
-    size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
-    // NOTE that bufferSize will usually be greater than clutSize
-    if (!bufferSize) {
-      fprintf(stderr, "Skipping %s: empty image buffer\n", sigDesc.c_str());
-      return outputCount;
-    }
-
-    std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
-    uint8_t *imageBuf = imageBuffer.get();
-    uint16_t *imageBuf16 = (uint16_t *)imageBuf;
-    float *imageBuf32 = (float *)imageBuf;
-    memset( imageBuf, 0, bufferSize );
-
-    // copy data from CLUT to image buffer
-    icFloatNumber *clutData = clut->GetData(0);
-
-
-#if 0
-// TEST - same as below, just more expensive calculation
-    size_t gridCount = (size_t)tileWidth * (size_t)tileHeight * (size_t)tiles;
-    for (size_t k = 0; k < gridCount; ++k ) {
-        size_t y = (gridPoints -1) - (k % gridPoints);  // turn LAB to look as expected
-        size_t x = (k / gridPoints) % gridPoints;
-        size_t tile = k / (gridPoints*gridPoints);
-        size_t tileX = tile % tilesWide;
-        size_t tileY = tile / tilesWide;
-        size_t outputIndex = outputChannels * ((tileY * gridPoints * imageWidth) + (tileX * gridPoints) + (y * imageWidth) + x);
-        size_t inputIndex = outputChannels * k;
-        if (bytes == 4 || bytes == 8)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf32[outputIndex+c] = clutData[inputIndex+c];
-        else if (bytes == 2)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
-        else
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
-    }
-
-#else
-      size_t n001 = (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t n010 = (size_t)tileWidth * (size_t)outputChannels;
-      size_t n100 = (size_t)outputChannels;
-
-      if (inputChannels < 2)
-        std::swap(n010,n100);
-
-      size_t outTileStepV = (size_t)imageWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t outTileStepH = (size_t)tileWidth * (size_t)outputChannels;
-      size_t outColStep = (size_t)outputChannels;
-      size_t outRowStep = (size_t)imageWidth * (size_t)outputChannels;
-
-      for (int z = 0; z < tiles; ++z) {
-        int z2 = z % tilesWide; // tile # horiz
-        int z3 = z / tilesWide; // tile # vert
-        for (int x = 0; x < tileWidth; ++x)
-        for (int y = 0; y < tileHeight; ++y) {
-          size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;  // turn LAB to look as expected
-          size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
-          if (bytes == 4 || bytes == 8)
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf32[outputIndex+c] = clutData[inputIndex+c];
-          else if (bytes == 2)
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
-          else
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
-        }
-      }
-#endif
-
-      std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
-      int tiffColor = TIFFColorModelFromICCModel( outputSpace );
-      if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
-                        imageWidth, imageHeight, outputChannels, 8*bytes )) {
-        fprintf(stderr, "Failed to write TIFF: %s\n", tiffPath2.c_str());
-      }
     }
     return ++outputCount;
     break;
@@ -1710,156 +1561,48 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
 
   icTagTypeSignature typeSig = tag->GetType();
 
-  switch(typeSig) {
-
-    case icSigColorantTableType:    // colorant tables -- name and PCS only
-      {
-      CIccTagColorantTable *table = dynamic_cast<CIccTagColorantTable*> (tag);
-      if (!table) {
-        fprintf(stderr, "Skipping %s: unable to convert colorantTable\n", sigDesc.c_str());
-        return 0;
-      }
-
-      std::string path(":");
-      path += sigDesc;
-      std::string report;
-      if (table->Validate(path, report, NULL) > icValidateWarning) {
-        fprintf(stderr,"WARNING - colorantTable failed validation: %s\n", report.c_str() );
-        return 0;
-      }
-
-      icColorSpaceSignature pcs = pIcc->m_Header.pcs; // table->GetPCS();   // never initialized in table!
-
-      if (pcs != icSigXYZData && pcs != icSigLabData) {
-        fprintf(stderr,"WARNING - unknown pcs for colorantTable: %s\n",
-                            icGetSig(buf, bufSize, pcs) );
-        return 0;
-      }
-
-      icUInt32Number colorCount = table->GetSize();
-
-      icFloatNumber XYZIlluminant[3];
-      pIcc->getNormIlluminantXYZ( XYZIlluminant );
-
-      colorsOut.reserve(colorCount);
-
-      for (icUInt32Number i = 0; i < colorCount; ++i) {
-        icFloatNumber labTemp[3];
-        icColorantTableEntry *entry = table->GetEntry( i );
-        namedLAB tempNamed;
-        tempNamed.name = std::to_string(i+1) + std::string(" ") + std::string(entry->name);
-        if (pcs == icSigXYZData) {
-            // XYZ 16 bit integer
-            icFloatNumber xyzTemp[3];
-            xyzTemp[0] = icU16toF( entry->data[0] );
-            xyzTemp[1] = icU16toF( entry->data[1] );
-            xyzTemp[2] = icU16toF( entry->data[2] );
-            icXYZtoLab( labTemp, xyzTemp, XYZIlluminant );
-        } else {
-            //  LAB 16bit integer
-            labTemp[0] = icU16toF( entry->data[0] );
-            labTemp[1] = icU16toF( entry->data[1] );
-            labTemp[2] = icU16toF( entry->data[2] );
-            icLabFromPcs( labTemp );
-        }
-
-        tempNamed.L = labTemp[0];
-        tempNamed.a = labTemp[1];
-        tempNamed.b = labTemp[2];
-
-        colorsOut.push_back(tempNamed);
-      }
-
-      std::string description("Colorant Table: ");
-      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
-                        XYZIlluminant, pdffile );
-      }
-      break;
-
-    case icSigNamedColor2Type:      // named color - PCS and colorspace (PCS optional?)
-      {
-      CIccTagNamedColor2 *table = dynamic_cast<CIccTagNamedColor2*> (tag);
-      if (!table) {
-        fprintf(stderr, "Skipping %s: unable to convert namedColorTable\n", sigDesc.c_str());
-        return 0;
-      }
-
-      std::string path(":");
-      path += sigDesc;
-      std::string report;
-      if (table->Validate(path, report, NULL) > icValidateWarning) {
-        fprintf(stderr,"WARNING - namedColorTable failed validation: %s\n", report.c_str() );
-        return 0;
-      }
-
-      icColorSpaceSignature pcs = table->GetPCS();// pIcc->m_Header.pcs;
-
-      if (pcs != icSigXYZData && pcs != icSigLabData) {
-        fprintf(stderr,"WARNING - unknown pcs for namedColorTable: %s\n",
-                            icGetSig(buf, bufSize, pcs) );
-        return 0;
-      }
-
-      icUInt32Number colorCount = table->GetSize();
-
-      icFloatNumber XYZIlluminant[3];
-      pIcc->getNormIlluminantXYZ( XYZIlluminant );
-
-      colorsOut.reserve(colorCount);
-
-      std::string prefix = table->GetPrefix();
-      std::string suffix = table->GetSufix();
-      for (icUInt32Number i = 0; i < colorCount; ++i) {
-        icFloatNumber labTemp[3];
-        SIccNamedColorEntry *entry = table->GetEntry( i );
-        namedLAB tempNamed;
-        tempNamed.name = prefix + std::string(entry->rootName) + suffix;
-        if (pcs == icSigXYZData) {
-            // XYZ float
-            icXYZtoLab( labTemp, entry->pcsCoords, XYZIlluminant );
-        } else {
-            //  LAB float
-            icFloatNumber labTemp2[3];
-            labTemp2[0] = entry->pcsCoords[0];
-            labTemp2[1] = entry->pcsCoords[1];
-            labTemp2[2] = entry->pcsCoords[2];
-            table->Lab2ToLab4(labTemp,labTemp2);
-            icLabFromPcs( labTemp );
-        }
-
-        tempNamed.L = labTemp[0];
-        tempNamed.a = labTemp[1];
-        tempNamed.b = labTemp[2];
-
-        colorsOut.push_back(tempNamed);
-      }
-
-      std::string description("Named Color Table: ");
-      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
-                            XYZIlluminant, pdffile );
-      }
-      break;
-
-    case icSigTagArrayType:         // v5 only
-      {
-      CIccTagArray *array = dynamic_cast<CIccTagArray*> (tag);
-      if (!array) {
-        fprintf(stderr, "Skipping %s: unable to convert named color array\n", sigDesc.c_str());
-        return 0;
-      }
-
-// TODO - dissect structure, figure out LAB values for colors
-
-      }
-      break;
-
+  // The name + Lab extraction (XYZ/Lab PCS handling, Lab2ToLab4, illuminant
+  // normalization) now lives ONLY in the shared IccVizModel; this renderer
+  // reads back the resulting colour list and draws it with the existing
+  // a*b*/xy PDF plotters. Only the per-type description label and the v5
+  // tagArray "not yet dissected" case remain tool-side.
+  std::string description;
+  switch (typeSig) {
+    case icSigColorantTableType: description = "Colorant Table: ";   break;
+    case icSigNamedColor2Type:   description = "Named Color Table: "; break;
+    case icSigTagArrayType:      // v5 only -- structure not yet dissected
+      return 0;
     default:
       printf("Unknown named color type %s for tag %s\n",
          icGetSig(buf, bufSize, typeSig),
          sigDesc.c_str() );
-      break;
+      return 0;
   }
 
+  // iccviz::RenderGraph applies the same validation + XYZ/Lab PCS gate the
+  // inline code used to; on failure it simply produces no plot (skip).
+  iccviz::GraphResult gr = iccviz::RenderGraph( pIcc, "named:ab:" + sigDesc );
+  if (!gr.ok)
+    return 0;
+
+  for (const iccviz::Series &s : gr.graph.series) {
+    if (s.id != "colors")
+      continue;
+    colorsOut.reserve( s.verts.size() );
+    for (const iccviz::Vertex &v : s.verts) {
+      namedLAB tempNamed;
+      tempNamed.name = v.label;   // prefix/suffix or "<n> <name>" already applied
+      tempNamed.L = v.aux;        // L* carried as the series' aux scalar
+      tempNamed.a = v.x;
+      tempNamed.b = v.y;
+      colorsOut.push_back( tempNamed );
+    }
+  }
+
+  icFloatNumber XYZIlluminant[3];
+  pIcc->getNormIlluminantXYZ( XYZIlluminant );
+  outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
+                    XYZIlluminant, pdffile );
 
   return outputCount;
 }
