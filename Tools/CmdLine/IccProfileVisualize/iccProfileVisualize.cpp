@@ -1505,6 +1505,81 @@ std::string remove_extension( const std::string& filename)
 
 /******************************************************************************/
 
+// Escape a string for use inside a PDF literal string "( ... )".
+static
+std::string escapePdfText( const std::string &s )
+{
+  std::string out;
+  out.reserve( s.size() );
+  for (char c : s) {
+    if ((unsigned char)c < 0x20) { out += ' '; continue; }  // drop control chars
+    if (c == '(' || c == ')' || c == '\\') out += '\\';
+    out += c;
+  }
+  return out;
+}
+
+// Comprehensive report wrap-up: a summary / table-of-contents page placed at the
+// front of the PDF. Shows the profile's key header fields and lists the
+// visualizations that follow, driven off iccviz::Enumerate() so the contents
+// stay in sync with what the model produces. (Enumerate lists by a canonical
+// signature order, so the numbering is a contents list rather than a strict
+// page index.)
+static
+int reportSummaryPDF( CIccProfile *pIcc, PDFWriter &pdffile )
+{
+  std::ostringstream commands;
+
+  const float top    = pdffile.PageHeight();
+  const float left   = 0.5f * inch2point;
+  const float lineH  = 16.0f;
+  float y = top - 0.6f * inch2point;
+
+  auto line = [&]( float x, float yy, float size, const std::string &text ) {
+    commands << "BT /F1 " << size << " Tf " << x << " " << yy
+             << " Td (" << escapePdfText(text) << ") Tj ET\n";
+  };
+
+  line( left, y, 18.0f, "ICC Profile Visualization Report" );
+  y -= 2.0f * lineH;
+
+  // Header summary. CIccInfo's getters reuse an internal buffer, so each result
+  // is consumed into a std::string before the next call.
+  CIccInfo info;
+  line( left, y, 11.0f, std::string("Profile class:    ") + info.GetProfileClassSigName(pIcc->m_Header.deviceClass) ); y -= lineH;
+  line( left, y, 11.0f, std::string("Data color space: ") + info.GetColorSpaceSigName(pIcc->m_Header.colorSpace) );    y -= lineH;
+  line( left, y, 11.0f, std::string("PCS:              ") + info.GetColorSpaceSigName(pIcc->m_Header.pcs) );           y -= lineH;
+  line( left, y, 11.0f, std::string("Version:          ") + info.GetVersionName(pIcc->m_Header.version) );             y -= lineH;
+  y -= lineH;
+
+  std::vector<iccviz::Descriptor> viz = iccviz::Enumerate( pIcc );
+  line( left, y, 13.0f, "Visualizations in this report:" );
+  y -= 1.5f * lineH;
+
+  if (viz.empty()) {
+    line( left + 0.25f*inch2point, y, 10.0f, "(no plottable content)" );
+  }
+  else {
+    int n = 1;
+    for (const auto &d : viz) {
+      const char *kind = (d.output == iccviz::Output::Raster) ? "[raster]" : "[graph]";
+      line( left + 0.25f*inch2point, y, 10.0f,
+            std::to_string(n++) + ".  " + d.title + "   " + kind );
+      y -= lineH;
+      if (y < 0.5f*inch2point) break;   // don't run off the page
+    }
+  }
+
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+  pdffile.AddPage( content, std::string() );   // text-only page (no xobject)
+
+  return 1;
+}
+
+/******************************************************************************/
+
 // output graphic representation of 1D and nD LUTs
 static
 int processLuts(CIccProfile *pIcc, const char *profilePath )
@@ -1529,6 +1604,9 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
 
+
+  // comprehensive report wrap-up: summary / table-of-contents as the first page
+  outputItems += reportSummaryPDF( pIcc, pdffile );
 
   // plot RGB chromaticities, white point
   outputItems += graphChromaticityPDF( pIcc, pdffile );
