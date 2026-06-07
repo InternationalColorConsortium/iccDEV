@@ -152,29 +152,35 @@ void AddErrorStringToLog(const std::string &input)
 
 void LogAnError(FILE *stream, const char* format, ...)
 {
-  if (gLogErrorsToString) {
+  try {
+    if (gLogErrorsToString) {
+      std::va_list args;
+      va_start(args, format);
+      const size_t bufSize = 4096;      // could also print twice to get size, but this is simpler
+      char buf [ bufSize ];
+      auto len = std::vsnprintf(buf, bufSize, format, args);
+      if (len > 0)
+        AddErrorStringToLog( buf );
+      else
+        AddErrorStringToLog( "Internal buffer error while formatting: \"" + std::string(format) + "\"\n" );
+      va_end(args);
+      return;
+    }
+
+    // are we running silent (but not deep)?
+    if (gRunSilent)
+      return;
+
+    // else normal output
     std::va_list args;
     va_start(args, format);
-    const size_t bufSize = 4096;      // could also print twice to get size, but this is simpler
-    char buf [ bufSize ];
-    auto len = std::vsnprintf(buf, bufSize, format, args);
-    if (len > 0)
-      AddErrorStringToLog( buf );
-    else
-      AddErrorStringToLog( "Internal buffer error while formatting: \"" + std::string(format) + "\"\n" );
+    (void)std::vfprintf(stream, format, args);
     va_end(args);
-    return;
+  }
+  catch(...) {
+    // don't let any exceptions escape, don't rethrow
   }
 
-  // are we running silent (but not deep)?
-  if (gRunSilent)
-    return;
-
-  // else normal output
-  std::va_list args;
-  va_start(args, format);
-  (void)std::vfprintf(stream, format, args);
-  va_end(args);
 }
 
 /******************************************************************************/
@@ -2424,6 +2430,8 @@ void printUsage(void)
 {
   printf("Usage: iccProfileVisualize <args> input_profiles\n");
   printf("\t-silent         don't output any warnings or errors.\n");
+  printf("\t-V              print usage and version.\n");
+  printf("\t-help           print usage and version.\n");
   printf("  output will be TIFF and PDF files next to each input profile.\n");
   printf("iccProfileVisualize built with IccProfLib version " ICCPROFLIBVER "\n\n");
 }
@@ -2463,6 +2471,12 @@ filename_list parse_arguments( int argc, char *argv[] )
 
   } // end loop over arguments
 
+
+  if (filenames.size() == 0) {
+      printUsage();
+      exit (0);
+  }
+
   return filenames;
 }
 
@@ -2499,16 +2513,16 @@ int main(int argc, char* argv[])
     try {
       ClearErrorLogs();
       
+      // DEBUGGING printf("Processing profile '%s'\n", file.c_str() );
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
       if (!pIcc) {
         LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", file.c_str() );
         continue;
       }
 
-      // DEBUGGING printf("Processing profile '%s'\n", argv[k]);
       auto count = processLuts( pIcc, file );
       if (!count) {
-        LogAnError(stderr,"Profile %s had no content for output\n", file.c_str()  );
+        LogAnError(stderr,"Profile %s had no content for output\n", file.c_str() );
       }
 
       delete pIcc;
@@ -2517,7 +2531,7 @@ int main(int argc, char* argv[])
       LogAnError(stderr, "%s: ERROR exception: '%s'\n", file.c_str() , e.what() );
     }
     catch (...) {
-      LogAnError(stderr, "%s: ERROR: unknown exception\n", file.c_str()  );
+      LogAnError(stderr, "%s: ERROR: unknown exception\n", file.c_str() );
     }
     
     // NOTE - consume error logs here if needed, so exceptions are included
