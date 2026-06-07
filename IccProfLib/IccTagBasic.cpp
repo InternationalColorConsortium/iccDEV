@@ -9476,10 +9476,21 @@ void CIccTagColorantTable::Describe(std::string &sDescription, int /* nVerbosene
   icUInt32Number i, nLen, nMaxLen=0;
   icFloatNumber Lab[3] = {0};
 
+  // CWE-400/CWE-834: m_nCount is validated against the tag size and capped at
+  // 0xffff in Read(), and m_pData is allocated to match. Guard here so a
+  // corrupted/directly-constructed table can't drive an unbounded describe loop
+  // or dereference a null array.
+  const icUInt32Number nMaxColorants = 0xffff;
+  icUInt32Number nCount = m_nCount;
+  if (!m_pData)
+    nCount = 0;
+  else if (nCount > nMaxColorants)
+    nCount = nMaxColorants;
+
   snprintf(buf, bufSize, "BEGIN_COLORANTS %u\n", (unsigned int) m_nCount);
   sDescription += buf;
 
-  for (i=0; i<m_nCount; i++) {
+  for (i=0; i<nCount; i++) {
     nLen = (icUInt32Number)strlen(m_pData[i].name);
     if (nLen>nMaxLen)
       nMaxLen =nLen;
@@ -9494,7 +9505,7 @@ void CIccTagColorantTable::Describe(std::string &sDescription, int /* nVerbosene
     snprintf(buf, bufSize, "Lab_L Lab_a Lab_b\n");
     sDescription += buf;
   }
-  for (i=0; i<m_nCount; i++) {
+  for (i=0; i<nCount; i++) {
     snprintf(buf, bufSize, "%2u \"%s\"", (unsigned int) i, m_pData[i].name);
     sDescription += buf;
     memset(buf, ' ', 128);
