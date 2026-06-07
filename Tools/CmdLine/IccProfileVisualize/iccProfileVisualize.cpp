@@ -61,7 +61,6 @@
  *
  */
 
-
 #include <cstdio>
 #include <cstdarg>
 #include <iostream>
@@ -115,20 +114,66 @@
 
 /******************************************************************************/
 
+// command line option
 bool gRunSilent = false;
+
+// internal option - should only be used by client code that wants to display errors separately
+bool gLogErrorsToText = false;
+
+// global storage of accumulated error reports
+// abstracted because this can easily become more complicated in the future
+std::string gErrorLogs;
 
 typedef std::vector<std::string> filename_list;
 
 /******************************************************************************/
 
-// NOTE - this could also have a mode to dump to a text stream for PDF output
-// that would need a reset and final function, plus global storage of the text
+static
+void ClearErrorLogs()
+{
+  gErrorLogs.clear();
+}
+
+/******************************************************************************/
+
+static
+std::string GetErrorLogs()
+{
+  return gErrorLogs;
+}
+
+/******************************************************************************/
+
+static
+void AddErrorString(const std::string &input)
+{
+  gErrorLogs += input;
+}
+
+/******************************************************************************/
+
 static
 void ErrorLog(FILE *stream, const char* format, ...)
 {
+  if (gLogErrorsToText) {
+    std::va_list args;
+    va_start(args, format);
+    size_t bufSize = 4096;      // could also print twice to get size, but this is simpler
+    char buf[bufSize];
+    auto len = std::vsnprintf(buf, bufSize, format, args);
+    if (len > 0)
+      AddErrorString( buf );
+    else
+      AddErrorString( "Error while formatting: " + std::string(format) );
+    va_end(args);
+    return;
+  }
+
+  // are we running silent (but not deep)?
   if (gRunSilent)
     return;
 
+  // else normal output
   std::va_list args;
   va_start(args, format);
   (void)std::vfprintf(stream, format, args);
@@ -2453,6 +2498,8 @@ int main(int argc, char* argv[])
 
   for (auto &file : files) {
     try {
+      ClearErrorLogs();
+      
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
       if (!pIcc) {
         ErrorLog(stderr,"Unable to parse '%s' as ICC profile!\n", file.c_str() );
@@ -2473,6 +2520,8 @@ int main(int argc, char* argv[])
     catch (...) {
       ErrorLog(stderr, "%s: ERROR: unknown exception\n", file.c_str()  );
     }
+    
+    // consume error logs here if needed
 
   } // end for argc
 
