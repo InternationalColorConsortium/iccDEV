@@ -119,7 +119,7 @@
 bool gRunSilent = false;
 
 // internal option - should only be used by client code that wants to display errors separately
-bool gLogErrorsToText = false;
+bool gLogErrorsToString = false;
 
 // global storage of accumulated error reports
 // abstracted below because this can easily become more complicated in the future
@@ -152,11 +152,11 @@ void AddErrorStringToLog(const std::string &input)
 
 void LogAnError(FILE *stream, const char* format, ...)
 {
-  if (gLogErrorsToText) {
+  if (gLogErrorsToString) {
     std::va_list args;
     va_start(args, format);
-    size_t bufSize = 4096;      // could also print twice to get size, but this is simpler
-    char buf[bufSize];
+    const size_t bufSize = 4096;      // could also print twice to get size, but this is simpler
+    char buf [ bufSize ];
     auto len = std::vsnprintf(buf, bufSize, format, args);
     if (len > 0)
       AddErrorStringToLog( buf );
