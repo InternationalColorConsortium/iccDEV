@@ -1230,6 +1230,7 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
 
 /******************************************************************************/
 
+#if 0
 // output graphic representation of response curve 1D LUTs
 //     or would, if I could find any example of profiles using response curves...
 // return number of output items created
@@ -1270,6 +1271,7 @@ int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::stri
   return 0; // no output created
 
 }   // end outputResponseCurves()
+#endif
 
 /******************************************************************************/
 
@@ -2272,15 +2274,19 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
         outputItems += output1DLUT(pIcc, pTag, sigDesc, pdffile, basename );
         }
         break;
-    
+
+#if 0
+// I can't find any examples that use the response tag
+// which makes it difficult to test
       case icSigOutputResponseTag:
         {
-printf("**** Found response curves in %s\n", profilePath );     // DEBUG
+//printf("**** Found response curves in %s\n", profilePath );     // DEBUG
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
         outputItems += outputResponseCurves(pIcc, pTag, sigDesc, pdffile, basename );
         }
         break;
+#endif
 
       // nD LUTs
       case icSigAToB0Tag:
