@@ -1076,7 +1076,12 @@ bool ContainsTag(const icTagSignature *tags, size_t count, icTagSignature sig)
 
 bool HasAnyRequiredAlternative(CIccProfile *pIcc, const RuleTable &rule)
 {
-  for (size_t i = 0; i < rule.alternativeCount; ++i) {
+  // CWE-400/CWE-834: the RuleTable entries are static, trusted definitions whose
+  // alternative[] arrays hold only a handful of tags; clamp to an explicit upper
+  // bound so the walk can never run unbounded if a count is ever miswired.
+  const size_t nMaxRuleTags = 64;
+  size_t nAlt = (rule.alternativeCount > nMaxRuleTags) ? nMaxRuleTags : rule.alternativeCount;
+  for (size_t i = 0; i < nAlt; ++i) {
     if (HasTag(pIcc, rule.alternative[i])) {
       return true;
     }
@@ -1197,7 +1202,12 @@ bool HasRequiredTags(CIccProfile *pIcc, std::string &detail)
     }
   };
 
-  for (size_t i = 0; i < rule->requiredCount; ++i) {
+  // CWE-400/CWE-834: the RuleTable entries are static, trusted definitions whose
+  // required[] arrays hold only a handful of tags; clamp to an explicit upper bound
+  // so the walk can never run unbounded if a count is ever miswired.
+  const size_t nMaxRuleTags = 64;
+  size_t nReq = (rule->requiredCount > nMaxRuleTags) ? nMaxRuleTags : rule->requiredCount;
+  for (size_t i = 0; i < nReq; ++i) {
     requireTag(rule->required[i], SigString(rule->required[i]).c_str());
   }
 
