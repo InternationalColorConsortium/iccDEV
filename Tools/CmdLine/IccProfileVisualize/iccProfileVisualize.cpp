@@ -75,7 +75,7 @@
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
-//#include "IccCmdLineUtil.h"
+#include "../IccCmdLineUtil.h"
 #include "MiniTIFF.hpp"
 #include "MiniSVG.hpp"
 #include "MiniPDF.hpp"
@@ -1039,7 +1039,7 @@ bool describe1DLUT( CIccTagCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    fprintf(stderr,"%s: WARNING - curve failed validation: %s\n", filename.c_str(), report.c_str() );
+    fprintf(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "simpleCurve";
     return true;
   }
@@ -1068,7 +1068,7 @@ bool describe1DLUT( CIccTagParametricCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    fprintf(stderr,"%s: WARNING - curve failed validation: %s\n", filename.c_str(), report.c_str() );
+    fprintf(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "parametric";
     return true;
   }
@@ -1086,7 +1086,7 @@ bool describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    fprintf(stderr,"%s: WARNING - curve failed validation: %s\n", filename.c_str(), report.c_str() );
+    fprintf(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "segmented";
     return true;
   }
@@ -1104,7 +1104,7 @@ bool describe1DLUT( CIccCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    fprintf(stderr,"%s: WARNING - curve failed validation: %s\n", filename.c_str(), report.c_str() );
+    fprintf(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "unknown";
     return true;
   }
@@ -1122,7 +1122,7 @@ bool describe3DLUT( CIccMBB *curve, CIccProfile *pIcc, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, pIcc ) > icValidateWarning) {
-    fprintf(stderr,"%s: WARNING - 3D table failed validation: %s\n", filename.c_str(), report.c_str() );
+    fprintf(stderr,"%s: WARNING - 3D table failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "MBBLut";
     return true;
   }
@@ -1230,8 +1230,9 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
 
 /******************************************************************************/
 
-// output graphic representation of 1D LUTs
-// return 1 if output created, 0 if none
+// output graphic representation of response curve 1D LUTs
+//     or would, if I could find any example of profiles using response curves...
+// return number of output items created
 static
 int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
                         PDFWriter &pdffile, const std::string &filename )
@@ -1251,8 +1252,20 @@ int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::stri
     return 0;
   }
 
+  CIccTagResponseCurveSet16 *curves = dynamic_cast<CIccTagResponseCurveSet16*> (tag);
+  if (!curves) {
+      fprintf(stderr, "%s: Skipping %s: unable to convert response curves\n", filename.c_str(), sigDesc.c_str());
+      return 0;
+  }
+  
+  //icUInt16Number channels = curves->GetNumChannels();
+  CIccResponseCurveStruct *curveIter = curves->GetFirstCurves();
+  while (curveIter != NULL) {
 
-// TODO - read and write curves!
+// TODO - read and output
+
+    curveIter = curves->GetNextCurves();
+  }
 
   return 0; // no output created
 
@@ -1800,6 +1813,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
 {
   const size_t bufSize = 64;
   char buf[bufSize];
+  char buf2[bufSize];
   namedLabList colorsOut;
 
   int outputCount = 0;
@@ -1837,16 +1851,14 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       path += sigDesc;
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
-        fprintf(stderr,"%s: WARNING - colorantTable failed validation: %s\n", filename.c_str(), report.c_str() );
+        fprintf(stderr,"%s: WARNING - colorantTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
         return 0;
       }
-      
-      icColorSpaceSignature table_pcs = table->GetPCS();
-      if (pcs != table_pcs) {
-        fprintf(stderr,"%s: WARNING - bad pcs for colorant table: %s\n",
-                            filename.c_str(), icGetSig(buf, bufSize, pcs) );
-        return 0;
-      }
+
+/*
+    CIccTagColorantTable::m_PCS is never set, so testing the value always fails.
+    This value is not written, or read as part of the table -- so we must assume that data PCS == profile PCS
+*/
 
       icUInt32Number colorCount = table->GetSize();
 
@@ -1897,7 +1909,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       path += sigDesc;
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
-        fprintf(stderr,"%s: WARNING - namedColorTable failed validation: %s\n", filename.c_str(), report.c_str() );
+        fprintf(stderr,"%s: WARNING - namedColorTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
         return 0;
       }
       
@@ -1967,7 +1979,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       path += sigDesc;
       std::string report;
       if (array->Validate(path, report, NULL) > icValidateWarning) {
-        fprintf(stderr,"%s: WARNING - named color array failed validation: %s\n", filename.c_str(), report.c_str() );
+        fprintf(stderr,"%s: WARNING - named color array failed validation:\n%s\n", filename.c_str(), report.c_str() );
         return 0;
       }
 
@@ -2219,8 +2231,8 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   char buf1[bufSize];
   int outputItems = 0;
 
-  std::string basename = remove_extension( profilePath );
-
+  std::string tmpName = remove_extension( profilePath );
+  std::string basename = icSanitizeFileName( tmpName );
 
 // write next to input file
 // write output to basename + _luts.pdf
