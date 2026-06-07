@@ -5468,7 +5468,15 @@ CIccApplyMpeCalculator::~CIccApplyMpeCalculator()
   icUInt32Number i;
 
   if (m_SubElem) {
-    for (i=0; i<m_nSubElem; i++) {
+    // CWE-400/CWE-834: m_nSubElem is bounded by MAX_CALC_ELEMENTS in
+    // CIccMpeCalculator::Read and the m_SubElem array is allocated to match
+    // (see GetNewApply). Clamp defensively so a corrupted count can never drive
+    // an unbounded free loop over the array.
+    const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+    icUInt32Number nSubElem = m_nSubElem;
+    if (nSubElem > MAX_CALC_ELEMENTS)
+      nSubElem = MAX_CALC_ELEMENTS;
+    for (i=0; i<nSubElem; i++) {
       delete m_SubElem[i];
     }
     free(m_SubElem);
