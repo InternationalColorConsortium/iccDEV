@@ -752,13 +752,21 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
           sscanf(icXmlAttrValue(attr), "%u", &pTag->m_nReserved);
         }
 
+        bool bAttached = false;
         for (xmlNode *tagSigNode = pNode->children; tagSigNode; tagSigNode = tagSigNode->next) {
           if (tagSigNode->type == XML_ELEMENT_NODE && !icXmlStrCmp(tagSigNode->name, "TagSignature")) {
             if ((const icChar*)tagSigNode->children != NULL) {
               sigTag = (icTagSignature)icGetSigVal((const icChar*)tagSigNode->children->content);
               AttachTag(sigTag, pTag);
+              bAttached = true;
             }
           }
+        }
+
+        //No TagSignature node claimed ownership of pTag; free it to avoid a leak
+        if (!bAttached) {
+          delete pTag;
+          return false;
         }
       }
       else {

@@ -1348,6 +1348,7 @@ bool CIccTagArray::Read(icUInt32Number size, CIccIO *pIO)
         CIccTag *pTag = CIccTagCreator::CreateTag(tagSig);
         if (pTag) {
           if (!pTag->Read(tagPos[i].size, pIO)) {
+            delete pTag;
             delete [] tagPos;
             return false;
           }
