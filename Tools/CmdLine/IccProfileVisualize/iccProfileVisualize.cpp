@@ -80,6 +80,7 @@
 #include "MiniSVG.hpp"
 #include "MiniPDF.hpp"
 #include "spectralLocus.hpp"
+#include "errorLog.hpp"
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -140,6 +141,8 @@ std::string &GetErrorLogs()
 
 /******************************************************************************/
 
+// currently just used by LogAnError, but could be exported if needed
+static
 void AddErrorStringToLog(const std::string &input)
 {
   gErrorLogs += input;
@@ -147,9 +150,7 @@ void AddErrorStringToLog(const std::string &input)
 
 /******************************************************************************/
 
-// this needs to be exported to fileIO code as well!
-
-void ErrorLog(FILE *stream, const char* format, ...)
+void LogAnError(FILE *stream, const char* format, ...)
 {
   if (gLogErrorsToText) {
     std::va_list args;
@@ -1108,7 +1109,7 @@ bool describe1DLUT( CIccTagCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    ErrorLog(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    LogAnError(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "simpleCurve";
     return true;
   }
@@ -1137,7 +1138,7 @@ bool describe1DLUT( CIccTagParametricCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    ErrorLog(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    LogAnError(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "parametric";
     return true;
   }
@@ -1155,7 +1156,7 @@ bool describe1DLUT( CIccTagSegmentedCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    ErrorLog(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    LogAnError(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "segmented";
     return true;
   }
@@ -1173,7 +1174,7 @@ bool describe1DLUT( CIccCurve *curve, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, NULL) > icValidateWarning) {
-    ErrorLog(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    LogAnError(stderr,"%s: WARNING - curve failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "unknown";
     return true;
   }
@@ -1191,7 +1192,7 @@ bool describe3DLUT( CIccMBB *curve, CIccProfile *pIcc, std::string &description,
   path += sigDesc;
   std::string report;
   if (curve->Validate(path, report, pIcc ) > icValidateWarning) {
-    ErrorLog(stderr,"%s: WARNING - 3D table failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    LogAnError(stderr,"%s: WARNING - 3D table failed validation:\n%s\n", filename.c_str(), report.c_str() );
     description = "MBBLut";
     return true;
   }
@@ -1211,7 +1212,7 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
   char buf[bufSize];
 
   if (!tag) {
-    ErrorLog(stderr, "%s: ERROR - missing data for %s\n", filename.c_str(), sigDesc.c_str() );
+    LogAnError(stderr, "%s: ERROR - missing data for %s\n", filename.c_str(), sigDesc.c_str() );
     return 0;
   }
 
@@ -1272,7 +1273,7 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
       break;
 
     default:
-      ErrorLog(stderr,"%s: Unknown 1D LUT type %s for tag %s\n",
+      LogAnError(stderr,"%s: Unknown 1D LUT type %s for tag %s\n",
          filename.c_str(),
          icGetSig(buf, bufSize, typeSig), sigDesc.c_str() );
       {
@@ -1311,20 +1312,20 @@ int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::stri
   char buf[bufSize];
 
   if (!tag) {
-    ErrorLog(stderr, "%s: ERROR - missing data for %s\n", filename.c_str(), sigDesc.c_str());
+    LogAnError(stderr, "%s: ERROR - missing data for %s\n", filename.c_str(), sigDesc.c_str());
     return 0;
   }
 
   icTagTypeSignature typeSig = tag->GetType();
   if (typeSig != icSigResponseCurveSet16Type)  {
-    ErrorLog(stderr,"%s: Unknown ResponseCurve type %s for tag %s\n",
+    LogAnError(stderr,"%s: Unknown ResponseCurve type %s for tag %s\n",
          filename.c_str(), icGetSig(buf, bufSize, typeSig), sigDesc.c_str() );
     return 0;
   }
 
   CIccTagResponseCurveSet16 *curves = dynamic_cast<CIccTagResponseCurveSet16*> (tag);
   if (!curves) {
-      ErrorLog(stderr, "%s: Skipping %s: unable to convert response curves\n", filename.c_str(), sigDesc.c_str());
+      LogAnError(stderr, "%s: Skipping %s: unable to convert response curves\n", filename.c_str(), sigDesc.c_str());
       return 0;
   }
   
@@ -1445,7 +1446,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
   int outputCount = 0;
 
   if (!tag) {
-    ErrorLog(stderr, "%s: Skipping %s: unable to load tag\n", basename.c_str(), sigDesc.c_str());
+    LogAnError(stderr, "%s: Skipping %s: unable to load tag\n", basename.c_str(), sigDesc.c_str());
     return 0;
   }
 
@@ -1460,7 +1461,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     {
     CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
     if (!lut) {
-      ErrorLog(stderr, "%s: Skipping %s: unable to convert LUT\n", basename.c_str(), sigDesc.c_str());
+      LogAnError(stderr, "%s: Skipping %s: unable to convert LUT\n", basename.c_str(), sigDesc.c_str());
       return outputCount;
     }
 
@@ -1482,7 +1483,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     bool isInputMatrix = lut->IsInputMatrix();
 
     if (inputChannels <= 0 || outputChannels <= 0) {
-      ErrorLog(stderr, "%s: Skipping %s: invalid channel count\n", basename.c_str(), sigDesc.c_str());
+      LogAnError(stderr, "%s: Skipping %s: invalid channel count\n", basename.c_str(), sigDesc.c_str());
       return outputCount;
     }
 
@@ -1530,7 +1531,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       // clut is optional in mAB and mBA tags - only report if it isn't one of those
       if ( !(typeSig == icSigLutAtoBType || typeSig == icSigLutBtoAType) ) {
         std::string typeDesc = icGetSigStr(buf, bufSize, typeSig);
-        ErrorLog(stderr,"%s: ERROR - clut data could not be read for tag '%s' of type '%s'\n",
+        LogAnError(stderr,"%s: ERROR - clut data could not be read for tag '%s' of type '%s'\n",
                 basename.c_str(), sigDesc.c_str(), typeDesc.c_str() );
       }
       return outputCount;
@@ -1542,7 +1543,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     int gridPoints = clut->GridPoints(); // gridSize[0]
     int tiles = gridPoints;
     if (gridPoints <= 0) {
-      ErrorLog(stderr, "%s: Skipping %s: invalid CLUT grid\n", basename.c_str(), sigDesc.c_str());
+      LogAnError(stderr, "%s: Skipping %s: invalid CLUT grid\n", basename.c_str(), sigDesc.c_str());
       return outputCount;
     }
 
@@ -1552,7 +1553,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     if (inputChannels >= 2) {
       tileWidth = clut->GridPoint(1);
       if (tileWidth <= 0) {
-        ErrorLog(stderr, "%s: Skipping %s: invalid CLUT width\n", basename.c_str(), sigDesc.c_str());
+        LogAnError(stderr, "%s: Skipping %s: invalid CLUT width\n", basename.c_str(), sigDesc.c_str());
         return outputCount;
       }
     }
@@ -1560,7 +1561,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     if (inputChannels >= 3) {
       tileHeight = clut->GridPoint(2);
       if (tileHeight <= 0) {
-        ErrorLog(stderr, "%s: Skipping %s: invalid CLUT height\n", basename.c_str(), sigDesc.c_str());
+        LogAnError(stderr, "%s: Skipping %s: invalid CLUT height\n", basename.c_str(), sigDesc.c_str());
         return outputCount;
       }
     }
@@ -1569,7 +1570,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       for (int i = 3; i < inputChannels; ++i) {
         int extraGridPoints = clut->GridPoint(i);
         if (extraGridPoints <= 0) {
-          ErrorLog(stderr, "%s: Skipping %s: invalid CLUT tile count\n", basename.c_str(), sigDesc.c_str());
+          LogAnError(stderr, "%s: Skipping %s: invalid CLUT tile count\n", basename.c_str(), sigDesc.c_str());
           return outputCount;
         }
         tiles *= extraGridPoints;
@@ -1591,13 +1592,13 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
       // find tile arrangement closest to a square
     if (tiles <= 0) {
-      ErrorLog(stderr,"%s: WARNING - tile count overflow.\n", basename.c_str() );
+      LogAnError(stderr,"%s: WARNING - tile count overflow.\n", basename.c_str() );
       tiles = 1;
     }
 
     auto tempResult = std::sqrt(tiles);
     if (tempResult > std::numeric_limits<int>::max()) {
-      ErrorLog(stderr,"%s: ERROR - sqrt bad result!\n", basename.c_str() );
+      LogAnError(stderr,"%s: ERROR - sqrt bad result!\n", basename.c_str() );
       tempResult = tiles/2;
     }
     int tilesWide = (int)tempResult;
@@ -1619,7 +1620,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     int imageWidth = tilesWide * tileWidth;
     int imageHeight = tilesHigh * tileHeight;
     if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
-      ErrorLog(stderr, "%s: Skipping %s: invalid image geometry\n", basename.c_str(), sigDesc.c_str());
+      LogAnError(stderr, "%s: Skipping %s: invalid image geometry\n", basename.c_str(), sigDesc.c_str());
       return outputCount;
     }
 
@@ -1627,7 +1628,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
     // NOTE that bufferSize will usually be greater than clutSize
     if (!bufferSize) {
-      ErrorLog(stderr, "%s: Skipping %s: empty image buffer\n", basename.c_str(), sigDesc.c_str());
+      LogAnError(stderr, "%s: Skipping %s: empty image buffer\n", basename.c_str(), sigDesc.c_str());
       return outputCount;
     }
 
@@ -1700,7 +1701,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       int tiffColor = TIFFColorModelFromICCModel( outputSpace );
       if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
                         imageWidth, imageHeight, outputChannels, 8*bytes )) {
-        ErrorLog(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
+        LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
       }
     }
     return ++outputCount;
@@ -1711,7 +1712,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     break;
 
   default:
-    ErrorLog(stderr,"%s: Unknown nD LUT type %s for tag %s\n",
+    LogAnError(stderr,"%s: Unknown nD LUT type %s for tag %s\n",
          basename.c_str(),
          icGetSig(buf, bufSize, typeSig),
          sigDesc.c_str() );
@@ -1890,7 +1891,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
   int outputCount = 0;
 
   if (!tag) {
-    ErrorLog(stderr, "%s: Skipping %s: unable to load tag\n", filename.c_str(), sigDesc.c_str());
+    LogAnError(stderr, "%s: Skipping %s: unable to load tag\n", filename.c_str(), sigDesc.c_str());
     return 0;
   }
 
@@ -1902,7 +1903,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
   icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
   if (pcs != icSigXYZData && pcs != icSigLabData) {
     if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
-      ErrorLog(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
+      LogAnError(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
                         filename.c_str(), icGetSig(buf, bufSize, pcs) );
     return 0;
   }
@@ -1914,7 +1915,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       {
       CIccTagColorantTable *table = dynamic_cast<CIccTagColorantTable*> (tag);
       if (!table) {
-        ErrorLog(stderr, "%s: Skipping %s: unable to convert colorantTable\n", filename.c_str(), sigDesc.c_str());
+        LogAnError(stderr, "%s: Skipping %s: unable to convert colorantTable\n", filename.c_str(), sigDesc.c_str());
         return 0;
       }
 
@@ -1922,7 +1923,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       path += sigDesc;
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
-        ErrorLog(stderr,"%s: WARNING - colorantTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
+        LogAnError(stderr,"%s: WARNING - colorantTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
         return 0;
       }
 
@@ -1972,7 +1973,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       {
       CIccTagNamedColor2 *table = dynamic_cast<CIccTagNamedColor2*> (tag);
       if (!table) {
-        ErrorLog(stderr, "%s: Skipping %s: unable to convert namedColorTable\n", filename.c_str(), sigDesc.c_str());
+        LogAnError(stderr, "%s: Skipping %s: unable to convert namedColorTable\n", filename.c_str(), sigDesc.c_str());
         return 0;
       }
 
@@ -1980,13 +1981,13 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       path += sigDesc;
       std::string report;
       if (table->Validate(path, report, NULL) > icValidateWarning) {
-        ErrorLog(stderr,"%s: WARNING - namedColorTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
+        LogAnError(stderr,"%s: WARNING - namedColorTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
         return 0;
       }
       
       icColorSpaceSignature table_pcs = table->GetPCS();
       if (pcs != table_pcs) {
-        ErrorLog(stderr,"%s: WARNING - bad pcs for namedColorTable: %s\n",
+        LogAnError(stderr,"%s: WARNING - bad pcs for namedColorTable: %s\n",
                             filename.c_str(), icGetSig(buf, bufSize, pcs) );
         return 0;
       }
@@ -2032,14 +2033,14 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       {
       CIccTagArray *array = dynamic_cast<CIccTagArray*> (tag);
       if (!array) {
-        ErrorLog(stderr, "%s: Skipping %s: unable to convert named color array\n", filename.c_str(), sigDesc.c_str());
+        LogAnError(stderr, "%s: Skipping %s: unable to convert named color array\n", filename.c_str(), sigDesc.c_str());
         return 0;
       }
       
       icArraySignature arrayType = array->GetTagArrayType();
       if (arrayType != icSigColorantInfoArray
         && arrayType != icSigNamedColorArray) {
-        ErrorLog(stderr,"%s: WARNING - unknown color array type: %s for tag %s\n",
+        LogAnError(stderr,"%s: WARNING - unknown color array type: %s for tag %s\n",
                         filename.c_str(),
                         icGetSig(buf, bufSize, arrayType),
                         sigDesc.c_str() );
@@ -2050,7 +2051,7 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
       path += sigDesc;
       std::string report;
       if (array->Validate(path, report, NULL) > icValidateWarning) {
-        ErrorLog(stderr,"%s: WARNING - named color array failed validation:\n%s\n", filename.c_str(), report.c_str() );
+        LogAnError(stderr,"%s: WARNING - named color array failed validation:\n%s\n", filename.c_str(), report.c_str() );
         return 0;
       }
 
@@ -2129,7 +2130,7 @@ CIccPcsXform::pushRef2Xyz
                 break;
             
               default:
-                ErrorLog(stderr,"%s: Unknown named color struct data type %s for tag %s\n",
+                LogAnError(stderr,"%s: Unknown named color struct data type %s for tag %s\n",
                         filename.c_str(),
                         icGetSig(buf, bufSize, pcsDataType),
                         sigDesc.c_str() );
@@ -2188,7 +2189,7 @@ CIccPcsXform::pushRef2Xyz
                   break;
                 
                 default:
-                  ErrorLog(stderr,"%s: Unknown named color struct name type %s for tag %s\n",
+                  LogAnError(stderr,"%s: Unknown named color struct name type %s for tag %s\n",
                         filename.c_str(),
                         icGetSig(buf, bufSize, nameDataType),
                         sigDesc.c_str() );
@@ -2229,7 +2230,7 @@ CIccPcsXform::pushRef2Xyz
                     break;
                 
                   default:
-                    ErrorLog(stderr,"%s: Unknown named color tint data type %s for tag %s\n",
+                    LogAnError(stderr,"%s: Unknown named color tint data type %s for tag %s\n",
                             filename.c_str(),
                             icGetSig(buf, bufSize, tintDataType),
                             sigDesc.c_str() );
@@ -2246,7 +2247,7 @@ CIccPcsXform::pushRef2Xyz
             break;
         
           default:
-            ErrorLog(stderr,"%s: Unknown named color struct %s for tag %s\n",
+            LogAnError(stderr,"%s: Unknown named color struct %s for tag %s\n",
                     filename.c_str(),
                     icGetSig(buf, bufSize, structType),
                     sigDesc.c_str() );
@@ -2266,7 +2267,7 @@ CIccPcsXform::pushRef2Xyz
       break;
 
     default:
-      ErrorLog(stderr,"%s: Unknown named color type %s for tag %s\n",
+      LogAnError(stderr,"%s: Unknown named color type %s for tag %s\n",
          filename.c_str(),
          icGetSig(buf, bufSize, typeSig),
          sigDesc.c_str() );
@@ -2500,23 +2501,23 @@ int main(int argc, char* argv[])
       
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
       if (!pIcc) {
-        ErrorLog(stderr,"Unable to parse '%s' as ICC profile!\n", file.c_str() );
+        LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", file.c_str() );
         continue;
       }
 
       // DEBUGGING printf("Processing profile '%s'\n", argv[k]);
       auto count = processLuts( pIcc, file );
       if (!count) {
-        ErrorLog(stderr,"Profile %s had no content for output\n", file.c_str()  );
+        LogAnError(stderr,"Profile %s had no content for output\n", file.c_str()  );
       }
 
       delete pIcc;
     }   // end try
     catch (const std::exception& e) {
-      ErrorLog(stderr, "%s: ERROR exception: '%s'\n", file.c_str() , e.what() );
+      LogAnError(stderr, "%s: ERROR exception: '%s'\n", file.c_str() , e.what() );
     }
     catch (...) {
-      ErrorLog(stderr, "%s: ERROR: unknown exception\n", file.c_str()  );
+      LogAnError(stderr, "%s: ERROR: unknown exception\n", file.c_str()  );
     }
     
     // NOTE - consume error logs here if needed, so exceptions are included
