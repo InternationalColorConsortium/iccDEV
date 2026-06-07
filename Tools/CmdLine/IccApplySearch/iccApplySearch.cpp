@@ -326,7 +326,7 @@ int main(int argc, const char* argv[])
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
       printf("Unable to parse configuration arguments\n");
-      return -1;
+      return EXIT_FAILURE;
     }
     argv += nArg;
     argc -= nArg;

@@ -66,6 +66,9 @@
 
 
 #include "IccCmmConfig.h"
+
+#include <errno.h>
+#include <limits.h>
 #include <cstdio>
 #include <fstream>
 #include <cstring>
@@ -175,6 +178,36 @@ static const char* clrEncNames[] = { "value", "float", "unitFloat", "percent",
                                      "8Bit", "16Bit", "16BitV2", nullptr };
 static icFloatColorEncoding clrEncValues[] = { icEncodeValue, icEncodeFloat, icEncodeUnitFloat, icEncodePercent,
                                                icEncode8Bit, icEncode16Bit, icEncode16BitV2, icEncodeUnknown };
+
+static bool icIsJsonColorEncoding(icFloatColorEncoding v)
+{
+  int i;
+  for (i = 0; clrEncNames[i]; i++) {
+    if (v == clrEncValues[i])
+      return true;
+  }
+
+  return false;
+}
+
+static bool icParseIntArg(const char* arg, int& n)
+{
+  char* end = NULL;
+  long value;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  value = strtol(arg, &end, 10);
+  if (errno || end == arg || value < INT_MIN || value > INT_MAX)
+    return false;
+  if (*end && *end != ':')
+    return false;
+
+  n = (int)value;
+  return true;
+}
 
 icFloatColorEncoding icSetJsonColorEncoding(const char* szEncode)
 {
@@ -303,15 +336,15 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
   m_dstType = icCfgLegacy;
   m_dstFile.clear();
 
-  //Setup destination encoding. Validate the parsed value against the valid
-  //enumerator range before storing it: assigning an out-of-range integer to
-  //icFloatColorEncoding is undefined behavior and later loads of that value
-  //(e.g. in toJson) trap under UBSan. Fall back to the reset default when the
-  //argument is malformed or out of range.
-  int nDstEncoding = atoi(args[1]);
-  if (nDstEncoding < icEncodeValue || nDstEncoding > icEncodeUnknown)
-    nDstEncoding = icEncodeValue;
-  m_dstEncoding = (icFloatColorEncoding)nDstEncoding;
+  //Setup destination encoding
+  int nDstEncoding;
+  if (!icParseIntArg(args[1], nDstEncoding))
+    return 0;
+
+  icFloatColorEncoding dstEncoding = (icFloatColorEncoding)nDstEncoding;
+  if (!icIsJsonColorEncoding(dstEncoding))
+    return 0;
+  m_dstEncoding = dstEncoding;
 
   const char *colon = strchr(args[1], ':');
   if (colon) {

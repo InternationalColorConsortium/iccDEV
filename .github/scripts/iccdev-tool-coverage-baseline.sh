@@ -726,6 +726,10 @@ run_test "ncm-04" "sRGB: 8-bit RGB data, encoding=3 (Float)" \
 run_expect_exit "ncm-05" "Reject final encoding=4 (8Bit)" 1 \
   "$APPLYNCM" "$SRGB_CALC_DATA" 4 0 "$SRGB" 1
 
+run_expect_exit "ncm-05b" "Reject oversized final encoding without sanitizer findings" 1 \
+  "$APPLYNCM" -exportcfganddata "$OUTDIR/ncm-oversized-encoding.json" \
+  "$SRGB_CALC_DATA" 999999999999 0 "$SRGB" 1
+
 run_test "ncm-06" "sRGB: 8-bit RGB data, encoding=5 (16Bit)" \
   "$APPLYNCM" "$SRGB_CALC_DATA" 5 0 "$SRGB" 1
 
@@ -923,6 +927,10 @@ run_test "search-02" "Search sRGB->sRGB perceptual" \
 
 run_test "search-03" "Search sRGB->sRGB float encoding" \
   "$APPLYSRCH" "$SRGB_CALC_DATA" 3 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+
+run_expect_exit "search-03b" "Reject oversized final encoding without sanitizer findings" 1 \
+  "$APPLYSRCH" -exportcfganddata "$OUTDIR/search-oversized-encoding.json" \
+  "$SRGB_CALC_DATA" 999999999999 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
 run_expect_exit "search-04" "Reject legacy three-profile search chain" 255 \
   "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$DISPLAY_P3" 1 "$SRGB" 1 -INIT 1
