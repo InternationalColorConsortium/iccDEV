@@ -303,8 +303,15 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
   m_dstType = icCfgLegacy;
   m_dstFile.clear();
 
-  //Setup destination encoding
-  m_dstEncoding = (icFloatColorEncoding)atoi(args[1]);
+  //Setup destination encoding. Validate the parsed value against the valid
+  //enumerator range before storing it: assigning an out-of-range integer to
+  //icFloatColorEncoding is undefined behavior and later loads of that value
+  //(e.g. in toJson) trap under UBSan. Fall back to the reset default when the
+  //argument is malformed or out of range.
+  int nDstEncoding = atoi(args[1]);
+  if (nDstEncoding < icEncodeValue || nDstEncoding > icEncodeUnknown)
+    nDstEncoding = icEncodeValue;
+  m_dstEncoding = (icFloatColorEncoding)nDstEncoding;
 
   const char *colon = strchr(args[1], ':');
   if (colon) {
