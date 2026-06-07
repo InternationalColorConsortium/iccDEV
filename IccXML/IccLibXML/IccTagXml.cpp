@@ -1015,8 +1015,15 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
                 coords.ParseArray(pNode->children);
                 icFloatNumber *pBuf = coords.GetBuf();
 
+                // CWE-400/CWE-834: m_nDeviceCoords is capped at
+                // kMaxNamedColorDeviceCoords on load and sizes deviceCoords[];
+                // clamp to that bound so a corrupted count can't drive an
+                // unbounded or out-of-range copy.
+                const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+                icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+                                              ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
                 icUInt32Number j;
-                for (j = 0; j < m_nDeviceCoords && j < coords.GetSize(); j++) {
+                for (j = 0; j < nDevCoords && j < coords.GetSize(); j++) {
                   pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j];
                 }
               }
@@ -1199,6 +1206,13 @@ bool CIccTagXmlSparseMatrixArray::ToXml(std::string &xml, std::string blanks/* =
 
   CIccSparseMatrix mtx;
   icUInt32Number bytesPerMatrix = GetBytesPerMatrix();
+
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_RawData
+  // is allocated to m_nSize*bytesPerMatrix; assert an explicit upper limit so a
+  // corrupted count can't drive an unbounded serialization walk.
+  const icUInt32Number nMaxMatrices = 0xffffff;
+  if (m_nSize > nMaxMatrices)
+    return false;
 
   for (i=0; i<(int)m_nSize; i++) {
     if (!mtx.Reset(m_RawData+i*bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, true) ||
@@ -1387,6 +1401,13 @@ bool CIccTagXmlFixedNum<T, Tsig>::ToXml(std::string &xml, std::string blanks/* =
   const size_t bufSize = 256;
   char buf[bufSize];
   int i;
+
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_Num is
+  // allocated to match; assert an explicit upper limit so a corrupted count can't
+  // drive an unbounded serialization walk.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
 
   if (Tsig==icSigS15Fixed16ArrayType) {
     int n = 8;
@@ -1966,6 +1987,12 @@ bool CIccTagXmlColorantOrder::ToXml(std::string &xml, std::string blanks/* = ""*
   char buf[bufSize];
 
   xml += blanks + "<ColorantOrder>\n"; //+ blanks + "  ";
+  // CWE-400/CWE-834: SetSize() caps the colorant count at 0xffff and allocates
+  // m_pData to match; assert that bound locally so the serialization walk has an
+  // explicit upper limit.
+  const icUInt32Number nMaxColorants = 0xffff;
+  if (m_nCount > nMaxColorants)
+    return false;
   for (icUInt32Number i=0; i<m_nCount; i++) {
     snprintf(buf, bufSize, "  <n>%d</n>\n", m_pData[i]);
     xml += blanks + buf;
@@ -2004,6 +2031,12 @@ bool CIccTagXmlColorantTable::ToXml(std::string &xml, std::string blanks/* = ""*
   std::string str;
 
   xml += blanks + "<ColorantTable>\n";
+  // CWE-400/CWE-834: SetSize() caps the colorant count at 0xffff and allocates
+  // m_pData to match; assert that bound locally so the serialization walk has an
+  // explicit upper limit.
+  const icUInt32Number nMaxColorants = 0xffff;
+  if (m_nCount > nMaxColorants)
+    return false;
   for (icUInt32Number i=0; i<m_nCount; i++) {
     icFloatNumber lab[3];
     lab[0] = icU16toF(m_pData[i].data[0]);
