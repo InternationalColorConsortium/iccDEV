@@ -1471,6 +1471,10 @@ IF(ENABLE_TOOLS)
   ADD_SUBDIRECTORY(Tools/IccV5DspObsToV4Dsp)
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
   ADD_SUBDIRECTORY(Tools/IccApplySearch)
+  # Shared visualization model library — single source of the plot/raster math
+  # consumed by both iccProfileVisualize (PDF/TIFF) and iccProfilePlot (JSON).
+  ADD_SUBDIRECTORY(Tools/IccVizModel)
+  SET(TARGET_LIB_ICCVIZMODEL IccVizModel CACHE INTERNAL "Link target for IccVizModel")
   ADD_SUBDIRECTORY(Tools/IccProfileVisualize)
   ADD_SUBDIRECTORY(Tools/IccProfilePlot)
 

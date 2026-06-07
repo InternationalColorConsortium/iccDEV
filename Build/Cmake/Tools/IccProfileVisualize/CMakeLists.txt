@@ -19,8 +19,11 @@ set_target_properties(${TARGET_NAME} PROPERTIES
   OUTPUT_NAME "iccProfileVisualize"
 )
 
+# IccVizModel (PUBLIC) is the shared visualization model and carries the
+# IccVizModel.hpp/spectralLocus.hpp include directory.
 target_link_libraries(${TARGET_NAME}
   PRIVATE
+    ${TARGET_LIB_ICCVIZMODEL}
     ${TARGET_LIB_ICCPROFLIB}
     $<$<BOOL:${ENABLE_ICCXML}>:${TARGET_LIB_ICCXML}>
 )
