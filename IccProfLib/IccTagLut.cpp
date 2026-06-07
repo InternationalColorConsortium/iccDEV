@@ -360,9 +360,11 @@ void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
     if (nVerboseness > 75) {
       sDescription += "IN OUT\n";
 
-      // CWE-400/834: SetSize() caps m_nSize at 65536 and allocates m_Curve to
-      // match; assert that bound locally so the table walk has an explicit limit.
-      if (m_nSize > 65536)
+      // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
+      // m_Curve to match; assert that bound locally so the table walk has an
+      // explicit limit.
+      const icUInt32Number nMaxCurveEntries = 65536;
+      if (m_nSize > nMaxCurveEntries)
         return;
 
       for (icUInt32Number i=0; i<m_nSize; i++) {
@@ -430,9 +432,11 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
 
       sDescription.reserve(sDescription.size() + m_nSize * 20);
 
-      // CWE-400/834: SetSize() caps m_nSize at 65536 and allocates m_Curve to
-      // match; assert that bound locally so the table walk has an explicit limit.
-      if (m_nSize > 65536)
+      // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
+      // m_Curve to match; assert that bound locally so the table walk has an
+      // explicit limit.
+      const icUInt32Number nMaxCurveEntries = 65536;
+      if (m_nSize > nMaxCurveEntries)
         return;
 
       for (i=0; i<(int)m_nSize; i++) {
@@ -581,9 +585,11 @@ bool CIccTagCurve::IsIdentity()
     return  IsUnity(icFloatNumber(m_Curve[0]*65535.0/256.0));
   }
 
-  // CWE-400/834: SetSize() caps m_nSize at 65536 and allocates m_Curve to match;
-  // assert that bound locally so the table walk has an explicit upper limit.
-  if (m_nSize > 65536)
+  // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates m_Curve
+  // to match; assert that bound locally so the table walk has an explicit upper
+  // limit.
+  const icUInt32Number nMaxCurveEntries = 65536;
+  if (m_nSize > nMaxCurveEntries)
     return false;
 
   icUInt32Number i;
@@ -3362,6 +3368,13 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
   // used for the df[] loop. Input channels are capped at <=16 by Init() on load;
   // guard locally so both bounds are explicit at point of use.
   if (m_nInput > 16)
+    return;
+
+  // CWE-400/CWE-834: m_nNodes == (1<<m_nInput) and indexes the fixed df[]/m_nOffset
+  // arrays; assert the derived upper bound (m_nInput<=16 => m_nNodes<=65536) on the
+  // field itself so the node walks below have an explicit limit.
+  const icUInt32Number nMaxNodes = 65536;
+  if (m_nNodes > nMaxNodes)
     return;
 
   for (i=0; i<m_nInput; i++) {

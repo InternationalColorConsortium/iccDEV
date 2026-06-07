@@ -318,6 +318,14 @@ CIccStructNamedColor* CIccArrayNamedColor::FindColor(const icChar *szColor) cons
 
 CIccStructNamedColor* CIccArrayNamedColor::FindDeviceColor(const icFloatNumber *pDevColor) const
 {
+  // CWE-400/CWE-834: m_nDeviceSamples is the device color space's sample count
+  // (icGetSpaceSamples) and sizes both temp[] and the caller's pDevColor[]; assert
+  // an explicit upper bound so a corrupted value can't drive an unbounded walk or
+  // oversized allocation. Device channels never exceed nMaxDeviceSamples.
+  const icUInt32Number nMaxDeviceSamples = 0xffff;
+  if (m_nDeviceSamples > nMaxDeviceSamples)
+    return NULL;
+
   icFloatNumber *temp = new (std::nothrow) icFloatNumber[m_nDeviceSamples];
 
   if (!temp)

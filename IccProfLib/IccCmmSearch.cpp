@@ -171,12 +171,21 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
   CIccCmmSearch* pCmm = (CIccCmmSearch*)m_pCmm;
 
     if (!pCmm->m_src_to_mid.size()) { //src == mid so copy pixel data into mid search pixels
-    for (size_t i = 0; i < m_nApply; i++) {
+    // CWE-400/CWE-834: m_nApply is set from container sizes at Begin() and bounds
+    // the m_mid_data walk; clamp to the actual allocation so a corrupted count
+    // can't drive an unbounded or out-of-range walk.
+    size_t nApply = (m_nApply < m_mid_data.size()) ? m_nApply : m_mid_data.size();
+    for (size_t i = 0; i < nApply; i++) {
       memcpy(&m_mid_data[i][0], SrcPixel, m_nSamples*sizeof(icFloatNumber));
     }
   }
   else {
-    for (size_t i = 0; i < m_nApply; i++) {
+    // CWE-400/CWE-834: clamp to the smaller of m_nApply and the indexed containers
+    // so neither the m_mid_data nor the m_src_to_mid walk can run out of range.
+    size_t nApply = (m_nApply < m_mid_data.size()) ? m_nApply : m_mid_data.size();
+    if (nApply > pCmm->m_src_to_mid.size())
+      nApply = pCmm->m_src_to_mid.size();
+    for (size_t i = 0; i < nApply; i++) {
       pCmm->m_src_to_mid[i]->Apply(&m_mid_data[i][0], SrcPixel);
     }
   }

@@ -1213,6 +1213,13 @@ void CIccTagArray::Describe(std::string &sDescription, int nVerboseness)
 
   icUInt32Number i;
 
+  // CWE-400/CWE-834: Read() bounds m_nSize by the tag byte size (count*sizeof
+  // (icPositionNumber) <= size) and SetSize() allocates m_TagVals to match; assert
+  // an explicit upper limit so the describe walk can't run unbounded.
+  const icUInt32Number nMaxArrayEntries = 0xffffff;
+  if (m_nSize > nMaxArrayEntries)
+    return;
+
   for (i=0; i<m_nSize; i++) {
     if (i)
       sDescription += "\n";
@@ -1559,10 +1566,16 @@ void CIccTagArray::Cleanup()
   icUInt32Number i, j;
   CIccTag* pTag;
 
-  for (i=0; i<m_nSize; i++) {
+  // CWE-400/CWE-834: m_TagVals is allocated to m_nSize by SetSize() (count bounded
+  // by the tag byte size in Read); clamp the cleanup walks to that bound so a
+  // corrupted count can't drive an unbounded or out-of-range walk.
+  const icUInt32Number nMaxArrayEntries = 0xffffff;
+  icUInt32Number nSize = (m_nSize > nMaxArrayEntries) ? nMaxArrayEntries : m_nSize;
+
+  for (i=0; i<nSize; i++) {
     pTag = m_TagVals[i].ptr;
     if (pTag) {
-      for (j=i+1; j<m_nSize; j++) {
+      for (j=i+1; j<nSize; j++) {
         if (m_TagVals[j].ptr == pTag)
           m_TagVals[j].ptr = NULL;
       }

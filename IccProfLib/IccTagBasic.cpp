@@ -3379,6 +3379,13 @@ void CIccTagNamedColor2::Describe(std::string &sDescription, int /* nVerboseness
   snprintf(buf, bufSize, "Sufix= \"%s\"\n", m_szSufix);
   sDescription += buf;
 
+  // CWE-400/CWE-834: Read() caps m_nSize at kMaxNamedColorEntries and allocates
+  // the entry array to match; assert that bound locally so the describe walk has
+  // an explicit upper limit.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  if (m_nSize > kMaxNamedColorEntries)
+    return;
+
   for (i=0; i<m_nSize; i++) {
     snprintf(buf, bufSize, "Color[%u]: %s :", (unsigned int)i, pNamedColor->rootName);
     sDescription += buf;
@@ -3446,6 +3453,13 @@ void CIccTagNamedColor2::SetColorSpaces(icColorSpaceSignature csPCS, icColorSpac
  */
 icInt32Number CIccTagNamedColor2::FindRootColor(const icChar *szRootColor) const
 {
+  // CWE-400/CWE-834: Read() caps m_nSize at kMaxNamedColorEntries and allocates
+  // the entry array to match; assert that bound locally so the search has an
+  // explicit upper limit.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  if (m_nSize > kMaxNamedColorEntries)
+    return -1;
+
   for (icUInt32Number i=0; i<m_nSize; i++) {
     if (stricmp(GetEntry(i)->rootName,szRootColor) == 0)
       return i;
@@ -3482,6 +3496,13 @@ void CIccTagNamedColor2::ResetPCSCache()
 bool CIccTagNamedColor2::InitFindCachedPCSColor()
 {
   icFloatNumber *pXYZ, *pLab;
+
+  // CWE-400/CWE-834: Read() caps m_nSize at kMaxNamedColorEntries and allocates
+  // the entry array to match; assert that bound locally so the cache allocation
+  // and the conversion walks below have an explicit upper limit.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  if (m_nSize > kMaxNamedColorEntries)
+    return false;
 
   if (!m_NamedLab) {
     m_NamedLab = new (std::nothrow) SIccNamedLabEntry[m_nSize];
@@ -3616,6 +3637,13 @@ icInt32Number CIccTagNamedColor2::FindColor(const icChar *szColor) const
   }
 
 
+  // CWE-400/CWE-834: Read() caps m_nSize at kMaxNamedColorEntries and allocates
+  // the entry array to match; assert that bound locally so the search has an
+  // explicit upper limit.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  if (m_nSize > kMaxNamedColorEntries)
+    return -1;
+
   for ( i=0; i<(icInt32Number)m_nSize; i++) {
     sColorName = m_szPrefix;
     sColorName += GetEntry(i)->rootName;
@@ -3650,6 +3678,13 @@ icInt32Number CIccTagNamedColor2::FindDeviceColor(icFloatNumber *pDevColor) cons
   icFloatNumber *pDevOut;
   icInt32Number leastDiffindex = -1;
 
+
+  // CWE-400/CWE-834: Read() caps m_nSize at kMaxNamedColorEntries and allocates
+  // the entry array to match; assert that bound locally so the search has an
+  // explicit upper limit.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  if (m_nSize > kMaxNamedColorEntries)
+    return -1;
 
   for (icUInt32Number i=0; i<m_nSize; i++) {
     pDevOut = GetEntry(i)->deviceCoords;
@@ -4026,6 +4061,12 @@ void CIccTagXYZ::Describe(std::string &sDescription, int /* nVerboseness */)
   }
   else {
     icUInt32Number i;
+    // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and the
+    // m_XYZ array is allocated to match; assert an explicit upper limit so a
+    // corrupted count can't drive an unbounded describe walk.
+    const icUInt32Number nMaxXYZValues = 65536;
+    if (m_nSize > nMaxXYZValues)
+      return;
     sDescription.reserve(sDescription.size() + m_nSize*79);
 
     for (i=0; i<m_nSize; i++) {
@@ -9183,7 +9224,14 @@ void CIccTagColorantOrder::Describe(std::string &sDescription, int /* nVerbosene
   snprintf(buf, bufSize, "Colorant Count : %u\n", (unsigned int) m_nCount);
   sDescription += buf;
   sDescription += "Order of Colorants:\n";
-  
+
+  // CWE-400/CWE-834: Read() rejects nCount > the tag size and SetSize() caps the
+  // colorant count at 0xffff, allocating m_pData to match; assert that bound
+  // locally so the describe walk has an explicit upper limit.
+  const icUInt32Number nMaxColorants = 0xffff;
+  if (m_nCount > nMaxColorants)
+    return;
+
   for (icUInt32Number i=0; i<m_nCount; i++) {
     snprintf(buf, bufSize, "%u\n", (unsigned int) m_pData[i]);
     sDescription += buf;
