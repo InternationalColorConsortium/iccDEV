@@ -448,6 +448,12 @@ bool CIccTagJsonDateTime::ParseJson(const IccJson &j, std::string & /*parseStr*/
 bool CIccTagJsonXYZ::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_XYZ is
+  // allocated to match; assert an explicit upper limit so a corrupted count can't
+  // drive an unbounded serialization walk.
+  const icUInt32Number nMaxXYZValues = 65536;
+  if (m_nSize > nMaxXYZValues)
+    return false;
   if (m_XYZ) {
     for (icUInt32Number i = 0; i < m_nSize; i++) {
       arr.push_back(IccJson::array({
@@ -836,6 +842,13 @@ bool CIccTagJsonNamedColor2::ToJson(IccJson &j)
   j["colorantSuffix"] = icJsonFixedAsciiString(m_szSufix, sizeof(m_szSufix));
 
   IccJson colors = IccJson::array();
+  // CWE-400/CWE-834: Read() caps m_nSize at kMaxNamedColorEntries and m_nDeviceCoords
+  // at kMaxNamedColorDeviceCoords, allocating the entry array to match; assert those
+  // bounds locally so neither serialization walk can run unbounded.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+  if (m_nSize > kMaxNamedColorEntries || m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+    return false;
   if (m_NamedColor) {
     for (icUInt32Number i = 0; i < m_nSize; i++) {
       const SIccNamedColorEntry *pColor = GetEntry(i);
@@ -1035,6 +1048,13 @@ bool CIccTagJsonSparseMatrixArray::ToJson(IccJson &j)
   CIccSparseMatrix mtx;
   icUInt32Number bytesPerMatrix = GetBytesPerMatrix();
   IccJson matrices = IccJson::array();
+
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_RawData
+  // is allocated to m_nSize*bytesPerMatrix; assert an explicit upper limit so a
+  // corrupted count can't drive an unbounded serialization walk.
+  const icUInt32Number nMaxMatrices = 0xffffff;
+  if (m_nSize > nMaxMatrices)
+    return false;
 
   for (icUInt32Number i = 0; i < m_nSize; i++) {
     mtx.Reset(m_RawData + i * bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, true);
@@ -1245,6 +1265,12 @@ template <class T, class A, icTagTypeSignature Tsig>
 bool CIccTagJsonNum<T, A, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_Num is
+  // allocated to match; assert an explicit upper limit so a corrupted count can't
+  // drive an unbounded serialization walk.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
   for (icUInt32Number i = 0; i < this->m_nSize; i++)
     arr.push_back(this->m_Num[i]);
   j["values"] = arr;
@@ -1722,6 +1748,13 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
     j["curveType"] = "gamma";
     j["gamma"] = (double)(m_Curve[0] * 65535.0 / 256.0);
   } else {
+    // CWE-400/CWE-834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
+    // m_Curve to match; assert that bound locally so the identity check and table
+    // serialization walks below have an explicit upper limit.
+    const icUInt32Number nMaxCurveEntries = 65536;
+    if (m_nSize > nMaxCurveEntries)
+      return false;
+
     // Check whether the table is a sampled identity (linear ramp 0..1).
     // Tolerance of 0.5/65535 covers 16-bit quantisation rounding.
     bool isIdentity = true;
