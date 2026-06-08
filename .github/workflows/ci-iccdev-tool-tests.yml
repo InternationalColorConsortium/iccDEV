@@ -521,9 +521,9 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          ignorelist_arg=()
+          ignorelist_arg=""
           if [ "$MATRIX_COMPILER" = "clang" ]; then
-            ignorelist_arg=(-DUBSAN_IGNORELIST="${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}")
+            ignorelist_arg="-DUBSAN_IGNORELIST=${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}"
           fi
 
           cmake -S Build/Cmake -B "${BUILD_DIR}" \
@@ -537,7 +537,7 @@ jobs:
             -DENABLE_INTEGER_SANITIZER="${MATRIX_INTEGER_SANITIZER}" \
             -DENABLE_FLOAT_SANITIZER=ON \
             -DSANITIZER_RECOVER=ON \
-            "${ignorelist_arg[@]}" \
+            ${ignorelist_arg:+"$ignorelist_arg"} \
             -DENABLE_TOOLS=ON \
             -DENABLE_TESTS=ON \
             -DENABLE_WXWIDGETS=OFF \
