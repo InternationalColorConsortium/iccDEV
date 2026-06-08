@@ -507,6 +507,9 @@ jobs:
             exit 1
           fi
 
+          issue1230_enable_ubsan=ON
+          issue1230_enable_float_sanitizer=ON
+
           if [ "$RUNNER_OS_NAME" = "macOS" ] && [ "$MATRIX_COMPILER" = "gcc" ]; then
             runtime_dir=""
             runtime_probe="$("$cxx" -print-file-name=libubsan.dylib)"
@@ -524,37 +527,50 @@ jobs:
                   runtime_dir="$candidate"
                   break
                 fi
-                runtime_file="$(find "$candidate" \( -name 'libubsan*.dylib' -o -name 'libubsan*.a' \) -print -quit 2>/dev/null || true)"
+                runtime_file="$(
+                  find "$candidate" \
+                    \( -name 'libubsan*.dylib' -o -name 'libubsan*.a' \) \
+                    -print -quit 2>/dev/null || true
+                )"
                 if [ -n "$runtime_file" ]; then
-                  mkdir -p "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime"
+                  runtime_link="${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime"
+                  mkdir -p "$runtime_link"
                   case "$runtime_file" in
                     *.dylib)
-                      ln -sf "$runtime_file" "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime/libubsan.dylib"
+                      ln -sf "$runtime_file" "$runtime_link/libubsan.dylib"
                       ;;
                     *.a)
-                      ln -sf "$runtime_file" "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime/libubsan.a"
+                      ln -sf "$runtime_file" "$runtime_link/libubsan.a"
                       ;;
                   esac
-                  runtime_dir="${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime"
+                  runtime_dir="$runtime_link"
                   break
                 fi
               done
             fi
 
             if [ -z "$runtime_dir" ]; then
-              echo "::error title=GCC runtime::libubsan.dylib not found"
-              exit 1
+              issue1230_enable_ubsan=OFF
+              issue1230_enable_float_sanitizer=OFF
+              notice="macOS GCC libubsan unavailable; "
+              notice+="running fail-closed replay without sanitizer flags"
+              echo "::notice title=GCC runtime::${notice}"
+            else
+              {
+                printf 'LIBRARY_PATH=%s%s\n' \
+                  "$runtime_dir" "${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+                printf 'DYLD_LIBRARY_PATH=%s%s\n' \
+                  "$runtime_dir" "${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+              } >> "$GITHUB_ENV"
             fi
-
-            {
-              echo "LIBRARY_PATH=${runtime_dir}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
-              echo "DYLD_LIBRARY_PATH=${runtime_dir}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
-            } >> "$GITHUB_ENV"
           fi
 
           {
             echo "CC=$cc"
             echo "CXX=$cxx"
+            echo "ISSUE1230_ENABLE_UBSAN=$issue1230_enable_ubsan"
+            key="ISSUE1230_ENABLE_FLOAT_SANITIZER"
+            printf '%s=%s\n' "$key" "$issue1230_enable_float_sanitizer"
           } >> "$GITHUB_ENV"
 
           "$cc" --version | sed -n '1p'
@@ -572,6 +588,9 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
+          enable_ubsan="${ISSUE1230_ENABLE_UBSAN:-ON}"
+          enable_float_sanitizer="${ISSUE1230_ENABLE_FLOAT_SANITIZER:-ON}"
+
           ignorelist_arg=""
           if [ "$MATRIX_COMPILER" = "clang" ]; then
             ignorelist_arg="-DUBSAN_IGNORELIST=${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}"
@@ -584,9 +603,9 @@ jobs:
             -DCMAKE_C_FLAGS="-O0 -g3" \
             -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
             -DENABLE_ASAN="${MATRIX_ASAN}" \
-            -DENABLE_UBSAN=ON \
+            -DENABLE_UBSAN="${enable_ubsan}" \
             -DENABLE_INTEGER_SANITIZER="${MATRIX_INTEGER_SANITIZER}" \
-            -DENABLE_FLOAT_SANITIZER=ON \
+            -DENABLE_FLOAT_SANITIZER="${enable_float_sanitizer}" \
             -DSANITIZER_RECOVER=ON \
             ${ignorelist_arg:+"$ignorelist_arg"} \
             -DENABLE_TOOLS=ON \
