@@ -41,6 +41,8 @@ TRUNCATED="$OUTDIR/truncated.icc"
 MALWARE="$OUTDIR/private-pe-signature.icc"
 GZIP_FALSE_POSITIVE="$OUTDIR/private-invalid-gzip-signature.icc"
 GZIP_TRUE_POSITIVE="$OUTDIR/private-valid-gzip-signature.icc"
+STD_GZIP_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-gzip-signature.icc"
+STD_GZIP_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-gzip-signature.icc"
 REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
 
 PASS=0
@@ -562,6 +564,184 @@ run_valid_gzip_signature_profile() {
   pass_case "$name" "valid gzip member still triggers S8 and S12"
 }
 
+generate_standard_tag_invalid_gzip_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$STD_GZIP_FALSE_POSITIVE" <<'PY'
+import pathlib
+import struct
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+# 256-byte high-entropy CLUT-like blob carried by a STANDARD 'A2B0' tag, with the
+# exact Fogra51_CF false-positive bytes (1f 8b 08 then invalid FLG 0x86 ...)
+# embedded in the middle -- mirrors a coincidental gzip magic inside lutAToBType
+# CLUT data, as opposed to the private-tag false positive above.
+blob = bytearray((i * 73 + 11) & 0xff for i in range(256))
+blob[120:130] = bytes([0x1f, 0x8b, 0x08, 0x86, 0x97, 0x0b, 0x75, 0x87, 0x7e, 0x87])
+size = 144 + len(blob)
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[64:68] = struct.pack(">I", 0)
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"A2B0"
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", len(blob))
+data[144:size] = blob
+dst.write_bytes(data)
+PY
+}
+
+run_standard_tag_invalid_gzip_signature_profile() {
+  local name="pawg-standard-tag-invalid-gzip-true-negative"
+  local logfile="$OUTDIR/standard-tag-invalid-gzip.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_GZIP_FALSE_POSITIVE"
+
+  if ! generate_standard_tag_invalid_gzip_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag invalid gzip signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_GZIP_FALSE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S8" "$logfile"; then
+    fail_case "$name" "invalid gzip header in standard tag was incorrectly reported in S8"
+    return
+  fi
+  if grep -F -q "embedded gzip stream" "$logfile"; then
+    fail_case "$name" "invalid gzip header produced gzip detail text"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S11" "$logfile"; then
+    fail_case "$name" "standard tag was misreported as a private tag in S11"
+    return
+  fi
+
+  pass_case "$name" "invalid gzip-like bytes in a standard CLUT tag did not trigger S8"
+}
+
+generate_standard_tag_valid_gzip_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$STD_GZIP_TRUE_POSITIVE" <<'PY'
+import gzip
+import pathlib
+import struct
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+# Genuine gzip member embedded in the middle of a 256-byte CLUT-like blob carried
+# by a STANDARD 'A2B0' tag. The whole-file S8 scan must still flag it, while the
+# private-tag checks S11/S12 stay clear because no private tag is present -- this
+# is the standard-tag counterpart to the private-tag true positive above.
+member = gzip.compress(b"icc-pawg-clut\n", mtime=0)
+blob = bytearray((i * 73 + 11) & 0xff for i in range(256))
+blob[120:120 + len(member)] = member
+size = 144 + len(blob)
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[64:68] = struct.pack(">I", 0)
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"A2B0"
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", len(blob))
+data[144:size] = blob
+dst.write_bytes(data)
+PY
+}
+
+run_standard_tag_valid_gzip_signature_profile() {
+  local name="pawg-standard-tag-valid-gzip-true-positive"
+  local logfile="$OUTDIR/standard-tag-valid-gzip.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_GZIP_TRUE_POSITIVE"
+
+  if ! generate_standard_tag_valid_gzip_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag valid gzip signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_GZIP_TRUE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "gzip-signature input unexpectedly returned success"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] S8" "$logfile"; then
+    fail_case "$name" "valid gzip signature in standard tag was not reported in S8"
+    return
+  fi
+  if ! grep -F -q "embedded gzip stream signature at offset" "$logfile"; then
+    fail_case "$name" "gzip detail text missing expected offset"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S12" "$logfile"; then
+    fail_case "$name" "standard-tag gzip must leave private-tag check S12 clear"
+    return
+  fi
+
+  pass_case "$name" "valid gzip member in a standard CLUT tag triggers S8 while S12 stays clear"
+}
+
 run_json_report() {
   local name="pawg-json-evidence-output"
   local logfile="$OUTDIR/json-report.log"
@@ -705,6 +885,8 @@ run_truncated_profile
 run_private_malware_profile
 run_invalid_gzip_signature_profile
 run_valid_gzip_signature_profile
+run_standard_tag_invalid_gzip_signature_profile
+run_standard_tag_valid_gzip_signature_profile
 run_registered_private_profile
 echo "iccPawgReport PAWG regression and security tests: $PASS passed, $FAIL failed, $TOTAL total"
 
