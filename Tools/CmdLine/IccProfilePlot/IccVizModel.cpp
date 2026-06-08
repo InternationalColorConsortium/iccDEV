@@ -451,6 +451,8 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
       auto* flt = dynamic_cast<CIccTagNumArray*>(pcsElem);
       if (!flt) continue;
 
+      // TODO - can we easily convert spectra to PCS? Probably not without
+      //        specifying viewing conditions. (carried over from iccProfileVisualize)
       std::vector<NamedLab> tempColors;
       icUInt32Number colorCount = flt->GetNumValues() / 3;   // ignore any partial triple
       for (icUInt32Number k = 0; k < colorCount; ++k) {

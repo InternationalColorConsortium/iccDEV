@@ -1283,12 +1283,25 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
       case iccviz::Kind::NamedColorsXY:
         break;
 
+// Future visualizations (carried over from iccProfileVisualize's intent list).
+// In this data-first port they are added by extending iccviz::Enumerate / the
+// IccVizModel producers rather than this switch — the tool just draws whatever
+// the model enumerates.
+// TODO - plot gamut from A2B and B2A tags into xy and LAB plots
+//        (ongoing iccProfileVisualize gamut work; the convex_hull2D / cross()
+//         helpers above are reserved for hulling the projected CLUT samples)
+// TODO - plot named spectra as graphs?
+// TODO - response curves (responseCurveSet16; cf. the disabled
+//        outputResponseCurves below — no profile using them found yet)
 // TODO - embedded height image
 // TODO - embedded normal image
 // TODO - BRDF images?
 // TODO - LUT content from MPE tags?
 // TODO - spectral viewing conditions?
 // TODO - all XYZ type tags?
+// TODO - curveSetElement
+// TODO - singleSampledCurve
+// TODO - segmentedCurve
 
       // ignore everything else
       default:
