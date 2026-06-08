@@ -501,6 +501,36 @@ jobs:
             exit 1
           fi
 
+          if [ "$RUNNER_OS_NAME" = "macOS" ] && [ "$MATRIX_COMPILER" = "gcc" ]; then
+            runtime_dir=""
+            runtime_probe="$("$cxx" -print-file-name=libubsan.dylib)"
+            if [ -f "$runtime_probe" ]; then
+              runtime_dir="$(dirname "$runtime_probe")"
+            fi
+
+            if [ -z "$runtime_dir" ]; then
+              brew_gcc_prefix="$(brew --prefix gcc 2>/dev/null || true)"
+              for candidate in \
+                "$brew_gcc_prefix/lib/gcc/current" \
+                "$brew_gcc_prefix/lib/gcc/15"; do
+                if [ -f "$candidate/libubsan.dylib" ]; then
+                  runtime_dir="$candidate"
+                  break
+                fi
+              done
+            fi
+
+            if [ -z "$runtime_dir" ]; then
+              echo "::error title=GCC runtime::libubsan.dylib not found"
+              exit 1
+            fi
+
+            {
+              echo "LIBRARY_PATH=${runtime_dir}${LIBRARY_PATH:+:${LIBRARY_PATH}}"
+              echo "DYLD_LIBRARY_PATH=${runtime_dir}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+            } >> "$GITHUB_ENV"
+          fi
+
           {
             echo "CC=$cc"
             echo "CXX=$cxx"
