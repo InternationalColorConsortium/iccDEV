@@ -43,6 +43,10 @@ GZIP_FALSE_POSITIVE="$OUTDIR/private-invalid-gzip-signature.icc"
 GZIP_TRUE_POSITIVE="$OUTDIR/private-valid-gzip-signature.icc"
 STD_GZIP_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-gzip-signature.icc"
 STD_GZIP_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-gzip-signature.icc"
+STD_ELF_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-elf-signature.icc"
+STD_ELF_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-elf-signature.icc"
+STD_SHEBANG_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-shebang-signature.icc"
+STD_SHEBANG_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-shebang-signature.icc"
 REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
 
 PASS=0
@@ -742,6 +746,268 @@ run_standard_tag_valid_gzip_signature_profile() {
   pass_case "$name" "valid gzip member in a standard CLUT tag triggers S8 while S12 stays clear"
 }
 
+# Shared builder: writes a minimal RGB profile carrying a single STANDARD 'A2B0'
+# tag whose 256-byte CLUT-like blob has `embed` spliced in at offset 120.
+emit_standard_tag_blob_profile() {
+  python3 - "$1" "$2" <<'PY'
+import pathlib
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+embed = bytes.fromhex(sys.argv[2])
+blob = bytearray((i * 73 + 11) & 0xff for i in range(256))
+blob[120:120 + len(embed)] = embed
+size = 144 + len(blob)
+data = bytearray(size)
+data[0:4] = size.to_bytes(4, "big")
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[68:72] = (0x0000F6D6).to_bytes(4, "big")
+data[72:76] = (0x00010000).to_bytes(4, "big")
+data[76:80] = (0x0000D32D).to_bytes(4, "big")
+data[128:132] = (1).to_bytes(4, "big")
+data[132:136] = b"A2B0"
+data[136:140] = (144).to_bytes(4, "big")
+data[140:144] = len(blob).to_bytes(4, "big")
+data[144:size] = blob
+dst.write_bytes(data)
+PY
+}
+
+generate_standard_tag_invalid_elf_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  # "\x7fELF" magic followed by an invalid e_ident (EI_CLASS/EI_VERSION zero) --
+  # a coincidental 4-byte hit in CLUT data, not a real ELF object.
+  emit_standard_tag_blob_profile "$STD_ELF_FALSE_POSITIVE" \
+    "7f454c4600000000a1b2c3d4e5f60718293a4b5c"
+}
+
+run_standard_tag_invalid_elf_signature_profile() {
+  local name="pawg-standard-tag-invalid-elf-true-negative"
+  local logfile="$OUTDIR/standard-tag-invalid-elf.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_ELF_FALSE_POSITIVE"
+
+  if ! generate_standard_tag_invalid_elf_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag invalid ELF signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_ELF_FALSE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S8" "$logfile"; then
+    fail_case "$name" "invalid ELF ident in standard tag was incorrectly reported in S8"
+    return
+  fi
+  if grep -F -q "ELF executable" "$logfile"; then
+    fail_case "$name" "invalid ELF ident produced ELF detail text"
+    return
+  fi
+
+  pass_case "$name" "ELF magic with invalid ident in a standard CLUT tag did not trigger S8"
+}
+
+generate_standard_tag_valid_elf_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  # Valid ELF identification: \x7fELF, ELFCLASS64, ELFDATA2LSB, EV_CURRENT,
+  # e_type=ET_EXEC, e_machine=EM_X86_64, e_version=EV_CURRENT.
+  emit_standard_tag_blob_profile "$STD_ELF_TRUE_POSITIVE" \
+    "7f454c4602010100000000000000000002003e0001000000"
+}
+
+run_standard_tag_valid_elf_signature_profile() {
+  local name="pawg-standard-tag-valid-elf-true-positive"
+  local logfile="$OUTDIR/standard-tag-valid-elf.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_ELF_TRUE_POSITIVE"
+
+  if ! generate_standard_tag_valid_elf_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag valid ELF signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_ELF_TRUE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "ELF-signature input unexpectedly returned success"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] S8" "$logfile"; then
+    fail_case "$name" "valid ELF signature in standard tag was not reported in S8"
+    return
+  fi
+  if ! grep -F -q "ELF executable signature at offset" "$logfile"; then
+    fail_case "$name" "ELF detail text missing expected offset"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S12" "$logfile"; then
+    fail_case "$name" "standard-tag ELF must leave private-tag check S12 clear"
+    return
+  fi
+
+  pass_case "$name" "valid ELF header in a standard CLUT tag triggers S8 while S12 stays clear"
+}
+
+generate_standard_tag_invalid_shebang_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  # "#!/" followed by binary (non-printable) bytes -- a coincidental hit in CLUT
+  # data, not an interpreter line.
+  emit_standard_tag_blob_profile "$STD_SHEBANG_FALSE_POSITIVE" \
+    "23212f00ff01801090a0b0c0d0e0f000"
+}
+
+run_standard_tag_invalid_shebang_signature_profile() {
+  local name="pawg-standard-tag-invalid-shebang-true-negative"
+  local logfile="$OUTDIR/standard-tag-invalid-shebang.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_SHEBANG_FALSE_POSITIVE"
+
+  if ! generate_standard_tag_invalid_shebang_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag invalid shebang signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_SHEBANG_FALSE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S8" "$logfile"; then
+    fail_case "$name" "binary bytes after #!/ in standard tag were incorrectly reported in S8"
+    return
+  fi
+  if grep -F -q "script shebang" "$logfile"; then
+    fail_case "$name" "non-script #!/ produced shebang detail text"
+    return
+  fi
+
+  pass_case "$name" "#!/ followed by binary in a standard CLUT tag did not trigger S8"
+}
+
+generate_standard_tag_valid_shebang_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  # A genuine interpreter line: #!/bin/sh\n
+  emit_standard_tag_blob_profile "$STD_SHEBANG_TRUE_POSITIVE" \
+    "23212f62696e2f73680a"
+}
+
+run_standard_tag_valid_shebang_signature_profile() {
+  local name="pawg-standard-tag-valid-shebang-true-positive"
+  local logfile="$OUTDIR/standard-tag-valid-shebang.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_SHEBANG_TRUE_POSITIVE"
+
+  if ! generate_standard_tag_valid_shebang_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag valid shebang signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_SHEBANG_TRUE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "shebang-signature input unexpectedly returned success"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] S8" "$logfile"; then
+    fail_case "$name" "valid shebang in standard tag was not reported in S8"
+    return
+  fi
+  if ! grep -F -q "script shebang signature at offset" "$logfile"; then
+    fail_case "$name" "shebang detail text missing expected offset"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S12" "$logfile"; then
+    fail_case "$name" "standard-tag shebang must leave private-tag check S12 clear"
+    return
+  fi
+
+  pass_case "$name" "valid #!/ interpreter line in a standard CLUT tag triggers S8 while S12 stays clear"
+}
+
 run_json_report() {
   local name="pawg-json-evidence-output"
   local logfile="$OUTDIR/json-report.log"
@@ -887,6 +1153,10 @@ run_invalid_gzip_signature_profile
 run_valid_gzip_signature_profile
 run_standard_tag_invalid_gzip_signature_profile
 run_standard_tag_valid_gzip_signature_profile
+run_standard_tag_invalid_elf_signature_profile
+run_standard_tag_valid_elf_signature_profile
+run_standard_tag_invalid_shebang_signature_profile
+run_standard_tag_valid_shebang_signature_profile
 run_registered_private_profile
 echo "iccPawgReport PAWG regression and security tests: $PASS passed, $FAIL failed, $TOTAL total"
 
