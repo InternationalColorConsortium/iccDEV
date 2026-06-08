@@ -435,7 +435,7 @@ jobs:
                 zlib1g-dev liblzma-dev nlohmann-json3-dev
               ;;
             macOS)
-              packages=(cmake libpng libtiff libxml2 nlohmann-json jpeg-turbo)
+              packages=(cmake llvm libpng libtiff libxml2 nlohmann-json jpeg-turbo)
               if [ "$MATRIX_COMPILER" = "gcc" ]; then
                 packages+=(gcc)
               fi
@@ -491,8 +491,14 @@ jobs:
             cc=clang-18
             cxx=clang++-18
           else
-            cc=clang
-            cxx=clang++
+            llvm_prefix="$(brew --prefix llvm 2>/dev/null || true)"
+            if [ -x "$llvm_prefix/bin/clang" ] && [ -x "$llvm_prefix/bin/clang++" ]; then
+              cc="$llvm_prefix/bin/clang"
+              cxx="$llvm_prefix/bin/clang++"
+            else
+              cc=clang
+              cxx=clang++
+            fi
           fi
 
           if [ -z "${cc:-}" ] || [ -z "${cxx:-}" ]; then
@@ -510,11 +516,19 @@ jobs:
 
             if [ -z "$runtime_dir" ]; then
               brew_gcc_prefix="$(brew --prefix gcc 2>/dev/null || true)"
+              runtime_file=""
               for candidate in \
                 "$brew_gcc_prefix/lib/gcc/current" \
                 "$brew_gcc_prefix/lib/gcc/15"; do
                 if [ -f "$candidate/libubsan.dylib" ]; then
                   runtime_dir="$candidate"
+                  break
+                fi
+                runtime_file="$(find "$candidate" -name 'libubsan*.dylib' -print -quit 2>/dev/null || true)"
+                if [ -n "$runtime_file" ]; then
+                  mkdir -p "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime"
+                  ln -sf "$runtime_file" "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime/libubsan.dylib"
+                  runtime_dir="${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime"
                   break
                 fi
               done
