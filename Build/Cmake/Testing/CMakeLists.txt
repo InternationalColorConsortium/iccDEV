@@ -684,6 +684,14 @@ set_tests_properties(iccdev.json-cfg PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1230-json-threads-regression
+  60
+  "iccdev;json;cfg;applyprofiles;issue-1230;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1230-json-threads-regression.sh"
+)
+
+iccdev_add_script_test(
   iccdev.issue-1121-json-envvars-regression
   60
   "iccdev;json;cfg;envvars;issue-1121;regression;asan"

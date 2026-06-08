@@ -337,6 +337,246 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
+  json-issue-1230:
+    name: "Issue 1230 - ${{ matrix.os_name }} ${{ matrix.compiler }}"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_name: ubuntu-x64
+            runner: ubuntu-24.04
+            arch: x86_64
+            compiler: clang
+            asan: "ON"
+            integer_sanitizer: "ON"
+          - os_name: ubuntu-x64
+            runner: ubuntu-24.04
+            arch: x86_64
+            compiler: gcc
+            asan: "OFF"
+            integer_sanitizer: "OFF"
+          - os_name: macos-x64
+            runner: macos-15-intel
+            arch: x86_64
+            compiler: clang
+            asan: "ON"
+            integer_sanitizer: "ON"
+          - os_name: macos-x64
+            runner: macos-15-intel
+            arch: x86_64
+            compiler: gcc
+            asan: "OFF"
+            integer_sanitizer: "OFF"
+          - os_name: macos-arm64
+            runner: macos-15
+            arch: arm64
+            compiler: clang
+            asan: "ON"
+            integer_sanitizer: "ON"
+          - os_name: macos-arm64
+            runner: macos-15
+            arch: arm64
+            compiler: gcc
+            asan: "OFF"
+            integer_sanitizer: "OFF"
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    env:
+      BASH_ENV: /dev/null
+      BUILD_DIR: build-issue-1230
+
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify runner architecture
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          actual_arch="$(uname -m)"
+          echo "Runner architecture: ${actual_arch}"
+          if [ "$actual_arch" != "$EXPECTED_ARCH" ]; then
+            msg="expected ${EXPECTED_ARCH}, got ${actual_arch}"
+            echo "::error title=Runner architecture::${msg}"
+            exit 1
+          fi
+
+      - name: Install issue 1230 dependencies
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+          DEBIAN_FRONTEND: noninteractive
+          HOMEBREW_NO_AUTO_UPDATE: 1
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$RUNNER_OS_NAME" in
+            Linux)
+              bash .github/scripts/ci-safe-apt-update.sh
+              sudo apt-get install -y --no-install-recommends \
+                build-essential cmake \
+                clang-18 clang++-18 gcc g++ \
+                libxml2-dev libtiff-dev libjpeg-dev libpng-dev \
+                zlib1g-dev liblzma-dev nlohmann-json3-dev
+              ;;
+            macOS)
+              packages=(cmake libpng libtiff libxml2 nlohmann-json jpeg-turbo)
+              if [ "$MATRIX_COMPILER" = "gcc" ]; then
+                packages+=(gcc)
+              fi
+
+              missing=()
+              for package in "${packages[@]}"; do
+                if ! brew list --versions "$package" >/dev/null 2>&1; then
+                  missing+=("$package")
+                fi
+              done
+              if [ "${#missing[@]}" -gt 0 ]; then
+                brew install "${missing[@]}"
+              fi
+
+              brew_prefix="$(brew --prefix)"
+              pkg_config_path="${brew_prefix}/lib/pkgconfig"
+              pkg_config_path+=":${brew_prefix}/opt/libxml2/lib/pkgconfig"
+              {
+                echo "CMAKE_PREFIX_PATH=${brew_prefix}"
+                echo "PKG_CONFIG_PATH=${pkg_config_path}"
+              } >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "::error title=Unsupported runner OS::$RUNNER_OS_NAME"
+              exit 1
+              ;;
+          esac
+
+      - name: Resolve compiler
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          RUNNER_OS_NAME: ${{ runner.os }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          if [ "$MATRIX_COMPILER" = "gcc" ]; then
+            for cc_candidate in gcc-15 gcc-14 gcc-13 gcc; do
+              if command -v "$cc_candidate" >/dev/null 2>&1; then
+                cc="$cc_candidate"
+                break
+              fi
+            done
+            for cxx_candidate in g++-15 g++-14 g++-13 g++; do
+              if command -v "$cxx_candidate" >/dev/null 2>&1; then
+                cxx="$cxx_candidate"
+                break
+              fi
+            done
+          elif [ "$RUNNER_OS_NAME" = "Linux" ]; then
+            cc=clang-18
+            cxx=clang++-18
+          else
+            cc=clang
+            cxx=clang++
+          fi
+
+          if [ -z "${cc:-}" ] || [ -z "${cxx:-}" ]; then
+            msg="unable to resolve $MATRIX_COMPILER"
+            echo "::error title=Compiler resolution::${msg}"
+            exit 1
+          fi
+
+          {
+            echo "CC=$cc"
+            echo "CXX=$cxx"
+          } >> "$GITHUB_ENV"
+
+          "$cc" --version | sed -n '1p'
+          "$cxx" --version | sed -n '1p'
+
+      - name: Configure issue 1230 CTest build
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_ASAN: ${{ matrix.asan }}
+          MATRIX_INTEGER_SANITIZER: ${{ matrix.integer_sanitizer }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
+          UBSAN_IGNORELIST: .github/ci/ubsan-ignorelist.txt
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          ignorelist_arg=()
+          if [ "$MATRIX_COMPILER" = "clang" ]; then
+            ignorelist_arg=(-DUBSAN_IGNORELIST="${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}")
+          fi
+
+          cmake -S Build/Cmake -B "${BUILD_DIR}" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER="$CC" \
+            -DCMAKE_CXX_COMPILER="$CXX" \
+            -DCMAKE_C_FLAGS="-O0 -g3" \
+            -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
+            -DENABLE_ASAN="${MATRIX_ASAN}" \
+            -DENABLE_UBSAN=ON \
+            -DENABLE_INTEGER_SANITIZER="${MATRIX_INTEGER_SANITIZER}" \
+            -DENABLE_FLOAT_SANITIZER=ON \
+            -DSANITIZER_RECOVER=ON \
+            "${ignorelist_arg[@]}" \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=ON \
+            -DENABLE_WXWIDGETS=OFF \
+            -DENABLE_SHARED_LIBS=ON \
+            -DENABLE_STATIC_LIBS=OFF \
+            -Wno-dev
+
+      - name: Build issue 1230 target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+          if [ -z "$jobs" ]; then
+            jobs="$(sysctl -n hw.logicalcpu)"
+          fi
+          cmake --build "${BUILD_DIR}" \
+            --target iccApplyProfiles \
+            --parallel "$jobs"
+
+      - name: Run issue 1230 regression
+        env:
+          BASH_ENV: /dev/null
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          ctest --test-dir "${BUILD_DIR}" \
+            -R '^iccdev\.issue-1230-json-threads-regression$' \
+            --output-on-failure \
+            --no-tests=error
+
   thread-linkage:
     name: "RefIccMAX thread linkage - manual"
     if: ${{ inputs.thread_linkage_build_type != '' && inputs.thread_linkage_ipo != '' }}
