@@ -76,6 +76,7 @@
 #include "IccTag.h"
 #include "IccTagBasic.h"
 #include "IccTagLut.h"
+#include "IccTagComposite.h"   // CIccTagArray / CIccTagStruct (v5 named-colour arrays)
 #include "IccUtil.h"
 
 #include "spectralLocus.hpp"   // const spectralLocus2degree (internal linkage)
@@ -342,6 +343,19 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
   icFloatNumber illum[3];
   pIcc->getNormIlluminantXYZ(illum);
 
+  // PCS basis for the colour conversion is the profile header PCS — matching
+  // iccProfileVisualize, which reads pIcc->m_Header.pcs (not the table's own
+  // PCS) and uses it for every named-colour type. Anything that isn't XYZ/Lab
+  // can't be plotted: icSigNoColorData (spectral / iccMAX) skips silently, while
+  // any other space records a warning.
+  icColorSpaceSignature pcs = pIcc->m_Header.pcs;
+  if (pcs != icSigXYZData && pcs != icSigLabData) {
+    if (pcs != icSigNoColorData)
+      return record(Severity::Warning,
+                    "WARNING - unknown pcs for colors: " + sigStr(static_cast<icTagSignature>(pcs)));
+    return false;
+  }
+
   if (type == icSigColorantTableType) {
     auto* table = dynamic_cast<CIccTagColorantTable*>(tag);
     if (!table)
@@ -349,10 +363,7 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
     std::string path = ":colorantTable", report;
     if (table->Validate(path, report, nullptr) > icValidateWarning)
       return record(Severity::Warning, "WARNING - colorantTable failed validation:\n" + report);
-    icColorSpaceSignature pcs = pIcc->m_Header.pcs;
-    if (pcs != icSigXYZData && pcs != icSigLabData)
-      return record(Severity::Warning,
-                    "WARNING - unknown pcs for colors: " + sigStr(static_cast<icTagSignature>(pcs)));
+    // CIccTagColorantTable carries no PCS of its own; assume the profile PCS.
     icUInt32Number n = table->GetSize();
     for (icUInt32Number i = 0; i < n; ++i) {
       icColorantTableEntry* e = table->GetEntry(i);
@@ -377,8 +388,7 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
     std::string path = ":namedColor2", report;
     if (table->Validate(path, report, nullptr) > icValidateWarning)
       return record(Severity::Warning, "WARNING - namedColorTable failed validation:\n" + report);
-    icColorSpaceSignature pcs = table->GetPCS();
-    if (pcs != icSigXYZData && pcs != icSigLabData)
+    if (pcs != table->GetPCS())
       return record(Severity::Warning,
                     "WARNING - bad pcs for namedColorTable: " + sigStr(static_cast<icTagSignature>(pcs)));
     icUInt32Number n = table->GetSize();
@@ -399,7 +409,130 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
     return !out.empty();
   }
 
-  return false;  // tagArray (v5) not yet dissected
+  if (type == icSigTagArrayType) {   // v5 named-colour / colorant-info array
+    auto* array = dynamic_cast<CIccTagArray*>(tag);
+    if (!array)
+      return record(Severity::Error, "Skipping " + sigDesc + ": unable to convert named color array");
+    icArraySignature arrayType = array->GetTagArrayType();
+    if (arrayType != icSigColorantInfoArray && arrayType != icSigNamedColorArray)
+      return record(Severity::Warning,
+                    "WARNING - unknown color array type: " +
+                    sigStr(static_cast<icTagSignature>(arrayType)) + " for tag " + sigDesc);
+    std::string path = ":" + sigDesc, report;
+    if (array->Validate(path, report, nullptr) > icValidateWarning)
+      return record(Severity::Warning, "WARNING - named color array failed validation:\n" + report);
+
+    icUInt32Number items = array->GetSize();
+    for (icUInt32Number i = 0; i < items; ++i) {
+      CIccTag* thisItem = array->GetIndex(i);
+      if (!thisItem) continue;
+
+      icStructSignature structType = thisItem->GetTagStructType();
+      if (structType != icSigColorantInfoStruct &&
+          structType != icSigTintZeroStruct &&
+          structType != icSigNamedColorStruct) {
+        record(Severity::Warning, "Unknown named color struct " +
+               sigStr(static_cast<icTagSignature>(structType)) + " for tag " + sigDesc);
+        continue;
+      }
+      auto* structPtr = dynamic_cast<CIccTagStruct*>(thisItem);
+      if (!structPtr) continue;
+
+      // PCS data member — Float16/32/64 array of (L*a*b* or XYZ) triples.
+      CIccTag* pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
+      if (!pcsElem) continue;
+      icTagTypeSignature pcsDataType = pcsElem->GetType();
+      if (pcsDataType != icSigFloat64ArrayType && pcsDataType != icSigFloat32ArrayType &&
+          pcsDataType != icSigFloat16ArrayType) {
+        record(Severity::Warning, "Unknown named color struct data type " +
+               sigStr(static_cast<icTagSignature>(pcsDataType)) + " for tag " + sigDesc);
+        continue;
+      }
+      auto* flt = dynamic_cast<CIccTagNumArray*>(pcsElem);
+      if (!flt) continue;
+
+      std::vector<NamedLab> tempColors;
+      icUInt32Number colorCount = flt->GetNumValues() / 3;   // ignore any partial triple
+      for (icUInt32Number k = 0; k < colorCount; ++k) {
+        icFloatNumber v[3], lab[3];
+        flt->GetValues(v, k * 3, 3);
+        if (pcs == icSigXYZData) {
+          icXYZtoLab(lab, v, illum);
+        } else {
+          lab[0] = v[0]; lab[1] = v[1]; lab[2] = v[2];   // Lab directly coded as float
+        }
+        tempColors.push_back(NamedLab{"", lab[0], lab[1], lab[2]});
+      }
+
+      // Name member (optional): CinfName, falling back to CinfLocalizedName.
+      CIccTag* nameElem = structPtr->FindElem(icSigCinfNameMbr);
+      if (!nameElem)
+        nameElem = structPtr->FindElem(icSigCinfLocalizedNameMbr);
+      if (nameElem) {
+        std::string nameString;
+        switch (nameElem->GetType()) {
+          case icSigUtf8TextType:
+            if (auto* t = dynamic_cast<CIccTagUtf8Text*>(nameElem))
+              nameString = std::string((char*)t->GetText());
+            break;
+          case icSigUtf16TextType:
+            if (auto* t = dynamic_cast<CIccTagUtf16Text*>(nameElem)) {
+              std::string buffer;
+              nameString = std::string((char*)t->GetText(buffer));   // GetText converts to UTF8
+            }
+            break;
+          case icSigTextType:
+            if (auto* t = dynamic_cast<CIccTagText*>(nameElem))
+              nameString = std::string((char*)t->GetText());
+            break;
+          case icSigDictType:                       // sometimes used where MLU expected
+          case icSigMultiLocalizedUnicodeType:
+            if (auto* t = dynamic_cast<CIccTagMultiLocalizedUnicode*>(nameElem)) {
+              CIccLocalizedUnicode* u = t->Find(icLanguageCodeEnglish, icCountryCodeUSA);
+              if (u) u->GetText(nameString);
+            }
+            break;
+          default:
+            record(Severity::Warning, "Unknown named color struct name type " +
+                   sigStr(static_cast<icTagSignature>(nameElem->GetType())) + " for tag " + sigDesc);
+            break;
+        }
+        if (!nameString.empty())
+          for (auto& c : tempColors) c.name = nameString;
+      }
+
+      // Tint member (optional): per-colour tint % appended to the name.
+      CIccTag* tintElem = structPtr->FindElem(icSigNmclTintMbr);
+      if (tintElem) {
+        icTagTypeSignature tintType = tintElem->GetType();
+        if (tintType == icSigFloat64ArrayType || tintType == icSigFloat32ArrayType ||
+            tintType == icSigFloat16ArrayType) {
+          if (auto* tflt = dynamic_cast<CIccTagNumArray*>(tintElem)) {
+            icUInt32Number dataCount = tflt->GetNumValues();
+            if (dataCount <= tempColors.size()) {
+              for (icUInt32Number k = 0; k < dataCount; ++k) {
+                icFloatNumber tv;
+                tflt->GetValues(&tv, k, 1);
+                int percent = static_cast<int>(std::lround(tv * 100.0f));
+                tempColors[k].name += "(" + std::to_string(percent) + "%)";
+              }
+            }
+          }
+        } else {
+          record(Severity::Warning, "Unknown named color tint data type " +
+                 sigStr(static_cast<icTagSignature>(tintType)) + " for tag " + sigDesc);
+        }
+      }
+
+      out.insert(out.end(), tempColors.begin(), tempColors.end());
+    }
+
+    // Match iccProfileVisualize's "Color Array: <sig>" page label.
+    title = "Color Array";
+    return !out.empty();
+  }
+
+  return false;  // unknown / unsupported named-colour tag type
 }
 
 Graph buildNamedAB(const std::vector<NamedLab>& colors, const std::string& title) {
@@ -675,7 +808,7 @@ CIccCurve* lutCurveFor(CIccMBB* lut, char grp, int idx) {
 
 // ── public API ───────────────────────────────────────────────────────────────
 
-std::vector<Descriptor> Enumerate(CIccProfile* pIcc) {
+std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order) {
   std::vector<Descriptor> out;
   if (!pIcc) return out;
 
@@ -728,7 +861,8 @@ std::vector<Descriptor> Enumerate(CIccProfile* pIcc) {
   }
 
   static const icTagSignature kNamedSigs[] = {
-    icSigNamedColorTag, icSigNamedColor2Tag, icSigColorantTableTag, icSigColorantTableOutTag };
+    icSigNamedColorTag, icSigNamedColor2Tag, icSigColorantTableTag, icSigColorantTableOutTag,
+    icSigColorantInfoTag, icSigColorantInfoOutTag };   // last two are v5 tagArray
   for (icTagSignature sig : kNamedSigs) {
     CIccTag* t = pIcc->FindTag(sig);
     if (!t) continue;
@@ -742,6 +876,36 @@ std::vector<Descriptor> Enumerate(CIccProfile* pIcc) {
     xy.kind = Kind::NamedColorsXY; xy.output = Output::Graph;
     xy.id = "named:xy:" + sigStr(sig); xy.title = title + " — xy (" + sigStr(sig) + ")";
     xy.tag = sig; out.push_back(std::move(xy));
+  }
+
+  if (order == Order::TagTable) {
+    // Reproduce the profile's tag-table page order (what iccProfileVisualize
+    // emitted by walking its tag directory). The portable, in-library-safe
+    // accessor for a tag's position is protected (CIccProfile::GetTag), so this
+    // path reads the PUBLIC m_Tags directory directly to recover the exact tag
+    // order, then ranks each descriptor by its owning tag's directory index.
+    //
+    // SCOPE NOTE: iterating m_Tags is only safe when the caller is linked in the
+    // same toolchain as IccProfLib (the CLI case — exactly what iccProfileVisualize
+    // does). Order::Canonical, the default, never touches m_Tags and is the
+    // cross-module/WASM-safe ordering; prefer it where the std::list ABI is not
+    // guaranteed to match. Chromaticity (tag == 0, whole-profile) is pinned first,
+    // as iccProfileVisualize emitted it before its tag loop. std::stable_sort
+    // preserves the canonical sub-order within one tag (a LUT's A/B/M curves then
+    // its CLUT; named a*b* then xy).
+    std::vector<icTagSignature> seq;
+    for (const IccTagEntry& e : pIcc->m_Tags)
+      seq.push_back(e.TagInfo.sig);
+    auto rank = [&seq](const Descriptor& d) -> size_t {
+      if (d.tag == static_cast<icTagSignature>(0)) return 0;   // chromaticity first
+      for (size_t i = 0; i < seq.size(); ++i)
+        if (seq[i] == d.tag) return i + 1;
+      return seq.size() + 1;
+    };
+    std::stable_sort(out.begin(), out.end(),
+                     [&](const Descriptor& a, const Descriptor& b) {
+                       return rank(a) < rank(b);
+                     });
   }
   return out;
 }
