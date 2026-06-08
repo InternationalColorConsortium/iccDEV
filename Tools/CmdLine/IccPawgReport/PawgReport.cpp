@@ -812,6 +812,31 @@ bool HasAsciiSignatureCaseInsensitive(const RawProfile &raw, const char *sig,
       }
     }
     if (matched) {
+      // Corroborate: these signatures are dangerous only as text, so a genuine
+      // hit sits inside printable content (embedded script/markup/command line).
+      // A coincidental case-insensitive match inside binary CLUT data has little
+      // or no printable context -- require adjacent printable bytes before/after.
+      const size_t kMinContext = 16;
+      size_t printableBefore = 0;
+      for (size_t k = i; k > begin && printableBefore < kMinContext; --k) {
+        const unsigned char c = raw.data[k - 1];
+        if (c != '\t' && c != '\n' && c != '\r' && (c < 0x20 || c > 0x7e)) {
+          break;
+        }
+        ++printableBefore;
+      }
+      size_t printableAfter = 0;
+      for (size_t k = i + sigLen; k < end && printableAfter < kMinContext; ++k) {
+        const unsigned char c = raw.data[k];
+        if (c != '\t' && c != '\n' && c != '\r' && (c < 0x20 || c > 0x7e)) {
+          break;
+        }
+        ++printableAfter;
+      }
+      if (printableBefore + printableAfter < kMinContext) {
+        continue;
+      }
+
       char msg[96];
       std::snprintf(msg, sizeof(msg), "signature at offset 0x%zx", i);
       detail = msg;

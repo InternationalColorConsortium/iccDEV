@@ -47,6 +47,8 @@ STD_ELF_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-elf-signature.icc"
 STD_ELF_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-elf-signature.icc"
 STD_SHEBANG_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-shebang-signature.icc"
 STD_SHEBANG_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-shebang-signature.icc"
+STD_TEXTSIG_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-textsig-signature.icc"
+STD_TEXTSIG_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-textsig-signature.icc"
 REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
 
 PASS=0
@@ -1008,6 +1010,121 @@ run_standard_tag_valid_shebang_signature_profile() {
   pass_case "$name" "valid #!/ interpreter line in a standard CLUT tag triggers S8 while S12 stays clear"
 }
 
+generate_standard_tag_invalid_textsig_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  # Case-insensitive text signature "iex(" surrounded by binary CLUT bytes -- a
+  # coincidental match with no printable context, as seen on SWOP2013C3_CRPC5.icc.
+  emit_standard_tag_blob_profile "$STD_TEXTSIG_FALSE_POSITIVE" "69657828"
+}
+
+run_standard_tag_invalid_textsig_signature_profile() {
+  local name="pawg-standard-tag-invalid-textsig-true-negative"
+  local logfile="$OUTDIR/standard-tag-invalid-textsig.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_TEXTSIG_FALSE_POSITIVE"
+
+  if ! generate_standard_tag_invalid_textsig_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag invalid text-signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_TEXTSIG_FALSE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S8" "$logfile"; then
+    fail_case "$name" "text signature without printable context was incorrectly reported in S8"
+    return
+  fi
+  if grep -F -q "PowerShell expression invocation" "$logfile"; then
+    fail_case "$name" "binary-context text match produced text-signature detail"
+    return
+  fi
+
+  pass_case "$name" "text signature with no printable context in a standard CLUT tag did not trigger S8"
+}
+
+generate_standard_tag_valid_textsig_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  # A genuine embedded script blob (printable context on both sides):
+  # <html><body><script>invoke-expression('calc.exe');</script></body></html>
+  emit_standard_tag_blob_profile "$STD_TEXTSIG_TRUE_POSITIVE" \
+    "3c68746d6c3e3c626f64793e3c7363726970743e696e766f6b652d65787072657373696f6e282763616c632e65786527293b3c2f7363726970743e3c2f626f64793e3c2f68746d6c3e"
+}
+
+run_standard_tag_valid_textsig_signature_profile() {
+  local name="pawg-standard-tag-valid-textsig-true-positive"
+  local logfile="$OUTDIR/standard-tag-valid-textsig.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_TEXTSIG_TRUE_POSITIVE"
+
+  if ! generate_standard_tag_valid_textsig_signature_profile; then
+    fail_case "$name" "failed to generate standard-tag valid text-signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_TEXTSIG_TRUE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "text-signature input unexpectedly returned success"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] S8" "$logfile"; then
+    fail_case "$name" "embedded script markup in standard tag was not reported in S8"
+    return
+  fi
+  if ! grep -F -q "signature at offset" "$logfile"; then
+    fail_case "$name" "text-signature detail text missing expected offset"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S12" "$logfile"; then
+    fail_case "$name" "standard-tag text signature must leave private-tag check S12 clear"
+    return
+  fi
+
+  pass_case "$name" "embedded script markup in a standard CLUT tag triggers S8 while S12 stays clear"
+}
+
 run_json_report() {
   local name="pawg-json-evidence-output"
   local logfile="$OUTDIR/json-report.log"
@@ -1157,6 +1274,8 @@ run_standard_tag_invalid_elf_signature_profile
 run_standard_tag_valid_elf_signature_profile
 run_standard_tag_invalid_shebang_signature_profile
 run_standard_tag_valid_shebang_signature_profile
+run_standard_tag_invalid_textsig_signature_profile
+run_standard_tag_valid_textsig_signature_profile
 run_registered_private_profile
 echo "iccPawgReport PAWG regression and security tests: $PASS passed, $FAIL failed, $TOTAL total"
 
