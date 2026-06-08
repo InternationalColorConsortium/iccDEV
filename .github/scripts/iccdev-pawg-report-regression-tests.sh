@@ -39,6 +39,8 @@ PAWG="$TOOLS_DIR/IccPawgReport/iccPawgReport"
 GOOD_PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
 TRUNCATED="$OUTDIR/truncated.icc"
 MALWARE="$OUTDIR/private-pe-signature.icc"
+GZIP_FALSE_POSITIVE="$OUTDIR/private-invalid-gzip-signature.icc"
+GZIP_TRUE_POSITIVE="$OUTDIR/private-valid-gzip-signature.icc"
 REGISTERED_PRIVATE="$OUTDIR/registered-private-tag.icc"
 
 PASS=0
@@ -396,6 +398,170 @@ run_private_malware_profile() {
   pass_case "$name" "private malware signature detected without crash"
 }
 
+generate_private_invalid_gzip_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$GZIP_FALSE_POSITIVE" <<'PY'
+import pathlib
+import struct
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+size = 180
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[64:68] = struct.pack(">I", 0)
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"zzzz"
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", 36)
+payload = bytearray(36)
+payload[1:11] = bytes([0x1f, 0x8b, 0x08, 0x86, 0x97, 0x0b, 0x75, 0x87, 0x7e, 0x87])
+data[144:180] = payload
+dst.write_bytes(data)
+PY
+}
+
+run_invalid_gzip_signature_profile() {
+  local name="pawg-invalid-gzip-signature-true-negative"
+  local logfile="$OUTDIR/private-invalid-gzip.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$GZIP_FALSE_POSITIVE"
+
+  if ! generate_private_invalid_gzip_signature_profile; then
+    fail_case "$name" "failed to generate invalid gzip signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$GZIP_FALSE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S8" "$logfile"; then
+    fail_case "$name" "invalid gzip header was incorrectly reported in S8"
+    return
+  fi
+  if grep -F -q "embedded gzip stream" "$logfile"; then
+    fail_case "$name" "invalid gzip header produced gzip detail text"
+    return
+  fi
+
+  pass_case "$name" "invalid gzip-like bytes did not trigger S8"
+}
+
+generate_private_valid_gzip_signature_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$GZIP_TRUE_POSITIVE" <<'PY'
+import gzip
+import pathlib
+import struct
+import sys
+
+dst = pathlib.Path(sys.argv[1])
+payload = gzip.compress(b"icc-pawg\n", mtime=0)
+size = 144 + len(payload)
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[64:68] = struct.pack(">I", 0)
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"zzzz"
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", len(payload))
+data[144:size] = payload
+dst.write_bytes(data)
+PY
+}
+
+run_valid_gzip_signature_profile() {
+  local name="pawg-valid-gzip-signature-true-positive"
+  local logfile="$OUTDIR/private-valid-gzip.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$GZIP_TRUE_POSITIVE"
+
+  if ! generate_private_valid_gzip_signature_profile; then
+    fail_case "$name" "failed to generate valid gzip signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$GZIP_TRUE_POSITIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "gzip-signature input unexpectedly returned success"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[FAIL] S8" "$logfile"; then
+    fail_case "$name" "valid gzip signature was not reported in S8"
+    return
+  fi
+  if ! grep -F -q "embedded gzip stream signature at offset" "$logfile"; then
+    fail_case "$name" "gzip detail text missing expected offset"
+    return
+  fi
+  if ! grep -F -q "[FAIL] S12" "$logfile"; then
+    fail_case "$name" "private gzip signature was not reported in S12"
+    return
+  fi
+
+  pass_case "$name" "valid gzip member still triggers S8 and S12"
+}
+
 run_json_report() {
   local name="pawg-json-evidence-output"
   local logfile="$OUTDIR/json-report.log"
@@ -537,6 +703,8 @@ run_good_profile "pawg-read-option-fidelity" "--read"
 run_json_report
 run_truncated_profile
 run_private_malware_profile
+run_invalid_gzip_signature_profile
+run_valid_gzip_signature_profile
 run_registered_private_profile
 echo "iccPawgReport PAWG regression and security tests: $PASS passed, $FAIL failed, $TOTAL total"
 

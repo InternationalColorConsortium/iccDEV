@@ -638,8 +638,80 @@ std::string FirstReportLine(const std::string &report)
   return "validation reported an issue without detail";
 }
 
+typedef bool (*SigValidator)(const RawProfile &raw, size_t offset, size_t end);
+
+bool ValidatePe(const RawProfile &raw, size_t offset, size_t end)
+{
+  if (offset > end || end - offset < 64) {
+    return false;
+  }
+
+  uint32_t peOff = (uint32_t)raw.data[offset + 60] |
+                   ((uint32_t)raw.data[offset + 61] << 8) |
+                   ((uint32_t)raw.data[offset + 62] << 16) |
+                   ((uint32_t)raw.data[offset + 63] << 24);
+  return peOff < 1024 && peOff <= end - offset - 4 &&
+         raw.data[offset + peOff] == 'P' && raw.data[offset + peOff + 1] == 'E';
+}
+
+bool ValidateGzipHeader(const RawProfile &raw, size_t offset, size_t end)
+{
+  const size_t kGzipHeaderLen = 10;
+  if (offset > end || end - offset < kGzipHeaderLen) {
+    return false;
+  }
+
+  const unsigned char cm = raw.data[offset + 2];
+  const unsigned char flg = raw.data[offset + 3];
+  const unsigned char xfl = raw.data[offset + 8];
+  const unsigned char os = raw.data[offset + 9];
+  if (cm != 0x08 || (flg & 0xe0) != 0 || !(xfl == 0 || xfl == 2 || xfl == 4) ||
+      !(os <= 13 || os == 255)) {
+    return false;
+  }
+
+  size_t pos = offset + kGzipHeaderLen;
+  if (flg & 0x04) {
+    if (end - pos < 2) {
+      return false;
+    }
+    const size_t extraLen = (size_t)raw.data[pos] | ((size_t)raw.data[pos + 1] << 8);
+    pos += 2;
+    if (extraLen > end - pos) {
+      return false;
+    }
+    pos += extraLen;
+  }
+  if (flg & 0x08) {
+    while (pos < end && raw.data[pos] != 0) {
+      ++pos;
+    }
+    if (pos >= end) {
+      return false;
+    }
+    ++pos;
+  }
+  if (flg & 0x10) {
+    while (pos < end && raw.data[pos] != 0) {
+      ++pos;
+    }
+    if (pos >= end) {
+      return false;
+    }
+    ++pos;
+  }
+  if (flg & 0x02) {
+    if (end - pos < 2) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 bool HasSignature(const RawProfile &raw, const unsigned char *sig, size_t sigLen,
-                  size_t begin, size_t end, std::string &detail)
+                  SigValidator validate, size_t begin, size_t end,
+                  std::string &detail)
 {
   if (sigLen == 0 || begin >= end || end > raw.data.size()) {
     return false;
@@ -650,18 +722,8 @@ bool HasSignature(const RawProfile &raw, const unsigned char *sig, size_t sigLen
       continue;
     }
 
-    if (sigLen == 2 && sig[0] == 'M') {
-      if (i + 64 > end) {
-        continue;
-      }
-      uint32_t peOff = (uint32_t)raw.data[i + 60] |
-                       ((uint32_t)raw.data[i + 61] << 8) |
-                       ((uint32_t)raw.data[i + 62] << 16) |
-                       ((uint32_t)raw.data[i + 63] << 24);
-      if (peOff >= 1024 || i + peOff + 4 > end ||
-          raw.data[i + peOff] != 'P' || raw.data[i + peOff + 1] != 'E') {
-        continue;
-      }
+    if (validate && !validate(raw, i, end)) {
+      continue;
     }
 
     char msg[96];
@@ -718,25 +780,26 @@ bool ScanMalwareRange(const RawProfile &raw, size_t begin, size_t end,
     const unsigned char *bytes;
     size_t len;
     const char *name;
+    SigValidator validate;
   };
   static const Sig sigs[] = {
-    {elf, sizeof(elf), "ELF executable"},
-    {mz, sizeof(mz), "PE executable"},
-    {macho64, sizeof(macho64), "Mach-O executable"},
-    {macho32, sizeof(macho32), "Mach-O executable"},
-    {shebang, sizeof(shebang), "script shebang"},
-    {pdf, sizeof(pdf), "embedded PDF"},
-    {zip, sizeof(zip), "embedded ZIP archive"},
-    {rar, sizeof(rar), "embedded RAR archive"},
-    {sevenZip, sizeof(sevenZip), "embedded 7z archive"},
-    {gzip, sizeof(gzip), "embedded gzip stream"}
+    {elf, sizeof(elf), "ELF executable", nullptr},
+    {mz, sizeof(mz), "PE executable", ValidatePe},
+    {macho64, sizeof(macho64), "Mach-O executable", nullptr},
+    {macho32, sizeof(macho32), "Mach-O executable", nullptr},
+    {shebang, sizeof(shebang), "script shebang", nullptr},
+    {pdf, sizeof(pdf), "embedded PDF", nullptr},
+    {zip, sizeof(zip), "embedded ZIP archive", nullptr},
+    {rar, sizeof(rar), "embedded RAR archive", nullptr},
+    {sevenZip, sizeof(sevenZip), "embedded 7z archive", nullptr},
+    {gzip, sizeof(gzip), "embedded gzip stream", ValidateGzipHeader}
   };
 
   const size_t kMaxScan = (size_t)10 * 1024 * 1024;
   size_t scanEnd = std::min(end, begin + kMaxScan);
   for (const Sig &sig : sigs) {
     std::string offset;
-    if (HasSignature(raw, sig.bytes, sig.len, begin, scanEnd, offset)) {
+    if (HasSignature(raw, sig.bytes, sig.len, sig.validate, begin, scanEnd, offset)) {
       detail = std::string(sig.name) + " " + offset;
       return true;
     }
