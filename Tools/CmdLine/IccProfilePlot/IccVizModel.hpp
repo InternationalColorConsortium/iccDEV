@@ -239,11 +239,28 @@ bool GetSilent();
 // profile filename here so its output matches iccProfileVisualize byte-for-byte.
 void SetDiagnosticContext(const std::string& name);
 
-// List every visualization available for the profile, in a stable canonical
-// order: chromaticity first, then per-tag in tag-table order — TRC curves, then
-// each LUT's A/B/M curves followed by its CLUT image, then named/colorant tables
-// as a*b* then xy.
-std::vector<Descriptor> Enumerate(CIccProfile* pIcc);
+// Ordering of Enumerate's result.
+enum class Order : unsigned char {
+  Canonical,   // fixed, deterministic signature order (default; cross-TU/WASM-safe)
+  TagTable     // approximate the profile's tag-table (directory) order, by tag offset
+};
+
+// List every visualization available for the profile.
+//
+// Order::Canonical (default) returns a fixed, deterministic order: chromaticity
+// first, then TRC curves, then each LUT's A/B/M curves followed by its CLUT
+// image, then named/colorant tables as a*b* then xy. It probes a fixed signature
+// list (never iterates the profile's tag list), so it is safe to call from a
+// module compiled separately from IccProfLib (e.g. WASM).
+//
+// Order::TagTable reorders that same set to follow the profile's tag-table order
+// — what iccProfileVisualize produced by walking its tag directory — so a report
+// generator can match that page sequence. It does so WITHOUT the cross-TU tag-list
+// iteration: it sorts by each owning tag's byte offset (via the in-library-safe
+// GetTag()), with chromaticity pinned first. Offset order matches directory order
+// for essentially all real profiles; it is an approximation only in the rare case
+// of a tag whose directory position disagrees with its offset.
+std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order = Order::Canonical);
 
 // Render one graph / raster by descriptor id. Re-enumerates to find the
 // descriptor (cheap; callers should cache the parsed profile). Diagnostics are

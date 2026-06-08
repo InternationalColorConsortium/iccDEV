@@ -21,3 +21,24 @@ TARGET_LINK_LIBRARIES( ${TARGET_NAME} ${ICC_PLOT_LINK_LIB} )
 IF(ENABLE_INSTALL_RIM)
   INSTALL (TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
 ENDIF(ENABLE_INSTALL_RIM)
+
+# Second tool: a data-first PDF/TIFF report generator that drives off IccVizModel
+# and draws with the dependency-free Mini{PDF,SVG,TIFF} writers. Output name is
+# distinct from the standalone iccProfileVisualize tool to avoid an install clash.
+SET( VIZ_SOURCES
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/iccProfileVisualize.cpp
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/MiniPDF.cpp
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/MiniSVG.cpp
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/MiniTIFF.cpp
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot/IccVizModel.cpp )
+SET( VIZ_TARGET_NAME iccProfileVisualizePlot )
+
+ADD_EXECUTABLE( ${VIZ_TARGET_NAME} ${VIZ_SOURCES} )
+
+TARGET_INCLUDE_DIRECTORIES( ${VIZ_TARGET_NAME} PRIVATE
+  ${SRC_PATH}/Tools/CmdLine/IccProfilePlot )
+
+TARGET_LINK_LIBRARIES( ${VIZ_TARGET_NAME} ${ICC_PLOT_LINK_LIB} )
+IF(ENABLE_INSTALL_RIM)
+  INSTALL (TARGETS ${VIZ_TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+ENDIF(ENABLE_INSTALL_RIM)
