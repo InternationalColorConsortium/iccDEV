@@ -378,7 +378,7 @@ bool CIccProfileJson::ParseBasic(const IccJson &header, std::string & /*parseStr
 }
 
 bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
-                               std::map<std::string, icTagSignature> &keyToSig,
+                               KeyToSignatureMap &keyToSig,
                                std::string &parseStr)
 {
   // Determine tag signature from the key name
@@ -521,7 +521,7 @@ bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)
       return false;
     }
 
-    std::map<std::string, icTagSignature> keyToSig;
+    KeyToSignatureMap keyToSig;
     for (const auto &entry : tags) {
       if (!entry.is_object() || entry.size() != 1) {
         parseStr += "Warning: tag entry must be a single-member object, skipping\n";
