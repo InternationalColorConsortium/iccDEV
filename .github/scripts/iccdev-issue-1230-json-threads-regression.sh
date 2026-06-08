@@ -10,8 +10,10 @@ TESTING_DIR="${ICCDEV_TESTING_DIR:?Set ICCDEV_TESTING_DIR to iccDEV Testing path
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-issue-1230-output}"
 
 APPLY_PROFILES="$TOOLS_DIR/IccApplyProfiles/iccApplyProfiles"
-PROFILE="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
+PROFILE_PREF="$TESTING_DIR/sRGB_v4_ICC_preference.icc"
+PROFILE_D65="$TESTING_DIR/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
 SOURCE_IMAGE="$TESTING_DIR/hybrid/Data/TShirtDesignKW.tif"
+SEED_TIFF="$TESTING_DIR/ApplyDataFiles/seed-tiff-none-rgb-8x8.tif"
 
 mkdir -p "$OUTDIR"
 
@@ -20,13 +22,23 @@ if [ ! -x "$APPLY_PROFILES" ]; then
   exit 1
 fi
 
-if [ ! -f "$PROFILE" ]; then
-  echo "[FAIL] ICC profile fixture not found: $PROFILE"
+if [ ! -f "$PROFILE_PREF" ]; then
+  echo "[FAIL] ICC profile fixture not found: $PROFILE_PREF"
+  exit 1
+fi
+
+if [ ! -f "$PROFILE_D65" ]; then
+  echo "[FAIL] ICC profile fixture not found: $PROFILE_D65"
   exit 1
 fi
 
 if [ ! -f "$SOURCE_IMAGE" ]; then
   echo "[FAIL] TIFF fixture not found: $SOURCE_IMAGE"
+  exit 1
+fi
+
+if [ ! -f "$SEED_TIFF" ]; then
+  echo "[FAIL] TIFF fixture not found: $SEED_TIFF"
   exit 1
 fi
 
@@ -40,7 +52,6 @@ cleanup() {
 trap cleanup EXIT
 
 CONFIG="$TMPDIR/issue-1230-connect-threads.json"
-LOGFILE="$OUTDIR/issue-1230-connect-threads.log"
 OUTPUT_IMAGE="$TMPDIR/issue-1230-output.tif"
 
 cat > "$CONFIG" <<EOF
@@ -55,7 +66,7 @@ cat > "$CONFIG" <<EOF
   },
   "profileSequence": [
     {
-      "iccFile": "$PROFILE",
+      "iccFile": "$PROFILE_PREF",
       "intent": 1,
       "interpolation": "tetrahedral"
     }
@@ -66,25 +77,64 @@ cat > "$CONFIG" <<EOF
 }
 EOF
 
-exit_code=0
-timeout 30 "$APPLY_PROFILES" -cfg "$CONFIG" > "$LOGFILE" 2>&1 || exit_code=$?
+CASE_DIR="$TMPDIR/local-research-shape"
+mkdir -p "$CASE_DIR/test-profiles"
+cp "$SEED_TIFF" "$CASE_DIR/seed-tiff-none-rgb-8x8.tif"
+cp "$PROFILE_D65" "$CASE_DIR/test-profiles/sRGB_D65_MAT.icc"
 
-if grep -Eq 'ERROR: AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:|outside the range of representable values' "$LOGFILE"; then
-  echo "[FAIL] issue-1230 sanitizer finding reproduced"
-  sed -n '1,120p' "$LOGFILE"
-  exit 2
-fi
+LOCAL_CONFIG="$CASE_DIR/ub-runtime-error-outside-range-IccJsonUtil_cpp-Line274.json"
+cat > "$LOCAL_CONFIG" <<EOF
+{
+  "imageFiles": {
+    "srcImageFile": "seed-tiff-none-rgb-8x8.tif",
+    "dstImageFile": "foo.bar",
+    "dstEncoding": "8Bit",
+    "/stCompression": false,
+    "dstPlanar": false,
+    "dstEmbedIcc": false
+  },
+  "profileSequence": [
+    {
+      "iccFile": "test-profiles/sRGB_D65_MAT.icc",
+      "intent": 1,
+      "interpolation": "tetrahedral"
+    }
+  ],
+  "connect": {
+    "threads": 1111111111111111111111
+  }
+}
+EOF
 
-if [ "$exit_code" -eq 124 ]; then
-  echo "[FAIL] issue-1230 command timed out"
-  sed -n '1,120p' "$LOGFILE"
-  exit 1
-fi
+run_case() {
+  local name="$1"
+  local workdir="$2"
+  local config="$3"
+  local logfile="$OUTDIR/$name.log"
+  local exit_code=0
 
-if [ "$exit_code" -eq 0 ]; then
-  echo "[FAIL] issue-1230 malformed connect.threads value was accepted"
-  sed -n '1,120p' "$LOGFILE"
-  exit 1
-fi
+  (cd "$workdir" && timeout 30 "$APPLY_PROFILES" -cfg "$config") > "$logfile" 2>&1 || exit_code=$?
 
-echo "[PASS] issue-1230 connect.threads failed closed without sanitizer findings (exit=$exit_code)"
+  if grep -Eq 'ERROR: AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:|outside the range of representable values' "$logfile"; then
+    echo "[FAIL] issue-1230 sanitizer finding reproduced in $name"
+    sed -n '1,120p' "$logfile"
+    exit 2
+  fi
+
+  if [ "$exit_code" -eq 124 ]; then
+    echo "[FAIL] issue-1230 command timed out in $name"
+    sed -n '1,120p' "$logfile"
+    exit 1
+  fi
+
+  if [ "$exit_code" -eq 0 ]; then
+    echo "[FAIL] issue-1230 malformed connect.threads value was accepted in $name"
+    sed -n '1,120p' "$logfile"
+    exit 1
+  fi
+
+  echo "[PASS] issue-1230 connect.threads failed closed in $name without sanitizer findings (exit=$exit_code)"
+}
+
+run_case generated-absolute "$TMPDIR" "$CONFIG"
+run_case local-research-shape "$CASE_DIR" "$(basename "$LOCAL_CONFIG")"

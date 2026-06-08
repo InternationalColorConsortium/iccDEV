@@ -449,6 +449,10 @@ option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"     
 option(ENABLE_UBSAN               "Enable UndefinedBehaviorSanitizer only"              OFF)
 option(ENABLE_INTEGER_SANITIZER   "Enable IntegerSanitizer (unsigned overflow, etc.)"   OFF)
 option(ENABLE_FLOAT_SANITIZER     "Enable float-divide-by-zero + float-cast-overflow"   OFF)
+
+IF(ICC_JSON_ORDERED)
+  add_definitions(-DICC_JSON_ORDERED=1)
+ENDIF()
 option(ENABLE_TSAN                "Enable ThreadSanitizer (conflicts with ASan)"        OFF)
 option(ENABLE_MSAN                "Enable MemorySanitizer (Clang only)"                 OFF)
 option(ENABLE_LSAN                "Enable LeakSanitizer standalone"                     OFF)
@@ -1388,7 +1392,6 @@ IF(ENABLE_ICCJSON)
   # ICC_JSON_ORDERED: use nlohmann::ordered_json for deterministic key order.
   # Default OFF (unordered is faster). Enable for reproducible output / CI logs.
   IF(ICC_JSON_ORDERED)
-    add_definitions(-DICC_JSON_ORDERED=1)
     message(STATUS "IccJSON key order      : ordered (deterministic)")
   ELSE()
     message(STATUS "IccJSON key order      : unordered (faster)")

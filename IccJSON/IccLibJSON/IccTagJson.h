@@ -64,9 +64,9 @@ Copyright:  (c) see Software License
 #include "IccTag.h"
 #include "IccTagMPE.h"
 #include "IccJsonConfig.h"
-#include <nlohmann/json.hpp>
+#include "../../IccProfLib/IccJsonTypes.h"
 
-using IccJson = nlohmann::ordered_json;
+using IccJson = iccJson::json;
 
 // ---------------------------------------------------------------------------
 // Base extension interface

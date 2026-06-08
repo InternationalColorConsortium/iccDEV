@@ -65,12 +65,12 @@ Copyright:  (c) see Software License
 #include "IccMpeACS.h"
 #include "IccMpeCalc.h"
 #include "IccMpeSpectral.h"
-#include <nlohmann/json.hpp>
+#include "../../IccProfLib/IccJsonTypes.h"
 #include <map>
 #include <list>
 #include <string>
 
-using IccJson = nlohmann::ordered_json;
+using IccJson = iccJson::json;
 
 // ---------------------------------------------------------------------------
 // Base extension interface

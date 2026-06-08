@@ -61,12 +61,12 @@ Copyright:  (c) see Software License
 #define _ICCPROFILEJSON_H
 
 #include "IccProfile.h"
-#include <nlohmann/json.hpp>
+#include "../../IccProfLib/IccJsonTypes.h"
 #include <map>
 #include <unordered_map>
 #include <string>
 
-using IccJson = nlohmann::ordered_json;
+using IccJson = iccJson::json;
 
 // currently breaking on GCC due to difference bug in basic_string.h line 495
 // unordered_map doesn't use a signed comparison
