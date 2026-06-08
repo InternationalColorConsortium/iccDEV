@@ -126,6 +126,7 @@ if("tools" IN_LIST FEATURES)
         iccApplyToLink
         iccApplySearch
         iccV5DspObsToV4Dsp
+        iccProfileVisualize
     )
     vcpkg_copy_tools(TOOL_NAMES ${_core_tools} AUTO_CLEAN)
 

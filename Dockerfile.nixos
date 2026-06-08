@@ -88,6 +88,7 @@ COPY --from=builder /runtime-root/ /
 ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccFromXml:\
 /workspace/iccDEV/Build/Tools/IccDumpProfile:\
+/workspace/iccDEV/Build/Tools/IccProfileVisualize:\
 /workspace/iccDEV/Build/Tools/IccPawgReport:\
 /workspace/iccDEV/Build/Tools/IccApplyNamedCmm:\
 /workspace/iccDEV/Build/Tools/IccRoundTrip:\
