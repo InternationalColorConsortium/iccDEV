@@ -524,10 +524,17 @@ jobs:
                   runtime_dir="$candidate"
                   break
                 fi
-                runtime_file="$(find "$candidate" -name 'libubsan*.dylib' -print -quit 2>/dev/null || true)"
+                runtime_file="$(find "$candidate" \( -name 'libubsan*.dylib' -o -name 'libubsan*.a' \) -print -quit 2>/dev/null || true)"
                 if [ -n "$runtime_file" ]; then
                   mkdir -p "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime"
-                  ln -sf "$runtime_file" "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime/libubsan.dylib"
+                  case "$runtime_file" in
+                    *.dylib)
+                      ln -sf "$runtime_file" "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime/libubsan.dylib"
+                      ;;
+                    *.a)
+                      ln -sf "$runtime_file" "${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime/libubsan.a"
+                      ;;
+                  esac
                   runtime_dir="${RUNNER_TEMP:-/tmp}/iccdev-gcc-runtime"
                   break
                 fi
