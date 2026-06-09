@@ -516,9 +516,12 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
   if (jsonToValue(j["dstEncoding"], str))
     m_dstEncoding = icSetJsonFileEncoding(str.c_str());
 
-  jsonToValue(j["dstCompression"], m_dstCompression);
-  jsonToValue(j["dstPlanar"], m_dstPlanar);
-  jsonToValue(j["dstEmbedIcc"], m_dstEmbedIcc);
+  if (j.contains("dstCompression") && !jsonToValue(j["dstCompression"], m_dstCompression))
+    return false;
+  if (j.contains("dstPlanar") && !jsonToValue(j["dstPlanar"], m_dstPlanar))
+    return false;
+  if (j.contains("dstEmbedIcc") && !jsonToValue(j["dstEmbedIcc"], m_dstEmbedIcc))
+    return false;
 
   return true;
 }
@@ -726,10 +729,15 @@ static bool icGetJsonRenderingIntent(const json& j, int& v)
     else if (str == icIntentNames[icAbsolute])
       v = icAbsolute;
     else
-      v = icUnknownIntent;
+      return false;
   }
-  else if (j.is_number_integer()) {
-    v = j.get<int>();
+  else if (j.is_number()) {
+    int nIntent = icUnknownIntent;
+    if (!jsonToValue(j, nIntent) ||
+        nIntent < static_cast<int>(icPerceptual) ||
+        nIntent > static_cast<int>(icAbsolute))
+      return false;
+    v = nIntent;
   }
   else
     return false;
@@ -855,7 +863,8 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
 
   jsonToValue(j["iccFile"], parsed.m_iccFile);
 
-  icGetJsonRenderingIntent(j["intent"], parsed.m_intent);
+  if (j.contains("intent") && !icGetJsonRenderingIntent(j["intent"], parsed.m_intent))
+    return false;
 
   std::string str;
   if (jsonToValue(j["transform"], str)) {
@@ -1409,9 +1418,12 @@ bool CIccCfgSearchApply::fromJsonInit(json j)
 
   m_bInitialized = true;
 
-  int intent = icUnknownIntent; // just incase json parsing fails
-  icGetJsonRenderingIntent(j["intent"], intent);
-  m_intentInitial = (icRenderingIntent)intent;
+  if (j.contains("intent")) {
+    int intent = icUnknownIntent;
+    if (!icGetJsonRenderingIntent(j["intent"], intent))
+      return false;
+    m_intentInitial = (icRenderingIntent)intent;
+  }
 
   std::string str;
   if (jsonToValue(j["transform"], str)) {

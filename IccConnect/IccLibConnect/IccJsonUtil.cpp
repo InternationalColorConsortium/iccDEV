@@ -347,17 +347,24 @@ bool jsonToValue(const json& j, bool& value)
     return true;
   }
   else if (j.is_number_float()) {
-    // don't want to check for 0 due to floating point messiness. If the value is greater than 0.5, then
-    // it's definitely not 0.
-    value = j.get<float>() > 0.5;
+    const double v = j.get<double>();
+    if (!std::isfinite(v) || (v != 0.0 && v != 1.0))
+      return false;
+    value = v != 0.0;
     return true;
   }
   else if (j.is_number_integer()) {
-    value = j.get<int>() != 0;
+    const icInt64Number v = j.get<icInt64Number>();
+    if (v != 0 && v != 1)
+      return false;
+    value = v != 0;
     return true;
   }
   else if (j.is_number_unsigned()) {
-    value = j.get<unsigned>() != 0;
+    const icUInt64Number v = j.get<icUInt64Number>();
+    if (v > 1)
+      return false;
+    value = v != 0;
     return true;
   }
 
