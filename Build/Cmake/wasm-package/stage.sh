@@ -98,7 +98,9 @@ cp -f "$SCRIPT_DIR/README.md"    "$STAGE_DIR/README.md"
 sed "s/@WASM_PKG_VERSION@/${VERSION}/g" "$SCRIPT_DIR/package.json.in" > "$STAGE_DIR/package.json"
 
 # LICENSE
-if [[ -f "$REPO_ROOT/LICENSE.md" ]]; then
+if [[ -f "$HOME/LICENSE.md" ]]; then
+    cp -f "$HOME/LICENSE.md" "$STAGE_DIR/LICENSE"
+elif [[ -f "$REPO_ROOT/LICENSE.md" ]]; then
     cp -f "$REPO_ROOT/LICENSE.md" "$STAGE_DIR/LICENSE"
 elif [[ -f "$REPO_ROOT/LICENSE" ]]; then
     cp -f "$REPO_ROOT/LICENSE"    "$STAGE_DIR/LICENSE"
