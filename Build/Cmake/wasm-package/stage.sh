@@ -98,7 +98,9 @@ cp -f "$SCRIPT_DIR/README.md"    "$STAGE_DIR/README.md"
 sed "s/@WASM_PKG_VERSION@/${VERSION}/g" "$SCRIPT_DIR/package.json.in" > "$STAGE_DIR/package.json"
 
 # LICENSE
-if [[ -f "$REPO_ROOT/LICENSE.md" ]]; then
+if [[ -f "$HOME/LICENSE.md" ]]; then
+    cp -f "$HOME/LICENSE.md" "$STAGE_DIR/LICENSE"
+elif [[ -f "$REPO_ROOT/LICENSE.md" ]]; then
     cp -f "$REPO_ROOT/LICENSE.md" "$STAGE_DIR/LICENSE"
 elif [[ -f "$REPO_ROOT/LICENSE" ]]; then
     cp -f "$REPO_ROOT/LICENSE"    "$STAGE_DIR/LICENSE"
@@ -128,7 +130,10 @@ echo "  stage dir:     $STAGE_DIR"
 echo "  version:       $VERSION"
 echo ""
 echo "Stage contents (top level):"
-ls -lh "$STAGE_DIR" | sed -n '2,40p'
+find "$STAGE_DIR" -mindepth 1 -maxdepth 1 -printf '%M %3n %u %g %10s %TY-%Tm-%Td %TH:%TM %p\n' \
+    | sort \
+    | sed "s# $STAGE_DIR/# #" \
+    | sed -n '1,39p'
 
 if [[ $STAGED -lt 17 ]]; then
     echo "::warning::stage.sh: only $STAGED of 17 tools staged" >&2

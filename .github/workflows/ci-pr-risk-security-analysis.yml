@@ -1113,29 +1113,41 @@ jobs:
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
-          # H-6: privileged cache boundaries must not mix PR/release cache namespaces.
+          # H-6: workflow cache primitives are prohibited repository-wide.
           CACHE_BOUNDARY_GAPS=0
           while IFS= read -r wf; do
             wf_base=$(basename "$wf")
-            has_write=false
-            if grep -qE '^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write' "$wf"; then
-              has_write=true
-            fi
-            if [[ "$has_write" == "true" ]] && grep -qE 'cache-to:\s*type=gha|restore-keys:' "$wf"; then
-              if ! grep -q "github.ref == 'refs/heads/master'" "$wf"; then
-                CACHE_BOUNDARY_GAPS=$((CACHE_BOUNDARY_GAPS + 1))
-                echo "[HIGH] \`$(sanitize_line "$wf_base")\` combines write credentials with GHA cache usage without a master-only gate" >> "$RISK_REPORT_PATH"
-                echo "" >> "$RISK_REPORT_PATH"
-              fi
-            fi
-            if [[ "$wf_base" == "ci-latest-release.yml" ]] && grep -q 'restore-keys:' "$wf"; then
+            if awk '
+              /^[[:space:]]*run:[[:space:]]*\|/ {
+                in_run=1
+                match($0, /^[[:space:]]*/)
+                run_indent=RLENGTH
+                next
+              }
+              in_run {
+                match($0, /^[[:space:]]*/)
+                if ($0 !~ /^[[:space:]]*$/ && RLENGTH <= run_indent) {
+                  in_run=0
+                } else {
+                  next
+                }
+              }
+              /^[[:space:]]*uses:[[:space:]]*actions\/cache@/ ||
+              /^[[:space:]]*cache-(from|to):[[:space:]]*type=gha/ ||
+              /^[[:space:]]*restore-keys:/ ||
+              /^[[:space:]]*key:[[:space:]]*.*(cache|msys2-pkgs)/ ||
+              /^[[:space:]]*cache:[[:space:]]*/ && $0 !~ /^[[:space:]]*cache:[[:space:]]*false[[:space:]]*$/ {
+                found=1
+              }
+              END { exit found ? 0 : 1 }
+            ' "$wf"; then
               CACHE_BOUNDARY_GAPS=$((CACHE_BOUNDARY_GAPS + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` release workflow uses broad cache restore keys" >> "$RISK_REPORT_PATH"
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses prohibited workflow cache primitives" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
             fi
           done < <(find .github/workflows -name '*.yml' -o -name '*.yaml' 2>/dev/null)
           if [[ $CACHE_BOUNDARY_GAPS -eq 0 ]]; then
-            echo "[OK] Privileged cache boundaries are isolated from PR/release namespace mixing" >> "$RISK_REPORT_PATH"
+            echo "[OK] Workflow cache primitives are absent" >> "$RISK_REPORT_PATH"
             echo "" >> "$RISK_REPORT_PATH"
           fi
 
@@ -1158,12 +1170,12 @@ jobs:
             fi
             if grep -qE 'uses:\s*actions/cache@' "$wf"; then
               PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses actions/cache in a publish/write workflow boundary" >> "$RISK_REPORT_PATH"
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses prohibited actions/cache" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
             fi
             if grep -qE 'cache-(from|to):\s*type=gha' "$wf"; then
               PUBLISH_BOUNDARY_GAPS=$((PUBLISH_BOUNDARY_GAPS + 1))
-              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses Docker Buildx GHA cache in a publish/write workflow boundary" >> "$RISK_REPORT_PATH"
+              echo "[HIGH] \`$(sanitize_line "$wf_base")\` uses prohibited Docker Buildx GHA cache" >> "$RISK_REPORT_PATH"
               echo "" >> "$RISK_REPORT_PATH"
             fi
             if grep -q 'download-artifact' "$wf" && ! grep -qE '^\s+(name|pattern):\s*' "$wf"; then
@@ -1992,6 +2004,9 @@ jobs:
             '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
             '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
             '^\[HIGH\] Absolute cache policy violation'
+            '^\[HIGH\].*prohibited workflow cache primitives'
+            '^\[HIGH\].*prohibited actions/cache'
+            '^\[HIGH\].*prohibited Docker Buildx GHA cache'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'
@@ -2060,6 +2075,10 @@ jobs:
               *"Absolute cache policy violation"*)
                 cause="A workflow contains a cache primitive or does not explicitly disable an implicit cache control."
                 remediation="Remove cache primitives and set supported implicit cache toggles such as cache:false, cache-binary:false, or no-cache:true."
+                ;;
+              *"prohibited workflow cache primitives"*|*"prohibited actions/cache"*|*"prohibited Docker Buildx GHA cache"*)
+                cause="A workflow can consume mutable GitHub Actions cache state."
+                remediation="Remove Actions cache, restore keys, cache-key namespaces, and Buildx GHA cache; rebuild inputs from pinned refs and verified checksums."
                 ;;
               *"downloads artifacts without an explicit name or pattern"*)
                 cause="A publish workflow can ingest unintended artifacts from the same run."
@@ -2195,6 +2214,9 @@ jobs:
             '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
             '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
             '^\[HIGH\] Absolute cache policy violation'
+            '^\[HIGH\].*prohibited workflow cache primitives'
+            '^\[HIGH\].*prohibited actions/cache'
+            '^\[HIGH\].*prohibited Docker Buildx GHA cache'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'
@@ -3016,24 +3038,21 @@ jobs:
             $report += "[OK] Privileged workflow_dispatch publish jobs are master/environment gated"
           }
 
-          # H-6: privileged cache boundaries must not mix PR/release cache namespaces.
+          # H-6: workflow cache primitives are prohibited repository-wide.
           $cacheBoundaryGaps = 0
           foreach ($wf in $workflows) {
             $content = Get-Content $wf.FullName -Raw -ErrorAction SilentlyContinue
-            $hasWrite = $content -match '(?m)^\s+(contents|packages|attestations|artifact-metadata|id-token):\s*write'
-            if ($hasWrite -and $content -match 'cache-to:\s*type=gha|restore-keys:') {
-              if ($content -notmatch "github\.ref == 'refs/heads/master'") {
-                $cacheBoundaryGaps++
-                $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` combines write credentials with GHA cache usage without a master-only gate"
-              }
-            }
-            if ($wf.Name -eq "ci-latest-release.yml" -and $content -match 'restore-keys:') {
+            if ($content -match '(?m)^\s*uses:\s*actions/cache@' -or
+                $content -match '(?m)^\s*cache-(from|to):\s*type=gha' -or
+                $content -match '(?m)^\s*restore-keys:' -or
+                $content -match '(?m)^\s*key:\s*.*(cache|msys2-pkgs)' -or
+                ($content -match '(?m)^\s*cache:\s*' -and $content -notmatch '(?m)^\s*cache:\s*false\s*$')) {
               $cacheBoundaryGaps++
-              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` release workflow uses broad cache restore keys"
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses prohibited workflow cache primitives"
             }
           }
           if ($cacheBoundaryGaps -eq 0) {
-            $report += "[OK] Privileged cache boundaries are isolated from PR/release namespace mixing"
+            $report += "[OK] Workflow cache primitives are absent"
           }
 
           # H-7: publish workflows must not consume mutable cache or broad artifact intake.
@@ -3053,11 +3072,11 @@ jobs:
             if (-not $hasPublishBoundary) { continue }
             if ($content -match 'uses:\s*actions/cache@') {
               $publishBoundaryGaps++
-              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses actions/cache in a publish/write workflow boundary"
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses prohibited actions/cache"
             }
             if ($content -match 'cache-(from|to):\s*type=gha') {
               $publishBoundaryGaps++
-              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses Docker Buildx GHA cache in a publish/write workflow boundary"
+              $report += "[HIGH] ``$(Sanitize-Line $wf.Name)`` uses prohibited Docker Buildx GHA cache"
             }
             if (($content -match 'download-artifact') -and ($content -notmatch '(?m)^\s+(name|pattern):\s*')) {
               $publishBoundaryGaps++
@@ -3762,10 +3781,9 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact',
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
-            '^\[HIGH\].*write credentials with GHA cache',
-            '^\[HIGH\].*release workflow uses broad cache restore keys',
-            '^\[HIGH\].*actions/cache in a publish/write workflow boundary',
-            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary',
+            '^\[HIGH\].*prohibited workflow cache primitives',
+            '^\[HIGH\].*prohibited actions/cache',
+            '^\[HIGH\].*prohibited Docker Buildx GHA cache',
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
             '^\[HIGH\].*allows missing release artifacts',
             '^\[HIGH\] GitHub token format assumption'
@@ -3808,15 +3826,9 @@ jobs:
             } elseif ($Finding -like "*privileged workflow_dispatch publish permissions*") {
               $cause = "Manual dispatch can reach write-capable publish permissions without both branch and environment controls."
               $remediation = "Require github.ref == refs/heads/master and a protected GitHub environment for publish jobs."
-            } elseif ($Finding -like "*write credentials with GHA cache*") {
-              $cause = "A write-capable job shares mutable GitHub Actions cache state without a master-only trust boundary."
-              $remediation = "Namespace caches by workflow role and restrict write-capable cache producers to master-only jobs."
-            } elseif ($Finding -like "*release workflow uses broad cache restore keys*") {
-              $cause = "Release builds can restore cache entries from broader or lower-trust cache namespaces."
-              $remediation = "Use exact release-specific cache keys with pinned dependency versions and no broad restore prefixes."
-            } elseif (($Finding -like "*actions/cache in a publish/write workflow boundary*") -or ($Finding -like "*Buildx GHA cache in a publish/write workflow boundary*")) {
-              $cause = "A publish or write-capable workflow can consume mutable GitHub Actions cache state before producing packages, releases, images, or attestations."
-              $remediation = "Remove Actions cache and Buildx GHA cache from publish paths; rebuild release inputs from pinned refs and verified checksums."
+            } elseif (($Finding -like "*prohibited workflow cache primitives*") -or ($Finding -like "*prohibited actions/cache*") -or ($Finding -like "*prohibited Docker Buildx GHA cache*")) {
+              $cause = "A workflow can consume mutable GitHub Actions cache state."
+              $remediation = "Remove Actions cache, restore keys, cache-key namespaces, and Buildx GHA cache; rebuild inputs from pinned refs and verified checksums."
             } elseif ($Finding -like "*downloads artifacts without an explicit name or pattern*") {
               $cause = "A publish workflow can ingest unintended artifacts from the same run."
               $remediation = "Download only explicit artifact names or constrained patterns and verify the expected artifact manifest before packaging."
@@ -3937,10 +3949,9 @@ jobs:
             '^\[HIGH\].*workflow_run \+ download-artifact',
             '^\[HIGH\].*[Uu]ntrusted PR artifact upload',
             '^\[HIGH\].*privileged workflow_dispatch publish permissions',
-            '^\[HIGH\].*write credentials with GHA cache',
-            '^\[HIGH\].*release workflow uses broad cache restore keys',
-            '^\[HIGH\].*actions/cache in a publish/write workflow boundary',
-            '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary',
+            '^\[HIGH\].*prohibited workflow cache primitives',
+            '^\[HIGH\].*prohibited actions/cache',
+            '^\[HIGH\].*prohibited Docker Buildx GHA cache',
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern',
             '^\[HIGH\].*allows missing release artifacts',
             '^\[HIGH\] GitHub token format assumption'
