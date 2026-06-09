@@ -32,12 +32,6 @@ permissions:
 
 on:
   workflow_dispatch:
-    inputs:
-      validate_cache_policy_only:
-        description: "Only validate that this workflow does not use Actions cache primitives"
-        required: false
-        default: true
-        type: boolean
 
 concurrency:
   group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
@@ -71,7 +65,6 @@ jobs:
   linux:
     name: "Linux ${{ matrix.compiler }}"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -148,10 +141,14 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          if [ ! -f "$HOME/LICENSE.md" ]; then
+            cp LICENSE.md "$HOME/LICENSE.md"
+          fi
           cd Build
           cmake -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DICCDEV_PACKAGE_FLAVOR="${MATRIX_COMPILER}" \
+                -DICCDEV_LICENSE_FILE="$HOME/LICENSE.md" \
                 -Wno-dev Cmake/
       - name: Build
         shell: bash --noprofile --norc {0}
@@ -189,6 +186,9 @@ jobs:
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          if [ ! -f "$HOME/LICENSE.md" ]; then
+            cp LICENSE.md "$HOME/LICENSE.md"
+          fi
           stage="staging/iccdev-linux-${MATRIX_COMPILER}"
           rm -rf staging
           mkdir -p "$stage"
@@ -199,7 +199,7 @@ jobs:
             find "$libdir" -type f -name "*.so*" -exec cp -a {} "$stage/" \; 2>/dev/null || true
             find "$libdir" -type l -name "*.so*" -exec cp -a {} "$stage/" \; 2>/dev/null || true
           done
-          cp LICENSE.md "$stage/"
+          cp "$HOME/LICENSE.md" "$stage/LICENSE.md"
           cp Build/Packaging/README.md "$stage/"
           cp Build/Packaging/VERSION "$stage/"
           cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
@@ -267,7 +267,6 @@ jobs:
   macos:
     name: "macOS Clang"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -309,6 +308,9 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          if [ ! -f "$HOME/LICENSE.md" ]; then
+            cp LICENSE.md "$HOME/LICENSE.md"
+          fi
           echo "Setting up CMake build configuration..."
           cd Build
           sudo rm -rf /Library/Frameworks/Mono.framework/Headers/png.h
@@ -322,6 +324,7 @@ jobs:
           cmake -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DICCDEV_PACKAGE_FLAVOR=clang \
+                -DICCDEV_LICENSE_FILE="$HOME/LICENSE.md" \
                 -DJPEG_LIBRARY="${jpeg_turbo_prefix}/lib/libjpeg.dylib" \
                 -DJPEG_INCLUDE_DIR="${jpeg_turbo_prefix}/include" \
                 -Wno-dev Cmake/
@@ -350,6 +353,9 @@ jobs:
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          if [ ! -f "$HOME/LICENSE.md" ]; then
+            cp LICENSE.md "$HOME/LICENSE.md"
+          fi
           stage="staging/iccdev-macos-clang"
           rm -rf staging
           mkdir -p "$stage"
@@ -360,7 +366,7 @@ jobs:
             find "$libdir" -type f -name "*.dylib" -exec cp -a {} "$stage/" \; 2>/dev/null || true
             find "$libdir" -type l -name "*.dylib" -exec cp -a {} "$stage/" \; 2>/dev/null || true
           done
-          cp LICENSE.md "$stage/"
+          cp "$HOME/LICENSE.md" "$stage/LICENSE.md"
           cp Build/Packaging/README.md "$stage/"
           cp Build/Packaging/VERSION "$stage/"
           cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
@@ -463,7 +469,6 @@ jobs:
   windows:
     name: "Windows MSVC"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: windows-2022
     timeout-minutes: 45
     env:
@@ -580,6 +585,10 @@ jobs:
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
           }
+          $licenseSource = Join-Path $HOME "LICENSE.md"
+          if (-not (Test-Path $licenseSource)) {
+            Copy-Item -Path "LICENSE.md" -Destination $licenseSource -Force
+          }
           Write-Host "============================= Starting Build =============================" -ForegroundColor Green
           Write-Host "Copyright (c) 2025 International Color Consortium. All rights reserved." -ForegroundColor Green
           git branch
@@ -590,7 +599,7 @@ jobs:
           tar -xf deps.zip
           cd Build/Cmake
           Write-Host "========= Building... ================`n"
-          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Release -DICCDEV_PACKAGE_FLAVOR=msvc -Wno-dev
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Release -DICCDEV_PACKAGE_FLAVOR=msvc -DICCDEV_LICENSE_FILE="$licenseSource" -Wno-dev
           cmake --build build --config Release -- /m /maxcpucount
           cmake --build build --config Release -- /m /maxcpucount
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
@@ -610,6 +619,10 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
+          $licenseSource = Join-Path $HOME "LICENSE.md"
+          if (-not (Test-Path $licenseSource)) {
+            Copy-Item -Path "LICENSE.md" -Destination $licenseSource -Force
+          }
           $stage = "staging/iccdev-windows-msvc"
           if (Test-Path "staging") {
             Remove-Item -Path "staging" -Recurse -Force
@@ -619,7 +632,7 @@ jobs:
           Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.exe,*.dll,*.lib |
             Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
             ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
-          Copy-Item -Path "LICENSE.md" -Destination $stage -Force
+          Copy-Item -Path $licenseSource -Destination (Join-Path $stage "LICENSE.md") -Force
           Copy-Item -Path "Build/Cmake/build/Packaging/README.md" -Destination $stage -Force
           Copy-Item -Path "Build/Cmake/build/Packaging/VERSION" -Destination $stage -Force
           Copy-Item -Path "Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md" -Destination $stage -Force
@@ -700,7 +713,6 @@ jobs:
   wasm:
     name: "WASM Release (Emscripten)"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -1230,8 +1242,7 @@ jobs:
     needs: [linux, macos, windows, wasm]
     if: >-
       ${{
-        (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-mod-packaging') &&
-        (github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true)
+        github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-mod-packaging'
       }}
     runs-on: ubuntu-latest
     environment: release
