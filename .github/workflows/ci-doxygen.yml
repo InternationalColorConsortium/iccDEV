@@ -10,8 +10,7 @@
 # This workflow intentionally does not use dependency caches and does not run
 # on pull_request or pull_request_target. Generated HTML can include source
 # comments and should only be uploaded through the protected doxygen-publish
-# environment from the canonical repository on trusted master pushes or
-# explicit maintainer-dispatched branch test runs.
+# environment from explicit maintainer-dispatched branch test runs.
 #
 # Copyright (c) 2024-2026 The International Color Consortium.
 ###############################################################################
@@ -20,22 +19,6 @@ name: iccDEV Doxygen Docs
 
 'on':
   workflow_dispatch:
-  push:
-    branches: [master]
-    paths:
-      - 'README.md'
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - 'IccJSON/**'
-      - 'IccConnect/**'
-      - 'Tools/**'
-      - 'examples/**'
-      - 'docs/**'
-      - 'Testing/**'
-      - '.github/ci/doxygen/**'
-      - '.github/scripts/check-workflow-cache-policy.sh'
-      - '.github/scripts/sanitize-sed.sh'
-      - '.github/workflows/ci-doxygen.yml'
 
 concurrency:
   group: "doxygen-${{ github.workflow }}-${{ github.ref_name }}"

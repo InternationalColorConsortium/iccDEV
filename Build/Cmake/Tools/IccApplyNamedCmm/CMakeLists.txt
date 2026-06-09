@@ -39,7 +39,7 @@ if(NOT TARGET iccApplyNamedCmm)
   )
 
   if(ENABLE_INSTALL_RIM)
-    install(TARGETS iccApplyNamedCmm DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS iccApplyNamedCmm DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
   endif()
 
 else()
