@@ -51,7 +51,12 @@ jobs:
   build:
     name: "Docker (${{ matrix.variant }})"
     needs: cache-policy
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/fix-nixos-image-runtime'
+    if: >-
+      ${{
+        github.ref == 'refs/heads/master' ||
+        github.ref == 'refs/heads/fix-nixos-image-runtime' ||
+        github.ref == 'refs/heads/ci-mod-packaging'
+      }}
     runs-on: ubuntu-latest
     environment: ghcr-publish
     timeout-minutes: 30
