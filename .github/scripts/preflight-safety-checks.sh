@@ -417,7 +417,7 @@ def job_context(workflow, job):
 
 failures = 0
 warnings = 0
-cache_publish = 0
+cache_canaries = 0
 artifact_intake = 0
 artifact_publish = 0
 auth_canaries = 0
@@ -496,21 +496,28 @@ for path in sys.argv[1:]:
             pr_context = bool(workflow_triggers(workflow) & {"pull_request", "pull_request_target"})
 
             if uses.startswith("actions/cache@"):
-                if publish_context:
-                    print(f"[FAIL] {label}: actions/cache in release/publish/write context", file=sys.stderr)
-                    failures += 1
-                    cache_publish += 1
-                else:
-                    print(f"[WARN] {label}: actions/cache use requires cache-poisoning review")
-                    warnings += 1
+                print(f"[FAIL] {label}: actions/cache is prohibited in repository workflows",
+                      file=sys.stderr)
+                failures += 1
+                cache_canaries += 1
 
-            if uses.startswith("docker/build-push-action@") and publish_context:
+            if uses.startswith("docker/build-push-action@"):
                 for key in ("cache-from", "cache-to"):
                     if "type=gha" in str(block.get(key, "")):
-                        print(f"[FAIL] {label}: Docker Buildx {key}=type=gha in publish context",
+                        print(f"[FAIL] {label}: Docker Buildx {key}=type=gha is prohibited",
                               file=sys.stderr)
                         failures += 1
-                        cache_publish += 1
+                        cache_canaries += 1
+
+            for key in ("key", "restore-keys"):
+                if key not in block:
+                    continue
+                value = str(block.get(key, ""))
+                if "cache" in value.lower() or "msys2-pkgs" in value.lower() or key == "restore-keys":
+                    print(f"[FAIL] {label}: cache key primitive '{key}' is prohibited",
+                          file=sys.stderr)
+                    failures += 1
+                    cache_canaries += 1
 
             if uses.startswith("actions/download-artifact@") and publish_context:
                 if "name" not in block and "pattern" not in block:
@@ -585,7 +592,7 @@ for path in sys.argv[1:]:
                     failures += 1
                     package_install_canaries += 1
 
-print(f"cache publish canaries: {cache_publish}")
+print(f"cache canaries: {cache_canaries}")
 print(f"artifact intake canaries: {artifact_intake}")
 print(f"artifact publish canaries: {artifact_publish}")
 print(f"untrusted PR artifact canaries: {untrusted_artifacts}")

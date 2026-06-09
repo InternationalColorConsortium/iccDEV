@@ -49,7 +49,7 @@ if(NOT TARGET iccApplyProfiles)
   )
 
   if(ENABLE_INSTALL_RIM)
-    install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
   endif()
 else()
   message(WARNING "Target iccApplyProfiles already exists. Skipping duplicate addition.")

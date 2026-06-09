@@ -29,7 +29,7 @@ concurrency:
 jobs:
   build:
     name: "Build regression dependency image"
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-cmake-raspi-testing'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-mod-packaging'
     runs-on: ubuntu-24.04
     environment: ghcr-publish
     timeout-minutes: 30
@@ -66,9 +66,6 @@ jobs:
 
           printf 'name=ghcr.io/%s/iccdev-ci-regression\n' "$owner" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
-
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9  # v6.1.0
@@ -87,15 +84,55 @@ jobs:
 
       - name: Build and push
         id: build-push
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
-        with:
-          context: .
-          file: ./Dockerfile.ci-regression
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: mode=max
-          sbom: true
+        env:
+          BASH_ENV: /dev/null
+          TAGS: ${{ steps.meta.outputs.tags }}
+          LABELS: ${{ steps.meta.outputs.labels }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          mapfile -t tags <<< "$TAGS"
+          mapfile -t labels <<< "$LABELS"
+
+          build_args=(--no-cache --pull -f ./Dockerfile.ci-regression)
+          for tag in "${tags[@]}"; do
+            [ -n "$tag" ] || continue
+            if [[ ! "$tag" =~ ^ghcr\.io/[a-z0-9][a-z0-9-]*/iccdev-ci-regression:[A-Za-z0-9_.-]+$ ]]; then
+              echo "Invalid generated image tag" >&2
+              exit 1
+            fi
+            build_args+=(-t "$tag")
+          done
+          for label in "${labels[@]}"; do
+            [ -n "$label" ] || continue
+            build_args+=(--label "$label")
+          done
+
+          if [ "${#tags[@]}" -eq 0 ]; then
+            echo "No image tags generated" >&2
+            exit 1
+          fi
+
+          docker build "${build_args[@]}" .
+
+          digest=""
+          for tag in "${tags[@]}"; do
+            [ -n "$tag" ] || continue
+            push_log="$(mktemp)"
+            docker push "$tag" | tee "$push_log"
+            if [ -z "$digest" ]; then
+              digest="$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^sha256:/) { print $i; exit } }' "$push_log")"
+            fi
+            rm -f "$push_log"
+          done
+
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Unable to resolve pushed image digest" >&2
+            exit 1
+          fi
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275  # v3.2.0
@@ -131,12 +168,8 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-regression-container-cache"
-          rm -rf "$TRIVY_CACHE"
-          mkdir -p "$TRIVY_CACHE"
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$TRIVY_CACHE":/root/.cache/ \
             "$TRIVY_IMAGE" \
             image --scanners vuln,secret --ignore-unfixed \
             --severity HIGH,CRITICAL --exit-code 1 "$IMAGE_REF"

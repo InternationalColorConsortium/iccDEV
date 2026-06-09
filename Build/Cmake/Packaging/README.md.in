@@ -1,0 +1,18 @@
+# RefIccMAX command-line tools package
+
+This package is a minimal distribution of RefIccMAX command-line tools and the
+runtime libraries needed by those tools.
+
+Native packages install into the platform layout:
+
+- `@CMAKE_INSTALL_BINDIR@` for command-line tools
+- `@CMAKE_INSTALL_LIBDIR@` for shared RefIccMAX libraries
+- `@CMAKE_INSTALL_DOCDIR@` for package notes, license, version, and tool catalog
+
+Portable archives use the same runtime install component and are intended for
+unpack-and-run testing. Build a portable, self-contained archive from a static
+configuration (`ENABLE_SHARED_LIBS=OFF`, `ENABLE_STATIC_LIBS=ON`). Build native
+`.deb` and `.rpm` packages from a dynamic configuration.
+
+The `Testing/` source tree, man pages, shell completions, and development
+headers are intentionally excluded from v1 runtime packages.
