@@ -142,6 +142,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"

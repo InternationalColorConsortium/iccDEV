@@ -93,7 +93,9 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
+          # shellcheck disable=SC2153
           mapfile -t tags <<< "$TAGS"
+          # shellcheck disable=SC2153
           mapfile -t labels <<< "$LABELS"
 
           build_args=(--no-cache --pull -f ./Dockerfile.ci-regression)
