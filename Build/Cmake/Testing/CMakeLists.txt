@@ -26,6 +26,11 @@ if(WIN32)
     "${CMAKE_BINARY_DIR}")
 endif()
 
+add_custom_target(build-test-binaries
+  COMMENT "Build iccDEV binaries required by CTest"
+  VERBATIM
+)
+
 add_custom_target(check
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
@@ -35,6 +40,7 @@ add_custom_target(check
   COMMENT "Run iccDEV CTest suite"
   VERBATIM
 )
+add_dependencies(check build-test-binaries)
 
 function(iccdev_add_check_dependencies)
   foreach(_target
@@ -59,7 +65,7 @@ function(iccdev_add_check_dependencies)
       iccProfileVisualize
   )
     if(TARGET "${_target}")
-      add_dependencies(check "${_target}")
+      add_dependencies(build-test-binaries "${_target}")
     endif()
   endforeach()
 endfunction()
@@ -77,7 +83,7 @@ function(iccdev_add_iccconnect_thread_test)
   target_compile_features(iccConnectThreadTest PRIVATE cxx_std_17)
   target_link_libraries(iccConnectThreadTest PRIVATE ${TARGET_LIB_ICCCONNECT})
 
-  add_dependencies(check iccConnectThreadTest)
+  add_dependencies(build-test-binaries iccConnectThreadTest)
 
   if(WIN32)
     add_test(
@@ -126,7 +132,7 @@ function(iccdev_add_embedio_read8_bounds_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedio-read8-bounds.cpp"
   )
   target_link_libraries(iccEmbedIoRead8BoundsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
-  add_dependencies(check iccEmbedIoRead8BoundsTest)
+  add_dependencies(build-test-binaries iccEmbedIoRead8BoundsTest)
 
   add_test(
     NAME iccdev.embedio-read8-bounds
@@ -161,7 +167,7 @@ function(iccdev_add_tag_layout_shared_data_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/tag-layout-shared-data.cpp"
   )
   target_link_libraries(iccTagLayoutSharedDataTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
-  add_dependencies(check iccTagLayoutSharedDataTest)
+  add_dependencies(build-test-binaries iccTagLayoutSharedDataTest)
 
   add_test(
     NAME iccdev.tag-layout-shared-data
@@ -196,7 +202,7 @@ function(iccdev_add_fileio_getlength_position_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/fileio-getlength-position.cpp"
   )
   target_link_libraries(iccFileIoGetLengthPositionTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
-  add_dependencies(check iccFileIoGetLengthPositionTest)
+  add_dependencies(build-test-binaries iccFileIoGetLengthPositionTest)
 
   add_test(
     NAME iccdev.fileio-getlength-preserves-position
@@ -238,7 +244,7 @@ function(iccdev_add_fileio_seek_tell_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/fileio-seek-tell.cpp"
   )
   target_link_libraries(iccFileIoSeekTellTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
-  add_dependencies(check iccFileIoSeekTellTest)
+  add_dependencies(build-test-binaries iccFileIoSeekTellTest)
 
   add_test(
     NAME iccdev.fileio-seek-tell
@@ -274,7 +280,7 @@ function(iccdev_add_profile_write_failure_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/profile-write-failure.cpp"
   )
   target_link_libraries(iccProfileWriteFailureTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
-  add_dependencies(check iccProfileWriteFailureTest)
+  add_dependencies(build-test-binaries iccProfileWriteFailureTest)
 
   add_test(
     NAME iccdev.profile-write-failure
@@ -311,7 +317,7 @@ function(iccdev_add_parser_restore_calls_test)
   target_compile_features(iccParserRestoreCallsTest PRIVATE cxx_std_17)
   target_link_libraries(iccParserRestoreCallsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
 
-  add_dependencies(check iccParserRestoreCallsTest)
+  add_dependencies(build-test-binaries iccParserRestoreCallsTest)
 
   if(WIN32)
     add_test(
@@ -443,7 +449,7 @@ if(WIN32)
       TIMEOUT 60
       LABELS "iccdev;windows;tools;profile"
     )
-    add_dependencies(check iccDumpProfile)
+    add_dependencies(build-test-binaries iccDumpProfile)
   endif()
 
   if(TARGET iccPawgReport)
@@ -464,7 +470,7 @@ if(WIN32)
       TIMEOUT 60
       LABELS "iccdev;windows;tools;pawg;report;profile"
     )
-    add_dependencies(check iccPawgReport)
+    add_dependencies(build-test-binaries iccPawgReport)
   endif()
 
   if(ENABLE_SHARED_LIBS AND TARGET IccProfLib2)
@@ -491,7 +497,7 @@ if(WIN32)
       TIMEOUT 180
       LABELS "iccdev;windows;shared;issue-987"
     )
-    add_dependencies(check IccProfLib2)
+    add_dependencies(build-test-binaries IccProfLib2)
   endif()
 
   iccdev_add_iccconnect_thread_test()

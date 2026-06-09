@@ -44,7 +44,10 @@ for workflow in "$@"; do
       }
     }
     /^[[:space:]]*uses:[[:space:]]*actions\/cache@/ ||
-    /^[[:space:]]*cache-(from|to):[[:space:]]*type=gha/ {
+    /^[[:space:]]*cache-(from|to):[[:space:]]*type=gha/ ||
+    /^[[:space:]]*restore-keys:/ ||
+    /^[[:space:]]*key:[[:space:]]*.*(cache|msys2-pkgs)/ ||
+    /^[[:space:]]*cache:[[:space:]]*/ && $0 !~ /^[[:space:]]*cache:[[:space:]]*false[[:space:]]*$/ {
       gsub(/^[[:space:]]+/, "")
       print
     }

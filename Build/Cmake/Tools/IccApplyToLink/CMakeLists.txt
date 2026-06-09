@@ -30,7 +30,7 @@ IF(NOT TARGET iccApplyToLink)
 
   # Optional: Install the executable if enabled
   IF(ENABLE_INSTALL_RIM)
-    INSTALL(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+    INSTALL(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
   ENDIF()
 ELSE()
   # Log a warning if the target already exists

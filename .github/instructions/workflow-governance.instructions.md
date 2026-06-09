@@ -131,10 +131,10 @@ exposure. The Wiz GitHub Actions guidance highlights the same practical risks:
 credential theft, poisoned pipeline execution, artifact handling, and cache or
 tooling state crossing into release or package publishing.
 
-Do not use `actions/cache` or Docker Buildx `type=gha` cache in jobs that publish
-packages, containers, attestations, or GitHub Releases. Release and publishing
-jobs must rebuild trusted inputs from pinned refs or verified checksums instead
-of restoring mutable cache state.
+Do not use `actions/cache`, Docker Buildx `type=gha` cache, restore keys, or
+workflow cache-key namespaces in any repository workflow. Workflows must rebuild
+trusted inputs from pinned refs or verified checksums instead of restoring
+mutable cache state.
 
 Publishing jobs must download artifacts by explicit `name:` or constrained
 `pattern:` and validate the expected artifact set before packaging, attestation,
