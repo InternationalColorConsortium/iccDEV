@@ -30,12 +30,6 @@ permissions:
 on:
   workflow_call:
   workflow_dispatch:
-    inputs:
-      validate_cache_policy_only:
-        description: "Only validate that this workflow does not use Actions cache primitives"
-        required: false
-        default: true
-        type: boolean
 
 concurrency:
   group: pr-wasm-${{ github.event.pull_request.number || github.ref }}
@@ -73,7 +67,6 @@ jobs:
   wasm-build-and-validate:
     name: "WASM Release Build + Parity"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
