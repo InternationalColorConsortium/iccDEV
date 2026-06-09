@@ -606,6 +606,11 @@ message(STATUS "GNU Install Include Dir: ${CMAKE_INSTALL_INCLUDEDIR}")
 message(STATUS "GNU Install Library Dir: ${CMAKE_INSTALL_LIBDIR}")
 message(STATUS "GNU Install CMake Dir  : ${CMAKE_INSTALL_DATAROOTDIR}/cmake")
 
+set(CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/${PACKAGE_NAME}" CACHE PATH "Documentation install directory")
+set(ICCDEV_RUNTIME_COMPONENT runtime)
+set(ICCDEV_DEVELOPMENT_COMPONENT dev)
+set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "${ICCDEV_RUNTIME_COMPONENT}")
+
 # ----------------------------------------------------------------------
 # Build Feature Toggles
 # ----------------------------------------------------------------------
@@ -1043,19 +1048,23 @@ endif()
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
   # Top-level project: full install/build mode
   option(ENABLE_INSTALL_RIM "Enable install target for RefIccMAX." ON)
+  option(ENABLE_CPACK_PACKAGING "Enable CPack native packages and portable archives." ON)
   if(VERBOSE_CONFIG)
     message(STATUS "RefIccMAX is being built as a top-level project.")
     message(STATUS "ENABLE_INSTALL_RIM      = ${ENABLE_INSTALL_RIM}")
+    message(STATUS "ENABLE_CPACK_PACKAGING  = ${ENABLE_CPACK_PACKAGING}")
   endif()
 else()
   # Subproject: disable install to avoid polluting parent build
   set(ENABLE_INSTALL_RIM OFF CACHE BOOL "Install disabled in subproject mode" FORCE)
+  set(ENABLE_CPACK_PACKAGING OFF CACHE BOOL "Packaging disabled in subproject mode" FORCE)
   set(ENABLE_STATIC_LIBS ON  CACHE BOOL "Force static linking in subproject" FORCE)
   set(ENABLE_SHARED_LIBS OFF CACHE BOOL "Disable shared libs in subproject" FORCE)
 
   if(VERBOSE_CONFIG)
     message(STATUS "RefIccMAX included as subproject - installation is disabled.")
     message(STATUS "ENABLE_INSTALL_RIM      = ${ENABLE_INSTALL_RIM}")
+    message(STATUS "ENABLE_CPACK_PACKAGING  = ${ENABLE_CPACK_PACKAGING}")
     message(STATUS "ENABLE_STATIC_LIBS      = ${ENABLE_STATIC_LIBS}")
     message(STATUS "ENABLE_SHARED_LIBS      = ${ENABLE_SHARED_LIBS}")
   endif()
@@ -1698,49 +1707,24 @@ IF( NOT CMAKE_SYSTEM_NAME MATCHES Darwin )
 ENDIF()
 MESSAGE( "Configured ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION_FULL}" )
 
-ADD_CUSTOM_TARGET( dist-bin
-    COMMAND test -d bin-temp && rm -rv bin-temp || echo "start fresh"
-    COMMAND mkdir bin-temp && cd bin-temp && cmake -DENABLE_STATIC_LIBS=ON -DENABLE_SHARED_LIBS=OFF ${CMAKE_SOURCE_DIR} && make -j8 && make dist-bin2
-    COMMAND ls -l bin-temp/${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing
-    COMMAND echo "Dependencies for iccTiffDump:"
-    COMMAND test ${CMAKE_SYSTEM_NAME} = Linux && ldd bin-temp/${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/iccTiffDump || echo ""
-    COMMAND test ${CMAKE_SYSTEM_NAME} = Darwin && otool -L bin-temp/${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/iccTiffDump || echo ""
-    COMMAND rm -r bin-temp
-    COMMAND tar tzvf ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}.tar.gz
-    COMMAND echo "We are in:"
-    COMMAND pwd
-    COMMAND ls -l ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}.tar.gz
-    COMMENT Make a ${PROJECT_NAME} binary package
-    VERBATIM
-    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-    )
+set(ICCDEV_DIST_NAME "${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION_FULL}")
+set(ICCDEV_DIST_STAGE "${CMAKE_CURRENT_BINARY_DIR}/dist-bin-stage")
+set(ICCDEV_DIST_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/${ICCDEV_DIST_NAME}.tar.gz")
+set(ICCDEV_INSTALL_CONFIG_ARGS "")
+if(_is_multi_config)
+  list(APPEND ICCDEV_INSTALL_CONFIG_ARGS --config $<CONFIG>)
+endif()
 
-ADD_CUSTOM_TARGET( dist-bin2
-    DEPENDS check
-    COMMAND mkdir -p ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyNamedCmm ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyProfiles ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplySearch ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccApplyToLink ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccDumpProfile ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccDumpProfileGui ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/ || echo ""
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccFromXML ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccFromCube ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccToXml ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccRoundTrip ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccSpecSepToTiff ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccTiffDump ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccPngDump ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccV5DspObsToV4Dsp ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/iccProfileVisualize ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/CreateAllProfiles.sh ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND cp -av ${CMAKE_SOURCE_DIR}/../../Testing/RunTests.sh ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/Testing/
-    COMMAND echo tar cf - ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/ --owner user:1000 --group group:500 | gzip -9 > ../${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}.tar.gz
-    COMMAND tar cf - ${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}/ ${GNUTAR_OPTS} | gzip -9 > ../${PROJECT_NAME}-${CMAKE_SYSTEM_NAME}${ARCH}-${${PROJECT_UP_NAME}_VERSION}.tar.gz
-                COMMENT Helper for making a ${PROJECT_NAME} binary package
-                VERBATIM
-                WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-                )
+ADD_CUSTOM_TARGET( dist-bin
+    COMMAND ${CMAKE_COMMAND} -E rm -rf "${ICCDEV_DIST_STAGE}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${ICCDEV_DIST_STAGE}"
+    COMMAND ${CMAKE_COMMAND} --install "${CMAKE_CURRENT_BINARY_DIR}" ${ICCDEV_INSTALL_CONFIG_ARGS} --prefix "${ICCDEV_DIST_STAGE}/${ICCDEV_DIST_NAME}" --component "${ICCDEV_RUNTIME_COMPONENT}"
+    COMMAND ${CMAKE_COMMAND} -E chdir "${ICCDEV_DIST_STAGE}" ${CMAKE_COMMAND} -E tar "czf" "${ICCDEV_DIST_ARCHIVE}" "${ICCDEV_DIST_NAME}"
+    COMMAND ${CMAKE_COMMAND} -DICCDEV_SHA256_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/SHA256SUMS -DICCDEV_SHA256_FILES=${ICCDEV_DIST_ARCHIVE} -P "${CMAKE_CURRENT_SOURCE_DIR}/Packaging/WriteSha256Sums.cmake"
+    COMMAND ${CMAKE_COMMAND} -E tar "tf" "${ICCDEV_DIST_ARCHIVE}"
+    COMMENT "Create runtime-only ${PROJECT_NAME} archive without the Testing tree"
+    VERBATIM
+)
 
 #
 # Misc.
@@ -1765,14 +1749,14 @@ IF(ENABLE_INSTALL_RIM)
   INSTALL ( FILES
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-                DESTINATION ${CMAKE_MODULES_INSTALL_DIR} COMPONENT dev
+                DESTINATION ${CMAKE_MODULES_INSTALL_DIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT}
         )
 
   # Install exported targets file alongside the Config
   INSTALL( EXPORT RefIccMAXTargets
            NAMESPACE RefIccMAX::
            DESTINATION ${CMAKE_MODULES_INSTALL_DIR}
-           COMPONENT dev
+           COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT}
   )
 ENDIF(ENABLE_INSTALL_RIM)
 
@@ -1781,3 +1765,7 @@ export( EXPORT RefIccMAXTargets
         NAMESPACE RefIccMAX::
         FILE "${CMAKE_CURRENT_BINARY_DIR}/RefIccMAXTargets.cmake"
 )
+
+if(ENABLE_CPACK_PACKAGING AND ENABLE_INSTALL_RIM)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/Packaging/RefIccMAXCPack.cmake")
+endif()

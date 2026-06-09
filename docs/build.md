@@ -191,6 +191,22 @@ cmake --build out/vs2022-x64 --config Release --target check
 See [CTest tool suites](ctest.md) for the registered tests, fixtures, logs, and
 add-test process.
 
+## Runtime packaging
+
+CPack is enabled for top-level builds. Build native packages from a dynamic
+Release configuration:
+
+```bash
+cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED_LIBS=ON
+cmake --build Build --parallel "$(nproc)"
+cmake --build Build --target package-sha256
+```
+
+Linux emits `.deb`, `.rpm`, `.zip`, and `SHA256SUMS`. The legacy `dist-bin`
+target now creates a runtime-only archive from the install component and does
+not copy `Testing/`. Release construction in `ci-latest-release` stages flat
+portable archives plus native Linux packages.
+
 ## Instrumentation Builds
 
 Use CMake options instead of hand-written sanitizer flags. Clean the cache when

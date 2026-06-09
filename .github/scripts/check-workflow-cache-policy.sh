@@ -63,6 +63,8 @@ for workflow in "${workflow_files[@]}"; do
     }
     /^[[:space:]]*-?[[:space:]]*uses:[[:space:]]*actions\/cache@/ ||
     /^[[:space:]]*cache-(from|to):[[:space:]]*type=gha/ ||
+    /^[[:space:]]*restore-keys:/ ||
+    /^[[:space:]]*key:[[:space:]]*.*(cache|msys2-pkgs)/ ||
     /^[[:space:]]*cache-dependency-path:[[:space:]]*/ ||
     (/^[[:space:]]*cache:[[:space:]]*/ && $0 !~ /^[[:space:]]*cache:[[:space:]]*false([[:space:]]*(#.*)?)?$/) ||
     (/^[[:space:]]*cache-binary:[[:space:]]*/ && $0 !~ /^[[:space:]]*cache-binary:[[:space:]]*false([[:space:]]*(#.*)?)?$/) ||

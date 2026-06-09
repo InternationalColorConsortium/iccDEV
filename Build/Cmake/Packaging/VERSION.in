@@ -1,0 +1,10 @@
+name=@PACKAGE_NAME@
+project=@PROJECT_NAME@
+version=@REFICCMAX_VERSION@
+git_sha=@GIT_COMMIT_HASH@
+build_date_utc=@ICCDEV_BUILD_DATE_UTC@
+platform=@CMAKE_SYSTEM_NAME@
+arch=@ICCDEV_PACKAGE_ARCH@
+build_type=@ICCDEV_PACKAGE_BUILD_TYPE@
+shared_libs=@ENABLE_SHARED_LIBS@
+static_libs=@ENABLE_STATIC_LIBS@

@@ -81,6 +81,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -142,6 +143,7 @@ jobs:
           cd Build
           cmake -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
                 -DCMAKE_BUILD_TYPE=Release \
+                -DICCDEV_PACKAGE_FLAVOR="${MATRIX_COMPILER}" \
                 -Wno-dev Cmake/
       - name: Build
         shell: bash --noprofile --norc {0}
@@ -169,77 +171,63 @@ jobs:
             echo "::error ::Build failed! CMakeCache.txt not found." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-      - name: Stage bundle into Testing directory
+      - name: Stage minimal runtime bundle and CPack assets
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          stage="staging/iccDEV-Testing"
+          stage="staging/iccdev-linux-${MATRIX_COMPILER}"
+          rm -rf staging
           mkdir -p "$stage"
-          # 1. Copy Testing contents (exclude Fuzzing)
-          for item in Testing/*; do
-            [ "$(basename "$item")" = "Fuzzing" ] && continue
-            cp -a "$item" "$stage/"
-          done
-          # 2. Copy tool binaries and libraries from build
-          find Build/Tools -type f \( -perm -u+x -o -name '*.so*' -o -name '*.a' \) \
+          # Copy tool binaries and runtime libraries only; do not ship Testing/.
+          find Build/Tools -type f \( -perm -u+x -o -name "*.so*" -o -name "*.a" \) \
             -exec cp -a {} "$stage/" \;
-          find Build/IccProfLib -type f -name '*.so*' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccProfLib -type l -name '*.so*' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccXML -type f -name '*.so*' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccXML -type l -name '*.so*' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccJSON -type f -name '*.so*' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccJSON -type l -name '*.so*' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
-          cp Testing/Readme.md  "$stage/"
+          for libdir in Build/IccProfLib Build/IccXML Build/IccJSON Build/IccConnect; do
+            find "$libdir" -type f -name "*.so*" -exec cp -a {} "$stage/" \; 2>/dev/null || true
+            find "$libdir" -type l -name "*.so*" -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          done
           cp LICENSE.md "$stage/"
-          cp -a docs    "$stage/docs"
-          # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
-          printf '%s\n' \
-            "#!/bin/sh" \
-            "# Resolve the directory where this script lives" \
-            "if [ -n \"\${BASH_SOURCE:-}\" ]; then" \
-            "  SCRIPT_DIR=\"\$(cd \"\$(dirname \"\${BASH_SOURCE[0]}\")\" && pwd)\"" \
-            "else" \
-            "  SCRIPT_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"" \
-            "fi" \
-            "export PATH=\"\$SCRIPT_DIR:\$PATH\"" \
-            "export LD_LIBRARY_PATH=\"\$SCRIPT_DIR\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}\"" \
-            "for d in \"\$SCRIPT_DIR\"/*/; do" \
-            "  [ -d \"\$d\" ] && export PATH=\"\$d:\$PATH\"" \
-            "done" \
-            "echo \"PATH and LD_LIBRARY_PATH updated.\"" \
-            "echo \"Tools directory: \$SCRIPT_DIR\"" \
-            > "$stage/path.sh"
-          chmod +x "$stage/path.sh"
+          cp Build/Packaging/README.md "$stage/"
+          cp Build/Packaging/VERSION "$stage/"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
+          {
+            echo "# RefIccMAX tool catalog"
+            echo ""
+            echo "Generated from staged executables."
+            echo ""
+            find "$stage" -maxdepth 1 -type f -executable ! -name "*.*" -printf "- \`%f\`\\n" | sort
+          } > "$stage/TOOL-CATALOG.md"
+          cmake --build Build --target package-sha256 --parallel "$(nproc)"
+          mkdir -p staging/cpack
+          find Build -maxdepth 1 -type f \( -name "*.deb" -o -name "*.rpm" -o -name "*.zip" -o -name "SHA256SUMS" \) \
+            -exec cp -a {} staging/cpack/ \;
+          if find staging -path "*Testing*" -print -quit | grep -q .; then
+            echo "::error::Release staging unexpectedly contains Testing/"
+            exit 1
+          fi
           # Summary of staged bundle contents
           total=$(find "$stage" -type f | wc -l)
           echo ""
           echo "===== Staged Bundle Contents ($total files) ====="
-          for ext in so 'so.*' a icc md; do
+          for ext in so "so.*" a icc md; do
             count=$(find "$stage" -maxdepth 1 \( -type f -o -type l \) -name "*.$ext" | wc -l)
             if [ "$count" -gt 0 ]; then
               echo ""
               echo "--- *.$ext ($count) ---"
-              find "$stage" -maxdepth 1 \( -type f -o -type l \) -name "*.$ext" -printf '  %f  (%k KB)\n'
+              find "$stage" -maxdepth 1 \( -type f -o -type l \) -name "*.$ext" -printf "  %f  (%k KB)\\n"
             fi
           done
           # List executables (ELF binaries without extension)
-          exes=$(find "$stage" -maxdepth 1 -type f -executable ! -name '*.*' | wc -l)
+          exes=$(find "$stage" -maxdepth 1 -type f -executable ! -name "*.*" | wc -l)
           if [ "$exes" -gt 0 ]; then
             echo ""
             echo "--- executables ($exes) ---"
-            find "$stage" -maxdepth 1 -type f -executable ! -name '*.*' -printf '  %f  (%k KB)\n'
+            find "$stage" -maxdepth 1 -type f -executable ! -name "*.*" -printf "  %f  (%k KB)\\n"
           fi
           echo ""
           echo "Total: $total files staged into $stage"
@@ -324,6 +312,7 @@ jobs:
           export LDFLAGS="-L${libpng_prefix}/lib -L${jpeg_turbo_prefix}/lib"
           cmake -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
                 -DCMAKE_BUILD_TYPE=Release \
+                -DICCDEV_PACKAGE_FLAVOR=clang \
                 -DJPEG_LIBRARY="${jpeg_turbo_prefix}/lib/libjpeg.dylib" \
                 -DJPEG_INCLUDE_DIR="${jpeg_turbo_prefix}/include" \
                 -Wno-dev Cmake/
@@ -343,7 +332,7 @@ jobs:
           make -j"$(sysctl -n hw.ncpu)"
           echo "Build process completed."
 
-      - name: Stage bundle into Testing directory
+      - name: Stage minimal runtime bundle
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
@@ -352,52 +341,33 @@ jobs:
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          stage="staging/iccDEV-Testing"
+          stage="staging/iccdev-macos-clang"
+          rm -rf staging
           mkdir -p "$stage"
-          # 1. Copy Testing contents (exclude Fuzzing)
-          for item in Testing/*; do
-            [ "$(basename "$item")" = "Fuzzing" ] && continue
-            cp -a "$item" "$stage/"
-          done
-          # 2. Copy tool binaries and libraries from build
-          find Build/Tools -type f \( -perm -u+x -o -name '*.dylib' -o -name '*.a' \) \
+          # Copy tool binaries and runtime libraries only; do not ship Testing/.
+          find Build/Tools -type f \( -perm -u+x -o -name "*.dylib" -o -name "*.a" \) \
             -exec cp -a {} "$stage/" \;
-          find Build/IccProfLib -type f -name '*.dylib' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccProfLib -type l -name '*.dylib' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccXML -type f -name '*.dylib' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccXML -type l -name '*.dylib' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccJSON -type f -name '*.dylib' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          find Build/IccJSON -type l -name '*.dylib' \
-            -exec cp -a {} "$stage/" \; 2>/dev/null || true
-          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
-          cp Testing/Readme.md  "$stage/"
+          for libdir in Build/IccProfLib Build/IccXML Build/IccJSON Build/IccConnect; do
+            find "$libdir" -type f -name "*.dylib" -exec cp -a {} "$stage/" \; 2>/dev/null || true
+            find "$libdir" -type l -name "*.dylib" -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          done
           cp LICENSE.md "$stage/"
-          cp -a docs    "$stage/docs"
-          # 4. Generate path.sh helper script (POSIX-compatible, resolves from script location)
-          printf '%s\n' \
-            "#!/bin/sh" \
-            "# Resolve the directory where this script lives" \
-            "if [ -n \"\${BASH_SOURCE:-}\" ]; then" \
-            "  SCRIPT_DIR=\"\$(cd \"\$(dirname \"\${BASH_SOURCE[0]}\")\" && pwd)\"" \
-            "else" \
-            "  SCRIPT_DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"" \
-            "fi" \
-            "export PATH=\"\$SCRIPT_DIR:\$PATH\"" \
-            "export DYLD_LIBRARY_PATH=\"\$SCRIPT_DIR\${DYLD_LIBRARY_PATH:+:\$DYLD_LIBRARY_PATH}\"" \
-            "for d in \"\$SCRIPT_DIR\"/*/; do" \
-            "  [ -d \"\$d\" ] && export PATH=\"\$d:\$PATH\"" \
-            "done" \
-            "echo \"PATH and DYLD_LIBRARY_PATH updated.\"" \
-            "echo \"Tools directory: \$SCRIPT_DIR\"" \
-            > "$stage/path.sh"
-          chmod +x "$stage/path.sh"
+          cp Build/Packaging/README.md "$stage/"
+          cp Build/Packaging/VERSION "$stage/"
+          cp Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md "$stage/"
+          {
+            echo "# RefIccMAX tool catalog"
+            echo ""
+            echo "Generated from staged executables."
+            echo ""
+            find "$stage" -maxdepth 1 -type f -perm -111 ! -name "*.*" -exec basename {} \; | sort | sed "s/.*/- \`&\`/"
+          } > "$stage/TOOL-CATALOG.md"
+          if find staging -path "*Testing*" -print -quit | grep -q .; then
+            echo "::error::Release staging unexpectedly contains Testing/"
+            exit 1
+          fi
           # Normalize Mach-O library references for the portable release bundle.
-          find "$stage" -maxdepth 1 -type f \( -perm -111 -o -name '*.dylib' \) -print | sort |
+          find "$stage" -maxdepth 1 -type f \( -perm -111 -o -name "*.dylib" \) -print | sort |
           while IFS= read -r target; do
             target_base="$(basename "$target")"
             case "$target_base" in
@@ -610,7 +580,7 @@ jobs:
           tar -xf deps.zip
           cd Build/Cmake
           Write-Host "========= Building... ================`n"
-          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Release  -Wno-dev
+          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Release -DICCDEV_PACKAGE_FLAVOR=msvc -Wno-dev
           cmake --build build --config Release -- /m /maxcpucount
           cmake --build build --config Release -- /m /maxcpucount
           $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
@@ -622,7 +592,7 @@ jobs:
           $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
           $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
           $env:PATH -split ';'
-      - name: Stage bundle into Testing directory
+      - name: Stage minimal runtime bundle
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
           git config --global credential.helper ""
@@ -630,53 +600,30 @@ jobs:
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
-          $stage = "staging/iccDEV-Testing"
+          $stage = "staging/iccdev-windows-msvc"
+          if (Test-Path "staging") {
+            Remove-Item -Path "staging" -Recurse -Force
+          }
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          # 1. Copy the entire Testing directory contents (exclude Fuzzing)
-          Get-ChildItem -Path "Testing" -Exclude "Fuzzing" |
-            Copy-Item -Destination $stage -Recurse -Force
-          # 2. Copy .exe and library files from the build (no .pdb in Release)
+          # Copy command-line tools and co-located runtime libraries only.
           Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.exe,*.dll,*.lib |
             Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
             ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
-          # 3. Copy Testing/Readme.md, LICENSE.md and docs/
-          Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
-          Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
-          # 4. Copy full IIS sample tree (web.config, html/css/js, assets/, all ps1 helpers)
-          #    under staging/iccDEV-Testing/IccIisIsapi/ so web.config + demo pages
-          #    resolve relative to the installed ISAPI extension.
-          $iisSrc = "Tools/Winnt/IccIisIsapi"
-          if (Test-Path $iisSrc) {
-            $iisDst = Join-Path $stage "IccIisIsapi"
-            New-Item -ItemType Directory -Force -Path $iisDst | Out-Null
-            # skip source files (*.cpp/*.h/*.def) and build outputs that are
-            # already captured by the flat DLL/EXE sweep above
-            Get-ChildItem -Path $iisSrc -Force -Exclude '*.cpp','*.h','*.def' |
-              Copy-Item -Destination $iisDst -Recurse -Force
-            # Back-compat: also keep Install-IccIisIsapiSite.ps1 at the stage
-            # root (existing docs reference that path).
-            $iisInstaller = Join-Path $iisSrc "Install-IccIisIsapiSite.ps1"
-            if (Test-Path $iisInstaller) {
-              Copy-Item -Path $iisInstaller -Destination $stage -Force
-            }
+          Copy-Item -Path "Build/Cmake/build/Packaging/README.md" -Destination $stage -Force
+          Copy-Item -Path "Build/Cmake/build/Packaging/VERSION" -Destination $stage -Force
+          Copy-Item -Path "Build/Cmake/Packaging/THIRD-PARTY-NOTICES.md" -Destination $stage -Force
+          $catalog = @("# RefIccMAX tool catalog", "", "Generated from staged executables.", "")
+          $catalog += Get-ChildItem -Path $stage -File -Filter *.exe |
+            Sort-Object Name |
+            ForEach-Object { "- ``$($_.Name)``" }
+          $catalog | Set-Content -Path "$stage/TOOL-CATALOG.md" -Encoding ASCII
+          $testingPath = Get-ChildItem -Path "staging" -Recurse -Force |
+            Where-Object { $_.FullName -match '\\Testing(\\|$)' } |
+            Select-Object -First 1
+          if ($testingPath) {
+            throw "Release staging unexpectedly contains Testing: $($testingPath.FullName)"
           }
-          # 5. Generate path.bat helper script
-          @'
-          @echo off
-          setlocal EnableDelayedExpansion
-          set "SCRIPT_DIR=%~dp0"
-          if "!SCRIPT_DIR:~-1!"=="\" set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"
-          :: Build new PATH with script dir and all subdirs containing .exe
-          set "NEW_PATH=!SCRIPT_DIR!;!PATH!"
-          for /R "!SCRIPT_DIR!" %%F in (*.exe) do (
-              set "dir=%%~dpF"
-              if "!dir:~-1!"=="\" set "dir=!dir:~0,-1!"
-              echo !NEW_PATH! | findstr /I /C:"!dir!" >nul || set "NEW_PATH=!dir!;!NEW_PATH!"
-          )
-          :: Export PATH back to caller via endlocal trick
-          endlocal & set "PATH=%NEW_PATH%"
-          '@ | Set-Content -Path "$stage/path.bat" -Encoding ASCII
           # Summary of staged bundle contents
           $allFiles = Get-ChildItem -Path $stage -Recurse -File
           $count = $allFiles.Count
@@ -1270,7 +1217,11 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm]
-    if: ${{ github.ref == 'refs/heads/master' }}
+    if: >-
+      ${{
+        (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-mod-packaging') &&
+        (github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true)
+      }}
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 15
@@ -1361,7 +1312,14 @@ jobs:
             [ -d "$dir" ] || continue
             name="$(basename "$dir")"
             echo "--- Packaging $name ---"
+            if [ -d "$dir/cpack" ]; then
+              find "$dir/cpack" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' \) -print0 |
+                while IFS= read -r -d '' package_asset; do
+                  cp -a "$package_asset" "release-assets/$(basename "$package_asset")"
+                done
+            fi
             (cd "$dir" && zip -r "../../release-assets/${name}.zip" . \
+              -x './cpack/*' \
               -x './binary-hardening.md' \
               -x './binary-inventory.csv' \
               -x './failures.txt' \
@@ -1405,17 +1363,17 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          if ! compgen -G "release-assets/*.zip" >/dev/null; then
-            echo "::error::No release zip files found for checksum generation"
+          if ! find release-assets -maxdepth 1 -type f \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) -print -quit | grep -q .; then
+            echo "::error::No release archives or native packages found for checksum generation"
             exit 1
           fi
 
           (
             cd release-assets
-            find . -maxdepth 1 -type f -name '*.zip' -printf '%P\0' \
+            find . -maxdepth 1 -type f \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) -printf '%P\0' \
               | sort -z \
               | xargs -0 sha256sum > SHA256SUMS
-            find . -maxdepth 1 -type f -name '*.zip' -printf '%P\0' \
+            find . -maxdepth 1 -type f \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) -printf '%P\0' \
               | sort -z \
               | xargs -0 sha512sum > SHA512SUMS
           )
@@ -1423,7 +1381,7 @@ jobs:
           {
             echo "### Release Checksums"
             echo ""
-            echo "Generated \`SHA256SUMS\` and \`SHA512SUMS\` for release zip assets."
+            echo "Generated \`SHA256SUMS\` and \`SHA512SUMS\` for release assets."
             echo ""
             echo '```'
             sed -n '1,20p' release-assets/SHA256SUMS | while IFS= read -r line; do
@@ -1473,6 +1431,7 @@ jobs:
             echo "|----------|---------|"
             echo "| Linux (GCC) | \`iccdev-linux-gcc.zip\` |"
             echo "| Linux (Clang) | \`iccdev-linux-clang.zip\` |"
+            echo "| Linux native packages | \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"
             echo "| macOS (Clang) | \`iccdev-macos-clang.zip\` |"
             echo "| Windows (MSVC) | \`iccdev-windows-msvc.zip\` |"
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
@@ -1497,9 +1456,7 @@ jobs:
           } > "$body_file"
 
           gh release create "$release_tag" \
-            release-assets/*.zip \
-            release-assets/SHA256SUMS \
-            release-assets/SHA512SUMS \
+            release-assets/* \
             --repo "$GH_REPOSITORY" \
             --target "$GH_SHA" \
             --title "Latest Build" \
