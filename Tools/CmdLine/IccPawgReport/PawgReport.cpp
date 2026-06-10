@@ -739,7 +739,7 @@ bool ValidateElf(const RawProfile &raw, size_t offset, size_t end)
 
   // e_type: NONE/REL/EXEC/DYN/CORE (0-4), or the OS/processor-specific reserved
   // ranges (0xfe00-0xffff). e_version must be EV_CURRENT.
-  const bool typeOk = eType <= 4 || (eType >= 0xfe00 && eType <= 0xffff);
+  const bool typeOk = eType <= 4 || (eType >= 0xfe00);  // && eType <= 0xffff implied by data type
   return typeOk && eVersion == 1;
 }
 

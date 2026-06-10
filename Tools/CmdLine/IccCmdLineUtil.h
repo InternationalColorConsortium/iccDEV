@@ -142,7 +142,7 @@ inline std::string icSanitizeFileName(const char* szText)
       result += "T";
       break;
     default:
-      if (ch < 0x20 || (ch >= 0x7f && ch <= 0xff)) {
+      if (ch < 0x20 || (ch >= 0x7f)) {  // && <= 0xFF implied by data type
         result += "_";
       }
       else {
