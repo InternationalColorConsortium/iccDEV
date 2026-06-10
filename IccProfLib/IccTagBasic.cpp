@@ -1012,7 +1012,7 @@ bool CIccTagUtf8Text::Read(icUInt32Number size, CIccIO *pIO)
 {
   icTagTypeSignature sig;
 
-  if (size<sizeof(icTagTypeSignature) || !pIO) {
+  if (size < (sizeof(icTagTypeSignature)+ sizeof(icUInt32Number)) || !pIO) {
     m_szText[0] = '\0';
     return false;
   }
@@ -1021,9 +1021,6 @@ bool CIccTagUtf8Text::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   if (!pIO->Read32(&m_nReserved))
-    return false;
-
-  if (size < sizeof(icTagTypeSignature) + sizeof(icUInt32Number))
     return false;
 
   size_t nSize = size - sizeof(icTagTypeSignature) - sizeof(icUInt32Number);
@@ -1368,7 +1365,7 @@ bool CIccTagZipUtf8Text::Read(icUInt32Number size, CIccIO *pIO)
 {
   icTagTypeSignature sig;
 
-  if (size<sizeof(icTagTypeSignature) || !pIO) {
+  if (size < (sizeof(icTagTypeSignature) + sizeof(icUInt32Number)) || !pIO) {
     AllocBuffer(0);
     return false;
   }
