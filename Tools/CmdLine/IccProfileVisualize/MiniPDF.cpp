@@ -185,7 +185,6 @@ void PDFWriter::CloseFile()
             return;
           }
 
-          m_objects.clear();
         }
         catch (const std::exception& e) {
           LogAnError(stderr, "PDF writing error in '%s': '%s'\n", m_filename.c_str(), e.what() );
@@ -197,7 +196,7 @@ void PDFWriter::CloseFile()
     m_filename.clear();
   }
 
-  // cleanup all the allocated objects
+  // always cleanup all of the allocated objects
   for (auto &obj: m_objects ) {
     delete obj;
     obj = NULL;
