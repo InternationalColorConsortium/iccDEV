@@ -2022,7 +2022,7 @@ void CIccTagUtf16Text::SetText(const icUChar16 *szText)
   for (n=0; szText[n]; n++);
 
   icUInt32Number len=n + 1;
-  icUChar16 *szBuf = GetBuffer(len);
+  icUChar16 *szBuf = GetBuffer(len);  // this internally allocates m_szText
 
   memcpy(szBuf, szText, len*sizeof(icUChar16));
   Release();
@@ -2047,7 +2047,8 @@ void CIccTagUtf16Text::SetText(const icUChar *szText)
   }
 
   icUtf16Vector str;
-  icConvertUTF8toUTF16(szText, szText+strlen((icChar*)szText)+1, str, lenientConversion);
+  size_t inputLen = strlen((icChar*)szText);
+  icConvertUTF8toUTF16(szText, szText+inputLen+1, str, lenientConversion);
 
   int pos = 0;
   if (str[0]==0xfeff) {
@@ -2055,10 +2056,10 @@ void CIccTagUtf16Text::SetText(const icUChar *szText)
   }
 
   icUInt32Number nSize = (icUInt32Number)(str.size()-pos);
-  //icUChar16 *szBuf = GetBuffer(nSize);      // ERROR - value unused! is the memcpy correct?
+  icUChar16 *szBuf = GetBuffer(nSize);  // this internally allocates m_szText
 
   if (nSize)
-    memcpy(m_szText, &str[pos], nSize*sizeof(icUChar));
+    memcpy(szBuf, &str[pos], nSize*sizeof(icUChar16));
   Release();
 }
 
