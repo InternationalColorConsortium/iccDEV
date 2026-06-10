@@ -11013,7 +11013,12 @@ bool CIccTagResponseCurveSet16::Read(icUInt32Number size, CIccIO *pIO)
   CIccResponseCurveStruct entry;
 
   for (icUInt16Number i=0; i<nCountMeasmntTypes; i++) {
-    if (nOffset[i] + 4 > size) {
+    if ( (nOffset[i] + (size_t)4) > size) {
+      delete[] nOffset;
+      return false;
+    }
+    size_t offsetCalc = startPos + nOffset[i];
+    if (offsetCalc > size || offsetCalc > 0xFFFFFFFFULL) {
       delete[] nOffset;
       return false;
     }
