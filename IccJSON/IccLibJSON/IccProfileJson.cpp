@@ -381,6 +381,11 @@ bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
                                KeyToSignatureMap &keyToSig,
                                std::string &parseStr)
 {
+  if (key.empty()) {
+    parseStr += "Tag entry has empty name\n";
+    return false;
+  }
+
   // Determine tag signature from the key name
   icTagSignature sig = CIccTagCreator::GetTagNameSig(key.c_str());
   if (sig == icSigUnknownTag) {

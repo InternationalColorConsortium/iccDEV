@@ -488,7 +488,10 @@ const icChar* CIccSpecTagFactory::GetTagSigName(icTagSignature tagSig)
 
 icTagSignature CIccSpecTagFactory::GetTagNameSig(const icChar *szName)
 {
-  if (g_TagSigToNameMap.empty()) {
+  if (!szName || !szName[0])
+    return icSigUnknownTag;
+
+  if (g_TagNameToSigMap.empty()) {
     for (int i = 0; g_icTagNameTable[i].sig; i++)
       g_TagNameToSigMap[g_icTagNameTable[i].szName] = g_icTagNameTable[i].sig;
     for (int i = 0; g_icAltTagNameTable[i].sig; i++)
@@ -516,6 +519,9 @@ const icChar* CIccSpecTagFactory::GetTagTypeSigName(icTagTypeSignature typeSig)
 
 icTagTypeSignature CIccSpecTagFactory::GetTagTypeNameSig(const icChar *szName)
 {
+  if (!szName || !szName[0])
+    return icSigUnknownType;
+
   if (g_TagTypeNameToSigMap.empty()) {
     for (int i = 0; g_icTagTypeNameTable[i].sig; i++)
       g_TagTypeNameToSigMap[g_icTagTypeNameTable[i].szName] = g_icTagTypeNameTable[i].sig;

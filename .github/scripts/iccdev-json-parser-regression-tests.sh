@@ -161,6 +161,46 @@ run_xml_reject_test() {
   PASS=$((PASS + 1))
 }
 
+run_fromjson_success_test() {
+  local name="$1"
+  local json_file="$2"
+  local output_file="$OUTDIR/${name}.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$output_file" "$logfile"
+
+  timeout 30 "$FROMJSON" "$json_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -eq 124 ]; then
+    echo "  [FAIL] $name -- timed out"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ge 129 ] && [ "$exit_code" -le 192 ]; then
+    echo "  [FAIL] $name -- crashed with signal $((exit_code - 128))"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+    echo "  [FAIL] $name -- iccFromJson failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccFromJson completed without sanitizer findings)"
+  PASS=$((PASS + 1))
+}
+
 run_tojson_success_test() {
   local name="$1"
   local icc_file="$2"
@@ -457,6 +497,39 @@ write("struct-bad-member", {
     "structureSignature": "tst1",
     "memberTags": [{"badMember": {"sig": "abcd"}}]
 })
+
+write("utf16-short-text", {
+    "type": "utf16Type",
+    "text": "AA"
+})
+
+def write_tag_entry(name, entry):
+    doc = copy.deepcopy(base)
+    doc["IccProfile"]["Tags"].append(entry)
+    with open(os.path.join(outdir, name + ".json"), "w", encoding="utf-8") as f:
+        json.dump(doc, f, indent=2)
+
+write_tag_entry("empty-tag-name", {
+    "": {
+        "sig": "ZZE1",
+        "data": {
+            "type": "utf16Type",
+            "text": ""
+        }
+    }
+})
+
+write("struct-empty-member-name", {
+    "type": "tagStructType",
+    "structureType": "brdfTransformStructure",
+    "memberTags": [{
+        "": {
+            "sig": "abcd",
+            "type": "utf16Type",
+            "text": ""
+        }
+    }]
+})
 ' "$BASE_JSON" "$OUTDIR"
 
 XML_MATRIX_HUGE="$OUTDIR/xml-matrix-huge-channels.xml"
@@ -557,6 +630,9 @@ run_reject_test "spectral-white-short" "$OUTDIR/spectral-white-short.json" "whit
 run_reject_test "spectral-matrix-huge-channels" "$OUTDIR/spectral-matrix-huge-channels.json" "Invalid inputChannels or outputChannels in spectral matrix element"
 run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "offsetData count does not match spectral element size"
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
+run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
+run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
+run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"

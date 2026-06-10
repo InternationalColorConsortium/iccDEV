@@ -2051,6 +2051,12 @@ void CIccTagUtf16Text::SetText(const icUChar *szText)
   size_t inputLen = strlen((icChar*)szText);
   icConvertUTF8toUTF16(szText, szText+inputLen+1, str, lenientConversion);
 
+  if (str.empty()) {
+    icUChar16 c=0;
+    SetText(&c);
+    return;
+  }
+
   int pos = 0;
   if (str[0]==0xfeff) {
     pos = 1;

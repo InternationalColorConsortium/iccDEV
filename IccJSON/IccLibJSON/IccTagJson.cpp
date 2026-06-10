@@ -2783,6 +2783,11 @@ bool CIccTagJsonStruct::ParseTag(const IccJson &elemEntry, std::string &parseStr
   const std::string &key     = it.key();
   const IccJson     &elemObj = it.value();
 
+  if (key.empty()) {
+    parseStr += "MemberTag entry has empty name\n";
+    return false;
+  }
+
   // Determine element signature
   IIccStruct *pStruct = GetStructHandler();
   icSignature sigElem = pStruct ? pStruct->GetElemSig(key.c_str()) : (icSignature)0;
