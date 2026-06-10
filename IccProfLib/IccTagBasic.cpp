@@ -78,6 +78,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <new>
+#include <climits>
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfile.h"
@@ -5354,7 +5355,7 @@ icValidateStatus CIccTagSparseMatrixArray::Validate(std::string sigPath, std::st
   if (!m_RawData) {
     sReport += icMsgValidateCriticalError;
     sReport += sSigPathName;
-    sReport += " - Data dont defined for matrices\n";
+    sReport += " - Data not defined for matrices\n";
     rv = icMaxStatus(rv, icValidateCriticalError);
     return rv;
   }
@@ -5363,9 +5364,17 @@ icValidateStatus CIccTagSparseMatrixArray::Validate(std::string sigPath, std::st
   CIccSparseMatrix mtx;
   int i;
 
-  icUInt16Number nBytesPerMatrix = m_nChannelsPerMatrix * sizeof(icFloatNumber);
+  size_t nBytesPerMatrix = m_nChannelsPerMatrix * sizeof(icFloatNumber);
   const size_t bufSize = 128;
   char buf[bufSize];
+  
+  if ( nBytesPerMatrix > 0xFFFFFFFFULL ) {  // make sure it is less than 32 bit max
+    sReport += icMsgValidateCriticalError;
+    sReport += sSigPathName;
+    sReport += " - Matrix data size too large\n";
+    rv = icMaxStatus(rv, icValidateCriticalError);
+    return rv;
+  }
   
   if (!mtx.Reset(m_RawData, nBytesPerMatrix, icSparseMatrixFloatNum, true)) {
     sReport += icMsgValidateCriticalError;
@@ -5378,7 +5387,7 @@ icValidateStatus CIccTagSparseMatrixArray::Validate(std::string sigPath, std::st
 
   nRows = mtx.Rows();
   nCols = mtx.Cols();
-  icUInt32Number nMaxElements = CIccSparseMatrix::MaxEntries(nBytesPerMatrix, nRows, sizeof(icFloatNumber));
+  icUInt32Number nMaxElements = CIccSparseMatrix::MaxEntries( (icUInt32Number)nBytesPerMatrix, nRows, sizeof(icFloatNumber));
   icUInt8Number *temp = new icUInt8Number[nBytesPerMatrix];
 
   for (i=0; i<(int)m_nSize; i++) {
