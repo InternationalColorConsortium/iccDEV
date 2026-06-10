@@ -551,6 +551,22 @@ if count != 1:
 pathlib.Path(dst_path).write_text(text, encoding="utf-8")
 ' "$XML_PROFILE" "$XML_MATRIX_HUGE"
 
+XML_EMPTY_PRIVATE_TYPE="$OUTDIR/xml-empty-private-type.xml"
+python3 -c '
+import pathlib
+import re
+import sys
+
+src_path, dst_path = sys.argv[1:3]
+text = pathlib.Path(src_path).read_text(encoding="utf-8")
+pattern = re.compile(r"<profileDescriptionTag>\s*<multiLocalizedUnicodeType>.*?</multiLocalizedUnicodeType>\s*</profileDescriptionTag>", re.S)
+replacement = "<profileDescriptionTag> <PrivateType type=\"\"><UnknownData>00</UnknownData></PrivateType> </profileDescriptionTag>"
+text, count = pattern.subn(replacement, text, count=1)
+if count != 1:
+    raise SystemExit("No profileDescriptionTag found for private type mutation")
+pathlib.Path(dst_path).write_text(text, encoding="utf-8")
+' "$XML_PROFILE" "$XML_EMPTY_PRIVATE_TYPE"
+
 TEXT_INVALID_ASCII="$OUTDIR/text-invalid-ascii.icc"
 python3 -c '
 import pathlib
@@ -634,6 +650,7 @@ run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
 run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
 run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
+run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
 

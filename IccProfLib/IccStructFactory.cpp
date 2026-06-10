@@ -210,6 +210,9 @@ bool CIccStructCreator::DoGetStructSigName(std::string &structName, icStructSign
 
 icStructSignature CIccStructCreator::DoGetStructSig(const icChar* structName)
 {
+  if (!structName || !structName[0])
+    return (icStructSignature)0;
+
   CIccStructFactoryList::iterator i;
 
   for (i = factoryStack.begin(); i != factoryStack.end(); i++) {

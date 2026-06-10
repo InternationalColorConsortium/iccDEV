@@ -594,6 +594,9 @@ const icChar* CIccTagCreator::DoGetTagSigName(icTagSignature tagSig)
 
 icTagSignature CIccTagCreator::DoGetTagNameSig(const icChar *szName)
 {
+  if (!szName || !szName[0])
+    return icSigUnknownTag;
+
   CIccTagFactoryList::iterator i;
   icTagSignature rv;
 
@@ -623,6 +626,9 @@ const icChar* CIccTagCreator::DoGetTagTypeSigName(icTagTypeSignature tagTypeSig)
 
 icTagTypeSignature CIccTagCreator::DoGetTagTypeNameSig(const icChar* szName)
 {
+  if (!szName || !szName[0])
+    return icSigUnknownType;
+
   CIccTagFactoryList::iterator i;
   icTagTypeSignature rv;
 
