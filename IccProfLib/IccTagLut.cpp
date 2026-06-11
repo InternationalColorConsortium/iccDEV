@@ -1951,11 +1951,20 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
   m_DimSize[i] = m_nOutput;
   nNumPoints = m_GridPoints[i];
   for (i--; i>=0; i--) {
-    m_DimSize[i] = m_DimSize[i+1] * m_GridPoints[i+1];
+    size_t dim1 = m_DimSize[i+1];
+    size_t fullSize = dim1 * m_GridPoints[i+1];
+    if (fullSize > 0xFFFFFFFFu)
+        return false;
+    m_DimSize[i] = (icUInt32Number)fullSize;
     nNumPoints *= m_GridPoints[i];
-    if (nMaxSize && nNumPoints * m_nOutput * nBytesPerPoint > nMaxSize)
+    // carefullly protect against 64 bit overflow
+    if (nMaxSize && (nNumPoints > nMaxSize || nNumPoints * m_nOutput > nMaxSize
+            || nNumPoints * m_nOutput * nBytesPerPoint > nMaxSize) )
       return false;
   }
+
+  if (nNumPoints > 0xFFFFFFFFu)
+    return false;
   m_nNumPoints = (icUInt32Number)nNumPoints;
 
   // Use 64-bit math to catch overflows even when no nMaxSize was
