@@ -109,6 +109,10 @@ run_dockerfile_policy() {
   [ "$policy_failures" -eq 0 ]
 }
 
+run_workflow_cache_policy() {
+  .github/scripts/check-workflow-cache-policy.sh .github/workflows
+}
+
 workflow_trigger_names() {
   local wf="$1"
   python3 - "$wf" <<'PY'
@@ -496,21 +500,33 @@ for path in sys.argv[1:]:
             pr_context = bool(workflow_triggers(workflow) & {"pull_request", "pull_request_target"})
 
             if uses.startswith("actions/cache@"):
-                if publish_context:
-                    print(f"[FAIL] {label}: actions/cache in release/publish/write context", file=sys.stderr)
-                    failures += 1
-                    cache_publish += 1
-                else:
-                    print(f"[WARN] {label}: actions/cache use requires cache-poisoning review")
-                    warnings += 1
+                print(f"[FAIL] {label}: actions/cache is banned", file=sys.stderr)
+                failures += 1
+                cache_publish += 1
 
-            if uses.startswith("docker/build-push-action@") and publish_context:
+            if uses.startswith("docker/build-push-action@"):
                 for key in ("cache-from", "cache-to"):
                     if "type=gha" in str(block.get(key, "")):
-                        print(f"[FAIL] {label}: Docker Buildx {key}=type=gha in publish context",
+                        print(f"[FAIL] {label}: Docker Buildx {key}=type=gha is banned",
                               file=sys.stderr)
                         failures += 1
                         cache_publish += 1
+                if str(block.get("no-cache", "")).lower() == "false":
+                    print(f"[FAIL] {label}: Docker Buildx no-cache:false is banned",
+                          file=sys.stderr)
+                    failures += 1
+                    cache_publish += 1
+
+            for key in ("cache", "cache-binary"):
+                if key in block and str(block.get(key, "")).lower() != "false":
+                    print(f"[FAIL] {label}: {key} must be false", file=sys.stderr)
+                    failures += 1
+                    cache_publish += 1
+
+            if "cache-dependency-path" in block:
+                print(f"[FAIL] {label}: cache-dependency-path is banned", file=sys.stderr)
+                failures += 1
+                cache_publish += 1
 
             if uses.startswith("actions/download-artifact@") and publish_context:
                 if "name" not in block and "pattern" not in block:
@@ -979,6 +995,7 @@ PY
     skip_or_fail "zizmor"
   fi
 
+  run_check "workflow cache policy" run_workflow_cache_policy
   run_check "workflow security canaries" workflow_security_canaries
   run_check "GitHub token format canaries" token_format_canaries
   run_check "local ci-risk-analysis subset" run_workflow_risk_subset

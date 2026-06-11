@@ -29,9 +29,9 @@ concurrency:
 jobs:
   build:
     name: "Build regression dependency image"
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-cmake-raspi-testing'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
-    environment: ghcr-publish
+    environment: ${{ github.ref == 'refs/heads/master' && 'ghcr-publish' || 'ci-validation' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -81,6 +81,7 @@ jobs:
             type=ref,event=branch
 
       - name: Log in to GHCR
+        if: github.ref == 'refs/heads/master'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
@@ -93,15 +94,20 @@ jobs:
         with:
           context: .
           file: ./Dockerfile.ci-regression
-          push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           no-cache: true
           pull: true
-          provenance: mode=max
-          sbom: true
+          load: ${{ github.ref != 'refs/heads/master' }}
+          push: ${{ github.ref == 'refs/heads/master' }}
+          provenance: ${{ github.ref == 'refs/heads/master' && 'mode=max' || 'false' }}
+          sbom: ${{ github.ref == 'refs/heads/master' }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Attest build provenance
+        if: github.ref == 'refs/heads/master'
         uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -112,23 +118,91 @@ jobs:
         env:
           BASH_ENV: /dev/null
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_REF_NAME: ${{ github.ref_name }}
+          EXPECTED_SHA: ${{ github.sha }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          docker run --rm "$IMAGE_REF" bash -lc '
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="$IMAGE_REF"
+          else
+            TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
+          fi
+
+          image_sha="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          image_ref="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
+          if [ "$image_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Image revision mismatch: $image_sha != $EXPECTED_SHA"
+            exit 1
+          fi
+          if [ "$image_ref" != "$EXPECTED_REF_NAME" ]; then
+            echo "::error::Image ref mismatch: $image_ref != $EXPECTED_REF_NAME"
+            exit 1
+          fi
+
+          docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
-            clang-18 --version | sed -n "1p"
-            clang++-18 --version | sed -n "1p"
+            command -v git clang clang++ cmake make realpath
+            clang --version | sed -n "1p"
+            clang++ --version | sed -n "1p"
             cmake --version | sed -n "1p"
             /usr/bin/time --version | sed -n "1p"
+            printf "int main(void){return 0;}\n" > /tmp/asan-smoke.c
+            clang -fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound \
+              -fno-omit-frame-pointer -g -O0 /tmp/asan-smoke.c -o /tmp/asan-smoke
+            /tmp/asan-smoke
+          '
+
+          docker run --rm \
+            -v "$PWD":/workspace/iccDEV-src:ro \
+            "$TEST_IMAGE" bash -lc '
+            set -euo pipefail
+            work="$(mktemp -d)"
+            git config --global --add safe.directory /workspace/iccDEV-src
+            git config --global --add safe.directory /workspace/iccDEV-src/.git
+            git clone /workspace/iccDEV-src "$work/iccDEV"
+            cd "$work/iccDEV/Build"
+            git branch && echo "---" && git log --oneline -1
+            SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
+            export CXXFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
+            export LDFLAGS="$SAN_FLAGS"
+            CC=clang CXX=clang++ cmake Cmake \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DENABLE_ASAN=ON \
+              -DENABLE_UBSAN=ON \
+              -DENABLE_TOOLS=ON
+            make -j"$(nproc)" iccDumpProfile
+            cd ../Testing/
+            echo "=== Updating PATH ==="
+            for d in ../Build/Tools/*; do
+              [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+            done
+            printf "%s\n%s\n%s\n" \
+              "unsigned-integer-overflow:*/IccMD5.cpp" \
+              "shift-base:*/IccMD5.cpp" \
+              "shift-exponent:*/IccMD5.cpp" > silence.txt
+            test -x ./CreateAllProfiles.sh
+            test -x ./RunTests.sh
+            test -x ./HDR/mkprofiles.sh
+            test -x ./Display/RunProtoTests.sh
+            test -x ./hybrid/BuildAndTest.sh
+            test -x ./CalcTest/checkInvalidProfiles.sh
+            test -x ./mcs/updateprev.sh
+            test -x ./mcs/updateprevWithBkgd.sh
           '
 
       - name: Scan test image
         env:
           BASH_ENV: /dev/null
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' }}
           TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
         run: |
           set -euo pipefail
@@ -138,12 +212,17 @@ jobs:
           TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-regression-container-cache"
           rm -rf "$TRIVY_CACHE"
           mkdir -p "$TRIVY_CACHE"
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="$IMAGE_REF"
+          else
+            TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
+          fi
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$TRIVY_CACHE":/root/.cache/ \
             "$TRIVY_IMAGE" \
             image --scanners vuln,secret --ignore-unfixed \
-            --severity HIGH,CRITICAL --exit-code 1 "$IMAGE_REF"
+            --severity HIGH,CRITICAL --exit-code 1 "$TEST_IMAGE"
 
       - name: Generate summary
         env:

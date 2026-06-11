@@ -46,11 +46,19 @@ RUN apt-get update \
     zlib1g-dev=1:1.3.dfsg-3.1ubuntu2.1 \
  && rm -rf /var/lib/apt/lists/*
 
+RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
+ && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 \
+ && update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer /usr/bin/llvm-symbolizer-18 100
+
+ENV CC=clang \
+    CXX=clang++ \
+    ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer
+
 RUN groupadd --system iccdev-ci \
  && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD clang-18 --version >/dev/null && cmake --version >/dev/null || exit 1
+  CMD clang --version >/dev/null && cmake --version >/dev/null || exit 1
 
 USER iccdev-ci
 WORKDIR /workspace

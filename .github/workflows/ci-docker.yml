@@ -51,9 +51,9 @@ jobs:
   build:
     name: "Docker (${{ matrix.variant }})"
     needs: cache-policy
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/fix-nixos-image-runtime'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    environment: ghcr-publish
+    environment: ${{ github.ref == 'refs/heads/master' && 'ghcr-publish' || 'ci-validation' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -82,6 +82,24 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           persist-credentials: false
+
+      - name: Verify checked out workflow ref
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Checkout SHA mismatch: $actual_sha != $EXPECTED_SHA"
+            exit 1
+          fi
+
+          echo "Building Docker images from ${EXPECTED_REF}@${EXPECTED_SHA}"
 
       - name: Lowercase image name
         id: image
@@ -120,6 +138,7 @@ jobs:
             type=raw,value=latest,enable=${{ matrix.suffix == '-nixos' }}
 
       - name: Log in to GHCR
+        if: github.ref == 'refs/heads/master'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
@@ -132,15 +151,20 @@ jobs:
         with:
           context: .
           file: ./${{ matrix.dockerfile }}
-          push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           no-cache: true
           pull: true
-          provenance: mode=max
-          sbom: true
+          load: ${{ github.ref != 'refs/heads/master' }}
+          push: ${{ github.ref == 'refs/heads/master' }}
+          provenance: ${{ github.ref == 'refs/heads/master' && 'mode=max' || 'false' }}
+          sbom: ${{ github.ref == 'refs/heads/master' }}
+          labels: |
+            ${{ steps.meta.outputs.labels }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Generate SBOM
+        if: github.ref == 'refs/heads/master'
         uses: anchore/sbom-action@63cb575d30b83445769f98c4725d7125db09688f  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
@@ -148,6 +172,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Attest build provenance
+        if: github.ref == 'refs/heads/master'
         uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -155,6 +180,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
+        if: github.ref == 'refs/heads/master'
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v3.0.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -163,6 +189,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload SBOM
+        if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
@@ -173,13 +200,45 @@ jobs:
         env:
           BASH_ENV: /dev/null
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          MATRIX_VARIANT: ${{ matrix.variant }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            docker pull "${IMAGE_REF}"
+            docker tag  "${IMAGE_REF}" "iccdev-${MATRIX_VARIANT}-test:latest"
+          else
+            primary_tag="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
+            docker tag "$primary_tag" "iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
+
+      - name: Verify image source labels
+        env:
+          BASH_ENV: /dev/null
+          EXPECTED_REF_NAME: ${{ github.ref_name }}
+          EXPECTED_SHA: ${{ github.sha }}
           MATRIX_VARIANT: ${{ matrix.variant }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          docker pull "${IMAGE_REF}"
-          docker tag  "${IMAGE_REF}" "iccdev-${MATRIX_VARIANT}-test:latest"
+          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+
+          image_sha="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          image_ref="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
+          if [ "$image_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Image revision mismatch: $image_sha != $EXPECTED_SHA"
+            exit 1
+          fi
+          if [ "$image_ref" != "$EXPECTED_REF_NAME" ]; then
+            echo "::error::Image ref mismatch: $image_ref != $EXPECTED_REF_NAME"
+            exit 1
+          fi
 
       - name: Scan test image
         env:

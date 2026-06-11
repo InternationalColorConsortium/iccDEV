@@ -252,6 +252,13 @@ jobs:
           yamllint_config='{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}'
           yamllint -d "$yamllint_config" "${workflow_files[@]}"
           zizmor "${workflow_files[@]}"
+          trusted_cache_policy="../trusted/.github/scripts/check-workflow-cache-policy.sh"
+          if [ ! -x "$trusted_cache_policy" ]; then
+            echo "[FAIL] Trusted cache policy helper not found" >&2
+            failures=$((failures + 1))
+          else
+            "$trusted_cache_policy" "${workflow_files[@]}"
+          fi
           else
             echo "[SKIP] No changed workflow files"
           fi
@@ -400,7 +407,7 @@ jobs:
             echo ""
             echo "| Canary | Count |"
             echo "|--------|-------|"
-            printf "| Cache publish canaries | \`%s\` |\n" "$(extract_metric "cache publish canaries")"
+            printf "| Cache policy canaries | \`%s\` |\n" "$(extract_metric "cache publish canaries")"
             printf "| Artifact intake canaries | \`%s\` |\n" "$(extract_metric "artifact intake canaries")"
             printf "| Artifact publish canaries | \`%s\` |\n" "$(extract_metric "artifact publish canaries")"
             printf "| Untrusted PR artifact canaries | \`%s\` |\n" "$(extract_metric "untrusted PR artifact canaries")"
