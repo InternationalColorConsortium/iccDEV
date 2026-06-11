@@ -548,8 +548,10 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
   if (pProfile->m_Header.deviceClass==icSigColorEncodingClass) {
     CIccProfile *pEncProfile;
-    if (icConvertEncodingProfile(pEncProfile, pProfile)!=icEncConvertOk)
+    if (icConvertEncodingProfile(pEncProfile, pProfile)!=icEncConvertOk) {
+      delete pProfile;
       return NULL;
+    }
     delete pProfile;
     pProfile = pEncProfile;
   }
@@ -560,8 +562,10 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
   if (nTagIntent == icUnknownIntent)
     nTagIntent = icPerceptual;
 
-  if (!IsValidXformIntent(nTagIntent))
+  if (!IsValidXformIntent(nTagIntent)) {
+    delete pProfile;
     return NULL;
+  }
 
 // TODO -  there are too many layers in the switch, making it very difficult to understand the code
 // it should be broken into functions for improved readability
@@ -668,8 +672,10 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           else if (pProfile->m_Header.colorSpace == icSigGrayData) {
             rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
           }
-          else
+          else {
+            delete pProfile;
             return NULL;
+          }
         }
         else if (pTag->GetType()==icSigMultiProcessElementType) {
           rv = CIccXformCreator::CreateXform(icXformTypeMpe, pTag, pHintManager);
@@ -796,8 +802,10 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           else if (pProfile->m_Header.colorSpace == icSigGrayData) {
             rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
           }
-          else
+          else {
+            delete pProfile;
             return NULL;
+          }
         }
         else if (pTag->GetType()==icSigMultiProcessElementType) {
           rv = CIccXformCreator::CreateXform(icXformTypeMpe, pTag, pHintManager);
@@ -819,8 +827,10 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
     case icXformLutNamedColor:
       {
         CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
-        if (!pTag)
+        if (!pTag) {
+          delete pProfile;
           return NULL;
+        }
 
         // If the caller pre-attached a NamedColor hint (e.g. to set
         // nOverprintType), honor it and only fill in the header-derived
@@ -835,8 +845,10 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         CIccCreateNamedColorXformHint* pNamedColorHint = pCallerHint;
         if (!pNamedColorHint) {
           pNamedColorHint = new (std::nothrow) CIccCreateNamedColorXformHint();
-          if (!pNamedColorHint)
+          if (!pNamedColorHint) {
+            delete pProfile;
             return NULL;
+          }
         }
 
         pNamedColorHint->csPcs = pProfile->m_Header.pcs;
@@ -869,6 +881,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           pTag = pProfile->FindTag(icSigPreview0Tag);
         }
         if (!pTag) {
+          delete pProfile;
           return NULL;
         }
         else {
@@ -890,6 +903,7 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         bInput = false;
         CIccTag *pTag = pProfile->FindTag(icSigGamutTag);
         if (!pTag) {
+          delete pProfile;
           return NULL;
         }
         else {
@@ -1201,6 +1215,12 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       rv->m_pConnectionConditions = pProfile;
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
+  }
+  else {
+    // Create() owns pProfile (the caller's profile, or the encoding-converted
+    // replacement built above). When no xform is produced, free it here so it
+    // doesn't leak - none of the failure paths reach SetParams().
+    delete pProfile;
   }
 
   return rv;
