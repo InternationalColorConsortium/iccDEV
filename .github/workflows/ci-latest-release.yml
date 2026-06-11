@@ -32,12 +32,6 @@ permissions:
 
 on:
   workflow_dispatch:
-    inputs:
-      validate_cache_policy_only:
-        description: "Only validate that this workflow does not use Actions cache primitives"
-        required: false
-        default: true
-        type: boolean
 
 concurrency:
   group: "latest-release-${{ github.workflow }}-${{ github.ref }}"
@@ -71,7 +65,6 @@ jobs:
   linux:
     name: "Linux ${{ matrix.compiler }}"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -278,7 +271,6 @@ jobs:
   macos:
     name: "macOS Clang"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
@@ -492,7 +484,6 @@ jobs:
   windows:
     name: "Windows MSVC"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: windows-2022
     timeout-minutes: 45
     env:
@@ -752,7 +743,6 @@ jobs:
   wasm:
     name: "WASM Release (Emscripten)"
     needs: cache-policy
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -1280,7 +1270,7 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm]
-    if: ${{ github.ref == 'refs/heads/master' && (github.event_name != 'workflow_dispatch' || inputs.validate_cache_policy_only != true) }}
+    if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 15

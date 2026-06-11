@@ -596,6 +596,20 @@ raise SystemExit("no tag large enough for textType mutation")
 ' "$PROFILE" "$TEXT_INVALID_ASCII"
 
 NAMED_PROFILE="$TESTING_DIR/Named/NamedColor.icc"
+if [ ! -f "$NAMED_PROFILE" ] && [ -f "$TESTING_DIR/Named/NamedColor.xml" ]; then
+  NAMED_PROFILE="$OUTDIR/NamedColor.icc"
+  named_exit=0
+  timeout 30 "$FROMXML" "$TESTING_DIR/Named/NamedColor.xml" "$NAMED_PROFILE" > "$OUTDIR/namedcolor-fromxml.log" 2>&1 || named_exit=$?
+  if [ "$named_exit" -ne 0 ] || [ ! -s "$NAMED_PROFILE" ]; then
+    echo "ERROR: Unable to create NamedColor.icc from NamedColor.xml"
+    sed -n '1,10p' "$OUTDIR/namedcolor-fromxml.log"
+    exit 1
+  fi
+fi
+if [ ! -f "$NAMED_PROFILE" ]; then
+  echo "ERROR: NamedColor.icc fixture not found and NamedColor.xml fallback is unavailable"
+  exit 1
+fi
 NAMED_INVALID_ASCII="$OUTDIR/namedcolor-invalid-ascii.icc"
 python3 -c '
 import pathlib
