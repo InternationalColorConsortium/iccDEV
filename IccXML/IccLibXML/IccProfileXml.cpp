@@ -698,7 +698,16 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
           if ((attr = icXmlFindAttr(pTypeNode, "reserved"))) {
             sscanf(icXmlAttrValue(attr), "%x", &pTag->m_nReserved);
           }
-          AttachTag(sigTag, pTag);
+          //AttachTag refuses (and does not take ownership) when a tag with this
+          //signature already exists; free pTag to avoid a leak on duplicates.
+          if (!AttachTag(sigTag, pTag)) {
+            parseStr += "Unable to attach duplicate tag \"";
+            parseStr += nodeName;
+            snprintf(str, strSize, "\" on line %d\n", pTypeNode->line);
+            parseStr += str;
+            delete pTag;
+            return false;
+          }
         }
         else {
           parseStr += "Unable to Parse \"";
@@ -757,8 +766,11 @@ bool CIccProfileXml::ParseTag(xmlNode *pNode, std::string &parseStr)
           if (tagSigNode->type == XML_ELEMENT_NODE && !icXmlStrCmp(tagSigNode->name, "TagSignature")) {
             if ((const icChar*)tagSigNode->children != NULL) {
               sigTag = (icTagSignature)icGetSigVal((const icChar*)tagSigNode->children->content);
-              AttachTag(sigTag, pTag);
-              bAttached = true;
+              //Only flag ownership transfer when AttachTag actually accepts pTag.
+              //It refuses duplicate signatures without taking ownership, so a
+              //blanket bAttached=true here would leak pTag on a duplicate tag.
+              if (AttachTag(sigTag, pTag))
+                bAttached = true;
             }
           }
         }
