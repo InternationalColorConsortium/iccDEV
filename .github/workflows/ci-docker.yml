@@ -106,6 +106,8 @@ jobs:
           printf 'name=ghcr.io/%s/iccdev%s\n' "$owner" "$MATRIX_SUFFIX" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        with:
+          cache-binary: false
 
       - name: Docker meta
         id: meta
@@ -133,6 +135,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          no-cache: true
+          pull: true
           provenance: mode=max
           sbom: true
 

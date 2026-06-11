@@ -68,6 +68,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        with:
+          cache-binary: false
 
       - name: Docker metadata
         id: meta
@@ -94,6 +96,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          no-cache: true
+          pull: true
           provenance: mode=max
           sbom: true
 
