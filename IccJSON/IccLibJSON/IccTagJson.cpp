@@ -1164,6 +1164,9 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
     }
     icUInt32Number nActiveRows = nJsonRows < nRows ? nJsonRows : nRows;
 
+    if (nActiveRows && !rowstart)
+      return false;
+    
     for (icUInt32Number r = 0; r < nActiveRows; r++) {
       const IccJson &jRow = jRows[r];
       rowstart[r] = (icUInt16Number)pos;
@@ -1200,9 +1203,13 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
       }
       pos += cnt;
     }
-    // fill remaining row-start sentinels (including end sentinel at nRows)
-    for (icUInt32Number r = nActiveRows; r <= nRows; r++)
-      rowstart[r] = (icUInt16Number)pos;
+    
+    if (rowstart) {
+      // fill remaining row-start sentinels (including end sentinel at nRows)
+      for (icUInt32Number r = nActiveRows; r <= nRows; r++)
+        rowstart[r] = (icUInt16Number)pos;
+    }
+
   }
   return true;
 }
