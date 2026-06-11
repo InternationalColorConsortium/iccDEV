@@ -135,14 +135,14 @@ jobs:
 
           image_sha="$(docker image inspect "$TEST_IMAGE" \
             --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
-          image_ref="$(docker image inspect "$TEST_IMAGE" \
+          image_ref_label="$(docker image inspect "$TEST_IMAGE" \
             --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
           if [ "$image_sha" != "$EXPECTED_SHA" ]; then
             echo "::error::Image revision mismatch: $image_sha != $EXPECTED_SHA"
             exit 1
           fi
-          if [ "$image_ref" != "$EXPECTED_REF_NAME" ]; then
-            echo "::error::Image ref mismatch: $image_ref != $EXPECTED_REF_NAME"
+          if [ "$image_ref_label" != "$EXPECTED_REF_NAME" ]; then
+            echo "::error::Image ref mismatch: $image_ref_label != $EXPECTED_REF_NAME"
             exit 1
           fi
 

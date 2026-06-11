@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg8=8c-2ubuntu12 \
     libpng16-16t64=1.6.57-1 \
     libssl3t64=3.5.5-1ubuntu3.2 \
+    openssl-provider-legacy=3.5.5-1ubuntu3.2 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
     python3=3.14.3-0ubuntu2 \
  && rm -rf /var/lib/apt/lists/*
