@@ -210,6 +210,16 @@ jobs:
           CTEST_LIST="${BUILD_DIR}/ctest-list.txt"
           ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
 
+      - name: Build CTest helper binaries
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cmake --build "${BUILD_DIR}" --target build-test-binaries --parallel "$(nproc)"
+
       - name: Run CTest tool suites
         env:
           BASH_ENV: /dev/null
