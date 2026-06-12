@@ -799,7 +799,21 @@ int main(int argc, icChar* argv[])
       stat = theCmm.AddXform(pXformProfile, nIntent<0 ? icUnknownIntent : (icRenderingIntent)nIntent, nInterp, pPccProfile,
                               (icXformLutType)nType, bUseD2BxB2DxTags, &Hint);
       if (stat) {
-        printf("Invalid Profile(%d):  %s\n", stat, argv[nCount]);
+        // AddXform can fail for reasons that have nothing to do with the
+        // profile itself.  In particular icCmmStatBadSpaceLink (2) means the
+        // profile's source color space does not connect to the output space
+        // of the previous transform in the chain (CIccCmm alternates the
+        // input/output direction of successive profiles based on the
+        // first_transform argument, so the connecting spaces depend on chain
+        // position and direction, not just the profile).  The old message
+        // here ("Invalid Profile(N)") reported any failure as an invalid
+        // profile, which misled users when a structurally valid profile was
+        // simply chained incompatibly - see issue #1322.  Decode the status
+        // with CIccCmm::GetStatusText so the real cause is visible.
+        printf("Error - Unable to add '%s' to transform chain (status %d: %s)\n", argv[nCount], stat, CIccCmm::GetStatusText(stat));
+        if (stat == icCmmStatBadSpaceLink) {
+          printf("The profile's color spaces do not connect with the previous transform in the chain.\n");
+        }
         return -1;
       }
       sigMap.clear();
@@ -809,7 +823,12 @@ int main(int argc, icChar* argv[])
 
   //All profiles have been added to CMM.  Tell CMM that we are ready to begin applying colors/pixels
   if((stat=theCmm.Begin())) {
-    printf("Error %d - Unable to begin profile application - Possibly invalid or incompatible profiles\n", stat);
+    // Begin() walks the assembled xform list and connects/optimizes the
+    // transforms; it is where cross-profile incompatibilities that AddXform
+    // could not see (PCS conversion setup, connection conditions) surface.
+    // Decode the status code into text (issue #1322 follow-through) instead
+    // of printing a bare number.
+    printf("Error - Unable to begin profile application (status %d: %s) - Possibly invalid or incompatible profiles\n", stat, CIccCmm::GetStatusText(stat));
     return -1;
   }
 

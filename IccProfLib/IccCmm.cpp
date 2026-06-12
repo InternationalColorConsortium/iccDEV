@@ -8298,6 +8298,12 @@ const icChar* CIccCmm::GetStatusText(icStatusCMM stat)
     return "Too many samples used";
   case icCmmStatBadMCSLink:
     return "Invalid MCS link connection";
+  // icCmmStatUnsupported was added to icStatusCMM without a matching case
+  // here (the enum declaration in IccCmm.h asks for GetStatusText to be kept
+  // in sync).  Added while wiring status names into the CLI tool error
+  // messages for issues #1322/#1323 so every enum value decodes to text.
+  case icCmmStatUnsupported:
+    return "Unsupported operation";
   default:
     return "Unknown CMM Status value";
 
