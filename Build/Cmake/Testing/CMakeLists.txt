@@ -36,6 +36,16 @@ add_custom_target(check
   VERBATIM
 )
 
+add_custom_target(build-test-binaries
+  COMMENT "Build iccDEV CTest regression helper binaries"
+)
+add_dependencies(check build-test-binaries)
+
+function(iccdev_add_regression_executable TARGET_NAME)
+  add_executable("${TARGET_NAME}" EXCLUDE_FROM_ALL ${ARGN})
+  add_dependencies(build-test-binaries "${TARGET_NAME}")
+endfunction()
+
 function(iccdev_add_check_dependencies)
   foreach(_target
       iccApplyNamedCmm
@@ -65,13 +75,16 @@ function(iccdev_add_check_dependencies)
 endfunction()
 
 iccdev_add_check_dependencies()
+if(TARGET iccDescribeSinkTest)
+  add_dependencies(build-test-binaries iccDescribeSinkTest)
+endif()
 
 function(iccdev_add_iccconnect_thread_test)
   if(NOT TARGET "${TARGET_LIB_ICCCONNECT}")
     return()
   endif()
 
-  add_executable(iccConnectThreadTest
+  iccdev_add_regression_executable(iccConnectThreadTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccconnect-threaded-cmm.cpp"
   )
   target_compile_features(iccConnectThreadTest PRIVATE cxx_std_17)
@@ -122,7 +135,7 @@ function(iccdev_add_embedio_read8_bounds_test)
     return()
   endif()
 
-  add_executable(iccEmbedIoRead8BoundsTest
+  iccdev_add_regression_executable(iccEmbedIoRead8BoundsTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/embedio-read8-bounds.cpp"
   )
   target_link_libraries(iccEmbedIoRead8BoundsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
@@ -157,7 +170,7 @@ function(iccdev_add_tag_layout_shared_data_test)
     return()
   endif()
 
-  add_executable(iccTagLayoutSharedDataTest
+  iccdev_add_regression_executable(iccTagLayoutSharedDataTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/tag-layout-shared-data.cpp"
   )
   target_link_libraries(iccTagLayoutSharedDataTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
@@ -192,7 +205,7 @@ function(iccdev_add_fileio_getlength_position_test)
     return()
   endif()
 
-  add_executable(iccFileIoGetLengthPositionTest
+  iccdev_add_regression_executable(iccFileIoGetLengthPositionTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/fileio-getlength-position.cpp"
   )
   target_link_libraries(iccFileIoGetLengthPositionTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
@@ -234,7 +247,7 @@ function(iccdev_add_fileio_seek_tell_test)
     return()
   endif()
 
-  add_executable(iccFileIoSeekTellTest
+  iccdev_add_regression_executable(iccFileIoSeekTellTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/fileio-seek-tell.cpp"
   )
   target_link_libraries(iccFileIoSeekTellTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
@@ -270,7 +283,7 @@ function(iccdev_add_profile_write_failure_test)
     return()
   endif()
 
-  add_executable(iccProfileWriteFailureTest
+  iccdev_add_regression_executable(iccProfileWriteFailureTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/profile-write-failure.cpp"
   )
   target_link_libraries(iccProfileWriteFailureTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
@@ -305,7 +318,7 @@ function(iccdev_add_parser_restore_calls_test)
     return()
   endif()
 
-  add_executable(iccParserRestoreCallsTest
+  iccdev_add_regression_executable(iccParserRestoreCallsTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/parser-restore-calls.cpp"
   )
   target_compile_features(iccParserRestoreCallsTest PRIVATE cxx_std_17)

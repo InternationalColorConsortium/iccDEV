@@ -30,6 +30,7 @@ cmake -S Build/Cmake -B build \
   -DENABLE_STATIC_LIBS=ON
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
+cmake --build build --target build-test-binaries --parallel "$(nproc)"
 ctest --test-dir build --output-on-failure --no-tests=error
 cmake --build build --target check
 ```
@@ -42,6 +43,7 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64 ^
   -DENABLE_TOOLS=ON
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ctest --test-dir out/vs2022-x64 -C Release -N --no-tests=error
+cmake --build out/vs2022-x64 --config Release --target build-test-binaries
 ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
@@ -53,6 +55,7 @@ set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
   -DENABLE_TESTS=ON
 cmake --build out/mingw-x64 --parallel
+cmake --build out/mingw-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
@@ -63,6 +66,7 @@ $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
   -DENABLE_TESTS=ON
 cmake --build out/mingw-x64 --parallel
+cmake --build out/mingw-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
@@ -73,6 +77,7 @@ packages, use the dependency-light static preset. `cmd.exe`:
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
+cmake --build out/mingw-core-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
@@ -82,11 +87,18 @@ PowerShell:
 $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
+cmake --build out/mingw-core-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
 Use `--no-tests=error` for discovery and execution so a registration regression
 cannot pass as a green no-op.
+
+The default `all` build intentionally excludes CTest-only helper binaries such as
+`iccFileIoSeekTellTest` and `iccParserRestoreCallsTest`. Build the
+`build-test-binaries` target before running filtered CTest commands directly, or
+use the `check` target to build tool and test dependencies before running the
+full suite.
 
 ## Registered Suites
 
