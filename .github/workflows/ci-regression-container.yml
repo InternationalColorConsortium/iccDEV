@@ -128,6 +128,7 @@ jobs:
           unset GITHUB_TOKEN || true
 
           if [ "$PUBLISH_IMAGE" = "true" ]; then
+            docker pull "$IMAGE_REF"
             TEST_IMAGE="$IMAGE_REF"
           else
             TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
@@ -213,6 +214,7 @@ jobs:
           rm -rf "$TRIVY_CACHE"
           mkdir -p "$TRIVY_CACHE"
           if [ "$PUBLISH_IMAGE" = "true" ]; then
+            docker pull "$IMAGE_REF"
             TEST_IMAGE="$IMAGE_REF"
           else
             TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
