@@ -51,6 +51,7 @@ jobs:
   build:
     name: "Docker (${{ matrix.variant }})"
     needs: cache-policy
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: ghcr-publish
     timeout-minutes: 30
@@ -384,6 +385,7 @@ jobs:
     name: "Prune old container versions"
     runs-on: ubuntu-latest
     needs: build
+    if: github.ref == 'refs/heads/master'
     environment: ghcr-publish
     permissions:
       packages: write  # Required to delete old GHCR package versions.
