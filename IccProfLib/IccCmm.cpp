@@ -8833,10 +8833,16 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
 
   //borrow the caller's AttachIO to perform the AddXform
   pProfile->CopyAttach(&Profile, true);
+  
+  // CFL-078: Save deviceClass before AddXform - cenc ownership transfer
+  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
 
   icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
   // AddXform took ownership of the profile pointer, or deleted it if there was an error
-
+  
+  if (stat == icCmmStatOk && savedClass != icSigColorEncodingClass)
+    pProfile->CopyAttach(nullptr);
+    
   return stat;
 }
 
