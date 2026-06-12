@@ -552,7 +552,6 @@ bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, ic
 
 	// add the xform
 	if (cmm.AddXform(pICC, nIntent, icInterpTetrahedral, NULL, icXformLutColorimetric, pICC->m_Header.version >= icVersionNumberV5 ? false : true)!=icCmmStatOk) {
-		delete pICC;
 		return false;
 	}
 
@@ -593,7 +592,6 @@ CIccCmm* CIccApplyBPC::getBlackXfm(icRenderingIntent nIntent, const CIccProfile 
 
 	// add the xform
 	if (pCmm->AddXform(pICC1, nIntent, icInterpTetrahedral, NULL, icXformLutColor, pICC1->m_Header.version >= icVersionNumberV5 ? false : true)!=icCmmStatOk) {
-		delete pICC1;
 		delete pCmm;
 		return NULL;
 	}
@@ -607,7 +605,6 @@ CIccCmm* CIccApplyBPC::getBlackXfm(icRenderingIntent nIntent, const CIccProfile 
 
 	// add the xform
 	if (pCmm->AddXform(pICC2, icRelativeColorimetric, icInterpTetrahedral, NULL, icXformLutColor, pICC2->m_Header.version >= icVersionNumberV5 ? false : true)!=icCmmStatOk) { // uses the relative intent on the device to Lab side
-		delete pICC2;
 		delete pCmm;
 		return NULL;
 	}

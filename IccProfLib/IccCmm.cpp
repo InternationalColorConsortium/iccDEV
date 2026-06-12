@@ -8336,14 +8336,8 @@ icStatusCMM CIccCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
-  // CFL-078: Save deviceClass before AddXform - CIccXform::Create() deletes
-  // cenc profiles internally (line 546), so caller must NOT double-delete.
-  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
-
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
-
-  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
-    delete pProfile;
+  // AddXform took ownership of the profile pointer, or deleted it if there was an error
 
   return rv;
 }
@@ -8396,13 +8390,8 @@ icStatusCMM CIccCmm::AddXform(icUInt8Number *pProfileMem,
     return icCmmStatCantOpenProfile;
   }
 
-  // CFL-078: Save deviceClass before AddXform - cenc ownership transfer
-  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
-
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
-
-  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
-    delete pProfile;
+  // AddXform took ownership of the profile pointer, or deleted it if there was an error
 
   return rv;
 }
@@ -8417,6 +8406,7 @@ icStatusCMM CIccCmm::AddXform(icUInt8Number *pProfileMem,
  * 
  * Args: 
  *  pProfile = pointer to the CIccProfile object to be added (profile will be owned by the CMM's added xform),
+ *      AddXform takes ownership of the profile, or deletes the profile on error.
  *  nIntent = rendering intent to be used with the profile,
  *  nInterp = type of interpolation to be used with the profile,
  *  nLutType = selection of which transform lut to use
@@ -8476,6 +8466,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
       }
       else {
         if (pProfile->m_Header.deviceClass == icSigLinkClass) {
+          delete pProfile;
           return icCmmStatBadSpaceLink;
         }
         if (pProfile->m_Header.deviceClass == icSigAbstractClass) {
@@ -8511,24 +8502,30 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
       break;
 
     case icXformLutBRDFParam:
-      if (!bInput)
+      if (!bInput) {
+        delete pProfile;
         return icCmmStatBadSpaceLink;
+      }
       nSrcSpace = pProfile->m_Header.colorSpace;
       nDstSpace = icSigBRDFParameters;
       bInput = true;
       break;
 
     case icXformLutBRDFDirect:
-      if (!bInput)
+      if (!bInput) {
+        delete pProfile;
         return icCmmStatBadSpaceLink;
+      }
       nSrcSpace = icSigBRDFDirect;
       nDstSpace = pProfile->m_Header.pcs;
       bInput = true;
       break;
 
     case icXformLutBRDFMcsParam:
-      if (!bInput)
+      if (!bInput) {
+        delete pProfile;
         return icCmmStatBadSpaceLink;
+      }
       nSrcSpace = (icColorSpaceSignature)pProfile->m_Header.mcs;
       nDstSpace = icSigBRDFParameters;
       break;
@@ -8547,6 +8544,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
           if ((icXformLutType)(prev->ptr->GetXformType()) != icXformLutMCS) {
             //check to see if we can convert previous xform to connect via an MCS
             if (!prev->ptr->GetProfile()->m_Header.mcs) {
+              delete pProfile;
               return icCmmStatBadMCSLink;
             }
 
@@ -8561,6 +8559,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
               // leave the list with a NULL xform that the next Apply
               // dereferences -> SIGSEGV. Leave pPrev in place and
               // surface a clean error status.
+              delete pProfile;
               return icCmmStatBadMCSLink;
             }
 
@@ -8571,6 +8570,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
           }
         }
         else {
+          delete pProfile;
           return icCmmStatBadMCSLink;
         }
 
@@ -8589,12 +8589,14 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
           nParentSpace = pProfile->GetParentColorSpace();
         }
         else {
+          delete pProfile;
           return icCmmStatBadSpaceLink;
         }
       }
       break;
 
     default:
+      delete pProfile;
       return icCmmStatBadLutType;
   }
 
@@ -8606,15 +8608,19 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
       m_nSrcSpace = nSrcSpace;
     }
     else if (!IsCompatSpace(m_nSrcSpace, nSrcSpace)) {
+      delete pProfile;
       return icCmmStatBadSpaceLink;
     }
   }
   else if (!IsCompatSpace(m_nLastSpace, nSrcSpace)) {
+    delete pProfile;
     return icCmmStatBadSpaceLink;
   }
 
-  if (nSrcSpace==icSigNamedData)
+  if (nSrcSpace==icSigNamedData) {
+    delete pProfile;
     return icCmmStatBadSpaceLink;
+  }
   
   //Automatic creation of intent from header/last profile
   if (nIntent==icUnknownIntent) {
@@ -8638,6 +8644,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   Xform.ptr = CIccXform::Create(pProfile, bInput, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
 
   if (!Xform.ptr) {
+    // profile was deleted inside CIccXform::Create
     return icCmmStatBadXform;
   }
 
@@ -8664,6 +8671,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
 *
 * Args:
 *  pProfile = pointer to the CIccProfile object to be added,
+*      AddXform takes ownership of the profile, or deletes the profile on error.
 *  nIntent = rendering intent to be used with the profile,
 *  nInterp = type of interpolation to be used with the profile,
 *  nLutType = selection of which transform lut to use
@@ -8692,6 +8700,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   case icSigMultiplexIdentificationClass:
   case icSigMultiplexVisualizationClass:
   case icSigMultiplexLinkClass:
+    delete pProfile;
     return icCmmStatBadLutType;
 
   default:
@@ -8712,6 +8721,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   }
   else {
     if (pProfile->m_Header.deviceClass == icSigLinkClass) {
+      delete pProfile;
       return icCmmStatBadSpaceLink;
     }
     if (pProfile->m_Header.deviceClass == icSigAbstractClass) {
@@ -8737,15 +8747,19 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
       m_nSrcSpace = nSrcSpace;
     }
     else if (!IsCompatSpace(m_nSrcSpace, nSrcSpace)) {
+      delete pProfile;
       return icCmmStatBadSpaceLink;
     }
   }
   else if (!IsCompatSpace(m_nLastSpace, nSrcSpace)) {
+    delete pProfile;
     return icCmmStatBadSpaceLink;
   }
 
-  if (nSrcSpace == icSigNamedData)
+  if (nSrcSpace == icSigNamedData) {
+    delete pProfile;
     return icCmmStatBadSpaceLink;
+  }
 
   //Automatic creation of intent from header/last profile
   if (nIntent == icUnknownIntent) {
@@ -8764,6 +8778,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
   Xform.ptr = CIccXform::Create(pProfile, pXformTag, bInput, nIntent, nInterp, pPcc, bUseSpectralPCS, pHintManager);
 
   if (!Xform.ptr) {
+    // CIccXform::Create has already deleted the profile
     return icCmmStatBadXform;
   }
 
@@ -8786,6 +8801,7 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
  * 
  * Args: 
  *  Profile = reference a CIccProfile object that will be copies and added,
+ *      AddXform takes ownership of the profile, or deletes the profile on error.
  *  nIntent = rendering intent to be used with the profile,
  *  nInterp = type of interpolation to be used with the profile,
  *  nLutType = selection of which transform lut to use
@@ -8818,17 +8834,8 @@ icStatusCMM CIccCmm::AddXform(CIccProfile &Profile,
   //borrow the caller's AttachIO to perform the AddXform
   pProfile->CopyAttach(&Profile, true);
 
-  // CFL-078: Save deviceClass before AddXform - cenc ownership transfer
-  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
-
   icStatusCMM stat = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
-
-  //Now that we have added the xform disconnect from the callers AttachIO
-  if (savedClass != icSigColorEncodingClass)
-    pProfile->CopyAttach(nullptr);
-
-  if (stat != icCmmStatOk && savedClass != icSigColorEncodingClass)
-    delete pProfile;
+  // AddXform took ownership of the profile pointer, or deleted it if there was an error
 
   return stat;
 }
@@ -10877,13 +10884,8 @@ icStatusCMM CIccNamedColorCmm::AddXform(const icChar *szProfilePath,
   if (!pProfile) 
     return icCmmStatCantOpenProfile;
 
-  // CFL-078: Save deviceClass before AddXform - cenc ownership transfer (CWE-416)
-  icProfileClassSignature savedClass = pProfile->m_Header.deviceClass;
-
   icStatusCMM rv = AddXform(pProfile, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
-
-  if (rv != icCmmStatOk && savedClass != icSigColorEncodingClass)
-    delete pProfile;
+  // AddXform took ownership of the profile pointer, or deleted it if there was an error
 
   return rv;
 }
@@ -10897,6 +10899,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(const icChar *szProfilePath,
  * 
  * Args: 
  *  pProfile = pointer to the CIccProfile object to be added,
+ *      AddXform takes ownership of the profile, or deletes the profile on error.
  *  nIntent = rendering intent to be used with the profile,
  *  nInterp = type of interpolation to be used with the profile
  *  nLutType = type of lut to use from the profile
@@ -11023,16 +11026,21 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
 
         Xform.ptr = CIccXform::Create(pProfile, bInput, nIntent, nInterp, pPcc, icXformLutNamedColor, bUseD2BxB2DxTags, pHintManager);
         if (!Xform.ptr) {
+          // CIccXform::Create has already deleted the profile
           return icCmmStatBadXform;
         }
         CIccXformNamedColor *pXform = (CIccXformNamedColor *)Xform.ptr;
         rv = pXform->SetSrcSpace(nSrcSpace);
-        if (rv)
+        if (rv) {
+          delete Xform.ptr;
           return rv;
+        }
 
         rv = pXform->SetDestSpace(nDstSpace);
-        if (rv)
+        if (rv) {
+          delete Xform.ptr;
           return rv;
+        }
       }
       else {
         //It isn't named color so make we will use color lut.
@@ -11055,6 +11063,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
         }
         else {
           if (pProfile->m_Header.deviceClass == icSigLinkClass) {
+            delete pProfile;
             return icCmmStatBadSpaceLink;
           }
           if (pProfile->m_Header.deviceClass == icSigAbstractClass) {
@@ -11122,11 +11131,13 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
           break;
 
         default:
+          delete pProfile;
           return icCmmStatBadLutType;
       }
       break;
 
     default:
+      delete pProfile;
       return icCmmStatBadLutType;
   }
 
@@ -11137,10 +11148,14 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
       m_nSrcSpace = nSrcSpace;
     }
     else if (!IsCompatSpace(m_nSrcSpace, nSrcSpace) && !IsNChannelCompat(m_nSrcSpace, nSrcSpace)) {
+      if (!Xform.ptr)
+        delete pProfile;
       return icCmmStatBadSpaceLink;
     }
   }
   else if (!IsCompatSpace(m_nLastSpace, nSrcSpace) && !IsNChannelCompat(m_nSrcSpace, nSrcSpace))  {
+      if (!Xform.ptr)
+        delete pProfile;
       return icCmmStatBadSpaceLink;
   }
 
@@ -11168,6 +11183,7 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
     Xform.ptr = CIccXform::Create(pProfile, bInput, nIntent, nInterp, pPcc, nUseLutType, bUseD2BxB2DxTags, pHintManager);
 
   if (!Xform.ptr) {
+    // CIccXform::Create has already deleted the profile
     return icCmmStatBadXform;
   }
 
