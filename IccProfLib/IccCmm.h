@@ -1103,10 +1103,10 @@ protected:
   void pushXyzLumToXyz(IIccProfileConnectionConditions *pPCC);
   void pushScale3(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3);
   void pushOffset3(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3, bool bConvertIntXyzOffset=true);
-  void pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
+  icStatusCMM pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   void pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange);
-  void pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
-  void pushRad2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry=false);
+  icStatusCMM pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
+  icStatusCMM pushRad2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry=false);
   icStatusCMM pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushBiRef2Ref(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
@@ -1114,7 +1114,7 @@ protected:
   void pushMatrix(icUInt16Number nRows, icUInt16Number nCols, const icFloatNumber *vals);
   void pushMatrixTransverse(icUInt16Number nRows, icUInt16Number nCols, icFloatNumber *vals);
   icStatusCMM pushXYZConvert(CIccXform *pSrcXform, CIccXform *pDstXform);
-  void pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const icSpectralRange &srcRange, const icSpectralRange &dstRange);
+  icStatusCMM pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const icSpectralRange &srcRange, const icSpectralRange &dstRange);
 
 
   icColorSpaceSignature m_srcSpace;
