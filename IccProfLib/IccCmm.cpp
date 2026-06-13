@@ -3250,6 +3250,9 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
   CIccApplyXform *pApply = tmp.GetNewApply(stat);
   if (pApply) {
     icFloatNumber xyz[3], normxyz[3], pccxyz[3];
+    
+    if (illuminantRange.steps < 3)
+      return icCmmStatInvalidProfile;
 
     //Get absolute xyz for illuminant and observer
     tmp.Apply(pApply, xyz, illuminant);
