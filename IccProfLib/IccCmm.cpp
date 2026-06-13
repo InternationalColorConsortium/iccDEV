@@ -3258,26 +3258,27 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
     tmp.Apply(pApply, xyz, illuminant);
 
     //calculate normalized XYZ
-    if (xyz[1] == 0.0f) {   // but don't divide by zero
-      normxyz[0] = xyz[0];
-      normxyz[1] = xyz[1];
-      normxyz[2] = xyz[2];
-    } else {
-      normxyz[0] = xyz[0] / xyz[1];
-      normxyz[1] = xyz[1] / xyz[1];
-      normxyz[2] = xyz[2] / xyz[1];
+    if (xyz[1] == 0.0f) {   // But don't divide by zero
+        delete pApply;      // This can occur when the illuminant and observer don't overlap
+        return icCmmStatInvalidProfile; // really bad illuminant and observer
     }
+    
+    normxyz[0] = xyz[0] / xyz[1];
+    normxyz[1] = xyz[1] / xyz[1];
+    normxyz[2] = xyz[2] / xyz[1];
 
     //get desired XYZ from pcc (might be slightly different from calculated normxyz)
     pPcc->getNormIlluminantXYZ(pccxyz);
 
-    if (xyz[1] != 0.0f          // don't divide by zero
-        && normxyz[0] != 0.0f && normxyz[1] != 0.0f &&normxyz[2] != 0.0f ) {
-      //push scale factor to normalize XYZ values and correct for difference between calculated and desired XYZ
-      pushScale3(pccxyz[0] / (normxyz[0] * xyz[1]),
-                 pccxyz[1] / (normxyz[1] * xyz[1]),
-                 pccxyz[2] / (normxyz[2] * xyz[1]));
+    if (normxyz[0] == 0.0f || normxyz[1] == 0.0f || normxyz[2] == 0.0f ) {
+      delete pApply;
+      return icCmmStatInvalidProfile; // really bad illuminant and observer
     }
+    
+    //push scale factor to normalize XYZ values and correct for difference between calculated and desired XYZ
+    pushScale3(pccxyz[0] / (normxyz[0] * xyz[1]),
+               pccxyz[1] / (normxyz[1] * xyz[1]),
+               pccxyz[2] / (normxyz[2] * xyz[1]));
 
     delete pApply;
   }
