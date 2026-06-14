@@ -712,6 +712,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1121-json-envvars-regression.sh"
 )
 
+# Guards iccApplyToLink -PCC profile ownership on its error-exit paths (#1336):
+# drives the AddXform BadSpaceLink path with tracked profiles under LeakSanitizer
+# and fails if a -PCC profile is stranded.  Uses committed test-data profiles, so
+# no generated-profile fixture is required.
+iccdev_add_script_test(
+  iccdev.issue-1336-applytolink-pcc-regression
+  60
+  "iccdev;tools;applytolink;leak;issue-1336;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1336-applytolink-pcc-regression.sh"
+)
+
 iccdev_add_script_test(
   iccdev.issue-1166-cam-hyperbolicinv-regression
   60
