@@ -1107,6 +1107,20 @@ set_tests_properties(iccdev.profile-visualize-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
+# #1346: signed atoi() -> unsigned wrap in IccTagXml ParseXml handlers.
+# Replays a PoC profile with a negative cicpFields ColorPrimaries attribute
+# through iccFromXml; under the integer/implicit-conversion sanitizer the test
+# FAILS if UBSan's implicit-integer-sign-change diagnostic reappears, and SKIPS
+# cleanly on a plain (non-sanitizer) build.  Uses a committed PoC, so it needs
+# no generated-profile fixture.
+iccdev_add_script_test(
+  iccdev.issue-1346-imageparse-atoi-unsigned-regression
+  60
+  "iccdev;xml;imageparse;issue-1346;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1346-imageparse-atoi-unsigned-regression.sh"
+)
+
 # Replays the #1342 / #1343 fuzz PoCs (negative SeamlessIndicator) through
 # iccFromXml and fails if the signed->unsigned implicit conversion in the
 # Embedded Height/Normal image ParseXml() handlers reappears.  Meaningful only
