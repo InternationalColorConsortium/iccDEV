@@ -2281,7 +2281,9 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
       case icSigTransmissionSpectralPcsData:
         switch (m_dstSpace) {
           case icSigLabPcsData:
-            pushRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions);
+            if ((stat=pushRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
+              return stat;
+            }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
@@ -2300,7 +2302,9 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             break;
 
           case icSigXYZPcsData:
-            pushRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions);
+            if ((stat=pushRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
+              return stat;
+            }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
@@ -2322,8 +2326,10 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             break;
 
           case icSigRadiantSpectralPcsData:
-            pushApplyIllum(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions);
-            pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
+            if ((stat=pushApplyIllum(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
+              return stat;
+            }
+            pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
                             pToXform->m_pProfile->m_Header.spectralRange);
             break;
 
@@ -2340,7 +2346,9 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
         switch (m_dstSpace) {
           case icSigLabPcsData:
-            pushRad2Xyz(pFromProfile, pFromXform->m_pConnectionConditions, false);
+            if ((stat=pushRad2Xyz(pFromProfile, pFromXform->m_pConnectionConditions, false))!=icCmmStatOk) {
+              return stat;
+            }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
@@ -2359,7 +2367,9 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             break;
 
           case icSigXYZPcsData:
-            pushRad2Xyz(pFromProfile, pFromXform->m_pConnectionConditions, false);
+            if ((stat=pushRad2Xyz(pFromProfile, pFromXform->m_pConnectionConditions, false))!=icCmmStatOk) {
+              return stat;
+            }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
@@ -3207,22 +3217,23 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
   return icCmmStatOk;
 }
 
-void CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const icSpectralRange &srcRange, const icSpectralRange &dstRange)
+icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
   if (!pPcc)
-    return;
+    return icCmmStatInvalidProfile;
 
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
   if (!pView)
-    return; // need a way to report errors
+    return icCmmStatProfileMissingTag;
 
   CIccPcsXform tmp;
 
   icSpectralRange illuminantRange;
   const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
-
   icSpectralRange observerRange;
   const icFloatNumber *observer = pView->getObserver(observerRange);
+  if (!illuminant || !observer)
+    return icCmmStatInvalidProfile;
 
   //make sure illuminant goes through identical conversion steps
   if (!icSameSpectralRange(srcRange, illuminantRange) || !icSameSpectralRange(dstRange, illuminantRange)) {
@@ -3239,11 +3250,19 @@ void CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const
   CIccApplyXform *pApply = tmp.GetNewApply(stat);
   if (pApply) {
     icFloatNumber xyz[3], normxyz[3], pccxyz[3];
+    
+    if (illuminantRange.steps < 3)
+      return icCmmStatInvalidProfile;
 
     //Get absolute xyz for illuminant and observer
     tmp.Apply(pApply, xyz, illuminant);
 
     //calculate normalized XYZ
+    if (xyz[1] == 0.0f) {   // But don't divide by zero
+        delete pApply;      // This can occur when the illuminant and observer don't overlap
+        return icCmmStatInvalidProfile; // really bad illuminant and observer
+    }
+    
     normxyz[0] = xyz[0] / xyz[1];
     normxyz[1] = xyz[1] / xyz[1];
     normxyz[2] = xyz[2] / xyz[1];
@@ -3251,17 +3270,19 @@ void CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const
     //get desired XYZ from pcc (might be slightly different from calculated normxyz)
     pPcc->getNormIlluminantXYZ(pccxyz);
 
-#if 1
+    if (normxyz[0] == 0.0f || normxyz[1] == 0.0f || normxyz[2] == 0.0f ) {
+      delete pApply;
+      return icCmmStatInvalidProfile; // really bad illuminant and observer
+    }
+    
     //push scale factor to normalize XYZ values and correct for difference between calculated and desired XYZ
-    pushScale3(pccxyz[0] / (normxyz[0] * xyz[1]), 
+    pushScale3(pccxyz[0] / (normxyz[0] * xyz[1]),
                pccxyz[1] / (normxyz[1] * xyz[1]),
                pccxyz[2] / (normxyz[2] * xyz[1]));
-#else
-    pushScale3(1.0f/xyz[1], 1.0f/xyz[1], 1.0f/xyz[1]);
-#endif
 
     delete pApply;
   }
+  return icCmmStatOk;
 }
 
 /**
@@ -3274,24 +3295,29 @@ void CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const
  *  handle pPcc.
  **************************************************************************
  */
-void CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
+icStatusCMM CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
 
   if (pView) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
-
     icSpectralRange observerRange;
     const icFloatNumber *observer = pView->getObserver(observerRange);
+    if (!illuminant || !observer)
+      return icCmmStatInvalidProfile;
 
     pushSpecToRange(pProfile->m_Header.spectralRange, illuminantRange);
     pushScale(illuminantRange.steps, illuminant);
     pushSpecToRange(illuminantRange, observerRange);
     pushMatrix(3, observerRange.steps, observer);
 
-    pushXYZNormalize(pPcc, illuminantRange, illuminantRange);
+    icStatusCMM stat;
+    if ((stat=pushXYZNormalize(pPcc, illuminantRange, illuminantRange))!=icCmmStatOk) {
+      return stat;
+    }
   }
+  return icCmmStatOk;
 }
 
 
@@ -3354,7 +3380,7 @@ void CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const icSpec
  *  vectors.
  **************************************************************************
  */
-void CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
+icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
 
@@ -3363,6 +3389,8 @@ void CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionCo
 
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
+    if (!illuminant)
+      return icCmmStatInvalidProfile;
 
     CIccPcsStepScale *pScale = new CIccPcsStepScale(illuminantRange.steps);
     memcpy(pScale->data(), illuminant, illuminantRange.steps*sizeof(icFloatNumber));
@@ -3385,6 +3413,7 @@ void CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionCo
         m_list->push_back(ptr);
     }
   }
+  return icCmmStatOk;
 }
 
 
@@ -3398,16 +3427,17 @@ void CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionCo
  *  Connection Conditions.
  **************************************************************************
  */
-void CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry)
+icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry)
 {
   const CIccTagSpectralViewingConditions *pProfView = pProfile ? pProfile->getPccViewingConditions() : NULL;
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
   if (pProfView && pView) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
-
     icSpectralRange observerRange;
     const icFloatNumber *observer = pView->getObserver(observerRange);
+    if (!illuminant || !observer)
+      return icCmmStatInvalidProfile;
 
     //Preserve smallest step size
     icFloatNumber spectralSteps = (icFloatNumber)pProfile->m_Header.spectralRange.steps;
@@ -3443,6 +3473,7 @@ void CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionCondi
     }
     pushScale3(k, k, k);
   }
+  return icCmmStatOk;
 }
 
 
@@ -3462,6 +3493,8 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
   if (pView) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
+    if (!illuminant)
+      return icCmmStatProfileMissingTag;
 
     if (icGetColorSpaceType(pProfile->m_Header.spectralPCS)==icSigSparseMatrixSpectralPcsData) {
       CIccPcsStepSrcSparseMatrix *pMtx = new (std::nothrow) CIccPcsStepSrcSparseMatrix(pProfile->m_Header.spectralRange.steps,
@@ -3531,10 +3564,14 @@ icStatusCMM CIccPcsXform::pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnec
   if (pView) {
     icSpectralRange observerRange;
     const icFloatNumber *observer = pView->getObserver(observerRange);
+    if (!observer)
+      return icCmmStatInvalidProfile;
 
     pushSpecToRange(pProfile->m_Header.spectralRange, observerRange);
     pushMatrix(3, observerRange.steps, observer);
-    pushXYZNormalize(pPcc, pProfile->m_Header.biSpectralRange, pProfile->m_Header.spectralRange);
+    if ((stat=pushXYZNormalize(pPcc, pProfile->m_Header.biSpectralRange, pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+      return stat;
+    }
   }
   else {
     return icCmmStatBadConnection;
@@ -3565,6 +3602,8 @@ icStatusCMM CIccPcsXform::pushBiRef2Ref(CIccProfile *pProfile, IIccProfileConnec
   if (pView) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
+    if (!illuminant)
+      return icCmmStatProfileMissingTag;
 
     CIccPcsStepScale *pScale = new (std::nothrow) CIccPcsStepScale(pProfile->m_Header.spectralRange.steps);
 
@@ -8927,16 +8966,27 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
 
         rv = pPcs->Connect(last->ptr, next->ptr);
 
-        if (rv!=icCmmStatOk && rv!=icCmmStatIdentityXform)
+        // A hard Connect() failure aborts CheckPCSConnections.  pPcs is still a
+        // locally-owned allocation that has not been handed to the xform list,
+        // so free it before returning - the sibling CIccPcsXform blocks (the
+        // ConnectFirst case above and the trailing case below) both delete on
+        // their failure paths; this one previously leaked it (#1337).
+        if (rv!=icCmmStatOk && rv!=icCmmStatIdentityXform) {
+          delete pPcs;
           return rv;
+        }
 
         if (rv!=icCmmStatIdentityXform) {
+          // A real conversion is needed: ownership of pPcs passes to the xform
+          // list, which frees it when the CMM is destroyed.
           ptr.ptr = pPcs;
           xforms.push_back(ptr);
 
           bUsesPcsXforms = true;
         }
         else {
+          // Identity conversion: the spaces already match, so the extra
+          // PcsXform is unnecessary - discard it.
           delete pPcs;
         }
       }

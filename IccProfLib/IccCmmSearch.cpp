@@ -270,8 +270,16 @@ icStatusCMM CIccCmmSearch::AddXform(CIccProfile* pProfile,
   bool bUseD2BxB2DxTags,
   CIccCreateXformHintManager* /* pHintManager */)
 {
-  if (pProfile->m_Header.deviceClass == icSigNamedColorClass)
+  // This override owns pProfile on every path, matching the base
+  // CIccCmm::AddXform contract (#1327): the successful cases below store it and
+  // ~CIccCmmSearch frees it, while every rejection deletes it here.  Callers
+  // (the filename and reference AddXform overloads) therefore never free it
+  // themselves.  A NamedColor profile has no search LUT, so reject it -- and
+  // free it, as the default case below already does (#1332).
+  if (pProfile->m_Header.deviceClass == icSigNamedColorClass) {
+    delete pProfile;
     return icCmmStatInvalidLut;
+  }
 
   switch (m_nAttached) {
   case 0:

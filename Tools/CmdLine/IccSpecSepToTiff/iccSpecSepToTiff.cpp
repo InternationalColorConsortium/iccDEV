@@ -273,7 +273,7 @@ int main(int argc, char* argv[]) {
 
   CTiffImg outfile;
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
-                     nSamples, 0, xRes, yRes, bCompress, bSep)) {
+                     (unsigned int)nSamples, 0, xRes, yRes, bCompress, bSep)) {
     printf("Unable to create %s\n", argv[1]);
     return -1;
   }
