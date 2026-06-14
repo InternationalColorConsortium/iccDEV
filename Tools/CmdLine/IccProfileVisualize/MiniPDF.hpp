@@ -347,10 +347,24 @@ std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
                     const std::string &text,
                     PDFTextAlignment align = kPDFTextAlignCenter );
 
-std::string PDFMultiLineTextLabel( const point2D &basepoint,
+// this will break the text string into lines
+std::string PDFMultiLineText( const point2D &basepoint,
                     float labelSize, float leading, float second_line_indent,
                     const std::string &text,
-                    PDFTextAlignment align = kPDFTextAlignCenter,
+                    PDFTextAlignment align,
+                    bool allowBlankLines = true );
+
+// this takes premade lines
+std::string PDFMultiLineText( const point2D &basepoint,
+                    float textSizePts, float leading, float second_line_indent,
+                    std::vector<std::string> &lines, PDFTextAlignment align  = kPDFTextAlignLeft,
+                    bool allowBlankLines = true );
+
+// take a long string and break it up into lines based on the limit
+std::string PDFParagraphText( const point2D &basepoint,
+                    float textSizePts, float leading, float second_line_indent,
+                    size_t characterLineLimit,
+                    const std::string &text, PDFTextAlignment align = kPDFTextAlignLeft,
                     bool allowBlankLines = true );
 
 /******************************************************************************/

@@ -982,7 +982,7 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   float labelSize = 12.0f;     // points
   float leading = labelSize * 1.1f;
   float indent = 0.5f * inch2point;
-  commands << PDFMultiLineTextLabel( labelPt, labelSize, leading, indent,
+  commands << PDFMultiLineText( labelPt, labelSize, leading, indent,
                                     name + " " + description, kPDFTextAlignCenterLeft );
 
   // draw the curve
