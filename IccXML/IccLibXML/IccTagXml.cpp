@@ -5545,7 +5545,14 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
   if (!tagNode)
     return false;
 
-  m_nSeamlesIndicator = atoi(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"));
+  // SeamlessIndicator is stored as an unsigned 32-bit indicator (the binary
+  // Read() path uses Read32).  atoi() returns a signed int, so a negative XML
+  // attribute used to wrap to a huge unsigned value through the implicit
+  // int -> icUInt32Number conversion (#1342).  The value is now parsed into a
+  // signed temporary and any negative (invalid) input is floored to 0, so the
+  // stored indicator is always a well-defined non-negative number.
+  int nSeamlessIndicator = atoi(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"));
+  m_nSeamlesIndicator = nSeamlessIndicator < 0 ? 0 : (icUInt32Number)nSeamlessIndicator;
   m_nEncodingFormat = (icImageEncodingType)atoi(icXmlAttrValue(tagNode, "EncodingFormat", "0"));
   m_fMetersMinPixelValue = (icFloatNumber)atof(icXmlAttrValue(tagNode, "MetersMinPixelValue", "0.0"));
   m_fMetersMaxPixelValue = (icFloatNumber)atof(icXmlAttrValue(tagNode, "MetersMaxPixelValue", "0.0"));
@@ -5648,7 +5655,14 @@ bool CIccTagXmlEmbeddedNormalImage::ParseXml(xmlNode *pNode, std::string &parseS
   if (!tagNode)
     return false;
 
-  m_nSeamlesIndicator = atoi(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"));
+  // SeamlessIndicator is stored as an unsigned 32-bit indicator (the binary
+  // Read() path uses Read32).  atoi() returns a signed int, so a negative XML
+  // attribute used to wrap to a huge unsigned value through the implicit
+  // int -> icUInt32Number conversion (#1343).  The value is now parsed into a
+  // signed temporary and any negative (invalid) input is floored to 0, so the
+  // stored indicator is always a well-defined non-negative number.
+  int nSeamlessIndicator = atoi(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"));
+  m_nSeamlesIndicator = nSeamlessIndicator < 0 ? 0 : (icUInt32Number)nSeamlessIndicator;
   m_nEncodingFormat = (icImageEncodingType)atoi(icXmlAttrValue(tagNode, "EncodingFormat", "0"));
 
   xmlNode *pImageNode;
