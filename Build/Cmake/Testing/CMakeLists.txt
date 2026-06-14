@@ -241,6 +241,47 @@ function(iccdev_add_cmmsearch_namedcolor_ownership_test)
   endif()
 endfunction()
 
+# Guards CIccXform::Create(CIccProfile*, CIccTag*) profile ownership (#1308):
+# AddXform hands its owned profile to the tag-based Create overload, which must
+# free it when no xform can be built.  The helper feeds a valid profile plus a
+# NULL tag, so Create takes its failure path; a profile it fails to free is
+# unreachable and reported by the ASan/LSan CI job.
+function(iccdev_add_xform_create_tag_ownership_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXformCreateTagOwnershipTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xform-create-tag-ownership.cpp"
+  )
+  target_link_libraries(iccXformCreateTagOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccXformCreateTagOwnershipTest)
+
+  add_test(
+    NAME iccdev.xform-create-tag-ownership
+    COMMAND "$<TARGET_FILE:iccXformCreateTagOwnershipTest>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.xform-create-tag-ownership PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;xform;leak;issue-1308;regression"
+  )
+  if(WIN32)
+    set(_xform_create_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXformCreateTagOwnershipTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xform_create_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xform-create-tag-ownership PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xform_create_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -556,6 +597,7 @@ if(WIN32)
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
+  iccdev_add_xform_create_tag_ownership_test()
 
   return()
 endif()
@@ -613,6 +655,7 @@ iccdev_add_fileio_seek_tell_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
+iccdev_add_xform_create_tag_ownership_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
