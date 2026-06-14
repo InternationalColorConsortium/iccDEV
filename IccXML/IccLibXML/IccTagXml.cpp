@@ -84,8 +84,30 @@ typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 namespace iccDEV {
 #endif
 
+// Parse a non-negative integer XML attribute value.
+//
+// atoi() returns a signed int, but the ParseXml handlers below store these
+// attributes into unsigned icUIntNN members/locals.  A negative attribute
+// therefore used to wrap to a huge unsigned value -- either implicitly (caught
+// by UBSan's implicit-integer-sign-change, e.g. #1342/#1343) or silently behind
+// an explicit (icUIntNN) cast (invisible to UBSan).  This helper centralizes
+// the fix: any negative (invalid) input is floored to 0 so the stored value is
+// always well-defined.
+//
+// Usage: replace `atoi(icXmlAttrValue(...))` with
+// `icXmlAttrToUInt(icXmlAttrValue(...))`.  The helper returns the widest
+// unsigned type (icUInt32Number); callers that target an 8- or 16-bit member
+// keep their explicit (icUInt8Number)/(icUInt16Number) cast exactly as before,
+// which both narrows the value and suppresses the implicit-integer-truncation
+// check, so no behavior other than the negative-wrap is changed (#1346).
+static icUInt32Number icXmlAttrToUInt(const char *szValue)
+{
+  int nValue = atoi(szValue);
+  return nValue < 0 ? 0u : (icUInt32Number)nValue;
+}
 
-bool CIccTagXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/) 
+
+bool CIccTagXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   xml += blanks + "<UnknownData>\n";
   icXmlDumpHexData(xml, blanks+" ", m_pData, m_nSize);
@@ -793,7 +815,7 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
   m_spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
-  m_spectralRange.steps = (icUInt16Number)atoi(icXmlAttrValue(pChild, "steps"));
+  m_spectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
 
   pChild = icXmlFindNode(pNode, "BiSpectralRange");
 
@@ -801,7 +823,7 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
     if ((pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
       m_biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
       m_biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
-      m_biSpectralRange.steps = (icUInt16Number)atoi(icXmlAttrValue(pChild, "steps"));
+      m_biSpectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
     }
   }
 
@@ -1169,22 +1191,22 @@ bool CIccTagXmlCicp::ParseXml(xmlNode* pNode, std::string& /*parseStr*/)
   if (pNode) {
     xmlAttr* attr;
     if ((attr = icXmlFindAttr(pNode, "ColorPrimaries")))
-      m_nColorPrimaries = atoi(icXmlAttrValue(attr));
+      m_nColorPrimaries = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
     else
       m_nColorPrimaries = 0;
 
     if ((attr = icXmlFindAttr(pNode, "TransferCharacteristics")))
-      m_nTransferCharacteristics = atoi(icXmlAttrValue(attr));
+      m_nTransferCharacteristics = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
     else
       m_nTransferCharacteristics = 0;
 
     if ((attr = icXmlFindAttr(pNode, "MatrixCoefficients")))
-      m_nMatrixCoefficients = atoi(icXmlAttrValue(attr));
+      m_nMatrixCoefficients = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
     else
       m_nMatrixCoefficients = 0;
 
     if ((attr = icXmlFindAttr(pNode, "VideoFullRangeFlag")))
-      m_nVideoFullRangeFlag = atoi(icXmlAttrValue(attr));
+      m_nVideoFullRangeFlag = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
     else
       m_nVideoFullRangeFlag = 0;
   }
@@ -1256,7 +1278,7 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
     xmlAttr *matrixType = icXmlFindAttr(pNode, "matrixType");
 
     if (outputChan && matrixType) {
-      icUInt32Number nChannelsPerMatrix = atoi(icXmlAttrValue(outputChan));
+      icUInt32Number nChannelsPerMatrix = icXmlAttrToUInt(icXmlAttrValue(outputChan));
       icSparseMatrixType nMatrixType = (icSparseMatrixType)atoi(icXmlAttrValue(matrixType));
 
       xmlNode *pChild;
@@ -1285,8 +1307,8 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
             if (rows && cols) {
               icUInt16Number nRows, nCols;
 
-              nRows = atoi(icXmlAttrValue(rows));
-              nCols = atoi(icXmlAttrValue(cols));
+              nRows = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(rows));
+              nCols = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(cols));
 
               mtx.Init(nRows, nCols, true);
 
@@ -1346,8 +1368,8 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
             if (rows && cols) {
               icUInt16Number nRows, nCols;
 
-              nRows = atoi(icXmlAttrValue(rows));
-              nCols = atoi(icXmlAttrValue(cols));
+              nRows = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(rows));
+              nCols = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(cols));
 
               mtx.Init(nRows, nCols, true);
 
@@ -2322,7 +2344,7 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
-      m_reserved2 = (icUInt16Number)atoi(icXmlAttrValue(attr));
+      m_reserved2 = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(attr));
     }
     
     // if these are not set correctly, then later allocations and calculations WILL fail
@@ -2376,7 +2398,7 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
-      m_reserved3 = (icUInt16Number)atoi(icXmlAttrValue(attr));
+      m_reserved3 = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(attr));
     }
     
     // if these are not set correctly, then later allocations and calculations WILL fail
@@ -3364,7 +3386,7 @@ bool CIccTagXmlParametricCurve::ParseXml(xmlNode *pNode, std::string & /*parseSt
         xmlAttr *reserved2 = icXmlFindAttr(pCurveNode, "Reserved");
 
         if (reserved2) {
-          m_nReserved2 = (icUInt16Number)atoi(icXmlAttrValue(reserved2));
+          m_nReserved2 = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(reserved2));
         }
         return true;
       }
@@ -3712,7 +3734,7 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
     xmlAttr *gridGranularity = icXmlFindAttr(pNode, "GridGranularity");
 
     if (gridGranularity) {
-      nGridGranularity = (icUInt8Number)atoi(icXmlAttrValue(gridGranularity));
+      nGridGranularity = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(gridGranularity));
     }
     else {
       delete pCLUT;
@@ -4488,8 +4510,8 @@ bool CIccTagXmlMultiProcessElement::ParseXml(xmlNode *pNode, std::string &parseS
     return false;
   }
 
-  m_nInputChannels = atoi(icXmlAttrValue(pInputChannels));
-  m_nOutputChannels = atoi(icXmlAttrValue(pOutputChannels));
+  m_nInputChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pInputChannels));
+  m_nOutputChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pOutputChannels));
 
   if (!m_list) {
     m_list = new (std::nothrow) CIccMultiProcessElementList();
@@ -5395,7 +5417,7 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
   subNode = icXmlFindNode(childNode->children, "PCSValues");
 
   if (subNode) {
-    m_nPCSChannels = atoi(icXmlAttrValue(subNode, "channels", "0"));
+    m_nPCSChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(subNode, "channels", "0"));
 
     if (!m_nPCSChannels) {
       parseStr += "Bad PCSValues channels\n";
@@ -5431,7 +5453,7 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
   subNode = icXmlFindNode(childNode->children, "DeviceValues");
 
   if (subNode) {
-    m_nDeviceChannels = atoi(icXmlAttrValue(subNode, "channels", "0"));
+    m_nDeviceChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(subNode, "channels", "0"));
 
     if (!m_nDeviceChannels) {
       parseStr += "Bad DeviceValues channels\n";
