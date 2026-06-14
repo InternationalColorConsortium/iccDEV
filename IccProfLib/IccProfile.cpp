@@ -3551,6 +3551,8 @@ bool CIccProfile::calcLumIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnectio
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
+    if (!illuminant)
+      return false;
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 
@@ -3597,6 +3599,8 @@ bool CIccProfile::calcNormIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnecti
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
+    if (!illuminant)
+      return false;
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 

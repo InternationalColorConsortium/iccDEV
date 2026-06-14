@@ -200,6 +200,47 @@ function(iccdev_add_tag_layout_shared_data_test)
   endif()
 endfunction()
 
+# Guards CIccCmmSearch::AddXform profile ownership (#1332): the search CMM
+# rejects a NamedColor profile (no search LUT) and, like the base AddXform
+# contract (#1327), must free it.  The helper feeds a NamedColor profile through
+# the inherited filename overload, which opens it internally, so a profile the
+# override fails to free is unreachable and reported by the ASan/LSan CI job.
+function(iccdev_add_cmmsearch_namedcolor_ownership_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCmmSearchNamedColorOwnershipTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/cmmsearch-namedcolor-ownership.cpp"
+  )
+  target_link_libraries(iccCmmSearchNamedColorOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCmmSearchNamedColorOwnershipTest)
+
+  add_test(
+    NAME iccdev.cmmsearch-namedcolor-ownership
+    COMMAND "$<TARGET_FILE:iccCmmSearchNamedColorOwnershipTest>"
+      "${ICCDEV_REPO_ROOT}/.github/ci/test-data/fuzz-nmcl-9c09d1e6.icc"
+  )
+  set_tests_properties(iccdev.cmmsearch-namedcolor-ownership PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccconnect;search;leak;issue-1332;regression"
+  )
+  if(WIN32)
+    set(_cmmsearch_namedcolor_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCmmSearchNamedColorOwnershipTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _cmmsearch_namedcolor_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.cmmsearch-namedcolor-ownership PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_cmmsearch_namedcolor_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -514,6 +555,7 @@ if(WIN32)
   iccdev_add_fileio_seek_tell_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
+  iccdev_add_cmmsearch_namedcolor_ownership_test()
 
   return()
 endif()
@@ -570,6 +612,7 @@ iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
+iccdev_add_cmmsearch_namedcolor_ownership_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
