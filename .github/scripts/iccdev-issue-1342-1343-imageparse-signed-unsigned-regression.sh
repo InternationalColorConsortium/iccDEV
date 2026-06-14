@@ -81,7 +81,10 @@ run_case() {
     echo "[SKIP] PoC XML missing: $xml"
     return
   fi
-  local log="$OUTDIR/$(basename "$xml").log"
+  # Declare then assign separately so the $(basename ...) exit status is not
+  # masked by `local` (shellcheck SC2155).
+  local log
+  log="$OUTDIR/$(basename "$xml").log"
   # The PoC profile is intentionally invalid, so iccFromXml exits non-zero
   # regardless of the fix; the pass/fail signal is the UBSan runtime error, not
   # the tool exit code.  Keep ASan quiet about unrelated leaks on this invalid
