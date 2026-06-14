@@ -8966,16 +8966,27 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
 
         rv = pPcs->Connect(last->ptr, next->ptr);
 
-        if (rv!=icCmmStatOk && rv!=icCmmStatIdentityXform)
+        // A hard Connect() failure aborts CheckPCSConnections.  pPcs is still a
+        // locally-owned allocation that has not been handed to the xform list,
+        // so free it before returning - the sibling CIccPcsXform blocks (the
+        // ConnectFirst case above and the trailing case below) both delete on
+        // their failure paths; this one previously leaked it (#1337).
+        if (rv!=icCmmStatOk && rv!=icCmmStatIdentityXform) {
+          delete pPcs;
           return rv;
+        }
 
         if (rv!=icCmmStatIdentityXform) {
+          // A real conversion is needed: ownership of pPcs passes to the xform
+          // list, which frees it when the CMM is destroyed.
           ptr.ptr = pPcs;
           xforms.push_back(ptr);
 
           bUsesPcsXforms = true;
         }
         else {
+          // Identity conversion: the spaces already match, so the extra
+          // PcsXform is unnecessary - discard it.
           delete pPcs;
         }
       }
