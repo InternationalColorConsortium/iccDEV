@@ -1029,6 +1029,20 @@ set_tests_properties(iccdev.profile-visualize-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
+# Replays the #1342 / #1343 fuzz PoCs (negative SeamlessIndicator) through
+# iccFromXml and fails if the signed->unsigned implicit conversion in the
+# Embedded Height/Normal image ParseXml() handlers reappears.  Meaningful only
+# under the integer/implicit-conversion sanitizer build (the script skips
+# cleanly otherwise), so it carries the ubsan label.  No profile fixture needed
+# -- the trigger XML files are committed test data.
+iccdev_add_script_test(
+  iccdev.issue-1342-1343-imageparse-signed-unsigned-regression
+  120
+  "iccdev;imageparse;signed-unsigned;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1342-1343-imageparse-signed-unsigned-regression.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus
