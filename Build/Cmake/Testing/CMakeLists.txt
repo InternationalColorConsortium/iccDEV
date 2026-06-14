@@ -216,9 +216,19 @@ function(iccdev_add_cmmsearch_namedcolor_ownership_test)
   target_link_libraries(iccCmmSearchNamedColorOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccCmmSearchNamedColorOwnershipTest)
 
+  # This regression's pass/fail signal IS the LeakSanitizer at-exit scan, but the
+  # CI tool-test job and ICCDEV_TEST_ENV both export ASAN_OPTIONS=...detect_leaks=0
+  # to silence unrelated leaks in the smoke-tested tools.  Inheriting that would
+  # disable LSan here and let a profile leak pass undetected.  Launch through
+  # `cmake -E env ASAN_OPTIONS=detect_leaks=1` to force leak detection on for
+  # this test's own process.  Set ONLY detect_leaks=1: appending halt_on_error=0
+  # makes the runtime print the leak but exit 0, and a ':' option separator is
+  # mis-parsed and silently disables the check.
   add_test(
     NAME iccdev.cmmsearch-namedcolor-ownership
-    COMMAND "$<TARGET_FILE:iccCmmSearchNamedColorOwnershipTest>"
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "ASAN_OPTIONS=detect_leaks=1"
+      "$<TARGET_FILE:iccCmmSearchNamedColorOwnershipTest>"
       "${ICCDEV_REPO_ROOT}/.github/ci/test-data/fuzz-nmcl-9c09d1e6.icc"
   )
   set_tests_properties(iccdev.cmmsearch-namedcolor-ownership PROPERTIES
