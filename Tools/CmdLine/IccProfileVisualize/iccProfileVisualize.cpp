@@ -185,6 +185,29 @@ void LogAnError(FILE *stream, const char* format, ...)
 
 /******************************************************************************/
 
+struct XYColor
+{
+  XYColor (float xx, float yy) : x(xx), y(yy) {}
+
+  bool operator<(const XYColor& o) const {
+    if (x == o.x)
+      return y < o.y;
+    else
+      return x < o.x;
+  }
+
+public:
+  float x;
+  float y;
+};
+
+float cross(const XYColor &O, const XYColor &A, const XYColor &B)
+{
+  return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+}
+
+/******************************************************************************/
+
 // Cross product 2 vectors from O to A and B
 // Returns a positive value, if OAB makes a counter-clockwise turn,
 // negative for clockwise turn, and zero if the points are collinear.
@@ -275,56 +298,6 @@ void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &rang
 
 /******************************************************************************/
 
-enum TextAlignment {
-    kTextAlignLeft = 0,
-    kTextAlignCenter = 1,
-    kTextAlignRight = 2
-};
-
-static
-std::string AddGraphLabels( const point2D &basepoint, bool isVertical,
-        const point2D &tickLength, float labelSize, const std::string &text,
-        TextAlignment align = kTextAlignCenter )
-{
-  std::ostringstream commands;
-
-  float textWidth = labelSize * 0.6f * text.size(); // very approximate, not using font metrics
-  float textHalf = 0.5f * textWidth;
-
-  point2D position(0,0);
-  switch(align) {
-    default:
-    case kTextAlignLeft:
-        // do nothing
-        break;
-
-    case kTextAlignCenter:
-        position = point2D(-textHalf,0);
-        break;
-
-    case kTextAlignRight:
-        position = point2D(-textWidth,0);
-        break;
-  }
-
-  point2D pt00 = basepoint;
-  commands << "BT /F1 " << labelSize << " Tf ";
-  if (isVertical) {
-    std::swap(position.x,position.y);
-    pt00 += tickLength*1.25f + position;
-    commands << "0 " << 1 << " " << -1 << " 0 " << pt00 << " Tm ";
-  }
-  else {
-    pt00 += tickLength + position - point2D(0,labelSize);
-    commands << pt00 << " Td ";
-  }
-  commands << "(" << text << ") Tj ET\n";
-
-  return commands.str();
-}
-
-/******************************************************************************/
-
 static
 std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
         const point2D &tickLength, const point2D &fullLength, float labelSize, const std::string &label )
@@ -381,12 +354,12 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
   std::string half("50%");
   std::string full("100%");
   bool isVertical = (range.x == 0);
-  commands << AddGraphLabels( basepoint, isVertical, tickLength, labelSize, zero );
-  commands << AddGraphLabels( basepoint+0.5f*range, isVertical, tickLength, labelSize, half );
-  commands << AddGraphLabels( basepoint+range, isVertical, tickLength, labelSize, full, kTextAlignRight );
+  commands << PDFSingleLineTextLabel( basepoint, isVertical, tickLength, labelSize, zero );
+  commands << PDFSingleLineTextLabel( basepoint+0.5f*range, isVertical, tickLength, labelSize, half );
+  commands << PDFSingleLineTextLabel( basepoint+range, isVertical, tickLength, labelSize, full, kPDFTextAlignRight );
 
   // IO label near 2/3
-  commands << AddGraphLabels( basepoint + range*0.66, isVertical, tickLength, labelSize, label );
+  commands << PDFSingleLineTextLabel( basepoint + range*0.66, isVertical, tickLength, labelSize, label );
 
   // grestore at end
   commands << "Q\n";
@@ -424,29 +397,6 @@ void CreateAxesXobject( PDFWriter &pdfout )
   commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0f, "Output" );
 
   pdfout.AddXObject( bounds, commands, "Axes" );
-}
-
-/******************************************************************************/
-
-struct XYColor
-{
-  XYColor (float xx, float yy) : x(xx), y(yy) {}
-
-  bool operator<(const XYColor& o) const {
-    if (x == o.x)
-      return y < o.y;
-    else
-      return x < o.x;
-  }
-
-public:
-  float x;
-  float y;
-};
-
-float cross(const XYColor &O, const XYColor &A, const XYColor &B)
-{
-  return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
 }
 
 /******************************************************************************/
@@ -529,22 +479,22 @@ std::vector<int> locusLabelWavelengths =
 /******************************************************************************/
 
 static
-point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
+point2D spectrumLabelOffset( int nm, float textSize, PDFTextAlignment &align )
 {
 // NOTE - Yes, I could create normal vectors from the locus points, etc.
 // but this looks better with less math, and is much easier to debug.
 
   if (nm < 515) {
     // go left
-    align = kTextAlignRight;
+    align = kPDFTextAlignRight;
     return point2D( -2.0f, 0.0f );
   } else if (nm <= 520) {
     // go up
-    align = kTextAlignCenter;
+    align = kPDFTextAlignCenter;
     return point2D( -3.0f, textSize*1.55f );
   } else {
     // go right
-    align = kTextAlignLeft;
+    align = kPDFTextAlignLeft;
     return point2D( textSize*0.5, textSize );
   }
 
@@ -623,13 +573,13 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   const float labelSize = 9.0f;
   const int wavelengthOffset = spectralLocus2degree[0].wavelength;
   for (auto &nm : locusLabelWavelengths ) {
-    TextAlignment align;
+    PDFTextAlignment align;
     point2D offset = spectrumLabelOffset( nm,labelSize, align );
     size_t index = nm - wavelengthOffset;
     point2D thispoint = basepoint + scaling * point2D( spectralLocus2degree[index].x,
                                                        spectralLocus2degree[index].y );
     std::string number = std::to_string(nm);
-    commands << AddGraphLabels( thispoint + offset, false, point2D(0,0), labelSize, number, align );
+    commands << PDFSingleLineTextLabel( thispoint + offset, false, point2D(0,0), labelSize, number, align );
   }
 
   // plankian white curve
@@ -747,13 +697,13 @@ void CreateABPlotXobject( PDFWriter &pdfout )
   commands << "0.4 0 0 0 k\n";
   float labelSize = 10.0f;
   point2D labelPtYellow(center.x,top-margin);
-  commands << AddGraphLabels( labelPtYellow, false, point2D(0,0), labelSize, "+b Yellow", kTextAlignCenter );
+  commands << PDFSingleLineTextLabel( labelPtYellow, false, point2D(0,0), labelSize, "+b Yellow", kPDFTextAlignCenter );
   point2D labelPtBlue( center.x,bottom+margin+labelSize*1.2f);
-  commands << AddGraphLabels( labelPtBlue, false, point2D(0,0), labelSize, "-b Blue", kTextAlignCenter );
+  commands << PDFSingleLineTextLabel( labelPtBlue, false, point2D(0,0), labelSize, "-b Blue", kPDFTextAlignCenter );
   point2D labelPtMagenta(right-margin,center.y);
-  commands << AddGraphLabels( labelPtMagenta, false, point2D(0,0), labelSize, "+a Magenta", kTextAlignRight );
+  commands << PDFSingleLineTextLabel( labelPtMagenta, false, point2D(0,0), labelSize, "+a Magenta", kPDFTextAlignRight );
   point2D labelPtTeal(left+margin,center.y);
-  commands << AddGraphLabels( labelPtTeal, false, point2D(0,0), labelSize, "-a Green", kTextAlignLeft );
+  commands << PDFSingleLineTextLabel( labelPtTeal, false, point2D(0,0), labelSize, "-a Green", kPDFTextAlignLeft );
 
   // end colored grid, grestore, gsave
   commands << "Q q\n";
@@ -839,8 +789,8 @@ std::string plotXYZTag( CIccTag *tag, std::string label, const point2D &basepoin
       point2D thePt = basepoint + scaling * point2D( theXY.x, theXY.y );
       commands << plotSquarePDF( thePt, symbolSize );
       point2D textOffset( 0, symbolSize+2+textSize );
-      commands << AddGraphLabels( thePt + textOffset, false, point2D(0,0),
-                                    textSize, label, kTextAlignLeft );
+      commands << PDFSingleLineTextLabel( thePt + textOffset, false, point2D(0,0),
+                                    textSize, label, kPDFTextAlignLeft );
       if (result)
         *result = thePt;
     }
@@ -889,7 +839,7 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   point2D range( right - left, 0 );
   point2D labelBase( left, top );
   point2D tickLength(0,0);
-  commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12.0f, "Chromaticity xy" );
+  commands << PDFSingleLineTextLabel( labelBase + range*0.5, false, tickLength, 12.0f, "Chromaticity xy" );
 
 
   // gsave, color black
@@ -1009,28 +959,6 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 }
 #endif  // USE_SVG
 
-/******************************************************************************/
-
-static
-std::vector<std::string> splitTextLines(const std::string& str)
-{
-  const char newline = '\n';
-  std::vector<std::string> lines;
-  size_t start = 0;
-  size_t end = str.find(newline);
-  while (end != std::string::npos) {
-    lines.push_back(str.substr(start, end - start));
-    start = end + 1;
-    end = str.find(newline, start);
-  }
-  auto temp = str.substr(start);
-  if (temp.size() > 0)
-    lines.push_back(temp);
-  return lines;
-}
-
-/******************************************************************************/
-
 static
 void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
         const std::string &description, PDFWriter &pdffile, int steps )
@@ -1050,31 +978,12 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   // add the common axes
   commands << "/Axes Do\n";
 
-  // label (may be a couple of lines)
-  std::vector<std::string> lines = splitTextLines( description );
+  point2D labelPt( 0.5f*right, top - 0.2f*inch2point );
   float labelSize = 12.0f;     // points
   float leading = labelSize * 1.1f;
   float indent = 0.5f * inch2point;
-  commands << "BT /F1 " << labelSize << " Tf ";
-  size_t line_num = 0;
-  for (size_t i = 0; i < lines.size(); ++i, ++line_num) {
-    std::string label = lines[i];
-    if (label.size() == 0)  // double returns are not pretty
-        continue;
-    if (line_num == 0) {
-      label = name + " " + label;
-      float textHalf = labelSize * 0.3f * label.size();
-      point2D labelPt( 0.5f*right - textHalf, top - 0.2f*inch2point );
-      commands << labelPt << " Td ";
-    }
-    else {
-      commands << " " << indent << " " << -leading << " Td ";
-      indent = 0.0f;
-    }
-    commands << "(" << label << ") Tj\n";
-  }
-  commands << "ET\n";
-
+  commands << PDFMultiLineTextLabel( labelPt, labelSize, leading, indent,
+                                    name + " " + description, kPDFTextAlignCenterLeft );
 
   // draw the curve
   // optimization - draw only 3 points for identity curve
@@ -1777,7 +1686,7 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
   point2D range( right - left, 0 );
   point2D labelBase( left, top );
   point2D tickLength(0,0);
-  commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12, description );
+  commands << PDFSingleLineTextLabel( labelBase + range*0.5, false, tickLength, 12, description );
 
   point2D labelOffset( 0, markSize + 2 + textSize );
   for (auto &sample : colorsOut) {
@@ -1791,8 +1700,8 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
 
     point2D plotCenter = basepoint + scaling * point2D( theXY.x, theXY.y );
     commands << plotSquarePDF( plotCenter, markSize);
-    commands << AddGraphLabels( plotCenter+labelOffset, false, point2D(0,0),
-                                textSize, sample.name, kTextAlignLeft );
+    commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
+                                textSize, sample.name, kPDFTextAlignLeft );
   }
 
   // and finally create the graphics object and page
@@ -1837,7 +1746,7 @@ int graphNamedColorsABPDF( namedLabList &colorsOut, const std::string &descripti
   point2D range( right - left, 0 );
   point2D labelBase( left, top );
   point2D tickLength(0,0);
-  commands << AddGraphLabels( labelBase + range*0.5, false, tickLength, 12, description );
+  commands << PDFSingleLineTextLabel( labelBase + range*0.5, false, tickLength, 12, description );
 
 
   float symbolSize = 4.0f;
@@ -1847,8 +1756,8 @@ int graphNamedColorsABPDF( namedLabList &colorsOut, const std::string &descripti
     point2D colorPt( sample.a*maxRadius/abChartScale, sample.b*maxRadius/abChartScale );
     point2D plotCenter = center + colorPt;
     commands << plotSquarePDF( plotCenter, symbolSize);
-    commands << AddGraphLabels( plotCenter+labelOffset, false, point2D(0,0),
-                                labelSize, sample.name, kTextAlignLeft );
+    commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
+                                labelSize, sample.name, kPDFTextAlignLeft );
   }
 
 

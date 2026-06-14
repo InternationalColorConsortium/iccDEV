@@ -81,6 +81,15 @@ std::ostream& operator<<( std::ostream &os, const Rect2D &r )
   return os << r.left << " " << r.bottom << " " << r.right << " " << r.top;
 }
 
+/******************************************************************************/
+
+std::ostream& operator<<( std::ostream &os, const point2D &p )
+{
+  return os << p.x << " " << p.y;
+}
+
+/******************************************************************************/
+
 static bool WritePdfTextFile(FILE* outFile, const std::string& text)
 {
   bool failed = false;
@@ -95,13 +104,6 @@ static bool WritePdfTextFile(FILE* outFile, const std::string& text)
     failed = true;
 
   return !failed;
-}
-
-/******************************************************************************/
-
-std::ostream& operator<<( std::ostream &os, const point2D &p )
-{
-  return os << p.x << " " << p.y;
 }
 
 /******************************************************************************/
@@ -159,6 +161,11 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
   m_groupIndex = group;
 
     // preliminaries are done
+
+#if 0
+    (void)PDFDebugPages( pdffile );
+#endif
+
 }
 
 /******************************************************************************/
@@ -426,6 +433,263 @@ void PDFWriter::AddPage( size_t content, std::string xObjectName )
   m_objects.push_back( pageObj );
   GetPageParent()->m_pageObjectIndices.push_back( ObjectCount() );
   m_pageCount++;
+}
+
+
+/******************************************************************************/
+
+std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
+        const point2D &tickLength, float textSizePts,
+        const std::string &text,
+        PDFTextAlignment align )
+{
+  std::ostringstream commands;
+
+  float textWidth = textSizePts * 0.49f * text.size(); // very approximate, not using font metrics
+  float textHalf = 0.5f * textWidth;
+
+  point2D position(0,0);
+  switch(align) {
+    default:
+    case kPDFTextAlignLeft:
+        // do nothing
+        break;
+
+    case kPDFTextAlignCenter:
+    case kPDFTextAlignCenterLeft:
+        position = point2D(-textHalf,0);
+        break;
+
+    case kPDFTextAlignRight:
+        position = point2D(-textWidth,0);
+        break;
+  }
+
+  point2D pt00 = basepoint;
+  commands << "BT /F1 " << textSizePts << " Tf ";
+  if (isVertical) {
+    std::swap(position.x,position.y);
+    pt00 += tickLength*1.25f + position;
+    commands << "0 " << 1 << " " << -1 << " 0 " << pt00 << " Tm ";
+  }
+  else {
+    pt00 += tickLength + position - point2D(0,textSizePts);
+    commands << pt00 << " Td ";
+  }
+  commands << "(" << text << ") Tj ET\n";
+
+  return commands.str();
+}
+
+/******************************************************************************/
+
+static
+std::vector<std::string> splitTextLines(const std::string& str)
+{
+  const char newline = '\n';
+  std::vector<std::string> lines;
+  size_t start = 0;
+  size_t end = str.find(newline);
+  while (end != std::string::npos) {
+    lines.push_back(str.substr(start, end - start));
+    start = end + 1;
+    end = str.find(newline, start);
+  }
+  auto temp = str.substr(start);
+  if (temp.size() > 0)
+    lines.push_back(temp);
+  return lines;
+}
+
+/******************************************************************************/
+
+// Center and right aligned are not perfect, because we are not using the font metrics and only estimating width
+std::string PDFMultiLineTextLabel( const point2D &basepoint,
+                    float textSizePts, float leading, float second_line_indent,
+                    const std::string &text, PDFTextAlignment align,
+                    bool allowBlankLines )
+{
+  std::ostringstream commands;
+  
+  std::vector<std::string> lines = splitTextLines( text );
+  
+  commands << "BT /F1 " << textSizePts << " Tf ";
+  
+  float last_textWidth = 0.0f;
+  float last_textHalf = 0.0f;
+  for (size_t line_num = 0; line_num < lines.size(); ++line_num) {
+    std::string label = lines[ line_num ];
+    if (!allowBlankLines && label.size() == 0)  // double returns are not pretty
+      continue;
+    
+    float textWidth = textSizePts * 0.49f * label.size();
+    float textHalf = 0.5f * textWidth;
+    
+    point2D offset(0,0);
+    switch(align) {
+      default:
+      case kPDFTextAlignLeft:
+        // do nothing
+        break;
+
+      case kPDFTextAlignCenter:
+        offset = point2D(-textHalf+last_textHalf,0);
+        break;
+
+      case kPDFTextAlignRight:
+        offset = point2D(-textWidth+last_textWidth,0);
+        break;
+    
+      case kPDFTextAlignCenterLeft:
+        if (line_num == 0)
+          offset = point2D(-textHalf,0);
+        break;
+    }
+
+    if (line_num == 0) {
+      commands << (basepoint+offset) << " Td ";
+    }
+    else {
+      point2D relative( second_line_indent, -leading );
+      commands << " " << (relative+offset) << " Td ";
+      second_line_indent = 0.0f;
+    }
+    commands << "(" << label << ") Tj\n";
+    
+    last_textHalf = textHalf;
+    last_textWidth = textWidth;
+  }
+  
+  commands << "ET\n";
+
+  return commands.str();
+}
+
+/******************************************************************************/
+/******************************************************************************/
+
+// randomly generated lorem ipsum text
+static
+std::string random_ipsum(
+"Ut at diam leo. Mauris libero nulla,\n"
+"auctor sit amet venenatis Stiles,\n"
+"lorem eget odio. Integer vitae dui\n"
+"Fairchild magna dignissim ICC in\n"
+"id diam.\n"
+"\n"
+"Sed quis imperdiet lorem, vel ipsum\n"
+"diam. Nam varius Berns leo quis\n"
+"pretium. Hunt fringilla a mi a\n"
+"facilisis. Pellentesque Wyszecki\n"
+"porttitor consequat." );
+
+
+// Debug PDF utilities and features
+int PDFDebugPages( PDFWriter &pdffile )
+{
+
+// Single line text
+#if 0
+  {
+  std::ostringstream commands;
+
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdffile.PageHeight();
+  float right = pdffile.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+
+// Single Line text
+  float textSizePts = 12.0f;
+  
+  point2D pointLeft( left, top - 1*inch2point );
+  std::string labelLeft( "LeftAligned\n" );
+  commands << PDFSingleLineTextLabel( pointLeft, false, point2D(0,0), textSizePts,
+                            labelLeft, kPDFTextAlignLeft );
+
+  point2D pointLeft2( left + textSizePts, top - 1*inch2point );
+  commands << PDFSingleLineTextLabel( pointLeft2, true, point2D(0,0), textSizePts,
+                            labelLeft, kPDFTextAlignLeft );
+
+
+  point2D pointCenter( 0.5f*right, top - 3*inch2point );
+  std::string labelCenter( "CenterAligned\n" );
+  commands << PDFSingleLineTextLabel( pointCenter, false, point2D(0,0), textSizePts,
+                            labelCenter, kPDFTextAlignCenter );
+
+  point2D pointCenter2( 0.5f*right, top - 3*inch2point );
+  commands << PDFSingleLineTextLabel( pointCenter2, true, point2D(0,0), textSizePts,
+                            labelCenter, kPDFTextAlignCenter );
+  
+  
+  point2D pointRight( right, top - 5*inch2point );
+  std::string labelRight( "RightAligned\n" );
+  commands << PDFSingleLineTextLabel( pointRight, false, point2D(0,0), textSizePts,
+                            labelRight, kPDFTextAlignRight );
+
+  point2D pointRight2( right - textSizePts, top - 5*inch2point );
+  commands << PDFSingleLineTextLabel( pointRight2, true, point2D(0,0), textSizePts,
+                            labelRight, kPDFTextAlignRight );
+
+
+  // and finally create the graphics object and page
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+  pdffile.AddPage( content, std::string() );
+  }
+#endif
+
+// Multiline text
+#if 0
+  {
+  std::ostringstream commands;
+
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdffile.PageHeight();
+  float right = pdffile.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+
+  float textSizePts = 10.0f;
+  float leading = textSizePts * 1.1f;
+  
+  
+  point2D pointLeft( left + 20.0f, top - 0.2f*inch2point );
+  std::string labelLeft( "LeftAligned\n" );
+  float leftIndent = -20.0;
+  commands << PDFMultiLineTextLabel( pointLeft, textSizePts, leading,
+                leftIndent, labelLeft+random_ipsum, kPDFTextAlignLeft );
+
+  point2D pointCenter( 0.5f*right, top - 2*inch2point );
+  std::string labelCenter( "CenterAligned\n" );
+  float centerIndent = 0.0;
+  commands << PDFMultiLineTextLabel( pointCenter, textSizePts, leading,
+                centerIndent, labelCenter+random_ipsum, kPDFTextAlignCenter );
+  
+  point2D pointRight( right, top - 4*inch2point );
+  std::string labelRight( "RightAligned\n" );
+  float rightIndent = 0.0;
+  commands << PDFMultiLineTextLabel( pointRight, textSizePts, leading,
+                rightIndent, labelRight+random_ipsum, kPDFTextAlignRight );
+  
+  point2D pointCenterLeft( 0.5f*right, top - 6*inch2point );
+  std::string labelCenterLeft( "CenterLeftAligned\n" );
+  float centerLeftIndent = 0.5f * inch2point;
+  commands << PDFMultiLineTextLabel( pointCenterLeft, textSizePts, leading,
+                centerLeftIndent, labelCenterLeft+random_ipsum, kPDFTextAlignCenterLeft );
+
+  // and finally create the graphics object and page
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+  pdffile.AddPage( content, std::string() );
+  }
+#endif
+
+
+return 1;
+
 }
 
 /******************************************************************************/

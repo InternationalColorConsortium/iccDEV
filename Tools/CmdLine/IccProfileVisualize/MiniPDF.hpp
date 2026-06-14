@@ -333,4 +333,31 @@ private:
 
 /******************************************************************************/
 
+// utility functions to create graphics
+
+enum PDFTextAlignment {
+    kPDFTextAlignLeft = 0,
+    kPDFTextAlignCenter = 1,
+    kPDFTextAlignRight = 2,
+    kPDFTextAlignCenterLeft = 3,  // for graph top label, center then left with indent
+};
+
+std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
+                    const point2D &offset, float labelSize,
+                    const std::string &text,
+                    PDFTextAlignment align = kPDFTextAlignCenter );
+
+std::string PDFMultiLineTextLabel( const point2D &basepoint,
+                    float labelSize, float leading, float second_line_indent,
+                    const std::string &text,
+                    PDFTextAlignment align = kPDFTextAlignCenter,
+                    bool allowBlankLines = true );
+
+/******************************************************************************/
+
+// Debug PDF utilities and features
+int PDFDebugPages( PDFWriter &pdffile );
+
+/******************************************************************************/
+
 #endif /* MiniPDF_hpp */
