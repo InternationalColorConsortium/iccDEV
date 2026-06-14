@@ -216,9 +216,19 @@ function(iccdev_add_cmmsearch_namedcolor_ownership_test)
   target_link_libraries(iccCmmSearchNamedColorOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccCmmSearchNamedColorOwnershipTest)
 
+  # This regression's pass/fail signal IS the LeakSanitizer at-exit scan, but the
+  # CI tool-test job and ICCDEV_TEST_ENV both export ASAN_OPTIONS=...detect_leaks=0
+  # to silence unrelated leaks in the smoke-tested tools.  Inheriting that would
+  # disable LSan here and let a profile leak pass undetected.  Launch through
+  # `cmake -E env ASAN_OPTIONS=detect_leaks=1` to force leak detection on for
+  # this test's own process.  Set ONLY detect_leaks=1: appending halt_on_error=0
+  # makes the runtime print the leak but exit 0, and a ':' option separator is
+  # mis-parsed and silently disables the check.
   add_test(
     NAME iccdev.cmmsearch-namedcolor-ownership
-    COMMAND "$<TARGET_FILE:iccCmmSearchNamedColorOwnershipTest>"
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "ASAN_OPTIONS=detect_leaks=1"
+      "$<TARGET_FILE:iccCmmSearchNamedColorOwnershipTest>"
       "${ICCDEV_REPO_ROOT}/.github/ci/test-data/fuzz-nmcl-9c09d1e6.icc"
   )
   set_tests_properties(iccdev.cmmsearch-namedcolor-ownership PROPERTIES
@@ -237,6 +247,60 @@ function(iccdev_add_cmmsearch_namedcolor_ownership_test)
     endforeach()
     set_tests_properties(iccdev.cmmsearch-namedcolor-ownership PROPERTIES
       ENVIRONMENT_MODIFICATION "${_cmmsearch_namedcolor_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards CIccXform::Create(CIccProfile*, CIccTag*) profile ownership (#1308):
+# AddXform hands its owned profile to the tag-based Create overload, which must
+# free it when no xform can be built.  The helper feeds a valid profile plus a
+# NULL tag, so Create takes its failure path; a profile it fails to free is
+# unreachable and reported by the ASan/LSan CI job.
+function(iccdev_add_xform_create_tag_ownership_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXformCreateTagOwnershipTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xform-create-tag-ownership.cpp"
+  )
+  target_link_libraries(iccXformCreateTagOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccXformCreateTagOwnershipTest)
+
+  # This regression's pass/fail signal IS the LeakSanitizer at-exit scan, but the
+  # CI tool-test job and ICCDEV_TEST_ENV both export ASAN_OPTIONS=detect_leaks=0
+  # to silence unrelated leaks in the smoke-tested tools.  Inheriting that would
+  # disable LSan here and make the test a false pass even when the profile leaks.
+  # Force leak detection back on for this test's own process by launching it
+  # through `cmake -E env` (the same override mechanism the script tests use; a
+  # CTest ENVIRONMENT property is NOT reliable for ASAN_OPTIONS here).  Set ONLY
+  # detect_leaks=1: do not append halt_on_error=0 -- with halt_on_error=0 the
+  # runtime still prints the leak but exits 0, so ctest would pass on a real
+  # leak.  Plain detect_leaks=1 makes a detected leak exit non-zero (the failure
+  # signal ctest needs).
+  add_test(
+    NAME iccdev.xform-create-tag-ownership
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "ASAN_OPTIONS=detect_leaks=1"
+      "$<TARGET_FILE:iccXformCreateTagOwnershipTest>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.xform-create-tag-ownership PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;xform;leak;issue-1308;regression"
+  )
+  if(WIN32)
+    set(_xform_create_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXformCreateTagOwnershipTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xform_create_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xform-create-tag-ownership PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xform_create_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -556,6 +620,7 @@ if(WIN32)
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
+  iccdev_add_xform_create_tag_ownership_test()
 
   return()
 endif()
@@ -613,6 +678,7 @@ iccdev_add_fileio_seek_tell_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
+iccdev_add_xform_create_tag_ownership_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
@@ -753,6 +819,18 @@ iccdev_add_script_test(
   "iccdev;json;cfg;envvars;issue-1121;regression;asan"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1121-json-envvars-regression.sh"
+)
+
+# Guards iccApplyToLink -PCC profile ownership on its error-exit paths (#1336):
+# drives the AddXform BadSpaceLink path with tracked profiles under LeakSanitizer
+# and fails if a -PCC profile is stranded.  Uses committed test-data profiles, so
+# no generated-profile fixture is required.
+iccdev_add_script_test(
+  iccdev.issue-1336-applytolink-pcc-regression
+  60
+  "iccdev;tools;applytolink;leak;issue-1336;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1336-applytolink-pcc-regression.sh"
 )
 
 # Guards CIccCmm::CheckPCSConnections CIccPcsXform ownership on its Connect
@@ -1039,6 +1117,20 @@ iccdev_add_script_test(
 )
 set_tests_properties(iccdev.profile-visualize-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
+)
+
+# #1346: signed atoi() -> unsigned wrap in IccTagXml ParseXml handlers.
+# Replays a PoC profile with a negative cicpFields ColorPrimaries attribute
+# through iccFromXml; under the integer/implicit-conversion sanitizer the test
+# FAILS if UBSan's implicit-integer-sign-change diagnostic reappears, and SKIPS
+# cleanly on a plain (non-sanitizer) build.  Uses a committed PoC, so it needs
+# no generated-profile fixture.
+iccdev_add_script_test(
+  iccdev.issue-1346-imageparse-atoi-unsigned-regression
+  60
+  "iccdev;xml;imageparse;issue-1346;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1346-imageparse-atoi-unsigned-regression.sh"
 )
 
 # Describe sink + options API smoke test. Verifies byte-equivalence

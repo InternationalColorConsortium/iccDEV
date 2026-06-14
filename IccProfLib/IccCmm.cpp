@@ -526,8 +526,16 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 														 icXformInterp nInterp/* =icInterpLinear */, 
                              IIccProfileConnectionConditions *pPcc/*=NULL*/,
                              icXformLutType nLutType/* =icXformLutColor */, 
-														 bool bUseD2BTags/* =true */, CIccCreateXformHintManager *pHintManager/* =NULL */)
+														 bool bUseD2BTags/* =true */, CIccCreateXformHintManager *pHintManager/* =NULL */,
+                             bool bOwnsProfile/* =true */)
 {
+  // Ownership contract: on success pProfile is handed to the new xform via
+  // SetParams() and freed when that xform is destroyed.  On every FAILURE path
+  // below we dispose of pProfile ourselves -- but only when we own it.
+  // bOwnsProfile is true for the usual callers that give their profile to
+  // Create, and false for callers that merely lend a profile they still own (a
+  // profile borrowed from a live xform).  Guarding each delete with it keeps the
+  // owned case leak-free (#1304/#1305) without double-freeing a borrowed profile.
   CIccXform *rv = NULL;
   icRenderingIntent nTagIntent = nIntent;
   bool bUseSpectralPCS = false;
@@ -549,10 +557,14 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
   if (pProfile->m_Header.deviceClass==icSigColorEncodingClass) {
     CIccProfile *pEncProfile;
     if (icConvertEncodingProfile(pEncProfile, pProfile)!=icEncConvertOk) {
-      delete pProfile;
+      if (bOwnsProfile)
+        delete pProfile;
       return NULL;
     }
-    delete pProfile;
+    // The encoding profile is replaced by its converted form; free the original
+    // only when we own it, then continue with (and later hand off) the copy.
+    if (bOwnsProfile)
+      delete pProfile;
     pProfile = pEncProfile;
   }
   if (pProfile->m_Header.deviceClass==icSigLinkClass/* && nIntent==icAbsoluteColorimetric*/) {
@@ -563,7 +575,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
     nTagIntent = icPerceptual;
 
   if (!IsValidXformIntent(nTagIntent)) {
-    delete pProfile;
+    if (bOwnsProfile)
+      delete pProfile;
     return NULL;
   }
 
@@ -673,7 +686,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
             rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
           }
           else {
-            delete pProfile;
+            if (bOwnsProfile)
+              delete pProfile;
             return NULL;
           }
         }
@@ -803,7 +817,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
             rv = CIccXformCreator::CreateXform(icXformTypeMonochrome, NULL, pHintManager);
           }
           else {
-            delete pProfile;
+            if (bOwnsProfile)
+              delete pProfile;
             return NULL;
           }
         }
@@ -828,7 +843,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       {
         CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
         if (!pTag) {
-          delete pProfile;
+          if (bOwnsProfile)
+            delete pProfile;
           return NULL;
         }
 
@@ -846,7 +862,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         if (!pNamedColorHint) {
           pNamedColorHint = new (std::nothrow) CIccCreateNamedColorXformHint();
           if (!pNamedColorHint) {
-            delete pProfile;
+            if (bOwnsProfile)
+              delete pProfile;
             return NULL;
           }
         }
@@ -881,7 +898,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           pTag = pProfile->FindTag(icSigPreview0Tag);
         }
         if (!pTag) {
-          delete pProfile;
+          if (bOwnsProfile)
+            delete pProfile;
           return NULL;
         }
         else {
@@ -903,7 +921,8 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         bInput = false;
         CIccTag *pTag = pProfile->FindTag(icSigGamutTag);
         if (!pTag) {
-          delete pProfile;
+          if (bOwnsProfile)
+            delete pProfile;
           return NULL;
         }
         else {
@@ -1216,10 +1235,11 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
   }
-  else {
-    // Create() owns pProfile (the caller's profile, or the encoding-converted
-    // replacement built above). When no xform is produced, free it here so it
-    // doesn't leak - none of the failure paths reach SetParams().
+  else if (bOwnsProfile) {
+    // No xform was produced. pProfile never reached SetParams(), so free it here
+    // when we own it (the caller's profile, or the encoding-converted replacement
+    // built above) so it doesn't leak. A borrowed profile (bOwnsProfile==false)
+    // is left for its real owner to free.
     delete pProfile;
   }
 
@@ -1256,14 +1276,23 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
                              icXformInterp nInterp/* =icInterpLinear */,
                              IIccProfileConnectionConditions *pPcc/*=NULL*/,
                              bool bUseSpectralPCS/* =false*/,
-                             CIccCreateXformHintManager *pHintManager/* =NULL */)
+                             CIccCreateXformHintManager *pHintManager/* =NULL */,
+                             bool bOwnsProfile/* =true */)
 {
+  // Ownership contract (same as the no-tag Create overload): on success pProfile
+  // is handed to the new xform via SetParams(); on every failure path we free it
+  // ourselves, but only when bOwnsProfile is true.  Before #1308 this overload
+  // returned NULL on failure without freeing pProfile, leaking the caller's
+  // owned profile; the guarded deletes below close that leak while leaving a
+  // borrowed profile (bOwnsProfile==false) for its real owner.
   CIccXform *rv = NULL;
   icRenderingIntent nTagIntent = nIntent;
   bool bAbsToRel = false;
   icMCSConnectionType nMCS = icNoMCS;
 
   if (pProfile->m_Header.deviceClass == icSigColorEncodingClass) {
+    if (bOwnsProfile)
+      delete pProfile;
     return NULL;
   }
 
@@ -1275,10 +1304,16 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
     nTagIntent = icPerceptual;
 
   //Unsupported elements cause fall back behavior
-  if (pTag == NULL)
+  if (pTag == NULL) {
+    if (bOwnsProfile)
+      delete pProfile;
     return NULL;
-  if (pTag && !pTag->IsSupported())
+  }
+  if (pTag && !pTag->IsSupported()) {
+    if (bOwnsProfile)
+      delete pProfile;
     return NULL;
+  }
 
   if (bInput) {
     if (pTag->GetType() == icSigMultiProcessElementType) {
@@ -1334,6 +1369,12 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       rv->m_pConnectionConditions = pProfile;
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
+  }
+  else if (bOwnsProfile) {
+    // No xform was built for this profile/tag combination; pProfile never
+    // reached SetParams(), so free it here when we own it (#1308).  A borrowed
+    // profile (bOwnsProfile==false) is left for its real owner to free.
+    delete pProfile;
   }
 
   return rv;
@@ -1425,9 +1466,11 @@ CIccXform *CIccXform::Create(CIccProfile &Profile,
   if (!pProfile)
     return NULL;
 
+  // The pointer-based Create owns this copy: it stores it in the returned xform
+  // on success and frees it on failure (bOwnsProfile defaults to true).  Do not
+  // delete pProfile here on failure -- that would double-free the copy Create
+  // already released.
   CIccXform *pXform = Create(pProfile, bInput, nIntent, nInterp, pPcc, nLutType, bUseD2BxB2DxTags, pHintManager);
-  if (!pXform)
-    delete pProfile;
 
   return pXform;
 }
@@ -7437,9 +7480,16 @@ CIccXformMpe::~CIccXformMpe()
 **************************************************************************
 */
 CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, icRenderingIntent nIntent/* =icUnknownIntent */,
-																icXformInterp nInterp/* =icInterpLinear */, icXformLutType nLutType/* =icXformLutColor */, 
-																CIccCreateXformHintManager *pHintManager/* =NULL */)
+																icXformInterp nInterp/* =icInterpLinear */, icXformLutType nLutType/* =icXformLutColor */,
+																CIccCreateXformHintManager *pHintManager/* =NULL */,
+																bool bOwnsProfile/* =true */)
 {
+  // Same ownership contract as CIccXform::Create: on success pProfile is handed
+  // to the new xform via SetParams(); on failure we free it ourselves when we
+  // own it (bOwnsProfile==true).  This overload currently has no callers, but
+  // the guards keep its behavior consistent with the rest of the Create family
+  // so any future caller is leak-safe without risking a borrowed-profile
+  // double-free.
   CIccXform *rv = NULL;
   icRenderingIntent nTagIntent = nIntent;
   bool bUseSpectralPCS = false;
@@ -7460,8 +7510,11 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
   if (nTagIntent == icUnknownIntent)
     nTagIntent = icPerceptual;
 
-  if (!IsValidXformIntent(nTagIntent))
+  if (!IsValidXformIntent(nTagIntent)) {
+    if (bOwnsProfile)
+      delete pProfile;
     return NULL;
+  }
 
   switch (nUseLutType) {
     case icXformLutColor:
@@ -7512,8 +7565,11 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
           if (bUseColorimeticTags && pProfile->m_Header.colorSpace == icSigRgbData && pProfile->m_Header.version < icVersionNumberV5) {
             rv = new (std::nothrow) CIccXformMatrixTRC();
           }
-          else
+          else {
+            if (bOwnsProfile)
+              delete pProfile;
             return NULL;
+          }
         }
         else if (pTag->GetType()==icSigMultiProcessElementType) {
           rv = new (std::nothrow) CIccXformMpe(pTag);
@@ -7588,8 +7644,11 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
           if (bUseColorimeticTags && pProfile->m_Header.colorSpace == icSigRgbData && pProfile->m_Header.version<icVersionNumberV5) {
             rv = new (std::nothrow) CIccXformMatrixTRC();
           }
-          else
+          else {
+            if (bOwnsProfile)
+              delete pProfile;
             return NULL;
+          }
         }
 
         if (pTag && pTag->GetType()==icSigMultiProcessElementType) {
@@ -7612,8 +7671,11 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
     case icXformLutNamedColor:
       {
         CIccTag *pTag = pProfile->FindTag(icSigNamedColor2Tag);
-        if (!pTag)
+        if (!pTag) {
+          if (bOwnsProfile)
+            delete pProfile;
           return NULL;
+        }
 
         rv = new (std::nothrow) CIccXformNamedColor(pTag, pProfile->m_Header.pcs, pProfile->m_Header.colorSpace,
                                      pProfile->m_Header.spectralPCS,
@@ -7630,6 +7692,8 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
           pTag = pProfile->FindTag(icSigPreview0Tag);
         }
         if (!pTag) {
+          if (bOwnsProfile)
+            delete pProfile;
           return NULL;
         }
         else {
@@ -7651,6 +7715,8 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
         bInput = false;
         CIccTag *pTag = pProfile->FindTag(icSigGamutTag);
         if (!pTag) {
+          if (bOwnsProfile)
+            delete pProfile;
           return NULL;
         }
         else {
@@ -7673,6 +7739,11 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
   if (rv) {
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel);
+  }
+  else if (bOwnsProfile) {
+    // No xform was produced; pProfile never reached SetParams(), so free it here
+    // when we own it.  A borrowed profile is left for its real owner to free.
+    delete pProfile;
   }
 
   return rv;
@@ -8594,8 +8665,13 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
             }
 
             CIccXform *pPrev = prev->ptr;
+            // pPrev still owns this profile: pass bOwnsProfile=false so a failed
+            // Create leaves it intact (pPrev is left in place below on failure).
+            // On success pPrev->DetachAll() transfers ownership to pNew, so no
+            // ShareProfile() is needed here.
             CIccXform *pNew = CIccXform::Create(pPrev->GetProfilePtr(), pPrev->IsInput(), pPrev->GetIntent(), pPrev->GetInterp(),
-                                                pPrev->GetConnectionConditions(), icXformLutMCS, bUseD2BxB2DxTags, pHintManager);
+                                                pPrev->GetConnectionConditions(), icXformLutMCS, bUseD2BxB2DxTags, pHintManager,
+                                                /*bOwnsProfile=*/false);
 
             if (!pNew) {
               // Create failed (e.g., previous profile has no MCS-
@@ -9059,8 +9135,12 @@ icStatusCMM CIccCmm::CheckPCSRangeConversions()
         }
         //If we find the HToSxTag then create a transform for it and inject it into the transform list
         if (pTag) {
+          // pProfile is borrowed here (it is shared with the surrounding link and
+          // ShareProfile() is called on success below), so pass bOwnsProfile=false
+          // to keep a failed Create from deleting a profile this code still owns.
           ptr.ptr = CIccXform::Create(pProfile, pTag, true, last->ptr->GetIntent(), last->ptr->GetInterp(),
-                                      last->ptr->GetConnectionConditions(), false);
+                                      last->ptr->GetConnectionConditions(), false /*bUseSpectralPCS*/,
+                                      NULL /*pHintManager*/, false /*bOwnsProfile*/);
           if (ptr.ptr) {
             ptr.ptr->ShareProfile(); //Indicate that profile is shared (so it won't be deleted)
             ptr.ptr->SetPcsAdjustXform(); // Indicates that transform should be treated as abstract
