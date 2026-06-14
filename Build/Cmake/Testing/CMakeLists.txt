@@ -257,9 +257,22 @@ function(iccdev_add_xform_create_tag_ownership_test)
   target_link_libraries(iccXformCreateTagOwnershipTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
   add_dependencies(check iccXformCreateTagOwnershipTest)
 
+  # This regression's pass/fail signal IS the LeakSanitizer at-exit scan, but the
+  # CI tool-test job and ICCDEV_TEST_ENV both export ASAN_OPTIONS=detect_leaks=0
+  # to silence unrelated leaks in the smoke-tested tools.  Inheriting that would
+  # disable LSan here and make the test a false pass even when the profile leaks.
+  # Force leak detection back on for this test's own process by launching it
+  # through `cmake -E env` (the same override mechanism the script tests use; a
+  # CTest ENVIRONMENT property is NOT reliable for ASAN_OPTIONS here).  Set ONLY
+  # detect_leaks=1: do not append halt_on_error=0 -- with halt_on_error=0 the
+  # runtime still prints the leak but exits 0, so ctest would pass on a real
+  # leak.  Plain detect_leaks=1 makes a detected leak exit non-zero (the failure
+  # signal ctest needs).
   add_test(
     NAME iccdev.xform-create-tag-ownership
-    COMMAND "$<TARGET_FILE:iccXformCreateTagOwnershipTest>"
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "ASAN_OPTIONS=detect_leaks=1"
+      "$<TARGET_FILE:iccXformCreateTagOwnershipTest>"
       "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
   )
   set_tests_properties(iccdev.xform-create-tag-ownership PROPERTIES
