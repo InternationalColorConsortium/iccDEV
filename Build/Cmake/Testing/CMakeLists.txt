@@ -712,6 +712,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1121-json-envvars-regression.sh"
 )
 
+# Guards CIccCmm::CheckPCSConnections CIccPcsXform ownership on its Connect
+# error path (#1337).  Generates two profiles from committed XML, chains them
+# into an unsupported PCS link under LeakSanitizer, and fails on a leak.  No
+# -PCC, so this is independent of the iccApplyToLink #1336 fix.
+iccdev_add_script_test(
+  iccdev.issue-1337-checkpcsconnections-regression
+  120
+  "iccdev;tools;cmm;leak;issue-1337;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1337-checkpcsconnections-regression.sh"
+)
+
 iccdev_add_script_test(
   iccdev.issue-1166-cam-hyperbolicinv-regression
   60
