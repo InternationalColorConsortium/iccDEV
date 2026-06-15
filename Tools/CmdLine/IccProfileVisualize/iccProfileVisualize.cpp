@@ -705,10 +705,7 @@ void CreateABPlotXobject( PDFWriter &pdfout )
   point2D labelPtTeal(left+margin,center.y);
   commands << PDFSingleLineTextLabel( labelPtTeal, false, point2D(0,0), labelSize, "-a Green", kPDFTextAlignLeft );
 
-  // end colored grid, grestore, gsave
-  commands << "Q q\n";
-
-  // grestore
+  // end colored grid, grestore
   commands << "Q\n";
   std::string commandString = commands.str();
   pdfout.AddXObject( bounds, commandString, "abPlot" );

@@ -159,7 +159,7 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
 
     // preliminaries are done
 
-#if 0
+#if 1
 // enable to debug text layout and other PDF utilities
   (void)PDFDebugPages( *this );
 #endif
@@ -596,6 +596,14 @@ void PDFWriter::AddPage( std::string name, size_t content, std::string xObjectNa
 
 /******************************************************************************/
 
+// very approximate, not using font metrics
+float PDFEstimateStringWidth( const std::string &str, float textSizePts )
+{
+    return 0.49f * textSizePts * str.size();
+}
+
+/******************************************************************************/
+
 std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
         const point2D &tickLength, float textSizePts,
         const std::string &text,
@@ -603,7 +611,7 @@ std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
 {
   std::ostringstream commands;
 
-  float textWidth = textSizePts * 0.49f * text.size(); // very approximate, not using font metrics
+  float textWidth = PDFEstimateStringWidth( text, textSizePts );
   float textHalf = 0.5f * textWidth;
 
   point2D position(0,0);
@@ -638,6 +646,7 @@ std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
 
   return commands.str();
 }
+
 /******************************************************************************/
 
 // Center and right aligned are not perfect, because we are not using the font metrics and only estimating width
@@ -657,7 +666,7 @@ std::string PDFMultiLineText( const point2D &basepoint,
     if (!allowBlankLines && label.size() == 0)  // double returns are not pretty
       continue;
     
-    float textWidth = textSizePts * 0.49f * label.size();
+    float textWidth = PDFEstimateStringWidth( label, textSizePts );
     float textHalf = 0.5f * textWidth;
     
     point2D offset(0,0);
@@ -779,6 +788,196 @@ std::string PDFParagraphText( const point2D &basepoint,
   
   return PDFMultiLineText( basepoint,  textSizePts, leading,
                     second_line_indent, lines, align, allowBlankLines );
+}
+
+/******************************************************************************/
+/******************************************************************************/
+
+struct RGB8Color {
+  RGB8Color() : r(0), g(0), b(0) {}
+  
+  RGB8Color( uint8_t rr, uint8_t gg, uint8_t bb ) :
+    r(rr), g(gg), b(bb) {}
+
+  RGB8Color( uint32_t hexRGB ) {
+        r = (uint8_t)((hexRGB >> 16) & 0xFF);
+        g = (uint8_t)((hexRGB >>  8) & 0xFF);
+        b = (uint8_t)((hexRGB >>  0) & 0xFF);
+  }
+  
+  bool constexpr operator==( const RGB8Color &y ) const {
+    return (r==y.r) && (g==y.g) && (b==y.b);
+  }
+  
+  bool constexpr operator!=( const RGB8Color &y ) const {
+    return !(*this == y);
+  }
+
+public:
+  uint8_t r, g, b;
+};
+
+std::ostream& operator<<( std::ostream &os, const RGB8Color &col )
+{
+  // r g b
+  return os << (col.r/255.0f) << " " << (col.g/255.0f) << " " << (col.b/255.0f);
+}
+
+/******************************************************************************/
+
+struct tableEntry {
+  tableEntry() : m_backgroundColor(0xffffff), m_textColor(0) {}
+
+public:
+  std::string m_text;
+  RGB8Color m_backgroundColor;
+  RGB8Color m_textColor;
+    // FUTURE - alignment
+
+  float m_width;        // used by layout code
+};
+
+/******************************************************************************/
+
+// row outer, column inner
+typedef std::vector< tableEntry > tableRowData;
+typedef std::vector< tableRowData > tableData;
+
+
+class gridTable {
+
+public:
+  gridTable() : m_lineWeight(0.0f), m_textSize(10.0f), m_cellMargin(2.0f) {}
+  
+  void AddRow( const tableRowData &one_row ) { m_data.push_back( one_row ); }
+
+public:
+    float m_lineWeight;
+    float m_textSize;
+    float m_cellMargin;
+    RGB8Color m_lineColor;
+    tableData m_data;
+};
+
+/******************************************************************************/
+
+std::string PDFDrawGridTable( gridTable &table, const point2D &basepoint,
+                        float columnWidthMinimum = 10.0, float columnWidthMaximum = 9e99 )
+{
+  std::ostringstream commands;
+  float rowHeight = 1.2 * table.m_textSize + 2*table.m_cellMargin; // single line for now, paragraphs later
+  float textBaseOffset = 0.2 * table.m_textSize;    // push up so descenders are still readable
+  size_t totalRows = table.m_data.size();
+  const RGB8Color white(0xfffffff);
+  const RGB8Color black(0);
+
+  if (totalRows == 0)
+    return commands.str();
+
+  // determine total number of columns
+  size_t totalColumns = 0;
+  for (const auto &row: table.m_data) {
+    size_t columns = row.size();
+    totalColumns = std::max( totalColumns, columns );
+  }
+
+  if (totalColumns == 0)
+    return commands.str();
+
+  // measure cells for text width
+  // assuming single line text for now
+  std::vector<float> colWidth(totalColumns,0.0f);
+  for (size_t y = 0; y < totalRows; ++y) {
+    auto &row = table.m_data[y];
+    for (size_t x = 0; x < totalColumns && x < row.size(); ++x) {
+        auto &cell = row[x];
+        float cellWidth = PDFEstimateStringWidth( cell.m_text, table.m_textSize ) + 2*table.m_cellMargin;
+        colWidth[x] = std::max( colWidth[x], cellWidth );
+        cell.m_width = cellWidth;
+    }
+  }
+
+  // enforce limits on colWidth
+  if (columnWidthMinimum > columnWidthMaximum)
+    std::swap( columnWidthMinimum, columnWidthMaximum );
+
+  for (size_t x = 0; x < totalColumns ; ++x) {
+    auto width = colWidth[x];
+    width = std::max( width, columnWidthMinimum );
+    width = std::min( width, columnWidthMaximum );
+    colWidth[x] = width;
+  }
+  
+
+  // sum columns to get offsets
+  std::vector<float> offsetByColumn(totalColumns+1);
+  offsetByColumn[0] = 0.0f;
+  for (size_t k = 1; k <= totalColumns; ++k) {
+    offsetByColumn[k] = colWidth[k-1] + offsetByColumn[k-1];
+  }
+
+  // draw cell backgrounds, if not white
+  commands << "q\n";
+  for (size_t y = 0; y < totalRows; ++y) {
+    const auto &row = table.m_data[y];
+    for (size_t x = 0; x < totalColumns && x < row.size(); ++x) {
+      if ( row[x].m_backgroundColor == white)
+        continue;
+      point2D offset( offsetByColumn[x], -rowHeight*y );
+      offset += basepoint;
+      point2D sizeX( colWidth[x], 0.0f );
+      point2D sizeY( 0.0f, -rowHeight );
+      commands << row[x].m_backgroundColor << " rg ";
+      commands << offset << " m " << offset+sizeX << " l ";
+      commands << offset+sizeX+sizeY << " l " << offset+sizeY << " l h f\n";
+    }
+  }
+  commands << "Q\n";
+  
+  
+  // draw text
+  commands << "q\n";
+  for (size_t y = 0; y < totalRows; ++y) {
+    const auto &row = table.m_data[y];
+    for (size_t x = 0; x < totalColumns && x < row.size(); ++x) {
+      if (row[x].m_text.size() == 0)
+        continue;
+      point2D offset( offsetByColumn[x] + table.m_cellMargin, -rowHeight*(y+1) + table.m_cellMargin + textBaseOffset );
+      offset += basepoint;
+      commands << row[x].m_textColor << " rg ";
+      commands << "BT /F1 " << table.m_textSize << " Tf ";
+      commands << offset << " Td ";
+      commands << "(" << row[x].m_text << ") Tj ET\n";
+    }
+  }
+  // grestore
+  commands << "Q\n";
+  
+  
+  // draw border lines above everything
+  if (table.m_lineWeight > 0.0f) {
+    commands << "q\n";
+    commands << table.m_lineWeight << " w ";
+    commands << table.m_lineColor << " RG\n";
+    
+    // horizontals
+    for (size_t y = 0; y <= totalRows; ++y) {
+      point2D start( basepoint.x - table.m_lineWeight/2, basepoint.y - rowHeight*y );
+      point2D length( offsetByColumn[totalColumns] + table.m_lineWeight, 0 );
+      commands << start << " m " << start+length << " l S\n";
+    }
+
+    // verticals
+    for (size_t x = 0; x <= totalColumns; ++x) {
+      point2D start( basepoint.x + offsetByColumn[x], basepoint.y );
+      point2D length( 0, -rowHeight*totalRows - table.m_lineWeight/2 );
+      commands << start << " m " << start+length << " l S\n";
+    }
+    commands << "Q\n";
+  }
+
+  
+  return commands.str();
 }
 
 /******************************************************************************/
@@ -951,6 +1150,121 @@ int PDFDebugPages( PDFWriter &pdffile )
   size_t content = pdffile.ObjectCount();
   pdffile.AddPage( "DEBUG Paragraph Text", content, std::string() );
   }
+#endif
+
+// Tables
+#if 1
+  std::ostringstream commands;
+
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdffile.PageHeight();
+  float right = pdffile.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+  const float margin = 10.0;
+
+  float textSizePts = 10.0f;
+  
+  gridTable table1;
+  table1.m_textSize = textSizePts;
+  table1.m_lineWeight = 1.0f;
+  table1.m_data.resize(11);
+  for (auto &row: table1.m_data)
+    row.resize(2);
+
+  table1.m_data[0][0].m_text = "Akai";
+  table1.m_data[0][1].m_textColor = 0xffff00;
+  table1.m_data[0][1].m_text = "Red";
+  table1.m_data[0][1].m_backgroundColor = 0xff0000;
+  table1.m_data[1][0].m_text = "Midori";
+  table1.m_data[1][1].m_text = "Green";
+  table1.m_data[1][1].m_backgroundColor = 0x00FF00;
+  table1.m_data[2][0].m_text = "Aoi";
+  table1.m_data[2][1].m_text = "Blue";
+  table1.m_data[2][1].m_backgroundColor = 0x0000ff;
+  table1.m_data[3][0].m_text = "Shiroi";
+  table1.m_data[3][1].m_text = "White";
+  table1.m_data[3][1].m_backgroundColor = 0xffffff;
+  table1.m_data[4][0].m_text = "Kuroi";
+  table1.m_data[4][1].m_text = "Black";
+  table1.m_data[4][1].m_textColor = 0xffffff;
+  table1.m_data[4][1].m_backgroundColor = 0x000000;
+  table1.m_data[5][0].m_text = "Shian";
+  table1.m_data[5][1].m_text = "Cyan";
+  table1.m_data[5][1].m_backgroundColor = 0x00ffff;
+  table1.m_data[6][0].m_text = "Mazenta";
+  table1.m_data[6][1].m_text = "Magenta";
+  table1.m_data[6][1].m_backgroundColor = 0xff00ff;
+  table1.m_data[7][0].m_text = "Kiiroi";
+  table1.m_data[7][1].m_text = "Yellow";
+  table1.m_data[7][1].m_backgroundColor = 0xffff00;
+  table1.m_data[8][0].m_text = "";
+  table1.m_data[8][1].m_text = "Blank";
+  table1.m_data[9][0].m_text = "Blank";
+  table1.m_data[9][1].m_text = "";
+  table1.m_data[10][0].m_text = "";
+  table1.m_data[10][1].m_text = "";
+  
+  point2D point1( left+margin, top - margin);
+  commands << PDFDrawGridTable( table1, point1, 60.0 );
+  
+  point2D point2( left+margin + 200, top - margin);
+  table1.m_lineWeight = 0.0f;
+  table1.m_cellMargin = 8.0f;
+  commands << PDFDrawGridTable( table1, point2 );
+
+  point2D point3( left+margin + 400, top - margin);
+  table1.m_lineWeight = 4.0f;
+  table1.m_cellMargin = 9.0f;
+  table1.m_lineColor = 0xff6020;
+  commands << PDFDrawGridTable( table1, point3 );
+
+  
+
+  gridTable table2;
+  table2.m_textSize = textSizePts;
+  table2.m_lineWeight = 0.2f;
+  table2.m_lineColor = 0x004422;
+  table2.m_cellMargin = 2.0f;
+  table2.m_data.resize(6);
+  table2.m_data[0].resize(1);
+  table2.m_data[1].resize(2);
+  table2.m_data[2].resize(3);
+  table2.m_data[3].resize(4);
+  table2.m_data[4].resize(5);
+  table2.m_data[5].resize(6);
+
+  table2.m_data[0][0].m_text = "1";
+  table2.m_data[1][1].m_text = "2";
+  table2.m_data[2][2].m_text = "3";
+  table2.m_data[3][3].m_text = "4";
+  table2.m_data[4][4].m_text = "5";
+  table2.m_data[5][5].m_text = "6";
+  
+  point2D point4( left+margin, 300 );
+  commands << PDFDrawGridTable( table2, point4 );
+
+
+  
+  gridTable table3;
+  table3.m_textSize = textSizePts;
+  table3.m_lineWeight = 1.0f;
+  table3.m_lineColor = 0x002244;
+  table3.m_cellMargin = 2.0f;
+  table3.m_data.resize(6);
+  table3.m_data[5].resize(6);
+  table3.m_data[5][5].m_text = "X";
+  
+  point2D point5( left+margin + 90, 300 );
+  commands << PDFDrawGridTable( table3, point5 );
+  
+  
+    
+  // and finally create the graphics object and page
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+  pdffile.AddPage( "DEBUG Tables", content, std::string() );
 #endif
 
 return 1;
