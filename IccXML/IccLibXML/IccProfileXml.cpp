@@ -107,9 +107,20 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
     xml += blanks + line;
   }
 
-  snprintf(line, bufSize, "    <DataColourSpace>%s</DataColourSpace>\n", icFixXml(fix, icGetColorSigStr(buf, bufSize, m_Header.colorSpace)));
+  // Header colour-space signatures are serialized as four-character text. A zero
+  // signature (0x00000000) must round-trip back to zero, but icGetColorSigStr(0)
+  // returns the literal "NULL"; the inverse icGetSigVal("NULL") then packs the
+  // ASCII bytes 'N','U','L','L' into 0x4E554C4C, corrupting the value on reparse
+  // (see iccFromXml turning a NoData header into "Unknown 'NULL' = 4E554C4C").
+  // Emit an empty element for a zero signature instead -- icXmlGetChildSigVal()
+  // returns 0 for an empty element, restoring the original value. This mirrors the
+  // JSON serializer (IccProfileJson.cpp), which already guards these fields the
+  // same way. Note: per ICC.1 (v4.4.0.0) 7.2.6 / Table 19 a zero data colour
+  // space is itself invalid for a v2/v4 profile; faithfully preserving the bytes
+  // is a serialization concern, leaving the validator to flag the malformance.
+  snprintf(line, bufSize, "    <DataColourSpace>%s</DataColourSpace>\n", m_Header.colorSpace ? icFixXml(fix, icGetColorSigStr(buf, bufSize, m_Header.colorSpace)) : "");
   xml += blanks + line;
-  snprintf(line, bufSize, "    <PCS>%s</PCS>\n",  icFixXml(fix, icGetColorSigStr(buf, bufSize, m_Header.pcs)));
+  snprintf(line, bufSize, "    <PCS>%s</PCS>\n",  m_Header.pcs ? icFixXml(fix, icGetColorSigStr(buf, bufSize, m_Header.pcs)) : "");
   xml += blanks + line;
 
   snprintf(line, bufSize, "    <CreationDateTime>%d-%02d-%02dT%02d:%02d:%02d</CreationDateTime>\n",
