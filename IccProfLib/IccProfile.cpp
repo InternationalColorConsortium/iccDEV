@@ -1693,9 +1693,22 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   }
   else {
     if (m_Header.deviceClass==icSigLinkClass) {
-      if (!Info.IsValidSpace(m_Header.pcs)) {
+      // A DeviceLink PCS holds the B-side connection (output) colour space. As
+      // with the data colour space (#1359), the iccMAX N-channel spaces (ncXXXX)
+      // are only valid for v5/iccMAX; IsValidSpace() is version-blind, so gate
+      // them by major version for v2/v4 DeviceLink profiles and report the raw
+      // value rather than the friendly descriptor when an iccMAX-only space
+      // appears on a v2/v4 profile.
+      bool bValidPcs = Info.IsValidSpace(m_Header.pcs);
+      bool bIccMaxOnlyPcs = icGetColorSpaceType(m_Header.pcs)==icSigNChannelData;
+      if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
+        bValidPcs = false;
+      if (!bValidPcs) {
         sReport += icMsgValidateCriticalError;
-        snprintf(buf, bufSize, " - %s: Unknown pcs color space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
+        if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
+          snprintf(buf, bufSize, " - Invalid pcs colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.pcs);
+        else
+          snprintf(buf, bufSize, " - %s: Unknown pcs color space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
         sReport += buf;
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
