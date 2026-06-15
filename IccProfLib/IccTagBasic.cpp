@@ -12169,7 +12169,7 @@ void CIccTagSpectralViewingConditions::Describe(std::string &sDescription, int n
   sDescription += info.GetIlluminantName(m_stdIlluminant);
   sDescription += "\n";
 
-  snprintf(buf, bufSize, "Color Temperature: %.1fK\n\n", m_colorTemperature);
+  snprintf(buf, bufSize, "Colour Temperature: %.1fK\n\n", m_colorTemperature);
   sDescription += buf;
 
   if (m_illuminant) {

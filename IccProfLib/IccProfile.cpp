@@ -1650,7 +1650,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         if (m_Header.version<icVersionNumberV5 && bIccMaxOnlySpace)
           snprintf(buf, bufSize, " - Invalid data colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.colorSpace);
         else
-          snprintf(buf, bufSize, " - %s: Unknown color space!\n", Info.GetColorSpaceSigName(m_Header.colorSpace));
+          snprintf(buf, bufSize, " - %s: Unknown colour space!\n", Info.GetColorSpaceSigName(m_Header.colorSpace));
         sReport += buf;
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
@@ -1708,7 +1708,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
           snprintf(buf, bufSize, " - Invalid pcs colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.pcs);
         else
-          snprintf(buf, bufSize, " - %s: Unknown pcs color space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
+          snprintf(buf, bufSize, " - %s: Unknown pcs colour space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
         sReport += buf;
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
@@ -1722,7 +1722,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
 
         default:
           sReport += icMsgValidateCriticalError;
-          snprintf(buf, bufSize, " - %s: Invalid pcs color space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
+          snprintf(buf, bufSize, " - %s: Invalid pcs colour space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
           sReport += buf;
           rv = icMaxStatus(rv, icValidateCriticalError);
           break;
@@ -1821,7 +1821,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
 
         default:
           sReport += icMsgValidateCriticalError;
-          snprintf(buf, bufSize, "%s: Invalid spectral PCS color space!\n", Info.GetColorSpaceSigName((icColorSpaceSignature)m_Header.spectralPCS));
+          snprintf(buf, bufSize, "%s: Invalid spectral PCS colour space!\n", Info.GetColorSpaceSigName((icColorSpaceSignature)m_Header.spectralPCS));
           sReport += buf;
           rv = icMaxStatus(rv, icValidateCriticalError);
           break;

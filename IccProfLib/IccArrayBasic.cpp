@@ -503,7 +503,7 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
     int nBad = 0;
 
     if (n<1) {
-      sReport += "Named Color array must have at least 1 entry\n";
+      sReport += "NamedColor array must have at least 1 entry\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
 
@@ -608,7 +608,7 @@ icValidateStatus CIccArrayNamedColor::Validate(std::string sigPath, std::string 
       }
     }
     if (nBad) {
-      sReport += "Named Color array has invalid tag struct entries!\n";
+      sReport += "NamedColor array has invalid tag struct entries!\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
   }

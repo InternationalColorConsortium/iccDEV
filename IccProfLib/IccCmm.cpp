@@ -8448,11 +8448,11 @@ const icChar* CIccCmm::GetStatusText(icStatusCMM stat)
   case icCmmStatProfileMissingTag:
     return "Missing tag in profile";
   case icCmmStatColorNotFound:
-    return "Color not found";
+    return "Colour not found";
   case icCmmStatIncorrectApply:
     return "Incorrect Apply object";
   case icCmmStatBadColorEncoding:
-    return "Invalid color encoding used";
+    return "Invalid colour encoding used";
   case icCmmStatAllocErr:
     return "Memory allocation error";
   case icCmmStatBadLutType:

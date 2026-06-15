@@ -402,11 +402,11 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
     sDescription += buf;
     snprintf(buf, bufSize, "Creator:            %s\n", icGetSig(buf2, bufSize, pHdr->creator));
     sDescription += buf;
-    snprintf(buf, bufSize, "Data Color Space:   %s\n", Fmt.GetColorSpaceSigName(pHdr->colorSpace));
+    snprintf(buf, bufSize, "Data Colour Space:  %s\n", Fmt.GetColorSpaceSigName(pHdr->colorSpace));
     sDescription += buf;
     snprintf(buf, bufSize, "Flags               %s\n", Fmt.GetProfileFlagsName(pHdr->flags));
     sDescription += buf;
-    snprintf(buf, bufSize, "PCS Color Space:    %s\n", Fmt.GetColorSpaceSigName(pHdr->pcs));
+    snprintf(buf, bufSize, "PCS Colour Space:   %s\n", Fmt.GetColorSpaceSigName(pHdr->pcs));
     sDescription += buf;
     snprintf(buf, bufSize, "Platform:           %s\n", Fmt.GetPlatformSigName(pHdr->platform));
     sDescription += buf;
@@ -455,11 +455,11 @@ void CIccTagEmbeddedProfile::Describe(std::string& sDescription, int /* nVerbose
       sDescription += "BiSpectral Range:   Not Defined\n";
     }
     if (pHdr->mcs) {
-      snprintf(buf, bufSize, "MCS Color Space:    %s\n", Fmt.GetColorSpaceSigName((icColorSpaceSignature)pHdr->mcs));
+      snprintf(buf, bufSize, "MCS Colour Space:   %s\n", Fmt.GetColorSpaceSigName((icColorSpaceSignature)pHdr->mcs));
       sDescription += buf;
     }
     else {
-      sDescription += "MCS Color Space:    Not Defined\n";
+      sDescription += "MCS Colour Space:   Not Defined\n";
     }
 
     sDescription += "\nProfile Tags\n";
