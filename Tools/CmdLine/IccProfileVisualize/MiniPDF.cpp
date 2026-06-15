@@ -288,15 +288,19 @@ void PDFWriter::CreateTOCFromPages()
     std::string &name = pageParent->m_pageNames[k];
     size_t pageIndex = pageParent->m_pageObjectIndices[k];
     
-    point2D pointLeft( left, top - lineCount*tocTextLeading );
+    float lineStartY = top - lineCount*tocTextLeading;
+    point2D pointLeft( left, lineStartY );
     size_t pageNumber = k + 1 + tocPageEstimate;
     std::string pageLabel = name + " .... " + std::to_string( pageNumber );
     commands << PDFSingleLineTextLabel( pointLeft, false, point2D(0,0), tocTextSize,
                             pageLabel, kPDFTextAlignLeft );
 
-// TODO - annotation/link for text!
-// need rect for line entry
-// create PDFAnnotation object for each page/line
+    float textWidth = 0.49f * tocTextSize * pageLabel.size();
+    Rect2D area( left, left+textWidth, lineStartY - tocTextLeading, lineStartY );
+    PDFAnnotation *annot = new PDFAnnotation( area, pageIndex );
+    AddObject( annot );
+    
+    linkList.push_back( ObjectCount() );
 
     if (lineCount >= linesPerPage || k == (pageCount-1) ) {
       std::string contentsName = "Table of Contents";
@@ -531,7 +535,7 @@ void PDFAnnotation::WriteContent(  std::ostream &out )
 {
   out << "<< /Type/Annot /Subtype/Link\n";
   out << " /Rect[ " << m_area << "]";
-  out << " /Border[ 0 0 1 ]\n";     // PDF 8.4.1 Annotation Dictionaries
+  out << " /Border[ 0 0 0 ]\n";     // PDF 8.4.1 Annotation Dictionaries
   out << " /Dest[" << std::to_string(m_pageIndex) << " 0 R /Fit]\n";
   out << ">>\n";
 }
