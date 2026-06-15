@@ -232,7 +232,8 @@ void PDFWriter::CreateOutlineFromPages()
       prevIndex = currentIndex - 1;
     if (k < (pageCount-1))
       nextIndex = currentIndex + 1;
-    PDFOutlineEntry *outline = new PDFOutlineEntry( m_outlineParentIndex, pageIndex, name, prevIndex, nextIndex );
+    std::string bookmarkName = std::to_string(k+1) + " " + name;    // may want to match for TOC
+    PDFOutlineEntry *outline = new PDFOutlineEntry( m_outlineParentIndex, pageIndex, bookmarkName, prevIndex, nextIndex );
     AddObject( outline );
     outParent->AddOutlineObject( ObjectCount() );
   }
