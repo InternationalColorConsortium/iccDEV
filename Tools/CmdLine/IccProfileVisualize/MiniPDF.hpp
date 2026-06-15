@@ -122,7 +122,7 @@ public:
 
 public:
   size_t m_pageObj;
-  size_t m_outlineObj;  // not used yet
+  size_t m_outlineObj;
 };
 
 /******************************************************************************/
@@ -134,23 +134,16 @@ public:
   PDFPageParent() : PDFObject() {}
 
   virtual void WriteContent(  std::ostream &out ) final;
+  
+  void AddPage( size_t pageIndex, const std::string &pageName )
+    {
+    m_pageObjectIndices.push_back( pageIndex );
+    m_pageNames.push_back( pageName );
+    }
 
 public:
     std::vector<size_t> m_pageObjectIndices;
-};
-
-/******************************************************************************/
-
-// outline parent (currently not implemented)
-class PDFOutlineParent : public PDFObject
-{
-public:
-  PDFOutlineParent() : PDFObject() {}
-
-  virtual void WriteContent(  std::ostream &out ) final;
-
-public:
-    // nothing yet
+    std::vector<std::string> m_pageNames;
 };
 
 /******************************************************************************/
@@ -167,7 +160,7 @@ public:
      {}
 
   virtual void WriteContent(  std::ostream &out ) final;
-
+  
 public:
   float m_pageWidth;
   float m_pageHeight;
@@ -176,7 +169,49 @@ public:
   size_t m_procset;
   size_t m_font;
   size_t m_xobjectIndex;
+  size_t m_pageObjectIndex;
   std::string m_xobjectName;
+};
+
+/******************************************************************************/
+
+// outline parent
+class PDFOutlineParent : public PDFObject
+{
+public:
+  PDFOutlineParent() : PDFObject() {}
+
+  virtual void WriteContent(  std::ostream &out ) final;
+  
+  void AddOutlineObject( size_t index )
+    {
+    m_outlineObjectIndices.push_back( index );
+    }
+
+public:
+    std::vector<size_t> m_outlineObjectIndices;    // should match up with pageParent list
+};
+
+/******************************************************************************/
+
+// an outline entry that references a single page
+class PDFOutlineEntry: public PDFObject
+{
+public:
+  PDFOutlineEntry( size_t parentIndex, size_t pageIndex, const std::string &title,
+                    size_t prev, size_t next) :
+    m_outlineParentIndex(parentIndex), m_pageIndex(pageIndex),
+      m_prevIndex(prev), m_nextIndex(next), m_name(title)
+     {}
+
+  virtual void WriteContent(  std::ostream &out ) final;
+
+public:
+  size_t m_outlineParentIndex;
+  size_t m_pageIndex;
+  size_t m_prevIndex;
+  size_t m_nextIndex;
+  std::string m_name;
 };
 
 /******************************************************************************/
@@ -262,12 +297,12 @@ class PDFWriter
 {
 public:
   PDFWriter() : m_pageWidth(0), m_pageHeight(0), m_pageCount(0),
-            m_xrefStart(0), m_pageParentIndex(0), m_outlineIndex(0),
+            m_xrefStart(0), m_pageParentIndex(0), m_outlineParentIndex(0),
             m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
     { }
   PDFWriter( const std::string &filename, float widthPt, float heightPt ):
             m_pageWidth(0), m_pageHeight(0), m_pageCount(0), m_xrefStart(0),
-            m_pageParentIndex(0), m_outlineIndex(0), m_fontIndex(0),
+            m_pageParentIndex(0), m_outlineParentIndex(0), m_fontIndex(0),
             m_groupIndex(0), m_procsetIndex(0)
     { OpenFile(filename, widthPt, heightPt); }
 
@@ -292,7 +327,7 @@ public:
     m_objects.push_back( obj );
   }
 
-  void AddPage( size_t content, std::string xObjectName );
+  void AddPage( std::string name, size_t content, std::string xObjectName );
 
 protected:
 
@@ -313,6 +348,18 @@ protected:
     return pageParent;
   }
 
+  PDFOutlineParent *GetOutlineParent() {
+    if (!m_outlineParentIndex) {
+      fprintf(stderr,"FATAL - PDF outline parent index not set!\n");
+      return NULL;
+    }
+    PDFObject *parentObj( m_objects[m_outlineParentIndex-1] );
+    PDFOutlineParent *outParent = dynamic_cast<PDFOutlineParent *>(parentObj);
+    return outParent;
+  }
+  
+  void CreateOutlineFromPages();
+
 private:
   float m_pageWidth;     // used to init pages
   float m_pageHeight;    // used to init pages
@@ -320,7 +367,7 @@ private:
   size_t m_pageCount;
   size_t m_xrefStart;
   size_t m_pageParentIndex;
-  size_t m_outlineIndex;
+  size_t m_outlineParentIndex;
 
   object_name_to_index_map m_xobjects;
   size_t m_fontIndex;       // used to init pages   // TODO - make this a map from name to object index

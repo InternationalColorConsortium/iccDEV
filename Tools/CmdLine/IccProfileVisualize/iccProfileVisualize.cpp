@@ -700,7 +700,7 @@ void CreateABPlotXobject( PDFWriter &pdfout )
   commands << PDFSingleLineTextLabel( labelPtYellow, false, point2D(0,0), labelSize, "+b Yellow", kPDFTextAlignCenter );
   point2D labelPtBlue( center.x,bottom+margin+labelSize*1.2f);
   commands << PDFSingleLineTextLabel( labelPtBlue, false, point2D(0,0), labelSize, "-b Blue", kPDFTextAlignCenter );
-  point2D labelPtMagenta(right-margin,center.y);
+  point2D labelPtMagenta(right-margin-8,center.y);
   commands << PDFSingleLineTextLabel( labelPtMagenta, false, point2D(0,0), labelSize, "+a Magenta", kPDFTextAlignRight );
   point2D labelPtTeal(left+margin,center.y);
   commands << PDFSingleLineTextLabel( labelPtTeal, false, point2D(0,0), labelSize, "-a Green", kPDFTextAlignLeft );
@@ -902,8 +902,9 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   PDFGraphic *graphics = new PDFGraphic( commands.str() );
   pdffile.AddObject( graphics );
   size_t content = pdffile.ObjectCount();
+  std::string pageName( "Profile Chromaticities");
 
-  pdffile.AddPage( content, "xyPlot" );
+  pdffile.AddPage( pageName, content, "xyPlot" );
 
   return 1;
 }
@@ -959,6 +960,23 @@ void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
 }
 #endif  // USE_SVG
 
+/******************************************************************************/
+
+static
+std::string extract_LUTNameForBookmark(const std::string& str)
+{
+  size_t start = 0;
+  size_t end = str.find(']');
+  if (end != std::string::npos)
+    return str.substr(start, end - start + 1);
+  end = str.find('\n');
+  if (end != std::string::npos)
+    return str.substr(start, end - start);
+  return str;
+}
+
+/******************************************************************************/
+
 static
 void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
         const std::string &description, PDFWriter &pdffile, int steps )
@@ -982,8 +1000,9 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   float labelSize = 12.0f;     // points
   float leading = labelSize * 1.1f;
   float indent = 0.5f * inch2point;
+  std::string fullName = name + " " + description;
   commands << PDFMultiLineText( labelPt, labelSize, leading, indent,
-                                    name + " " + description, kPDFTextAlignCenterLeft );
+                                    fullName, kPDFTextAlignCenterLeft );
 
   // draw the curve
   // optimization - draw only 3 points for identity curve
@@ -1010,8 +1029,8 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   PDFGraphic *graphics = new PDFGraphic( commands.str() );
   pdffile.AddObject( graphics );
   size_t content = pdffile.ObjectCount();
-
-  pdffile.AddPage( content, "Axes" );
+  std::string pageName = extract_LUTNameForBookmark( fullName );
+  pdffile.AddPage( pageName, content, "Axes" );
 }
 
 /******************************************************************************/
@@ -1709,7 +1728,7 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
   pdffile.AddObject( graphics );
   size_t content = pdffile.ObjectCount();
 
-  pdffile.AddPage( content, "xyPlot" );
+  pdffile.AddPage( description + " xy Plot", content, "xyPlot" );
 
   return 1;
 }
@@ -1766,7 +1785,7 @@ int graphNamedColorsABPDF( namedLabList &colorsOut, const std::string &descripti
   pdffile.AddObject( graphics );
   size_t content = pdffile.ObjectCount();
 
-  pdffile.AddPage( content, "abPlot" );
+  pdffile.AddPage( description + " ab Plot", content, "abPlot" );
 
   return 1;
 }
