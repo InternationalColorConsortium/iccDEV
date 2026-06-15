@@ -1625,10 +1625,32 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         (m_Header.deviceClass!=icSigNamedColorClass &&
          m_Header.deviceClass!=icSigMultiplexIdentificationClass &&
          m_Header.deviceClass!=icSigMultiplexVisualizationClass)) {
-    if (!Info.IsValidSpace(m_Header.colorSpace)) {
+    // A v2/v4 profile's data colour space must be one of the signatures
+    // positively enumerated in ICC.1 (v4.4.0.0) 7.2.6 / Table 19.  Two families
+    // of signature are *only* legal for iccMAX (v5) and must be rejected on a
+    // v2/v4 profile: the zero "no data" space (0x00000000) and the N-channel
+    // spaces ncXXXX (introduced by iccMAX 7.2.8 / Table 15 for MultiplexLink,
+    // MultiplexVisualization and abstract profiles).  IsValidSpace() is
+    // version-blind and accepts the ncXXXX family for any version, so gate them
+    // here by major version.
+    bool bValidSpace = Info.IsValidSpace(m_Header.colorSpace);
+    bool bIccMaxOnlySpace = (m_Header.colorSpace==icSigNoColorData) ||
+                            (icGetColorSpaceType(m_Header.colorSpace)==icSigNChannelData);
+    if (m_Header.version<icVersionNumberV5 && bIccMaxOnlySpace)
+      bValidSpace = false;
+
+    if (!bValidSpace) {
       if (!(m_Header.version>=icVersionNumberV5 && m_Header.deviceClass==icSigAbstractClass && Info.IsValidSpectralSpace(m_Header.colorSpace) && IsTagPresent(icSigDToB0Tag))) {
         sReport += icMsgValidateCriticalError;
-        snprintf(buf, bufSize, " - %s: Unknown color space!\n", Info.GetColorSpaceSigName(m_Header.colorSpace));
+        // For an iccMAX-only space on a v2/v4 profile report the raw value
+        // rather than the friendly descriptor: GetColorSpaceSigName() renders
+        // 0x00000000 as "NoData", which would imply a legitimate (v5-only)
+        // space on a profile where it is simply invalid.  Other unrecognised
+        // signatures keep the existing "Unknown ..." wording.
+        if (m_Header.version<icVersionNumberV5 && bIccMaxOnlySpace)
+          snprintf(buf, bufSize, " - Invalid data colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.colorSpace);
+        else
+          snprintf(buf, bufSize, " - %s: Unknown color space!\n", Info.GetColorSpaceSigName(m_Header.colorSpace));
         sReport += buf;
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
