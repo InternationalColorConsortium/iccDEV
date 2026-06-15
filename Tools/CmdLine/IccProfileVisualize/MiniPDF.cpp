@@ -263,7 +263,7 @@ void PDFWriter::CreateTOCFromPages()
   const float right = PageWidth() - margin;
   const Rect2D bounds ( left, right, bottom, top );
   const float tocTextSize = 10.0f;
-  const float tocTextLeading = 1.2 * tocTextSize;
+  const float tocTextLeading = 1.5f * tocTextSize;
   
   PDFPageParent *pageParent = GetPageParent();
   size_t pageCount = pageParent->m_pageObjectIndices.size();
@@ -288,7 +288,7 @@ void PDFWriter::CreateTOCFromPages()
     std::string &name = pageParent->m_pageNames[k];
     size_t pageIndex = pageParent->m_pageObjectIndices[k];
     
-    point2D pointLeft( left, top - k*tocTextLeading );
+    point2D pointLeft( left, top - lineCount*tocTextLeading );
     size_t pageNumber = k + 1 + tocPageEstimate;
     std::string pageLabel = name + " .... " + std::to_string( pageNumber );
     commands << PDFSingleLineTextLabel( pointLeft, false, point2D(0,0), tocTextSize,
@@ -313,7 +313,9 @@ void PDFWriter::CreateTOCFromPages()
       size_t tocPageContentIndex = ObjectCount();
       size_t tocPageIndex = AddPageHidden( tocPageContentIndex, linkList );
       tocPages.push_back( tocPageIndex );
+      
       linkList.clear();
+      commands.str("");
       commands.clear();
       lineCount = 0;
       ++contentPageNumber;
