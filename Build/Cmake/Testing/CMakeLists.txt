@@ -1162,6 +1162,19 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1356-xml-colorspace-null-roundtrip-regression.sh"
 )
 
+# #1362: iccV5DspObsToV4Dsp must emit the rXYZ/gXYZ/bXYZ matrix-column tags as
+# XYZType ('XYZ '), not s15Fixed16ArrayType ('sf32').  Runs the producer on the
+# committed V5 display + observer inputs and fails if any of the three tags is
+# still 'sf32' on disk.  Plain functional test -- skips cleanly if the tool or
+# fixtures are absent.
+iccdev_add_script_test(
+  iccdev.issue-1362-v5dspobs-xyztype-regression
+  60
+  "iccdev;tools;v5dspobs;xyztype;issue-1362;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1362-v5dspobs-xyztype-regression.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus
