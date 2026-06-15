@@ -228,22 +228,28 @@ int main(int argc, char* argv[])
   matrixMpe->Apply(mtxApply, in, rRGB);
   pTagC2S->Apply(pAppyC2S.get(), out, in);
  
-  CIccTagS15Fixed16* primaryXYZ = new CIccTagS15Fixed16(3);
-  (*primaryXYZ)[0] = icDtoF(out[0]); (*primaryXYZ)[1] = icDtoF(out[1]); (*primaryXYZ)[2] = icDtoF(out[2]);
+  // The red/green/blue matrix-column tags (rXYZ/gXYZ/bXYZ, a.k.a.
+  // red/green/blueColorantTag) must be XYZType per ICC.1 9.2.46 / 9.2.31 /
+  // 9.2.4 (each an array of one XYZNumber, 10.31). Emitting them as
+  // s15Fixed16ArrayType ('sf32') produced a non-compliant profile that
+  // consumers keying on the spec type (e.g. dynamic_cast<CIccTagXYZ*>) cannot
+  // read. Use CIccTagXYZ so the tag carries the correct 'XYZ ' type signature.
+  CIccTagXYZ* primaryXYZ = new CIccTagXYZ;
+  (*primaryXYZ)[0].X = icDtoF(out[0]); (*primaryXYZ)[0].Y = icDtoF(out[1]); (*primaryXYZ)[0].Z = icDtoF(out[2]);
   pIcc->AttachTag(icSigRedColorantTag, primaryXYZ); // pointer ownership is passed to the profile
 
   matrixMpe->Apply(mtxApply, in, gRGB);
   pTagC2S->Apply(pAppyC2S.get(), out, in);
 
-  primaryXYZ = new CIccTagS15Fixed16(3);
-  (*primaryXYZ)[0] = icDtoF(out[0]); (*primaryXYZ)[1] = icDtoF(out[1]); (*primaryXYZ)[2] = icDtoF(out[2]);
+  primaryXYZ = new CIccTagXYZ;
+  (*primaryXYZ)[0].X = icDtoF(out[0]); (*primaryXYZ)[0].Y = icDtoF(out[1]); (*primaryXYZ)[0].Z = icDtoF(out[2]);
   pIcc->AttachTag(icSigGreenColorantTag, primaryXYZ); // pointer ownership is passed to the profile
 
   matrixMpe->Apply(mtxApply, in, bRGB);
   pTagC2S->Apply(pAppyC2S.get(), out, in);
 
-  primaryXYZ = new CIccTagS15Fixed16(3);
-  (*primaryXYZ)[0] = icDtoF(out[0]); (*primaryXYZ)[1] = icDtoF(out[1]); (*primaryXYZ)[2] = icDtoF(out[2]);
+  primaryXYZ = new CIccTagXYZ;
+  (*primaryXYZ)[0].X = icDtoF(out[0]); (*primaryXYZ)[0].Y = icDtoF(out[1]); (*primaryXYZ)[0].Z = icDtoF(out[2]);
   pIcc->AttachTag(icSigBlueColorantTag, primaryXYZ); // pointer ownership is passed to the profile
 
   if (!SaveIccProfile(argv[3], pIcc)) {
