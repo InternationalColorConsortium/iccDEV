@@ -159,7 +159,7 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Generate SBOM
-        uses: anchore/sbom-action@63cb575d30b83445769f98c4725d7125db09688f  # v0.22.2
+        uses: anchore/sbom-action@4a83e1fa8a49c8b54b2478e3dfafcc2d1417b432  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           format: spdx-json
