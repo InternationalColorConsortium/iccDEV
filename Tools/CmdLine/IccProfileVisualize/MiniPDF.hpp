@@ -160,7 +160,15 @@ public:
      {}
 
   virtual void WriteContent(  std::ostream &out ) final;
-  
+
+  void AddAnnotation( size_t index ) {
+    m_annotations.push_back(index);
+  }
+
+  void AddAnnotationList( const std::vector<size_t> &annots ) {
+    m_annotations.insert( m_annotations.end(), annots.begin(), annots.end() );
+  }
+
 public:
   float m_pageWidth;
   float m_pageHeight;
@@ -170,6 +178,7 @@ public:
   size_t m_font;
   size_t m_xobjectIndex;
   size_t m_pageObjectIndex;
+  std::vector<size_t> m_annotations;
   std::string m_xobjectName;
 };
 
@@ -239,6 +248,22 @@ public:
 
 public:
   std::string m_buf;
+};
+
+/******************************************************************************/
+
+class PDFAnnotation : public PDFObject
+{
+public:
+  PDFAnnotation( Rect2D &area, size_t index) : PDFObject(),
+    m_area(area), m_pageIndex(index)
+    {}
+
+  virtual void WriteContent(  std::ostream &out ) final;
+
+public:
+  Rect2D m_area;
+  size_t m_pageIndex;
 };
 
 /******************************************************************************/
@@ -357,8 +382,12 @@ protected:
     PDFOutlineParent *outParent = dynamic_cast<PDFOutlineParent *>(parentObj);
     return outParent;
   }
+
+private:
   
+  void CreateTOCFromPages();
   void CreateOutlineFromPages();
+  size_t AddPageHidden( size_t contentIndex, const std::vector<size_t> &annots );
 
 private:
   float m_pageWidth;     // used to init pages

@@ -176,10 +176,8 @@ void PDFWriter::CloseFile()
           std::ostringstream out;
           out.exceptions(std::ios::badbit | std::ios::failbit);
 
-// these can insert pages - be careful
-        // CreateTOCFromPages();
+          CreateTOCFromPages();     // this inserts pages, be careful!
           CreateOutlineFromPages();
-
           WriteHeader(out);
           WriteObjects(out);
           WriteXRefs(out);
@@ -214,6 +212,7 @@ void PDFWriter::CloseFile()
   m_objects.clear();
 
 }
+
 /******************************************************************************/
 
 void PDFWriter::CreateOutlineFromPages()
@@ -237,6 +236,96 @@ void PDFWriter::CreateOutlineFromPages()
     AddObject( outline );
     outParent->AddOutlineObject( ObjectCount() );
   }
+
+}
+
+/******************************************************************************/
+
+// currently used by TOC - no xobjects
+size_t PDFWriter::AddPageHidden( size_t contentIndex, const std::vector<size_t> &annots )
+{
+    PDFPage *pageObj = new PDFPage( m_pageWidth, m_pageHeight,
+                    m_pageParentIndex, contentIndex, m_procsetIndex,
+                    m_fontIndex, 0, "" );
+    pageObj->AddAnnotationList( annots );
+    m_objects.push_back( pageObj );
+    return ObjectCount();
+}
+
+/******************************************************************************/
+
+void PDFWriter::CreateTOCFromPages()
+{
+  const float margin = 20.0;
+  const float bottom = 0.0f + margin;
+  const float left = 0.0f + margin;
+  const float top = PageHeight() - margin;
+  const float right = PageWidth() - margin;
+  const Rect2D bounds ( left, right, bottom, top );
+  const float tocTextSize = 10.0f;
+  const float tocTextLeading = 1.2 * tocTextSize;
+  
+  PDFPageParent *pageParent = GetPageParent();
+  size_t pageCount = pageParent->m_pageObjectIndices.size();
+  
+  if (pageCount == 0)
+    return;
+
+  // how many pages those links will take up?
+  float height = fabsf(bottom - top);
+  float linesPerPage = floorf( height / tocTextLeading );
+  size_t tocPageEstimate = (size_t) ceilf( pageCount / linesPerPage );
+  
+  std::vector<size_t> tocPages;
+  std::vector<std::string> tocPageNames;
+  std::vector<size_t> linkList;
+  std::ostringstream commands;
+  
+  size_t lineCount = 0;
+  size_t contentPageNumber = 1;
+  for (size_t k = 0; k < pageCount; ++k ) {
+    ++lineCount;
+    std::string &name = pageParent->m_pageNames[k];
+    size_t pageIndex = pageParent->m_pageObjectIndices[k];
+    
+    point2D pointLeft( left, top - k*tocTextLeading );
+    size_t pageNumber = k + 1 + tocPageEstimate;
+    std::string pageLabel = name + " .... " + std::to_string( pageNumber );
+    commands << PDFSingleLineTextLabel( pointLeft, false, point2D(0,0), tocTextSize,
+                            pageLabel, kPDFTextAlignLeft );
+
+// TODO - annotation/link for text!
+// need rect for line entry
+// create PDFAnnotation object for each page/line
+
+    if (lineCount >= linesPerPage || k == (pageCount-1) ) {
+      std::string contentsName = "Table of Contents";
+      if (contentPageNumber > 1)
+        contentsName+= " " + std::to_string(contentPageNumber);
+      tocPageNames.push_back(contentsName);
+    
+      point2D pointLabel( 0.5f*(left+right), top + margin );
+      commands << PDFSingleLineTextLabel( pointLabel, false, point2D(0,0), tocTextSize,
+                            contentsName, kPDFTextAlignLeft );
+    
+      PDFGraphic *graphics = new PDFGraphic( commands.str() );
+      AddObject( graphics );
+      size_t tocPageContentIndex = ObjectCount();
+      size_t tocPageIndex = AddPageHidden( tocPageContentIndex, linkList );
+      tocPages.push_back( tocPageIndex );
+      linkList.clear();
+      commands.clear();
+      lineCount = 0;
+      ++contentPageNumber;
+    }
+  } // end loop over pages
+
+  // add TOC pages to the FRONT of the page list
+  pageParent->m_pageObjectIndices.insert( pageParent->m_pageObjectIndices.begin(),
+                        tocPages.begin(), tocPages.end() );
+  pageParent->m_pageNames.insert( pageParent->m_pageNames.begin(),
+                        tocPageNames.begin(), tocPageNames.end() );
+  m_pageCount += tocPages.size();
 
 }
 
@@ -370,6 +459,13 @@ void PDFPage::WriteContent( std::ostream &out )
         out << " /Font << /F1 " << m_font << " 0 R>>";
     out << " >> ";
   }
+  if (m_annotations.size() > 0) {
+    out << " /Annots [ ";
+    for (auto &aindex: m_annotations) {
+      out << std::to_string(aindex) << " 0 R\n";
+    }
+    out << "]\n";
+  }
   out << ">>\n";
 }
 
@@ -425,6 +521,17 @@ void PDFGroup::WriteContent( std::ostream &out )
 {
     // I == isolated       K == knockout
   out << "<< /I true /K false /S /Transparency /Type/Group >>\n";
+}
+
+/******************************************************************************/
+
+void PDFAnnotation::WriteContent(  std::ostream &out )
+{
+  out << "<< /Type/Annot /Subtype/Link\n";
+  out << " /Rect[ " << m_area << "]";
+  out << " /Border[ 0 0 1 ]\n";     // PDF 8.4.1 Annotation Dictionaries
+  out << " /Dest[" << std::to_string(m_pageIndex) << " 0 R /Fit]\n";
+  out << ">>\n";
 }
 
 /******************************************************************************/
