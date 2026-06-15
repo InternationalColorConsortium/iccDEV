@@ -91,7 +91,11 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
 
   xml += blanks + "<IccProfile>\n";
   xml += blanks + "  <Header>\n";
-  snprintf(line, bufSize, "    <PreferredCMMType>%s</PreferredCMMType>\n", icFixXml(fix, icGetColorSigStr(buf, bufSize, m_Header.cmmId)));
+  // Guard every zero header signature the same way as the data colour space /
+  // PCS below (and the JSON serializer): icGetSig*(0) emits the literal "NULL",
+  // which icGetSigVal("NULL") reparses to 0x4E554C4C, corrupting a legitimately
+  // zero PreferredCMMType on round-trip. Emit an empty element for zero instead.
+  snprintf(line, bufSize, "    <PreferredCMMType>%s</PreferredCMMType>\n", m_Header.cmmId ? icFixXml(fix, icGetColorSigStr(buf, bufSize, m_Header.cmmId)) : "");
   xml += blanks + line;
   snprintf(line, bufSize, "    <ProfileVersion>%s</ProfileVersion>\n", info.GetVersionName(m_Header.version));
   xml += blanks + line;
@@ -99,7 +103,9 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
     snprintf(line, bufSize,"    <ProfileSubClassVersion>%s</ProfileSubClassVersion>\n", info.GetSubClassVersionName(m_Header.version));
     xml += blanks + line;
   }
-  snprintf(line, bufSize, "    <ProfileDeviceClass>%s</ProfileDeviceClass>\n", icFixXml(fix, icGetSigStr(buf, bufSize, m_Header.deviceClass)));
+  // Guard the zero case as above so a zero device class round-trips as 0 rather
+  // than being corrupted to 0x4E554C4C via the "NULL" text encoding.
+  snprintf(line, bufSize, "    <ProfileDeviceClass>%s</ProfileDeviceClass>\n", m_Header.deviceClass ? icFixXml(fix, icGetSigStr(buf, bufSize, m_Header.deviceClass)) : "");
   xml += blanks + line;
 
   if (m_Header.deviceSubClass) {
@@ -168,7 +174,9 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
 
   xml += blanks + line;
   
-  snprintf(line, bufSize, "    <ProfileCreator>%s</ProfileCreator>\n", icFixXml(fix, icGetSigStr(buf, bufSize, m_Header.creator)));
+  // Guard the zero case as above so a zero creator round-trips as 0 rather than
+  // being corrupted to 0x4E554C4C via the "NULL" text encoding.
+  snprintf(line, bufSize, "    <ProfileCreator>%s</ProfileCreator>\n", m_Header.creator ? icFixXml(fix, icGetSigStr(buf, bufSize, m_Header.creator)) : "");
   xml += blanks + line;
 
   if (m_Header.profileID.ID32[0] || m_Header.profileID.ID32[1] || 

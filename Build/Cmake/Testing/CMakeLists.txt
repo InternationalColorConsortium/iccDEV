@@ -1173,6 +1173,19 @@ iccdev_add_script_test(
   "iccdev;tools;v5dspobs;xyztype;issue-1362;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1362-v5dspobs-xyztype-regression.sh"
+# #1361: generalises #1356 to the remaining header signature fields that the
+# JSON serializer guards but the XML serializer did not -- PreferredCMMType
+# (cmmId), ProfileDeviceClass (deviceClass) and ProfileCreator (creator).
+# Zeroes those three fields in a real profile and fails if any is corrupted to
+# 0x4E554C4C ("NULL") on an iccToXml -> iccFromXml round-trip.  Companion to the
+# static CodeQL query signature-serialized-without-zero-guard.ql.  Plain
+# functional test -- skips cleanly if the tools/fixture are absent.
+iccdev_add_script_test(
+  iccdev.issue-1361-header-sig-roundtrip-regression
+  60
+  "iccdev;xml;signature;roundtrip;issue-1361;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1361-header-sig-roundtrip-regression.sh"
 )
 
 # Describe sink + options API smoke test. Verifies byte-equivalence
