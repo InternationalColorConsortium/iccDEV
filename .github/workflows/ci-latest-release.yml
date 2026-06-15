@@ -1434,7 +1434,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Attest release archive provenance
-        uses: actions/attest-build-provenance@10334b5f1e684784025c3fc0a277c88c19089275  # v3.2.0
+        uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf  # v3.2.0
         with:
           subject-checksums: release-assets/SHA256SUMS
 
