@@ -90,6 +90,14 @@ std::ostream& operator<<( std::ostream &os, const point2D &p )
 
 /******************************************************************************/
 
+std::ostream& operator<<( std::ostream &os, const RGB8Color &col )
+{
+  // r g b fractions
+  return os << (col.r/255.0f) << " " << (col.g/255.0f) << " " << (col.b/255.0f);
+}
+
+/******************************************************************************/
+
 static bool WritePdfTextFile(FILE* outFile, const std::string& text)
 {
   bool failed = false;
@@ -159,7 +167,7 @@ void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heig
 
     // preliminaries are done
 
-#if 1
+#if 0
 // enable to debug text layout and other PDF utilities
   (void)PDFDebugPages( *this );
 #endif
@@ -773,7 +781,6 @@ std::vector<std::string> splitTextParagraph(const std::string& str, size_t rowLi
   return lines;
 }
 
-
 /******************************************************************************/
 
 // Center and right aligned are not perfect, because we are not using the font metrics and only estimating width
@@ -791,78 +798,9 @@ std::string PDFParagraphText( const point2D &basepoint,
 }
 
 /******************************************************************************/
-/******************************************************************************/
-
-struct RGB8Color {
-  RGB8Color() : r(0), g(0), b(0) {}
-  
-  RGB8Color( uint8_t rr, uint8_t gg, uint8_t bb ) :
-    r(rr), g(gg), b(bb) {}
-
-  RGB8Color( uint32_t hexRGB ) {
-        r = (uint8_t)((hexRGB >> 16) & 0xFF);
-        g = (uint8_t)((hexRGB >>  8) & 0xFF);
-        b = (uint8_t)((hexRGB >>  0) & 0xFF);
-  }
-  
-  bool constexpr operator==( const RGB8Color &y ) const {
-    return (r==y.r) && (g==y.g) && (b==y.b);
-  }
-  
-  bool constexpr operator!=( const RGB8Color &y ) const {
-    return !(*this == y);
-  }
-
-public:
-  uint8_t r, g, b;
-};
-
-std::ostream& operator<<( std::ostream &os, const RGB8Color &col )
-{
-  // r g b
-  return os << (col.r/255.0f) << " " << (col.g/255.0f) << " " << (col.b/255.0f);
-}
-
-/******************************************************************************/
-
-struct tableEntry {
-  tableEntry() : m_backgroundColor(0xffffff), m_textColor(0) {}
-
-public:
-  std::string m_text;
-  RGB8Color m_backgroundColor;
-  RGB8Color m_textColor;
-    // FUTURE - alignment
-
-  float m_width;        // used by layout code
-};
-
-/******************************************************************************/
-
-// row outer, column inner
-typedef std::vector< tableEntry > tableRowData;
-typedef std::vector< tableRowData > tableData;
-
-
-class gridTable {
-
-public:
-  gridTable() : m_lineWeight(0.0f), m_textSize(10.0f), m_cellMargin(2.0f) {}
-  
-  void AddRow( const tableRowData &one_row ) { m_data.push_back( one_row ); }
-
-public:
-    float m_lineWeight;
-    float m_textSize;
-    float m_cellMargin;
-    RGB8Color m_lineColor;
-    tableData m_data;
-};
-
-/******************************************************************************/
 
 std::string PDFDrawGridTable( gridTable &table, const point2D &basepoint,
-                        float columnWidthMinimum = 10.0, float columnWidthMaximum = 9e99 )
+                        float columnWidthMinimum, float columnWidthMaximum )
 {
   std::ostringstream commands;
   float rowHeight = 1.2 * table.m_textSize + 2*table.m_cellMargin; // single line for now, paragraphs later

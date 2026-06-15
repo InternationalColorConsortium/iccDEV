@@ -69,7 +69,6 @@
 #include <map>
 #include "MiniSVG.hpp"
 
-
 /******************************************************************************/
 
 struct Rect2D {
@@ -91,6 +90,34 @@ struct Rect2D {
 
 std::ostream& operator<<( std::ostream &os, const Rect2D &r );
 std::ostream& operator<<( std::ostream &os, const point2D &r );
+
+/******************************************************************************/
+
+struct RGB8Color {
+  RGB8Color() : r(0), g(0), b(0) {}
+  
+  RGB8Color( uint8_t rr, uint8_t gg, uint8_t bb ) :
+    r(rr), g(gg), b(bb) {}
+
+  RGB8Color( uint32_t hexRGB ) {
+        r = (uint8_t)((hexRGB >> 16) & 0xFF);
+        g = (uint8_t)((hexRGB >>  8) & 0xFF);
+        b = (uint8_t)((hexRGB >>  0) & 0xFF);
+  }
+  
+  bool constexpr operator==( const RGB8Color &y ) const {
+    return (r==y.r) && (g==y.g) && (b==y.b);
+  }
+  
+  bool constexpr operator!=( const RGB8Color &y ) const {
+    return !(*this == y);
+  }
+
+public:
+  uint8_t r, g, b;
+};
+
+std::ostream& operator<<( std::ostream &os, const RGB8Color &col );
 
 /******************************************************************************/
 
@@ -409,6 +436,43 @@ private:
 
 /******************************************************************************/
 
+struct tableEntry {
+  tableEntry() : m_backgroundColor(0xffffff), m_textColor(0) {}
+
+public:
+  std::string m_text;
+  RGB8Color m_backgroundColor;
+  RGB8Color m_textColor;
+    // FUTURE - alignment
+
+  float m_width;        // used by layout code
+};
+
+/******************************************************************************/
+
+// row outer, column inner
+typedef std::vector< tableEntry > tableRowData;
+typedef std::vector< tableRowData > tableData;
+
+/******************************************************************************/
+
+class gridTable {
+
+public:
+  gridTable() : m_lineWeight(0.0f), m_textSize(10.0f), m_cellMargin(2.0f) {}
+  
+  void AddRow( const tableRowData &one_row ) { m_data.push_back( one_row ); }
+
+public:
+    float m_lineWeight;
+    float m_textSize;
+    float m_cellMargin;
+    RGB8Color m_lineColor;
+    tableData m_data;
+};
+
+/******************************************************************************/
+
 // utility functions to create graphics
 
 enum PDFTextAlignment {
@@ -442,6 +506,10 @@ std::string PDFParagraphText( const point2D &basepoint,
                     size_t characterLineLimit,
                     const std::string &text, PDFTextAlignment align = kPDFTextAlignLeft,
                     bool allowBlankLines = true );
+
+// draw a table/grid/spreadsheet
+std::string PDFDrawGridTable( gridTable &table, const point2D &basepoint,
+                float columnWidthMinimum = 10.0, float columnWidthMaximum = 9e99 );
 
 /******************************************************************************/
 
