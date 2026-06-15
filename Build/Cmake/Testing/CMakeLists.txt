@@ -1147,6 +1147,21 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1342-1343-imageparse-signed-unsigned-regression.sh"
 )
 
+# #1356: XML serializer corrupts a zero (NoData) header colour-space signature
+# on round-trip.  iccToXml wrote the literal "NULL" for a 0x00000000 data
+# colour space / PCS; iccFromXml then reparsed "NULL" to 0x4E554C4C, so the
+# value did not survive a round-trip (iccFromJson kept it as NoData because the
+# JSON writer guards the zero case).  Round-trips a committed NoData profile
+# through iccToXml -> iccFromXml and fails if the corrupted 0x4E554C4C value
+# reappears.  Plain functional test -- skips cleanly if the tools are absent.
+iccdev_add_script_test(
+  iccdev.issue-1356-xml-colorspace-null-roundtrip-regression
+  60
+  "iccdev;xml;colourspace;roundtrip;issue-1356;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1356-xml-colorspace-null-roundtrip-regression.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus
