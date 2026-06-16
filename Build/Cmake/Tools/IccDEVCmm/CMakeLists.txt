@@ -54,7 +54,11 @@ add_library(${TARGET_NAME} SHARED ${SOURCES})
 
 # MSVC-Specific Settings
 if (MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
+    if (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
+    endif()
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}")
 
     # Precompiled header: create with stdafx.cpp, use for other .cpp files
     set_source_files_properties("${OS_SPECIFIC_SOURCES}/stdafx.cpp"

@@ -837,9 +837,64 @@ if(SANITIZER_FLAGS)
   string(JOIN " " FINAL_SAN_FLAGS ${SANITIZER_FLAGS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FINAL_SAN_FLAGS}")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FINAL_SAN_FLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
+  if(NOT MSVC)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
+  endif()
   message(STATUS ">>> Final sanitizer flags: ${FINAL_SAN_FLAGS}")
+endif()
+
+if(MSVC)
+  set(_iccdev_clangcl_asan OFF)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND (ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_FUZZING))
+    set(_iccdev_clangcl_asan ON)
+  endif()
+
+  if(_iccdev_clangcl_asan)
+    if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
+      set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+      message(STATUS ">>> ClangCL AddressSanitizer uses the non-debug MSVC DLL runtime (/MD); clang-cl rejects /MDd with /fsanitize=address")
+    elseif(CMAKE_MSVC_RUNTIME_LIBRARY MATCHES "Debug")
+      message(FATAL_ERROR "ClangCL AddressSanitizer rejects the debug MSVC runtime (/MDd). Use -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL or MultiThreaded.")
+    endif()
+
+    set(_iccdev_clangcl_asan_arch "x86_64")
+    if(CMAKE_VS_PLATFORM_NAME STREQUAL "Win32")
+      set(_iccdev_clangcl_asan_arch "i386")
+    elseif(CMAKE_VS_PLATFORM_NAME MATCHES "ARM64")
+      set(_iccdev_clangcl_asan_arch "aarch64")
+    endif()
+
+    execute_process(
+      COMMAND "${CMAKE_CXX_COMPILER}" --print-resource-dir
+      OUTPUT_VARIABLE _iccdev_clangcl_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+    )
+    set(_iccdev_clangcl_asan_lib_dir "${_iccdev_clangcl_resource_dir}/lib/windows")
+    find_library(_iccdev_clangcl_asan_dynamic
+      NAMES "clang_rt.asan_dynamic-${_iccdev_clangcl_asan_arch}"
+      PATHS "${_iccdev_clangcl_asan_lib_dir}"
+      NO_DEFAULT_PATH)
+    find_library(_iccdev_clangcl_asan_thunk
+      NAMES "clang_rt.asan_dynamic_runtime_thunk-${_iccdev_clangcl_asan_arch}"
+      PATHS "${_iccdev_clangcl_asan_lib_dir}"
+      NO_DEFAULT_PATH)
+    if(NOT _iccdev_clangcl_asan_dynamic OR NOT _iccdev_clangcl_asan_thunk)
+      message(FATAL_ERROR "ClangCL AddressSanitizer runtime libraries were not found in ${_iccdev_clangcl_asan_lib_dir}")
+    endif()
+
+    add_link_options(
+      "${_iccdev_clangcl_asan_dynamic}"
+      "${_iccdev_clangcl_asan_thunk}"
+      "/include:__asan_seh_interceptor"
+      "/wholearchive:${_iccdev_clangcl_asan_thunk}"
+      "/INFERASANLIBS:NO"
+    )
+  elseif(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+  endif()
+  unset(_iccdev_clangcl_asan)
 endif()
 
 # Apply coverage instrumentation flags
@@ -898,7 +953,12 @@ macro(_iccdev_add_cxx_flag_if_supported FLAG VAR)
     add_compile_options("${FLAG}")
   endif()
 endmacro()
-check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output LANGUAGES CXX)
+if(SANITIZER_FLAGS OR ENABLE_COVERAGE OR ENABLE_PROFILING)
+  set(ipo_supported TRUE)
+  set(ipo_output "IPO support not probed because instrumentation disables LTO")
+else()
+  check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output LANGUAGES CXX)
+endif()
 
 if(DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
   # User explicitly set LTO preference via -D flag; respect it unconditionally
@@ -999,19 +1059,12 @@ endif()
 
 # Platform-Specific Flags - MINIMAL (no extra flags for Release/Debug)
 if(MSVC)
-    # Debug: CMake defaults only (no extra flags)
-    # CMAKE_CXX_FLAGS_DEBUG uses CMake defaults
-    # Release: CMake defaults only (no extra flags)
-    # CMAKE_CXX_FLAGS_RELEASE uses CMake defaults
-    if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-    endif()
-    message(STATUS "Configuring MSVC runtime and flags (CMake defaults)")
-    message(STATUS "  MSVC runtime:   ${CMAKE_MSVC_RUNTIME_LIBRARY}")
-    message(STATUS "  DEBUG:          CMake defaults only")
-    message(STATUS "  RELEASE:        CMake defaults only")
-    message(STATUS "  RELWITHDEBINFO: CMake defaults only")
-    message(STATUS "  MINSIZEREL:     CMake defaults only")
+  message(STATUS "Configuring MSVC runtime and flags (CMake defaults)")
+  message(STATUS "  MSVC runtime:   ${CMAKE_MSVC_RUNTIME_LIBRARY}")
+  message(STATUS "  DEBUG:          CMake defaults only")
+  message(STATUS "  RELEASE:        CMake defaults only")
+  message(STATUS "  RELWITHDEBINFO: CMake defaults only")
+  message(STATUS "  MINSIZEREL:     CMake defaults only")
 elseif(UNIX)
     # Debug: CMake defaults only (no extra flags)
     # CMAKE_CXX_FLAGS_DEBUG uses CMake defaults
