@@ -37,9 +37,24 @@ static void print_last_error(const char *what)
     std::printf("[FAIL] %s failed, GetLastError=%lu\n", what, GetLastError());
 }
 
-static std::wstring widen_ascii_path(const char *path)
+static std::wstring normalize_windows_path(const char *path)
 {
-    return std::wstring(path, path + std::strlen(path));
+    std::wstring wide(path, path + std::strlen(path));
+    for (wchar_t &ch : wide) {
+        if (ch == L'/')
+            ch = L'\\';
+    }
+
+    DWORD needed = GetFullPathNameW(wide.c_str(), 0, NULL, NULL);
+    if (!needed)
+        return wide;
+
+    std::vector<wchar_t> buffer(needed);
+    DWORD written = GetFullPathNameW(wide.c_str(), needed, buffer.data(), NULL);
+    if (!written || written >= needed)
+        return wide;
+
+    return std::wstring(buffer.data(), written);
 }
 
 static FARPROC require_proc(HMODULE module, const char *name)
@@ -172,8 +187,8 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    const std::wstring dll_path = widen_ascii_path(argv[1]);
-    const std::wstring profile_path = widen_ascii_path(argv[2]);
+    const std::wstring dll_path = normalize_windows_path(argv[1]);
+    const std::wstring profile_path = normalize_windows_path(argv[2]);
     CmmApi api = {};
 
     if (!load_cmm(dll_path.c_str(), api))
