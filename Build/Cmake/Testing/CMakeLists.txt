@@ -1202,6 +1202,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1355-roundtrip-mattrc-invertibility-regression.sh"
 )
 
+# #1394 - CIccTagXmlNum::ToXml walked m_nSize without a bound, so a malformed
+# ui08/ui16/ui32/ui64 array drove an unbounded serialization loop (CWE-400/834):
+# a ~16 MB ui08 tag ballooned to ~80 MB of XML. Asserts the 0xffffff cap refuses
+# an over-cap array while an in-bounds array still serializes. python3-gated.
+iccdev_add_script_test(
+  iccdev.issue-1394-xml-num-array-dos
+  120
+  "iccdev;xml;security;dos;issue-1394;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1394-xml-num-array-dos.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus

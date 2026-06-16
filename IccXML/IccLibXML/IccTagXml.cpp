@@ -1537,6 +1537,15 @@ bool CIccTagXmlNum<T, A, Tsig>::ToXml(std::string &xml, std::string blanks/* = "
   char buf[bufSize];
   int i;
 
+  // CWE-400/CWE-834: m_nSize is derived from the tag byte size in Read() and m_Num is
+  // allocated to match; assert an explicit upper limit so a corrupted count can't drive
+  // an unbounded serialization walk (each element expands to several XML characters, so
+  // a multi-megabyte ui08/ui16/ui32/ui64 array would otherwise balloon the output).
+  // Mirrors the guard already applied to the sibling CIccTagXmlFixedNum::ToXml above.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
+
   xml += blanks + "<Array>\n";
   for (i=0; i<(int)this->m_nSize; i++) {
     if (!(i%16)) {
