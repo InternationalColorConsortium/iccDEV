@@ -461,12 +461,32 @@ int main(int argc, char* argv[])
   profile.AttachTag(icSigProfileDescriptionTag, pTextTag);
 
 
-  //Add copyright Tag
-  if (cube.getCopyright().size()) {
-    pTextTag = new CIccTagMultiLocalizedUnicode();
+  //Add copyright Tag -- required in every profile (ICC.2).  Emit it
+  //unconditionally, using the cube comments when present and a default otherwise,
+  //so the output is not missing a required tag when the cube had no comments (#1379).
+  pTextTag = new CIccTagMultiLocalizedUnicode();
+  if (cube.getCopyright().size())
     pTextTag->SetText(cube.getCopyright().c_str());
-    profile.AttachTag(icSigCopyrightTag, pTextTag);
-  }
+  else
+    pTextTag->SetText("Copyright ICC");
+  profile.AttachTag(icSigCopyrightTag, pTextTag);
+
+  //Add profileSequenceDescTag -- required in a DeviceLink profile (ICC.2).  It
+  //was omitted entirely, leaving the link non-conformant (#1379).  Describe the
+  //single cube-derived stage of the link.
+  CIccTagProfileSeqDesc* pSeqTag = new CIccTagProfileSeqDesc();
+  CIccProfileDescStruct seqDesc;
+  seqDesc.m_deviceMfg = 0;
+  seqDesc.m_deviceModel = 0;
+  seqDesc.m_attributes = 0;
+  seqDesc.m_technology = (icTechnologySignature)0;
+  seqDesc.m_deviceMfgDesc.SetType(icSigMultiLocalizedUnicodeType);
+  ((CIccTagMultiLocalizedUnicode*)seqDesc.m_deviceMfgDesc.GetTag())->SetText("International Color Consortium");
+  seqDesc.m_deviceModelDesc.SetType(icSigMultiLocalizedUnicodeType);
+  ((CIccTagMultiLocalizedUnicode*)seqDesc.m_deviceModelDesc.GetTag())->SetText(
+    (std::string("Device link created from ") + argv[1]).c_str());
+  pSeqTag->m_Descriptions->push_back(seqDesc);
+  profile.AttachTag(icSigProfileSequenceDescTag, pSeqTag);
 
   if (SaveIccProfile(argv[2], &profile)) {
     printf("'%s' successfully created\n", argv[2]);

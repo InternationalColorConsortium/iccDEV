@@ -1043,6 +1043,14 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1379-fromcube-conformance
+  60
+  "iccdev;tools;fromcube;validation;issue-1379;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh"
+)
+
+iccdev_add_script_test(
   iccdev.calculator-regressions
   300
   "iccdev;calculator;regression;asan"
