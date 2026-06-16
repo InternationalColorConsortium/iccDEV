@@ -190,6 +190,7 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.windows-iccdevcmm-smoke` | `Tools/Winnt/IccDEVCmm/tests/IccDEVCmmSmoke.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
@@ -207,10 +208,14 @@ that disposable directory, verifies key output, and fails if the source
 Windows CTest wrappers collect build-tree DLL directories plus runtime
 dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
 vcpkg installed triplets, compiler `bin` directories, and common dependency
-library prefixes. This keeps CTest execution independent of a developer's
-interactive `PATH` for tools such as `libxml2.dll` or `libwinpthread-1.dll`.
-MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
-because GCC launches runtime-dependent compiler subprocesses during the build.
+library prefixes. MSVC builds also add the matching Debug CRT redistributable
+directory when it is present, so Debug helper binaries and DLLs can run on CI
+machines that do not have `msvcp140d.dll` or `vcruntime140d.dll` on the system
+`PATH`. This keeps CTest execution independent of a developer's interactive
+`PATH` for tools such as `libxml2.dll`, `libwinpthread-1.dll`, or the MSVC
+Debug CRT. MinGW builds still need the UCRT64 `bin` directory on the invoking
+shell `PATH` because GCC launches runtime-dependent compiler subprocesses during
+the build.
 
 Feature-disabled Windows builds register the tests whose targets are available.
 For example, `mingw-core-x64` does not build XML conversion tools, so it skips
@@ -224,7 +229,11 @@ and header/file-size diagnostic. `iccdev.issue-987-shared-mpe-export` is a
 focused Windows shared-library regression for MSVC and MinGW. It checks that
 `IccProfLib2.dll` exports `CIccTagMultiProcessElement::NumElements` with
 `dumpbin` or `objdump`, then builds and runs a small consumer against the
-build-tree DLL and import library.
+build-tree DLL and import library. `iccdev.windows-iccdevcmm-smoke` loads the
+Windows ICM CMM DLL directly, verifies the required `CM*` exports and `ICCD`
+CMM identity, validates `sRGB_v4_ICC_preference.icc`, then creates, translates
+through, and deletes a two-profile RGB transform without registering the CMM
+globally.
 
 ## Fixtures and Logs
 

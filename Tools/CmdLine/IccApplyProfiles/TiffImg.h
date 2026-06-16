@@ -76,6 +76,13 @@
 #define PHOTO_CIELAB      2
 #define PHOTO_ICCLAB      3
 #define PHOTO_RGB         4
+// PHOTO_PALETTE / PHOTO_UNKNOWN are CTiffImg's INTERNAL photometric values
+// (returned by GetPhoto()), and are deliberately NOT libtiff's PHOTOMETRIC_*
+// constants.  GetPhoto() must map PHOTOMETRIC_PALETTE to PHOTO_PALETTE so callers
+// can detect/reject palette input (#1381), and report anything it does not
+// recognise as PHOTO_UNKNOWN instead of silently as PHOTO_MINISWHITE (#1380).
+#define PHOTO_PALETTE     5
+#define PHOTO_UNKNOWN     0xffffffff
 
 class CTiffImg  
 {

@@ -465,6 +465,47 @@ function(iccdev_add_parser_restore_calls_test)
   endif()
 endfunction()
 
+function(iccdev_add_windows_iccdevcmm_smoke_test)
+  if(NOT WIN32 OR NOT TARGET RefIccMAX)
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccDEVCmmSmokeTest
+    "${ICCDEV_REPO_ROOT}/Tools/Winnt/IccDEVCmm/tests/IccDEVCmmSmoke.cpp"
+  )
+  target_compile_features(iccDEVCmmSmokeTest PRIVATE cxx_std_17)
+  target_compile_definitions(iccDEVCmmSmokeTest PRIVATE UNICODE _UNICODE)
+  target_link_libraries(iccDEVCmmSmokeTest PRIVATE Mscms.lib)
+
+  add_dependencies(check iccDEVCmmSmokeTest RefIccMAX)
+
+  add_test(
+    NAME iccdev.windows-iccdevcmm-smoke
+    COMMAND
+      "$<TARGET_FILE:iccDEVCmmSmokeTest>"
+      "$<TARGET_FILE:RefIccMAX>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;windows;cmm;icm;dll"
+  )
+
+  set(_iccdevcmm_windows_env_mods
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDEVCmmSmokeTest>"
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:RefIccMAX>"
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+  )
+  foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+    list(APPEND _iccdevcmm_windows_env_mods
+      "PATH=path_list_prepend:${_runtime_path}")
+  endforeach()
+  set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
+    ENVIRONMENT_MODIFICATION "${_iccdevcmm_windows_env_mods}"
+  )
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -621,6 +662,7 @@ if(WIN32)
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
+  iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
 endif()
@@ -988,11 +1030,27 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1383-pngdump-palette-injection
+  60
+  "iccdev;tools;pngdump;palette;issue-1383;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1383-pngdump-palette-injection.sh"
+)
+
+iccdev_add_script_test(
   iccdev.issue-1167-jpegdump-byte-regression
   120
   "iccdev;tools;jpegdump;asan;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1167-jpegdump-byte-regression.sh"
+)
+
+iccdev_add_script_test(
+  iccdev.issue-1382-jpegdump-app2-reassembly
+  60
+  "iccdev;tools;jpegdump;app2;issue-1382;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1382-jpegdump-app2-reassembly.sh"
 )
 
 iccdev_add_script_test(
@@ -1040,6 +1098,14 @@ iccdev_add_script_test(
   "iccdev;tools;fromcube;mluc;asan;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1179-fromcube-regression.sh"
+)
+
+iccdev_add_script_test(
+  iccdev.issue-1379-fromcube-conformance
+  60
+  "iccdev;tools;fromcube;validation;issue-1379;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh"
 )
 
 iccdev_add_script_test(
@@ -1213,6 +1279,16 @@ iccdev_add_script_test(
   "iccdev;tools;dump;signame;issue-1395;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1395-profileclass-signame.sh"
+# #1394 - CIccTagXmlNum::ToXml walked m_nSize without a bound, so a malformed
+# ui08/ui16/ui32/ui64 array drove an unbounded serialization loop (CWE-400/834):
+# a ~16 MB ui08 tag ballooned to ~80 MB of XML. Asserts the 0xffffff cap refuses
+# an over-cap array while an in-bounds array still serializes. python3-gated.
+iccdev_add_script_test(
+  iccdev.issue-1394-xml-num-array-dos
+  120
+  "iccdev;xml;security;dos;issue-1394;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1394-xml-num-array-dos.sh"
 )
 
 # Describe sink + options API smoke test. Verifies byte-equivalence

@@ -38,6 +38,7 @@ MALFORMED_FILE="$MALFORMED_DIR/spec_3"
 PACKED_DIR="$OUTDIR/specsep-packed"
 PACKED_FILE="$PACKED_DIR/spec_1"
 VALID_DIR="$OUTDIR/specsep-valid"
+PALETTE_DIR="$OUTDIR/specsep-palette"
 LOGFILE="$OUTDIR/specsep-tiff-geometry.log"
 OUTPUT_TIFF="$OUTDIR/specsep-geometry-output.tif"
 
@@ -320,10 +321,92 @@ run_specsep_descending_range_accept() {
   pass_case "$name" "descending range accepted without sanitizer findings"
 }
 
+generate_palette_tiff() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  local path="$1"
+  mkdir -p "$(dirname "$path")"
+  # Minimal 2x2 8-bit PHOTOMETRIC_PALETTE (=3) TIFF, including the required
+  # ColorMap (tag 320); libtiff treats a palette photometric without a colormap
+  # as min-is-black, so the colormap is what makes this a genuine palette file.
+  python3 - "$path" <<'PY'
+import struct, sys, pathlib
+path = pathlib.Path(sys.argv[1])
+w = h = 2; bps = 8; ncol = 1 << bps
+pix = bytes(w * h); doff = 8; ifd = doff + len(pix)
+if ifd % 2:
+    pix += b"\0"; ifd += 1
+cmap = b"".join(struct.pack("<H", (i * 65535) // (ncol - 1))
+                for _ in range(3) for i in range(ncol))
+entries = [(256, 4, 1, w), (257, 4, 1, h), (258, 3, 1, bps), (259, 3, 1, 1),
+           (262, 3, 1, 3), (273, 4, 1, doff), (277, 3, 1, 1), (278, 4, 1, h),
+           (279, 4, 1, len(pix)), (284, 3, 1, 1), (296, 3, 1, 2),
+           (320, 3, 3 * ncol, 0)]
+entries.sort()
+cmap_off = ifd + 2 + len(entries) * 12 + 4
+entries = [(t, ty, c, (cmap_off if t == 320 else v)) for (t, ty, c, v) in entries]
+d = bytearray(b"II" + struct.pack("<H", 42) + struct.pack("<I", ifd)); d += pix
+d += struct.pack("<H", len(entries))
+for t, ty, c, v in entries:
+    d += struct.pack("<HHI", t, ty, c)
+    d += (struct.pack("<H", v) + b"\0\0") if (ty == 3 and c == 1) else struct.pack("<I", v)
+d += struct.pack("<I", 0); d += cmap
+path.write_bytes(d)
+PY
+}
+
+run_specsep_palette_reject() {
+  local name="specsep-palette-reject"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$LOGFILE" "$OUTPUT_TIFF"
+
+  if [ ! -x "$SPECSEP" ]; then
+    fail_case "$name" "missing executable: $SPECSEP"
+    return
+  fi
+
+  if ! generate_palette_tiff "$PALETTE_DIR/spec_0"; then
+    fail_case "$name" "python3 unavailable or palette TIFF generation failed"
+    return
+  fi
+
+  # iccSpecSepToTiff must refuse palette input: GetPhoto() returns the internal
+  # PHOTO_PALETTE enum, which the tool now compares correctly (#1381).
+  timeout 60 "$SPECSEP" "$OUTPUT_TIFF" 0 0 "$PALETTE_DIR/spec_" 0 0 1 > "$LOGFILE" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$LOGFILE"; then
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ "$exit_code" -ne 255 ]; then
+    fail_case "$name" "expected graceful reject exit=255, got exit=$exit_code"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if ! grep -Fq "is a palette based file" "$LOGFILE" 2>/dev/null; then
+    fail_case "$name" "missing palette rejection text (#1381)"
+    sed -n '1,40p' "$LOGFILE"
+    return
+  fi
+
+  if [ -e "$OUTPUT_TIFF" ]; then
+    fail_case "$name" "output TIFF created despite palette rejection"
+    return
+  fi
+
+  pass_case "$name" "palette input rejected (#1381) without sanitizer findings"
+}
+
 echo "=== iccSpecSepToTiff malformed TIFF geometry regression ==="
 run_specsep_geometry_reject
 run_specsep_packed_bps_reject
 run_specsep_descending_range_accept
+run_specsep_palette_reject
 echo "iccSpecSepToTiff malformed TIFF geometry regression: $PASS passed, $FAIL failed, $TOTAL total"
 
 if [ "$FAIL" -ne 0 ]; then
