@@ -28,7 +28,6 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `json-raw-normalized-value` | CWE-682 | JSON serialization of raw normalized ICC value |
 | `json-recursive-parse` | CWE-674, CWE-400 | Recursive JSON structure without depth limit |
 | `json-size-overflow` | CWE-680, CWE-190 | JSON array size cast to narrow integer without bounds check |
-| `json-unchecked-type-access` | CWE-704, CWE-20 | JSON `.get<T>()` without type guard |
 | `localized-text-unsafe-serialization` | CWE-116, CWE-20 | Localized ICC text emitted without XML/JSON hex fallback |
 | `multiplication-overflow-alloc` | CWE-190, CWE-680, CWE-787 | Multiplication overflow before allocation |
 | `new-array-delete-mismatch` | CWE-762 | `new[]` allocation released with scalar `delete` |
