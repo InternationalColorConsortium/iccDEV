@@ -1190,6 +1190,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1361-header-sig-roundtrip-regression.sh"
 )
 
+# #1355 - matrix/TRC (PCSXYZ) profiles must round-trip near-exactly. Guards the
+# two CMM/eval fixes (ConnectFirst actual->internal XYZ rescale; native-PCS
+# round-trip connection): iccRoundTrip RT1 mean dE was ~20 before, ~0 after.
+# Skips cleanly if iccRoundTrip is not built.
+iccdev_add_script_test(
+  iccdev.issue-1355-roundtrip-mattrc-invertibility-regression
+  120
+  "iccdev;cmm;roundtrip;issue-1355;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1355-roundtrip-mattrc-invertibility-regression.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus

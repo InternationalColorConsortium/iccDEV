@@ -96,8 +96,16 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     return icCmmStatInvalidProfile;
   }
 
-  CIccCmm dev2Lab(icSigUnknownData, icSigLabData);
-  CIccCmm Lab2Dev2Lab(icSigLabData, icSigLabData, false);
+  // Connect the round-trip CMMs through the profile's native PCS.  Forcing the
+  // connection space to Lab for an XYZ-PCS profile inserts a gratuitous XYZ<->Lab
+  // conversion pair (the L* cube root and its inverse) into every transform leg --
+  // wasted math, and numerically lossy at high chroma where the round trip should
+  // be exactly invertible.  Use XYZ directly when the profile PCS is XYZ; otherwise
+  // Lab.  Either way the comparison below is still performed in L*a*b*.
+  const bool bXyzConnect = (pProfile->m_Header.pcs == icSigXYZData);
+  const icColorSpaceSignature connSpace = bXyzConnect ? icSigXYZData : icSigLabData;
+  CIccCmm dev2Lab(icSigUnknownData, connSpace);
+  CIccCmm Lab2Dev2Lab(connSpace, connSpace, false);
   icXformLutType nLutType = buseMpeTags ? icXformLutColor : icXformLutColorimetric;
 
   icStatusCMM result;
@@ -184,9 +192,19 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     Lab2Dev2Lab.Apply(roundPcs1, devPcs);  //First round trip gets color into output gamut
     Lab2Dev2Lab.Apply(roundPcs2, roundPcs1);  //Second round trip find reproducibility error
 
-    icLabFromPcs(devPcs);
-    icLabFromPcs(roundPcs1);
-    icLabFromPcs(roundPcs2);
+    // Decode the PCS samples to actual L*a*b* for the dE comparison.  When the
+    // connection space is XYZ the samples are internal XYZ, so undo the internal
+    // scaling (icXyzFromPcs) and convert XYZ->Lab; otherwise they are internal Lab.
+    if (bXyzConnect) {
+      icXyzFromPcs(devPcs);    icXYZtoLab(devPcs);
+      icXyzFromPcs(roundPcs1); icXYZtoLab(roundPcs1);
+      icXyzFromPcs(roundPcs2); icXYZtoLab(roundPcs2);
+    }
+    else {
+      icLabFromPcs(devPcs);
+      icLabFromPcs(roundPcs1);
+      icLabFromPcs(roundPcs2);
+    }
 
     Compare(sPixel, devPcs, roundPcs1, roundPcs2);
   }

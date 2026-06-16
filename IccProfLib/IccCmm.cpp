@@ -2568,11 +2568,19 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
   else if (srcSpace == icSigLabData) {
 
     if (pToXform->GetSrcSpace() == icSigXYZData) {
+      // Incoming PCS is Lab feeding a transform whose source space is XYZ.
+      // CIccPcsStepLabToXyz emits *actual* (unscaled) XYZ, but an XYZ-source
+      // transform consumes *internal* XYZ (scaled by icXyzToXyzIn = 32768/65535).
+      // Mirror ConnectLast() and the icSigXYZData source branch above by rescaling
+      // actual->internal XYZ here; without it the XYZ handed to the transform is
+      // ~2x too large (65535/32768) and the Lab->device direction (e.g. round-trip
+      // evaluation through a matrix/TRC display profile) is grossly wrong.
       pushLabToXyz(pToXform->m_pConnectionConditions);
       if (pToXform->NeedAdjustSrcPCS()) {
         pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
         pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
       }
+      pushXyzToXyzIn();
     }
     else if (pToXform->NeedAdjustSrcPCS()) {
       pushLabToXyz(pToXform->m_pConnectionConditions);
