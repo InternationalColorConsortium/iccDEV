@@ -190,6 +190,7 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.windows-iccdevcmm-smoke` | `Tools/Winnt/IccDEVCmm/tests/IccDEVCmmSmoke.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
@@ -224,7 +225,11 @@ and header/file-size diagnostic. `iccdev.issue-987-shared-mpe-export` is a
 focused Windows shared-library regression for MSVC and MinGW. It checks that
 `IccProfLib2.dll` exports `CIccTagMultiProcessElement::NumElements` with
 `dumpbin` or `objdump`, then builds and runs a small consumer against the
-build-tree DLL and import library.
+build-tree DLL and import library. `iccdev.windows-iccdevcmm-smoke` loads the
+Windows ICM CMM DLL directly, verifies the required `CM*` exports and `ICCD`
+CMM identity, validates `sRGB_v4_ICC_preference.icc`, then creates, translates
+through, and deletes a two-profile RGB transform without registering the CMM
+globally.
 
 ## Fixtures and Logs
 

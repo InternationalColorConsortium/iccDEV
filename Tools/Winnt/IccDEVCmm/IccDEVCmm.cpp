@@ -1206,7 +1206,7 @@ BOOL WINAPI CMDeleteTransform(
 {
   size_t i = (size_t)hcmTransform;
 
-  if (i>256 && i<256+AVAILABLE_TRANSFORMS && g_Transforms[i-256]) {
+  if (i>=256 && i<256+AVAILABLE_TRANSFORMS && g_Transforms[i-256]) {
     delete g_Transforms[i-256];
     g_Transforms[i-256] = NULL;
 

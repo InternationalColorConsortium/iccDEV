@@ -465,6 +465,47 @@ function(iccdev_add_parser_restore_calls_test)
   endif()
 endfunction()
 
+function(iccdev_add_windows_iccdevcmm_smoke_test)
+  if(NOT WIN32 OR NOT TARGET RefIccMAX)
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccDEVCmmSmokeTest
+    "${ICCDEV_REPO_ROOT}/Tools/Winnt/IccDEVCmm/tests/IccDEVCmmSmoke.cpp"
+  )
+  target_compile_features(iccDEVCmmSmokeTest PRIVATE cxx_std_17)
+  target_compile_definitions(iccDEVCmmSmokeTest PRIVATE UNICODE _UNICODE)
+  target_link_libraries(iccDEVCmmSmokeTest PRIVATE Mscms.lib)
+
+  add_dependencies(check iccDEVCmmSmokeTest RefIccMAX)
+
+  add_test(
+    NAME iccdev.windows-iccdevcmm-smoke
+    COMMAND
+      "$<TARGET_FILE:iccDEVCmmSmokeTest>"
+      "$<TARGET_FILE:RefIccMAX>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;windows;cmm;icm;dll"
+  )
+
+  set(_iccdevcmm_windows_env_mods
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDEVCmmSmokeTest>"
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:RefIccMAX>"
+    "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+  )
+  foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+    list(APPEND _iccdevcmm_windows_env_mods
+      "PATH=path_list_prepend:${_runtime_path}")
+  endforeach()
+  set_tests_properties(iccdev.windows-iccdevcmm-smoke PROPERTIES
+    ENVIRONMENT_MODIFICATION "${_iccdevcmm_windows_env_mods}"
+  )
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -621,6 +662,7 @@ if(WIN32)
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
+  iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
 endif()
