@@ -208,10 +208,14 @@ that disposable directory, verifies key output, and fails if the source
 Windows CTest wrappers collect build-tree DLL directories plus runtime
 dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
 vcpkg installed triplets, compiler `bin` directories, and common dependency
-library prefixes. This keeps CTest execution independent of a developer's
-interactive `PATH` for tools such as `libxml2.dll` or `libwinpthread-1.dll`.
-MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
-because GCC launches runtime-dependent compiler subprocesses during the build.
+library prefixes. MSVC builds also add the matching Debug CRT redistributable
+directory when it is present, so Debug helper binaries and DLLs can run on CI
+machines that do not have `msvcp140d.dll` or `vcruntime140d.dll` on the system
+`PATH`. This keeps CTest execution independent of a developer's interactive
+`PATH` for tools such as `libxml2.dll`, `libwinpthread-1.dll`, or the MSVC
+Debug CRT. MinGW builds still need the UCRT64 `bin` directory on the invoking
+shell `PATH` because GCC launches runtime-dependent compiler subprocesses during
+the build.
 
 Feature-disabled Windows builds register the tests whose targets are available.
 For example, `mingw-core-x64` does not build XML conversion tools, so it skips
