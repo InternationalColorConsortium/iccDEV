@@ -1202,6 +1202,19 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1355-roundtrip-mattrc-invertibility-regression.sh"
 )
 
+# #1395 - CIccInfo::GetProfileClassSigName appended a glued "Class" suffix to its
+# display labels ("DisplayClass", "OutputClass", ...), which is not an ICC.1/ICC.2
+# spec identifier and is redundant in every (display-only) caller. The suffix was
+# dropped; this asserts iccDumpProfile now prints the de-suffixed name ("Display",
+# "Output", ...) for one committed profile per deviceClass, with no trailing "Class".
+iccdev_add_script_test(
+  iccdev.issue-1395-profileclass-signame
+  120
+  "iccdev;tools;dump;signame;issue-1395;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1395-profileclass-signame.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus

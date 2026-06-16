@@ -1912,39 +1912,48 @@ const icChar *CIccInfo::GetSpectralColorSigName(icColorSpaceSignature sig)
 
 const icChar *CIccInfo::GetProfileClassSigName(icProfileClassSignature sig)
 {
+  // These strings are display-only labels for the deviceClass signature; every
+  // caller emits them as human-readable text (iccDumpProfile "Profile Class: %s",
+  // the validation report in IccProfile.cpp, the wxWidgets GUI label) and nothing
+  // parses, compares, or serializes them — XML/JSON write the raw 4CC via
+  // icGetSigStr(), independent of this helper. The glued "Class" suffix is dropped:
+  // it is not an ICC.1/ICC.2 spec identifier (in the spec "class" is a separate word
+  // tied to "profile"/"device"/"media"), it is redundant since each caller's
+  // surrounding text already supplies the context, and the CamelCaps form hampers
+  // future localization.
   switch (sig) {
   case icSigInputClass:
-    return "InputClass";
+    return "Input";
 
   case icSigDisplayClass:
-    return "DisplayClass";
+    return "Display";
 
   case icSigOutputClass:
-    return "OutputClass";
+    return "Output";
 
   case icSigLinkClass:
-    return "LinkClass";
+    return "Link";
 
   case icSigAbstractClass:
-    return "AbstractClass";
+    return "Abstract";
 
   case icSigColorSpaceClass:
-    return "ColorSpaceClass";
+    return "ColorSpace";
 
   case icSigNamedColorClass:
-    return "NamedColorClass";
+    return "NamedColor";
 
   case icSigColorEncodingClass:
-    return "ColorEncodingClass";
+    return "ColorEncoding";
 
   case icSigMultiplexIdentificationClass:
-    return "MultiplexIdentificationClass";
+    return "MultiplexIdentification";
 
   case icSigMultiplexVisualizationClass:
-    return "MultiplexVisualizationClass";
+    return "MultiplexVisualization";
 
   case icSigMultiplexLinkClass:
-    return "MultiplexLinkClass";
+    return "MultiplexLink";
 
   default:
     return GetUnknownName(sig);
