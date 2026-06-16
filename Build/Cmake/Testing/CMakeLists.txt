@@ -996,6 +996,14 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1382-jpegdump-app2-reassembly
+  60
+  "iccdev;tools;jpegdump;app2;issue-1382;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1382-jpegdump-app2-reassembly.sh"
+)
+
+iccdev_add_script_test(
   iccdev.issue-1168-pawg-calculator-hbo
   120
   "iccdev;tools;pawg;calculator;asan;regression"
