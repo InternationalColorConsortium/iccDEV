@@ -463,6 +463,31 @@ bool InjectIccProfile(const std::string& inputPng,
                  png_get_compression_type(png_ptr, info_ptr),
                  png_get_filter_type(png_ptr, info_ptr));
 
+    // libpng requires the palette (PLTE) -- and any transparency (tRNS) -- to be
+    // set on the output before png_write_info() for indexed-colour images.
+    // Copying only IHDR left paletted PNGs failing with "Valid palette required
+    // for paletted images" when injecting an ICC profile (#1383), so propagate
+    // the palette (and tRNS) from the input here.
+    if (png_get_color_type(png_ptr, info_ptr) == PNG_COLOR_TYPE_PALETTE) {
+        png_colorp palette = NULL;
+        int num_palette = 0;
+        if (!png_get_PLTE(png_ptr, info_ptr, &palette, &num_palette) || !palette || num_palette <= 0) {
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            png_destroy_write_struct(&write_ptr, &write_info_ptr);
+            fclose(fpIn); fclose(fpOut);
+            LOG_ERROR("Palette PNG is missing a valid PLTE chunk.");
+            return false;
+        }
+        png_set_PLTE(write_ptr, write_info_ptr, palette, num_palette);
+
+        png_bytep trans_alpha = NULL;
+        int num_trans = 0;
+        png_color_16p trans_color = NULL;
+        if (png_get_tRNS(png_ptr, info_ptr, &trans_alpha, &num_trans, &trans_color)) {
+            png_set_tRNS(write_ptr, write_info_ptr, trans_alpha, num_trans, trans_color);
+        }
+    }
+
     // only now is it safe to attach ICC
     png_set_iCCP(write_ptr, write_info_ptr, "icc", 0, iccData.data(), static_cast<png_uint_32>(iccData.size()));
 

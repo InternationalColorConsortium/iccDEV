@@ -988,6 +988,14 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.issue-1383-pngdump-palette-injection
+  60
+  "iccdev;tools;pngdump;palette;issue-1383;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1383-pngdump-palette-injection.sh"
+)
+
+iccdev_add_script_test(
   iccdev.issue-1167-jpegdump-byte-regression
   120
   "iccdev;tools;jpegdump;asan;regression"
