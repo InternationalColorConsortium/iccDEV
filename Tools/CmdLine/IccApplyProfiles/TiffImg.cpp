@@ -562,8 +562,14 @@ unsigned int CTiffImg::GetPhoto()
     return PHOTO_CIELAB;
   else if (m_nPhoto==PHOTOMETRIC_ICCLAB)
     return PHOTO_ICCLAB;
+  else if (m_nPhoto==PHOTOMETRIC_PALETTE)
+    // Palette TIFFs previously fell through to PHOTO_MINISWHITE and were silently
+    // accepted; give them their own value so callers can reject them (#1381).
+    return PHOTO_PALETTE;
   else
-    return PHOTO_MINISWHITE;
+    // Report unrecognised photometrics as UNKNOWN rather than masking them as
+    // PHOTO_MINISWHITE, so callers fail closed on unsupported input (#1380).
+    return PHOTO_UNKNOWN;
 }
 
 

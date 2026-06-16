@@ -208,7 +208,11 @@ int main(int argc, char* argv[]) {
       return -1;
     }
 
-    if (infile[i].GetPhoto() == PHOTOMETRIC_PALETTE) {
+    // GetPhoto() returns CTiffImg's internal PHOTO_* enum, not a libtiff
+    // PHOTOMETRIC_* constant, so the palette check must compare against
+    // PHOTO_PALETTE.  Comparing against PHOTOMETRIC_PALETTE never matched, so
+    // palette input was wrongly accepted and converted (#1381).
+    if (infile[i].GetPhoto() == PHOTO_PALETTE) {
       printf("input %s is a palette based file\n", filename);
       return -1;
     }
