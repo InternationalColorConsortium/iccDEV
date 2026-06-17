@@ -2152,6 +2152,12 @@ CIccPcsXform::pushRef2Xyz
                       for (icUInt32Number k = 0; k < dataCount; ++k) {
                         icFloatNumber valueTemp;
                         flt16->GetValues(&valueTemp, k, 1);
+                        if (!std::isfinite(valueTemp))
+                          valueTemp = 0.0f;
+                        if (valueTemp > 1.0f)
+                          valueTemp = 1.0f;
+                        if (valueTemp < 0.0f)
+                          valueTemp = 0.0f;
                         int percent = (int)round(valueTemp * 100.0f);
                         tempColorValues[k].name += std::string("(") + std::to_string(percent) + std::string("%)");
                       }
