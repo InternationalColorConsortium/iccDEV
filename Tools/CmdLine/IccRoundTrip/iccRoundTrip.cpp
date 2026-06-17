@@ -176,7 +176,10 @@ int main(int argc, char* argv[])
   icStatusCMM stat = eval.EvaluateProfile(argv[1], 0, nIntent, icInterpLinear, nUseMPE);
 
   if (stat!=icCmmStatOk) {
-    printf("Unable to perform round trip on '%s'\n", argv[1]);
+    // Decode the status so callers can tell an outright failure (e.g. an
+    // unreadable profile) from a deliberate refusal such as "Too many samples
+    // used", which guards the round trip against wide device spaces (#1405).
+    printf("Unable to perform round trip on '%s': %s\n", argv[1], CIccCmm::GetStatusText(stat));
     return -1;
   }
 
@@ -185,7 +188,7 @@ int main(int argc, char* argv[])
   stat = prmg.EvaluateProfile(argv[1], nIntent, icInterpLinear, nUseMPE);
 
   if (stat!=icCmmStatOk) {
-    printf("Unable to perform PRMG analysis on '%s'\n", argv[1]);
+    printf("Unable to perform PRMG analysis on '%s': %s\n", argv[1], CIccCmm::GetStatusText(stat));
     return -1;
   }
 

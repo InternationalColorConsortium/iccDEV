@@ -1306,6 +1306,21 @@ iccdev_add_script_test(
   "iccdev;cmm;security;ub;issue-1406;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1406-roundtrip-xyzlum-dbz.sh"
+ )
+ 
+# #1405 - CIccEvalCompare::EvaluateProfile walked an nGran^ndim device-sample
+# grid with no bound, so a 6-channel profile at the default granularity 33 ran
+# 33^6 (~1.3 billion) samples for over an hour (CWE-400). Regenerates the 6CLR
+# SixChanCameraRef fixture from its tracked XML and round-trips it under a short
+# timeout: pre-fix the tool never terminates, post-fix it reports "Too many
+# samples used"; a 3-channel control still round-trips. iccFromXml-gated. The
+# CTest ceiling sits above the script's internal 45s DoS timeout.
+iccdev_add_script_test(
+  iccdev.issue-1405-roundtrip-sample-cap
+  180
+  "iccdev;roundtrip;security;dos;issue-1405;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1405-roundtrip-sample-cap.sh"
 )
 
 # Describe sink + options API smoke test. Verifies byte-equivalence
