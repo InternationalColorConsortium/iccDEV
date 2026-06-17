@@ -3045,7 +3045,18 @@ void CIccPcsXform::pushXyzLumToXyz(IIccProfileConnectionConditions *pPCC)
   icFloatNumber XYZLum[3];
   pPCC->getLumIlluminantXYZ(&XYZLum[0]);
 
-  icFloatNumber scale = 1.0f / XYZLum[1];
+  // XYZLum[1] is the illuminant luminance (Y) and the divisor for the inverse
+  // luminance scale.  A malformed profile can drive it to zero -- e.g. a
+  // spectralViewingConditions (svcn) tag whose illuminant Y is zero, or a zero
+  // luminanceTag -- which turns 1.0/Y into a divide by zero (UBSAN
+  // float-divide-by-zero at this line, issue #1406) yielding an infinite scale
+  // that then corrupts every PCS sample fed through pushScale3.  Fall back to an
+  // identity scale when the luminance is not a positive, finite value: there is
+  // no meaningful luminance normalization to undo, and a no-op leaves the PCS
+  // data intact instead of poisoning it with inf/NaN.
+  icFloatNumber scale = (std::isfinite(XYZLum[1]) && XYZLum[1] > 0.0f)
+                          ? 1.0f / XYZLum[1]
+                          : 1.0f;
 
   return pushScale3(scale, scale, scale);
 }

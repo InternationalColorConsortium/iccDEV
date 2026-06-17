@@ -1293,6 +1293,21 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1394-xml-num-array-dos.sh"
 )
 
+# #1406 - CIccPcsXform::pushXyzLumToXyz computed 1.0/XYZLum[1] (illuminant Y) for
+# the inverse-luminance PCS step. A profile with a zero svcn illuminant luminance
+# made that a divide by zero (UBSan float-divide-by-zero, IccCmm.cpp:3048),
+# yielding an infinite scale that corrupts every PCS sample. Replays the fuzz PoC
+# through iccApplyProfiles with a +1000 luminance intent and fails if the
+# divide-by-zero reappears. Only meaningful under a float-divide-by-zero build
+# (ci-regression-container); SKIPS otherwise.
+iccdev_add_script_test(
+  iccdev.issue-1406-roundtrip-xyzlum-dbz
+  120
+  "iccdev;cmm;security;ub;issue-1406;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1406-roundtrip-xyzlum-dbz.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus
