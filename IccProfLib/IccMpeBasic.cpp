@@ -5376,45 +5376,41 @@ void CIccMpeMatrix::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, 
     if (m_bApplyConstants) {
       switch (m_type) {
         case ic3x3Matrix:
-          *dstPixel++ = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + m_pConstants[0];
-          *dstPixel++ = data[ 3]*srcPixel[0] + data[ 4]*srcPixel[1] + data[ 5]*srcPixel[2] + m_pConstants[1];
-          *dstPixel   = data[ 6]*srcPixel[0] + data[ 7]*srcPixel[1] + data[ 8]*srcPixel[2] + m_pConstants[2];
+          dstPixel[0] = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + m_pConstants[0];
+          dstPixel[1] = data[ 3]*srcPixel[0] + data[ 4]*srcPixel[1] + data[ 5]*srcPixel[2] + m_pConstants[1];
+          dstPixel[2] = data[ 6]*srcPixel[0] + data[ 7]*srcPixel[1] + data[ 8]*srcPixel[2] + m_pConstants[2];
           break;
 
         case ic3x4Matrix:
-          *dstPixel++ = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + m_pConstants[0];
-          *dstPixel++ = data[ 3]*srcPixel[0] + data[ 4]*srcPixel[1] + data[ 5]*srcPixel[2] + m_pConstants[1];
-          *dstPixel++ = data[ 6]*srcPixel[0] + data[ 7]*srcPixel[1] + data[ 8]*srcPixel[2] + m_pConstants[2];
-          *dstPixel   = data[ 9]*srcPixel[0] + data[10]*srcPixel[1] + data[11]*srcPixel[2] + m_pConstants[3];
+          dstPixel[0] = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + m_pConstants[0];
+          dstPixel[1] = data[ 3]*srcPixel[0] + data[ 4]*srcPixel[1] + data[ 5]*srcPixel[2] + m_pConstants[1];
+          dstPixel[2] = data[ 6]*srcPixel[0] + data[ 7]*srcPixel[1] + data[ 8]*srcPixel[2] + m_pConstants[2];
+          dstPixel[3] = data[ 9]*srcPixel[0] + data[10]*srcPixel[1] + data[11]*srcPixel[2] + m_pConstants[3];
           break;
 
         case ic4x3Matrix:
-          *dstPixel++ = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + data[ 3]*srcPixel[3] + m_pConstants[0];
-          *dstPixel++ = data[ 4]*srcPixel[0] + data[ 5]*srcPixel[1] + data[ 6]*srcPixel[2] + data[ 7]*srcPixel[3] + m_pConstants[1];
-          *dstPixel   = data[ 8]*srcPixel[0] + data[ 9]*srcPixel[1] + data[10]*srcPixel[2] + data[11]*srcPixel[3] + m_pConstants[2];
+          dstPixel[0] = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + data[ 3]*srcPixel[3] + m_pConstants[0];
+          dstPixel[1] = data[ 4]*srcPixel[0] + data[ 5]*srcPixel[1] + data[ 6]*srcPixel[2] + data[ 7]*srcPixel[3] + m_pConstants[1];
+          dstPixel[2] = data[ 8]*srcPixel[0] + data[ 9]*srcPixel[1] + data[10]*srcPixel[2] + data[11]*srcPixel[3] + m_pConstants[2];
           break;
 
         case ic4x4Matrix:
-          *dstPixel++ = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + data[ 3]*srcPixel[3] + m_pConstants[0];
-          *dstPixel++ = data[ 4]*srcPixel[0] + data[ 5]*srcPixel[1] + data[ 6]*srcPixel[2] + data[ 7]*srcPixel[3] + m_pConstants[1];
-          *dstPixel++ = data[ 8]*srcPixel[0] + data[ 9]*srcPixel[1] + data[10]*srcPixel[2] + data[11]*srcPixel[3] + m_pConstants[2];
-          *dstPixel   = data[12]*srcPixel[0] + data[13]*srcPixel[1] + data[14]*srcPixel[2] + data[15]*srcPixel[3] + m_pConstants[3];
+          dstPixel[0] = data[ 0]*srcPixel[0] + data[ 1]*srcPixel[1] + data[ 2]*srcPixel[2] + data[ 3]*srcPixel[3] + m_pConstants[0];
+          dstPixel[1] = data[ 4]*srcPixel[0] + data[ 5]*srcPixel[1] + data[ 6]*srcPixel[2] + data[ 7]*srcPixel[3] + m_pConstants[1];
+          dstPixel[2] = data[ 8]*srcPixel[0] + data[ 9]*srcPixel[1] + data[10]*srcPixel[2] + data[11]*srcPixel[3] + m_pConstants[2];
+          dstPixel[3] = data[12]*srcPixel[0] + data[13]*srcPixel[1] + data[14]*srcPixel[2] + data[15]*srcPixel[3] + m_pConstants[3];
           break;
       
         case icOtherMatrix:
         default:
           {
-            int i, j;
-
-            for (j=0; j<m_nOutputChannels; j++) {
-              *dstPixel = m_pConstants[j];
-
-              for (i=0; i<m_nInputChannels; i++) {
-                *dstPixel += data[i]*srcPixel[i];
+            for (int j=0; j < m_nOutputChannels; ++j) {
+              icFloatNumber accum = m_pConstants[j];
+              for (int i=0; i < m_nInputChannels; ++i) {
+                accum += data[i] * srcPixel[i];
               }
-
-              data += i;
-              dstPixel++;
+              dstPixel[j] = accum;
+              data += m_nInputChannels;
             }
           }
           break;
@@ -5423,45 +5419,41 @@ void CIccMpeMatrix::Apply(CIccApplyMpe * /* pApply */, icFloatNumber *dstPixel, 
     else {
       switch (m_type) {
         case ic3x3Matrix:
-          *dstPixel++ = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2];
-          *dstPixel++ = data[3] * srcPixel[0] + data[4] * srcPixel[1] + data[5] * srcPixel[2];
-          *dstPixel = data[6] * srcPixel[0] + data[7] * srcPixel[1] + data[8] * srcPixel[2];
+          dstPixel[0] = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2];
+          dstPixel[1] = data[3] * srcPixel[0] + data[4] * srcPixel[1] + data[5] * srcPixel[2];
+          dstPixel[2] = data[6] * srcPixel[0] + data[7] * srcPixel[1] + data[8] * srcPixel[2];
           break;
 
         case ic3x4Matrix:
-          *dstPixel++ = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2];
-          *dstPixel++ = data[3] * srcPixel[0] + data[4] * srcPixel[1] + data[5] * srcPixel[2];
-          *dstPixel++ = data[6] * srcPixel[0] + data[7] * srcPixel[1] + data[8] * srcPixel[2];
-          *dstPixel = data[9] * srcPixel[0] + data[10] * srcPixel[1] + data[11] * srcPixel[2];
+          dstPixel[0] = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2];
+          dstPixel[1] = data[3] * srcPixel[0] + data[4] * srcPixel[1] + data[5] * srcPixel[2];
+          dstPixel[2] = data[6] * srcPixel[0] + data[7] * srcPixel[1] + data[8] * srcPixel[2];
+          dstPixel[3] = data[9] * srcPixel[0] + data[10] * srcPixel[1] + data[11] * srcPixel[2];
           break;
 
         case ic4x3Matrix:
-          *dstPixel++ = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2] + data[3] * srcPixel[3];
-          *dstPixel++ = data[4] * srcPixel[0] + data[5] * srcPixel[1] + data[6] * srcPixel[2] + data[7] * srcPixel[3];
-          *dstPixel = data[8] * srcPixel[0] + data[9] * srcPixel[1] + data[10] * srcPixel[2] + data[11] * srcPixel[3];
+          dstPixel[0] = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2] + data[3] * srcPixel[3];
+          dstPixel[1] = data[4] * srcPixel[0] + data[5] * srcPixel[1] + data[6] * srcPixel[2] + data[7] * srcPixel[3];
+          dstPixel[2] = data[8] * srcPixel[0] + data[9] * srcPixel[1] + data[10] * srcPixel[2] + data[11] * srcPixel[3];
           break;
 
         case ic4x4Matrix:
-          *dstPixel++ = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2] + data[3] * srcPixel[3];
-          *dstPixel++ = data[4] * srcPixel[0] + data[5] * srcPixel[1] + data[6] * srcPixel[2] + data[7] * srcPixel[3];
-          *dstPixel++ = data[8] * srcPixel[0] + data[9] * srcPixel[1] + data[10] * srcPixel[2] + data[11] * srcPixel[3];
-          *dstPixel = data[12] * srcPixel[0] + data[13] * srcPixel[1] + data[14] * srcPixel[2] + data[15] * srcPixel[3];
+          dstPixel[0] = data[0] * srcPixel[0] + data[1] * srcPixel[1] + data[2] * srcPixel[2] + data[3] * srcPixel[3];
+          dstPixel[1] = data[4] * srcPixel[0] + data[5] * srcPixel[1] + data[6] * srcPixel[2] + data[7] * srcPixel[3];
+          dstPixel[2] = data[8] * srcPixel[0] + data[9] * srcPixel[1] + data[10] * srcPixel[2] + data[11] * srcPixel[3];
+          dstPixel[3] = data[12] * srcPixel[0] + data[13] * srcPixel[1] + data[14] * srcPixel[2] + data[15] * srcPixel[3];
           break;
 
         case icOtherMatrix:
         default:
           {
-            int i, j;
-
-            for (j = 0; j < m_nOutputChannels; j++) {
-              *dstPixel = 0.0f;
-
-              for (i = 0; i < m_nInputChannels; i++) {
-                *dstPixel += data[i] * srcPixel[i];
+            for (int j = 0; j < m_nOutputChannels; ++j) {
+              icFloatNumber accum = 0.0f;
+              for (int i = 0; i < m_nInputChannels; ++i) {
+                accum += data[i] * srcPixel[i];
               }
-
-              data += i;
-              dstPixel++;
+              dstPixel[j] = accum;
+              data += m_nInputChannels;
             }
           }
           break;
