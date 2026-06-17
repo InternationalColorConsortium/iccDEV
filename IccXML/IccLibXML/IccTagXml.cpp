@@ -2801,7 +2801,7 @@ bool CIccTagXmlCurve::ToXml(std::string &xml, icConvertType nType, std::string b
         xml += "\n";
         xml += blanks;  
       }
-      snprintf(buf, bufSize, " %3d", (int)(m_Curve[i] * 255.0 + 0.5));
+      snprintf(buf, bufSize, " %3u", icFtoU8(m_Curve[i]));
       xml += buf;
     }
     xml += "\n";
@@ -2814,7 +2814,7 @@ bool CIccTagXmlCurve::ToXml(std::string &xml, icConvertType nType, std::string b
         xml += "\n";
         xml += blanks + " ";
       }
-      snprintf(buf, bufSize, " %5d", (int)(m_Curve[i] * 65535.0 + 0.5));
+      snprintf(buf, bufSize, " %5u", icFtoU16(m_Curve[i]));
       xml += buf;
     }
     xml += "\n";
