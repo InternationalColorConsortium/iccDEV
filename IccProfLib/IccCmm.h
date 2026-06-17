@@ -134,6 +134,9 @@ typedef enum {
   icXformLutNamedColorimetric  = 0xB,
   icXformLutNamedSpectral      = 0xC,
   icXformLutNamedDevice        = 0xD,
+  
+  icXformLutMinimum = 0x0,              // used for error checking
+  icXformLutMaximum = 0xD,              // used for error checking
  } icXformLutType;
 
   // Note: Named-color variants that pin which member of a v5 NamedColor

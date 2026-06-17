@@ -1005,7 +1005,6 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
         }
         bFirst = false;
       }
-      int nType;
       int nIntent = atoi(args[1]);
 
       pProf->m_useD2BxB2Dx = true;
@@ -1030,7 +1029,7 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       nIntent = nIntent % 10000;
       pProf->m_adjustPcsLuminance = nIntent / 1000 != 0;
       nIntent = nIntent % 1000;
-      nType = abs(nIntent) / 10;
+      int nType = abs(nIntent) / 10;
       nIntent = nIntent % 10;
 
       switch (nType) {
@@ -1048,6 +1047,13 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       default:
         break;
       }
+      
+      // pin decoded values to valid range
+      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+        nIntent = icPerceptual;
+      
+      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+       nType = icXformLutColor;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
       pProf->m_transform = (icXformLutType)nType;
@@ -1257,6 +1263,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
         pProf->m_useBPC = true;
         nType = icXformLutColor;
       }
+      
+      // pin decoded values to valid range
+      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+        nIntent = icPerceptual;
+      
+      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+       nType = icXformLutColor;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
       pProf->m_transform = (icXformLutType)nType;
@@ -1298,6 +1311,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     else if (nType == 4) {
       nType = icXformLutColor;
     }
+      
+    // pin decoded values to valid range
+    if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+      nIntent = icPerceptual;
+      
+    if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+      nType = icXformLutColor;
 
     m_intentInitial = (icRenderingIntent)nIntent;
     m_transformInitial = (icXformLutType)nType;

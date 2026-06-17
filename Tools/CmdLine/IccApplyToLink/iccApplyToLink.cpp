@@ -783,7 +783,16 @@ int main(int argc, icChar* argv[])
         nType = 0;
         Hint.AddHint(new CIccApplyBPCHint());
         break;
+      default:
+        break;
       }
+      
+      // pin decoded values to valid range
+      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+        nIntent = icPerceptual;
+      
+      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+       nType = icXformLutColor;
 
       if (nLuminance) {
         Hint.AddHint(new CIccLuminanceMatchingHint());
