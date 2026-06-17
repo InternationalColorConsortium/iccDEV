@@ -693,7 +693,7 @@ int main(int argc, icChar* argv[])
   nNumProfiles = temp/2;
 
   ILinkWriter* pLinkWriter;
-  if (atoi(argv[2])) {
+  if (atoi(argv[2]) != 0) {
     pLinkWriter = new CCubeWriter();
   }
   else {
@@ -710,14 +710,19 @@ int main(int argc, icChar* argv[])
   pWriter->setFile(argv[1]);
 
   int nLutSize = atoi(argv[3]);
-  if (nLutSize <= 0) {
+  if (nLutSize <= 0 || nLutSize > 255) {
     printf("Invalid LUT sizes\n");
     return -1;
   }
   
   pWriter->setLutSize(nLutSize);
 
-  pWriter->setOption(atoi(argv[4]));
+  int precision = atoi(argv[4]);
+  if (precision < 0)
+    precision = 0;
+  if (precsion > 20)
+    precision = 20;
+  pWriter->setOption(precision);
 
   pWriter->setTitle(argv[5]);
 

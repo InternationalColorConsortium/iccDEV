@@ -156,18 +156,24 @@ int main(int argc, char* argv[])
   }
 
   icRenderingIntent nIntent = icRelativeColorimetric;
-  int nUseMPE = 0;
+  bool nUseMPE = false;
 
   if (argc>2) {
-    nIntent = (icRenderingIntent)atoi(argv[2]);
-    if (argc>3) {
-      nUseMPE = atoi(argv[3]);
+    int temp = atoi(argv[2]);
+      
+    // pin values to valid range before casting
+    if (temp < (int)icPerceptual || temp > (int)icAbsoluteColorimetric)
+      temp = icPerceptual;
+    nIntent = (icRenderingIntent)temp;
+    
+    if (argc > 3) {
+      nUseMPE = atoi(argv[3]) != 0;
     }
   }
 
   CIccMinMaxEval eval;
 
-  icStatusCMM stat = eval.EvaluateProfile(argv[1], 0, nIntent, icInterpLinear, (nUseMPE!=0));
+  icStatusCMM stat = eval.EvaluateProfile(argv[1], 0, nIntent, icInterpLinear, nUseMPE);
 
   if (stat!=icCmmStatOk) {
     printf("Unable to perform round trip on '%s'\n", argv[1]);
@@ -176,7 +182,7 @@ int main(int argc, char* argv[])
 
   CIccPRMG prmg;
 
-  stat = prmg.EvaluateProfile(argv[1], nIntent, icInterpLinear, (nUseMPE!=0));
+  stat = prmg.EvaluateProfile(argv[1], nIntent, icInterpLinear, nUseMPE);
 
   if (stat!=icCmmStatOk) {
     printf("Unable to perform PRMG analysis on '%s'\n", argv[1]);

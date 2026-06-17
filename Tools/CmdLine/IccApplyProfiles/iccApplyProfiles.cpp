@@ -244,7 +244,7 @@ int main(int argc, const char** argv)
 
   if (argc > 3 && !stricmp(argv[1], "-threads")) {
     nThreadArg = atoi(argv[2]);
-    if (nThreadArg < 0) {
+    if (nThreadArg < 0 || nThreadArg > 1024) {      // arbitrary upper limit
       printf("Invalid thread count '%s'\n", argv[2]);
       Usage();
       return -1;

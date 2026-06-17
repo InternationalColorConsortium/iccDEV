@@ -353,7 +353,7 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
     m_dstDigits = 5 + m_dstPrecision;
     colon = strchr(colon, ':');
     if (colon) {
-      m_dstDigits = atoi(colon);
+      m_dstDigits = (icUInt8Number)atoi(colon);
     }
   }
   
@@ -609,6 +609,11 @@ int CIccCfgCreateLink::fromArgs(const char** args, int nArg, bool bReset)
   int n = atoi(args[1]);
   m_linkGridSize = atoi(args[2]);
   int o = atoi(args[3]);
+  
+  if (m_linkGridSize > 255)
+    m_linkGridSize = 255;
+  if (m_linkGridSize < 2)
+    m_linkGridSize = 2;
 
   switch (n)
   {
