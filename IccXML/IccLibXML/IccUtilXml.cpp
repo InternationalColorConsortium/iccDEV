@@ -652,15 +652,17 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
     }
     
     T value = buf[i];
-    if (std::is_floating_point<T>::value) {
+    if constexpr (std::is_floating_point<T>::value) {
         if (!std::isfinite(value))
           value = 0;
     }
 
     switch (Tsig) {
       case icSigUInt8ArrayType:
-        if (value < 0) value = 0;   // enforced by the type, but need to inform CodeQL
-        if (value > 255) value = 255;   // enforced by the type, but need to inform CodeQL
+        if (value < 0) value = 0;
+        if constexpr (std::numeric_limits<T>::max() > 255) {
+          if (value > 255) value = 255;
+        }
         switch (nType) {
           case icConvert8Bit:
           default:
@@ -679,8 +681,10 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
         break;
 
       case icSigUInt16ArrayType:
-        if (value < 0) value = 0;   // enforced by the type, but need to inform CodeQL
-        if (value > 65535) value = 65535;   // enforced by the type, but need to inform CodeQL
+        if (value < 0) value = 0;
+        if constexpr (std::numeric_limits<T>::max() > 65535) {
+          if (value > 65535) value = 65535;
+        }
         switch (nType) {
           case icConvert8Bit:
             snprintf(str, strSize, "%u", (icUInt16Number)((icFloatNumber)value * 255.0 / 65535.0 + 0.5));
@@ -698,8 +702,11 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
         break;
 
       case icSigUInt32ArrayType:
-        if (value < 0) value = 0;   // enforced by the type, but need to inform CodeQL
-        if (value > UINT_MAX) value = UINT_MAX;   // enforced by the type, but need to inform CodeQL
+        if (value < 0) value = 0;
+        if constexpr (std::numeric_limits<T>::max() > std::numeric_limits<uint32_t>::max()) {
+          if (value > std::numeric_limits<uint32_t>::max()) value = std::numeric_limits<uint32_t>::max();
+        }
+        if (value > UINT_MAX) value = UINT_MAX;
         snprintf(str, strSize, "%u", (unsigned int)value);
         break;
       
@@ -712,7 +719,6 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
       case icSigFloat64ArrayType:
         switch (nType) {
           case icConvert8Bit:
-    
             if (value < 0) value = 0;
             if (value > 1.0) value = 1.0;
             snprintf(str, strSize, "%u", (icUInt8Number)(value * 255.0 + 0.5));
