@@ -650,44 +650,57 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
     else {
       xml += " ";
     }
+    
+    T value = buf[i];
+    if (std::is_floating_point<T>::value) {
+        if (!std::isfinite(value))
+          value = 0;
+    }
 
     switch (Tsig) {
       case icSigUInt8ArrayType:
+        if (value < 0) value = 0;   // enforced by the type, but need to inform CodeQL
+        if (value > 255) value = 255;   // enforced by the type, but need to inform CodeQL
         switch (nType) {
           case icConvert8Bit:
           default:
-            snprintf(str, strSize, "%u", (icUInt8Number)buf[i]);
+            snprintf(str, strSize, "%u", (icUInt8Number)value);
             break;
 
           case icConvert16Bit:
-            snprintf(str, strSize, "%u", (icUInt16Number)((icFloatNumber)buf[i] * 65535.0 / 255.0 + 0.5));
+            if (value > 1.0) value = 1.0;
+            snprintf(str, strSize, "%u", (icUInt16Number)((icFloatNumber)value * 65535.0 / 255.0 + 0.5));
             break;
 
           case icConvertFloat:
-            snprintf(str, strSize, icXmlFloatFmt, (icFloatNumber)buf[i] / 255.0);
+            snprintf(str, strSize, icXmlFloatFmt, (icFloatNumber)value / 255.0);
             break;
         }
         break;
 
       case icSigUInt16ArrayType:
+        if (value < 0) value = 0;   // enforced by the type, but need to inform CodeQL
+        if (value > 65535) value = 65535;   // enforced by the type, but need to inform CodeQL
         switch (nType) {
           case icConvert8Bit:
-            snprintf(str, strSize, "%u", (icUInt16Number)((icFloatNumber)buf[i] * 255.0 / 65535.0 + 0.5));
+            snprintf(str, strSize, "%u", (icUInt16Number)((icFloatNumber)value * 255.0 / 65535.0 + 0.5));
             break;
 
           case icConvert16Bit:
           default:
-            snprintf(str, strSize, "%u", (icUInt16Number)buf[i]);
+            snprintf(str, strSize, "%u", (icUInt16Number)value);
             break;
 
           case icConvertFloat:
-            snprintf(str, strSize, icXmlFloatFmt, (icFloatNumber)buf[i] / 65535.0);
+            snprintf(str, strSize, icXmlFloatFmt, (icFloatNumber)value / 65535.0);
             break;
         }
         break;
 
       case icSigUInt32ArrayType:
-        snprintf(str, strSize, "%u", (unsigned int) buf[i]);
+        if (value < 0) value = 0;   // enforced by the type, but need to inform CodeQL
+        if (value > UINT_MAX) value = UINT_MAX;   // enforced by the type, but need to inform CodeQL
+        snprintf(str, strSize, "%u", (unsigned int)value);
         break;
       
       case icSigUInt64ArrayType:
@@ -699,16 +712,21 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
       case icSigFloat64ArrayType:
         switch (nType) {
           case icConvert8Bit:
-            snprintf(str, strSize, "%u", (icUInt8Number)(buf[i] * 255.0 + 0.5));
+    
+            if (value < 0) value = 0;
+            if (value > 1.0) value = 1.0;
+            snprintf(str, strSize, "%u", (icUInt8Number)(value * 255.0 + 0.5));
             break;
 
           case icConvert16Bit:
-            snprintf(str, strSize, "%u", (icUInt16Number)(buf[i] * 65535.0 + 0.5));
+            if (value < 0) value = 0;
+            if (value > 1.0) value = 1.0;
+            snprintf(str, strSize, "%u", (icUInt16Number)(value * 65535.0 + 0.5));
             break;
 
           case icConvertFloat:
           default:
-            snprintf(str, strSize, icXmlFloatFmt, (icFloatNumber)buf[i]);
+            snprintf(str, strSize, icXmlFloatFmt, (icFloatNumber)value);
         }
         break;
     }
