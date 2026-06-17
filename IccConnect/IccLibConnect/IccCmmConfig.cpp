@@ -607,13 +607,14 @@ int CIccCfgCreateLink::fromArgs(const char** args, int nArg, bool bReset)
   m_linkFile = args[0];
 
   int n = atoi(args[1]);
-  m_linkGridSize = atoi(args[2]);
+  int tempGridSize = atoi(args[2]);
   int o = atoi(args[3]);
   
-  if (m_linkGridSize > 255)
-    m_linkGridSize = 255;
-  if (m_linkGridSize < 2)
-    m_linkGridSize = 2;
+  if (tempGridSize > 255)
+    tempGridSize = 255;
+  if (tempGridSize < 2)
+    tempGridSize = 2;
+  m_linkGridSize = (icUInt8Number)tempGridSize;
 
   switch (n)
   {
