@@ -720,7 +720,7 @@ int main(int argc, icChar* argv[])
   int precision = atoi(argv[4]);
   if (precision < 0)
     precision = 0;
-  if (precsion > 20)
+  if (precision > 20)
     precision = 20;
   pWriter->setOption(precision);
 
