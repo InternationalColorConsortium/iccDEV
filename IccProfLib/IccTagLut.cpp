@@ -2606,8 +2606,11 @@ void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
   
   // m_UnitClipFunc points to NoClip
-  if (x < 0)
-    x = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+    
+  if (x < 0.0f)
+    x = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2660,10 +2663,15 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
   
   // m_UnitClipFunc points to NoClip
-  if (x < 0.0)
-    x = 0.0;
-  if (y < 0.0)
-    y = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+    
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2737,12 +2745,19 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
   icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
   
   // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (x < 0)
-    x = 0.0;
-  if (y < 0)
-    y = 0.0;
-  if (z < 0)
-    z = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+  if (!std::isfinite(z))
+    z = 0.0f;
+
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
+  if (z < 0.0f)
+    z = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2838,12 +2853,19 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
   
   // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (x < 0)
-    x = 0.0;
-  if (y < 0)
-    y = 0.0;
-  if (z < 0)
-    z = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+  if (!std::isfinite(z))
+    z = 0.0f;
+    
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
+  if (z < 0.0f)
+    z = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2959,14 +2981,23 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber z = m_UnitClipFunc(srcPixel[3]) * mz;
   
   // m_UnitClipFunc points to NoClip
-  if (w < 0)
-    w = 0.0;
-  if (x < 0)
-    x = 0.0;
-  if (y < 0)
-    y = 0.0;
-  if (z < 0)
-    z = 0.0;
+  if (!std::isfinite(w))
+    w = 0.0f;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+  if (!std::isfinite(z))
+    z = 0.0f;
+    
+  if (w < 0.0f)
+    w = 0.0f;
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
+  if (z < 0.0f)
+    z = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -3066,16 +3097,27 @@ void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
   
   // m_UnitClipFunc points to NoClip
-  if (g0 < 0)
-    g0 = 0.0;
-  if (g1 < 0)
-    g1 = 0.0;
-  if (g2 < 0)
-    g2 = 0.0;
-  if (g3 < 0)
-    g3 = 0.0;
-  if (g4 < 0)
-    g4 = 0.0;
+  if (!std::isfinite(g0))
+    g0 = 0.0f;
+  if (!std::isfinite(g1))
+    g1 = 0.0f;
+  if (!std::isfinite(g2))
+    g2 = 0.0f;
+  if (!std::isfinite(g3))
+    g3 = 0.0f;
+  if (!std::isfinite(g4))
+    g4 = 0.0f;
+
+  if (g0 < 0.0f)
+    g0 = 0.0f;
+  if (g1 < 0.0f)
+    g1 = 0.0f;
+  if (g2 < 0.0f)
+    g2 = 0.0f;
+  if (g3 < 0.0f)
+    g3 = 0.0f;
+  if (g4 < 0.0f)
+    g4 = 0.0f;
     
   if (g0 > m0)
     g0 = m0;
@@ -3203,18 +3245,29 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber g5 = m_UnitClipFunc(srcPixel[5]) * m5;
   
   // m_UnitClipFunc points to NoClip
-  if (g0 < 0)
-    g0 = 0.0;
-  if (g1 < 0)
-    g1 = 0.0;
-  if (g2 < 0)
-    g2 = 0.0;
-  if (g3 < 0)
-    g3 = 0.0;
-  if (g4 < 0)
-    g4 = 0.0;
-  if (g5 < 0)
-    g5 = 0.0;
+  if (!std::isfinite(g0))
+    g0 = 0.0f;
+  if (!std::isfinite(g1))
+    g1 = 0.0f;
+  if (!std::isfinite(g2))
+    g2 = 0.0f;
+  if (!std::isfinite(g3))
+    g3 = 0.0f;
+  if (!std::isfinite(g4))
+    g4 = 0.0f;
+
+  if (g0 < 0.0f)
+    g0 = 0.0f;
+  if (g1 < 0.0f)
+    g1 = 0.0f;
+  if (g2 < 0.0f)
+    g2 = 0.0f;
+  if (g3 < 0.0f)
+    g3 = 0.0f;
+  if (g4 < 0.0f)
+    g4 = 0.0f;
+  if (g5 < 0.0f)
+    g5 = 0.0f;
     
   if (g0 > m0)
     g0 = m0;
