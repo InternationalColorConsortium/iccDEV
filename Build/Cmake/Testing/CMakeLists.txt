@@ -1307,7 +1307,23 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1406-roundtrip-xyzlum-dbz.sh"
  )
- 
+
+# #1410 - icYxy2XYZVector (IccEncoding.cpp) converts Yxy white/media/surround
+# chromaticities to XYZ as Y*x/y and Y*(1-x-y)/y. Loading a colorEncodingParams
+# ("cenc") profile whose chromaticity y coordinate is zero made that a divide by
+# zero (UBSan float-divide-by-zero, IccEncoding.cpp:138/140), poisoning the header
+# illuminant and derived XYZ tags with inf/NaN. Adds the fuzz PoC as a transform
+# profile through iccApplyToLink and fails if the divide-by-zero reappears. Only
+# meaningful under a float-divide-by-zero build (ci-regression-container); SKIPS
+# otherwise.
+iccdev_add_script_test(
+  iccdev.issue-1410-encoding-yxy-xyz-dbz
+  120
+  "iccdev;encoding;security;ub;issue-1410;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1410-encoding-yxy-xyz-dbz.sh"
+ )
+
 # #1405 - CIccEvalCompare::EvaluateProfile walked an nGran^ndim device-sample
 # grid with no bound, so a 6-channel profile at the default granularity 33 ran
 # 33^6 (~1.3 billion) samples for over an hour (CWE-400). Regenerates the 6CLR
