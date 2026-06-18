@@ -12068,6 +12068,10 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
       delete range;
     }
     else {
+      if ( m_observerRange.steps > newRange.steps) {
+        delete rv;
+        return NULL;
+      }
       memcpy(rv, m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
     }
   }
@@ -12087,6 +12091,10 @@ CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpec
     delete range;
   }
   else {
+    if ( m_observerRange.steps > newRange.steps) {
+      delete pMtx;
+      return NULL;
+    }
     memcpy(pMtx->entry(0), m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
   }
 

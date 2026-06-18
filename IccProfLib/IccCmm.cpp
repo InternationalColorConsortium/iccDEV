@@ -3514,6 +3514,8 @@ icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnecti
 
     if (dPCSStepSize<dObsStepSize) {
       icFloatNumber *obs = pView->applyRangeToObserver(pProfile->m_Header.spectralRange);
+      if (!obs)
+        return icCmmStatInvalidProfile;
 
       pushMatrix(3, pProfile->m_Header.spectralRange.steps, obs);
       free(obs);
