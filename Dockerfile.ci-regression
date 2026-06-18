@@ -86,7 +86,8 @@ RUN groupadd --system iccdev-ci \
  && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
 
 COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
-COPY docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
+COPY --chmod=0755 docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
+COPY --chmod=0755 docker/iccdev-generate-profiles.sh /usr/local/bin/iccdev-generate-profiles
 
 USER iccdev-ci
 WORKDIR /workspace/iccDEV
@@ -112,31 +113,26 @@ RUN git config --global --add safe.directory /workspace/iccDEV \
      -DENABLE_SHARED_LIBS=ON \
      -DENABLE_STATIC_LIBS=ON \
      -Wno-dev \
- && cmake --build /workspace/build --parallel "$(nproc)" \
- && cd Testing \
- && for d in /workspace/build/Tools/*; do [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"; done \
- && printf '%s\n%s\n%s\n' \
-     'unsigned-integer-overflow:*/IccMD5.cpp' \
-     'shift-base:*/IccMD5.cpp' \
-     'shift-exponent:*/IccMD5.cpp' > silence.txt \
- && ASAN_OPTIONS='print_scariness=1:halt_on_error=1:detect_leaks=0' \
-    UBSAN_OPTIONS="halt_on_error=0:suppressions=$PWD/silence.txt" \
-    ./CreateAllProfiles.sh
+ && cmake --build /workspace/build --parallel "$(nproc)"
+
+WORKDIR /workspace/iccDEV/Testing
+RUN iccdev-generate-profiles /workspace/build/Tools
 
 USER root
 RUN chmod 0755 /usr/local/bin/iccdev-banner \
+ && chmod 0755 /usr/local/bin/iccdev-generate-profiles \
  && find /workspace/build/Tools -mindepth 2 -maxdepth 2 -type f -executable \
      -exec ln -sf '{}' /usr/local/bin/ ';' \
  && printf '%s\n' \
-     'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
-     '  export ICCDEV_BANNER_SHOWN=1' \
-     '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
-     'fi' > /etc/profile.d/iccdev-banner.sh \
+     "if [ -z \"\${ICCDEV_BANNER_SHOWN:-}\" ]; then" \
+     "  export ICCDEV_BANNER_SHOWN=1" \
+     "  case \"\$-\" in *i*) /usr/local/bin/iccdev-banner ;; esac" \
+     "fi" > /etc/profile.d/iccdev-banner.sh \
  && printf '%s\n' \
-     'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
-     '  export ICCDEV_BANNER_SHOWN=1' \
-     '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
-     'fi' >> /workspace/.bashrc \
+     "if [ -z \"\${ICCDEV_BANNER_SHOWN:-}\" ]; then" \
+     "  export ICCDEV_BANNER_SHOWN=1" \
+     "  case \"\$-\" in *i*) /usr/local/bin/iccdev-banner ;; esac" \
+     "fi" >> /workspace/.bashrc \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \

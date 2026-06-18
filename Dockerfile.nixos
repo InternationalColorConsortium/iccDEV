@@ -21,7 +21,8 @@ LABEL org.opencontainers.image.title="iccDEV Build Container (NixOS)" \
 
 WORKDIR /workspace/iccDEV
 COPY . .
-COPY docker/iccdev-banner.sh /tmp/iccdev-banner
+COPY --chmod=0755 docker/iccdev-banner.sh /tmp/iccdev-banner
+COPY --chmod=0755 docker/iccdev-generate-profiles.sh /tmp/iccdev-generate-profiles
 ARG GIT_COMMIT=""
 
 RUN nix-shell -p cmake clang gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run "\
@@ -46,16 +47,7 @@ RUN nix-shell -p cmake clang gcc gnumake pkg-config libxml2 libtiff libjpeg libp
       -DENABLE_FLOAT_SANITIZER=ON \
       -DENABLE_TOOLS=ON && \
     cmake --build Build --parallel \"\$(nproc)\" && \
-    cd Testing && \
-    for d in ../Build/Tools/*; do [ -d \"\$d\" ] && export PATH=\"\$(realpath \"\$d\"):\$PATH\"; done && \
-    printf '%s\n%s\n%s\n' \
-      'unsigned-integer-overflow:*/IccMD5.cpp' \
-      'shift-base:*/IccMD5.cpp' \
-      'shift-exponent:*/IccMD5.cpp' > silence.txt && \
-    ASAN_OPTIONS='print_scariness=1:halt_on_error=1:detect_leaks=0' \
-      UBSAN_OPTIONS=\"halt_on_error=0:suppressions=\$PWD/silence.txt\" \
-      ./CreateAllProfiles.sh && \
-    cd .. && \
+    cmake -E chdir Testing /tmp/iccdev-generate-profiles ../Build/Tools && \
     echo '=== Libraries ===' && \
     ls -lh /workspace/iccDEV/Build/IccProfLib/libIccProfLib2* && \
     ls -lh /workspace/iccDEV/Build/IccXML/libIccXML2* && \
@@ -78,7 +70,9 @@ RUN nix-shell -p cmake clang gcc gnumake pkg-config libxml2 libtiff libjpeg libp
  && cp -a /workspace/iccDEV/Testing /runtime-root/workspace/iccDEV/Testing \
  && cp -a /workspace/iccDEV/LICENSE.md /workspace/iccDEV/README.md /runtime-root/workspace/iccDEV/ \
  && cp -a /tmp/iccdev-banner /runtime-root/usr/bin/iccdev-banner \
+ && cp -a /tmp/iccdev-generate-profiles /runtime-root/usr/bin/iccdev-generate-profiles \
  && chmod 0755 /runtime-root/usr/bin/iccdev-banner \
+ && chmod 0755 /runtime-root/usr/bin/iccdev-generate-profiles \
  && { \
       printf '%s\n' "$BUSYBOX_ROOT"; \
       printf '%s\n' "$LLVM_ROOT"; \

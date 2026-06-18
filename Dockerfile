@@ -31,7 +31,8 @@ RUN apt-get update \
 
 WORKDIR /opt/iccdev
 COPY . .
-COPY docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
+COPY --chmod=0755 docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
+COPY --chmod=0755 docker/iccdev-generate-profiles.sh /usr/local/bin/iccdev-generate-profiles
 ARG GIT_COMMIT=""
 ENV WARN_FLAGS="-Wall -Wextra -Wpedantic -Werror"
 
@@ -49,18 +50,13 @@ RUN sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/
       -DCMAKE_CXX_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0 -std=c++17" \
       -DENABLE_SANITIZERS=ON \
       -DENABLE_TOOLS=ON \
- && cmake --build Build --parallel "$(nproc)" \
- && cd Testing \
- && for d in ../Build/Tools/*; do [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"; done \
- && printf '%s\n%s\n%s\n' \
-      'unsigned-integer-overflow:*/IccMD5.cpp' \
-      'shift-base:*/IccMD5.cpp' \
-      'shift-exponent:*/IccMD5.cpp' > silence.txt \
- && ASAN_OPTIONS='print_scariness=1:halt_on_error=1:detect_leaks=0' \
-    UBSAN_OPTIONS="halt_on_error=0:suppressions=$PWD/silence.txt" \
-    ./CreateAllProfiles.sh \
- && cd .. \
- && rm -rf .git
+ && cmake --build Build --parallel "$(nproc)"
+
+WORKDIR /opt/iccdev/Testing
+RUN iccdev-generate-profiles /opt/iccdev/Build/Tools
+
+WORKDIR /opt/iccdev
+RUN rm -rf .git
 
 RUN echo "=== Libraries ===" \
  && ls -lh /opt/iccdev/Build/IccProfLib/libIccProfLib2* \
@@ -99,20 +95,22 @@ COPY --from=builder /opt/iccdev/Testing /opt/iccdev/Testing
 COPY --from=builder /opt/iccdev/LICENSE.md /opt/iccdev/LICENSE.md
 COPY --from=builder /opt/iccdev/README.md /opt/iccdev/README.md
 COPY --from=builder /usr/local/bin/iccdev-banner /usr/local/bin/iccdev-banner
+COPY --from=builder /usr/local/bin/iccdev-generate-profiles /usr/local/bin/iccdev-generate-profiles
 
 RUN groupadd -r iccdev \
  && useradd -r -g iccdev -d /opt/iccdev -s /bin/bash iccdev \
  && chmod 0755 /usr/local/bin/iccdev-banner \
+ && chmod 0755 /usr/local/bin/iccdev-generate-profiles \
  && printf '%s\n' \
-      'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
-      '  export ICCDEV_BANNER_SHOWN=1' \
-      '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
-      'fi' > /etc/profile.d/iccdev-banner.sh \
+      "if [ -z \"\${ICCDEV_BANNER_SHOWN:-}\" ]; then" \
+      "  export ICCDEV_BANNER_SHOWN=1" \
+      "  case \"\$-\" in *i*) /usr/local/bin/iccdev-banner ;; esac" \
+      "fi" > /etc/profile.d/iccdev-banner.sh \
  && printf '%s\n' \
-      'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
-      '  export ICCDEV_BANNER_SHOWN=1' \
-      '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
-      'fi' > /opt/iccdev/.bashrc \
+      "if [ -z \"\${ICCDEV_BANNER_SHOWN:-}\" ]; then" \
+      "  export ICCDEV_BANNER_SHOWN=1" \
+      "  case \"\$-\" in *i*) /usr/local/bin/iccdev-banner ;; esac" \
+      "fi" > /opt/iccdev/.bashrc \
  && chown -R iccdev:iccdev /opt/iccdev
 
 ENV ICCDEV_ROOT="/opt/iccdev"
