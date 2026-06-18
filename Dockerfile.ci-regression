@@ -12,10 +12,12 @@ FROM ubuntu:26.04@sha256:fed6ddb82c61194e1814e93b59cfcb6759e5aa33c4e41bb3782313c
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+ARG GIT_COMMIT=unknown
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 LABEL org.opencontainers.image.title="iccDEV CI Regression Dependencies" \
-      org.opencontainers.image.description="Ubuntu 26.04 maintainer image for ci-regression-checks" \
+      org.opencontainers.image.description="Ubuntu 26.04 maintainer image with iccDEV source, tools, and QA utilities" \
       org.opencontainers.image.licenses="BSD-3-Clause" \
       org.opencontainers.image.vendor="International Color Consortium" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
@@ -28,11 +30,18 @@ RUN apt-get update \
     ca-certificates=20260601~26.04.1 \
     clang=1:21.1.6-71 \
     clang-21=1:21.1.8-6ubuntu1 \
+    clang-tidy-21=1:21.1.8-6ubuntu1 \
+    clang-tools-21=1:21.1.8-6ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
+    cppcheck=2.19.0-3 \
+    curl=8.18.0-1ubuntu2.1 \
     g++=4:15.2.0-5ubuntu1 \
     gcc=4:15.2.0-5ubuntu1 \
+    gdb=17.1-2ubuntu1 \
     git=1:2.53.0-1ubuntu1 \
+    gcovr=7.2+really-2 \
     gpgv=2.4.8-4ubuntu3 \
+    jq=1.8.1-4ubuntu2 \
     libclang-rt-dev=1:21.1.6-71 \
     libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
     libjpeg-dev=8c-2ubuntu12 \
@@ -42,6 +51,7 @@ RUN apt-get update \
     libtiff-dev=4.7.0-3ubuntu4 \
     libwxgtk3.2-dev=3.2.9+dfsg-1 \
     libxml2-dev=2.15.2+dfsg-0.1 \
+    lcov=2.4-3 \
     lsb-release=12.1-2build1 \
     llvm=1:21.1.6-71 \
     llvm-21=1:21.1.8-6ubuntu1 \
@@ -50,26 +60,89 @@ RUN apt-get update \
     openssl-provider-legacy=3.5.5-1ubuntu3.2 \
     pkg-config=2.5.1-4 \
     python3=3.14.3-0ubuntu2 \
+    python3-pip=25.1.1+dfsg-1ubuntu2 \
+    python3-venv=3.14.3-0ubuntu2 \
+    shellcheck=0.11.0-2 \
     time=1.9-0.4 \
+    valgrind=1:3.26.0-0ubuntu1 \
     wx-common=3.2.9+dfsg-1 \
     zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3 \
  && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100 \
  && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-21 100 \
+ && update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-21 100 \
+ && update-alternatives --install /usr/bin/scan-build scan-build /usr/bin/scan-build-21 100 \
  && update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer /usr/bin/llvm-symbolizer-21 100
 
 ENV CC=clang \
     CXX=clang++ \
-    ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer
+    ASAN_SYMBOLIZER_PATH=/usr/bin/llvm-symbolizer \
+    ICCDEV_ROOT=/workspace/iccDEV \
+    ICCDEV_BUILD_DIR=/workspace/build \
+    ICCDEV_BUILD_LABEL="maintainer regression image"
 
 RUN groupadd --system iccdev-ci \
  && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
 
-HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD clang --version >/dev/null && cmake --version >/dev/null || exit 1
+COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
+COPY docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
 
 USER iccdev-ci
-WORKDIR /workspace
+WORKDIR /workspace/iccDEV
+
+RUN git config --global --add safe.directory /workspace/iccDEV \
+ && git remote set-url origin https://github.com/InternationalColorConsortium/iccDEV.git \
+ && if [ "$GIT_COMMIT" != "unknown" ]; then test "$(git rev-parse HEAD)" = "$GIT_COMMIT"; fi \
+ && mkdir -p /workspace/build \
+ && SAN_FLAGS="-fsanitize=address,undefined,float-divide-by-zero,float-cast-overflow" \
+ && CC=gcc CXX=g++ cmake -S Build/Cmake -B /workspace/build \
+     -DCMAKE_BUILD_TYPE=Debug \
+     -DCMAKE_C_COMPILER=gcc \
+     -DCMAKE_CXX_COMPILER=g++ \
+     -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror -fno-omit-frame-pointer -g -O0" \
+     -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -fno-omit-frame-pointer -g -O0 -std=c++17" \
+     -DCMAKE_EXE_LINKER_FLAGS="$SAN_FLAGS" \
+     -DCMAKE_SHARED_LINKER_FLAGS="$SAN_FLAGS" \
+     -DENABLE_SANITIZERS=ON \
+     -DSANITIZER_RECOVER=ON \
+     -DENABLE_TOOLS=ON \
+     -DENABLE_TESTS=ON \
+     -DENABLE_WXWIDGETS=OFF \
+     -DENABLE_SHARED_LIBS=ON \
+     -DENABLE_STATIC_LIBS=ON \
+     -Wno-dev \
+ && cmake --build /workspace/build --parallel "$(nproc)" \
+ && cd Testing \
+ && for d in /workspace/build/Tools/*; do [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"; done \
+ && printf '%s\n%s\n%s\n' \
+     'unsigned-integer-overflow:*/IccMD5.cpp' \
+     'shift-base:*/IccMD5.cpp' \
+     'shift-exponent:*/IccMD5.cpp' > silence.txt \
+ && ASAN_OPTIONS='print_scariness=1:halt_on_error=1:detect_leaks=0' \
+    UBSAN_OPTIONS="halt_on_error=0:suppressions=$PWD/silence.txt" \
+    ./CreateAllProfiles.sh
+
+USER root
+RUN chmod 0755 /usr/local/bin/iccdev-banner \
+ && find /workspace/build/Tools -mindepth 2 -maxdepth 2 -type f -executable \
+     -exec ln -sf '{}' /usr/local/bin/ ';' \
+ && printf '%s\n' \
+     'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
+     '  export ICCDEV_BANNER_SHOWN=1' \
+     '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
+     'fi' > /etc/profile.d/iccdev-banner.sh \
+ && printf '%s\n' \
+     'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
+     '  export ICCDEV_BANNER_SHOWN=1' \
+     '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
+     'fi' >> /workspace/.bashrc \
+ && chown iccdev-ci:iccdev-ci /workspace/.bashrc
+
+HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
+  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null || exit 1
+
+USER iccdev-ci
+WORKDIR /workspace/iccDEV
 
 CMD ["bash"]

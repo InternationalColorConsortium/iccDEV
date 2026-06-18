@@ -31,6 +31,7 @@ RUN apt-get update \
 
 WORKDIR /opt/iccdev
 COPY . .
+COPY docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
 ARG GIT_COMMIT=""
 ENV WARN_FLAGS="-Wall -Wextra -Wpedantic -Werror"
 
@@ -49,6 +50,16 @@ RUN sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/
       -DENABLE_SANITIZERS=ON \
       -DENABLE_TOOLS=ON \
  && cmake --build Build --parallel "$(nproc)" \
+ && cd Testing \
+ && for d in ../Build/Tools/*; do [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"; done \
+ && printf '%s\n%s\n%s\n' \
+      'unsigned-integer-overflow:*/IccMD5.cpp' \
+      'shift-base:*/IccMD5.cpp' \
+      'shift-exponent:*/IccMD5.cpp' > silence.txt \
+ && ASAN_OPTIONS='print_scariness=1:halt_on_error=1:detect_leaks=0' \
+    UBSAN_OPTIONS="halt_on_error=0:suppressions=$PWD/silence.txt" \
+    ./CreateAllProfiles.sh \
+ && cd .. \
  && rm -rf .git
 
 RUN echo "=== Libraries ===" \
@@ -87,11 +98,25 @@ COPY --from=builder /opt/iccdev/Build /opt/iccdev/Build
 COPY --from=builder /opt/iccdev/Testing /opt/iccdev/Testing
 COPY --from=builder /opt/iccdev/LICENSE.md /opt/iccdev/LICENSE.md
 COPY --from=builder /opt/iccdev/README.md /opt/iccdev/README.md
+COPY --from=builder /usr/local/bin/iccdev-banner /usr/local/bin/iccdev-banner
 
 RUN groupadd -r iccdev \
  && useradd -r -g iccdev -d /opt/iccdev -s /bin/bash iccdev \
+ && chmod 0755 /usr/local/bin/iccdev-banner \
+ && printf '%s\n' \
+      'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
+      '  export ICCDEV_BANNER_SHOWN=1' \
+      '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
+      'fi' > /etc/profile.d/iccdev-banner.sh \
+ && printf '%s\n' \
+      'if [ -z "${ICCDEV_BANNER_SHOWN:-}" ]; then' \
+      '  export ICCDEV_BANNER_SHOWN=1' \
+      '  case "$-" in *i*) /usr/local/bin/iccdev-banner ;; esac' \
+      'fi' > /opt/iccdev/.bashrc \
  && chown -R iccdev:iccdev /opt/iccdev
 
+ENV ICCDEV_ROOT="/opt/iccdev"
+ENV ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest"
 ENV PATH="/opt/iccdev/Build/Tools/IccToXml:/opt/iccdev/Build/Tools/IccFromXml:/opt/iccdev/Build/Tools/IccDumpProfile:/opt/iccdev/Build/Tools/IccProfileVisualize:/opt/iccdev/Build/Tools/IccPawgReport:/opt/iccdev/Build/Tools/IccApplyNamedCmm:/opt/iccdev/Build/Tools/IccRoundTrip:/opt/iccdev/Build/Tools/IccFromCube:/opt/iccdev/Build/Tools/IccApplyProfiles:/opt/iccdev/Build/Tools/IccApplySearch:/opt/iccdev/Build/Tools/IccApplyToLink:/opt/iccdev/Build/Tools/IccJpegDump:/opt/iccdev/Build/Tools/IccPngDump:/opt/iccdev/Build/Tools/IccSpecSepToTiff:/opt/iccdev/Build/Tools/IccTiffDump:/opt/iccdev/Build/Tools/IccV5DspObsToV4Dsp:/opt/iccdev/Build/Tools/IccToJson:/opt/iccdev/Build/Tools/IccFromJson:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/iccdev/Build/IccProfLib:/opt/iccdev/Build/IccXML:/opt/iccdev/Build/IccJSON"
 ENV ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer-21"

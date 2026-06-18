@@ -156,8 +156,10 @@ jobs:
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
             command -v git clang clang++ gcc g++ cmake make realpath afl-fuzz llvm-symbolizer
+            command -v clang-tidy cppcheck scan-build valgrind gdb lcov gcovr jq curl shellcheck
             clang --version | sed -n "1p"
             clang++ --version | sed -n "1p"
+            clang-tidy --version | sed -n "1p"
             gcc --version | sed -n "1p"
             g++ --version | sed -n "1p"
             cmake --version | sed -n "1p"
@@ -171,21 +173,27 @@ jobs:
             /tmp/gcc-warning-smoke
           '
 
-          docker run --rm \
-            -v "$PWD":/workspace/iccDEV-src:ro \
-            "$TEST_IMAGE" bash -lc '
+          docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
-            work="$(mktemp -d)"
-            git config --global --add safe.directory /workspace/iccDEV-src
-            git config --global --add safe.directory /workspace/iccDEV-src/.git
-            git clone /workspace/iccDEV-src "$work/iccDEV"
-            cd "$work/iccDEV/Build"
+            test "$PWD" = /workspace/iccDEV
+            test -d .git
+            test -f IccProfLib/IccProfile.cpp
+            git remote get-url origin
+            command -v iccDumpProfile
+            test -d "$ICCDEV_BUILD_DIR"
+            cmake --build "$ICCDEV_BUILD_DIR" --target iccDumpProfile --parallel "$(nproc)"
             git branch && echo "---" && git log --oneline -1
+            git status --short | sed -n "1,20p"
+            git fetch --dry-run origin
+            banner="$(/usr/local/bin/iccdev-banner)"
+            grep -q "Reference ICC profiles present:" <<< "$banner"
+            work="$(mktemp -d)"
+            cd "$work"
             SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
             export CFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
             export CXXFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
             export LDFLAGS="$SAN_FLAGS"
-            CC=clang CXX=clang++ cmake Cmake \
+            CC=clang CXX=clang++ cmake /workspace/iccDEV/Build/Cmake \
               -DCMAKE_BUILD_TYPE=Debug \
               -DCMAKE_C_COMPILER=clang \
               -DCMAKE_CXX_COMPILER=clang++ \
@@ -197,9 +205,9 @@ jobs:
               -DENABLE_FLOAT_SANITIZER=ON \
               -DENABLE_TOOLS=ON
             make -j"$(nproc)" iccDumpProfile
-            cd ../Testing/
+            cd /workspace/iccDEV/Testing/
             echo "=== Updating PATH ==="
-            for d in ../Build/Tools/*; do
+            for d in "$ICCDEV_BUILD_DIR"/Tools/*; do
               [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
             done
             printf "%s\n%s\n%s\n" \
