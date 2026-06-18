@@ -23,7 +23,7 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.
 Maintainer sanitizer/regression containers add pinned CI-only packages such as
-`clang-18`, `llvm-18`, `libclang-rt-18-dev`, `libssl-dev`, and GNU `time`.
+current Clang/LLVM runtimes, GCC, AFL++, `libssl-dev`, and GNU `time`.
 
 Windows examples include both `cmd.exe` and PowerShell forms where shell syntax
 differs. If CMake reports `No such preset`, fetch and switch to a branch that
@@ -244,7 +244,7 @@ should change container package pins, published image tags, or GHCR workflows.
 |------|--------------------|-------------------------|
 | `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Built by `ci-docker`; validate with a local Docker build and tool smoke test. |
 | `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Built by the NixOS container path in `ci-docker`; validate the runtime closure and secret scan. |
-| `Dockerfile.ci-regression` | Pinned Ubuntu 24.04 dependency image for `ci-regression-checks`. | Built by `ci-regression-container`; publishing uses the `ghcr-publish` environment and the consumer workflow pins the resulting digest. |
+| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with current Clang/LLVM, GCC, sanitizer, and fuzzing tooling. | Built by `ci-regression-container`; publishing uses the `ghcr-publish` environment on `master`, branch dispatches use validation, and the consumer workflow pins the resulting digest. |
 
 Before publishing a branch-specific regression image, maintainers must allow the
 branch in the `ghcr-publish` environment branch policy, approve the deployment,

@@ -10,6 +10,10 @@
 
 name: ci-regression-container
 
+# Existing pinned SHAs, labels, and smoke commands exceed line length.
+# Keep this yamllint disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
 
@@ -97,6 +101,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           no-cache: true
           pull: true
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
           load: ${{ github.ref != 'refs/heads/master' }}
           push: ${{ github.ref == 'refs/heads/master' }}
           provenance: ${{ github.ref == 'refs/heads/master' && 'mode=max' || 'false' }}
@@ -149,15 +155,20 @@ jobs:
 
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
-            command -v git clang clang++ cmake make realpath
+            command -v git clang clang++ gcc g++ cmake make realpath afl-fuzz llvm-symbolizer
             clang --version | sed -n "1p"
             clang++ --version | sed -n "1p"
+            gcc --version | sed -n "1p"
+            g++ --version | sed -n "1p"
             cmake --version | sed -n "1p"
+            afl-fuzz -V 1 2>&1 | sed -n "1p" || true
             /usr/bin/time --version | sed -n "1p"
             printf "int main(void){return 0;}\n" > /tmp/asan-smoke.c
             clang -fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound \
               -fno-omit-frame-pointer -g -O0 /tmp/asan-smoke.c -o /tmp/asan-smoke
             /tmp/asan-smoke
+            gcc -Wall -Wextra -Werror /tmp/asan-smoke.c -o /tmp/gcc-warning-smoke
+            /tmp/gcc-warning-smoke
           '
 
           docker run --rm \
@@ -175,8 +186,14 @@ jobs:
             export LDFLAGS="$SAN_FLAGS"
             CC=clang CXX=clang++ cmake Cmake \
               -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_C_FLAGS="-O0 -g3" \
+              -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
               -DENABLE_ASAN=ON \
               -DENABLE_UBSAN=ON \
+              -DENABLE_INTEGER_SANITIZER=ON \
+              -DENABLE_FLOAT_SANITIZER=ON \
               -DENABLE_TOOLS=ON
             make -j"$(nproc)" iccDumpProfile
             cd ../Testing/

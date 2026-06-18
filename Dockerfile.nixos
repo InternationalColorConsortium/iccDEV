@@ -21,8 +21,10 @@ LABEL org.opencontainers.image.title="iccDEV Build Container (NixOS)" \
 
 WORKDIR /workspace/iccDEV
 COPY . .
+ARG GIT_COMMIT=""
 
 RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run "\
+    export GIT_COMMIT=\"${GIT_COMMIT}\" && \
     export NIX_LDFLAGS=\"-ltiff \${NIX_LDFLAGS:-}\" && \
     sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt && \
     rm -f Build/CMakeCache.txt && rm -rf Build/CMakeFiles && \

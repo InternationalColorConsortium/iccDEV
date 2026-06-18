@@ -14,6 +14,10 @@
 
 name: ci-docker
 
+# Existing pinned SHAs and command strings intentionally exceed line length.
+# Keep this yamllint disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
 
@@ -52,7 +56,7 @@ jobs:
     name: "Docker (${{ matrix.variant }})"
     needs: cache-policy
     runs-on: ubuntu-latest
-    environment: ghcr-publish
+    environment: ${{ github.ref == 'refs/heads/master' && 'ghcr-publish' || 'ci-validation' }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -135,6 +139,7 @@ jobs:
             type=raw,value=latest
 
       - name: Log in to GHCR
+        if: github.ref == 'refs/heads/master'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
@@ -150,14 +155,19 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           no-cache: true
           pull: true
-          push: true
-          provenance: mode=max
-          sbom: true
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+          load: ${{ github.ref != 'refs/heads/master' }}
+          push: ${{ github.ref == 'refs/heads/master' }}
+          provenance: ${{ github.ref == 'refs/heads/master' && 'mode=max' || 'false' }}
+          sbom: ${{ github.ref == 'refs/heads/master' }}
           labels: |
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Generate SBOM
+        if: github.ref == 'refs/heads/master'
         uses: anchore/sbom-action@4a83e1fa8a49c8b54b2478e3dfafcc2d1417b432  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
@@ -165,6 +175,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Attest build provenance
+        if: github.ref == 'refs/heads/master'
         uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -172,6 +183,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
+        if: github.ref == 'refs/heads/master'
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v3.0.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -180,6 +192,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload SBOM
+        if: github.ref == 'refs/heads/master'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
@@ -190,18 +203,26 @@ jobs:
         env:
           BASH_ENV: /dev/null
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           MATRIX_VARIANT: ${{ matrix.variant }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          docker pull "${IMAGE_REF}"
-          docker tag  "${IMAGE_REF}" "iccdev-${MATRIX_VARIANT}-test:latest"
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            docker pull "${IMAGE_REF}"
+            TEST_IMAGE="${IMAGE_REF}"
+          else
+            TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
+          fi
+          docker tag "${TEST_IMAGE}" "iccdev-${MATRIX_VARIANT}-test:latest"
 
       - name: Verify image source labels
         env:
           BASH_ENV: /dev/null
           EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_REF_NAME: ${{ github.ref_name }}
           MATRIX_VARIANT: ${{ matrix.variant }}
         run: |
           set -euo pipefail
@@ -211,8 +232,14 @@ jobs:
 
           image_sha="$(docker image inspect "$TEST_IMAGE" \
             --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          image_ref_label="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
           if [ "$image_sha" != "$EXPECTED_SHA" ]; then
             echo "::error::Image revision mismatch: $image_sha != $EXPECTED_SHA"
+            exit 1
+          fi
+          if [ "$image_ref_label" != "$EXPECTED_REF_NAME" ]; then
+            echo "::error::Image ref mismatch: $image_ref_label != $EXPECTED_REF_NAME"
             exit 1
           fi
 

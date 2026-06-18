@@ -29,13 +29,14 @@ RUN apt-get update \
 
 WORKDIR /opt/iccdev
 COPY . .
+ARG GIT_COMMIT=""
 
 RUN sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt \
  && rm -f Build/CMakeCache.txt \
  && rm -rf Build/CMakeFiles \
  && rm -f Build/Cmake/CMakeCache.txt \
  && rm -rf Build/Cmake/CMakeFiles \
- && cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release \
+ && GIT_COMMIT="$GIT_COMMIT" cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release \
  && cmake --build Build --parallel "$(nproc)" \
  && rm -rf .git
 

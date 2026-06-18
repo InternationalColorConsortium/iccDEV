@@ -12,6 +12,11 @@
 
 name: ci-regression-checks
 
+# Existing pinned image digests, CMake commands, and reproduction strings
+# intentionally exceed the default yamllint line length. Keep the disable local
+# to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
   packages: read
@@ -104,9 +109,7 @@ jobs:
     name: "iccDEV Tools - CTest ASAN+UBSAN"
     runs-on: ubuntu-24.04
     container:
-      # yamllint disable rule:line-length
       image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression@sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76
-      # yamllint enable rule:line-length
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -148,16 +151,18 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          clang-18 --version | sed -n '1p'
-          clang++-18 --version | sed -n '1p'
+          clang --version | sed -n '1p'
+          clang++ --version | sed -n '1p'
+          gcc --version | sed -n '1p'
+          g++ --version | sed -n '1p'
           cmake --version | sed -n '1p'
           /usr/bin/time --version | sed -n '1p'
 
       - name: Configure iccDEV CTest build
         env:
           BASH_ENV: /dev/null
-          CC: clang-18
-          CXX: clang++-18
+          CC: clang
+          CXX: clang++
           UBSAN_IGNORELIST: .github/ci/ubsan-ignorelist.txt
         run: |
           set -euo pipefail
@@ -166,8 +171,8 @@ jobs:
 
           cmake -S Build/Cmake -B "${BUILD_DIR}" \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang-18 \
-            -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_C_FLAGS="-O0 -g3" \
             -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
             -DENABLE_ASAN=ON \
@@ -299,7 +304,8 @@ jobs:
             echo "|-----------|-------|"
             echo "| Runner | ubuntu-24.04 |"
             echo "| Container | \`$(sanitize_line "$container_ref")\` |"
-            echo "| Compiler | $(sanitize_line "$(clang-18 --version 2>/dev/null | sed -n '1,1p')") |"
+            echo "| Compiler | $(sanitize_line "$(clang --version 2>/dev/null | sed -n '1,1p')") |"
+            echo "| GCC | $(sanitize_line "$(gcc --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
             echo "| Test command | \`${test_cmd}\` |"
@@ -308,7 +314,7 @@ jobs:
             echo ""
             echo '```bash'
             echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=Debug \\"
-            echo "  -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \\"
+            echo "  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \\"
             echo "  -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON \\"
             echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON"

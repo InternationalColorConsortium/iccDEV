@@ -697,6 +697,7 @@ jobs:
           docker build \
             --pull \
             --no-cache \
+            --build-arg "GIT_COMMIT=${GITHUB_SHA}" \
             --target "$MATRIX_TARGET" \
             --file "$MATRIX_DOCKERFILE" \
             --tag "$MATRIX_IMAGE_TAG" \

@@ -4,51 +4,60 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: ci-regression-checks dependency image.
+# Intent: ci-regression-checks maintainer image.
 #
 ###############################################################
 
-FROM ubuntu:24.04@sha256:353675e2a41babd526e2b837d7ec780c2a05bca0164f7ea5dbbd433d21d166fc
+FROM ubuntu:26.04@sha256:fed6ddb82c61194e1814e93b59cfcb6759e5aa33c4e41bb3782313c2386ed6df
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 LABEL org.opencontainers.image.title="iccDEV CI Regression Dependencies" \
-      org.opencontainers.image.description="Pinned Ubuntu 24.04 dependency image for ci-regression-checks" \
+      org.opencontainers.image.description="Ubuntu 26.04 maintainer image for ci-regression-checks" \
       org.opencontainers.image.licenses="BSD-3-Clause" \
       org.opencontainers.image.vendor="International Color Consortium" \
       org.opencontainers.image.source="https://github.com/InternationalColorConsortium/iccDEV"
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-    bash=5.2.21-2ubuntu4 \
-    build-essential=12.10ubuntu1 \
-    ca-certificates=20240203 \
-    clang-18=1:18.1.3-1ubuntu1 \
-    clang++-18=1:18.1.3-1ubuntu1 \
-    cmake=3.28.3-1build7 \
-    git=1:2.43.0-1ubuntu7.3 \
-    gpgv=2.4.4-2ubuntu17.4 \
-    libclang-rt-18-dev=1:18.1.3-1ubuntu1 \
-    libjpeg-dev=8c-2ubuntu11 \
-    liblzma-dev=5.6.1+really5.4.5-1ubuntu0.3 \
-    libpng-dev=1.6.43-5ubuntu0.6 \
-    libssl-dev=3.0.13-0ubuntu3.11 \
-    libtiff-dev=4.5.1+git230720-4ubuntu2.5 \
-    libwxgtk3.2-dev=3.2.4+dfsg-4build1 \
-    libxml2-dev=2.9.14+dfsg-1.3ubuntu3.7 \
-    lsb-release=12.0-2 \
-    llvm-18=1:18.1.3-1ubuntu1 \
-    nlohmann-json3-dev=3.11.3-1 \
-    time=1.9-0.2build1 \
-    wx-common=3.2.4+dfsg-4build1 \
-    zlib1g-dev=1:1.3.dfsg-3.1ubuntu2.1 \
+    afl++=4.33c-1.1ubuntu1 \
+    bash=5.3-2ubuntu1 \
+    build-essential=12.12ubuntu2 \
+    ca-certificates=20260601~26.04.1 \
+    clang=1:21.1.6-71 \
+    clang-21=1:21.1.8-6ubuntu1 \
+    cmake=4.2.3-2ubuntu2 \
+    g++=4:15.2.0-5ubuntu1 \
+    gcc=4:15.2.0-5ubuntu1 \
+    git=1:2.53.0-1ubuntu1 \
+    gpgv=2.4.8-4ubuntu3 \
+    libclang-rt-dev=1:21.1.6-71 \
+    libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
+    libjpeg-dev=8c-2ubuntu12 \
+    liblzma-dev=5.8.3-1 \
+    libpng-dev=1.6.57-1 \
+    libssl-dev=3.5.5-1ubuntu3.2 \
+    libtiff-dev=4.7.0-3ubuntu4 \
+    libwxgtk3.2-dev=3.2.9+dfsg-1 \
+    libxml2-dev=2.15.2+dfsg-0.1 \
+    lsb-release=12.1-2build1 \
+    llvm=1:21.1.6-71 \
+    llvm-21=1:21.1.8-6ubuntu1 \
+    make=4.4.1-3 \
+    nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
+    openssl-provider-legacy=3.5.5-1ubuntu3.2 \
+    pkg-config=2.5.1-4 \
+    python3=3.14.3-0ubuntu2 \
+    time=1.9-0.4 \
+    wx-common=3.2.9+dfsg-1 \
+    zlib1g-dev=1:1.3.dfsg+really1.3.1-1ubuntu3 \
  && rm -rf /var/lib/apt/lists/*
 
-RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-18 100 \
- && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-18 100 \
- && update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer /usr/bin/llvm-symbolizer-18 100
+RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-21 100 \
+ && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-21 100 \
+ && update-alternatives --install /usr/bin/llvm-symbolizer llvm-symbolizer /usr/bin/llvm-symbolizer-21 100
 
 ENV CC=clang \
     CXX=clang++ \
