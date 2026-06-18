@@ -706,7 +706,6 @@ bool CIccXmlArrayType<T, Tsig>::DumpArray(std::string &xml, std::string blanks, 
         if constexpr (std::numeric_limits<T>::max() > std::numeric_limits<uint32_t>::max()) {
           if (value > std::numeric_limits<uint32_t>::max()) value = std::numeric_limits<uint32_t>::max();
         }
-        if (value > UINT_MAX) value = UINT_MAX;
         snprintf(str, strSize, "%u", (unsigned int)value);
         break;
       
