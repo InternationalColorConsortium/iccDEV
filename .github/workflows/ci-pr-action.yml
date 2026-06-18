@@ -605,6 +605,8 @@ jobs:
     name: Tool Smoke Tests (ASAN+UBSAN)
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
+    with:
+      regression_image_tag: ${{ github.ref_name == 'ci-docker-canary' && 'ci-docker-canary' || 'master' }}
 
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}

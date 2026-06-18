@@ -85,7 +85,7 @@ jobs:
             type=ref,event=branch
 
       - name: Log in to GHCR
-        if: github.ref == 'refs/heads/master'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
@@ -103,17 +103,17 @@ jobs:
           pull: true
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-          load: ${{ github.ref != 'refs/heads/master' }}
-          push: ${{ github.ref == 'refs/heads/master' }}
-          provenance: ${{ github.ref == 'refs/heads/master' && 'mode=max' || 'false' }}
-          sbom: ${{ github.ref == 'refs/heads/master' }}
+          load: ${{ github.event_name != 'workflow_dispatch' && github.ref != 'refs/heads/master' }}
+          push: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' }}
+          provenance: ${{ (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master') && 'mode=max' || 'false' }}
+          sbom: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' }}
           labels: |
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Attest build provenance
-        if: github.ref == 'refs/heads/master'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master'
         uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -127,7 +127,7 @@ jobs:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           EXPECTED_SHA: ${{ github.sha }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' }}
+          PUBLISH_IMAGE: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -221,7 +221,7 @@ jobs:
           BASH_ENV: /dev/null
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' }}
+          PUBLISH_IMAGE: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/master' }}
           TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
         run: |
           set -euo pipefail

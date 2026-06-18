@@ -16,11 +16,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     build-essential=12.12ubuntu2 \
-    clang=1:21.1.6-71 \
-    clang-21=1:21.1.8-6ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
-    libclang-rt-dev=1:21.1.6-71 \
-    libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
+    gcc=4:15.2.0-5ubuntu1 \
+    g++=4:15.2.0-5ubuntu1 \
     lsb-release=12.1-2build1 \
     make=4.4.1-3 \
     libxml2-dev=2.15.2+dfsg-0.1 \
@@ -34,25 +32,21 @@ RUN apt-get update \
 WORKDIR /opt/iccdev
 COPY . .
 ARG GIT_COMMIT=""
-ENV SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
+ENV WARN_FLAGS="-Wall -Wextra -Wpedantic -Werror"
 
 RUN sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt \
  && rm -f Build/CMakeCache.txt \
  && rm -rf Build/CMakeFiles \
  && rm -f Build/Cmake/CMakeCache.txt \
  && rm -rf Build/Cmake/CMakeFiles \
- && GIT_COMMIT="$GIT_COMMIT" CC=clang CXX=clang++ \
-    CFLAGS="${SAN_FLAGS} -fno-omit-frame-pointer -g -O0" \
-    CXXFLAGS="${SAN_FLAGS} -fno-omit-frame-pointer -g -O0" \
-    LDFLAGS="${SAN_FLAGS}" \
+ && GIT_COMMIT="$GIT_COMMIT" CC=gcc CXX=g++ \
     cmake -S Build/Cmake -B Build \
       -DCMAKE_BUILD_TYPE=Debug \
-      -DCMAKE_C_COMPILER=clang \
-      -DCMAKE_CXX_COMPILER=clang++ \
-      -DENABLE_ASAN=ON \
-      -DENABLE_UBSAN=ON \
-      -DENABLE_INTEGER_SANITIZER=ON \
-      -DENABLE_FLOAT_SANITIZER=ON \
+      -DCMAKE_C_COMPILER=gcc \
+      -DCMAKE_CXX_COMPILER=g++ \
+      -DCMAKE_C_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0" \
+      -DCMAKE_CXX_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0 -std=c++17" \
+      -DENABLE_SANITIZERS=ON \
       -DENABLE_TOOLS=ON \
  && cmake --build Build --parallel "$(nproc)" \
  && rm -rf .git
@@ -80,7 +74,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtiff6=4.7.0-3ubuntu4 \
     libjpeg8=8c-2ubuntu12 \
     libpng16-16t64=1.6.57-1 \
-    libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
+    libasan8=16-20260322-1ubuntu1 \
+    libubsan1=16-20260322-1ubuntu1 \
     libssl3t64=3.5.5-1ubuntu3.2 \
     llvm-21=1:21.1.8-6ubuntu1 \
     openssl-provider-legacy=3.5.5-1ubuntu3.2 \

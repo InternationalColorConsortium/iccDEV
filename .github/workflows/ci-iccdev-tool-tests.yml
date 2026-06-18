@@ -54,8 +54,21 @@ on:
         required: false
         default: false
         type: boolean
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
   workflow_dispatch:
     inputs:
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: choice
+        options:
+          - master
+          - ci-docker-canary
       run_hybrid_timing:
         description: 'Run the hybrid iccApplyProfiles timing matrix'
         required: false
@@ -109,7 +122,7 @@ jobs:
     name: "iccDEV Tools - GCC Strict ASAN+UBSAN"
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression@sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -121,6 +134,7 @@ jobs:
 
     env:
       BASH_ENV: /dev/null
+      REGRESSION_IMAGE_TAG: ${{ inputs.regression_image_tag || 'master' }}
       BUILD_DIR: build
 
     steps:
@@ -294,8 +308,7 @@ jobs:
 
           test_cmd="ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
-          container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression@"
-          container_ref+="sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76"
+          container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${REGRESSION_IMAGE_TAG}"
 
           {
             echo "### iccDEV CTest Tool Suites"
