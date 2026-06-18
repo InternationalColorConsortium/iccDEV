@@ -12069,7 +12069,7 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
     }
     else {
       if ( m_observerRange.steps > newRange.steps) {
-        delete rv;
+        free(rv);
         return NULL;
       }
       memcpy(rv, m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
