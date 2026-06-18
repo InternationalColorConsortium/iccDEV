@@ -417,6 +417,8 @@ public:
 
     icUInt16Number nSrc = pElemApply->NumInputChannels();
     icUInt16Number nDst = pElemApply->NumOutputChannels();
+    if (!nSrc || !nDst)
+      return false;
 
     size_t ss = os.pStack->size();
     if (nSrc>ss)
@@ -431,6 +433,8 @@ public:
     pElemApply->Apply(d, s);
 
     size_t ns = (size_t)( ss + (int)nDst - (int)nSrc );
+    if (ns < nDst || ns > icMaxDataStackSize)
+      return false;
 
     if (ns != ss)
       os.pStack->resize(ns);
