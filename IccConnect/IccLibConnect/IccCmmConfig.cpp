@@ -179,7 +179,7 @@ static const char* clrEncNames[] = { "value", "float", "unitFloat", "percent",
 static icFloatColorEncoding clrEncValues[] = { icEncodeValue, icEncodeFloat, icEncodeUnitFloat, icEncodePercent,
                                                icEncode8Bit, icEncode16Bit, icEncode16BitV2, icEncodeUnknown };
 
-static bool icIsJsonColorEncoding(icFloatColorEncoding v)
+static bool icIsJsonColorEncoding(int v)
 {
   int i;
   for (i = 0; clrEncNames[i]; i++) {
@@ -341,10 +341,10 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
   if (!icParseIntArg(args[1], nDstEncoding))
     return 0;
 
-  icFloatColorEncoding dstEncoding = (icFloatColorEncoding)nDstEncoding;
-  if (!icIsJsonColorEncoding(dstEncoding))
+  if (!icIsJsonColorEncoding(nDstEncoding))
     return 0;
-  m_dstEncoding = dstEncoding;
+
+  m_dstEncoding = (icFloatColorEncoding)nDstEncoding;
 
   const char *colon = strchr(args[1], ':');
   if (colon) {
