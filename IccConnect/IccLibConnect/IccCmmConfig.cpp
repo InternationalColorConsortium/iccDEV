@@ -179,11 +179,20 @@ static const char* clrEncNames[] = { "value", "float", "unitFloat", "percent",
 static icFloatColorEncoding clrEncValues[] = { icEncodeValue, icEncodeFloat, icEncodeUnitFloat, icEncodePercent,
                                                icEncode8Bit, icEncode16Bit, icEncode16BitV2, icEncodeUnknown };
 
-static bool icIsJsonColorEncoding(icFloatColorEncoding v)
+// Validate a caller-supplied encoding selector against the set of encodings the
+// JSON config understands.  The argument is taken as a plain int, NOT an
+// icFloatColorEncoding: the value arrives straight from a command-line integer
+// (icParseIntArg) and may be outside the enum's defined range (0..icEncodeUnknown).
+// Materializing such a value in an icFloatColorEncoding variable and then reading
+// it is undefined behavior -- UBSan's -fsanitize=enum traps the load (issue #1422,
+// "load of value 9, which is not a valid value for type 'icFloatColorEncoding'").
+// Comparing the raw int against each (promoted) table entry keeps every load in
+// range, so callers can range-check the int before they ever narrow it to the enum.
+static bool icIsJsonColorEncoding(int v)
 {
   int i;
   for (i = 0; clrEncNames[i]; i++) {
-    if (v == clrEncValues[i])
+    if (v == (int)clrEncValues[i])
       return true;
   }
 
@@ -341,10 +350,13 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
   if (!icParseIntArg(args[1], nDstEncoding))
     return 0;
 
-  icFloatColorEncoding dstEncoding = (icFloatColorEncoding)nDstEncoding;
-  if (!icIsJsonColorEncoding(dstEncoding))
+  // Range-check the parsed integer while it is still an int.  Casting an
+  // out-of-range value (the fuzz PoC for #1422 passes 9; the enum only defines
+  // 0..icEncodeUnknown) to icFloatColorEncoding and then loading it is UB, so
+  // reject first and only narrow to the enum once the value is known valid.
+  if (!icIsJsonColorEncoding(nDstEncoding))
     return 0;
-  m_dstEncoding = dstEncoding;
+  m_dstEncoding = (icFloatColorEncoding)nDstEncoding;
 
   const char *colon = strchr(args[1], ':');
   if (colon) {

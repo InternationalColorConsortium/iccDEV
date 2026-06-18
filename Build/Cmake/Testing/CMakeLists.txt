@@ -1324,6 +1324,42 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1410-encoding-yxy-xyz-dbz.sh"
  )
 
+# #1421 - CIccCfgProfileSequence::fromArgs decodes a packed rendering-intent code
+# whose tens field selects the xform LUT type (intent 65535 -> nType 53), and
+# CIccCfgProfile::toJson reads it back via icGetTransformName. icXformLutType only
+# defines 0x0..0xD, so at the bisected commit (b90ac39) toJson loaded value 53 as
+# an icXformLutType -- UBSan -fsanitize=enum undefined behaviour. #1400 (b087101)
+# pins the decoded type to valid range before storing it; this test replays the
+# 65535 repro through iccApplyProfiles -exportcfg and fails if the invalid-enum
+# load reappears. -exportcfg runs the toJson load before any file is opened, so
+# placeholder names suffice. Only meaningful under a -fsanitize=undefined build
+# (ENABLE_UBSAN/ENABLE_SANITIZERS); SKIPS otherwise.
+iccdev_add_script_test(
+  iccdev.issue-1421-cfg-transform-enum-load
+  120
+  "iccdev;cmm;config;security;ub;issue-1421;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1421-cfg-transform-enum-load.sh"
+ )
+
+# #1422 - CIccCfgDataApply::fromArgs (iccApplyNamedCmm -exportcfganddata) narrowed
+# the destination encoding selector straight from the command line to an
+# icFloatColorEncoding and then read it in icIsJsonColorEncoding. The enum only
+# defines 0..icEncodeUnknown, so an out-of-range selector (the fuzz repro passes 9)
+# was loaded as an invalid enum -- UBSan -fsanitize=enum undefined behaviour at
+# IccCmmConfig.cpp:345. The fix range-checks the raw int before narrowing. The
+# selector is parsed before any data/profile file is opened, so this test drives
+# the exact "9" argument with placeholder names and fails if the invalid-enum load
+# reappears. Only meaningful under a -fsanitize=undefined build
+# (ENABLE_UBSAN/ENABLE_SANITIZERS); SKIPS otherwise.
+iccdev_add_script_test(
+  iccdev.issue-1422-cfg-encoding-enum-load
+  120
+  "iccdev;cmm;config;security;ub;issue-1422;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1422-cfg-encoding-enum-load.sh"
+ )
+
 # #1405 - CIccEvalCompare::EvaluateProfile walked an nGran^ndim device-sample
 # grid with no bound, so a 6-channel profile at the default granularity 33 ran
 # 33^6 (~1.3 billion) samples for over an hour (CWE-400). Regenerates the 6CLR
