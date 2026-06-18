@@ -84,6 +84,17 @@ Copyright:  ? see ICC Software License
 #include "IccIO.h"
 #include "IccDefs.h"
 
+// Wrap this translation unit in the iccDEV namespace under the library-wide
+// USEICCDEVNAMESPACE convention (see IccArrayFactory.cpp / IccTagFactory.cpp).
+// This localizes the file-local anonymous namespace below so it documents as
+// iccDEV::anonymous_namespace{IccTagEmbedIcc.cpp} instead of a top-level
+// anonymous_namespace{} (issue #1425). The macro is off in the default build,
+// so this is compiled away there and only the Doxygen pass / namespace-enabled
+// builds see the wrapper; behaviour is unchanged either way.
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
+
 /**
 ****************************************************************************
 * Name: CIccTagEmbedProfile::CIccTagEmbedProfile
@@ -546,3 +557,7 @@ icValidateStatus CIccTagEmbeddedProfile::Validate(std::string sigPath, std::stri
   
   return rv;
 }
+
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
+#endif
