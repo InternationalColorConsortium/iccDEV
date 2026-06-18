@@ -84,7 +84,19 @@
 #define PHOTO_PALETTE     5
 #define PHOTO_UNKNOWN     0xffffffff
 
-class CTiffImg  
+// Declare CTiffImg inside the iccDEV namespace under the library-wide
+// USEICCDEVNAMESPACE convention so its definitions in TiffImg.cpp (which wraps
+// the whole translation unit in iccDEV for #1428) can enclose this class.  The
+// macro is off in the default build, so CTiffImg stays in the global namespace
+// there and the three tools that include this header (iccApplyProfiles,
+// iccTiffDump, iccSpecSepToTiff) are unaffected; only the Doxygen pass /
+// namespace-enabled builds see the wrapper.  The PHOTO_* photometric codes above
+// stay as preprocessor macros (no namespace) so callers keep using them as-is.
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
+
+class CTiffImg
 {
 public:
   CTiffImg();
@@ -150,5 +162,9 @@ protected:
   unsigned char *m_pProfile;
   unsigned int m_nProfileLength;
 };
+
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
+#endif
 
 #endif // !defined(_TIFFIMG_H)

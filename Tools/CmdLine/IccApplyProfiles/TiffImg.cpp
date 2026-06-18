@@ -86,6 +86,20 @@ static char THIS_FILE[]=__FILE__;
 #define new DEBUG_NEW
 #endif
 
+// Wrap this translation unit in the iccDEV namespace under the library-wide
+// USEICCDEVNAMESPACE convention (see IccArrayFactory.cpp / IccTagFactory.cpp,
+// and the sibling guard in IccTagEmbedIcc.cpp / IccTagJson.cpp). This localizes
+// the file-local anonymous namespace below (the #1204 bounds-checking helpers
+// kMaxTiffSamples / checkedUInt32 / calcBytesPerLine / canCreateRegularOutput)
+// so it documents as iccDEV::anonymous_namespace{TiffImg.cpp} instead of a
+// top-level anonymous_namespace{} (issue #1428). The macro is off in the default
+// build, so this is compiled away there and only the Doxygen pass / namespace-
+// enabled builds see the wrapper; behaviour and linkage are unchanged either way
+// (the helpers keep internal linkage from the anonymous namespace regardless).
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
+
 namespace {
 
 const icUInt16Number kMaxTiffSamples = std::numeric_limits<icUInt16Number>::max();
@@ -174,15 +188,25 @@ CTiffImg::~CTiffImg()
 
 void CTiffImg::Close()
 {
-  m_nWidth = 0;
-  m_nHeight = 0;
-  m_nBitsPerSample = 0;
-  m_nSamples = 0;
-  m_nExtraSamples = 0;
+  // Close() is both the public reset and the destructor's cleanup (~CTiffImg
+  // calls it), and Create()/Open() call it up front to recycle an instance.
+  // Previously it released the two heap resources but only zeroed five of the
+  // scalar members, leaving the rest (geometry, strip layout, cursors, photo,
+  // resolution, profile fields) holding values from the prior image.  A reused
+  // object therefore did not return to its freshly-constructed state, so a stale
+  // member could leak into the next Open()/Create() if any path read it before
+  // re-initializing it.  Align Close() with the constructor: free what is owned,
+  // then reset EVERY member to the exact value CTiffImg::CTiffImg() initializes
+  // it to, in the same order, so post-Close state is identical to post-ctor and
+  // the object is safe to reuse (#1429).
 
+  // Release owned resources first.  m_hTif is the libtiff handle; m_pStripBuf is
+  // the only heap buffer this class allocates (in Open()/Create()).  Note
+  // m_pProfile/m_nProfileLength are vestigial: GetIccProfile()/SetIccProfile()
+  // route the ICC payload through libtiff's own TIFFTAG_ICCPROFILE storage and
+  // never assign m_pProfile, so nulling it (below) frees nothing and cannot leak.
   if (m_hTif) {
     TIFFClose(m_hTif);
-
     m_hTif = NULL;
   }
 
@@ -190,6 +214,30 @@ void CTiffImg::Close()
     free(m_pStripBuf);
     m_pStripBuf = NULL;
   }
+
+  // Reset all remaining members to their ctor-initialized values (ctor order).
+  m_bRead = false;
+  m_nWidth = 0;
+  m_nHeight = 0;
+  m_nBitsPerSample = 0;
+  m_nBytesPerSample = 0;
+  m_nPhoto = 0;
+  m_nSamples = 0;
+  m_nExtraSamples = 0;
+  m_nPlanar = 0;
+  m_nCompress = 0;
+  m_fXRes = 0.0f;
+  m_fYRes = 0.0f;
+  m_nBytesPerLine = 0;
+  m_nRowsPerStrip = 0;
+  m_nStripSize = 0;
+  m_nStripSamples = 0;
+  m_nStripsPerSample = 0;
+  m_nBytesPerStripLine = 0;
+  m_nCurLine = 0;
+  m_nCurStrip = 0;
+  m_pProfile = NULL;
+  m_nProfileLength = 0;
 }
 
 bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHeight,
@@ -589,3 +637,7 @@ bool CTiffImg::SetIccProfile(unsigned char *pProfile, unsigned int nLen)
   
   return true;
 }
+
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
+#endif
