@@ -620,6 +620,88 @@ jobs:
     # and must not upload npm-shaped bundles as artifacts.
     uses: ./.github/workflows/ci-pr-wasm.yml
 
+  docker-canary:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: Docker GCC Canary (${{ matrix.variant }})
+    needs: [setup, detect-src, validate-inputs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: ubuntu
+            dockerfile: Dockerfile
+            target: builder
+            image_tag: iccdev-pr-docker-canary:ubuntu
+          - variant: nixos
+            dockerfile: Dockerfile.nixos
+            target: builder
+            image_tag: iccdev-pr-docker-canary:nixos
+
+    steps:
+      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build ci-docker canary image
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_VARIANT: ${{ matrix.variant }}
+          MATRIX_DOCKERFILE: ${{ matrix.dockerfile }}
+          MATRIX_TARGET: ${{ matrix.target }}
+          MATRIX_IMAGE_TAG: ${{ matrix.image_tag }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$MATRIX_VARIANT" in
+            ubuntu|nixos) ;;
+            *)
+              echo "Invalid Docker canary variant" >&2
+              exit 1
+              ;;
+          esac
+
+          case "$MATRIX_DOCKERFILE" in
+            Dockerfile|Dockerfile.nixos) ;;
+            *)
+              echo "Invalid Dockerfile selection" >&2
+              exit 1
+              ;;
+          esac
+
+          case "$MATRIX_TARGET" in
+            builder) ;;
+            *)
+              echo "Invalid Docker build target" >&2
+              exit 1
+              ;;
+          esac
+
+          case "$MATRIX_IMAGE_TAG" in
+            iccdev-pr-docker-canary:ubuntu|iccdev-pr-docker-canary:nixos) ;;
+            *)
+              echo "Invalid Docker canary image tag" >&2
+              exit 1
+              ;;
+          esac
+
+          docker build \
+            --pull \
+            --no-cache \
+            --target "$MATRIX_TARGET" \
+            --file "$MATRIX_DOCKERFILE" \
+            --tag "$MATRIX_IMAGE_TAG" \
+            .
+
   #############################################################################
   # Example Consumer Project -- verifies build-tree export works
   #############################################################################
@@ -710,6 +792,7 @@ jobs:
       - tool-tests
       - win-ci
       - wasm-ci
+      - docker-canary
       - example-project
     if: always()
     steps:
@@ -749,6 +832,7 @@ jobs:
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
           WASM_RESULT: ${{ needs['wasm-ci'].result }}
+          DOCKER_CANARY_RESULT: ${{ needs['docker-canary'].result }}
           EXAMPLE_RESULT: ${{ needs['example-project'].result }}
         run: |
           set -euo pipefail
@@ -781,6 +865,7 @@ jobs:
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
           WASM_RESULT="${WASM_RESULT:-success}"
+          DOCKER_CANARY_RESULT="${DOCKER_CANARY_RESULT:-success}"
           EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
 
@@ -802,12 +887,13 @@ jobs:
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
           WASM_RESULT="$(trim_and_norm "$WASM_RESULT")"
+          DOCKER_CANARY_RESULT="$(trim_and_norm "$DOCKER_CANARY_RESULT")"
           EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$WASM_RESULT" "$EXAMPLE_RESULT"; do
+          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$WASM_RESULT" "$DOCKER_CANARY_RESULT" "$EXAMPLE_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -877,6 +963,7 @@ jobs:
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
             printf "| wasm-ci            | %s |\n" "$(sanitize_line "$WASM_RESULT")"
+            printf "| docker-canary      | %s |\n" "$(sanitize_line "$DOCKER_CANARY_RESULT")"
             printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"

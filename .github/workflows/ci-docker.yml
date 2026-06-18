@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: "docker-${{ github.workflow }}"
+  group: "docker-${{ github.workflow }}-${{ github.ref_name }}"
   cancel-in-progress: true
 
 jobs:
@@ -51,7 +51,6 @@ jobs:
   build:
     name: "Docker (${{ matrix.variant }})"
     needs: cache-policy
-    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: ghcr-publish
     timeout-minutes: 30
