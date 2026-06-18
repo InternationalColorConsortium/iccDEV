@@ -23,13 +23,27 @@ WORKDIR /workspace/iccDEV
 COPY . .
 ARG GIT_COMMIT=""
 
-RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run "\
+RUN nix-shell -p cmake clang gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run "\
     export GIT_COMMIT=\"${GIT_COMMIT}\" && \
+    export SAN_FLAGS=\"-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound\" && \
+    export CC=clang && \
+    export CXX=clang++ && \
+    export CFLAGS=\"\${SAN_FLAGS} -fno-omit-frame-pointer -g -O0\" && \
+    export CXXFLAGS=\"\${SAN_FLAGS} -fno-omit-frame-pointer -g -O0\" && \
+    export LDFLAGS=\"\${SAN_FLAGS} \${LDFLAGS:-}\" && \
     export NIX_LDFLAGS=\"-ltiff \${NIX_LDFLAGS:-}\" && \
     sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt && \
     rm -f Build/CMakeCache.txt && rm -rf Build/CMakeFiles && \
     rm -f Build/Cmake/CMakeCache.txt && rm -rf Build/Cmake/CMakeFiles && \
-    cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release && \
+    cmake -S Build/Cmake -B Build \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_C_COMPILER=clang \
+      -DCMAKE_CXX_COMPILER=clang++ \
+      -DENABLE_ASAN=ON \
+      -DENABLE_UBSAN=ON \
+      -DENABLE_INTEGER_SANITIZER=ON \
+      -DENABLE_FLOAT_SANITIZER=ON \
+      -DENABLE_TOOLS=ON && \
     cmake --build Build --parallel \"\$(nproc)\" && \
     echo '=== Libraries ===' && \
     ls -lh /workspace/iccDEV/Build/IccProfLib/libIccProfLib2* && \
@@ -43,6 +57,7 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && FINDUTILS_ROOT="$(nix-build '<nixpkgs>' -A findutils --no-out-link)" \
  && GREP_ROOT="$(nix-build '<nixpkgs>' -A gnugrep --no-out-link)" \
  && LDD_ROOT="$(nix-build '<nixpkgs>' -A glibc.bin --no-out-link)" \
+ && LLVM_ROOT="$(nix-build '<nixpkgs>' -A llvm --no-out-link)" \
  && SED_ROOT="$(nix-build '<nixpkgs>' -A gnused --no-out-link)" \
  && mkdir -p /runtime-root/bin /runtime-root/etc /runtime-root/tmp /runtime-root/usr/bin /runtime-root/workspace/iccDEV \
  && printf '%s\n' 'iccdev:x:1000:' > /runtime-root/etc/group \
@@ -53,6 +68,7 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && cp -a /workspace/iccDEV/LICENSE.md /workspace/iccDEV/README.md /runtime-root/workspace/iccDEV/ \
  && { \
       printf '%s\n' "$BUSYBOX_ROOT"; \
+      printf '%s\n' "$LLVM_ROOT"; \
       find /workspace/iccDEV/Build/Tools /workspace/iccDEV/Build/IccProfLib /workspace/iccDEV/Build/IccXML /workspace/iccDEV/Build/IccJSON \
         -type f \( -executable -o -name '*.so*' \) -print \
         | while IFS= read -r file; do \
@@ -67,6 +83,7 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
       "$COREUTILS_ROOT/bin/ln" -s busybox "/runtime-root/bin/$tool"; \
     done \
  && "$COREUTILS_ROOT/bin/ln" -s /bin/env /runtime-root/usr/bin/env \
+ && "$COREUTILS_ROOT/bin/ln" -s "$LLVM_ROOT/bin/llvm-symbolizer" /runtime-root/usr/bin/llvm-symbolizer \
  && if "$FINDUTILS_ROOT/bin/find" /runtime-root/nix/store -maxdepth 1 -name '*-source' -type d -print -quit | "$GREP_ROOT/bin/grep" -q .; then \
       echo 'NixOS runtime root contains /nix/store/*-source paths' >&2; \
       exit 1; \
@@ -109,6 +126,7 @@ ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /usr/bin"
 
 ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML:/workspace/iccDEV/Build/IccJSON"
+ENV ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer"
 ENV LANG=C
 ENV LC_ALL=C
 

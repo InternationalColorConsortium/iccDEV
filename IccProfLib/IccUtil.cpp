@@ -2996,7 +2996,7 @@ icDateTimeNumber icGetDateTimeValue(const icChar *str)
     minutes = timeinfo->tm_min;
     seconds = timeinfo->tm_sec;
   } else {
-    sscanf(str, "%d-%02d-%02dT%02d:%02d:%02d", &year, &month, &day, &hours, &minutes, &seconds);
+    sscanf(str, "%u-%02u-%02uT%02u:%02u:%02u", &year, &month, &day, &hours, &minutes, &seconds);
   }
   dateTime.year    = year;
   dateTime.month   = month;

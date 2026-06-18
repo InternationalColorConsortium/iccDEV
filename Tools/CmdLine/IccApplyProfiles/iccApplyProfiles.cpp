@@ -100,11 +100,12 @@ static bool GetFloatRowByteCount(unsigned int nWidth, int nSamples, size_t& nByt
     return false;
 
 #if defined(__SIZEOF_INT128__)
-  const unsigned __int128 nByteCount = (unsigned __int128)nWidth *
-                                      (unsigned __int128)(unsigned int)nSamples *
-                                      (unsigned __int128)sizeof(icFloatNumber);
+  __extension__ typedef unsigned __int128 CIccUInt128;
+  const CIccUInt128 nByteCount = (CIccUInt128)nWidth *
+                                 (CIccUInt128)(unsigned int)nSamples *
+                                 (CIccUInt128)sizeof(icFloatNumber);
 
-  if (nByteCount > (unsigned __int128)((size_t)-1))
+  if (nByteCount > (CIccUInt128)((size_t)-1))
     return false;
 
   nBytes = (size_t)nByteCount;

@@ -16,7 +16,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     build-essential=12.12ubuntu2 \
+    clang=1:21.1.6-71 \
+    clang-21=1:21.1.8-6ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
+    libclang-rt-dev=1:21.1.6-71 \
+    libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
     lsb-release=12.1-2build1 \
     make=4.4.1-3 \
     libxml2-dev=2.15.2+dfsg-0.1 \
@@ -30,13 +34,26 @@ RUN apt-get update \
 WORKDIR /opt/iccdev
 COPY . .
 ARG GIT_COMMIT=""
+ENV SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
 
 RUN sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt \
  && rm -f Build/CMakeCache.txt \
  && rm -rf Build/CMakeFiles \
  && rm -f Build/Cmake/CMakeCache.txt \
  && rm -rf Build/Cmake/CMakeFiles \
- && GIT_COMMIT="$GIT_COMMIT" cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release \
+ && GIT_COMMIT="$GIT_COMMIT" CC=clang CXX=clang++ \
+    CFLAGS="${SAN_FLAGS} -fno-omit-frame-pointer -g -O0" \
+    CXXFLAGS="${SAN_FLAGS} -fno-omit-frame-pointer -g -O0" \
+    LDFLAGS="${SAN_FLAGS}" \
+    cmake -S Build/Cmake -B Build \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_C_COMPILER=clang \
+      -DCMAKE_CXX_COMPILER=clang++ \
+      -DENABLE_ASAN=ON \
+      -DENABLE_UBSAN=ON \
+      -DENABLE_INTEGER_SANITIZER=ON \
+      -DENABLE_FLOAT_SANITIZER=ON \
+      -DENABLE_TOOLS=ON \
  && cmake --build Build --parallel "$(nproc)" \
  && rm -rf .git
 
@@ -63,7 +80,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libtiff6=4.7.0-3ubuntu4 \
     libjpeg8=8c-2ubuntu12 \
     libpng16-16t64=1.6.57-1 \
+    libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
     libssl3t64=3.5.5-1ubuntu3.2 \
+    llvm-21=1:21.1.8-6ubuntu1 \
     openssl-provider-legacy=3.5.5-1ubuntu3.2 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
     python3=3.14.3-0ubuntu2 \
@@ -80,6 +99,7 @@ RUN groupadd -r iccdev \
 
 ENV PATH="/opt/iccdev/Build/Tools/IccToXml:/opt/iccdev/Build/Tools/IccFromXml:/opt/iccdev/Build/Tools/IccDumpProfile:/opt/iccdev/Build/Tools/IccProfileVisualize:/opt/iccdev/Build/Tools/IccPawgReport:/opt/iccdev/Build/Tools/IccApplyNamedCmm:/opt/iccdev/Build/Tools/IccRoundTrip:/opt/iccdev/Build/Tools/IccFromCube:/opt/iccdev/Build/Tools/IccApplyProfiles:/opt/iccdev/Build/Tools/IccApplySearch:/opt/iccdev/Build/Tools/IccApplyToLink:/opt/iccdev/Build/Tools/IccJpegDump:/opt/iccdev/Build/Tools/IccPngDump:/opt/iccdev/Build/Tools/IccSpecSepToTiff:/opt/iccdev/Build/Tools/IccTiffDump:/opt/iccdev/Build/Tools/IccV5DspObsToV4Dsp:/opt/iccdev/Build/Tools/IccToJson:/opt/iccdev/Build/Tools/IccFromJson:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/iccdev/Build/IccProfLib:/opt/iccdev/Build/IccXML:/opt/iccdev/Build/IccJSON"
+ENV ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer-21"
 
 USER iccdev
 WORKDIR /opt/iccdev

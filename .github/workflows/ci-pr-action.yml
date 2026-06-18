@@ -622,7 +622,7 @@ jobs:
 
   docker-canary:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: Docker GCC Canary (${{ matrix.variant }})
+    name: Docker Sanitizer Canary (${{ matrix.variant }})
     needs: [setup, detect-src, validate-inputs]
     runs-on: ubuntu-latest
     timeout-minutes: 30

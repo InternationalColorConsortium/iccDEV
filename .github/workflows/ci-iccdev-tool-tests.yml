@@ -106,7 +106,7 @@ concurrency:
 
 jobs:
   tool-tests:
-    name: "iccDEV Tools - CTest ASAN+UBSAN"
+    name: "iccDEV Tools - GCC Strict ASAN+UBSAN"
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression@sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76
@@ -151,19 +151,22 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          clang --version | sed -n '1p'
-          clang++ --version | sed -n '1p'
           gcc --version | sed -n '1p'
           g++ --version | sed -n '1p'
+          if command -v clang >/dev/null 2>&1; then
+            clang --version | sed -n '1p'
+          else
+            echo "[WARN] clang not present in pinned regression image; using GCC strict canary"
+          fi
           cmake --version | sed -n '1p'
           /usr/bin/time --version | sed -n '1p'
 
       - name: Configure iccDEV CTest build
         env:
           BASH_ENV: /dev/null
-          CC: clang
-          CXX: clang++
-          UBSAN_IGNORELIST: .github/ci/ubsan-ignorelist.txt
+          CC: gcc
+          CXX: g++
+          WARN_FLAGS: -Wall -Wextra -Wpedantic -Werror
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -171,15 +174,12 @@ jobs:
 
           cmake -S Build/Cmake -B "${BUILD_DIR}" \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_C_FLAGS="-O0 -g3" \
-            -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
-            -DENABLE_ASAN=ON \
-            -DENABLE_UBSAN=ON \
-            -DENABLE_INTEGER_SANITIZER=ON \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0" \
+            -DCMAKE_CXX_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0 -std=c++17" \
+            -DENABLE_SANITIZERS=ON \
             -DSANITIZER_RECOVER=ON \
-            -DUBSAN_IGNORELIST="${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}" \
             -DENABLE_TOOLS=ON \
             -DENABLE_TESTS=ON \
             -DENABLE_WXWIDGETS=OFF \
@@ -304,7 +304,7 @@ jobs:
             echo "|-----------|-------|"
             echo "| Runner | ubuntu-24.04 |"
             echo "| Container | \`$(sanitize_line "$container_ref")\` |"
-            echo "| Compiler | $(sanitize_line "$(clang --version 2>/dev/null | sed -n '1,1p')") |"
+            echo "| Compiler | $(sanitize_line "$(g++ --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| GCC | $(sanitize_line "$(gcc --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
@@ -313,9 +313,12 @@ jobs:
             echo "### Manual Reproduction"
             echo ""
             echo '```bash'
+            echo "WARN_FLAGS='-Wall -Wextra -Wpedantic -Werror'"
             echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=Debug \\"
-            echo "  -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \\"
-            echo "  -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON \\"
+            echo "  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \\"
+            echo "  -DCMAKE_C_FLAGS=\"\${WARN_FLAGS} -fno-omit-frame-pointer -g -O0\" \\"
+            echo "  -DCMAKE_CXX_FLAGS=\"\${WARN_FLAGS} -fno-omit-frame-pointer -g -O0 -std=c++17\" \\"
+            echo "  -DENABLE_SANITIZERS=ON \\"
             echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON"
             echo "cmake --build build --parallel \"\$(nproc)\""
