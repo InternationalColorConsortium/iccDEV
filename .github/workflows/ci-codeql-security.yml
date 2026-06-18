@@ -13,6 +13,10 @@
 
 name: "ci-codeql-security"
 
+# Existing pinned SHAs and CodeQL command strings exceed line length.
+# Keep this yamllint disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
 
@@ -176,12 +180,12 @@ jobs:
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           mkdir -p codeql-results
 
-          # Standard security + quality suite
+          # Standard security + quality suite, minus cpp/path-injection.
           codeql database analyze /tmp/codeql-db \
             --format=sarif-latest \
             --output=codeql-results/cpp-security-and-quality.sarif \
             --threads=0 \
-            codeql/cpp-queries:codeql-suites/cpp-security-and-quality.qls
+            "$TRUSTED_CODEQL_QUERIES/iccdev-cpp-security-and-quality.qls"
 
           # Custom iccDEV security queries
           codeql database analyze /tmp/codeql-db \

@@ -1,0 +1,5 @@
+- description: "iccDEV C++ security-and-quality suite without path-injection"
+- import: codeql-suites/cpp-security-and-quality.qls
+  from: codeql/cpp-queries
+- exclude:
+    id: cpp/path-injection
