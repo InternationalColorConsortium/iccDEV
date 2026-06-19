@@ -122,6 +122,7 @@ public:
   unsigned int GetExtraSamples() { return m_nExtraSamples; }
   unsigned int GetCompress() { return m_nCompress; }
   unsigned int GetPlanar() { return m_nPlanar; }
+  unsigned int GetSampleFormat() { return m_nSampleFormat; }
   float GetXRes() {return m_fXRes;}
   float GetYRes() {return m_fYRes;}
 
@@ -143,6 +144,7 @@ protected:
   icUInt16Number m_nExtraSamples;
   icUInt16Number m_nPlanar;
   icUInt16Number m_nCompress;
+  icUInt16Number m_nSampleFormat;
 
   float m_fXRes;
   float m_fYRes;

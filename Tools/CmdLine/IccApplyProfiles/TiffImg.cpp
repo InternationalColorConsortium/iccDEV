@@ -165,6 +165,7 @@ CTiffImg::CTiffImg()
     m_nExtraSamples(0),
     m_nPlanar(0),
     m_nCompress(0),
+    m_nSampleFormat(1), // uint
     m_fXRes(0.0f),
     m_fYRes(0.0f),
     m_nBytesPerLine(0),
@@ -266,6 +267,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   m_fYRes = fYRes;
   m_nPlanar = bSep ? PLANARCONFIG_SEPARATE : PLANARCONFIG_CONTIG;
   m_nCompress = bCompress ? COMPRESSION_LZW : COMPRESSION_NONE;
+  m_nSampleFormat = SAMPLEFORMAT_UINT;
   
   // fix up some common errors from malformed TIFF files (which could cause errors down the line)
   if (m_fXRes <= 0.0)
@@ -324,15 +326,17 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     }
   }
   TIFFSetField(m_hTif, TIFFTAG_BITSPERSAMPLE, m_nBitsPerSample);
-  if (m_nBitsPerSample==32)
+  if (m_nBitsPerSample >= 32) {
+    m_nSampleFormat = SAMPLEFORMAT_IEEEFP;
     TIFFSetField(m_hTif, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
+  }
   TIFFSetField(m_hTif, TIFFTAG_ROWSPERSTRIP, m_nRowsPerStrip);
   TIFFSetField(m_hTif, TIFFTAG_COMPRESSION, m_nCompress);
   TIFFSetField(m_hTif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
   TIFFSetField(m_hTif, TIFFTAG_XRESOLUTION, fXRes);
   TIFFSetField(m_hTif, TIFFTAG_YRESOLUTION, fYRes);
   if (bCompress) {
-    if (m_nBitsPerSample==32) {
+    if (m_nBitsPerSample >= 32) {
       TIFFSetField(m_hTif, TIFFTAG_PREDICTOR, PREDICTOR_FLOATINGPOINT);
     }
     else {
@@ -390,7 +394,6 @@ bool CTiffImg::Open(const char *szFname)
   }
   //icUInt16Number nPlanar=PLANARCONFIG_CONTIG;
   icUInt16Number nOrientation=ORIENTATION_TOPLEFT;
-  icUInt16Number nSampleFormat=SAMPLEFORMAT_UINT;
   icUInt16Number *nSampleInfo=NULL;
 
   TIFFGetField(m_hTif, TIFFTAG_IMAGEWIDTH, &m_nWidth);
@@ -400,7 +403,7 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetField(m_hTif, TIFFTAG_SAMPLESPERPIXEL, &m_nSamples);
   TIFFGetField(m_hTif, TIFFTAG_EXTRASAMPLES, &m_nExtraSamples, &nSampleInfo);
   TIFFGetField(m_hTif, TIFFTAG_BITSPERSAMPLE, &m_nBitsPerSample);
-  TIFFGetField(m_hTif, TIFFTAG_SAMPLEFORMAT, &nSampleFormat);
+  TIFFGetField(m_hTif, TIFFTAG_SAMPLEFORMAT, &m_nSampleFormat);
   TIFFGetField(m_hTif, TIFFTAG_ROWSPERSTRIP, &m_nRowsPerStrip);
   TIFFGetField(m_hTif, TIFFTAG_ORIENTATION, &nOrientation);
   TIFFGetField(m_hTif, TIFFTAG_XRESOLUTION, &m_fXRes);
@@ -420,9 +423,12 @@ bool CTiffImg::Open(const char *szFname)
   if (m_nRowsPerStrip > m_nHeight)
     m_nRowsPerStrip = m_nHeight;    // best guess, to limit memory allocated
 
-  //Validate what we expect to work with
-  if ((m_nBitsPerSample==32 && nSampleFormat!=SAMPLEFORMAT_IEEEFP) ||
-      (m_nBitsPerSample!=32 && nSampleFormat!=SAMPLEFORMAT_UINT) ||
+  // Validate what we expect to work with:
+  // 32 bit or greater is floating point
+  // less than 32 bit is unsigned integer
+  // this could be more general, but will require more code and testing
+  if ((m_nBitsPerSample >= 32 && m_nSampleFormat != SAMPLEFORMAT_IEEEFP) ||
+      (m_nBitsPerSample < 32 && m_nSampleFormat != SAMPLEFORMAT_UINT) ||
        nOrientation != ORIENTATION_TOPLEFT) {
     Close();
     return false;
