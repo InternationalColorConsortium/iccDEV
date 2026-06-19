@@ -150,9 +150,14 @@ void DumpProfileInfo(CIccProfile* pProfile, std::string prefix)
 {
   icHeader* pHdr = &pProfile->m_Header;
   CIccInfo Fmt;
+  const size_t bufSize = 64;
+  char buf[bufSize];
 
   printf("%sVersion:          %s\n", prefix.c_str(), Fmt.GetVersionName(pHdr->version));
 
+  printf("%sClass:            %s\n", prefix.c_str(), Fmt.GetProfileClassSigName(pHdr->deviceClass) );
+  if (pHdr->deviceSubClass)
+    printf("%sSubClass:         %s\n", prefix.c_str(), icGetSig(buf, bufSize, pHdr->deviceSubClass));
   if (pHdr->colorSpace)
     printf("%sColor Space:      %s\n", prefix.c_str(), Fmt.GetColorSpaceSigName(pHdr->colorSpace));
   if (pHdr->pcs)
