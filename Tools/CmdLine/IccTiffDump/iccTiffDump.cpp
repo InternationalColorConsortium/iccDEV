@@ -217,6 +217,42 @@ FILE* icOpenWriteBinaryFile(const char* szFname)
 
 //===================================================
 
+static
+const char *GetSampleFormatDescription( unsigned int format )
+{
+  const int bufSize = 256;
+  static char buf[ bufSize ];
+
+  switch( format ) {
+    case SAMPLEFORMAT_UINT:
+      return "unsigned integer";
+      break;
+    case SAMPLEFORMAT_INT:
+      return "signed integer";
+      break;
+    case SAMPLEFORMAT_IEEEFP:
+      return "floating point";
+      break;
+    case SAMPLEFORMAT_VOID:
+      return "undefined";
+      break;
+    case SAMPLEFORMAT_COMPLEXINT:
+      return "complex integer";
+      break;
+    case SAMPLEFORMAT_COMPLEXIEEEFP:
+      return "complex floating point";
+      break;
+    default:
+      snprintf(buf,bufSize,"Unknown format: %u = 0x%8.8X", format, format );
+      return buf;
+      break;
+  }
+
+// unreachable
+}
+
+//===================================================
+
 int main(int argc, icChar* argv[])
 {
   int minargs = 1;
@@ -239,7 +275,9 @@ int main(int argc, icChar* argv[])
     SrcImg.GetWidth(), SrcImg.GetHeight(),
     SrcImg.GetWidthIn(), SrcImg.GetHeightIn());
   printf("Planar:            %s\n", GetId(SrcImg.GetPlanar(), planar_types));
-  printf("BitsPerSample:     %d\n", SrcImg.GetBitsPerSample());
+  printf("BitsPerSample:     %d (%s)\n", SrcImg.GetBitsPerSample(),
+            GetSampleFormatDescription( SrcImg.GetSampleFormat()) );
+
   printf("SamplesPerPixel:   %d\n", SrcImg.GetSamples());
   int nExtra = SrcImg.GetExtraSamples();
   if (nExtra)
