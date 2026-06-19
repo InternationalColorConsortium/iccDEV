@@ -85,6 +85,31 @@
 #include "IccStructFactory.h"
 #include "IccArrayFactory.h"
 
+// Guard against attacker-crafted profiles that nest composite tags
+// (tagArrayType / tagStructType) arbitrarily deep. CIccTagArray::Read and
+// CIccTagStruct::Read each create their element tags (CIccTagCreator::CreateTag
+// / CIccTag::Create) and call pTag->Read() on them; an element may itself be a
+// composite tag, so the two functions mutually recurse (an array of structs of
+// arrays of ...) with one native C++ stack frame per nesting level and only
+// ~24 attacker bytes needed per level. With no depth cap this exhausts the call
+// stack and crashes the process (SIGSEGV) before any validation/describe runs.
+// The existing per-level caps (kMaxArrayEntries, the struct dir-size check)
+// bound the WIDTH of a single level, NOT the nesting DEPTH. A single shared
+// thread_local counter caps both entry points because they recurse into each
+// other. This mirrors the embedded-profile depth guard in IccTagEmbedIcc.cpp
+// (kMaxEmbeddedProfileDepth=8); 30 levels is far beyond any legitimate profile
+// while staying well clear of the smallest (~1 MB Emscripten/wasm) stack.
+namespace {
+  static thread_local int s_compositeTagDepth = 0;
+  static const int kMaxCompositeTagDepth = 30;
+
+  struct CompositeDepthGuard {
+    CompositeDepthGuard()  { ++s_compositeTagDepth; }
+    ~CompositeDepthGuard() { --s_compositeTagDepth; }
+    bool TooDeep() const { return s_compositeTagDepth > kMaxCompositeTagDepth; }
+  };
+}
+
 void IIccStruct::Describe(std::string &sDescription, int nVerboseness) const
 {
   if (m_pTagStruct) {
@@ -368,6 +393,13 @@ void CIccTagStruct::Describe(std::string &sDescription, int nVerboseness)
  ******************************************************************************/
 bool CIccTagStruct::Read(icUInt32Number size, CIccIO *pIO)
 {
+  // Bound recursion depth across the array<->struct composite Read paths
+  // (see CompositeDepthGuard above): a struct element may be another struct
+  // or array, so LoadElem -> pTag->Read can re-enter here unboundedly.
+  CompositeDepthGuard depthGuard;
+  if (depthGuard.TooDeep())
+    return false;
+
   icTagTypeSignature sig;
 
   m_tagSize = size;
@@ -1252,9 +1284,17 @@ void CIccTagArray::Describe(std::string &sDescription, int nVerboseness)
 ******************************************************************************/
 bool CIccTagArray::Read(icUInt32Number size, CIccIO *pIO)
 {
+  // Bound recursion depth across the array<->struct composite Read paths
+  // (see CompositeDepthGuard above): an array element may be another array
+  // or struct, so the CreateTag + pTag->Read loop below can re-enter here
+  // unboundedly on a deeply-nested tagArrayType chain.
+  CompositeDepthGuard depthGuard;
+  if (depthGuard.TooDeep())
+    return false;
+
   icTagTypeSignature sig;
 
-  icUInt32Number headerSize = sizeof(icTagTypeSignature) + 
+  icUInt32Number headerSize = sizeof(icTagTypeSignature) +
     sizeof(icUInt32Number) +
     sizeof(icTagTypeSignature) +
     sizeof(icStructSignature) +
