@@ -527,10 +527,24 @@ inline bool status_ok(icStatusCMM status, const std::string &phase, std::string 
   return false;
 }
 
+// Build a CMM step for the round-trip / smoothness metrics.  The intent defaults
+// to RELATIVE COLORIMETRIC and callers should leave it that way unless they have a
+// specific reason: these metrics measure how invertible / smooth the transform is,
+// which must be assessed colorimetrically.  Passing icUnknownIntent (the AddXform
+// default) instead resolves to the profile *header* rendering intent -- Perceptual
+// for most output profiles -- and round-tripping the perceptual A2B/B2A pair, which
+// deliberately compresses gamut, is not a clean inverse and reports spuriously
+// large dE (e.g. CRPC6 round trip max 21 dE under Perceptual vs ~3 under Relative).
+//
+// Absolute colorimetric would give the same round-trip numbers as relative: the
+// media-white adaptation it adds is a per-channel XYZ (von Kries) scale that the
+// forward leg multiplies in and the reverse leg divides back out, so it cancels
+// over a round trip.  Relative is therefore the simpler correct default here.
 inline bool begin_profile_cmm(CIccProfile *pIcc,
                               CIccCmm &cmm,
                               const char *direction,
-                              std::string &reason) {
+                              std::string &reason,
+                              icRenderingIntent intent = icRelativeColorimetric) {
   if (!pIcc) {
     reason = "Profile handle is null";
     return false;
@@ -542,7 +556,7 @@ inline bool begin_profile_cmm(CIccProfile *pIcc,
     return false;
   }
 
-  icStatusCMM status = cmm.AddXform(*pIcc);
+  icStatusCMM status = cmm.AddXform(*pIcc, intent);
   if (!status_ok(status, std::string(direction) + " AddXform", reason)) {
     return false;
   }
