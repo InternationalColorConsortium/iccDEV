@@ -221,6 +221,8 @@ inline std::vector<std::string> split_ws(const std::string &line) {
   return out;
 }
 
+// Decode an *internal PCS* sample (a CMM output) to actual L*a*b*.  src is the
+// internal PCS encoding, not actual colorimetry.
 inline void pcs_to_lab(icColorSpaceSignature pcs, const icFloatNumber *src, icFloatNumber *lab) {
   lab[0] = src[0];
   lab[1] = src[1];
@@ -229,7 +231,14 @@ inline void pcs_to_lab(icColorSpaceSignature pcs, const icFloatNumber *src, icFl
   if (pcs == icSigLabData) {
     icLabFromPcs(lab);
   } else {
-    icXYZtoLab(lab, const_cast<icFloatNumber*>(src), nullptr);
+    // Internal PCS XYZ is scaled by icXyzToXyzIn (32768/65535 ~= 0.5) relative to
+    // actual XYZ, but icXYZtoLab divides by the *actual* D50 white -- so the
+    // internal sample must be un-scaled to actual XYZ first, exactly as the CMM
+    // round-trip evaluator does in IccEval.cpp (icXyzFromPcs + icXYZtoLab, see
+    // #1355/#1377).  Without this, white decodes to L* ~= 76 instead of 100 and
+    // every XYZ-PCS dE is computed in a distorted space.
+    icXyzFromPcs(lab);
+    icXYZtoLab(lab, lab, nullptr);
   }
 }
 
@@ -1899,12 +1908,15 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
       labMeasured[1] = static_cast<icFloatNumber>(pcsRows[i][1]);
       labMeasured[2] = static_cast<icFloatNumber>(pcsRows[i][2]);
     } else {
+      // Measured XYZ from the targ is *actual* XYZ (normalized to 0..1 above),
+      // not PCS-encoded -- convert it straight to Lab.  Do NOT route it through
+      // pcs_to_lab(), which un-scales an internal PCS XYZ and would halve this.
       const icFloatNumber measuredXYZ[3] = {
           static_cast<icFloatNumber>(pcsRows[i][0]),
           static_cast<icFloatNumber>(pcsRows[i][1]),
           static_cast<icFloatNumber>(pcsRows[i][2]),
       };
-      pcs_to_lab(icSigXYZData, measuredXYZ, labMeasured.data());
+      icXYZtoLab(labMeasured.data(), measuredXYZ, nullptr);
     }
 
     const double de = delta_e_2000(labPred.data(), labMeasured.data());
