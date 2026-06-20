@@ -165,7 +165,8 @@ CTiffImg::CTiffImg()
     m_nExtraSamples(0),
     m_nPlanar(0),
     m_nCompress(0),
-    m_nSampleFormat(1), // uint
+    m_nSampleFormat(SAMPLEFORMAT_UINT),
+    m_nOrientation(ORIENTATION_TOPLEFT),
     m_fXRes(0.0f),
     m_fYRes(0.0f),
     m_nBytesPerLine(0),
@@ -227,6 +228,8 @@ void CTiffImg::Close()
   m_nExtraSamples = 0;
   m_nPlanar = 0;
   m_nCompress = 0;
+  m_nSampleFormat = SAMPLEFORMAT_UINT;
+  m_nOrientation = ORIENTATION_TOPLEFT;
   m_fXRes = 0.0f;
   m_fYRes = 0.0f;
   m_nBytesPerLine = 0;
@@ -332,7 +335,7 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   }
   TIFFSetField(m_hTif, TIFFTAG_ROWSPERSTRIP, m_nRowsPerStrip);
   TIFFSetField(m_hTif, TIFFTAG_COMPRESSION, m_nCompress);
-  TIFFSetField(m_hTif, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+  TIFFSetField(m_hTif, TIFFTAG_ORIENTATION, m_nOrientation);
   TIFFSetField(m_hTif, TIFFTAG_XRESOLUTION, fXRes);
   TIFFSetField(m_hTif, TIFFTAG_YRESOLUTION, fYRes);
   if (bCompress) {
@@ -392,8 +395,6 @@ bool CTiffImg::Open(const char *szFname)
     TIFFError(szFname,"Can not open input image");
     return false;
   }
-  //icUInt16Number nPlanar=PLANARCONFIG_CONTIG;
-  icUInt16Number nOrientation=ORIENTATION_TOPLEFT;
   icUInt16Number *nSampleInfo=NULL;
 
   TIFFGetField(m_hTif, TIFFTAG_IMAGEWIDTH, &m_nWidth);
@@ -405,7 +406,7 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetField(m_hTif, TIFFTAG_BITSPERSAMPLE, &m_nBitsPerSample);
   TIFFGetField(m_hTif, TIFFTAG_SAMPLEFORMAT, &m_nSampleFormat);
   TIFFGetField(m_hTif, TIFFTAG_ROWSPERSTRIP, &m_nRowsPerStrip);
-  TIFFGetField(m_hTif, TIFFTAG_ORIENTATION, &nOrientation);
+  TIFFGetField(m_hTif, TIFFTAG_ORIENTATION, &m_nOrientation);
   TIFFGetField(m_hTif, TIFFTAG_XRESOLUTION, &m_fXRes);
   TIFFGetField(m_hTif, TIFFTAG_YRESOLUTION, &m_fYRes);
   TIFFGetField(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
@@ -429,7 +430,7 @@ bool CTiffImg::Open(const char *szFname)
   // this could be more general, but will require more code and testing
   if ((m_nBitsPerSample >= 32 && m_nSampleFormat != SAMPLEFORMAT_IEEEFP) ||
       (m_nBitsPerSample < 32 && m_nSampleFormat != SAMPLEFORMAT_UINT) ||
-       nOrientation != ORIENTATION_TOPLEFT) {
+       m_nOrientation != ORIENTATION_TOPLEFT) {
     Close();
     return false;
   }

@@ -145,6 +145,7 @@ protected:
   icUInt16Number m_nPlanar;
   icUInt16Number m_nCompress;
   icUInt16Number m_nSampleFormat;
+  icUInt16Number m_nOrientation;
 
   float m_fXRes;
   float m_fYRes;
