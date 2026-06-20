@@ -298,6 +298,13 @@ void DumpV5Summary(CIccProfile *pIcc)
     printf("          with spectralViewingConditionsTag (svcn) for proper rendering.\n");
   }
 
+  // report the existance of an embedded profile, but don't dive into it
+  CIccTag* pEmbedded = pIcc->FindTag(icSigEmbeddedV5ProfileTag);
+  if (pEmbedded) {
+    printf("  Sub-Profile: Embedded\n");
+    // see code in iccTiffDump for recursively descending embedded profiles
+  }
+
   printf("\n");
 }
 

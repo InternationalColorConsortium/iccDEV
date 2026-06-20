@@ -581,15 +581,22 @@ public:
     size_t ss = os.pStack->size();
     int r=op->data.select.v1+1;
     int c=op->data.select.v2+1;
-    int nSize = r*c;
+    // v1/v2 are icUInt16Number, so r and c can each reach 65536 and r*c can reach
+    // ~2^32 -- well past INT_MAX.  Computing the product in int overflowed (UBSan:
+    // "65536 * 32768 cannot be represented in type 'int'", #1448) and wrapped to a
+    // negative value that slipped past the "nSize>ss" guard, leading to a bad
+    // resize / out-of-bounds stack index.  Compute the product in size_t (as the
+    // sibling op at OsExtendArgs already does) so the guard rejects oversized
+    // requests; once it passes, nSize<=ss<=icMaxDataStackSize so it fits an int.
+    size_t nSize = (size_t)r*(size_t)c;
 
-    if (nSize>(int)ss)
+    if (nSize>ss)
       return false;
 
     if (r>1 && c>1) {
       int j, k;
 
-      if (os.pScratch->size()<(size_t)nSize)
+      if (os.pScratch->size()<nSize)
         os.pScratch->resize(nSize);
 
       icFloatNumber *ptrStack = &(*os.pStack)[ss-nSize];
@@ -619,17 +626,22 @@ public:
     size_t ss = os.pStack->size();
     int r=op->data.select.v1+1;
     int c=op->data.select.v2+1;
-    int nMSize = r*c;
-    int nSize = nMSize + c;
+    // r and c (icUInt16Number+1) can each reach 65536, so r*c can reach ~2^32 --
+    // past INT_MAX.  The int product overflowed (UBSan: "65536 * 32768 cannot be
+    // represented in type 'int'", #1447) and wrapped negative, slipping past the
+    // "nSize>ss" guard into a bad stack index.  Compute the matrix size in size_t;
+    // after the guard nSize<=ss<=icMaxDataStackSize so the narrow uses below fit.
+    size_t nMSize = (size_t)r*(size_t)c;
+    size_t nSize = nMSize + (size_t)c;
 
-    if (nSize>(int)ss)
+    if (nSize>ss)
       return false;
 
     if (r>1 && c>1) {
 
       if (os.pScratch->size()<(size_t)c)
         os.pScratch->resize(c);
-      
+
       icFloatNumber *ptrStack = &(*os.pStack)[ss-nSize];
       icFloatNumber *x = &(*os.pScratch)[0];
       icFloatNumber *mtx = ptrStack;
