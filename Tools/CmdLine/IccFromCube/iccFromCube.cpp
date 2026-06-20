@@ -78,6 +78,7 @@
 #include "IccMpeBasic.h"
 #include "IccProfLibVer.h"
 #include "IccUtil.h"
+#include "../IccCmdLineUtil.h"
 
 class CubeFile
 {
@@ -453,7 +454,9 @@ int main(int argc, char* argv[])
   CIccTagMultiLocalizedUnicode* pTextTag = new CIccTagMultiLocalizedUnicode();
   std::string desc = cube.getDescription();
   if (desc.size()) {
-    pTextTag->SetText(desc.c_str());
+    // remove escape sequences and malicious commands
+    std::string cleanText = icSanitizeTagText(desc);
+    pTextTag->SetText(cleanText.c_str());
   }
   else {
     pTextTag->SetText((std::string("Device link created from ") + argv[1]).c_str());
@@ -465,8 +468,12 @@ int main(int argc, char* argv[])
   //unconditionally, using the cube comments when present and a default otherwise,
   //so the output is not missing a required tag when the cube had no comments (#1379).
   pTextTag = new CIccTagMultiLocalizedUnicode();
-  if (cube.getCopyright().size())
-    pTextTag->SetText(cube.getCopyright().c_str());
+  std::string copyright = cube.getCopyright();
+  if (copyright.size()) {
+    // remove escape sequences and malicious commands
+    std::string cleanText = icSanitizeTagText(copyright);
+    pTextTag->SetText(cleanText.c_str());
+  }
   else
     pTextTag->SetText("Copyright ICC");
   profile.AttachTag(icSigCopyrightTag, pTextTag);
