@@ -1597,7 +1597,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
 #else
       size_t n001 = (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t n010 = (size_t)tileWidth * (size_t)outputChannels;
+      size_t n010 = (size_t)tileHeight * (size_t)outputChannels;
       size_t n100 = (size_t)outputChannels;
 
       if (inputChannels < 2)
