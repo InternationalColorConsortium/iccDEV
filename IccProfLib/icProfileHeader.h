@@ -1034,7 +1034,7 @@ typedef enum {
     icSigWindowsCMS                     = 0x57435320,  /* 'WCS ' */
     icSigMutoh                          = 0x5349474E,  /* 'SIGN' */
     icSigOnyxGraphics                   = 0x4f4e5958,  /* 'ONYX' */
-    icSigRefIccMAX                      = 0x52494343,  /* 'RIMX' */
+    icSigRefIccMAX                      = 0x52494D58,  /* 'RIMX' */
     icSigDemoIccMAX                     = 0x44494d58,  /* 'DIMX' */
     icSigIccDEV                         = 0x49434344,  /* 'ICCD' */
     icSigRolfGierling                   = 0x52474d53,  /* 'RGMS' */
@@ -1044,6 +1044,8 @@ typedef enum {
     icSigVivo                           = 0x7669766F,  /* 'VIVO' */
     icSigWareToGo                       = 0x57544720,  /* 'WTG ' */
     icSigZoran                          = 0x7a633030,  /* 'zc00' */
+    icSigReprointelligence              = 0x72657072,  /* 'repr' */
+    icSigICC                            = 0x69636364,  /* 'iccd' */
     icSigUnknownCmm                     = 0x00000000,
     
 /* Convenience Enum Definition - Not defined in ICC specification */

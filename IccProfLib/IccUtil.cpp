@@ -2082,6 +2082,24 @@ const icChar *CIccInfo::GetCmmSigName(icCmmSignature sig)
   case icSigZoran:
     return "Zoran";
 
+  // These CMM signatures are defined in the icCmmSignature enum but previously
+  // had no name here, so GetCmmSigName() returned "Unknown..." for them and any
+  // consumer that gates on the name (e.g. iccPawgReport's S3 check) treated a
+  // legitimately registered CMM as unregistered.
+  case icSigWindowsCMS:
+    return "Windows Color System (WCS)";
+
+  case icSigOnyxGraphics:
+    return "Onyx Graphics";
+
+  // Added from registry.color.org/cmm-signatures (entries missing from the
+  // earlier "as of Mar 6, 2018" enum snapshot).
+  case icSigReprointelligence:
+    return "Reprointelligence";
+
+  case icSigICC:
+    return "International Color Consortium";
+
   default:
     return GetUnknownName(sig);
   }
