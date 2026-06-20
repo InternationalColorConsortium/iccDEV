@@ -9791,7 +9791,19 @@ icStatusCMM CIccCmm::FromInternalEncoding(icColorSpaceSignature nSpace, icFloatC
           {
             icLabFromPcs(pInput);
 
-            pInput[0] = (icUInt8Number)(pInput[0]/100.0 * 255.0 + 0.5);
+            // icABtoU8() clamps the a*/b* channels (NaN/<0/>255) before their
+            // cast; the L* channel is scaled by hand here, so apply the same
+            // guard. Without it an out-of-range or NaN L* (e.g. produced by a
+            // malformed transform) yields an out-of-range float->uint8
+            // conversion, which is undefined behavior.
+            icFloatNumber l8 = pInput[0] / 100.0f * 255.0f + 0.5f;
+            if (std::isnan(pInput[0]))
+              l8 = 0.0f;
+            else if (l8 < 0.0f)
+              l8 = 0.0f;
+            else if (l8 > 255.0f)
+              l8 = 255.0f;
+            pInput[0] = (icUInt8Number)l8;
             pInput[1] = icABtoU8(pInput[1]);
             pInput[2] = icABtoU8(pInput[2]);
             break;
