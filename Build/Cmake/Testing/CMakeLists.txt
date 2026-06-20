@@ -340,6 +340,53 @@ function(iccdev_add_pawg_q4_characterization_test)
   endif()
 endfunction()
 
+# Guards iccPawgReport's Q1 (round-trip) and Q3 (smoothness) intent (#1455):
+# iccquality::begin_profile_cmm must default to RELATIVE colorimetric, not the
+# profile header rendering intent.  The pre-fix `AddXform(*pIcc)` used the header
+# intent -- Perceptual for most output profiles -- and round-tripping the
+# perceptual A2B/B2A pair (which compresses gamut) reported spuriously large dE
+# (CMYK-3DLUTs.icc Q1 max 22.6 -> a false FAIL; CRPC6 max ~21 vs ~2 relative).
+# The test builds a profile whose A2B0 (perceptual) and A2B1 (relative) tables
+# differ and asserts the default forward matches the relative one.  Header-only
+# metrics, so it just needs the IccPawgReport include dir + IccProfLib.
+function(iccdev_add_pawg_q1q3_relative_intent_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgQ1Q3RelativeIntentTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-q1q3-relative-colorimetric.cpp"
+  )
+  target_include_directories(iccPawgQ1Q3RelativeIntentTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgQ1Q3RelativeIntentTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgQ1Q3RelativeIntentTest)
+
+  add_test(
+    NAME iccdev.pawg-q1q3-relative-colorimetric
+    COMMAND "$<TARGET_FILE:iccPawgQ1Q3RelativeIntentTest>"
+  )
+  set_tests_properties(iccdev.pawg-q1q3-relative-colorimetric PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;quality;roundtrip;regression"
+  )
+  if(WIN32)
+    set(_pawg_q1q3_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgQ1Q3RelativeIntentTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_q1q3_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-q1q3-relative-colorimetric PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_q1q3_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards CIccCmmSearch::AddXform profile ownership (#1332): the search CMM
 # rejects a NamedColor profile (no search LUT) and, like the base AddXform
 # contract (#1327), must free it.  The helper feeds a NamedColor profile through
@@ -803,6 +850,7 @@ if(WIN32)
   iccdev_add_pawg_q2_tonecurves_test()
   iccdev_add_pawg_q4_characterization_test()
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
+  iccdev_add_pawg_q1q3_relative_intent_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
@@ -865,6 +913,7 @@ iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
 iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
+iccdev_add_pawg_q1q3_relative_intent_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 
