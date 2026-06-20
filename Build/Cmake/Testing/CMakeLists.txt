@@ -387,6 +387,52 @@ function(iccdev_add_pawg_q1q3_relative_intent_test)
   endif()
 endfunction()
 
+# Guards the calc-element matrix-size integer overflow (#1447 Solve / #1448
+# Transpose): CIccOpDefTranspose/Solve::Exec computed `int nSize = r*c` with r,c
+# each up to 65536, overflowing int and slipping past the size guard into a bad
+# resize / OOB stack index.  The test drives the two minimized h0rk1p PoC
+# profiles (embedded) through a CMM; the signed-integer-overflow sanitizer traps
+# the pre-fix multiply.  Most meaningful under the ASAN+UBSAN tool job, but also
+# catches the regression in a plain build (the wrapped size crashes resize()).
+function(iccdev_add_mpecalc_matrix_overflow_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeCalcMatrixOverflowTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpecalc-matrix-size-overflow.cpp"
+  )
+  target_link_libraries(iccMpeCalcMatrixOverflowTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMpeCalcMatrixOverflowTest)
+
+  add_test(
+    NAME iccdev.mpecalc-matrix-size-overflow
+    COMMAND "$<TARGET_FILE:iccMpeCalcMatrixOverflowTest>"
+  )
+  # With the fix the oversized op is rejected in microseconds; pre-fix a plain
+  # (non-sanitizer) build instead runs the op's ~2.1e9-iteration loop, so a short
+  # timeout is itself a regression signal there.  Under the ASAN+UBSAN job the
+  # overflow traps instantly -- that is the authoritative guard.
+  set_tests_properties(iccdev.mpecalc-matrix-size-overflow PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;mpe;calc;overflow;regression"
+  )
+  if(WIN32)
+    set(_mpecalc_overflow_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeCalcMatrixOverflowTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpecalc_overflow_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpecalc-matrix-size-overflow PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpecalc_overflow_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards CIccCmmSearch::AddXform profile ownership (#1332): the search CMM
 # rejects a NamedColor profile (no search LUT) and, like the base AddXform
 # contract (#1327), must free it.  The helper feeds a NamedColor profile through
@@ -851,6 +897,7 @@ if(WIN32)
   iccdev_add_pawg_q4_characterization_test()
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
   iccdev_add_pawg_q1q3_relative_intent_test()
+  iccdev_add_mpecalc_matrix_overflow_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
@@ -914,6 +961,7 @@ iccdev_add_pawg_q2_tonecurves_test()
 iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
 iccdev_add_pawg_q1q3_relative_intent_test()
+iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 
