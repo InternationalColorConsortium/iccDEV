@@ -309,41 +309,11 @@ static const IccManufacturerSig kIccManufacturerSignatures[] = {
   {0x7978796d, "YxyMaster GmbH"},
 };
 
-/* CMM Signatures registry (registry.color.org/cmm-signatures). Provided for
-   the permissiveness-delta report; the live S3 CMM check uses the core
-   IccProfLib GetCmmSigName() table, which this snapshot is diffed against. */
-static const IccManufacturerSig kIccCmmSignatures[] = {
-  {0x33324254, "the imaging factory"},
-  {0x41434d53, "Agfa Graphics N.V."},
-  {0x41444245, "Adobe Systems, Inc."},
-  {0x43434d53, "Canon"},
-  {0x44494d58, "ICC"},
-  {0x44676f53, "GretagMacbeth"},
-  {0x45464920, "EFI"},
-  {0x45584143, "ExactCODE GmbH"},
-  {0x46462020, "Fujifilm Corporation"},
-  {0x48434d4d, "Global Graphics Software Inc"},
-  {0x48444d20, "Heidelberger Druckmaschinen AG"},
-  {0x4b434d53, "Kodak"},
-  {0x4d434d44, "Konica Minolta"},
-  {0x4f4e5958, "Onyx Graphics"},
-  {0x52474d53, "Rolf Gierling Multitools"},
-  {0x52494d58, "ICC"},
-  {0x53494343, "SampleICC"},
-  {0x5349474e, "Mutoh"},
-  {0x54434d4d, "Toshiba TEC Corporation"},
-  {0x5543434d, "Canon"},
-  {0x55434d53, "Canon"},
-  {0x57435320, "Microsoft"},
-  {0x57544720, "Ware To Go"},
-  {0x6170706c, "Apple Computer"},
-  {0x6172676c, "Graeme Gill"},
-  {0x69636364, "ICC"},
-  {0x6c636d73, "Hewlett Packard"},
-  {0x72657072, "Reprointelligence"},
-  {0x7669766f, "Vivo Mobile Communication"},
-  {0x7a633030, "Zoran Corporation"},
-};
+/* The CMM Signatures registry (registry.color.org/cmm-signatures) is parsed by
+   generate_signature_registry.py and reported in its run summary / the hand-
+   maintained PERMISSIVENESS_DELTAS.md, but is intentionally NOT emitted here:
+   the live S3 CMM check uses the core IccProfLib GetCmmSigName() table, so a
+   second C++ copy would be a never-referenced static (CodeQL #1474). */
 
 /* Registered private tag-signature ranges (registry.color.org/tag-signatures,
    non-ICC rows). Used to attribute private tags found in a profile body. */

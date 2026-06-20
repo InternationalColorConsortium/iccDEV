@@ -184,13 +184,13 @@ def emit(manuf, cmm, ranges, fetched_on, notes):
     w("};")
     w("")
     # CMM signatures ----------------------------------------------------------
-    w("/* CMM Signatures registry (registry.color.org/cmm-signatures). Provided for")
-    w("   the permissiveness-delta report; the live S3 CMM check uses the core")
-    w("   IccProfLib GetCmmSigName() table, which this snapshot is diffed against. */")
-    w("static const IccManufacturerSig kIccCmmSignatures[] = {")
-    for v in sorted(cmm):
-        w('  {0x%08x, "%s"},' % (v, c_escape(cmm[v])))
-    w("};")
+    # The cmm dict is still parsed and reported in the run summary / the hand-
+    # maintained PERMISSIVENESS_DELTAS.md, but is intentionally NOT emitted as a
+    # C++ table: the live S3 CMM check uses IccProfLib GetCmmSigName(), so a
+    # second copy here would be a never-referenced static (CodeQL #1474).
+    w("/* CMM Signatures registry (registry.color.org/cmm-signatures) is parsed and")
+    w("   reported in the run summary / PERMISSIVENESS_DELTAS.md, but is NOT emitted")
+    w("   here: the live S3 CMM check uses IccProfLib GetCmmSigName(). */")
     w("")
     # Private tag-signature ranges -------------------------------------------
     w("/* Registered private tag-signature ranges (registry.color.org/tag-signatures,")
