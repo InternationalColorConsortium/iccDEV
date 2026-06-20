@@ -6683,14 +6683,33 @@ icStatusCMM CIccXformNDLut::Begin()
 
   m_nNumInput = m_pTag->m_nInput;
 
+  // CWE-400/CWE-834: m_nNumInput is a copy of the tag's icUInt8Number input channel
+  // count (m_pTag->m_nInput), so it is bounded to 0..255, and the m_Curves* arrays
+  // walked below are allocated to match it (CIccMBB::NewCurvesA/B/M size by
+  // m_nInput/m_nOutput). Assert that bound explicitly and reject an out-of-range
+  // count as an invalid LUT so the per-channel curve walks can never be driven past
+  // those arrays even if the count reached this object corrupted.
+  const int kMaxLutInputChannels = 256;
+  if (m_nNumInput < 0 || m_nNumInput >= kMaxLutInputChannels)
+    return icCmmStatInvalidLut;
+
   m_ApplyCurvePtrA = m_ApplyCurvePtrB = m_ApplyCurvePtrM = NULL;
 
   if (m_pTag->m_bInputMatrix) {
     if (m_pTag->m_CurvesB) {
       Curve = m_pTag->m_CurvesB;
 
-      for (i=0; i<m_nNumInput; i++)
+      // CWE-476: a Read()-accepted tag can still carry NULL curve slots when the
+      // profile declared more channels than it supplied curves - CIccMBB::Validate
+      // reports exactly this as "Incorrect number of B-curves". The apply path skips
+      // Validate, so reject a missing curve here as an invalid LUT instead of
+      // dereferencing NULL. After this loop every Curve[i] (i<count) is non-NULL, so
+      // the IsIdentity walk below needs no further guard.
+      for (i=0; i<m_nNumInput; i++) {
+        if (!Curve[i])
+          return icCmmStatInvalidLut;
         Curve[i]->Begin();
+      }
 
       for (i=0; i<m_nNumInput; i++) {
         if (!Curve[i]->IsIdentity()) {
@@ -6707,7 +6726,11 @@ icStatusCMM CIccXformNDLut::Begin()
     if (m_pTag->m_CurvesA) {
       Curve = m_pTag->m_CurvesA;
 
+      // CWE-476: reject NULL curve slots (see the m_CurvesB note above) so this
+      // output-side walk can't dereference a missing A-curve on a malformed tag.
       for (i=0; i<m_pTag->m_nOutput; i++) {
+        if (!Curve[i])
+          return icCmmStatInvalidLut;
         Curve[i]->Begin();
       }
 
@@ -6724,8 +6747,13 @@ icStatusCMM CIccXformNDLut::Begin()
     if (m_pTag->m_CurvesA) {
       Curve = m_pTag->m_CurvesA;
 
-      for (i=0; i<m_nNumInput; i++)
+      // CWE-476: reject NULL curve slots (see the m_CurvesB note above) so this
+      // input-side walk can't dereference a missing A-curve on a malformed tag.
+      for (i=0; i<m_nNumInput; i++) {
+        if (!Curve[i])
+          return icCmmStatInvalidLut;
         Curve[i]->Begin();
+      }
 
       for (i=0; i<m_nNumInput; i++) {
         if (!Curve[i]->IsIdentity()) {
@@ -6742,7 +6770,11 @@ icStatusCMM CIccXformNDLut::Begin()
     if (m_pTag->m_CurvesM) {
       Curve = m_pTag->m_CurvesM;
 
+      // CWE-476: reject NULL curve slots (see the m_CurvesB note above) so this
+      // output-side walk can't dereference a missing M-curve on a malformed tag.
       for (i=0; i<m_pTag->m_nOutput; i++) {
+        if (!Curve[i])
+          return icCmmStatInvalidLut;
         Curve[i]->Begin();
       }
 
@@ -6757,7 +6789,11 @@ icStatusCMM CIccXformNDLut::Begin()
     if (m_pTag->m_CurvesB) {
       Curve = m_pTag->m_CurvesB;
 
+      // CWE-476: reject NULL curve slots (see the m_CurvesB note above) so this
+      // output-side walk can't dereference a missing B-curve on a malformed tag.
       for (i=0; i<m_pTag->m_nOutput; i++) {
+        if (!Curve[i])
+          return icCmmStatInvalidLut;
         Curve[i]->Begin();
       }
 
