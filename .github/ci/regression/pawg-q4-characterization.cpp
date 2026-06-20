@@ -171,8 +171,16 @@ static const double kPatches[][3] = {
 static const int kNumPatches = static_cast<int>(sizeof(kPatches) / sizeof(kPatches[0]));
 
 // Run the profile's forward transform at the given intent, returning the
-// internal-PCS XYZ for each patch.  Used to author the synthetic targ so its
+// *actual* XYZ for each patch.  Used to author the synthetic targ so its
 // "measured" values are exactly what that intent produces.
+//
+// CIccCmm with an XYZ PCS emits *internal* PCS XYZ (scaled by icXyzToXyzIn ~=
+// 0.5).  Measured characterization data in a real targ is actual colorimetry,
+// and the Q4 evaluator's measured-XYZ path feeds the targ columns straight to
+// icXYZtoLab while un-scaling its own predicted side via icXyzFromPcs (#1454).
+// So author the targ in actual XYZ too -- apply the same icXyzFromPcs to the
+// CMM output -- otherwise predicted (un-scaled) and measured (raw internal)
+// land on different scales and even a perfect profile shows ~20 dE.
 static bool forward_xyz(CIccProfile &p, icRenderingIntent intent,
                         std::vector<std::array<double, 3>> &out) {
   CIccCmm cmm(icSigRgbData, icSigXYZData, true);
@@ -185,17 +193,18 @@ static bool forward_xyz(CIccProfile &p, icRenderingIntent intent,
                            static_cast<icFloatNumber>(kPatches[i][2])};
     icFloatNumber xyz[3] = {0, 0, 0};
     if (cmm.Apply(xyz, in) != icCmmStatOk) return false;
+    icXyzFromPcs(xyz);   // internal PCS XYZ -> actual XYZ (match evaluator, #1454)
     out.push_back({xyz[0], xyz[1], xyz[2]});
   }
   return true;
 }
 
 // Build a CGATS targ block: numeric SAMPLE_ID, *text* SAMPLE_NAME, RGB device
-// columns (0..100), and the supplied internal-PCS XYZ as the measured columns.
-// The XYZ values are left on the internal 0..1 PCS scale (<= 2) so the
-// evaluator's measured-XYZ rescale is a no-op and "measured" stays on exactly
-// the same footing as its own predicted PCS — isolating the rendering-intent
-// difference, which is what this test targets.
+// columns (0..100), and the supplied actual XYZ as the measured columns.
+// The XYZ values are actual colorimetry on the 0..1 scale (<= ~1) so the
+// evaluator's measured-XYZ rescale is a no-op and "measured" lands on exactly
+// the same actual-XYZ footing as its own (un-scaled) predicted PCS — isolating
+// the rendering-intent difference, which is what this test targets.
 static std::string make_targ(const std::vector<std::array<double, 3>> &xyz) {
   static const char *names[] = {"WHITE", "BLACK", "RED",  "GREEN", "BLUE",
                                 "GREY",  "P_80",  "P_29", "OLIVE"};
