@@ -1092,17 +1092,25 @@ CIccTagArray::CIccTagArray(const CIccTagArray &tagAry)
 {
   m_TagVals = NULL;
   m_nSize = 0;
-  if (tagAry.m_nSize) {
-    m_TagVals = new IccTagPtr[tagAry.m_nSize];
+  // CWE-400/CWE-834: a well-formed source satisfies m_nSize == allocated
+  // (m_TagVals), with m_nSize bounded by Read()'s 2^20 entry cap and matched
+  // by SetSize(). Clamp the copy to the same explicit upper limit Describe()
+  // and Cleanup() use, and walk the clamped local rather than the field, so a
+  // corrupted source count can't drive an unbounded allocation/copy here. Real
+  // arrays (<= 2^20 from Read) are always below this bound and never clamped.
+  const icUInt32Number nMaxArrayEntries = 0xffffff;
+  icUInt32Number nCopy = (tagAry.m_nSize > nMaxArrayEntries) ? nMaxArrayEntries : tagAry.m_nSize;
+  if (nCopy) {
+    m_TagVals = new IccTagPtr[nCopy];
 
     icUInt32Number i;
-    for (i=0; i<tagAry.m_nSize; i++) {
+    for (i=0; i<nCopy; i++) {
       if (tagAry.m_TagVals[i].ptr)
         m_TagVals[i].ptr = tagAry.m_TagVals[i].ptr->NewCopy();
       else
         m_TagVals[i].ptr = NULL;
     }
-    m_nSize = tagAry.m_nSize;
+    m_nSize = nCopy;
   }
   m_sigArrayType = tagAry.m_sigArrayType;
 
@@ -1131,17 +1139,24 @@ CIccTagArray &CIccTagArray::operator=(const CIccTagArray &tagAry)
 
   m_TagVals = NULL;
   m_nSize = 0;
-  if (tagAry.m_nSize) {
-    m_TagVals = new IccTagPtr[tagAry.m_nSize];
+  // CWE-400/CWE-834: mirror the copy-constructor guard above - clamp the copy
+  // to the same explicit upper limit Describe()/Cleanup() use and walk the
+  // clamped local rather than the field, so a corrupted source count can't
+  // drive an unbounded allocation/copy. Real arrays (<= 2^20 from Read) never
+  // reach this bound.
+  const icUInt32Number nMaxArrayEntries = 0xffffff;
+  icUInt32Number nCopy = (tagAry.m_nSize > nMaxArrayEntries) ? nMaxArrayEntries : tagAry.m_nSize;
+  if (nCopy) {
+    m_TagVals = new IccTagPtr[nCopy];
 
     icUInt32Number i;
-    for (i=0; i<tagAry.m_nSize; i++) {
+    for (i=0; i<nCopy; i++) {
       if (tagAry.m_TagVals[i].ptr)
         m_TagVals[i].ptr = tagAry.m_TagVals[i].ptr->NewCopy();
       else
         m_TagVals[i].ptr = NULL;
     }
-    m_nSize = tagAry.m_nSize;
+    m_nSize = nCopy;
   }
 
   m_sigArrayType = tagAry.m_sigArrayType;
@@ -1562,7 +1577,20 @@ icValidateStatus CIccTagArray::Validate(std::string sigPath, std::string &sRepor
   CIccInfo Info;
   std::string sigAryPath = sigPath + icGetSigPath(m_sigArrayType);
 
-  if (m_pArray) {  //Should call GetArrayHandler before validate to get 
+  // CWE-400/CWE-834: m_nSize is bounded by Read()'s 2^20 entry cap and matched
+  // by SetSize(), but assert the same explicit upper limit Describe()/Cleanup()
+  // use before the element-validation walks below, so a corrupted count can't
+  // drive them unbounded. A count this large only arises from corruption (Read
+  // caps well below it), so report it as a critical error rather than walking.
+  const icUInt32Number nMaxArrayEntries = 0xffffff;
+  if (m_nSize > nMaxArrayEntries) {
+    sReport += icMsgValidateCriticalError;
+    sReport += Info.GetSigPathName(sigPath);
+    sReport += " - Tag array entry count exceeds sane maximum.\n";
+    return icMaxStatus(rv, icValidateCriticalError);
+  }
+
+  if (m_pArray) {  //Should call GetArrayHandler before validate to get
     rv = icMaxStatus(rv, m_pArray->Validate(sigPath, sReport, pProfile));
   }
   else if (m_sigArrayType==icSigUtf8TextTypeArray) { //UTF8 text arrays are known
@@ -1579,16 +1607,24 @@ icValidateStatus CIccTagArray::Validate(std::string sigPath, std::string &sRepor
     }
     icUInt32Number i;
     for (i=0; i<m_nSize; i++) {
-      rv = icMaxStatus(rv, m_TagVals[i].ptr->Validate(sigAryPath, sReport, pProfile));
+      // m_TagVals[i].ptr is NULL for sparse array slots - Read() stores NULL
+      // for entries with zero offset/size (a spec-legal empty slot) - so guard
+      // the deref as Describe()/Write()/Cleanup() already do; without it,
+      // validating a sparse or malformed array crashes on a NULL deref.
+      if (m_TagVals[i].ptr)
+        rv = icMaxStatus(rv, m_TagVals[i].ptr->Validate(sigAryPath, sReport, pProfile));
     }
   }
-  else { 
+  else {
     icUInt32Number i;
     sReport += "Unknown tag array type - Validating array sub-tags\n";
     rv = icMaxStatus(rv, icValidateWarning);
 
     for (i=0; i<m_nSize; i++) {
-      rv = icMaxStatus(rv, m_TagVals[i].ptr->Validate(sigAryPath, sReport, pProfile));
+      // Same sparse-slot guard as the UTF8 branch above: a NULL element is a
+      // legal empty slot from Read(), not a deref target.
+      if (m_TagVals[i].ptr)
+        rv = icMaxStatus(rv, m_TagVals[i].ptr->Validate(sigAryPath, sReport, pProfile));
     }
   }
 
