@@ -61,8 +61,13 @@ static void test_white_decode() {
 
   // Actual D50 white, and its *internal* PCS encoding (actual * 32768/65535).
   // This is what a CMM emits for a media-relative white; pcs_to_lab must decode
-  // it back to L*=100, a*=b*=0.
-  const icFloatNumber actualD50[3] = {icD50XYZ[0], icD50XYZ[1], icD50XYZ[2]};
+  // it back to L*=100, a*=b*=0.  Use the literal D50 constant (the value of the
+  // library's icD50XYZ) rather than the exported global: icD50XYZ is a DLL data
+  // symbol, and the Windows test links the static lib, so referencing it
+  // directly fails to resolve the __imp_ indirection (LNK2001) while functions
+  // like icXyzToPcs still thunk fine.  icXYZtoLab divides by this same constant
+  // internally, so the literal keeps the white decode exact.
+  const icFloatNumber actualD50[3] = {0.9642f, 1.0000f, 0.8249f};
   icFloatNumber internalD50[3] = {actualD50[0], actualD50[1], actualD50[2]};
   icXyzToPcs(internalD50);  // actual -> internal PCS (the inverse of the fix)
 
