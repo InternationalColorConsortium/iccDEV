@@ -146,12 +146,18 @@ void Usage()
   printf("Usage: iccTiffDump tiff_file {exported_icc_file}\n\n");
 }
 
-void DumpProfileInfo(CIccProfile* pProfile, std::string prefix)
+void DumpProfileInfo(CIccProfile* pProfile, std::string prefix, int level = 1)
 {
   icHeader* pHdr = &pProfile->m_Header;
   CIccInfo Fmt;
+  const int profileRecursionLimit = 4;
   const size_t bufSize = 64;
   char buf[bufSize];
+
+  if (level > profileRecursionLimit) {
+    printf("%sSubprofile recursion halted\n", prefix.c_str());
+    return;
+  }
 
   printf("%sVersion:          %s\n", prefix.c_str(), Fmt.GetVersionName(pHdr->version));
 
@@ -206,7 +212,7 @@ void DumpProfileInfo(CIccProfile* pProfile, std::string prefix)
       CIccTagEmbeddedProfile* pEmbeddedTag = (CIccTagEmbeddedProfile*)pEmbedded;
       if (pEmbeddedTag->GetProfile()) {
         printf("%sSub-Profile:      Embedded\n", prefix.c_str());
-        DumpProfileInfo(pEmbeddedTag->GetProfile(), prefix + " ");
+        DumpProfileInfo(pEmbeddedTag->GetProfile(), prefix + " ", level+1 );
       }
     }
   }

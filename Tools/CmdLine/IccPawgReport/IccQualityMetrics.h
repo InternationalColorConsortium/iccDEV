@@ -136,6 +136,12 @@ struct CharacterizationMetrics {
 
 constexpr int kQualityMaxDeviceChannels = 4;
 
+// Upper bound on characterization patches fed through the forward CMM.  Standard
+// targets top out around 1.6k patches (IT8.7/4, IT8.7/5); this cap is generous
+// for any real target yet keeps a hostile/oversized targ tag from turning the
+// per-patch CMM Apply loop into an unbounded computation (CWE-400).
+constexpr std::size_t kMaxCharacterizationSamples = 8192;
+
 inline double clamp01(double v) {
   if (v < 0.0) return 0.0;
   if (v > 1.0) return 1.0;
@@ -215,6 +221,8 @@ inline std::vector<std::string> split_ws(const std::string &line) {
   return out;
 }
 
+// Decode an *internal PCS* sample (a CMM output) to actual L*a*b*.  src is the
+// internal PCS encoding, not actual colorimetry.
 inline void pcs_to_lab(icColorSpaceSignature pcs, const icFloatNumber *src, icFloatNumber *lab) {
   lab[0] = src[0];
   lab[1] = src[1];
@@ -223,7 +231,14 @@ inline void pcs_to_lab(icColorSpaceSignature pcs, const icFloatNumber *src, icFl
   if (pcs == icSigLabData) {
     icLabFromPcs(lab);
   } else {
-    icXYZtoLab(lab, const_cast<icFloatNumber*>(src), nullptr);
+    // Internal PCS XYZ is scaled by icXyzToXyzIn (32768/65535 ~= 0.5) relative to
+    // actual XYZ, but icXYZtoLab divides by the *actual* D50 white -- so the
+    // internal sample must be un-scaled to actual XYZ first, exactly as the CMM
+    // round-trip evaluator does in IccEval.cpp (icXyzFromPcs + icXYZtoLab, see
+    // #1355/#1377).  Without this, white decodes to L* ~= 76 instead of 100 and
+    // every XYZ-PCS dE is computed in a distorted space.
+    icXyzFromPcs(lab);
+    icXYZtoLab(lab, lab, nullptr);
   }
 }
 
@@ -527,10 +542,24 @@ inline bool status_ok(icStatusCMM status, const std::string &phase, std::string 
   return false;
 }
 
+// Build a CMM step for the round-trip / smoothness metrics.  The intent defaults
+// to RELATIVE COLORIMETRIC and callers should leave it that way unless they have a
+// specific reason: these metrics measure how invertible / smooth the transform is,
+// which must be assessed colorimetrically.  Passing icUnknownIntent (the AddXform
+// default) instead resolves to the profile *header* rendering intent -- Perceptual
+// for most output profiles -- and round-tripping the perceptual A2B/B2A pair, which
+// deliberately compresses gamut, is not a clean inverse and reports spuriously
+// large dE (e.g. CRPC6 round trip max 21 dE under Perceptual vs ~3 under Relative).
+//
+// Absolute colorimetric would give the same round-trip numbers as relative: the
+// media-white adaptation it adds is a per-channel XYZ (von Kries) scale that the
+// forward leg multiplies in and the reverse leg divides back out, so it cancels
+// over a round trip.  Relative is therefore the simpler correct default here.
 inline bool begin_profile_cmm(CIccProfile *pIcc,
                               CIccCmm &cmm,
                               const char *direction,
-                              std::string &reason) {
+                              std::string &reason,
+                              icRenderingIntent intent = icRelativeColorimetric) {
   if (!pIcc) {
     reason = "Profile handle is null";
     return false;
@@ -542,7 +571,7 @@ inline bool begin_profile_cmm(CIccProfile *pIcc,
     return false;
   }
 
-  icStatusCMM status = cmm.AddXform(*pIcc);
+  icStatusCMM status = cmm.AddXform(*pIcc, intent);
   if (!status_ok(status, std::string(direction) + " AddXform", reason)) {
     return false;
   }
@@ -1528,26 +1557,44 @@ struct ParsedTargetData {
   bool parsedFormat = false;
   bool parsedData = false;
   std::vector<std::string> fields;
-  std::vector<std::vector<double>> rows;
+  // Data rows are kept as *raw string cells*, not pre-parsed doubles.  A CGATS
+  // data set routinely interleaves non-numeric columns (SAMPLE_ID, SAMPLE_NAME,
+  // SAMPLE_LOC, ...) between the numeric device/PCS columns -- e.g. real IT8.7/4
+  // targets carry an alphanumeric patch name like "B17" or "2F12" in column 2.
+  // The previous parser parsed every cell as a double and dropped any row that
+  // contained even one non-numeric token, silently discarding ~97% of a typical
+  // target (only the handful of rows whose patch name happened to be all-digits
+  // survived).  Keeping cells as strings lets the consumer parse *only* the
+  // columns it actually needs, by name, the way chardata's parseCGATS does.
+  std::vector<std::vector<std::string>> rows;
 };
 
-inline ParsedTargetData parse_char_target(CIccProfile *pIcc) {
-  ParsedTargetData parsed;
-  if (!pIcc) {
-    return parsed;
+// Split a CGATS data line into cells.  Mirrors chardata's parseCGATS delimiter
+// rule: if the line contains a TAB, treat TAB as the field separator (so quoted
+// or space-bearing sample names survive intact); otherwise split on runs of
+// whitespace.  Cells are trimmed.
+inline std::vector<std::string> split_cgats_cells(const std::string &line) {
+  if (line.find('\t') != std::string::npos) {
+    std::vector<std::string> out;
+    size_t start = 0;
+    for (;;) {
+      size_t tab = line.find('\t', start);
+      if (tab == std::string::npos) {
+        out.push_back(trim_copy(line.substr(start)));
+        break;
+      }
+      out.push_back(trim_copy(line.substr(start, tab - start)));
+      start = tab + 1;
+    }
+    return out;
   }
+  return split_ws(line);
+}
 
-  CIccTagText *textTag = dynamic_cast<CIccTagText*>(pIcc->FindTag(icSigCharTargetTag));
-  if (!textTag) {
-    return parsed;
-  }
-  parsed.hasTag = true;
-
-  const char *text = textTag->GetText();
-  if (!text || !text[0]) {
-    return parsed;
-  }
-
+// Parse the body of a CGATS / IT8 / ISO-28178 characterization text block into
+// field names + raw data-cell rows.  Split out from parse_char_target() so it can
+// be unit-tested directly against on-disk CGATS files (no ICC profile required).
+inline void parse_cgats_text(const std::string &text, ParsedTargetData &parsed) {
   std::istringstream input(text);
   std::string line;
   bool inFormat = false;
@@ -1579,34 +1626,41 @@ inline ParsedTargetData parse_char_target(CIccProfile *pIcc) {
     }
 
     if (inFormat) {
+      // DATA_FORMAT field names are always whitespace-delimited identifiers.
       std::vector<std::string> toks = split_ws(line);
       parsed.fields.insert(parsed.fields.end(), toks.begin(), toks.end());
       continue;
     }
 
     if (inData) {
-      std::vector<std::string> toks = split_ws(line);
-      if (toks.empty()) {
-        continue;
-      }
-      std::vector<double> row;
-      row.reserve(toks.size());
-      bool ok = true;
-      for (const std::string &tok : toks) {
-        char *end = nullptr;
-        const double value = std::strtod(tok.c_str(), &end);
-        if (!end || *end != '\0' || !std::isfinite(value)) {
-          ok = false;
-          break;
-        }
-        row.push_back(value);
-      }
-      if (ok) {
-        parsed.rows.push_back(std::move(row));
+      // Keep every data row as raw cells.  Column selection / numeric parsing is
+      // deferred to the consumer, which knows which columns it needs by name.
+      std::vector<std::string> cells = split_cgats_cells(line);
+      if (!cells.empty()) {
+        parsed.rows.push_back(std::move(cells));
       }
     }
   }
+}
 
+inline ParsedTargetData parse_char_target(CIccProfile *pIcc) {
+  ParsedTargetData parsed;
+  if (!pIcc) {
+    return parsed;
+  }
+
+  CIccTagText *textTag = dynamic_cast<CIccTagText*>(pIcc->FindTag(icSigCharTargetTag));
+  if (!textTag) {
+    return parsed;
+  }
+  parsed.hasTag = true;
+
+  const char *text = textTag->GetText();
+  if (!text || !text[0]) {
+    return parsed;
+  }
+
+  parse_cgats_text(text, parsed);
   return parsed;
 }
 
@@ -1621,6 +1675,27 @@ inline int find_field_index(const std::vector<std::string> &fields,
     }
   }
   return -1;
+}
+
+// Parse one raw CGATS cell (selected by column index) into a finite double.
+// Returns false when the row is too short for that column, the cell is blank, or
+// the cell is not a clean number -- letting the caller drop just that row rather
+// than the whole data set.
+inline bool parse_numeric_cell(const std::vector<std::string> &row, int col, double &out) {
+  if (col < 0 || static_cast<size_t>(col) >= row.size()) {
+    return false;
+  }
+  const std::string &cell = row[static_cast<size_t>(col)];
+  if (cell.empty()) {
+    return false;
+  }
+  char *end = nullptr;
+  const double value = std::strtod(cell.c_str(), &end);
+  if (!end || *end != '\0' || !std::isfinite(value)) {
+    return false;
+  }
+  out = value;
+  return true;
 }
 
 inline void normalize_device_rows(std::vector<std::array<double, kQualityMaxDeviceChannels>> &values,
@@ -1675,108 +1750,54 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
     return false;
   }
 
-  std::vector<std::array<double, kQualityMaxDeviceChannels>> deviceRows;
-  std::vector<std::array<double, 3>> pcsRows;
   const icColorSpaceSignature colorSpace = pIcc->m_Header.colorSpace;
   const icColorSpaceSignature pcs = pIcc->m_Header.pcs;
+
+  // --- Map the device columns by name. ---------------------------------------
+  // Accept the common CGATS spellings for each channel so we interpret the
+  // broadest range of targets: the namespaced form (CMYK_C), the bare letter
+  // (C), and the full colorant name (CYAN).  This widening mirrors chardata's
+  // header standardisation (CMYK_C -> CYAN, etc.).
   int deviceChannels = 0;
-
+  int devCol[kQualityMaxDeviceChannels] = {-1, -1, -1, -1};
   if (colorSpace == icSigRgbData) {
-    const int r = find_field_index(parsed.fields, {"RGB_R", "R"});
-    const int g = find_field_index(parsed.fields, {"RGB_G", "G"});
-    const int b = find_field_index(parsed.fields, {"RGB_B", "B"});
-    if (r >= 0 && g >= 0 && b >= 0) {
-      metrics.hasDeviceColumns = true;
-      deviceChannels = 3;
-      for (const auto &row : parsed.rows) {
-        if (static_cast<int>(row.size()) <= std::max({r, g, b})) {
-          continue;
-        }
-        deviceRows.push_back({row[static_cast<size_t>(r)],
-                              row[static_cast<size_t>(g)],
-                              row[static_cast<size_t>(b)],
-                              0.0});
-      }
-      normalize_device_rows(deviceRows, deviceChannels);
-    }
+    deviceChannels = 3;
+    devCol[0] = find_field_index(parsed.fields, {"RGB_R", "R", "RED"});
+    devCol[1] = find_field_index(parsed.fields, {"RGB_G", "G", "GREEN"});
+    devCol[2] = find_field_index(parsed.fields, {"RGB_B", "B", "BLUE"});
   } else if (colorSpace == icSigGrayData) {
-    const int k = find_field_index(parsed.fields, {"GRAY", "K", "GRAY_K"});
-    if (k >= 0) {
-      metrics.hasDeviceColumns = true;
-      deviceChannels = 1;
-      for (const auto &row : parsed.rows) {
-        if (static_cast<int>(row.size()) <= k) {
-          continue;
-        }
-        deviceRows.push_back({row[static_cast<size_t>(k)], 0.0, 0.0, 0.0});
-      }
-      normalize_device_rows(deviceRows, deviceChannels);
-    }
+    deviceChannels = 1;
+    devCol[0] = find_field_index(parsed.fields, {"GRAY", "GRAY_K", "K", "GREY"});
   } else if (colorSpace == icSigCmykData) {
-    const int c = find_field_index(parsed.fields, {"CMYK_C", "C"});
-    const int m = find_field_index(parsed.fields, {"CMYK_M", "M"});
-    const int y = find_field_index(parsed.fields, {"CMYK_Y", "Y"});
-    const int k = find_field_index(parsed.fields, {"CMYK_K", "K"});
-    if (c >= 0 && m >= 0 && y >= 0 && k >= 0) {
-      metrics.hasDeviceColumns = true;
-      deviceChannels = 4;
-      for (const auto &row : parsed.rows) {
-        if (static_cast<int>(row.size()) <= std::max({c, m, y, k})) {
-          continue;
-        }
-        deviceRows.push_back({row[static_cast<size_t>(c)],
-                              row[static_cast<size_t>(m)],
-                              row[static_cast<size_t>(y)],
-                              row[static_cast<size_t>(k)]});
-      }
-      normalize_device_rows(deviceRows, deviceChannels);
+    deviceChannels = 4;
+    devCol[0] = find_field_index(parsed.fields, {"CMYK_C", "C", "CYAN"});
+    devCol[1] = find_field_index(parsed.fields, {"CMYK_M", "M", "MAGENTA"});
+    devCol[2] = find_field_index(parsed.fields, {"CMYK_Y", "Y", "YELLOW"});
+    devCol[3] = find_field_index(parsed.fields, {"CMYK_K", "K", "BLACK"});
+  } else {
+    reason = "Characterization round-trip supports Gray/RGB/CMYK device spaces only";
+    return false;
+  }
+  metrics.hasDeviceColumns = true;
+  for (int c = 0; c < deviceChannels; ++c) {
+    if (devCol[c] < 0) {
+      metrics.hasDeviceColumns = false;
     }
   }
 
-  if (pcs == icSigLabData) {
-    const int l = find_field_index(parsed.fields, {"LAB_L", "L"});
-    const int a = find_field_index(parsed.fields, {"LAB_A", "A"});
-    const int b = find_field_index(parsed.fields, {"LAB_B", "B"});
-    if (l >= 0 && a >= 0 && b >= 0) {
-      metrics.hasPcsColumns = true;
-      for (const auto &row : parsed.rows) {
-        if (static_cast<int>(row.size()) <= std::max({l, a, b})) {
-          continue;
-        }
-        pcsRows.push_back({row[static_cast<size_t>(l)],
-                           row[static_cast<size_t>(a)],
-                           row[static_cast<size_t>(b)]});
-      }
-    }
+  // --- Map the measured PCS columns by name. ---------------------------------
+  int pcsCol[3] = {-1, -1, -1};
+  const bool pcsIsLab = (pcs == icSigLabData);
+  if (pcsIsLab) {
+    pcsCol[0] = find_field_index(parsed.fields, {"LAB_L", "L"});
+    pcsCol[1] = find_field_index(parsed.fields, {"LAB_A", "A"});
+    pcsCol[2] = find_field_index(parsed.fields, {"LAB_B", "B"});
   } else if (pcs == icSigXYZData) {
-    const int x = find_field_index(parsed.fields, {"XYZ_X", "X"});
-    const int y = find_field_index(parsed.fields, {"XYZ_Y", "Y"});
-    const int z = find_field_index(parsed.fields, {"XYZ_Z", "Z"});
-    if (x >= 0 && y >= 0 && z >= 0) {
-      metrics.hasPcsColumns = true;
-      for (const auto &row : parsed.rows) {
-        if (static_cast<int>(row.size()) <= std::max({x, y, z})) {
-          continue;
-        }
-        pcsRows.push_back({row[static_cast<size_t>(x)],
-                           row[static_cast<size_t>(y)],
-                           row[static_cast<size_t>(z)]});
-      }
-      double maxSeen = 0.0;
-      for (const auto &v : pcsRows) {
-        maxSeen = std::max(maxSeen, std::fabs(v[0]));
-        maxSeen = std::max(maxSeen, std::fabs(v[1]));
-        maxSeen = std::max(maxSeen, std::fabs(v[2]));
-      }
-      if (maxSeen > 2.0 && maxSeen <= 100.0) {
-        for (auto &v : pcsRows) {
-          v[0] /= 100.0;
-          v[1] /= 100.0;
-          v[2] /= 100.0;
-        }
-      }
-    }
+    pcsCol[0] = find_field_index(parsed.fields, {"XYZ_X", "X"});
+    pcsCol[1] = find_field_index(parsed.fields, {"XYZ_Y", "Y"});
+    pcsCol[2] = find_field_index(parsed.fields, {"XYZ_Z", "Z"});
   }
+  metrics.hasPcsColumns = (pcsCol[0] >= 0 && pcsCol[1] >= 0 && pcsCol[2] >= 0);
 
   if (!metrics.hasDeviceColumns) {
     reason = "Characterization data present but device columns are not mapped for this profile class";
@@ -1787,60 +1808,95 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
     return false;
   }
 
-  if (deviceRows.empty() || pcsRows.empty()) {
-    reason = "Characterization data present but no usable measurement rows were parsed";
+  // --- Extract device + measured PCS values *together*, one source row at a
+  //     time, so the two stay index-aligned.  The previous code built the
+  //     device and PCS vectors in two independent passes that each skipped
+  //     short rows on their own -- any row dropped by one pass but not the other
+  //     silently shifted every subsequent device/PCS pairing.  A row is taken
+  //     only when every needed device and PCS cell parses to a finite number;
+  //     otherwise the whole row is skipped, keeping the two vectors lock-step.
+  std::vector<std::array<double, kQualityMaxDeviceChannels>> deviceRows;
+  std::vector<std::array<double, 3>> pcsRows;
+  for (const auto &row : parsed.rows) {
+    std::array<double, kQualityMaxDeviceChannels> dev{0.0, 0.0, 0.0, 0.0};
+    std::array<double, 3> meas{0.0, 0.0, 0.0};
+    bool ok = true;
+    for (int c = 0; c < deviceChannels && ok; ++c) {
+      ok = parse_numeric_cell(row, devCol[c], dev[static_cast<size_t>(c)]);
+    }
+    for (int c = 0; c < 3 && ok; ++c) {
+      ok = parse_numeric_cell(row, pcsCol[c], meas[static_cast<size_t>(c)]);
+    }
+    if (!ok) {
+      continue;
+    }
+    deviceRows.push_back(dev);
+    pcsRows.push_back(meas);
+  }
+
+  if (deviceRows.empty()) {
+    reason = "Characterization data present but no rows had complete numeric device + PCS columns";
     return false;
   }
 
-  const size_t usableRows = std::min(deviceRows.size(), pcsRows.size());
-  if (usableRows == 0) {
-    reason = "Characterization data present but no aligned device/PCS rows were parsed";
-    return false;
-  }
+  // Device cells may be authored 0..1, 0..100, 0..255, or 0..65535; rescale to 0..1.
+  normalize_device_rows(deviceRows, deviceChannels);
 
-  ClassicLutTransform classicForward;
-  MatrixTrcTransform matrixForward;
-  bool useClassic = false;
-  bool useMatrix = false;
-  bool useCmm = false;
-  CIccCmm cmmForward(static_cast<icColorSpaceSignature>(pIcc->m_Header.colorSpace),
-                     static_cast<icColorSpaceSignature>(pIcc->m_Header.pcs),
-                     true);
-
-  std::string transformReason;
-  const char *forwardLabel = "";
-  if (CIccTag *forwardTag = nullptr; select_classic_lut_forward_tag(pIcc, forwardTag, forwardLabel)) {
-    useClassic = build_classic_lut_transform(forwardTag, pIcc->m_Header.pcs, classicForward, transformReason);
-    if (!useClassic && !transformReason.empty()) {
-      transformReason = std::string(forwardLabel) + " present but " + transformReason;
+  // Measured XYZ is conventionally on a 0..100 scale (Y of the white ~= 100);
+  // bring it onto the 0..1 PCS scale icXYZtoLab expects.  Lab columns are
+  // already in actual L*a*b* units and are used as-is.
+  if (!pcsIsLab) {
+    double maxSeen = 0.0;
+    for (const auto &v : pcsRows) {
+      for (int i = 0; i < 3; ++i) {
+        maxSeen = std::max(maxSeen, std::fabs(v[static_cast<size_t>(i)]));
+      }
+    }
+    if (maxSeen > 2.0 && maxSeen <= 100.0) {
+      for (auto &v : pcsRows) {
+        v[0] /= 100.0;
+        v[1] /= 100.0;
+        v[2] /= 100.0;
+      }
     }
   }
 
-  if (!useClassic) {
-    useMatrix = build_matrix_trc_transform(pIcc, matrixForward, transformReason);
+  // --- Forward transform: ABSOLUTE COLORIMETRIC, and nothing else. -----------
+  //
+  // This check compares the profile's predicted output against *measured*
+  // characterization data -- the actual colorimetry (under the measurement
+  // illuminant) of the printed/displayed patches, paper tint and all.  The ONLY
+  // rendering intent whose numbers are defined to match that measurement is
+  // ABSOLUTE COLORIMETRIC:
+  //
+  //   * Perceptual (A2B0) and Saturation (A2B2) apply gamut compression and
+  //     preference rendering, so their output deliberately diverges from the
+  //     measured values -- often by many dE at saturated colours.  Selecting
+  //     A2B0 here (the historical bug) reported ~7 dE average / ~16 dE max on
+  //     accurate offset profiles whose true agreement with their own embedded
+  //     data is ~0.05 dE.
+  //   * Relative colorimetric re-references everything to the media white point
+  //     (paper -> L*=100), discarding the paper tint that the absolute
+  //     measurement still carries; it is wrong here by the media-white offset.
+  //
+  // Absolute colorimetric (relative + media-white-point reintroduction) is the
+  // one transform that reproduces the measured colorimetry, so it is the only
+  // correct intent for a colorimetric comparison like this.  We therefore build
+  // the forward CMM with icAbsoluteColorimetric and do NOT fall back to a raw
+  // A2B LUT read (which would yield media-relative numbers and reintroduce the
+  // very error this fixes); if an absolute transform cannot be built we report
+  // N/A rather than a wrong number.
+  CIccCmm cmmForward(colorSpace, pcs, true);
+  icStatusCMM st = cmmForward.AddXform(*pIcc, icAbsoluteColorimetric, icInterpTetrahedral);
+  if (st == icCmmStatOk) {
+    st = cmmForward.Begin();
   }
-  if (!useClassic && !useMatrix) {
-    useCmm = begin_profile_cmm(pIcc, cmmForward, "forward", transformReason);
-  }
-  if (!useClassic && !useMatrix && !useCmm) {
-    reason = "Characterization data present but no supported forward transform is available";
-    if (!transformReason.empty()) {
-      reason += ": " + transformReason;
-    }
+  if (st != icCmmStatOk) {
+    reason = "Characterization data present but an absolute-colorimetric forward transform could not be built";
     return false;
   }
 
-  if (useClassic) {
-    if (classicForward.inputChannels != deviceChannels) {
-      reason = "Characterization device columns do not match classic LUT input channels";
-      return false;
-    }
-  } else if (useMatrix && matrixForward.channels != deviceChannels) {
-    reason = "Characterization device columns do not match matrix/TRC input channels";
-    return false;
-  }
-
-  const size_t limit = std::min<size_t>(usableRows, 128);
+  const size_t limit = std::min<size_t>(deviceRows.size(), kMaxCharacterizationSamples);
   std::array<icFloatNumber, 16> pcsPred{};
   std::array<icFloatNumber, 3> labPred{};
   std::array<icFloatNumber, 3> labMeasured{};
@@ -1855,31 +1911,26 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
           static_cast<icFloatNumber>(clamp01(deviceRows[i][static_cast<size_t>(c)]));
     }
 
-    bool ok = false;
-    if (useClassic) {
-      ok = evaluate_classic_lut_forward(classicForward, device.data(), pcsPred.data());
-    } else if (useMatrix) {
-      ok = evaluate_matrix_trc_forward(matrixForward, device.data(), pcsPred.data());
-    } else {
-      ok = cmmForward.Apply(pcsPred.data(), device.data()) == icCmmStatOk &&
-           finite3(pcsPred.data());
-    }
-    if (!ok) {
+    if (cmmForward.Apply(pcsPred.data(), device.data()) != icCmmStatOk ||
+        !finite3(pcsPred.data())) {
       continue;
     }
 
-    pcs_to_lab(pIcc->m_Header.pcs, pcsPred.data(), labPred.data());
-    if (pIcc->m_Header.pcs == icSigLabData) {
+    pcs_to_lab(pcs, pcsPred.data(), labPred.data());
+    if (pcsIsLab) {
       labMeasured[0] = static_cast<icFloatNumber>(pcsRows[i][0]);
       labMeasured[1] = static_cast<icFloatNumber>(pcsRows[i][1]);
       labMeasured[2] = static_cast<icFloatNumber>(pcsRows[i][2]);
     } else {
+      // Measured XYZ from the targ is *actual* XYZ (normalized to 0..1 above),
+      // not PCS-encoded -- convert it straight to Lab.  Do NOT route it through
+      // pcs_to_lab(), which un-scales an internal PCS XYZ and would halve this.
       const icFloatNumber measuredXYZ[3] = {
           static_cast<icFloatNumber>(pcsRows[i][0]),
           static_cast<icFloatNumber>(pcsRows[i][1]),
           static_cast<icFloatNumber>(pcsRows[i][2]),
       };
-      pcs_to_lab(icSigXYZData, measuredXYZ, labMeasured.data());
+      icXYZtoLab(labMeasured.data(), measuredXYZ, nullptr);
     }
 
     const double de = delta_e_2000(labPred.data(), labMeasured.data());
