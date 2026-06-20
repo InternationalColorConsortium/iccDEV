@@ -116,6 +116,12 @@ struct CurveInvertibilityMetrics {
     double maxError = 0.0;
     bool monotonic = true;
     bool flat = false;
+    // True only for tone-reproduction curves (rTRC/gTRC/bTRC/kTRC).  The
+    // round-trip inverse-error metric is a required property of these curves;
+    // LUT A/B/M shaper curves are not individually invertible (e.g. a B2A output
+    // curve's dark-end clamping plateau), so their inverse error must not be
+    // thresholded.  See #1458.
+    bool isToneCurve = false;
   };
 
   std::vector<CurveResult> curves;
@@ -1392,16 +1398,25 @@ inline bool measure_transform_smoothness(CIccProfile *pIcc,
   return false;
 }
 
-inline void append_curve_target(std::vector<std::pair<std::string, CIccCurve*>> &targets,
+// A curve to assess, plus whether it is a tone-reproduction curve (only those
+// are required to be invertible -- see CurveResult::isToneCurve / #1458).
+struct CurveTarget {
+  std::string name;
+  CIccCurve *curve;
+  bool isToneCurve;
+};
+
+inline void append_curve_target(std::vector<CurveTarget> &targets,
                                 const std::string &name,
-                                CIccCurve *curve) {
+                                CIccCurve *curve,
+                                bool isToneCurve) {
   if (!curve) {
     return;
   }
-  targets.push_back(std::make_pair(name, curve));
+  targets.push_back(CurveTarget{name, curve, isToneCurve});
 }
 
-inline void append_mbb_curve_targets(std::vector<std::pair<std::string, CIccCurve*>> &targets,
+inline void append_mbb_curve_targets(std::vector<CurveTarget> &targets,
                                      CIccProfile *pIcc,
                                      icTagSignature sig,
                                      const char *label) {
@@ -1422,7 +1437,7 @@ inline void append_mbb_curve_targets(std::vector<std::pair<std::string, CIccCurv
       }
       std::ostringstream oss;
       oss << label << " " << setName << "[" << i << "]";
-      append_curve_target(targets, oss.str(), curves[i]);
+      append_curve_target(targets, oss.str(), curves[i], /*isToneCurve=*/false);
     }
   };
 
@@ -1448,11 +1463,11 @@ inline CurveInvertibilityMetrics measure_curve_invertibility(CIccProfile *pIcc) 
     return metrics;
   }
 
-  std::vector<std::pair<std::string, CIccCurve*>> curves;
-  append_curve_target(curves, "rTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigRedTRCTag)));
-  append_curve_target(curves, "gTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigGreenTRCTag)));
-  append_curve_target(curves, "bTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigBlueTRCTag)));
-  append_curve_target(curves, "kTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigGrayTRCTag)));
+  std::vector<CurveTarget> curves;
+  append_curve_target(curves, "rTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigRedTRCTag)), /*isToneCurve=*/true);
+  append_curve_target(curves, "gTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigGreenTRCTag)), /*isToneCurve=*/true);
+  append_curve_target(curves, "bTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigBlueTRCTag)), /*isToneCurve=*/true);
+  append_curve_target(curves, "kTRC", dynamic_cast<CIccCurve*>(pIcc->FindTag(icSigGrayTRCTag)), /*isToneCurve=*/true);
 
   append_mbb_curve_targets(curves, pIcc, icSigAToB0Tag, "A2B0");
   append_mbb_curve_targets(curves, pIcc, icSigBToA0Tag, "B2A0");
@@ -1468,14 +1483,15 @@ inline CurveInvertibilityMetrics measure_curve_invertibility(CIccProfile *pIcc) 
   append_mbb_curve_targets(curves, pIcc, icSigBToD2Tag, "B2D2");
 
   for (auto &entry : curves) {
-    CIccCurve *curve = entry.second;
+    CIccCurve *curve = entry.curve;
     if (!curve) {
       continue;
     }
 
     begin_curve_safe(curve);
     CurveInvertibilityMetrics::CurveResult result;
-    result.name = entry.first;
+    result.name = entry.name;
+    result.isToneCurve = entry.isToneCurve;
     result.monotonic = true;
     result.flat = true;
 
@@ -1500,9 +1516,16 @@ inline CurveInvertibilityMetrics measure_curve_invertibility(CIccProfile *pIcc) 
     }
 
     result.flat = std::fabs(maxValue - minValue) < 1e-6;
-    if (result.flat) {
-      result.maxError = 1.0;
-      result.avgError = 1.0;
+
+    // Monotonicity and the dead/flat check above apply to every curve (real
+    // defects regardless of role).  The round-trip *inverse* error, however, is
+    // only a required property of tone-reproduction curves: LUT A/B/M shaper
+    // curves legitimately are not individually invertible -- e.g. a B2A output
+    // curve with a dark-end clamping plateau round-trips with an "error" equal to
+    // the plateau width even though the profile is correct (#1458).  So compute
+    // the inverse error only for (non-flat) tone curves; a flat curve has no
+    // meaningful inverse and is already flagged via result.flat.
+    if (result.flat || !result.isToneCurve) {
       metrics.curves.push_back(result);
       continue;
     }

@@ -1803,21 +1803,40 @@ PawgVerdict QualityCurveInvertibility(CIccProfile *pIcc, std::string &detail)
     return PawgVerdict::NotApplicable;
   }
 
+  // Monotonicity / dead-curve defects are flagged for every curve, but the
+  // round-trip inverse-error threshold applies to tone curves only: LUT A/B/M
+  // shaper curves are not required to be individually invertible (e.g. a B2A
+  // output curve's dark-end clamping plateau), so thresholding their inverse
+  // error spuriously WARNed correct CMYK output profiles (#1458).  The error is
+  // also in normalized 0-1 curve-input units, not CIEDE2000.
   int problemCount = 0;
-  double maxErr = 0.0;
+  int toneCount = 0;
+  int shaperCount = 0;
+  double toneMaxErr = 0.0;
   for (const auto &curve : metrics.curves) {
-    maxErr = std::max(maxErr, curve.maxError);
+    if (curve.isToneCurve) {
+      ++toneCount;
+      toneMaxErr = std::max(toneMaxErr, curve.maxError);
+    } else {
+      ++shaperCount;
+    }
     if (!curve.monotonic || curve.flat) {
       ++problemCount;
     }
   }
 
   std::ostringstream oss;
-  oss << metrics.curves.size() << " curve(s) checked, max inverse error=" << maxErr
-      << "; warn(non-monotonic, flat, or maxErr>" << kCurveWarnMaxError << ")";
+  oss << metrics.curves.size() << " curve(s) checked (" << toneCount << " tone, "
+      << shaperCount << " shaper)";
+  if (toneCount > 0) {
+    oss << ", max tone-curve inverse error=" << toneMaxErr << " (normalized curve units)";
+  } else {
+    oss << ", no tone curves to invert; shaper curves checked for monotonicity/flatness only";
+  }
+  oss << "; warn(non-monotonic, flat, or tone-curve inverse error>" << kCurveWarnMaxError << ")";
   detail = oss.str();
-  return (problemCount == 0 && maxErr <= kCurveWarnMaxError) ? PawgVerdict::Ok
-                                                             : PawgVerdict::Warn;
+  return (problemCount == 0 && toneMaxErr <= kCurveWarnMaxError) ? PawgVerdict::Ok
+                                                                 : PawgVerdict::Warn;
 }
 
 PawgVerdict QualitySmoothness(CIccProfile *pIcc, std::string &detail)
@@ -2154,7 +2173,10 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc)
   std::string q2Detail;
   PawgVerdict q2 = QualityCurveInvertibility(pIcc, q2Detail);
   AddItem(items, "Q2",
-          "Curve round trip differences in CIEDE2000 (i.e. can be inverted)",
+          // The curve round-trip error is in normalized 0-1 curve-input units,
+          // not CIEDE2000 (it compares an input value to its Find(Apply(x))), so
+          // the item is labelled accordingly rather than "in CIEDE2000" (#1458).
+          "Curve round trip differences in normalized curve units (i.e. can be inverted)",
           q2,
           q2Detail);
 
