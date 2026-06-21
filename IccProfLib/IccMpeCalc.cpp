@@ -3587,11 +3587,8 @@ bool CIccCalculatorFunc::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&m_nOps))
     return false;
 
-  // CWE-400/CWE-834: m_nOps is a 32-bit count with no ICC.2-imposed maximum.
-  // Reject counts at or above the shared MAX_CALC_ELEMENTS cap (IccMpeCalc.h)
-  // before allocating m_Op[] or driving the op loop below, so a corrupt or
-  // hostile count cannot force an unbounded allocation. ">= reject": a valid
-  // count is strictly less than the cap.
+  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
   if (m_nOps >= MAX_CALC_ELEMENTS)
     return false;
 
@@ -4635,12 +4632,11 @@ CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
   if (channelGen.m_nSubElem) {
     icUInt32Number i;
 
-    // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
-    // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
-    // match. A constructor/assignment cannot reject, so clamp the copy loop to
-    // that same cap (using the >= boundary shared with the reject paths) so a
-    // corrupted count can't drive an unbounded walk.
-    icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+    // CWE-400/CWE-834: m_nSubElem is bounded by MAX_CALC_ELEMENTS on load and the
+    // m_SubElem array is allocated to match; clamp the copy loop to that bound so
+    // a corrupted count can't drive an unbounded walk.
+    const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+    icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
 
     m_SubElem = (CIccMultiProcessElement**)calloc(m_nSubElem, sizeof(CIccMultiProcessElement*));
     if (m_SubElem) {
@@ -4693,12 +4689,11 @@ CIccMpeCalculator &CIccMpeCalculator::operator=(const CIccMpeCalculator &channel
   if (channelGen.m_nSubElem) {
     icUInt32Number i;
 
-    // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
-    // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
-    // match. A constructor/assignment cannot reject, so clamp the copy loop to
-    // that same cap (using the >= boundary shared with the reject paths) so a
-    // corrupted count can't drive an unbounded walk.
-    icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+    // CWE-400/CWE-834: m_nSubElem is bounded by MAX_CALC_ELEMENTS on load and the
+    // m_SubElem array is allocated to match; clamp the copy loop to that bound so
+    // a corrupted count can't drive an unbounded walk.
+    const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+    icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
 
     m_SubElem = (CIccMultiProcessElement**)calloc(m_nSubElem, sizeof(CIccMultiProcessElement*));
     if (m_SubElem) {
@@ -4755,11 +4750,10 @@ void CIccMpeCalculator::SetSize(icUInt16Number nInputChannels, icUInt16Number nO
   icUInt32Number i;
 
   if (m_SubElem) {
-    // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
-    // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
-    // match. SetSize() cannot reject, so clamp the delete loop to that same cap
-    // (>= boundary) so a corrupted count can't drive an unbounded walk.
-    icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+    // CWE-400/CWE-834: m_nSubElem is bounded by MAX_CALC_ELEMENTS on load and the
+    // m_SubElem array is allocated to match; clamp the delete loop to that bound.
+    const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+    icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
     for (i=0; i<nSub; i++) {
       if (m_SubElem[i]) {
         m_SubElem[i]->SetParentObject(nullptr);
@@ -4846,11 +4840,10 @@ void CIccMpeCalculator::Describe(std::string &sDescription, int nVerboseness)
 
     if (m_nSubElem && m_SubElem) {
       icUInt32Number i;
-      // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
-      // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
-      // match. Describe() cannot reject, so clamp the describe walk to that same
-      // cap (>= boundary) so a corrupted count can't drive an unbounded walk.
-      icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+      // CWE-400/CWE-834: m_nSubElem is bounded by MAX_CALC_ELEMENTS on load and the
+      // m_SubElem array is allocated to match; clamp the describe walk to that bound.
+      const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+      icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
       for (i=0; i<nSub; i++) {
         snprintf(buf, bufSize, "BEGIN_SUBCALCELEM %u\n", (unsigned int) i);
         sDescription += buf;
@@ -4940,12 +4933,8 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&nSubElem))
     return false;
 
-  // CWE-400/CWE-834: nSubElem is a 32-bit count read straight from the profile
-  // with no ICC.2-imposed maximum. Reject counts at or above the shared
-  // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) before sizing m_SubElem[], so a corrupt
-  // or hostile count cannot force an unbounded allocation. This is the
-  // authoritative load-time gate the copy/describe/validate clamps rely on.
-  // ">= reject": a valid count is strictly less than the cap.
+  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
   if (nSubElem >= MAX_CALC_ELEMENTS)
     return false;
 
@@ -5061,11 +5050,10 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   if (!pIO->Write16(&m_nOutputChannels))
     return false;
 
-  // CWE-400/CWE-834: m_nSubElem is bounded by the shared MAX_CALC_ELEMENTS cap
-  // (IccMpeCalc.h) on load; reject anything at or above it before serialising the
-  // count so a corrupted value can't be written or drive the unbounded
-  // sub-element write loop below. ">= reject" matches the load-time gate (a valid
-  // count is strictly less than the cap).
+  // CWE-400/CWE-834: m_nSubElem is bounded by MAX_CALC_ELEMENTS on load; reject
+  // anything larger before serializing the count so a corrupted value can't be
+  // written or drive the unbounded sub-element write loop below.
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
   if (m_nSubElem >= MAX_CALC_ELEMENTS)
     return false;
 
@@ -5475,10 +5463,8 @@ bool CIccMpeCalculator::SetElem(icUInt32Number idx, CIccMultiProcessElement *pEl
 {
   bool rv = true;
 
-  // CWE-400/CWE-834: idx indexes (and, via idx+1, sizes) the sub-element array.
-  // Reject any index at or above the shared MAX_CALC_ELEMENTS cap (IccMpeCalc.h)
-  // before the realloc/calloc below, so a hostile index can't force an unbounded
-  // allocation.
+  // Prevent excessive allocation - limit to 65536 elements (reasonable max)
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
   if (idx >= MAX_CALC_ELEMENTS)
     return false;
 
@@ -5563,13 +5549,13 @@ CIccApplyMpeCalculator::~CIccApplyMpeCalculator()
   icUInt32Number i;
 
   if (m_SubElem) {
-    // CWE-400/CWE-834: m_nSubElem is bounded by the shared MAX_CALC_ELEMENTS cap
-    // (IccMpeCalc.h) in CIccMpeCalculator::Read and m_SubElem[] is allocated to
-    // match (see GetNewApply). A destructor cannot reject, so clamp the free loop
-    // defensively to that same cap (>= boundary) so a corrupted count can never
-    // drive an unbounded walk over the array.
+    // CWE-400/CWE-834: m_nSubElem is bounded by MAX_CALC_ELEMENTS in
+    // CIccMpeCalculator::Read and the m_SubElem array is allocated to match
+    // (see GetNewApply). Clamp defensively so a corrupted count can never drive
+    // an unbounded free loop over the array.
+    const icUInt32Number MAX_CALC_ELEMENTS = 65536;
     icUInt32Number nSubElem = m_nSubElem;
-    if (nSubElem >= MAX_CALC_ELEMENTS)
+    if (nSubElem > MAX_CALC_ELEMENTS)
       nSubElem = MAX_CALC_ELEMENTS;
     for (i=0; i<nSubElem; i++) {
       delete m_SubElem[i];

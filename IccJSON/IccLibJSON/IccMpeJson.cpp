@@ -1725,12 +1725,7 @@ bool CIccMpeJsonCalculator::UpdateLocals(std::string &func, std::string sFunc,
       }
       int voffset = vo + nLocalsOffset;
       int vsize   = vs + 1;
-      // The temporary-variable memory holds up to 65536 slots (indices 0..65535,
-      // i.e. icMaxDataStackSize + 1); a [voffset, voffset+vsize) range fits iff
-      // voffset + vsize <= 65536. Use > 65536 to match the named-variable bounds
-      // checks above: the prior > 65535 was off-by-one and wrongly rejected a
-      // local that legitimately occupies the final slot.
-      if (voffset + vsize > 65536) {
+      if (voffset + vsize > 65535) {
         parseStr += "Local variable out of bounds - too many variables.\n";
         return false;
       }

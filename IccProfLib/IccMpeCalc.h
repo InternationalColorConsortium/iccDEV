@@ -90,22 +90,6 @@ class IIccOpDef;
 
 #define icMaxDataStackSize 65535
 
-// Defensive upper bound on the number of elements parsed from a calc-based
-// multiProcessElement. ICC.2 stores every one of these as a 32-bit count with
-// NO maximum imposed by the specification: the calculator sub-element count
-// (m_nSubElem) and operation count (m_nOps) inside a calcElement, plus the
-// processing-element count (m_nProcElements) of a multiProcessElementType tag.
-// This cap exists solely to bound memory and loop iteration against corrupt or
-// hostile counts; it is an arbitrary round 2^16 ceiling (orders of magnitude
-// larger than any real-world profile) and is deliberately NOT derived from any
-// field width. It is applied uniformly as a ">= reject": a valid count is
-// strictly less than MAX_CALC_ELEMENTS (i.e. at most 65535). Centralised here
-// so every load, copy, serialise, describe and validate path shares one value
-// and one boundary. NB: this is the element-COUNT cap and is distinct from the
-// temporary-variable memory size (icMaxDataStackSize + 1 = 65536 slots) used by
-// the calc variable-addressing checks, which happens to share the same number.
-#define MAX_CALC_ELEMENTS 65536
-
 
 
 /************************************************************************
