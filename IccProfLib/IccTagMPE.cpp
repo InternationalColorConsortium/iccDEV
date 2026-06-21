@@ -78,6 +78,7 @@
 #include <cstdlib>
 #include "IccTagMPE.h"
 #include "IccIO.h"
+#include "IccMpeCalc.h"  // shared MAX_CALC_ELEMENTS element-count cap
 #include "IccMpeFactory.h"
 #include <map>
 #include <new>
@@ -1028,8 +1029,12 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&m_nProcElements))
     return false;
 
-  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
-  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  // CWE-400/CWE-834: m_nProcElements is a 32-bit count read straight from the
+  // profile with no ICC.2-imposed maximum. Reject counts at or above the shared
+  // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) before sizing m_position[] so a corrupt
+  // or hostile count cannot force an unbounded allocation; the byte-size check
+  // immediately below is the tighter, authoritative bound. ">= reject": a valid
+  // count is strictly less than the cap.
   if (m_nProcElements >= MAX_CALC_ELEMENTS)
     return false;
 

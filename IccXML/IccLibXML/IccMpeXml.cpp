@@ -2467,12 +2467,12 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
   int i;
 
   // CWE-400/CWE-834: the walk below iterates m_nSubElem over m_SubElem[].
-  // CIccMpeCalculator::Read() caps m_nSubElem at MAX_CALC_ELEMENTS and allocates
-  // m_SubElem to match (IccMpeCalc.cpp), so on a valid element the walk never
-  // exceeds the allocation; assert that same bound so a corrupted count can't
+  // CIccMpeCalculator::Read() caps m_nSubElem at the shared MAX_CALC_ELEMENTS cap
+  // (IccMpeCalc.h, reached here via IccMpeXml.h) and sizes m_SubElem[] to match,
+  // so on a valid element the walk never exceeds the allocation. Reject the same
+  // bound with the same ">=" boundary used on load, so a corrupted count can't
   // drive an unbounded serialization walk.
-  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
-  if (m_nSubElem > MAX_CALC_ELEMENTS)
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
     return false;
 
   if (m_SubElem && m_nSubElem) {
@@ -3245,7 +3245,12 @@ bool CIccMpeXmlCalculator::UpdateLocals(std::string &func, std::string sFunc, st
       voffset = _voffset + nLocalsOffset;
       vsize = _vsize + 1;
 
-      if (voffset + vsize > 65535) {
+      // The temporary-variable memory holds up to 65536 slots (indices 0..65535,
+      // i.e. icMaxDataStackSize + 1); a [voffset, voffset+vsize) range fits iff
+      // voffset + vsize <= 65536. Use > 65536 to match the named-variable bounds
+      // checks above: the prior > 65535 was off-by-one and wrongly rejected a
+      // local that legitimately occupies the final slot.
+      if (voffset + vsize > 65536) {
         parseStr += "Local variable out of bounds - too many variables.\n";
         return false;
       }
