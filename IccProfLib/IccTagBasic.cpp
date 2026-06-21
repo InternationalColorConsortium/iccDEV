@@ -3188,7 +3188,12 @@ bool CIccTagNamedColor2::SetSize(icUInt32Number nSize, icInt32Number nDeviceCoor
 */
 void CIccTagNamedColor2::SetPrefix(const icChar *szPrefix)
 {
-  strncpy(m_szPrefix, szPrefix, sizeof(m_szPrefix));
+  // Copy at most sizeof-1 bytes so the explicit terminator below always has
+  // room. Passing the full destination size as the bound makes GCC's
+  // -Wstringop-truncation flag the call (it cannot see the following NUL
+  // store); capping at sizeof-1 is value-preserving because that last byte was
+  // already being overwritten with '\0'.
+  strncpy(m_szPrefix, szPrefix, sizeof(m_szPrefix)-1);
   m_szPrefix[sizeof(m_szPrefix)-1]='\0';
 }
 
@@ -3205,7 +3210,9 @@ void CIccTagNamedColor2::SetPrefix(const icChar *szPrefix)
 */
 void CIccTagNamedColor2::SetSufix(const icChar *szSufix)
 {
-  strncpy(m_szSufix, szSufix, sizeof(m_szSufix));
+  // See SetPrefix: cap the strncpy bound at sizeof-1 so the explicit NUL store
+  // has room and -Wstringop-truncation is satisfied; value-preserving.
+  strncpy(m_szSufix, szSufix, sizeof(m_szSufix)-1);
   m_szSufix[sizeof(m_szSufix)-1]='\0';
 }
 
