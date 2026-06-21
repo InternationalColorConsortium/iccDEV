@@ -897,6 +897,12 @@ public:
   CIccPcsStepMatrix(icUInt16Number nRows, icUInt16Number nCols, bool bInitIdentity=false) : CIccMatrixMath(nRows, nCols, bInitIdentity) {}
   CIccPcsStepMatrix(const CIccPcsStepMatrix &mat) : CIccMatrixMath(mat) {}
   CIccPcsStepMatrix(const CIccMatrixMath &mat) : CIccMatrixMath(mat) {}
+  // PCS steps are polymorphic and always handled through pointers (Mult/concat/
+  // reduce return newly allocated objects); they are never value-assigned. The
+  // base CIccMatrixMath owns a raw buffer with no copy assignment operator, so
+  // an implicit one would shallow-copy and double free. Match the copy
+  // constructor (Rule of Two) by deleting assignment to keep this clone-only.
+  CIccPcsStepMatrix &operator=(const CIccPcsStepMatrix &) = delete;
   virtual icPcsStepType GetType() { return icPcsStepMatrix; }
 
   virtual ~CIccPcsStepMatrix() {}
