@@ -5187,6 +5187,15 @@ bool CIccMpeCalculator::Begin(icElemInterp nInterp, CIccTagMultiProcessElement *
   if (!m_calcFunc->Begin(this, pMPE))
     return false;
 
+  // CWE-400/CWE-834: the walk below calls Begin() on each of the m_nSubElem
+  // sub-elements held in m_SubElem[]. CIccMpeCalculator::Read() rejects any
+  // m_nSubElem >= MAX_CALC_ELEMENTS and sizes m_SubElem[] to the accepted count,
+  // so on a valid element the walk never exceeds the allocation; reject that same
+  // bound here so a corrupted count can't drive an unbounded begin walk.
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   icUInt32Number n;
   for (n=0; n<m_nSubElem; n++) {
     if (m_SubElem[n] && !m_SubElem[n]->Begin(nInterp, pMPE))
@@ -5209,6 +5218,15 @@ bool CIccMpeCalculator::Begin(icElemInterp nInterp, CIccTagMultiProcessElement *
 CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
 {
   //CIccApplyTagMpe *pApplyTagEx = (CIccApplyTagMpe*)pApplyTag;
+
+  // CWE-400/CWE-834: this builds the parallel apply object whose loop below clones
+  // each of the m_nSubElem sub-elements into pApply->m_SubElem[]. Read() bounds
+  // m_nSubElem by MAX_CALC_ELEMENTS and sizes m_SubElem[] to match; reject the
+  // same bound up front (before any allocation, so no leak) so a corrupted count
+  // can't drive an unbounded clone walk.
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return NULL;
 
   CIccApplyMpeCalculator *pApply = new (std::nothrow) CIccApplyMpeCalculator(this);
 
@@ -5298,8 +5316,15 @@ icValidateStatus CIccMpeCalculator::Validate(std::string sigPath, std::string &s
 
   icUInt32Number i;
 
+  // CWE-400/CWE-834: the walk below validates each of the m_nSubElem sub-elements
+  // in m_SubElem[]. Read() bounds m_nSubElem by MAX_CALC_ELEMENTS and sizes
+  // m_SubElem[] to the accepted count; clamp the loop to that same bound (as Read()
+  // itself does) so a corrupted count can't drive an unbounded validation walk.
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+
   if (m_SubElem) {
-    for (i=0; i<m_nSubElem; i++) {
+    for (i=0; i<nSub; i++) {
       if (m_SubElem[i])
         rv = icMaxStatus(rv, m_SubElem[i]->Validate(mpeSigPath, sReport, pMPE, pProfile));
     }
@@ -5340,6 +5365,14 @@ bool CIccMpeCalculator::IsLateBinding() const
 {
   icUInt32Number i;
 
+  // CWE-400/CWE-834: the walk below queries each of the m_nSubElem sub-elements in
+  // m_SubElem[]. Read() bounds m_nSubElem by MAX_CALC_ELEMENTS and sizes m_SubElem[]
+  // to match; reject that same bound so a corrupted count can't drive an unbounded
+  // walk (a missing late-binding answer is the safe default).
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   if (m_SubElem) {
     for (i=0; i<m_nSubElem; i++) {
       if (m_SubElem[i] && m_SubElem[i]->IsLateBinding())
@@ -5362,6 +5395,14 @@ bool CIccMpeCalculator::IsLateBinding() const
  ******************************************************************************/
 bool CIccMpeCalculator::IsLateBindingReflectance() const
 {
+  // CWE-400/CWE-834: the walk below queries each of the m_nSubElem sub-elements in
+  // m_SubElem[]. Read() bounds m_nSubElem by MAX_CALC_ELEMENTS and sizes m_SubElem[]
+  // to match; reject that same bound so a corrupted count can't drive an unbounded
+  // walk (a missing late-binding answer is the safe default).
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   icUInt32Number i;
 
   if (m_SubElem) {
