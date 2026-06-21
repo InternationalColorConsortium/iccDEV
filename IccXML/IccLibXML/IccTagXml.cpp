@@ -1917,8 +1917,15 @@ bool CIccTagXmlMultiLocalizedUnicode::ToXml(std::string &xml, std::string blanks
 
   for (i=m_Strings->begin(); i!=m_Strings->end(); i++) {
     icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+    // Pack the 16-bit language/country codes into the 32-bit signature expected by
+    // icGetSigStr(). m_nLanguageCode is a 16-bit unsigned that promotes to (signed)
+    // int before the shift, so a high-bit language code (>= 0x8000) makes
+    // m_nLanguageCode<<16 overflow into negative territory -- signed overflow UB,
+    // and the resulting negative int silently wraps when passed to icGetSigStr's
+    // icUInt32Number parameter. Cast to icUInt32Number first so the whole pack is
+    // computed in well-defined unsigned arithmetic.
     icXmlDumpLocalizedText(xml, blanks, "LocalizedText",
-                           icGetSigStr(data, 256, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                           icGetSigStr(data, 256, ((icUInt32Number)i->m_nLanguageCode<<16) + i->m_nCountryCode),
                            bufstr);
   }
   return true;
@@ -4578,8 +4585,11 @@ bool CIccTagXmlProfileSequenceId::ToXml(std::string &xml, std::string blanks/* =
 
       for (i=pid->m_desc.m_Strings->begin(); i!=pid->m_desc.m_Strings->end(); i++) {
         icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+        // Cast to icUInt32Number before the shift: see CIccTagXmlMultiLocalizedUnicode::ToXml
+        // -- m_nLanguageCode<<16 otherwise promotes to signed int and overflows for
+        // language codes >= 0x8000, then wraps when handed to icGetSigStr.
         icXmlDumpLocalizedText(xml, blanks + " ", "LocalizedText",
-                               icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                               icGetSigStr(data, bufSize, ((icUInt32Number)i->m_nLanguageCode<<16) + i->m_nCountryCode),
                                bufstr);
       }
     }
@@ -4669,8 +4679,10 @@ bool CIccTagXmlDict::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
         for (i=nv->GetNameLocalized()->m_Strings->begin(); i!=nv->GetNameLocalized()->m_Strings->end(); i++) {
           icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+          // Cast to icUInt32Number before the shift: see CIccTagXmlMultiLocalizedUnicode::ToXml
+          // -- avoids signed-int overflow / value-changing wrap for language codes >= 0x8000.
           icXmlDumpLocalizedText(xml, blanks + "  ", "LocalizedName",
-                                 icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                                 icGetSigStr(data, bufSize, ((icUInt32Number)i->m_nLanguageCode<<16) + i->m_nCountryCode),
                                  bufstr);
         }
       }
@@ -4679,8 +4691,10 @@ bool CIccTagXmlDict::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
         for (i=nv->GetValueLocalized()->m_Strings->begin(); i!=nv->GetValueLocalized()->m_Strings->end(); i++) {
           icUtf16ToUtf8(bufstr, i->GetBuf(), i->GetLength());
+          // Cast to icUInt32Number before the shift: see CIccTagXmlMultiLocalizedUnicode::ToXml
+          // -- avoids signed-int overflow / value-changing wrap for language codes >= 0x8000.
           icXmlDumpLocalizedText(xml, blanks + "  ", "LocalizedValue",
-                                 icGetSigStr(data, bufSize, (i->m_nLanguageCode<<16) + i->m_nCountryCode),
+                                 icGetSigStr(data, bufSize, ((icUInt32Number)i->m_nLanguageCode<<16) + i->m_nCountryCode),
                                  bufstr);
         }
       }
