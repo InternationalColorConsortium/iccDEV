@@ -432,7 +432,9 @@ public:
           }
         }
         else if (m_pFirstProfile->m_Header.version >= icVersionNumberV5) {
-
+          // V5+ source profiles carry colorant naming through the V5 machinery
+          // rather than the legacy colorantTable tag, so there is nothing to
+          // copy across for the CLR input space here.
         }
       }
 
@@ -445,7 +447,8 @@ public:
             }
           }
           else if (m_pLastProfile->m_Header.version >= icVersionNumberV5) {
-
+            // V5+ destination DeviceLink: no legacy colorantTableOut tag to copy;
+            // V5 colorant naming is handled through the V5 machinery elsewhere.
           }
         }
         else if (m_pLastProfile->m_Header.version < icVersionNumberV5) {
@@ -455,7 +458,8 @@ public:
           }
         }
         else if (m_pLastProfile->m_Header.version >= icVersionNumberV5) {
-
+          // V5+ destination profile: no legacy colorantTable tag to copy; V5
+          // colorant naming is handled through the V5 machinery elsewhere.
         }
       }
 

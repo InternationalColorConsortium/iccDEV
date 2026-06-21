@@ -7389,7 +7389,9 @@ icStatusCMM CIccXformNamedColor::Apply(CIccApplyXform*  /* pApply */, icFloatNum
 icStatusCMM CIccXformNamedColor::SetSrcSpace(icColorSpaceSignature nSrcSpace)
 {
   if (m_pArray) {
-
+    // Array-backed named-color xform: the source space is accepted as-is. The
+    // PCS/device/named-data validation below applies only to the single-tag
+    // (m_pTag) case.
   }
   else if (m_pTag) {
     CIccTagNamedColor2 *pTag = m_pTag;
@@ -7422,7 +7424,9 @@ icStatusCMM CIccXformNamedColor::SetDestSpace(icColorSpaceSignature nDestSpace)
     return icCmmStatBadSpaceLink;
 
   if (m_pArray) {
-
+    // Array-backed named-color xform: the destination space is accepted as-is.
+    // The PCS/device/named-data validation below applies only to the single-tag
+    // (m_pTag) case.
   }
   else if (m_pTag) {
     CIccTagNamedColor2 *pTag = (CIccTagNamedColor2*)m_pTag;
