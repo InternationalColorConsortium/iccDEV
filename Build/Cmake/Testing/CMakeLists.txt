@@ -247,6 +247,99 @@ function(iccdev_add_pawg_q4_xyz_pcs_decode_test)
   endif()
 endfunction()
 
+# Guards iccPawgReport's Q2 curve-invertibility scope (#1458): the round-trip
+# inverse-error metric must apply to tone-reproduction curves (rTRC/gTRC/bTRC/
+# kTRC) only, not to LUT A/B/M shaper curves.  A B2A output shaper curve
+# legitimately has a non-invertible dark-end clamping plateau, so thresholding
+# its inverse error spuriously WARNed correct CMYK output profiles (APTEC 0.0977,
+# CRPC6 0.1406).  The test builds a B2A whose output curves carry that plateau
+# and asserts the shaper inverse error is no longer thresholded, while a tone
+# curve carrying the same plateau is still flagged.  Header-only metrics, so it
+# just needs the IccPawgReport include dir + IccProfLib.
+function(iccdev_add_pawg_q2_tonecurves_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgQ2ToneCurvesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-q2-tonecurves-only.cpp"
+  )
+  target_include_directories(iccPawgQ2ToneCurvesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgQ2ToneCurvesTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgQ2ToneCurvesTest)
+
+  add_test(
+    NAME iccdev.pawg-q2-tonecurves-only
+    COMMAND "$<TARGET_FILE:iccPawgQ2ToneCurvesTest>"
+  )
+  set_tests_properties(iccdev.pawg-q2-tonecurves-only PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;quality;invertibility;regression"
+  )
+  if(WIN32)
+    set(_pawg_q2_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgQ2ToneCurvesTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_q2_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-q2-tonecurves-only PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_q2_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards iccPawgReport's Q4 characterization round-trip
+# (iccquality::evaluate_characterization): it must (1) compare predicted output
+# against the embedded measurement data in ABSOLUTE colorimetric -- the only
+# intent defined to match measured colorimetry -- and (2) keep every CGATS data
+# row including those with a text SAMPLE_NAME column.  The pre-fix code used the
+# perceptual A2B0 table (~7 dE on accurate profiles) and dropped any row with a
+# non-numeric cell (1617-patch targets collapsed to ~49).  Header-only metrics,
+# so the test just needs the IccPawgReport include dir + IccProfLib.
+function(iccdev_add_pawg_q4_characterization_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgQ4CharacterizationTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-q4-characterization.cpp"
+  )
+  target_include_directories(iccPawgQ4CharacterizationTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgQ4CharacterizationTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgQ4CharacterizationTest)
+
+  add_test(
+    NAME iccdev.pawg-q4-characterization
+    COMMAND "$<TARGET_FILE:iccPawgQ4CharacterizationTest>"
+  )
+  set_tests_properties(iccdev.pawg-q4-characterization PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;quality;characterization;regression"
+  )
+  if(WIN32)
+    set(_pawg_q4_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgQ4CharacterizationTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_q4_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-q4-characterization PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_q4_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards CIccCmmSearch::AddXform profile ownership (#1332): the search CMM
 # rejects a NamedColor profile (no search LUT) and, like the base AddXform
 # contract (#1327), must free it.  The helper feeds a NamedColor profile through
@@ -707,6 +800,8 @@ if(WIN32)
   iccdev_add_fileio_seek_tell_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
+  iccdev_add_pawg_q2_tonecurves_test()
+  iccdev_add_pawg_q4_characterization_test()
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
@@ -767,6 +862,8 @@ iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
+iccdev_add_pawg_q2_tonecurves_test()
+iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()

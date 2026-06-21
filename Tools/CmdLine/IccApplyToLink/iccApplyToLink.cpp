@@ -139,7 +139,7 @@ public:
 
   virtual bool setFile(const char* szOutputFile)
   {
-    m_filename = szOutputFile;
+    m_filename = icSanitizeFileName( szOutputFile );
 
     return true;
   }
@@ -151,7 +151,7 @@ public:
 
   virtual void setTitle(const char* szTitle)
   {
-    m_title = szTitle;
+    m_title = icSanitizeTagText( szTitle );
   }
 
   virtual void setCmm(CIccCmm* pCmm)
@@ -224,7 +224,8 @@ public:
         const CIccTag* pDesc = pProfile->FindTagConst(icSigProfileDescriptionTag);
         std::string text;
         if (icGetTagText(pDesc, text)) {
-          fprintf(m_f, "# - %s\n", text.c_str());
+          std::string cleanText = icSanitizeTagText( text );
+          fprintf(m_f, "# - %s\n", cleanText.c_str());
         }
 
       }
@@ -289,7 +290,7 @@ public:
 
   virtual bool setFile(const char* szOutputFile)
   {
-    m_filename = szOutputFile;
+    m_filename = icSanitizeFileName( szOutputFile );
 
     return true;
   }
@@ -301,7 +302,7 @@ public:
 
   virtual void setTitle(const char* szTitle)
   {
-    m_title = szTitle;
+    m_title = icSanitizeTagText( szTitle );
   }
 
   virtual void setCmm(CIccCmm* pCmm)

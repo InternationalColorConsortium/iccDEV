@@ -83,6 +83,7 @@
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
+#include "../IccCmdLineUtil.h"
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -117,7 +118,10 @@ static bool WriteStringToStdout(const std::string &contents)
   if (contents.empty())
     return true;
 
-  if (fwrite(contents.c_str(), 1, contents.length(), stdout) != contents.length()) {
+  // remove escape sequences and malicious commands
+  std::string cleanedContents = icSanitizeTagText( contents );
+  
+  if (fwrite(cleanedContents.c_str(), 1, cleanedContents.length(), stdout) != cleanedContents.length()) {
     fprintf(stderr, "Unable to write report to stdout\n");
     return false;
   }

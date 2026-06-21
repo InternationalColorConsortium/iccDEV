@@ -119,6 +119,47 @@ inline std::string icSanitizeConsoleText(const std::string& text)
 
 /******************************************************************************/
 
+// we want to preserve CRLF and tab, but not control characters
+inline std::string icSanitizeTagText(const char* szText)
+{
+  static const char hex[] = "0123456789ABCDEF";
+  std::string result;
+
+  if (!szText)
+    return result;
+
+  for (const unsigned char *p = (const unsigned char*)szText; *p; p++) {
+    unsigned char ch = *p;
+
+    switch (ch) {
+    case '\n':
+    case '\r':
+    case '\t':
+      result += (char)ch;
+      break;
+    default:
+      if (ch < 0x20 || ch >= 0x7f) {  // && <= 0xFF implied by data type
+        result += "\\x";
+        result += hex[(ch >> 4) & 0xf];
+        result += hex[ch & 0xf];
+      }
+      else {
+        result += (char)ch;
+      }
+      break;
+    }
+  }
+
+  return result;
+}
+
+inline std::string icSanitizeTagText(const std::string& text)
+{
+  return icSanitizeTagText(text.c_str());
+}
+
+/******************************************************************************/
+
 // NOTE - we cannot filter out path characters /\ without breaking output
 // But we can remove non-ASCII and high ASCII that cause problems
 inline std::string icSanitizeFileName(const char* szText)
@@ -142,7 +183,7 @@ inline std::string icSanitizeFileName(const char* szText)
       result += "T";
       break;
     default:
-      if (ch < 0x20 || (ch >= 0x7f)) {  // && <= 0xFF implied by data type
+      if (ch < 0x20 || ch >= 0x7f) {  // && <= 0xFF implied by data type
         result += "_";
       }
       else {

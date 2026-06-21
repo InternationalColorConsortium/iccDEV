@@ -246,13 +246,23 @@ public:
     switch(m_nType) {
       case icConvert8Bit:
         for (i=0; i<m_nSamples; i++) {
-          snprintf(buf, bufSize, " %3d", (icUInt8Number)(pData[i]*255.0 + 0.5));
+          // Clamp to [0,1] (the !(v>=0) test also catches NaN) before scaling:
+          // CLUT sample data from a malformed profile may fall outside the
+          // normalized range, and an out-of-range float->uint cast is UB. The
+          // sibling scalar serializer (icXmlDumpArrayValue) clamps the same way.
+          icFloatNumber v = pData[i];
+          if (!(v >= 0.0)) v = 0.0;
+          else if (v > 1.0) v = 1.0;
+          snprintf(buf, bufSize, " %3d", (icUInt8Number)(v*255.0 + 0.5));
           *m_xml += buf;
         }
         break;
       case icConvert16Bit:
         for (i=0; i<m_nSamples; i++) {
-          snprintf(buf, bufSize, " %5d", (icUInt16Number)(pData[i]*65535.0 + 0.5));
+          icFloatNumber v = pData[i];
+          if (!(v >= 0.0)) v = 0.0;
+          else if (v > 1.0) v = 1.0;
+          snprintf(buf, bufSize, " %5d", (icUInt16Number)(v*65535.0 + 0.5));
           *m_xml += buf;
         }
         break;

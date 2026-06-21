@@ -1258,6 +1258,134 @@ run_registered_private_profile() {
   pass_case "$name" "registered private tag recognized from registry snapshot"
 }
 
+# --- S3 header manufacturer/creator registry (issue #1459) ------------------
+# Emit a minimal RGB profile whose header 'manufacturer' (offset 48) and
+# 'creator' (offset 80) fields are set to the given 4CC hex strings. Per
+# ICC.1:2022-05 section 7.2.17 these must match a signature in the Manufacturer
+# Signatures registry (or be zero); S3 validates them against the generated
+# IccSignatureRegistry.h snapshot.
+emit_header_sig_profile() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import pathlib, struct, sys
+dst = pathlib.Path(sys.argv[1])
+manufacturer = bytes.fromhex(sys.argv[2])
+creator = bytes.fromhex(sys.argv[3])
+size = 160
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[48:52] = manufacturer            # header 'manufacturer' signature
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[80:84] = creator                 # header 'creator' signature
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"arts"               # registered private tag (keeps S11/C6 happy)
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", 16)
+data[144:148] = b"data"
+dst.write_bytes(data)
+PY
+}
+
+run_s3_header_signature_case() {
+  local name="$1"        # test name
+  local manuf_hex="$2"   # manufacturer 4CC hex (8 chars)
+  local creator_hex="$3" # creator 4CC hex (8 chars)
+  local expect="$4"      # OK | WARN -- expected S3 verdict
+  local needle="$5"      # substring that must appear in the S3 detail (or "")
+  local profile="$OUTDIR/s3-${name}.icc"
+  local logfile="$OUTDIR/s3-${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$profile"
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    fail_case "$name" "python3 unavailable to synthesize profile"
+    return
+  fi
+  if ! emit_header_sig_profile "$profile" "$manuf_hex" "$creator_hex"; then
+    fail_case "$name" "failed to generate header-signature profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$profile" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+
+  local s3_line
+  s3_line="$(grep -E '^  \[(OK  |WARN|FAIL|N/A |GAP |--  )\] S3[[:space:]]' "$logfile")"
+  if [ -z "$s3_line" ]; then
+    fail_case "$name" "S3 item missing from report"
+    return
+  fi
+  if ! printf '%s\n' "$s3_line" | grep -F -q "[$expect"; then
+    fail_case "$name" "S3 expected $expect; got: $s3_line"
+    return
+  fi
+  if [ -n "$needle" ] && ! grep -F -q "$needle" "$logfile"; then
+    fail_case "$name" "S3 detail missing expected text: $needle"
+    return
+  fi
+
+  pass_case "$name" "S3 reported $expect as expected"
+}
+
+run_s3_header_signature_tests() {
+  # Registered manufacturer + creator: 'KODA' (Kodak) and 'APPL' (Apple) are both
+  # in the Manufacturer Signatures registry. The pre-#1459 validator wrongly
+  # checked these against the private *tag* ranges, where 'KODA' does not appear,
+  # and falsely warned. This is the regression guard for the fix.
+  run_s3_header_signature_case "manufacturer-creator-registered" \
+    "4b4f4441" "4150504c" "OK  " ""
+
+  # Unregistered creator 'ZZZZ': must still warn, and the detail must name the
+  # Manufacturer Signatures registry (not the old "local registry" wording).
+  run_s3_header_signature_case "creator-unregistered-warns" \
+    "00000000" "5a5a5a5a" "WARN" "Manufacturer Signatures registry"
+
+  # 'XRCM' appears in the ICC-published CGATS21_CRPC6.icc but is NOT in the public
+  # Manufacturer Signatures registry. S3 correctly continues to warn until the ICC
+  # adds it (issue #1459 Segment A, governance). This documents that known gap.
+  run_s3_header_signature_case "creator-xrcm-governance-gap" \
+    "00000000" "5852434d" "WARN" "XRCM"
+
+  # 'none' (0x6E6F6E65) is a pervasive "no manufacturer" placeholder (AdobeRGB1998,
+  # ROMM-RGB, ...). It is neither zero nor registered, so S3 still WARNs per
+  # section 7.2.17, but with softened wording flagging it as a known placeholder
+  # rather than suspect data (issue #1459).
+  run_s3_header_signature_case "manufacturer-none-placeholder-warn" \
+    "6e6f6e65" "00000000" "WARN" "known 'no manufacturer' placeholder"
+
+  # 'ICC ' (0x49434320) is used by the ICC's own reference profiles (and the
+  # iccDEV regression fixtures). Still WARNs (not in the Manufacturer Signatures
+  # registry, which lists SICC/iccd for the consortium), with softened wording;
+  # tracked for registry submission (issue #1459 Segment A).
+  run_s3_header_signature_case "creator-icc-reference-warn" \
+    "00000000" "49434320" "WARN" "International Color Consortium reference-profile signature"
+}
+
 echo "=== iccPawgReport PAWG regression and security tests ==="
 run_static_source_audit
 run_binary_size_guard
@@ -1277,6 +1405,7 @@ run_standard_tag_valid_shebang_signature_profile
 run_standard_tag_invalid_textsig_signature_profile
 run_standard_tag_valid_textsig_signature_profile
 run_registered_private_profile
+run_s3_header_signature_tests
 echo "iccPawgReport PAWG regression and security tests: $PASS passed, $FAIL failed, $TOTAL total"
 
 if [ "$FAIL" -ne 0 ]; then
