@@ -2466,6 +2466,15 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
   int i;
 
+  // CWE-400/CWE-834: the walk below iterates m_nSubElem over m_SubElem[].
+  // CIccMpeCalculator::Read() caps m_nSubElem at MAX_CALC_ELEMENTS and allocates
+  // m_SubElem to match (IccMpeCalc.cpp), so on a valid element the walk never
+  // exceeds the allocation; assert that same bound so a corrupted count can't
+  // drive an unbounded serialization walk.
+  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  if (m_nSubElem > MAX_CALC_ELEMENTS)
+    return false;
+
   if (m_SubElem && m_nSubElem) {
     xml += blanks2 + "<SubElements>\n";
     for (i=0; i<(int)m_nSubElem; i++) {

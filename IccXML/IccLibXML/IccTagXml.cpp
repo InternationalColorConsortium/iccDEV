@@ -840,6 +840,17 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
   int i, j;
   std::string str;
 
+  // CWE-400/CWE-834: the entry walk below iterates m_nSize and, per entry, the
+  // device-coord walk iterates m_nDeviceCoords. Read() caps these at
+  // kMaxNamedColorEntries / kMaxNamedColorDeviceCoords and sizes the entry list
+  // and each entry's deviceCoords[] to match (IccTagBasic.cpp), so on a valid
+  // tag the loops never exceed the allocations; assert those same bounds here so
+  // a corrupted count can't drive an unbounded serialization walk.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+  if (m_nSize > kMaxNamedColorEntries || m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+    return false;
+
   snprintf(line, bufSize, "<NamedColors VendorFlag=\"%08x\" CountOfDeviceCoords=\"%d\" DeviceEncoding=\"int16\"", (unsigned int) m_nVendorFlags, (unsigned int) m_nDeviceCoords);
   xml += blanks + line;
 
@@ -1015,8 +1026,14 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
                 coords.ParseArray(pNode->children);
                 icUInt8Number *pBuf = coords.GetBuf();
 
+                // CWE-400/CWE-834: clamp the field to the same load-time bound as
+                // the float branch below (deviceCoords[] is sized to it) so a
+                // corrupted count can't drive an out-of-range copy.
+                const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+                icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+                                              ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
                 icUInt32Number j;
-                for (j = 0; j < m_nDeviceCoords && j < coords.GetSize(); j++) {
+                for (j = 0; j < nDevCoords && j < coords.GetSize(); j++) {
                   pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j] / 255.0f;
                 }
               }
@@ -1026,8 +1043,14 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
                 coords.ParseArray(pNode->children);
                 icUInt16Number *pBuf = coords.GetBuf();
 
+                // CWE-400/CWE-834: clamp the field to the same load-time bound as
+                // the float branch below (deviceCoords[] is sized to it) so a
+                // corrupted count can't drive an out-of-range copy.
+                const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+                icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+                                              ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
                 icUInt32Number j;
-                for (j = 0; j < m_nDeviceCoords && j < coords.GetSize(); j++) {
+                for (j = 0; j < nDevCoords && j < coords.GetSize(); j++) {
                   pNamedColor->deviceCoords[j] = (icFloatNumber)pBuf[j] / 65535.0f;
                 }
               }
@@ -1632,6 +1655,13 @@ bool CIccTagXmlFloatNum<T, A, Tsig>::ToXml(std::string &xml, std::string blanks/
 {
   const size_t bufSize = 512;
   char buf[bufSize];
+
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_Num is
+  // allocated to match; assert the same explicit upper limit used by the FixedNum/Num
+  // siblings so a corrupted count can't drive an unbounded serialization walk.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
 
   if (this->m_nSize==1) {
 #ifdef _WIN32
@@ -2791,6 +2821,15 @@ bool CIccTagXmlCurve::ToXml(std::string &xml, icConvertType nType, std::string b
   const size_t bufSize = 40;
   char buf[bufSize];
   int i;
+
+  // CWE-400/CWE-834: each encoding branch below walks m_Curve over m_nSize.
+  // CIccTagCurve::Read() bounds m_nSize by the tag byte size and allocates
+  // m_Curve to match (IccTagLut.cpp), so on a valid tag the walk never exceeds
+  // the allocation; assert an explicit upper limit so a corrupted count can't
+  // drive an unbounded serialization walk.
+  const icUInt32Number nMaxCurveEntries = 0xffffff;
+  if (m_nSize > nMaxCurveEntries)
+    return false;
 
   if (!m_nSize) {
     xml += blanks + "<Curve/>\n";
