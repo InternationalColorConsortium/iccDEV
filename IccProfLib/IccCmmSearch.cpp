@@ -87,7 +87,13 @@ CIccApplyCmmSearch::CIccApplyCmmSearch(CIccCmm* pBaseCmm) : CIccApplyCmm(pBaseCm
   icUInt16Number nSrcSamples = pCmm->m_dst_to_mid[0]->GetSourceSamples();
 
   m_mid_data.resize(m_nApply);
-  for (size_t i = 0; i < m_nApply; i++) {
+  // CWE-400/CWE-834: m_nApply is derived from the host-attached PCC container
+  // sizes (m_pcc/m_dst_to_mid), not a profile field, and is already bounded to
+  // m_dst_to_mid.size() above; clamp the per-entry allocation walk to the actual
+  // m_mid_data allocation as well so a corrupted count can never run out of
+  // range -- mirrors the defensive clamps on the Apply() walks below.
+  size_t nApply = (m_nApply < m_mid_data.size()) ? m_nApply : m_mid_data.size();
+  for (size_t i = 0; i < nApply; i++) {
     m_mid_data[i].resize(m_nSamples);
   }
   m_pixel.resize(m_nSamples);
@@ -113,7 +119,18 @@ icFloatNumber CIccApplyCmmSearch::costFunc(CIccSearchVec& point)
   CIccCmmSearch* pCmm = (CIccCmmSearch*)m_pCmm;
   icFloatNumber sum = 0.0;
   icFloatNumber div = 0.0;
-  for (size_t i = 0; i < m_nApply; i++) {
+  // CWE-400/CWE-834: the cost walk indexes three parallel containers
+  // (m_dst_to_mid, m_mid_data, m_weight) by i; by construction all are
+  // >= m_nApply, but clamp to the smallest so a corrupted m_nApply can never
+  // index any of them out of range -- same guard form as Apply() above.
+  size_t nApply = m_nApply;
+  if (nApply > pCmm->m_dst_to_mid.size())
+    nApply = pCmm->m_dst_to_mid.size();
+  if (nApply > m_mid_data.size())
+    nApply = m_mid_data.size();
+  if (nApply > pCmm->m_weight.size())
+    nApply = pCmm->m_weight.size();
+  for (size_t i = 0; i < nApply; i++) {
     pCmm->m_dst_to_mid[i]->Apply(&m_pixel[0], &point.vec()[0]);
 
     if (m_bNeedPcsToLab) {
@@ -170,7 +187,7 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
 {
   CIccCmmSearch* pCmm = (CIccCmmSearch*)m_pCmm;
 
-    if (!pCmm->m_src_to_mid.size()) { //src == mid so copy pixel data into mid search pixels
+  if (!pCmm->m_src_to_mid.size()) { //src == mid so copy pixel data into mid search pixels
     // CWE-400/CWE-834: m_nApply is set from container sizes at Begin() and bounds
     // the m_mid_data walk; clamp to the actual allocation so a corrupted count
     // can't drive an unbounded or out-of-range walk.
@@ -194,7 +211,10 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
 
   //Cost function needs delteEab so convert from PCS encoding to Lab for comparisons
   if (m_bNeedPcsToLab) {
-    for (size_t i = 0; i < m_nApply; i++) {
+    // CWE-400/CWE-834: same clamp as the m_mid_data walks above -- bound the
+    // Lab conversion to the actual allocation rather than the raw m_nApply.
+    size_t nApply = (m_nApply < m_mid_data.size()) ? m_nApply : m_mid_data.size();
+    for (size_t i = 0; i < nApply; i++) {
       icLabFromPcs(&m_mid_data[i][0]);
     }
   }
