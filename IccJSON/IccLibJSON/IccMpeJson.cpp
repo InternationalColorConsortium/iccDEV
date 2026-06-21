@@ -1008,12 +1008,12 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
 
   icUInt16Number nIn  = (icUInt16Number)nInInt;
   icUInt16Number nOut = (icUInt16Number)nOutInt;
-  icUInt64Number nEntries64 = (icUInt64Number)nIn * nOut;
-  if (nEntries64 > 0xFFFFFFFFUL) {
-    parseStr += "MatrixElement size is too large\n";
-    return false;
-  }
-  icUInt32Number nEntries = (icUInt32Number)nEntries64;
+  // icJsonValidMatrixChannels has already bounded nIn and nOut to
+  // [1, kIccJsonMaxMatrixChannels] (255), so the entry count is at most
+  // 255*255 = 65025 and always fits icUInt32Number. The former 64-bit
+  // "> 0xFFFFFFFF" overflow guard was therefore unreachable (flagged by
+  // CodeQL cpp/constant-comparison as always false); compute directly.
+  icUInt32Number nEntries = (icUInt32Number)nIn * nOut;
 
   if (j.contains("matrix") && !j["matrix"].is_array()) {
     parseStr += "matrix must be an array in MatrixElement\n";
@@ -1027,7 +1027,7 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   bool bHasMatrix = j.contains("matrix") && j["matrix"].is_array();
   bool bHasConstants = j.contains("constants") && j["constants"].is_array();
 
-  if (bHasMatrix && j["matrix"].size() != nEntries64) {
+  if (bHasMatrix && j["matrix"].size() != nEntries) {
     parseStr += "matrix count does not match MatrixElement size\n";
     return false;
   }
@@ -2230,12 +2230,12 @@ static bool icSpectralMatrixFromJson(const IccJson &j, CIccMpeSpectralMatrix *pM
     return false;
 
   const int nSteps = (int)range.steps;
-  icUInt64Number nMatrixValues64 = (icUInt64Number)nVectors * range.steps;
-  if (nMatrixValues64 > 0x7fffffffUL) {
-    parseStr += "spectral matrix element size is too large\n";
-    return false;
-  }
-  int nMatrixValues = (int)nMatrixValues64;
+  // nVectors is bounded to [1, kIccJsonMaxMatrixChannels] (255) above and
+  // range.steps is a 16-bit sample count (<= 65535), so the value count is at
+  // most 255*65535 = 16711425 and always fits a signed int. The former 64-bit
+  // "> 0x7fffffff" overflow guard was therefore unreachable (flagged by CodeQL
+  // cpp/constant-comparison as always false); compute directly.
+  int nMatrixValues = nVectors * (int)range.steps;
 
   if (!pMtx->SetSize((icUInt16Number)nIn, (icUInt16Number)nOut, range)) {
     parseStr += "Unable to SetSize in spectral matrix element\n";
