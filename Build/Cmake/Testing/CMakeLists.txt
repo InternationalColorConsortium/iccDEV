@@ -1092,6 +1092,14 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.specsep-usage-exit-code-regression
+  120
+  "iccdev;specsep;tiff;usage;exitcode;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1514-specsep-usage-exit-code-regression-tests.sh"
+)
+
+iccdev_add_script_test(
   iccdev.dump-profile-header-regression
   120
   "iccdev;dump;profile;header;regression;asan"
