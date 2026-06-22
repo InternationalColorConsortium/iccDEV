@@ -61,6 +61,7 @@
  */
 
 #include "IccColorimetry.h"
+#include "IccTagBasic.h"   // CIccTagSpectralViewingConditions (built-in obs/illum tables)
 #include <cmath>
 #include <cstring>
 
@@ -297,6 +298,33 @@ void icApplyWeightingTable(const icSpectralRange &range, const icFloatNumber *pW
   pXYZ[2] = (icFloatNumber)Z;
 }
 
+const icFloatNumber *icGetStandardObserver(icStandardObserver obs, icSpectralRange &outRange)
+{
+  // iccDEV's built-in CMF tables live as file-static data reachable only through
+  // CIccTagSpectralViewingConditions::getObserver(). Select the standard id on a
+  // throwaway viewing-conditions tag (no custom data) and let getObserver() return
+  // the shared table -- a single source of truth, no duplicated curves here. The
+  // returned pointer is into program-lifetime static storage, not the temporary,
+  // so it stays valid after vc is destroyed.
+  CIccTagSpectralViewingConditions vc;
+  icSpectralRange none;
+  memset(&none, 0, sizeof(none));
+  vc.setObserver(obs, none, NULL);
+  const icFloatNumber *p = vc.getObserver(outRange);
+  return (p && outRange.steps) ? p : NULL;   // nullptr if obs has no built-in table
+}
+
+const icFloatNumber *icGetStandardIlluminant(icIlluminant illum, icSpectralRange &outRange)
+{
+  // Same indirection as icGetStandardObserver for the built-in illuminant SPDs.
+  CIccTagSpectralViewingConditions vc;
+  icSpectralRange none;
+  memset(&none, 0, sizeof(none));
+  vc.setIlluminant(illum, none, NULL);
+  const icFloatNumber *p = vc.getIlluminant(outRange);
+  return (p && outRange.steps) ? p : NULL;   // nullptr if illum has no built-in table
+}
+
 //==========================================================================
 // CIccColorimetricCalculator
 //==========================================================================
@@ -337,6 +365,20 @@ bool CIccColorimetricCalculator::SetWeightingTable(const icSpectralRange &range,
   m_bHaveWt = true;
   m_bReady = false;
   return true;
+}
+
+bool CIccColorimetricCalculator::SetStandardObserver(icStandardObserver obs)
+{
+  icSpectralRange range;
+  const icFloatNumber *p = icGetStandardObserver(obs, range);
+  return p ? SetObserver(range, p) : false;   // SetObserver copies, so p need not persist
+}
+
+bool CIccColorimetricCalculator::SetStandardIlluminant(icIlluminant illum)
+{
+  icSpectralRange range;
+  const icFloatNumber *p = icGetStandardIlluminant(illum, range);
+  return p ? SetIlluminant(range, p) : false;
 }
 
 bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZCalcMethod method,

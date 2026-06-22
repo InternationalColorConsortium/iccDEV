@@ -313,6 +313,68 @@ void testWeightingFreeFunctions()
   }
 }
 
+// ---- Part E: built-in standard observer/illuminant accessors --------------------
+void testStandardAccessors()
+{
+  // E1/E2: the two built-in CIE observers resolve to an 81-sample 380-780 nm table.
+  const icStandardObserver knownObs[2] = { icStdObs1931TwoDegrees, icStdObs1964TenDegrees };
+  for (int i = 0; i < 2; i++) {
+    icSpectralRange r;
+    const icFloatNumber *p = icGetStandardObserver(knownObs[i], r);
+    bool ok = p && r.steps == 81
+           && std::fabs((double)icF16toF(r.start) - 380.0) < 1.0
+           && std::fabs((double)icF16toF(r.end)   - 780.0) < 1.0;
+    check(ok, "icGetStandardObserver returns built-in 380-780@5nm table", 0.0);
+  }
+
+  // E3: an observer with no built-in data returns nullptr (not a stale/garbage ptr).
+  {
+    icSpectralRange r;
+    check(icGetStandardObserver(icStdObsUnknown, r) == NULL,
+          "icGetStandardObserver(unknown) -> nullptr", 0.0);
+  }
+
+  // E4: the four built-in illuminants resolve; a non-built-in one (F2) returns null.
+  const icIlluminant knownIll[4] = { icIlluminantD50, icIlluminantD65, icIlluminantD93, icIlluminantA };
+  for (int i = 0; i < 4; i++) {
+    icSpectralRange r;
+    const icFloatNumber *p = icGetStandardIlluminant(knownIll[i], r);
+    check(p && r.steps == 81, "icGetStandardIlluminant returns built-in 81-sample SPD", 0.0);
+  }
+  {
+    icSpectralRange r;
+    check(icGetStandardIlluminant(icIlluminantF2, r) == NULL,
+          "icGetStandardIlluminant(F2, no built-in) -> nullptr", 0.0);
+  }
+
+  // E6: real-data anchor. Reducing a perfect diffuser with the built-in D50 SPD and
+  // 1931 2-deg observer (iccDEV's own 5 nm rectangular sum) must reproduce the D50
+  // white point: Y == 1 exactly and X,Z within a band of the canonical 0.9642 /
+  // 0.8249 (iccDEV's 5 nm tables sit ~5e-4 low on Z, well inside 2e-3). This pins
+  // that the accessors hand back the correct tables and the baseline integrates
+  // them correctly -- it anchors the plumbing, not a reference/registry method.
+  {
+    CIccColorimetricCalculator calc;
+    icSpectralRange obsR;
+    const icFloatNumber *obs = icGetStandardObserver(icStdObs1931TwoDegrees, obsR);
+    bool ready = obs
+              && calc.SetStandardObserver(icStdObs1931TwoDegrees)
+              && calc.SetStandardIlluminant(icIlluminantD50)
+              && calc.Prepare(obsR, icXYZCalcDirectSum);
+    check(ready, "D50 anchor: standard obs/illum prepared on built-in grid", 0.0);
+    if (ready) {
+      std::vector<icFloatNumber> white(obsR.steps, (icFloatNumber)1.0);
+      icFloatNumber xyz[3] = { 0, 0, 0 };
+      calc.ReflectanceToXYZ(&white[0], xyz);
+      std::printf("[colorimetry-methods] D50/1931 white point = %.5f %.5f %.5f\n",
+                  (double)xyz[0], (double)xyz[1], (double)xyz[2]);
+      check(std::fabs((double)xyz[1] - 1.0)    < TOL_EXACT, "D50 anchor: Y == 1", std::fabs((double)xyz[1] - 1.0));
+      check(std::fabs((double)xyz[0] - 0.9642) < 2e-3, "D50 anchor: X ~ 0.9642", std::fabs((double)xyz[0] - 0.9642));
+      check(std::fabs((double)xyz[2] - 0.8249) < 2e-3, "D50 anchor: Z ~ 0.8249", std::fabs((double)xyz[2] - 0.8249));
+    }
+  }
+}
+
 } // namespace
 
 int main()
@@ -321,6 +383,7 @@ int main()
   testSameGrid();
   testDifferingGrids();
   testWeightingFreeFunctions();
+  testStandardAccessors();
 
   if (g_fail) {
     std::fprintf(stderr, "[colorimetry-methods] %d invariant(s) failed\n", g_fail);

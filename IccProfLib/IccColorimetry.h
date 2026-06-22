@@ -142,6 +142,27 @@ ICCPROFLIB_API bool icComputeWeightingTable(const icSpectralRange &obsRange, con
 ICCPROFLIB_API void icApplyWeightingTable(const icSpectralRange &range, const icFloatNumber *pWeights,
                                           const icFloatNumber *pReflectance, icFloatNumber *pXYZ);
 
+/**
+ * Fetch one of iccDEV's built-in CIE colour-matching-function tables (380-780 nm
+ * @ 5 nm = 81 samples, laid out as consecutive xbar,ybar,zbar blocks -- exactly the
+ * 3*steps form SetObserver() expects). Fills outRange and returns the shared table,
+ * or nullptr if obs has no built-in data (only icStdObs1931TwoDegrees and
+ * icStdObs1964TenDegrees do). The returned pointer is program-lifetime static data
+ * (the same table CIccTagSpectralViewingConditions uses); do not free it.
+ */
+ICCPROFLIB_API const icFloatNumber *icGetStandardObserver(icStandardObserver obs,
+                                                          icSpectralRange &outRange);
+
+/**
+ * Fetch one of iccDEV's built-in relative illuminant SPD tables (380-780 nm @ 5 nm
+ * = 81 samples, the form SetIlluminant() expects). Fills outRange and returns the
+ * shared table, or nullptr if illum has no built-in data (only icIlluminantD50,
+ * icIlluminantD65, icIlluminantD93 and icIlluminantA do). The returned pointer is
+ * program-lifetime static data; do not free it.
+ */
+ICCPROFLIB_API const icFloatNumber *icGetStandardIlluminant(icIlluminant illum,
+                                                            icSpectralRange &outRange);
+
 // NOTE: ingesting the registry weighting-table CSVs is intentionally NOT part of
 // this live library. The registry values are effectively static; an external
 // "parallel" loader/converter (run by a maintainer) can fetch the registry CSVs
@@ -169,9 +190,15 @@ public:
   /// Set the colour-matching functions: pObserver holds 3*range.steps samples as
   /// consecutive xbar, ybar, zbar blocks. Resets the prepared operator.
   bool SetObserver(const icSpectralRange &range, const icFloatNumber *pObserver);     // 3*range.steps
+  /// Convenience: set the observer from a built-in CIE table (see
+  /// icGetStandardObserver). Returns false if obs has no built-in data.
+  bool SetStandardObserver(icStandardObserver obs);
   /// Set the illuminant SPD: pIlluminant holds range.steps relative-power samples.
   /// Resets the prepared operator.
   bool SetIlluminant(const icSpectralRange &range, const icFloatNumber *pIlluminant); // range.steps
+  /// Convenience: set the illuminant from a built-in SPD table (see
+  /// icGetStandardIlluminant). Returns false if illum has no built-in data.
+  bool SetStandardIlluminant(icIlluminant illum);
   /// Supply an external weighting table (e.g. a registry LWL CSV converted to
   /// 3*range.steps Wx,Wy,Wz weights). Used only by icXYZCalcWeighting when its
   /// range matches measRange exactly; resets the prepared operator.
