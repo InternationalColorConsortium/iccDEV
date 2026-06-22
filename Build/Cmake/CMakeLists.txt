@@ -1637,6 +1637,7 @@ IF(ENABLE_TOOLS)
     ADD_SUBDIRECTORY(Tools/IccApplySearch)
   ENDIF()
   ADD_SUBDIRECTORY(Tools/IccProfileVisualize)
+  ADD_SUBDIRECTORY(Tools/IccProfilePlot)
 
   # Ensure IccXML-dependent tools are built after IccXML library (safety net)
   IF(ENABLE_ICCXML)
