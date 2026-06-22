@@ -375,6 +375,62 @@ void testStandardAccessors()
   }
 }
 
+// ---- Part G: emissive / radiant reduction --------------------------------------
+void testEmissive()
+{
+  // Built-in D50 SPD doubles as the adopted white AND the emitted spectrum: a source
+  // radiating its own adopted white reproduces the white point, so the emissive
+  // reduction must give the SAME D50 white point as the reflectance perfect-diffuser
+  // anchor (0.96425 / 1 / 0.82468), Y == 1. This pins the no-illuminant emissive
+  // normalization (k = sum(ybar*white), mirroring CIccPcc::getEmissiveObserver).
+  icSpectralRange r;
+  const icFloatNumber *d50 = icGetStandardIlluminant(icIlluminantD50, r);
+  CIccColorimetricCalculator calc;
+  bool ready = d50
+            && calc.SetStandardObserver(icStdObs1931TwoDegrees)
+            && calc.SetEmissiveWhite(r, d50)
+            && calc.PrepareEmissive(r);
+  check(ready, "emissive: observer + adopted white prepared", 0.0);
+  if (ready) {
+    icFloatNumber xyz[3] = { 0, 0, 0 };
+    calc.RadianceToXYZ(d50, xyz);   // emit exactly the adopted white spectrum
+    std::printf("[colorimetry-methods] emissive D50-white radiance = %.5f %.5f %.5f\n",
+                (double)xyz[0], (double)xyz[1], (double)xyz[2]);
+    check(std::fabs((double)xyz[1] - 1.0)    < TOL_EXACT, "emissive: adopted white Y == 1", std::fabs((double)xyz[1] - 1.0));
+    check(std::fabs((double)xyz[0] - 0.9642) < 2e-3, "emissive: adopted white X ~ 0.9642", std::fabs((double)xyz[0] - 0.9642));
+    check(std::fabs((double)xyz[2] - 0.8249) < 2e-3, "emissive: adopted white Z ~ 0.8249", std::fabs((double)xyz[2] - 0.8249));
+
+    // Emissive XYZ scales with radiance magnitude (unlike reflectance): twice the
+    // radiance -> twice the XYZ, so a 2x-bright white emitter has Y = 2.
+    std::vector<icFloatNumber> twice(r.steps);
+    for (int i = 0; i < (int)r.steps; i++) twice[i] = (icFloatNumber)(2.0 * (double)d50[i]);
+    icFloatNumber xyz2[3] = { 0, 0, 0 };
+    calc.RadianceToXYZ(&twice[0], xyz2);
+    double e = 0.0;
+    for (int k = 0; k < 3; k++) e = std::max(e, std::fabs((double)xyz2[k] - 2.0 * (double)xyz[k]));
+    check(e < 1e-5, "emissive: radiance scales XYZ (2x white -> Y=2)", e);
+
+    // Operator linearity on emissive inputs.
+    std::vector<icFloatNumber> l2(r.steps), mix(r.steps);
+    for (int i = 0; i < (int)r.steps; i++) {
+      l2[i]  = (icFloatNumber)((double)d50[i] * (0.5 + 0.4 * std::sin(i * 0.2)));
+      mix[i] = (icFloatNumber)(0.3 * (double)d50[i] + 0.7 * (double)l2[i]);
+    }
+    icFloatNumber a[3], b[3], c[3];
+    calc.RadianceToXYZ(d50, a);
+    calc.RadianceToXYZ(&l2[0], b);
+    calc.RadianceToXYZ(&mix[0], c);
+    double el = 0.0;
+    for (int k = 0; k < 3; k++) el = std::max(el, std::fabs((double)c[k] - (0.3 * (double)a[k] + 0.7 * (double)b[k])));
+    check(el < TOL_EXACT, "emissive: operator linearity", el);
+  }
+
+  // Without an adopted white PrepareEmissive must fail (no normalization reference).
+  CIccColorimetricCalculator noWhite;
+  noWhite.SetStandardObserver(icStdObs1931TwoDegrees);
+  check(d50 && !noWhite.PrepareEmissive(r), "emissive: missing white -> PrepareEmissive fails", 0.0);
+}
+
 } // namespace
 
 int main()
@@ -384,6 +440,7 @@ int main()
   testDifferingGrids();
   testWeightingFreeFunctions();
   testStandardAccessors();
+  testEmissive();
 
   if (g_fail) {
     std::fprintf(stderr, "[colorimetry-methods] %d invariant(s) failed\n", g_fail);

@@ -330,9 +330,10 @@ const icFloatNumber *icGetStandardIlluminant(icIlluminant illum, icSpectralRange
 //==========================================================================
 
 CIccColorimetricCalculator::CIccColorimetricCalculator()
-  : m_bHaveWt(false), m_bReady(false) {
+  : m_bHaveWhite(false), m_bHaveWt(false), m_bReady(false) {
   memset(&m_obsRange, 0, sizeof(m_obsRange));
   memset(&m_illumRange, 0, sizeof(m_illumRange));
+  memset(&m_whiteRange, 0, sizeof(m_whiteRange));
   memset(&m_wtRange, 0, sizeof(m_wtRange));
   memset(&m_measRange, 0, sizeof(m_measRange));
 }
@@ -379,6 +380,16 @@ bool CIccColorimetricCalculator::SetStandardIlluminant(icIlluminant illum)
   icSpectralRange range;
   const icFloatNumber *p = icGetStandardIlluminant(illum, range);
   return p ? SetIlluminant(range, p) : false;
+}
+
+bool CIccColorimetricCalculator::SetEmissiveWhite(const icSpectralRange &range, const icFloatNumber *pWhite) {
+  if (!range.steps || !pWhite)
+    return false;
+  m_whiteRange = range;
+  m_white.assign(pWhite, pWhite + (int)range.steps);
+  m_bHaveWhite = true;
+  m_bReady = false;
+  return true;
 }
 
 bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZCalcMethod method,
@@ -438,10 +449,59 @@ bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZ
   return ok;
 }
 
+bool CIccColorimetricCalculator::PrepareEmissive(const icSpectralRange &measRange,
+                                                 icSpectralInterpMethod interp,
+                                                 icSpectralExtendMethod extend) {
+  if (!measRange.steps || !m_obs.size() || !m_bHaveWhite || !m_white.size())
+    return false;
+  int nm = (int)measRange.steps;
+  m_measRange = measRange;
+  m_M.assign(3*nm, 0.0f);
+
+  // Emissive/radiant colorimetry: the spectrum IS the stimulus, so there is no
+  // illuminant factor (cf. the reflectance path's R*S). Mirror
+  // CIccPcc::getEmissiveObserver: resample the observer onto measRange and scale all
+  // three CMFs by 1/k with k = sum(ybar(meas)*white(meas)), so the adopted white
+  // radiance maps to Y = 1; then M[c][m] = CMFc(meas_m) / k. The default linear
+  // interp matches getEmissiveObserver's rangeMap.
+  Grid om(m_obsRange), me(measRange);
+  std::vector<double> xb, yb, zb;
+  toDouble(&m_obs[0],      om.n, xb);
+  toDouble(&m_obs[om.n],   om.n, yb);
+  toDouble(&m_obs[2*om.n], om.n, zb);
+  std::vector<double> xm, ym, zm, wm, wv;
+  resampleCore(om, xb, me, xm, interp, extend);
+  resampleCore(om, yb, me, ym, interp, extend);
+  resampleCore(om, zb, me, zm, interp, extend);
+  Grid wg(m_whiteRange);
+  toDouble(&m_white[0], wg.n, wv);
+  resampleCore(wg, wv, me, wm, interp, extend);
+
+  double k = 0.0;
+  for (int m = 0; m < nm; m++) k += ym[m]*wm[m];
+  if (!(std::fabs(k) > 1e-12)) return false;
+  for (int m = 0; m < nm; m++) {
+    m_M[m]        = (icFloatNumber)(xm[m] / k);
+    m_M[nm + m]   = (icFloatNumber)(ym[m] / k);
+    m_M[2*nm + m] = (icFloatNumber)(zm[m] / k);
+  }
+  m_bReady = true;
+  return true;
+}
+
 bool CIccColorimetricCalculator::ReflectanceToXYZ(const icFloatNumber *pReflectance, icFloatNumber *pXYZ) const {
   if (!m_bReady || !pReflectance || !pXYZ)
     return false;
   icApplyWeightingTable(m_measRange, &m_M[0], pReflectance, pXYZ);
+  return true;
+}
+
+bool CIccColorimetricCalculator::RadianceToXYZ(const icFloatNumber *pRadiance, icFloatNumber *pXYZ) const {
+  // Same prepared-operator application as ReflectanceToXYZ; the operator built by
+  // PrepareEmissive already carries the emissive (no-illuminant) normalization.
+  if (!m_bReady || !pRadiance || !pXYZ)
+    return false;
+  icApplyWeightingTable(m_measRange, &m_M[0], pRadiance, pXYZ);
   return true;
 }
 

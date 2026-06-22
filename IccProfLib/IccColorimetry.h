@@ -179,6 +179,12 @@ ICCPROFLIB_API const icFloatNumber *icGetStandardIlluminant(icIlluminant illum,
  *  weighting table (e.g. a registry LWL CSV) may be supplied for the weighting
  *  method.  Prepare() builds a 3 x measRange.steps operator so that subsequent
  *  ReflectanceToXYZ() calls are a single matrix-vector product.
+ *
+ *  The same object also reduces emissive/radiant spectra: SetEmissiveWhite() +
+ *  PrepareEmissive() build a no-illuminant operator (the spectrum is the stimulus)
+ *  normalised so the adopted white radiance maps to Y = 1, mirroring
+ *  CIccPcc::getEmissiveObserver(); RadianceToXYZ() then applies it.  A calculator
+ *  holds one prepared operator at a time -- whichever Prepare* was called last.
  **************************************************************************
  */
 class ICCPROFLIB_API CIccColorimetricCalculator
@@ -199,6 +205,10 @@ public:
   /// Convenience: set the illuminant from a built-in SPD table (see
   /// icGetStandardIlluminant). Returns false if illum has no built-in data.
   bool SetStandardIlluminant(icIlluminant illum);
+  /// Set the emissive adopted-white radiance (range.steps samples) used by
+  /// PrepareEmissive to normalise the observer so this white maps to Y = 1.
+  /// Resets the prepared operator.
+  bool SetEmissiveWhite(const icSpectralRange &range, const icFloatNumber *pWhite); // range.steps
   /// Supply an external weighting table (e.g. a registry LWL CSV converted to
   /// 3*range.steps Wx,Wy,Wz weights). Used only by icXYZCalcWeighting when its
   /// range matches measRange exactly; resets the prepared operator.
@@ -211,9 +221,25 @@ public:
                icSpectralInterpMethod interp = icSpectralInterpSprague,
                icSpectralExtendMethod extend = icSpectralExtendHold);
 
+  /// Build the emissive operator: like Prepare but with NO illuminant (the spectrum
+  /// is the stimulus). The observer is resampled onto measRange and normalised by
+  /// sum(ybar*white) so the adopted white maps to Y = 1 (relative emissive
+  /// colorimetry, as CIccPcc::getEmissiveObserver). interp/extend control the
+  /// observer/white resampling (linear matches the existing emission path). Requires
+  /// an observer and an emissive white. Emissive data is integrated at its own
+  /// resolution -- coarse radiance is not up-sampled (narrow peaks), so there is no
+  /// method knob. Returns false otherwise.
+  bool PrepareEmissive(const icSpectralRange &measRange,
+                       icSpectralInterpMethod interp = icSpectralInterpLinear,
+                       icSpectralExtendMethod extend = icSpectralExtendHold);
+
   /// Reduce one reflectance vector (measRange.steps samples) to XYZ[3] using the
   /// prepared operator. Returns false if Prepare() has not succeeded.
   bool ReflectanceToXYZ(const icFloatNumber *pReflectance, icFloatNumber *pXYZ) const;
+
+  /// Reduce one emissive/radiant spectrum (measRange.steps samples) to XYZ[3] using
+  /// the operator from PrepareEmissive. Returns false if no operator is prepared.
+  bool RadianceToXYZ(const icFloatNumber *pRadiance, icFloatNumber *pXYZ) const;
 
   /// True once Prepare() has built a usable operator.
   bool IsReady() const { return m_bReady; }
@@ -222,7 +248,11 @@ private:
   icSpectralRange m_obsRange;
   std::vector<icFloatNumber> m_obs;     // 3*m_obsRange.steps
   icSpectralRange m_illumRange;
-  std::vector<icFloatNumber> m_illum;   // m_illumRange.steps
+  std::vector<icFloatNumber> m_illum;   // m_illumRange.steps (reflectance illuminant)
+
+  bool m_bHaveWhite;                    // emissive adopted white supplied?
+  icSpectralRange m_whiteRange;
+  std::vector<icFloatNumber> m_white;   // m_whiteRange.steps (emissive adopted white)
 
   bool m_bHaveWt;
   icSpectralRange m_wtRange;
