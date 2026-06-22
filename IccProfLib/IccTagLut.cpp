@@ -3255,6 +3255,13 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
     g3 = 0.0f;
   if (!std::isfinite(g4))
     g4 = 0.0f;
+  // g5 needs the same NaN/Inf guard as g0..g4: the < 0 and > m5 clamps below
+  // cannot catch a non-finite value (NaN compares false against both bounds),
+  // so without this an Inf/NaN srcPixel[5] would reach the (icUInt32Number)g5
+  // cast unguarded -- undefined behaviour. (g0..g4 were guarded here; g5 was
+  // missed when this finiteness block was added.)
+  if (!std::isfinite(g5))
+    g5 = 0.0f;
 
   if (g0 < 0.0f)
     g0 = 0.0f;

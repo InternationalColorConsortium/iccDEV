@@ -538,6 +538,54 @@ function(iccdev_add_xform_create_tag_ownership_test)
   endif()
 endfunction()
 
+# Guards the IccColorimetry spectral->XYZ reduction module (#1475): the registry-
+# aligned reduction methods (icXYZCalcDirectSum / icXYZCalcWeighting /
+# icXYZCalcSpragueTo1nm) and their range-reconciliation primitives
+# (icSpectralResample, icComputeWeightingTable, icApplyWeightingTable) must satisfy
+# their method-independent numeric contract: exact resampling of constants and
+# linear ramps (incl. Sprague interior + linear extrapolation), relative-colorimetry
+# normalization (perfect diffuser -> Y = 1), operator linearity, same-grid
+# equivalence of the three methods, and free-function/calculator weighting parity.
+# The test feeds smooth synthetic observer/illuminant data -- no profile file and no
+# (still-provisional) registry constants -- so it pins the algorithm, not the
+# numbers; any sign/index/normalization/Sprague-coefficient break trips it.  The
+# module is header + IccProfLib only.
+function(iccdev_add_colorimetry_methods_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccColorimetryMethodsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/colorimetry-methods.cpp"
+  )
+  target_compile_features(iccColorimetryMethodsTest PRIVATE cxx_std_17)
+  target_link_libraries(iccColorimetryMethodsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccColorimetryMethodsTest)
+
+  add_test(
+    NAME iccdev.colorimetry-methods
+    COMMAND "$<TARGET_FILE:iccColorimetryMethodsTest>"
+  )
+  set_tests_properties(iccdev.colorimetry-methods PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;colorimetry;spectral;issue-1475;regression"
+  )
+  if(WIN32)
+    set(_colorimetry_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccColorimetryMethodsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _colorimetry_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.colorimetry-methods PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_colorimetry_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -900,6 +948,7 @@ if(WIN32)
   iccdev_add_mpecalc_matrix_overflow_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
+  iccdev_add_colorimetry_methods_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -964,6 +1013,7 @@ iccdev_add_pawg_q1q3_relative_intent_test()
 iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
+iccdev_add_colorimetry_methods_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

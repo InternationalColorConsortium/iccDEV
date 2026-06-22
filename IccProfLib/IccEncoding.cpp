@@ -293,6 +293,11 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
   
   pxy = (CIccTagFloat32*)pParams->FindElemOfType(icSigCeptRedPrimaryXYZMbr, icSigFloat32ArrayType);
   if (!pxy || pxy->GetSize()<2) {
+    // pMtx is not attached to pMpeTag until after all three primary lookups
+    // succeed (the Attach is at the bottom of this block), so deleting pMpeTag
+    // here does not reclaim it -- the matrix must be freed explicitly, exactly
+    // as the SetSize failure path above already does.
+    delete pMtx;
     delete pMpeTag;
     delete pIcc;
     return icEncConvertMemoryError;
@@ -303,6 +308,8 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
 
   pxy = (CIccTagFloat32*)pParams->FindElemOfType(icSigCeptGreenPrimaryXYZMbr, icSigFloat32ArrayType);
   if (!pxy || pxy->GetSize()<2) {
+    // Same unattached-matrix leak as the red-primary path above.
+    delete pMtx;
     delete pMpeTag;
     delete pIcc;
     return icEncConvertMemoryError;
@@ -313,6 +320,8 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
 
   pxy = (CIccTagFloat32*)pParams->FindElemOfType(icSigCeptBluePrimaryXYZMbr, icSigFloat32ArrayType);
   if (!pxy || pxy->GetSize()<2) {
+    // Same unattached-matrix leak as the red-primary path above.
+    delete pMtx;
     delete pMpeTag;
     delete pIcc;
     return icEncConvertMemoryError;
