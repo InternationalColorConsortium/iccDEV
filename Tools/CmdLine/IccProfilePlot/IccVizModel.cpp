@@ -62,7 +62,7 @@
  */
 
 /**
- * IccVizModel implementation — see IccVizModel.hpp.
+ * IccVizModel implementation  -  see IccVizModel.hpp.
  *
  * The producers below compute the profile's chromaticity, tone-curve, named-
  * colour and CLUT visualizations and return them as data structures (point
@@ -70,7 +70,7 @@
  */
 
 #include "IccVizModel.hpp"
-#include "IccVizMath.hpp"     // shared XYZ→xy + planckian math
+#include "IccVizMath.hpp"     // shared XYZ->xy + planckian math
 
 #include "IccProfile.h"
 #include "IccTag.h"
@@ -94,7 +94,7 @@ const float chromaticityChartScale = 0.85f;
 const float abChartScale = 2 * 130.0f;
 const float kNaN = std::numeric_limits<float>::quiet_NaN();
 
-// ── diagnostic output state (see SetSilent / SetDiagnosticContext) ────────────
+// -- diagnostic output state (see SetSilent / SetDiagnosticContext) ------------
 // Defaults reproduce iccProfileVisualize's top-level call: NOT silent, no prefix.
 bool g_silent = false;
 std::string g_diagContext;
@@ -108,7 +108,7 @@ bool effectiveSilent(Verbosity v) {
 }
 
 // Echo a result's diagnostics to stderr unless silenced. The message text already
-// carries the exact upstream wording (Skipping … / WARNING - … / ERROR - …); the
+// carries the exact upstream wording (Skipping ... / WARNING - ... / ERROR - ...); the
 // optional context reproduces iccProfileVisualize's leading "<filename>: ".
 void emitDiagnostics(const std::vector<Diagnostic>& diags, Verbosity v) {
   if (effectiveSilent(v)) return;
@@ -125,7 +125,7 @@ std::string sigStr(icTagSignature sig) {
   return std::string(icGetSigStr(buf, sizeof buf, static_cast<icUInt32Number>(sig)));
 }
 
-// ── colour helpers — single-sourced in IccVizMath.hpp so the XYZ→xy +
+// -- colour helpers  -  single-sourced in IccVizMath.hpp so the XYZ->xy +
 //    planckian math lives in exactly one place.
 using iccvizmath::XY;
 using iccvizmath::xyFromICCXYZ;
@@ -181,7 +181,7 @@ int photometricFromSpace(icColorSpaceSignature s) {
   }
 }
 
-// ── curve description + validation gate ──────────────────────────────────────
+// -- curve description + validation gate --------------------------------------
 
 // Validate a curve, returning the report text by reference. A status
 // > icValidateWarning means the curve is malformed (e.g. gamma 0, bad LUT
@@ -211,7 +211,7 @@ std::string describeCurve(CIccCurve* curve) {
   return desc;
 }
 
-// ── producers ────────────────────────────────────────────────────────────────
+// -- producers ----------------------------------------------------------------
 
 Graph buildCurveGraph(CIccCurve* curve, const std::string& title) {
   Graph g;
@@ -328,7 +328,7 @@ Graph buildChromaticityGraph(CIccProfile* pIcc) {
 struct NamedLab { std::string name; float L, a, b; };
 
 // Collect named/colorant colours as Lab + name. `diag` (when supplied) carries
-// the granular skip reasons — including the IccProfLib validation `report`
+// the granular skip reasons  -  including the IccProfLib validation `report`
 // string, which the data-first path would otherwise discard. Enumerate() probes
 // with diag==nullptr (silent skip); RenderGraph() pulls the reasons through.
 bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigDesc,
@@ -343,7 +343,7 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
   icFloatNumber illum[3];
   pIcc->getNormIlluminantXYZ(illum);
 
-  // PCS basis for the colour conversion is the profile header PCS — matching
+  // PCS basis for the colour conversion is the profile header PCS  -  matching
   // iccProfileVisualize, which reads pIcc->m_Header.pcs (not the table's own
   // PCS) and uses it for every named-colour type. Anything that isn't XYZ/Lab
   // can't be plotted: icSigNoColorData (spectral / iccMAX) skips silently, while
@@ -438,7 +438,7 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
       auto* structPtr = dynamic_cast<CIccTagStruct*>(thisItem);
       if (!structPtr) continue;
 
-      // PCS data member — Float16/32/64 array of (L*a*b* or XYZ) triples.
+      // PCS data member  -  Float16/32/64 array of (L*a*b* or XYZ) triples.
       CIccTag* pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
       if (!pcsElem) continue;
       icTagTypeSignature pcsDataType = pcsElem->GetType();
@@ -539,7 +539,7 @@ bool collectNamedColors(CIccProfile* pIcc, CIccTag* tag, const std::string& sigD
 
 Graph buildNamedAB(const std::vector<NamedLab>& colors, const std::string& title) {
   Graph g;
-  g.title = title + " — a*b*";
+  g.title = title + "  -  a*b*";
   g.xAxis = Axis{"a*", -abChartScale / 2, abChartScale / 2, true};
   g.yAxis = Axis{"b*", -abChartScale / 2, abChartScale / 2, true};
 
@@ -555,7 +555,7 @@ Graph buildNamedAB(const std::vector<NamedLab>& colors, const std::string& title
     }
     g.series.push_back(std::move(circ));
   }
-  // Quadrant labels (Hint) — match the PDF's +a Magenta / -a Green / etc.
+  // Quadrant labels (Hint)  -  match the PDF's +a Magenta / -a Green / etc.
   Series ax;
   ax.id = "axisLabels"; ax.name = "Axes"; ax.role = Role::Hint; ax.shape = Shape::Scatter;
   ax.colorHint = "neutral";
@@ -577,7 +577,7 @@ Graph buildNamedAB(const std::vector<NamedLab>& colors, const std::string& title
 Graph buildNamedXY(CIccProfile* pIcc, const std::vector<NamedLab>& colors,
                    const std::string& title) {
   Graph g;
-  g.title = title + " — xy";
+  g.title = title + "  -  xy";
   g.xAxis = Axis{"x (CIE 1931)", 0.0f, chromaticityChartScale, true};
   g.yAxis = Axis{"y (CIE 1931)", 0.0f, chromaticityChartScale, true};
 
@@ -601,11 +601,11 @@ Graph buildNamedXY(CIccProfile* pIcc, const std::vector<NamedLab>& colors,
   return g;
 }
 
-// CLUT lattice → raster. The nD CLUT is flattened to a 2-D image: the first two
+// CLUT lattice -> raster. The nD CLUT is flattened to a 2-D image: the first two
 // input dimensions form each tile, and the remaining dimensions are laid out as
 // a grid of tiles arranged toward a square.
 //
-// On failure returns false and — when `diag` is supplied — records the granular
+// On failure returns false and  -  when `diag` is supplied  -  records the granular
 // skip/warn reason. Enumerate() probes with diag==nullptr, so a tag that simply
 // carries no CLUT skips silently; only an actual RenderRaster() pulls the reasons
 // through. Non-fatal conditions (tile-count overflow, an out-of-range sqrt)
@@ -767,7 +767,7 @@ bool buildClutRaster(CIccTag* tag, const std::string& sigDesc, Raster& out,
   return true;
 }
 
-// Append LUT sub-curve descriptors in the A→B→M order output3DLUT uses.
+// Append LUT sub-curve descriptors in the A->B->M order output3DLUT uses.
 void enumerateLutCurves(CIccProfile* pIcc, icTagSignature sig, CIccMBB* lut,
                         std::vector<Descriptor>& out) {
   std::string base = sigStr(sig);
@@ -808,7 +808,7 @@ CIccCurve* lutCurveFor(CIccMBB* lut, char grp, int idx) {
 
 } // namespace
 
-// ── public API ───────────────────────────────────────────────────────────────
+// -- public API ---------------------------------------------------------------
 
 std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order) {
   std::vector<Descriptor> out;
@@ -851,7 +851,7 @@ std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order) {
     if (!lut) continue;
     enumerateLutCurves(pIcc, sig, lut, out);
     Raster probe;
-    // Probe only — diag==nullptr, so tags that legitimately carry no CLUT
+    // Probe only  -  diag==nullptr, so tags that legitimately carry no CLUT
     // (matrix/curve-only mAB/mBA) skip silently; a real RenderRaster() surfaces
     // any failure reason.
     if (buildClutRaster(t, sigStr(sig), probe)) {
@@ -872,11 +872,11 @@ std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order) {
     if (!collectNamedColors(pIcc, t, sigStr(sig), colors, title)) continue;   // probe: diag==nullptr
     Descriptor ab;
     ab.kind = Kind::NamedColorsAB; ab.output = Output::Graph;
-    ab.id = "named:ab:" + sigStr(sig); ab.title = title + " — a*b* (" + sigStr(sig) + ")";
+    ab.id = "named:ab:" + sigStr(sig); ab.title = title + "  -  a*b* (" + sigStr(sig) + ")";
     ab.tag = sig; out.push_back(std::move(ab));
     Descriptor xy;
     xy.kind = Kind::NamedColorsXY; xy.output = Output::Graph;
-    xy.id = "named:xy:" + sigStr(sig); xy.title = title + " — xy (" + sigStr(sig) + ")";
+    xy.id = "named:xy:" + sigStr(sig); xy.title = title + "  -  xy (" + sigStr(sig) + ")";
     xy.tag = sig; out.push_back(std::move(xy));
   }
 
@@ -888,7 +888,7 @@ std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order) {
     // order, then ranks each descriptor by its owning tag's directory index.
     //
     // SCOPE NOTE: iterating m_Tags is only safe when the caller is linked in the
-    // same toolchain as IccProfLib (the CLI case — exactly what iccProfileVisualize
+    // same toolchain as IccProfLib (the CLI case  -  exactly what iccProfileVisualize
     // does). Order::Canonical, the default, never touches m_Tags and is the
     // cross-module/WASM-safe ordering; prefer it where the std::list ABI is not
     // guaranteed to match. Chromaticity (tag == 0, whole-profile) is pinned first,
@@ -945,8 +945,8 @@ GraphResult RenderGraph(CIccProfile* pIcc, const std::string& id, Verbosity v) {
                                                     : buildNamedXY(pIcc, colors, title);
         res.ok = true;
       } else {
-        // Surface the specific reason (validation report, bad pcs, …) rather
-        // than a generic string — restoring outputNamedColors' diagnostics.
+        // Surface the specific reason (validation report, bad pcs, ...) rather
+        // than a generic string  -  restoring outputNamedColors' diagnostics.
         res.error = res.diagnostics.empty() ? "no colours" : res.diagnostics.back().message;
       }
       emitDiagnostics(res.diagnostics, v);
@@ -968,7 +968,7 @@ RasterResult RenderRaster(CIccProfile* pIcc, const std::string& id, Verbosity v)
     if (t && buildClutRaster(t, sigStr(d.tag), res.raster, &res.diagnostics)) {
       res.ok = true;
     } else {
-      // Specific reason (invalid CLUT width/height/grid, empty buffer, …).
+      // Specific reason (invalid CLUT width/height/grid, empty buffer, ...).
       res.error = res.diagnostics.empty() ? "could not build raster"
                                           : res.diagnostics.back().message;
     }
@@ -979,7 +979,7 @@ RasterResult RenderRaster(CIccProfile* pIcc, const std::string& id, Verbosity v)
   return res;
 }
 
-// ── diagnostic output policy (see IccVizModel.hpp) ────────────────────────────
+// -- diagnostic output policy (see IccVizModel.hpp) ----------------------------
 void SetSilent(bool silent) { g_silent = silent; }
 bool GetSilent() { return g_silent; }
 void SetDiagnosticContext(const std::string& name) { g_diagContext = name; }

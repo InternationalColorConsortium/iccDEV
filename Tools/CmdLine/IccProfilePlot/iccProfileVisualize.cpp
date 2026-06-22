@@ -380,7 +380,7 @@ float cross(const XYColor &O, const XYColor &A, const XYColor &B)
 // https://en.wikipedia.org/wiki/Planckian_locus
 // Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho; Youngsun Kim (December 2002).
 // "Design of Advanced Color Temperature Control System for HDTV Applications"
-// Journal of the Korean Physical Society. 41 (6): 865–871. S2CID 4489377
+// Journal of the Korean Physical Society. 41 (6): 865-871. S2CID 4489377
 static
 XYColor approx_planck( double t )
 {
@@ -1012,13 +1012,13 @@ std::string remove_extension( const std::string& filename)
 
 /******************************************************************************/
 
-// ── IccViz-backed rendering ──────────────────────────────────────────────────
+// -- IccViz-backed rendering --------------------------------------------------
 //
 // The functions below replace the inline profile-data extraction that the
 // original output1DLUT / output3DLUT / outputNamedColors / graphChromaticityPDF
 // performed by walking tags themselves. Instead they consume the DATA that
-// IccVizModel (iccviz::RenderGraph / RenderRaster) returns — 2-D point series
-// and ICC-normalized raster samples — and feed it through the SAME MiniPDF /
+// IccVizModel (iccviz::RenderGraph / RenderRaster) returns  -  2-D point series
+// and ICC-normalized raster samples  -  and feed it through the SAME MiniPDF /
 // MiniTIFF drawing primitives the original used. The artifacts look the same;
 // only the data source moved behind the iccviz API.
 
@@ -1266,7 +1266,7 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
             for (const auto &v : colors->verts)   // x=a*, y=b*, aux=L*, label=name
               colorsOut.push_back( namedLAB( v.label, v.aux, v.x, v.y ) );
             // recover the original "<table>: <sig>" page label from the base
-            // title (graph title is "<table> — a*b*"): Colorant Table / Named
+            // title (graph title is "<table>  -  a*b*"): Colorant Table / Named
             // Color Table / Color Array (v5 tagArray).
             std::string table = "Named Color Table";
             if (res.graph.title.rfind("Colorant Table", 0) == 0)   table = "Colorant Table";
@@ -1285,14 +1285,14 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
 
 // Future visualizations (carried over from iccProfileVisualize's intent list).
 // In this data-first port they are added by extending iccviz::Enumerate / the
-// IccVizModel producers rather than this switch — the tool just draws whatever
+// IccVizModel producers rather than this switch  -  the tool just draws whatever
 // the model enumerates.
 // TODO - plot gamut from A2B and B2A tags into xy and LAB plots
 //        (ongoing iccProfileVisualize gamut work; the convex_hull2D / cross()
 //         helpers above are reserved for hulling the projected CLUT samples)
 // TODO - plot named spectra as graphs?
 // TODO - response curves (responseCurveSet16; cf. the disabled
-//        outputResponseCurves below — no profile using them found yet)
+//        outputResponseCurves below  -  no profile using them found yet)
 // TODO - embedded height image
 // TODO - embedded normal image
 // TODO - BRDF images?

@@ -62,22 +62,20 @@
  */
 
 /**
- * IccVizMath — small shared colour-math helpers for the visualization model.
+ * IccVizMath  -  small shared colour-math helpers for the visualization model.
  *
- * The pure scalar conversions the visualizations need: XYZ→xy chromaticity
+ * The pure scalar conversions the visualizations need: XYZ->xy chromaticity
  * projection and the Kang et al. planckian-locus approximation.
  *
- * They live in one header so the math — especially approxPlanck()'s polynomial
- * constants — has a single source. The functions are header-only (inline) and
+ * They live in one header so the math  -  especially approxPlanck()'s polynomial
+ * constants  -  has a single source. The functions are header-only (inline) and
  * depend only on the ICC scalar types, so the header carries no link dependency.
  */
 
 #ifndef ICC_VIZ_MATH_HPP
 #define ICC_VIZ_MATH_HPP
 
-#include "IccProfLibConf.h"    // required before icProfileHeader.h (uint types/config)
-#include "icProfileHeader.h"   // icXYZNumber
-#include "IccDefs.h"           // icFloatNumber
+#include "IccDefs.h"           // icXYZNumber, icFloatNumber, and ICC header packing
 
 namespace iccvizmath {
 
@@ -87,7 +85,7 @@ struct XY {
   float y = 0.0f;
 };
 
-// 16-bit ICC XYZ (s15Fixed16 stored as integer/65535) → CIE xy chromaticity.
+// 16-bit ICC XYZ (s15Fixed16 stored as integer/65535) -> CIE xy chromaticity.
 inline XY xyFromICCXYZ(const icXYZNumber* xyz) {
   // integers, so don't have to test for NaN or Inf
   float X = xyz->X / 65535.0f;
@@ -98,7 +96,7 @@ inline XY xyFromICCXYZ(const icXYZNumber* xyz) {
   return XY{X / sum, Y / sum};
 }
 
-// Float XYZ → CIE xy chromaticity.
+// Float XYZ -> CIE xy chromaticity.
 inline XY xyFromXYZFloat(const icFloatNumber* xyz) {
   float X = xyz[0];
   float Y = xyz[1];
@@ -112,7 +110,7 @@ inline XY xyFromXYZFloat(const icFloatNumber* xyz) {
 //   https://en.wikipedia.org/wiki/Planckian_locus
 //   Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho;
 //   Youngsun Kim (December 2002). "Design of Advanced Color Temperature Control
-//   System for HDTV Applications" J. Korean Physical Society 41(6): 865–871.
+//   System for HDTV Applications" J. Korean Physical Society 41(6): 865-871.
 inline XY approxPlanck(double t) {
   const double c3a = -0.2661239;
   const double c2a = -0.2343589;

@@ -1,7 +1,7 @@
 /*
   File:     iccProfilePlot.cpp
 
-  Contains: Console app that exposes IccVizModel — the data-first profile
+  Contains: Console app that exposes IccVizModel  -  the data-first profile
             visualization API. It lists the visualizations a profile supports
             and emits each one as DATA (graphs as 2-D point series + axis hints;
             the nD CLUT lattice as ICC-normalized raster samples), so a caller
@@ -75,7 +75,7 @@
 #include <string>
 #include <vector>
 
-// ── tiny hand-rolled JSON emitter (no third-party deps, like IccPawgReport) ──
+// -- tiny hand-rolled JSON emitter (no third-party deps, like IccPawgReport) --
 
 static void jsonEscape(const std::string& s, std::string& out) {
   for (char ch : s) {
@@ -123,7 +123,7 @@ static const char* shapeStr(iccviz::Shape s) {
   }
 }
 
-// ── emitters ─────────────────────────────────────────────────────────────────
+// -- emitters -----------------------------------------------------------------
 
 static void printList(const std::vector<iccviz::Descriptor>& descs) {
   std::printf("[");
@@ -234,20 +234,20 @@ int main(int argc, char* argv[]) {
   if (slash != std::string::npos) base = base.substr(slash + 1);
   iccviz::SetDiagnosticContext(base);
 
-  // ── worked example of the IccVizModel API (mirrors the usage guide in
-  //    IccVizModel.hpp) ───────────────────────────────────────────────────────
+  // -- worked example of the IccVizModel API (mirrors the usage guide in
+  //    IccVizModel.hpp) -------------------------------------------------------
   // The three commands below correspond to the three steps a consumer takes.
   // A report generator (PDF, SVG, an interactive UI) follows the SAME shape:
   // enumerate once, then for each Descriptor branch on its `output` and render
-  // it — drawing the returned Graph/Raster data with whatever toolkit it owns.
+  // it  -  drawing the returned Graph/Raster data with whatever toolkit it owns.
   int rc = 0;
   if (cmd == "list") {
-    // STEP 2 — discover. Enumerate() returns one Descriptor per available
+    // STEP 2  -  discover. Enumerate() returns one Descriptor per available
     // visualization (its `kind`, `output` and the `id` used to render it). A
     // PDF generator would walk exactly this list to lay out its pages.
     printList(iccviz::Enumerate(pIcc));
   } else if (cmd == "graph" && argc >= 4) {
-    // STEP 3a — render a graph. For a Descriptor whose output == Output::Graph,
+    // STEP 3a  -  render a graph. For a Descriptor whose output == Output::Graph,
     // RenderGraph() returns point-series + axis hints; here we serialize them,
     // but a PDF generator would stroke each Series into a chart instead.
     auto res = iccviz::RenderGraph(pIcc, argv[3]);   // diagnostics auto-echo to stderr
@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
       rc = 3;
     } else printGraph(res.graph);
   } else if (cmd == "raster" && argc >= 4) {
-    // STEP 3b — render a raster. For a Descriptor whose output == Output::Raster
+    // STEP 3b  -  render a raster. For a Descriptor whose output == Output::Raster
     // (the nD CLUT), RenderRaster() returns ICC-normalized samples + geometry;
     // a PDF generator would colour-manage and embed them as an image.
     auto res = iccviz::RenderRaster(pIcc, argv[3]);

@@ -1,7 +1,7 @@
 /*
   File:     IccVizModel.hpp
 
-  Contains: Data-first profile visualization model — public API (see the header doc-comment for usage: pick a Kind, supply a CIccProfile, call Enumerate/RenderGraph/RenderRaster).
+  Contains: Data-first profile visualization model  -  public API (see the header doc-comment for usage: pick a Kind, supply a CIccProfile, call Enumerate/RenderGraph/RenderRaster).
 
   Version:  V1
 
@@ -62,10 +62,10 @@
  */
 
 /**
- * IccVizModel — data-first profile visualization model.
+ * IccVizModel  -  data-first profile visualization model.
  *
- * Computes a profile's visualizations — tone curves, the CIE 1931 chromaticity
- * chart, named/colorant a*b* and xy scatters, and the nD CLUT lattice — and
+ * Computes a profile's visualizations  -  tone curves, the CIE 1931 chromaticity
+ * chart, named/colorant a*b* and xy scatters, and the nD CLUT lattice  -  and
  * *returns the underlying data* rather than finished drawings:
  *
  *   - Graph visualizations (tone curves, chromaticity, named-colour scatters)
@@ -73,16 +73,16 @@
  *     draws/rasterizes them in its own look-and-feel. NO raster is produced for
  *     graph types.
  *   - Genuine images (the nD CLUT lattice) come back as Raster: the flattened,
- *     ICC-normalized CLUT samples plus geometry — the caller decides how to
+ *     ICC-normalized CLUT samples plus geometry  -  the caller decides how to
  *     colour-manage/display them.
  *
- * Series carry a role: Primary (the profile's own data — primaries, white,
+ * Series carry a role: Primary (the profile's own data  -  primaries, white,
  * curve, named colours) vs Hint (reference geometry the caller may draw or
- * ignore — spectral locus, planckian curve, wavelength labels, chroma circles,
+ * ignore  -  spectral locus, planckian curve, wavelength labels, chroma circles,
  * identity line). No ticks/grid are shipped: those are a caller-side decision;
  * only an axis range *hint* is provided.
  *
- * ── HOW TO USE THIS API ──────────────────────────────────────────────────────
+ * -- HOW TO USE THIS API ------------------------------------------------------
  *
  *   1. Open a profile into a CIccProfile* (e.g. OpenIccProfile("foo.icc")).
  *      Everything here takes that pointer; nothing is mutated, so one parsed
@@ -91,7 +91,7 @@
  *   2. Call Enumerate(pIcc) to discover what the profile can show. It returns a
  *      vector<Descriptor>, one per available visualization, in a stable order.
  *      Each Descriptor tells you:
- *        - kind   : which visualization (see enum Kind — Curve1D, ChromaticityXY,
+ *        - kind   : which visualization (see enum Kind  -  Curve1D, ChromaticityXY,
  *                   NamedColorsAB, NamedColorsXY, ClutImage). Use this to pick a
  *                   chart/lens, or to drive a menu.
  *        - output : Output::Graph (vector data) or Output::Raster (an image).
@@ -115,19 +115,18 @@
  *      below to suppress or redirect that for library use.
  *
  *   A caller that wants a finished report (e.g. a PDF) walks the Enumerate list,
- *   renders each descriptor, and draws the returned data with its own toolkit —
+ *   renders each descriptor, and draws the returned data with its own toolkit -
  *   see iccProfilePlot.cpp for a worked, commented example.
  *
  * Design intent: this file depends ONLY on IccProfLib + spectralLocus.hpp + the
- * C++ standard library — no embind, no nlohmann, no PDF/TIFF writers — so it is
+ * C++ standard library  -  no embind, no nlohmann, no PDF/TIFF writers  -  so it is
  * self-contained and portable between callers (CLI, browser/WASM, tests).
  */
 
 #ifndef ICC_VIZ_MODEL_HPP
 #define ICC_VIZ_MODEL_HPP
 
-#include "IccProfLibConf.h"    // required before icProfileHeader.h (uint types/config)
-#include "icProfileHeader.h"   // icTagSignature, icColorSpaceSignature
+#include "IccDefs.h"           // icTagSignature, icColorSpaceSignature, and ICC header packing
 #include <string>
 #include <vector>
 #include <limits>
@@ -144,7 +143,7 @@ enum class Kind : unsigned int {
   NamedColorsAB  = 3,   // named/colorant colours on a CIELAB a*b* chart
   NamedColorsXY  = 4,   // named/colorant colours on the xy chart
   ClutImage      = 5,   // nD CLUT lattice flattened to an image (raster)
-  // SmoothnessLattice = 6,  // reserved — deferred to a later phase
+  // SmoothnessLattice = 6,  // reserved  -  deferred to a later phase
 };
 
 enum class Output : unsigned char { Graph, Raster };
@@ -162,18 +161,18 @@ struct Vertex {
 };
 
 struct Series {
-  std::string id;          // "curve","identity","locus","planckian","chroma30",…
+  std::string id;          // "curve","identity","locus","planckian","chroma30",...
   std::string name;        // human/legend label
   Role  role  = Role::Primary;
   Shape shape = Shape::Polyline;
-  std::string auxKind;     // "", "Lstar", "nm", "kelvin" — meaning of Vertex.aux
+  std::string auxKind;     // "", "Lstar", "nm", "kelvin"  -  meaning of Vertex.aux
   std::string colorHint;   // optional: "R","G","B","white","neutral","locus"
   std::vector<Vertex> verts;
 };
 
 struct Axis {
   std::string label;       // "Input", "a*", "x (CIE 1931)"
-  float minHint = 0.0f;    // suggested range only — caller may recompute/override
+  float minHint = 0.0f;    // suggested range only  -  caller may recompute/override
   float maxHint = 1.0f;
   bool  equalAspect = false;  // chart wants square aspect (xy / ab plots)
 };
@@ -205,7 +204,7 @@ struct Descriptor {
   int  idx = -1;         // channel index within grp, else -1
 };
 
-// A diagnostic raised while building a visualization — a granular skip/warn
+// A diagnostic raised while building a visualization  -  a granular skip/warn
 // reason, carried here as DATA so a library caller (browser UI, CLI, test)
 // decides how to surface them (log to stderr, show inline, ignore). Additive:
 // `error` still holds the single fatal reason for the simple ok/error path,
@@ -217,9 +216,9 @@ struct Diagnostic { Severity severity = Severity::Error; std::string message; };
 struct GraphResult  { bool ok = false; std::string error; std::vector<Diagnostic> diagnostics; Graph  graph;  };
 struct RasterResult { bool ok = false; std::string error; std::vector<Diagnostic> diagnostics; Raster raster; };
 
-// ── diagnostic output policy ─────────────────────────────────────────────────
+// -- diagnostic output policy -------------------------------------------------
 // Each render result ALWAYS carries its diagnostics as data (see Diagnostic). In
-// ADDITION, the model echoes them to stderr — reproducing the top-level
+// ADDITION, the model echoes them to stderr  -  reproducing the top-level
 // behaviour a command-line caller expects. A process-global switch controls
 // this; it DEFAULTS to not-silent, so a caller that never touches it (and never
 // passes a Verbosity) behaves exactly like the CLI.
@@ -235,7 +234,7 @@ enum class Verbosity {
 
 void SetSilent(bool silent = true);                  // global; default state is not-silent
 bool GetSilent();
-// Optional "<name>: " prefix prepended to each stderr line — the CLI sets the
+// Optional "<name>: " prefix prepended to each stderr line  -  the CLI sets the
 // profile filename here so its output matches iccProfileVisualize byte-for-byte.
 void SetDiagnosticContext(const std::string& name);
 
@@ -254,7 +253,7 @@ enum class Order : unsigned char {
 // module compiled separately from IccProfLib (e.g. WASM).
 //
 // Order::TagTable reorders that same set to follow the profile's tag-table order
-// — what iccProfileVisualize produced by walking its tag directory — so a report
+//  -  what iccProfileVisualize produced by walking its tag directory  -  so a report
 // generator can match that page sequence. It does so WITHOUT the cross-TU tag-list
 // iteration: it sorts by each owning tag's byte offset (via the in-library-safe
 // GetTag()), with chromaticity pinned first. Offset order matches directory order
@@ -264,7 +263,7 @@ std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order = Order::Canoni
 
 // Render one graph / raster by descriptor id. Re-enumerates to find the
 // descriptor (cheap; callers should cache the parsed profile). Diagnostics are
-// echoed to stderr per the Verbosity (default → the global SetSilent() switch).
+// echoed to stderr per the Verbosity (default -> the global SetSilent() switch).
 GraphResult  RenderGraph (CIccProfile* pIcc, const std::string& id, Verbosity v = Verbosity::Default);
 RasterResult RenderRaster(CIccProfile* pIcc, const std::string& id, Verbosity v = Verbosity::Default);
 
