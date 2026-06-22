@@ -147,8 +147,14 @@ int main(int argc, char* argv[]) {
   const int minargs = 8; // argc = 8 without profile, 9 with profile
   
   if (argc < minargs) {
+    // Too few arguments is a usage *error*, not a successful help request: this
+    // tool has no explicit -h/--help flag, so Usage() only ever fires here, on a
+    // malformed invocation.  Returning 0 reported success to the caller even
+    // though nothing was produced (#1514), so wrapper scripts/CI could not tell
+    // a no-op apart from a real conversion.  Fail like every other error exit in
+    // main(), all of which return -1 (process status 255).
     Usage(argv[0]);
-    return 0;
+    return -1;
   }
 
   bool bCompress = atoi(argv[2]) != 0;
