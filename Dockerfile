@@ -21,7 +21,9 @@ RUN apt-get update \
     g++=4:15.2.0-5ubuntu1 \
     lsb-release=12.1-2build1 \
     make=4.4.1-3 \
-    libxml2-dev=2.15.2+dfsg-0.1 \
+    zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
+    libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
+    libxml2-dev=2.15.2+dfsg-0.1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
     libtiff-dev=4.7.0-3ubuntu4 \
     libjpeg-dev=8c-2ubuntu12 \
@@ -77,7 +79,7 @@ LABEL org.opencontainers.image.title="iccDEV Build Container" \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6=2.43-2ubuntu2 \
-    libxml2-16=2.15.2+dfsg-0.1 \
+    libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
     libtiff6=4.7.0-3ubuntu4 \
     libjpeg8=8c-2ubuntu12 \
     libpng16-16t64=1.6.57-1 \
