@@ -100,6 +100,7 @@ const double SPRAGUE_LEAD1[6] = { 508,  -540,  488,  -367,  144,  -24 }; // one 
 const double SPRAGUE_TRAIL0[6]= { -24,   144, -367,   488, -540,  508 }; // one after last
 const double SPRAGUE_TRAIL1[6]= { -180, 1080,-2648,  3033,-1960,  884 }; // two after last
 
+// Six-term dot product of an end-point coefficient row (c) with six samples (v).
 static double dot6(const double *c, const double *v) {
   return c[0]*v[0]+c[1]*v[1]+c[2]*v[2]+c[3]*v[3]+c[4]*v[4]+c[5]*v[5];
 }
@@ -136,48 +137,73 @@ static double spragueEval(const std::vector<double> &ext, int i, double X) {
   return base + X*(a0 + X*(a1 + X*(a2 + X*(a3 + X*a4))));
 }
 
-// 4-point cubic (Catmull-Rom) at segment i, fractional X, indices clamped to data.
+// 4-point cubic (Catmull-Rom) interpolation of equally-spaced data v.
+//
+// Evaluates the spline on source segment i -- between samples v[i] (the segment
+// base, at X=0) and v[i+1] (at X=1) -- at fractional position X in [0,1]. A
+// Catmull-Rom segment needs the two bracketing samples plus one neighbour on each
+// side (v[i-1], v[i], v[i+1], v[i+2]); near the array ends those neighbour indices
+// are clamped to the first/last sample so the curve degrades to a one-sided slope
+// instead of reading out of bounds. This is the 3rd-order interpolant used for
+// illuminant-range reconciliation (TN-06).
 static double cubicEval(const std::vector<double> &v, int i, double X) {
   int n = (int)v.size();
-  int im1 = i-1 < 0 ? 0 : i-1;
-  int ip1 = i+1 > n-1 ? n-1 : i+1;
-  int ip2 = i+2 > n-1 ? n-1 : i+2;
+  int im1 = i-1 < 0 ? 0 : i-1;       // v[i-1], clamped at the low end
+  int ip1 = i+1 > n-1 ? n-1 : i+1;   // v[i+1], clamped at the high end
+  int ip2 = i+2 > n-1 ? n-1 : i+2;   // v[i+2], clamped at the high end
   double p0 = v[im1], p1 = v[i], p2 = v[ip1], p3 = v[ip2];
-  double a = -0.5*p0 + 1.5*p1 - 1.5*p2 + 0.5*p3;
-  double b =      p0 - 2.5*p1 + 2.0*p2 - 0.5*p3;
-  double c = -0.5*p0          + 0.5*p2;
-  return ((a*X + b)*X + c)*X + p1;
+  // Catmull-Rom basis (tension 1/2): coefficients of the cubic a*X^3+b*X^2+c*X+p1,
+  // where p1 is the value at X=0 (segment base) and the spline passes through p2 at X=1.
+  double a = -0.5*p0 + 1.5*p1 - 1.5*p2 + 0.5*p3;   // X^3 term
+  double b =      p0 - 2.5*p1 + 2.0*p2 - 0.5*p3;   // X^2 term
+  double c = -0.5*p0          + 0.5*p2;            // X^1 term
+  return ((a*X + b)*X + c)*X + p1;                 // Horner evaluation, constant term = p1
 }
 
-// Resample equally-spaced data v (grid src) onto grid dst, into out.
+// Resample equally-spaced data v (sampled on grid src) onto grid dst, writing
+// dst.n values into out.
+//
+// For each destination wavelength, its position t is expressed in source-sample
+// units (t = 0 at src.start, t = n-1 at the last source sample), then one of three
+// regimes applies:
+//   - t at/below the first sample or at/above the last: hold the nearest end value,
+//     or (extend == Linear) linearly extrapolate from the two end samples;
+//   - interior: interpolate within source segment i = floor(t) at fraction X = t-i,
+//     using Sprague (CIE 167) when requested and available, else cubic, else linear.
+// The 1e-9 tolerances absorb floating-point error so a t that lands a hair outside
+// [0, n-1] snaps onto the end sample rather than triggering extrapolation. interp
+// is assumed already downgraded by the caller when src has too few samples for the
+// requested method (icSpectralResample / icComputeWeightingTable do this).
 static void resampleCore(const Grid &src, const std::vector<double> &v,
                          const Grid &dst, std::vector<double> &out,
                          icSpectralInterpMethod interp, icSpectralExtendMethod extend) {
   int n = src.n;
   out.assign(dst.n, 0.0);
+  // Sprague interpolation needs a 6-point-extended copy of v; build it once up
+  // front, and only when Sprague is actually the active method.
   std::vector<double> ext;
   bool haveExt = (interp == icSpectralInterpSprague) && spragueExtend(v, ext);
 
   for (int j = 0; j < dst.n; j++) {
-    double w = dst.nm(j);
-    double t = (src.step != 0.0) ? (w - src.start) / src.step : 0.0;
+    double w = dst.nm(j);                           // destination wavelength (nm)
+    double t = (src.step != 0.0) ? (w - src.start) / src.step : 0.0;  // position in source samples
 
     if (t <= 0.0) {                                 // at/below first sample
-      if (t > -1e-9) { out[j] = v[0]; continue; }
+      if (t > -1e-9) { out[j] = v[0]; continue; }   // within rounding of the first sample
       out[j] = (extend == icSpectralExtendLinear && n > 1)
                  ? v[0] + t * (v[1] - v[0]) : v[0]; // linear extrapolation or hold
       continue;
     }
     if (t >= n - 1) {                               // at/above last sample
-      if (t < n - 1 + 1e-9) { out[j] = v[n-1]; continue; }
+      if (t < n - 1 + 1e-9) { out[j] = v[n-1]; continue; }  // within rounding of the last sample
       out[j] = (extend == icSpectralExtendLinear && n > 1)
                  ? v[n-1] + (t - (n-1)) * (v[n-1] - v[n-2]) : v[n-1];
       continue;
     }
 
-    int i = (int)std::floor(t);
-    if (i > n - 2) i = n - 2;
-    double X = t - i;
+    int i = (int)std::floor(t);                     // source segment index (base sample v[i])
+    if (i > n - 2) i = n - 2;                        // keep the i+1 neighbour in range at the top
+    double X = t - i;                               // fractional position within segment i
     if (interp == icSpectralInterpSprague && haveExt)
       out[j] = spragueEval(ext, i, X);
     else if (interp == icSpectralInterpCubic)
@@ -187,6 +213,8 @@ static void resampleCore(const Grid &src, const std::vector<double> &v,
   }
 }
 
+// Widen n icFloatNumber samples at p into a double-precision working vector v
+// (all internal spectral math runs in double; see the section banner above).
 static void toDouble(const icFloatNumber *p, int n, std::vector<double> &v) {
   v.resize(n);
   for (int i = 0; i < n; i++) v[i] = (double)p[i];
@@ -209,6 +237,8 @@ static void toDouble(const icFloatNumber *p, int n, std::vector<double> &v) {
 // CIE Y=100 scale (a perfect diffuser sums to the illuminant XYZ with Y=100);
 // 380-780 nm @ 10 nm = 41 samples; consecutive Wx,Wy,Wz blocks (3*41 = 123).
 
+// CIE 1931 2-degree standard observer, D50 daylight (~5000 K; ICC PCS illuminant).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1931D50[123] = {
   // Wx (41)
   0.00142657f, 0.00886669f, 0.05797580f, 0.19074179f, 0.74819756f, 1.60457598f,
@@ -236,6 +266,8 @@ static const icFloatNumber kWtsObs1931D50[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1931 2-degree standard observer, D65 daylight (~6500 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1931D65[123] = {
   // Wx (41)
   0.00280186f, 0.01704361f, 0.09698451f, 0.31056867f, 1.16402130f, 2.40044086f,
@@ -263,6 +295,8 @@ static const icFloatNumber kWtsObs1931D65[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1931 2-degree standard observer, incandescent/tungsten (illuminant A, ~2856 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1931A[123] = {
   // Wx (41)
   0.00045699f, 0.00396559f, 0.01701452f, 0.05724145f, 0.24583158f, 0.66030724f,
@@ -290,6 +324,8 @@ static const icFloatNumber kWtsObs1931A[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1931 2-degree standard observer, phosphor-converted blue LED (LED-B1, ~2700 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1931LED_B1[123] = {
   // Wx (41)
   0.00002146f, -0.00008782f, 0.00063351f, 0.00101954f, 0.03732256f, 0.24579556f,
@@ -317,6 +353,8 @@ static const icFloatNumber kWtsObs1931LED_B1[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1931 2-degree standard observer, narrow-band tri-phosphor fluorescent (F11, ~4000 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1931F11[123] = {
   // Wx (41)
   0.00211347f, -0.00759300f, 0.03753289f, 0.20977571f, -0.29331224f, 2.60787141f,
@@ -344,6 +382,8 @@ static const icFloatNumber kWtsObs1931F11[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1964 10-degree supplementary observer, D50 daylight (~5000 K; ICC PCS illuminant).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1964D50[123] = {
   // Wx (41)
   0.00030102f, 0.00227985f, 0.05818689f, 0.38449921f, 1.08358618f, 1.61104187f,
@@ -371,6 +411,8 @@ static const icFloatNumber kWtsObs1964D50[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1964 10-degree supplementary observer, D65 daylight (~6500 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1964D65[123] = {
   // Wx (41)
   0.00049486f, 0.00469161f, 0.09732896f, 0.61608037f, 1.66000233f, 2.37709244f,
@@ -398,6 +440,8 @@ static const icFloatNumber kWtsObs1964D65[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1964 10-degree supplementary observer, incandescent/tungsten (illuminant A, ~2856 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1964A[123] = {
   // Wx (41)
   0.00000159f, 0.00152127f, 0.01758005f, 0.11837661f, 0.37211724f, 0.68554706f,
@@ -425,6 +469,8 @@ static const icFloatNumber kWtsObs1964A[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1964 10-degree supplementary observer, phosphor-converted blue LED (LED-B1, ~2700 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1964LED_B1[123] = {
   // Wx (41)
   0.00003071f, -0.00014968f, 0.00082066f, 0.00244244f, 0.06246108f, 0.25870111f,
@@ -452,6 +498,8 @@ static const icFloatNumber kWtsObs1964LED_B1[123] = {
   0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f, 0.00000000f,
 };
 
+// CIE 1964 10-degree supplementary observer, narrow-band tri-phosphor fluorescent (F11, ~4000 K).
+// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.
 static const icFloatNumber kWtsObs1964F11[123] = {
   // Wx (41)
   0.00420851f, -0.02061773f, 0.08524728f, 0.28828959f, -0.21033984f, 2.70395710f,

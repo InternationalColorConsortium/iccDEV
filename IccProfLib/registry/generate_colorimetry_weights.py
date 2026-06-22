@@ -46,19 +46,22 @@ END = "// <<<END GENERATED WEIGHTING TABLES"
 # Registry grid: 380-780 nm @ 10 nm = 41 samples.
 EXPECT_START, EXPECT_STEP, EXPECT_N = 380, 10, 41
 
-# (filename token, IccProfLib enum, C identifier tag) -- the registry's two observers.
+# (filename token, IccProfLib enum, C identifier tag, plain-English label) -- the
+# registry's two observers. The label is emitted verbatim into the per-array C
+# comment so a reader knows what each kWts... table is without decoding the name.
 OBSERVERS = [
-    ("1931", "icStdObs1931TwoDegrees", "Obs1931"),
-    ("1964", "icStdObs1964TenDegrees", "Obs1964"),
+    ("1931", "icStdObs1931TwoDegrees", "Obs1931", "CIE 1931 2-degree standard observer"),
+    ("1964", "icStdObs1964TenDegrees", "Obs1964", "CIE 1964 10-degree supplementary observer"),
 ]
-# (filename token, IccColorimetry enum, C identifier tag) -- the registry's five
-# illuminants. LED-B1 has no ICC wire-enum, hence the IccColorimetry-local enum.
+# (filename token, IccColorimetry enum, C identifier tag, plain-English label) --
+# the registry's five illuminants. LED-B1 has no ICC wire-enum, hence the
+# IccColorimetry-local enum. Labels feed the per-array C comment (see OBSERVERS).
 ILLUMINANTS = [
-    ("D50",    "icWtIllumD50",    "D50"),
-    ("D65",    "icWtIllumD65",    "D65"),
-    ("A",      "icWtIllumA",      "A"),
-    ("LED-B1", "icWtIllumLED_B1", "LED_B1"),
-    ("F11",    "icWtIllumF11",    "F11"),
+    ("D50",    "icWtIllumD50",    "D50",    "D50 daylight (~5000 K; ICC PCS illuminant)"),
+    ("D65",    "icWtIllumD65",    "D65",    "D65 daylight (~6500 K)"),
+    ("A",      "icWtIllumA",      "A",      "incandescent/tungsten (illuminant A, ~2856 K)"),
+    ("LED-B1", "icWtIllumLED_B1", "LED_B1", "phosphor-converted blue LED (LED-B1, ~2700 K)"),
+    ("F11",    "icWtIllumF11",    "F11",    "narrow-band tri-phosphor fluorescent (F11, ~4000 K)"),
 ]
 
 
@@ -69,8 +72,8 @@ def filename(obs_tok, illum_tok):
 def fetch():
     import urllib.request
     os.makedirs(DATA, exist_ok=True)
-    for obs_tok, _, _ in OBSERVERS:
-        for illum_tok, _, _ in ILLUMINANTS:
+    for obs_tok, _, _, _ in OBSERVERS:
+        for illum_tok, _, _, _ in ILLUMINANTS:
             fn = filename(obs_tok, illum_tok)
             # registry.color.org returns 403 to the default Python-urllib agent;
             # send a conventional User-Agent (as curl/a browser would).
@@ -112,8 +115,14 @@ def lit(s):
     return s + "f"
 
 
-def emit_array(name, wx, wy, wz):
-    out = ["static const icFloatNumber %s[%d] = {" % (name, 3 * EXPECT_N)]
+def emit_array(name, obs_label, illum_label, wx, wy, wz):
+    # Two-line plain-English header so each table is self-describing in the source:
+    # what observer x illuminant it is, then the shared layout/scale.
+    out = [
+        "// %s, %s." % (obs_label, illum_label),
+        "// Registry 10 nm LWL weighting table -- Wx,Wy,Wz blocks, CIE Y=100 scale.",
+        "static const icFloatNumber %s[%d] = {" % (name, 3 * EXPECT_N),
+    ]
     for label, col in (("Wx", wx), ("Wy", wy), ("Wz", wz)):
         out.append("  // %s (%d)" % (label, EXPECT_N))
         for i in range(0, EXPECT_N, 6):
@@ -129,11 +138,11 @@ def generate(fetched_on):
     out.append("// 380-780 nm @ 10 nm = 41 samples; consecutive Wx,Wy,Wz blocks (3*41 = 123).")
     out.append("")
     entries = []
-    for obs_tok, obs_enum, obs_tag in OBSERVERS:
-        for illum_tok, illum_enum, illum_tag in ILLUMINANTS:
+    for obs_tok, obs_enum, obs_tag, obs_label in OBSERVERS:
+        for illum_tok, illum_enum, illum_tag, illum_label in ILLUMINANTS:
             name = "kWts%s%s" % (obs_tag, illum_tag)
             wx, wy, wz = read_table(obs_tok, illum_tok)
-            out.append(emit_array(name, wx, wy, wz))
+            out.append(emit_array(name, obs_label, illum_label, wx, wy, wz))
             out.append("")
             entries.append((obs_enum, illum_enum, name))
     out.append("struct IccColorimetryWtEntry {")
