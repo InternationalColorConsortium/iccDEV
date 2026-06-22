@@ -220,6 +220,38 @@ static void toDouble(const icFloatNumber *p, int n, std::vector<double> &v) {
   for (int i = 0; i < n; i++) v[i] = (double)p[i];
 }
 
+// ---- Input-validation helpers (Tier 1 structural + Tier 2 finiteness guards) ----
+//
+// Note (deliberate): range.steps is intentionally NOT capped. It is an
+// icUInt16Number (<= 65535), so the largest transient allocation a single call can
+// drive is ~3*65535 doubles (~1.5 MB) -- bounded and short-lived. An explicit cap
+// would add an arbitrary magic limit without closing a real DoS surface, so none is
+// imposed at this time.
+
+// A spectral range is well-formed if it has at least one sample and, when it has
+// more than one, its endpoints are strictly increasing (so Grid::step > 0). A
+// single sample (steps==1) may carry any endpoints. Rejecting inverted or
+// zero-span multi-sample ranges at the API boundary keeps the per-sample resample
+// loops from silently working off a negative or zero wavelength step.
+static bool rangeWellFormed(const icSpectralRange &r) {
+  if (!r.steps)
+    return false;
+  if (r.steps > 1 && !(icF16toF(r.end) > icF16toF(r.start)))
+    return false;
+  return true;
+}
+
+// True iff all n samples at p are finite (no NaN/Inf). Used both to reject poisoned
+// spectral input at the API boundary and to reject a prepared operator that came
+// out non-finite. NOTE: this checks only finiteness, never sign or magnitude --
+// negative and >1 spectral values are legitimate (see icApplyWeightingTable).
+static bool allFinite(const icFloatNumber *p, int n) {
+  for (int i = 0; i < n; i++)
+    if (!std::isfinite((double)p[i]))
+      return false;
+  return true;
+}
+
 } // anonymous namespace
 
 //==========================================================================
@@ -556,7 +588,11 @@ static const icUInt16Number kColorimetryWtSteps      = 41;
 bool icSpectralResample(const icSpectralRange &srcRange, const icFloatNumber *pSrc,
                         const icSpectralRange &dstRange, icFloatNumber *pDst,
                         icSpectralInterpMethod interp, icSpectralExtendMethod extend) {
-  if (!pSrc || !pDst || !srcRange.steps || !dstRange.steps)
+  // Tier 1: null pointers and ill-formed (empty/inverted) ranges are rejected.
+  if (!pSrc || !pDst || !rangeWellFormed(srcRange) || !rangeWellFormed(dstRange))
+    return false;
+  // Tier 2: refuse NaN/Inf input rather than propagate it into pDst.
+  if (!allFinite(pSrc, (int)srcRange.steps))
     return false;
   Grid src(srcRange), dst(dstRange);
   std::vector<double> v, out;
@@ -574,7 +610,12 @@ bool icComputeWeightingTable(const icSpectralRange &obsRange, const icFloatNumbe
                              const icSpectralRange &illumRange, const icFloatNumber *pIllum,
                              const icSpectralRange &outRange, icFloatNumber *pWeights,
                              icSpectralInterpMethod interp) {
-  if (!pObs || !pIllum || !pWeights || !obsRange.steps || !illumRange.steps || !outRange.steps)
+  // Tier 1: null pointers and ill-formed (empty/inverted) ranges are rejected.
+  if (!pObs || !pIllum || !pWeights ||
+      !rangeWellFormed(obsRange) || !rangeWellFormed(illumRange) || !rangeWellFormed(outRange))
+    return false;
+  // Tier 2: refuse NaN/Inf observer (3*steps xbar,ybar,zbar) or illuminant input.
+  if (!allFinite(pObs, 3*(int)obsRange.steps) || !allFinite(pIllum, (int)illumRange.steps))
     return false;
 
   Grid obs(obsRange), out(outRange);
@@ -640,7 +681,19 @@ bool icComputeWeightingTable(const icSpectralRange &obsRange, const icFloatNumbe
 
 void icApplyWeightingTable(const icSpectralRange &range, const icFloatNumber *pWeights,
                            const icFloatNumber *pReflectance, icFloatNumber *pXYZ) {
+  // Tier 1: this is the one apply kernel with no caller-side gate, so it must not
+  // dereference null/degenerate input. Being void, it signals "no result" by
+  // emitting XYZ = 0 (when pXYZ is available) and bailing.
+  if (!pWeights || !pReflectance || !pXYZ || !range.steps) {
+    if (pXYZ) pXYZ[0] = pXYZ[1] = pXYZ[2] = 0;
+    return;
+  }
   int n = (int)range.steps;
+  // DELIBERATE (no value clamping): weights and samples pass through untouched.
+  // The registry LWL weights are legitimately negative by construction, and
+  // reflectance/radiance samples are legitimately > 1.0 (emissive and scene
+  // spectrophotometry) or slightly < 0 (measurement noise/fluorescence). Clamping
+  // to [0,1] here would silently corrupt valid data, so we do not range-limit.
   double X = 0.0, Y = 0.0, Z = 0.0;
   for (int m = 0; m < n; m++) {
     double r = pReflectance[m];
@@ -648,9 +701,11 @@ void icApplyWeightingTable(const icSpectralRange &range, const icFloatNumber *pW
     Y += pWeights[n + m]    * r;
     Z += pWeights[2*n + m]  * r;
   }
-  pXYZ[0] = (icFloatNumber)X;
-  pXYZ[1] = (icFloatNumber)Y;
-  pXYZ[2] = (icFloatNumber)Z;
+  // Tier 2: a NaN/Inf weight or sample propagates into the sums; rather than emit a
+  // non-finite XYZ, fall back to 0 on each affected channel.
+  pXYZ[0] = std::isfinite(X) ? (icFloatNumber)X : 0;
+  pXYZ[1] = std::isfinite(Y) ? (icFloatNumber)Y : 0;
+  pXYZ[2] = std::isfinite(Z) ? (icFloatNumber)Z : 0;
 }
 
 const icFloatNumber *icGetStandardObserver(icStandardObserver obs, icSpectralRange &outRange)
@@ -714,7 +769,8 @@ CIccColorimetricCalculator::CIccColorimetricCalculator()
 CIccColorimetricCalculator::~CIccColorimetricCalculator() {}
 
 bool CIccColorimetricCalculator::SetObserver(const icSpectralRange &range, const icFloatNumber *pObserver) {
-  if (!range.steps || !pObserver)
+  // Tier 1: validate the range geometry once, here at the boundary (not per sample).
+  if (!rangeWellFormed(range) || !pObserver)
     return false;
   m_obsRange = range;
   m_obs.assign(pObserver, pObserver + 3*(int)range.steps);
@@ -723,7 +779,7 @@ bool CIccColorimetricCalculator::SetObserver(const icSpectralRange &range, const
 }
 
 bool CIccColorimetricCalculator::SetIlluminant(const icSpectralRange &range, const icFloatNumber *pIlluminant) {
-  if (!range.steps || !pIlluminant)
+  if (!rangeWellFormed(range) || !pIlluminant)
     return false;
   m_illumRange = range;
   m_illum.assign(pIlluminant, pIlluminant + (int)range.steps);
@@ -746,7 +802,7 @@ bool CIccColorimetricCalculator::SetStandardIlluminant(icIlluminant illum)
 }
 
 bool CIccColorimetricCalculator::SetEmissiveWhite(const icSpectralRange &range, const icFloatNumber *pWhite) {
-  if (!range.steps || !pWhite)
+  if (!rangeWellFormed(range) || !pWhite)
     return false;
   m_whiteRange = range;
   m_white.assign(pWhite, pWhite + (int)range.steps);
@@ -757,7 +813,7 @@ bool CIccColorimetricCalculator::SetEmissiveWhite(const icSpectralRange &range, 
 
 bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZCalcMethod method,
                                          icSpectralInterpMethod interp, icSpectralExtendMethod extend) {
-  if (!measRange.steps || !m_obs.size() || !m_illum.size())
+  if (!rangeWellFormed(measRange) || !m_obs.size() || !m_illum.size())
     return false;
   int nm = (int)measRange.steps;
   m_measRange = measRange;
@@ -788,6 +844,11 @@ bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZ
       m_M[nm + m]   = (icFloatNumber)(k * ym[m] * sm[m]);
       m_M[2*nm + m] = (icFloatNumber)(k * zm[m] * sm[m]);
     }
+    // Tier 2: a non-finite observer/illuminant sample (e.g. NaN only in xbar/zbar)
+    // can slip past the sumPy guard, which only tests ybar*S. Reject any operator
+    // that came out non-finite so ReflectanceToXYZ never applies a poisoned matrix.
+    if (!allFinite(&m_M[0], 3*nm))
+      return false;
     m_bReady = true;
     return true;
   }
@@ -799,6 +860,10 @@ bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZ
   (void)interp;
   bool ok = icComputeWeightingTable(m_obsRange, &m_obs[0], m_illumRange, &m_illum[0],
                                     measRange, &m_M[0], recon);
+  // Tier 2: belt-and-braces -- icComputeWeightingTable already finiteness-checks its
+  // inputs, but reject the built operator too if it somehow came out non-finite.
+  if (ok && !allFinite(&m_M[0], 3*nm))
+    ok = false;
   m_bReady = ok;
   return ok;
 }
@@ -806,7 +871,7 @@ bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZ
 bool CIccColorimetricCalculator::PrepareEmissive(const icSpectralRange &measRange,
                                                  icSpectralInterpMethod interp,
                                                  icSpectralExtendMethod extend) {
-  if (!measRange.steps || !m_obs.size() || !m_bHaveWhite || !m_white.size())
+  if (!rangeWellFormed(measRange) || !m_obs.size() || !m_bHaveWhite || !m_white.size())
     return false;
   int nm = (int)measRange.steps;
   m_measRange = measRange;
@@ -839,6 +904,10 @@ bool CIccColorimetricCalculator::PrepareEmissive(const icSpectralRange &measRang
     m_M[nm + m]   = (icFloatNumber)(ym[m] / k);
     m_M[2*nm + m] = (icFloatNumber)(zm[m] / k);
   }
+  // Tier 2: reject a non-finite operator (e.g. NaN observer/white outside the
+  // sum(ybar*white) term) so RadianceToXYZ never applies a poisoned matrix.
+  if (!allFinite(&m_M[0], 3*nm))
+    return false;
   m_bReady = true;
   return true;
 }

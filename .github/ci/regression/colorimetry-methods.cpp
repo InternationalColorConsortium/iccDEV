@@ -34,6 +34,9 @@
 // white points. Those validate that the data plumbing hands back the correct
 // tables (right observer/illuminant, no transposition/corruption), which is a
 // property of external CIE truth, not of a provisional reduction method.
+// Part G exercises the emissive/radiant path; Part H pins the defensive input
+// guards (null pointer, ill-formed range, non-finite value) added for robustness --
+// each Part-H assertion is red-green: it fails if the matching guard is removed.
 //
 // Returns 0 on success; the number of failed invariants otherwise (each printed).
 
@@ -511,6 +514,102 @@ void testEmissive()
   check(d50 && !noWhite.PrepareEmissive(r), "emissive: missing white -> PrepareEmissive fails", 0.0);
 }
 
+// ---- Part H: input guards (null / ill-formed range / non-finite) ---------------
+// The reduction module added structural + finiteness guards so degenerate input is
+// rejected (or safely absorbed) instead of reading out of bounds or emitting
+// NaN/Inf. Each check below fails if the corresponding guard is removed. NOTE: by
+// design these guards never reject negative or >1 spectral values -- those are
+// legitimate (negative LWL weights; emissive/scene samples > 1) -- so this part
+// deliberately tests only null/range/finiteness, never sign or magnitude.
+void testInputGuards()
+{
+  // H1: icApplyWeightingTable must not dereference a null table; on bad input it
+  // zeroes XYZ and returns. (Without the guard this dereferences null and crashes.)
+  {
+    icSpectralRange r = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> white(31, (icFloatNumber)1.0);
+    icFloatNumber xyz[3] = { 999, 999, 999 };
+    icApplyWeightingTable(r, NULL, &white[0], xyz);
+    check(xyz[0] == 0 && xyz[1] == 0 && xyz[2] == 0, "apply(null weights) -> XYZ=0, no deref", 0.0);
+  }
+
+  // H2: a non-finite sample must not leak a NaN/Inf XYZ -- the result is sanitized
+  // to a finite value per channel rather than propagated to the caller.
+  {
+    icSpectralRange g = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> obs = makeObserver(400, 700, 31);
+    std::vector<icFloatNumber> ill = makeIlluminant(400, 700, 31);
+    std::vector<icFloatNumber> wt(3 * 31);
+    bool built = icComputeWeightingTable(g, &obs[0], g, &ill[0], g, &wt[0], icSpectralInterpLinear);
+    check(built, "apply-NaN setup: weighting table built", 0.0);
+    if (built) {
+      std::vector<icFloatNumber> refl(31, (icFloatNumber)0.5);
+      refl[5] = (icFloatNumber)NAN;
+      icFloatNumber xyz[3] = { 0, 0, 0 };
+      icApplyWeightingTable(g, &wt[0], &refl[0], xyz);
+      check(std::isfinite((double)xyz[0]) && std::isfinite((double)xyz[1]) && std::isfinite((double)xyz[2]),
+            "apply(NaN sample) -> finite XYZ (no NaN leak)", 0.0);
+    }
+  }
+
+  // H3: icSpectralResample rejects non-finite input rather than propagating it.
+  {
+    icSpectralRange g = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> in(31, (icFloatNumber)0.5), out(31);
+    in[10] = (icFloatNumber)NAN;
+    check(!icSpectralResample(g, &in[0], g, &out[0]), "resample(NaN input) -> false", 0.0);
+  }
+
+  // H4: an inverted range (end < start with steps>1) is ill-formed -> rejected, both
+  // at the free-function and at the calculator Set* boundary.
+  {
+    icSpectralRange bad = makeRange(700, 400, 31);   // inverted endpoints
+    icSpectralRange good = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> in(31, (icFloatNumber)0.5), out(31);
+    check(!icSpectralResample(bad, &in[0], good, &out[0]), "resample(inverted src range) -> false", 0.0);
+
+    CIccColorimetricCalculator calc;
+    std::vector<icFloatNumber> obs = makeObserver(400, 700, 31);
+    check(!calc.SetObserver(bad, &obs[0]), "SetObserver(inverted range) -> false", 0.0);
+  }
+
+  // H5: icComputeWeightingTable rejects a non-finite observer at the boundary.
+  {
+    icSpectralRange g = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> obs = makeObserver(400, 700, 31);
+    std::vector<icFloatNumber> ill = makeIlluminant(400, 700, 31);
+    std::vector<icFloatNumber> wt(3 * 31);
+    obs[0] = (icFloatNumber)NAN;
+    check(!icComputeWeightingTable(g, &obs[0], g, &ill[0], g, &wt[0], icSpectralInterpLinear),
+          "icComputeWeightingTable(NaN observer) -> false", 0.0);
+  }
+
+  // H6: the catch-all. A NaN only in xbar slips past the sum(ybar*S) denominator
+  // guard, so the BUILT operator must itself be finiteness-checked; Prepare fails.
+  {
+    icSpectralRange g = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> obs = makeObserver(400, 700, 31);
+    std::vector<icFloatNumber> ill = makeIlluminant(400, 700, 31);
+    obs[0] = (icFloatNumber)NAN;   // xbar[0] only; ybar/zbar stay finite
+    CIccColorimetricCalculator calc;
+    bool set = calc.SetObserver(g, &obs[0]) && calc.SetIlluminant(g, &ill[0]);
+    check(set && !calc.Prepare(g, icXYZCalcDirectSum),
+          "Prepare(NaN in xbar) -> false (operator finiteness catch)", 0.0);
+  }
+
+  // H7: same catch-all on the emissive path -- NaN in xbar, finite adopted white.
+  {
+    icSpectralRange g = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> obs = makeObserver(400, 700, 31);
+    std::vector<icFloatNumber> white(31, (icFloatNumber)1.0);
+    obs[0] = (icFloatNumber)NAN;
+    CIccColorimetricCalculator calc;
+    bool set = calc.SetObserver(g, &obs[0]) && calc.SetEmissiveWhite(g, &white[0]);
+    check(set && !calc.PrepareEmissive(g),
+          "PrepareEmissive(NaN in xbar) -> false (operator finiteness catch)", 0.0);
+  }
+}
+
 } // namespace
 
 int main()
@@ -522,6 +621,7 @@ int main()
   testStandardAccessors();
   testRegistryWeightingTables();
   testEmissive();
+  testInputGuards();
 
   if (g_fail) {
     std::fprintf(stderr, "[colorimetry-methods] %d invariant(s) failed\n", g_fail);
