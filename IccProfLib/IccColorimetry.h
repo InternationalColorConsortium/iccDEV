@@ -88,9 +88,10 @@ namespace iccDEV {
  *    the measurement interval. This reproduces the behaviour of the existing
  *    iccMAX spectral-PCS path and is provided as the comparison baseline.
  *  - icXYZCalcWeighting: the weighting-function method X = R.w (eqn 2 of WP56),
- *    using either an externally supplied table (e.g. the registry LWL tables) or
- *    self-computed triangular/ASTM-style weights. Recommended for intervals that
- *    are not 1 or 5 nm (e.g. 10 nm instrument data).
+ *    using self-computed triangular/ASTM-style weights (icComputeWeightingTable).
+ *    Recommended for intervals that are not 1 or 5 nm (e.g. 10 nm instrument data).
+ *    The registry's own published LWL tables are available separately as baked-in
+ *    static data via icGetColorimetryWeightingTable() + icApplyWeightingTable().
  *  - icXYZCalcSpragueTo1nm: reconstruct the measurement onto a fine grid with
  *    CIE 167:2005 Sprague interpolation before summation. Recommended fallback
  *    when no suitable weighting function is available.
@@ -163,10 +164,40 @@ ICCPROFLIB_API const icFloatNumber *icGetStandardObserver(icStandardObserver obs
 ICCPROFLIB_API const icFloatNumber *icGetStandardIlluminant(icIlluminant illum,
                                                             icSpectralRange &outRange);
 
-// NOTE: ingesting the registry weighting-table CSVs is intentionally NOT part of
-// this live library. The registry values are effectively static; an external
-// "parallel" loader/converter (run by a maintainer) can fetch the registry CSVs
-// and produce the weight arrays, which then enter via SetWeightingTable().
+/**
+ * The illuminants for which the ICC colorimetry-data registry publishes 10 nm
+ * weighting tables (registry.color.org/colorimetry-data). LED-B1 has no ICC
+ * wire-enum (icIlluminant) assignment, so the registry's set is named here.
+ */
+enum icColorimetryWeightingIlluminant {
+  icWtIllumD50    = 0,
+  icWtIllumD65    = 1,
+  icWtIllumA      = 2,
+  icWtIllumLED_B1 = 3,
+  icWtIllumF11    = 4,
+};
+
+/**
+ * Fetch one of the ICC colorimetry-data registry's weighting tables (ISO 13655 /
+ * Li et al. 2016 LWL, computed for ICC by T. Habib, NTNU): 380-780 nm @ 10 nm =
+ * 41 samples, laid out as consecutive Wx,Wy,Wz blocks (the 3*steps form
+ * icApplyWeightingTable expects). Fills outRange and returns the static const
+ * table, or nullptr if (obs,illum) is not one of the registry's 10 combinations
+ * (icStdObs1931TwoDegrees / icStdObs1964TenDegrees x the five illuminants above).
+ *
+ * These tables carry the registry's CIE Y=100 normalisation (a perfect diffuser
+ * sums to the illuminant's XYZ with Y=100) -- unlike the relative Y=1 convention
+ * of icComputeWeightingTable / icXYZCalcDirectSum. The returned pointer is
+ * program-lifetime static data; do not free it.
+ *
+ * The table data is baked in as static const arrays generated from the registry
+ * CSVs by IccProfLib/registry/generate_colorimetry_weights.py (rerun by a
+ * maintainer when the registry is revised) -- the live library performs no CSV
+ * ingestion at runtime.
+ */
+ICCPROFLIB_API const icFloatNumber *icGetColorimetryWeightingTable(
+    icStandardObserver obs, icColorimetryWeightingIlluminant illum,
+    icSpectralRange &outRange);
 
 /**
  **************************************************************************
@@ -175,10 +206,11 @@ ICCPROFLIB_API const icFloatNumber *icGetStandardIlluminant(icIlluminant illum,
  * Purpose:
  *  Reduces spectral reflectance to CIE XYZ using a selectable, registry-aligned
  *  method.  Observer and illuminant are supplied explicitly (so the caller can
- *  feed authoritative CIE 1 nm data or the built-in 5 nm tables); an external
- *  weighting table (e.g. a registry LWL CSV) may be supplied for the weighting
- *  method.  Prepare() builds a 3 x measRange.steps operator so that subsequent
- *  ReflectanceToXYZ() calls are a single matrix-vector product.
+ *  feed authoritative CIE 1 nm data or the built-in 5 nm tables).  Prepare()
+ *  builds a 3 x measRange.steps operator so that subsequent ReflectanceToXYZ()
+ *  calls are a single matrix-vector product.  (The registry's own LWL weighting
+ *  tables are a complete operator already -- use icGetColorimetryWeightingTable()
+ *  with icApplyWeightingTable() directly rather than this calculator.)
  *
  *  The same object also reduces emissive/radiant spectra: SetEmissiveWhite() +
  *  PrepareEmissive() build a no-illuminant operator (the spectrum is the stimulus)
@@ -209,11 +241,6 @@ public:
   /// PrepareEmissive to normalise the observer so this white maps to Y = 1.
   /// Resets the prepared operator.
   bool SetEmissiveWhite(const icSpectralRange &range, const icFloatNumber *pWhite); // range.steps
-  /// Supply an external weighting table (e.g. a registry LWL CSV converted to
-  /// 3*range.steps Wx,Wy,Wz weights). Used only by icXYZCalcWeighting when its
-  /// range matches measRange exactly; resets the prepared operator.
-  bool SetWeightingTable(const icSpectralRange &range, const icFloatNumber *pWeights);// 3*range.steps
-
   /// Build the 3 x measRange.steps reduction operator for measurements sampled on
   /// measRange using the chosen method (interp/extend select the reconstruction and
   /// end handling). Requires an observer and illuminant; returns false otherwise.
@@ -253,10 +280,6 @@ private:
   bool m_bHaveWhite;                    // emissive adopted white supplied?
   icSpectralRange m_whiteRange;
   std::vector<icFloatNumber> m_white;   // m_whiteRange.steps (emissive adopted white)
-
-  bool m_bHaveWt;
-  icSpectralRange m_wtRange;
-  std::vector<icFloatNumber> m_wt;      // 3*m_wtRange.steps (external table)
 
   icSpectralRange m_measRange;
   std::vector<icFloatNumber> m_M;       // prepared 3*m_measRange.steps operator

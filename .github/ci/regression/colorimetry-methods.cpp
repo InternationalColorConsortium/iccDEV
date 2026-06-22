@@ -26,9 +26,14 @@
 //   D. The free-function weighting path (icComputeWeightingTable +
 //      icApplyWeightingTable) matches the calculator's self-computed weighting.
 //
-// The observer/illuminant here are smooth synthetic curves (positive, no real CIE
-// data) -- the invariants are properties of the algorithm, not of the numbers, so
+// The core algorithm invariants (A-D) use smooth synthetic curves (positive, no
+// real CIE data) -- they are properties of the algorithm, not of the numbers, so
 // synthetic input exercises every code path without baking in provisional values.
+// Parts E and F add real-data anchors -- iccDEV's built-in observer/illuminant
+// tables, and the baked-in registry weighting tables -- checked against canonical
+// white points. Those validate that the data plumbing hands back the correct
+// tables (right observer/illuminant, no transposition/corruption), which is a
+// property of external CIE truth, not of a provisional reduction method.
 //
 // Returns 0 on success; the number of failed invariants otherwise (each printed).
 
@@ -375,6 +380,81 @@ void testStandardAccessors()
   }
 }
 
+// ---- Part F: baked-in registry weighting tables --------------------------------
+// The 10 registry tables (icGetColorimetryWeightingTable) are static const data
+// injected from registry.color.org/colorimetry-data by the maintainer generator.
+// They are deliberately NOT pinned value-by-value -- the LWL weights are provisional
+// pending CIE TC1-101. Instead each table is validated by the one property every
+// colorimetric weighting table has by construction: applied to a perfect diffuser it
+// reproduces its illuminant's white point on the registry's CIE Y=100 scale
+// (sum(Wy)=100; X/Y and Z/Y = the canonical chromaticity). That anchors the injected
+// data to external truth (CIE white points) and catches a corrupted, mislabeled or
+// Wx/Wz-transposed table, without depending on any provisional per-wavelength weight.
+void testRegistryWeightingTables()
+{
+  struct Combo {
+    icStandardObserver               obs;
+    icColorimetryWeightingIlluminant illum;
+    const char                      *name;
+    bool                             hasCanon;  // canonical white point pinned below?
+    double                           Xn, Zn;    // canonical X/Y, Z/Y (Y=1) if hasCanon
+  };
+  // Canonical white points: CIE 15 D50/D65/A for the 2 deg (1931) and 10 deg (1964)
+  // observers -- rock-solid external references. F11 and LED-B1 white points vary
+  // more between sources, so they are checked for presence + Y=100 only (not pinned).
+  const Combo combos[10] = {
+    { icStdObs1931TwoDegrees, icWtIllumD50,    "D50/1931",    true,  0.96422, 0.82521 },
+    { icStdObs1931TwoDegrees, icWtIllumD65,    "D65/1931",    true,  0.95047, 1.08883 },
+    { icStdObs1931TwoDegrees, icWtIllumA,      "A/1931",      true,  1.09850, 0.35585 },
+    { icStdObs1931TwoDegrees, icWtIllumLED_B1, "LED-B1/1931", false, 0.0,     0.0     },
+    { icStdObs1931TwoDegrees, icWtIllumF11,    "F11/1931",    false, 0.0,     0.0     },
+    { icStdObs1964TenDegrees, icWtIllumD50,    "D50/1964",    true,  0.96720, 0.81427 },
+    { icStdObs1964TenDegrees, icWtIllumD65,    "D65/1964",    true,  0.94811, 1.07304 },
+    { icStdObs1964TenDegrees, icWtIllumA,      "A/1964",      true,  1.11144, 0.35200 },
+    { icStdObs1964TenDegrees, icWtIllumLED_B1, "LED-B1/1964", false, 0.0,     0.0     },
+    { icStdObs1964TenDegrees, icWtIllumF11,    "F11/1964",    false, 0.0,     0.0     },
+  };
+  const double WP_BAND = 4e-3;   // absorbs the LWL-vs-canonical method delta (~1e-4)
+
+  for (int i = 0; i < 10; i++) {
+    icSpectralRange r;
+    const icFloatNumber *w = icGetColorimetryWeightingTable(combos[i].obs, combos[i].illum, r);
+    bool grid = w && r.steps == 41
+             && std::fabs((double)icF16toF(r.start) - 380.0) < 1.0
+             && std::fabs((double)icF16toF(r.end)   - 780.0) < 1.0;
+    check(grid, "registry table present on 380-780@10nm grid", 0.0);
+    if (!grid) continue;
+
+    std::vector<icFloatNumber> diffuser(r.steps, (icFloatNumber)1.0);
+    icFloatNumber xyz[3];
+    icApplyWeightingTable(r, w, &diffuser[0], xyz);
+    std::printf("[colorimetry-methods] registry %-11s perfect-diffuser XYZ = %8.4f %8.4f %8.4f\n",
+                combos[i].name, (double)xyz[0], (double)xyz[1], (double)xyz[2]);
+
+    // Y=100 normalization invariant -- holds for all 10 tables by construction.
+    check(std::fabs((double)xyz[1] - 100.0) < 1e-2, "registry table sum(Wy)==100",
+          std::fabs((double)xyz[1] - 100.0));
+
+    // Canonical white-point anchor (external truth) for the well-tabulated combos.
+    if (combos[i].hasCanon && xyz[1] > 1e-6) {
+      double xn = (double)xyz[0] / (double)xyz[1];
+      double zn = (double)xyz[2] / (double)xyz[1];
+      char buf[112];
+      std::snprintf(buf, sizeof(buf), "registry %s: white point X/Y matches canonical", combos[i].name);
+      check(std::fabs(xn - combos[i].Xn) < WP_BAND, buf, std::fabs(xn - combos[i].Xn));
+      std::snprintf(buf, sizeof(buf), "registry %s: white point Z/Y matches canonical", combos[i].name);
+      check(std::fabs(zn - combos[i].Zn) < WP_BAND, buf, std::fabs(zn - combos[i].Zn));
+    }
+  }
+
+  // An (obs,illum) outside the registry's 10 combinations -> nullptr + zeroed range.
+  {
+    icSpectralRange r;
+    const icFloatNumber *w = icGetColorimetryWeightingTable(icStdObsUnknown, icWtIllumD50, r);
+    check(w == NULL && r.steps == 0, "icGetColorimetryWeightingTable(unknown obs) -> nullptr", 0.0);
+  }
+}
+
 // ---- Part G: emissive / radiant reduction --------------------------------------
 void testEmissive()
 {
@@ -440,6 +520,7 @@ int main()
   testDifferingGrids();
   testWeightingFreeFunctions();
   testStandardAccessors();
+  testRegistryWeightingTables();
   testEmissive();
 
   if (g_fail) {
