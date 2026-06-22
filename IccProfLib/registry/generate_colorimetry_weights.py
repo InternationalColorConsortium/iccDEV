@@ -164,7 +164,9 @@ def inject(generated):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Generate baked-in colorimetry weighting tables.")
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--fetch", action="store_true",
                     help="re-download the CSV snapshot from the registry before generating")
     args = ap.parse_args()
