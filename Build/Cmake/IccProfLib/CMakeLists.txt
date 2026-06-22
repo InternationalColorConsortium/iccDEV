@@ -25,6 +25,7 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccCAM.cpp
     ${SRC_PATH}/IccProfLib/IccCmm.cpp
     ${SRC_PATH}/IccProfLib/IccCmmThread.cpp
+    ${SRC_PATH}/IccProfLib/IccColorimetry.cpp
     ${SRC_PATH}/IccProfLib/IccConvertUTF.cpp
     ${SRC_PATH}/IccProfLib/IccEncoding.cpp
     ${SRC_PATH}/IccProfLib/IccEnvVar.cpp
@@ -66,6 +67,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccCAM.h
   ${SRC_PATH}/IccProfLib/IccCmm.h
   ${SRC_PATH}/IccProfLib/IccCmmThread.h
+  ${SRC_PATH}/IccProfLib/IccColorimetry.h
   ${SRC_PATH}/IccProfLib/IccConvertUTF.h
   ${SRC_PATH}/IccProfLib/IccDefs.h
   ${SRC_PATH}/IccProfLib/IccEncoding.h
