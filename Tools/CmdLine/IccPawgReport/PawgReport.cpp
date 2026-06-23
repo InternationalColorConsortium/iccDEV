@@ -179,8 +179,18 @@ bool LoadRawProfile(const char *szFilename, RawProfile &raw)
 
   in.seekg(0, std::ios::end);
   std::streamoff end = in.tellg();
-  if (end < 0) {
-    raw.readError = "unable to determine file size";
+  // A directory (or other non-regular path) can be opened by std::ifstream
+  // successfully, yet tellg() then reports a nonsensical length: libstdc++
+  // returns LLONG_MAX (0x7fffffffffffffff) for a directory such as "/tmp".
+  // That value flowed straight into raw.data.resize() below, requesting a ~9 EB
+  // allocation that aborts under AddressSanitizer ("requested allocation size
+  // 0x7fffffffffffffff", #1519).  An ICC profile carries its size in a uint32
+  // header field, so any length that cannot fit a conformant profile is not one
+  // we could ever load; reject it here exactly like an unreadable file so the
+  // caller degrades to the same graceful "parse failed" report it already emits
+  // for a missing path, instead of crashing.
+  if (end < 0 || (uint64_t)end > 0xFFFFFFFFull) {
+    raw.readError = "input is not a readable regular file";
     return false;
   }
   in.seekg(0, std::ios::beg);
