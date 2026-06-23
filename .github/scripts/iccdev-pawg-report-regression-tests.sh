@@ -220,6 +220,63 @@ run_binary_size_guard() {
   pass_case "$name" "executable size is bounded: $size_bytes bytes"
 }
 
+# Issue #1519: pointing iccPawgReport at a directory (e.g. "/tmp") used to abort.
+# LoadRawProfile() opened the directory with std::ifstream, then tellg() reported
+# LLONG_MAX as its "size", which flowed into raw.data.resize() as a ~9 EB request
+# -- under AddressSanitizer that is "requested allocation size 0x7fffffffffffffff
+# (allocation-size-too-big)"; in a non-sanitizer build it throws std::bad_alloc.
+# The fix rejects any length that cannot fit a uint32 ICC profile, so a directory
+# now degrades to the same graceful "parse failed" report a missing path produces.
+# This case proves the crash is gone in BOTH build flavors: no sanitizer finding
+# AND no bad_alloc/huge-allocation text, a non-zero exit (a directory is not a
+# valid profile), and the normal report body still renders.
+run_directory_input_crash_guard() {
+  local name="pawg-directory-input-crash-guard"
+  local logfile="$OUTDIR/$name.log"
+  local dir_input="$OUTDIR/directory-input-1519"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile"
+
+  if [ ! -x "$PAWG" ]; then
+    fail_case "$name" "missing executable: $PAWG"
+    return
+  fi
+
+  mkdir -p "$dir_input"
+
+  timeout 60 "$PAWG" "$dir_input" > "$logfile" 2>&1 || exit_code=$?
+
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out on directory input (possible hang)"
+    return
+  fi
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding on directory input (huge allocation regressed)"
+    return
+  fi
+
+  if grep -qE "allocation size|allocation-size-too-big|bad_alloc|exceeds maximum supported size" "$logfile" 2>/dev/null; then
+    fail_case "$name" "huge-allocation / bad_alloc on directory input"
+    sed -n '1,40p' "$logfile"
+    return
+  fi
+
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "directory input reported success (expected non-zero exit)"
+    return
+  fi
+
+  if ! grep -F -q "[ SECURITY ]" "$logfile"; then
+    fail_case "$name" "directory input did not degrade to the normal report body"
+    return
+  fi
+
+  pass_case "$name" "directory input handled gracefully (no crash, non-zero exit, report rendered)"
+}
+
 run_good_profile() {
   local name="$1"
   local flag="$2"
@@ -1389,6 +1446,7 @@ run_s3_header_signature_tests() {
 echo "=== iccPawgReport PAWG regression and security tests ==="
 run_static_source_audit
 run_binary_size_guard
+run_directory_input_crash_guard
 run_good_profile "pawg-valid-profile-fidelity" ""
 run_good_profile "pawg-read-option-fidelity" "--read"
 run_json_report
