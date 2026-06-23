@@ -743,18 +743,26 @@ bool buildClutRaster(CIccTag* tag, const std::string& sigDesc, Raster& out,
   float* buf32 = reinterpret_cast<float*>(buf);
   icFloatNumber* clutData = clut->GetData(0);
 
-  // The tile-packing geometry above (tiles/tileWidth/tileHeight strides) is
-  // derived from the grid arrangement, NOT from the CLUT's actual sample array,
-  // so for a malformed or non-square CLUT the computed input index `in` can run
-  // past the end of clutData. Bound every read against the true element count
-  // -- NumPoints() grid nodes x outputChannels samples per node -- and treat any
-  // out-of-range node as 0 (the buffer is pre-zeroed) instead of reading out of
-  // bounds (CWE-125, heap-buffer-overflow read; issue #1548).
+  // Defense-in-depth bound for the input read below. The stride fix above makes
+  // the index correct for well-formed CLUTs (square and non-square), but the
+  // packing geometry is still derived from grid metadata rather than the actual
+  // sample array, so a malformed profile with inconsistent grid/channel counts
+  // could still compute an in-range-looking index past the data. Bound every read
+  // against the true element count -- NumPoints() grid nodes x outputChannels
+  // samples per node -- and treat any out-of-range node as 0 (the buffer is
+  // pre-zeroed) instead of reading out of bounds (CWE-125; issue #1548).
   const size_t clutSampleCount =
       static_cast<size_t>(clut->NumPoints()) * static_cast<size_t>(outputChannels);
 
+  // CLUT input strides. n010 is the per-row (x dimension) stride and MUST be
+  // tileHeight*outputChannels: x indexes the tileWidth dimension, and advancing
+  // one x-step skips a full column of tileHeight samples. Using tileWidth here
+  // (as an earlier revision did) only coincides for square CLUTs (tileWidth ==
+  // tileHeight); for a non-square CLUT it over-strides and walks the input index
+  // off the end of clutData -- the root cause of the #1548 heap-overflow read.
+  // (Matches the reference iccProfileVisualize layout.)
   size_t n001 = static_cast<size_t>(tileWidth) * tileHeight * outputChannels;
-  size_t n010 = static_cast<size_t>(tileWidth) * outputChannels;
+  size_t n010 = static_cast<size_t>(tileHeight) * outputChannels;
   size_t n100 = static_cast<size_t>(outputChannels);
   if (inputChannels < 2) std::swap(n010, n100);
   size_t outTileStepV = static_cast<size_t>(imageWidth) * tileHeight * outputChannels;
