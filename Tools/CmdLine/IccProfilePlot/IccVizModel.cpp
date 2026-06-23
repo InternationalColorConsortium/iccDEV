@@ -743,6 +743,16 @@ bool buildClutRaster(CIccTag* tag, const std::string& sigDesc, Raster& out,
   float* buf32 = reinterpret_cast<float*>(buf);
   icFloatNumber* clutData = clut->GetData(0);
 
+  // The tile-packing geometry above (tiles/tileWidth/tileHeight strides) is
+  // derived from the grid arrangement, NOT from the CLUT's actual sample array,
+  // so for a malformed or non-square CLUT the computed input index `in` can run
+  // past the end of clutData. Bound every read against the true element count
+  // -- NumPoints() grid nodes x outputChannels samples per node -- and treat any
+  // out-of-range node as 0 (the buffer is pre-zeroed) instead of reading out of
+  // bounds (CWE-125, heap-buffer-overflow read; issue #1548).
+  const size_t clutSampleCount =
+      static_cast<size_t>(clut->NumPoints()) * static_cast<size_t>(outputChannels);
+
   size_t n001 = static_cast<size_t>(tileWidth) * tileHeight * outputChannels;
   size_t n010 = static_cast<size_t>(tileWidth) * outputChannels;
   size_t n100 = static_cast<size_t>(outputChannels);
@@ -758,6 +768,10 @@ bool buildClutRaster(CIccTag* tag, const std::string& sigDesc, Raster& out,
       for (int y = 0; y < tileHeight; ++y) {
         size_t in = z * n001 + x * n010 + (tileHeight - 1 - y) * n100;
         size_t o = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
+        // Skip nodes the packing geometry addresses beyond the real CLUT array;
+        // leaves the pre-zeroed output sample intact rather than over-reading (#1548).
+        if (in + static_cast<size_t>(outputChannels) > clutSampleCount)
+          continue;
         if (bytes == 4 || bytes == 8)
           for (int c = 0; c < outputChannels; ++c) buf32[o + c] = clutData[in + c];
         else if (bytes == 2)

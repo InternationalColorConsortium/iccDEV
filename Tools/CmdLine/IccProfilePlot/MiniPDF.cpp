@@ -180,11 +180,16 @@ void PDFWriter::CloseFile()
           FILE* outFile = icOpenRegularWriteTextFile(m_filename.c_str());
           if (!WritePdfTextFile(outFile, out.str())) {
             fprintf(stderr, "PDF writing error in '%s': unable to open regular output file\n", m_filename.c_str());
+            // Fall through (don't early-return) so the shared object-cleanup loop
+            // at the end still frees every PDFObject on this failure path (#1547).
             m_filename.clear();
-            return;
           }
 
-          m_objects.clear();
+          // NOTE: do NOT clear() m_objects here. The objects are owned by this
+          // vector and are freed by the unified delete loop at the end of this
+          // function (which runs on every path). clear()ing now would drop the
+          // owning pointers and leak every PDFObject -- including the PDFPage
+          // allocations from AddPage() (issue #1547).
         }
         catch (const std::exception& e) {
           fprintf(stderr, "PDF writing error in '%s': '%s'\n", m_filename.c_str(), e.what() );
