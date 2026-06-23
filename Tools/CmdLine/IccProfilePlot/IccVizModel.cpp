@@ -206,6 +206,14 @@ std::string describeCurve(CIccCurve* curve) {
       return "LookupTable[" + std::to_string(size) + "]";
     }
   }
+  // Other curve types are formatted by Describe(), which walks the curve's data.
+  // Run the curve's own Validate() first -- the same validate-before-describe
+  // gate the rest of this module uses (see curveValidate) -- so the formatter is
+  // never the first thing to touch unvalidated, possibly-malformed data
+  // (CWE-476). Per this module's design we do NOT drop a bad curve: the status
+  // is advisory and we still return its description.
+  std::string report;
+  curve->Validate(":curve", report, nullptr);
   std::string desc;
   curve->Describe(desc, 100);
   return desc;
