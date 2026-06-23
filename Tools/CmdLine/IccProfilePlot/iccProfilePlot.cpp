@@ -68,15 +68,13 @@
 #include "IccVizModel.hpp"
 #include "IccProfile.h"
 #include "IccProfLibVer.h"
+#include "../IccCmdLineUtil.h"   // icOpenRegularWriteBinaryFile — safe output open
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <vector>
-#if !defined(_WIN32)
-#include <sys/stat.h>   // fchmod — restrict output-file permissions
-#endif
 
 // -- tiny hand-rolled JSON emitter (no third-party deps, like IccPawgReport) --
 
@@ -190,15 +188,13 @@ static void printRaster(const iccviz::Raster& r, const char* outFile) {
               r.normalizedICC ? "true" : "false");
   if (outFile) {
     // Dump the raw, interleaved sample buffer to a side file so the JSON on
-    // stdout stays small (it only carries the path + byte count).
-    FILE* f = std::fopen(outFile, "wb");
+    // stdout stays small (it only carries the path + byte count). Open through
+    // the shared helper, which creates the file with open(O_CREAT, 0644) after a
+    // regular-file check -- never world-writable and not following a symlink to
+    // an existing special file (CWE-732, CWE-59), matching the Mini{TIFF,PDF}
+    // writers instead of a bare fopen().
+    FILE* f = icOpenRegularWriteBinaryFile(outFile);
     if (f) {
-#if !defined(_WIN32)
-      // The output is derived from a possibly-untrusted profile, so do not let
-      // it inherit a permissive umask. Force owner read/write + group/other
-      // read only (0644) — never group/world-writable (CWE-732).
-      ::fchmod(::fileno(f), S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-#endif
       // Verify the write fully succeeded: a short or failed fwrite must be
       // surfaced as an error rather than reported as a good dump (CWE-252).
       size_t nWritten = std::fwrite(r.samples.data(), 1, r.samples.size(), f);

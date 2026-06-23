@@ -229,8 +229,9 @@ Graph buildCurveGraph(CIccCurve* curve, const std::string& title) {
   if (curve->IsIdentity()) steps = 2;
   // Defensive floor: steps drives the divisor below, so guarantee it is at
   // least 1 even if the logic above is ever changed to allow a smaller value
-  // (avoids a divide-by-zero on i / (float)steps).
-  if (steps < 1) steps = 1;
+  // (avoids a divide-by-zero on i / (float)steps). Written as <= 0 so the
+  // non-zero invariant on the denominator is explicit (steps is int).
+  if (steps <= 0) steps = 1;
 
   Series data;
   data.id = "curve"; data.name = title; data.role = Role::Primary;
