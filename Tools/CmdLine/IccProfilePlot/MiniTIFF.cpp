@@ -310,10 +310,18 @@ bool WriteTIFF( const std::string &name, float dpi, int color_model, uint8_t *bu
   else
     writeFailed |= putIFDLong( TIFF_STRIPBYTECOUNTS, TIFF_LONG, 1, 0, outfile );
 
+  // TIFF XResolution/YResolution are stored as a rational numerator/denominator
+  // pair; we fix the denominator at 1000 and scale dpi into the numerator.
   uint32_t resDenom32 = 1000;
-  if ((dpi * resDenom32) > (float) std::numeric_limits<uint32_t>::max()) {
+  // Sanitise dpi before the float->integer cast: a non-finite (NaN/Inf),
+  // negative, or out-of-range value would make (uint32_t)(dpi*resDenom32)
+  // undefined / wrap around. Fall back to a sane 96 dpi in any of those cases.
+  if (!std::isfinite(dpi) || dpi <= 0.0f ||
+      (dpi * resDenom32) > (float) std::numeric_limits<uint32_t>::max()) {
         dpi = 96.0f;
   }
+  // dpi is now guaranteed finite and within [>0, UINT32_MAX/resDenom32], so the
+  // cast is well-defined.
   uint32_t resRatio32 = (uint32_t)(dpi * resDenom32);
 
   writeFailed |= putIFDLong( TIFF_XRESOLUTION, TIFF_RATIO, 1, xres_offset, outfile );

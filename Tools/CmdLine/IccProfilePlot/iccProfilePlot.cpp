@@ -74,6 +74,9 @@
 #include <cstdlib>
 #include <string>
 #include <vector>
+#if !defined(_WIN32)
+#include <sys/stat.h>   // fchmod — restrict output-file permissions
+#endif
 
 // -- tiny hand-rolled JSON emitter (no third-party deps, like IccPawgReport) --
 
@@ -186,12 +189,27 @@ static void printRaster(const iccviz::Raster& r, const char* outFile) {
               r.width, r.height, r.channels, r.bitsPerChannel, r.photometric,
               r.normalizedICC ? "true" : "false");
   if (outFile) {
+    // Dump the raw, interleaved sample buffer to a side file so the JSON on
+    // stdout stays small (it only carries the path + byte count).
     FILE* f = std::fopen(outFile, "wb");
     if (f) {
-      std::fwrite(r.samples.data(), 1, r.samples.size(), f);
-      std::fclose(f);
-      std::printf(",\"samplesFile\":%s,\"sampleBytes\":%zu",
-                  jstr(outFile).c_str(), r.samples.size());
+#if !defined(_WIN32)
+      // The output is derived from a possibly-untrusted profile, so do not let
+      // it inherit a permissive umask. Force owner read/write + group/other
+      // read only (0644) — never group/world-writable (CWE-732).
+      ::fchmod(::fileno(f), S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+#endif
+      // Verify the write fully succeeded: a short or failed fwrite must be
+      // surfaced as an error rather than reported as a good dump (CWE-252).
+      size_t nWritten = std::fwrite(r.samples.data(), 1, r.samples.size(), f);
+      bool ok = (nWritten == r.samples.size());
+      // A failure flushing/closing the stream also invalidates the dump.
+      if (std::fclose(f) != 0) ok = false;
+      if (ok)
+        std::printf(",\"samplesFile\":%s,\"sampleBytes\":%zu",
+                    jstr(outFile).c_str(), r.samples.size());
+      else
+        std::printf(",\"error\":\"failed to write output file\"");
     } else {
       std::printf(",\"error\":\"could not open output file\"");
     }

@@ -220,10 +220,17 @@ Graph buildCurveGraph(CIccCurve* curve, const std::string& title) {
   g.xAxis = Axis{"Input", 0.0f, 1.0f, false};
   g.yAxis = Axis{"Output", 0.0f, 1.0f, false};
 
+  // Number of samples used to trace the curve. Default to a smooth 1000; for a
+  // sampled LUT curve use at least its own point count so we never under-sample
+  // it, and drop to the 2 endpoints when the curve is a pure identity.
   int steps = 1000;
   if (auto* tc = dynamic_cast<CIccTagCurve*>(curve))
     steps = std::max(1000, static_cast<int>(tc->GetSize()));
   if (curve->IsIdentity()) steps = 2;
+  // Defensive floor: steps drives the divisor below, so guarantee it is at
+  // least 1 even if the logic above is ever changed to allow a smaller value
+  // (avoids a divide-by-zero on i / (float)steps).
+  if (steps < 1) steps = 1;
 
   Series data;
   data.id = "curve"; data.name = title; data.role = Role::Primary;
@@ -780,9 +787,19 @@ void enumerateLutCurves(CIccProfile* pIcc, icTagSignature sig, CIccMBB* lut,
     {'B', lut->GetCurvesB(), inMtx ? inCh : outCh, inMtx},
     {'M', lut->GetCurvesM(), inMtx ? inCh : outCh, inMtx},
   };
+  // Upper bound on curve channels we will ever enumerate. ICC colour spaces
+  // top out at 15 device channels (nCLR) plus PCS, so 256 is comfortably
+  // generous while still capping a malformed LUT that reports a bogus channel
+  // count — preventing an unbounded loop / DoS (CWE-400/CWE-834).
+  const int kMaxVizChannels = 256;
   for (const Grp& grp : groups) {
     if (!grp.arr) continue;
-    for (int i = 0; i < grp.count; ++i) {
+    // grp.count comes straight from the profile's LUT channel count; clamp it
+    // before driving the loop so untrusted data cannot dictate the iteration
+    // count. The curve arrays are sized by the same channel count, so clamping
+    // down can never read past the array.
+    const int count = std::min(grp.count, kMaxVizChannels);
+    for (int i = 0; i < count; ++i) {
       CIccCurve* c = grp.arr[i];
       if (!c) continue;
       std::string ch = channelName(i, grp.useInput, inSp, outSp, inCh, outCh);

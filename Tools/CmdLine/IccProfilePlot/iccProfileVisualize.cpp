@@ -481,6 +481,9 @@ point2D spectrumLabelOffset( int nm, float textSize, TextAlignment &align )
 
 // x range [ 0.00364, 0.73469 ]   for 2degree 1931 observer
 // y range [ 0.00529, 0.83409 ]
+// Fixed layout constant (not profile-derived): the xy chromaticity chart is
+// drawn over [0, 0.85] in both axes. Used as a divisor below; it is a non-zero
+// compile-time constant, so those divisions can never divide by zero.
 const float chromaticityChartScale = 0.85f;
 
 static
@@ -609,6 +612,9 @@ std::string plotCirclePDF( const point2D &center, float radius )
 
 // DEFERRED - full 128+ range is probably excessive for real world use
 // what is an appropriate limit?        So far 130 looks fine.
+// Fixed layout constant (not profile-derived): the a*/b* chart spans ±130, so
+// the full extent is 260. Used as a divisor below; it is a non-zero
+// compile-time constant, so those divisions can never divide by zero.
 const float abChartScale = 2 * 130.0f;
 
 static
