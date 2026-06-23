@@ -77,6 +77,7 @@
 #include <map>
 #include <sstream>  // Make sure to include this header
 #include <iomanip>  // Include this header for setw and setfill
+#include <cmath>    // std::isfinite for NaN/Inf-safe float->int casts
 
 typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 
@@ -912,7 +913,15 @@ bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
         for (j=0; j<(int)m_nDeviceCoords; j++) {
           if (j)
             xml+=" ";
-          snprintf(buf, bufSize, "%d", (int)(pEntry->deviceCoords[j] * 65535.0 + 0.5));
+          // CWE-681 (CodeQL #1902): deviceCoords come from a parsed profile and may be
+          // NaN/Inf for malformed input; a non-finite float->int cast is undefined
+          // behaviour. Guard finiteness and clamp to the valid 16-bit device range
+          // [0,65535] before the cast (a no-op for any conformant coord in [0,1]).
+          double dc = pEntry->deviceCoords[j] * 65535.0 + 0.5;
+          if (!std::isfinite(dc)) dc = 0.0;
+          else if (dc < 0.0) dc = 0.0;
+          else if (dc > 65535.0) dc = 65535.0;
+          snprintf(buf, bufSize, "%d", (int)dc);
           xml += buf;
         }
         xml += "\n";

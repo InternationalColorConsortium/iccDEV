@@ -217,6 +217,7 @@ static void resampleCore(const Grid &src, const std::vector<double> &v,
     // valid t this is a no-op: floor(t) is already in [0, n-2]. Mirrors the
     // adjacent-guard form used in #1478.
     double tf = std::floor(t);                      // source segment index (base sample v[i])
+    if (!std::isfinite(tf)) tf = 0.0;               // explicit NaN/Inf guard local to the cast (CWE-681)
     if (!(tf >= 0.0)) tf = 0.0;                     // also catches NaN
     else if (tf > n - 2) tf = n - 2;               // keep the i+1 neighbour in range at the top
     int i = (int)tf;
