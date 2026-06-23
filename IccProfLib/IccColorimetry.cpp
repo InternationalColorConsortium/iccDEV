@@ -610,6 +610,51 @@ static const icUInt16Number kColorimetryWtSteps      = 41;
 // <<<END GENERATED WEIGHTING TABLES
 
 //==========================================================================
+// Loaded-weighting-table helpers (validation + registry tracking)
+//
+// These live outside the top anonymous namespace because registryWeightCeiling()
+// reads the generated kColorimetryWtTables above; they are file-static all the same.
+//==========================================================================
+
+// Upper bound on the sample count a caller may load. The registry tables use 41
+// (380-780 @ 10 nm); 1 nm over a wide span is a few hundred, so this is generous
+// headroom while bounding m_loadedWt (3*steps floats) against a runaway allocation.
+static const int kMaxLoadedWtSteps = 4096;
+
+// Map an ICC wire illuminant to the registry weighting-table illuminant, when one
+// exists. Only D50/D65/A have both a wire-enum and a published registry table; D93
+// (and the rest) have no registry LWL table, and the registry's LED-B1/F11 have no
+// wire-enum (reach them via ResetWeightingTableToRegistry instead).
+static bool mapIlluminantToRegistry(icIlluminant illum, icColorimetryWeightingIlluminant &reg) {
+  switch (illum) {
+    case icIlluminantD50: reg = icWtIllumD50; return true;
+    case icIlluminantD65: reg = icWtIllumD65; return true;
+    case icIlluminantA:   reg = icWtIllumA;   return true;
+    default:              return false;
+  }
+}
+
+// Magnitude sanity ceiling for LoadWeightingTable, derived (per request) from the
+// values in the in-tree registry LWL tables: take the largest |weight| present across
+// all baked registry tables and allow a generous multiple. This lets the registry's
+// own Y=100 data, a Y=1-normalised variant, and the legitimately negative LWL weights
+// all pass, while rejecting gross garbage (NaN/Inf are caught separately; this catches
+// absurd magnitudes). It is a defensive gate, NOT a correctness requirement -- callers
+// with an unusual radiometric scale that legitimately exceeds it can pre-scale.
+static double registryWeightCeiling() {
+  static const double HEADROOM = 16.0;
+  double mx = 0.0;
+  for (int t = 0; t < kColorimetryWtTableCount; t++) {
+    const icFloatNumber *p = kColorimetryWtTables[t].pWeights;
+    for (int i = 0; i < 3 * (int)kColorimetryWtSteps; i++) {
+      double a = std::fabs((double)p[i]);
+      if (a > mx) mx = a;
+    }
+  }
+  return mx * HEADROOM;
+}
+
+//==========================================================================
 // Public free functions
 //==========================================================================
 
@@ -787,11 +832,27 @@ const icFloatNumber *icGetColorimetryWeightingTable(icStandardObserver obs,
 //==========================================================================
 
 CIccColorimetricCalculator::CIccColorimetricCalculator()
-  : m_bHaveWhite(false), m_bReady(false) {
+  : m_bHaveWhite(false),
+    m_bWtUserLoaded(false), m_bStdObs(false), m_stdObs(icStdObs1931TwoDegrees),
+    m_bRegIllum(false), m_regIllum(icWtIllumD50),
+    m_bReady(false) {
   memset(&m_obsRange, 0, sizeof(m_obsRange));
   memset(&m_illumRange, 0, sizeof(m_illumRange));
   memset(&m_whiteRange, 0, sizeof(m_whiteRange));
+  memset(&m_loadedWtRange, 0, sizeof(m_loadedWtRange));
   memset(&m_measRange, 0, sizeof(m_measRange));
+
+  // Seed the loaded weighting table so icXYZCalcLoadedTable works immediately, with no
+  // "table loaded yet?" check required of the caller (see the strong note in the
+  // header). Default to the registry LWL table for the ICC PCS conditions (CIE 1931
+  // 2-degree observer, D50); SetStandardObserver/SetStandardIlluminant re-seed it to
+  // match the selected published combination until a caller loads a custom table.
+  icSpectralRange r;
+  const icFloatNumber *p = icGetColorimetryWeightingTable(icStdObs1931TwoDegrees, icWtIllumD50, r);
+  if (p) {
+    m_loadedWtRange = r;
+    m_loadedWt.assign(p, p + 3 * (int)r.steps);
+  }
 }
 
 CIccColorimetricCalculator::~CIccColorimetricCalculator() {}
@@ -803,6 +864,11 @@ bool CIccColorimetricCalculator::SetObserver(const icSpectralRange &range, const
   m_obsRange = range;
   m_obs.assign(pObserver, pObserver + 3*(int)range.steps);
   m_bReady = false;
+  // A custom observer has no registry mapping; drop the standard-id tracking so the
+  // loaded-table seed is not (mis)attributed to it. SetStandardObserver re-establishes
+  // it below. Any existing registry seed is left in place (still a valid table).
+  m_bStdObs = false;
+  seedLoadedWeightingTable();
   return true;
 }
 
@@ -812,6 +878,8 @@ bool CIccColorimetricCalculator::SetIlluminant(const icSpectralRange &range, con
   m_illumRange = range;
   m_illum.assign(pIlluminant, pIlluminant + (int)range.steps);
   m_bReady = false;
+  m_bRegIllum = false;             // custom illuminant: no registry mapping (see SetObserver)
+  seedLoadedWeightingTable();
   return true;
 }
 
@@ -819,14 +887,52 @@ bool CIccColorimetricCalculator::SetStandardObserver(icStandardObserver obs)
 {
   icSpectralRange range;
   const icFloatNumber *p = icGetStandardObserver(obs, range);
-  return p ? SetObserver(range, p) : false;   // SetObserver copies, so p need not persist
+  if (!p || !SetObserver(range, p))   // SetObserver copies, so p need not persist
+    return false;
+  // Record the standard observer id and re-seed the loaded table to the registry LWL
+  // table for the now-known (observer, illuminant) pair when one is published.
+  m_bStdObs = true;
+  m_stdObs = obs;
+  seedLoadedWeightingTable();
+  return true;
 }
 
 bool CIccColorimetricCalculator::SetStandardIlluminant(icIlluminant illum)
 {
   icSpectralRange range;
   const icFloatNumber *p = icGetStandardIlluminant(illum, range);
-  return p ? SetIlluminant(range, p) : false;
+  if (!p || !SetIlluminant(range, p))
+    return false;
+  icColorimetryWeightingIlluminant reg;
+  if (mapIlluminantToRegistry(illum, reg)) {
+    m_bRegIllum = true;
+    m_regIllum = reg;
+  }
+  else {
+    m_bRegIllum = false;          // e.g. D93 -- no registry LWL table; keep prior seed
+  }
+  seedLoadedWeightingTable();
+  return true;
+}
+
+void CIccColorimetricCalculator::seedLoadedWeightingTable()
+{
+  // Keep the icXYZCalcLoadedTable operator pointed at the registry LWL table for the
+  // currently-selected viewing conditions -- UNLESS the caller has loaded/pinned a
+  // custom table, which must never be clobbered. Requires a standard observer AND an
+  // illuminant that maps to a published registry table; otherwise the previous seed is
+  // retained (so a valid table is always present). See the strong note in the header.
+  if (m_bWtUserLoaded)
+    return;
+  if (!m_bStdObs || !m_bRegIllum)
+    return;
+  icSpectralRange r;
+  const icFloatNumber *p = icGetColorimetryWeightingTable(m_stdObs, m_regIllum, r);
+  if (p) {
+    m_loadedWtRange = r;
+    m_loadedWt.assign(p, p + 3 * (int)r.steps);
+    m_bReady = false;            // any operator built from a stale seed is invalidated
+  }
 }
 
 bool CIccColorimetricCalculator::SetEmissiveWhite(const icSpectralRange &range, const icFloatNumber *pWhite) {
@@ -839,11 +945,91 @@ bool CIccColorimetricCalculator::SetEmissiveWhite(const icSpectralRange &range, 
   return true;
 }
 
+bool CIccColorimetricCalculator::LoadWeightingTable(const icSpectralRange &range,
+                                                   const icFloatNumber *pWeights) {
+  // Validate against the in-tree registry LWL tables' characteristics (see header).
+  // Tier 1: range geometry and sample-count bounds (2..kMaxLoadedWtSteps; registry = 41).
+  if (!rangeWellFormed(range) || !pWeights)
+    return false;
+  int n = (int)range.steps;
+  if (n < 2 || n > kMaxLoadedWtSteps)
+    return false;
+  // Tier 2: every Wx,Wy,Wz weight must be finite...
+  if (!allFinite(pWeights, 3*n))
+    return false;
+  // ...and within a generous registry-derived magnitude ceiling. Negative weights are
+  // accepted (legitimate in LWL tables) and values are NOT clamped -- this only rejects
+  // gross garbage, mirroring icApplyWeightingTable's no-clamp policy.
+  double ceiling = registryWeightCeiling();
+  for (int i = 0; i < 3*n; i++) {
+    if (std::fabs((double)pWeights[i]) > ceiling)
+      return false;
+  }
+  // Commit only after full validation, so a rejected load leaves the prior table intact.
+  m_loadedWtRange = range;
+  m_loadedWt.assign(pWeights, pWeights + 3*n);
+  m_bWtUserLoaded = true;   // pin it: SetStandard* re-seeding no longer applies
+  m_bReady = false;
+  return true;
+}
+
+bool CIccColorimetricCalculator::ResetWeightingTableToRegistry(
+    icStandardObserver obs, icColorimetryWeightingIlluminant illum) {
+  icSpectralRange r;
+  const icFloatNumber *p = icGetColorimetryWeightingTable(obs, illum, r);
+  if (!p)
+    return false;            // (obs,illum) not one of the registry's published tables
+  m_loadedWtRange = r;
+  m_loadedWt.assign(p, p + 3 * (int)r.steps);
+  m_bWtUserLoaded = true;    // an explicit registry choice; pin it like a load
+  m_bReady = false;
+  return true;
+}
+
+bool CIccColorimetricCalculator::GetLoadedWeightingTable(icSpectralRange &range,
+                                                        const icFloatNumber *&pWeights) const {
+  if (m_loadedWt.empty()) {  // only in a degenerate state (the ctor seeds a table)
+    memset(&range, 0, sizeof(range));
+    pWeights = NULL;
+    return false;
+  }
+  range = m_loadedWtRange;
+  pWeights = &m_loadedWt[0];
+  return true;
+}
+
+const icFloatNumber *CIccColorimetricCalculator::GetRegistryWeightingTable(
+    icStandardObserver obs, icColorimetryWeightingIlluminant illum, icSpectralRange &range) {
+  return icGetColorimetryWeightingTable(obs, illum, range);   // forwards to the baked-in data
+}
+
 bool CIccColorimetricCalculator::Prepare(const icSpectralRange &measRange, icXYZCalcMethod method,
                                          icSpectralInterpMethod interp, icSpectralExtendMethod extend) {
-  if (!rangeWellFormed(measRange) || !m_obs.size() || !m_illum.size())
+  if (!rangeWellFormed(measRange))
     return false;
   int nm = (int)measRange.steps;
+
+  if (method == icXYZCalcLoadedTable) {
+    // The loaded table is itself the complete 3 x N (Wx,Wy,Wz) operator at its own grid;
+    // it folds observer+illuminant in already (so no SetObserver/SetIlluminant is needed)
+    // and cannot be re-gridded without recomputation (WP56). The measurement must
+    // therefore be sampled on exactly the loaded table's grid -- require an exact match.
+    if (m_loadedWt.empty() ||
+        m_loadedWtRange.start != measRange.start ||
+        m_loadedWtRange.end   != measRange.end   ||
+        m_loadedWtRange.steps != measRange.steps)
+      return false;
+    m_measRange = measRange;
+    m_M = m_loadedWt;
+    if (!allFinite(&m_M[0], 3*nm))   // belt-and-braces (validated at load time)
+      return false;
+    m_bReady = true;
+    return true;
+  }
+
+  // DirectSum / Weighting / Sprague all integrate an observer against an illuminant.
+  if (!m_obs.size() || !m_illum.size())
+    return false;
   m_measRange = measRange;
   m_M.assign(3*nm, 0.0f);
 

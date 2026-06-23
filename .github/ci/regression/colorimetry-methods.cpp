@@ -630,6 +630,174 @@ void testInputGuards()
   }
 }
 
+// ---- Part I: loaded weighting table (icXYZCalcLoadedTable) ----------------------
+// The calculator carries a complete weighting-table operator that it ALWAYS keeps
+// populated: seeded with a registry LWL table at construction, re-seeded to track the
+// selected standard observer+illuminant, or replaced via LoadWeightingTable(). This
+// part pins that contract -- every assertion is red-green against the feature:
+//   I1 default seed == registry D50/1931        (breaks if the ctor seed is removed)
+//   I2 auto-track to the selected registry combo (breaks if SetStandard* re-seed goes)
+//   I3 non-registry illuminant keeps a valid seed
+//   I4 LoadWeightingTable validation rejects garbage, leaving the prior table intact
+//   I5 a valid load (incl. negative weights) pins the table against later SetStandard*
+//   I6 Prepare(icXYZCalcLoadedTable) needs a matching grid and reduces correctly
+//   I7 ResetWeightingTableToRegistry reaches LED-B1 (no wire-enum); unknown -> false
+//   I8 the static GetRegistryWeightingTable accessor == the free function
+void testLoadedWeightingTable()
+{
+  // Exact-grid + value comparison of two 3*steps tables; large sentinel if grids differ.
+  auto tableDiff = [](const icSpectralRange &ra, const icFloatNumber *a,
+                      const icSpectralRange &rb, const icFloatNumber *b) -> double {
+    if (!a || !b || ra.start != rb.start || ra.end != rb.end || ra.steps != rb.steps)
+      return 1e9;
+    double m = 0.0;
+    for (int i = 0; i < 3 * (int)ra.steps; i++)
+      m = std::max(m, std::fabs((double)a[i] - (double)b[i]));
+    return m;
+  };
+
+  icSpectralRange regR;
+  const icFloatNumber *regD50_1931 = icGetColorimetryWeightingTable(icStdObs1931TwoDegrees, icWtIllumD50, regR);
+
+  // I1: a fresh calculator already has the registry D50/1931 table loaded (the seed),
+  // so icXYZCalcLoadedTable is usable with no caller setup.
+  {
+    CIccColorimetricCalculator calc;
+    icSpectralRange lr; const icFloatNumber *lw = NULL;
+    bool got = calc.GetLoadedWeightingTable(lr, lw);
+    check(got && lw, "loaded I1: default table present after construction", 0.0);
+    double d = tableDiff(lr, lw, regR, regD50_1931);
+    check(d < TOL_EXACT, "loaded I1: default seed == registry D50/1931", d);
+  }
+
+  // I2: setting a standard observer + illuminant that the registry publishes re-seeds
+  // the loaded table to that exact combination.
+  {
+    CIccColorimetricCalculator calc;
+    check(calc.SetStandardObserver(icStdObs1964TenDegrees), "loaded I2: set 1964 observer", 0.0);
+    check(calc.SetStandardIlluminant(icIlluminantD65),      "loaded I2: set D65 illuminant", 0.0);
+    icSpectralRange lr; const icFloatNumber *lw = NULL;
+    calc.GetLoadedWeightingTable(lr, lw);
+    icSpectralRange rr; const icFloatNumber *rw = icGetColorimetryWeightingTable(icStdObs1964TenDegrees, icWtIllumD65, rr);
+    double d = tableDiff(lr, lw, rr, rw);
+    check(d < TOL_EXACT, "loaded I2: auto-tracks to registry D65/1964", d);
+  }
+
+  // I3: an illuminant with no registry table (D93) leaves the previous valid seed in
+  // place rather than clearing it -- the method never ends up table-less.
+  {
+    CIccColorimetricCalculator calc;
+    calc.SetStandardObserver(icStdObs1931TwoDegrees);
+    calc.SetStandardIlluminant(icIlluminantD50);   // -> registry D50/1931
+    calc.SetStandardIlluminant(icIlluminantD93);   // no registry table; keep D50/1931
+    icSpectralRange lr; const icFloatNumber *lw = NULL;
+    bool got = calc.GetLoadedWeightingTable(lr, lw);
+    double d = tableDiff(lr, lw, regR, regD50_1931);
+    check(got && d < TOL_EXACT, "loaded I3: non-registry illuminant retains prior seed", d);
+  }
+
+  // I4: LoadWeightingTable validation. Build a valid baseline from the registry table,
+  // then mutate it to trip each gate; a rejected load must leave the prior table intact.
+  {
+    CIccColorimetricCalculator calc;                      // starts at registry D50/1931
+    const int n = (int)regR.steps;                        // 41
+    icSpectralRange g = makeRange(380, 780, n);
+    std::vector<icFloatNumber> base(regD50_1931, regD50_1931 + 3 * n);
+
+    check(!calc.LoadWeightingTable(g, NULL), "loaded I4: null weights -> false", 0.0);
+
+    icSpectralRange g1 = makeRange(500, 500, 1);
+    std::vector<icFloatNumber> one(3, (icFloatNumber)0.1);
+    check(!calc.LoadWeightingTable(g1, &one[0]), "loaded I4: < 2 samples -> false", 0.0);
+
+    std::vector<icFloatNumber> nan = base; nan[5] = (icFloatNumber)NAN;
+    check(!calc.LoadWeightingTable(g, &nan[0]), "loaded I4: non-finite value -> false", 0.0);
+
+    std::vector<icFloatNumber> huge = base; huge[5] = (icFloatNumber)1e30;
+    check(!calc.LoadWeightingTable(g, &huge[0]), "loaded I4: absurd magnitude -> false", 0.0);
+
+    // None of the rejected loads disturbed the seeded table.
+    icSpectralRange lr; const icFloatNumber *lw = NULL;
+    calc.GetLoadedWeightingTable(lr, lw);
+    double d = tableDiff(lr, lw, regR, regD50_1931);
+    check(d < TOL_EXACT, "loaded I4: rejected loads leave prior table intact", d);
+  }
+
+  // I5: a valid load -- including a legitimately NEGATIVE weight (LWL tables have them;
+  // values are not clamped) -- takes effect and PINS the table: a later SetStandard*
+  // no longer re-seeds it.
+  {
+    CIccColorimetricCalculator calc;
+    const int n = (int)regR.steps;
+    icSpectralRange g = makeRange(380, 780, n);
+    std::vector<icFloatNumber> custom(regD50_1931, regD50_1931 + 3 * n);
+    custom[0] = (icFloatNumber)(-0.5);                    // negative weight is accepted
+    check(calc.LoadWeightingTable(g, &custom[0]), "loaded I5: valid load (w/ negative) -> true", 0.0);
+
+    icSpectralRange lr; const icFloatNumber *lw = NULL;
+    calc.GetLoadedWeightingTable(lr, lw);
+    double d = tableDiff(lr, lw, g, &custom[0]);
+    check(d < TOL_EXACT, "loaded I5: loaded values retrievable verbatim", d);
+
+    calc.SetStandardObserver(icStdObs1964TenDegrees);     // would re-seed if not pinned
+    calc.SetStandardIlluminant(icIlluminantA);
+    calc.GetLoadedWeightingTable(lr, lw);
+    double d2 = tableDiff(lr, lw, g, &custom[0]);
+    check(d2 < TOL_EXACT, "loaded I5: load pins table against later SetStandard*", d2);
+  }
+
+  // I6: Prepare(icXYZCalcLoadedTable) requires the measurement grid to equal the loaded
+  // table's grid (a weighting table cannot be re-gridded); on a match it reduces a
+  // perfect diffuser to the illuminant XYZ (registry Y=100 scale), identical to applying
+  // the table directly with icApplyWeightingTable.
+  {
+    CIccColorimetricCalculator calc;                      // registry D50/1931, Y=100
+    icSpectralRange lr; const icFloatNumber *lw = NULL;
+    calc.GetLoadedWeightingTable(lr, lw);
+
+    icSpectralRange mismatch = makeRange(400, 700, 31);
+    check(!calc.Prepare(mismatch, icXYZCalcLoadedTable), "loaded I6: mismatched grid -> false", 0.0);
+
+    bool ready = calc.Prepare(lr, icXYZCalcLoadedTable);
+    check(ready, "loaded I6: matching grid -> Prepare ok", 0.0);
+    if (ready) {
+      std::vector<icFloatNumber> diffuser(lr.steps, (icFloatNumber)1.0);
+      icFloatNumber viaCalc[3] = { 0, 0, 0 }, viaApply[3] = { 0, 0, 0 };
+      calc.ReflectanceToXYZ(&diffuser[0], viaCalc);
+      icApplyWeightingTable(lr, lw, &diffuser[0], viaApply);
+      check(std::fabs((double)viaCalc[1] - 100.0) < 1e-2, "loaded I6: diffuser Y==100 (registry scale)",
+            std::fabs((double)viaCalc[1] - 100.0));
+      double e = 0.0;
+      for (int k = 0; k < 3; k++) e = std::max(e, std::fabs((double)viaCalc[k] - (double)viaApply[k]));
+      check(e < TOL_EXACT, "loaded I6: calculator path == icApplyWeightingTable", e);
+    }
+  }
+
+  // I7: ResetWeightingTableToRegistry reaches the registry illuminants with no
+  // icIlluminant wire-enum (LED-B1, F11); an unpublished combination is rejected.
+  {
+    CIccColorimetricCalculator calc;
+    bool ok = calc.ResetWeightingTableToRegistry(icStdObs1931TwoDegrees, icWtIllumLED_B1);
+    check(ok, "loaded I7: reset to LED-B1/1931 -> true", 0.0);
+    icSpectralRange lr; const icFloatNumber *lw = NULL;
+    calc.GetLoadedWeightingTable(lr, lw);
+    icSpectralRange rr; const icFloatNumber *rw = icGetColorimetryWeightingTable(icStdObs1931TwoDegrees, icWtIllumLED_B1, rr);
+    double d = tableDiff(lr, lw, rr, rw);
+    check(d < TOL_EXACT, "loaded I7: reset installs the LED-B1 table", d);
+    check(!calc.ResetWeightingTableToRegistry(icStdObsUnknown, icWtIllumD50),
+          "loaded I7: reset(unpublished combo) -> false", 0.0);
+  }
+
+  // I8: the static registry accessor on the class forwards to the free function.
+  {
+    icSpectralRange ra, rb;
+    const icFloatNumber *a = CIccColorimetricCalculator::GetRegistryWeightingTable(icStdObs1931TwoDegrees, icWtIllumA, ra);
+    const icFloatNumber *b = icGetColorimetryWeightingTable(icStdObs1931TwoDegrees, icWtIllumA, rb);
+    check(a != NULL && a == b && ra.steps == rb.steps,
+          "loaded I8: static GetRegistryWeightingTable == free function", 0.0);
+  }
+}
+
 } // namespace
 
 int main()
@@ -640,6 +808,7 @@ int main()
   testWeightingFreeFunctions();
   testStandardAccessors();
   testRegistryWeightingTables();
+  testLoadedWeightingTable();
   testEmissive();
   testInputGuards();
 

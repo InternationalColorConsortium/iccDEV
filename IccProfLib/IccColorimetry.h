@@ -90,16 +90,30 @@ namespace iccDEV {
  *  - icXYZCalcWeighting: the weighting-function method X = R.w (eqn 2 of WP56),
  *    using self-computed triangular/ASTM-style weights (icComputeWeightingTable).
  *    Recommended for intervals that are not 1 or 5 nm (e.g. 10 nm instrument data).
- *    The registry's own published LWL tables are available separately as baked-in
- *    static data via icGetColorimetryWeightingTable() + icApplyWeightingTable().
+ *    The registry's own published LWL tables are available as baked-in static data
+ *    via icGetColorimetryWeightingTable() + icApplyWeightingTable(), or through the
+ *    calculator via icXYZCalcLoadedTable (below).
  *  - icXYZCalcSpragueTo1nm: reconstruct the measurement onto a fine grid with
  *    CIE 167:2005 Sprague interpolation before summation. Recommended fallback
  *    when no suitable weighting function is available.
+ *  - icXYZCalcLoadedTable: apply a complete weighting-table operator that the
+ *    calculator holds (Wx,Wy,Wz blocks -- exactly the form of a registry LWL table).
+ *    The table is either one the caller supplies at run time with
+ *    CIccColorimetricCalculator::LoadWeightingTable(), or -- until then -- the
+ *    registry LWL table the calculator seeds itself with. This makes the registry-LWL
+ *    reduction available *through* the calculator (cf. the standalone
+ *    icGetColorimetryWeightingTable() + icApplyWeightingTable()), with the table
+ *    selectable and overridable after construction.
+ *    IMPORTANT: the calculator is NEVER without a table -- it is seeded with a
+ *    registry LWL table at construction (see CIccColorimetricCalculator) -- so this
+ *    method is usable immediately and the caller NEVER has to load a table first nor
+ *    handle a "no table loaded" error.
  */
 enum icXYZCalcMethod {
   icXYZCalcDirectSum     = 0,
   icXYZCalcWeighting     = 1,
   icXYZCalcSpragueTo1nm  = 2,
+  icXYZCalcLoadedTable   = 3,
 };
 
 /** Interpolation used when resampling equally-spaced spectral data between ranges. */
@@ -217,6 +231,26 @@ ICCPROFLIB_API const icFloatNumber *icGetColorimetryWeightingTable(
  *  normalised so the adopted white radiance maps to Y = 1, mirroring
  *  CIccPcc::getEmissiveObserver(); RadianceToXYZ() then applies it.  A calculator
  *  holds one prepared operator at a time -- whichever Prepare* was called last.
+ *
+ *  LOADED WEIGHTING TABLE (icXYZCalcLoadedTable) -- READ THIS:
+ *  The calculator also carries a complete weighting-table operator (3 x N Wx,Wy,Wz,
+ *  the same form as a registry LWL table) that Prepare(.., icXYZCalcLoadedTable)
+ *  applies directly. This operator is ALWAYS POPULATED, so the icXYZCalcLoadedTable
+ *  method NEVER needs a "table loaded yet?" check by the caller and NEVER returns a
+ *  "no table" error:
+ *    - At construction it is seeded with the registry LWL table for the ICC PCS
+ *      conditions (CIE 1931 2-degree observer, D50).
+ *    - SetStandardObserver()/SetStandardIlluminant() RE-SEED it with the registry
+ *      LWL table for the selected combination whenever that pair is one the registry
+ *      publishes (1931/1964 x D50/D65/A); for any other selection the previous
+ *      registry seed is retained (it stays a valid registry table).
+ *    - LoadWeightingTable() REPLACES it with a caller-supplied table and pins it
+ *      (later SetStandard* calls then leave it untouched). ResetWeightingTableToRegistry()
+ *      restores a chosen registry table.
+ *  This "default to the registry LWL table in all cases" design is deliberate: it
+ *  spares the caller any extra error/branch logic around the loaded-table method.
+ *  Retrieve whichever table is in effect with GetLoadedWeightingTable(); retrieve a
+ *  raw registry table with GetRegistryWeightingTable().
  **************************************************************************
  */
 class ICCPROFLIB_API CIccColorimetricCalculator
@@ -268,6 +302,56 @@ public:
   /// the operator from PrepareEmissive. Returns false if no operator is prepared.
   bool RadianceToXYZ(const icFloatNumber *pRadiance, icFloatNumber *pXYZ) const;
 
+  // -- Loaded weighting table (the icXYZCalcLoadedTable method) ----------------------
+  //
+  // The calculator ALWAYS holds a valid weighting-table operator for
+  // icXYZCalcLoadedTable (seeded at construction, re-seeded by SetStandard*; see the
+  // class header above). The methods below load/replace, reset, and retrieve it.
+
+  /// Load a custom weighting-table operator to be used by icXYZCalcLoadedTable.
+  /// Layout is identical to a registry LWL table: 3*range.steps samples as consecutive
+  /// Wx,Wy,Wz blocks over the equally-spaced grid 'range' (each (wavelength,weight)
+  /// pair is one grid point x one channel). The table IS the complete operator that
+  /// reduces a reflectance vector sampled on 'range' to XYZ -- so a subsequent
+  /// Prepare(measRange, icXYZCalcLoadedTable) requires measRange to equal 'range'
+  /// (a weighting table cannot be re-gridded without recomputation; see WP56).
+  ///
+  /// The table is validated against the characteristics of the in-tree registry LWL
+  /// tables: the range must be well formed with 2..N samples, every value must be
+  /// finite, and magnitudes must not exceed a generous multiple of the largest weight
+  /// present in the baked-in registry tables. Negative weights are accepted -- they are
+  /// legitimate in LWL tables by construction -- and values are never clamped.
+  ///
+  /// On success the loaded table is PINNED: subsequent SetStandardObserver/
+  /// SetStandardIlluminant calls no longer re-seed it (call ResetWeightingTableToRegistry
+  /// to go back to a registry table). Returns false (leaving the previous table intact)
+  /// if validation fails. Resets any prepared operator.
+  bool LoadWeightingTable(const icSpectralRange &range, const icFloatNumber *pWeights); // 3*range.steps
+
+  /// Replace the loaded weighting table with the baked-in registry LWL table for
+  /// (obs,illum) and pin it (as LoadWeightingTable does). This also reaches the two
+  /// registry illuminants -- LED-B1 and F11 -- that have no icIlluminant wire-enum and
+  /// so cannot be selected through SetStandardIlluminant. Returns false (table
+  /// unchanged) if (obs,illum) is not one of the registry's published combinations.
+  bool ResetWeightingTableToRegistry(icStandardObserver obs,
+                                     icColorimetryWeightingIlluminant illum);
+
+  /// Retrieve the weighting table currently in effect for icXYZCalcLoadedTable (the
+  /// registry seed, or a caller-loaded table). Fills 'range' and points pWeights at the
+  /// internal 3*range.steps Wx,Wy,Wz operator (valid until the next Load/Reset/SetStandard*
+  /// or destruction; do not free). Always succeeds for a live calculator (a table is
+  /// always present); returns false only in the degenerate empty state.
+  bool GetLoadedWeightingTable(icSpectralRange &range, const icFloatNumber *&pWeights) const;
+
+  /// Retrieve a baked-in registry LWL weighting table directly (forwards to the free
+  /// function icGetColorimetryWeightingTable). Fills 'range' and returns the static
+  /// 3*range.steps Wx,Wy,Wz operator, or nullptr if (obs,illum) is not published. This
+  /// is the registry counterpart of GetLoadedWeightingTable(); it does not touch the
+  /// calculator's state (hence static).
+  static const icFloatNumber *GetRegistryWeightingTable(icStandardObserver obs,
+                                                        icColorimetryWeightingIlluminant illum,
+                                                        icSpectralRange &range);
+
   /// True once Prepare() has built a usable operator.
   bool IsReady() const { return m_bReady; }
 
@@ -280,6 +364,18 @@ private:
   bool m_bHaveWhite;                    // emissive adopted white supplied?
   icSpectralRange m_whiteRange;
   std::vector<icFloatNumber> m_white;   // m_whiteRange.steps (emissive adopted white)
+
+  // Loaded weighting-table operator for icXYZCalcLoadedTable. ALWAYS POPULATED (see
+  // the class header): seeded with a registry LWL table at construction, re-seeded to
+  // track the selected standard observer+illuminant, or replaced by LoadWeightingTable.
+  std::vector<icFloatNumber> m_loadedWt;             // 3*m_loadedWtRange.steps (Wx,Wy,Wz)
+  icSpectralRange m_loadedWtRange;
+  bool m_bWtUserLoaded;                              // caller supplied/pinned a table?
+  bool m_bStdObs;                                    // current observer is a known standard id?
+  icStandardObserver m_stdObs;                       //   ...which one
+  bool m_bRegIllum;                                  // current illuminant maps to a registry table?
+  icColorimetryWeightingIlluminant m_regIllum;       //   ...which one
+  void seedLoadedWeightingTable();                   // re-seed from registry when appropriate
 
   icSpectralRange m_measRange;
   std::vector<icFloatNumber> m_M;       // prepared 3*m_measRange.steps operator
