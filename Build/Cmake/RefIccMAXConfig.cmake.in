@@ -51,6 +51,11 @@ find_dependency(Threads)
 
 set(_REFICCMAX_ENABLE_ICCXML "@ENABLE_ICCXML@")
 set(_REFICCMAX_ENABLE_ICCJSON "@ENABLE_ICCJSON@")
+set(_REFICCMAX_ICC_USE_ZLIB "@ICC_USE_ZLIB@")
+
+if(_REFICCMAX_ICC_USE_ZLIB)
+  find_dependency(ZLIB)
+endif()
 
 if(_REFICCMAX_ENABLE_ICCXML)
   find_dependency(LibXml2)

@@ -390,7 +390,7 @@ bool InjectIccProfile(const std::string& inputPng,
         return false;
     }
 
-    FILE* fpOut = OpenPngOutputFile(outputPng);
+    FILE* volatile fpOut = OpenPngOutputFile(outputPng);
     if (!fpOut) {
         fclose(fpIn);
         LOG_ERROR("Failed to open output PNG file.");
@@ -440,7 +440,7 @@ bool InjectIccProfile(const std::string& inputPng,
     }
 
     png_bytepp row_pointers = NULL;
-    png_uint_32 rowsAllocated = 0;
+    volatile png_uint_32 rowsAllocated = 0;
     if (setjmp(png_jmpbuf(write_ptr))) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);

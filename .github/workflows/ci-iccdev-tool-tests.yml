@@ -438,6 +438,7 @@ jobs:
             echo '```bash'
             echo "TOOL_BUILD_TYPE='${TOOL_BUILD_TYPE}'"
             echo "WARN_FLAGS='-Wall -Wextra -Wpedantic -Werror'"
+            echo "if [ \"\${TOOL_BUILD_TYPE}\" = Debug ]; then WARN_FLAGS=\"\${WARN_FLAGS} -fno-omit-frame-pointer -g -O0\"; fi"
             echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=\"\${TOOL_BUILD_TYPE}\" \\"
             echo "  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \\"
             echo "  -DCMAKE_C_FLAGS=\"\${WARN_FLAGS}\" \\"

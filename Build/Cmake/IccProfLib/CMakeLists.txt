@@ -155,6 +155,10 @@ ENDIF()
 # transitively but relying on that is fragile and trips up Clang-based builds.
 find_package(Threads REQUIRED)
 list(APPEND EXTRA_LIBS Threads::Threads)
+if(ICC_USE_ZLIB)
+  find_package(ZLIB REQUIRED)
+  list(APPEND EXTRA_LIBS ZLIB::ZLIB)
+endif()
 
 IF(ENABLE_SHARED_LIBS)
   ADD_LIBRARY(${TARGET_NAME} SHARED ${SOURCES})
@@ -173,6 +177,9 @@ IF(ENABLE_SHARED_LIBS)
   #   still incomplete, so shared builds intentionally keep default visibility.
   if(NOT MSVC)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
+  endif()
+  if(ICC_USE_ZLIB)
+    target_compile_definitions(${TARGET_NAME} PUBLIC ICC_USE_ZLIB=1)
   endif()
 
   if(MSVC)
@@ -215,6 +222,9 @@ IF(ENABLE_STATIC_LIBS)
 
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
+  if(ICC_USE_ZLIB)
+    target_compile_definitions(${TARGET_NAME}-static PUBLIC ICC_USE_ZLIB=1)
+  endif()
 
   # PUBLIC include dirs - build dir FIRST for generated version header
   target_include_directories(${TARGET_NAME}-static PUBLIC

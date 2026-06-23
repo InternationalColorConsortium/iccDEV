@@ -463,6 +463,7 @@ option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"   
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
+option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         OFF)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
 option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)
@@ -508,6 +509,14 @@ endif()
 # --- nlohmann_json ---
 if(ENABLE_ICCJSON OR ENABLE_TOOLS)
   find_package(nlohmann_json REQUIRED)
+endif()
+
+# --- zlib ---
+if(ICC_USE_ZLIB)
+  find_package(ZLIB REQUIRED)
+  if(VERBOSE_CONFIG)
+    message(STATUS "ZLIB                   : ${ZLIB_LIBRARIES} (version: ${ZLIB_VERSION})")
+  endif()
 endif()
 
 # --- TIFF ---
@@ -651,6 +660,7 @@ message(STATUS "ICC_TRACE_NAN_ENABLED      = ${ICC_TRACE_NAN_ENABLED}")
 message(STATUS "ICC_CLUT_DEBUG             = ${ICC_CLUT_DEBUG}")
 message(STATUS "ICC_ENABLE_ASSERTS         = ${ICC_ENABLE_ASSERTS}")
 message(STATUS "ICC_LOG_SAFE               = ${ICC_LOG_SAFE}")
+message(STATUS "ICC_USE_ZLIB               = ${ICC_USE_ZLIB}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
 message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
 message(STATUS "ENABLE_UBSAN               = ${ENABLE_UBSAN}")

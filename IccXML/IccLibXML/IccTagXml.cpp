@@ -106,6 +106,23 @@ static icUInt32Number icXmlAttrToUInt(const char *szValue)
   return nValue < 0 ? 0u : (icUInt32Number)nValue;
 }
 
+static void icXmlCopyFixedString(char *dst, size_t dstSize, const char *src)
+{
+  if (!dst || !dstSize) {
+    return;
+  }
+  if (!src) {
+    src = "";
+  }
+
+  size_t len = strlen(src);
+  if (len >= dstSize) {
+    len = dstSize - 1;
+  }
+  memcpy(dst, src, len);
+  dst[len] = '\0';
+}
+
 
 bool CIccTagXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
@@ -928,11 +945,9 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
         sscanf(szVendorFlags, "%x", &m_nVendorFlags);
 
-        strncpy(m_szPrefix, icUtf8ToAnsi(str, szPrefix), sizeof(m_szPrefix));
-        m_szPrefix[sizeof(m_szPrefix)-1] = '\0';
+        icXmlCopyFixedString(m_szPrefix, sizeof(m_szPrefix), icUtf8ToAnsi(str, szPrefix));
 
-        strncpy(m_szSufix, icUtf8ToAnsi(str, szSufix), sizeof(m_szSufix));
-        m_szSufix[sizeof(m_szSufix)-1] = '\0';
+        icXmlCopyFixedString(m_szSufix, sizeof(m_szSufix), icUtf8ToAnsi(str, szSufix));
 
         icUInt32Number newDeviceCoords = atoi(szDeviceCoords);
         icUInt32Number n = icXmlNodeCount3(pNode->children, "NamedColor", "LabNamedColor", "XYZNamedColor");
@@ -1016,8 +1031,7 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
           }
 
           if (szName) {
-            strncpy(pNamedColor->rootName, icUtf8ToAnsi(str, szName), sizeof(pNamedColor->rootName));
-            pNamedColor->rootName[sizeof(pNamedColor->rootName) - 1] = 0;
+            icXmlCopyFixedString(pNamedColor->rootName, sizeof(pNamedColor->rootName), icUtf8ToAnsi(str, szName));
 
             if (m_nDeviceCoords && pNode->children) {
               if (!strcmp(szDeviceEncoding, "int8")) {

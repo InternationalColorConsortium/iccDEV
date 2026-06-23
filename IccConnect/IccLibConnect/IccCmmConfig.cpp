@@ -1708,8 +1708,9 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
   {
     char encodeBuf[20000];
     sscanf(tempBuf, "%19999s", encodeBuf);
-    strncpy(tempBuf, encodeBuf, tempBufSize - 1);
-    tempBuf[tempBufSize - 1] = '\0';
+    size_t encodeLen = strnlen(encodeBuf, tempBufSize - 1);
+    memcpy(tempBuf, encodeBuf, encodeLen);
+    tempBuf[encodeLen] = '\0';
   }
 
   //Setup source encoding
