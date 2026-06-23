@@ -131,6 +131,37 @@ CIccMatrixMath::CIccMatrixMath(const CIccMatrixMath &matrix)
 
 /**
 **************************************************************************
+* Name: CIccMatrixMath::operator=
+*
+* Purpose:
+*  Copy assignment (Rule of Two).  The copy constructor above deep-copies the
+*  owned m_vals buffer and the destructor frees it; without this matching
+*  operator the compiler-generated assignment would shallow-copy m_vals, so the
+*  source and target would share one buffer and double-free it on destruction.
+**************************************************************************
+*/
+CIccMatrixMath &CIccMatrixMath::operator=(const CIccMatrixMath &matrix)
+{
+  if (this == &matrix)
+    return *this;
+
+  int nTotal = matrix.m_nRows * matrix.m_nCols;
+  // Allocate the replacement before releasing the old buffer so a failed
+  // allocation leaves this object unchanged (strong exception guarantee).
+  icFloatNumber *vals = new icFloatNumber[nTotal];
+  memcpy(vals, matrix.m_vals, nTotal*sizeof(icFloatNumber));
+
+  delete[] m_vals;
+  m_vals = vals;
+  m_nRows = matrix.m_nRows;
+  m_nCols = matrix.m_nCols;
+
+  return *this;
+}
+
+
+/**
+**************************************************************************
 * Name: CIccMatrixMath::~CIccMatrixMath
 * 
 * Purpose: 
