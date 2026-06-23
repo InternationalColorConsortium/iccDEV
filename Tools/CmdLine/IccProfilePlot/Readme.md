@@ -95,6 +95,10 @@ struct Descriptor { Kind kind; Output output; std::string id, title;
 - **`id` is the stable handle.** Enumerate returns ids like `chroma:xy`,
   `curve:rTRC`, `curve:A2B0:B:1`, `clut:A2B0`, `named:ab:ncl2`. Titles may
   change; ids do not. Pass an `id` back to `RenderGraph`/`RenderRaster`.
+  **Which ids appear is profile-dependent** -- they reflect the tags actually
+  present, so the ids used as examples here (e.g. `chroma:xy`, which needs
+  RGB-matrix primaries) will be absent for profiles that lack the underlying
+  tag. Always enumerate first; never assume a given id exists.
 - **Graphs are pure data.** Each plot is point series split into **Primary** (the
   profile's own values  -  primaries, white, gamut, the curve, named colours) and
   **Hint** (reference geometry you may draw or ignore  -  spectral locus, Planckian

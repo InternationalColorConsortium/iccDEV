@@ -832,6 +832,74 @@ function(iccdev_add_iccprofileplot_pdf_leak_test)
   endif()
 endfunction()
 
+# Guards the process exit codes of the IccProfilePlot tools (#1550 QA findings):
+# both tools previously returned 0 even when the work failed, so scripts and CI
+# would treat a bad run as success.  Two WILL_FAIL tests assert the deliberate
+# nonzero exit:
+#   * Finding 1 -- iccProfileVisualizePlot on a non-ICC input must exit nonzero
+#     (it parses nothing and produces no output).  We feed it the tool's own
+#     Readme.md, a guaranteed-present file that is clearly not a profile.
+#   * Finding 2 -- iccProfilePlot raster with an unwritable raw-output path must
+#     exit nonzero.  We point the optional out.raw at the ctest output DIRECTORY:
+#     icOpenRegularWriteBinaryFile rejects it (not a regular file), reproducing
+#     the "could not open output file" path portably, without an OS-specific
+#     "/no/such/dir".  The render itself still succeeds, isolating the exit-code
+#     contract.  WILL_FAIL passes iff the process returns nonzero.
+function(iccdev_add_iccprofileplot_exitcode_test)
+  if(TARGET iccProfileVisualizePlot)
+    add_dependencies(check iccProfileVisualizePlot)
+    add_test(
+      NAME iccdev.iccprofileplot-viz-badinput-exitcode
+      COMMAND "$<TARGET_FILE:iccProfileVisualizePlot>"
+        "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot/Readme.md"
+    )
+    set_tests_properties(iccdev.iccprofileplot-viz-badinput-exitcode PROPERTIES
+      WILL_FAIL TRUE
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 60
+      LABELS "iccdev;iccprofileplot;viz;exitcode;issue-1550;regression"
+    )
+  endif()
+
+  if(TARGET iccProfilePlot)
+    add_dependencies(check iccProfilePlot)
+    add_test(
+      NAME iccdev.iccprofileplot-raster-badoutput-exitcode
+      COMMAND "$<TARGET_FILE:iccProfilePlot>"
+        "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+        raster clut:A2B0 "${ICCDEV_TEST_OUTDIR}"
+    )
+    set_tests_properties(iccdev.iccprofileplot-raster-badoutput-exitcode PROPERTIES
+      WILL_FAIL TRUE
+      WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+      TIMEOUT 60
+      LABELS "iccdev;iccprofileplot;raster;exitcode;issue-1550;regression"
+    )
+  endif()
+
+  if(WIN32)
+    set(_exitcode_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _exitcode_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    if(TARGET iccProfileVisualizePlot)
+      set_tests_properties(iccdev.iccprofileplot-viz-badinput-exitcode PROPERTIES
+        ENVIRONMENT_MODIFICATION
+          "${_exitcode_windows_env_mods};PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfileVisualizePlot>"
+      )
+    endif()
+    if(TARGET iccProfilePlot)
+      set_tests_properties(iccdev.iccprofileplot-raster-badoutput-exitcode PROPERTIES
+        ENVIRONMENT_MODIFICATION
+          "${_exitcode_windows_env_mods};PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfilePlot>"
+      )
+    endif()
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1249,6 +1317,7 @@ if(WIN32)
   iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_iccprofileplot_clut_oob_test()
   iccdev_add_iccprofileplot_pdf_leak_test()
+  iccdev_add_iccprofileplot_exitcode_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -1341,6 +1410,7 @@ iccdev_add_extended_device_colorspace_test()
 iccdev_add_dpcc_pcc_replacement_test()
 iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
+iccdev_add_iccprofileplot_exitcode_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

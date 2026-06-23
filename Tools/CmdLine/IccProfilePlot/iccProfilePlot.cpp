@@ -181,7 +181,13 @@ static void printGraph(const iccviz::Graph& g) {
   std::printf("%s\n", s.c_str());
 }
 
-static void printRaster(const iccviz::Raster& r, const char* outFile) {
+// Returns true on full success. When a raw output file was requested but could
+// not be opened or fully written, the JSON still carries an "error" field for
+// human consumers, but we also report false so main() can exit nonzero -- an
+// automated consumer must not treat a missing raw dump as success (#1550 QA
+// Finding 2, CWE-252). With no outFile requested, there is nothing to fail.
+static bool printRaster(const iccviz::Raster& r, const char* outFile) {
+  bool ok = true;
   std::printf("{\"width\":%d,\"height\":%d,\"channels\":%d,\"bitsPerChannel\":%d,"
               "\"photometric\":%d,\"normalizedICC\":%s",
               r.width, r.height, r.channels, r.bitsPerChannel, r.photometric,
@@ -198,7 +204,7 @@ static void printRaster(const iccviz::Raster& r, const char* outFile) {
       // Verify the write fully succeeded: a short or failed fwrite must be
       // surfaced as an error rather than reported as a good dump (CWE-252).
       size_t nWritten = std::fwrite(r.samples.data(), 1, r.samples.size(), f);
-      bool ok = (nWritten == r.samples.size());
+      ok = (nWritten == r.samples.size());
       // A failure flushing/closing the stream also invalidates the dump.
       if (std::fclose(f) != 0) ok = false;
       if (ok)
@@ -207,12 +213,14 @@ static void printRaster(const iccviz::Raster& r, const char* outFile) {
       else
         std::printf(",\"error\":\"failed to write output file\"");
     } else {
+      ok = false;
       std::printf(",\"error\":\"could not open output file\"");
     }
   } else {
     std::printf(",\"sampleBytes\":%zu", r.samples.size());
   }
   std::printf("}\n");
+  return ok;
 }
 
 static void usage() {
@@ -277,7 +285,11 @@ int main(int argc, char* argv[]) {
     if (!res.ok) {
       if (res.diagnostics.empty()) std::fprintf(stderr, "%s: %s\n", base.c_str(), res.error.c_str());
       rc = 3;
-    } else printRaster(res.raster, argc >= 5 ? argv[4] : nullptr);
+    } else if (!printRaster(res.raster, argc >= 5 ? argv[4] : nullptr)) {
+      // Render succeeded but the requested raw dump could not be written;
+      // exit nonzero so callers don't silently miss the output file (#1550).
+      rc = 4;
+    }
   } else {
     usage();
     rc = 1;

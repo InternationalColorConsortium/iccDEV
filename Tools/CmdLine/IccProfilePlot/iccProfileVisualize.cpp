@@ -1361,11 +1361,20 @@ int main(int argc, char* argv[])
 
 // if we need options in the future, then parse -* and add all unknowns to a list of filenames
 
+  // Track per-file outcome so the process exit code reflects real success.
+  // The upstream reference tool returns 0 unconditionally, which makes scripts
+  // and CI treat an unparseable profile (or one that yields no output) as a
+  // success. We diverge deliberately here (PR #1517 QA Finding 1, #1550): any
+  // input that fails to parse, throws, or produces no requested output marks
+  // the run as failed and yields a nonzero exit.
+  int status = 0;
+
   for (int k = 1; k < argc; ++k) {
     try {
       CIccProfile *pIcc = OpenIccProfile( argv[k] );
       if (!pIcc) {
         fprintf(stderr,"Unable to parse '%s' as ICC profile!\n", argv[k]);
+        status = -1;
         continue;
       }
 
@@ -1373,20 +1382,23 @@ int main(int argc, char* argv[])
       auto count = processLuts( pIcc, argv[k] );
       if (!count) {
         fprintf(stderr,"Profile %s had no content for output\n", argv[k] );
+        status = -1;
       }
 
       delete pIcc;
     }   // end try
     catch (const std::exception& e) {
       fprintf(stderr, "%s: ERROR exception: '%s'\n", argv[k], e.what() );
+      status = -1;
     }
     catch (...) {
       fprintf(stderr, "%s: ERROR: unknown exception\n", argv[k] );
+      status = -1;
     }
 
   } // end for argc
 
-  return 0;
+  return status;
 }
 
 /******************************************************************************/
