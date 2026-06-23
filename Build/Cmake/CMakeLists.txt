@@ -973,6 +973,17 @@ macro(_iccdev_add_cxx_flag_if_supported FLAG VAR)
     add_compile_options("${FLAG}")
   endif()
 endmacro()
+
+function(_iccdev_configure_fortify_source PLATFORM_NAME)
+  if(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+    add_compile_definitions(_FORTIFY_SOURCE=2)
+    message(STATUS "${PLATFORM_NAME}: _FORTIFY_SOURCE=2 enabled for optimized ${CMAKE_BUILD_TYPE} build")
+  elseif(NOT _is_multi_config)
+    add_compile_options(-U_FORTIFY_SOURCE)
+    message(STATUS "${PLATFORM_NAME}: _FORTIFY_SOURCE undefined for non-optimized ${CMAKE_BUILD_TYPE} build")
+  endif()
+endfunction()
+
 if(SANITIZER_FLAGS OR ENABLE_COVERAGE OR ENABLE_PROFILING)
   set(ipo_supported TRUE)
   set(ipo_output "IPO support not probed because instrumentation disables LTO")
@@ -1205,10 +1216,7 @@ if(APPLE)
     message(STATUS "macOS: strict warnings DISABLED -- ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} below floor (GCC 15 / Clang 14). Base hardening still active.")
   endif()
 
-  # Fortify source for optimized builds (requires -O1 or higher)
-  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    add_compile_definitions(_FORTIFY_SOURCE=2)
-  endif()
+  _iccdev_configure_fortify_source("macOS")
 
   message(STATUS "macOS build: Warning flags and security hardening applied.")
 
@@ -1274,10 +1282,7 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
   # Hardening: RELRO and BIND_NOW for executables
   add_link_options(-Wl,-z,relro,-z,now)
 
-  # Fortify source for optimized builds (requires -O1 or higher)
-  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    add_compile_definitions(_FORTIFY_SOURCE=2)
-  endif()
+  _iccdev_configure_fortify_source("Linux")
 
   message(STATUS "Linux build: Warning flags and security hardening applied.")
 

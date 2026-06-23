@@ -25,13 +25,13 @@ COPY --chmod=0755 docker/iccdev-banner.sh /tmp/iccdev-banner
 COPY --chmod=0755 docker/iccdev-generate-profiles.sh /tmp/iccdev-generate-profiles
 ARG GIT_COMMIT=""
 
-RUN nix-shell -p cmake clang gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run "\
+RUN nix-shell -E 'with import <nixpkgs> {}; stdenv.mkDerivation { name = "iccdev-nixos-build"; hardeningDisable = [ "fortify" ]; nativeBuildInputs = [ cmake clang gcc gnumake pkg-config coreutils findutils ]; buildInputs = [ libxml2 libtiff libjpeg libpng nlohmann_json zlib ]; }' --run "\
     export GIT_COMMIT=\"${GIT_COMMIT}\" && \
     export SAN_FLAGS=\"-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound\" && \
     export CC=clang && \
     export CXX=clang++ && \
-    export CFLAGS=\"\${SAN_FLAGS} -fno-omit-frame-pointer -g -O0\" && \
-    export CXXFLAGS=\"\${SAN_FLAGS} -fno-omit-frame-pointer -g -O0\" && \
+    export CFLAGS=\"\${SAN_FLAGS} -U_FORTIFY_SOURCE -fno-omit-frame-pointer -g -O0\" && \
+    export CXXFLAGS=\"\${SAN_FLAGS} -U_FORTIFY_SOURCE -fno-omit-frame-pointer -g -O0\" && \
     export LDFLAGS=\"\${SAN_FLAGS} \${LDFLAGS:-}\" && \
     export NIX_LDFLAGS=\"-ltiff \${NIX_LDFLAGS:-}\" && \
     sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt && \
