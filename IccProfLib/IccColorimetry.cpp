@@ -188,6 +188,14 @@ static void resampleCore(const Grid &src, const std::vector<double> &v,
     double w = dst.nm(j);                           // destination wavelength (nm)
     double t = (src.step != 0.0) ? (w - src.start) / src.step : 0.0;  // position in source samples
 
+    // Defence in depth for the (int)floor(t) cast below: callers validate ranges
+    // via rangeWellFormed() (which now rejects non-finite endpoints), so t should
+    // always be finite here, but a non-finite t would slip past both end-range
+    // tests (every comparison with NaN is false) and reach the cast as undefined
+    // behaviour (CWE-681, #2230).  Treat a degenerate position as the first
+    // sample rather than casting it.
+    if (!std::isfinite(t)) { out[j] = v[0]; continue; }
+
     if (t <= 0.0) {                                 // at/below first sample
       if (t > -1e-9) { out[j] = v[0]; continue; }   // within rounding of the first sample
       out[j] = (extend == icSpectralExtendLinear && n > 1)
@@ -235,6 +243,16 @@ static void toDouble(const icFloatNumber *p, int n, std::vector<double> &v) {
 // loops from silently working off a negative or zero wavelength step.
 static bool rangeWellFormed(const icSpectralRange &r) {
   if (!r.steps)
+    return false;
+  // Endpoints are icFloat16 and so can encode +/-Inf or NaN from a malformed
+  // profile.  Reject any non-finite endpoint: a multi-sample range with an
+  // infinite endpoint slips past the strictly-increasing check below (e.g.
+  // start = -Inf with a finite end still satisfies end > start) yet yields
+  // Grid::step = Inf and a per-sample position t = (w - start)/step = NaN, which
+  // then reaches the (int)floor(t) cast in resampleCore() -- undefined behaviour
+  // on the cast (CWE-681, #2230).  Reject it here, the module's Tier-1 boundary.
+  if (!std::isfinite((double)icF16toF(r.start)) ||
+      !std::isfinite((double)icF16toF(r.end)))
     return false;
   if (r.steps > 1 && !(icF16toF(r.end) > icF16toF(r.start)))
     return false;
