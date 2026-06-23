@@ -16,6 +16,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `snprintf-size-mismatch` | CWE-120 | Buffer smaller than formatted output |
 | `unchecked-allocation` | CWE-252, CWE-476 | Allocation result used without null check |
 | `unbounded-profile-loop` | CWE-400, CWE-834 | Loop bound from profile field without cap |
+| `unbounded-clut-index` | CWE-125 | CLUT `GetData()` buffer indexed without a length bound (#1548) |
 | `float-to-int-cast` | CWE-681 | Float-to-integer cast without range check |
 | `division-by-zero-profile` | CWE-369 | Division by profile-derived value |
 | `world-writable-output` | CWE-732 | File created with world-writable mode |
