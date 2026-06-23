@@ -27,8 +27,15 @@ predicate isNarrowCountType(Type t) {
 
 predicate conditionMentionsFieldAndBound(Expr condition, Field field) {
   condition.getAChild*().(FieldAccess).getTarget() = field and
+  // Match a guard that names a recognised upper bound. NOTE: object-like macros
+  // (e.g. #define MAX_CALC_ELEMENTS 65536) are expanded before CodeQL builds the
+  // AST, so a guard written `field >= MAX_CALC_ELEMENTS` presents here as the
+  // literal `65536`, never the macro spelling. The bare value must therefore be
+  // listed alongside the macro name. Includes the concrete caps used across the
+  // library: 65536 (MAX_CALC_ELEMENTS) and 16777215/0xffffff (the 24-bit array
+  // serialization cap) in addition to the previously-listed 4096/65535.
   condition.getAChild*().toString().regexpMatch(
-    "(?i).*(max|limit|bound|INT_MAX|icMaxEnum|4096|65535|MAX_CALC_ELEMENTS|kMax).*"
+    "(?i).*(max|limit|bound|INT_MAX|icMaxEnum|4096|65535|65536|16777215|0xffffff|MAX_CALC_ELEMENTS|kMax).*"
   )
 }
 

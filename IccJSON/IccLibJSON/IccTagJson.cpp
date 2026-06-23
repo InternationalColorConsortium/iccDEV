@@ -1321,7 +1321,12 @@ template <class T, class A, icTagTypeSignature Tsig>
 bool CIccTagJsonFloatNum<T, A, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
-  for (icUInt32Number i = 0; i < this->m_nSize; i++)
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_Num is
+  // allocated to match; mirror the same explicit cap the integer sibling
+  // (CIccTagJsonNum::ToJson) uses, inline in the loop condition, so a corrupted count
+  // can't drive an unbounded serialization walk. A valid count is strictly less.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  for (icUInt32Number i = 0; i < this->m_nSize && i < nMaxNumValues; i++)
     arr.push_back((double)this->m_Num[i]);
   j["values"] = arr;
   return true;

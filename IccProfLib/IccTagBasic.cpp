@@ -8736,7 +8736,62 @@ bool CIccTagData::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   if (IsTypeCompressed()) {
-    //Uncompress data here
+#ifdef ICC_USE_ZLIB
+    // The on-disk payload of a compressed dataType tag (icCompressedData flag set)
+    // is a zlib stream. Inflate it here so the in-memory m_pData holds the plaintext
+    // the accessors (GetData/operator[]/Describe) expect; Write() re-deflates it
+    // symmetrically. On a build without zlib the block is compiled out, so the raw
+    // compressed bytes are left in m_pData and Write() re-emits them unchanged
+    // (lossless pass-through rather than corrupting or dropping the tag).
+    if (nNum) {
+      z_stream zstr;
+      memset(&zstr, 0, sizeof(zstr));
+
+      if (inflateInit(&zstr) != Z_OK)
+        return false;
+
+      zstr.next_in = (Bytef*)m_pData;
+      zstr.avail_in = nNum;
+
+      // CWE-400: cap the inflated size so a small zlib "bomb" payload cannot drive an
+      // unbounded allocation; mirrors the Describe() ceiling on tag data bytes.
+      const icUInt32Number nMaxInflatedBytes = 0x10000000;
+      icUtf8Vector out;
+      unsigned char buf[32768];
+      int zstat;
+
+      do {
+        zstr.next_out = buf;
+        zstr.avail_out = sizeof(buf);
+
+        zstat = inflate(&zstr, Z_SYNC_FLUSH);
+
+        if (zstat != Z_OK && zstat != Z_STREAM_END) {
+          inflateEnd(&zstr);
+          return false;
+        }
+
+        size_t n = sizeof(buf) - zstr.avail_out;
+        if (out.size() + n > nMaxInflatedBytes) {
+          inflateEnd(&zstr);
+          return false;
+        }
+        out.insert(out.end(), buf, buf + n);
+      } while (zstat != Z_STREAM_END);
+
+      inflateEnd(&zstr);
+
+      // Replace the compressed bytes with the decompressed payload. Allocate at least
+      // one byte so SetSize never hits a realloc-to-zero; m_nSize tracks the logical
+      // length, which may legitimately be 0 for an empty tag.
+      icUInt32Number nOut = (icUInt32Number)out.size();
+      if (!SetSize(nOut ? nOut : 1, false))
+        return false;
+      if (nOut)
+        memcpy(m_pData, &out[0], nOut);
+      m_nSize = nOut;
+    }
+#endif
   }
 
   return true;
@@ -8772,19 +8827,55 @@ bool CIccTagData::Write(CIccIO *pIO)
   if (!pIO->Write32(&m_nDataFlag))
     return false;
 
+#ifdef ICC_USE_ZLIB
   if (IsTypeCompressed()) {
-    icUInt32Number *pData = NULL;
-    size_t nSize = 0;
+    // Symmetric with Read(): m_pData holds the plaintext, so deflate it back into the
+    // zlib stream that belongs on disk for a compressed dataType tag. The enclosing
+    // tag-directory writer sizes the tag from the bytes actually written here, so the
+    // compressed length (!= m_nSize) is recorded correctly (same model as
+    // CIccTagZipUtf8Text::Write).
+    z_stream zstr;
+    memset(&zstr, 0, sizeof(zstr));
 
-// TODO, UNFINISHED - Compress data here
+    if (deflateInit(&zstr, Z_DEFAULT_COMPRESSION) != Z_OK)
+      return false;
 
-    if (pIO->Write8(pData, nSize) != nSize)
+    zstr.next_in = (Bytef*)m_pData;
+    zstr.avail_in = m_nSize;
+
+    icUtf8Vector compress;
+    unsigned char buf[32768];
+    int zstat;
+
+    do {
+      zstr.next_out = buf;
+      zstr.avail_out = sizeof(buf);
+
+      zstat = deflate(&zstr, Z_FINISH);
+
+      if (zstat != Z_OK && zstat != Z_STREAM_END) {
+        deflateEnd(&zstr);
+        return false;
+      }
+
+      size_t n = sizeof(buf) - zstr.avail_out;
+      compress.insert(compress.end(), buf, buf + n);
+    } while (zstat != Z_STREAM_END);
+
+    deflateEnd(&zstr);
+
+    size_t nCompSize = compress.size();
+    if (nCompSize && pIO->Write8(&compress[0], nCompSize) != nCompSize)
       return false;
+
+    return true;
   }
-  else {
-    if (pIO->Write8(m_pData, m_nSize) != m_nSize)
-      return false;
-  }
+#endif
+
+  // Uncompressed data, or a compressed tag on a non-zlib build where m_pData still
+  // holds the original on-disk compressed bytes (lossless pass-through).
+  if (pIO->Write8(m_pData, m_nSize) != m_nSize)
+    return false;
 
   return true;
 }
