@@ -3706,6 +3706,14 @@ icInt32Number CIccTagNamedColor2::FindDeviceColor(icFloatNumber *pDevColor) cons
   if (m_nSize > kMaxNamedColorEntries)
     return -1;
 
+  // CWE-400/CWE-834: m_nDeviceCoords is the per-entry device channel count, which
+  // Read() caps at kMaxNamedColorDeviceCoords while sizing each entry's deviceCoords
+  // array; assert that bound on the field so the inner device-coord walk below has
+  // an explicit upper limit. Value-preserving: a valid count is far below the cap.
+  const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+  if (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+    return -1;
+
   for (icUInt32Number i=0; i<m_nSize; i++) {
     pDevOut = GetEntry(i)->deviceCoords;
 
