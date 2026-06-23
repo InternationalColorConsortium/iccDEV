@@ -209,8 +209,17 @@ static void resampleCore(const Grid &src, const std::vector<double> &v,
       continue;
     }
 
-    int i = (int)std::floor(t);                     // source segment index (base sample v[i])
-    if (i > n - 2) i = n - 2;                        // keep the i+1 neighbour in range at the top
+    // CWE-681 (#2230): the isfinite(t) guard above already prevents a non-finite
+    // t from reaching this float->int conversion, and t is in (0, n-1) here, but
+    // clamp the cast operand to the valid segment range [0, n-2] right at the
+    // conversion so the NaN/range check is local to the cast (a float->int cast
+    // of a non-finite or out-of-range value is undefined behaviour). For any
+    // valid t this is a no-op: floor(t) is already in [0, n-2]. Mirrors the
+    // adjacent-guard form used in #1478.
+    double tf = std::floor(t);                      // source segment index (base sample v[i])
+    if (!(tf >= 0.0)) tf = 0.0;                     // also catches NaN
+    else if (tf > n - 2) tf = n - 2;               // keep the i+1 neighbour in range at the top
+    int i = (int)tf;
     double X = t - i;                               // fractional position within segment i
     if (interp == icSpectralInterpSprague && haveExt)
       out[j] = spragueEval(ext, i, X);
