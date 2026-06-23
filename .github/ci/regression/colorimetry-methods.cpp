@@ -608,6 +608,26 @@ void testInputGuards()
     check(set && !calc.PrepareEmissive(g),
           "PrepareEmissive(NaN in xbar) -> false (operator finiteness catch)", 0.0);
   }
+
+  // H8: a range with a non-finite endpoint is ill-formed -> rejected (#2230).
+  // icFloat16 endpoints can encode +/-Inf; an infinite endpoint passes the
+  // strictly-increasing check (end > -Inf is true) yet drives Grid::step to Inf
+  // and the per-sample position t to NaN, which would otherwise reach the
+  // (int)floor(t) cast in resampleCore() as undefined behaviour (CWE-681). The
+  // boundary guard must reject it -- fails red if that finiteness check is removed.
+  {
+    icSpectralRange infStart = makeRange(-INFINITY, 700, 31);  // start = float16 -Inf
+    icSpectralRange good = makeRange(400, 700, 31);
+    std::vector<icFloatNumber> in(31, (icFloatNumber)0.5), out(31);
+    check(!icSpectralResample(infStart, &in[0], good, &out[0]),
+          "resample(non-finite src endpoint) -> false", 0.0);
+    check(!icSpectralResample(good, &in[0], infStart, &out[0]),
+          "resample(non-finite dst endpoint) -> false", 0.0);
+
+    CIccColorimetricCalculator calc;
+    std::vector<icFloatNumber> obs = makeObserver(400, 700, 31);
+    check(!calc.SetObserver(infStart, &obs[0]), "SetObserver(non-finite endpoint) -> false", 0.0);
+  }
 }
 
 } // namespace
