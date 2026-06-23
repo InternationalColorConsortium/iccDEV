@@ -1996,8 +1996,10 @@ bool CIccMpeJsonCalculator::ToJson(IccJson &j)
     IccJson elems = IccJson::array();
     // CWE-400/CWE-834: m_nSubElem is the CIccMpeCalculator field that Read() caps at
     // MAX_CALC_ELEMENTS (IccMpeCalc.h) while sizing m_SubElem[], so this serialization
-    // walk never exceeds the allocation. Mirror the cap inline so the bound is explicit
-    // at the point of iteration; a valid count is strictly less than the cap.
+    // walk never exceeds the allocation. Assert that bound on the field before the
+    // walk (a valid count is strictly less than the cap) and keep it mirrored inline.
+    if (m_nSubElem >= MAX_CALC_ELEMENTS)
+      return false;
     for (icUInt32Number i = 0; i < m_nSubElem && i < MAX_CALC_ELEMENTS; i++) {
       if (!m_SubElem[i]) return false;
       IIccExtensionMpe *pExt = m_SubElem[i]->GetExtension();

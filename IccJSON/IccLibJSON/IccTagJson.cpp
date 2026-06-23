@@ -1322,10 +1322,12 @@ bool CIccTagJsonFloatNum<T, A, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
   // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_Num is
-  // allocated to match; mirror the same explicit cap the integer sibling
-  // (CIccTagJsonNum::ToJson) uses, inline in the loop condition, so a corrupted count
-  // can't drive an unbounded serialization walk. A valid count is strictly less.
+  // allocated to match; cap this serialization walk so a corrupted count can't drive
+  // an unbounded loop. Assert the bound on the field before the walk (a valid count
+  // is strictly less) and keep it mirrored inline in the loop condition.
   const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
   for (icUInt32Number i = 0; i < this->m_nSize && i < nMaxNumValues; i++)
     arr.push_back((double)this->m_Num[i]);
   j["values"] = arr;
