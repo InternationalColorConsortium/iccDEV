@@ -274,6 +274,12 @@ def reusable_callees(workflow):
     return callees
 
 
+APPROVED_UNTRUSTED_ARTIFACT_REASONS = {
+    "sanitized-risk-report",
+    "sanitized-developer-report",
+}
+
+
 def artifact_allowlist_reason(raw):
     lines = raw.splitlines()
     for index, line in enumerate(lines):
@@ -283,7 +289,9 @@ def artifact_allowlist_reason(raw):
         context = "\n".join(lines[start:index])
         match = re.search(r"preflight:\s*allow-untrusted-artifact\s+reason=(\S+)", context)
         if match:
-            return clean_text(match.group(1))
+            reason = clean_text(match.group(1))
+            if reason in APPROVED_UNTRUSTED_ARTIFACT_REASONS:
+                return reason
     return ""
 
 

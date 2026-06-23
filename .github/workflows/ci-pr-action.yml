@@ -47,6 +47,26 @@ on:
           - source
           - governance
           - docs
+      run_tool_flamegraphs:
+        description: 'Run opt-in perf/FlameGraph profiling for representative tools'
+        required: false
+        default: false
+        type: boolean
+      tool_flamegraph_repeat:
+        description: 'Repetitions per tool during FlameGraph profiling'
+        required: false
+        default: '10'
+        type: string
+      tool_flamegraph_min_samples:
+        description: 'Minimum samples per tool before marking LOW_SAMPLES'
+        required: false
+        default: '25'
+        type: string
+      tool_flamegraph_timeout:
+        description: 'Timeout in seconds per profiled tool'
+        required: false
+        default: '45'
+        type: string
 
 concurrency:
   group: "ci-pr-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
@@ -602,11 +622,20 @@ jobs:
 
   tool-tests:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: Tool Smoke Tests (ASAN+UBSAN)
+    name: Tool Smoke Tests (ASAN+UBSAN, ${{ matrix.tool_build_type }})
     needs: [setup, detect-src, validate-inputs]
+    strategy:
+      fail-fast: false
+      matrix:
+        tool_build_type: ${{ fromJson(needs.validate-inputs.outputs.build-types) }}
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
     with:
       regression_image_tag: ${{ github.ref_name == 'ci-docker-canary' && 'ci-docker-canary' || 'master' }}
+      tool_build_type: ${{ matrix.tool_build_type }}
+      run_tool_flamegraphs: ${{ inputs.run_tool_flamegraphs || false }}
+      tool_flamegraph_repeat: ${{ inputs.tool_flamegraph_repeat || '10' }}
+      tool_flamegraph_min_samples: ${{ inputs.tool_flamegraph_min_samples || '25' }}
+      tool_flamegraph_timeout: ${{ inputs.tool_flamegraph_timeout || '45' }}
 
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}

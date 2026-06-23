@@ -54,6 +54,31 @@ on:
         required: false
         default: false
         type: boolean
+      run_tool_flamegraphs:
+        description: 'Run perf/FlameGraph profiling for representative tool invocations'
+        required: false
+        default: false
+        type: boolean
+      tool_flamegraph_repeat:
+        description: 'Repetitions per tool during FlameGraph profiling'
+        required: false
+        default: '10'
+        type: string
+      tool_flamegraph_min_samples:
+        description: 'Minimum samples per tool before marking LOW_SAMPLES'
+        required: false
+        default: '25'
+        type: string
+      tool_flamegraph_timeout:
+        description: 'Timeout in seconds per profiled tool'
+        required: false
+        default: '45'
+        type: string
+      tool_build_type:
+        description: 'Build type for the reusable CTest tool suite'
+        required: false
+        default: Debug
+        type: string
       regression_image_tag:
         description: 'Trusted regression container tag'
         required: false
@@ -99,6 +124,34 @@ on:
         required: false
         default: false
         type: boolean
+      run_tool_flamegraphs:
+        description: 'Run perf/FlameGraph profiling for representative tool invocations'
+        required: false
+        default: false
+        type: boolean
+      tool_flamegraph_repeat:
+        description: 'Repetitions per tool during FlameGraph profiling'
+        required: false
+        default: '10'
+        type: string
+      tool_flamegraph_min_samples:
+        description: 'Minimum samples per tool before marking LOW_SAMPLES'
+        required: false
+        default: '25'
+        type: string
+      tool_flamegraph_timeout:
+        description: 'Timeout in seconds per profiled tool'
+        required: false
+        default: '45'
+        type: string
+      tool_build_type:
+        description: 'Build type for the CTest tool suite'
+        required: true
+        default: Debug
+        type: choice
+        options:
+          - Release
+          - Debug
       thread_linkage_build_type:
         description: 'Build type for the manual RefIccMAX thread linkage check'
         required: true
@@ -114,12 +167,12 @@ on:
         type: boolean
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tool_build_type || 'Debug' }}
   cancel-in-progress: true
 
 jobs:
   tool-tests:
-    name: "iccDEV Tools - GCC Strict ASAN+UBSAN"
+    name: "iccDEV Tools - GCC Strict ASAN+UBSAN (${{ inputs.tool_build_type || 'Debug' }})"
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
@@ -135,6 +188,7 @@ jobs:
     env:
       BASH_ENV: /dev/null
       REGRESSION_IMAGE_TAG: ${{ inputs.regression_image_tag || 'master' }}
+      TOOL_BUILD_TYPE: ${{ inputs.tool_build_type || 'Debug' }}
       BUILD_DIR: build
 
     steps:
@@ -174,6 +228,11 @@ jobs:
           fi
           cmake --version | sed -n '1p'
           /usr/bin/time --version | sed -n '1p'
+          if command -v perf >/dev/null 2>&1; then
+            perf --version | sed -n '1p'
+          else
+            echo "[WARN] perf not present; tool FlameGraphs will be skipped if requested"
+          fi
 
       - name: Configure iccDEV CTest build
         env:
@@ -186,12 +245,28 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
+          case "$TOOL_BUILD_TYPE" in
+            Release|Debug)
+              ;;
+            *)
+              echo "::error title=Invalid build type::${TOOL_BUILD_TYPE}"
+              exit 1
+              ;;
+          esac
+
+          c_flags="${WARN_FLAGS}"
+          cxx_flags="${WARN_FLAGS} -std=c++17"
+          if [ "$TOOL_BUILD_TYPE" = "Debug" ]; then
+            c_flags="${c_flags} -fno-omit-frame-pointer -g -O0"
+            cxx_flags="${cxx_flags} -fno-omit-frame-pointer -g -O0"
+          fi
+
           cmake -S Build/Cmake -B "${BUILD_DIR}" \
-            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_BUILD_TYPE="${TOOL_BUILD_TYPE}" \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DCMAKE_C_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0" \
-            -DCMAKE_CXX_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0 -std=c++17" \
+            -DCMAKE_C_FLAGS="${c_flags}" \
+            -DCMAKE_CXX_FLAGS="${cxx_flags}" \
             -DENABLE_SANITIZERS=ON \
             -DSANITIZER_RECOVER=ON \
             -DENABLE_TOOLS=ON \
@@ -199,6 +274,7 @@ jobs:
             -DENABLE_WXWIDGETS=OFF \
             -DENABLE_SHARED_LIBS=ON \
             -DENABLE_STATIC_LIBS=ON \
+            -DICC_USE_ZLIB=ON \
             -Wno-dev
 
       - name: Build iccDEV tools
@@ -283,6 +359,32 @@ jobs:
           HYBRID_TIMING_INSTRUMENT="$HYBRID_TIMING_INSTRUMENT_INPUT" \
             .github/scripts/iccdev-hybrid-applyprofiles-timing.sh
 
+      - name: Run all-tool FlameGraph profiling
+        if: ${{ inputs.run_tool_flamegraphs }}
+        continue-on-error: true
+        env:
+          BASH_ENV: /dev/null
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          TOOL_FLAMEGRAPH_REPEAT_INPUT: ${{ inputs.tool_flamegraph_repeat || '10' }}
+          TOOL_FLAMEGRAPH_MIN_SAMPLES_INPUT: ${{ inputs.tool_flamegraph_min_samples || '25' }}
+          TOOL_FLAMEGRAPH_TIMEOUT_INPUT: ${{ inputs.tool_flamegraph_timeout || '45' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          ICCDEV_TOOLS_DIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools" \
+          ICCDEV_TESTING_DIR="$GITHUB_WORKSPACE/Testing" \
+          ICCDEV_FLAMEGRAPH_OUTDIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs" \
+          ICCDEV_FLAMEGRAPH_REPEAT="$TOOL_FLAMEGRAPH_REPEAT_INPUT" \
+          ICCDEV_FLAMEGRAPH_MIN_SAMPLES="$TOOL_FLAMEGRAPH_MIN_SAMPLES_INPUT" \
+          ICCDEV_FLAMEGRAPH_TIMEOUT="$TOOL_FLAMEGRAPH_TIMEOUT_INPUT" \
+          ICCDEV_FLAMEGRAPH_USER_ONLY=1 \
+          ICCDEV_FLAMEGRAPH_CALL_GRAPH=dwarf \
+            .github/scripts/iccdev-tool-flamegraphs.sh
+
       - name: Generate summary
         if: always()
         env:
@@ -304,6 +406,14 @@ jobs:
               printf '%s' "$s"
             }
             sanitize_line() { escape_html "$1"; }
+            sanitize_code_line() {
+              local s="$1"
+              s="${s//$'\r'/}"
+              s="${s//$'\n'/ }"
+              s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
+              s="${s//\`\`\`/\` \` \`}"
+              printf '%s' "$s"
+            }
           fi
 
           test_cmd="ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
@@ -326,14 +436,16 @@ jobs:
             echo "### Manual Reproduction"
             echo ""
             echo '```bash'
+            echo "TOOL_BUILD_TYPE='${TOOL_BUILD_TYPE}'"
             echo "WARN_FLAGS='-Wall -Wextra -Wpedantic -Werror'"
-            echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=Debug \\"
+            echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=\"\${TOOL_BUILD_TYPE}\" \\"
             echo "  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \\"
-            echo "  -DCMAKE_C_FLAGS=\"\${WARN_FLAGS} -fno-omit-frame-pointer -g -O0\" \\"
-            echo "  -DCMAKE_CXX_FLAGS=\"\${WARN_FLAGS} -fno-omit-frame-pointer -g -O0 -std=c++17\" \\"
+            echo "  -DCMAKE_C_FLAGS=\"\${WARN_FLAGS}\" \\"
+            echo "  -DCMAKE_CXX_FLAGS=\"\${WARN_FLAGS} -std=c++17\" \\"
             echo "  -DENABLE_SANITIZERS=ON \\"
             echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
-            echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON"
+            echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON \\"
+            echo "  -DICC_USE_ZLIB=ON"
             echo "cmake --build build --parallel \"\$(nproc)\""
             echo "ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
             echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
@@ -368,6 +480,150 @@ jobs:
               done
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Package developer report
+        if: ${{ success() }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          report_dir="${BUILD_DIR}/Testing/ctest-output/developer-report"
+          data_dir="${report_dir}/data"
+          graph_dir="${report_dir}/graphs"
+          rm -rf "$report_dir"
+          mkdir -p "$data_dir" "$graph_dir"
+
+          copy_file_if_present() {
+            local src="$1"
+            local dst="$2"
+            if [ -f "$src" ]; then
+              mkdir -p "$(dirname "$dst")"
+              cp -f "$src" "$dst"
+            fi
+          }
+
+          copy_dir_if_present() {
+            local src="$1"
+            local dst="$2"
+            if [ -d "$src" ]; then
+              rm -rf "$dst"
+              mkdir -p "$(dirname "$dst")"
+              cp -a "$src" "$dst"
+            fi
+          }
+
+          copy_file_if_present "${BUILD_DIR}/build.log" "${data_dir}/build.log"
+          copy_file_if_present "${BUILD_DIR}/ctest-list.txt" "${data_dir}/ctest-list.txt"
+          copy_file_if_present "${BUILD_DIR}/ctest-results.xml" "${data_dir}/ctest-results.xml"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/Temporary" \
+            "${data_dir}/ctest-temporary"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing" \
+            "${data_dir}/hybrid-applyprofiles-timing"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs" \
+            "${graph_dir}/tool-flamegraphs"
+
+          {
+            printf 'iccDEV developer report\n'
+            printf '=======================\n\n'
+            printf 'Build type: %s\n' "$TOOL_BUILD_TYPE"
+            printf 'Commit: %s\n' "$(git rev-parse HEAD)"
+            printf 'Run: %s\n\n' "${GITHUB_RUN_ID:-local}"
+            printf 'Open index.html for the presentation view.\n'
+            printf 'Data files are under data/ and FlameGraph outputs are under graphs/.\n'
+          } > "${report_dir}/README.txt"
+
+          html="${report_dir}/index.html"
+          {
+            printf '%s\n' '<!doctype html>'
+            printf '%s\n' '<html lang="en"><head><meta charset="utf-8">'
+            printf '%s\n' '<title>iccDEV Developer Report</title>'
+            printf '%s' '<style>body{font-family:system-ui,sans-serif;margin:2rem;'
+            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%%;'
+            printf '%s' 'margin:1rem 0}th,td{border:1px solid #ddd;padding:.45rem;'
+            printf '%s' 'text-align:left}th{background:#f4f6f8}code{background:#f4f6f8;'
+            printf '%s' 'padding:.1rem .25rem}.pass{color:#116329}.warn{color:#9a6700}'
+            printf '%s\n' '.fail{color:#b42318}</style>'
+            printf '%s\n' '</head><body>'
+            printf '<h1>iccDEV Developer Report</h1>\n'
+            printf '<table><tr><th>Component</th><th>Value</th></tr>\n'
+            printf '<tr><td>Build type</td><td>%s</td></tr>\n' "$(escape_html "$TOOL_BUILD_TYPE")"
+            printf '<tr><td>Commit</td><td><code>%s</code></td></tr>\n' "$(escape_html "$(git rev-parse --short HEAD)")"
+            printf '<tr><td>Run</td><td><code>%s</code></td></tr>\n' "$(escape_html "${GITHUB_RUN_ID:-local}")"
+            printf '</table>\n'
+
+            flamegraph_manifest="${graph_dir}/tool-flamegraphs/manifest.tsv"
+            if [ -f "$flamegraph_manifest" ]; then
+              printf '<h2>Tool FlameGraphs</h2>\n'
+              printf '<table><tr><th>Tool</th><th>Status</th>'
+              printf '<th>Samples</th><th>Unknown folded</th>'
+              printf '<th>SVG</th><th>Report</th><th>Note</th></tr>\n'
+              tail -n +2 "$flamegraph_manifest" | while IFS=$'\t' read -r \
+                tool status _exit_code samples unknown svg perf_report _command note; do
+                svg_cell='no'
+                if [ -n "$svg" ]; then
+                  svg_rel="${svg#*tool-flamegraphs/}"
+                  svg_href="graphs/tool-flamegraphs/${svg_rel}"
+                  svg_cell="<a href=\"$(escape_html "$svg_href")\">svg</a>"
+                fi
+                report_cell='n/a'
+                if [ -n "$perf_report" ]; then
+                  report_rel="${perf_report#*tool-flamegraphs/}"
+                  report_href="graphs/tool-flamegraphs/${report_rel}"
+                  report_cell="<a href=\"$(escape_html "$report_href")\">report</a>"
+                fi
+                printf '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' \
+                  "$(escape_html "$tool")" \
+                  "$(escape_html "$status")" \
+                  "$(escape_html "$samples")" \
+                  "$(escape_html "$unknown")" \
+                  "$svg_cell" \
+                  "$report_cell" \
+                  "$(escape_html "$note")"
+              done
+              printf '</table>\n'
+            else
+              printf '<h2>Tool FlameGraphs</h2><p>No FlameGraph manifest was generated.</p>\n'
+            fi
+
+            printf '<h2>Included Data</h2><ul>\n'
+            find "$data_dir" "$graph_dir" -type f | sort | while IFS= read -r file; do
+              rel="${file#"$report_dir"/}"
+              printf '<li><a href="%s">%s</a></li>\n' \
+                "$(escape_html "$rel")" \
+                "$(escape_html "$rel")"
+            done
+            printf '</ul></body></html>\n'
+          } > "$html"
+
+      - name: Upload developer report
+        if: ${{ success() }}
+        # preflight: allow-untrusted-artifact reason=sanitized-developer-report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-developer-report-${{ inputs.tool_build_type || 'Debug' }}
+          path: ${{ env.BUILD_DIR }}/Testing/ctest-output/developer-report
+          if-no-files-found: error
+          retention-days: 14
 
   thread-linkage:
     name: "RefIccMAX thread linkage - manual"

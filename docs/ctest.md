@@ -249,7 +249,10 @@ CTest logs and per-suite output are written under:
 ```
 
 The CI workflows upload those paths with `ctest-results.xml` and
-`ctest-list.txt`.
+`ctest-list.txt` inside the developer report artifact. For the reusable Linux
+tool workflow, the artifact is named `iccdev-developer-report-<BuildType>` and
+contains a presentation `index.html`, CTest data, optional hybrid timing data,
+and optional all-tool FlameGraph data/SVGs.
 
 ## Maintainer Add-Test Process
 

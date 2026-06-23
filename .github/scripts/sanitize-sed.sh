@@ -226,6 +226,26 @@ sanitize_print() {
   printf '%s' "$s"
 }
 
+# sanitize_code_line STRING
+# Produce a single-line string for fenced code blocks:
+# - remove CR/LF and control chars
+# - trim
+# - neutralize markdown fence delimiters
+# - truncate to SANITIZE_LINE_MAXLEN
+#
+# Unlike sanitize_line(), this intentionally does not HTML-escape quotes and
+# braces. Use it only inside fenced code blocks so JSON and command output remain
+# readable in GitHub summaries without rendering as HTML.
+sanitize_code_line() {
+  local input="$1"
+  local s
+  s="$(_strip_ctrl_remove_newlines "$input")"
+  s="$(_trim_whitespace "$s")"
+  s="${s//\`\`\`/\` \` \`}"
+  s="$(_truncate "$s" "$SANITIZE_LINE_MAXLEN")"
+  printf '%s' "$s"
+}
+
 # sanitize_ref STRING
 # Sanitize branch, tag or ref names for use in filenames, concurrency groups, etc.
 # - replace disallowed chars with '-'

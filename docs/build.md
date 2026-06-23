@@ -191,6 +191,15 @@ cmake --build out/vs2022-x64 --config Release --target check
 See [CTest tool suites](ctest.md) for the registered tests, fixtures, logs, and
 add-test process.
 
+The reusable tool-test workflow can also run opt-in all-tool profiling. Dispatch
+`ci-pr-action` with `run_tool_flamegraphs=true` to include the sanitized
+FlameGraph manifest in the job summary. Each profiled tool records status,
+sample count, unknown folded-frame count, SVG availability, and skip reason.
+On successful runs, the workflow uploads an `iccdev-developer-report-<BuildType>`
+artifact with `index.html`, CTest outputs, hybrid timing data when requested,
+and FlameGraph data/SVGs when profiling was enabled. The artifact upload uses
+the reviewed sanitized developer-report governance exception.
+
 ## Instrumentation Builds
 
 Use CMake options instead of hand-written sanitizer flags. Clean the cache when
