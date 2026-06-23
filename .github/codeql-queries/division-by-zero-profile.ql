@@ -37,6 +37,23 @@ private predicate isProfileLocalDenominatorName(string name) {
   )
 }
 
+/**
+ * Holds when `e` is a read of a `const`/`constexpr` variable whose initializer
+ * folds to a non-zero compile-time constant (e.g. `const float kScale = 0.85f;`
+ * or `const float kSpan = 2 * 130.0f;`). Such a divisor can never be zero or
+ * non-finite at run time regardless of its name, so a name-based match on it
+ * (e.g. `...Scale`, `...Range`) is a false positive. Only exempt when the value
+ * is known and provably non-zero; a non-constant `const` initialized from a
+ * profile field has no `getValue()` and is therefore still reported.
+ */
+private predicate isCompileTimeNonzeroConstant(Expr e) {
+  exists(Variable v |
+    e = v.getAnAccess() and
+    v.isConst() and
+    v.getInitializer().getExpr().getValue().toFloat() != 0.0
+  )
+}
+
 private predicate isProfileDerivedDenominator(Expr e) {
   exists(FieldAccess fa |
     fa = e.getAChild*() and
@@ -203,6 +220,7 @@ private predicate hasConditionalZeroGuardForDenominator(DivExpr div) {
 from DivExpr div
 where
   not div.getRightOperand() instanceof Literal and
+  not isCompileTimeNonzeroConstant(div.getRightOperand()) and
   isProfileDerivedDenominator(div.getRightOperand()) and
   not hasNearbyZeroOrFiniteCheckForDenominator(div) and
   not hasPriorFailClosedZeroOrFiniteCheckForDenominator(div) and
