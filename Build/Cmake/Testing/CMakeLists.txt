@@ -699,6 +699,53 @@ function(iccdev_add_profile_write_failure_test)
   endif()
 endfunction()
 
+function(iccdev_add_tagdata_zlib_roundtrip_test)
+  # Compressed dataType read/write only works when the library is built with
+  # zlib (#1530 ICC_USE_ZLIB option); skip otherwise so the deflate/inflate
+  # invariants this test asserts are never checked against a no-zlib build.
+  if(NOT ICC_USE_ZLIB)
+    return()
+  endif()
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTagDataZlibRoundtripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tagdata-zlib-roundtrip.cpp"
+  )
+  target_compile_features(iccTagDataZlibRoundtripTest PRIVATE cxx_std_17)
+  # IccProfLib links ZLIB::ZLIB and defines ICC_USE_ZLIB=1 PUBLIC, so both
+  # propagate to this executable; link zlib explicitly as belt-and-braces.
+  target_link_libraries(iccTagDataZlibRoundtripTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  if(TARGET ZLIB::ZLIB)
+    target_link_libraries(iccTagDataZlibRoundtripTest PRIVATE ZLIB::ZLIB)
+  endif()
+  add_dependencies(check iccTagDataZlibRoundtripTest)
+
+  add_test(
+    NAME iccdev.tagdata-zlib-roundtrip
+    COMMAND "$<TARGET_FILE:iccTagDataZlibRoundtripTest>"
+  )
+  set_tests_properties(iccdev.tagdata-zlib-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;tag;zlib;compression;issue-1521;regression"
+  )
+  if(WIN32)
+    set(_tagdata_zlib_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTagDataZlibRoundtripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tagdata_zlib_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tagdata-zlib-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tagdata_zlib_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_parser_restore_calls_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -939,6 +986,7 @@ if(WIN32)
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
+  iccdev_add_tagdata_zlib_roundtrip_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -1004,6 +1052,7 @@ iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
+iccdev_add_tagdata_zlib_roundtrip_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
