@@ -1054,7 +1054,11 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
   CIccLutOffsetMap loadedElements;
 
   icUInt32Number i;
-  for (i=0; i<m_nProcElements; i++) {
+  // CWE-400/CWE-834: m_nProcElements is rejected at >= MAX_CALC_ELEMENTS above and
+  // m_position[] is sized to match, so this position-table read never exceeds the
+  // allocation. Mirror the cap in the loop condition so the bound is explicit at the
+  // point of iteration (a valid count is strictly less than the cap).
+  for (i=0; i<m_nProcElements && i<MAX_CALC_ELEMENTS; i++) {
     if (!pIO->Read32(&m_position[i].offset))
       return false;
     if (!pIO->Read32(&m_position[i].size))
@@ -1064,7 +1068,9 @@ bool CIccTagMultiProcessElement::Read(icUInt32Number size, CIccIO *pIO)
   CIccMultiProcessElementPtr ptr;
   icElemTypeSignature sigElem;
 
-  for (i=0; i<m_nProcElements; i++) {
+  // CWE-400/CWE-834: same m_nProcElements bound as the position-table read above;
+  // mirror MAX_CALC_ELEMENTS inline so the element-load walk has an explicit cap.
+  for (i=0; i<m_nProcElements && i<MAX_CALC_ELEMENTS; i++) {
     if (m_position[i].size > size || m_position[i].offset > size - m_position[i].size) {
       return false;
     }
@@ -1163,7 +1169,10 @@ bool CIccTagMultiProcessElement::Write(CIccIO *pIO)
 
     //Write an empty position table
     icUInt32Number j, zeros[2] = { 0, 0 };
-    for (j=0; j<m_nProcElements; j++) {
+    // CWE-400/CWE-834: m_nProcElements mirrors m_list->size() (a Read-capped or
+    // programmatically bounded element list); mirror MAX_CALC_ELEMENTS inline so the
+    // placeholder-table write has an explicit upper bound.
+    for (j=0; j<m_nProcElements && j<MAX_CALC_ELEMENTS; j++) {
       if (pIO->Write32(zeros, 2)!=2)
         return false;
     }
@@ -1201,7 +1210,9 @@ bool CIccTagMultiProcessElement::Write(CIccIO *pIO)
     if (pIO->Seek(offsetPos, icSeekSet)<0)
       return false;
 
-    for (j=0; j<m_nProcElements; j++) {
+    // CWE-400/CWE-834: same m_nProcElements bound as the placeholder write above;
+    // mirror MAX_CALC_ELEMENTS inline on the final position-table write.
+    for (j=0; j<m_nProcElements && j<MAX_CALC_ELEMENTS; j++) {
       if (!pIO->Write32(&m_position[j].offset))
         return false;
       if (!pIO->Write32(&m_position[j].size))

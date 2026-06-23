@@ -2477,7 +2477,9 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
   if (m_SubElem && m_nSubElem) {
     xml += blanks2 + "<SubElements>\n";
-    for (i=0; i<(int)m_nSubElem; i++) {
+    // Mirror the MAX_CALC_ELEMENTS bound (rejected above) inline so the walk has an
+    // explicit cap at the point of iteration; a valid count is strictly less.
+    for (i=0; i<(int)m_nSubElem && i<(int)MAX_CALC_ELEMENTS; i++) {
       if (m_SubElem[i]) {
         IIccExtensionMpe *pExt = m_SubElem[i]->GetExtension();
         if (pExt && !strcmp(pExt->GetExtClassName(), "CIccMpeXml")) {
