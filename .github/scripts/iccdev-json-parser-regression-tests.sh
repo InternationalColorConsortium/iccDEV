@@ -765,6 +765,11 @@ else
 fi
 PROFLIB="$(find_library_file "$BUILD_ROOT/IccProfLib" "IccProfLib2" 2>/dev/null || true)"
 XMLLIB="$(find_library_file "$BUILD_ROOT/IccXML" "IccXML2" 2>/dev/null || true)"
+LINK_EXTRA=()
+if [ -n "$PROFLIB" ] && [[ "$PROFLIB" == *.a ]] &&
+    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "$BUILD_ROOT/CMakeCache.txt" 2>/dev/null; then
+  LINK_EXTRA+=(-lz)
+fi
 
 if [ -z "$PROFLIB" ] || [ -z "$XMLLIB" ]; then
   {
@@ -789,6 +794,7 @@ else
     -Wl,-rpath,"$BUILD_ROOT/IccProfLib" \
     -Wl,-rpath,"$BUILD_ROOT/IccXML" \
     "$PROFLIB" "$XMLLIB" \
+    "${LINK_EXTRA[@]}" \
     -o "$HELPER_BIN" > "$HELPER_LOG" 2>&1 || helper_compile=$?
 fi
 
