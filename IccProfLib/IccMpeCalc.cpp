@@ -3609,7 +3609,9 @@ bool CIccCalculatorFunc::Read(icUInt32Number size, CIccIO *pIO)
     }
 
     icUInt32Number i;
-    for (i=0; i<m_nOps; i++) {
+    // CWE-400/834: m_nOps is rejected above when >= MAX_CALC_ELEMENTS; mirror that
+    // bound in the loop condition so the walk is provably finite to static analysis.
+    for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
       if (!pIO->Read32(&m_Op[i].sig))
         return false;
       if (!pIO->Read32(&m_Op[i].data.num))
@@ -3647,7 +3649,9 @@ bool CIccCalculatorFunc::Write(CIccIO *pIO)
     return false;
 
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++)  {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++)  {
     if (!pIO->Write32(&m_Op[i].sig))
       return false;
     if (!pIO->Write32(&m_Op[i].data.num))
@@ -3674,7 +3678,9 @@ bool CIccCalculatorFunc::SetOpDefs()
     return false;
 
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     m_Op[i].def = CIccCalcOpMgr::getOpDef(m_Op[i].sig);
     if (!m_Op[i].def)
       return false;
@@ -3734,7 +3740,9 @@ bool CIccCalculatorFunc::InitSelectOps()
 {
   icUInt32Number i;
 
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig==icSigSelectOp) {
       if (!InitSelectOp(&m_Op[i], m_nOps-i))
         return false;
@@ -4091,7 +4099,9 @@ icUInt32Number CIccCalculatorFunc::GetMaxTemp() const
 {
   icUInt32Number i, nMaxTemp = 0;
 
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig == icSigTempGetChanOp || m_Op[i].sig == icSigTempPutChanOp || m_Op[i].sig == icSigTempSaveChanOp ) {
       icUInt32Number last = (icUInt32Number)(m_Op[i].data.select.v1) + (icUInt32Number)(m_Op[i].data.select.v2);
       if (last>nMaxTemp)
@@ -4452,7 +4462,9 @@ icFuncParseStatus CIccCalculatorFunc::DoesStackUnderflowOverflow(std::string &sR
 bool CIccCalculatorFunc::HasValidOperations(std::string &sReport) const
 {
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (!m_Op[i].IsValidOp(m_pCalc)) {
       std::string opDesc;
       m_Op[i].Describe(opDesc, 100); // TODO - propogate nVerboseness 
@@ -4504,8 +4516,10 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
     icUInt32Number version = pProfile->m_Header.version;
 
     icCalcOpMap map;
-    for (i = 0; i < m_nOps; i++) {
-      if (version < icVersionNumberV5_1 && 
+    // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+    // sized to it; mirror that bound here so the walk is provably finite.
+    for (i = 0; i < m_nOps && i < MAX_CALC_ELEMENTS; i++) {
+      if (version < icVersionNumberV5_1 &&
           (m_Op[i].sig == icSigNotOp ||
            m_Op[i].sig == icSigNotEqualOp)) {
         map[m_Op[i].sig] = NULL;
@@ -4543,7 +4557,9 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
 bool CIccCalculatorFunc::DoesOverflowInput(icUInt16Number nInputChannels) const
 {
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig == icSigInputChanOp) {
       if (m_Op[i].data.select.v1+m_Op[i].data.select.v2 >= nInputChannels)
         return true;
@@ -4566,7 +4582,9 @@ bool CIccCalculatorFunc::DoesOverflowInput(icUInt16Number nInputChannels) const
 bool CIccCalculatorFunc::DoesOverflowOutput(icUInt16Number nOutputChannels) const
 {
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig == icSigOutputChanOp) {
       if (m_Op[i].data.select.v1 + m_Op[i].data.select.v2 >= nOutputChannels)
         return true;
@@ -5114,7 +5132,9 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   pos = &posvals[1];
 
   if (m_nSubElem) {
-    for(n=0; n<m_nSubElem; n++) {
+    // CWE-400/834: m_nSubElem is bounded by MAX_CALC_ELEMENTS at Read() and
+    // m_SubElem[] is sized to it; mirror that bound here so the walk is finite.
+    for(n=0; n<m_nSubElem && n<MAX_CALC_ELEMENTS; n++) {
       if (m_SubElem[n]) {
         int64_t start = pIO->Tell();
         if (start < elemStart) {
@@ -5208,7 +5228,9 @@ bool CIccMpeCalculator::Begin(icElemInterp nInterp, CIccTagMultiProcessElement *
     return false;
 
   icUInt32Number n;
-  for (n=0; n<m_nSubElem; n++) {
+  // The >= MAX_CALC_ELEMENTS reject above already bounds m_nSubElem, but mirror
+  // the cap in the loop condition too so the walk is provably finite to analysis.
+  for (n=0; n<m_nSubElem && n<MAX_CALC_ELEMENTS; n++) {
     if (m_SubElem[n] && !m_SubElem[n]->Begin(nInterp, pMPE))
       return false;
   }
@@ -5258,7 +5280,9 @@ CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
     pApply->m_SubElem = (CIccSubCalcApply **)calloc(m_nSubElem, sizeof(CIccSubCalcApply*));
 
     if (m_SubElem) {
-      for (i=0; i<m_nSubElem; i++) {
+      // CWE-400/834: m_nSubElem is bounded by MAX_CALC_ELEMENTS at Read() and
+      // m_SubElem[] is sized to it; mirror that bound here so the walk is finite.
+      for (i=0; i<m_nSubElem && i<MAX_CALC_ELEMENTS; i++) {
         if (m_SubElem[i]) {
           pApply->m_SubElem[i] = new CIccSubCalcApply(m_SubElem[i]->GetNewApply(pApplyTag));
         }
@@ -5413,7 +5437,9 @@ bool CIccMpeCalculator::IsLateBindingReflectance() const
   icUInt32Number i;
 
   if (m_SubElem) {
-    for (i=0; i<m_nSubElem; i++) {
+    // CWE-400/834: m_nSubElem is bounded by MAX_CALC_ELEMENTS at Read() and
+    // m_SubElem[] is sized to it; mirror that bound here so the walk is finite.
+    for (i=0; i<m_nSubElem && i<MAX_CALC_ELEMENTS; i++) {
       if (m_SubElem[i] && m_SubElem[i]->IsLateBindingReflectance())
         return true;
     }
