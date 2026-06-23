@@ -199,7 +199,7 @@ bool CIccProfileJson::ToJson(IccJson &root)
       continue;
     sigSet.insert(i->TagInfo.sig);
 
-    CIccTag *pTag = FindTag(i->TagInfo.sig);
+    CIccTag *pTag = FindTag(*i);        // performance improvement to make this linear instead of N^2
     if (!pTag)
       continue;
 
@@ -262,7 +262,9 @@ bool CIccProfileJson::ToJson(std::string &jsonString, int indent)
   if (!ToJson(profile))
     return false;
   root["IccProfile"] = profile;
-  jsonString = root.dump(indent);
+  
+  // dump the json data to string, but replace bad text/utf8 data with valid data instead of throwing exceptions
+  jsonString = root.dump( indent,' ',true, nlohmann::detail::error_handler_t::replace );
   return true;
 }
 
