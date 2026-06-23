@@ -2409,6 +2409,13 @@ void CIccCLUT::Begin()
 
   m_nOffset = new icUInt32Number[m_nNodes];
 
+  // CWE-400/CWE-834: m_nInput<=16 (asserted above) bounds m_nNodes=(1<<m_nInput) to
+  // 65536, which is also the m_nOffset[] allocation size just made; assert that
+  // bound on the field so the offset-table walks below have an explicit upper limit
+  // a corrupted CLUT cannot exceed. Value-preserving: a valid m_nNodes is <= 65536.
+  if (m_nNodes > 65536)
+    return;
+
   if (m_nInput==1) {
     m_nOffset[0] = n000 = 0;
     m_nOffset[1] = n001 = m_DimSize[0];
