@@ -79,6 +79,7 @@
 #include "IccConnect.h"
 #include "TiffImg.h"
 #include "IccProfLibVer.h"
+#include "IccLibConnectVer.h"
 #include "../IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
@@ -170,7 +171,7 @@ static icUInt16Number UnitClipToUInt16(icFloatNumber v)
 
 void Usage() 
 {
-  printf("iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER "\n\n");
+  printf("iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
   printf("Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
   printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");

@@ -1,3 +1,4 @@
+---
 ###############################################################
 #
 ## Copyright (c) 2025-2026 International Color Consortium.
@@ -9,13 +10,15 @@
 #
 ## Last Updated: 2026-03-26 by David Hoyt / Copilot
 #                Add push-to-master trigger
-#                Add release job: zip + publish to GitHub Releases (latest release)
-#                Pin softprops/action-gh-release@v2 and actions/download-artifact@v4
+#                Add release job: zip + publish to GitHub Releases
+#                Pin release and artifact actions
 #                Elevate permissions to contents: write for release creation
 #                Add WASM Release build (Emscripten) to release packaging
 #                Remove WASM dependency caches for release hardening
 #                Use safe apt source handling for Linux release dependencies
 #                Governance: sanitize-sed.sh on all GITHUB_STEP_SUMMARY writes
+#                Consolidate Doxygen HTML documentation artifact generation
+#                Consolidate CPack runtime package smoke and artifact generation
 #
 #  TODO: Extract repetitive shell commands to reusable script
 #
@@ -30,7 +33,7 @@ name: ci-latest-release
 permissions:
   contents: read
 
-on:
+"on":
   workflow_dispatch:
 
 concurrency:
@@ -200,6 +203,10 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccJSON -type l -name '*.so*' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccConnect -type f -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccConnect -type l -name '*.so*' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
           # 3. Copy Testing/Readme.md, LICENSE.md and docs/
           cp Testing/Readme.md  "$stage/"
           cp LICENSE.md "$stage/"
@@ -222,6 +229,10 @@ jobs:
             "echo \"Tools directory: \$SCRIPT_DIR\"" \
             > "$stage/path.sh"
           chmod +x "$stage/path.sh"
+          for tool in iccApplyProfiles iccApplyNamedCmm iccApplySearch; do
+            LD_LIBRARY_PATH="$stage${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+              "$stage/$tool" 2>&1 | grep -q "IccLibConnect Version"
+          done
           # Summary of staged bundle contents
           total=$(find "$stage" -type f | wc -l)
           echo ""
@@ -374,6 +385,10 @@ jobs:
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
           find Build/IccJSON -type l -name '*.dylib' \
             -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccConnect -type f -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
+          find Build/IccConnect -type l -name '*.dylib' \
+            -exec cp -a {} "$stage/" \; 2>/dev/null || true
           # 3. Copy Testing/Readme.md, LICENSE.md and docs/
           cp Testing/Readme.md  "$stage/"
           cp LICENSE.md "$stage/"
@@ -426,6 +441,10 @@ jobs:
               esac
             done
             install_name_tool -add_rpath "@loader_path" "$target" || true
+          done
+          for tool in iccApplyProfiles iccApplyNamedCmm iccApplySearch; do
+            DYLD_LIBRARY_PATH="$stage${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
+              "$stage/$tool" 2>&1 | grep -q "IccLibConnect Version"
           done
           # Summary of staged bundle contents
           total=$(find "$stage" -type f | wc -l)
@@ -1267,9 +1286,252 @@ jobs:
             echo "- Status: Success"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
+  cpack-linux:
+    name: "Linux CPack runtime packages"
+    needs: cache-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install package build dependencies
+        # preflight: allow-package-install reason=runtime-cpack-local-backends
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          bash .github/scripts/ci-safe-apt-update.sh
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libxml2-dev \
+            ninja-build \
+            nlohmann-json3-dev \
+            rpm \
+            unzip \
+            zlib1g-dev
+
+      - name: Configure CPack build
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cmake -S Build/Cmake -B build-cpack -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=OFF \
+            -DENABLE_SHARED_LIBS=ON \
+            -DENABLE_STATIC_LIBS=OFF \
+            -DENABLE_WXWIDGETS=OFF \
+            -DENABLE_ICCJSON=ON
+
+      - name: Build CPack runtime tree
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cmake --build build-cpack --parallel "$(nproc)"
+
+      - name: Package runtime artifacts
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cmake --build build-cpack --target package-sha256
+
+      - name: Validate runtime package outputs
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          test -s build-cpack/SHA256SUMS
+          grep -Eq '  reficcmax-.*\.zip$' build-cpack/SHA256SUMS
+          grep -Eq '  reficcmax-.*\.deb$' build-cpack/SHA256SUMS
+          grep -Eq '  reficcmax-.*\.rpm$' build-cpack/SHA256SUMS
+          zip_file="$(
+            awk '/  reficcmax-.*\.zip$/ {print "build-cpack/" $2; exit}' \
+              build-cpack/SHA256SUMS
+          )"
+          unzip -Z1 "${zip_file}" > build-cpack/ZIP-CONTENTS.txt
+          grep -q '/VERSION$' build-cpack/ZIP-CONTENTS.txt
+          grep -q '/TOOL-CATALOG.md$' build-cpack/ZIP-CONTENTS.txt
+          if grep -q '/Testing/' build-cpack/ZIP-CONTENTS.txt; then
+            echo "Runtime package unexpectedly contains Testing tree" >&2
+            exit 1
+          fi
+          cmake -E sha256sum \
+            build-cpack/reficcmax-*.zip \
+            build-cpack/reficcmax-*.deb \
+            build-cpack/reficcmax-*.rpm \
+            | awk '{name=$2; sub(".*/", "", name); print $1 "  " name}' \
+            | sort -k2 \
+            > build-cpack/SHA256SUMS.verify
+          diff -u build-cpack/SHA256SUMS build-cpack/SHA256SUMS.verify
+
+      - name: Report CPack summary
+        if: success()
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          {
+            echo "### Linux CPack Runtime Packages"
+            echo ""
+            echo "| Artifact | Size |"
+            echo "|----------|------|"
+            for artifact in \
+              build-cpack/reficcmax-*.zip \
+              build-cpack/reficcmax-*.deb \
+              build-cpack/reficcmax-*.rpm; do
+              [ -f "$artifact" ] || continue
+              size=$(du -h "$artifact" | cut -f1)
+              echo "| $(sanitize_line "$(basename "$artifact")") | $(sanitize_line "$size") |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Upload runtime packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: reficcmax-runtime-packages-linux
+          path: |
+            build-cpack/reficcmax-*.zip
+            build-cpack/reficcmax-*.deb
+            build-cpack/reficcmax-*.rpm
+            build-cpack/SHA256SUMS
+            build-cpack/ZIP-CONTENTS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  doxygen:
+    name: "Doxygen HTML Docs"
+    needs: cache-policy
+    runs-on: ubuntu-24.04
+    environment: doxygen-publish
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install Doxygen and Graphviz
+        # preflight: allow-package-install reason=doxygen-local-doc-generator
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          bash .github/scripts/ci-safe-apt-update.sh
+          sudo apt-get install -y -qq doxygen graphviz
+
+      - name: Generate HTML documentation
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          doxygen .github/ci/doxygen/Doxyfile
+          if [ -s docs/generated/doxygen-warnings.log ]; then
+            cat docs/generated/doxygen-warnings.log
+            exit 1
+          fi
+          test -f docs/generated/html/inherits.html
+          test -f docs/generated/html/iis-isapi_8openapi_8yaml_source.html
+          if find docs/generated/html -maxdepth 1 \
+            \( -name 'namespaceanonymous*' -o -name 'structanonymous*' -o -name 'classanonymous*' \) \
+            | grep -q .; then
+            echo "::error::Anonymous namespace pages leaked into generated HTML"
+            exit 1
+          fi
+          if grep -R "namespaceanonymous" -l docs/generated/html | grep -q .; then
+            echo "::error::Anonymous namespace references leaked into generated HTML"
+            exit 1
+          fi
+          echo "Full iccDEV Doxygen HTML generation complete"
+          find docs/generated/html -maxdepth 1 -printf '%p\n' |
+            sort |
+            sed -n '1,5p'
+
+      - name: Report documentation summary
+        if: success()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          html_dir="docs/generated/html"
+          total_files=$(find "$html_dir" -type f | wc -l)
+          svg_files=$(find "$html_dir" -name '*.svg' | wc -l)
+          html_files=$(find "$html_dir" -name '*.html' | wc -l)
+          class_count=$(find "$html_dir" -name 'class*.html' | wc -l)
+          total_size=$(du -sh "$html_dir" | cut -f1)
+
+          {
+            echo "### Doxygen HTML Documentation"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Total files | $(sanitize_line "${total_files}") |"
+            echo "| HTML pages | $(sanitize_line "${html_files}") |"
+            echo "| Class pages | $(sanitize_line "${class_count}") |"
+            echo "| SVG graphs | $(sanitize_line "${svg_files}") |"
+            echo "| Doxygen warnings | 0 |"
+            echo "| Total size | $(sanitize_line "${total_size}") |"
+            echo ""
+            echo "**Coverage**: IccProfLib, IccXML,"
+            echo "IccJSON/IccLibJSON, IccConnect/IccLibConnect,"
+            echo "CLI tools including IccPawgReport and"
+            echo "IccProfileVisualize, Winnt tools including"
+            echo "IccIisIsapi and its OpenAPI contract,"
+            echo "wxWidget tools, hello-iccdev, docs, and Testing notes."
+            echo ""
+            echo "**Visual aids**: Interactive SVG (pan/zoom),"
+            echo "class hierarchy browser, call/caller graphs,"
+            echo "collaboration diagrams, UML class diagrams,"
+            echo "include dependency graphs, directory graphs,"
+            echo "treeview navigation, client-side search,"
+            echo "and cross-referenced inline source browser."
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Upload HTML documentation
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: iccdev-doxygen-html
+          path: docs/generated/html/
+          if-no-files-found: error
+          retention-days: 30
+
   release:
     name: "Publish Latest Release"
-    needs: [linux, macos, windows, wasm]
+    needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
     if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     environment: release
@@ -1314,6 +1576,18 @@ jobs:
           name: iccdev-wasm-release
           path: artifacts/iccdev-wasm-release
 
+      - name: Download Doxygen HTML artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-doxygen-html
+          path: artifacts/iccdev-doxygen-html
+
+      - name: Download CPack runtime packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: reficcmax-runtime-packages-linux
+          path: artifacts/reficcmax-runtime-packages-linux
+
       - name: Restore release artifact metadata
         shell: bash --noprofile --norc {0}
         env:
@@ -1334,6 +1608,8 @@ jobs:
             iccdev-macos-clang
             iccdev-windows-msvc
             iccdev-wasm-release
+            iccdev-doxygen-html
+            reficcmax-runtime-packages-linux
           )
           for artifact in "${expected[@]}"; do
             if [ ! -d "artifacts/$artifact" ]; then
@@ -1377,6 +1653,11 @@ jobs:
             echo "  Created ${name}.zip ($(du -h "release-assets/${name}.zip" | cut -f1))"
           done
 
+          runtime_dir="artifacts/reficcmax-runtime-packages-linux"
+          cp "$runtime_dir"/reficcmax-*.zip release-assets/
+          cp "$runtime_dir"/reficcmax-*.deb release-assets/
+          cp "$runtime_dir"/reficcmax-*.rpm release-assets/
+
           echo ""
           echo "=== Release assets ==="
           ls -lh release-assets/
@@ -1405,17 +1686,23 @@ jobs:
             sanitize_line() { escape_html "$1"; }
           fi
 
-          if ! compgen -G "release-assets/*.zip" >/dev/null; then
-            echo "::error::No release zip files found for checksum generation"
+          if ! compgen -G "release-assets/*.zip" >/dev/null &&
+             ! compgen -G "release-assets/*.deb" >/dev/null &&
+             ! compgen -G "release-assets/*.rpm" >/dev/null; then
+            echo "::error::No release package files found for checksum generation"
             exit 1
           fi
 
           (
             cd release-assets
-            find . -maxdepth 1 -type f -name '*.zip' -printf '%P\0' \
+            find . -maxdepth 1 -type f \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) \
+              -printf '%P\0' \
               | sort -z \
               | xargs -0 sha256sum > SHA256SUMS
-            find . -maxdepth 1 -type f -name '*.zip' -printf '%P\0' \
+            find . -maxdepth 1 -type f \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) \
+              -printf '%P\0' \
               | sort -z \
               | xargs -0 sha512sum > SHA512SUMS
           )
@@ -1476,6 +1763,8 @@ jobs:
             echo "| macOS (Clang) | \`iccdev-macos-clang.zip\` |"
             echo "| Windows (MSVC) | \`iccdev-windows-msvc.zip\` |"
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
+            echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
+            echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"
             echo "| Checksums | \`SHA256SUMS\`, \`SHA512SUMS\` |"
             echo ""
             echo "### Provenance"
@@ -1498,6 +1787,8 @@ jobs:
 
           gh release create "$release_tag" \
             release-assets/*.zip \
+            release-assets/*.deb \
+            release-assets/*.rpm \
             release-assets/SHA256SUMS \
             release-assets/SHA512SUMS \
             --repo "$GH_REPOSITORY" \
@@ -1522,11 +1813,12 @@ jobs:
             echo ""
             echo "- Tag: \`${release_tag}\`"
             echo "- Commit: \`${GITHUB_SHA:0:7}\`"
-            zip_count=$(find release-assets -maxdepth 1 -type f -name '*.zip' | wc -l)
-            echo "- Assets uploaded: ${zip_count} zip files"
+            asset_count=$(find release-assets -maxdepth 1 -type f \
+              \( -name '*.zip' -o -name '*.deb' -o -name '*.rpm' \) | wc -l)
+            echo "- Assets uploaded: ${asset_count} package files"
             echo "- Provenance: GitHub Artifact Attestations generated from \`SHA256SUMS\`"
             echo ""
-            for f in release-assets/*.zip; do
+            for f in release-assets/*.zip release-assets/*.deb release-assets/*.rpm; do
               [ -f "$f" ] || continue
               echo "  - \`$(basename "$f")\` ($(du -h "$f" | cut -f1))"
             done

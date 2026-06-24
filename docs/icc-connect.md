@@ -11,7 +11,7 @@ The library is intentionally narrow:
 
 | Header | Purpose |
 |--------|---------|
-| [IccCmmConfig.h](../IccConnect/IccLibConnect/IccCmmConfig.h) | C++ config objects (`CIccCfgProfile`, `CIccCfgProfileSequence`, `CIccCfgSearchApply`, …) and JSON / argv loaders. |
+| [IccCmmConfig.h](../IccConnect/IccLibConnect/IccCmmConfig.h) | C++ config objects (`CIccCfgProfile`, `CIccCfgProfileSequence`, `CIccCfgSearchApply`, ...) and JSON / argv loaders. |
 | [IccJsonUtil.h](../IccConnect/IccLibConnect/IccJsonUtil.h) | nlohmann/json helpers shared by the config objects. |
 | [IccConnect.h](../IccConnect/IccLibConnect/IccConnect.h) | `CIccConnectCmm` factory that turns a config into a `Begin()`-ed CMM. |
 
@@ -21,8 +21,8 @@ The JSON shape consumed by `IccCmmConfig` is described by
 ## Build and Linkage
 
 `IccConnect2` is built from [Build/Cmake/IccConnect/CMakeLists.txt](../Build/Cmake/IccConnect/CMakeLists.txt)
-and is enabled by the same `ENABLE_SHARED_LIBS` / `ENABLE_STATIC_LIBS`
-options used by `IccProfLib`. It depends on:
+when `ENABLE_ICCJSON=ON`, and follows the same `ENABLE_SHARED_LIBS` /
+`ENABLE_STATIC_LIBS` options used by `IccProfLib`. It depends on:
 
 - `IccProfLib2` (or `IccProfLib2-static`)
 - `nlohmann_json::nlohmann_json`
@@ -121,7 +121,7 @@ requests them:
 | `adjustPcsLuminance` | `CIccLuminanceMatchingHint` |
 | `iccEnvVars` (non-empty) | `CIccCmmEnvVarHint` |
 | `pccEnvVars` (non-empty) | `CIccCmmPccEnvVarHint` |
-| `transform` ∈ any `named*` variant (`named`, `namedOnBlack`, `namedOnGray`, `namedColorimetric{,OnBlack,OnGray}`, `namedSpectral{,OnBlack,OnGray}`, `namedDevice`) *or* overprint set via the legacy CLI high-bit | `CIccCreateNamedColorXformHint` with `nOverprintType` set from the JSON `transform` name (or from the legacy CLI's `+1000000`/`+2000000` high-bit) |
+| `transform` in any `named*` variant (`named`, `namedOnBlack`, `namedOnGray`, `namedColorimetric{,OnBlack,OnGray}`, `namedSpectral{,OnBlack,OnGray}`, `namedDevice`) *or* overprint set via the legacy CLI high-bit | `CIccCreateNamedColorXformHint` with `nOverprintType` set from the JSON `transform` name (or from the legacy CLI's `+1000000`/`+2000000` high-bit) |
 
 `pccFile` is opened once per profile entry, passed through as the PCC for
 that xform, and deleted after `Begin()` returns.
@@ -132,7 +132,7 @@ The JSON `transform` field for a NamedColor stage has two independent
 axes that mirror the non-named `color` / `colorimetric` / `spectral`
 triad, plus a `namedDevice` stem for reading the device-side member.
 
-**Output-side axis** — picks which array member the named lookup
+**Output-side axis** -- picks which array member the named lookup
 reads (and, equivalently, which space the xform exposes downstream):
 
 | Stem | Member read | Output-side space | Behaviour when the member is absent for an entry |
@@ -142,7 +142,7 @@ reads (and, equivalently, which space the xform exposes downstream):
 | `namedSpectral` | Spectral member (selected by the overprint axis below) | Profile's `spectralPCS` | Fail with `icCmmStatBadTintXform`. No silent fall-back to the over-white member or to `nmclPcsDataMbr`. |
 | `namedDevice` | `nmclDeviceDataMbr` (v5 array) or `deviceCoords` struct field (v4 `CIccTagNamedColor2`) | Profile's `colorSpace` | Fail with `icCmmStatBadTintXform`. No silent fall-back to PCS or spectral. |
 
-**Overprint axis** — only meaningful on the spectral path. The suffix
+**Overprint axis** -- only meaningful on the spectral path. The suffix
 selects which spectral array member is read (neither `nmclPcsDataMbr`
 nor `nmclDeviceDataMbr` varies by substrate, so the suffix is a no-op
 on `namedColorimetric*` and is not accepted on `namedDevice`):
@@ -160,7 +160,7 @@ The two axes combine into the following set of JSON `transform` values:
 
 The legacy argv form (`CIccCfgProfileSequence::fromArgs`) carries only
 the overprint axis, in the millions digit of the intent code:
-`intent + 1000000` → over-black; `intent + 2000000` → over-gray;
+`intent + 1000000` -> over-black; `intent + 2000000` -> over-gray;
 anything else stays at over-white. The output-side axis is JSON-only.
 
 If the profile lacks the requested array member for any named color
@@ -177,10 +177,10 @@ a config object (typically `CIccCfgApply`, `CIccCfgImageApply`, or
 `CIccCfgSearchApply`) from JSON or argv, then hand its profile sequence to
 the appropriate factory. See:
 
-- [icc-connect-config.schema.json](icc-connect-config.schema.json) — full
+- [icc-connect-config.schema.json](icc-connect-config.schema.json) -- full
   schema for the config objects in `IccCmmConfig.h`.
 - [Tools/CmdLine/IccApplyNamedCmm](../Tools/CmdLine/IccApplyNamedCmm) and
-  the other `iccApply*` tools — concrete usage of `-cfg config.json` plus
+  the other `iccApply*` tools -- concrete usage of `-cfg config.json` plus
   argv-based fallback.
 
 ## Typical Pipeline
@@ -215,9 +215,9 @@ decorator and the ownership pattern used by `iccApplyProfiles`.
 
 ## See Also
 
-- [icc-connect-config.schema.json](icc-connect-config.schema.json) — JSON
+- [icc-connect-config.schema.json](icc-connect-config.schema.json) -- JSON
   Schema for IccConnect configuration objects.
-- [CIccThreadedCmm](icc-cmm-threading.md) — parallel apply over a
+- [CIccThreadedCmm](icc-cmm-threading.md) -- parallel apply over a
   `Begin()`-ed CMM.
-- [CLI tool reference](tools-cli-reference.md) — `iccApply*` tools that use
+- [CLI tool reference](tools-cli-reference.md) -- `iccApply*` tools that use
   this library.

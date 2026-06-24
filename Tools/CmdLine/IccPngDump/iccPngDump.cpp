@@ -122,7 +122,7 @@ void Usage();
 
 /**
  * Safely exits the program with a given reason.
- * 
+ *
  * @param reason The reason for exiting.
  */
 

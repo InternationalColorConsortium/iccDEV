@@ -102,8 +102,8 @@ docker run --rm iccdev-container-check <smoke-command>
 
 For `Dockerfile.ci-regression`, use a no-cache build and smoke `clang`,
 `clang++`, `gcc`, `g++`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. If the image must be published,
-allow the branch in the `ghcr-publish` environment before triggering deployment,
-then pin the published digest in `ci-iccdev-tool-tests.yml`.
+trigger the `ci-docker` regression matrix variant, then pass the published branch
+or SHA tag to `ci-iccdev-tool-tests.yml`.
 
 Workflow YAML:
 

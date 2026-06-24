@@ -25,7 +25,7 @@
 #
 # Like the other UBSan fuzz regressions, the divide-by-zero check only exists
 # when the tool was built with the float-divide-by-zero sanitizer (the
-# ci-regression-container build adds -fsanitize=float-divide-by-zero; plain
+# ci-docker regression image adds -fsanitize=float-divide-by-zero; plain
 # ENABLE_UBSAN does NOT).  On a build without it the test SKIPS rather than
 # report a misleading pass.
 #

@@ -28,7 +28,7 @@ SET( CFILES
         ${SRC_PATH}/IccXML/IccLibXML/IccUtilXml.cpp
   )
 
-# Public headers — defined unconditionally for target properties
+# Public headers - defined unconditionally for target properties
 SET( HEADERS_PUBLIC
       ${SRC_PATH}/IccXML/IccLibXML/IccIoXml.h
       ${SRC_PATH}/IccXML/IccLibXML/IccMpeXmlFactory.h
@@ -44,7 +44,7 @@ IF(ENABLE_INSTALL_RIM)
   INSTALL( FILES
              ${HEADERS_PUBLIC}
              DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
-             COMPONENT shared-proof )
+             COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT} )
 ENDIF(ENABLE_INSTALL_RIM)
 
 # Generate version header with git commit hash
@@ -67,10 +67,10 @@ IF(ENABLE_INSTALL_RIM)
   INSTALL( FILES
     "${CMAKE_CURRENT_BINARY_DIR}/IccLibXMLVer.h"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
-    COMPONENT shared-proof )
+    COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT} )
 ENDIF(ENABLE_INSTALL_RIM)
 
-# Generated header dir — propagated via target_include_directories(PUBLIC) below
+# Generated header dir - propagated via target_include_directories(PUBLIC) below
 
 # message(STATUS "Starting CMake debug for target: ${TARGET_NAME}")
 # message(STATUS "CFILES = ${CFILES}")
@@ -118,8 +118,8 @@ IF(ENABLE_SHARED_LIBS)
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
 
-  # PUBLIC include dirs — propagate to consumers via target_link_libraries()
-  # PUBLIC include dirs — build dir FIRST for generated version header
+  # PUBLIC include dirs - propagate to consumers via target_link_libraries()
+  # PUBLIC include dirs - build dir FIRST for generated version header
   target_include_directories(${TARGET_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML>
@@ -128,16 +128,16 @@ IF(ENABLE_SHARED_LIBS)
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
 
-  # PUBLIC linkage — consumers transitively get IccProfLib2 headers + libxml2
+  # PUBLIC linkage - consumers transitively get IccProfLib2 headers + libxml2
   TARGET_LINK_LIBRARIES(${TARGET_NAME} PUBLIC ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
 #    message(STATUS "Installing SHARED library")
     INSTALL(TARGETS ${TARGET_NAME}
             EXPORT  RefIccMAXTargets
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT shared-proof
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT})
   ENDIF()
 ENDIF()
 
@@ -153,8 +153,8 @@ IF(ENABLE_STATIC_LIBS)
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
 
-  # PUBLIC include dirs — same as shared target
-  # PUBLIC include dirs — build dir FIRST for generated version header
+  # PUBLIC include dirs - same as shared target
+  # PUBLIC include dirs - build dir FIRST for generated version header
   target_include_directories(${TARGET_NAME}-static PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../IccXML/IccLibXML>
@@ -163,14 +163,14 @@ IF(ENABLE_STATIC_LIBS)
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
   )
 
-  # PUBLIC linkage — consumers transitively get IccProfLib2 headers + libxml2
+  # PUBLIC linkage - consumers transitively get IccProfLib2 headers + libxml2
   TARGET_LINK_LIBRARIES(${TARGET_NAME}-static PUBLIC ${TARGET_LIB_ICCPROFLIB} ${EXTRA_LIBS} ${EXTRA_LIBS_CS})
 
   IF(ENABLE_INSTALL_RIM)
 #    message(STATUS "Installing STATIC library")
     INSTALL(TARGETS ${TARGET_NAME}-static
             EXPORT  RefIccMAXTargets
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT})
   ENDIF()
 
   # If no shared library, create alias so IccXML2 always exists

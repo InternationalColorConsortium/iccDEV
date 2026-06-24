@@ -80,7 +80,7 @@ if(TARGET iccDescribeSinkTest)
 endif()
 
 function(iccdev_add_iccconnect_thread_test)
-  if(NOT TARGET "${TARGET_LIB_ICCCONNECT}")
+  if(NOT DEFINED TARGET_LIB_ICCCONNECT OR NOT TARGET "${TARGET_LIB_ICCCONNECT}")
     return()
   endif()
 
@@ -1144,6 +1144,26 @@ list(JOIN ICCDEV_TOOL_PATHS ":" ICCDEV_TOOL_PATH)
 set(ICCDEV_SHARED_LIBRARY_PATH
     "${CMAKE_BINARY_DIR}/IccProfLib:${CMAKE_BINARY_DIR}/IccXML:${CMAKE_BINARY_DIR}/IccJSON:${CMAKE_BINARY_DIR}/IccConnect")
 
+set(ICCDEV_REQUIRE_JSON_ROUNDTRIP 0)
+if(TARGET iccToJson AND TARGET iccFromJson)
+  set(ICCDEV_REQUIRE_JSON_ROUNDTRIP 1)
+endif()
+
+set(ICCDEV_HAS_ICCCONNECT FALSE)
+if(DEFINED TARGET_LIB_ICCCONNECT AND TARGET "${TARGET_LIB_ICCCONNECT}")
+  set(ICCDEV_HAS_ICCCONNECT TRUE)
+endif()
+
+set(ICCDEV_HAS_JSON_TOOLS FALSE)
+if(TARGET iccToJson AND TARGET iccFromJson)
+  set(ICCDEV_HAS_JSON_TOOLS TRUE)
+endif()
+
+set(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS FALSE)
+if(TARGET iccApplyNamedCmm AND TARGET iccApplyProfiles AND TARGET iccApplySearch)
+  set(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS TRUE)
+endif()
+
 set(ICCDEV_TEST_ENV
   "PATH=${ICCDEV_TOOL_PATH}:$ENV{PATH}"
   "LD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{LD_LIBRARY_PATH}"
@@ -1156,7 +1176,7 @@ set(ICCDEV_TEST_ENV
   "ICCDEV_TOOLS_DIR=${ICCDEV_TOOLS_DIR}"
   "ICCDEV_TESTING_DIR=${ICCDEV_TESTING_DIR}"
   "ICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
-  "ICCDEV_REQUIRE_JSON_ROUNDTRIP=1"
+  "ICCDEV_REQUIRE_JSON_ROUNDTRIP=${ICCDEV_REQUIRE_JSON_ROUNDTRIP}"
 )
 
 iccdev_add_iccconnect_thread_test()
@@ -1223,29 +1243,31 @@ set_tests_properties(iccdev.legacy-run-tests PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
-iccdev_add_script_test(
-  iccdev.tool-coverage
-  300
-  "iccdev;tools;asan;regression"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tool-coverage-baseline.sh"
-  --asan
-  --skip-hybrid
-)
-set_tests_properties(iccdev.tool-coverage PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
+  iccdev_add_script_test(
+    iccdev.tool-coverage
+    300
+    "iccdev;tools;asan;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tool-coverage-baseline.sh"
+    --asan
+    --skip-hybrid
+  )
+  set_tests_properties(iccdev.tool-coverage PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
 
-iccdev_add_script_test(
-  iccdev.hybrid-pipeline
-  900
-  "iccdev;tools;hybrid;asan;regression;slow"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-hybrid-pipeline-tests.sh"
-)
-set_tests_properties(iccdev.hybrid-pipeline PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+  iccdev_add_script_test(
+    iccdev.hybrid-pipeline
+    900
+    "iccdev;tools;hybrid;asan;regression;slow"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-hybrid-pipeline-tests.sh"
+  )
+  set_tests_properties(iccdev.hybrid-pipeline PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.specsep-tiff-geometry-regression
@@ -1301,32 +1323,34 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-pawg-report-regression-tests.sh"
 )
 
-iccdev_add_script_test(
-  iccdev.json-cfg
-  300
-  "iccdev;json;cfg;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-cfg-tests.sh"
-)
-set_tests_properties(iccdev.json-cfg PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(TARGET iccApplyNamedCmm AND TARGET iccApplyProfiles AND TARGET iccApplySearch)
+  iccdev_add_script_test(
+    iccdev.json-cfg
+    300
+    "iccdev;json;cfg;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-cfg-tests.sh"
+  )
+  set_tests_properties(iccdev.json-cfg PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
 
-iccdev_add_script_test(
-  iccdev.issue-1230-json-threads-regression
-  60
-  "iccdev;json;cfg;applyprofiles;issue-1230;regression;ubsan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1230-json-threads-regression.sh"
-)
+  iccdev_add_script_test(
+    iccdev.issue-1230-json-threads-regression
+    60
+    "iccdev;json;cfg;applyprofiles;issue-1230;regression;ubsan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1230-json-threads-regression.sh"
+  )
 
-iccdev_add_script_test(
-  iccdev.issue-1121-json-envvars-regression
-  60
-  "iccdev;json;cfg;envvars;issue-1121;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1121-json-envvars-regression.sh"
-)
+  iccdev_add_script_test(
+    iccdev.issue-1121-json-envvars-regression
+    60
+    "iccdev;json;cfg;envvars;issue-1121;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1121-json-envvars-regression.sh"
+  )
+endif()
 
 # Guards iccApplyToLink -PCC profile ownership on its error-exit paths (#1336):
 # drives the AddXform BadSpaceLink path with tracked profiles under LeakSanitizer
@@ -1352,35 +1376,39 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1337-checkpcsconnections-regression.sh"
 )
 
-iccdev_add_script_test(
-  iccdev.issue-1166-cam-hyperbolicinv-regression
-  60
-  "iccdev;json;cfg;cam;issue-1166;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1166-cam-hyperbolicinv-regression.sh"
-)
+if(TARGET iccApplyProfiles)
+  iccdev_add_script_test(
+    iccdev.issue-1166-cam-hyperbolicinv-regression
+    60
+    "iccdev;json;cfg;cam;issue-1166;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1166-cam-hyperbolicinv-regression.sh"
+  )
+endif()
 
-iccdev_add_script_test(
-  iccdev.json-cli-exercise
-  300
-  "iccdev;json;cli;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/json-cli-exercise.sh"
-)
-set_tests_properties(iccdev.json-cli-exercise PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(ICCDEV_HAS_JSON_TOOLS)
+  iccdev_add_script_test(
+    iccdev.json-cli-exercise
+    300
+    "iccdev;json;cli;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/json-cli-exercise.sh"
+  )
+  set_tests_properties(iccdev.json-cli-exercise PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
 
-iccdev_add_script_test(
-  iccdev.json-parser-regressions
-  300
-  "iccdev;json;parser;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-parser-regression-tests.sh"
-)
-set_tests_properties(iccdev.json-parser-regressions PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+  iccdev_add_script_test(
+    iccdev.json-parser-regressions
+    300
+    "iccdev;json;parser;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-parser-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.json-parser-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.cam-impact-surround-regression
@@ -1393,24 +1421,28 @@ set_tests_properties(iccdev.cam-impact-surround-regression PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
-iccdev_add_script_test(
-  iccdev.issue-1079-fromjson-soft-failure
-  60
-  "iccdev;json;fromjson;issue-1079;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1079-fromjson-soft-failure.sh"
-)
+if(TARGET iccFromJson)
+  iccdev_add_script_test(
+    iccdev.issue-1079-fromjson-soft-failure
+    60
+    "iccdev;json;fromjson;issue-1079;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1079-fromjson-soft-failure.sh"
+  )
+endif()
 
-iccdev_add_script_test(
-  iccdev.stdobserver-regressions
-  300
-  "iccdev;xml;json;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-stdobserver-regression-tests.sh"
-)
-set_tests_properties(iccdev.stdobserver-regressions PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(ICCDEV_HAS_JSON_TOOLS AND TARGET iccFromXml AND TARGET iccDumpProfile)
+  iccdev_add_script_test(
+    iccdev.stdobserver-regressions
+    300
+    "iccdev;xml;json;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-stdobserver-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.stdobserver-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.mluc-setter-regressions
@@ -1423,16 +1455,18 @@ set_tests_properties(iccdev.mluc-setter-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
-iccdev_add_script_test(
-  iccdev.mluc-read-utf16-regressions
-  300
-  "iccdev;mluc;utf16;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh"
-)
-set_tests_properties(iccdev.mluc-read-utf16-regressions PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(ICCDEV_HAS_JSON_TOOLS AND TARGET iccFromXml AND TARGET iccToXml AND TARGET iccDumpProfile)
+  iccdev_add_script_test(
+    iccdev.mluc-read-utf16-regressions
+    300
+    "iccdev;mluc;utf16;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-mluc-read-utf16-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.mluc-read-utf16-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.mluc-iso-code-regressions
@@ -1456,16 +1490,18 @@ set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
-iccdev_add_script_test(
-  iccdev.iccconnect-search-cost-regressions
-  300
-  "iccdev;iccconnect;search;cost;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh"
-)
-set_tests_properties(iccdev.iccconnect-search-cost-regressions PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(ICCDEV_HAS_ICCCONNECT)
+  iccdev_add_script_test(
+    iccdev.iccconnect-search-cost-regressions
+    300
+    "iccdev;iccconnect;search;cost;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-iccconnect-search-cost-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.iccconnect-search-cost-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.cam-degenerate-regressions
@@ -1475,16 +1511,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-cam-degenerate-regression-tests.sh"
 )
 
-iccdev_add_script_test(
-  iccdev.issue-1097-applyprofiles-hbo
-  120
-  "iccdev;tools;applyprofiles;asan;regression"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1097-applyprofiles-hbo.sh"
-)
-set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
-  SKIP_RETURN_CODE 77
-)
+if(TARGET iccApplyProfiles)
+  iccdev_add_script_test(
+    iccdev.issue-1097-applyprofiles-hbo
+    120
+    "iccdev;tools;applyprofiles;asan;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1097-applyprofiles-hbo.sh"
+  )
+  set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
+    SKIP_RETURN_CODE 77
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.issue-1151-pngdump-icc-injection
@@ -1573,16 +1611,18 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh"
 )
 
-iccdev_add_script_test(
-  iccdev.calculator-regressions
-  300
-  "iccdev;calculator;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-calculator-regression-tests.sh"
-)
-set_tests_properties(iccdev.calculator-regressions PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(TARGET iccApplyNamedCmm AND TARGET iccDumpProfile)
+  iccdev_add_script_test(
+    iccdev.calculator-regressions
+    300
+    "iccdev;calculator;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-calculator-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.calculator-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.lut16-zero-curve-regressions
@@ -1606,27 +1646,31 @@ set_tests_properties(iccdev.namedcolor-apply-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
-iccdev_add_script_test(
-  iccdev.v5-namedcmm-regressions
-  300
-  "iccdev;v5;namedcmm;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-v5-namedcmm-regression-tests.sh"
-)
-set_tests_properties(iccdev.v5-namedcmm-regressions PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(TARGET iccApplyNamedCmm AND TARGET iccRoundTrip)
+  iccdev_add_script_test(
+    iccdev.v5-namedcmm-regressions
+    300
+    "iccdev;v5;namedcmm;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-v5-namedcmm-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.v5-namedcmm-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
-iccdev_add_script_test(
-  iccdev.namedcolor-overprint-regressions
-  300
-  "iccdev;namedcolor;overprint;regression;asan"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh"
-)
-set_tests_properties(iccdev.namedcolor-overprint-regressions PROPERTIES
-  FIXTURES_REQUIRED iccdev_profiles
-)
+if(TARGET iccApplyNamedCmm)
+  iccdev_add_script_test(
+    iccdev.namedcolor-overprint-regressions
+    300
+    "iccdev;namedcolor;overprint;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-namedcolor-overprint-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.namedcolor-overprint-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 iccdev_add_script_test(
   iccdev.version-bcd-regressions
@@ -1764,14 +1808,16 @@ iccdev_add_script_test(
 # yielding an infinite scale that corrupts every PCS sample. Replays the fuzz PoC
 # through iccApplyProfiles with a +1000 luminance intent and fails if the
 # divide-by-zero reappears. Only meaningful under a float-divide-by-zero build
-# (ci-regression-container); SKIPS otherwise.
-iccdev_add_script_test(
-  iccdev.issue-1406-roundtrip-xyzlum-dbz
-  120
-  "iccdev;cmm;security;ub;issue-1406;regression"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1406-roundtrip-xyzlum-dbz.sh"
- )
+# (ci-docker regression image); SKIPS otherwise.
+if(TARGET iccApplyProfiles)
+  iccdev_add_script_test(
+    iccdev.issue-1406-roundtrip-xyzlum-dbz
+    120
+    "iccdev;cmm;security;ub;issue-1406;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1406-roundtrip-xyzlum-dbz.sh"
+   )
+endif()
 
 # #1410 - icYxy2XYZVector (IccEncoding.cpp) converts Yxy white/media/surround
 # chromaticities to XYZ as Y*x/y and Y*(1-x-y)/y. Loading a colorEncodingParams
@@ -1779,7 +1825,7 @@ iccdev_add_script_test(
 # zero (UBSan float-divide-by-zero, IccEncoding.cpp:138/140), poisoning the header
 # illuminant and derived XYZ tags with inf/NaN. Adds the fuzz PoC as a transform
 # profile through iccApplyToLink and fails if the divide-by-zero reappears. Only
-# meaningful under a float-divide-by-zero build (ci-regression-container); SKIPS
+# meaningful under a float-divide-by-zero build (ci-docker regression image); SKIPS
 # otherwise.
 iccdev_add_script_test(
   iccdev.issue-1410-encoding-yxy-xyz-dbz
@@ -1799,13 +1845,15 @@ iccdev_add_script_test(
 # load reappears. -exportcfg runs the toJson load before any file is opened, so
 # placeholder names suffice. Only meaningful under a -fsanitize=undefined build
 # (ENABLE_UBSAN/ENABLE_SANITIZERS); SKIPS otherwise.
-iccdev_add_script_test(
-  iccdev.issue-1421-cfg-transform-enum-load
-  120
-  "iccdev;cmm;config;security;ub;issue-1421;regression"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1421-cfg-transform-enum-load.sh"
- )
+if(TARGET iccApplyProfiles)
+  iccdev_add_script_test(
+    iccdev.issue-1421-cfg-transform-enum-load
+    120
+    "iccdev;cmm;config;security;ub;issue-1421;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1421-cfg-transform-enum-load.sh"
+   )
+endif()
 
 # #1422 - CIccCfgDataApply::fromArgs (iccApplyNamedCmm -exportcfganddata) narrowed
 # the destination encoding selector straight from the command line to an
@@ -1817,13 +1865,15 @@ iccdev_add_script_test(
 # the exact "9" argument with placeholder names and fails if the invalid-enum load
 # reappears. Only meaningful under a -fsanitize=undefined build
 # (ENABLE_UBSAN/ENABLE_SANITIZERS); SKIPS otherwise.
-iccdev_add_script_test(
-  iccdev.issue-1422-cfg-encoding-enum-load
-  120
-  "iccdev;cmm;config;security;ub;issue-1422;regression"
-  "${ICCDEV_REPO_ROOT}"
-  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1422-cfg-encoding-enum-load.sh"
- )
+if(TARGET iccApplyNamedCmm)
+  iccdev_add_script_test(
+    iccdev.issue-1422-cfg-encoding-enum-load
+    120
+    "iccdev;cmm;config;security;ub;issue-1422;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1422-cfg-encoding-enum-load.sh"
+   )
+endif()
 
 # #1405 - CIccEvalCompare::EvaluateProfile walked an nGran^ndim device-sample
 # grid with no bound, so a 6-channel profile at the default granularity 33 ran

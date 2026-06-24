@@ -83,7 +83,7 @@ cmake --build out/vs2022-clangcl-x64 --config Release -- /m /maxcpucount
 ## Windows MinGW UCRT64
 
 Install MSYS2 UCRT64 packages for the selected feature set. A core command-line
-tool build uses GCC, CMake, Ninja, libxml2, and nlohmann-json:
+tool build with `ENABLE_ICCJSON=OFF` uses GCC, CMake, Ninja, and libxml2:
 
 `cmd.exe`:
 
@@ -93,8 +93,7 @@ pacman -S --needed ^
   mingw-w64-ucrt-x86_64-cmake ^
   mingw-w64-ucrt-x86_64-ninja ^
   mingw-w64-ucrt-x86_64-make ^
-  mingw-w64-ucrt-x86_64-libxml2 ^
-  mingw-w64-ucrt-x86_64-nlohmann-json
+  mingw-w64-ucrt-x86_64-libxml2
 
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
@@ -117,8 +116,7 @@ pacman -S --needed `
   mingw-w64-ucrt-x86_64-cmake `
   mingw-w64-ucrt-x86_64-ninja `
   mingw-w64-ucrt-x86_64-make `
-  mingw-w64-ucrt-x86_64-libxml2 `
-  mingw-w64-ucrt-x86_64-nlohmann-json
+  mingw-w64-ucrt-x86_64-libxml2
 
 $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
@@ -132,6 +130,11 @@ cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
   -DENABLE_IIS_TOOLS=OFF
 cmake --build out/mingw-x64 --target iccDumpProfile --parallel
 ```
+
+Install `mingw-w64-ucrt-x86_64-nlohmann-json` and set
+`-DENABLE_ICCJSON=ON` when building `IccJSON2`, `IccConnect2`,
+`iccToJson` / `iccFromJson`, or the JSON runtime-configuration tools
+(`iccApplyNamedCmm`, `iccApplyProfiles`, and `iccApplySearch`).
 
 For a dependency-light local compiler sanity check, use the static core preset.
 It disables XML and image tools, but still builds the core library, JSON library,
@@ -200,6 +203,25 @@ artifact with `index.html`, CTest outputs, hybrid timing data when requested,
 and FlameGraph data/SVGs when profiling was enabled. The artifact upload uses
 the reviewed sanitized developer-report governance exception.
 
+## Runtime packaging
+
+Top-level CMake builds can also emit runtime packages with CPack without changing
+the legacy `dist-bin` archive flow:
+
+```bash
+cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON -DENABLE_SHARED_LIBS=ON
+cmake --build build --parallel "$(nproc)"
+cmake --build build --target package-sha256
+```
+
+The `runtime` install component includes command-line tools, shared runtime
+libraries, package notes, the project license, a version manifest, and a generated
+tool catalog. Development headers, CMake package exports, and static archives are
+installed by the `dev` component. Linux builds generate ZIP packages by default
+and add DEB or RPM packages when the corresponding local CPack backend is
+available. The `ci-latest-release` workflow runs the Linux CPack runtime-package
+smoke and uploads the `reficcmax-runtime-packages-linux` artifact.
+
 ## Instrumentation Builds
 
 Use CMake options instead of hand-written sanitizer flags. Clean the cache when
@@ -253,11 +275,11 @@ should change container package pins, published image tags, or GHCR workflows.
 |------|--------------------|-------------------------|
 | `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Built by `ci-docker`; validate with a local Docker build and tool smoke test. |
 | `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Built by the NixOS container path in `ci-docker`; validate the runtime closure and secret scan. |
-| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with current Clang/LLVM, GCC, sanitizer, and fuzzing tooling. | Built by `ci-regression-container`; publishing uses the `ghcr-publish` environment on `master`, branch dispatches use validation, and the consumer workflow pins the resulting digest. |
+| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with current Clang/LLVM, GCC, sanitizer, and fuzzing tooling. | Built by the regression matrix variant in `ci-docker`; publishing uses `ghcr-publish` on `master`, branch dispatches use validation, and the consumer workflow selects the published tag. |
 
-Before publishing a branch-specific regression image, maintainers must allow the
-branch in the `ghcr-publish` environment branch policy, approve the deployment,
-then update `ci-iccdev-tool-tests.yml` to the newly published digest.
+Before using a branch-specific regression image, maintainers should trigger
+`ci-docker` on that branch, read the published branch or SHA tag from the run,
+then pass that tag to `ci-iccdev-tool-tests.yml`.
 
 ## vcpkg Consumers
 

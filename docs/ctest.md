@@ -5,6 +5,11 @@ CTest when `ENABLE_TESTS=ON` and `ENABLE_TOOLS=ON`. The legacy shell and batch
 scripts remain the source of truth for profile generation, but CTest owns
 discovery, labels, fixtures, timeouts, logs, and the `check` target.
 
+CTest registers tests only for tools enabled by the selected CMake options.
+With `ENABLE_ICCJSON=OFF`, JSON conversion, `IccConnect`, and JSON
+runtime-configuration tool regressions are omitted; the legacy script test runs
+with JSON round-trip enforcement disabled.
+
 CTest registration is maintainer-owned infrastructure because it affects CI
 coverage, workflow pass/fail behavior, and cross-platform release confidence.
 General contributors should add or update test inputs under `Testing/` and

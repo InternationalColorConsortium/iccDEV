@@ -25,7 +25,7 @@ where it belongs.
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
 | Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
-| Regression container publisher | `.github/workflows/ci-regression-container.yml` | Builds and publishes `Dockerfile.ci-regression` through `ghcr-publish`. |
+| Regression container publisher | `.github/workflows/ci-docker.yml` | Builds and publishes `Dockerfile.ci-regression` through the regression matrix variant. |
 
 ## When to Add a Script
 
@@ -170,12 +170,11 @@ separate from general source changes when practical.
 
 For `Dockerfile.ci-regression` publishing:
 
-1. Add the branch to the `ghcr-publish` environment deployment branch policy if
-   the branch is not already allowed.
-2. Trigger `ci-regression-container` and wait for maintainer deployment approval.
-3. Read the pushed GHCR digest from the run log or summary.
-4. Pin `ci-iccdev-tool-tests.yml` to that digest and rerun the regression gate.
-5. Remove temporary branch policy entries after the branch is no longer needed.
+1. Trigger `ci-docker` on the target branch.
+2. Confirm the `regression` matrix variant pushed `iccdev-ci-regression`.
+3. Read the published branch or SHA tag from the run log or summary.
+4. Pass that tag to `ci-iccdev-tool-tests.yml` and rerun the regression gate.
+5. Remove temporary branch-specific inputs after the branch is no longer needed.
 
 ## Local Validation
 

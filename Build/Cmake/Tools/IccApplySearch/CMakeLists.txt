@@ -1,6 +1,6 @@
 #
 # iccApplySearch CMakeLists.txt | IccDEV Project
-# Copyright (©) 2025 The International Color Consortium. All rights reserved.
+# Copyright (C) 2025 The International Color Consortium. All rights reserved.
 #
 #
 # Last Updated: 21-OCT-2025 at 0300Z by David Hoyt
@@ -38,5 +38,5 @@ target_compile_options(iccApplySearch PRIVATE)
 
 # Install
 IF(ENABLE_INSTALL_RIM)
-  INSTALL(TARGETS iccApplySearch DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT shared-proof)
+  INSTALL(TARGETS iccApplySearch DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT})
 ENDIF(ENABLE_INSTALL_RIM)

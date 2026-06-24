@@ -4,7 +4,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: ci-docker (unified Ubuntu + NixOS)
+# Intent: ci-docker (unified Ubuntu, NixOS, and regression images)
 #
 # Last Updated: 2026-04-08 by David Hoyt
 #
@@ -22,6 +22,14 @@ permissions:
   contents: read
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - "Dockerfile"
+      - "Dockerfile.nixos"
+      - "Dockerfile.ci-regression"
+      - ".github/workflows/ci-docker.yml"
   workflow_dispatch:
 
 concurrency:
@@ -55,7 +63,7 @@ jobs:
   build:
     name: "Docker (${{ matrix.variant }})"
     needs: cache-policy
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     environment: ${{ github.ref == 'refs/heads/master' && 'ghcr-publish' || 'ci-validation' }}
     timeout-minutes: 30
     permissions:
@@ -71,15 +79,29 @@ jobs:
       matrix:
         include:
           - variant: ubuntu
+            runner: ubuntu-latest
+            image: iccdev
             dockerfile: Dockerfile
             suffix: ""
             workdir: /opt/iccdev
+            tools_dir: /opt/iccdev/Build/Tools
             run_shell: bash
           - variant: nixos
+            runner: ubuntu-latest
+            image: iccdev-nixos
             dockerfile: Dockerfile.nixos
             suffix: "-nixos"
             workdir: /workspace/iccDEV
+            tools_dir: /workspace/iccDEV/Build/Tools
             run_shell: sh
+          - variant: regression
+            runner: ubuntu-24.04
+            image: iccdev-ci-regression
+            dockerfile: Dockerfile.ci-regression
+            suffix: "-ci-regression"
+            workdir: /workspace/iccDEV
+            tools_dir: /workspace/build/Tools
+            run_shell: bash
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
@@ -107,7 +129,7 @@ jobs:
         id: image
         env:
           BASH_ENV: /dev/null
-          MATRIX_SUFFIX: ${{ matrix.suffix }}
+          MATRIX_IMAGE: ${{ matrix.image }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -118,12 +140,12 @@ jobs:
             echo "Invalid repository owner for image name" >&2
             exit 1
           fi
-          if [[ ! "$MATRIX_SUFFIX" =~ ^(-nixos)?$ ]]; then
-            echo "Invalid Docker image suffix" >&2
+          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-nixos|-ci-regression)?$ ]]; then
+            echo "Invalid Docker image name" >&2
             exit 1
           fi
 
-          printf 'name=ghcr.io/%s/iccdev%s\n' "$owner" "$MATRIX_SUFFIX" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          printf 'name=ghcr.io/%s/%s\n' "$owner" "$MATRIX_IMAGE" >> "$GITHUB_OUTPUT"  # elements-sanitized
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
         with:
@@ -135,11 +157,13 @@ jobs:
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
-            type=sha
-            type=raw,value=latest
+            type=sha,enable=${{ matrix.variant != 'regression' }}
+            type=raw,value=latest,enable=${{ matrix.variant != 'regression' }}
+            type=sha,format=long,enable=${{ matrix.variant == 'regression' }}
+            type=ref,event=branch,enable=${{ matrix.variant == 'regression' }}
 
       - name: Log in to GHCR
-        if: github.ref == 'refs/heads/master'
+        if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
@@ -157,10 +181,10 @@ jobs:
           pull: true
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-          load: ${{ github.ref != 'refs/heads/master' }}
-          push: ${{ github.ref == 'refs/heads/master' }}
-          provenance: ${{ github.ref == 'refs/heads/master' && 'mode=max' || 'false' }}
-          sbom: ${{ github.ref == 'refs/heads/master' }}
+          load: ${{ !(github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression')) }}
+          push: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
+          provenance: ${{ (github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression')) && 'mode=max' || 'false' }}
+          sbom: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
           labels: |
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -175,7 +199,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Attest build provenance
-        if: github.ref == 'refs/heads/master'
+        if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
         uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -205,7 +229,7 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -224,11 +248,18 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           MATRIX_VARIANT: ${{ matrix.variant }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
 
           image_sha="$(docker image inspect "$TEST_IMAGE" \
             --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
@@ -248,19 +279,30 @@ jobs:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
           TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
           TRIVY_CACHE="${RUNNER_TEMP:-/tmp}/trivy-image-cache-${MATRIX_VARIANT}"
           rm -rf "$TRIVY_CACHE"
           mkdir -p "$TRIVY_CACHE"
+          trivy_args=(image --scanners 'vuln,secret' --severity 'HIGH,CRITICAL' --exit-code 1)
+          if [ "$MATRIX_VARIANT" = "regression" ]; then
+            trivy_args+=(--ignore-unfixed)
+          fi
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$TRIVY_CACHE":/root/.cache/ \
             "$TRIVY_IMAGE" \
-            image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 "$TEST_IMAGE"
+            "${trivy_args[@]}" "$TEST_IMAGE"
 
       - name: Verify NixOS image hygiene
         if: matrix.variant == 'nixos'
@@ -304,23 +346,31 @@ jobs:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
           MATRIX_WORKDIR: ${{ matrix.workdir }}
+          MATRIX_TOOLS_DIR: ${{ matrix.tools_dir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
           SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
           TOOL_COUNT=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
-            "find ${MATRIX_WORKDIR}/Build/Tools -type f -executable | wc -l")
+            "find ${MATRIX_TOOLS_DIR} -type f -executable | wc -l")
           echo "Tools built: $TOOL_COUNT"
           if [ "$TOOL_COUNT" -lt 12 ]; then
             echo "::error::Expected at least 12 tools, found $TOOL_COUNT"
             exit 1
           fi
           TOOL_SMOKE=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
-            "${MATRIX_WORKDIR}/Build/Tools/IccDumpProfile/iccDumpProfile 2>&1 || true")
+            "${MATRIX_TOOLS_DIR}/IccDumpProfile/iccDumpProfile 2>&1 || true")
           if ! grep -qiE 'Usage:|IccProfLib' <<< "$TOOL_SMOKE"; then
             echo "::error::Tool smoke test failed -- runtime library issue"
             echo "$TOOL_SMOKE"
@@ -332,7 +382,7 @@ jobs:
             echo "- Runtime deps: All resolved"
             echo '```'
             TOOL_LIST=$(docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c \
-              "find ${MATRIX_WORKDIR}/Build/Tools -type f -executable -exec basename {} \; | sort")
+              "find ${MATRIX_TOOLS_DIR} -type f -executable -exec basename {} \; | sort")
             sanitize_print "$TOOL_LIST"
             echo ''
             echo '```'
@@ -342,12 +392,19 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
           SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
           FAILURES=0
           echo "### Tool Tests (${SAFE_VARIANT})" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
@@ -373,12 +430,19 @@ jobs:
           MATRIX_VARIANT: ${{ matrix.variant }}
           MATRIX_WORKDIR: ${{ matrix.workdir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
           source .github/scripts/sanitize-sed.sh
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
           SAFE_VARIANT="$(sanitize_line "$MATRIX_VARIANT")"
           echo "### iccToXml Conversion (${SAFE_VARIANT})" >> "$GITHUB_STEP_SUMMARY"  # sanitize_line
           docker run --rm "$TEST_IMAGE" "${MATRIX_SHELL}" -c "
@@ -395,6 +459,111 @@ jobs:
             echo ''
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"  # sanitize_print
+
+      - name: Verify regression image
+        if: matrix.variant == 'regression'
+        env:
+          BASH_ENV: /dev/null
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+          EXPECTED_REF_NAME: ${{ github.ref_name }}
+          EXPECTED_SHA: ${{ github.sha }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            docker pull "$IMAGE_REF"
+            TEST_IMAGE="$IMAGE_REF"
+          else
+            TEST_IMAGE="$(printf '%s\n' "$IMAGE_TAGS" | sed -n '1p')"
+          fi
+
+          image_sha="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          image_ref_label="$(docker image inspect "$TEST_IMAGE" \
+            --format '{{ index .Config.Labels "org.opencontainers.image.ref.name" }}')"
+          if [ "$image_sha" != "$EXPECTED_SHA" ]; then
+            echo "::error::Image revision mismatch: $image_sha != $EXPECTED_SHA"
+            exit 1
+          fi
+          if [ "$image_ref_label" != "$EXPECTED_REF_NAME" ]; then
+            echo "::error::Image ref mismatch: $image_ref_label != $EXPECTED_REF_NAME"
+            exit 1
+          fi
+
+          docker run --rm "$TEST_IMAGE" bash -lc '
+            set -euo pipefail
+            command -v git clang clang++ gcc g++ cmake make realpath afl-fuzz llvm-symbolizer
+            command -v clang-tidy cppcheck scan-build valgrind gdb lcov gcovr jq curl shellcheck
+            clang --version | sed -n "1p"
+            clang++ --version | sed -n "1p"
+            clang-tidy --version | sed -n "1p"
+            gcc --version | sed -n "1p"
+            g++ --version | sed -n "1p"
+            cmake --version | sed -n "1p"
+            afl-fuzz -V 1 2>&1 | sed -n "1p" || true
+            /usr/bin/time --version | sed -n "1p"
+            printf "int main(void){return 0;}\n" > /tmp/asan-smoke.c
+            clang -fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound \
+              -fno-omit-frame-pointer -g -O0 /tmp/asan-smoke.c -o /tmp/asan-smoke
+            /tmp/asan-smoke
+            gcc -Wall -Wextra -Werror /tmp/asan-smoke.c -o /tmp/gcc-warning-smoke
+            /tmp/gcc-warning-smoke
+          '
+
+          docker run --rm "$TEST_IMAGE" bash -lc '
+            set -euo pipefail
+            test "$PWD" = /workspace/iccDEV
+            test -d .git
+            test -f IccProfLib/IccProfile.cpp
+            git remote get-url origin
+            command -v iccDumpProfile
+            test -d "$ICCDEV_BUILD_DIR"
+            cmake --build "$ICCDEV_BUILD_DIR" --target iccDumpProfile --parallel "$(nproc)"
+            git branch && echo "---" && git log --oneline -1
+            git status --short | sed -n "1,20p"
+            git fetch --dry-run origin
+            banner="$(/usr/local/bin/iccdev-banner)"
+            grep -q "Reference ICC profiles present:" <<< "$banner"
+            work="$(mktemp -d)"
+            cd "$work"
+            SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
+            export CFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
+            export CXXFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
+            export LDFLAGS="$SAN_FLAGS"
+            CC=clang CXX=clang++ cmake /workspace/iccDEV/Build/Cmake \
+              -DCMAKE_BUILD_TYPE=Debug \
+              -DCMAKE_C_COMPILER=clang \
+              -DCMAKE_CXX_COMPILER=clang++ \
+              -DCMAKE_C_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0" \
+              -DCMAKE_CXX_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0 -std=c++17" \
+              -DENABLE_ASAN=ON \
+              -DENABLE_UBSAN=ON \
+              -DENABLE_INTEGER_SANITIZER=ON \
+              -DENABLE_FLOAT_SANITIZER=ON \
+              -DENABLE_TOOLS=ON
+            make -j"$(nproc)" iccDumpProfile
+            cd /workspace/iccDEV/Testing/
+            echo "=== Updating PATH ==="
+            for d in "$ICCDEV_BUILD_DIR"/Tools/*; do
+              [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
+            done
+            printf "%s\n%s\n%s\n" \
+              "unsigned-integer-overflow:*/IccMD5.cpp" \
+              "shift-base:*/IccMD5.cpp" \
+              "shift-exponent:*/IccMD5.cpp" > silence.txt
+            test -x ./CreateAllProfiles.sh
+            test -x ./RunTests.sh
+            test -x ./HDR/mkprofiles.sh
+            test -x ./Display/RunProtoTests.sh
+            test -x ./hybrid/BuildAndTest.sh
+            test -x ./CalcTest/checkInvalidProfiles.sh
+            test -x ./mcs/updateprev.sh
+            test -x ./mcs/updateprevWithBkgd.sh
+          '
 
       - name: Cleanup
         if: always()

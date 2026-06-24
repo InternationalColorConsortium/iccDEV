@@ -463,6 +463,7 @@ option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"   
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
+option(ICC_VERBOSE_CALC_APPLY     "Enable verbose CIccMpeCalculator Apply debugging"    OFF)
 option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         OFF)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
@@ -507,7 +508,7 @@ if(ENABLE_ICCXML)
 endif()
 
 # --- nlohmann_json ---
-if(ENABLE_ICCJSON OR ENABLE_TOOLS)
+if(ENABLE_ICCJSON)
   find_package(nlohmann_json REQUIRED)
 endif()
 
@@ -615,6 +616,11 @@ message(STATUS "GNU Install Include Dir: ${CMAKE_INSTALL_INCLUDEDIR}")
 message(STATUS "GNU Install Library Dir: ${CMAKE_INSTALL_LIBDIR}")
 message(STATUS "GNU Install CMake Dir  : ${CMAKE_INSTALL_DATAROOTDIR}/cmake")
 
+set(CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/${PACKAGE_NAME}" CACHE PATH "Documentation install directory")
+set(ICCDEV_RUNTIME_COMPONENT runtime)
+set(ICCDEV_DEVELOPMENT_COMPONENT dev)
+set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "${ICCDEV_RUNTIME_COMPONENT}")
+
 # ----------------------------------------------------------------------
 # Build Feature Toggles
 # ----------------------------------------------------------------------
@@ -643,6 +649,10 @@ if(ICC_LOG_SAFE)
   add_compile_definitions(ICC_LOG_SAFE=1)
 endif()
 
+if(ICC_VERBOSE_CALC_APPLY)
+  add_compile_definitions(ICC_VERBOSE_CALC_APPLY=1)
+endif()
+
 # ----------------------------------------------------------------------
 # Build Status Output
 # ----------------------------------------------------------------------
@@ -660,6 +670,7 @@ message(STATUS "ICC_TRACE_NAN_ENABLED      = ${ICC_TRACE_NAN_ENABLED}")
 message(STATUS "ICC_CLUT_DEBUG             = ${ICC_CLUT_DEBUG}")
 message(STATUS "ICC_ENABLE_ASSERTS         = ${ICC_ENABLE_ASSERTS}")
 message(STATUS "ICC_LOG_SAFE               = ${ICC_LOG_SAFE}")
+message(STATUS "ICC_VERBOSE_CALC_APPLY     = ${ICC_VERBOSE_CALC_APPLY}")
 message(STATUS "ICC_USE_ZLIB               = ${ICC_USE_ZLIB}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
 message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
@@ -1064,19 +1075,23 @@ endif()
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
   # Top-level project: full install/build mode
   option(ENABLE_INSTALL_RIM "Enable install target for RefIccMAX." ON)
+  option(ENABLE_CPACK_PACKAGING "Enable CPack native packages and portable archives." ON)
   if(VERBOSE_CONFIG)
     message(STATUS "RefIccMAX is being built as a top-level project.")
     message(STATUS "ENABLE_INSTALL_RIM      = ${ENABLE_INSTALL_RIM}")
+    message(STATUS "ENABLE_CPACK_PACKAGING  = ${ENABLE_CPACK_PACKAGING}")
   endif()
 else()
   # Subproject: disable install to avoid polluting parent build
   set(ENABLE_INSTALL_RIM OFF CACHE BOOL "Install disabled in subproject mode" FORCE)
+  set(ENABLE_CPACK_PACKAGING OFF CACHE BOOL "Packaging disabled in subproject mode" FORCE)
   set(ENABLE_STATIC_LIBS ON  CACHE BOOL "Force static linking in subproject" FORCE)
   set(ENABLE_SHARED_LIBS OFF CACHE BOOL "Disable shared libs in subproject" FORCE)
 
   if(VERBOSE_CONFIG)
     message(STATUS "RefIccMAX included as subproject - installation is disabled.")
     message(STATUS "ENABLE_INSTALL_RIM      = ${ENABLE_INSTALL_RIM}")
+    message(STATUS "ENABLE_CPACK_PACKAGING  = ${ENABLE_CPACK_PACKAGING}")
     message(STATUS "ENABLE_STATIC_LIBS      = ${ENABLE_STATIC_LIBS}")
     message(STATUS "ENABLE_SHARED_LIBS      = ${ENABLE_SHARED_LIBS}")
   endif()
@@ -1503,7 +1518,7 @@ ENDIF(ENABLE_ICCJSON)
 #
 # IccConnect library (JSON-configurable CMM transform construction)
 #
-IF(ENABLE_ICCJSON OR ENABLE_TOOLS)
+IF(ENABLE_ICCJSON)
   message(STATUS "Adding subdirectory for IccConnect.")
   add_subdirectory(IccConnect)
 
@@ -1544,13 +1559,6 @@ function(iccdev_fixup_msvc_compile_pdb TARGET_NAME)
 endfunction()
 
 IF(ENABLE_TOOLS)
-  # Verify nlohmann_json is configured properly (required for JSON tools)
-  IF(ENABLE_ICCJSON)
-    IF(NOT nlohmann_json_DIR)
-      MESSAGE(WARNING "nlohmann JSON library not found but ENABLE_ICCJSON is ON. JSON tools will be skipped.")
-    ENDIF()
-  ENDIF()
-
   # Add XML-related tools
   IF(ENABLE_ICCXML)
     ADD_SUBDIRECTORY(Tools/IccFromXml)
@@ -1564,7 +1572,11 @@ IF(ENABLE_TOOLS)
     message(STATUS "Adding Subdirectory IccToJson.")
     ADD_SUBDIRECTORY(Tools/IccToJson)
   ENDIF()
-  ADD_SUBDIRECTORY(Tools/IccApplyNamedCmm)
+  IF(TARGET_LIB_ICCCONNECT)
+    ADD_SUBDIRECTORY(Tools/IccApplyNamedCmm)
+  ELSE()
+    message(STATUS "IccJSON disabled - skipping JSON runtime-config tools.")
+  ENDIF()
   ADD_SUBDIRECTORY(Tools/IccDescribeSinkTest)
   ADD_SUBDIRECTORY(Tools/IccDumpProfile)
   ADD_SUBDIRECTORY(Tools/IccPawgReport)
@@ -1572,7 +1584,9 @@ IF(ENABLE_TOOLS)
   ADD_SUBDIRECTORY(Tools/IccFromCube)
   ADD_SUBDIRECTORY(Tools/IccV5DspObsToV4Dsp)
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
-  ADD_SUBDIRECTORY(Tools/IccApplySearch)
+  IF(TARGET_LIB_ICCCONNECT)
+    ADD_SUBDIRECTORY(Tools/IccApplySearch)
+  ENDIF()
   ADD_SUBDIRECTORY(Tools/IccProfileVisualize)
 
   # Ensure IccXML-dependent tools are built after IccXML library (safety net)
@@ -1622,7 +1636,9 @@ IF(ENABLE_TOOLS)
       if(VERBOSE_CONFIG)
         message(STATUS "Adding Subdirectory IccApplyProfiles.")
       endif()
-      ADD_SUBDIRECTORY(Tools/IccApplyProfiles)
+      IF(TARGET_LIB_ICCCONNECT)
+        ADD_SUBDIRECTORY(Tools/IccApplyProfiles)
+      ENDIF()
       if(VERBOSE_CONFIG)
         message(STATUS "Adding subdirectory IccSpecSepToTiff.")
       endif()
@@ -1780,14 +1796,14 @@ IF(ENABLE_INSTALL_RIM)
   INSTALL ( FILES
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-                DESTINATION ${CMAKE_MODULES_INSTALL_DIR} COMPONENT dev
+                DESTINATION ${CMAKE_MODULES_INSTALL_DIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT}
         )
 
   # Install exported targets file alongside the Config
   INSTALL( EXPORT RefIccMAXTargets
            NAMESPACE RefIccMAX::
            DESTINATION ${CMAKE_MODULES_INSTALL_DIR}
-           COMPONENT dev
+           COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT}
   )
 ENDIF(ENABLE_INSTALL_RIM)
 
@@ -1796,3 +1812,7 @@ export( EXPORT RefIccMAXTargets
         NAMESPACE RefIccMAX::
         FILE "${CMAKE_CURRENT_BINARY_DIR}/RefIccMAXTargets.cmake"
 )
+
+if(ENABLE_CPACK_PACKAGING AND ENABLE_INSTALL_RIM)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/Packaging/RefIccMAXCPack.cmake")
+endif()
