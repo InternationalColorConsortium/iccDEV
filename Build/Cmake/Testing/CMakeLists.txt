@@ -660,6 +660,41 @@ function(iccdev_add_extended_device_colorspace_test)
   endif()
 endfunction()
 
+function(iccdev_add_dpcc_pcc_replacement_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccDpccPccReplacementTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/dpcc-pcc-replacement.cpp"
+  )
+  target_link_libraries(iccDpccPccReplacementTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccDpccPccReplacementTest)
+
+  add_test(
+    NAME iccdev.dpcc-pcc-replacement
+    COMMAND "$<TARGET_FILE:iccDpccPccReplacementTest>"
+  )
+  set_tests_properties(iccdev.dpcc-pcc-replacement PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;spec;cmm;issue-1559;regression"
+  )
+  if(WIN32)
+    set(_dpcc_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDpccPccReplacementTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _dpcc_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.dpcc-pcc-replacement PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_dpcc_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1073,6 +1108,7 @@ if(WIN32)
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_extended_device_colorspace_test()
+  iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -1141,6 +1177,7 @@ iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_extended_device_colorspace_test()
+iccdev_add_dpcc_pcc_replacement_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
