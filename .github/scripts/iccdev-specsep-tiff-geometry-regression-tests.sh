@@ -291,9 +291,10 @@ run_specsep_packed_bps_reject() {
 run_specsep_descending_range_accept() {
   local name="specsep-descending-range-accept"
   local exit_code=0
+  local dump_log="$OUTDIR/specsep-descending-tiffdump.log"
 
   TOTAL=$((TOTAL + 1))
-  rm -f "$LOGFILE" "$OUTPUT_TIFF"
+  rm -f "$LOGFILE" "$OUTPUT_TIFF" "$dump_log"
 
   if [ ! -x "$SPECSEP" ]; then
     fail_case "$name" "missing executable: $SPECSEP"
@@ -318,7 +319,20 @@ run_specsep_descending_range_accept() {
     return
   fi
 
-  pass_case "$name" "descending range accepted without sanitizer findings"
+  if command -v tiffdump >/dev/null 2>&1; then
+    tiffdump "$OUTPUT_TIFF" > "$dump_log" 2>&1 || {
+      fail_case "$name" "tiffdump could not inspect generated output"
+      sed -n '1,40p' "$dump_log"
+      return
+    }
+    if ! grep -Fq "ExtraSamples (338) SHORT (3) 2<0 0>" "$dump_log"; then
+      fail_case "$name" "generated multi-sample TIFF lacks unspecified ExtraSamples"
+      sed -n '1,80p' "$dump_log"
+      return
+    fi
+  fi
+
+  pass_case "$name" "descending range accepted with explicit ExtraSamples metadata"
 }
 
 generate_palette_tiff() {

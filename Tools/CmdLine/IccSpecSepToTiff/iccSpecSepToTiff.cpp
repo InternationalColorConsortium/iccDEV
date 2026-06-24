@@ -282,8 +282,9 @@ int main(int argc, char* argv[]) {
     yRes = 72;
 
   CTiffImg outfile;
+  unsigned int nExtraSamples = nSamples > 1 ? (unsigned int)nSamples - 1 : 0;
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
-                     (unsigned int)nSamples, 0, xRes, yRes, bCompress, bSep)) {
+                     (unsigned int)nSamples, nExtraSamples, xRes, yRes, bCompress, bSep)) {
     printf("Unable to create %s\n", argv[1]);
     return -1;
   }
