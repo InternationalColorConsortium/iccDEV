@@ -1366,30 +1366,16 @@ uint16_t ClipU16( const icFloatNumber &input )
 
 /******************************************************************************/
 
-// output graphic representation of nD LUTs
-// return count of output objects created, 0 if none
 static
-int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
-        const std::string &basename, PDFWriter &pdffile )
+int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+                const std::string &basename, PDFWriter &pdffile )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
   int outputCount = 0;
 
-  if (!tag) {
-    LogAnError(stderr, "%s: Skipping %s: unable to load tag\n", basename.c_str(), sigDesc.c_str());
-    return 0;
-  }
-
   icTagTypeSignature typeSig = tag->GetType();
-  switch(typeSig) {
-
-  // these are all subclases of CIccMBB, and can share most of the code
-  case icSigLut8Type:   // CIccTagLut8
-  case icSigLut16Type:  // CIccTagLut16
-  case icSigLutAtoBType:  // CIccTagLutAtoB
-  case icSigLutBtoAType:  // CIccTagLutBtoA
-    {
+  
     CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
     if (!lut) {
       LogAnError(stderr, "%s: Skipping %s: unable to convert LUT\n", basename.c_str(), sigDesc.c_str());
@@ -1634,20 +1620,47 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
                         imageWidth, imageHeight, outputChannels, 8*bytes )) {
         LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
       }
-    }
-    return ++outputCount;
-    break;
 
-  case icSigMultiProcessElementType:
-    // do nothing for now, because we don't know how to render the Multiprocess elements
-    break;
+  return 1;
+}
 
-  default:
-    LogAnError(stderr,"%s: Unknown nD LUT type %s for tag %s\n",
+/******************************************************************************/
+
+// output graphic representation of nD LUTs
+// return count of output objects created, 0 if none
+static
+int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+        const std::string &basename, PDFWriter &pdffile )
+{
+  const size_t bufSize = 128;
+  char buf[bufSize];
+
+  if (!tag) {
+    LogAnError(stderr, "%s: Skipping %s: unable to load tag\n", basename.c_str(), sigDesc.c_str());
+    return 0;
+  }
+
+  icTagTypeSignature typeSig = tag->GetType();
+  switch(typeSig) {
+
+    // these are all subclases of CIccMBB, and can share most of the code
+    case icSigLut8Type:   // CIccTagLut8
+    case icSigLut16Type:  // CIccTagLut16
+    case icSigLutAtoBType:  // CIccTagLutAtoB
+    case icSigLutBtoAType:  // CIccTagLutBtoA
+      return outputMBBType( pIcc, tag, sigDesc, basename, pdffile );
+      break;
+
+    case icSigMultiProcessElementType:
+      // do nothing for now, because we don't know how to render the Multiprocess elements
+      break;
+
+    default:
+      LogAnError(stderr,"%s: Unknown nD LUT type %s for tag %s\n",
          basename.c_str(),
          icGetSig(buf, bufSize, typeSig),
          sigDesc.c_str() );
-    break;
+      break;
 
   }   // end switch by type
 
@@ -1809,24 +1822,30 @@ int graphNamedColorsPDF( namedLabList &colorsOut, const std::string &description
 
 /******************************************************************************/
 
-// convert all types of color lists to a known vector of names and LAB or XYZ colors
-// then plot that
 static
-int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+int outputColorantTable(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         PDFWriter &pdffile, const std::string &filename )
 {
   const size_t bufSize = 64;
   char buf[bufSize];
-  namedLabList colorsOut;
-
   int outputCount = 0;
-
-  if (!tag) {
-    LogAnError(stderr, "%s: Skipping %s: unable to load tag\n", filename.c_str(), sigDesc.c_str());
+  
+  namedLabList colorsOut;
+  
+  CIccTagColorantTable *table = dynamic_cast<CIccTagColorantTable*> (tag);
+  if (!table) {
+    LogAnError(stderr, "%s: Skipping %s: unable to convert colorantTable\n", filename.c_str(), sigDesc.c_str());
     return 0;
   }
 
-  icTagTypeSignature typeSig = tag->GetType();
+  std::string path(":");
+  path += sigDesc;
+  std::string report;
+  if (table->Validate(path, report, NULL) > icValidateWarning) {
+    LogAnError(stderr,"%s: WARNING - colorantTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    return 0;
+  }
+
 
   icFloatNumber XYZIlluminant[3];
   pIcc->getNormIlluminantXYZ( XYZIlluminant );
@@ -1840,367 +1859,417 @@ int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
   }
 
 
-  switch(typeSig) {
-
-    case icSigColorantTableType:    // colorant tables -- name and PCS only
-      {
-      CIccTagColorantTable *table = dynamic_cast<CIccTagColorantTable*> (tag);
-      if (!table) {
-        LogAnError(stderr, "%s: Skipping %s: unable to convert colorantTable\n", filename.c_str(), sigDesc.c_str());
-        return 0;
-      }
-
-      std::string path(":");
-      path += sigDesc;
-      std::string report;
-      if (table->Validate(path, report, NULL) > icValidateWarning) {
-        LogAnError(stderr,"%s: WARNING - colorantTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
-        return 0;
-      }
-
 /*
-    CIccTagColorantTable::m_PCS is never set, so testing the value always fails.
-    This value is not written, or read as part of the table -- so we must assume that data PCS == profile PCS
+CIccTagColorantTable::m_PCS is never set, so testing the value always fails.
+This value is not written, or read as part of the table -- so we must assume that data PCS == profile PCS
 */
 
-      icUInt32Number colorCount = table->GetSize();
+  icUInt32Number colorCount = table->GetSize();
 
-      colorsOut.reserve(colorCount);
+  colorsOut.reserve(colorCount);
 
-      for (icUInt32Number i = 0; i < colorCount; ++i) {
-        icFloatNumber labTemp[3];
-        icColorantTableEntry *entry = table->GetEntry( i );
-        namedLAB tempNamed;
-        tempNamed.name = std::to_string(i+1) + std::string(" ") + std::string(entry->name);
-        if (pcs == icSigXYZData) {
-            // XYZ 16 bit integer
-            icFloatNumber xyzTemp[3];
-            xyzTemp[0] = icU16toF( entry->data[0] );
-            xyzTemp[1] = icU16toF( entry->data[1] );
-            xyzTemp[2] = icU16toF( entry->data[2] );
-            icXYZtoLab( labTemp, xyzTemp, XYZIlluminant );
-        } else {
-            //  LAB 16bit integer
-            labTemp[0] = icU16toF( entry->data[0] );
-            labTemp[1] = icU16toF( entry->data[1] );
-            labTemp[2] = icU16toF( entry->data[2] );
-            icLabFromPcs( labTemp );
-        }
+  for (icUInt32Number i = 0; i < colorCount; ++i) {
+    icFloatNumber labTemp[3];
+    icColorantTableEntry *entry = table->GetEntry( i );
+    namedLAB tempNamed;
+    tempNamed.name = std::to_string(i+1) + std::string(" ") + std::string(entry->name);
+    if (pcs == icSigXYZData) {
+        // XYZ 16 bit integer
+        icFloatNumber xyzTemp[3];
+        xyzTemp[0] = icU16toF( entry->data[0] );
+        xyzTemp[1] = icU16toF( entry->data[1] );
+        xyzTemp[2] = icU16toF( entry->data[2] );
+        icXYZtoLab( labTemp, xyzTemp, XYZIlluminant );
+    } else {
+        //  LAB 16bit integer
+        labTemp[0] = icU16toF( entry->data[0] );
+        labTemp[1] = icU16toF( entry->data[1] );
+        labTemp[2] = icU16toF( entry->data[2] );
+        icLabFromPcs( labTemp );
+    }
 
-        tempNamed.L = labTemp[0];
-        tempNamed.a = labTemp[1];
-        tempNamed.b = labTemp[2];
+    tempNamed.L = labTemp[0];
+    tempNamed.a = labTemp[1];
+    tempNamed.b = labTemp[2];
 
-        colorsOut.push_back(tempNamed);
-      }
+    colorsOut.push_back(tempNamed);
+  }
 
-      std::string description("Colorant Table: ");
-      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
+  std::string description("Colorant Table: ");
+  outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
+                    XYZIlluminant, pdffile );
+
+  return outputCount;
+}
+
+/******************************************************************************/
+
+static
+int outputNamedColor2(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+        PDFWriter &pdffile, const std::string &filename )
+{
+  const size_t bufSize = 64;
+  char buf[bufSize];
+  int outputCount = 0;
+  
+  namedLabList colorsOut;
+  
+  CIccTagNamedColor2 *table = dynamic_cast<CIccTagNamedColor2*> (tag);
+  if (!table) {
+    LogAnError(stderr, "%s: Skipping %s: unable to convert namedColorTable\n", filename.c_str(), sigDesc.c_str());
+    return 0;
+  }
+
+  std::string path(":");
+  path += sigDesc;
+  std::string report;
+  if (table->Validate(path, report, NULL) > icValidateWarning) {
+    LogAnError(stderr,"%s: WARNING - namedColorTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    return 0;
+  }
+  
+  icFloatNumber XYZIlluminant[3];
+  pIcc->getNormIlluminantXYZ( XYZIlluminant );
+  
+  icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
+  if (pcs != icSigXYZData && pcs != icSigLabData) {
+    if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
+      LogAnError(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
+                        filename.c_str(), icGetSig(buf, bufSize, pcs) );
+    return 0;
+  }
+  
+  icColorSpaceSignature table_pcs = table->GetPCS();
+  if (pcs != table_pcs) {
+    LogAnError(stderr,"%s: WARNING - bad pcs for namedColorTable: %s\n",
+                        filename.c_str(), icGetSig(buf, bufSize, pcs) );
+    return 0;
+  }
+
+  icUInt32Number colorCount = table->GetSize();
+
+  colorsOut.reserve(colorCount);
+
+  std::string prefix = table->GetPrefix();
+  std::string suffix = table->GetSufix();
+  for (icUInt32Number i = 0; i < colorCount; ++i) {
+    icFloatNumber labTemp[3];
+    SIccNamedColorEntry *entry = table->GetEntry( i );
+    namedLAB tempNamed;
+    tempNamed.name = prefix + std::string(entry->rootName) + suffix;
+    if (pcs == icSigXYZData) {
+        // XYZ float
+        icXYZtoLab( labTemp, entry->pcsCoords, XYZIlluminant );
+    } else {
+        //  LAB float
+        icFloatNumber labTemp2[3];
+        labTemp2[0] = entry->pcsCoords[0];
+        labTemp2[1] = entry->pcsCoords[1];
+        labTemp2[2] = entry->pcsCoords[2];
+        table->Lab2ToLab4(labTemp,labTemp2);
+        icLabFromPcs( labTemp );
+    }
+
+    tempNamed.L = labTemp[0];
+    tempNamed.a = labTemp[1];
+    tempNamed.b = labTemp[2];
+
+    colorsOut.push_back(tempNamed);
+  }
+
+  std::string description("Named Color Table: ");
+  outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
                         XYZIlluminant, pdffile );
-      }
-      break;
 
-    case icSigNamedColor2Type:      // named color - PCS and colorspace (PCS optional?)
-      {
-      CIccTagNamedColor2 *table = dynamic_cast<CIccTagNamedColor2*> (tag);
-      if (!table) {
-        LogAnError(stderr, "%s: Skipping %s: unable to convert namedColorTable\n", filename.c_str(), sigDesc.c_str());
-        return 0;
-      }
+  return outputCount;
+}
 
-      std::string path(":");
-      path += sigDesc;
-      std::string report;
-      if (table->Validate(path, report, NULL) > icValidateWarning) {
-        LogAnError(stderr,"%s: WARNING - namedColorTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
-        return 0;
-      }
-      
-      icColorSpaceSignature table_pcs = table->GetPCS();
-      if (pcs != table_pcs) {
-        LogAnError(stderr,"%s: WARNING - bad pcs for namedColorTable: %s\n",
-                            filename.c_str(), icGetSig(buf, bufSize, pcs) );
-        return 0;
-      }
+/******************************************************************************/
 
-      icUInt32Number colorCount = table->GetSize();
+static
+int outputNamedColorArray(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+        PDFWriter &pdffile, const std::string &filename )
+{
+  const size_t bufSize = 64;
+  char buf[bufSize];
+  int outputCount = 0;
+  
+  namedLabList colorsOut;
 
-      colorsOut.reserve(colorCount);
+  CIccTagArray *array = dynamic_cast<CIccTagArray*> (tag);
+  if (!array) {
+    LogAnError(stderr, "%s: Skipping %s: unable to convert named color array\n", filename.c_str(), sigDesc.c_str());
+    return 0;
+  }
+  
+  icArraySignature arrayType = array->GetTagArrayType();
+  if (arrayType != icSigColorantInfoArray
+    && arrayType != icSigNamedColorArray) {
+    LogAnError(stderr,"%s: WARNING - unknown color array type: %s for tag %s\n",
+                    filename.c_str(),
+                    icGetSig(buf, bufSize, arrayType),
+                    sigDesc.c_str() );
+    return 0;
+  }
 
-      std::string prefix = table->GetPrefix();
-      std::string suffix = table->GetSufix();
-      for (icUInt32Number i = 0; i < colorCount; ++i) {
-        icFloatNumber labTemp[3];
-        SIccNamedColorEntry *entry = table->GetEntry( i );
-        namedLAB tempNamed;
-        tempNamed.name = prefix + std::string(entry->rootName) + suffix;
-        if (pcs == icSigXYZData) {
-            // XYZ float
-            icXYZtoLab( labTemp, entry->pcsCoords, XYZIlluminant );
-        } else {
-            //  LAB float
-            icFloatNumber labTemp2[3];
-            labTemp2[0] = entry->pcsCoords[0];
-            labTemp2[1] = entry->pcsCoords[1];
-            labTemp2[2] = entry->pcsCoords[2];
-            table->Lab2ToLab4(labTemp,labTemp2);
-            icLabFromPcs( labTemp );
-        }
+  std::string path(":");
+  path += sigDesc;
+  std::string report;
+  if (array->Validate(path, report, NULL) > icValidateWarning) {
+    LogAnError(stderr,"%s: WARNING - named color array failed validation:\n%s\n", filename.c_str(), report.c_str() );
+    return 0;
+  }
 
-        tempNamed.L = labTemp[0];
-        tempNamed.a = labTemp[1];
-        tempNamed.b = labTemp[2];
+  icFloatNumber XYZIlluminant[3];
+  pIcc->getNormIlluminantXYZ( XYZIlluminant );
+  
+  icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
+  if (pcs != icSigXYZData && pcs != icSigLabData) {
+    if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
+      LogAnError(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
+                        filename.c_str(), icGetSig(buf, bufSize, pcs) );
+    return 0;
+  }
 
-        colorsOut.push_back(tempNamed);
-      }
+  namedLabList tempColorValues;
 
-      std::string description("Named Color Table: ");
-      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
-                            XYZIlluminant, pdffile );
-      }
-      break;
+  icUInt32Number items = array->GetSize();
 
-    case icSigTagArrayType:         // v5 only
-      {
-      CIccTagArray *array = dynamic_cast<CIccTagArray*> (tag);
-      if (!array) {
-        LogAnError(stderr, "%s: Skipping %s: unable to convert named color array\n", filename.c_str(), sigDesc.c_str());
-        return 0;
-      }
-      
-      icArraySignature arrayType = array->GetTagArrayType();
-      if (arrayType != icSigColorantInfoArray
-        && arrayType != icSigNamedColorArray) {
-        LogAnError(stderr,"%s: WARNING - unknown color array type: %s for tag %s\n",
-                        filename.c_str(),
-                        icGetSig(buf, bufSize, arrayType),
-                        sigDesc.c_str() );
-        return 0;
-      }
+  for (icUInt32Number i = 0; i < items; ++i) {
+    CIccTag *thisItem = array->GetIndex(i);
+    if (!thisItem)
+        continue;
 
-      std::string path(":");
-      path += sigDesc;
-      std::string report;
-      if (array->Validate(path, report, NULL) > icValidateWarning) {
-        LogAnError(stderr,"%s: WARNING - named color array failed validation:\n%s\n", filename.c_str(), report.c_str() );
-        return 0;
-      }
+    tempColorValues.clear();
 
-      namedLabList tempColorValues;
-
-      icUInt32Number items = array->GetSize();
-
-      for (icUInt32Number i = 0; i < items; ++i) {
-        CIccTag *thisItem = array->GetIndex(i);
-        if (!thisItem)
-            continue;
-
-        tempColorValues.clear();
-
-        auto structType = thisItem->GetTagStructType();
+    auto structType = thisItem->GetTagStructType();
+    
+    if (structType != icSigColorantInfoStruct
+        && structType != icSigTintZeroStruct
+        && structType != icSigNamedColorStruct) {
         
-        switch (structType) {
-          case icSigColorantInfoStruct:
-          case icSigTintZeroStruct:
-          case icSigNamedColorStruct:
-            {
-            CIccTagStruct *structPtr = dynamic_cast<CIccTagStruct*> (thisItem);
-            if (!structPtr)
-              continue;
+        LogAnError(stderr,"%s: Unknown named color struct %s for tag %s\n",
+                filename.c_str(),
+                icGetSig(buf, bufSize, structType),
+                sigDesc.c_str() );
+        continue;
+    }
+    
+    CIccTagStruct *structPtr = dynamic_cast<CIccTagStruct*> (thisItem);
+    if (!structPtr)
+      continue;
 
 // TODO - can we easily convert spectra to PCS? Probably not without specifying viewing conditions.
 /*
 CIccPcsXform::pushRef2Xyz
- CIccPcsXform::pushRad2Xyz
- CIccPcsXform::pushBiRef2Xyz
- */
-            CIccTag *pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
-            if (!pcsElem)
-              continue;
+CIccPcsXform::pushRad2Xyz
+CIccPcsXform::pushBiRef2Xyz
+*/
+    CIccTag *pcsElem = structPtr->FindElem(icSigCinfPcsDataMbr);
+    if (!pcsElem)
+      continue;
+
+    tempColorValues.clear();
+    
+    icTagTypeSignature pcsDataType = pcsElem->GetType();
+    
+    if (pcsDataType != icSigFloat64ArrayType
+        && pcsDataType != icSigFloat32ArrayType
+        && pcsDataType != icSigFloat16ArrayType) {
         
-            tempColorValues.clear();
-            
-            icTagTypeSignature pcsDataType = pcsElem->GetType();
-            switch( pcsDataType) {
-              case icSigFloat64ArrayType:
-              case icSigFloat32ArrayType:
-              case icSigFloat16ArrayType:
-                {
-                CIccTagNumArray *flt16 = dynamic_cast<CIccTagNumArray*> (pcsElem);
-                if (!flt16)
-                  continue;
-                icUInt32Number dataCount = flt16->GetNumValues();
-                icUInt32Number colorCount = dataCount / 3; // ignoring any partials
+        LogAnError(stderr,"%s: Unknown named color struct data type %s for tag %s\n",
+                filename.c_str(),
+                icGetSig(buf, bufSize, pcsDataType),
+                sigDesc.c_str() );
+        continue;
+    }
 
-                // loop over count, convert to LAB as needed
-                for (icUInt32Number k = 0; k < colorCount; ++k) {
-                    icFloatNumber valueTemp[3];
-                    icFloatNumber labTemp[3];
-                    
-                    flt16->GetValues(valueTemp, k*3, 3);
-                    
-                    if (pcs == icSigXYZData) {
-                        // XYZ float
-                        icXYZtoLab( labTemp, valueTemp, XYZIlluminant );
-                    } else {
-                        //  LAB float
-                        labTemp[0] = valueTemp[0];
-                        labTemp[1] = valueTemp[1];
-                        labTemp[2] = valueTemp[2];
-                        // assume LAB directly coded as float (as seen in examples)
-                    }
+    CIccTagNumArray *flt16 = dynamic_cast<CIccTagNumArray*> (pcsElem);
+    if (!flt16)
+      continue;
+    
+    icUInt32Number dataCount = flt16->GetNumValues();
+    icUInt32Number colorCount = dataCount / 3; // ignoring any partials
 
-                    namedLAB tempNamed;     // leaving name empty for now
-                    tempNamed.L = labTemp[0];
-                    tempNamed.a = labTemp[1];
-                    tempNamed.b = labTemp[2];
-                    tempColorValues.push_back( tempNamed );
-                }
+    // loop over count, convert to LAB as needed
+    for (icUInt32Number k = 0; k < colorCount; ++k) {
+        icFloatNumber valueTemp[3];
+        icFloatNumber labTemp[3];
+        
+        flt16->GetValues(valueTemp, k*3, 3);
+        
+        if (pcs == icSigXYZData) {
+            // XYZ float
+            icXYZtoLab( labTemp, valueTemp, XYZIlluminant );
+        } else {
+            //  LAB float
+            labTemp[0] = valueTemp[0];
+            labTemp[1] = valueTemp[1];
+            labTemp[2] = valueTemp[2];
+            // assume LAB directly coded as float (as seen in examples)
+        }
 
-                }
-                break;
-            
-              default:
-                LogAnError(stderr,"%s: Unknown named color struct data type %s for tag %s\n",
-                        filename.c_str(),
-                        icGetSig(buf, bufSize, pcsDataType),
-                        sigDesc.c_str() );
-                continue;
-                break;
-            }   // end switch by PCS data type
-            
-            
-            // now we try to find names to match the colors
-            CIccTag *nameElem = structPtr->FindElem(icSigCinfNameMbr);
-            if (!nameElem)      // fallback to other tag type
-              nameElem = structPtr->FindElem(icSigCinfLocalizedNameMbr);        // unused so far?
-            
-            // if we don't have names, just skip it and still plot the color valuess
-            if (nameElem) {
-              icTagTypeSignature nameDataType = nameElem->GetType();
-              std::string nameString;
-              switch( nameDataType) {
-                case icSigUtf8TextType:
-                  {
-                  CIccTagUtf8Text *nameUTF8 = dynamic_cast<CIccTagUtf8Text*> (nameElem);
-                  if (nameUTF8)
-                    nameString = std::string( (char *)nameUTF8->GetText() );
-                  }
-                  break;
-                
-                case icSigUtf16TextType:
-                  {
-                  CIccTagUtf16Text *nameUTF16 = dynamic_cast<CIccTagUtf16Text*> (nameElem);
-                  if (nameUTF16) {
-                    std::string buffer;
-                    nameString = std::string( (char *)nameUTF16->GetText(buffer) );   // GetText converts to UTF8
-                    }
-                  }
-                  break;
-                
-                case icSigTextType:
-                  {
-                  CIccTagText *nameText = dynamic_cast<CIccTagText*> (nameElem);
-                  if (nameText)
-                    nameString = std::string( (char *)nameText->GetText() );
-                  }
-                  break;
-                  
-                case icSigDictType: // supposed to be multiLocalizedUnicodeType, but so far unused?
-                case icSigMultiLocalizedUnicodeType:
-                  {
-                  CIccTagMultiLocalizedUnicode *nameDict = dynamic_cast<CIccTagMultiLocalizedUnicode*> (nameElem);
-                  if (nameDict) {
-                        // has language and first entry fallbacks
-                    CIccLocalizedUnicode *uniText = nameDict->Find( icLanguageCodeEnglish, icCountryCodeUSA );
-                    if (uniText)
-                      uniText->GetText(nameString);
-                    }
-                  }
-                  break;
-                
-                default:
-                  LogAnError(stderr,"%s: Unknown named color struct name type %s for tag %s\n",
-                        filename.c_str(),
-                        icGetSig(buf, bufSize, nameDataType),
-                        sigDesc.c_str() );
-                  break;
-              }
-              
-              if (nameString.size() > 0) {
-                for (auto &color: tempColorValues)
-                  color.name = nameString;
-              }
-            
-            } // end name element handling
-
-
-            // now try to match tint values and append to name, if present
-            CIccTag *tintElem = structPtr->FindElem(icSigNmclTintMbr);
-            if (tintElem) {
-                icTagTypeSignature tintDataType = tintElem->GetType();
-                switch( tintDataType) {
-                  case icSigFloat64ArrayType:
-                  case icSigFloat32ArrayType:
-                  case icSigFloat16ArrayType:
-                    {
-                    CIccTagNumArray *flt16 = dynamic_cast<CIccTagNumArray*> (tintElem);
-                    if (!flt16)
-                      continue;
-                    icUInt32Number dataCount = flt16->GetNumValues();
-                    if (dataCount <= tempColorValues.size()) {
-                      for (icUInt32Number k = 0; k < dataCount; ++k) {
-                        icFloatNumber valueTemp;
-                        flt16->GetValues(&valueTemp, k, 1);
-                        if (!std::isfinite(valueTemp))
-                          valueTemp = 0.0f;
-                        if (valueTemp > 1.0f)
-                          valueTemp = 1.0f;
-                        if (valueTemp < 0.0f)
-                          valueTemp = 0.0f;
-                        int percent = (int)round(valueTemp * 100.0f);
-                        tempColorValues[k].name += std::string("(") + std::to_string(percent) + std::string("%)");
-                      }
-                    }
-
-                    }
-                    break;
-                
-                  default:
-                    LogAnError(stderr,"%s: Unknown named color tint data type %s for tag %s\n",
-                            filename.c_str(),
-                            icGetSig(buf, bufSize, tintDataType),
-                            sigDesc.c_str() );
-                    // skipping this still allows colors and names, even if we don't have tint percentages
-                    break;
-                }   // end switch by PCS data type
-              
-            }   // end tint value handling
-
-            // add temp values to our list
-            if (tempColorValues.size() > 0)
-              colorsOut.insert( colorsOut.end(), tempColorValues.begin(), tempColorValues.end() );
+        namedLAB tempNamed;     // leaving name empty for now
+        tempNamed.L = labTemp[0];
+        tempNamed.a = labTemp[1];
+        tempNamed.b = labTemp[2];
+        tempColorValues.push_back( tempNamed );
+    }
+    
+    
+    // now we try to find names to match the colors
+    CIccTag *nameElem = structPtr->FindElem(icSigCinfNameMbr);
+    if (!nameElem)      // fallback to other tag type
+      nameElem = structPtr->FindElem(icSigCinfLocalizedNameMbr);        // unused so far?
+    
+    // if we don't have names, just skip it and still plot the color valuess
+    if (nameElem) {
+      icTagTypeSignature nameDataType = nameElem->GetType();
+      std::string nameString;
+      switch( nameDataType) {
+        case icSigUtf8TextType:
+          {
+          CIccTagUtf8Text *nameUTF8 = dynamic_cast<CIccTagUtf8Text*> (nameElem);
+          if (nameUTF8)
+            nameString = std::string( (char *)nameUTF8->GetText() );
+          }
+          break;
+        
+        case icSigUtf16TextType:
+          {
+          CIccTagUtf16Text *nameUTF16 = dynamic_cast<CIccTagUtf16Text*> (nameElem);
+          if (nameUTF16) {
+            std::string buffer;
+            nameString = std::string( (char *)nameUTF16->GetText(buffer) );   // GetText converts to UTF8
             }
-            break;
+          }
+          break;
         
-          default:
-            LogAnError(stderr,"%s: Unknown named color struct %s for tag %s\n",
-                    filename.c_str(),
-                    icGetSig(buf, bufSize, structType),
-                    sigDesc.c_str() );
-            break;
-        } // end switch struct type
+        case icSigTextType:
+          {
+          CIccTagText *nameText = dynamic_cast<CIccTagText*> (nameElem);
+          if (nameText)
+            nameString = std::string( (char *)nameText->GetText() );
+          }
+          break;
+          
+        case icSigDictType: // supposed to be multiLocalizedUnicodeType, but so far unused?
+        case icSigMultiLocalizedUnicodeType:
+          {
+          CIccTagMultiLocalizedUnicode *nameDict = dynamic_cast<CIccTagMultiLocalizedUnicode*> (nameElem);
+          if (nameDict) {
+                // has language and first entry fallbacks
+            CIccLocalizedUnicode *uniText = nameDict->Find( icLanguageCodeEnglish, icCountryCodeUSA );
+            if (uniText)
+              uniText->GetText(nameString);
+            }
+          }
+          break;
         
-      } // end loop over items in array
-
-      // make sure we found some usable colors and names
-      if (colorsOut.size() == 0)
-        return 0;
- 
-      std::string description("Color Array: ");
-      outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
-                        XYZIlluminant, pdffile );
+        default:
+          LogAnError(stderr,"%s: Unknown named color struct name type %s for tag %s\n",
+                filename.c_str(),
+                icGetSig(buf, bufSize, nameDataType),
+                sigDesc.c_str() );
+          break;
       }
+      
+      if (nameString.size() > 0) {
+        for (auto &color: tempColorValues)
+          color.name = nameString;
+      }
+    
+    } // end name element handling
+
+
+    // now try to match tint values and append to name, if present
+    CIccTag *tintElem = structPtr->FindElem(icSigNmclTintMbr);
+    if (tintElem) {
+      icTagTypeSignature tintDataType = tintElem->GetType();
+
+      if (tintDataType == icSigFloat64ArrayType
+          || tintDataType == icSigFloat32ArrayType
+          || tintDataType == icSigFloat16ArrayType) {
+        CIccTagNumArray *fltTint = dynamic_cast<CIccTagNumArray*> (tintElem);
+        if (fltTint) {
+            icUInt32Number tintCount = fltTint->GetNumValues();
+            if (tintCount <= tempColorValues.size()) {
+              for (icUInt32Number k = 0; k < tintCount; ++k) {
+                icFloatNumber valueTemp;
+                fltTint->GetValues(&valueTemp, k, 1);
+                if (!std::isfinite(valueTemp))
+                  valueTemp = 0.0f;
+                if (valueTemp > 1.0f)
+                  valueTemp = 1.0f;
+                if (valueTemp < 0.0f)
+                  valueTemp = 0.0f;
+                int percent = (int)round(valueTemp * 100.0f);
+                tempColorValues[k].name += std::string("(") + std::to_string(percent) + std::string("%)");
+              }
+            }
+          }
+        }
+        else {
+            LogAnError(stderr,"%s: Unknown named color tint data type %s for tag %s\n",
+                    filename.c_str(),
+                    icGetSig(buf, bufSize, tintDataType),
+                    sigDesc.c_str() );
+            // skipping this still allows colors and names, even if we don't have tint percentages
+            // so don't call continue
+        }
+      
+    }   // end tint value handling
+
+    // add temp values to our list
+    if (tempColorValues.size() > 0)
+      colorsOut.insert( colorsOut.end(), tempColorValues.begin(), tempColorValues.end() );
+    
+  } // end loop over items in array
+
+  // make sure we found some usable colors and names
+  if (colorsOut.size() == 0)
+    return 0;
+
+  std::string description("Color Array: ");
+  outputCount += graphNamedColorsPDF( colorsOut, description + sigDesc,
+                    XYZIlluminant, pdffile );
+
+  return outputCount;
+}
+
+/******************************************************************************/
+
+// convert all types of color lists to a known vector of names and LAB or XYZ colors
+// then plot that
+static
+int outputNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+        PDFWriter &pdffile, const std::string &filename )
+{
+  const size_t bufSize = 64;
+  char buf[bufSize];
+  int outputCount = 0;
+  
+  namedLabList colorsOut;
+
+  if (!tag) {
+    LogAnError(stderr, "%s: Skipping %s: unable to load tag\n", filename.c_str(), sigDesc.c_str());
+    return 0;
+  }
+
+  icTagTypeSignature typeSig = tag->GetType();
+
+  switch(typeSig) {
+
+    case icSigColorantTableType:    // colorant tables -- name and PCS only
+      return outputColorantTable( pIcc, tag, sigDesc, pdffile, filename );
+      break;
+
+    case icSigNamedColor2Type:      // named color - PCS and colorspace (PCS optional?)
+      return outputNamedColor2( pIcc, tag, sigDesc, pdffile, filename );
+      break;
+
+    case icSigTagArrayType:         // v5 only
+      return outputNamedColorArray( pIcc, tag, sigDesc, pdffile, filename );
       break;
 
     default:
