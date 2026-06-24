@@ -1850,7 +1850,7 @@ int outputColorantTable(CIccProfile *pIcc, CIccTag *tag, const std::string &sigD
   icFloatNumber XYZIlluminant[3];
   pIcc->getNormIlluminantXYZ( XYZIlluminant );
   
-  icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
+  icColorSpaceSignature pcs = pIcc->m_Header.pcs;
   if (pcs != icSigXYZData && pcs != icSigLabData) {
     if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
       LogAnError(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
@@ -1931,7 +1931,7 @@ int outputNamedColor2(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDes
   icFloatNumber XYZIlluminant[3];
   pIcc->getNormIlluminantXYZ( XYZIlluminant );
   
-  icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
+  icColorSpaceSignature pcs = pIcc->m_Header.pcs;
   if (pcs != icSigXYZData && pcs != icSigLabData) {
     if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
       LogAnError(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
@@ -2023,7 +2023,7 @@ int outputNamedColorArray(CIccProfile *pIcc, CIccTag *tag, const std::string &si
   icFloatNumber XYZIlluminant[3];
   pIcc->getNormIlluminantXYZ( XYZIlluminant );
   
-  icColorSpaceSignature pcs = pIcc->m_Header.pcs;   // table->GetPCS();
+  icColorSpaceSignature pcs = pIcc->m_Header.pcs;
   if (pcs != icSigXYZData && pcs != icSigLabData) {
     if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
       LogAnError(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
@@ -2514,6 +2514,8 @@ int main(int argc, char* argv[])
       ClearErrorLogs();
       
       // DEBUGGING printf("Processing profile '%s'\n", file.c_str() );
+// TODO - read XML and JSON profiles
+// try each in-turn, or sniff file contents for clues?
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
       if (!pIcc) {
         LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", file.c_str() );
