@@ -193,17 +193,17 @@ public:
 	bool IsTagPresent(icSignature sig) const { return (GetTag(sig)!=NULL); }
 
 
-  //Implement the IIccProfileConnectionConditions interface
-  virtual const CIccTagSpectralViewingConditions *getPccViewingConditions() { return (const CIccTagSpectralViewingConditions*)
-                                                                                FindTagOfType(icSigSpectralViewingConditionsTag, 
-                                                                                              icSigSpectralViewingConditionsType); }
-  virtual CIccTagMultiProcessElement *getCustomToStandardPcc() { return (CIccTagMultiProcessElement*)
-                                                                   FindTagOfType(icSigCustomToStandardPccTag, 
-                                                                                 icSigMultiProcessElementType); }
-
-  virtual CIccTagMultiProcessElement *getStandardToCustomPcc() { return (CIccTagMultiProcessElement*)
-                                                                   FindTagOfType(icSigStandardToCustomPccTag, 
-                                                                                 icSigMultiProcessElementType); }
+  //Implement the IIccProfileConnectionConditions interface.
+  //
+  // For an abstract profile that carries a devicePccTag ('dpcc'), the iccMAX
+  // extended device colour space amendment (9.2.x+1 / 12.2.y) replaces these
+  // profile-level connection conditions with the matching members of the tag's
+  // profileConnectionConditionsStructure. Each getter prefers the structure
+  // member (via getDevicePccElem) and falls back to the profile's own tag, so
+  // every consumer of the PCC interface picks up the replacement automatically.
+  virtual const CIccTagSpectralViewingConditions *getPccViewingConditions();
+  virtual CIccTagMultiProcessElement *getCustomToStandardPcc();
+  virtual CIccTagMultiProcessElement *getStandardToCustomPcc();
   virtual icIlluminant getPccIlluminant();
   virtual icFloatNumber getPccCCT();
   virtual icStandardObserver getPccObserver();
@@ -216,6 +216,13 @@ public:
   bool calcMediaWhiteXYZ(icFloatNumber *pXYZ, IIccProfileConnectionConditions *pObservingPCC);
 
 protected:
+
+  // Return the member sub-tag of the given signature/type from this profile's
+  // devicePccTag ('dpcc') profileConnectionConditionsStructure, or NULL when the
+  // profile is not an abstract iccMAX profile, has no devicePccTag, or the member
+  // is absent. Used by the PCC interface getters to apply the extended device
+  // colour space amendment's connection-condition replacements (#626 / #1559).
+  CIccTag* getDevicePccElem(icSignature sigMember, icTagTypeSignature sigType);
 
   void Cleanup();
   IccTagEntry* GetTag(icSignature sig) const;

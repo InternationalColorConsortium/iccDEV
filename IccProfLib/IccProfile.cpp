@@ -3412,6 +3412,98 @@ icUInt16Number CIccProfile::GetParentSpaceSamples() const
 
 /**
  ****************************************************************************
+ * Name: CIccProfile::getDevicePccElem
+ *
+ * Purpose: Look up a member sub-tag of this profile's devicePccTag ('dpcc')
+ *  profileConnectionConditionsStructure. The extended device colour space
+ *  amendment (9.2.x+1 / 12.2.y) lets an abstract profile carry alternate
+ *  replacement profile connection conditions in this structure; the PCC
+ *  interface getters consult it before the profile's own PCC tags.
+ *
+ * Args:
+ *  sigMember = the 'pcc ' member signature to retrieve,
+ *  sigType   = the required tag type of that member
+ *
+ * Return: the member tag, or NULL when no replacement applies.
+ *****************************************************************************
+ */
+CIccTag* CIccProfile::getDevicePccElem(icSignature sigMember, icTagTypeSignature sigType)
+{
+  // The devicePccTag is only defined for abstract iccMAX (v5) profiles.
+  if (m_Header.version < icVersionNumberV5 || m_Header.deviceClass != icSigAbstractClass)
+    return NULL;
+
+  CIccTag *pTag = FindTag(icSigDevicePccTag);
+  if (!pTag || pTag->GetTagStructType() != icSigProfileConnectionConditionsStruct)
+    return NULL;
+
+  return ((CIccTagStruct*)pTag)->FindElemOfType(sigMember, sigType);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::getPccViewingConditions
+ *
+ * Purpose: Get the spectral viewing conditions for profile connection,
+ *  preferring a devicePccTag svcn member when present (#626 / #1559).
+ *  getPccIlluminant/CCT/Observer and getNormIlluminantXYZ/getLumIlluminantXYZ
+ *  all derive from this getter, so overriding it here also applies the dpcc
+ *  illuminant/observer (and the iXYZ PCS illuminant, 12.2.y.2.1) to them.
+ *****************************************************************************
+ */
+const CIccTagSpectralViewingConditions *CIccProfile::getPccViewingConditions()
+{
+  // Replacement svcn from the devicePccTag structure, else the profile's own svcn.
+  CIccTag *pElem = getDevicePccElem(icSigPccSpectralViewingConditionsMbr, icSigSpectralViewingConditionsType);
+  if (pElem)
+    return (const CIccTagSpectralViewingConditions*)pElem;
+
+  return (const CIccTagSpectralViewingConditions*)FindTagOfType(icSigSpectralViewingConditionsTag,
+                                                                icSigSpectralViewingConditionsType);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::getCustomToStandardPcc
+ *
+ * Purpose: Get the custom-to-standard PCC transform, preferring a devicePccTag
+ *  c2sp member when present (#626 / #1559).
+ *****************************************************************************
+ */
+CIccTagMultiProcessElement *CIccProfile::getCustomToStandardPcc()
+{
+  // Replacement c2sp from the devicePccTag structure, else the profile's own c2sp tag.
+  CIccTag *pElem = getDevicePccElem(icSigPccCustomToStandardPccMbr, icSigMultiProcessElementType);
+  if (pElem)
+    return (CIccTagMultiProcessElement*)pElem;
+
+  return (CIccTagMultiProcessElement*)FindTagOfType(icSigCustomToStandardPccTag, icSigMultiProcessElementType);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::getStandardToCustomPcc
+ *
+ * Purpose: Get the standard-to-custom PCC transform, preferring a devicePccTag
+ *  s2cp member when present (#626 / #1559).
+ *****************************************************************************
+ */
+CIccTagMultiProcessElement *CIccProfile::getStandardToCustomPcc()
+{
+  // Replacement s2cp from the devicePccTag structure, else the profile's own s2cp tag.
+  CIccTag *pElem = getDevicePccElem(icSigPccStandardToCustomPccMbr, icSigMultiProcessElementType);
+  if (pElem)
+    return (CIccTagMultiProcessElement*)pElem;
+
+  return (CIccTagMultiProcessElement*)FindTagOfType(icSigStandardToCustomPccTag, icSigMultiProcessElementType);
+}
+
+
+/**
+ ****************************************************************************
  * Name: CIccProfile::getPccIlluminant
  * 
  * Purpose: Get the Illuminant associated with profile connection.
@@ -3580,7 +3672,11 @@ void CIccProfile::getLumIlluminantXYZ(icFloatNumber *pXYZ)
  */
 bool CIccProfile::getMediaWhiteXYZ(icFloatNumber *pXYZ)
 {
-  CIccTag *pTag = FindTag(icSigMediaWhitePointTag);
+  // Prefer a devicePccTag mwpt member when present; it replaces the profile's
+  // mediaWhitePointTag for an abstract profile (#626 / #1559, spec 12.2.y.2.2).
+  CIccTag *pTag = getDevicePccElem(icSigPccMediaWhitePointMbr, icSigXYZType);
+  if (!pTag)
+    pTag = FindTag(icSigMediaWhitePointTag);
   if (pTag && pTag->GetType()==icSigXYZType) {
     CIccTagXYZ *pXYZTag = (CIccTagXYZ*)pTag;
     icXYZNumber *pMediaXYZ = pXYZTag->GetXYZ(0);
