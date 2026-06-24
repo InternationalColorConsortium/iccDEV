@@ -98,6 +98,9 @@ IIccStruct* CIccBasicStructFactory::CreateStruct(icStructSignature structTypeSig
     case icSigNamedColorStruct:
       return new (std::nothrow) CIccStructNamedColor(pTagStruct);
 
+    case icSigProfileConnectionConditionsStruct:
+      return new (std::nothrow) CIccStructProfileConnectionConditions(pTagStruct);
+
     case icSigProfileInfoStruct:
       return new (std::nothrow) CIccStructProfileInfo(pTagStruct);
 
@@ -120,6 +123,7 @@ static struct {
   {icSigColorEncodingParamsSruct, "colorEncodingParamsStructure"},
   {icSigMeasurementInfoStruct, "measurementInfoStructure"},
   {icSigNamedColorStruct, "namedColorStructure"},
+  {icSigProfileConnectionConditionsStruct, "profileConnectionConditionsStructure"},
   {icSigProfileInfoStruct, "profileInfoStructure"},
   {icSigTintZeroStruct, "tintZeroStructure"},
   {(icStructSignature)0, ""},

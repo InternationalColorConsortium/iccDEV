@@ -849,6 +849,59 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
 }
 
 
+bool CIccTagXmlSpectralRange::ToXml(std::string &xml, std::string blanks/* = ""*/)
+{
+  const size_t lineSize = 256;
+  char line[lineSize];
+
+  xml += blanks + "<SpectralRange>\n";
+  snprintf(line, lineSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_spectralRange.start), icF16toF(m_spectralRange.end), m_spectralRange.steps);
+  xml += blanks + line;
+  xml += blanks + "</SpectralRange>\n";
+
+  if (m_biSpectralRange.steps) {
+    xml += blanks + "<BiSpectralRange>\n";
+    snprintf(line, lineSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_biSpectralRange.start), icF16toF(m_biSpectralRange.end), m_biSpectralRange.steps);
+    xml += blanks + line;
+    xml += blanks + "</BiSpectralRange>\n";
+  }
+
+  return true;
+}
+
+
+bool CIccTagXmlSpectralRange::ParseXml(xmlNode *pNode, std::string &parseStr)
+{
+  xmlNode *pChild;
+
+  if (!(pChild = icXmlFindNode(pNode, "SpectralRange"))) {
+    parseStr += "No SpectralRange section found\n";
+    return false;
+  }
+
+  if (!(pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
+    parseStr += "SpectralRange missing Wavelengths\n";
+    return false;
+  }
+
+  m_spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
+  m_spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
+  m_spectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
+
+  pChild = icXmlFindNode(pNode, "BiSpectralRange");
+
+  if (pChild) {
+    if ((pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
+      m_biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
+      m_biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
+      m_biSpectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
+    }
+  }
+
+  return true;
+}
+
+
 bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   const size_t bufSize = 256;

@@ -142,6 +142,8 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigDateTimeTag, "dateTimeTag"},
   {icSigDeviceMfgDescTag, "deviceMfgDescTag"},
   {icSigDeviceModelDescTag, "deviceModelDescTag"},
+  {icSigDevicePccTag, "devicePccTag"},
+  {icSigDeviceSpectralRangeTag, "deviceSpectralRangeTag"},
   {icSigMetaDataTag, "metaDataTag"},
   {icSigDToB0Tag, "DToB0Tag"},
   {icSigDToB1Tag, "DToB1Tag"},
@@ -266,6 +268,7 @@ struct {
   {icSigScreeningType, "screeningType"},
   {icSigSignatureType, "signatureType"},
   {icSigSpectralDataInfoType, "spectralDataInfoType"},
+  {icSigSpectralRangeType, "spectralRangeType"},
   {icSigSpectralViewingConditionsType, "spectralViewingConditionsType"},
   {icSigTextType, "textType"},
   {icSigTextDescriptionType, "textDescriptionType"},
@@ -423,6 +426,9 @@ CIccTag* CIccSpecTagFactory::CreateTag(icTagTypeSignature tagSig)
 
     case icSigSpectralDataInfoType:
       return new(std::nothrow) CIccTagSpectralDataInfo;
+
+    case icSigSpectralRangeType:
+      return new(std::nothrow) CIccTagSpectralRange;
 
     case icSigSpectralViewingConditionsType:
       return new(std::nothrow) CIccTagSpectralViewingConditions;

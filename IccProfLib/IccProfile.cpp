@@ -1640,7 +1640,18 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
       bValidSpace = false;
 
     if (!bValidSpace) {
-      if (!(m_Header.version>=icVersionNumberV5 && m_Header.deviceClass==icSigAbstractClass && Info.IsValidSpectralSpace(m_Header.colorSpace) && IsTagPresent(icSigDToB0Tag))) {
+      // A spectral colour space signature (Table 21) is permitted as the data
+      // colour space of a v5 profile.  The pre-amendment form was an abstract
+      // profile carrying a DToB0 tag.  The iccMAX extended device colour space
+      // amendment (7.2.8) additionally allows spectral device colour spaces for
+      // other classes, in which case the spectral range shall be defined by a
+      // deviceSpectralRangeTag ('dsrn') or by the header spectral/bi-spectral
+      // range fields (7.2.22/7.2.23); a spectral space with neither is rejected.
+      bool bV5Spectral = (m_Header.version>=icVersionNumberV5 && Info.IsValidSpectralSpace(m_Header.colorSpace));
+      bool bAbstractSpectral = bV5Spectral && m_Header.deviceClass==icSigAbstractClass && IsTagPresent(icSigDToB0Tag);
+      bool bDeviceSpectral = bV5Spectral && (IsTagPresent(icSigDeviceSpectralRangeTag) ||
+                                             m_Header.spectralRange.steps);
+      if (!(bAbstractSpectral || bDeviceSpectral)) {
         sReport += icMsgValidateCriticalError;
         // For an iccMAX-only space on a v2/v4 profile report the raw value
         // rather than the friendly descriptor: GetColorSpaceSigName() renders
@@ -2677,6 +2688,27 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       return false;
     else return true;
   }
+
+  case icSigDeviceSpectralRangeTag:
+    {
+      // Extended device colour space amendment (9.2.x): the deviceSpectralRangeTag
+      // carries a spectralRangeType and is only defined for iccMAX (v5) profiles.
+      if (m_Header.version >= icVersionNumberV5 && typeSig==icSigSpectralRangeType)
+        return true;
+      else
+        return false;
+    }
+
+  case icSigDevicePccTag:
+    {
+      // Extended device colour space amendment (9.2.x+1): the devicePccTag carries
+      // a tagStructType of profileConnectionConditionsStructure ('pcc ').
+      if (m_Header.version >= icVersionNumberV5 &&
+          typeSig==icSigTagStructType && structSig==icSigProfileConnectionConditionsStruct)
+        return true;
+      else
+        return false;
+    }
 
   //The Private Tag case
   default:

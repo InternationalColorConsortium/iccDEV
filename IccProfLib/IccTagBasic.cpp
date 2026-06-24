@@ -11823,10 +11823,239 @@ icValidateStatus CIccTagSpectralDataInfo::Validate(std::string sigPath, std::str
 
 /**
  ****************************************************************************
- * Name: CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions
- * 
+ * Name: CIccTagSpectralRange::CIccTagSpectralRange
+ *
  * Purpose: Constructor
- * 
+ *
+ *****************************************************************************
+ */
+CIccTagSpectralRange::CIccTagSpectralRange()
+{
+  m_nReserved = 0;
+  memset(&m_spectralRange, 0, sizeof(m_spectralRange));
+  memset(&m_biSpectralRange, 0, sizeof(m_biSpectralRange));
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccTagSpectralRange::CIccTagSpectralRange
+ *
+ * Purpose: Copy Constructor
+ *
+ * Args:
+ *  ITSR = The CIccTagSpectralRange object to be copied
+ *****************************************************************************
+ */
+CIccTagSpectralRange::CIccTagSpectralRange(const CIccTagSpectralRange &ITSR)
+{
+  m_nReserved = ITSR.m_nReserved;
+  m_spectralRange = ITSR.m_spectralRange;
+  m_biSpectralRange = ITSR.m_biSpectralRange;
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccTagSpectralRange::operator=
+ *
+ * Purpose: Copy Operator
+ *
+ * Args:
+ *  SpectralRangeTag = The CIccTagSpectralRange object to be copied
+ *****************************************************************************
+ */
+CIccTagSpectralRange &CIccTagSpectralRange::operator=(const CIccTagSpectralRange &SpectralRangeTag)
+{
+  if (&SpectralRangeTag == this)
+    return *this;
+
+  m_nReserved = SpectralRangeTag.m_nReserved;
+  m_spectralRange = SpectralRangeTag.m_spectralRange;
+  m_biSpectralRange = SpectralRangeTag.m_biSpectralRange;
+
+  return *this;
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccTagSpectralRange::~CIccTagSpectralRange
+ *
+ * Purpose: Destructor
+ *
+ *****************************************************************************
+ */
+CIccTagSpectralRange::~CIccTagSpectralRange()
+{
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccTagSpectralRange::Read
+ *
+ * Purpose: Read in the tag contents into a data block
+ *
+ * Args:
+ *  size - # of bytes in tag,
+ *  pIO - IO object to read tag from
+ *
+ * Return:
+ *  true = successful, false = failure
+ *****************************************************************************
+ */
+bool CIccTagSpectralRange::Read(icUInt32Number size, CIccIO *pIO)
+{
+  icTagTypeSignature sig;
+
+  // spectralRangeType is a fixed 20-byte structure (Table W): type signature,
+  // 4 reserved bytes, then two icSpectralRange (6 bytes each).
+  if (sizeof(icTagTypeSignature) + sizeof(icUInt32Number) + 6*sizeof(icUInt16Number) > size)
+    return false;
+
+  if (!pIO) {
+    m_nReserved = 0;
+    memset(&m_spectralRange, 0, sizeof(m_spectralRange));
+    memset(&m_biSpectralRange, 0, sizeof(m_biSpectralRange));
+    return false;
+  }
+
+  if (!pIO->Read32(&sig))
+    return false;
+
+  if (!pIO->Read32(&m_nReserved))
+    return false;
+
+  if (!pIO->Read16(&m_spectralRange.start))
+    return false;
+
+  if (!pIO->Read16(&m_spectralRange.end))
+    return false;
+
+  if (!pIO->Read16(&m_spectralRange.steps))
+    return false;
+
+  if (!pIO->Read16(&m_biSpectralRange.start))
+    return false;
+
+  if (!pIO->Read16(&m_biSpectralRange.end))
+    return false;
+
+  if (!pIO->Read16(&m_biSpectralRange.steps))
+    return false;
+
+  return true;
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccTagSpectralRange::Write
+ *
+ * Purpose: Write the tag to a file
+ *
+ * Args:
+ *  pIO - The IO object to write tag to.
+ *
+ * Return:
+ *  true = succesful, false = failure
+ *****************************************************************************
+ */
+bool CIccTagSpectralRange::Write(CIccIO *pIO)
+{
+  icTagTypeSignature sig = GetType();
+
+  if (!pIO)
+    return false;
+
+  if (!pIO->Write32(&sig))
+    return false;
+
+  if (!pIO->Write32(&m_nReserved))
+    return false;
+
+  if (!pIO->Write16(&m_spectralRange.start))
+    return false;
+
+  if (!pIO->Write16(&m_spectralRange.end))
+    return false;
+
+  if (!pIO->Write16(&m_spectralRange.steps))
+    return false;
+
+  if (!pIO->Write16(&m_biSpectralRange.start))
+    return false;
+
+  if (!pIO->Write16(&m_biSpectralRange.end))
+    return false;
+
+  if (!pIO->Write16(&m_biSpectralRange.steps))
+    return false;
+
+  return true;
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccTagSpectralRange::Describe
+ *
+ * Purpose: Dump data associated with the tag to a string
+ *
+ * Args:
+ *  sDescription - string to concatenate tag dump to
+ *****************************************************************************
+ */
+void CIccTagSpectralRange::Describe(std::string &sDescription, int /* nVerboseness */)
+{
+  const size_t bufSize = 256;
+  icChar buf[bufSize];
+
+  snprintf(buf, bufSize, "SpectralRange: start %fnm end %fnm with %d steps\n", icF16toF(m_spectralRange.start), icF16toF(m_spectralRange.end), m_spectralRange.steps);
+  sDescription += buf;
+  if (m_biSpectralRange.steps) {
+    snprintf(buf, bufSize, "BiSpectralRange: start %fnm end %fnm with %d steps\n", icF16toF(m_biSpectralRange.start), icF16toF(m_biSpectralRange.end), m_biSpectralRange.steps);
+    sDescription += buf;
+  }
+}
+
+
+/**
+******************************************************************************
+* Name: CIccTagSpectralRange::Validate
+*
+* Purpose: Check tag data validity.
+*
+* Args:
+*  sig = signature of tag being validated,
+*  sReport = String to add report information to
+*
+* Return:
+*  icValidateStatusOK if valid, or other error status.
+******************************************************************************
+*/
+icValidateStatus CIccTagSpectralRange::Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile/*=NULL*/) const
+{
+  icValidateStatus rv = CIccTag::Validate(sigPath, sReport, pProfile);
+
+  CIccInfo Info;
+  std::string sSigPathName = Info.GetSigPathName(sigPath);
+
+  rv = icMaxStatus(rv, Info.CheckData(sReport, m_spectralRange, "Spectral Range"));
+  if (m_biSpectralRange.steps)
+    rv = icMaxStatus(rv, Info.CheckData(sReport, m_biSpectralRange, "Bispectral Range"));
+
+  return rv;
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions
+ *
+ * Purpose: Constructor
+ *
  *****************************************************************************
  */
 CIccTagSpectralViewingConditions::CIccTagSpectralViewingConditions()

@@ -405,7 +405,9 @@ typedef enum {
 #endif
     icSigDeviceMfgDescTag                  = 0x646D6E64,  /* 'dmnd' */
     icSigDeviceModelDescTag                = 0x646D6464,  /* 'dmdd' */
+    icSigDevicePccTag                      = 0x64706363,  /* 'dpcc' iccMAX extended device colour space amendment */
     icSigDeviceSettingsTag                 = 0x64657673,  /* 'devs' Removed in V4 */
+    icSigDeviceSpectralRangeTag            = 0x6473726E,  /* 'dsrn' iccMAX extended device colour space amendment */
     icSigDToB0Tag                          = 0x44324230,  /* 'D2B0' */
     icSigDToB1Tag                          = 0x44324231,  /* 'D2B1' */
     icSigDToB2Tag                          = 0x44324232,  /* 'D2B2' */
@@ -563,6 +565,7 @@ typedef enum {
     icSigSegmentedCurveType             = 0x63757266,  /* 'curf' */
     icSigSignatureType                  = 0x73696720,  /* 'sig ' */
     icSigSparseMatrixArrayType          = 0x736D6174,  /* 'smat' */
+    icSigSpectralRangeType              = 0x73726E67,  /* 'srng' iccMAX extended device colour space amendment */
     icSigSpectralViewingConditionsType  = 0x7376636e,  /* 'svcn' */
     icSigSpectralDataInfoType           = 0x7364696e,  /* 'sdin' */
     icSigTagArrayType                   = 0x74617279,  /* 'tary' */
@@ -605,6 +608,7 @@ typedef enum {
     icSigColorEncodingParamsSruct       = 0x63657074,  /* 'cept' */
     icSigMeasurementInfoStruct          = 0x6d656173,  /* 'meas' */
     icSigNamedColorStruct               = 0x6e6d636c,  /* 'nmcl' */
+    icSigProfileConnectionConditionsStruct = 0x70636320,  /* 'pcc ' iccMAX extended device colour space amendment */
     icSigProfileInfoStruct              = 0x70696e66,  /* 'pinf' */
     icSigTintZeroStruct                 = 0x746e7430,  /* 'tnt0' */
     icSigUndefinedStruct                = 0x00000000,
@@ -852,6 +856,26 @@ typedef enum {
   icSigTnt0UnknownMbr           = 0x3f3f3f3f,  /* '????' */
   icMaxTnt0Mbr                  = 0xFFFFFFFF,
 } icTintZeroMemberSignature;
+
+
+/**
+* ProfileConnectionConditionsStructure (icSigProfileConnectionConditionsStruct)
+* Member Tag signatures (iccMAX extended device colour space amendment, 12.2.y).
+* The members parallel the profile-level PCC tags they logically replace when the
+* containing structure (a devicePccTag) is used for PCS/PCC processing.
+*/
+typedef enum {
+  icSigPccPcsIlluminantXYZMbr        = 0x6958595a,  /* 'iXYZ' PCS illuminant XYZ */
+  icSigPccMediaWhitePointMbr         = 0x6d777074,  /* 'mwpt' Media white point */
+  icSigPccSpectralWhitePointMbr      = 0x73777074,  /* 'swpt' Spectral white point */
+  icSigPccSpectralViewingConditionsMbr = 0x7376636e, /* 'svcn' Spectral viewing conditions */
+  icSigPccCustomToStandardPccMbr     = 0x63327370,  /* 'c2sp' Custom to standard PCC transform */
+  icSigPccStandardToCustomPccMbr     = 0x73326370,  /* 's2cp' Standard to custom PCC transform */
+
+/* Convenience Enum Definitions - Not defined in proposal*/
+  icSigPccUnknownMbr            = 0x3f3f3f3f,  /* '????' */
+  icMaxPccMbr                   = 0xFFFFFFFF,
+} icProfileConnectionConditionsMemberSignature;
 
 
 /** 

@@ -625,6 +625,41 @@ function(iccdev_add_getvalues_nstart_test)
   endif()
 endfunction()
 
+function(iccdev_add_extended_device_colorspace_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccExtendedDeviceColorSpaceTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/extended-device-colorspace.cpp"
+  )
+  target_link_libraries(iccExtendedDeviceColorSpaceTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccExtendedDeviceColorSpaceTest)
+
+  add_test(
+    NAME iccdev.extended-device-colorspace
+    COMMAND "$<TARGET_FILE:iccExtendedDeviceColorSpaceTest>"
+  )
+  set_tests_properties(iccdev.extended-device-colorspace PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;spec;tag;issue-626;regression"
+  )
+  if(WIN32)
+    set(_extdevcs_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccExtendedDeviceColorSpaceTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _extdevcs_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.extended-device-colorspace PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_extdevcs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1037,6 +1072,7 @@ if(WIN32)
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
+  iccdev_add_extended_device_colorspace_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -1104,6 +1140,7 @@ iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
+iccdev_add_extended_device_colorspace_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

@@ -441,6 +441,19 @@ public:
   virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
 };
 
+class ICCPROFLIB_API CIccTagXmlSpectralRange : public CIccTagSpectralRange, public CIccTagXml
+{
+public:
+  virtual ~CIccTagXmlSpectralRange() {}
+
+  virtual const char *GetClassName() const {return "CIccTagXmlSpectralRange"; }
+
+  virtual IIccExtensionTag *GetExtension() {return this; }
+
+  virtual bool ToXml(std::string &xml, std::string blanks="");
+  virtual bool ParseXml(xmlNode *pNode, std::string &parseStr);
+};
+
 class ICCPROFLIB_API CIccTagXmlSpectralViewingConditions : public CIccTagSpectralViewingConditions, public CIccTagXml
 {
 public:

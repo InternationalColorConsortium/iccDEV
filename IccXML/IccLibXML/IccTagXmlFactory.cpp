@@ -179,6 +179,9 @@ CIccTag* CIccTagXmlFactory::CreateTag(icTagTypeSignature tagSig)
   case icSigSpectralDataInfoType:
     return new(std::nothrow) CIccTagXmlSpectralDataInfo;
 
+  case icSigSpectralRangeType:
+    return new(std::nothrow) CIccTagXmlSpectralRange;
+
   case icSigProfileSequenceDescType:
     return new(std::nothrow) CIccTagXmlProfileSeqDesc;
 
