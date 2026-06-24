@@ -5607,7 +5607,9 @@ bool CIccTagSparseMatrixArray::GetValues(icFloatNumber *DstVector, icUInt32Numbe
   if (nStart % nBytesPerMatrix != 0)
     return false;
 
-  if (nStart / nBytesPerMatrix > m_nSize)
+  // CWE-125: ">" let the matrix index equal m_nSize -- one past the last valid index
+  // (0..m_nSize-1) -- so the memcpy below read a whole matrix beyond m_RawData. ">=".
+  if (nStart / nBytesPerMatrix >= m_nSize)
     return false;
 
   memcpy(DstVector, m_RawData+nStart, nVectorSize);
@@ -5984,7 +5986,9 @@ bool CIccTagFixedNum<T, Tsig>::SetSize(icUInt32Number nSize, bool bZeroNew/*=tru
 template <class T, icTagTypeSignature Tsig>
 bool CIccTagFixedNum<T, Tsig>::GetValues(icFloatNumber *DstVector, icUInt32Number nStart, icUInt32Number nVectorSize) const
 {
-  if (nVectorSize+nStart >m_nSize)
+  // CWE-125: overflow-safe form of "nVectorSize+nStart > m_nSize" -- that sum of two
+  // icUInt32Number can wrap for a huge nStart and slip past the guard; this cannot.
+  if (nVectorSize > m_nSize || nStart > m_nSize - nVectorSize)
     return false;
 
   icUInt32Number i;
@@ -6574,10 +6578,10 @@ bool CIccTagNum<T, Tsig>::SetSize(icUInt32Number nSize, bool bZeroNew/*=true*/)
 template <class T, icTagTypeSignature Tsig>
 bool CIccTagNum<T, Tsig>::GetValues(icFloatNumber *DstVector, icUInt32Number nStart, icUInt32Number nVectorSize) const
 {
-  if (nVectorSize+nStart >m_nSize)
-    return false;
-    
-  if (nVectorSize > m_nSize)
+  // CWE-125: overflow-safe bound on both the start offset and the length. The original
+  // "nVectorSize+nStart > m_nSize" can wrap for a huge nStart; this form cannot, and it
+  // subsumes the separate nVectorSize > m_nSize check that followed.
+  if (nVectorSize > m_nSize || nStart > m_nSize - nVectorSize)
     return false;
 
   icUInt32Number i;
@@ -7171,7 +7175,15 @@ bool  CIccTagFloatNum<T, Tsig>::SetSize(icUInt32Number nSize, bool bZeroNew/*=tr
 template <class T, icTagTypeSignature Tsig>
 bool CIccTagFloatNum<T, Tsig>::GetValues(icFloatNumber *DstVector, icUInt32Number nStart, icUInt32Number nVectorSize) const
 {
-  if (nVectorSize > m_nSize)
+  // CWE-125: bound the SOURCE read as well as the destination length. The original
+  // check guarded only nVectorSize (the output write below), so a non-zero nStart let
+  // m_Num[i+nStart] read past the end of the array when nStart+nVectorSize > m_nSize
+  // (e.g. CIccArrayNamedColor::FindPcsColor passes a fixed nVectorSize=3 while nStart
+  // steps by the device-sample count, over-reading on <3-channel device data).
+  // Written nStart > m_nSize - nVectorSize rather than nStart+nVectorSize > m_nSize so
+  // the sum cannot wrap (both operands are icUInt32Number); nVectorSize > m_nSize is
+  // tested first so the subtraction never underflows.
+  if (nVectorSize > m_nSize || nStart > m_nSize - nVectorSize)
     return false;
 
   icUInt32Number i;

@@ -586,6 +586,45 @@ function(iccdev_add_colorimetry_methods_test)
   endif()
 endfunction()
 
+# #1553: CIccTag*NumArray::GetValues must bound the source start offset (nStart), not
+# only the destination length, or m_Num[i+nStart] over-reads (CWE-125). Pins the
+# corrected bound on the FloatNum (the repro'd defect), FixedNum and Num variants; each
+# assertion is red-green against the matching guard. Header + IccProfLib only.
+function(iccdev_add_getvalues_nstart_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccGetValuesNStartTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/getvalues-nstart-bound.cpp"
+  )
+  target_link_libraries(iccGetValuesNStartTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccGetValuesNStartTest)
+
+  add_test(
+    NAME iccdev.getvalues-nstart-bound
+    COMMAND "$<TARGET_FILE:iccGetValuesNStartTest>"
+  )
+  set_tests_properties(iccdev.getvalues-nstart-bound PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;tag;issue-1553;regression"
+  )
+  if(WIN32)
+    set(_getvalues_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccGetValuesNStartTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _getvalues_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.getvalues-nstart-bound PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_getvalues_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -997,6 +1036,7 @@ if(WIN32)
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_colorimetry_methods_test()
+  iccdev_add_getvalues_nstart_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -1063,6 +1103,7 @@ iccdev_add_mpecalc_matrix_overflow_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_colorimetry_methods_test()
+iccdev_add_getvalues_nstart_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
