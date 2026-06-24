@@ -71,6 +71,7 @@ jobs:
       packages: write  # Required to publish GHCR images.
       id-token: write  # Required for artifact attestation identity.
       attestations: write  # Required to publish build provenance.
+      artifact-metadata: write  # Required for artifact metadata storage records.
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -191,12 +192,54 @@ jobs:
             org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Generate SBOM
-        if: github.ref == 'refs/heads/master'
+        if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
         uses: anchore/sbom-action@52585ffac92ba32c717677c870223d2aba163db6  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           format: spdx-json
           output-file: sbom.spdx.json
+
+      - name: Measure SBOM attestation size
+        if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
+        id: sbom-size
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_VARIANT: ${{ matrix.variant }}
+          MAX_ATTEST_BYTES: "16777216"
+          SBOM_PATH: sbom.spdx.json
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [ ! -f "$SBOM_PATH" ]; then
+            echo "::error::SBOM file missing: $SBOM_PATH"
+            exit 1
+          fi
+
+          sbom_bytes="$(wc -c < "$SBOM_PATH" | tr -d ' ')"
+          case "$sbom_bytes" in
+            ''|*[!0-9]*)
+              echo "::error::Invalid SBOM byte count: $sbom_bytes"
+              exit 1
+              ;;
+          esac
+
+          echo "bytes=$sbom_bytes" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          if [ "$sbom_bytes" -le "$MAX_ATTEST_BYTES" ]; then
+            echo "attestable=true" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          else
+            echo "attestable=false" >> "$GITHUB_OUTPUT"  # elements-sanitized
+            echo "::notice title=SBOM Attestation Skipped::SBOM is ${sbom_bytes} bytes, above ${MAX_ATTEST_BYTES}"
+          fi
+
+          {
+            echo "### SBOM Attestation Size"
+            echo "- Variant: $(sanitize_line "$MATRIX_VARIANT")"
+            echo "- Bytes: $(sanitize_line "$sbom_bytes")"
+            echo "- Limit: $(sanitize_line "$MAX_ATTEST_BYTES")"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Attest build provenance
         if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
@@ -207,8 +250,8 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
-        if: github.ref == 'refs/heads/master'
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v3.0.0
+        if: ${{ (github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression')) && steps.sbom-size.outputs.attestable == 'true' }}
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v3.0.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
@@ -216,7 +259,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload SBOM
-        if: github.ref == 'refs/heads/master'
+        if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
