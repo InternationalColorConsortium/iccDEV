@@ -716,7 +716,7 @@ int main(int argc, icChar* argv[])
 
   int nLutSize = atoi(argv[3]);
   if (nLutSize < 2 || nLutSize > 255) {
-    printf("Invalid LUT size, needs to be between 2 and 255\n");
+    printf("Invalid LUT size (%d), needs to be between 2 and 255\n", nLutSize );
     return -1;
   }
   
@@ -909,6 +909,7 @@ int main(int argc, icChar* argv[])
   icFloatNumber* srcPixel = new icFloatNumber[nSrcSamples];
   icFloatNumber* dstPixel = new icFloatNumber[nDestSamples];
 
+  // 2 <= nLutSize <= 255, so maxLUT cannot be zero
   icUInt32Number maxLut = nLutSize - 1;
 
   int curPer, lastPer = -1;
