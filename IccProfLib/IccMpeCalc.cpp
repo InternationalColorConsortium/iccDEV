@@ -217,50 +217,61 @@ void IIccCalcDebugger::SetDebugger(IIccCalcDebugger *pDebugger)
     g_pDebugger = pDebugger;
 }
 
-// TODO - get rid of these macros and inline the code to reduce errors
-// shadowed variable names are way too risky
-// templates may be an option
-#define OsPopArg(X) { \
-  if (!os.pStack->size()) \
-    return false; \
-  X = *(os.pStack->rbegin()); \
-  os.pStack->pop_back(); \
+inline bool
+OsPopArg( SIccOpState &os, icFloatNumber &X )
+{
+  if (!os.pStack->size())
+    return false;
+  X = *(os.pStack->rbegin());
+  os.pStack->pop_back();
+  return true;
 }
 
-#define OsPopArgs(X, N) { \
-  icUInt32Number _nv=(N); \
-  size_t _ss = os.pStack->size(); \
-  if (_nv>_ss) \
-    return false; \
-  icFloatNumber *_sv = &(*os.pStack)[_ss-_nv]; \
-  memcpy((X), _sv, _nv*sizeof(icFloatNumber)); \
-  os.pStack->resize(_ss-_nv); \
+inline bool
+OsPopArgs( SIccOpState &os, icFloatNumber *X, const icUInt32Number N )
+{
+  size_t ss = os.pStack->size();
+  if (N > ss)
+    return false;
+  icFloatNumber *sv = &(*os.pStack)[ss-N];
+  memcpy( X, sv, N*sizeof(icFloatNumber));
+  os.pStack->resize(ss-N);
+  return true;
 }
 
-#define OsPushArg(X) { \
-  icFloatNumber _V = (X); \
-  os.pStack->push_back(_V); \
+inline void
+OsPushArg( SIccOpState &os, const icFloatNumber &X )
+{
+  os.pStack->push_back(X);
 }
 
-#define OsPushArgs(X, N) { \
-  size_t _ss = os.pStack->size(); \
-  icUInt32Number _nv=(N); \
-  os.pStack->resize(_ss+_nv); \
-  icFloatNumber *_sv = &(*os.pStack)[_ss]; \
-  memcpy(_sv, (X), _nv*sizeof(icFloatNumber)); \
+inline void
+OsPushArgs( SIccOpState &os, const icFloatNumber *X, const icUInt32Number N )
+{
+  size_t ss = os.pStack->size();
+  os.pStack->resize( ss + N );
+  icFloatNumber *sv = &(*os.pStack)[ss];
+  memcpy(sv, X, N*sizeof(icFloatNumber));
 }
 
-#define OsShrinkArgs(N) { \
-  icUInt32Number nv = (N); \
-  size_t _ss = os.pStack->size(); \
-  if (nv>_ss) \
-    return false; \
-  os.pStack->resize(_ss-nv); \
+inline bool
+OsShrinkArgs( SIccOpState &os, const int N )
+{
+  if (N < 0)
+    return false;
+  icUInt32Number nv = N;
+  size_t ss = os.pStack->size();
+  if (nv > ss)
+    return false;
+  os.pStack->resize(ss-nv);
+  return true;
 }
 
-#define OsExtendArgs(N) { \
-  size_t _ss = os.pStack->size(); \
-  os.pStack->resize(_ss+(N)); \
+inline void
+OsExtendArgs( SIccOpState &os, const size_t N )
+{
+  size_t ss = os.pStack->size();
+  os.pStack->resize(ss + N);
 }
 
 
@@ -326,8 +337,7 @@ class CIccOpDefOutputChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPopArgs(&os.output[op->data.select.v1], op->data.select.v2+1);
-    return true;
+    return OsPopArgs(os, &os.output[op->data.select.v1], op->data.select.v2+1);
   }
 };
 
@@ -336,7 +346,7 @@ class CIccOpDefInputChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPushArgs(&os.pixel[op->data.select.v1], op->data.select.v2+1);
+    OsPushArgs(os, &os.pixel[op->data.select.v1], op->data.select.v2+1);
     return true;
   }
 };
@@ -346,7 +356,7 @@ class CIccOpDefTempGetChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPushArgs(&os.temp[op->data.select.v1], op->data.select.v2+1);
+    OsPushArgs(os, &os.temp[op->data.select.v1], op->data.select.v2+1);
     return true;
   }
 };
@@ -356,8 +366,7 @@ class CIccOpDefTempPutChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPopArgs(&os.temp[op->data.select.v1], op->data.select.v2+1)
-    return true;
+    return OsPopArgs(os, &os.temp[op->data.select.v1], op->data.select.v2+1);
   }
 };
 
@@ -387,20 +396,20 @@ public:
     icFloatNumber val=0.0;
 
     if (sig==icSigTrueVar) {
-      OsPushArg((icFloatNumber)1.0);
-      OsPushArg((icFloatNumber)1.0);
+      OsPushArg(os,(icFloatNumber)1.0);
+      OsPushArg(os,(icFloatNumber)1.0);
     }
     else if (sig==icSigNotDefVar) {
-      OsPushArg((icFloatNumber)0.0);
-      OsPushArg((icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
     }
     else if (os.pApply->GetEnvVar(sig, val)) {
-      OsPushArg((icFloatNumber)val);
-      OsPushArg((icFloatNumber)1.0);
+      OsPushArg(os,(icFloatNumber)val);
+      OsPushArg(os,(icFloatNumber)1.0);
     }
     else {
-      OsPushArg((icFloatNumber)0.0);
-      OsPushArg((icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
     }
     return true;
   }
@@ -461,7 +470,7 @@ public:
       size_t ntSize = (size_t)n * (size_t)t;
       if (ntSize > size_t(icMaxDataStackSize))
         return false;
-      OsExtendArgs(ntSize);
+      OsExtendArgs(os,ntSize);
 
       icFloatNumber *to = &(*os.pStack)[stackSize];
       icFloatNumber *from = to-n;
@@ -487,7 +496,9 @@ public:
       return false;
 
     if (n && t) {
-      OsExtendArgs(t);
+      if (t < 0)
+        return false;
+      OsExtendArgs(os,(size_t)t);
 
       icFloatNumber *to = &(*os.pStack)[stackSize];
       icFloatNumber *from = to-n;
@@ -536,11 +547,12 @@ public:
 
       icFloatNumber *copyList = &(*os.pScratch)[0];
 
-      OsPopArgs(copyList, nCopy);
+      if (!OsPopArgs(os, copyList, nCopy))
+        return false;
 
       int j;
       for (j=0; j<nCopy; j++) {
-        OsPushArg(copyList[(j+next)%nCopy]);
+        OsPushArg(os,copyList[(j+next)%nCopy]);
       }
     }
     return true;
@@ -562,11 +574,12 @@ public:
 
       icFloatNumber *copyList = &(*os.pScratch)[0];
 
-      OsPopArgs(copyList, nCopy);
+      if (!OsPopArgs(os, copyList, nCopy))
+        return false;
 
       int j;
       for (j=0; j<nCopy; j++) {
-        OsPushArg(copyList[(j+next)%nCopy]);
+        OsPushArg(os,copyList[(j+next)%nCopy]);
       }
     }
     return true;
@@ -671,7 +684,7 @@ class CIccOpDefPi : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icPiNum);
+    OsPushArg(os,(icFloatNumber)icPiNum);
     return true;
   }
 };
@@ -681,7 +694,7 @@ class CIccOpDefPosInfinity : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icPosInfinity);
+    OsPushArg(os,(icFloatNumber)icPosInfinity);
     return true;
   }
 };
@@ -691,7 +704,7 @@ class CIccOpDefNegInfinity : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icNegInfinity);
+    OsPushArg(os,(icFloatNumber)icNegInfinity);
     return true;
   }
 };
@@ -701,7 +714,7 @@ class CIccOpDefNotANumber : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icNotANumber);
+    OsPushArg(os,(icFloatNumber)icNotANumber);
     return true;
   }
 };
@@ -718,13 +731,15 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] += s[1];
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       for (j=1; j<n; j++) {
         s[0] += s[j];
       }
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -742,13 +757,15 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] *= s[1];
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       for (j=1; j<n; j++) {
         s[0] *= s[j];
       }
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -766,7 +783,8 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] = icMin(s[0], s[1]);
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       icFloatNumber mv = s[0];
@@ -775,7 +793,8 @@ public:
           mv = s[j];
       }
       s[0] = mv;
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -793,7 +812,8 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] = icMax(s[0], s[1]);
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       icFloatNumber mv = s[0];
@@ -802,7 +822,8 @@ public:
           mv = s[j];
       }
       s[0] = mv;
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -825,8 +846,7 @@ public:
     }
     s[0] = j<n ? 0.0f : 1.0f;
 
-    OsShrinkArgs(n-1);
-    return true;
+    return OsShrinkArgs(os,n-1);
   }
 };
 
@@ -847,8 +867,7 @@ public:
     }
     s[0] = j<n ? 1.0f : 0.0f;
 
-    OsShrinkArgs(n-1);
-    return true;
+    return OsShrinkArgs(os,n-1);
   }
 };
 
@@ -866,8 +885,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = icMin(s[j], s[j+n]);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -885,8 +903,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = icMax(s[j], s[j+n]);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -904,8 +921,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (s[j]>=0.5f && s[j+n]>=0.5) ? 1.0f : 0.0f;
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -923,8 +939,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (s[j]>=0.5f || s[j+n]>=0.5) ? 1.0f : 0.0f;
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -942,8 +957,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] += s[j+n];
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -961,8 +975,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] -= s[j+n];
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -980,8 +993,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] *= s[j+n];
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1002,8 +1014,7 @@ public:
       else
         s[j] = 0.0f;
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1028,8 +1039,7 @@ public:
       else
         s[j] = (icFloatNumber)fmod(temp, tempN);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1048,8 +1058,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (icFloatNumber)pow(s[j], p);
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1068,8 +1077,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = s[j] + p;
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1088,8 +1096,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = s[j] - p;
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1108,8 +1115,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = s[j] * p;
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1135,8 +1141,7 @@ public:
         s[j] = 0.0f;
       }
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1154,8 +1159,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (icFloatNumber)pow(s[j], s[j+n]);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1545,8 +1549,7 @@ public:
       a2 = s[j+n];
       s[j] = (icFloatNumber)atan2(a2, a1);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1615,8 +1618,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 < a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1660,8 +1662,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 <= a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1687,8 +1688,7 @@ public:
                  (icFloatNumber)1.0 : 
                  (icFloatNumber)0.0));
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1714,8 +1714,7 @@ public:
         (icFloatNumber)0.0 :
           (icFloatNumber)1.0));
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1736,8 +1735,7 @@ public:
       a2 = s[j+n];
       s[j] = (fabs(a1-a2)<1.0e-5 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1758,8 +1756,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 >= a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1780,8 +1777,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 > a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -3840,7 +3836,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
 
     if (op->sig==icSigIfOp) {
       icFloatNumber a1;
-      OsPopArg(a1);
+      OsPopArg(os,a1);
 
       if (os.idx+1<nOps && ops[os.idx+1].sig==icSigElseOp) {
         os.idx++;
@@ -3889,7 +3885,7 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
     }
     else if (op->sig==icSigSelectOp) {
       icFloatNumber a1;
-      OsPopArg(a1);
+      OsPopArg(os,a1);
       icInt32Number nSel = icCalcSaturatingRound(a1);
 
       if (!op->extra) {
