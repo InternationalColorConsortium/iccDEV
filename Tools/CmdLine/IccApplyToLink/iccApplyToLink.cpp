@@ -715,8 +715,8 @@ int main(int argc, icChar* argv[])
   pWriter->setFile(argv[1]);
 
   int nLutSize = atoi(argv[3]);
-  if (nLutSize <= 0 || nLutSize > 255) {
-    printf("Invalid LUT sizes\n");
+  if (nLutSize < 2 || nLutSize > 255) {
+    printf("Invalid LUT size, needs to be between 2 and 255\n");
     return -1;
   }
   
@@ -892,19 +892,26 @@ int main(int argc, icChar* argv[])
   int nDestSamples = icGetSpaceSamples(DestspaceSig);
 
   int* idx = new int[nSrcSamples];
+  
+  //init idx;
+  size_t lutCount = 1;
+  size_t lutLimit = (((1ULL<<32)-1) / nLutSize);     // limit to 4 Gig(32 bits) instead of size_t(64 bits)
+  for (auto si = 0; si < nSrcSamples; si++) {
+    idx[si] = 0;
+    if (lutCount > lutLimit ) {    // avoid overflow
+      printf("LUT size too large\n");
+      delete[] idx;
+      return -1;
+    }
+    lutCount *= nLutSize;
+  }
+
   icFloatNumber* srcPixel = new icFloatNumber[nSrcSamples];
   icFloatNumber* dstPixel = new icFloatNumber[nDestSamples];
 
   icUInt32Number maxLut = nLutSize - 1;
 
   int curPer, lastPer = -1;
-
-  //init idx;
-  int lutCount = 1;
-  for (auto si = 0; si < nSrcSamples; si++) {
-    idx[si] = 0;
-    lutCount *= nLutSize;
-  }
 
   int j = 0;
   for (int c = 0; j >= 0; c++) {
