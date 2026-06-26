@@ -6171,7 +6171,20 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
     !pIO->Read16(&m_nDeviceChannels))
     return false;
 
-  if (m_nPCSChannels > 3)
+  // m_nPCSChannels is the per-vertex PCS coordinate count and is mandatory: a
+  // gamut boundary is a solid in PCS space, so every vertex must carry at least
+  // one PCS coordinate (in practice the PCS dimensionality, 1..3). Beyond being
+  // geometrically required, a zero value is a security hole: the maximum-count
+  // check below bounds m_NumberOfVertices via nVertices*nPCSChannels (and
+  // *nDeviceChannels). If m_nPCSChannels is 0 (and m_nDeviceChannels is 0, which
+  // is legitimately allowed because device coords are optional) that product
+  // collapses to 0, so the tag-size bound no longer constrains m_NumberOfVertices
+  // at all. A crafted tag can then declare ~2^31 vertices in a tiny tag, pass
+  // Read(), and make Describe()/Validate() spin for billions of iterations
+  // (CWE-400 uncontrolled resource consumption, issue #1581). Rejecting a zero
+  // PCS-channel count here restores the size bound and parses the malformed tag
+  // as unreadable, which is the correct outcome for non-conformant data.
+  if (m_nPCSChannels < 1 || m_nPCSChannels > 3)
     return false;
 
   if (m_nDeviceChannels > 15)
