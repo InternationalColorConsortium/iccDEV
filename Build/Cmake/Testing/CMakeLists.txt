@@ -625,6 +625,45 @@ function(iccdev_add_getvalues_nstart_test)
   endif()
 endfunction()
 
+# #1581: CIccTagGamutBoundaryDesc::Read must reject a gbd tag with 0 PCS channels,
+# which otherwise collapses the vertex-count size bound and lets a tiny tag declare a
+# near-2^31 vertex count (CWE-400 hang in Describe()). The test exercises Read() over a
+# crafted CIccMemIO payload and never calls Describe(), so it is fast either way.
+function(iccdev_add_gbd_zero_pcs_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccGbdZeroPcsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/gbd-zero-pcs-channels.cpp"
+  )
+  target_link_libraries(iccGbdZeroPcsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccGbdZeroPcsTest)
+
+  add_test(
+    NAME iccdev.gbd-zero-pcs-channels
+    COMMAND "$<TARGET_FILE:iccGbdZeroPcsTest>"
+  )
+  set_tests_properties(iccdev.gbd-zero-pcs-channels PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;tag;issue-1581;regression"
+  )
+  if(WIN32)
+    set(_gbd_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccGbdZeroPcsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _gbd_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.gbd-zero-pcs-channels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_gbd_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_extended_device_colorspace_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1107,6 +1146,7 @@ if(WIN32)
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
+  iccdev_add_gbd_zero_pcs_test()
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
@@ -1196,6 +1236,7 @@ iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
+iccdev_add_gbd_zero_pcs_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_dpcc_pcc_replacement_test()
 
