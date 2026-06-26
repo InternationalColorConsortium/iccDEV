@@ -1353,8 +1353,10 @@ elseif(WIN32)
 
     # ASLR + DEP + CET shadow stacks
     add_link_options(/DYNAMICBASE /NXCOMPAT)
-    # CET (Control-flow Enforcement Technology) requires VS 2019 16.7+
-    if(MSVC_VERSION GREATER_EQUAL 1927)
+    string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" _iccdev_msvc_platform)
+    # CET (Control-flow Enforcement Technology) requires VS 2019 16.7+ and is
+    # not accepted by the MSVC ARM/ARM64 linker.
+    if(MSVC_VERSION GREATER_EQUAL 1927 AND NOT _iccdev_msvc_platform MATCHES "^arm")
       add_link_options(/CETCOMPAT)
     endif()
 

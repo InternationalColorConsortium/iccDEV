@@ -629,7 +629,7 @@ jobs:
       packages: write  # Required to delete old GHCR package versions.
     strategy:
       matrix:
-        package: [iccdev, iccdev-nixos]
+        package: [iccdev, iccdev-nixos, iccdev-ci-regression]
     steps:
       # preflight: allow-token-exposure reason=ghcr-package-prune
       - name: Delete old package versions
