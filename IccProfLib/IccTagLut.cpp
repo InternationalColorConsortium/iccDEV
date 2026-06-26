@@ -6171,18 +6171,26 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
     !pIO->Read16(&m_nDeviceChannels))
     return false;
 
-  if (m_nPCSChannels > 3)
+  // m_nPCSChannels can be greater than 3 according to spec
+  if (m_nPCSChannels < 3)
     return false;
 
+  // m_nDeviceChannels can be zero according to spec
   if (m_nDeviceChannels > 15)
     return false;
 
+  // NOTE: in the ICCMAX.2:2019 table a row was cut off (vertex count)
   if (!pIO->Read32(&m_NumberOfVertices) ||
     !pIO->Read32(&m_NumberOfTriangles))
     return false;
 
   // minimum number to make a solid shape
   if (m_NumberOfVertices < 4 || m_NumberOfTriangles < 4)
+    return false;
+
+  // At most, there can be 3 vertices per triangle (degenerate case, usually ~1.5 per tri).
+  // More than that is definitely a mistake.
+  if ( (icUInt64Number)m_NumberOfVertices > ((icUInt64Number)m_NumberOfTriangles * 3) )
     return false;
 
   // maximum count will be enforced by file size and tag size limitations
@@ -6207,19 +6215,15 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   m_PCSValues = new (std::nothrow) icFloatNumber[pcsSize];
-
   if (!m_PCSValues)
     return false;
 
-  if (m_nDeviceChannels > 0)
-  {
+  if (m_nDeviceChannels > 0) {
     m_DeviceValues = new (std::nothrow) icFloatNumber[deviceSize];
-
     if (!m_DeviceValues)
       return false;
   }
-  else
-  {
+  else {
     m_DeviceValues = NULL;
   }
 
@@ -6230,21 +6234,17 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
   if (!m_Triangles)
     return false;
 
-  icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
-
-  if (pIO->Read32(m_Triangles, nNum32)!=nNum32)
+  size_t nNum64 = (size_t)m_NumberOfTriangles * 3;
+  if (pIO->Read32(m_Triangles, nNum64)!=nNum64)
     return false;
 
-  nNum32 = (icUInt32Number) pcsSize;
-	
-  if (pIO->ReadFloat32Float(m_PCSValues, nNum32)!=nNum32)
+  nNum64 = pcsSize;
+  if (pIO->ReadFloat32Float(m_PCSValues, nNum64)!=nNum64)
     return false;
 
-  if (m_nDeviceChannels > 0)
-  {
-    nNum32 = (icUInt32Number) deviceSize;
-    
-    if (pIO->ReadFloat32Float(m_DeviceValues, nNum32)!=nNum32)
+  if (m_nDeviceChannels > 0)  {
+    nNum64 = deviceSize;
+    if (pIO->ReadFloat32Float(m_DeviceValues, nNum64)!=nNum64)
       return false;
   }
 
@@ -6266,48 +6266,39 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
  */	
 bool CIccTagGamutBoundaryDesc::Write(CIccIO *pIO)
 {
-	
-	icTagTypeSignature sig = GetType();
-	
-	if (!pIO) {
-		return false;
-	}
-	
-	//icUInt32Number startPos = pIO->GetLength();   // unused, and no side effets
-	
-	if (!pIO->Write32(&sig) ||
-		!pIO->Write32(&m_nReserved))
-		return false;
-	
-	if (!pIO->Write16(&m_nPCSChannels) ||
-		!pIO->Write16(&m_nDeviceChannels))
-		return false;
-	
-	if (!pIO->Write32(&m_NumberOfVertices) ||
-		!pIO->Write32(&m_NumberOfTriangles))
-		return false;	
-	
-	icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
-	
-	if (pIO->Write32(m_Triangles, nNum32)!=nNum32)
-		return false;	
-	
-	
-	nNum32 = m_nPCSChannels*m_NumberOfVertices;
-	
-	if (pIO->WriteFloat32Float(m_PCSValues, nNum32)!=nNum32)
-		return false;
-	
-	if (m_nDeviceChannels > 0)
-	{
-		nNum32 = m_nDeviceChannels*m_NumberOfVertices;
-		
-		if (pIO->WriteFloat32Float(m_DeviceValues, nNum32)!=nNum32)
-			return false;
-	}
-	
-	return true;
-	
+  icTagTypeSignature sig = GetType();
+
+  if (!pIO) {
+    return false;
+  }
+
+  if (!pIO->Write32(&sig) ||
+      !pIO->Write32(&m_nReserved))
+    return false;
+
+  if (!pIO->Write16(&m_nPCSChannels) ||
+      !pIO->Write16(&m_nDeviceChannels))
+    return false;
+
+  if (!pIO->Write32(&m_NumberOfVertices) ||
+       !pIO->Write32(&m_NumberOfTriangles))
+    return false;
+
+  size_t nNum32 = (size_t)m_NumberOfTriangles*3;
+  if (pIO->Write32(m_Triangles, nNum32)!=nNum32)
+    return false;
+
+  nNum32 = (size_t)m_nPCSChannels*m_NumberOfVertices;
+  if (pIO->WriteFloat32Float(m_PCSValues, nNum32)!=nNum32)
+    return false;
+
+  if (m_nDeviceChannels > 0) {
+    nNum32 = (size_t)m_nDeviceChannels*m_NumberOfVertices;
+    if (pIO->WriteFloat32Float(m_DeviceValues, nNum32)!=nNum32)
+      return false;
+  }
+
+  return true;\
 }
 
 
@@ -6323,55 +6314,52 @@ bool CIccTagGamutBoundaryDesc::Write(CIccIO *pIO)
  */	
 void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerboseness)
 {
-    const size_t bufSize = 256;
-	icChar buf[bufSize];
-	
-    snprintf(buf, bufSize, "Number Of Vertices = %d, Number of Triangles = %d\n", (int) m_NumberOfVertices, (int) m_NumberOfTriangles);
-	sDescription += buf;
-	
-	snprintf(buf,bufSize, "Number Of Inputs = %d, Number of Outputs = %d\n", (int) m_nPCSChannels, (int) m_nDeviceChannels);
-	sDescription += buf;
-	
-    if (nVerboseness > 75) {
-	    int c = 0;
-	    int d = 0;
-	    for (int i=0; i<m_NumberOfVertices; i++)
-	    {
-            snprintf(buf,bufSize, "V = %d:\t",i);
-		    sDescription += buf;
-		    for (int j=0; j<m_nPCSChannels; j++)
-		    {
-			    snprintf(buf,bufSize, "%.4lf\t",m_PCSValues[c++]);
-			    sDescription += buf;
-		    }
-		    if (m_nDeviceChannels > 0)
-		    {
-			    snprintf(buf,bufSize, ":\t");
-			    sDescription += buf;
-			
-			    for (int j=0; j<m_nDeviceChannels; j++)
-			    {
-				    snprintf(buf,bufSize, "%.4lf\t",m_DeviceValues[d++]);
-				    sDescription += buf;
-			    }
-		    }
-		    snprintf(buf,bufSize, "\n");
-		    sDescription += buf;
-	    }
-	
-	    // CWE-400/834: m_Triangles is allocated to m_NumberOfTriangles at load and
-	    // the read path bounds that count by the tag size (sizeof(triangle)*count
-	    // <= tag size). Guard against a failed nothrow allocation before walking it.
-	    if (m_Triangles)
-	    for (int i=0; i<m_NumberOfTriangles; i++)
-	    {
-            snprintf(buf,bufSize, "V1 = %u\tV2 = %u\tV3 = %u\n",
-                        (unsigned int)m_Triangles[i].m_VertexNumbers[0],
-                        (unsigned int)m_Triangles[i].m_VertexNumbers[1],
-                        (unsigned int)m_Triangles[i].m_VertexNumbers[2] );
-		        sDescription += buf;
-	    }
+  const size_t bufSize = 256;
+  icChar buf[bufSize];
+
+  snprintf(buf, bufSize, "Number Of Vertices = %d, Number of Triangles = %d\n",
+            (int) m_NumberOfVertices, (int) m_NumberOfTriangles);
+  sDescription += buf;
+
+  snprintf(buf,bufSize, "Number Of Inputs = %d, Number of Outputs = %d\n",
+            (int) m_nPCSChannels, (int) m_nDeviceChannels);
+  sDescription += buf;
+
+  if (nVerboseness > 75) {
+    int c = 0;
+    int d = 0;
+    for (int i=0; i<m_NumberOfVertices; i++) {
+      snprintf(buf,bufSize, "V = %d:\t",i);
+      sDescription += buf;
+      for (int j=0; j<m_nPCSChannels; j++) {
+        snprintf(buf,bufSize, "%.4lf\t",m_PCSValues[c++]);
+        sDescription += buf;
+      }
+      if (m_nDeviceChannels > 0) {
+        snprintf(buf,bufSize, ":\t");
+        sDescription += buf;
+
+        for (int j=0; j<m_nDeviceChannels; j++) {
+          snprintf(buf,bufSize, "%.4lf\t",m_DeviceValues[d++]);
+          sDescription += buf;
+        }
+      }
+      snprintf(buf,bufSize, "\n");
+      sDescription += buf;
     }
+
+  // CWE-400/834: m_Triangles is allocated to m_NumberOfTriangles at load and
+  // the read path bounds that count by the tag size (sizeof(triangle)*count
+  // <= tag size). Guard against a failed nothrow allocation before walking it.
+  if (m_Triangles)
+    for (int i=0; i<m_NumberOfTriangles; i++) {
+    snprintf(buf,bufSize, "V1 = %u\tV2 = %u\tV3 = %u\n",
+            (unsigned int)m_Triangles[i].m_VertexNumbers[0],
+            (unsigned int)m_Triangles[i].m_VertexNumbers[1],
+            (unsigned int)m_Triangles[i].m_VertexNumbers[2] );
+    sDescription += buf;
+    }
+  }
 }
 
 /**
@@ -6391,14 +6379,17 @@ void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerbosen
  */		
 bool CIccTagGamutBoundaryDesc::setVertex(icInt32Number vertexNumber,icFloatNumber* pcsCoords,icFloatNumber* deviceCoords)
 {
-	if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
-		return false;
-	
-	memcpy(&m_PCSValues[vertexNumber*m_nPCSChannels],pcsCoords,sizeof(icFloatNumber)*m_nPCSChannels);
-	if ((m_DeviceValues) && (deviceCoords))
-		memcpy(&m_DeviceValues[vertexNumber*m_nDeviceChannels],deviceCoords,sizeof(icFloatNumber)*m_nDeviceChannels);
-	
-	return true;
+  if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
+    return false;
+
+  memcpy(&m_PCSValues[vertexNumber*m_nPCSChannels],
+        pcsCoords,sizeof(icFloatNumber)*m_nPCSChannels);
+
+  if ((m_DeviceValues) && (deviceCoords))
+    memcpy(&m_DeviceValues[vertexNumber*m_nDeviceChannels],
+            deviceCoords,sizeof(icFloatNumber)*m_nDeviceChannels);
+
+  return true;
 }
 
 
@@ -6417,10 +6408,10 @@ bool CIccTagGamutBoundaryDesc::setVertex(icInt32Number vertexNumber,icFloatNumbe
  */			
 icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexPCSCoord(icInt32Number vertexNumber)
 {
-	if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
-		return NULL;
-	
-	return &m_PCSValues[vertexNumber*m_nPCSChannels];
+  if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
+    return NULL;
+
+  return &m_PCSValues[vertexNumber*m_nPCSChannels];
 }
 
 /**
@@ -6438,13 +6429,13 @@ icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexPCSCoord(icInt32Number vertexN
  */		
 icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexDeviceCoord(icInt32Number vertexNumber)
 {
-	if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
-		return NULL;
-	
-	if (!m_DeviceValues)
-		return NULL;
-	
-	return &m_DeviceValues[vertexNumber*m_nDeviceChannels];
+  if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
+    return NULL;
+
+  if (!m_DeviceValues)
+    return NULL;
+
+  return &m_DeviceValues[vertexNumber*m_nDeviceChannels];
 }
 
 /**
@@ -6463,12 +6454,12 @@ icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexDeviceCoord(icInt32Number vert
  */		
 bool CIccTagGamutBoundaryDesc::setTriangle(icInt32Number triangleNumber,icGamutBoundaryTriangle& triangle)
 {
-	if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
-		return false;
-	
-	memcpy(&m_Triangles[triangleNumber],&triangle,sizeof(icGamutBoundaryTriangle));
-	
-	return true;
+  if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
+    return false;
+
+  memcpy(&m_Triangles[triangleNumber],&triangle,sizeof(icGamutBoundaryTriangle));
+
+  return true;
 }
 
 /**
@@ -6488,12 +6479,12 @@ bool CIccTagGamutBoundaryDesc::setTriangle(icInt32Number triangleNumber,icGamutB
 
 bool CIccTagGamutBoundaryDesc::getTriangle(icInt32Number triangleNumber,icGamutBoundaryTriangle& triangle)	
 {
-	if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
-		return false;
-	
-	memcpy(&triangle,&m_Triangles[triangleNumber],sizeof(icGamutBoundaryTriangle));
-	return true;
-}	
+  if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
+    return false;
+
+  memcpy(&triangle,&m_Triangles[triangleNumber],sizeof(icGamutBoundaryTriangle));
+  return true;
+}
 
 
 
@@ -6513,23 +6504,25 @@ bool CIccTagGamutBoundaryDesc::getTriangle(icInt32Number triangleNumber,icGamutB
  */
 icValidateStatus CIccTagGamutBoundaryDesc::Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile/*=NULL*/) const
 {
-	icValidateStatus rv = CIccTag::Validate(sigPath, sReport, pProfile);
-	
-	CIccInfo Info;
-	std::string sSigPathName = Info.GetSigPathName(sigPath);
-	
-	if ((m_NumberOfVertices == 0) || (m_NumberOfTriangles == 0) || (m_nPCSChannels < 3)) {
-		sReport += icMsgValidateWarning;
-		sReport += sSigPathName;
-		sReport += " - Invalid tag.\n";
-		
-		rv = icMaxStatus(rv, icValidateWarning);
-		return rv;
-	}
-	
-	return rv;
-}	
+  icValidateStatus rv = CIccTag::Validate(sigPath, sReport, pProfile);
 
+  CIccInfo Info;
+  std::string sSigPathName = Info.GetSigPathName(sigPath);
+
+  if ( (m_NumberOfVertices < 4) || (m_NumberOfTriangles < 4)
+    || (m_nPCSChannels < 3)
+    || (m_nDeviceChannels > 15)
+    || (m_NumberOfVertices > (m_NumberOfTriangles * 3)) ) {
+    sReport += icMsgValidateWarning;
+    sReport += sSigPathName;
+    sReport += " - Invalid tag.\n";
+
+    rv = icMaxStatus(rv, icValidateWarning);
+    return rv;
+  }
+
+  return rv;
+}
 
 
 #ifdef USEICCDEVNAMESPACE
