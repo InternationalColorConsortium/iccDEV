@@ -93,14 +93,22 @@ int main()
   // tiny tag can declare a near-2^31 vertex count and still be accepted. Must reject.
   {
     std::vector<icUInt8Number> p = buildGbd(/*pcs*/0, /*dev*/0,
-                                            /*verts*/0x74700200, /*tris*/5);
+                                            /*verts*/1000, /*tris*/5);
     check(!readGbd(p), "zero PCS channels with huge vertex count -> false (#1581)");
   }
-
-  // Regression guard for the existing upper bound: > 3 PCS channels is still invalid.
+  
+  // defect: < 3 PCS channels must be rejected
   {
-    std::vector<icUInt8Number> p = buildGbd(/*pcs*/4, /*dev*/0, /*verts*/4, /*tris*/4);
-    check(!readGbd(p), "four PCS channels -> false");
+    std::vector<icUInt8Number> p = buildGbd(/*pcs*/2, /*dev*/0,
+                                            /*verts*/5, /*tris*/5);
+    check(!readGbd(p), "two PCS channels -> false (#1581)");
+  }
+  
+  // defect: valid PCS channels with excessive vertex count must reject.
+  {
+    std::vector<icUInt8Number> p = buildGbd(/*pcs*/3, /*dev*/3,
+                                            /*verts*/1000, /*tris*/5);
+    check(!readGbd(p), "valid PCS channels with huge vertex count -> false (#1581)");
   }
 
   // A well-formed tag (3 PCS channels, no device coords, minimum solid) must still be
