@@ -3834,7 +3834,8 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
 
     if (op->sig==icSigIfOp) {
       icFloatNumber a1;
-      OsPopArg(os,a1);
+      if (!OsPopArg(os,a1))
+        return false;
 
       if (os.idx+1<nOps && ops[os.idx+1].sig==icSigElseOp) {
         os.idx++;
@@ -3883,7 +3884,8 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
     }
     else if (op->sig==icSigSelectOp) {
       icFloatNumber a1;
-      OsPopArg(os,a1);
+      if (!OsPopArg(os,a1))
+        return false;
       icInt32Number nSel = icCalcSaturatingRound(a1);
 
       if (!op->extra) {
