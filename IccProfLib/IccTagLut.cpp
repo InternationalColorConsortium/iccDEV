@@ -6298,7 +6298,7 @@ bool CIccTagGamutBoundaryDesc::Write(CIccIO *pIO)
       return false;
   }
 
-  return true;\
+  return true;
 }
 
 
