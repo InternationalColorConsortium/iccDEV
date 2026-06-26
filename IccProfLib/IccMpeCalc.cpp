@@ -496,8 +496,6 @@ public:
       return false;
 
     if (n && t) {
-      if (t < 0)
-        return false;
       OsExtendArgs(os,(size_t)t);
 
       icFloatNumber *to = &(*os.pStack)[stackSize];
