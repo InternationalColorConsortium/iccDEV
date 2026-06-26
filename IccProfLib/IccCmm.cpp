@@ -9319,9 +9319,18 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
   SetLateBindingCC();
 
   icStatusCMM rv;
-  CIccXformList::iterator i;
+  CIccXformList::iterator i = m_Xforms->begin();
+  
+  // Make sure the input channel and first transform input counts match.
+  // Otherwise we'll have a heap overflow during Apply.
+  if (i != m_Xforms->end()) {
+    icUInt16Number cmmInputCount = GetSourceSamples();
+    icUInt16Number xformInputCount = i->ptr->GetNumSrcSamples();
+    if (xformInputCount != cmmInputCount)
+      return icCmmStatBadSpaceLink;
+  }
 
-  for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
+  for (; i!=m_Xforms->end(); i++) {
 
     rv = i->ptr->Begin();
 
