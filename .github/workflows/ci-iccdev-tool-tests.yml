@@ -54,26 +54,6 @@ on:
         required: false
         default: false
         type: boolean
-      run_tool_flamegraphs:
-        description: 'Run perf/FlameGraph profiling for representative tool invocations'
-        required: false
-        default: false
-        type: boolean
-      tool_flamegraph_repeat:
-        description: 'Repetitions per tool during FlameGraph profiling'
-        required: false
-        default: '10'
-        type: string
-      tool_flamegraph_min_samples:
-        description: 'Minimum samples per tool before marking LOW_SAMPLES'
-        required: false
-        default: '25'
-        type: string
-      tool_flamegraph_timeout:
-        description: 'Timeout in seconds per profiled tool'
-        required: false
-        default: '45'
-        type: string
       tool_build_type:
         description: 'Build type for the reusable CTest tool suite'
         required: false
@@ -124,26 +104,6 @@ on:
         required: false
         default: false
         type: boolean
-      run_tool_flamegraphs:
-        description: 'Run perf/FlameGraph profiling for representative tool invocations'
-        required: false
-        default: false
-        type: boolean
-      tool_flamegraph_repeat:
-        description: 'Repetitions per tool during FlameGraph profiling'
-        required: false
-        default: '10'
-        type: string
-      tool_flamegraph_min_samples:
-        description: 'Minimum samples per tool before marking LOW_SAMPLES'
-        required: false
-        default: '25'
-        type: string
-      tool_flamegraph_timeout:
-        description: 'Timeout in seconds per profiled tool'
-        required: false
-        default: '45'
-        type: string
       tool_build_type:
         description: 'Build type for the CTest tool suite'
         required: true
@@ -190,6 +150,7 @@ jobs:
       REGRESSION_IMAGE_TAG: ${{ inputs.regression_image_tag || 'master' }}
       TOOL_BUILD_TYPE: ${{ inputs.tool_build_type || 'Debug' }}
       BUILD_DIR: build
+      SPECTRAL_PREVIEW_VENV: /tmp/iccdev-spectral-preview-venv
 
     steps:
       - name: Checkout iccDEV
@@ -228,11 +189,36 @@ jobs:
           fi
           cmake --version | sed -n '1p'
           /usr/bin/time --version | sed -n '1p'
-          if command -v perf >/dev/null 2>&1; then
-            perf --version | sed -n '1p'
-          else
-            echo "[WARN] perf not present; tool FlameGraphs will be skipped if requested"
-          fi
+
+      # preflight: allow-package-install reason=spectral-preview-codec-bootstrap
+      - name: Install spectral preview Python dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          python3 -m venv "$SPECTRAL_PREVIEW_VENV"
+          "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install --upgrade pip --quiet
+          "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install \
+            --only-binary=:all: \
+            'numpy==2.4.2' \
+            'tifffile==2026.2.24' \
+            'pillow==12.1.1' \
+            'imagecodecs==2026.6.6' \
+            --quiet
+          "$SPECTRAL_PREVIEW_VENV/bin/python" - <<'PY'
+          import imagecodecs
+          import numpy
+          import PIL
+          import tifffile
+
+          print(f"imagecodecs {imagecodecs.__version__}")
+          print(f"numpy {numpy.__version__}")
+          print(f"pillow {PIL.__version__}")
+          print(f"tifffile {tifffile.__version__}")
+          PY
 
       - name: Configure iccDEV CTest build
         env:
@@ -321,6 +307,7 @@ jobs:
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
+          ICCDEV_SPECTRAL_PREVIEW_PYTHON: /tmp/iccdev-spectral-preview-venv/bin/python
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -358,32 +345,6 @@ jobs:
           HYBRID_TIMING_BAND_ROWS="$HYBRID_TIMING_BAND_ROWS_INPUT" \
           HYBRID_TIMING_INSTRUMENT="$HYBRID_TIMING_INSTRUMENT_INPUT" \
             .github/scripts/iccdev-hybrid-applyprofiles-timing.sh
-
-      - name: Run all-tool FlameGraph profiling
-        if: ${{ inputs.run_tool_flamegraphs }}
-        continue-on-error: true
-        env:
-          BASH_ENV: /dev/null
-          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
-          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
-          LLVM_PROFILE_FILE: "/dev/null"
-          TOOL_FLAMEGRAPH_REPEAT_INPUT: ${{ inputs.tool_flamegraph_repeat || '10' }}
-          TOOL_FLAMEGRAPH_MIN_SAMPLES_INPUT: ${{ inputs.tool_flamegraph_min_samples || '25' }}
-          TOOL_FLAMEGRAPH_TIMEOUT_INPUT: ${{ inputs.tool_flamegraph_timeout || '45' }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          ICCDEV_TOOLS_DIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools" \
-          ICCDEV_TESTING_DIR="$GITHUB_WORKSPACE/Testing" \
-          ICCDEV_FLAMEGRAPH_OUTDIR="$GITHUB_WORKSPACE/${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs" \
-          ICCDEV_FLAMEGRAPH_REPEAT="$TOOL_FLAMEGRAPH_REPEAT_INPUT" \
-          ICCDEV_FLAMEGRAPH_MIN_SAMPLES="$TOOL_FLAMEGRAPH_MIN_SAMPLES_INPUT" \
-          ICCDEV_FLAMEGRAPH_TIMEOUT="$TOOL_FLAMEGRAPH_TIMEOUT_INPUT" \
-          ICCDEV_FLAMEGRAPH_USER_ONLY=1 \
-          ICCDEV_FLAMEGRAPH_CALL_GRAPH=dwarf \
-            .github/scripts/iccdev-tool-flamegraphs.sh
 
       - name: Generate summary
         if: always()
@@ -507,9 +468,8 @@ jobs:
 
           report_dir="${BUILD_DIR}/Testing/ctest-output/developer-report"
           data_dir="${report_dir}/data"
-          graph_dir="${report_dir}/graphs"
           rm -rf "$report_dir"
-          mkdir -p "$data_dir" "$graph_dir"
+          mkdir -p "$data_dir"
 
           copy_file_if_present() {
             local src="$1"
@@ -539,10 +499,6 @@ jobs:
           copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing" \
             "${data_dir}/hybrid-applyprofiles-timing"
-          copy_dir_if_present \
-            "${BUILD_DIR}/Testing/ctest-output/tool-flamegraphs" \
-            "${graph_dir}/tool-flamegraphs"
-
           {
             printf 'iccDEV developer report\n'
             printf '=======================\n\n'
@@ -550,7 +506,7 @@ jobs:
             printf 'Commit: %s\n' "$(git rev-parse HEAD)"
             printf 'Run: %s\n\n' "${GITHUB_RUN_ID:-local}"
             printf 'Open index.html for the presentation view.\n'
-            printf 'Data files are under data/ and FlameGraph outputs are under graphs/.\n'
+            printf 'Data files are under data/.\n'
           } > "${report_dir}/README.txt"
 
           html="${report_dir}/index.html"
@@ -572,42 +528,8 @@ jobs:
             printf '<tr><td>Run</td><td><code>%s</code></td></tr>\n' "$(escape_html "${GITHUB_RUN_ID:-local}")"
             printf '</table>\n'
 
-            flamegraph_manifest="${graph_dir}/tool-flamegraphs/manifest.tsv"
-            if [ -f "$flamegraph_manifest" ]; then
-              printf '<h2>Tool FlameGraphs</h2>\n'
-              printf '<table><tr><th>Tool</th><th>Status</th>'
-              printf '<th>Samples</th><th>Unknown folded</th>'
-              printf '<th>SVG</th><th>Report</th><th>Note</th></tr>\n'
-              tail -n +2 "$flamegraph_manifest" | while IFS=$'\t' read -r \
-                tool status _exit_code samples unknown svg perf_report _command note; do
-                svg_cell='no'
-                if [ -n "$svg" ]; then
-                  svg_rel="${svg#*tool-flamegraphs/}"
-                  svg_href="graphs/tool-flamegraphs/${svg_rel}"
-                  svg_cell="<a href=\"$(escape_html "$svg_href")\">svg</a>"
-                fi
-                report_cell='n/a'
-                if [ -n "$perf_report" ]; then
-                  report_rel="${perf_report#*tool-flamegraphs/}"
-                  report_href="graphs/tool-flamegraphs/${report_rel}"
-                  report_cell="<a href=\"$(escape_html "$report_href")\">report</a>"
-                fi
-                printf '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' \
-                  "$(escape_html "$tool")" \
-                  "$(escape_html "$status")" \
-                  "$(escape_html "$samples")" \
-                  "$(escape_html "$unknown")" \
-                  "$svg_cell" \
-                  "$report_cell" \
-                  "$(escape_html "$note")"
-              done
-              printf '</table>\n'
-            else
-              printf '<h2>Tool FlameGraphs</h2><p>No FlameGraph manifest was generated.</p>\n'
-            fi
-
             printf '<h2>Included Data</h2><ul>\n'
-            find "$data_dir" "$graph_dir" -type f | sort | while IFS= read -r file; do
+            find "$data_dir" -type f | sort | while IFS= read -r file; do
               rel="${file#"$report_dir"/}"
               printf '<li><a href="%s">%s</a></li>\n' \
                 "$(escape_html "$rel")" \

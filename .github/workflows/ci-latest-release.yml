@@ -759,6 +759,282 @@ jobs:
           "- Artifacts Uploaded: iccdev-windows-msvc" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
           "- Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
+  windows-arm64:
+    name: "Windows 11 ARM64 MSVC"
+    needs: cache-policy
+    runs-on: windows-11-arm
+    timeout-minutes: 60
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: "1"
+      POWERSHELL_UPDATECHECK: "Off"
+      ICCDEV_ARM64_BUILD_TYPE: Release
+      ICCDEV_ARM64_GENERATOR: Visual Studio 17 2022
+      ICCDEV_ARM64_PLATFORM: ARM64
+      ICCDEV_ARM64_VCPKG_BASELINE: eae1680538b86f962455c27abca2aad0dc304a4d
+      ICCDEV_ARM64_VCPKG_TRIPLET: arm64-windows
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+    steps:
+      - name: Checkout PR source
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
+
+      - name: Install ARM64 library dependencies
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          if ($env:RUNNER_ARCH -ne 'ARM64') {
+            throw "Expected an ARM64 runner, got $env:RUNNER_ARCH"
+          }
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments
+            )
+            & $FilePath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "$FilePath failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          $vcpkgRoot = Join-Path $env:RUNNER_TEMP 'vcpkg'
+          $vcpkgInstalledDir = Join-Path $env:RUNNER_TEMP 'vcpkg-installed'
+          if (Test-Path -LiteralPath $vcpkgRoot) {
+            Remove-Item -Recurse -Force -LiteralPath $vcpkgRoot
+          }
+          if (Test-Path -LiteralPath $vcpkgInstalledDir) {
+            Remove-Item -Recurse -Force -LiteralPath $vcpkgInstalledDir
+          }
+
+          Invoke-Native git @('clone', 'https://github.com/microsoft/vcpkg.git', $vcpkgRoot)
+          Invoke-Native git @('-C', $vcpkgRoot, 'checkout', $env:ICCDEV_ARM64_VCPKG_BASELINE)
+          Invoke-Native (Join-Path $vcpkgRoot 'bootstrap-vcpkg.bat') @('-disableMetrics')
+          Push-Location -LiteralPath $env:RUNNER_TEMP
+          try {
+            Invoke-Native (Join-Path $vcpkgRoot 'vcpkg.exe') @(
+              'install',
+              'libxml2',
+              'nlohmann-json',
+              '--triplet', $env:ICCDEV_ARM64_VCPKG_TRIPLET,
+              "--x-install-root=$vcpkgInstalledDir",
+              '--clean-after-build'
+            )
+          } finally {
+            Pop-Location
+          }
+
+          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$vcpkgRoot"
+          Add-Content -Path $env:GITHUB_ENV -Value "ICCDEV_ARM64_VCPKG_INSTALLED_DIR=$vcpkgInstalledDir"
+
+      - name: Build ARM64 release bundle
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          if (-not $env:VCPKG_ROOT) {
+            throw 'VCPKG_ROOT was not set by the dependency install step'
+          }
+          if (-not $env:ICCDEV_ARM64_VCPKG_INSTALLED_DIR) {
+            throw 'ICCDEV_ARM64_VCPKG_INSTALLED_DIR was not set by the dependency install step'
+          }
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments
+            )
+            & $FilePath @Arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "$FilePath failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          function Get-PeMachine {
+            param([Parameter(Mandatory = $true)][string] $Path)
+            $bytes = [System.IO.File]::ReadAllBytes($Path)
+            if ($bytes.Length -lt 0x40) {
+              throw "PE file too short: $Path"
+            }
+            $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+            if ($peOffset -lt 0 -or ($peOffset + 6) -gt $bytes.Length) {
+              throw "Invalid PE header offset: $Path"
+            }
+            $signature = [System.Text.Encoding]::ASCII.GetString($bytes, $peOffset, 4)
+            if ($signature -ne "PE`0`0") {
+              throw "Invalid PE signature: $Path"
+            }
+            $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+            switch ($machine) {
+              0xaa64 { return 'ARM64' }
+              0x8664 { return 'x64' }
+              0x014c { return 'x86' }
+              default { return "0x{0:x4}" -f $machine }
+            }
+          }
+
+          $buildDir = 'Build\Cmake\build-win-arm64-release'
+          if (Test-Path -LiteralPath $buildDir) {
+            Remove-Item -Recurse -Force -LiteralPath $buildDir
+          }
+          $vcpkgToolchain = Join-Path $env:VCPKG_ROOT 'scripts\buildsystems\vcpkg.cmake'
+          if (-not (Test-Path -LiteralPath $vcpkgToolchain)) {
+            throw "vcpkg toolchain not found: $vcpkgToolchain"
+          }
+
+          Invoke-Native cmake @(
+            '-S', 'Build\Cmake',
+            '-B', $buildDir,
+            '-G', $env:ICCDEV_ARM64_GENERATOR,
+            '-A', $env:ICCDEV_ARM64_PLATFORM,
+            "-DCMAKE_BUILD_TYPE=$env:ICCDEV_ARM64_BUILD_TYPE",
+            "-DCMAKE_TOOLCHAIN_FILE=$vcpkgToolchain",
+            '-DVCPKG_MANIFEST_MODE=OFF',
+            "-DVCPKG_TARGET_TRIPLET=$env:ICCDEV_ARM64_VCPKG_TRIPLET",
+            "-DVCPKG_INSTALLED_DIR=$env:ICCDEV_ARM64_VCPKG_INSTALLED_DIR",
+            '-DENABLE_SHARED_LIBS=ON',
+            '-DENABLE_STATIC_LIBS=ON',
+            '-DENABLE_TOOLS=ON',
+            '-DENABLE_TESTS=OFF',
+            '-DENABLE_ICCXML=ON',
+            '-DENABLE_ICCJSON=ON',
+            '-DENABLE_IMAGE_TOOLS=OFF',
+            '-DENABLE_WXWIDGETS=OFF',
+            '-DENABLE_CMM_TOOLS=OFF',
+            '-DENABLE_IIS_TOOLS=OFF',
+            '-DENABLE_LTO=OFF',
+            '-Wno-dev'
+          )
+          Invoke-Native cmake @(
+            '--build', $buildDir,
+            '--config', $env:ICCDEV_ARM64_BUILD_TYPE,
+            '--parallel'
+          )
+
+          $requiredLibraries = @(
+            'IccProfLib2.dll',
+            'IccProfLib2-static.lib',
+            'IccXML2.dll',
+            'IccXML2-static.lib',
+            'IccJSON2.dll',
+            'IccJSON2-static.lib',
+            'IccConnect2.dll',
+            'IccConnect2-static.lib'
+          )
+          $missingLibraries = @()
+          foreach ($libraryName in $requiredLibraries) {
+            $library = Get-ChildItem -Path $buildDir -Recurse -Filter $libraryName |
+              Select-Object -First 1
+            if (-not $library) {
+              $missingLibraries += $libraryName
+            } elseif ($library.Extension -eq '.dll') {
+              $libraryMachine = Get-PeMachine $library.FullName
+              if ($libraryMachine -ne 'ARM64') {
+                throw "Expected ARM64 library $libraryName, got $libraryMachine"
+              }
+            }
+          }
+          if ($missingLibraries.Count -gt 0) {
+            throw "Missing ARM64 library outputs: $($missingLibraries -join ', ')"
+          }
+
+          $tool = Get-ChildItem -Path $buildDir -Recurse -Filter 'iccDumpProfile.exe' |
+            Select-Object -First 1
+          if (-not $tool) {
+            throw 'iccDumpProfile.exe was not produced by the ARM64 release build'
+          }
+          $machine = Get-PeMachine $tool.FullName
+          if ($machine -ne 'ARM64') {
+            throw "Expected ARM64 executable, got $machine"
+          }
+
+      - name: Stage ARM64 bundle into Testing directory
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+
+          $stage = 'staging/iccDEV-Testing'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Get-ChildItem -Path 'Testing' -Exclude 'Fuzzing' |
+            Copy-Item -Destination $stage -Recurse -Force
+          Get-ChildItem -Path 'Build/Cmake/build-win-arm64-release' -Recurse -Include *.exe,*.dll,*.lib |
+            Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
+            ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
+          Copy-Item -Path 'Testing/Readme.md' -Destination $stage -Force
+          Copy-Item -Path 'LICENSE.md' -Destination $stage -Force
+          Copy-Item -Path 'docs' -Destination "$stage/docs" -Recurse -Force
+
+          @'
+          @echo off
+          setlocal EnableDelayedExpansion
+          set "SCRIPT_DIR=%~dp0"
+          if "!SCRIPT_DIR:~-1!"=="\" set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"
+          set "NEW_PATH=!SCRIPT_DIR!;!PATH!"
+          for /R "!SCRIPT_DIR!" %%F in (*.exe) do (
+              set "dir=%%~dpF"
+              if "!dir:~-1!"=="\" set "dir=!dir:~0,-1!"
+              echo !NEW_PATH! | findstr /I /C:"!dir!" >nul || set "NEW_PATH=!dir!;!NEW_PATH!"
+          )
+          endlocal & set "PATH=%NEW_PATH%"
+          '@ | Set-Content -Path "$stage/path.bat" -Encoding ASCII
+
+          $allFiles = Get-ChildItem -Path $stage -Recurse -File
+          Write-Host "Staged $($allFiles.Count) files into $stage"
+
+      - name: Upload ARM64 build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: iccdev-windows-arm64-msvc
+          path: staging
+          if-no-files-found: error
+
+      - name: Summary Report
+        if: always()
+        env:
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_JOB_STATUS: ${{ job.status }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .github/scripts/sanitize.ps1
+          "### Windows 11 ARM64 Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Commit SHA: $(Sanitize-Line $env:GH_COMMIT_SHA)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Runner architecture: $(Sanitize-Line $env:RUNNER_ARCH)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- vcpkg triplet: $(Sanitize-Line $env:ICCDEV_ARM64_VCPKG_TRIPLET)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Artifacts Uploaded: iccdev-windows-arm64-msvc" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "- Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
   wasm:
     name: "WASM Release (Emscripten)"
     needs: cache-policy
@@ -1424,7 +1700,6 @@ jobs:
     name: "Doxygen HTML Docs"
     needs: cache-policy
     runs-on: ubuntu-24.04
-    environment: doxygen-publish
     timeout-minutes: 60
     defaults:
       run:
@@ -1531,7 +1806,7 @@ jobs:
 
   release:
     name: "Publish Latest Release"
-    needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
+    needs: [linux, macos, windows, windows-arm64, wasm, cpack-linux, doxygen]
     if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     environment: release
@@ -1570,6 +1845,12 @@ jobs:
           name: iccdev-windows-msvc
           path: artifacts/iccdev-windows-msvc
 
+      - name: Download Windows ARM64 artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: iccdev-windows-arm64-msvc
+          path: artifacts/iccdev-windows-arm64-msvc
+
       - name: Download WASM artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -1607,6 +1888,7 @@ jobs:
             iccdev-linux-clang
             iccdev-macos-clang
             iccdev-windows-msvc
+            iccdev-windows-arm64-msvc
             iccdev-wasm-release
             iccdev-doxygen-html
             reficcmax-runtime-packages-linux
@@ -1762,6 +2044,7 @@ jobs:
             echo "| Linux (Clang) | \`iccdev-linux-clang.zip\` |"
             echo "| macOS (Clang) | \`iccdev-macos-clang.zip\` |"
             echo "| Windows (MSVC) | \`iccdev-windows-msvc.zip\` |"
+            echo "| Windows 11 ARM64 (MSVC) | \`iccdev-windows-arm64-msvc.zip\` |"
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
             echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
             echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"

@@ -323,9 +323,15 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
   TIFFSetField(m_hTif, TIFFTAG_SAMPLESPERPIXEL, m_nSamples);
   if (m_nExtraSamples) {
     unsigned short* extrasamplevalues = static_cast<unsigned short*>(calloc(m_nExtraSamples, sizeof(unsigned short)));
-    if (extrasamplevalues) {
-      TIFFSetField(m_hTif, TIFFTAG_EXTRASAMPLES, m_nExtraSamples, extrasamplevalues);
-      free(extrasamplevalues);
+    if (!extrasamplevalues) {
+      Close();
+      return false;
+    }
+    int extraStatus = TIFFSetField(m_hTif, TIFFTAG_EXTRASAMPLES, m_nExtraSamples, extrasamplevalues);
+    free(extrasamplevalues);
+    if (extraStatus != 1) {
+      Close();
+      return false;
     }
   }
   TIFFSetField(m_hTif, TIFFTAG_BITSPERSAMPLE, m_nBitsPerSample);

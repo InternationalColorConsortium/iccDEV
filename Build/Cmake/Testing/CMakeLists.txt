@@ -1308,6 +1308,14 @@ set_tests_properties(iccdev.tiffdump-output-hardening PROPERTIES
 )
 
 iccdev_add_script_test(
+  iccdev.spectral-tiff-preview
+  120
+  "iccdev;tiff;spectral;preview;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-spectral-tiff-preview-tests.sh"
+)
+
+iccdev_add_script_test(
   iccdev.basic-string-regressions
   120
   "iccdev;xml;basic-string;regression;asan"

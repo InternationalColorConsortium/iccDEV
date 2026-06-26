@@ -2484,10 +2484,17 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
 
   case icSigCharTargetTag:
     {
-      if (typeSig!=icSigTextType)
-        return false;
-      else
+      if (m_Header.version >= icVersionNumberV5) {
+        if (typeSig != icSigUtf8TextType &&
+            typeSig != icSigZipUtf8TextType)
+          return false;
         return true;
+      }
+      else {
+        if (typeSig != icSigTextType)
+          return false;
+        return true;
+      }
     }
 
   case icSigChromaticAdaptationTag:
