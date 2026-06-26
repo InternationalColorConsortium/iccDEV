@@ -890,30 +890,25 @@ int main(int argc, icChar* argv[])
   //Get and validate the destination color space from theCmm.
   icColorSpaceSignature DestspaceSig = theCmm.GetDestSpace();
   int nDestSamples = icGetSpaceSamples(DestspaceSig);
-
-  int* idx = new int[nSrcSamples];
   
-  //init idx;
   size_t lutCount = 1;
   size_t lutLimit = (((1ULL<<32)-1) / nLutSize);     // limit to 4 Gig(32 bits) instead of size_t(64 bits)
   for (auto si = 0; si < nSrcSamples; si++) {
-    idx[si] = 0;
     if (lutCount > lutLimit ) {    // avoid overflow
       printf("LUT size too large\n");
-      delete[] idx;
       return -1;
     }
     lutCount *= nLutSize;
   }
 
-  icFloatNumber* srcPixel = new icFloatNumber[nSrcSamples];
-  icFloatNumber* dstPixel = new icFloatNumber[nDestSamples];
+  std::vector<int> idx(nSrcSamples,0);
+  std::vector<icFloatNumber> srcPixel(nSrcSamples);
+  std::vector<icFloatNumber> dstPixel(nDestSamples);
 
   // 2 <= nLutSize <= 255, so maxLUT cannot be zero
   icUInt32Number maxLut = nLutSize - 1;
-
-  int curPer, lastPer = -1;
-
+  int lastPer = -1;
+  
   int j = 0;
   for (int c = 0; j >= 0; c++) {
 
@@ -922,9 +917,9 @@ int main(int argc, icChar* argv[])
     }
 
     //Use CMM to convert SrcPixel to DestPixel
-    theCmm.Apply(dstPixel, srcPixel);
+    theCmm.Apply(&dstPixel[0], &srcPixel[0]);
 
-    pWriter->setNextNode(dstPixel);
+    pWriter->setNextNode(&dstPixel[0]);
 
     for (j = nSrcSamples - 1; j >= 0;) {
       idx[j]++;
@@ -938,17 +933,13 @@ int main(int argc, icChar* argv[])
  
     //Display status of how much we have accomplished
     if (lutCount > 0) {     // explicit check to avoid divide by zero
-        curPer = ((c + 1) * 100) / lutCount;
+        int curPer = ((c + 1) * 100) / lutCount;
         if (curPer != lastPer) {
           printf("\r%d%%", curPer);
           lastPer = curPer;
         }
     }
   }
-  
-  delete[] dstPixel;
-  delete[] srcPixel;
-  delete[] idx;
 
   if (pWriter->finish()) {
     printf("\nLUT successfully written to '%s'\n", argv[1]);
