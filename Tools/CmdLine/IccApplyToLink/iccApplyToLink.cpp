@@ -71,6 +71,8 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
+#include <list>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
@@ -88,15 +90,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
-
-
-// ============================================================================
-
-static
-FILE* icOpenWriteBinaryFile(const char* szFname)
-{
-  return icOpenRegularWriteBinaryFile(szFname);
-}
 
 // ============================================================================
 
@@ -187,7 +180,7 @@ public:
       return false;
     }
 
-    m_f = icOpenWriteBinaryFile(m_filename.c_str());
+    m_f = icOpenRegularWriteBinaryFile(m_filename.c_str());
     if (!m_f) {
       printf("Unable to open '%s'\n", m_filename.c_str());
       return false;
@@ -601,10 +594,6 @@ protected:
   CIccTagProfileSeqDesc* m_pTagSeq = nullptr;
 };
 
-
-typedef std::list<CIccProfile*> IccProfilePtrList;
-
-
 void Usage() 
 {
   printf("iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
@@ -665,13 +654,15 @@ void Usage()
 
 //===================================================
 
+typedef std::vector<CIccProfile*> IccProfilePtrList;
+
 // The tool owns every -PCC profile it opens until cmm.Begin() has consumed the
 // connection conditions; they are tracked in pccList and must be released on
 // every exit path.  Centralizing the release here keeps the early-return error
 // paths from stranding them (#1336).
 static void releasePccList(IccProfilePtrList& pccList)
 {
-  for (IccProfilePtrList::iterator pcc = pccList.begin(); pcc != pccList.end(); pcc++) {
+  for (IccProfilePtrList::iterator pcc = pccList.begin(); pcc != pccList.end(); ++pcc) {
     delete *pcc;
   }
   pccList.clear();
