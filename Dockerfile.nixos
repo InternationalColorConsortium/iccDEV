@@ -86,7 +86,7 @@ RUN nix-shell -E 'with import <nixpkgs> {}; stdenv.mkDerivation { name = "iccdev
  && "$FINDUTILS_ROOT/bin/xargs" -r nix-store -qR < /tmp/runtime-roots | "$COREUTILS_ROOT/bin/sort" -u > /tmp/runtime-closure \
  && "$FINDUTILS_ROOT/bin/xargs" -r -I{} "$COREUTILS_ROOT/bin/cp" -a --parents "{}" /runtime-root < /tmp/runtime-closure \
  && "$COREUTILS_ROOT/bin/ln" -s "$BUSYBOX_ROOT/bin/busybox" /runtime-root/bin/busybox \
- && for tool in sh env find wc sort basename ls sed grep cat mkdir rm true false; do \
+ && for tool in sh env find wc sort basename ls sed grep cat mkdir rm true false id whoami; do \
       "$COREUTILS_ROOT/bin/ln" -s busybox "/runtime-root/bin/$tool"; \
     done \
  && "$COREUTILS_ROOT/bin/ln" -s /bin/env /runtime-root/usr/bin/env \

@@ -606,6 +606,9 @@ jobs:
             test -x ./CalcTest/checkInvalidProfiles.sh
             test -x ./mcs/updateprev.sh
             test -x ./mcs/updateprevWithBkgd.sh
+            cmake --build "$ICCDEV_BUILD_DIR" --target build-test-binaries --parallel "$(nproc)"
+            ctest --test-dir "$ICCDEV_BUILD_DIR" -N --no-tests=error
+            ctest --test-dir "$ICCDEV_BUILD_DIR" --output-on-failure --label-exclude slow --no-tests=error
           '
 
       - name: Cleanup
