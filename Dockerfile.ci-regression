@@ -67,7 +67,6 @@ RUN apt-get update \
     python3-venv=3.14.3-0ubuntu2 \
     shellcheck=0.11.0-2 \
     time=1.9-0.4 \
-    unzip=6.0-29ubuntu1 \
     valgrind=1:3.26.0-0ubuntu1 \
     wx-common=3.2.9+dfsg-1 \
     yamllint=1.37.1-1 \
@@ -97,7 +96,7 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
       --no-cache-dir \
       'numpy==2.4.2' \
       'tifffile==2026.2.24' \
-      'pillow==12.1.1' \
+      'pillow==12.2.0' \
       'imagecodecs==2026.6.6' \
       --quiet \
  && /opt/iccdev-spectral-preview/bin/python - <<'PY'
@@ -112,17 +111,6 @@ print(f"pillow {PIL.__version__}")
 print(f"tifffile {tifffile.__version__}")
 PY
 
-RUN actionlint_version="1.7.12" \
- && actionlint_archive="actionlint_${actionlint_version}_linux_amd64.tar.gz" \
- && actionlint_sha256="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8" \
- && curl -fsSLo "/tmp/${actionlint_archive}" \
-      "https://github.com/rhysd/actionlint/releases/download/v${actionlint_version}/${actionlint_archive}" \
- && printf '%s  %s\n' "$actionlint_sha256" "/tmp/${actionlint_archive}" | sha256sum -c - \
- && tar -xzf "/tmp/${actionlint_archive}" -C /tmp actionlint \
- && install -m 0755 /tmp/actionlint /usr/local/bin/actionlint \
- && rm -f "/tmp/${actionlint_archive}" /tmp/actionlint \
- && actionlint --version
-
 RUN hadolint_version="2.14.0" \
  && hadolint_sha256="6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47" \
  && curl -fsSLo /tmp/hadolint \
@@ -131,28 +119,6 @@ RUN hadolint_version="2.14.0" \
  && install -m 0755 /tmp/hadolint /usr/local/bin/hadolint \
  && rm -f /tmp/hadolint \
  && hadolint --version
-
-RUN trivy_version="0.71.2" \
- && trivy_archive="trivy_${trivy_version}_Linux-64bit.tar.gz" \
- && trivy_sha256="0510e71e2fd39bf863856d499c8dc19feb4e7336546394c502a8f5cc7ab27460" \
- && curl -fsSLo "/tmp/${trivy_archive}" \
-      "https://github.com/aquasecurity/trivy/releases/download/v${trivy_version}/${trivy_archive}" \
- && printf '%s  %s\n' "$trivy_sha256" "/tmp/${trivy_archive}" | sha256sum -c - \
- && tar -xzf "/tmp/${trivy_archive}" -C /tmp trivy \
- && install -m 0755 /tmp/trivy /usr/local/bin/trivy \
- && rm -f "/tmp/${trivy_archive}" /tmp/trivy \
- && trivy --version | sed -n '1p'
-
-RUN codeql_version="2.25.6" \
- && codeql_archive="codeql-linux64.zip" \
- && codeql_sha256="d7108fe3ab439267f2dbadd5462096aa190c6258e06d90004faef04d65bf4281" \
- && curl -fsSLo "/tmp/${codeql_archive}" \
-      "https://github.com/github/codeql-cli-binaries/releases/download/v${codeql_version}/${codeql_archive}" \
- && printf '%s  %s\n' "$codeql_sha256" "/tmp/${codeql_archive}" | sha256sum -c - \
- && unzip -q "/tmp/${codeql_archive}" -d /opt \
- && ln -s /opt/codeql/codeql /usr/local/bin/codeql \
- && rm -f "/tmp/${codeql_archive}" \
- && codeql version --format=terse
 
 RUN python3 -m venv /opt/iccdev-workflow-qa \
  && /opt/iccdev-workflow-qa/bin/python -m pip install --upgrade pip --quiet \
