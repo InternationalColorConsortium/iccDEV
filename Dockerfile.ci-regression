@@ -99,17 +99,7 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
       'pillow==12.2.0' \
       'imagecodecs==2026.6.6' \
       --quiet \
- && /opt/iccdev-spectral-preview/bin/python - <<'PY'
-import imagecodecs
-import numpy
-import PIL
-import tifffile
-
-print(f"imagecodecs {imagecodecs.__version__}")
-print(f"numpy {numpy.__version__}")
-print(f"pillow {PIL.__version__}")
-print(f"tifffile {tifffile.__version__}")
-PY
+ && /opt/iccdev-spectral-preview/bin/python -c 'import imagecodecs,numpy,PIL,tifffile; print(f"imagecodecs {imagecodecs.__version__}"); print(f"numpy {numpy.__version__}"); print(f"pillow {PIL.__version__}"); print(f"tifffile {tifffile.__version__}")'
 
 RUN hadolint_version="2.14.0" \
  && hadolint_sha256="6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47" \
