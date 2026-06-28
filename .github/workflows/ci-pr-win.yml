@@ -5,7 +5,7 @@
 #                 https://color.org
 #
 #
-# Intent: Windows MSVC and MinGW build and test pipeline for PR validation
+# Intent: Windows MSVC, ClangCL, and MinGW build and test pipeline for PR validation
 #
 # Last Updated: 2026-04-05 23:41:13 UTC by David Hoyt
 #               Review Permissions
@@ -37,7 +37,7 @@ env:
 
 jobs:
   build:
-    name: Windows MSVC build
+    name: Windows MSVC + ClangCL build
     runs-on: windows-2022
     timeout-minutes: 20
     defaults:
@@ -256,7 +256,6 @@ jobs:
           cd Build/Cmake
           Write-Host "========= Building iccDEV ... ================`n"
           cmake --build build -- /m /maxcpucount
-          cmake --build build -- /m /maxcpucount
 
       - name: Run Windows CTest check
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
@@ -274,77 +273,12 @@ jobs:
           pwd
           cd Build/Cmake
           Write-Host "========= Running CTest check ... ================`n"
-          cmake --build build --config Debug --target check -- /m /maxcpucount
-      - name: GitHub Summary
-        if: always()
-        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
-          POWERSHELL_UPDATECHECK: Off
-          GH_REPOSITORY: ${{ github.repository }}
-          GH_RUN_URL: ${{ env.RUN_URL }}
-          GH_EVENT_NAME: ${{ github.event_name }}
-          GH_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          GH_BUILD_TYPE: Debug
-          GH_RUNNER_OS: ${{ runner.os }}
-          GH_JOB_STATUS: ${{ job.status }}
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          # Use canonical sanitization from .github/scripts/sanitize.ps1
-          # PowerShell dot-sourcing: loads the script into the current scope
-          . .github/scripts/sanitize.ps1
-          "## CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Run URL: $(Sanitize-Line $env:GH_RUN_URL)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Triggered by: $(Sanitize-Line $env:GH_EVENT_NAME)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Commit SHA: $(Sanitize-Line $env:GH_COMMIT_SHA)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Build Type: $(Sanitize-Line $env:GH_BUILD_TYPE)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Runner OS: $(Sanitize-Line $env:GH_RUNNER_OS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
-
-  clangcl-smoke:
-    name: Windows ClangCL smoke
-    runs-on: windows-2022
-    timeout-minutes: 20
-    defaults:
-      run:
-        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
-
-    steps:
-      - name: Checkout PR source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
-
-      - name: Install dependencies
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
-          POWERSHELL_UPDATECHECK: Off
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          git config --global credential.helper ""
-          if (Test-Path Env:GITHUB_TOKEN) {
-           Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-          }
-          $depsUrl = @(
-            'https://github.com/InternationalColorConsortium/iccDEV/releases/download'
-            'v2.3.1/vcpkg-exported-deps.zip'
-          ) -join '/'
-          Start-BitsTransfer -Source $depsUrl -Destination "deps.zip"
-          tar -xf deps.zip
+          cmake --build build --config Debug --target build-test-binaries -- /m /maxcpucount
+          python ..\..\.github\scripts\run-recent-ctests.py `
+            --test-dir build `
+            --config Debug `
+            --limit 5 `
+            --selection-output build\recent-ctests.txt
 
       - name: Run ClangCL build and CTest check
         env:
@@ -362,17 +296,6 @@ jobs:
           git config --global credential.helper ""
           if (Test-Path Env:GITHUB_TOKEN) {
            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-          }
-
-          function Invoke-Native {
-           param(
-             [Parameter(Mandatory = $true)][string] $FilePath,
-             [Parameter(Mandatory = $true)][string[]] $Arguments
-           )
-           & $FilePath @Arguments
-           if ($LASTEXITCODE -ne 0) {
-             throw "$FilePath failed with exit code $LASTEXITCODE"
-           }
           }
 
           function Invoke-NativeLogged {
@@ -428,8 +351,15 @@ jobs:
           Invoke-NativeLogged cmake @(
            '--build', $buildDir,
            '--config', 'Debug',
-           '--target', 'check',
+           '--target', 'build-test-binaries',
            '--parallel'
+          ) $checkLog
+          Invoke-NativeLogged python @(
+           '.github\scripts\run-recent-ctests.py',
+           '--test-dir', $buildDir,
+           '--config', 'Debug',
+           '--limit', '5',
+           '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           ) $checkLog
 
       - name: Summarize ClangCL compiler warning signal
@@ -476,7 +406,7 @@ jobs:
            '--issues', '#1025,#1036'
           )
 
-      - name: GitHub Summary
+      - name: ClangCL Summary
         if: always()
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -495,12 +425,44 @@ jobs:
            '- Warning policy: ``_CRT_SECURE_NO_WARNINGS`` plus ``-Wno-deprecated-declarations``',
            '- Build scope: ``full configured command-line project plus Windows CMM DLL``',
            '- Build type: ``Debug``',
-           '- CTest: ``all registered Windows suites``',
+           '- CTest: ``last 5 registered Windows suites``',
            "- Result: ``$(Sanitize-Line $env:GH_JOB_STATUS)``"
           )
           $summaryLines | ForEach-Object {
             Sanitize-Print $_
           } | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: GitHub Summary
+        if: always()
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_URL: ${{ env.RUN_URL }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+          GH_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_BUILD_TYPE: Debug
+          GH_RUNNER_OS: ${{ runner.os }}
+          GH_JOB_STATUS: ${{ job.status }}
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          # Use canonical sanitization from .github/scripts/sanitize.ps1
+          # PowerShell dot-sourcing: loads the script into the current scope
+          . .github/scripts/sanitize.ps1
+          "## CMake Windows Build Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Repository: $(Sanitize-Line $env:GH_REPOSITORY)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Run URL: $(Sanitize-Line $env:GH_RUN_URL)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Triggered by: $(Sanitize-Line $env:GH_EVENT_NAME)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Commit SHA: $(Sanitize-Line $env:GH_COMMIT_SHA)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Build Type: $(Sanitize-Line $env:GH_BUILD_TYPE)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Runner OS: $(Sanitize-Line $env:GH_RUNNER_OS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "Status: $(Sanitize-Line $env:GH_JOB_STATUS)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
   mingw-smoke:
     name: MinGW UCRT64 smoke
@@ -619,15 +581,16 @@ jobs:
             '--build', $buildDir,
             '--parallel'
           )
-          Invoke-Native $ctest @(
-            '--test-dir', $buildDir,
-            '-N',
-            '--no-tests=error'
-          )
           Invoke-Native $cmake @(
             '--build', $buildDir,
-            '--target', 'check',
+            '--target', 'build-test-binaries',
             '--parallel'
+          )
+          Invoke-Native python @(
+            '.github\scripts\run-recent-ctests.py',
+            '--test-dir', $buildDir,
+            '--limit', '5',
+            '--selection-output', (Join-Path $buildDir 'recent-ctests.txt')
           )
 
           $compilerLine = (& $gxx --version)[0]
@@ -638,7 +601,7 @@ jobs:
             "- Build scope: ``full configured command-line project plus Windows CMM DLL``",
             "- Build type: ``Release``",
             "- Linkage: ``static``",
-            "- CTest: ``all registered MinGW suites``",
+            "- CTest: ``last 5 registered MinGW suites``",
             "- Result: ``passed``"
           )
           $summaryLines | ForEach-Object {

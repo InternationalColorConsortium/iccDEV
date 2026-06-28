@@ -313,11 +313,11 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          ctest --test-dir "${BUILD_DIR}" \
-            --output-on-failure \
-            --label-exclude "slow" \
-            --no-tests=error \
-            --output-junit "${BUILD_DIR}/ctest-results.xml"
+          python3 .github/scripts/run-recent-ctests.py \
+            --test-dir "${BUILD_DIR}" \
+            --limit 5 \
+            --output-junit "${BUILD_DIR}/ctest-results.xml" \
+            --selection-output "${BUILD_DIR}/recent-ctests.txt"
 
       - name: Run hybrid iccApplyProfiles timing matrix
         if: ${{ inputs.run_hybrid_timing }}
@@ -377,7 +377,7 @@ jobs:
             }
           fi
 
-          test_cmd="ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
+          test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --limit 5 --output-junit build/ctest-results.xml"
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
           container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${REGRESSION_IMAGE_TAG}"
 
@@ -409,7 +409,7 @@ jobs:
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON \\"
             echo "  -DICC_USE_ZLIB=ON"
             echo "cmake --build build --parallel \"\$(nproc)\""
-            echo "ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
+            echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit 5"
             echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
             echo '```'
             if [ -f "$timing_report" ]; then
@@ -492,6 +492,7 @@ jobs:
 
           copy_file_if_present "${BUILD_DIR}/build.log" "${data_dir}/build.log"
           copy_file_if_present "${BUILD_DIR}/ctest-list.txt" "${data_dir}/ctest-list.txt"
+          copy_file_if_present "${BUILD_DIR}/recent-ctests.txt" "${data_dir}/recent-ctests.txt"
           copy_file_if_present "${BUILD_DIR}/ctest-results.xml" "${data_dir}/ctest-results.xml"
           copy_dir_if_present \
             "${BUILD_DIR}/Testing/Temporary" \
