@@ -130,7 +130,7 @@ static bool WriteStringToStdout(const std::string &contents)
 }
 
 // adds MPE element type detail for v5 profiles
-bool DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
+bool DumpTagCore(CIccProfile *pIcc, CIccTag *pTag, icTagSignature sig, int nVerboseness)
 {
   const size_t bufSize = 64;
   char buf[bufSize];
@@ -172,7 +172,7 @@ bool DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
     }
 
     std::string validateReport;
-    if (pTag->Validate("", validateReport) >= icValidateCriticalError)
+    if (pTag->Validate("", validateReport, pIcc) >= icValidateCriticalError)
       contents = validateReport;
     else
       pTag->Describe(contents, nVerboseness);
@@ -191,14 +191,14 @@ bool DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
 bool DumpTagSig(CIccProfile *pIcc, icTagSignature sig, int nVerboseness)
 {
   CIccTag *pTag = pIcc->FindTag(sig);
-  return DumpTagCore(pTag, sig, nVerboseness);
+  return DumpTagCore(pIcc, pTag, sig, nVerboseness);
 }
 
 // This directly accesses the tag data, does not need to search
 bool DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
 {
   CIccTag *pTag = pIcc->FindTag(entry);
-  return DumpTagCore(pTag, entry.TagInfo.sig, nVerboseness);
+  return DumpTagCore(pIcc, pTag, entry.TagInfo.sig, nVerboseness);
 }
 
 void printUsage(void)
