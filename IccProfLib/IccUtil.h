@@ -468,6 +468,7 @@ protected:
 
 ICCPROFLIB_API const char *icUtf16ToUtf8(std::string &buf, const icUInt16Number *szSrc, int sizeSrc=0);
 ICCPROFLIB_API const unsigned short *icUtf8ToUtf16(CIccUTF16String &buf, const char *szSrc, int sizeSrc=0);
+ICCPROFLIB_API const char *icWCharToUtf8(std::string &buf, const wchar_t *szSrc, size_t sizeSrc);
 
 // ---------------------------------------------------------------------------
 // Date/time and rendering intent parsing helpers

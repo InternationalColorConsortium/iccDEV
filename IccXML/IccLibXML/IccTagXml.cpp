@@ -4774,12 +4774,15 @@ bool CIccTagXmlDict::ToXml(std::string &xml, std::string blanks/* = ""*/)
     std::string bufstr;
 
     xml += blanks + " <DictEntry Name=\"";
-    xml += icFixXml(fix, icUtf16ToUtf8(bufstr, (icUInt16Number*)nv->GetName().c_str(), (int)nv->GetName().size()));
+    auto nameStr = nv->GetName();       // wstring
+    xml += icFixXml(fix, icWCharToUtf8(bufstr, nameStr.c_str(), nameStr.size()));
+
     xml += "\"";
 
     if (nv->IsValueSet()) {
       xml += " Value=\"";
-      xml += icFixXml(fix, icUtf16ToUtf8(bufstr, (icUInt16Number*)nv->GetValue().c_str(), (int)nv->GetValue().size()));
+      auto valueStr = nv->GetValue();   // wstring
+      xml += icFixXml(fix, icWCharToUtf8(bufstr, valueStr.c_str(), valueStr.size()));
       xml += "\"";
     }
 

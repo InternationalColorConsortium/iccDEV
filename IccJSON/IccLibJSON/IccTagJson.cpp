@@ -2604,7 +2604,7 @@ bool CIccTagJsonDict::ToJson(IccJson &j)
     bool nameOverflow = false;
     int nameLen = icJsonSafeInt(wname.size(), &nameOverflow);
     if (nameOverflow) return false;
-    icUtf16ToUtf8(name, (const icUInt16Number*)wname.c_str(), nameLen);
+    icWCharToUtf8(name, wname.c_str(), nameLen);
     entry["name"] = name;
 
     // Optional value
@@ -2614,7 +2614,7 @@ bool CIccTagJsonDict::ToJson(IccJson &j)
       bool valueOverflow = false;
       int valueLen = icJsonSafeInt(wval.size(), &valueOverflow);
       if (valueOverflow) return false;
-      icUtf16ToUtf8(value, (const icUInt16Number*)wval.c_str(), valueLen);
+      icWCharToUtf8(value, wval.c_str(), valueLen);
       entry["value"] = value;
     }
 

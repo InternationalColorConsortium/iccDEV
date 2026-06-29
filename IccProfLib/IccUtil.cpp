@@ -82,6 +82,7 @@
 #include <cmath>
 #include <cstring>
 #include <time.h>
+#include <cwchar>
 
 #define PI 3.1415926535897932384626433832795
 
@@ -2989,6 +2990,45 @@ const unsigned short *icUtf8ToUtf16(CIccUTF16String &buf, const char *szSrc, int
 {
   if (!buf.FromUtf8(szSrc, sizeSrc))
     return NULL;
+  return buf.c_str();
+}
+
+const char *icWCharToUtf8(std::string &buf, const wchar_t *szSrc, size_t sizeSrc)
+{
+  if (!szSrc) {
+    buf.clear();
+    return buf.c_str();
+  }
+
+  if (!sizeSrc)
+    sizeSrc = wcslen(szSrc);
+  if (sizeSrc == 0) {
+    buf.clear();
+    return buf.c_str();
+  }
+
+  size_t n = sizeSrc * 4u;
+  if (n) {
+    char *szBuf = (char*)malloc(n + 1);
+    if (!szBuf) {
+      buf.clear();
+      return buf.c_str();
+    }
+    char *szDest = szBuf;
+#if WCHAR_MAX > 65535
+    const UTF32 *szPtr = (const UTF32 *)szSrc;
+    icConvertUTF32toUTF8(&szPtr, &szPtr[sizeSrc], (UTF8**)&szDest, (UTF8*)&szBuf[n], lenientConversion);
+#else
+    const UTF16 *szPtr = (const UTF16 *)szSrc;
+    icConvertUTF16toUTF8(&szPtr, &szPtr[sizeSrc], (UTF8**)&szDest, (UTF8*)&szBuf[n], lenientConversion);
+#endif
+    *szDest = '\0';
+    buf.assign(szBuf, (size_t)(szDest - szBuf));
+    free(szBuf);
+  } else {
+    buf.clear();
+  }
+
   return buf.c_str();
 }
 
