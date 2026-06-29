@@ -64,6 +64,13 @@
 #include <thread>
 
 
+static int icResolveCmmThreadCount(int nThreads)
+{
+  int nActual = nThreads > 0 ? nThreads : (int)std::thread::hardware_concurrency();
+  return nActual > 0 ? nActual : 1;
+}
+
+
 //===========================================================================
 // CIccApplyThreadedCmm
 //===========================================================================
@@ -108,10 +115,10 @@ CIccApplyThreadedCmm::~CIccApplyThreadedCmm()
  */
 bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
 {
-  m_nThreads = nThreads;
-  m_workers.resize(nThreads, NULL);
+  m_nThreads = icResolveCmmThreadCount(nThreads);
+  m_workers.resize(m_nThreads, NULL);
 
-  for (int i = 0; i < nThreads; i++) {
+  for (int i = 0; i < m_nThreads; i++) {
     icStatusCMM status;
     m_workers[i] = pCmm->GetNewApplyCmm(status);
     if (!m_workers[i] || status != icCmmStatOk)
@@ -263,9 +270,7 @@ CIccThreadedCmm* CIccThreadedCmm::Attach(CIccCmm *pCmm, int nThreads, bool bDele
     return NULL;
   }
 
-  int nActual = nThreads > 0 ? nThreads : (int)std::thread::hardware_concurrency();
-  if (nActual < 1)
-    nActual = 1;
+  int nActual = icResolveCmmThreadCount(nThreads);
 
   CIccThreadedCmm *rv = new CIccThreadedCmm();
   rv->m_pCmm       = pCmm;
