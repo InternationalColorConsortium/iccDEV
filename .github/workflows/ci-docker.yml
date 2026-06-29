@@ -192,7 +192,7 @@ jobs:
 
       - name: Generate SBOM
         if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
-        uses: anchore/sbom-action@52585ffac92ba32c717677c870223d2aba163db6  # v0.22.2
+        uses: anchore/sbom-action@5dd6ac9278f372ca3f8480f05a1ed38534773086  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           format: spdx-json
