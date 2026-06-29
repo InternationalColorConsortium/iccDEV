@@ -139,6 +139,34 @@ path.write_bytes(d)
 PY
 }
 
+generate_defaulted_packbits_gray_tiff() {
+  # 32x32 8-bit grayscale PackBits TIFF.  It intentionally omits
+  # SamplesPerPixel, SampleFormat, and Orientation so CTiffImg must accept the
+  # baseline/defaulted tag values reported by libtiff.
+  "$PYTHON" - "$1" <<'PY'
+import struct, sys, pathlib
+path = pathlib.Path(sys.argv[1])
+w = h = 32; bps = 8
+packbits = bytes([129, 0]) * ((w * h) // 128)
+doff = 8; ifd = doff + len(packbits)
+if ifd % 2:
+    packbits += b"\0"; ifd += 1
+entries = [(256, 4, 1, w), (257, 4, 1, h), (258, 3, 1, bps),
+           (259, 3, 1, 32773), (262, 3, 1, 1), (273, 4, 1, doff),
+           (278, 4, 1, h), (279, 4, 1, len(packbits)), (284, 3, 1, 1),
+           (296, 3, 1, 2)]
+entries.sort()
+d = bytearray(b"II" + struct.pack("<H", 42) + struct.pack("<I", ifd))
+d += packbits
+d += struct.pack("<H", len(entries))
+for t, ty, c, v in entries:
+    d += struct.pack("<HHI", t, ty, c)
+    d += (struct.pack("<H", v) + b"\0\0") if (ty == 3 and c == 1) else struct.pack("<I", v)
+d += struct.pack("<I", 0)
+path.write_bytes(d)
+PY
+}
+
 generate_tiff_with_icc() {
   # 2x2 RGB TIFF embedding the ICC bytes from file $2 (tag 34675, out-of-line).
   "$PYTHON" - "$1" "$2" <<'PY'
@@ -178,6 +206,16 @@ test_palette_photometric_report() {
   grep -Eq 'Photometric:[[:space:]]+Palette' "$log"
 }
 
+test_defaulted_packbits_gray_loads() {
+  [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
+  local tif="$OUTDIR/defaulted-packbits-gray.tif"
+  local log="$OUTDIR/tiffdump-defaulted-packbits-gray.log"
+  generate_defaulted_packbits_gray_tiff "$tif" || return 1
+  "$TIFFDUMP" "$tif" > "$log" 2>&1
+  grep -Eq 'SamplesPerPixel:[[:space:]]+1' "$log" || return 1
+  grep -Eq 'Compression:[[:space:]]+PackBits' "$log"
+}
+
 test_noncompliant_embedded_icc_rejected() {
   [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
   local srgb="$ICCDEV_TESTING/sRGB_v4_ICC_preference.icc"
@@ -207,6 +245,7 @@ run_ok "tiffdump-export-path-escape" test_export_path_escaping
 run_ok "tiffdump-extra-arg-reject" test_extra_arg_rejected
 run_ok "tiffdump-no-profile-export-reject" test_missing_embedded_profile_export_rejected
 run_ok "tiffdump-palette-photometric-report" test_palette_photometric_report
+run_ok "tiffdump-defaulted-packbits-gray-load" test_defaulted_packbits_gray_loads
 run_ok "tiffdump-noncompliant-embedded-icc-reject" test_noncompliant_embedded_icc_rejected
 
 echo "iccTiffDump output hardening regression: $pass passed, $fail failed, $((pass + fail)) total"

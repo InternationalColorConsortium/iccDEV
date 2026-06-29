@@ -111,6 +111,7 @@ IdList compression_types[] = {
   {COMPRESSION_NONE,         "None"},
   {COMPRESSION_LZW,          "LZW"},
   {COMPRESSION_JPEG,         "JPEG"},
+  {COMPRESSION_PACKBITS,     "PackBits"},
   {COMPRESSION_DEFLATE,      "Deflate"},
   {COMPRESSION_ADOBE_DEFLATE,"Deflate"},
   {UNKNOWNID,                "Unknown"},
