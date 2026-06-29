@@ -3086,16 +3086,26 @@ bool CIccTagJsonGamutBoundaryDesc::ToJson(IccJson &j)
       vertices["PCSChannels"] = (int)m_nPCSChannels;
       IccJson pcsArr = IccJson::array();
       icInt32Number nPCS = m_NumberOfVertices * m_nPCSChannels;
-      for (icInt32Number i = 0; i < nPCS; i++)
-        pcsArr.push_back((double)m_PCSValues[i]);
+      for (icInt32Number i = 0; i < nPCS; i++) {
+        icFloatNumber value = m_PCSValues[i];
+        if (!std::isfinite(value)) {        // flush NaN and Inf to zero
+          value = 0.0f;
+        }
+        pcsArr.push_back((double)value);
+      }
       vertices["PCSValues"] = pcsArr;
     }
     if (m_DeviceValues) {
       vertices["DeviceChannels"] = (int)m_nDeviceChannels;
       IccJson devArr = IccJson::array();
       icInt32Number nDev = m_NumberOfVertices * m_nDeviceChannels;
-      for (icInt32Number i = 0; i < nDev; i++)
-        devArr.push_back((double)m_DeviceValues[i]);
+      for (icInt32Number i = 0; i < nDev; i++) {
+        icFloatNumber value = m_DeviceValues[i];
+        if (!std::isfinite(value)) {        // flush NaN and Inf to zero
+          value = 0.0f;
+        }
+        devArr.push_back((double)value);
+      }
       vertices["DeviceValues"] = devArr;
     }
     j["Vertices"] = vertices;
