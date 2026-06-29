@@ -10,6 +10,11 @@ The fourth argument is a filename prefix. `iccSpecSepToTiff` appends the channel
 number to that prefix, so `spec_` with `start=1` opens `spec_1`, then `spec_2`,
 and so on.
 
+`compress` and `sep` must be literal boolean values (`0` or `1`). The channel
+range must be exact: repeatedly adding `incr` to `start` must land on `end`.
+When the optional profile argument is provided, the profile file must be
+readable or the command fails without writing an output TIFF.
+
 ```sh
 iccSpecSepToTiff
 ```
