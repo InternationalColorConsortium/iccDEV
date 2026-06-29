@@ -21,6 +21,11 @@ if [ ! -f "$SAMPLE_TIFF" ]; then
   echo "[FAIL] missing sample TIFF: $SAMPLE_TIFF"
   exit 1
 fi
+NO_PROFILE_TIFF="$REPO_ROOT/.github/ci/test-data/spectral/spec_1"
+if [ ! -f "$NO_PROFILE_TIFF" ]; then
+  echo "[FAIL] missing no-profile sample TIFF: $NO_PROFILE_TIFF"
+  exit 1
+fi
 
 pass=0
 fail=0
@@ -71,6 +76,33 @@ newline.icc"
 
   [ -s "$dst" ] || return 1
   grep -Fq 'Profile extracted to: '"$OUTDIR"'/export_with_\nnewline.icc' "$log"
+}
+
+test_extra_arg_rejected() {
+  local dst="$OUTDIR/extra-arg.icc"
+  local log="$OUTDIR/tiffdump-extra-arg.log"
+
+  rm -f "$dst"
+  if "$TIFFDUMP" "$SAMPLE_TIFF" "$dst" extra-token > "$log" 2>&1; then
+    return 1
+  fi
+
+  grep -Fq "Usage: iccTiffDump tiff_file {exported_icc_file}" "$log" || return 1
+  [ ! -e "$dst" ]
+}
+
+test_missing_embedded_profile_export_rejected() {
+  local dst="$OUTDIR/no-profile-export.icc"
+  local log="$OUTDIR/tiffdump-no-profile-export.log"
+
+  rm -f "$dst"
+  if "$TIFFDUMP" "$NO_PROFILE_TIFF" "$dst" > "$log" 2>&1; then
+    return 1
+  fi
+
+  grep -Fq "Profile:           None" "$log" || return 1
+  grep -Fq "No embedded ICC profile to extract" "$log" || return 1
+  [ ! -e "$dst" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -172,6 +204,8 @@ echo "=== iccTiffDump output hardening regression ==="
 run_ok "tiffdump-profile-description-escape" test_profile_description_escaping
 run_ok "tiffdump-input-path-escape" test_input_path_escaping
 run_ok "tiffdump-export-path-escape" test_export_path_escaping
+run_ok "tiffdump-extra-arg-reject" test_extra_arg_rejected
+run_ok "tiffdump-no-profile-export-reject" test_missing_embedded_profile_export_rejected
 run_ok "tiffdump-palette-photometric-report" test_palette_photometric_report
 run_ok "tiffdump-noncompliant-embedded-icc-reject" test_noncompliant_embedded_icc_rejected
 
