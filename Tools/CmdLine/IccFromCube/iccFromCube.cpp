@@ -148,7 +148,7 @@ public:
 
         bAddBlankLine = false;
       }
-      else if (line.substr(0, 12) == "LUT_1D_SiZE ") {
+      else if (line.substr(0, 12) == "LUT_1D_SIZE ") {
         printf("1DLUTs are not supported\n");
         return false;
       }
@@ -166,8 +166,9 @@ public:
         }
       }
       else if (line.substr(0, 11) == "DOMAIN_MIN ") {
-        m_fMinInput[0] = (icFloatNumber)atof(line.c_str() + 11);
-        const char* next = getNext(line.c_str());
+        const char* first = line.c_str() + 11;
+        m_fMinInput[0] = (icFloatNumber)atof(first);
+        const char* next = getNext(first);
         if (next) {
           m_fMinInput[1] = (icFloatNumber)atof(next);
           next = getNext(next);
@@ -182,8 +183,9 @@ public:
         }
       }
       else if (line.substr(0, 11) == "DOMAIN_MAX ") {
-        m_fMaxInput[0] = (icFloatNumber)atof(line.c_str() + 11);
-        const char* next = getNext(line.c_str());
+        const char* first = line.c_str() + 11;
+        m_fMaxInput[0] = (icFloatNumber)atof(first);
+        const char* next = getNext(first);
         if (next) {
           m_fMaxInput[1] = (icFloatNumber)atof(next);
           next = getNext(next);
@@ -351,11 +353,11 @@ protected:
 
 int main(int argc, char* argv[])
 {
-  if (argc <= 2) {
+  if (argc != 3) {
     printf("Usage: iccFromCube cube_file output_icc_file\n");
     printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
 
-    return 0;
+    return argc <= 2 ? 0 : 1;
   }
 
   CubeFile cube(argv[1]);

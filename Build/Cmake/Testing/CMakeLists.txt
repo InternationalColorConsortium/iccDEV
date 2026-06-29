@@ -1660,6 +1660,14 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh"
 )
 
+iccdev_add_script_test(
+  iccdev.fromcube-cli-args
+  60
+  "iccdev;tools;fromcube;cli;domain;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-fromcube-cli-args-regression.sh"
+)
+
 if(TARGET iccApplyNamedCmm AND TARGET iccDumpProfile)
   iccdev_add_script_test(
     iccdev.calculator-regressions
