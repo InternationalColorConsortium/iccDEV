@@ -649,8 +649,11 @@ int main(int argc, const char** argv)
   };
 
   //Read each line
+  bool bApplySuccess = true;
   for (i=0; i<(int)SrcImg.GetHeight(); i++) {
     if (!SrcImg.ReadLine(pSBuf)) {
+      printf("Error reading line %d from Tiff file - '%s'\n", i, cfgApply.m_srcImgFile.c_str());
+      bApplySuccess = false;
       break;
     }
     if (bUseRowApply) {
@@ -701,6 +704,8 @@ int main(int argc, const char** argv)
 
     //Output the converted pixels to the destination image
     if (!DstImg.WriteLine(pDBuf)) {
+      printf("Error writing line %d to Tiff file - '%s'\n", i, cfgApply.m_dstImgFile.c_str());
+      bApplySuccess = false;
       break;
     }
 
@@ -724,5 +729,5 @@ int main(int argc, const char** argv)
 
   DstImg.Close();
 
-  return 0;
+  return bApplySuccess ? 0 : -1;
 }

@@ -257,6 +257,212 @@ jobs:
           Write-Host "========= Building iccDEV ... ================`n"
           cmake --build build -- /m /maxcpucount
 
+      - name: Run batch profile creation routines
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .github/scripts/sanitize.ps1
+
+          function Resolve-ExistingPath([string] $Path) {
+            if (-not (Test-Path -LiteralPath $Path)) {
+              throw "Required path missing: $(Sanitize-Line $Path)"
+            }
+            return (Resolve-Path -LiteralPath $Path).Path
+          }
+
+          function Invoke-Native {
+            param(
+              [Parameter(Mandatory = $true)][string] $FilePath,
+              [Parameter(Mandatory = $true)][string[]] $Arguments,
+              [Parameter(Mandatory = $true)][string] $WorkingDirectory
+            )
+            Push-Location -LiteralPath $WorkingDirectory
+            try {
+              & $FilePath @Arguments
+              if ($LASTEXITCODE -ne 0) {
+                $safePath = Sanitize-Line $FilePath
+                throw "$safePath failed with exit code $LASTEXITCODE"
+              }
+            } finally {
+              Pop-Location
+            }
+          }
+
+          $buildDir = Resolve-ExistingPath 'Build\Cmake\build'
+          $sourceTestingDir = Resolve-ExistingPath 'Testing'
+          $workRoot = Join-Path $env:RUNNER_TEMP 'iccdev-batch-profile-routines'
+          $workTestingDir = Join-Path $workRoot 'Testing'
+          if (Test-Path -LiteralPath $workRoot) {
+            Remove-Item -Recurse -Force -LiteralPath $workRoot
+          }
+          New-Item -ItemType Directory -Force -Path $workRoot | Out-Null
+          Copy-Item -Recurse -Force `
+            -LiteralPath $sourceTestingDir `
+            -Destination $workTestingDir
+
+          $iccFromXmlExe = Get-ChildItem -LiteralPath $buildDir `
+            -Recurse -File -Filter 'iccFromXml.exe' |
+            Sort-Object FullName |
+            Select-Object -First 1
+          if (-not $iccFromXmlExe) {
+            throw 'iccFromXml.exe was not found in the Windows build tree'
+          }
+
+          $runtimeDirs = New-Object 'System.Collections.Generic.List[string]'
+          Get-ChildItem -LiteralPath $buildDir `
+            -Recurse -File -Include *.exe,*.dll | ForEach-Object {
+              $runtimeDirs.Add($_.DirectoryName)
+            }
+          Get-ChildItem -LiteralPath 'scripts\buildsystems' `
+            -Recurse -Directory `
+            -ErrorAction SilentlyContinue | ForEach-Object {
+              $runtimeDirs.Add($_.FullName)
+            }
+          $env:TOOLDIR = Split-Path -Parent $iccFromXmlExe.FullName
+          if (-not $env:TOOLDIR.EndsWith('\')) {
+            $env:TOOLDIR += '\'
+          }
+          $runtimeDirs.Add($env:TOOLDIR.TrimEnd('\'))
+          $runtimePath = ($runtimeDirs | Sort-Object -Unique) -join ';'
+          if (-not $runtimePath) {
+            throw 'No build runtime directories found for batch profile routines'
+          }
+          $systemPath = @(
+            "$env:SystemRoot\system32",
+            "$env:SystemRoot",
+            "$env:SystemRoot\System32\Wbem"
+          ) -join ';'
+          $env:PATH = "$env:TOOLDIR;$runtimePath;$systemPath"
+
+          $batchFiles = Get-ChildItem -LiteralPath $sourceTestingDir -Recurse -File -Filter '*.bat' |
+            Sort-Object FullName
+          if ($batchFiles.Count -eq 0) {
+            throw 'No Testing batch files found'
+          }
+
+          $profileCommandCount = 0
+          foreach ($batchFile in $batchFiles) {
+            $relativePath = [System.IO.Path]::GetRelativePath(
+              $sourceTestingDir,
+              $batchFile.FullName
+            )
+            $workBatch = Join-Path $workTestingDir $relativePath
+            $workDir = Split-Path -Parent $workBatch
+            $currentWorkDir = $workDir
+            $dirStack = New-Object 'System.Collections.Generic.List[string]'
+            $lines = Get-Content -LiteralPath $batchFile.FullName
+            $lineNumber = 0
+            foreach ($line in $lines) {
+              $lineNumber++
+              $cmd = $line.Trim()
+              if (-not $cmd) { continue }
+              if ($cmd.StartsWith(
+                'rem ',
+                [System.StringComparison]::OrdinalIgnoreCase
+              )) { continue }
+              if ($cmd.StartsWith('::')) { continue }
+              if ($cmd.StartsWith(':')) { continue }
+              if ($cmd.StartsWith('@')) {
+                $cmd = $cmd.Substring(1).Trim()
+              }
+              if ($cmd -match '(?i)^echo\s+') { continue }
+
+              if ($cmd -match '(?i)^if\s+not\s+exist\s+(.+?)\s+(md|mkdir)\s+(.+)$') {
+                $checkPath = $Matches[1].Trim().Trim('"')
+                $createPath = $Matches[3].Trim().Trim('"')
+                if ([System.IO.Path]::IsPathRooted($checkPath)) {
+                  $candidateCheck = $checkPath
+                } else {
+                  $candidateCheck = Join-Path $currentWorkDir $checkPath
+                }
+                if (-not (Test-Path -LiteralPath $candidateCheck)) {
+                  if ([System.IO.Path]::IsPathRooted($createPath)) {
+                    $candidateCreate = $createPath
+                  } else {
+                    $candidateCreate = Join-Path $currentWorkDir $createPath
+                  }
+                  New-Item -ItemType Directory -Force -Path $candidateCreate | Out-Null
+                }
+                continue
+              }
+
+              if ($cmd -match '(?i)^(md|mkdir)\s+(.+)$') {
+                $targetDir = $Matches[2].Trim().Trim('"')
+                if ([System.IO.Path]::IsPathRooted($targetDir)) {
+                  $candidateDir = $targetDir
+                } else {
+                  $candidateDir = Join-Path $currentWorkDir $targetDir
+                }
+                New-Item -ItemType Directory -Force -Path $candidateDir | Out-Null
+                continue
+              }
+
+              if ($cmd -match '(?i)^(cd|chdir)\s+(.+)$') {
+                $targetDir = $Matches[2].Trim()
+                if ($targetDir -match '(?i)^/d\s+(.+)$') {
+                  $targetDir = $Matches[1].Trim()
+                }
+                $targetDir = $targetDir.Trim('"')
+                if ([System.IO.Path]::IsPathRooted($targetDir)) {
+                  $candidateDir = $targetDir
+                } else {
+                  $candidateDir = Join-Path $currentWorkDir $targetDir
+                }
+                $currentWorkDir = Resolve-ExistingPath $candidateDir
+                continue
+              }
+
+              if ($cmd -match '(?i)^pushd\s+(.+)$') {
+                $dirStack.Add($currentWorkDir)
+                $targetDir = $Matches[1].Trim().Trim('"')
+                if ([System.IO.Path]::IsPathRooted($targetDir)) {
+                  $candidateDir = $targetDir
+                } else {
+                  $candidateDir = Join-Path $currentWorkDir $targetDir
+                }
+                $currentWorkDir = Resolve-ExistingPath $candidateDir
+                continue
+              }
+
+              if ($cmd -match '(?i)^popd\b') {
+                if ($dirStack.Count -eq 0) {
+                  throw "Unmatched popd in $relativePath line $lineNumber"
+                }
+                $lastIndex = $dirStack.Count - 1
+                $currentWorkDir = $dirStack[$lastIndex]
+                $dirStack.RemoveAt($lastIndex)
+                continue
+              }
+
+              $profilePattern = '(?i)^(%TOOLDIR%)?iccFromXml(\.exe)?\b'
+              if ($cmd -notmatch $profilePattern) { continue }
+
+              $profileCommandCount++
+              Write-Host (
+                "[PROFILE] {0}:{1}: {2}" -f $relativePath, $lineNumber, $cmd
+              )
+              Invoke-Native cmd.exe @('/d', '/v:off', '/c', $cmd) $currentWorkDir
+            }
+          }
+
+          if ($profileCommandCount -eq 0) {
+            throw 'No iccFromXml profile creation routines found in batch files'
+          }
+          Write-Host (
+            "[OK] Executed $profileCommandCount profile creation routines " +
+            "from $($batchFiles.Count) Testing batch files"
+          )
+
       - name: Run Windows CTest check
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
