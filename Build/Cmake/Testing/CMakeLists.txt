@@ -1310,6 +1310,16 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   )
 endif()
 
+if(TARGET iccFromXml AND TARGET iccApplyNamedCmm AND TARGET iccApplySearch)
+  iccdev_add_script_test(
+    iccdev.searchvec-uio-regression
+    120
+    "iccdev;tools;hybrid;search;ub;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-searchvec-uio-regression.sh"
+  )
+endif()
+
 iccdev_add_script_test(
   iccdev.specsep-tiff-geometry-regression
   120
