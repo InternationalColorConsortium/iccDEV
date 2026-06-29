@@ -3782,7 +3782,15 @@ bool CIccProfile::calcNormIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnecti
     }
 
     obs->VectorScale(illuminant);
-    obs->Scale(obs->RowSum(1));
+    icFloatNumber illumY = obs->RowSum(1);
+    if (!std::isfinite((double)illumY) || !icNotZero(illumY)) {
+      pXYZ[0] = 0.0f;
+      pXYZ[1] = 0.0f;
+      pXYZ[2] = 0.0f;
+      delete obs;
+      return false;
+    }
+    obs->Scale(1.0f / illumY);
 
     pXYZ[0] = obs->RowSum(0);
     pXYZ[1] = obs->RowSum(1);

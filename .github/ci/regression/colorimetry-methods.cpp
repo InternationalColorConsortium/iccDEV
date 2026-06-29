@@ -41,10 +41,13 @@
 // Returns 0 on success; the number of failed invariants otherwise (each printed).
 
 #include "IccColorimetry.h"
+#include "IccProfile.h"
+#include "IccTagBasic.h"
 #include "IccUtil.h"          // icFtoF16, icSpectralRange, icFloatNumber
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 namespace {
@@ -798,6 +801,43 @@ void testLoadedWeightingTable()
   }
 }
 
+// ---- Part J: profile-level normalized illuminant recomputation -------------------
+void testProfileNormIlluminant()
+{
+  CIccProfile profile;
+  profile.InitHeader();
+  profile.m_Header.version = icVersionNumberV5;
+
+  icSpectralRange emptyRange;
+  std::memset(&emptyRange, 0, sizeof(emptyRange));
+
+  CIccTagSpectralViewingConditions *view = new CIccTagSpectralViewingConditions();
+  bool attached = view
+               && view->setObserver(icStdObs1931TwoDegrees, emptyRange, NULL)
+               && view->setIlluminant(icIlluminantD50, emptyRange, NULL, 5000)
+               && profile.AttachTag(icSigSpectralViewingConditionsTag, view);
+  if (!attached) {
+    delete view;
+    check(false, "profile calcNormIlluminantXYZ setup", 0.0);
+    return;
+  }
+
+  icFloatNumber xyz[3] = { 0.0f, 0.0f, 0.0f };
+  bool ok = profile.calcNormIlluminantXYZ(xyz, &profile);
+  check(ok, "profile calcNormIlluminantXYZ returns true for D50/1931", 0.0);
+  if (!ok)
+    return;
+
+  std::printf("[colorimetry-methods] profile calcNorm D50 = %.5f %.5f %.5f\n",
+              (double)xyz[0], (double)xyz[1], (double)xyz[2]);
+  check(std::fabs((double)xyz[1] - 1.0)    < TOL_EXACT,
+        "profile calcNormIlluminantXYZ: Y == 1", std::fabs((double)xyz[1] - 1.0));
+  check(std::fabs((double)xyz[0] - 0.9671) < 2e-3,
+        "profile calcNormIlluminantXYZ: X ~ 0.9671", std::fabs((double)xyz[0] - 0.9671));
+  check(std::fabs((double)xyz[2] - 0.8138) < 2e-3,
+        "profile calcNormIlluminantXYZ: Z ~ 0.8138", std::fabs((double)xyz[2] - 0.8138));
+}
+
 } // namespace
 
 int main()
@@ -809,6 +849,7 @@ int main()
   testStandardAccessors();
   testRegistryWeightingTables();
   testLoadedWeightingTable();
+  testProfileNormIlluminant();
   testEmissive();
   testInputGuards();
 
