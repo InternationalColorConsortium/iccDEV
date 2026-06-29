@@ -403,19 +403,23 @@ bool CTiffImg::Open(const char *szFname)
   }
   icUInt16Number *nSampleInfo=NULL;
 
-  TIFFGetField(m_hTif, TIFFTAG_IMAGEWIDTH, &m_nWidth);
-  TIFFGetField(m_hTif, TIFFTAG_IMAGELENGTH, &m_nHeight);
-  TIFFGetField(m_hTif, TIFFTAG_PHOTOMETRIC, &m_nPhoto);
-  TIFFGetField(m_hTif, TIFFTAG_PLANARCONFIG, &m_nPlanar);
-  TIFFGetField(m_hTif, TIFFTAG_SAMPLESPERPIXEL, &m_nSamples);
+  if (!TIFFGetField(m_hTif, TIFFTAG_IMAGEWIDTH, &m_nWidth) ||
+      !TIFFGetField(m_hTif, TIFFTAG_IMAGELENGTH, &m_nHeight) ||
+      !TIFFGetField(m_hTif, TIFFTAG_PHOTOMETRIC, &m_nPhoto) ||
+      !TIFFGetField(m_hTif, TIFFTAG_BITSPERSAMPLE, &m_nBitsPerSample)) {
+    Close();
+    return false;
+  }
+
+  TIFFGetFieldDefaulted(m_hTif, TIFFTAG_PLANARCONFIG, &m_nPlanar);
+  TIFFGetFieldDefaulted(m_hTif, TIFFTAG_SAMPLESPERPIXEL, &m_nSamples);
   TIFFGetField(m_hTif, TIFFTAG_EXTRASAMPLES, &m_nExtraSamples, &nSampleInfo);
-  TIFFGetField(m_hTif, TIFFTAG_BITSPERSAMPLE, &m_nBitsPerSample);
-  TIFFGetField(m_hTif, TIFFTAG_SAMPLEFORMAT, &m_nSampleFormat);
-  TIFFGetField(m_hTif, TIFFTAG_ROWSPERSTRIP, &m_nRowsPerStrip);
-  TIFFGetField(m_hTif, TIFFTAG_ORIENTATION, &m_nOrientation);
+  TIFFGetFieldDefaulted(m_hTif, TIFFTAG_SAMPLEFORMAT, &m_nSampleFormat);
+  TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ROWSPERSTRIP, &m_nRowsPerStrip);
+  TIFFGetFieldDefaulted(m_hTif, TIFFTAG_ORIENTATION, &m_nOrientation);
   TIFFGetField(m_hTif, TIFFTAG_XRESOLUTION, &m_fXRes);
   TIFFGetField(m_hTif, TIFFTAG_YRESOLUTION, &m_fYRes);
-  TIFFGetField(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
+  TIFFGetFieldDefaulted(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
   
   if (m_nWidth == 0 || m_nHeight == 0 || m_nRowsPerStrip == 0 ||
       m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||

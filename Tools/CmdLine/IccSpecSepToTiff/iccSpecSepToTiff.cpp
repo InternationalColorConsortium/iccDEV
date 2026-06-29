@@ -132,6 +132,21 @@ static bool parseIntArg(const char *text, int &value)
   return true;
 }
 
+static bool parseBoolArg(const char *text, bool &value)
+{
+  if (!strcmp(text, "0")) {
+    value = false;
+    return true;
+  }
+
+  if (!strcmp(text, "1")) {
+    value = true;
+    return true;
+  }
+
+  return false;
+}
+
 static bool checkedSizeProduct(size_t a, size_t b, size_t &result)
 {
   if (a && b > std::numeric_limits<size_t>::max() / a)
@@ -146,7 +161,7 @@ static bool checkedSizeProduct(size_t a, size_t b, size_t &result)
 int main(int argc, char* argv[]) {
   const int minargs = 8; // argc = 8 without profile, 9 with profile
   
-  if (argc < minargs) {
+  if (argc < minargs || argc > 9) {
     // Too few arguments is a usage *error*, not a successful help request: this
     // tool has no explicit -h/--help flag, so Usage() only ever fires here, on a
     // malformed invocation.  Returning 0 reported success to the caller even
@@ -157,8 +172,13 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  bool bCompress = atoi(argv[2]) != 0;
-  bool bSep = atoi(argv[3]) != 0;
+  bool bCompress = false;
+  bool bSep = false;
+
+  if (!parseBoolArg(argv[2], bCompress) || !parseBoolArg(argv[3], bSep)) {
+    printf("Invalid boolean value for compress or sep: %s, %s\n", argv[2], argv[3]);
+    return -1;
+  }
 
   int start = 0;
   int end = 0;
@@ -187,6 +207,12 @@ int main(int argc, char* argv[]) {
 
   long long absRange = range < 0 ? -range : range;
   long long absStep = step < 0 ? -(long long)step : (long long)step;
+
+  if (absRange % absStep) {
+    printf("Invalid channel range specified: increment does not land on end: %d, %d, %d\n", start, end, step);
+    return -1;
+  }
+
   size_t nSamples = (size_t)(absRange / absStep) + 1;
 
   if (nSamples < 1 ||
@@ -281,6 +307,23 @@ int main(int argc, char* argv[]) {
   if (yRes<1)
     yRes = 72;
 
+  // profile pointer lifetime needs to last until output file is written!
+  std::unique_ptr<unsigned char[]> destProfile;
+  size_t destProfileLength = 0;
+  if (argc>8) {
+    CIccFileIO io;
+    if (io.Open(argv[8], "rb")) {
+      destProfileLength = io.GetLength();
+      destProfile.reset( new unsigned char[destProfileLength] );
+      io.Read8( destProfile.get(), destProfileLength );
+      io.Close();
+    }
+    else {
+      printf("Cannot open profile %s\n", argv[8]);
+      return -1;
+    }
+  }
+
   CTiffImg outfile;
   unsigned int nExtraSamples = nSamples > 1 ? (unsigned int)nSamples - 1 : 0;
   if (!outfile.Create(argv[1], f->GetWidth(), f->GetHeight(), f->GetBitsPerSample(), PHOTO_MINISBLACK,
@@ -289,17 +332,8 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  // profile pointer lifetime needs to last until output file is written!
-  std::unique_ptr<unsigned char[]> destProfile;
-  if (argc>8) {
-    CIccFileIO io;
-    if (io.Open(argv[8], "rb")) {
-      size_t length = io.GetLength();
-      destProfile.reset( new unsigned char[length] );
-      io.Read8( destProfile.get(), length );
-      outfile.SetIccProfile( destProfile.get(), (unsigned int)length );
-      io.Close();
-    }
+  if (destProfile) {
+    outfile.SetIccProfile( destProfile.get(), (unsigned int)destProfileLength );
   }
 
   for (unsigned int i=0; i<f->GetHeight(); i++) {

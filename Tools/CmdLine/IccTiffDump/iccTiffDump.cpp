@@ -111,6 +111,7 @@ IdList compression_types[] = {
   {COMPRESSION_NONE,         "None"},
   {COMPRESSION_LZW,          "LZW"},
   {COMPRESSION_JPEG,         "JPEG"},
+  {COMPRESSION_PACKBITS,     "PackBits"},
   {COMPRESSION_DEFLATE,      "Deflate"},
   {COMPRESSION_ADOBE_DEFLATE,"Deflate"},
   {UNKNOWNID,                "Unknown"},
@@ -271,6 +272,10 @@ int main(int argc, icChar* argv[])
     Usage();
     return 0;
   }
+  else if (argc > 3) {
+    Usage();
+    return -1;
+  }
 
   std::string srcName = icSanitizeConsoleText(argv[1]);
 
@@ -351,6 +356,11 @@ int main(int argc, icChar* argv[])
     }
   } else {
     printf("Profile:           None\n");
+    if (argc > 2) {
+      printf("\nNo embedded ICC profile to extract\n");
+      SrcImg.Close();
+      return -1;
+    }
   }
 
   SrcImg.Close();

@@ -945,7 +945,7 @@ fi
 echo ""
 
 # =============================================================================
-# 10. iccTiffDump (9 tests)
+# 10. iccTiffDump (10 tests)
 # =============================================================================
 echo "--- 10. iccTiffDump ---"
 TIFFDUMP="$TOOLS/IccTiffDump/iccTiffDump"
@@ -953,12 +953,22 @@ TIFFDUMP="$TOOLS/IccTiffDump/iccTiffDump"
 if [ -f "$TIFF_8BIT" ]; then
   run_test "tdump-01" "Dump TIFF 8-bit metadata" \
     "$TIFFDUMP" "$TIFF_8BIT"
-
-  run_test "tdump-06" "Extract ICC from TIFF to file" \
-    "$TIFFDUMP" "$TIFF_8BIT" "$OUTDIR/tiff_extracted.icc"
 else
   skip_test "tdump-01" "Dump TIFF 8-bit metadata" "8-bit TIFF fixture unavailable"
-  skip_test "tdump-06" "Extract ICC from TIFF to file" "8-bit TIFF fixture unavailable"
+fi
+
+if [ -f "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" ]; then
+  run_test "tdump-06" "Extract ICC from TIFF to file" \
+    "$TIFFDUMP" "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" "$OUTDIR/tiff_extracted.icc"
+else
+  skip_test "tdump-06" "Extract ICC from TIFF to file" "embedded-ICC TIFF fixture unavailable"
+fi
+
+if [ -f "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" ]; then
+  run_expect_exit "tdump-06b" "Reject ICC export when TIFF has no profile" 255 \
+    "$TIFFDUMP" "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" "$OUTDIR/tiff_no_profile.icc"
+else
+  skip_test "tdump-06b" "Reject ICC export when TIFF has no profile" "no-profile TIFF fixture unavailable"
 fi
 
 if [ -f "$TIFF_16BIT" ]; then

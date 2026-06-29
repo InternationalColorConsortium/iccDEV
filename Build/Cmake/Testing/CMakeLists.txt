@@ -1337,6 +1337,14 @@ iccdev_add_script_test(
 )
 
 iccdev_add_script_test(
+  iccdev.specsep-cli-args-regression
+  120
+  "iccdev;specsep;tiff;cli;args;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-specsep-cli-args-regression-tests.sh"
+)
+
+iccdev_add_script_test(
   iccdev.dump-profile-header-regression
   120
   "iccdev;dump;profile;header;regression;asan"
