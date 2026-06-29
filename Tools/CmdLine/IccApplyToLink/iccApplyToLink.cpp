@@ -608,10 +608,10 @@ void Usage()
   printf("  Where lut_size represents the number of grid entries for each lut dimension.\n\n");
   
   printf("  For option when link_type is 0:\n");
-  printf("    option represents the digits of precision for lut for .cube files\n");
-  printf("  For option when link_type is 1:\n");
   printf("    0 - version 4 profile with 16-bit table\n");
   printf("    1 - version 5 profile\n\n");
+  printf("  For option when link_type is 1:\n");
+  printf("    option represents the digits of precision for lut for .cube files\n\n");
 
   printf("  title is the title/description for the dest_link_file\n\n");
 
@@ -619,8 +619,8 @@ void Usage()
   printf("  range_max specifies the maximum input value (usually 1.0)\n\n");
 
   printf("  For first_transform:\n");
-  printf("    0 - use source transform from first profile\n");
-  printf("    1 - use destination transform from first profile\n\n");
+  printf("    0 - use destination transform from first profile\n");
+  printf("    1 - use source transform from first profile\n\n");
 
   printf("  For interp:\n");
   printf("    0 - linear interpolation\n");

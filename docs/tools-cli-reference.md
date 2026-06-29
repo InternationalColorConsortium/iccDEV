@@ -24,6 +24,11 @@ single index for common command shapes and shared option tables.
 | `iccApplyToLink` | Build DeviceLink profiles or `.cube` LUTs | `iccApplyToLink output.icc 0 33 1 "Link" 0.0 1.0 1 1 src.icc 1 dst.icc 1` |
 | `iccRoundTrip` | Evaluate round-trip behavior | `iccRoundTrip profile.icc` |
 
+For `iccApplyToLink`, `link_type=0` writes an ICC DeviceLink and `option`
+selects profile version (`0` for v4, `1` for v5). `link_type=1` writes a
+`.cube` text LUT and `option` is the precision. `first_transform=1` uses the
+source transform from the first profile; `0` uses its destination transform.
+
 ## Image and Specialty Tools
 
 | Tool | Purpose | Example |
@@ -69,7 +74,7 @@ parsed by the shared `CIccCfgProfile::fromArgs` is:
 
 | Add | Effect |
 |----:|--------|
-| `+10`–`+13` | Base intent without D2Bx/B2Dx tags |
+| `+10`-`+13` | Base intent without D2Bx/B2Dx tags |
 | `+1000` | Use luminance-based PCS adjustment |
 | `+10000` | Use V5 sub-profile if present |
 | `+100000` | Use HToS tag if present |
@@ -80,7 +85,7 @@ The over-black / over-gray flags only affect chains that include a v5
 NamedColor profile. JSON callers prefer the `transform` field values,
 which combine an output-side stem (`named` / `namedColorimetric` /
 `namedSpectral` / `namedDevice`) with an overprint suffix
-(`OnBlack` / `OnGray`, only meaningful on the spectral path) — see
+(`OnBlack` / `OnGray`, only meaningful on the spectral path) - see
 [`docs/icc-connect-config.schema.json`](icc-connect-config.schema.json)
 and [`Tools/CmdLine/IccApplyNamedCmm/Readme.md`](../Tools/CmdLine/IccApplyNamedCmm/Readme.md).
 
