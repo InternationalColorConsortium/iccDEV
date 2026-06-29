@@ -584,9 +584,6 @@ typedef enum {
     icSigXYZType                        = 0x58595A20,  /* 'XYZ ' */
     icSigXYZArrayType                   = 0x58595A20,  /* 'XYZ ' */
     icSigZipUtf8TextType                = 0x7a757438,  /* 'zut8' */
-#if defined(XRITE_ADDITIONS)
-    icSigZipXmlType_XRITE               = 0x5a584d4c,  /* 'ZXML' - X-Rite's uppercase version of 'zxml' */
-#endif
     icSigZipXmlType                     = 0x7a786d6c,  /* 'zxml' */
 
 /*Private tag types*/

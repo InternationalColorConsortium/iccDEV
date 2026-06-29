@@ -206,6 +206,7 @@ CIccTag* CIccTagXmlFactory::CreateTag(icTagTypeSignature tagSig)
   case icSigZipUtf8TextType:
     return new(std::nothrow) CIccTagXmlZipUtf8Text;
 
+  case icSigZipXMLType:
   case icSigZipXmlType:
     return new(std::nothrow) CIccTagXmlZipXml;
 
