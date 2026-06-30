@@ -40,6 +40,9 @@ add_custom_target(build-test-binaries
   COMMENT "Build iccDEV CTest regression helper binaries"
 )
 add_dependencies(check build-test-binaries)
+if(TARGET iccdev-stage-windows-runtime)
+  add_dependencies(check iccdev-stage-windows-runtime)
+endif()
 
 function(iccdev_add_regression_executable TARGET_NAME)
   add_executable("${TARGET_NAME}" EXCLUDE_FROM_ALL ${ARGN})

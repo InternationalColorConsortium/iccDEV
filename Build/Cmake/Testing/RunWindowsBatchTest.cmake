@@ -53,6 +53,7 @@ list(REMOVE_DUPLICATES _candidate_configs)
 
 set(_resolved_config "")
 set(_resolved_tool_suffix "")
+set(_resolved_runtime_dir "")
 set(_candidate_tool_suffixes)
 foreach(_candidate_config IN LISTS _candidate_configs)
   if(NOT "${_candidate_config}" STREQUAL "")
@@ -63,7 +64,16 @@ list(APPEND _candidate_tool_suffixes "")
 list(REMOVE_DUPLICATES _candidate_tool_suffixes)
 
 foreach(_candidate_tool_suffix IN LISTS _candidate_tool_suffixes)
-  if(EXISTS "${ICCDEV_BUILD_DIR}/Tools/IccFromXml${_candidate_tool_suffix}/iccFromXml.exe")
+  if(EXISTS "${ICCDEV_BUILD_DIR}/bin${_candidate_tool_suffix}/iccFromXml.exe")
+    set(_resolved_runtime_dir "${ICCDEV_BUILD_DIR}/bin${_candidate_tool_suffix}")
+    set(_resolved_tool_suffix "${_candidate_tool_suffix}")
+    if(_candidate_tool_suffix STREQUAL "")
+      set(_resolved_config "single-config")
+    else()
+      string(REGEX REPLACE "^/" "" _resolved_config "${_candidate_tool_suffix}")
+    endif()
+    break()
+  elseif(EXISTS "${ICCDEV_BUILD_DIR}/Tools/IccFromXml${_candidate_tool_suffix}/iccFromXml.exe")
     set(_resolved_tool_suffix "${_candidate_tool_suffix}")
     if(_candidate_tool_suffix STREQUAL "")
       set(_resolved_config "single-config")
@@ -76,8 +86,8 @@ endforeach()
 
 if(_resolved_config STREQUAL "")
   message(FATAL_ERROR
-    "Could not find iccFromXml.exe under ${ICCDEV_BUILD_DIR}/Tools/IccFromXml "
-    "or its config subdirectories. "
+    "Could not find iccFromXml.exe under ${ICCDEV_BUILD_DIR}/bin, "
+    "${ICCDEV_BUILD_DIR}/Tools/IccFromXml, or their config subdirectories. "
     "Build the tools first, or run ctest with -C <config> for multi-config generators.")
 endif()
 
@@ -102,18 +112,26 @@ set(_tool_dirs
 )
 
 set(_path_entries)
-foreach(_tool_dir IN LISTS _tool_dirs)
-  list(APPEND _path_entries "${ICCDEV_BUILD_DIR}/Tools/${_tool_dir}${_resolved_tool_suffix}")
-endforeach()
-list(APPEND _path_entries
-  "${ICCDEV_BUILD_DIR}/IccProfLib${_resolved_tool_suffix}"
-  "${ICCDEV_BUILD_DIR}/IccXML${_resolved_tool_suffix}"
-  "${ICCDEV_BUILD_DIR}/IccJSON${_resolved_tool_suffix}"
-  "${ICCDEV_BUILD_DIR}/IccConnect${_resolved_tool_suffix}"
-)
+if(NOT "${_resolved_runtime_dir}" STREQUAL "")
+  list(APPEND _path_entries "${_resolved_runtime_dir}")
+  set(_tools_dir_env "${_resolved_runtime_dir}")
+else()
+  foreach(_tool_dir IN LISTS _tool_dirs)
+    list(APPEND _path_entries "${ICCDEV_BUILD_DIR}/Tools/${_tool_dir}${_resolved_tool_suffix}")
+  endforeach()
+  list(APPEND _path_entries
+    "${ICCDEV_BUILD_DIR}/IccProfLib${_resolved_tool_suffix}"
+    "${ICCDEV_BUILD_DIR}/IccXML${_resolved_tool_suffix}"
+    "${ICCDEV_BUILD_DIR}/IccJSON${_resolved_tool_suffix}"
+    "${ICCDEV_BUILD_DIR}/IccConnect${_resolved_tool_suffix}"
+  )
+  set(_tools_dir_env "${ICCDEV_BUILD_DIR}/Tools")
+endif()
+list(REMOVE_DUPLICATES _path_entries)
 
 iccdev_collect_cache_runtime_path_entries(_runtime_path_entries "${ICCDEV_BUILD_DIR}")
 list(APPEND _path_entries ${_runtime_path_entries})
+list(REMOVE_DUPLICATES _path_entries)
 
 list(JOIN _path_entries ";" _path_prefix)
 set(_run_path "${_path_prefix}")
@@ -160,7 +178,7 @@ execute_process(
     "${CMAKE_COMMAND}" -E env
     "PATH=${_run_path_env}"
     "Path=${_run_path_env}"
-    "ICCDEV_TOOLS_DIR=${ICCDEV_BUILD_DIR}/Tools"
+    "ICCDEV_TOOLS_DIR=${_tools_dir_env}"
     "ICCDEV_TESTING_DIR=${ICCDEV_WINDOWS_WORK_DIR}"
     "ICCDEV_BUILD_DIR=${ICCDEV_BUILD_DIR}"
     cmd.exe /c call "${ICCDEV_BATCH_SCRIPT}"

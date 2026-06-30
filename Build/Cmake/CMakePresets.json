@@ -18,17 +18,20 @@
       "name": "vs2022-x64",
       "inherits": "default-base",
       "displayName": "Windows MSVC (VS2022)",
+      "description": "Builds Windows executables and DLLs into bin/<Config> so tools run from the build tree without an iccDEV PATH helper.",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$penv{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "VCPKG_MANIFEST_DIR": "${sourceDir}"
+        "VCPKG_MANIFEST_DIR": "${sourceDir}",
+        "ICCDEV_WINDOWS_UNIFIED_RUNTIME": "ON"
       }
     },
     {
       "name": "vs2022-clangcl-x64",
       "inherits": "vs2022-x64",
       "displayName": "Windows ClangCL (VS2022)",
+      "description": "Builds with the Visual Studio LLVM toolset and the same unified bin/<Config> runtime layout as vs2022-x64.",
       "toolset": "ClangCL"
     },
     {
@@ -51,6 +54,7 @@
       "inherits": "mingw-ucrt64-base",
       "displayName": "Windows MinGW UCRT64",
       "cacheVariables": {
+        "ICCDEV_WINDOWS_UNIFIED_RUNTIME": "ON",
         "ENABLE_WXWIDGETS": "OFF",
         "ENABLE_CMM_TOOLS": "OFF",
         "ENABLE_IIS_TOOLS": "OFF"
@@ -63,6 +67,7 @@
       "cacheVariables": {
         "ENABLE_TESTS": "ON",
         "ENABLE_TOOLS": "ON",
+        "ICCDEV_WINDOWS_UNIFIED_RUNTIME": "ON",
         "ENABLE_STATIC_LIBS": "ON",
         "ENABLE_SHARED_LIBS": "OFF",
         "ENABLE_ICCXML": "OFF",
