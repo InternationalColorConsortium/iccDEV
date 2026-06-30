@@ -458,7 +458,31 @@ option(ENABLE_ICCJSON             "Build IccJSON library support"               
 option(ENABLE_IMAGE_TOOLS         "Build TIFF/PNG/JPEG image-dependent tools"           ON)
 option(ENABLE_CMM_TOOLS           "Build Windows CMM DLL tool"                          ON)
 option(ENABLE_IIS_TOOLS           "Build Windows IIS ISAPI tool"                        ON)
-option(ICC_JSON_ORDERED           "Use ordered_json for deterministic key order (slower)" OFF)
+include(CheckCXXSourceCompiles)
+set(_ICC_JSON_ORDERED_DEFAULT OFF)
+
+set(_ICC_CHECK_GLIBCXX_SOURCE "
+#if defined(__has_include)
+#  if __has_include(<bits/c++config.h>)
+#    include <bits/c++config.h>
+#  endif
+#endif
+#if defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE < 11
+#  error libstdc++ before 11 cannot instantiate unordered basic_json here
+#endif
+int main() { return 0; }
+")
+check_cxx_source_compiles("${_ICC_CHECK_GLIBCXX_SOURCE}" _ICC_JSON_UNORDERED_STDLIB_OK)
+if(NOT _ICC_JSON_UNORDERED_STDLIB_OK)
+  set(_ICC_JSON_ORDERED_DEFAULT ON)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11)
+  set(_ICC_JSON_ORDERED_DEFAULT ON)
+endif()
+
+option(ICC_JSON_ORDERED           "Use ordered_json for deterministic key order (auto-ON on libstdc++<11)" ${_ICC_JSON_ORDERED_DEFAULT})
+if(ICC_JSON_ORDERED AND _ICC_JSON_ORDERED_DEFAULT)
+  message(STATUS "ICC_JSON_ORDERED auto-enabled: libstdc++<11 cannot build unordered basic_json")
+endif()
 option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"           OFF)
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
