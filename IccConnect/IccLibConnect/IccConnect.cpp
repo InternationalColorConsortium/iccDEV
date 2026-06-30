@@ -142,6 +142,9 @@ static icStatusCMM AddHintNoThrow(CIccCreateXformHintManager& Hint,
 static CIccConnectCmm* AttachStandardCmm(std::unique_ptr<CIccCmm>& pCmm,
                                          int nThreads)
 {
+  if (nThreads < 0 || nThreads > CIccThreadedCmm::GetMaxThreads())
+    return nullptr;
+
   if (nThreads == 0 || nThreads > 1) {
     CIccCmm* pRawCmm = pCmm.release();
     CIccThreadedCmm* pThreadedCmm = CIccThreadedCmm::Attach(pRawCmm, nThreads);
@@ -326,6 +329,14 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
 {
   std::string localErr;
   std::string& sErrorMsg = pErrorMsg ? *pErrorMsg : localErr;
+
+  if (nThreads < 0 || nThreads > CIccThreadedCmm::GetMaxThreads()) {
+    std::ostringstream oss;
+    oss << "invalid thread count " << nThreads << " (maximum "
+        << CIccThreadedCmm::GetMaxThreads() << ")";
+    sErrorMsg = oss.str();
+    return nullptr;
+  }
 
   IccProfilePtrList pccList;
   auto pCmm = std::unique_ptr<CIccCmm>(
