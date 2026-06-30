@@ -64,10 +64,18 @@
 #include <thread>
 
 
+static const int kIccMaxCmmThreads = 256;
+
 static int icResolveCmmThreadCount(int nThreads)
 {
+  if (nThreads < 0 || nThreads > kIccMaxCmmThreads)
+    return 0;
+
   int nActual = nThreads > 0 ? nThreads : (int)std::thread::hardware_concurrency();
-  return nActual > 0 ? nActual : 1;
+  if (nActual <= 0)
+    return 1;
+
+  return std::min(nActual, kIccMaxCmmThreads);
 }
 
 
@@ -244,6 +252,12 @@ CIccThreadedCmm::~CIccThreadedCmm()
 }
 
 
+int CIccThreadedCmm::GetMaxThreads()
+{
+  return kIccMaxCmmThreads;
+}
+
+
 /**
  **************************************************************************
  * Name: CIccThreadedCmm::Attach
@@ -271,6 +285,11 @@ CIccThreadedCmm* CIccThreadedCmm::Attach(CIccCmm *pCmm, int nThreads, bool bDele
   }
 
   int nActual = icResolveCmmThreadCount(nThreads);
+  if (nActual <= 0) {
+    if (bDeleteCmm)
+      delete pCmm;
+    return NULL;
+  }
 
   CIccThreadedCmm *rv = new CIccThreadedCmm();
   rv->m_pCmm       = pCmm;

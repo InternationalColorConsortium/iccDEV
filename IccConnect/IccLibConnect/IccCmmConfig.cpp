@@ -66,6 +66,7 @@
 
 
 #include "IccCmmConfig.h"
+#include "IccCmmThread.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -576,7 +577,8 @@ bool CIccCfgConnectOptions::fromJson(json j, bool bReset)
 
   if (j.find("threads") != j.end()) {
     int nThreads = m_nThreads;
-    if (!jsonToValue(j["threads"], nThreads) || nThreads < 0)
+    if (!jsonToValue(j["threads"], nThreads) || nThreads < 0 ||
+        nThreads > CIccThreadedCmm::GetMaxThreads())
       return false;
     m_nThreads = nThreads;
   }

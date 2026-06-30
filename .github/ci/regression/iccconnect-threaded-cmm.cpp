@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 static bool NearlyEqual(icFloatNumber a, icFloatNumber b)
@@ -52,6 +53,29 @@ int main(int argc, char** argv)
   }
   if (!threaded->IsThreaded()) {
     std::fprintf(stderr, "threaded CMM did not use CIccThreadedCmm\n");
+    return 1;
+  }
+
+  json oversizedThreadsJson;
+  oversizedThreadsJson["threads"] = CIccThreadedCmm::GetMaxThreads() + 1;
+  CIccCfgConnectOptions oversizedOptions;
+  if (oversizedOptions.fromJson(oversizedThreadsJson, true)) {
+    std::fprintf(stderr, "oversized JSON thread count was accepted\n");
+    return 1;
+  }
+
+  std::string tooManyThreadsError;
+  std::unique_ptr<CIccConnectCmm> tooManyThreads(
+    CIccConnectCmm::CreateStandard(
+      profiles, nullptr, 0, CIccThreadedCmm::GetMaxThreads() + 1,
+      &tooManyThreadsError));
+  if (tooManyThreads) {
+    std::fprintf(stderr, "oversized thread count was accepted\n");
+    return 1;
+  }
+  if (tooManyThreadsError.find("invalid thread count") == std::string::npos) {
+    std::fprintf(stderr, "missing oversized thread count error: %s\n",
+                 tooManyThreadsError.c_str());
     return 1;
   }
 

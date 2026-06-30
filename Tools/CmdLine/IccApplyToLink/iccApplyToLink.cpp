@@ -70,6 +70,7 @@
 
 
 #include <cstdio>
+#include <cmath>
 #include <string>
 #include <vector>
 #include <list>
@@ -92,6 +93,28 @@
 #endif
 
 // ============================================================================
+
+static bool IccApplyToLinkDiagnosticsEnabled()
+{
+  const char *env = getenv("ICC_APPLYTOLINK_DIAGNOSTICS");
+  return env && env[0] && env[0] != '0';
+}
+
+static void PrintRangeDiagnostic(icFloatNumber loRange, icFloatNumber hiRange, icFloatNumber sizeRange)
+{
+  if (!IccApplyToLinkDiagnosticsEnabled()) {
+    return;
+  }
+
+  fprintf(stderr,
+          "ICC_DIAG: range min=%g max=%g size=%g finite(min,max,size)=%d,%d,%d\n",
+          loRange,
+          hiRange,
+          sizeRange,
+          std::isfinite(loRange) ? 1 : 0,
+          std::isfinite(hiRange) ? 1 : 0,
+          std::isfinite(sizeRange) ? 1 : 0);
+}
 
 class ILinkWriter
 {
@@ -725,6 +748,11 @@ int main(int argc, icChar* argv[])
   icFloatNumber loRange = (icFloatNumber)atof(argv[6]);
   icFloatNumber hiRange = (icFloatNumber)atof(argv[7]);
   icFloatNumber sizeRange = hiRange - loRange;
+  PrintRangeDiagnostic(loRange, hiRange, sizeRange);
+  if (!std::isfinite(loRange) || !std::isfinite(hiRange) || !std::isfinite(sizeRange)) {
+    printf("Invalid input range: range_min and range_max must be finite numbers\n");
+    return 1;
+  }
   pWriter->setInputRange(loRange, hiRange);
 
   //Retrieve command line arguments
@@ -881,6 +909,11 @@ int main(int argc, icChar* argv[])
   //Get and validate the destination color space from theCmm.
   icColorSpaceSignature DestspaceSig = theCmm.GetDestSpace();
   int nDestSamples = icGetSpaceSamples(DestspaceSig);
+
+  if (nSrcSamples <= 0 || nDestSamples <= 0) {
+    printf("Invalid CMM channel count: source samples=%d destination samples=%d\n", nSrcSamples, nDestSamples);
+    return 1;
+  }
   
   size_t lutCount = 1;
   size_t lutLimit = (((1ULL<<32)-1) / nLutSize);     // limit to 4 Gig(32 bits) instead of size_t(64 bits)
@@ -892,9 +925,21 @@ int main(int argc, icChar* argv[])
     lutCount *= nLutSize;
   }
 
-  std::vector<int> idx(nSrcSamples,0);
-  std::vector<icFloatNumber> srcPixel(nSrcSamples);
-  std::vector<icFloatNumber> dstPixel(nDestSamples);
+  // Avoid vector(size, value) here: libstdc++ 15's fill_n countdown trips
+  // -fsanitize=integer on its internal unsigned zero-crossing.
+  std::vector<int> idx;
+  std::vector<icFloatNumber> srcPixel;
+  std::vector<icFloatNumber> dstPixel;
+  idx.reserve(nSrcSamples);
+  srcPixel.reserve(nSrcSamples);
+  dstPixel.reserve(nDestSamples);
+  for (int si = 0; si < nSrcSamples; si++) {
+    idx.push_back(0);
+    srcPixel.push_back(0.0f);
+  }
+  for (int si = 0; si < nDestSamples; si++) {
+    dstPixel.push_back(0.0f);
+  }
 
   // 2 <= nLutSize <= 255, so maxLUT cannot be zero
   icUInt32Number maxLut = nLutSize - 1;

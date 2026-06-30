@@ -146,6 +146,8 @@ private:
 public:
   virtual ~CIccThreadedCmm();
 
+  static int GetMaxThreads();
+
   // Attach to a Begin()-ed CMM.  nThreads=0 uses hardware_concurrency.
   // Returns NULL on failure; pCmm is deleted on failure when bDeleteCmm=true.
   static CIccThreadedCmm* Attach(CIccCmm *pCmm, int nThreads=0, bool bDeleteCmm=true);
