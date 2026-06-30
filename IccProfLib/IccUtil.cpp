@@ -1999,6 +1999,7 @@ const icChar *CIccInfo::GetCmmSigName(icCmmSignature sig)
   case icSigAgfa:
     return "Agfa";
 
+  case icSigApple_Mistake:
   case icSigApple:
     return "Apple";
 

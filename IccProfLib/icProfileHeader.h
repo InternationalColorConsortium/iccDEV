@@ -1037,6 +1037,7 @@ typedef enum {
     icSigMicrosoftCMM                   = 0x4D534654,  /* 'MSFT' */
     icSigAgfa                           = 0x41434D53,  /* 'ACMS' */
     icSigApple                          = 0x6170706C,  /* 'appl' */
+    icSigApple_Mistake                  = 0x4150504C,  /* 'APPL' a common mistake, but Apple, and other tools recognize it */
     icSigColorGear                      = 0x43434D53,  /* 'CCMS' */
     icSigColorGearLite                  = 0x5543434D,  /* 'UCCM' */
     icSigColorGearC                     = 0x55434D53,  /* 'UCMS' */
@@ -1051,7 +1052,7 @@ typedef enum {
     icSigMonaco                         = 0x6D6E636F,  /* 'mnco' */
     icSigLittleCMS                      = 0x6C636D73,  /* 'lcms' */
     icSigKodak                          = 0x4b434d53,  /* 'KCMS' */
-    icSigKonicaMinolta                  = 0x4d434d44,  /* 'MCML' */
+    icSigKonicaMinolta                  = 0x4d434d44,  /* 'MCML' actually this is 'MCMD'- which is right? Sent email to Dr. Phil Green. */
     icSigWindowsCMS                     = 0x57435320,  /* 'WCS ' */
     icSigMutoh                          = 0x5349474E,  /* 'SIGN' */
     icSigOnyxGraphics                   = 0x4f4e5958,  /* 'ONYX' */

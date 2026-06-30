@@ -1957,6 +1957,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     case icSigAdobe:
     case icSigAgfa:
     case icSigApple:
+    case icSigApple_Mistake:
     case icSigColorGear:
     case icSigColorGearLite:
     case icSigColorGearC:
