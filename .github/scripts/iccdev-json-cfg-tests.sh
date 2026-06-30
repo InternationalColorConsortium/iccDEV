@@ -64,6 +64,9 @@ echo "Tools dir: $TOOLS_DIR"
 echo "Testing dir: $TESTING_DIR"
 echo ""
 
+bash "$(dirname "$0")/iccdev-connect-config-schema-tests.sh"
+echo ""
+
 NAMED_PROFILE=""
 for candidate in \
   "$TESTING_DIR/Named/NamedColor.icc" \
