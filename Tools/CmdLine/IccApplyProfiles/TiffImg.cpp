@@ -650,9 +650,7 @@ bool CTiffImg::GetIccProfile(unsigned char *&pProfile, unsigned int &nLen)
 
 bool CTiffImg::SetIccProfile(unsigned char *pProfile, unsigned int nLen)
 {
-  TIFFSetField(m_hTif, TIFFTAG_ICCPROFILE, nLen, pProfile);
-  
-  return true;
+  return TIFFSetField(m_hTif, TIFFTAG_ICCPROFILE, nLen, pProfile) == 1;
 }
 
 #ifdef USEICCDEVNAMESPACE

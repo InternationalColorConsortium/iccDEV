@@ -36,6 +36,12 @@ SPECSEP="$TOOLS_DIR/IccSpecSepToTiff/iccSpecSepToTiff"
 SPECTRAL_PREFIX="$REPO_ROOT/.github/ci/test-data/spectral/spec_"
 HARVEST_PREFIX="$REPO_ROOT/.github/ci/test-data/specsep-harvest/gray300/spec_"
 PROFILE="$REPO_ROOT/Testing/sRGB_v4_ICC_preference.icc"
+TEXT_PROFILE="$REPO_ROOT/Tools/CmdLine/IccSpecSepToTiff/Readme.md"
+EMPTY_PROFILE="$OUTDIR/empty-profile.icc"
+FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
+SPECTRAL_XML="$REPO_ROOT/Testing/hybrid/MultSpectralRGB.xml"
+SPECTRAL_PROFILE="$OUTDIR/MultSpectralRGB.icc"
+SPECTRAL36_DIR="$OUTDIR/spectral36"
 
 PASS=0
 FAIL=0
@@ -155,6 +161,69 @@ check_tiffinfo_contains() {
   return 0
 }
 
+generate_spectral36_inputs() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$SPECTRAL36_DIR" <<'PY'
+import pathlib
+import struct
+import sys
+
+root = pathlib.Path(sys.argv[1])
+root.mkdir(parents=True, exist_ok=True)
+
+
+def ifd_entry(tag, tag_type, count, value):
+    entry = struct.pack("<HHI", tag, tag_type, count)
+    if tag_type == 3 and count == 1:
+        return entry + struct.pack("<H", value) + b"\0\0"
+    return entry + struct.pack("<I", value)
+
+
+def write_tiff(path, fill):
+    width = height = 2
+    pixels = bytes([fill & 0xff]) * (width * height)
+    ifd_offset = 8 + len(pixels)
+    entries = [
+        (256, 4, 1, width),
+        (257, 4, 1, height),
+        (258, 3, 1, 8),
+        (259, 3, 1, 1),
+        (262, 3, 1, 1),
+        (273, 4, 1, 8),
+        (277, 3, 1, 1),
+        (278, 4, 1, height),
+        (279, 4, 1, len(pixels)),
+        (284, 3, 1, 1),
+        (296, 3, 1, 2),
+        (339, 3, 1, 1),
+    ]
+    data = bytearray(b"II" + struct.pack("<H", 42) + struct.pack("<I", ifd_offset))
+    data.extend(pixels)
+    data.extend(struct.pack("<H", len(entries)))
+    for entry in sorted(entries):
+        data.extend(ifd_entry(*entry))
+    data.extend(struct.pack("<I", 0))
+    path.write_bytes(data)
+
+
+for i in range(1, 37):
+    write_tiff(root / f"spec_{i}", i * 7)
+PY
+}
+
+prepare_spectral_profile() {
+  if [ ! -x "$FROMXML" ] || [ ! -f "$SPECTRAL_XML" ]; then
+    return 1
+  fi
+
+  "$FROMXML" "$SPECTRAL_XML" "$SPECTRAL_PROFILE" > "$OUTDIR/fromxml-MultSpectralRGB.log" 2>&1 &&
+    [ -s "$SPECTRAL_PROFILE" ] &&
+    generate_spectral36_inputs
+}
+
 echo "=== iccSpecSepToTiff CLI argument regression ==="
 
 if [ ! -x "$SPECSEP" ]; then
@@ -163,18 +232,39 @@ if [ ! -x "$SPECSEP" ]; then
 fi
 
 run_expect_success \
-  "specsep-harvest-gray300-profile" \
-  "$OUTDIR/harvest-gray300-profile.tif" \
-  0 0 "$HARVEST_PREFIX" 1 8 1 "$PROFILE"
-check_tiffinfo_contains "specsep-harvest-gray300-profile" "$OUTDIR/harvest-gray300-profile.tif" "Samples/Pixel: 8" &&
-  check_tiffinfo_contains "specsep-harvest-gray300-profile" "$OUTDIR/harvest-gray300-profile.tif" "ICC Profile: <present>" &&
-  check_tiffinfo_contains "specsep-harvest-gray300-profile" "$OUTDIR/harvest-gray300-profile.tif" "Image Width: 300 Image Length: 300"
+  "specsep-harvest-gray300-no-profile" \
+  "$OUTDIR/harvest-gray300-no-profile.tif" \
+  0 0 "$HARVEST_PREFIX" 1 8 1
+check_tiffinfo_contains "specsep-harvest-gray300-no-profile" "$OUTDIR/harvest-gray300-no-profile.tif" "Samples/Pixel: 8" &&
+  check_tiffinfo_contains "specsep-harvest-gray300-no-profile" "$OUTDIR/harvest-gray300-no-profile.tif" "Image Width: 300 Image Length: 300"
+
+run_expect_success \
+  "specsep-srgb-profile-matching-3ch" \
+  "$OUTDIR/srgb-profile-matching-3ch.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1 3 1 "$PROFILE"
+check_tiffinfo_contains "specsep-srgb-profile-matching-3ch" "$OUTDIR/srgb-profile-matching-3ch.tif" "Samples/Pixel: 3" &&
+  check_tiffinfo_contains "specsep-srgb-profile-matching-3ch" "$OUTDIR/srgb-profile-matching-3ch.tif" "ICC Profile: <present>"
 
 run_expect_success \
   "specsep-fast-separate-planes" \
   "$OUTDIR/fast-separate.tif" \
   0 1 "$SPECTRAL_PREFIX" 1 10 1
 check_tiffinfo_contains "specsep-fast-separate-planes" "$OUTDIR/fast-separate.tif" "Planar Configuration: separate image planes"
+
+if prepare_spectral_profile; then
+  run_expect_success \
+    "specsep-spectral-profile-matching-36ch" \
+    "$OUTDIR/spectral-profile-matching-36ch.tif" \
+    0 0 "$SPECTRAL36_DIR/spec_" 1 36 1 "$SPECTRAL_PROFILE"
+
+  run_expect_reject \
+    "specsep-spectral-profile-sample-mismatch" \
+    "do not match TIFF SamplesPerPixel" \
+    "$OUTDIR/spectral-profile-sample-mismatch.tif" \
+    0 0 "$SPECTRAL36_DIR/spec_" 1 4 1 "$SPECTRAL_PROFILE"
+else
+  echo "  [SKIP] specsep-spectral-profile-alignment -- missing iccFromXml or MultSpectralRGB.xml"
+fi
 
 run_expect_reject \
   "specsep-invalid-compress-bool" \
@@ -199,6 +289,25 @@ run_expect_reject \
   "Cannot open profile" \
   "$OUTDIR/missing-profile.tif" \
   0 0 "$SPECTRAL_PREFIX" 1 3 1 "$OUTDIR/no-such-profile.icc"
+
+run_expect_reject \
+  "specsep-non-icc-profile" \
+  "Cannot parse profile" \
+  "$OUTDIR/non-icc-profile.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1 3 1 "$TEXT_PROFILE"
+
+: > "$EMPTY_PROFILE"
+run_expect_reject \
+  "specsep-empty-profile" \
+  "refusing to embed zero-length ICC data" \
+  "$OUTDIR/empty-profile.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1 3 1 "$EMPTY_PROFILE"
+
+run_expect_reject \
+  "specsep-profile-sample-mismatch" \
+  "do not match TIFF SamplesPerPixel" \
+  "$OUTDIR/profile-sample-mismatch.tif" \
+  0 0 "$HARVEST_PREFIX" 1 8 1 "$PROFILE"
 
 run_expect_reject \
   "specsep-non-divisible-range" \

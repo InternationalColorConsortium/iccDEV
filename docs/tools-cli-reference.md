@@ -43,7 +43,15 @@ source transform from the first profile; `0` uses its destination transform.
 
 `iccSpecSepToTiff` treats the input argument as a filename prefix and appends
 each channel number from `start` through `end`. For a single input named
-`spec_3`, pass prefix `spec_` with `start=3` and `end=3`.
+`spec_3`, pass prefix `spec_` with `start=3` and `end=3`. The prefix is literal,
+not a `printf` pattern: `spec_%03d.tif` opens `spec_%03d.tif1`, not `spec_001.tif`.
+
+When `{profile}` is provided, the file is parsed and validated as an ICC profile
+before any output is written. ICC.2 spectral PCS profiles must have spectral PCS
+channels and spectral range steps equal to the generated TIFF `SamplesPerPixel`;
+non-spectral profiles must have a data color-space sample count equal to
+`SamplesPerPixel`. Non-ICC bytes, empty files, non-compliant profiles, and
+sample-count mismatches are rejected.
 
 ## Text Data Encoding Values
 
