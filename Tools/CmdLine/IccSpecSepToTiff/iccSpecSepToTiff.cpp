@@ -81,6 +81,7 @@
 #include <vector>
 #include <memory>
 #include <limits>
+#include <string>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
@@ -107,12 +108,20 @@ void Usage(const char *name)
   
   printf("\toutput: path/name of the TIFF file to be created\n");                               // argv[1]
   printf("\tcompress: boolean (0 | 1), should the output be compressed\n");                     // argv[2]
-  printf("\tsep: boolean (0 | 1), plane data be seperated in the output TIFF\n");               // argv[3]
-  printf("\tinfile_prefix: input filename prefix; channel numbers are appended, example: \"spec_\"\n"); // argv[4]
+  printf("\tsep: boolean (0 | 1), plane data are separated in the output TIFF\n");              // argv[3]
+  printf("\tinfile_prefix: literal input filename prefix; channel numbers are appended, example: \"spec_\"\n"); // argv[4]
   printf("\tstart: integer, first channel number to process\n");                                // argv[5]
   printf("\tend: integer, last channel number to process\n");                                   // argv[6]
   printf("\tincrement: integer, increment between channels\n");                                 // argv[7]
-  printf("\tprofile: optional ICC profile to embed in the output TIFF\n");                      // argv[8]
+  printf("\tprofile: optional ICC profile to validate and embed in the output TIFF\n");         // argv[8]
+  printf("\n");
+  printf("Notes:\n");
+  printf("\t-h/--help are not option flags; run without arguments to print this usage.\n");
+  printf("\tinfile_prefix is not a printf format string; \"spec_00\" with start=1 opens \"spec_001\".\n");
+  printf("\tEmbedded profiles must parse and validate as ICC profiles. If a spectral PCS is present,\n");
+  printf("\tits channel count/range steps must match the generated TIFF SamplesPerPixel.\n");
+  printf("\tWithout a spectral PCS, profile data color-space samples must match TIFF SamplesPerPixel.\n");
+  printf("\tCI fixture images are intentionally tiny; use larger source TIFFs for visual display review.\n");
   printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
   printf("\n");
 }
@@ -153,6 +162,160 @@ static bool checkedSizeProduct(size_t a, size_t b, size_t &result)
     return false;
 
   result = a * b;
+  return true;
+}
+
+static const char *validateStatusName(icValidateStatus status)
+{
+  switch (status) {
+  case icValidateOK:
+    return "OK";
+  case icValidateWarning:
+    return "Warning";
+  case icValidateNonCompliant:
+    return "NonCompliant";
+  case icValidateCriticalError:
+    return "CriticalError";
+  default:
+    return "Unknown";
+  }
+}
+
+static void printFirstValidationLine(const std::string &report)
+{
+  if (report.empty())
+    return;
+
+  size_t end = report.find('\n');
+  std::string line = report.substr(0, end == std::string::npos ? report.size() : end);
+  if (!line.empty())
+    printf("Profile validation detail: %s\n", line.c_str());
+}
+
+static void sigToText(icUInt32Number sig, char *buf, size_t bufSize)
+{
+  if (!buf || !bufSize)
+    return;
+
+  buf[0] = '\0';
+  icGetColorSigStr(buf, bufSize, sig);
+}
+
+static bool validateProfileSampleCompatibility(const CIccProfile *profile,
+                                               size_t nSamples,
+                                               const char *profilePath)
+{
+  if (!profile)
+    return false;
+
+  const icHeader &header = profile->m_Header;
+  char colorSpace[64];
+  char pcs[64];
+  char spectralPcs[64];
+
+  sigToText(header.colorSpace, colorSpace, sizeof(colorSpace));
+  sigToText(header.pcs, pcs, sizeof(pcs));
+  sigToText(header.spectralPCS, spectralPcs, sizeof(spectralPcs));
+
+  if (header.spectralPCS != icSigNoSpectralData) {
+    icUInt32Number spectralSamples = icGetSpaceSamples((icColorSpaceSignature)header.spectralPCS);
+
+    if (!spectralSamples || spectralSamples != nSamples) {
+      printf("Profile %s spectral PCS samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
+             profilePath, (unsigned int)spectralSamples, spectralPcs, nSamples);
+      return false;
+    }
+
+    if (!header.spectralRange.steps || header.spectralRange.steps != nSamples) {
+      printf("Profile %s spectral PCS range steps (%u) do not match TIFF SamplesPerPixel (%zu).\n",
+             profilePath, (unsigned int)header.spectralRange.steps, nSamples);
+      return false;
+    }
+
+    printf("ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, spectralPCS=%s, spectralRangeSteps=%u, TIFFSamples=%zu\n",
+           profilePath, colorSpace, pcs, spectralPcs, (unsigned int)header.spectralRange.steps, nSamples);
+    return true;
+  }
+
+  icUInt32Number dataSamples = profile->GetSpaceSamples();
+  if (!dataSamples || dataSamples != nSamples) {
+    printf("Profile %s data color-space samples (%u, %s) do not match TIFF SamplesPerPixel (%zu).\n",
+           profilePath, (unsigned int)dataSamples, colorSpace, nSamples);
+    return false;
+  }
+
+  printf("ICC profile accepted: %s, status=conformant, data=%s, PCS=%s, TIFFSamples=%zu\n",
+         profilePath, colorSpace, pcs, nSamples);
+  return true;
+}
+
+static bool readValidateProfile(const char *profilePath,
+                                size_t nSamples,
+                                std::unique_ptr<unsigned char[]> &destProfile,
+                                size_t &destProfileLength)
+{
+  destProfile.reset();
+  destProfileLength = 0;
+
+  CIccFileIO io;
+  if (!io.Open(profilePath, "rb")) {
+    printf("Cannot open profile %s\n", profilePath);
+    return false;
+  }
+
+  destProfileLength = io.GetLength();
+  if (!destProfileLength) {
+    io.Close();
+    printf("Profile %s is empty; refusing to embed zero-length ICC data.\n", profilePath);
+    return false;
+  }
+
+  if (destProfileLength > (size_t)std::numeric_limits<icUInt32Number>::max()) {
+    io.Close();
+    printf("Profile %s is too large to embed in TIFF ICCProfile tag: %zu bytes\n",
+           profilePath, destProfileLength);
+    return false;
+  }
+
+  destProfile.reset(new unsigned char[destProfileLength]);
+  if (io.Read8(destProfile.get(), destProfileLength) != destProfileLength) {
+    io.Close();
+    printf("Cannot read complete profile %s\n", profilePath);
+    return false;
+  }
+  io.Close();
+
+  std::string validateReport;
+  icValidateStatus validateStatus = icValidateOK;
+  std::unique_ptr<CIccProfile> profile(ValidateIccProfile(destProfile.get(),
+                                                         (icUInt32Number)destProfileLength,
+                                                         validateReport,
+                                                         validateStatus));
+  if (!profile) {
+    printf("Cannot parse profile %s as an ICC profile.\n", profilePath);
+    printFirstValidationLine(validateReport);
+    return false;
+  }
+
+  if (validateStatus >= icValidateNonCompliant) {
+    printf("Profile %s failed ICC validation: %s.\n",
+           profilePath, validateStatusName(validateStatus));
+    printFirstValidationLine(validateReport);
+    return false;
+  }
+
+  std::unique_ptr<CIccProfile> compatibilityProfile(OpenIccProfile(destProfile.get(),
+                                                                  (icUInt32Number)destProfileLength,
+                                                                  true));
+  const CIccProfile *profileForSamples = profile.get();
+  if (compatibilityProfile &&
+      compatibilityProfile->m_Header.spectralPCS != icSigNoSpectralData) {
+    profileForSamples = compatibilityProfile.get();
+  }
+
+  if (!validateProfileSampleCompatibility(profileForSamples, nSamples, profilePath))
+    return false;
+
   return true;
 }
 
@@ -311,17 +474,8 @@ int main(int argc, char* argv[]) {
   std::unique_ptr<unsigned char[]> destProfile;
   size_t destProfileLength = 0;
   if (argc>8) {
-    CIccFileIO io;
-    if (io.Open(argv[8], "rb")) {
-      destProfileLength = io.GetLength();
-      destProfile.reset( new unsigned char[destProfileLength] );
-      io.Read8( destProfile.get(), destProfileLength );
-      io.Close();
-    }
-    else {
-      printf("Cannot open profile %s\n", argv[8]);
+    if (!readValidateProfile(argv[8], nSamples, destProfile, destProfileLength))
       return -1;
-    }
   }
 
   CTiffImg outfile;
@@ -333,7 +487,10 @@ int main(int argc, char* argv[]) {
   }
 
   if (destProfile) {
-    outfile.SetIccProfile( destProfile.get(), (unsigned int)destProfileLength );
+    if (!outfile.SetIccProfile( destProfile.get(), (unsigned int)destProfileLength )) {
+      printf("Unable to embed ICC profile in %s\n", argv[1]);
+      return -1;
+    }
   }
 
   for (unsigned int i=0; i<f->GetHeight(); i++) {

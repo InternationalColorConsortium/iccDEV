@@ -293,8 +293,8 @@
           "description": "Override color space for 'legacy' or 'it8' source files"
         },
         "srcFile": {
-          "type": "string",
-          "description": "Path to the source data file. Omit to use the inline colorData section."
+          "type": ["string", "null"],
+          "description": "Path to the source data file. Null or omitted uses the inline colorData section."
         },
         "dstType": {
           "type": "string",
@@ -449,6 +449,7 @@
     "searchApply": {
       "type": "object",
       "description": "CIccCfgSearchApply - full configuration for iccApplySearch",
+      "required": ["profileSequence", "initial"],
       "additionalProperties": false,
       "properties": {
         "profileSequence": {
@@ -469,8 +470,14 @@
 
   },
 
-  "description": "Top-level IccConnect configuration document. Must contain either a profile-apply configuration (profileSequence + one of applyData/applyImage/createLink) or a search-apply configuration (searchApply).",
+  "description": "Top-level IccConnect configuration document. Must contain an iccApplyNamedCmm data configuration (dataFiles + profileSequence), an iccApplyProfiles image configuration (imageFiles + profileSequence), an iccApplySearch configuration (dataFiles + searchApply), or a library create-link configuration (createLink + profileSequence).",
   "type": "object",
+  "anyOf": [
+    { "required": ["dataFiles", "profileSequence"] },
+    { "required": ["imageFiles", "profileSequence"] },
+    { "required": ["dataFiles", "searchApply"] },
+    { "required": ["createLink", "profileSequence"] }
+  ],
   "additionalProperties": false,
   "properties": {
     "connect": {
@@ -481,13 +488,13 @@
       "$ref": "#/$defs/profileSequence",
       "description": "Ordered list of profiles forming the CMM chain (iccApplyProfiles / iccApplyNamedCmm)"
     },
-    "applyData": {
+    "dataFiles": {
       "$ref": "#/$defs/dataApply",
-      "description": "Options for color-data file input/output"
+      "description": "Options for color-data file input/output (iccApplyNamedCmm / iccApplySearch -cfg key)"
     },
-    "applyImage": {
+    "imageFiles": {
       "$ref": "#/$defs/imageApply",
-      "description": "Options for image file input/output"
+      "description": "Options for image file input/output (iccApplyProfiles -cfg key)"
     },
     "createLink": {
       "$ref": "#/$defs/createLink",
@@ -495,7 +502,7 @@
     },
     "colorData": {
       "$ref": "#/$defs/colorData",
-      "description": "Inline color sample data (used when applyData.srcType is 'colorData')"
+      "description": "Inline color sample data (used when dataFiles.srcType is 'colorData')"
     },
     "searchApply": {
       "$ref": "#/$defs/searchApply",
