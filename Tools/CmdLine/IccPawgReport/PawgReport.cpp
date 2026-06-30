@@ -1298,7 +1298,7 @@ PawgVerdict TagValueEncodingVerdict(CIccProfile *pIcc, std::string &detail)
     }
 
     std::string report;
-    const icValidateStatus status = tag->Validate(SigString(it->TagInfo.sig), report, pIcc);
+    const icValidateStatus status = tag->Validate(icGetSigPath(it->TagInfo.sig), report, pIcc);
     worst = icMaxStatus(worst, status);
     if (status != icValidateOK && issues.size() < 4) {
       issues.push_back(SigString(it->TagInfo.sig) + ": " + FirstReportLine(report));
