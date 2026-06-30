@@ -1443,6 +1443,17 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1337-checkpcsconnections-regression.sh"
 )
 
+# CI debug helper for the NaN/SixChanInputRef iccApplyToLink PoC.  It preserves
+# the original master heap-buffer-overflow replay with extra signature/register
+# logging and now expects the NaN range to fail closed before CMM/LUT generation.
+iccdev_add_script_test(
+  iccdev.applytolink-nan-sixchan-debug
+  120
+  "iccdev;tools;cmm;applytolink;debug;asan;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applytolink-nan-sixchan-debug.sh"
+)
+
 if(TARGET iccApplyProfiles)
   iccdev_add_script_test(
     iccdev.issue-1166-cam-hyperbolicinv-regression

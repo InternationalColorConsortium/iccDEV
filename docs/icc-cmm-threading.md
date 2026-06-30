@@ -100,9 +100,9 @@ iccApplyProfiles -threads N -cfg config.json
 | Value | Behaviour |
 |-------|-----------|
 | omitted | Defaults to `nThreads = 1` (no wrapper; underlying CMM is used directly). |
-| `-threads 0` | Use `std::thread::hardware_concurrency()`. |
+| `-threads 0` | Use `std::thread::hardware_concurrency()`, capped at `CIccThreadedCmm::GetMaxThreads()`. |
 | `-threads 1` | No threaded wrapper. |
-| `-threads N` (N > 1) | Use exactly `N` workers. |
+| `-threads N` (N > 1) | Use exactly `N` workers, up to `CIccThreadedCmm::GetMaxThreads()`. |
 
 The flag is parsed before `-cfg`, so it must come first.
 

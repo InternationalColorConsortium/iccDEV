@@ -177,8 +177,9 @@
         "threads": {
           "type": "integer",
           "minimum": 0,
+          "maximum": 256,
           "default": 1,
-          "description": "Thread count for standard CMM apply. 1 uses the scalar CMM; 0 uses hardware concurrency; values greater than 1 wrap the CMM with CIccThreadedCmm."
+          "description": "Thread count for standard CMM apply. 1 uses the scalar CMM; 0 uses capped hardware concurrency; values greater than 1 wrap the CMM with CIccThreadedCmm up to CIccThreadedCmm::GetMaxThreads()."
         }
       }
     },
