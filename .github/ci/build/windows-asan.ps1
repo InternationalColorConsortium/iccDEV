@@ -11,7 +11,7 @@
 [CmdletBinding()]
 param(
     [string] $RepositoryUrl = "https://github.com/InternationalColorConsortium/iccDEV.git",
-    [string] $Branch = "ci-modify-cmake-windows-path-helper",
+    [string] $Branch = "master",
     [string] $WorkRoot = (Get-Location).Path,
     [string] $BuildDir = "out\windows-asan",
     [string] $Preset = "vs2022-x64",

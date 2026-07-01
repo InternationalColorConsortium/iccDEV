@@ -70,6 +70,10 @@
 
 
 #include <cstdio>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include "IccUtil.h"
 #include "IccEval.h"
@@ -145,29 +149,73 @@ void CIccMinMaxEval::Compare(icFloatNumber * /*pixel*/, icFloatNumber *deviceLab
   m_nTotal += 1;
 }
 
+static void PrintUsage()
+{
+  printf("Usage: iccRoundTrip profile {rendering_intent=1 {use_mpe=0}}\n");
+  printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
+  printf("  where rendering_intent is (0=perceptual, 1=relative, 2=saturation, 3=absolute)\n");
+  printf("  where use_mpe is (0=colorimetric tags, 1=MPE/color tags)\n");
+}
+
+static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
+{
+  char *end = NULL;
+  long parsed;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  parsed = strtol(arg, &end, 10);
+
+  if (errno == ERANGE || end == arg || *end != '\0' ||
+      parsed < minValue || parsed > maxValue ||
+      parsed < INT_MIN || parsed > INT_MAX) {
+    return false;
+  }
+
+  value = (int)parsed;
+  return true;
+}
 
 int main(int argc, char* argv[])
 {
-  if (argc<=1) {
-    printf("Usage: iccRoundTrip profile {rendering_intent=1 {use_mpe=0}}\n");
-    printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
-    printf("  where rendering_intent is (0=perceptual, 1=relative, 2=saturation, 3=absolute)\n");
+  if (argc <= 1) {
+    PrintUsage();
     return 0;
+  }
+
+  if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
+    PrintUsage();
+    return 0;
+  }
+
+  if (argc > 4) {
+    printf("Unexpected extra argument: '%s'\n", argv[4]);
+    PrintUsage();
+    return 1;
   }
 
   icRenderingIntent nIntent = icRelativeColorimetric;
   bool nUseMPE = false;
 
   if (argc>2) {
-    int temp = atoi(argv[2]);
-      
-    // pin values to valid range before casting
-    if (temp < (int)icPerceptual || temp > (int)icAbsoluteColorimetric)
-      temp = icPerceptual;
+    int temp = 0;
+    if (!ParseIntArg(argv[2], (int)icPerceptual, (int)icAbsoluteColorimetric, temp)) {
+      printf("Invalid rendering_intent: '%s'\n", argv[2]);
+      PrintUsage();
+      return 1;
+    }
     nIntent = (icRenderingIntent)temp;
     
     if (argc > 3) {
-      nUseMPE = atoi(argv[3]) != 0;
+      int tempUseMPE = 0;
+      if (!ParseIntArg(argv[3], 0, 1, tempUseMPE)) {
+        printf("Invalid use_mpe: '%s'\n", argv[3]);
+        PrintUsage();
+        return 1;
+      }
+      nUseMPE = tempUseMPE != 0;
     }
   }
 
@@ -228,4 +276,3 @@ int main(int argc, char* argv[])
   }
   return 0;
 }
-

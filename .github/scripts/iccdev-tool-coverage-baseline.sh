@@ -646,7 +646,7 @@ run_test "fromxml-06" "FromXml with -noid flag" \
 echo ""
 
 # =============================================================================
-# 4. iccRoundTrip (8 tests)
+# 4. iccRoundTrip (11 tests)
 # =============================================================================
 echo "--- 4. iccRoundTrip ---"
 ROUNDTRIP="$TOOLS/IccRoundTrip/iccRoundTrip"
@@ -672,8 +672,17 @@ run_test "rt-06" "RoundTrip DisplayP3 relative" \
 run_test "rt-07" "RoundTrip sRGB with MPE (use_mpe=1)" \
   "$ROUNDTRIP" "$SRGB" 1 1
 
+run_expect_exit "rt-08" "Reject invalid RoundTrip rendering intent" 1 \
+  "$ROUNDTRIP" "$SRGB" junk
+
+run_expect_exit "rt-09" "Reject invalid RoundTrip use_mpe flag" 1 \
+  "$ROUNDTRIP" "$SRGB" 1 2
+
+run_expect_exit "rt-10" "Reject extra RoundTrip arguments" 1 \
+  "$ROUNDTRIP" "$SRGB" 1 0 extra
+
 if [ "$QUICK_MODE" -eq 0 ]; then
-  run_test "rt-08" "RoundTrip AdobeRGB relative" \
+  run_test "rt-11" "RoundTrip AdobeRGB relative" \
     "$ROUNDTRIP" "$ADOBE" 1
 fi
 
