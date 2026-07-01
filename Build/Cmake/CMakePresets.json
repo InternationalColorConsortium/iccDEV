@@ -206,7 +206,6 @@
       "name": "macos-clang",
       "inherits": "default-base",
       "displayName": "macOS Clang",
-      "binaryDir": "${sourceDir}/../../out/${presetName}",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
