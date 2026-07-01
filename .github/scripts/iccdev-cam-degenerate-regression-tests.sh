@@ -81,7 +81,7 @@ run_cam_degenerate_helper() {
   fi
 
   for lib_name in IccProfLib2d IccProfLib2; do
-    if [ -f "$lib_dir/lib${lib_name}.so" ]; then
+    if [ -f "$lib_dir/lib${lib_name}.so" ] || [ -f "$lib_dir/lib${lib_name}.dylib" ]; then
       lib_arg="-l${lib_name}"
       break
     fi

@@ -59,6 +59,28 @@ To open the generated project:
 open out/macos-xcode/RefIccMAX.xcodeproj
 ```
 
+For GuardMalloc/libgmalloc crash reproduction, use a non-sanitizer Debug build
+and verify that the built Mach-O tools contain `LC_UUID`. Apple's dynamic loader
+can abort before `main()` when `DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib`
+is used with an executable that was linked without an `LC_UUID` load command.
+
+```bash
+cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+cmake --build out/macos-clang-guard-malloc --target iccToXml -j"$(sysctl -n hw.ncpu)"
+cmake --build out/macos-clang-guard-malloc --target check-macos-guard-malloc
+
+DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib \
+MallocScribble=1 \
+MallocPreScribble=1 \
+MallocGuardEdges=1 \
+MallocStackLogging=1 \
+out/macos-clang-guard-malloc/Tools/IccToXml/iccToXml input.icc output.xml
+```
+
+Do not combine GuardMalloc with AddressSanitizer, ThreadSanitizer, or
+MemorySanitizer. Use ASan/UBSan builds for sanitizer attribution and use
+GuardMalloc separately when checking allocator-sensitive behavior.
+
 ## Windows MSVC
 
 ```cmd
@@ -274,6 +296,8 @@ cmake --preset linux-clang-tsan -S Build/Cmake -B out/linux-clang-tsan
 cmake --preset linux-clang-msan -S Build/Cmake -B out/linux-clang-msan
 cmake --preset linux-clang-coverage -S Build/Cmake -B out/linux-clang-coverage
 cmake --preset linux-clang-profiling -S Build/Cmake -B out/linux-clang-profiling
+cmake --preset macos-clang-sanitizers -S Build/Cmake -B out/macos-clang-sanitizers
+cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
 ```
 
 ## Maintainer Dockerfiles

@@ -1328,6 +1328,77 @@ if(NOT BASH_EXECUTABLE)
   return()
 endif()
 
+set(ICCDEV_TIMEOUT_COMPAT_DIR "")
+if(NOT WIN32)
+  find_program(ICCDEV_TIMEOUT_EXECUTABLE timeout)
+  if(NOT ICCDEV_TIMEOUT_EXECUTABLE)
+    find_program(ICCDEV_GTIMEOUT_EXECUTABLE gtimeout)
+    set(ICCDEV_TIMEOUT_COMPAT_DIR "${CMAKE_BINARY_DIR}/Testing/timeout-bin")
+    set(_ICCDEV_TIMEOUT_COMPAT "${ICCDEV_TIMEOUT_COMPAT_DIR}/timeout")
+    file(MAKE_DIRECTORY "${ICCDEV_TIMEOUT_COMPAT_DIR}")
+    if(ICCDEV_GTIMEOUT_EXECUTABLE)
+      file(WRITE "${_ICCDEV_TIMEOUT_COMPAT}"
+        "#!/bin/sh\nexec \"${ICCDEV_GTIMEOUT_EXECUTABLE}\" \"$@\"\n")
+    else()
+      file(WRITE "${_ICCDEV_TIMEOUT_COMPAT}" [=[#!/usr/bin/env bash
+set -u
+
+if [ "$#" -lt 2 ]; then
+  echo "usage: timeout SECONDS COMMAND [ARG ...]" >&2
+  exit 125
+fi
+
+duration=$1
+shift
+
+case "$duration" in
+  ''|*[!0-9.]*)
+    echo "timeout: invalid duration '$duration'" >&2
+    exit 125
+    ;;
+esac
+
+timed_out=$(mktemp "${TMPDIR:-/tmp}/iccdev-timeout.XXXXXX") || exit 125
+rm -f "$timed_out"
+
+"$@" &
+pid=$!
+
+(
+  sleep "$duration"
+  if kill -0 "$pid" >/dev/null 2>&1; then
+    : > "$timed_out"
+    kill -TERM "$pid" >/dev/null 2>&1 || true
+    sleep 2
+    kill -KILL "$pid" >/dev/null 2>&1 || true
+  fi
+) &
+watcher=$!
+
+wait "$pid"
+status=$?
+
+kill "$watcher" >/dev/null 2>&1 || true
+wait "$watcher" 2>/dev/null || true
+
+if [ -e "$timed_out" ]; then
+  rm -f "$timed_out"
+  exit 124
+fi
+
+exit "$status"
+]=])
+    endif()
+    execute_process(
+      COMMAND chmod +x "${_ICCDEV_TIMEOUT_COMPAT}"
+      RESULT_VARIABLE _ICCDEV_TIMEOUT_CHMOD_RESULT
+    )
+    if(NOT _ICCDEV_TIMEOUT_CHMOD_RESULT EQUAL 0)
+      message(FATAL_ERROR "Failed to make ${_ICCDEV_TIMEOUT_COMPAT} executable")
+    endif()
+  endif()
+endif()
+
 set(ICCDEV_TOOL_PATHS
   "${ICCDEV_TOOLS_DIR}/IccApplyNamedCmm"
   "${ICCDEV_TOOLS_DIR}/IccApplyProfiles"
@@ -1348,6 +1419,9 @@ set(ICCDEV_TOOL_PATHS
   "${ICCDEV_TOOLS_DIR}/IccV5DspObsToV4Dsp"
   "${ICCDEV_TOOLS_DIR}/IccProfileVisualize"
 )
+if(ICCDEV_TIMEOUT_COMPAT_DIR)
+  list(PREPEND ICCDEV_TOOL_PATHS "${ICCDEV_TIMEOUT_COMPAT_DIR}")
+endif()
 
 list(JOIN ICCDEV_TOOL_PATHS ":" ICCDEV_TOOL_PATH)
 set(ICCDEV_SHARED_LIBRARY_PATH
@@ -1373,10 +1447,37 @@ if(TARGET iccApplyNamedCmm AND TARGET iccApplyProfiles AND TARGET iccApplySearch
   set(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS TRUE)
 endif()
 
+set(ICCDEV_MACOS_SDK_ENV)
+if(APPLE)
+  set(ICCDEV_MACOS_SDKROOT "${CMAKE_OSX_SYSROOT}")
+  if(NOT ICCDEV_MACOS_SDKROOT)
+    find_program(ICCDEV_XCRUN_EXECUTABLE xcrun)
+    if(ICCDEV_XCRUN_EXECUTABLE)
+      execute_process(
+        COMMAND "${ICCDEV_XCRUN_EXECUTABLE}" --show-sdk-path
+        OUTPUT_VARIABLE ICCDEV_MACOS_SDKROOT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+      )
+    endif()
+  endif()
+  if(ICCDEV_MACOS_SDKROOT)
+    list(APPEND ICCDEV_MACOS_SDK_ENV "SDKROOT=${ICCDEV_MACOS_SDKROOT}")
+  endif()
+endif()
+
+set(ICCDEV_TEST_INCLUDE_ENV)
+find_path(ICCDEV_NLOHMANN_INCLUDE_DIR nlohmann/json.hpp)
+if(ICCDEV_NLOHMANN_INCLUDE_DIR)
+  set(ICCDEV_TEST_INCLUDE_ENV "CPATH=${ICCDEV_NLOHMANN_INCLUDE_DIR}:$ENV{CPATH}")
+endif()
+
 set(ICCDEV_TEST_ENV
   "PATH=${ICCDEV_TOOL_PATH}:$ENV{PATH}"
   "LD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{LD_LIBRARY_PATH}"
   "DYLD_LIBRARY_PATH=${ICCDEV_SHARED_LIBRARY_PATH}:$ENV{DYLD_LIBRARY_PATH}"
+  ${ICCDEV_MACOS_SDK_ENV}
+  ${ICCDEV_TEST_INCLUDE_ENV}
   "CC=${CMAKE_C_COMPILER}"
   "CXX=${CMAKE_CXX_COMPILER}"
   "ASAN_OPTIONS=halt_on_error=0,detect_leaks=0"
