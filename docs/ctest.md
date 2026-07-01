@@ -53,6 +53,10 @@ ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
 
+Windows presets use a unified build-tree runtime directory. Visual Studio tools
+and iccDEV DLLs are under `out\vs2022-x64\bin\<Config>`; MinGW tools are under
+`out\mingw-x64\bin`.
+
 Windows MinGW single-config generators, `cmd.exe`:
 
 ```cmd
@@ -211,7 +215,9 @@ The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
 into `build/Testing/ctest-output/windows-testing`, runs the batch scripts from
 that disposable directory, verifies key output, and fails if the source
-`Testing/` tree is changed.
+`Testing/` tree is changed. It prefers the unified `bin` runtime directory and
+falls back to the older per-tool `Tools/<Tool>/<Config>` layout for existing
+build trees.
 
 Windows CTest wrappers collect build-tree DLL directories plus runtime
 dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,

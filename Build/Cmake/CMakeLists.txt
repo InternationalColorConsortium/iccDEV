@@ -458,6 +458,19 @@ option(ENABLE_ICCJSON             "Build IccJSON library support"               
 option(ENABLE_IMAGE_TOOLS         "Build TIFF/PNG/JPEG image-dependent tools"           ON)
 option(ENABLE_CMM_TOOLS           "Build Windows CMM DLL tool"                          ON)
 option(ENABLE_IIS_TOOLS           "Build Windows IIS ISAPI tool"                        ON)
+option(ICCDEV_WINDOWS_UNIFIED_RUNTIME
+  "Place Windows executable and DLL runtime artifacts in one build-tree bin directory"
+  ON)
+
+if(WIN32 AND ICCDEV_WINDOWS_UNIFIED_RUNTIME)
+  set(ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR
+      "${CMAKE_BINARY_DIR}/bin"
+      CACHE PATH "Windows build-tree directory for iccDEV executable and DLL runtime artifacts")
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+  set(CMAKE_PDB_OUTPUT_DIRECTORY "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+  message(STATUS "Windows runtime output directory: ${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+endif()
+
 include(CheckCXXSourceCompiles)
 set(_ICC_JSON_ORDERED_DEFAULT OFF)
 
@@ -690,6 +703,7 @@ message(STATUS "ENABLE_ICCJSON             = ${ENABLE_ICCJSON}")
 message(STATUS "ENABLE_IMAGE_TOOLS         = ${ENABLE_IMAGE_TOOLS}")
 message(STATUS "ENABLE_CMM_TOOLS           = ${ENABLE_CMM_TOOLS}")
 message(STATUS "ENABLE_IIS_TOOLS           = ${ENABLE_IIS_TOOLS}")
+message(STATUS "ICCDEV_WINDOWS_UNIFIED_RUNTIME = ${ICCDEV_WINDOWS_UNIFIED_RUNTIME}")
 message(STATUS "ICC_TRACE_NAN_ENABLED      = ${ICC_TRACE_NAN_ENABLED}")
 message(STATUS "ICC_CLUT_DEBUG             = ${ICC_CLUT_DEBUG}")
 message(STATUS "ICC_ENABLE_ASSERTS         = ${ICC_ENABLE_ASSERTS}")
@@ -947,6 +961,15 @@ if(MSVC)
       NO_DEFAULT_PATH)
     if(NOT _iccdev_clangcl_asan_dynamic OR NOT _iccdev_clangcl_asan_thunk)
       message(FATAL_ERROR "ClangCL AddressSanitizer runtime libraries were not found in ${_iccdev_clangcl_asan_lib_dir}")
+    endif()
+    find_file(_iccdev_clangcl_asan_runtime_dll
+      NAMES "clang_rt.asan_dynamic-${_iccdev_clangcl_asan_arch}.dll"
+      PATHS "${_iccdev_clangcl_asan_lib_dir}"
+      NO_DEFAULT_PATH)
+    if(_iccdev_clangcl_asan_runtime_dll)
+      set(ICCDEV_CLANGCL_ASAN_RUNTIME_DLL
+          "${_iccdev_clangcl_asan_runtime_dll}"
+          CACHE FILEPATH "ClangCL AddressSanitizer runtime DLL staged with Windows tools")
     endif()
 
     add_link_options(
@@ -1707,12 +1730,16 @@ IF(ENABLE_TOOLS)
     message(STATUS "wxWidgets disabled by ENABLE_WXWIDGETS=OFF - skipping wxProfileDump.")
   endif()
 
-  foreach(_iccdev_tool_target
+  set(_iccdev_tool_targets
       iccFromXml
       iccToXml
+      iccFromJson
+      iccToJson
       iccJpegDump
       iccApplyNamedCmm
+      iccDescribeSinkTest
       iccDumpProfile
+      iccPawgReport
       iccRoundTrip
       iccFromCube
       iccV5DspObsToV4Dsp
@@ -1727,8 +1754,42 @@ IF(ENABLE_TOOLS)
       iccDumpProfileGui
       iccProfileVisualize
   )
+  foreach(_iccdev_tool_target IN LISTS _iccdev_tool_targets)
     iccdev_fixup_msvc_compile_pdb(${_iccdev_tool_target})
   endforeach()
+
+  if(WIN32 AND ICCDEV_WINDOWS_UNIFIED_RUNTIME)
+    if(_is_multi_config)
+      set(_iccdev_windows_stage_runtime_dir "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}/$<CONFIG>")
+      set(_iccdev_windows_stage_config "$<CONFIG>")
+    else()
+      set(_iccdev_windows_stage_runtime_dir "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+      set(_iccdev_windows_stage_config "${CMAKE_BUILD_TYPE}")
+    endif()
+
+    add_custom_target(iccdev-stage-windows-runtime ALL
+      COMMAND "${CMAKE_COMMAND}"
+        "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DICCDEV_RUNTIME_DIR=${_iccdev_windows_stage_runtime_dir}"
+        "-DICCDEV_CONFIG=${_iccdev_windows_stage_config}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/StageWindowsRuntime.cmake"
+      COMMENT "Stage Windows runtime DLL dependencies into ${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}"
+      VERBATIM)
+
+    set(_iccdev_windows_runtime_dependencies
+      ${_iccdev_tool_targets}
+      IccProfLib2
+      IccXML2
+      IccJSON2
+      IccConnect2
+      RefIccMAX
+    )
+    foreach(_iccdev_windows_runtime_dependency IN LISTS _iccdev_windows_runtime_dependencies)
+      if(TARGET "${_iccdev_windows_runtime_dependency}")
+        add_dependencies(iccdev-stage-windows-runtime "${_iccdev_windows_runtime_dependency}")
+      endif()
+    endforeach()
+  endif()
 
 ENDIF(ENABLE_TOOLS)
 

@@ -68,6 +68,11 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
 
+Windows presets place iccDEV `.exe` and `.dll` runtime artifacts together under
+`bin` in the build tree. Run tools from that directory or by explicit path, for
+example `out\vs2022-x64\bin\Release\iccToXml.exe`; no manual PATH update is
+required for iccDEV project DLLs.
+
 ## Windows ClangCL
 
 Use the Visual Studio LLVM toolset with the same vcpkg-managed dependencies as
@@ -79,6 +84,9 @@ cd iccdev
 cmake --preset vs2022-clangcl-x64 -S Build/Cmake -B out/vs2022-clangcl-x64
 cmake --build out/vs2022-clangcl-x64 --config Release -- /m /maxcpucount
 ```
+
+The ClangCL preset uses the same `out\vs2022-clangcl-x64\bin\Release` runtime
+layout as the MSVC preset.
 
 ## Windows MinGW UCRT64
 
@@ -107,6 +115,9 @@ cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
   -DENABLE_IIS_TOOLS=OFF
 cmake --build out/mingw-x64 --target iccDumpProfile --parallel
 ```
+
+The MinGW preset writes runnable tools to `out\mingw-x64\bin`, for example
+`out\mingw-x64\bin\iccDumpProfile.exe`.
 
 PowerShell:
 

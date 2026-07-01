@@ -615,6 +615,7 @@ jobs:
           git config --global credential.helper ""
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
           if (Test-Path Env:GITHUB_TOKEN) {
             Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
@@ -629,18 +630,18 @@ jobs:
           tar -xf deps.zip
           cd Build/Cmake
           Write-Host "========= Building... ================`n"
-          cmake  -B build -S . -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_BUILD_TYPE=Release  -Wno-dev
+          cmake -B build -S . `
+            -DCMAKE_TOOLCHAIN_FILE="..\..\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_MANIFEST_MODE=OFF `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DICCDEV_WINDOWS_UNIFIED_RUNTIME=ON `
+            -Wno-dev
           cmake --build build --config Release -- /m /maxcpucount
-          cmake --build build --config Release -- /m /maxcpucount
-          $exeDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\build\ |
-              Where-Object { $_.FullName -match 'icc' -and $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
-              ForEach-Object { Split-Path $_.FullName -Parent } |
-              Sort-Object -Unique
-          $env:PATH = ($exeDirs -join ';') + ';' + $env:PATH
-          $env:PATH -split ';' | Select-String "icc"
-          $toolDirs = Get-ChildItem -Recurse -File -Include *.exe -Path .\Tools\ | ForEach-Object { Split-Path -Parent $_.FullName } | Sort-Object -Unique
-          $env:PATH = ($toolDirs -join ';') + ';' + $env:PATH
-          $env:PATH -split ';'
+          $runtimeDir = Resolve-Path ".\build\bin\Release"
+          Get-ChildItem -File -Path $runtimeDir |
+            Where-Object { $_.Extension -in '.exe','.dll' } |
+            Sort-Object Name |
+            ForEach-Object { Write-Host ("{0} {1}" -f $_.Name, $_.Length) }
       - name: Stage bundle into Testing directory
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
@@ -648,16 +649,28 @@ jobs:
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           $ProgressPreference = 'SilentlyContinue'
           $stage = "staging/iccDEV-Testing"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           # 1. Copy the entire Testing directory contents (exclude Fuzzing)
           Get-ChildItem -Path "Testing" -Exclude "Fuzzing" |
             Copy-Item -Destination $stage -Recurse -Force
-          # 2. Copy .exe and library files from the build (no .pdb in Release)
-          Get-ChildItem -Path "Build/Cmake/build" -Recurse -Include *.exe,*.dll,*.lib |
-            Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' -and $_.Name -notmatch '^CMake(C|CXX)CompilerId\.exe$' } |
+          # 2. Copy the unified Windows runtime directory. CMake stages iccDEV
+          #    tools, iccDEV DLLs, and vcpkg runtime DLLs together here so
+          #    release binaries run directly from the bundle root.
+          $runtimeDir = "Build/Cmake/build/bin/Release"
+          if (-not (Test-Path $runtimeDir)) {
+            throw "Windows runtime directory not found: $runtimeDir"
+          }
+          Get-ChildItem -Path $runtimeDir -File |
+            Where-Object { $_.Extension -in '.exe','.dll','.lib','.exp' } |
             ForEach-Object { Copy-Item $_.FullName -Destination $stage -Force }
+          foreach ($required in @('iccDumpProfile.exe', 'IccProfLib2.dll')) {
+            if (-not (Test-Path (Join-Path $stage $required))) {
+              throw "Required staged Windows runtime artifact missing: $required"
+            }
+          }
           # 3. Copy Testing/Readme.md, LICENSE.md and docs/
           Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
@@ -683,19 +696,19 @@ jobs:
           # 5. Generate path.bat helper script
           @'
           @echo off
-          setlocal EnableDelayedExpansion
           set "SCRIPT_DIR=%~dp0"
-          if "!SCRIPT_DIR:~-1!"=="\" set "SCRIPT_DIR=!SCRIPT_DIR:~0,-1!"
-          :: Build new PATH with script dir and all subdirs containing .exe
-          set "NEW_PATH=!SCRIPT_DIR!;!PATH!"
-          for /R "!SCRIPT_DIR!" %%F in (*.exe) do (
-              set "dir=%%~dpF"
-              if "!dir:~-1!"=="\" set "dir=!dir:~0,-1!"
-              echo !NEW_PATH! | findstr /I /C:"!dir!" >nul || set "NEW_PATH=!dir!;!NEW_PATH!"
-          )
-          :: Export PATH back to caller via endlocal trick
-          endlocal & set "PATH=%NEW_PATH%"
+          if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+          set "PATH=%SCRIPT_DIR%;%PATH%"
+          echo PATH updated for iccDEV tools: %SCRIPT_DIR%
           '@ | Set-Content -Path "$stage/path.bat" -Encoding ASCII
+          $dumpOutput = (& (Join-Path $stage 'iccDumpProfile.exe') --read --diag 1 (Join-Path $stage 'CalcTest\calcUnderStack_add.icc') 2>&1) -join "`n"
+          Write-Host $dumpOutput
+          if ($LASTEXITCODE -ne 0) {
+            throw "Staged iccDumpProfile smoke failed with exit code $LASTEXITCODE"
+          }
+          if ($dumpOutput -notmatch 'Profile Tags \(8\)') {
+            throw "Staged iccDumpProfile smoke did not report the expected tag count"
+          }
           # Summary of staged bundle contents
           $allFiles = Get-ChildItem -Path $stage -Recurse -File
           $count = $allFiles.Count
