@@ -577,13 +577,26 @@ inline bool begin_profile_cmm(CIccProfile *pIcc,
     return false;
   }
 
-  icStatusCMM status = cmm.AddXform(*pIcc, intent);
+  icStatusCMM status = cmm.AddXform(*pIcc, intent, icInterpLinear, NULL,
+                                    icXformLutColorimetric, false);
   if (!status_ok(status, std::string(direction) + " AddXform", reason)) {
     return false;
   }
 
   status = cmm.Begin();
-  return status_ok(status, std::string(direction) + " Begin", reason);
+  if (!status_ok(status, std::string(direction) + " Begin", reason)) {
+    return false;
+  }
+
+  CIccXform *xform = cmm.GetLastXform();
+  if (!xform ||
+      xform->GetNumSrcSamples() != cmm.GetSourceSamples() ||
+      xform->GetNumDstSamples() != cmm.GetDestSamples()) {
+    reason = "CIccCmm " + std::string(direction) + " selected a transform with incompatible channel counts";
+    return false;
+  }
+
+  return true;
 }
 
 inline bool has_standard_cmm_forward_candidate(CIccProfile *pIcc) {
@@ -1910,9 +1923,18 @@ inline bool evaluate_characterization(CIccProfile *pIcc,
   // very error this fixes); if an absolute transform cannot be built we report
   // N/A rather than a wrong number.
   CIccCmm cmmForward(colorSpace, pcs, true);
-  icStatusCMM st = cmmForward.AddXform(*pIcc, icAbsoluteColorimetric, icInterpTetrahedral);
+  icStatusCMM st = cmmForward.AddXform(*pIcc, icAbsoluteColorimetric, icInterpTetrahedral,
+                                       NULL, icXformLutColorimetric, false);
   if (st == icCmmStatOk) {
     st = cmmForward.Begin();
+  }
+  if (st == icCmmStatOk) {
+    CIccXform *xform = cmmForward.GetLastXform();
+    if (!xform ||
+        xform->GetNumSrcSamples() != cmmForward.GetSourceSamples() ||
+        xform->GetNumDstSamples() != cmmForward.GetDestSamples()) {
+      st = icCmmStatBadXform;
+    }
   }
   if (st != icCmmStatOk) {
     reason = "Characterization data present but an absolute-colorimetric forward transform could not be built";
