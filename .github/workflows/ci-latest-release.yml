@@ -714,8 +714,8 @@ jobs:
           $count = $allFiles.Count
           Write-Host "`n===== Staged Bundle Contents ($count files) =====" -ForegroundColor Cyan
           foreach ($ext in @('*.exe','*.dll','*.lib','*.icc','*.md')) {
-            $matched = $allFiles | Where-Object { $_.Name -like $ext }
-            if ($matched) {
+            $matched = @($allFiles | Where-Object { $_.Name -like $ext })
+            if ($matched.Count -gt 0) {
               Write-Host "`n--- $ext ($($matched.Count)) ---"
               $matched | ForEach-Object {
                 $rel = $_.FullName.Replace((Resolve-Path $stage).Path + '\', '')
