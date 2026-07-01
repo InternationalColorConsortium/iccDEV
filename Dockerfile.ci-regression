@@ -34,7 +34,7 @@ RUN apt-get update \
     clang-tools-21=1:21.1.8-6ubuntu1 \
     cmake=4.2.3-2ubuntu2 \
     cppcheck=2.19.0-3 \
-    curl=8.18.0-1ubuntu2.1 \
+    curl=8.18.0-1ubuntu2.2 \
     g++=4:15.2.0-5ubuntu1 \
     gcc=4:15.2.0-5ubuntu1 \
     gdb=17.1-2ubuntu1 \
