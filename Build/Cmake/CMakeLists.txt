@@ -511,7 +511,7 @@ option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"               
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
 option(ICC_VERBOSE_CALC_APPLY     "Enable verbose CIccMpeCalculator Apply debugging"    OFF)
-option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         OFF)
+option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         ON)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
 option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)
