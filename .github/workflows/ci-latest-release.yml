@@ -1544,7 +1544,7 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
-    if: ${{ github.ref == 'refs/heads/master' }}
+    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' }}
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 15
