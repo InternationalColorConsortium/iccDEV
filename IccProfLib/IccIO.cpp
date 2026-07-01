@@ -75,6 +75,7 @@
 #include <cstring>
 #include <cmath>
 #include <limits>
+#include <stdint.h>
 
 #if !defined(_WIN32) && !defined(WIN32)
 #include <sys/stat.h>
@@ -682,8 +683,10 @@ size_t CIccFileIO::GetLength()
   if (Seek(current, icSeekSet) < 0 || end < 0)
     return 0;
 
+#if SIZE_MAX < UINT64_MAX
   if ((uint64_t)end > (uint64_t)std::numeric_limits<size_t>::max())
     return 0;
+#endif
 
   return (size_t)end;
 }

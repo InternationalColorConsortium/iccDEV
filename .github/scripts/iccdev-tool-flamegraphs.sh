@@ -14,6 +14,8 @@
 #   ICCDEV_FLAMEGRAPH_USER_ONLY   -- set to 1 to sample user space only
 #   ICCDEV_FLAMEGRAPH_TIMEOUT     -- timeout per profiled tool
 #   ICCDEV_FLAMEGRAPH_DIR         -- optional FlameGraph checkout
+#   ICCDEV_FLAMEGRAPH_ONLY        -- optional single manifest tool name to profile
+#   ICCDEV_FLAMEGRAPH_APPLYTOLINK_NAN_POC -- set to 1 for focused NaN PoC
 ###############################################################################
 
 set -euo pipefail
@@ -40,6 +42,7 @@ CALL_GRAPH="${ICCDEV_FLAMEGRAPH_CALL_GRAPH:-dwarf}"
 USER_ONLY="${ICCDEV_FLAMEGRAPH_USER_ONLY:-1}"
 TIMEOUT_SEC="${ICCDEV_FLAMEGRAPH_TIMEOUT:-45}"
 FLAMEGRAPH_DIR="${ICCDEV_FLAMEGRAPH_DIR:-}"
+ONLY="${ICCDEV_FLAMEGRAPH_ONLY:-}"
 
 usage()
 {
@@ -271,6 +274,9 @@ profile_tool()
 {
   local name="$1"
   shift
+  if [ -n "$ONLY" ] && [ "$name" != "$ONLY" ]; then
+    return 0
+  fi
   local report_dir="$REPORTS/$name"
   local cmd_string
   cmd_string="$(command_string "$@")"
@@ -345,6 +351,9 @@ skip_tool()
 {
   local name="$1"
   local note="$2"
+  if [ -n "$ONLY" ] && [ "$name" != "$ONLY" ]; then
+    return 0
+  fi
   manifest_row "$name" "SKIP" "" "0" "0" "" "" "" "$note"
 }
 
@@ -371,6 +380,8 @@ TIFF_ALT="$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif"
 [ -f "$TIFF_8BIT" ] || TIFF_8BIT="$TIFF_ALT"
 V5_OBS="$ICCDEV_TESTING/PCC/Spec400_10_700-R1_2deg-CAT02.icc"
 [ -f "$V5_OBS" ] || V5_OBS="$ICCDEV_TESTING/ICS/Spec400_10_700-D50_2deg-Part1.icc"
+SIXCHAN_INPUT="$ICCDEV_TESTING/SpecRef/SixChanInputRef.icc"
+[ -f "$SIXCHAN_INPUT" ] || SIXCHAN_INPUT="$TP/SixChanInputRef.icc"
 
 DUMP="$(tool_path IccDumpProfile iccDumpProfile || true)"
 TOXML="$(tool_path IccToXml iccToXml || true)"
@@ -391,6 +402,15 @@ SPECSEP="$(tool_path IccSpecSepToTiff iccSpecSepToTiff || true)"
 PAWG="$(tool_path IccPawgReport iccPawgReport || true)"
 VISUALIZE="$(tool_path IccProfileVisualize iccProfileVisualize || true)"
 DESCRIBE="$(tool_path IccDescribeSinkTest iccDescribeSinkTest || true)"
+
+if [ "${ICCDEV_FLAMEGRAPH_APPLYTOLINK_NAN_POC:-0}" = "1" ] &&
+   ! require_file "$SIXCHAN_INPUT" &&
+   [ -n "$FROMXML" ] &&
+   [ -x "$FROMXML" ] &&
+   require_file "$ICCDEV_TESTING/SpecRef/SixChanInputRef.xml"; then
+  SIXCHAN_INPUT="$WORKDIR/SixChanInputRef.icc"
+  ( cd "$ICCDEV_TESTING/SpecRef" && "$FROMXML" "SixChanInputRef.xml" "$SIXCHAN_INPUT" ) > "$WORKDIR/SixChanInputRef.fromxml.log" 2>&1 || true
+fi
 
 if [ -n "$TOXML" ] && [ -f "$SRGB" ]; then
   "$TOXML" "$SRGB" "$WORKDIR/srgb.xml" >/dev/null 2>&1 || true
@@ -457,6 +477,14 @@ if [ -n "$APPLYLINK" ] && require_file "$SRGB"; then
   profile_tool iccApplyToLink "$APPLYLINK" "$WORKDIR/link.cube" 1 5 4 sRGB-cube 0.0 1.0 0 0 "$SRGB" 1
 else
   skip_tool iccApplyToLink "missing tool or sRGB profile"
+fi
+
+if [ "${ICCDEV_FLAMEGRAPH_APPLYTOLINK_NAN_POC:-0}" = "1" ]; then
+  if [ -n "$APPLYLINK" ] && require_file "$SIXCHAN_INPUT"; then
+    profile_tool iccApplyToLink-nan-sixchan "$APPLYLINK" "$WORKDIR/nan-sixchan.foo" 0 2 1 foo.bar nan 1 1 0 "$SIXCHAN_INPUT" 13
+  else
+    skip_tool iccApplyToLink-nan-sixchan "missing tool or SixChanInputRef profile"
+  fi
 fi
 
 if [ -n "$APPLYPROF" ] && require_file "$TIFF_8BIT" && require_file "$SRGB"; then

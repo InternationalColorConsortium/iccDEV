@@ -43,6 +43,7 @@ GZIP_FALSE_POSITIVE="$OUTDIR/private-invalid-gzip-signature.icc"
 GZIP_TRUE_POSITIVE="$OUTDIR/private-valid-gzip-signature.icc"
 STD_GZIP_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-gzip-signature.icc"
 STD_GZIP_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-gzip-signature.icc"
+STD_ZLIB_TRUE_NEGATIVE="$OUTDIR/standard-tag-valid-zlib-stream.icc"
 STD_ELF_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-elf-signature.icc"
 STD_ELF_TRUE_POSITIVE="$OUTDIR/standard-tag-valid-elf-signature.icc"
 STD_SHEBANG_FALSE_POSITIVE="$OUTDIR/standard-tag-invalid-shebang-signature.icc"
@@ -856,6 +857,93 @@ run_standard_tag_valid_gzip_signature_profile() {
   pass_case "$name" "valid gzip member in a standard CLUT tag triggers S8 while S12 stays clear"
 }
 
+generate_standard_tag_valid_zlib_stream_profile() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+
+  python3 - "$STD_ZLIB_TRUE_NEGATIVE" <<'PY'
+import pathlib
+import struct
+import sys
+import zlib
+
+dst = pathlib.Path(sys.argv[1])
+# RFC1950 zlib stream embedded in a standard tag.  This is the stream format used
+# by ICC compressed tags when ICC_USE_ZLIB is enabled; it must not be reported as
+# an embedded gzip member or generic malware signature.
+member = zlib.compress(b"icc-pawg-zlib-stream\n")
+blob = bytearray((i * 19 + 7) & 0xff for i in range(256))
+blob[120:120 + len(member)] = member
+size = 144 + len(blob)
+data = bytearray(size)
+data[0:4] = struct.pack(">I", size)
+data[8:12] = bytes.fromhex("04400000")
+data[12:16] = b"mntr"
+data[16:20] = b"RGB "
+data[20:24] = b"XYZ "
+data[36:40] = b"acsp"
+data[64:68] = struct.pack(">I", 0)
+data[68:72] = struct.pack(">I", 0x0000F6D6)
+data[72:76] = struct.pack(">I", 0x00010000)
+data[76:80] = struct.pack(">I", 0x0000D32D)
+data[128:132] = struct.pack(">I", 1)
+data[132:136] = b"A2B0"
+data[136:140] = struct.pack(">I", 144)
+data[140:144] = struct.pack(">I", len(blob))
+data[144:size] = blob
+dst.write_bytes(data)
+PY
+}
+
+run_standard_tag_valid_zlib_stream_profile() {
+  local name="pawg-standard-tag-valid-zlib-true-negative"
+  local logfile="$OUTDIR/standard-tag-valid-zlib.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile" "$STD_ZLIB_TRUE_NEGATIVE"
+
+  if ! generate_standard_tag_valid_zlib_stream_profile; then
+    fail_case "$name" "failed to generate standard-tag valid zlib stream profile"
+    return
+  fi
+
+  timeout 60 "$PAWG" "$STD_ZLIB_TRUE_NEGATIVE" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    fail_case "$name" "sanitizer finding"
+    return
+  fi
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,80p' "$logfile"
+    return
+  fi
+  if ! assert_report_truth "$name" "$logfile"; then
+    fail_case "$name" "report count or section mismatch"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S8" "$logfile"; then
+    fail_case "$name" "zlib stream was incorrectly reported in S8"
+    return
+  fi
+  if grep -F -q "embedded gzip stream" "$logfile"; then
+    fail_case "$name" "zlib stream produced gzip detail text"
+    return
+  fi
+  if ! grep -F -q "[OK  ] S12" "$logfile"; then
+    fail_case "$name" "standard-tag zlib stream must leave private-tag check S12 clear"
+    return
+  fi
+
+  pass_case "$name" "valid zlib stream does not trigger gzip or malware checks"
+}
+
 # Shared builder: writes a minimal RGB profile carrying a single STANDARD 'A2B0'
 # tag whose 256-byte CLUT-like blob has `embed` spliced in at offset 120.
 emit_standard_tag_blob_profile() {
@@ -1507,6 +1595,7 @@ run_invalid_gzip_signature_profile
 run_valid_gzip_signature_profile
 run_standard_tag_invalid_gzip_signature_profile
 run_standard_tag_valid_gzip_signature_profile
+run_standard_tag_valid_zlib_stream_profile
 run_standard_tag_invalid_elf_signature_profile
 run_standard_tag_valid_elf_signature_profile
 run_standard_tag_invalid_shebang_signature_profile

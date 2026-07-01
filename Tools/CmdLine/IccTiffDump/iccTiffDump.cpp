@@ -123,10 +123,78 @@ const char* GetId(unsigned long nId, IdList* pIdList)
   return pIdList->szName;
 }
 
-void Usage() 
+void Usage()
 {
   printf("iccTiffDump built with IccProfLib version " ICCPROFLIBVER "\n\n");
-  printf("Usage: iccTiffDump tiff_file {exported_icc_file}\n\n");
+  printf("Usage: iccTiffDump {--evidence-json} tiff_file {exported_icc_file}\n\n");
+}
+
+static std::string GetProfileId(CIccProfile* pProfile)
+{
+  if (!pProfile)
+    return std::string();
+
+  CIccInfo Fmt;
+  if (Fmt.IsProfileIDCalculated(&pProfile->m_Header.profileID))
+    return Fmt.GetProfileID(&pProfile->m_Header.profileID);
+
+  return std::string();
+}
+
+static std::string GetProfileId(const char* profilePath)
+{
+  if (!profilePath || !profilePath[0])
+    return std::string();
+
+  CIccProfile* pProfile = OpenIccProfile(profilePath);
+  if (!pProfile)
+    return std::string();
+
+  std::string id = GetProfileId(pProfile);
+  delete pProfile;
+  return id;
+}
+
+static void EmitWriteEvidenceJson(const char* tiffPath, const char* outputPath,
+                                  const std::string& embeddedProfileId,
+                                  const std::string& extractedProfileId)
+{
+  std::string outputDigest;
+  bool hasOutputDigest = outputPath && outputPath[0] &&
+    icSha256File(outputPath, outputDigest);
+
+  printf("{");
+  printf("\"schema\":\"iccdev-qa-evidence/v1\",");
+  printf("\"tool\":\"iccTiffDump\",");
+  printf("\"input\":\"%s\",", icJsonEscape(tiffPath).c_str());
+  printf("\"output\":\"%s\",", icJsonEscape(outputPath).c_str());
+  printf("\"qaFlags\":[\"ICCDEV_FLAG_WRITE\"],");
+  if (hasOutputDigest)
+    printf("\"outputDigest\":\"%s\",", outputDigest.c_str());
+  else
+    printf("\"outputDigest\":null,");
+  if (!embeddedProfileId.empty())
+    printf("\"embeddedProfileId\":\"%s\",", icJsonEscape(embeddedProfileId).c_str());
+  else
+    printf("\"embeddedProfileId\":null,");
+  if (!extractedProfileId.empty())
+    printf("\"extractedProfileId\":\"%s\",", icJsonEscape(extractedProfileId).c_str());
+  else
+    printf("\"extractedProfileId\":null,");
+  printf("\"write\":{");
+  if (hasOutputDigest)
+    printf("\"outputDigest\":\"%s\",", outputDigest.c_str());
+  else
+    printf("\"outputDigest\":null,");
+  if (!embeddedProfileId.empty())
+    printf("\"embeddedProfileId\":\"%s\",", icJsonEscape(embeddedProfileId).c_str());
+  else
+    printf("\"embeddedProfileId\":null,");
+  if (!extractedProfileId.empty())
+    printf("\"extractedProfileId\":\"%s\"", icJsonEscape(extractedProfileId).c_str());
+  else
+    printf("\"extractedProfileId\":null");
+  printf("}}\n");
 }
 
 void DumpProfileInfo(CIccProfile* pProfile, std::string prefix, int level = 1)
@@ -242,6 +310,14 @@ const char *GetSampleFormatDescription( unsigned int format )
 int main(int argc, icChar* argv[])
 {
   int minargs = 1;
+  bool bEvidenceJson = false;
+
+  if (argc > 1 && !stricmp(argv[1], "--evidence-json")) {
+    bEvidenceJson = true;
+    argv++;
+    argc--;
+  }
+
   if (argc <= minargs) {
     Usage();
     return 0;
@@ -259,28 +335,34 @@ int main(int argc, icChar* argv[])
     return -1;
   }
 
-  printf("-------------------->Tiff Image Dump<---------------------------\n");
-  printf("Filename:          %s\n", srcName.c_str());
-  printf("Size:              (%d x %d) pixels, (%.2lf\" x %.2lf\")\n",
-    SrcImg.GetWidth(), SrcImg.GetHeight(),
-    SrcImg.GetWidthIn(), SrcImg.GetHeightIn());
-  printf("Planar:            %s\n", GetId(SrcImg.GetPlanar(), planar_types));
-  printf("BitsPerSample:     %d (%s)\n", SrcImg.GetBitsPerSample(),
-            GetSampleFormatDescription( SrcImg.GetSampleFormat()) );
-
-  printf("SamplesPerPixel:   %d\n", SrcImg.GetSamples());
+  if (!bEvidenceJson) {
+    printf("-------------------->Tiff Image Dump<---------------------------\n");
+    printf("Filename:          %s\n", srcName.c_str());
+    printf("Size:              (%d x %d) pixels, (%.2lf\" x %.2lf\")\n",
+      SrcImg.GetWidth(), SrcImg.GetHeight(),
+      SrcImg.GetWidthIn(), SrcImg.GetHeightIn());
+    printf("Planar:            %s\n", GetId(SrcImg.GetPlanar(), planar_types));
+    printf("BitsPerSample:     %d (%s)\n", SrcImg.GetBitsPerSample(),
+           GetSampleFormatDescription(SrcImg.GetSampleFormat()));
+    printf("SamplesPerPixel:   %d\n", SrcImg.GetSamples());
+  }
   int nExtra = SrcImg.GetExtraSamples();
-  if (nExtra)
+  if (!bEvidenceJson && nExtra)
     printf("ExtraSamples:      %d\n", nExtra);
-  printf("Photometric:       %s\n", GetId(SrcImg.GetPhoto(), photo_types));
-  printf("BytesPerLine:      %d\n", SrcImg.GetBytesPerLine());
-  printf("Resolution:        (%lf x %lf) pixels per/inch\n", SrcImg.GetXRes(), SrcImg.GetYRes());
-  printf("Compression:       %s\n", GetId(SrcImg.GetCompress(), compression_types));
+  if (!bEvidenceJson) {
+    printf("Photometric:       %s\n", GetId(SrcImg.GetPhoto(), photo_types));
+    printf("BytesPerLine:      %d\n", SrcImg.GetBytesPerLine());
+    printf("Resolution:        (%lf x %lf) pixels per/inch\n", SrcImg.GetXRes(), SrcImg.GetYRes());
+    printf("Compression:       %s\n", GetId(SrcImg.GetCompress(), compression_types));
+  }
 
   unsigned char *pProfMem = nullptr;
   unsigned int nLen = 0;
+  std::string embeddedProfileId;
+  std::string extractedProfileId;
   if (SrcImg.GetIccProfile(pProfMem, nLen)) {
-    printf("Profile:           Embedded\n");
+    if (!bEvidenceJson)
+      printf("Profile:           Embedded\n");
 
     // Profile description and metadata
     CIccProfile *pProfile = OpenIccProfile(pProfMem, nLen);
@@ -290,6 +372,7 @@ int main(int argc, icChar* argv[])
       return 1;
     }
 
+    embeddedProfileId = GetProfileId(pProfile);
     std::string validateReport;
     if (!pProfile->ReadTags(pProfile)) {
       printf("\nUnable to read embedded ICC profile\n");
@@ -305,11 +388,14 @@ int main(int argc, icChar* argv[])
       return 1;
     }
 
-    DumpProfileInfo(pProfile, " ");
+    if (!bEvidenceJson)
+      DumpProfileInfo(pProfile, " ");
     if (argc > 2) {
       std::string dstName = icSanitizeConsoleText(argv[2]);
       if (SaveIccProfile(argv[2], pProfile)) {
-        printf("\nProfile extracted to: %s\n", dstName.c_str());
+        extractedProfileId = GetProfileId(argv[2]);
+        if (!bEvidenceJson)
+          printf("\nProfile extracted to: %s\n", dstName.c_str());
       }
       else {
         printf("\nUnable to extract profile\n");
@@ -319,14 +405,23 @@ int main(int argc, icChar* argv[])
       }
     }
     delete pProfile;
-  } else {
-    printf("Profile:           None\n");
+  }
+  else {
+    if (!bEvidenceJson)
+      printf("Profile:           None\n");
     if (argc > 2) {
-      printf("\nNo embedded ICC profile to extract\n");
+      if (bEvidenceJson)
+        fprintf(stderr, "No embedded ICC profile to extract\n");
+      else
+        printf("\nNo embedded ICC profile to extract\n");
       SrcImg.Close();
       return -1;
     }
   }
+
+  if (bEvidenceJson)
+    EmitWriteEvidenceJson(argv[1], argc > 2 ? argv[2] : "",
+                          embeddedProfileId, extractedProfileId);
 
   SrcImg.Close();
   return 0;

@@ -95,6 +95,7 @@ jobs:
             -DENABLE_TOOLS=ON \
             -DENABLE_TESTS=ON
           make -j"$(nproc)"
+          cmake --build . --target build-test-binaries --parallel "$(nproc)"
 
       - name: Verify tool binaries
         env:

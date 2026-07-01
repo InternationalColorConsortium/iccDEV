@@ -165,6 +165,9 @@ icFloatNumber CIccPRMG::GetChroma(icFloatNumber L, icFloatNumber h)
   if (h >= 360.0f)
     h = 0.0f;
 
+  if (!std::isfinite(h) || h < 0.0f)
+    return -1;
+
   int nHIndex = (int)(h / 10.0);
   icFloatNumber dHFraction = (h - nHIndex * 10.0f) / 10.0f;
 
@@ -177,7 +180,11 @@ icFloatNumber CIccPRMG::GetChroma(icFloatNumber L, icFloatNumber h)
     nLIndex = 19; // Assuming 19 is a safe index, adapt if necessary
     dLFraction = 1.0;
   } else {
-    nLIndex = (int)((L - 5.0) / 5.0) + 1;
+    icFloatNumber dLIndex = L - 5.0f;
+    if (!std::isfinite(dLIndex) || dLIndex < 0.0f)
+      return -1;
+
+    nLIndex = (int)(dLIndex / 5.0f) + 1;
     dLFraction = (L - nLIndex * 5.0f) / 5.0f;
   }
 

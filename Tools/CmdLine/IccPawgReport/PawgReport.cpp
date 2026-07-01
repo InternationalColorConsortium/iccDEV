@@ -780,6 +780,8 @@ bool ScanMalwareRange(const RawProfile &raw, size_t begin, size_t end,
   static const unsigned char zip[] = {'P', 'K', 0x03, 0x04};
   static const unsigned char rar[] = {'R', 'a', 'r', '!', 0x1a, 0x07};
   static const unsigned char sevenZip[] = {'7', 'z', 0xbc, 0xaf, 0x27, 0x1c};
+  // Gzip is an archive/container signature for S8 malware screening.  Do not
+  // treat RFC1950 zlib streams as malware here; ICC compressed tags use zlib.
   static const unsigned char gzip[] = {0x1f, 0x8b, 0x08};
 
   struct Sig {

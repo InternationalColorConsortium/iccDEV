@@ -85,6 +85,72 @@ typedef  std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 namespace iccDEV {
 #endif
 
+static bool icXmlIsHexSpace(char c)
+{
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static bool icXmlIsHexDigit(char c)
+{
+  return (c >= '0' && c <= '9') ||
+         (c >= 'A' && c <= 'F') ||
+         (c >= 'a' && c <= 'f');
+}
+
+static bool icXmlValidateHexBlob(const char *szText)
+{
+  icUInt32Number digits = 0;
+
+  if (!szText)
+    return false;
+
+  while (*szText) {
+    if (icXmlIsHexDigit(*szText)) {
+      digits++;
+    }
+    else if (!icXmlIsHexSpace(*szText)) {
+      return false;
+    }
+    szText++;
+  }
+
+  return digits && !(digits & 1);
+}
+
+static bool icXmlParseCompressedData(CIccTagZipUtf8Text *pTag, xmlNode *pNode,
+                                     std::string &parseStr)
+{
+  const char *szText = (const char*)pNode->children->content;
+  if (!icXmlValidateHexBlob(szText)) {
+    parseStr += "Invalid HexCompressedData hex in compressed tag\n";
+    return false;
+  }
+
+  CIccUInt8Array buf;
+  if (!buf.SetSize(icXmlGetHexDataSize(szText)) ||
+      icXmlGetHexData(buf.GetBuf(), szText, buf.GetSize()) != buf.GetSize()) {
+    parseStr += "Failed to decode HexCompressedData in compressed tag\n";
+    return false;
+  }
+
+  icUChar *pBuf = pTag->AllocBuffer(buf.GetSize());
+  if (!pBuf) {
+    parseStr += "Failed to allocate HexCompressedData buffer\n";
+    return false;
+  }
+
+  if (buf.GetSize())
+    memcpy(pBuf, buf.GetBuf(), buf.GetSize());
+
+  std::string text;
+  if (!pTag->GetText(text)) {
+    parseStr += "Invalid HexCompressedData zlib stream in compressed tag\n";
+    return false;
+  }
+
+  return true;
+}
+
 // Parse a non-negative integer XML attribute value.
 //
 // atoi() returns a signed int, but the ParseXml handlers below store these
@@ -467,16 +533,7 @@ bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
   while (pNode) {
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
-        CIccUInt8Array buf;
-        if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content)) ||
-            icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize())
-          return false;
-  
-        AllocBuffer(buf.GetSize());
-        if (m_nBufSize && m_pZipBuf) {
-          memcpy(m_pZipBuf, buf.GetBuf(), m_nBufSize);
-        }
-        return true;
+        return icXmlParseCompressedData(this, pNode, parseStr);
       }      
     }
     pNode = pNode->next; 
@@ -499,16 +556,7 @@ bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   while (pNode) {
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
-        CIccUInt8Array buf;
-        if (!buf.SetSize(icXmlGetHexDataSize((const icChar*)pNode->children->content)) ||
-          icXmlGetHexData(buf.GetBuf(), (const icChar*)pNode->children->content, buf.GetSize())!=buf.GetSize())
-          return false;
-
-        AllocBuffer(buf.GetSize());
-        if (m_nBufSize && m_pZipBuf) {
-          memcpy(m_pZipBuf, buf.GetBuf(), m_nBufSize);
-        }
-        return true;
+        return icXmlParseCompressedData(this, pNode, parseStr);
       }      
     }
     pNode = pNode->next; 

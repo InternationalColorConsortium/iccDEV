@@ -1843,7 +1843,10 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
   InputData.getline(tempBuf, tempBufSize);
   {
     char encodeBuf[20000];
-    sscanf(tempBuf, "%19999s", encodeBuf);
+    if (sscanf(tempBuf, "%19999s", encodeBuf) != 1) {
+      delete[] tempBuf;
+      return false;
+    }
     size_t encodeLen = strnlen(encodeBuf, tempBufSize - 1);
     memcpy(tempBuf, encodeBuf, encodeLen);
     tempBuf[encodeLen] = '\0';

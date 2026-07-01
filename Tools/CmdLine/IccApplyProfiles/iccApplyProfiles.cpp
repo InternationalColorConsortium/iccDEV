@@ -71,9 +71,12 @@
 
 
 #include <cstdio>
+#include <chrono>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include "IccCmm.h"
+#include "IccCmmThread.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
 #include "IccConnect.h"
@@ -165,6 +168,17 @@ static icUInt8Number UnitClipToUInt8(icFloatNumber v)
 static icUInt16Number UnitClipToUInt16(icFloatNumber v)
 {
   return static_cast<icUInt16Number>(UnitClip(v) * 65535.0f + 0.5f);
+}
+
+static bool IsEnvEnabled(const char *name)
+{
+  const char *value = getenv(name);
+  return value && value[0] && stricmp(value, "0");
+}
+
+static double IccDurationMs(std::chrono::steady_clock::duration duration)
+{
+  return std::chrono::duration<double, std::milli>(duration).count();
 }
 
 
@@ -433,6 +447,10 @@ int main(int argc, const char** argv)
 
   CIccCmm* pTheCmm = pConnect->GetCmm();
   const bool bUseRowApply = cfgConnect.m_nThreads != 1;
+  const bool bTiming = IsEnvEnabled("ICC_APPLY_PROFILES_TIMING");
+  int nActualThreads = 1;
+  if (pConnect->IsThreaded())
+    nActualThreads = pConnect->GetThreadedCmm()->GetNumThreads();
 
   // Set last_path to the last profile's file for downstream embed logic.
   if (!cfgProfiles.m_profiles.empty())
@@ -575,6 +593,11 @@ int main(int argc, const char** argv)
   CIccPixelBuf SrcPixel(nSrcSamples+16), DestPixel(nDestSamples+16), Pixel(icIntMax(nSrcSamples, nDestSamples)+16);
   int lastPer = -1;
   int curper;
+  std::chrono::steady_clock::duration applyDuration =
+    std::chrono::steady_clock::duration::zero();
+  unsigned long long nApplyCalls = 0;
+  unsigned long long nAsyncLaunches = 0;
+  auto loopStart = std::chrono::steady_clock::now();
 
   // Boundary rule (per Max Derhak): TIFF pixel values use a *device encoding*
   // regardless of color space. Integer formats map linearly to [0, 1] via
@@ -667,7 +690,16 @@ int main(int argc, const char** argv)
         }
       }
 
+      auto applyStart = std::chrono::steady_clock::now();
       pTheCmm->Apply(pDstRowBuf, pSrcRowBuf, SrcImg.GetWidth());
+      applyDuration += std::chrono::steady_clock::now() - applyStart;
+      nApplyCalls++;
+      if (nActualThreads > 1) {
+        unsigned int nActiveThreads = SrcImg.GetWidth() < (unsigned int)nActualThreads ?
+          SrcImg.GetWidth() : (unsigned int)nActualThreads;
+        if (nActiveThreads > 1)
+          nAsyncLaunches += nActiveThreads - 1;
+      }
 
       for (dptr=pDBuf, j=0; j<(int)SrcImg.GetWidth(); j++, dptr+=dbpp) {
         if (!encodePixel(dptr, pDstRowBuf + j * nDestSamples)) {
@@ -690,7 +722,10 @@ int main(int argc, const char** argv)
         }
 
         //Use CMM to convert SrcPixel to DestPixel
+        auto applyStart = std::chrono::steady_clock::now();
         pTheCmm->Apply(DestPixel, SrcPixel);
+        applyDuration += std::chrono::steady_clock::now() - applyStart;
+        nApplyCalls++;
 
         if (!encodePixel(dptr, DestPixel)) {
           free(pSBuf);
@@ -717,7 +752,19 @@ int main(int argc, const char** argv)
       lastPer = curper;
     }
   }
+  auto loopEnd = std::chrono::steady_clock::now();
   printf("\n");
+
+  if (bTiming) {
+    const double loopMs = IccDurationMs(loopEnd - loopStart);
+    const double applyMs = IccDurationMs(applyDuration);
+    const double applyPct = loopMs > 0.0 ? (applyMs * 100.0) / loopMs : 0.0;
+    printf("[TIMING] Loop ms: %.3f\n", loopMs);
+    printf("[TIMING] Apply ms: %.3f\n", applyMs);
+    printf("[TIMING] Apply pct: %.2f\n", applyPct);
+    printf("[TIMING] Apply calls: %llu\n", nApplyCalls);
+    printf("[TIMING] Async launches: %llu\n", nAsyncLaunches);
+  }
 
   //Clean everything up by closeing files and freeing buffers
   SrcImg.Close();

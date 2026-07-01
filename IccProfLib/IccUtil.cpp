@@ -70,6 +70,7 @@
 
 #include "IccIO.h"
 #include "IccUtil.h"
+#include "IccSignatureUtils.h"
 #include "IccTagFactory.h"
 #include "IccStructFactory.h"
 #include "IccArrayFactory.h"
@@ -1172,6 +1173,7 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
 
   switch (icGetColorSpaceType(nSig)) {
     case icSigNChannelData:
+    case icSigSrcMCSChannelData:
     case icSigReflectanceSpectralData:
     case icSigTransmisionSpectralData:
     case icSigRadiantSpectralData:
@@ -1232,6 +1234,7 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
 
   switch (icGetColorSpaceType(nSig)) {
     case icSigNChannelData:
+    case icSigSrcMCSChannelData:
     case icSigReflectanceSpectralData:
     case icSigTransmisionSpectralData:
     case icSigRadiantSpectralData:
@@ -1843,6 +1846,12 @@ const icChar *CIccInfo::GetColorSpaceSigName(icColorSpaceSignature sig)
     switch(icGetColorSpaceType(sig)) {
     case icSigNChannelData:
       snprintf(m_szStr, m_bufSize, "0x%04XChannelData", (unsigned int) icNumColorSpaceChannels(sig));
+      return m_szStr;
+
+    case icSigSrcMCSChannelData:
+      snprintf(m_szStr, m_bufSize, "%s/0x%04XChannelData",
+               ColorSpaceSignatureToStr((icUInt32Number)sig),
+               (unsigned int)icNumColorSpaceChannels(sig));
       return m_szStr;
 
     case icSigReflectanceSpectralData:

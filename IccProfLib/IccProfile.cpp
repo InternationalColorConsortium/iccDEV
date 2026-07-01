@@ -79,6 +79,7 @@
 #include <algorithm>
 #include <new>
 #include <limits>
+#include <stdint.h>
 #include "IccProfile.h"
 #include "IccTag.h"
 #include "IccArrayBasic.h"
@@ -3180,8 +3181,10 @@ bool CIccProfile::CheckFileSize(CIccIO *pIO) const
   if (pIO->Seek(curPos, icSeekSet) < 0)
     return false;
 
+#if SIZE_MAX < UINT64_MAX
   if ((uint64_t)endPos > (uint64_t)std::numeric_limits<size_t>::max())
     return false;
+#endif
 
   size_t FileSize = (size_t)endPos;
 
@@ -3231,8 +3234,15 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
   int64_t savePos = pIO->Tell();
   if (savePos >= 0 && pIO->Seek(0, icSeekEnd) >= 0) {
     int64_t endPos = pIO->Tell();
-    if (endPos >= 0 && (uint64_t)endPos <= (uint64_t)std::numeric_limits<size_t>::max())
+    if (endPos >= 0) {
+#if SIZE_MAX < UINT64_MAX
+      if ((uint64_t)endPos > (uint64_t)std::numeric_limits<size_t>::max()) {
+        pIO->Seek(savePos, icSeekSet);
+        return rv;
+      }
+#endif
       fileSize = (size_t)endPos;
+    }
     pIO->Seek(savePos, icSeekSet);
   }
 

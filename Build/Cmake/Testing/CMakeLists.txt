@@ -3853,6 +3853,52 @@ function(iccdev_add_windows_iccdevcmm_smoke_test)
   )
 endfunction()
 
+function(iccdev_add_signature_utils_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSignatureUtilsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/signature-utils.cpp"
+  )
+  target_compile_features(iccSignatureUtilsTest PRIVATE cxx_std_17)
+  target_link_libraries(iccSignatureUtilsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccSignatureUtilsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.signature-utils
+      COMMAND "$<TARGET_FILE:iccSignatureUtilsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.signature-utils
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSignatureUtilsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.signature-utils PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;signature;regression"
+  )
+  if(WIN32)
+    set(_signature_utils_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSignatureUtilsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _signature_utils_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.signature-utils PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_signature_utils_windows_env_mods}"
+    )
+  endif()
+endfunction()
 
 function(iccdev_add_zip_utf8_text_zlib_test)
   if(NOT ICC_USE_ZLIB OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
@@ -4159,6 +4205,7 @@ if(WIN32)
   iccdev_add_applytolink_v4_missing_desc_test()
   iccdev_add_prmg_hue_normalization_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
+  iccdev_add_signature_utils_test()
   iccdev_add_zip_utf8_text_zlib_test()
 
   return()
@@ -4423,6 +4470,7 @@ iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
 iccdev_add_prmg_hue_normalization_test()
+iccdev_add_signature_utils_test()
 iccdev_add_zip_utf8_text_zlib_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
@@ -4526,6 +4574,16 @@ if(TARGET iccFromXml AND TARGET iccApplyNamedCmm AND TARGET iccApplySearch)
     "iccdev;tools;hybrid;search;ub;regression"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-searchvec-uio-regression.sh"
+  )
+endif()
+
+if(ICCDEV_ENABLE_QA_FLAGS)
+  iccdev_add_script_test(
+    iccdev.qa-target-flags
+    120
+    "iccdev;qa-flags;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-qa-target-flags.sh"
   )
 endif()
 
@@ -4650,6 +4708,17 @@ iccdev_add_script_test(
   "iccdev;tools;cmm;leak;issue-1337;regression;asan"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1337-checkpcsconnections-regression.sh"
+)
+
+# Guards iccApplyToLink / CMM tag selection for spectral profiles that also
+# expose a colorimetric PCS (#1387).  The D2B opt-out intents must not select a
+# 36-channel DToB3 MPE while the CMM destination space remains 3-sample XYZ.
+iccdev_add_script_test(
+  iccdev.issue-1387-applytolink-spectral-d2b-regression
+  120
+  "iccdev;tools;cmm;applytolink;issue-1387;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1387-applytolink-spectral-d2b-regression.sh"
 )
 
 # CI debug helper for the NaN/SixChanInputRef iccApplyToLink PoC.  It preserves

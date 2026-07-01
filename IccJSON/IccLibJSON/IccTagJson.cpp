@@ -99,6 +99,69 @@ static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
   return (icUInt32Number)n;
 }
 
+static bool icJsonIsHexSpace(char c)
+{
+  return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
+static bool icJsonIsHexDigit(char c)
+{
+  return (c >= '0' && c <= '9') ||
+         (c >= 'A' && c <= 'F') ||
+         (c >= 'a' && c <= 'f');
+}
+
+static bool icJsonValidateHexBlob(const std::string &hex)
+{
+  icUInt32Number digits = 0;
+
+  for (std::string::const_iterator it = hex.begin(); it != hex.end(); ++it) {
+    if (icJsonIsHexDigit(*it)) {
+      digits++;
+    }
+    else if (!icJsonIsHexSpace(*it)) {
+      return false;
+    }
+  }
+
+  return digits && !(digits & 1);
+}
+
+static bool icJsonParseCompressedData(CIccTagZipUtf8Text *pTag, const IccJson &j,
+                                      std::string &parseStr)
+{
+  std::string hex;
+  if (!jGetString(j, "compressedData", hex)) {
+    parseStr += "Missing or invalid compressedData in compressed tag\n";
+    return false;
+  }
+
+  if (!icJsonValidateHexBlob(hex)) {
+    parseStr += "Invalid compressedData hex in compressed tag\n";
+    return false;
+  }
+
+  icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
+  icUChar *pBuf = pTag->AllocBuffer(sz);
+  if (!pBuf) {
+    parseStr += "Failed to allocate compressedData buffer\n";
+    return false;
+  }
+
+  if (icJsonGetHexData(pBuf, hex.c_str(), sz) != sz) {
+    parseStr += "Failed to decode compressedData hex\n";
+    return false;
+  }
+
+  std::string text;
+  if (!pTag->GetText(text)) {
+    parseStr += "Invalid compressedData zlib stream in compressed tag\n";
+    return false;
+  }
+
+  return true;
+}
+
 static inline int icJsonSafeInt(size_t n, bool *overflow = nullptr)
 {
   if (n > (size_t)INT_MAX) {
@@ -317,16 +380,9 @@ bool CIccTagJsonZipUtf8Text::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonZipUtf8Text::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonZipUtf8Text::ParseJson(const IccJson &j, std::string &parseStr)
 {
-  std::string hex;
-  if (jGetString(j, "compressedData", hex)) {
-    icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
-    icUChar *pBuf = AllocBuffer(sz);
-    if (!pBuf) return false;
-    icJsonGetHexData(pBuf, hex.c_str(), sz);
-  }
-  return true;
+  return icJsonParseCompressedData(this, j, parseStr);
 }
 
 // ===========================================================================
@@ -339,16 +395,9 @@ bool CIccTagJsonZipXml::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccTagJsonZipXml::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccTagJsonZipXml::ParseJson(const IccJson &j, std::string &parseStr)
 {
-  std::string hex;
-  if (jGetString(j, "compressedData", hex)) {
-    icUInt32Number sz = icJsonGetHexDataSize(hex.c_str());
-    icUChar *pBuf = AllocBuffer(sz);
-    if (!pBuf) return false;
-    icJsonGetHexData(pBuf, hex.c_str(), sz);
-  }
-  return true;
+  return icJsonParseCompressedData(this, j, parseStr);
 }
 
 // ===========================================================================

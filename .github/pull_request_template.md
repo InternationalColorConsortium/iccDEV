@@ -18,8 +18,12 @@
 
 ## Legal Requirements
 
-All official software projects hosted by the International Color Consoritum (ICC)
-follows the open source software best practice policies. The [International Color Consoritum IP policy](https://www.color.org/iccip.xalter) governs ICC specification development and contributions to ICC open source software. Software contributions are also covered by the Contributor License Agreement (CLA).
+All official software projects hosted by the International Color Consortium
+(ICC) follow open source software best practice policies. The [International
+Color Consortium IP policy](https://www.color.org/iccip.xalter) governs ICC
+specification development and contributions to ICC open source software.
+Software contributions are also covered by the Contributor License Agreement
+(CLA).
 
 ### Contributor License Agreements
 
@@ -31,11 +35,11 @@ There is no cost or membership requirement to sign the ICC Contributor License A
 
 * If you are an individual writing the code on your own time and you are SURE you are the sole owner of any intellectual property you contribute, you can sign the [CLA as an individual contributor](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md).
 
-* If you are writing the code as part of your job, or if there is any possibility that your employer might think they own any intellectual property you create, then you should use the [Corporate Contributor Licence Agreement](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)
+* If you are writing the code as part of your job, or if there is any possibility that your employer might think they own any intellectual property you create, then you should use the [Corporate Contributor License Agreement](https://github.com/InternationalColorConsortium/.github/blob/main/docs/CLA.md)
 
 ### License
 
-ICC software is licensed under the BSD 3-Clause "New" or "Revised" License. Contributions to ICC software projects should abide by that license unless otherwised specified or approved by the ICC.
+ICC software is licensed under the BSD 3-Clause "New" or "Revised" License. Contributions to ICC software projects should abide by that license unless otherwise specified or approved by the ICC.
 
 ### Copyright Notices
 

@@ -187,6 +187,7 @@ jobs:
             -DENABLE_STATIC_LIBS=ON \
             -DENABLE_TESTS=ON \
             -DENABLE_TOOLS=ON \
+            -DICC_USE_ZLIB=ON \
             -Wno-dev
           echo "::endgroup::"
 
@@ -360,6 +361,10 @@ jobs:
           unset GITHUB_TOKEN || true
           source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
 
+          cmake --build "$build_dir" \
+            --target build-test-binaries \
+            --parallel "$(nproc)"
+
           export PATH="${tool_path_dirs}${PATH}"
           export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
           mkdir -p coverage-report/ctest
@@ -494,6 +499,52 @@ jobs:
               printf '\n'
             done < "$fail_log"
             echo "::endgroup::"
+          fi
+
+      - name: "Exercise iccProfileVisualize"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          visualize_profraw="${WORKSPACE_DIR}/profraw/visualize-%p-%m.profraw"
+          export LLVM_PROFILE_FILE="$visualize_profraw"
+          export LD_LIBRARY_PATH="${library_path_dirs}${LD_LIBRARY_PATH:-}"
+          export ICCDEV_TOOLS_DIR="${build_dir}/Tools"
+          export ICCDEV_TESTING_DIR="${WORKSPACE_DIR}/Testing"
+          profile_visualize_dir="coverage-report/profile-visualize"
+          export ICCDEV_TEST_OUTDIR="${WORKSPACE_DIR}/${profile_visualize_dir}"
+          mkdir -p "${WORKSPACE_DIR}/profraw" "$ICCDEV_TEST_OUTDIR"
+
+          log="${profile_visualize_dir}/iccProfileVisualize.log"
+          set +e
+          bash "${TRUSTED_SCRIPTS}/iccdev-profile-visualize-tests.sh" \
+            > "$log" 2>&1
+          visualize_rc="$?"
+          set -e
+
+          visualize_summary="$(
+            grep -E '^iccProfileVisualize regression:' "$log" | tail -1 || true
+          )"
+          visualize_summary="${visualize_summary:-summary unavailable}"
+          {
+            printf 'visualize_exit_code=%s\n' "$visualize_rc"
+            printf 'visualize_summary=%s\n' "$visualize_summary"
+          } >> "$GITHUB_ENV"
+
+          echo "::group::iccProfileVisualize coverage exercise"
+          while IFS= read -r line; do
+            sanitize_line "$line"
+            printf '\n'
+          done < "$log"
+          echo "::endgroup::"
+
+          if [ "$visualize_rc" -eq 0 ]; then
+            echo "::notice title=iccProfileVisualize::coverage completed"
+          else
+            warn="::warning title=iccProfileVisualize::"
+            echo "${warn}exited ${visualize_rc}; report still generated"
           fi
 
       - name: "Exercise XML round-trip and iccRoundTrip"
@@ -674,138 +725,22 @@ jobs:
             exit 1
           fi
 
-          printf 'Merging %s profraw files...\n' "$profraw_count"
-          find "${WORKSPACE_DIR}/profraw" -name '*.profraw' -print0 \
-            | xargs -0 --no-run-if-empty llvm-profdata-18 merge -sparse \
-              -o coverage-report/merged.profdata
-
-          profdata_kb="$(( $(stat -c%s coverage-report/merged.profdata) / 1024 ))"
           printf 'profraw_count=%s\n' "$profraw_count" >> "$GITHUB_ENV"
-          echo "::notice title=Profdata::Merged ${profdata_kb}KB from ${profraw_count} profraw files"
 
-          main_bin="${tool_path}"
-          object_args=()
-          while IFS= read -r -d '' bin; do
-            if [ "$bin" != "$main_bin" ]; then
-              object_args+=("-object=$bin")
-            fi
-          done < <(find "$build_dir" -path '*/Tools/*' -type f -executable ! -name iccDumpProfileGui -print0 | sort -z)
-          while IFS= read -r -d '' lib; do
-            object_args+=("-object=$lib")
-          done < <(find "$build_dir" -name 'lib*.so' \( -type f -o -type l \) -print0 2>/dev/null | sort -z)
-
-          echo "::group::llvm-cov object list"
-          printf 'Primary binary: %s\n' "$main_bin"
-          printf '%s\n' "${object_args[@]}" | sed 's/^-object=/  /'
+          echo "::group::matched llvm-cov report"
+          Build/Cmake/Testing/iccdev-matched-coverage-report.sh \
+            "$build_dir" \
+            "${WORKSPACE_DIR}/profraw" \
+            coverage-report
           echo "::endgroup::"
 
-          echo "::group::llvm-cov report"
-          llvm-cov-18 report \
-            "$main_bin" "${object_args[@]}" \
-            -instr-profile=coverage-report/merged.profdata \
-            -ignore-filename-regex='(third_party|/usr/|test)' \
-            2>coverage-report/llvm-cov-stderr.txt \
-            | tee coverage-report/coverage-summary.txt
-          echo "::endgroup::"
-
-          mismatch="$(
-            grep -oE '[0-9]+ functions have mismatched data' coverage-report/llvm-cov-stderr.txt 2>/dev/null \
-              | awk '{print $1}' \
-              | head -1
-          )"
-          mismatch="${mismatch:-0}"
-          if [ "$mismatch" -gt 0 ]; then
-            echo "::notice title=Mismatched functions::${mismatch} template-instantiation duplicates"
-          fi
-          printf 'mismatch_count=%s\n' "$mismatch" >> "$GITHUB_ENV"
-
-          total_line="$(grep '^TOTAL' coverage-report/coverage-summary.txt | head -1 || true)"
-          region_pct="n/a"
-          func_pct="n/a"
-          line_pct="n/a"
-          branch_pct="n/a"
-          if [ -n "$total_line" ]; then
-            coverage_pct() {
-              local index="$1"
-              awk -v wanted="$index" '
-                {
-                  count = 0
-                  for (i = 1; i <= NF; i++) {
-                    if ($i ~ /%$/) {
-                      count++
-                      if (count == wanted) {
-                        print $i
-                        exit
-                      }
-                    }
-                  }
-                }
-              ' <<< "$total_line"
-            }
-            region_pct="$(coverage_pct 1)"
-            func_pct="$(coverage_pct 2)"
-            line_pct="$(coverage_pct 3)"
-            branch_pct="$(coverage_pct 4)"
-          fi
-          {
-            printf 'region_pct=%s\n' "$region_pct"
-            printf 'func_pct=%s\n' "$func_pct"
-            printf 'line_pct=%s\n' "$line_pct"
-            printf 'branch_pct=%s\n' "$branch_pct"
-          } >> "$GITHUB_ENV"
-
+          cat coverage-report/coverage-env.txt >> "$GITHUB_ENV"
+          source coverage-report/coverage-env.txt
+          profdata_notice="::notice title=Profdata::"
+          echo "${profdata_notice}Matched ${profdata_kb}KB from ${profraw_count} files"
+          echo "::notice title=HTML report::${html_count} pages generated"
           printf 'Coverage: regions=%s functions=%s lines=%s branches=%s\n' \
             "$region_pct" "$func_pct" "$line_pct" "$branch_pct"
-
-          echo "Generating HTML report..."
-          set +e
-          llvm-cov-18 show \
-            "$main_bin" "${object_args[@]}" \
-            -instr-profile=coverage-report/merged.profdata \
-            -format=html \
-            -output-dir=coverage-report/html \
-            -show-line-counts-or-regions \
-            -show-expansions \
-            -show-branches=count \
-            -ignore-filename-regex='(third_party|/usr/|test)' \
-            > coverage-report/html-stdout.txt \
-            2> coverage-report/html-stderr.txt
-          html_rc="$?"
-          set -e
-          if [ "$html_rc" -ne 0 ]; then
-            echo "::warning title=HTML report::llvm-cov show failed with exit code ${html_rc}"
-          fi
-          html_mismatch="$(
-            grep -oE '[0-9]+ functions have mismatched data' coverage-report/html-stderr.txt 2>/dev/null \
-              | awk '{print $1}' \
-              | head -1
-          )"
-          html_mismatch="${html_mismatch:-0}"
-          if [ "$html_mismatch" -gt 0 ]; then
-            echo "::notice title=HTML mismatched functions::${html_mismatch} template-instantiation duplicates"
-          fi
-
-          html_count="$(find coverage-report/html -name '*.html' 2>/dev/null | wc -l)"
-          printf 'html_count=%s\n' "$html_count" >> "$GITHUB_ENV"
-          echo "::notice title=HTML report::${html_count} pages generated"
-
-          set +e
-          llvm-cov-18 export \
-            "$main_bin" "${object_args[@]}" \
-            -instr-profile=coverage-report/merged.profdata \
-            -format=lcov \
-            -ignore-filename-regex='(third_party|/usr/|test)' \
-            > coverage-report/lcov.info \
-            2>coverage-report/lcov-stderr.txt
-          lcov_rc="$?"
-          set -e
-          if [ "$lcov_rc" -ne 0 ]; then
-            : > coverage-report/lcov.info
-            echo "::warning title=LCOV export::llvm-cov export failed with exit code ${lcov_rc}"
-          fi
-
-          lcov_records="$(grep -c '^SF:' coverage-report/lcov.info 2>/dev/null || printf 0)"
-          printf 'lcov_records=%s\n' "$lcov_records" >> "$GITHUB_ENV"
           printf 'LCOV export: %s source file records\n' "$lcov_records"
 
       - name: "Write workflow summary"
@@ -836,7 +771,10 @@ jobs:
           summary_line "| Lines | ${line_pct:-n/a} |"
           summary_line "| Branches | ${branch_pct:-n/a} |"
           summary_line ""
-          summary_line "Mismatched function records: ${mismatch_count:-0}"
+          summary_line "llvm-cov mismatched function records:"
+          summary_line "report ${mismatch_count:-0}, HTML ${html_mismatch_count:-0}"
+          summary_line "These are multi-object coverage-map diagnostics"
+          summary_line "from aggregate tool and shared-library reporting."
           summary_line ""
           summary_line "### Test Execution"
           summary_line "| Step | Result | Details |"
@@ -851,6 +789,9 @@ jobs:
           summary_line \
             "| Large profile CTest | ${ctest_large_profile_seconds:-n/a}s | iccdev.hybrid-pipeline |"
           summary_line "| iccDumpProfile | ${dump_pass:-0}/${dump_total:-0} pass | ${dump_fail:-0} failures |"
+          visualize_row="| iccProfileVisualize | exit ${visualize_exit_code:-n/a} | "
+          visualize_row="${visualize_row}${visualize_summary:-not run} |"
+          summary_line "$visualize_row"
           summary_line "| XML to ICC | ${xml_converted:-0} converted | ${xml_failed:-0} iccToXml failures |"
           summary_line "| iccFromXml | ${xml_from_failed:-0} non-blocking exits | see exercise review |"
           summary_line \

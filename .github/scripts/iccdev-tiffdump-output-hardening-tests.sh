@@ -87,7 +87,7 @@ test_extra_arg_rejected() {
     return 1
   fi
 
-  grep -Fq "Usage: iccTiffDump tiff_file {exported_icc_file}" "$log" || return 1
+  grep -Fq "Usage: iccTiffDump {--evidence-json} tiff_file {exported_icc_file}" "$log" || return 1
   [ ! -e "$dst" ]
 }
 

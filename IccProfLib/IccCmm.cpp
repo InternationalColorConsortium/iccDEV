@@ -75,6 +75,7 @@
 #endif
 
 #include <cmath>
+#include <cstdlib>
 #include <new>
 #include "IccXformFactory.h"
 #include "IccTag.h"
@@ -87,6 +88,12 @@
 #include "IccEncoding.h"
 #include "IccMatrixMath.h"
 #include <cassert>
+
+static bool IccCmmLegacySpectralReplayEnabled()
+{
+  const char *env = getenv("ICC_CMM_LEGACY_SPECTRAL_REPLAY");
+  return env && env[0] && env[0] != '0';
+}
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
@@ -593,11 +600,13 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       }
       if (bInput) {
         CIccTag *pTag = NULL;
-        // Spectral-only profiles have no AToBx tag to fall back to; their MPE pipeline
-        // lives in DToBx tags regardless of how the caller set bUseD2BTags. Opening
-        // that path here lets icXformLutColor + a spectral source profile resolve
-        // without the caller having to set useD2BxB2Dx explicitly.
-        if (bUseD2BTags || pProfile->m_Header.spectralPCS) {
+        // ICC.2 allows colorimetric and spectral PCS transforms to coexist in
+        // one profile. Spectral-only profiles have no AToBx tag to fall back to,
+        // but dual-PCS profiles must honor bUseD2BTags so Create() selects a
+        // tag whose channel count matches the CMM space chosen by AddXform().
+        bool bLegacySpectralReplay = IccCmmLegacySpectralReplayEnabled();
+        if (bUseD2BTags || (pProfile->m_Header.spectralPCS &&
+                            (bLegacySpectralReplay || !pProfile->m_Header.pcs))) {
           if (nLutType != icXformLutColorimetric &&
               (pProfile->m_Header.spectralPCS || pProfile->m_Header.version >= icVersionNumberV5)) {
             pTag = pProfile->FindTag(icSigDToB0Tag + nTagIntent);
@@ -734,9 +743,13 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
           bUseD2BTags = false;
         }
 
-        // Spectral-only destination profiles only carry BToDx tags; let icXformLutColor
-        // resolve them without requiring the caller to set useD2BxB2Dx.
-        if (bUseD2BTags || (nLutType != icXformLutColorimetric && pProfile->m_Header.spectralPCS)) {
+        // Spectral-only destination profiles only carry BToDx tags; profiles
+        // with a colorimetric PCS must honor bUseD2BTags to stay consistent
+        // with the source space AddXform() exposes to the CMM.
+        bool bLegacySpectralReplay = IccCmmLegacySpectralReplayEnabled();
+        if (bUseD2BTags || (nLutType != icXformLutColorimetric &&
+                            pProfile->m_Header.spectralPCS &&
+                            (bLegacySpectralReplay || !pProfile->m_Header.pcs))) {
           pTag = pProfile->FindTag(icSigBToD0Tag + nTagIntent);
 
           //Additional precedence not prescribed by the v4 ICC Specification
@@ -8922,10 +8935,10 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
         nSrcSpace = pProfile->m_Header.colorSpace;
         nParentSpace = pProfile->GetParentColorSpace();
 
-        // Use spectralPCS as the destination when nLutType explicitly asks for
-        // it, when the caller opted in via bUseD2BxB2DxTags, or when the
-        // profile is spectral-only (no colorimetric pcs) so spectralPCS is the
-        // only valid destination - matches the DToBx fallback in CIccXform::Create.
+        // ICC.2 defines spectral PCS use separately from colorimetric PCS use.
+        // Use spectralPCS when nLutType explicitly asks for it, when the caller
+        // opted in via bUseD2BxB2DxTags, or when the profile is spectral-only
+        // (no colorimetric pcs), matching CIccXform::Create() tag selection.
         if (nLutType == icXformLutSpectral ||
             (pProfile->m_Header.spectralPCS && nLutType != icXformLutColorimetric &&
              (bUseD2BxB2DxTags || !pProfile->m_Header.pcs)))
@@ -9119,6 +9132,15 @@ icStatusCMM CIccCmm::AddXform(CIccProfile *pProfile,
 
   if (!Xform.ptr) {
     // profile was deleted inside CIccXform::Create
+    return icCmmStatBadXform;
+  }
+
+  if (!IccCmmLegacySpectralReplayEnabled() &&
+      (Xform.ptr->GetNumSrcSamples() != icGetSpaceSamples(nSrcSpace) ||
+       Xform.ptr->GetNumDstSamples() != icGetSpaceSamples(nDstSpace))) {
+    // The selected tag must agree with the CMM spaces chosen above.  A mismatch
+    // means Create() selected an incompatible transform for this processing mode.
+    delete Xform.ptr;
     return icCmmStatBadXform;
   }
 

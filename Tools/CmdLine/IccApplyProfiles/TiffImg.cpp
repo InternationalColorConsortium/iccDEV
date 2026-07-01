@@ -366,16 +366,30 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
       return false;
     }
 
-    m_nStripSize = (unsigned int)TIFFStripSize(m_hTif);
-    m_nBytesPerStripLine = m_nWidth * m_nBytesPerSample;
+    tmsize_t stripSize = TIFFStripSize(m_hTif);
+    if (stripSize <= 0 ||
+        !checkedUInt32(static_cast<icUInt64Number>(stripSize), m_nStripSize) ||
+        !checkedUInt32Product(m_nWidth, m_nBytesPerSample, m_nBytesPerStripLine)) {
+      Close();
+      return false;
+    }
 
     if (m_nStripSize!=m_nBytesPerStripLine) {
       Close();
       return false;
     }
-    m_nBytesPerLine = m_nWidth * m_nBytesPerSample * m_nSamples;
+    if (!checkedUInt32Product(m_nBytesPerStripLine, m_nSamples, m_nBytesPerLine)) {
+      Close();
+      return false;
+    }
 
-    m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)m_nStripSize*m_nStripSamples));
+    unsigned int stripBufferSize = 0;
+    if (!checkedUInt32Product(m_nStripSize, m_nStripSamples, stripBufferSize)) {
+      Close();
+      return false;
+    }
+
+    m_pStripBuf = static_cast<unsigned char*>(malloc((size_t)stripBufferSize));
 
     if (m_nRowsPerStrip == 0 || !m_pStripBuf) {
       Close();
@@ -384,7 +398,13 @@ bool CTiffImg::Create(const char *szFname, unsigned int nWidth, unsigned int nHe
     m_nStripsPerSample = m_nHeight / m_nRowsPerStrip;
   }
   else {
-    m_nBytesPerLine = m_nStripSize = (unsigned int)TIFFStripSize(m_hTif);
+    tmsize_t stripSize = TIFFStripSize(m_hTif);
+    if (stripSize <= 0 ||
+        !checkedUInt32(static_cast<icUInt64Number>(stripSize), m_nStripSize)) {
+      Close();
+      return false;
+    }
+    m_nBytesPerLine = m_nStripSize;
     m_nStripSamples = 1;
   }
 
@@ -422,7 +442,7 @@ bool CTiffImg::Open(const char *szFname)
   TIFFGetFieldDefaulted(m_hTif, TIFFTAG_COMPRESSION, &m_nCompress);
   
   if (m_nWidth == 0 || m_nHeight == 0 || m_nRowsPerStrip == 0 ||
-      m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
+      m_nSamples == 0 ||
       m_nExtraSamples > m_nSamples || m_nBitsPerSample == 0) {
     // Corrupt parameters - can't read the file
     // If the file is uncompressed, we might guess some of the values,
@@ -521,7 +541,7 @@ bool CTiffImg::Open(const char *szFname)
 bool CTiffImg::ReadLine(unsigned char *pBuf)
 {
   if (!m_bRead || m_nRowsPerStrip == 0 ||
-      m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
+      m_nSamples == 0 ||
       m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
     return false;
 
@@ -574,7 +594,7 @@ bool CTiffImg::ReadLine(unsigned char *pBuf)
 bool CTiffImg::WriteLine(unsigned char *pBuf)
 {
   if (m_bRead ||
-      m_nSamples == 0 || m_nSamples > kMaxTiffSamples ||
+      m_nSamples == 0 ||
       m_nStripSamples == 0 || m_nStripSamples > kMaxTiffSamples)
     return false;
 

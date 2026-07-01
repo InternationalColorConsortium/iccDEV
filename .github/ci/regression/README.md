@@ -14,6 +14,8 @@ Test 18 (Regression Bisect).
 | `poc-744-tonemap-hbo.icc` | #744 | ToneMapFunc Describe heap-buffer-overflow (m_params OOB) | CWE-122 | iccDumpProfile ALL |
 | `poc-763-cenc-huaf.icc` | #763 | cenc profile use-after-free in AddXform | CWE-416 | iccApplyNamedCmm |
 | `poc-769-*.icc` | #769 | Unsigned integer overflow in offset+size bounds checks | CWE-190 | iccDumpProfile ALL |
+| `issue-1103-calculator-window-underflow.icc` | #1103 | Calculator function window underflow in CheckUnderflowOverflow | CWE-191 | iccDumpProfile -v 100 ALL |
+| `signature-utils.cpp` | maintainer | Signature utility include and MCS/N-channel formatting smoke test | CWE-758 | CTest `iccdev.signature-utils` |
 
 ## Script-based regressions
 
@@ -48,6 +50,8 @@ Test 18 (Regression Bisect).
 | `.github/scripts/iccdev-namedcolor-apply-regression-tests.sh` | AFL apply namedColor2 | `CIccXformNamedColor::Apply` copied more than 16 device coordinates and accepted negative lookup results | Builds a small helper that verifies valid lookup, color-not-found, and too-many-device-coordinate paths without sanitizer findings |
 | `.github/scripts/iccdev-tagcomposite-recursion-depth-regression-tests.sh` | #1437 | `CIccTagArray::Read` / `CIccTagStruct::Read` had no recursion-depth cap, so deeply-nested `tagArrayType`/`tagStructType` chains exhausted the stack (CWE-674) | Compiles a `CIccMemIO` harness that verifies a shallow composite chain still reads and that depth-200000 array and struct chains are rejected by the shared `CompositeDepthGuard` without sanitizer findings |
 | `.github/scripts/iccdev-v5-namedcmm-regression-tests.sh` | v5 NamedCMM bring-up | v5 non-spectral DToB/BRDFDToB and matrix/TRC fallback paths were skipped by CMM selection | Recreates compact v5 profiles in the configured test output directory and verifies `iccApplyNamedCmm` plus `iccRoundTrip` complete without sanitizer findings |
+| `.github/scripts/iccdev-issue-1387-applytolink-spectral-d2b-regression.sh` | #1387 | Dual colorimetric/spectral PCS profiles could select a 6-to-36 `DToB3` MPE despite D2B/B2D opt-out and a 3-channel XYZ CMM destination buffer | Rebuilds `SpecRef/SixChanInputRef.icc`, asserts the trigger shape, and verifies opt-out intents 11 and 13 complete without sanitizer findings |
+| `.github/scripts/iccdev-hextext-compression-ab-regression.sh` | zlib/HexTextData A/B | XML import could conflate generated `HexTextData` with zlib-gated `utf8ZipType` `HexCompressedData` behavior | Generates the canonical compressed ANSI-text and copyright hex strings, verifies `HexTextData` round-trips with zlib on or off, and verifies compressed `utf8ZipType` imports only with zlib enabled |
 | `.github/scripts/iccdev-version-bcd-regression-tests.sh` | `bisect-version-bcd-report` | ICC header version bytes with non-BCD nibbles were decoded as decimal-looking versions such as 141.91 | Mutates a known-good ICC profile version to `0xDB91BA7B` and verifies explicit invalid BCD diagnostics plus valid-version compatibility |
 | `.github/scripts/iccdev-profile-visualize-tests.sh` | `ci-mods` iccProfileVisualize bring-up | LUT visualization output could regress silently, and ASAN exposed mismatched array deallocation in generated TIFF paths | Runs `iccProfileVisualize` on `sRGB_v4_ICC_preference.icc` in a disposable directory and verifies A2B/B2A TIFF plus LUT PDF artifacts without sanitizer findings |
 | `.github/scripts/iccdev-issue-1729-spectral-data-info-sig.sh` | #1729 | `Testing/Display/LCDDisplay.xml` and `LaserProjector.xml` stored their `spectralDataInfoType` tag under the unregistered `smwi` (0x736D7769) signature, so a fromXml -> dump round-trip reported it as `Unknown 'smwi'` instead of `spectralDataInfoTag` (`sdin`) | Rebuilds both tracked fixtures with `iccFromXml`, dumps each with `iccDumpProfile`, and verifies the tag is recognized as `sdin` with no residual `smwi`/`0x736D7769` -- failing on a missing fixture or any sanitizer finding |
@@ -124,6 +128,26 @@ pinning it catches a rename that reading the global would hide.
 Literals copied out of the library drift silently, so
 `iccdev.proflib-exported-data-linkage` pins the real globals. If it fails after a
 library change, update the hard-coded copies it names.
+
+## Maintainer headless QA scans
+
+Broad command-line scans live in `.github/scripts/` and complement focused CTest
+regressions:
+
+| Script | Purpose |
+|--------|---------|
+| `icc-pawg-qa-scan.sh` | Runs `iccPawgReport` across text, JSON, and eager-read modes. |
+| `icc-dumpprofile-qa-scan.sh` | Runs `iccDumpProfile` across validation, verbosity, tag, `ALL`, read, and diagnostic modes. |
+| `icc-roundtrip-qa-scan.sh` | Runs `iccRoundTrip` across rendering intents and LUT/MPE modes. |
+| `iccdev-registry-profile-qa.sh` | Downloads the ICC registry profile source list and runs a CI-sized tool sweep. |
+
+The registry URL list is `.github/ci/profile-registry/profile-source-list.txt`.
+`.github/workflows/ci-iccdev-tool-tests.yml` exposes the registry sweep through
+the `run_registry_qa`, `registry_qa_timeout`, `registry_qa_max_profiles`, and
+`registry_qa_full_matrix` inputs. These scans are intended for tool workflows,
+scheduled jobs, and manual maintainer sweeps. Promote any sanitizer finding,
+signal crash, repeatable timeout, or contract-breaking graceful failure to a
+focused regression row above.
 
 ## Adding a new PoC
 

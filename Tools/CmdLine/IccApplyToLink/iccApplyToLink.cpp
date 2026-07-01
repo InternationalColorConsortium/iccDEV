@@ -72,6 +72,7 @@
 #include <cerrno>
 #include <climits>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <cstdlib>
 #include <string>
@@ -80,6 +81,7 @@
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
+#include "IccSignatureUtils.h"
 #include "IccApplyBPC.h"
 #include "IccEnvVar.h"
 #include "IccProfLibVer.h"
@@ -101,6 +103,67 @@ static bool IccApplyToLinkDiagnosticsEnabled()
 {
   const char *env = getenv("ICC_APPLYTOLINK_DIAGNOSTICS");
   return env && env[0] && env[0] != '0';
+}
+
+static void PrintColorSpaceDiagnostic(const char *label, icColorSpaceSignature sig)
+{
+  char sigBuf[32];
+  icUInt32Number reg = (icUInt32Number)sig;
+  icUInt8Number b0 = (icUInt8Number)((reg >> 24) & 0xff);
+  icUInt8Number b1 = (icUInt8Number)((reg >> 16) & 0xff);
+  icUInt8Number b2 = (icUInt8Number)((reg >> 8) & 0xff);
+  icUInt8Number b3 = (icUInt8Number)(reg & 0xff);
+  char ascii[5];
+  IccColorSpaceDescription desc = DescribeColorSpaceSignature((icUInt32Number)sig);
+
+  ascii[0] = b0 >= 0x20 && b0 <= 0x7e ? (char)b0 : '.';
+  ascii[1] = b1 >= 0x20 && b1 <= 0x7e ? (char)b1 : '.';
+  ascii[2] = b2 >= 0x20 && b2 <= 0x7e ? (char)b2 : '.';
+  ascii[3] = b3 >= 0x20 && b3 <= 0x7e ? (char)b3 : '.';
+  ascii[4] = '\0';
+
+  icGetSig(sigBuf, sizeof(sigBuf), reg);
+  fprintf(stderr,
+          "ICC_DIAG: %s=0x%08x sig=%s reg32=0x%08x reg16=0x%04x,0x%04x bytes=0x%02x,0x%02x,0x%02x,0x%02x ascii=%s name=%s known=%d samples=%d\n",
+          label,
+          reg,
+          sigBuf,
+          reg,
+          (icUInt16Number)((reg >> 16) & 0xffff),
+          (icUInt16Number)(reg & 0xffff),
+          b0,
+          b1,
+          b2,
+          b3,
+          ascii,
+          desc.name,
+          desc.isKnown ? 1 : 0,
+          icGetSpaceSamples(sig));
+}
+
+static void PrintProfileDiagnostic(const char *path, const CIccProfile *profile)
+{
+  if (!IccApplyToLinkDiagnosticsEnabled()) {
+    return;
+  }
+
+  if (!profile) {
+    fprintf(stderr, "ICC_DIAG: profile=%s load=null\n", path);
+    return;
+  }
+
+  CIccInfo info;
+  fprintf(stderr,
+          "ICC_DIAG: profile=%s class=%s intent=%s version=0x%08x size=%u\n",
+          path,
+          info.GetProfileClassSigName(profile->m_Header.deviceClass),
+          info.GetRenderingIntentName((icRenderingIntent)profile->m_Header.renderingIntent),
+          profile->m_Header.version,
+          profile->m_Header.size);
+  PrintColorSpaceDiagnostic("profile.colorSpace", profile->m_Header.colorSpace);
+  PrintColorSpaceDiagnostic("profile.pcs", profile->m_Header.pcs);
+  PrintColorSpaceDiagnostic("profile.spectralPCS", profile->m_Header.spectralPCS);
+  PrintColorSpaceDiagnostic("profile.mcs", (icColorSpaceSignature)profile->m_Header.mcs);
 }
 
 static void PrintRangeDiagnostic(icFloatNumber loRange, icFloatNumber hiRange, icFloatNumber sizeRange)
@@ -181,6 +244,17 @@ static bool IccLinkGridFits(int nGridSize, int nSrcSamples, int nDstSamples,
   const icUInt64Number nSamples = nNodes * (icUInt64Number)nDstSamples;
 
   return nSamples != 0 && nSamples <= 0xFFFFFFFFu;
+}
+
+static void PrintCmmDiagnostic(const CIccCmm &cmm, const char *stage)
+{
+  if (!IccApplyToLinkDiagnosticsEnabled()) {
+    return;
+  }
+
+  fprintf(stderr, "ICC_DIAG: cmm.stage=%s\n", stage);
+  PrintColorSpaceDiagnostic("cmm.source", cmm.GetSourceSpace());
+  PrintColorSpaceDiagnostic("cmm.dest", cmm.GetDestSpace());
 }
 
 class ILinkWriter
@@ -1111,8 +1185,10 @@ int main(int argc, icChar* argv[])
 
       //Read profile from path and add it to theCmm
       CIccProfile* pXformProfile = ReadIccProfile(argv[nCount], bUseSubProfile); //We need all tags in profile for providing information to link
+      PrintProfileDiagnostic(argv[nCount], pXformProfile);
       stat = theCmm.AddXform(pXformProfile, nIntent<0 ? icUnknownIntent : (icRenderingIntent)nIntent, nInterp, pPccProfile,
                               (icXformLutType)nType, bUseD2BxB2DxTags, &Hint);
+      PrintCmmDiagnostic(theCmm, "after-addxform");
       if (stat) {
         // AddXform can fail for reasons that have nothing to do with the
         // profile itself.  In particular icCmmStatBadSpaceLink (2) means the
@@ -1142,6 +1218,7 @@ int main(int argc, icChar* argv[])
 
   //All profiles have been added to CMM.  Tell CMM that we are ready to begin applying colors/pixels
   if((stat=theCmm.Begin())) {
+    PrintCmmDiagnostic(theCmm, "begin-failed");
     // Begin() walks the assembled xform list and connects/optimizes the
     // transforms; it is where cross-profile incompatibilities that AddXform
     // could not see (PCS conversion setup, connection conditions) surface.

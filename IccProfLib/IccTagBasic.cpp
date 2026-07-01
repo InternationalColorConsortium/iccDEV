@@ -76,6 +76,8 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <limits>
+#include <stdint.h>
 #include <algorithm>
 #include <limits>
 #include <new>
@@ -5610,8 +5612,12 @@ bool CIccTagSparseMatrixArray::Reset(icUInt32Number nNumMatrices, icUInt16Number
 
   static const icUInt64Number kMaxSparseMatrixArrayBytes =
       64ULL * 1024 * 1024;
-  if (total64 > kMaxSparseMatrixArrayBytes ||
-      total64 > static_cast<icUInt64Number>(SIZE_MAX)) {
+  bool exceedsSizeT = false;
+#if SIZE_MAX < UINT64_MAX
+  exceedsSizeT =
+      total64 > static_cast<icUInt64Number>(std::numeric_limits<size_t>::max());
+#endif
+  if (total64 > kMaxSparseMatrixArrayBytes || exceedsSizeT) {
     // Leave m_nSize untouched on failure so the object stays valid.
     return false;
   }
