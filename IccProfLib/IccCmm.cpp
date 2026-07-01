@@ -9309,7 +9309,8 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
   if (m_nDestSpace==icSigUnknownData) {
     m_nDestSpace = m_nLastSpace;
   }
-  else if (!IsCompatSpace(m_nDestSpace, m_nLastSpace)) {
+  else if (!IsCompatSpace(m_nDestSpace, m_nLastSpace) ||
+           GetDestSamples() != (icUInt16Number)icGetSpaceSamples(m_nLastSpace)) {
     return icCmmStatBadSpaceLink;
   }
 
