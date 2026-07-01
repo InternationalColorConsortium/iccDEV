@@ -203,10 +203,71 @@
       }
     },
     {
+      "name": "macos-clang",
+      "inherits": "default-base",
+      "displayName": "macOS Clang",
+      "binaryDir": "${sourceDir}/../../out/${presetName}",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "macos-clang-guard-malloc",
+      "inherits": "macos-clang",
+      "displayName": "macOS Clang with GuardMalloc support",
+      "description": "Debug tool build for DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib. Use the check-macos-guard-malloc target to verify LC_UUID load commands before running libgmalloc.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_MACOS_GUARD_MALLOC": "ON"
+      }
+    },
+    {
+      "name": "macos-clang-sanitizers",
+      "inherits": "macos-clang",
+      "displayName": "macOS Clang with ASan, UBSan, IntSan, and float sanitizers",
+      "description": "Debug sanitizer build for crash and UB attribution. Keep this separate from GuardMalloc/libgmalloc runs.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_TOOLS": "ON",
+        "ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
       "name": "macos-xcode",
       "inherits": "default-base",
       "displayName": "macOS (Xcode)",
-      "generator": "Xcode"
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/../../out/${presetName}"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "macos-clang",
+      "configurePreset": "macos-clang",
+      "configuration": "Release"
+    },
+    {
+      "name": "macos-clang-guard-malloc",
+      "configurePreset": "macos-clang-guard-malloc",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-clang-sanitizers",
+      "configurePreset": "macos-clang-sanitizers",
+      "configuration": "Debug"
+    },
+    {
+      "name": "macos-xcode",
+      "configurePreset": "macos-xcode",
+      "configuration": "Release"
     }
   ]
 }

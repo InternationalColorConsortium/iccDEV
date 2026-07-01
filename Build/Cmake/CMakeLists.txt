@@ -242,6 +242,16 @@ set(PACKAGE_DESCRIPTION
 # Define project root (relative to CMake source directory)
 # This may be overridden on CLI or CI environments
 set(PROJECT_ROOT_DIR "${CMAKE_SOURCE_DIR}/../..")
+get_filename_component(_ICCDEV_PROJECT_ROOT_DIR "${PROJECT_ROOT_DIR}" ABSOLUTE)
+get_filename_component(_ICCDEV_BINARY_DIR "${CMAKE_BINARY_DIR}" ABSOLUTE)
+
+if(_ICCDEV_BINARY_DIR STREQUAL _ICCDEV_PROJECT_ROOT_DIR)
+  message(FATAL_ERROR
+    "Refusing to use the repository root as the CMake build directory. "
+    "Use -B out/<name>, run legacy builds from Build/, or use a preset with "
+    "an isolated binaryDir."
+  )
+endif()
 
 # ----------------------------------------------------------------------
 # Build Configuration Summary
@@ -508,6 +518,7 @@ option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"     
 option(ENABLE_UBSAN               "Enable UndefinedBehaviorSanitizer only"              OFF)
 option(ENABLE_INTEGER_SANITIZER   "Enable IntegerSanitizer (unsigned overflow, etc.)"   OFF)
 option(ENABLE_FLOAT_SANITIZER     "Enable float-divide-by-zero + float-cast-overflow"   OFF)
+option(ENABLE_MACOS_GUARD_MALLOC  "Configure a macOS GuardMalloc/libgmalloc debug build" OFF)
 
 IF(ICC_JSON_ORDERED)
   add_definitions(-DICC_JSON_ORDERED=1)
@@ -715,6 +726,7 @@ message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
 message(STATUS "ENABLE_UBSAN               = ${ENABLE_UBSAN}")
 message(STATUS "ENABLE_INTEGER_SANITIZER   = ${ENABLE_INTEGER_SANITIZER}")
 message(STATUS "ENABLE_FLOAT_SANITIZER     = ${ENABLE_FLOAT_SANITIZER}")
+message(STATUS "ENABLE_MACOS_GUARD_MALLOC  = ${ENABLE_MACOS_GUARD_MALLOC}")
 message(STATUS "ENABLE_TSAN                = ${ENABLE_TSAN}")
 message(STATUS "ENABLE_MSAN                = ${ENABLE_MSAN}")
 message(STATUS "ENABLE_LSAN                = ${ENABLE_LSAN}")
@@ -740,6 +752,27 @@ endif()
 
 if(ENABLE_MSAN AND (ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_TSAN OR ENABLE_LSAN OR ENABLE_FUZZING))
   message(FATAL_ERROR "MemorySanitizer cannot be combined with other sanitizers (ENABLE_FUZZING and ENABLE_SANITIZERS include AddressSanitizer)")
+endif()
+
+if(ENABLE_MACOS_GUARD_MALLOC)
+  if(NOT APPLE)
+    message(FATAL_ERROR "ENABLE_MACOS_GUARD_MALLOC is only supported on macOS")
+  endif()
+  if(ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_FUZZING OR ENABLE_TSAN OR ENABLE_MSAN OR ENABLE_LSAN)
+    message(FATAL_ERROR "GuardMalloc interposes malloc at runtime; use a non-sanitizer Debug build")
+  endif()
+  foreach(_iccdev_macos_link_flags
+      CMAKE_EXE_LINKER_FLAGS
+      CMAKE_SHARED_LINKER_FLAGS
+      CMAKE_MODULE_LINKER_FLAGS)
+    if("${${_iccdev_macos_link_flags}}" MATCHES "(^|[ ,])-Wl,-no_uuid($|[ ,])|(^|[ ,])-no_uuid($|[ ,])")
+      message(FATAL_ERROR "GuardMalloc requires Mach-O LC_UUID load commands; remove -no_uuid from ${_iccdev_macos_link_flags}")
+    endif()
+  endforeach()
+  add_compile_options(-g -fno-omit-frame-pointer)
+  message(STATUS ">>> macOS GuardMalloc mode enabled")
+  message(STATUS ">>> Run tools with DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib")
+  message(STATUS ">>> Build target check-macos-guard-malloc verifies LC_UUID on built tools")
 endif()
 
 # Warn about ignored individual sanitizer options when using combined options
@@ -1758,6 +1791,20 @@ IF(ENABLE_TOOLS)
   foreach(_iccdev_tool_target IN LISTS _iccdev_tool_targets)
     iccdev_fixup_msvc_compile_pdb(${_iccdev_tool_target})
   endforeach()
+
+  if(APPLE AND ENABLE_MACOS_GUARD_MALLOC)
+    add_custom_target(check-macos-guard-malloc
+      COMMAND "${CMAKE_COMMAND}"
+        "-DICCDEV_BINARY_DIR=${CMAKE_BINARY_DIR}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/VerifyMacOSGuardMalloc.cmake"
+      COMMENT "Verify macOS tool binaries carry LC_UUID for libgmalloc"
+      VERBATIM)
+    foreach(_iccdev_tool_target IN LISTS _iccdev_tool_targets)
+      if(TARGET "${_iccdev_tool_target}")
+        add_dependencies(check-macos-guard-malloc "${_iccdev_tool_target}")
+      endif()
+    endforeach()
+  endif()
 
   if(WIN32 AND ICCDEV_WINDOWS_UNIFIED_RUNTIME)
     if(_is_multi_config)

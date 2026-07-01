@@ -42,6 +42,7 @@ User-facing build details live in `docs/build.md`.
 | `ENABLE_LSAN` | OFF | LeakSanitizer standalone |
 | `ENABLE_COVERAGE` | OFF | Clang source coverage or GCC gcov |
 | `ENABLE_PROFILING` | OFF | gprof/perf `-pg` profiling |
+| `ENABLE_MACOS_GUARD_MALLOC` | OFF | macOS GuardMalloc/libgmalloc debug configuration |
 
 `-fsanitize=undefined` does not catch unsigned overflow or float division by
 zero. For numeric bug hunting, use IntegerSanitizer plus
@@ -101,6 +102,8 @@ Preset equivalents live in `Build/Cmake/CMakePresets.json`:
 | `linux-clang-msan` | MSan-only Debug tool build |
 | `linux-clang-coverage` | Clang source coverage |
 | `linux-clang-profiling` | gprof/perf `-pg` profiling |
+| `macos-clang-sanitizers` | macOS ASan + UBSan + IntSan + float checks |
+| `macos-clang-guard-malloc` | macOS Debug tool build for libgmalloc |
 
 Example:
 
@@ -108,6 +111,19 @@ Example:
 cmake --preset linux-clang-sanitizers -S Build/Cmake -B out/linux-clang-sanitizers
 cmake --build out/linux-clang-sanitizers -j"$(nproc)"
 ```
+
+On macOS, use GuardMalloc separately from sanitizer builds:
+
+```bash
+cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+cmake --build out/macos-clang-guard-malloc --target iccToXml -j"$(sysctl -n hw.ncpu)"
+cmake --build out/macos-clang-guard-malloc --target check-macos-guard-malloc
+DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib MallocScribble=1 MallocPreScribble=1 MallocGuardEdges=1 MallocStackLogging=1 out/macos-clang-guard-malloc/Tools/IccToXml/iccToXml input.icc output.xml
+```
+
+`ENABLE_MACOS_GUARD_MALLOC` rejects sanitizer combinations and linker
+`-no_uuid`, then the `check-macos-guard-malloc` target verifies that built
+Mach-O tool executables contain `LC_UUID` before `libgmalloc` is inserted.
 
 For sanitizer bug reproduction, do not add `-DENABLE_COVERAGE=ON` or
 `-fprofile-instr-generate -fcoverage-mapping`; coverage instrumentation can
