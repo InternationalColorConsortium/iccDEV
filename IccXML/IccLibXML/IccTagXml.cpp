@@ -762,7 +762,7 @@ bool CIccTagXmlTextDescription::ParseXml(xmlNode *pNode, std::string &parseStr)
 
 bool CIccTagXmlSignature::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
-  char fix[40];
+  std::string fix;
   char buf[40];
   const size_t lineSize = 256;
   char line[lineSize];
@@ -787,7 +787,7 @@ bool CIccTagXmlSignature::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
 bool CIccTagXmlSpectralDataInfo::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
-  char fix[40];
+  std::string fix;
   char buf[40];
   const size_t lineSize = 256;
   char line[lineSize];
@@ -905,7 +905,7 @@ bool CIccTagXmlSpectralRange::ParseXml(xmlNode *pNode, std::string &parseStr)
 bool CIccTagXmlNamedColor2::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   const size_t bufSize = 256;
-  char fix[bufSize];
+  std::string fix;
   char line[bufSize];
   char buf[bufSize];
   int i, j;
@@ -2172,7 +2172,7 @@ bool CIccTagXmlColorantTable::ToXml(std::string &xml, std::string blanks/* = ""*
 {
   const size_t bufSize = 256;
   char buf[bufSize];
-  char fix[bufSize];
+  std::string fix;
   std::string str;
 
   xml += blanks + "<ColorantTable>\n";
@@ -2572,7 +2572,7 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
 bool icProfDescToXml(std::string &xml, CIccProfileDescStruct &p, std::string blanks = "")
 {
   const size_t bufSize = 256;
-  char fix[bufSize];
+  std::string fix;
   char buf[bufSize];
   char data[bufSize];
 
@@ -4769,11 +4769,11 @@ bool CIccTagXmlDict::ToXml(std::string &xml, std::string blanks/* = ""*/)
     CIccDictEntry *nv = nvp->ptr;
     if (!nv)
       continue;
-      
-	    const size_t bufSize = 256;
-	    char data[bufSize];
-	    std::string fix;
-	    std::string bufstr;
+
+    const size_t bufSize = 256;
+    char data[bufSize];
+    std::string fix;
+    std::string bufstr;
 
     xml += blanks + " <DictEntry Name=\"";
     auto nameStr = nv->GetName();       // wstring
@@ -4925,8 +4925,9 @@ bool CIccTagXmlDict::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 bool CIccTagXmlStruct::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   std::string info;
+  std::string fix;
   const size_t bufSize = 256;
-  char buf[bufSize], fix[bufSize], line[bufSize];
+  char buf[bufSize], line[bufSize];
   IIccStruct *pStruct = GetStructHandler();
 
   const icChar *structName = ((pStruct != NULL) ? pStruct->GetDisplayName() : NULL);
@@ -5328,8 +5329,9 @@ bool CIccTagXmlStruct::ParseXml(xmlNode *pNode, std::string &parseStr)
 bool CIccTagXmlArray::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   std::string info;
+  std::string fix;
   const size_t bufSize = 256;
-  char buf[bufSize], fix[bufSize], line[bufSize];
+  char buf[bufSize], line[bufSize];
 
   std::string arrayName;
   std::string arrayBlanks = "";

@@ -85,7 +85,7 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
   const size_t bufSize = 256;
   char line[bufSize];
   char buf[bufSize];
-  char fix[bufSize];
+  std::string fix;
   size_t n;
   bool nonzero;
 

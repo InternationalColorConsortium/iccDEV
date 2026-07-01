@@ -136,7 +136,7 @@ bool CIccMpeXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
   const size_t smallBufSize = 20;
   char line[bufSize*2];
   char buf[smallBufSize];
-  char fix[bufSize];
+  std::string fix;
   
   snprintf(line, bufSize*2, "<UnknownElement Type=\"%s\" InputChannels=\"%d\" OutputChannels=\"%d\"",
            icFixXml(fix, icGetSigStr(buf, smallBufSize, GetType())), NumInputChannels(), NumOutputChannels());
@@ -2131,7 +2131,7 @@ bool CIccMpeXmlBAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   const size_t bufSize = 256;
   char line[bufSize*2];
   char buf[bufSize/2];
-  char fix[bufSize];
+  std::string fix;
 
   snprintf(line, bufSize*2, "<BAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
                 icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
@@ -2187,7 +2187,7 @@ bool CIccMpeXmlEAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   const size_t bufSize = 256;
   char line[bufSize*2];
   char buf[bufSize/2];
-  char fix[bufSize];
+  std::string fix;
 
   snprintf(line, bufSize*2, "<EAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
     icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
