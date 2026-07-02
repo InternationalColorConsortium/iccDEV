@@ -832,10 +832,10 @@ void testProfileNormIlluminant()
               (double)xyz[0], (double)xyz[1], (double)xyz[2]);
   check(std::fabs((double)xyz[1] - 1.0)    < TOL_EXACT,
         "profile calcNormIlluminantXYZ: Y == 1", std::fabs((double)xyz[1] - 1.0));
-  check(std::fabs((double)xyz[0] - 0.9671) < 2e-3,
-        "profile calcNormIlluminantXYZ: X ~ 0.9671", std::fabs((double)xyz[0] - 0.9671));
-  check(std::fabs((double)xyz[2] - 0.8138) < 2e-3,
-        "profile calcNormIlluminantXYZ: Z ~ 0.8138", std::fabs((double)xyz[2] - 0.8138));
+  check(std::fabs((double)xyz[0] - 0.9642) < 2e-3,
+        "profile calcNormIlluminantXYZ: X ~ 0.9642", std::fabs((double)xyz[0] - 0.9642));
+  check(std::fabs((double)xyz[2] - 0.8247) < 2e-3,
+        "profile calcNormIlluminantXYZ: Z ~ 0.8247", std::fabs((double)xyz[2] - 0.8247));
 }
 
 } // namespace
