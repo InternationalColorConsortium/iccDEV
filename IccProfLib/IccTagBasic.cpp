@@ -4122,6 +4122,7 @@ bool CIccTagXYZ::SetSize(icUInt32Number nSize, bool bZeroNew/*=true*/)
 
   if (nSize > 65536) {
     free(m_XYZ);
+    m_XYZ = NULL;   // prevent double free in destructor
     m_nSize = 0;
     return false;
   }
