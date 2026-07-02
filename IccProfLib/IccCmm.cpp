@@ -9345,6 +9345,17 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
   if (rv != icCmmStatOk && rv!=icCmmStatIdentityXform)
     return rv;
 
+  // Make sure the output channel and last transform output counts match.
+  // Otherwise we'll have a heap overflow during Apply.
+  // Check here because CheckPCSConnections can add a transform to the end!
+  auto lastXform = GetLastXform();
+  if (lastXform) {
+    icUInt16Number cmmOutputCount = GetDestSamples();
+    icUInt16Number xformOutputCount = lastXform->GetNumDstSamples();
+    if (xformOutputCount != cmmOutputCount)
+      return icCmmStatBadSpaceLink;
+  }
+
   if (bAllocApplyCmm) {
     m_pApply = GetNewApplyCmm(rv);
   }
