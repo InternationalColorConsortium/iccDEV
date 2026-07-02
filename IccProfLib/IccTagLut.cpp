@@ -2003,9 +2003,9 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
  */
 bool CIccCLUT::ReadData(icUInt32Number size, CIccIO *pIO, icUInt8Number nPrecision)
 {
-  icUInt32Number nNum=NumPoints() * m_nOutput;
+  size_t nNum = (size_t)NumPoints() * m_nOutput;
 
-  if (nNum * nPrecision > size)
+  if (nNum * nPrecision > (size_t)size)
     return false;
 
   if (m_pData == NULL)
@@ -2082,6 +2082,10 @@ bool CIccCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (pIO->Read8(m_GridPoints, 16)!=16 ||
       !pIO->Read8(&m_nPrecision) ||
       pIO->Read8(&m_nReserved2[0], 3)!=3)
+    return false;
+
+  // currently only 8 or 16 bits per sample
+  if (m_nPrecision < 1 || m_nPrecision > 2)
     return false;
 
   if (!Init(m_GridPoints, size - 20, m_nPrecision))
@@ -3529,6 +3533,16 @@ icValidateStatus CIccCLUT::Validate(std::string sigPath, std::string &sReport, c
     sReport += " - Reserved Value must be zero.\n";
 
     rv = icValidateNonCompliant;
+  }
+
+  if (m_nPrecision < 1 || m_nPrecision > 2) {
+    const size_t tempSize = 256;
+    char temp[tempSize];
+    sReport += icMsgValidateCriticalError;
+    sReport += sSigPathName;
+    snprintf(temp, tempSize, " - CLUT: Only 1 or 2 bytes per sample are allowed, not %u\n", m_nPrecision);
+    sReport += temp;
+    rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
   if (sig==icSigLutAtoBType || sig==icSigLutBtoAType) {
