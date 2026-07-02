@@ -154,8 +154,14 @@ public:
       }
       else if (line.substr(0, 12) == "LUT_3D_SIZE ") {
         int64_t temp = atoll( line.c_str() + 12 );
-        if (temp >= INT_MAX || temp <= 0)
+        if (temp < 2) {
+            printf("LUT too small to process\n");
             return false;
+        }
+        if (temp > 1024) {
+            printf("LUT too large to process\n");
+            return false;
+        }
         m_sizeLut3D = (int)temp;
       }
       else if (line.substr(0, 19) == "LUT_3D_INPUT_RANGE ") {
@@ -232,12 +238,15 @@ public:
     if (m_sizeLut3D < 2 || nSizeLut <= 0)
         return false;
     
+    if (m_sizeLut3D > 1024)
+        return false;
+    
     uint64_t temp = (uint64_t)m_sizeLut3D * (uint64_t)m_sizeLut3D * (uint64_t)m_sizeLut3D;
     if (temp > UINT_MAX)
         return false;
     icUInt32Number num = (icUInt32Number)temp;
 
-    if (nSizeLut != num*3)
+    if ((uint64_t)nSizeLut != temp*3)
       return false;
 
     const char* next;
