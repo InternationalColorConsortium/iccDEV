@@ -12535,21 +12535,26 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
 
 CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpectralRange &newRange) const
 {
+  icSpectralRange observerRange;
+  const icFloatNumber *observer = getObserver(observerRange);
+  if (!observer || !observerRange.steps || !newRange.steps)
+    return NULL;
+
   CIccMatrixMath *pMtx=new CIccMatrixMath(3, newRange.steps);
 
-  CIccMatrixMath *range = CIccPcsXform::rangeMap(m_observerRange, newRange);
+  CIccMatrixMath *range = CIccPcsXform::rangeMap(observerRange, newRange);
   if (range) {
-    range->VectorMult(pMtx->entry(0), m_observer);
-    range->VectorMult(pMtx->entry(1), &m_observer[m_observerRange.steps]);
-    range->VectorMult(pMtx->entry(2), &m_observer[m_observerRange.steps*2]);
+    range->VectorMult(pMtx->entry(0), observer);
+    range->VectorMult(pMtx->entry(1), &observer[observerRange.steps]);
+    range->VectorMult(pMtx->entry(2), &observer[observerRange.steps*2]);
     delete range;
   }
   else {
-    if ( m_observerRange.steps > newRange.steps) {
+    if ( observerRange.steps > newRange.steps) {
       delete pMtx;
       return NULL;
     }
-    memcpy(pMtx->entry(0), m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
+    memcpy(pMtx->entry(0), observer, observerRange.steps*3*sizeof(icFloatNumber));
   }
 
   return pMtx;
@@ -12817,7 +12822,7 @@ bool CIccTagSpectralViewingConditions::setObserver(icStandardObserver observerId
   }
   else {
     if (!observer)
-      memset(&m_observerRange, 0, sizeof(m_illuminantRange));
+      memset(&m_observerRange, 0, sizeof(m_observerRange));
 
     m_observer = NULL;
   }
