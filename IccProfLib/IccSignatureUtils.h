@@ -268,11 +268,11 @@ inline const char* ColorSpaceSignatureToStr(icUInt32Number sig)
   // v5/iccMAX: N-channel (0x6e63xxxx) — channels in low 16 bits
   icUInt32Number csType = sig & 0xffff0000;
   icUInt32Number nChan  = sig & 0x0000ffff;
-  if (csType == 0x6e630000 && nChan > 0 && nChan <= 0xFFFF)
+  if (csType == 0x6e630000 && nChan > 0)
     return "NChannel";
 
   // v5/iccMAX: MCS (0x6d63xxxx) — multiplex channel set
-  if (csType == 0x6d630000 && nChan > 0 && nChan <= 0xFFFF)
+  if (csType == 0x6d630000 && nChan > 0)
     return "MCS";
 
   return "Unknown";

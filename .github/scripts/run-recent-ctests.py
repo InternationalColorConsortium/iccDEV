@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the most recently registered CTest tests."""
+"""Run registered CTest tests, optionally limited to the most recent entries."""
 
 from __future__ import annotations
 
@@ -56,10 +56,15 @@ def build_regex(test_names: list[str]) -> str:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run only the last N tests from the CTest registration order."
+        description="Run all CTest tests, or only the last N tests when --limit is set."
     )
     parser.add_argument("--test-dir", required=True, help="CTest build directory")
-    parser.add_argument("--limit", type=int, default=5, help="Number of tests to run")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Number of most recently registered tests to run; omit to run all tests",
+    )
     parser.add_argument("--config", default="", help="CTest configuration for multi-config generators")
     parser.add_argument(
         "--label-exclude",
@@ -74,7 +79,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
-    if args.limit < 1:
+    if args.limit is not None and args.limit < 1:
         print("--limit must be at least 1", file=sys.stderr)
         return 2
 
@@ -84,10 +89,13 @@ def main(argv: list[str]) -> int:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
 
-    selected_tests = tests[-args.limit :]
+    selected_tests = tests[-args.limit :] if args.limit is not None else tests
     write_selection(args.selection_output or None, selected_tests)
 
-    print("Selected recent CTests:")
+    if args.limit is None:
+        print(f"Selected all CTests ({len(selected_tests)}):")
+    else:
+        print(f"Selected recent CTests ({len(selected_tests)}):")
     for test_name in selected_tests:
         print(f"  {test_name}")
 
@@ -97,9 +105,9 @@ def main(argv: list[str]) -> int:
         args.test_dir,
         "--output-on-failure",
         "--no-tests=error",
-        "-R",
-        build_regex(selected_tests),
     ]
+    if args.limit is not None:
+        command.extend(["-R", build_regex(selected_tests)])
     if args.config:
         command.extend(["-C", args.config])
     for label_exclude in args.label_exclude:

@@ -315,7 +315,6 @@ jobs:
 
           python3 .github/scripts/run-recent-ctests.py \
             --test-dir "${BUILD_DIR}" \
-            --limit 5 \
             --output-junit "${BUILD_DIR}/ctest-results.xml" \
             --selection-output "${BUILD_DIR}/recent-ctests.txt"
 
@@ -377,7 +376,7 @@ jobs:
             }
           fi
 
-          test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --limit 5 --output-junit build/ctest-results.xml"
+          test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --output-junit build/ctest-results.xml"
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
           container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${REGRESSION_IMAGE_TAG}"
 
@@ -409,7 +408,7 @@ jobs:
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON \\"
             echo "  -DICC_USE_ZLIB=ON"
             echo "cmake --build build --parallel \"\$(nproc)\""
-            echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit 5"
+            echo "python3 .github/scripts/run-recent-ctests.py --test-dir build"
             echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
             echo '```'
             if [ -f "$timing_report" ]; then

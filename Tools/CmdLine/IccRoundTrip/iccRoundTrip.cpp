@@ -234,17 +234,19 @@ int main(int argc, char* argv[])
   CIccPRMG prmg;
 
   stat = prmg.EvaluateProfile(argv[1], nIntent, icInterpLinear, nUseMPE);
-
-  if (stat!=icCmmStatOk) {
-    printf("Unable to perform PRMG analysis on '%s': %s\n", argv[1], CIccCmm::GetStatusText(stat));
-    return -1;
-  }
+  bool prmgOk = stat == icCmmStatOk;
+  const char *prmgStatus = CIccCmm::GetStatusText(stat);
 
   CIccInfo info;
 
   printf("Profile:          '%s'\n", argv[1]);
   printf("Rendering Intent: %s\n", info.GetRenderingIntentName(nIntent));
-  printf("Specified Gamut:  %s\n", prmg.m_bPrmgImplied ? "Perceptual Reference Medium Gamut" : "Not Specified");
+  if (prmgOk) {
+    printf("Specified Gamut:  %s\n", prmg.m_bPrmgImplied ? "Perceptual Reference Medium Gamut" : "Not Specified");
+  }
+  else {
+    printf("Specified Gamut:  Not evaluated (%s)\n", prmgStatus);
+  }
 
   printf("\nRound Trip 1\n");
   printf(  "------------\n");
@@ -262,7 +264,7 @@ int main(int argc, char* argv[])
 
   printf("Max L, a, b:   " ICFLOATFMT ", " ICFLOATFMT ", " ICFLOATFMT "\n", eval.maxLab2[0], eval.maxLab2[1], eval.maxLab2[2]);
 
-  if (prmg.m_nTotal) {
+  if (prmgOk && prmg.m_nTotal) {
     printf("\nPRMG Interoperability - Round Trip Results\n");
     printf(  "------------------------------------------------------\n");
     
@@ -273,6 +275,11 @@ int main(int argc, char* argv[])
     printf("DE <= 5.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE5, scaling*(float)prmg.m_nDE5);
     printf("DE <=10.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE10, scaling*(float)prmg.m_nDE10);
     printf("Total     (%8u)\n", (unsigned int) prmg.m_nTotal);
+  }
+  else if (!prmgOk) {
+    printf("\nPRMG Interoperability - Round Trip Results\n");
+    printf(  "------------------------------------------------------\n");
+    printf("Skipped: %s\n", prmgStatus);
   }
   return 0;
 }

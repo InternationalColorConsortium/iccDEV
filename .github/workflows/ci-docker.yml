@@ -192,7 +192,7 @@ jobs:
 
       - name: Generate SBOM
         if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
-        uses: anchore/sbom-action@5dd6ac9278f372ca3f8480f05a1ed38534773086  # v0.22.2
+        uses: anchore/sbom-action@28d71544de8eaf1b958d335707167c5f783590ad  # v0.22.2
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           format: spdx-json
@@ -242,7 +242,7 @@ jobs:
 
       - name: Attest build provenance
         if: ${{ github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression') }}
-        uses: actions/attest-build-provenance@f14352a605c57b0a66e0d49bba5825967f1dbedf  # v3.2.0
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f  # v3.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
@@ -250,7 +250,7 @@ jobs:
 
       - name: Attest SBOM
         if: ${{ (github.ref == 'refs/heads/master' || (github.event_name == 'workflow_dispatch' && matrix.variant == 'regression')) && steps.sbom-size.outputs.attestable == 'true' }}
-        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v3.0.0
+        uses: actions/attest@daf44fb950173508f38bd2406030372c1d1162b1  # v3.0.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
