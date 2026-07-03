@@ -228,6 +228,9 @@ int main(int argc, char* argv[])
     // unreadable profile) from a deliberate refusal such as "Too many samples
     // used", which guards the round trip against wide device spaces (#1405).
     printf("Unable to perform round trip on '%s': %s\n", argv[1], CIccCmm::GetStatusText(stat));
+    if (stat == icCmmStatTooManySamples) {
+      return 0;
+    }
     return -1;
   }
 

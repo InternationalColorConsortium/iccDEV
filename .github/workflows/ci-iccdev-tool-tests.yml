@@ -69,6 +69,26 @@ on:
         required: false
         default: master
         type: string
+      run_registry_qa:
+        description: 'Run ICC profile registry command-line QA scan'
+        required: false
+        default: false
+        type: boolean
+      registry_qa_timeout:
+        description: 'Timeout in seconds for each registry QA tool run'
+        required: false
+        default: '20'
+        type: string
+      registry_qa_max_profiles:
+        description: 'Maximum registry ICC profiles to scan; 0 means all'
+        required: false
+        default: '3'
+        type: string
+      registry_qa_full_matrix:
+        description: 'Run every registry QA tool variant'
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       regression_image_tag:
@@ -102,7 +122,7 @@ on:
         default: ''
         type: string
       hybrid_timing_instrument:
-        description: 'Emit iccApplyProfiles and CMM timing instrumentation'
+        description: 'Emit iccApplyProfiles apply-loop timing instrumentation'
         required: false
         default: false
         type: boolean
@@ -135,6 +155,26 @@ on:
         description: 'Enable CMAKE_INTERPROCEDURAL_OPTIMIZATION for the manual check'
         required: true
         default: true
+        type: boolean
+      run_registry_qa:
+        description: 'Run ICC profile registry command-line QA scan'
+        required: true
+        default: false
+        type: boolean
+      registry_qa_timeout:
+        description: 'Timeout in seconds for each registry QA tool run'
+        required: true
+        default: '20'
+        type: string
+      registry_qa_max_profiles:
+        description: 'Maximum registry ICC profiles to scan; 0 means all'
+        required: true
+        default: '3'
+        type: string
+      registry_qa_full_matrix:
+        description: 'Run every registry QA tool variant'
+        required: true
+        default: false
         type: boolean
 
 concurrency:
@@ -202,6 +242,45 @@ jobs:
           cmake --version | sed -n '1p'
           /usr/bin/time --version | sed -n '1p'
 
+      - name: Check command-line warning policy
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          warning_probe="${RUNNER_TEMP:-/tmp}/icc-warning-policy.cpp"
+          {
+            printf '%s\n' '#include "Tools/CmdLine/IccCmdLineUtil.h"'
+            printf '%s\n' 'int main() { return 0; }'
+          } > "$warning_probe"
+
+          g++ --version | sed -n '1p'
+          g++ -std=c++17 \
+            -Wall -Wextra -Wtype-limits -Wattributes \
+            -Werror=type-limits -Werror=attributes \
+            -fsyntax-only -I "$GITHUB_WORKSPACE" "$warning_probe"
+
+          clang_cxx=""
+          if command -v clang++-18 >/dev/null 2>&1; then
+            clang_cxx="clang++-18"
+          elif command -v clang++ >/dev/null 2>&1; then
+            clang_cxx="clang++"
+          fi
+
+          if [ -n "$clang_cxx" ]; then
+            "$clang_cxx" -std=c++17 \
+              -Wall -Wextra \
+              -Wtautological-type-limit-compare \
+              -Wunknown-attributes -Wignored-attributes \
+              -Werror=tautological-type-limit-compare \
+              -Werror=unknown-attributes -Werror=ignored-attributes \
+              -fsyntax-only -I "$GITHUB_WORKSPACE" "$warning_probe"
+          else
+            echo "[WARN] clang++ not present in pinned regression image; GCC strict canary passed"
+          fi
+
       # preflight: allow-package-install reason=spectral-preview-codec-bootstrap
       - name: Install spectral preview Python dependencies
         if: ${{ inputs.ctest_mode != 'skip' }}
@@ -238,7 +317,6 @@ jobs:
           BASH_ENV: /dev/null
           CC: gcc
           CXX: g++
-          WARN_FLAGS: -Wall -Wextra -Wpedantic -Werror
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -253,19 +331,10 @@ jobs:
               ;;
           esac
 
-          c_flags="${WARN_FLAGS}"
-          cxx_flags="${WARN_FLAGS} -std=c++17"
-          if [ "$TOOL_BUILD_TYPE" = "Debug" ]; then
-            c_flags="${c_flags} -fno-omit-frame-pointer -g -O0"
-            cxx_flags="${cxx_flags} -fno-omit-frame-pointer -g -O0"
-          fi
-
           cmake -S Build/Cmake -B "${BUILD_DIR}" \
             -DCMAKE_BUILD_TYPE="${TOOL_BUILD_TYPE}" \
             -DCMAKE_C_COMPILER=gcc \
             -DCMAKE_CXX_COMPILER=g++ \
-            -DCMAKE_C_FLAGS="${c_flags}" \
-            -DCMAKE_CXX_FLAGS="${cxx_flags}" \
             -DENABLE_SANITIZERS=ON \
             -DSANITIZER_RECOVER=ON \
             -DENABLE_TOOLS=ON \
@@ -274,6 +343,8 @@ jobs:
             -DENABLE_SHARED_LIBS=ON \
             -DENABLE_STATIC_LIBS=ON \
             -DICC_USE_ZLIB=ON \
+            -DICCDEV_ENABLE_QA_FLAGS=ON \
+            -DICCDEV_ENABLE_STRICT_WARNINGS=ON \
             -Wno-dev
 
       - name: Build iccDEV tools
@@ -375,6 +446,58 @@ jobs:
           HYBRID_TIMING_INSTRUMENT="$HYBRID_TIMING_INSTRUMENT_INPUT" \
             .github/scripts/iccdev-hybrid-applyprofiles-timing.sh
 
+      - name: Run ICC registry profile QA scan
+        if: ${{ inputs.run_registry_qa }}
+        env:
+          BASH_ENV: /dev/null
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          REGISTRY_QA_TIMEOUT_INPUT: ${{ inputs.registry_qa_timeout || '20' }}
+          REGISTRY_QA_MAX_PROFILES_INPUT: ${{ inputs.registry_qa_max_profiles || '3' }}
+          REGISTRY_QA_FULL_MATRIX_INPUT: ${{ inputs.registry_qa_full_matrix && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$REGISTRY_QA_TIMEOUT_INPUT" in
+            ''|*[!0-9]*)
+              echo "::error title=Invalid registry QA timeout::${REGISTRY_QA_TIMEOUT_INPUT}"
+              exit 1
+              ;;
+          esac
+          case "$REGISTRY_QA_MAX_PROFILES_INPUT" in
+            ''|*[!0-9]*)
+              echo "::error title=Invalid registry QA max profiles::${REGISTRY_QA_MAX_PROFILES_INPUT}"
+              exit 1
+              ;;
+          esac
+          case "$REGISTRY_QA_FULL_MATRIX_INPUT" in
+            0|1)
+              ;;
+            *)
+              echo "::error title=Invalid registry QA matrix flag::${REGISTRY_QA_FULL_MATRIX_INPUT}"
+              exit 1
+              ;;
+          esac
+
+          registry_out="${BUILD_DIR}/Testing/ctest-output/registry-profile-qa"
+          args=(
+            --timeout "$REGISTRY_QA_TIMEOUT_INPUT"
+            --max-profiles "$REGISTRY_QA_MAX_PROFILES_INPUT"
+            --out-dir "$registry_out"
+            --fail-on "CRASH"
+          )
+          if [ "$REGISTRY_QA_FULL_MATRIX_INPUT" = "1" ]; then
+            args+=(--full-matrix)
+          fi
+
+          ICC_PAWG_REPORT="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccPawgReport/iccPawgReport" \
+          ICC_DUMP_PROFILE="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccDumpProfile/iccDumpProfile" \
+          ICC_ROUND_TRIP="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccRoundTrip/iccRoundTrip" \
+            .github/scripts/iccdev-registry-profile-qa.sh "${args[@]}"
+
       - name: Generate summary
         if: always()
         env:
@@ -405,6 +528,12 @@ jobs:
               printf '%s' "$s"
             }
           fi
+          sanitize_table_cell() {
+            local s
+            s="$(sanitize_line "$1")"
+            s="${s//|/\\|}"
+            printf '%s' "$s"
+          }
 
           case "$CTEST_MODE" in
             fast)
@@ -421,6 +550,13 @@ jobs:
               ;;
           esac
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
+          qa_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags"
+          qa_evidence="${qa_dir}/evidence.ndjson"
+          qa_summary="${qa_dir}/summary.tsv"
+          registry_qa_dir="${BUILD_DIR}/Testing/ctest-output/registry-profile-qa"
+          registry_qa_summary="${registry_qa_dir}/summary.md"
+          applytolink_debug_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug"
+          applytolink_stack_report="${applytolink_debug_dir}/stack-analysis.txt"
           container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${REGRESSION_IMAGE_TAG}"
 
           {
@@ -430,6 +566,8 @@ jobs:
             echo "|-----------|-------|"
             echo "| Runner | ubuntu-24.04 |"
             echo "| Container | \`$(sanitize_line "$container_ref")\` |"
+            echo "| Build type | $(sanitize_line "$TOOL_BUILD_TYPE") |"
+            echo "| Compiled at | $(sanitize_line "$TOOL_BUILD_TYPE") with ASAN+UBSAN, zlib zipUtf8Text support, QA target flags, debug symbols, frame pointers, and CMake strict warnings |"
             echo "| Compiler | $(sanitize_line "$(g++ --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| GCC | $(sanitize_line "$(gcc --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
@@ -441,16 +579,13 @@ jobs:
             echo ""
             echo '```bash'
             echo "TOOL_BUILD_TYPE='${TOOL_BUILD_TYPE}'"
-            echo "WARN_FLAGS='-Wall -Wextra -Wpedantic -Werror'"
-            echo "if [ \"\${TOOL_BUILD_TYPE}\" = Debug ]; then WARN_FLAGS=\"\${WARN_FLAGS} -fno-omit-frame-pointer -g -O0\"; fi"
             echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=\"\${TOOL_BUILD_TYPE}\" \\"
             echo "  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \\"
-            echo "  -DCMAKE_C_FLAGS=\"\${WARN_FLAGS}\" \\"
-            echo "  -DCMAKE_CXX_FLAGS=\"\${WARN_FLAGS} -std=c++17\" \\"
             echo "  -DENABLE_SANITIZERS=ON \\"
             echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
             echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON \\"
-            echo "  -DICC_USE_ZLIB=ON"
+            echo "  -DICC_USE_ZLIB=ON -DICCDEV_ENABLE_QA_FLAGS=ON \\"
+            echo "  -DICCDEV_ENABLE_STRICT_WARNINGS=ON"
             echo "cmake --build build --parallel \"\$(nproc)\""
             case "$CTEST_MODE" in
               fast)
@@ -465,33 +600,88 @@ jobs:
                 ;;
             esac
             echo '```'
+            if [ -f "$qa_evidence" ]; then
+              echo ""
+              echo "## QA Target Flags Evidence"
+              echo ""
+              if [ -f "$qa_summary" ]; then
+                echo "| Case | Expected | Observed | Status | Notes |"
+                echo "|------|----------|----------|--------|-------|"
+                tail -n +2 "$qa_summary" | while IFS=$'\t' read -r \
+                  case_name expected observed status notes; do
+                  printf '| %s | %s | %s | %s | %s |\n' \
+                    "$(sanitize_table_cell "$case_name")" \
+                    "$(sanitize_table_cell "$expected")" \
+                    "$(sanitize_table_cell "$observed")" \
+                    "$(sanitize_table_cell "$status")" \
+                    "$(sanitize_table_cell "$notes")"
+                done
+                echo ""
+              fi
+              echo '```text'
+              while IFS= read -r line; do
+                sanitize_code_line "$line"
+                echo ""
+              done <"$qa_evidence"
+              echo '```'
+            fi
+            if [ -f "$applytolink_stack_report" ]; then
+              echo ""
+              echo "## iccApplyToLink NaN/SixChanInputRef Diagnostic Replay"
+              echo ""
+              echo '```text'
+              sed -n '1,90p' "$applytolink_stack_report" | while IFS= read -r line; do
+                sanitize_code_line "$line"
+                echo ""
+              done
+              echo '```'
+            fi
+            if [ -f "$registry_qa_summary" ]; then
+              echo ""
+              echo "## ICC Registry Profile QA"
+              echo ""
+              sed -n '1,120p' "$registry_qa_summary" | while IFS= read -r line; do
+                sanitize_code_line "$line"
+                echo ""
+              done
+            fi
             if [ -f "$timing_report" ]; then
               echo ""
               echo "## Hybrid \`iccApplyProfiles\` Timing"
               echo ""
               date -u '+%Y-%m-%d %H:%M:%S UTC'
               echo ""
-              printf '| %-10s | %-8s | %-7s | %-6s | %-9s | %-6s | %-8s | %-6s | %-13s | %-7s | %-9s |\n' \
-                "Case" "Threads" "Command" "Status" "Elapsed s" "User s" \
-                "System s" "RSS KB" "Minor faults" "Vol ctx" "Invol ctx"
-              printf '%s%s\n' \
-                '|------------|----------|---------|--------|-----------|--------|' \
-                '-----------|--------|---------------|----------|------------|'
+              timing_header='| Case | Threads | Command | Status | Elapsed s |'
+              timing_header+=' Loop ms | Apply ms | Apply % | Apply calls |'
+              timing_header+=' Async launches | User s | System s | RSS KB |'
+              timing_header+=' Minor faults | Vol ctx | Invol ctx |'
+              timing_rule='|------|---------|---------|--------|-----------|'
+              timing_rule+='---------|----------|---------|-------------|'
+              timing_rule+='----------------|--------|----------|--------|'
+              timing_rule+='---------------|---------|-----------|'
+              echo "$timing_header"
+              echo "$timing_rule"
               tail -n +2 "$timing_report" | while IFS=$'\t' read -r \
-                case_name threads command_name status elapsed_s user_s system_s \
-                rss faults vol_ctx invol_ctx _log_path; do
-                printf '| %-10s | %-8s | %-7s | %-6s | %-9s | %-6s | %-8s | %-6s | %-13s | %-7s | %-9s |\n' \
-                  "$(sanitize_line "$case_name")" \
-                  "$(sanitize_line "$threads")" \
-                  "$(sanitize_line "$command_name")" \
-                  "$(sanitize_line "$status")" \
-                  "$(sanitize_line "$elapsed_s")" \
-                  "$(sanitize_line "$user_s")" \
-                  "$(sanitize_line "$system_s")" \
-                  "$(sanitize_line "$rss")" \
-                  "$(sanitize_line "$faults")" \
-                  "$(sanitize_line "$vol_ctx")" \
-                  "$(sanitize_line "$invol_ctx")"
+                case_name threads command_name status elapsed_s loop_ms apply_ms \
+                apply_pct apply_calls async_launches user_s system_s rss faults \
+                vol_ctx invol_ctx _log_path; do
+                timing_row="| $(sanitize_line "$case_name")"
+                timing_row+=" | $(sanitize_line "$threads")"
+                timing_row+=" | $(sanitize_line "$command_name")"
+                timing_row+=" | $(sanitize_line "$status")"
+                timing_row+=" | $(sanitize_line "$elapsed_s")"
+                timing_row+=" | $(sanitize_line "$loop_ms")"
+                timing_row+=" | $(sanitize_line "$apply_ms")"
+                timing_row+=" | $(sanitize_line "$apply_pct")"
+                timing_row+=" | $(sanitize_line "$apply_calls")"
+                timing_row+=" | $(sanitize_line "$async_launches")"
+                timing_row+=" | $(sanitize_line "$user_s")"
+                timing_row+=" | $(sanitize_line "$system_s")"
+                timing_row+=" | $(sanitize_line "$rss")"
+                timing_row+=" | $(sanitize_line "$faults")"
+                timing_row+=" | $(sanitize_line "$vol_ctx")"
+                timing_row+=" | $(sanitize_line "$invol_ctx") |"
+                echo "$timing_row"
               done
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
@@ -551,8 +741,17 @@ jobs:
             "${BUILD_DIR}/Testing/Temporary" \
             "${data_dir}/ctest-temporary"
           copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags" \
+            "${data_dir}/iccdev-qa-target-flags"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug" \
+            "${data_dir}/iccdev-applytolink-nan-sixchan-debug"
+          copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing" \
             "${data_dir}/hybrid-applyprofiles-timing"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/registry-profile-qa" \
+            "${data_dir}/registry-profile-qa"
           {
             printf 'iccDEV developer report\n'
             printf '=======================\n\n'
@@ -581,6 +780,32 @@ jobs:
             printf '<tr><td>Commit</td><td><code>%s</code></td></tr>\n' "$(escape_html "$(git rev-parse --short HEAD)")"
             printf '<tr><td>Run</td><td><code>%s</code></td></tr>\n' "$(escape_html "${GITHUB_RUN_ID:-local}")"
             printf '</table>\n'
+
+            qa_summary="${data_dir}/iccdev-qa-target-flags/summary.tsv"
+            if [ -f "$qa_summary" ]; then
+              printf '<h2>QA Target Flags Evidence</h2>\n'
+              printf '<table><tr><th>Case</th><th>Expected</th><th>Observed</th><th>Status</th><th>Notes</th></tr>\n'
+              tail -n +2 "$qa_summary" | while IFS=$'\t' read -r \
+                case_name expected observed status notes; do
+                printf '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' \
+                  "$(escape_html "$case_name")" \
+                  "$(escape_html "$expected")" \
+                  "$(escape_html "$observed")" \
+                  "$(escape_html "$status")" \
+                  "$(escape_html "$notes")"
+              done
+              printf '</table>\n'
+            fi
+
+            applytolink_stack="${data_dir}/iccdev-applytolink-nan-sixchan-debug/stack-analysis.txt"
+            if [ -f "$applytolink_stack" ]; then
+              printf '<h2>iccApplyToLink NaN/SixChanInputRef Diagnostic Replay</h2>\n'
+              printf '<pre><code>'
+              sed -n '1,90p' "$applytolink_stack" | while IFS= read -r line; do
+                printf '%s\n' "$(escape_html "$line")"
+              done
+              printf '</code></pre>\n'
+            fi
 
             printf '<h2>Included Data</h2><ul>\n'
             find "$data_dir" -type f | sort | while IFS= read -r file; do
@@ -700,6 +925,7 @@ jobs:
               -DENABLE_WXWIDGETS=OFF \
               -DENABLE_SHARED_LIBS=ON \
               -DENABLE_STATIC_LIBS=ON \
+              -DICC_USE_ZLIB=ON \
               -Wno-dev
 
           run_case "build shared/static IccProfLib2 and iccApplyProfiles" \
@@ -709,6 +935,10 @@ jobs:
 
           run_case "inspect generated thread link interface" \
             grep -Eq 'INTERFACE_LINK_LIBRARIES "([^"]*;)?Threads::Threads(;|")' \
+              "${BUILD_DIR}/RefIccMAXTargets.cmake"
+
+          run_case "inspect generated zlib link interface" \
+            grep -q 'ZLIB::ZLIB' \
               "${BUILD_DIR}/RefIccMAXTargets.cmake"
 
           run_case "inspect shared library link command" \

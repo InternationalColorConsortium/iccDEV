@@ -15,9 +15,10 @@
 # This test regenerates the 6-channel SixChanCameraRef profile from its tracked
 # XML (the .icc artifacts are .gitignored) and runs iccRoundTrip under a short
 # timeout: pre-fix the tool never terminates (the timeout fires); post-fix it
-# returns immediately reporting "Too many samples used".  A normal 3-channel
-# profile (33^3 = 35937 samples, far under the cap) must still round-trip, so the
-# cap is proven not over-aggressive.
+# returns immediately reporting "Too many samples used" with a clean exit status,
+# letting batch QA classify the profile as a soft QA issue rather than a tool
+# failure. A normal 3-channel profile (33^3 = 35937 samples, far under the cap)
+# must still round-trip, so the cap is proven not over-aggressive.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -90,7 +91,7 @@ fi
 
 # 1) Build the 6-channel (6CLR) fixture from its tracked XML, then round-trip it.
 #    Pre-fix: 33^6 samples never terminate -> timeout fires (rc 124).
-#    Post-fix: rejected up front with "Too many samples used".
+#    Post-fix: rejected up front with "Too many samples used" and exit 0.
 SIXCHAN_ICC="$OUTDIR/SixChanCameraRef.icc"
 rm -f "$SIXCHAN_ICC" "$LOGFILE"
 if ! "$FROMXML" "$SIXCHAN_XML" "$SIXCHAN_ICC" > "$LOGFILE" 2>&1 || [ ! -s "$SIXCHAN_ICC" ]; then
@@ -105,6 +106,10 @@ check_sanitizers "$LOGFILE" || regress "sanitizer error round-tripping the 6-cha
 
 if [ "$rc" -eq 124 ]; then
   regress "6-channel round trip did not terminate within ${DOS_TIMEOUT}s -- sample count (33^6) uncapped"
+fi
+if [ "$rc" -ne 0 ]; then
+  sed -n '1,20p' "$LOGFILE"
+  regress "6-channel over-budget refusal should exit cleanly for batch QA classification (rc=$rc)"
 fi
 if ! grep -q "Too many samples used" "$LOGFILE"; then
   sed -n '1,20p' "$LOGFILE"
