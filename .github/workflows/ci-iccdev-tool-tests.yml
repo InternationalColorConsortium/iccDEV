@@ -654,7 +654,7 @@ jobs:
               --parallel "$(nproc)"
 
           run_case "inspect generated thread link interface" \
-            grep -q 'INTERFACE_LINK_LIBRARIES "Threads::Threads"' \
+            grep -Eq 'INTERFACE_LINK_LIBRARIES "([^"]*;)?Threads::Threads(;|")' \
               "${BUILD_DIR}/RefIccMAXTargets.cmake"
 
           run_case "inspect shared library link command" \
