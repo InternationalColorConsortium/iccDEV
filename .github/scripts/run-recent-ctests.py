@@ -13,10 +13,16 @@ from pathlib import Path
 TEST_LINE_RE = re.compile(r"^\s*Test\s+#\d+:\s+(.+?)\s*$")
 
 
-def list_tests(test_dir: str, config: str | None) -> list[str]:
+def combine_label_excludes(label_excludes: list[str]) -> str:
+    return "|".join(f"({label_exclude})" for label_exclude in label_excludes)
+
+
+def list_tests(test_dir: str, config: str | None, label_exclude: str) -> list[str]:
     command = ["ctest", "--test-dir", test_dir, "-N", "--no-tests=error"]
     if config:
         command.extend(["-C", config])
+    if label_exclude:
+        command.extend(["-LE", label_exclude])
 
     result = subprocess.run(
         command,
@@ -83,8 +89,9 @@ def main(argv: list[str]) -> int:
         print("--limit must be at least 1", file=sys.stderr)
         return 2
 
+    label_exclude = combine_label_excludes(args.label_exclude)
     try:
-        tests = list_tests(args.test_dir, args.config or None)
+        tests = list_tests(args.test_dir, args.config or None, label_exclude)
     except RuntimeError as exc:
         print(f"[FAIL] {exc}", file=sys.stderr)
         return 1
@@ -110,8 +117,8 @@ def main(argv: list[str]) -> int:
         command.extend(["-R", build_regex(selected_tests)])
     if args.config:
         command.extend(["-C", args.config])
-    for label_exclude in args.label_exclude:
-        command.extend(["--label-exclude", label_exclude])
+    if label_exclude:
+        command.extend(["-LE", label_exclude])
     if args.output_junit:
         command.extend(["--output-junit", args.output_junit])
 

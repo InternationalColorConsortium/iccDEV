@@ -178,8 +178,10 @@ and inverse conversions. It guards against divide-by-zero and non-finite
 appearance state regressions without committing generated profiles.
 
 `iccdev.hybrid-pipeline` preserves the full six-phase hybrid spectral/colorimetric
-integration test as a separate `slow` CTest label. Routine CI tool sweeps run
-with `--label-exclude slow`; run the hybrid gate explicitly with
+integration test as a separate `slow` CTest label. Routine CI tool sweeps use
+the fast lane with `--label-exclude slow --label-exclude calculator`; run full
+CTest or the hybrid gate explicitly when the slow and calculator suites are in
+scope:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
 Use a standalone CTest row for focused crash regressions that need clear
