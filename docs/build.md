@@ -308,13 +308,13 @@ should change container package pins, published image tags, or GHCR workflows.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
-| `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Built by `ci-docker`; validate with a local Docker build and tool smoke test. |
-| `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Built by the NixOS container path in `ci-docker`; validate the runtime closure and secret scan. |
-| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with current Clang/LLVM, GCC, sanitizer, and fuzzing tooling. | Built by the regression matrix variant in `ci-docker`; publishing uses `ghcr-publish` on `master`, branch dispatches use validation, and the consumer workflow selects the published tag. |
+| `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Validate with a local Docker build and tool smoke test before maintainer publishing. |
+| `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Validate locally with a Docker build, runtime closure check, and secret scan before maintainer publishing. |
+| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with current Clang/LLVM, GCC, sanitizer, and fuzzing tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; consumer workflows select the published tag. |
 
-Before using a branch-specific regression image, maintainers should trigger
-`ci-docker` on that branch, read the published branch or SHA tag from the run,
-then pass that tag to `ci-iccdev-tool-tests.yml`.
+Before using a branch-specific regression image, maintainers should publish it
+through the maintainer-controlled container release path, record the branch or
+SHA tag, then pass that tag to `ci-iccdev-tool-tests.yml`.
 
 ## vcpkg Consumers
 

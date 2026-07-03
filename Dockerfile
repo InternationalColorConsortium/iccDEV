@@ -3,7 +3,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: iccDEV ci-docker-build
+# Intent: iccDEV container build
 #
 # Last Updated: 2026-02-12 00:14:22 UTC by David Hoyt
 #

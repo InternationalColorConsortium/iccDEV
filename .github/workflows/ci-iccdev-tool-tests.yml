@@ -75,10 +75,7 @@ on:
         description: 'Trusted regression container tag'
         required: false
         default: master
-        type: choice
-        options:
-          - master
-          - ci-docker-canary
+        type: string
       run_hybrid_timing:
         description: 'Run the hybrid iccApplyProfiles timing matrix'
         required: false

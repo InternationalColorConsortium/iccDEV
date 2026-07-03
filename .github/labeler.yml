@@ -147,7 +147,6 @@ Docker:
           - '**/Dockerfile'
           - '**/*.dockerfile'
           - '.dockerignore'
-          - '.github/workflows/ci-docker*.yml'
 
 WASM:
   - changed-files:

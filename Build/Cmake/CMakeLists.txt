@@ -1348,8 +1348,8 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
 
   # Strict warning tier: requires GCC 15+ or Clang 14+ so all contributors and
   # CI see the same diagnostics. Older toolchains still build; they get the
-  # base set above plus reduced analysis. ci-docker (ubuntu:26.04 / GCC 15)
-  # and the iccDEV Tool Tests workflow (clang-18) both meet the floor.
+  # base set above plus reduced analysis. GCC 15+ maintainer builds and the
+  # iccDEV Tool Tests workflow (clang-18) both meet the floor.
   set(_iccdev_strict_capable FALSE)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
     set(_iccdev_strict_capable TRUE)

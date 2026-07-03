@@ -30,9 +30,9 @@
 #
 # Like the other UBSan fuzz regressions, the divide-by-zero check only exists when
 # the tool was built with the float-divide-by-zero sanitizer (the
-# ci-docker regression image adds -fsanitize=float-divide-by-zero; plain
-# ENABLE_UBSAN does NOT).  On a build without it the test SKIPS rather than report
-# a misleading pass.
+# regression image adds -fsanitize=float-divide-by-zero; plain ENABLE_UBSAN does
+# NOT).  On a build without it the test SKIPS rather than report a misleading
+# pass.
 #
 # Environment variables (set by the CTest harness):
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools/

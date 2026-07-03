@@ -2166,8 +2166,8 @@ iccdev_add_script_test(
 # made that a divide by zero (UBSan float-divide-by-zero, IccCmm.cpp:3048),
 # yielding an infinite scale that corrupts every PCS sample. Replays the fuzz PoC
 # through iccApplyProfiles with a +1000 luminance intent and fails if the
-# divide-by-zero reappears. Only meaningful under a float-divide-by-zero build
-# (ci-docker regression image); SKIPS otherwise.
+# divide-by-zero reappears. Only meaningful under a float-divide-by-zero
+# regression image; SKIPS otherwise.
 if(TARGET iccApplyProfiles)
   iccdev_add_script_test(
     iccdev.issue-1406-roundtrip-xyzlum-dbz
@@ -2184,8 +2184,7 @@ endif()
 # zero (UBSan float-divide-by-zero, IccEncoding.cpp:138/140), poisoning the header
 # illuminant and derived XYZ tags with inf/NaN. Adds the fuzz PoC as a transform
 # profile through iccApplyToLink and fails if the divide-by-zero reappears. Only
-# meaningful under a float-divide-by-zero build (ci-docker regression image); SKIPS
-# otherwise.
+# meaningful under a float-divide-by-zero regression image; SKIPS otherwise.
 iccdev_add_script_test(
   iccdev.issue-1410-encoding-yxy-xyz-dbz
   120

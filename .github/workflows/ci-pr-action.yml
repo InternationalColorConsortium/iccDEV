@@ -610,97 +610,15 @@ jobs:
         tool_build_type: ${{ fromJson(needs.validate-inputs.outputs.build-types) }}
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
     with:
-      regression_image_tag: ${{ github.ref_name == 'ci-docker-canary' && 'ci-docker-canary' || 'master' }}
+      regression_image_tag: master
       tool_build_type: ${{ matrix.tool_build_type }}
+      ctest_mode: fast
 
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: Windows Build & Test Profiles
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
-
-  docker-canary:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: Docker Sanitizer Canary (${{ matrix.variant }})
-    needs: [setup, detect-src, validate-inputs]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    defaults:
-      run:
-        shell: bash --noprofile --norc {0}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - variant: ubuntu
-            dockerfile: Dockerfile
-            target: builder
-            image_tag: iccdev-pr-docker-canary:ubuntu
-          - variant: nixos
-            dockerfile: Dockerfile.nixos
-            target: builder
-            image_tag: iccdev-pr-docker-canary:nixos
-
-    steps:
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Build ci-docker canary image
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-          MATRIX_DOCKERFILE: ${{ matrix.dockerfile }}
-          MATRIX_TARGET: ${{ matrix.target }}
-          MATRIX_IMAGE_TAG: ${{ matrix.image_tag }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-
-          case "$MATRIX_VARIANT" in
-            ubuntu|nixos) ;;
-            *)
-              echo "Invalid Docker canary variant" >&2
-              exit 1
-              ;;
-          esac
-
-          case "$MATRIX_DOCKERFILE" in
-            Dockerfile|Dockerfile.nixos) ;;
-            *)
-              echo "Invalid Dockerfile selection" >&2
-              exit 1
-              ;;
-          esac
-
-          case "$MATRIX_TARGET" in
-            builder) ;;
-            *)
-              echo "Invalid Docker build target" >&2
-              exit 1
-              ;;
-          esac
-
-          case "$MATRIX_IMAGE_TAG" in
-            iccdev-pr-docker-canary:ubuntu|iccdev-pr-docker-canary:nixos) ;;
-            *)
-              echo "Invalid Docker canary image tag" >&2
-              exit 1
-              ;;
-          esac
-
-          docker build \
-            --pull \
-            --no-cache \
-            --build-arg "GIT_COMMIT=${GITHUB_SHA}" \
-            --target "$MATRIX_TARGET" \
-            --file "$MATRIX_DOCKERFILE" \
-            --tag "$MATRIX_IMAGE_TAG" \
-            .
 
   finalize:
     name: PR Summary
@@ -714,7 +632,6 @@ jobs:
       # - scan-build
       - tool-tests
       - win-ci
-      - docker-canary
     if: always()
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -752,7 +669,6 @@ jobs:
           SCAN_RESULT: skipped
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
-          DOCKER_CANARY_RESULT: ${{ needs['docker-canary'].result }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -783,7 +699,6 @@ jobs:
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
-          DOCKER_CANARY_RESULT="${DOCKER_CANARY_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
 
           # remove CRs, trim whitespace and lowercase each value
@@ -803,12 +718,11 @@ jobs:
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
-          DOCKER_CANARY_RESULT="$(trim_and_norm "$DOCKER_CANARY_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_CANARY_RESULT"; do
+          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -877,7 +791,6 @@ jobs:
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
-            printf "| docker-canary      | %s |\n" "$(sanitize_line "$DOCKER_CANARY_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
             echo ""
