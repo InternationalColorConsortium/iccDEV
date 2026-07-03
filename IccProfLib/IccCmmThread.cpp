@@ -124,6 +124,10 @@ CIccApplyThreadedCmm::~CIccApplyThreadedCmm()
 bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
 {
   m_nThreads = icResolveCmmThreadCount(nThreads);
+  if (m_nThreads <= 0) {
+    return false;
+  }
+  
   m_workers.resize(m_nThreads, NULL);
 
   for (int i = 0; i < m_nThreads; i++) {
