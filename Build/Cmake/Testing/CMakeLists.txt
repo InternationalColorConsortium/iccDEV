@@ -2706,6 +2706,21 @@ if(TARGET iccApplyNamedCmm)
    )
 endif()
 
+# Legacy v2 namedColor2Type stores each rootName in a fixed 32-byte field. A
+# malformed profile can fill all 32 bytes without a NUL terminator; the reader
+# must force termination before iccApplyNamedCmm echoes the selected name. The
+# test uses an all-ASCII generated fixture so the regression signal is readable
+# and deterministic instead of terminal-dependent replacement characters.
+if(TARGET iccApplyNamedCmm)
+  iccdev_add_script_test(
+    iccdev.ncl2-nonul-ascii-regression
+    120
+    "iccdev;cmm;namedcolor;security;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-ncl2-nonul-ascii-regression.sh"
+   )
+endif()
+
 # #1405 - CIccEvalCompare::EvaluateProfile walked an nGran^ndim device-sample
 # grid with no bound, so a 6-channel profile at the default granularity 33 ran
 # 33^6 (~1.3 billion) samples for over an hour (CWE-400). Regenerates the 6CLR
