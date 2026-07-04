@@ -1579,6 +1579,7 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
 
   icSpectralRange illumRange;
   const icFloatNumber *illum = pSVC->getIlluminant(illumRange);
+  CIccMatrixMath observer(3, illumRange.steps);
 
   if (!illum || illumRange.steps < 2 || illumRange.start >= illumRange.end)
     return false;
@@ -2159,6 +2160,7 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
 
   icSpectralRange illumRange;
   const icFloatNumber *illum = pSVC->getIlluminant(illumRange);
+  CIccMatrixMath observer(3, illumRange.steps);
 
   if (!illum || illumRange.steps < 2 || illumRange.start >= illumRange.end)
     return false;

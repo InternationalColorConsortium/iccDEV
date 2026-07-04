@@ -4947,7 +4947,6 @@ if(TARGET iccApplyProfiles)
   set_tests_properties(iccdev.applyprofiles-observer-hbo-regression PROPERTIES
     SKIP_RETURN_CODE 77
   )
-
 endif()
 
 iccdev_add_script_test(
