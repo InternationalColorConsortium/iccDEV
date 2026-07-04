@@ -158,7 +158,7 @@ public:
             printf("LUT too small to process\n");
             return false;
         }
-        if (temp > 1024) {
+        if (temp > 255) {
             printf("LUT too large to process\n");
             return false;
         }
@@ -238,7 +238,7 @@ public:
     if (m_sizeLut3D < 2 || nSizeLut <= 0)
         return false;
     
-    if (m_sizeLut3D > 1024)
+    if (m_sizeLut3D > 255)
         return false;
     
     uint64_t temp = (uint64_t)m_sizeLut3D * (uint64_t)m_sizeLut3D * (uint64_t)m_sizeLut3D;
