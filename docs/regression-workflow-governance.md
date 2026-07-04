@@ -165,7 +165,7 @@ separate from general source changes when practical.
 |------|--------------|-----------------------|
 | `Dockerfile` | Ubuntu release/runtime image for the published `iccdev` container. | Build locally, run at least one installed tool, and check the healthcheck target. |
 | `Dockerfile.nixos` | NixOS/scratch runtime image and closure minimization. | Build locally, run one tool, and confirm closure/secret checks remain active. |
-| `Dockerfile.ci-regression` | Maintainer image for ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `clang`, `clang++`, `gcc`, `g++`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. |
+| `Dockerfile.ci-regression` | Maintainer image for ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. |
 
 For `Dockerfile.ci-regression` publishing:
 

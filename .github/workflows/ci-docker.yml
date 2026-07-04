@@ -156,7 +156,7 @@ jobs:
             type=ref,event=branch,enable=${{ matrix.variant == 'regression' }}
 
       - name: Log in to GHCR
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
@@ -174,17 +174,17 @@ jobs:
           pull: true
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-          load: ${{ !(github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags') }}
-          push: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
-          provenance: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags') && 'mode=max' || 'false' }}
-          sbom: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          load: ${{ !(github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') }}
+          push: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          provenance: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') && 'mode=max' || 'false' }}
+          sbom: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
           labels: |
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Generate SBOM
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
@@ -192,7 +192,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Measure SBOM attestation size
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
         id: sbom-size
         env:
           BASH_ENV: /dev/null
@@ -234,7 +234,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Attest build provenance
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -242,7 +242,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
-        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags') && steps.sbom-size.outputs.attestable == 'true' }}
+        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') && steps.sbom-size.outputs.attestable == 'true' }}
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v4.1.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -251,7 +251,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload SBOM
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
@@ -264,7 +264,7 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -283,7 +283,7 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -314,7 +314,7 @@ jobs:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
           TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -383,7 +383,7 @@ jobs:
           MATRIX_WORKDIR: ${{ matrix.workdir }}
           MATRIX_TOOLS_DIR: ${{ matrix.tools_dir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -427,7 +427,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -465,7 +465,7 @@ jobs:
           MATRIX_VARIANT: ${{ matrix.variant }}
           MATRIX_WORKDIR: ${{ matrix.workdir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -503,7 +503,7 @@ jobs:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           EXPECTED_SHA: ${{ github.sha }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -531,16 +531,37 @@ jobs:
 
           docker run --rm "$TEST_IMAGE" bash -lc '
             set -euo pipefail
-            command -v git clang clang++ gcc g++ cmake make realpath afl-fuzz llvm-symbolizer
-            command -v clang-tidy cppcheck scan-build valgrind gdb lcov gcovr jq curl shellcheck
+            command -v git gh clang clang++ gcc g++ cmake make realpath afl-fuzz llvm-symbolizer
+            command -v clang-tidy cppcheck scan-build valgrind gdb gdbserver lldb lld ld.lld lcov gcovr jq curl shellcheck
+            command -v llvm-cov llvm-profdata file strace
+            git --version | sed -n "1p"
+            gh --version | sed -n "1p"
+            curl --version | sed -n "1p"
             clang --version | sed -n "1p"
             clang++ --version | sed -n "1p"
             clang-tidy --version | sed -n "1p"
+            lldb --version | sed -n "1p"
+            ld.lld --version | sed -n "1p"
+            llvm-cov --version | sed -n "1p"
+            llvm-profdata --version | sed -n "1p"
+            gdb --version | sed -n "1p"
+            gdbserver --version | sed -n "1p"
             gcc --version | sed -n "1p"
             g++ --version | sed -n "1p"
             cmake --version | sed -n "1p"
             afl-fuzz -V 1 2>&1 | sed -n "1p" || true
             /usr/bin/time --version | sed -n "1p"
+            clang --version | grep -q "clang version 22\\."
+            clang++ --version | grep -q "clang version 22\\."
+            clang-tidy --version | grep -q "LLVM version 22\\."
+            lldb --version | grep -q "lldb version 22\\."
+            ld.lld --version | grep -q "LLD 22\\."
+            llvm-cov --version | grep -q "LLVM version 22\\."
+            llvm-profdata --version | grep -q "LLVM version 22\\."
+            gcc --version | grep -q " 15\\."
+            g++ --version | grep -q " 15\\."
+            test "${CC}" = clang
+            test "${CXX}" = clang++
             printf "int main(void){return 0;}\n" > /tmp/asan-smoke.c
             clang -fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound \
               -fno-omit-frame-pointer -g -O0 /tmp/asan-smoke.c -o /tmp/asan-smoke
@@ -555,6 +576,7 @@ jobs:
             test -d .git
             test -f IccProfLib/IccProfile.cpp
             git remote get-url origin
+            test "$(git remote get-url --push origin)" = "https://github.com/InternationalColorConsortium/iccDEV.git"
             command -v iccDumpProfile
             test -d "$ICCDEV_BUILD_DIR"
             cmake --build "$ICCDEV_BUILD_DIR" --target iccDumpProfile --parallel "$(nproc)"
@@ -618,7 +640,7 @@ jobs:
     name: "Prune old container versions"
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing'
     environment: ghcr-publish
     permissions:
       packages: write  # Required to delete old GHCR package versions.
@@ -630,7 +652,7 @@ jobs:
       - name: Delete old package versions
         env:
           BASH_ENV: /dev/null
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GHCR_PRUNE_TOKEN || secrets.GITHUB_TOKEN }}
           MATRIX_PACKAGE: ${{ matrix.package }}
         run: |
           set -euo pipefail
@@ -638,36 +660,83 @@ jobs:
 
           ORG="InternationalColorConsortium"
           CUTOFF=$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          KEEP_RECENT=10
+          DELETE_LIMIT=50
+          REQUIRED_SCOPES="read:packages,delete:packages"
 
-          echo "Pruning ${MATRIX_PACKAGE} versions older than ${CUTOFF}"
+          echo "Pruning ${MATRIX_PACKAGE} versions older than ${CUTOFF}; keeping ${KEEP_RECENT} newest non-latest versions; deleting up to ${DELETE_LIMIT}"
+
+          scope_header=$(curl -sS -I \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions?per_page=1" |
+            tr -d '\r' |
+            awk -F': ' 'tolower($1) == "x-oauth-scopes" {print $2}')
+          missing_scope=0
+          for required_scope in read:packages delete:packages; do
+            if ! grep -Eq "(^|, )${required_scope}(,|$)" <<< "${scope_header}"; then
+              missing_scope=1
+            fi
+          done
+          if [ "${missing_scope}" -ne 0 ]; then
+            echo "::error::GHCR prune token is missing expected scopes (${REQUIRED_SCOPES}); observed scopes: ${scope_header:-none}"
+            echo "::error::Set the ghcr-publish environment secret GHCR_PRUNE_TOKEN to a PAT with read:packages and delete:packages."
+            exit 1
+          fi
 
           gh api --paginate \
             "/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions" |
-          jq -r --arg cutoff "${CUTOFF}" '
-            .[] | select(
-              (.created_at < $cutoff) and
-              ((.metadata.container.tags | index("latest")) == null)
-            ) | .id
-          ' > /tmp/prune-ids.txt
+          jq -sr --arg cutoff "${CUTOFF}" --argjson keep_recent "${KEEP_RECENT}" '
+            add
+            | sort_by(.created_at)
+            | reverse
+            | map(. + {
+                tags: (.metadata.container.tags // []),
+                protected: (((.metadata.container.tags // []) | index("latest")) != null)
+              })
+            | [ .[] | select(.protected | not) ] as $candidates
+            | $candidates[$keep_recent:]
+            | .[]
+            | select(.created_at < $cutoff)
+            | .id
+          ' > /tmp/prune-all-ids.txt
+          sed -n "1,${DELETE_LIMIT}p" /tmp/prune-all-ids.txt > /tmp/prune-ids.txt
 
           TOTAL=$(wc -l < /tmp/prune-ids.txt | tr -d ' ')
+          CANDIDATES=$(wc -l < /tmp/prune-all-ids.txt | tr -d ' ')
           if [ "${TOTAL}" -eq 0 ]; then
             echo "No versions to prune"
             exit 0
           fi
 
-          echo "Found ${TOTAL} versions to prune"
+          echo "Found ${CANDIDATES} versions to prune; deleting ${TOTAL} this run"
           DELETED=0
           FAILED=0
           while IFS= read -r vid; do
-            if gh api --method DELETE \
-              "/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions/${vid}" \
-              2>/dev/null; then
+            response="/tmp/prune-response-${vid}.json"
+            status=$(curl -sS -o "${response}" -w "%{http_code}" \
+              -X DELETE \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions/${vid}") || status="curl-failed"
+            if [ "${status}" = "204" ]; then
               DELETED=$((DELETED + 1))
+              rm -f "${response}"
             else
+              echo "::warning::Failed to delete ${MATRIX_PACKAGE} version ${vid}: HTTP ${status}"
+              if [ -s "${response}" ]; then
+                jq -r '.message // .' "${response}" 2>/dev/null | sed -n '1,5p' || sed -n '1,5p' "${response}"
+              fi
+              rm -f "${response}"
               FAILED=$((FAILED + 1))
             fi
           done < /tmp/prune-ids.txt
 
           echo "Pruned ${DELETED}/${TOTAL} old versions (${FAILED} failed)"
-          rm -f /tmp/prune-ids.txt
+          rm -f /tmp/prune-ids.txt /tmp/prune-all-ids.txt
+          if [ "${FAILED}" -ne 0 ]; then
+            echo "::error::${FAILED} package version delete request(s) failed"
+            exit 1
+          fi

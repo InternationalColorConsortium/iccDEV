@@ -128,13 +128,17 @@ bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
     return false;
   }
   
-  m_workers.resize(m_nThreads, NULL);
+  m_workers.clear();
+  m_workers.reserve((size_t)m_nThreads);
 
   for (int i = 0; i < m_nThreads; i++) {
     icStatusCMM status;
-    m_workers[i] = pCmm->GetNewApplyCmm(status);
-    if (!m_workers[i] || status != icCmmStatOk)
+    CIccApplyCmm* pWorker = pCmm->GetNewApplyCmm(status);
+    if (!pWorker || status != icCmmStatOk) {
+      delete pWorker;
       return false;
+    }
+    m_workers.push_back(pWorker);
   }
   return true;
 }

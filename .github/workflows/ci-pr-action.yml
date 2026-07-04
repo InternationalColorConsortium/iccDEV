@@ -52,6 +52,9 @@ concurrency:
   group: "ci-pr-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
+env:
+  REGRESSION_IMAGE_TAG: ci-qa-pr-docker-testing
+
 jobs:
   detect-src:
     name: Welcome to iccDEV
@@ -503,6 +506,7 @@ jobs:
       os-list: ${{ steps.v.outputs.os }}
       compilers: ${{ steps.v.outputs.comp }}
       build-types: ${{ steps.v.outputs.bt }}
+      regression-image-tag: ${{ steps.v.outputs.regression_image_tag }}
 
     steps:
       - name: Set up Matrix Runners
@@ -555,7 +559,7 @@ jobs:
             local value="$2"
 
             case "$key" in
-              os|comp|bt) ;;
+              os|comp|bt|regression_image_tag) ;;
               *)
                 echo "Invalid output key: $key" >&2
                 exit 1
@@ -577,6 +581,7 @@ jobs:
           write_github_output os "$os_raw"
           write_github_output comp "$comp_raw"
           write_github_output bt "$bt_raw"
+          write_github_output regression_image_tag "$REGRESSION_IMAGE_TAG"
 
   risk-gate:
     name: Risk Analysis Gate
@@ -610,7 +615,7 @@ jobs:
         tool_build_type: ${{ fromJson(needs.validate-inputs.outputs.build-types) }}
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
     with:
-      regression_image_tag: master
+      regression_image_tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
       tool_build_type: ${{ matrix.tool_build_type }}
       ctest_mode: fast
 
