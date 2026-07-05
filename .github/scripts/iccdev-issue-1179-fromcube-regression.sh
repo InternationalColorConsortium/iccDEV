@@ -58,7 +58,7 @@ fi
   printf 'TITLE "T\357\273\277 Identity LUT"\n'
   printf 'LUT_3D_SIZE 2\n'
   printf 'DOMAIN_MIN 0.0 0.0 0.0\n'
-  printf 'DOMAIN_MAX 1.061.0(1.0\n'
+  printf 'DOMAIN_MAX 1.0 1.0 1.0\n'
   printf '0.0 0.0 0.0\n'
   printf '1.0 0.0 0.0\n'
   printf '0.0 1.0 0.0\n'

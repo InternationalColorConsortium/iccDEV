@@ -34,9 +34,17 @@ CUBE="$OUTDIR/domain.cube"
 OUT_ICC="$OUTDIR/domain.icc"
 EXTRA_ICC="$OUTDIR/extra.icc"
 ONE_D_CUBE="$OUTDIR/one-d.cube"
+TRUNCATED_CUBE="$OUTDIR/truncated.cube"
+EXTRA_ROW_CUBE="$OUTDIR/extra-row.cube"
+JUNK_SUFFIX_CUBE="$OUTDIR/junk-suffix.cube"
+NAN_INF_CUBE="$OUTDIR/nan-inf.cube"
 DOMAIN_LOG="$OUTDIR/domain.log"
 EXTRA_LOG="$OUTDIR/extra-args.log"
 ONED_LOG="$OUTDIR/one-d.log"
+TRUNCATED_LOG="$OUTDIR/truncated.log"
+EXTRA_ROW_LOG="$OUTDIR/extra-row.log"
+JUNK_SUFFIX_LOG="$OUTDIR/junk-suffix.log"
+NAN_INF_LOG="$OUTDIR/nan-inf.log"
 DUMP_LOG="$OUTDIR/domain-dump.log"
 
 fail() {
@@ -53,6 +61,28 @@ check_sanitizers() {
   fi
 
   return 0
+}
+
+expect_fromcube_failure() {
+  local cube_file="$1"
+  local output_file="$2"
+  local logfile="$3"
+  local label="$4"
+
+  rm -f "$output_file" "$logfile"
+  set +e
+  "$FROMCUBE" "$cube_file" "$output_file" > "$logfile" 2>&1
+  local rc=$?
+  set -e
+
+  check_sanitizers "$logfile" || fail "$label emitted sanitizer diagnostics"
+  if [ "$rc" -eq 0 ]; then
+    sed -n '1,80p' "$logfile"
+    fail "$label unexpectedly succeeded"
+  fi
+  if [ -e "$output_file" ]; then
+    fail "$label created an output profile"
+  fi
 }
 
 echo "=== iccFromCube CLI argument and DOMAIN regression ==="
@@ -123,4 +153,63 @@ if [ "$oned_rc" -eq 0 ]; then
 fi
 grep -Fq "1DLUTs are not supported" "$ONED_LOG" || fail "1D cube did not report unsupported 1DLUT"
 
-echo "  [PASS] fromcube-cli-args -- exact arity, DOMAIN ranges, and 1D rejection verified"
+cat > "$TRUNCATED_CUBE" <<'EOF'
+TITLE "truncated table"
+LUT_3D_SIZE 2
+0 0 0
+1 0 0
+0 1 0
+1 1 0
+EOF
+expect_fromcube_failure "$TRUNCATED_CUBE" "$OUTDIR/truncated.icc" "$TRUNCATED_LOG" "truncated 3DLUT table"
+grep -Fq "Incomplete 3DLUT table" "$TRUNCATED_LOG" || fail "truncated table did not report incomplete 3DLUT"
+
+cat > "$EXTRA_ROW_CUBE" <<'EOF'
+TITLE "extra row table"
+LUT_3D_SIZE 2
+0 0 0
+1 0 0
+0 1 0
+1 1 0
+0 0 1
+1 0 1
+0 1 1
+1 1 1
+0.5 0.5 0.5
+EOF
+expect_fromcube_failure "$EXTRA_ROW_CUBE" "$OUTDIR/extra-row.icc" "$EXTRA_ROW_LOG" "extra-row 3DLUT table"
+grep -Fq "Too many 3DLUT entries" "$EXTRA_ROW_LOG" || fail "extra-row table did not report surplus 3DLUT entries"
+
+cat > "$JUNK_SUFFIX_CUBE" <<'EOF'
+TITLE "junk suffix numbers"
+LUT_3D_SIZE 2
+DOMAIN_MIN 0red 0green 0blue
+DOMAIN_MAX 1red 1green 1blue
+0red 0green 0blue
+1red 0green 0blue
+0red 1green 0blue
+1red 1green 0blue
+0red 0green 1blue
+1red 0green 1blue
+0red 1green 1blue
+1red 1green 1blue
+EOF
+expect_fromcube_failure "$JUNK_SUFFIX_CUBE" "$OUTDIR/junk-suffix.icc" "$JUNK_SUFFIX_LOG" "junk-suffix numeric input"
+grep -Fq "Invalid DOMAIN_MIN value" "$JUNK_SUFFIX_LOG" || fail "junk suffix numeric input did not report invalid DOMAIN_MIN"
+
+cat > "$NAN_INF_CUBE" <<'EOF'
+TITLE "nan inf numbers"
+LUT_3D_SIZE 2
+0 0 0
+1 0 0
+0 1 0
+1 1 0
+0 0 1
+1 0 1
+0 1 1
+nan inf -inf
+EOF
+expect_fromcube_failure "$NAN_INF_CUBE" "$OUTDIR/nan-inf.icc" "$NAN_INF_LOG" "non-finite 3DLUT input"
+grep -Fq "Invalid 3DLUT entry" "$NAN_INF_LOG" || fail "non-finite 3DLUT input did not report invalid entry"
+
+echo "  [PASS] fromcube-cli-args -- exact arity, DOMAIN ranges, strict numeric parsing, and 1D rejection verified"

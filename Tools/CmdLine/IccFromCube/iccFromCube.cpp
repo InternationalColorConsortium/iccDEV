@@ -72,6 +72,11 @@
 #include <cstdio>
 #include <string>
 #include <climits>
+#include <cerrno>
+#include <cmath>
+#include <cstdlib>
+#include <cctype>
+#include <cfloat>
 #include "IccProfile.h"
 #include "IccTagBasic.h"
 #include "IccTagMPE.h"
@@ -153,7 +158,11 @@ public:
         return false;
       }
       else if (line.substr(0, 12) == "LUT_3D_SIZE ") {
-        int64_t temp = atoll( line.c_str() + 12 );
+        int64_t temp;
+        if (!parseInteger(line.c_str() + 12, temp)) {
+          printf("Invalid LUT_3D_SIZE value\n");
+          return false;
+        }
         if (temp < 2) {
             printf("LUT too small to process\n");
             return false;
@@ -165,44 +174,52 @@ public:
         m_sizeLut3D = (int)temp;
       }
       else if (line.substr(0, 19) == "LUT_3D_INPUT_RANGE ") {
-        m_fMinInput[0] = m_fMinInput[1] = m_fMinInput[2] = (icFloatNumber)atof(line.c_str() + 19);
-        const char* next = getNext(line.c_str() + 19);
-        if (next) {
-          m_fMaxInput[0] = m_fMaxInput[1] = m_fMaxInput[2] = (icFloatNumber)atof(next);
+        const char* cursor = line.c_str() + 19;
+        icFloatNumber minVal, maxVal;
+        if (!parseNextFloat(cursor, minVal)) {
+          printf("Invalid LUT_3D_INPUT_RANGE value\n");
+          return false;
+        }
+        m_fMinInput[0] = m_fMinInput[1] = m_fMinInput[2] = minVal;
+        if (parseNextFloat(cursor, maxVal))
+          m_fMaxInput[0] = m_fMaxInput[1] = m_fMaxInput[2] = maxVal;
+        if (hasTrailingData(cursor)) {
+          printf("Invalid LUT_3D_INPUT_RANGE value\n");
+          return false;
         }
       }
       else if (line.substr(0, 11) == "DOMAIN_MIN ") {
-        const char* first = line.c_str() + 11;
-        m_fMinInput[0] = (icFloatNumber)atof(first);
-        const char* next = getNext(first);
-        if (next) {
-          m_fMinInput[1] = (icFloatNumber)atof(next);
-          next = getNext(next);
-          if (next) {
-            m_fMinInput[2] = (icFloatNumber)atof(next);
-          }
-          else
-            m_fMinInput[2] = m_fMinInput[1];
+        const char* cursor = line.c_str() + 11;
+        if (!parseNextFloat(cursor, m_fMinInput[0])) {
+          printf("Invalid DOMAIN_MIN value\n");
+          return false;
         }
-        else {
+        if (!parseNextFloat(cursor, m_fMinInput[1])) {
           m_fMinInput[1] = m_fMinInput[2] = m_fMinInput[0];
+        }
+        else if (!parseNextFloat(cursor, m_fMinInput[2])) {
+          m_fMinInput[2] = m_fMinInput[1];
+        }
+        if (hasTrailingData(cursor)) {
+          printf("Invalid DOMAIN_MIN value\n");
+          return false;
         }
       }
       else if (line.substr(0, 11) == "DOMAIN_MAX ") {
-        const char* first = line.c_str() + 11;
-        m_fMaxInput[0] = (icFloatNumber)atof(first);
-        const char* next = getNext(first);
-        if (next) {
-          m_fMaxInput[1] = (icFloatNumber)atof(next);
-          next = getNext(next);
-          if (next) {
-            m_fMaxInput[2] = (icFloatNumber)atof(next);
-          }
-          else
-            m_fMaxInput[2] = m_fMaxInput[1];
+        const char* cursor = line.c_str() + 11;
+        if (!parseNextFloat(cursor, m_fMaxInput[0])) {
+          printf("Invalid DOMAIN_MAX value\n");
+          return false;
         }
-        else {
+        if (!parseNextFloat(cursor, m_fMaxInput[1])) {
           m_fMaxInput[1] = m_fMaxInput[2] = m_fMaxInput[0];
+        }
+        else if (!parseNextFloat(cursor, m_fMaxInput[2])) {
+          m_fMaxInput[2] = m_fMaxInput[1];
+        }
+        if (hasTrailingData(cursor)) {
+          printf("Invalid DOMAIN_MAX value\n");
+          return false;
         }
       }
       else if (line.substr(0, 18) == "LUT_IN_VIDEO_RANGE")
@@ -249,34 +266,110 @@ public:
     if ((uint64_t)nSizeLut != temp*3)
       return false;
 
-    const char* next;
-    for (auto n = 0u; n < num && !isEOF();) {
+    icUInt32Number n = 0;
+    for (; n < num && !isEOF();) {
       std::string line = getNextLine();
 
       //Skip empty and commented lines
       if (line.empty() || line[0] == '#')
         continue;
-      *toLut++ = (icFloatNumber)atof(line.c_str());
-      next = getNext(line.c_str());
-      if (!next) {
+      const char* cursor = line.c_str();
+      if (!parseNextFloat(cursor, *toLut++)) {
         printf("Invalid 3DLUT entry\n");
         return false;
       }
-      *toLut++ = (icFloatNumber)atof(next);
-      next = getNext(next);
-      if (!next) {
+      if (!parseNextFloat(cursor, *toLut++)) {
         printf("Invalid 3DLUT entry\n");
         return false;
       }
-      *toLut++ = (icFloatNumber)atof(next);
+      if (!parseNextFloat(cursor, *toLut++)) {
+        printf("Invalid 3DLUT entry\n");
+        return false;
+      }
+      if (hasTrailingData(cursor)) {
+        printf("Invalid 3DLUT entry\n");
+        return false;
+      }
 
       n++;
     }
+    if (n != num) {
+      printf("Incomplete 3DLUT table\n");
+      return false;
+    }
+
+    while (!isEOF()) {
+      std::string line = getNextLine();
+      if (!line.empty() && line[0] != '#') {
+        printf("Too many 3DLUT entries\n");
+        return false;
+      }
+    }
+
     return true;
   }
 
 protected:
   std::string m_sFilename;
+
+  static bool isSpace(char c)
+  {
+    return std::isspace(static_cast<unsigned char>(c)) != 0;
+  }
+
+  bool parseNextFloat(const char*& str, icFloatNumber& value)
+  {
+    while (*str && isSpace(*str))
+      str++;
+
+    if (!*str || *str == '#')
+      return false;
+
+    errno = 0;
+    char* end = nullptr;
+    double temp = std::strtod(str, &end);
+    if (end == str || errno == ERANGE || !std::isfinite(temp) || temp < -FLT_MAX || temp > FLT_MAX)
+      return false;
+
+    const char* tokenEnd = end;
+    if (*tokenEnd && !isSpace(*tokenEnd) && *tokenEnd != '#')
+      return false;
+
+    value = (icFloatNumber)temp;
+    str = end;
+    return true;
+  }
+
+  bool parseInteger(const char* str, int64_t& value)
+  {
+    while (*str && isSpace(*str))
+      str++;
+
+    if (!*str || *str == '#')
+      return false;
+
+    errno = 0;
+    char* end = nullptr;
+    long long temp = std::strtoll(str, &end, 10);
+    if (end == str || errno == ERANGE)
+      return false;
+
+    if (*end && !isSpace(*end) && *end != '#')
+      return false;
+    if (hasTrailingData(end))
+      return false;
+
+    value = (int64_t)temp;
+    return true;
+  }
+
+  bool hasTrailingData(const char* str)
+  {
+    while (*str && isSpace(*str))
+      str++;
+
+    return *str && *str != '#';
+  }
   
   bool open()
   {
