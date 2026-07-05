@@ -16,7 +16,7 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
@@ -44,20 +44,20 @@
  * ====================================================================
  *
  * This software consists of voluntary contributions made by many
- * individuals on behalf of the The International Color Consortium. 
+ * individuals on behalf of the The International Color Consortium.
  *
  *
  * Membership in the ICC is encouraged when this software is used for
- * commercial purposes. 
+ * commercial purposes.
  *
- *  
+ *
  * For more information on The International Color Consortium, please
  * see <http://www.color.org/>.
- *  
- * 
+ *
+ *
  */
 
-////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////
 // HISTORY:
 //
 // -Initial implementation by Max Derhak 5-15-2003
@@ -81,8 +81,8 @@ namespace iccDEV {
 /**
 **************************************************************************
 * Type: Class
-* 
-* Purpose: 
+*
+* Purpose:
 *  Object for performing matrix/vector math
 **************************************************************************
 */
@@ -100,6 +100,7 @@ public:
   virtual void VectorMult(icFloatNumber *pDst, const icFloatNumber *pSrc) const;
   virtual icUInt16Number GetCols() const { return m_nCols; }
   virtual icUInt16Number GetRows() const { return m_nRows; }
+  bool IsValid() const { return m_vals != NULL && m_nRows && m_nCols; }
 
   CIccMatrixMath *Mult(const CIccMatrixMath *matrix) const;
 
@@ -108,8 +109,16 @@ public:
   void VectorScale(const icFloatNumber *vec);
   void Scale(icFloatNumber v);
 
-  icFloatNumber *entry(icUInt16Number nRow, icUInt16Number nCol=0) { return &m_vals[(int)nRow*m_nCols + nCol]; }
-  const icFloatNumber *entry(icUInt16Number nRow, icUInt16Number nCol=0) const { return &m_vals[(int)nRow*m_nCols + nCol]; }
+  icFloatNumber *entry(icUInt16Number nRow, icUInt16Number nCol=0)
+  {
+    return IsValid() && nRow < m_nRows && nCol < m_nCols ?
+           &m_vals[(size_t)nRow * m_nCols + nCol] : NULL;
+  }
+  const icFloatNumber *entry(icUInt16Number nRow, icUInt16Number nCol=0) const
+  {
+    return IsValid() && nRow < m_nRows && nCol < m_nCols ?
+           &m_vals[(size_t)nRow * m_nCols + nCol] : NULL;
+  }
 
   virtual bool isIdentityMtx() const;
 
@@ -120,6 +129,7 @@ public:
   bool SetRange(const icSpectralRange &from, const icSpectralRange &to);
 
   static CIccMatrixMath* rangeMap(const icSpectralRange &from, const icSpectralRange &to);  //Caller is responsible for deleting returned matrix
+  static CIccMatrixMath* rangeMap(const icSpectralRange &from, const icSpectralRange &to, bool *pFailed);
 
 protected:
   icUInt16Number m_nRows, m_nCols;

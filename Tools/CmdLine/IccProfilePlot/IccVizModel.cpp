@@ -115,6 +115,11 @@ bool effectiveSilent(Verbosity v) {
   }
 }
 
+template <typename T>
+std::vector<T> makeValueInitializedVector(std::size_t n) {
+  return std::vector<T>(n);
+}
+
 // emitDiagnostics - echo a result's diagnostics to stderr unless silenced. The
 // message text already carries the exact upstream wording (Skipping ... /
 // WARNING - ... / ERROR - ...); the optional context reproduces iccProfileVisualize's
@@ -1050,7 +1055,7 @@ bool buildNeutralAxisGraph(CIccProfile* pIcc, icTagSignature sig, Graph& out,
   }
 
   // One series per device colorant; sample L* from 100 (white) down to 0 (black).
-  std::vector<Series> series(outCh);
+  std::vector<Series> series = makeValueInitializedVector<Series>(outCh);
   for (int c = 0; c < outCh; ++c) {
     series[c].id = "ch" + std::to_string(c);
     series[c].name = channelName(c, /*useInput=*/false, inSp, outSp, inCh, outCh);
@@ -1059,7 +1064,8 @@ bool buildNeutralAxisGraph(CIccProfile* pIcc, icTagSignature sig, Graph& out,
     series[c].verts.reserve(kNeutralSamples);
   }
 
-  std::vector<icFloatNumber> src(inCh, 0.0f), dst(outCh, 0.0f);
+  std::vector<icFloatNumber> src = makeValueInitializedVector<icFloatNumber>(inCh);
+  std::vector<icFloatNumber> dst = makeValueInitializedVector<icFloatNumber>(outCh);
   for (int i = 0; i < kNeutralSamples; ++i) {
     float L = 100.0f * (1.0f - static_cast<float>(i) / static_cast<float>(kNeutralSamples - 1));
     neutralSrc(L, inSp, src.data());
@@ -1089,7 +1095,8 @@ bool buildNeutralAxisGraph(CIccProfile* pIcc, icTagSignature sig, Graph& out,
       if (fapply && fst == icCmmStatOk &&
           fwd->GetNumSrcSamples() == outCh && fwd->GetNumDstSamples() >= 3) {
         const icColorSpaceSignature fOut = fwd->GetDstSpace();
-        std::vector<icFloatNumber> usrc(outCh, 0.0f), udst(fwd->GetNumDstSamples(), 0.0f);
+        std::vector<icFloatNumber> usrc = makeValueInitializedVector<icFloatNumber>(outCh);
+        std::vector<icFloatNumber> udst = makeValueInitializedVector<icFloatNumber>(fwd->GetNumDstSamples());
         for (int c = 0; c < outCh; ++c) {
           for (int k = 0; k < outCh; ++k) usrc[k] = (k == c) ? 1.0f : 0.0f;   // 100% of ink c
           fwd->Apply(fapply, udst.data(), usrc.data());
@@ -1198,7 +1205,7 @@ double voxelEnclosedVolume(const std::vector<float>& lab, double vs,
     return ((std::size_t)l * nA + a) * nB + b;
   };
   auto cl = [](int v, int hi) { return v < 0 ? 0 : (v >= hi ? hi - 1 : v); };
-  std::vector<unsigned char> g((std::size_t)nL * nA * nB, 0);  // 0 empty, 1 solid, 2 exterior
+  std::vector<unsigned char> g = makeValueInitializedVector<unsigned char>((std::size_t)nL * nA * nB);  // 0 empty, 1 solid, 2 exterior
 
   const int nPts = (int)(lab.size() / 3);
   for (int i = 0; i < nPts; ++i) {
@@ -1627,7 +1634,8 @@ GamutVolumeResult GamutVolume(CIccProfile* pIcc, icTagSignature aToBTag,
   const int nPts = (int)(dev.size() / N);
   std::vector<float> lab;
   lab.reserve((std::size_t)nPts * 3);
-  std::vector<icFloatNumber> src(N, 0.0f), dst(dstCh, 0.0f);
+  std::vector<icFloatNumber> src = makeValueInitializedVector<icFloatNumber>(N);
+  std::vector<icFloatNumber> dst = makeValueInitializedVector<icFloatNumber>(dstCh);
   for (int i = 0; i < nPts; ++i) {
     for (int c = 0; c < N; ++c) src[c] = (icFloatNumber)dev[(std::size_t)i * N + c];
     x->Apply(ap, dst.data(), src.data());
@@ -1759,8 +1767,11 @@ RoundTripResult RoundTripDE(CIccProfile* pIcc, icRenderingIntent intent,
   // Seed in-gamut Lab from a device interior grid via A2B, then round-trip each.
   std::vector<double> des;
   des.reserve((size_t)total);
-  std::vector<icFloatNumber> dev(N, 0.0f), pcs1(nPcs, 0.0f), dev2(N, 0.0f), pcs2(nPcs, 0.0f);
-  std::vector<int> idx(N, 0);
+  std::vector<icFloatNumber> dev = makeValueInitializedVector<icFloatNumber>(N);
+  std::vector<icFloatNumber> pcs1 = makeValueInitializedVector<icFloatNumber>(nPcs);
+  std::vector<icFloatNumber> dev2 = makeValueInitializedVector<icFloatNumber>(N);
+  std::vector<icFloatNumber> pcs2 = makeValueInitializedVector<icFloatNumber>(nPcs);
+  std::vector<int> idx = makeValueInitializedVector<int>(N);
   for (;;) {
     for (int c = 0; c < N; ++c) dev[c] = (icFloatNumber)idx[c] / S;   // device 0..1
     xA->Apply(apA, pcs1.data(), dev.data());     // device -> PCS (Lab1)

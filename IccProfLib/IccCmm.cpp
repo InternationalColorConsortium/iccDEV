@@ -92,6 +92,17 @@
 namespace iccDEV {
 #endif
 
+static bool icIsValidSpectralRange(const icSpectralRange &range)
+{
+  icFloatNumber start = icF16toF(range.start);
+  icFloatNumber end = icF16toF(range.end);
+
+  return range.steps >= 2 &&
+         std::isfinite(start) &&
+         std::isfinite(end) &&
+         end > start;
+}
+
 ////
 // Useful Macros
 ////
@@ -2222,7 +2233,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             else
               pushLabToXyz(pFromXform->m_pConnectionConditions);
             if (pFromXform->NeedAdjustDstPCS()) {
-              pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
@@ -2234,7 +2246,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
             if (pToXform->UseLegacyPCS())
               pushXyzToLab2(pToXform->m_pConnectionConditions);
@@ -2248,7 +2261,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             else
               pushLabToXyz(pFromXform->m_pConnectionConditions);
             if (pFromXform->NeedAdjustDstPCS()) {
-              pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
@@ -2260,9 +2274,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                           pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                           pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
-            pushXyzToXyzIn();
+            if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+              return stat;
             break;
 
           default:
@@ -2279,9 +2295,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
       case icSigXYZPcsData:
         switch (m_dstSpace) {
           case icSigLabPcsData:
-            pushXyzInToXyz();
+            if ((stat=pushXyzInToXyzChecked())!=icCmmStatOk)
+              return stat;
             if (pFromXform->NeedAdjustDstPCS()) {
-              pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
@@ -2293,7 +2311,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
             if (pToXform->UseLegacyPCS())
               pushXyzToLab2(pToXform->m_pConnectionConditions);
@@ -2302,9 +2321,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             break;
 
           case icSigXYZPcsData:
-            pushXyzInToXyz();
+            if ((stat=pushXyzInToXyzChecked())!=icCmmStatOk)
+              return stat;
             if (pFromXform->NeedAdjustDstPCS()) {
-              pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
               pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
             }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
@@ -2316,9 +2337,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
-            pushXyzToXyzIn();
+            if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+              return stat;
             break;
 
           default:
@@ -2347,7 +2370,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                                   pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                                   pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
             if (pToXform->UseLegacyPCS())
               pushXyzToLab2(pToXform->m_pConnectionConditions);
@@ -2368,9 +2392,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
-            pushXyzToXyzIn();
+            if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+              return stat;
             break;
 
           case icSigReflectanceSpectralPcsData:
@@ -2416,7 +2442,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
             if (pToXform->UseLegacyPCS())
               pushXyzToLab2(pToXform->m_pConnectionConditions);
@@ -2437,9 +2464,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
-            pushXyzToXyzIn();
+            if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+              return stat;
             break;
 
           case icSigReflectanceSpectralPcsData:
@@ -2466,7 +2495,9 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
       case icSigSparseMatrixSpectralPcsData:
         switch (m_dstSpace) {
           case icSigLabPcsData:
-            pushBiRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions);
+            if ((stat=pushBiRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
+              return stat;
+            }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
@@ -2476,7 +2507,8 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
             if (pToXform->UseLegacyPCS())
               pushXyzToLab2(pToXform->m_pConnectionConditions);
@@ -2497,9 +2529,11 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
               pushOffset3(pToXform->m_PCSOffset[0]/pToXform->m_PCSScale[0],
                             pToXform->m_PCSOffset[1]/pToXform->m_PCSScale[1],
                             pToXform->m_PCSOffset[2]/pToXform->m_PCSScale[2]);
-              pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+              if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+                return stat;
             }
-            pushXyzToXyzIn();
+            if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+              return stat;
             break;
 
           case icSigReflectanceSpectralPcsData:
@@ -2568,11 +2602,19 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
   if (!pToXform)
     return icCmmStatBadXform;
 
+  icStatusCMM stat;
+
+  m_srcSpace = srcSpace;
+  m_nSrcSamples = icGetSpaceSamples(srcSpace);
+  m_dstSpace = pToXform->GetSrcSpace();
+  m_nDstSamples = pToXform->GetNumSrcSamples();
 
   if (srcSpace == icSigXYZData) {
-    pushXyzInToXyz();
+    if ((stat=pushXyzInToXyzChecked())!=icCmmStatOk)
+      return stat;
     if (pToXform->NeedAdjustSrcPCS()) {
-      pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+      if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+        return stat;
       pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
     }
 
@@ -2583,7 +2625,8 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
         pushXyzToLab(pToXform->m_pConnectionConditions);
     }
     else {
-      pushXyzToXyzIn();
+      if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+        return stat;
     }
   }
   else if (srcSpace == icSigLabData) {
@@ -2598,14 +2641,17 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
       // evaluation through a matrix/TRC display profile) is grossly wrong.
       pushLabToXyz(pToXform->m_pConnectionConditions);
       if (pToXform->NeedAdjustSrcPCS()) {
-        pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+        if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+          return stat;
         pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
       }
-      pushXyzToXyzIn();
+      if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+        return stat;
     }
     else if (pToXform->NeedAdjustSrcPCS()) {
       pushLabToXyz(pToXform->m_pConnectionConditions);
-      pushScale3(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]);
+      if ((stat=pushScale3Checked(pToXform->m_PCSScale[0], pToXform->m_PCSScale[1], pToXform->m_PCSScale[2]))!=icCmmStatOk)
+        return stat;
       pushOffset3(pToXform->m_PCSOffset[0], pToXform->m_PCSOffset[1], pToXform->m_PCSOffset[2]);
       if (pToXform->UseLegacyPCS())
         pushXyzToLab2(pToXform->m_pConnectionConditions);
@@ -2643,7 +2689,15 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
 {
   if (!pFromXform)
     return icCmmStatBadXform;
-  icColorSpaceSignature srcSpace = pFromXform->GetDstSpace();
+
+  icStatusCMM stat;
+
+  m_srcSpace = pFromXform->GetDstSpace();
+  m_nSrcSamples = pFromXform->GetNumDstSamples();
+  m_dstSpace = dstSpace;
+  m_nDstSamples = icGetSpaceSamples(dstSpace);
+
+  icColorSpaceSignature srcSpace = m_srcSpace;
 
   if (pFromXform->NeedAdjustDstPCS() && IsSpaceColorimetricPCS(dstSpace)) {
     if (srcSpace == icSigLabData) {
@@ -2653,16 +2707,19 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
         pushLabToXyz(pFromXform->m_pConnectionConditions);
     }
 
-    pushScale3(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]);
+    if ((stat=pushScale3Checked(pFromXform->m_PCSScale[0], pFromXform->m_PCSScale[1], pFromXform->m_PCSScale[2]))!=icCmmStatOk)
+      return stat;
     pushOffset3(pFromXform->m_PCSOffset[0], pFromXform->m_PCSOffset[1], pFromXform->m_PCSOffset[2]);
 
-    pushXyzToXyzIn();
+    if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+      return stat;
 
     srcSpace = icSigXYZData;
   }
 
   if (srcSpace == icSigXYZData && dstSpace == icSigLabData) {
-    pushXyzInToXyz();
+    if ((stat=pushXyzInToXyzChecked())!=icCmmStatOk)
+      return stat;
     pushXyzToLab(pFromXform->m_pConnectionConditions);
   }
   else if (srcSpace == icSigLabData && dstSpace == icSigXYZData) {
@@ -2671,7 +2728,8 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
     else
       pushLabToXyz(pFromXform->m_pConnectionConditions);
     if (pFromXform->IsInput())
-      pushXyzToXyzIn();
+      if ((stat=pushXyzToXyzInChecked())!=icCmmStatOk)
+        return stat;
   }
   else if (pFromXform->UseLegacyPCS() && pFromXform->IsInput() && srcSpace == icSigLabData && dstSpace == icSigLabData) {
     pushLab2ToLab();
@@ -2782,6 +2840,29 @@ icStatusCMM CIccPcsXform::Optimize()
 
   *m_list = steps;
 
+  if (!m_list->empty()) {
+    CIccPcsStepList::const_iterator step = m_list->begin();
+    icUInt16Number stepSrc = step->ptr->GetSrcChannels();
+    if (!stepSrc || !m_nSrcSamples || stepSrc != m_nSrcSamples)
+      return icCmmStatBadSpaceLink;
+
+    icUInt16Number lastDst = step->ptr->GetDstChannels();
+    if (!lastDst)
+      return icCmmStatBadSpaceLink;
+    step++;
+    for (; step != m_list->end(); step++) {
+      stepSrc = step->ptr->GetSrcChannels();
+      if (!stepSrc || lastDst != stepSrc)
+        return icCmmStatBadSpaceLink;
+      lastDst = step->ptr->GetDstChannels();
+      if (!lastDst)
+        return icCmmStatBadSpaceLink;
+    }
+
+    if (!m_nDstSamples || lastDst != m_nDstSamples)
+      return icCmmStatBadSpaceLink;
+  }
+
   return icCmmStatOk;
 }
 
@@ -2839,13 +2920,9 @@ icUInt16Number CIccPcsXform::MaxChannels()
 {
   icUInt16Number nMax = 0;
   CIccPcsStepList::const_iterator s = m_list->begin();
-  if (s==m_list->end())
-    return nMax;
-  nMax = s->ptr->GetDstChannels();
-  if (s->ptr->GetSrcChannels()>nMax)
-    nMax = s->ptr->GetSrcChannels();
-  s++;
   for (; s!= m_list->end(); s++) {
+    if (s->ptr->GetDstChannels()>nMax)
+      nMax = s->ptr->GetDstChannels();
     if (s->ptr->GetSrcChannels()>nMax)
       nMax = s->ptr->GetSrcChannels();
   }
@@ -2993,17 +3070,13 @@ void CIccPcsXform::pushXyzToLab( IIccProfileConnectionConditions *pPCC)
  */
 void CIccPcsXform::pushScale3(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3)
 {
-  CIccPcsStepScale *scale;
-  CIccPcsStepPtr ptr;
+  pushScale3Checked(v1, v2, v3);
+}
 
-  scale = new CIccPcsStepScale(3);
-  icFloatNumber *data = scale->data();
-  data[0] = v1;
-  data[1] = v2;
-  data[2] = v3;
-
-  ptr.ptr = scale;
-  m_list->push_back(ptr);
+icStatusCMM CIccPcsXform::pushScale3Checked(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3)
+{
+  icFloatNumber data[3] = { v1, v2, v3 };
+  return pushScaleChecked(3, data);
 }
 
 /**
@@ -3016,8 +3089,13 @@ void CIccPcsXform::pushScale3(icFloatNumber v1, icFloatNumber v2, icFloatNumber 
  */
 void CIccPcsXform::pushXyzToXyzIn()
 {
+  pushXyzToXyzInChecked();
+}
+
+icStatusCMM CIccPcsXform::pushXyzToXyzInChecked()
+{
   icFloatNumber scale = (icFloatNumber) (32768.0 / 65535.0);
-  pushScale3(scale, scale, scale);
+  return pushScale3Checked(scale, scale, scale);
 }
 
 
@@ -3031,8 +3109,13 @@ void CIccPcsXform::pushXyzToXyzIn()
  */
 void CIccPcsXform::pushXyzInToXyz()
 {
+  pushXyzInToXyzChecked();
+}
+
+icStatusCMM CIccPcsXform::pushXyzInToXyzChecked()
+{
   icFloatNumber scale = (icFloatNumber) (65535.0 / 32768.0);
-  return pushScale3(scale, scale, scale);
+  return pushScale3Checked(scale, scale, scale);
 }
 
 
@@ -3046,12 +3129,17 @@ void CIccPcsXform::pushXyzInToXyz()
 */
 void CIccPcsXform::pushXyzToXyzLum(IIccProfileConnectionConditions *pPCC)
 {
+  pushXyzToXyzLumChecked(pPCC);
+}
+
+icStatusCMM CIccPcsXform::pushXyzToXyzLumChecked(IIccProfileConnectionConditions *pPCC)
+{
   icFloatNumber XYZLum[3];
   pPCC->getLumIlluminantXYZ(&XYZLum[0]);
 
   icFloatNumber scale = XYZLum[1];
 
-  return pushScale3(scale, scale, scale);
+  return pushScale3Checked(scale, scale, scale);
 }
 
 
@@ -3064,6 +3152,11 @@ void CIccPcsXform::pushXyzToXyzLum(IIccProfileConnectionConditions *pPCC)
 **************************************************************************
 */
 void CIccPcsXform::pushXyzLumToXyz(IIccProfileConnectionConditions *pPCC)
+{
+  pushXyzLumToXyzChecked(pPCC);
+}
+
+icStatusCMM CIccPcsXform::pushXyzLumToXyzChecked(IIccProfileConnectionConditions *pPCC)
 {
   icFloatNumber XYZLum[3];
   pPCC->getLumIlluminantXYZ(&XYZLum[0]);
@@ -3081,7 +3174,7 @@ void CIccPcsXform::pushXyzLumToXyz(IIccProfileConnectionConditions *pPCC)
                           ? 1.0f / XYZLum[1]
                           : 1.0f;
 
-  return pushScale3(scale, scale, scale);
+  return pushScale3Checked(scale, scale, scale);
 }
 
 
@@ -3129,12 +3222,24 @@ void CIccPcsXform::pushOffset3(icFloatNumber v1, icFloatNumber v2, icFloatNumber
  */
 void CIccPcsXform::pushScale(icUInt16Number n, const icFloatNumber *vals)
 {
-  CIccPcsStepScale *scale = new CIccPcsStepScale(n);
+  pushScaleChecked(n, vals);
+}
+
+icStatusCMM CIccPcsXform::pushScaleChecked(icUInt16Number n, const icFloatNumber *vals)
+{
+  CIccPcsStepScale *scale = new (std::nothrow) CIccPcsStepScale(n);
+  if (!scale || !scale->data()) {
+    delete scale;
+    return icCmmStatAllocErr;
+  }
+
   memcpy(scale->data(), vals, n*sizeof(icFloatNumber));
   
   CIccPcsStepPtr ptr;
   ptr.ptr = scale;
   m_list->push_back(ptr);
+
+  return icCmmStatOk;
 }
 
 
@@ -3148,12 +3253,29 @@ void CIccPcsXform::pushScale(icUInt16Number n, const icFloatNumber *vals)
  */
 void CIccPcsXform::pushMatrix(icUInt16Number nRows, icUInt16Number nCols, const icFloatNumber *vals)
 {
-  CIccPcsStepMatrix *mtx = new CIccPcsStepMatrix(nRows, nCols);
+  pushMatrixChecked(nRows, nCols, vals);
+}
+
+icStatusCMM CIccPcsXform::pushMatrixChecked(icUInt16Number nRows, icUInt16Number nCols, const icFloatNumber *vals)
+{
+  if (!vals || !nRows || !nCols)
+    return icCmmStatInvalidProfile;
+
+  CIccPcsStepMatrix *mtx = new (std::nothrow) CIccPcsStepMatrix(nRows, nCols);
+  if (!mtx)
+    return icCmmStatAllocErr;
+  if (!mtx->IsValid()) {
+    delete mtx;
+    return icCmmStatAllocErr;
+  }
+
   memcpy(mtx->entry(0), vals, (size_t)nRows*nCols*sizeof(icFloatNumber));
 
   CIccPcsStepPtr ptr;
   ptr.ptr = mtx;
   m_list->push_back(ptr);
+
+  return icCmmStatOk;
 }
 
 
@@ -3204,10 +3326,13 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
           if (pMat && (!pOffset || (pOffset[0]==0.0 && pOffset[1]==0.0 && pOffset[2]==0.0))) {
             CIccPcsStepMatrix *pStepMtx = new (std::nothrow) CIccPcsStepMatrix(3, 3);
 
-            if (pStepMtx ) {
+            if (pStepMtx && pStepMtx->IsValid()) {
               memcpy(pStepMtx->entry(0,0), pMat, 9*sizeof(icFloatNumber));
+              ptr.ptr = pStepMtx;
             }
-            ptr.ptr = pStepMtx;
+            else {
+              delete pStepMtx;
+            }
           }
         }
       }
@@ -3266,10 +3391,13 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
           if (pMat && (inChannels == 3) && (outChannels == 3) && (!pOffset || offsetsZero) ) {
             CIccPcsStepMatrix *pStepMtx = new (std::nothrow) CIccPcsStepMatrix(3, 3);
 
-            if (pStepMtx ) {
+            if (pStepMtx && pStepMtx->IsValid()) {
               memcpy(pStepMtx->entry(0,0), pMat, 9*sizeof(icFloatNumber));
+              ptr.ptr = pStepMtx;
             }
-            ptr.ptr = pStepMtx;
+            else {
+              delete pStepMtx;
+            }
           }
         }
       }
@@ -3293,10 +3421,14 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
   }
 
   if (pFromXform->LuminanceMatching()) {
-    pushXyzToXyzLum(pSrcPcc);
+    icStatusCMM stat = pushXyzToXyzLumChecked(pSrcPcc);
+    if (stat != icCmmStatOk)
+      return stat;
   }
   if (pToXform->LuminanceMatching()) {
-    pushXyzLumToXyz(pDstPcc);
+    icStatusCMM stat = pushXyzLumToXyzChecked(pDstPcc);
+    if (stat != icCmmStatOk)
+      return stat;
   }
   
   return icCmmStatOk;
@@ -3317,7 +3449,9 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
   const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
   icSpectralRange observerRange;
   const icFloatNumber *observer = pView->getObserver(observerRange);
-  if (!illuminant || !observer)
+  if (!illuminant || !observer ||
+      !icIsValidSpectralRange(illuminantRange) ||
+      !icIsValidSpectralRange(observerRange))
     return icCmmStatInvalidProfile;
 
   icStatusCMM stat=icCmmStatOk;
@@ -3340,7 +3474,9 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
       return stat;
     }
   }
-  tmp.pushMatrix(3, observerRange.steps, observer);
+  if ((stat=tmp.pushMatrixChecked(3, observerRange.steps, observer))!=icCmmStatOk) {
+    return stat;
+  }
 
   CIccApplyXform *pApply = tmp.GetNewApply(stat);
   if (pApply) {
@@ -3373,11 +3509,13 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
     }
     
     //push scale factor to normalize XYZ values and correct for difference between calculated and desired XYZ
-    pushScale3(pccxyz[0] / (normxyz[0] * xyz[1]),
-               pccxyz[1] / (normxyz[1] * xyz[1]),
-               pccxyz[2] / (normxyz[2] * xyz[1]));
+    stat = pushScale3Checked(pccxyz[0] / (normxyz[0] * xyz[1]),
+                             pccxyz[1] / (normxyz[1] * xyz[1]),
+                             pccxyz[2] / (normxyz[2] * xyz[1]));
 
     delete pApply;
+    if (stat != icCmmStatOk)
+      return stat;
   }
   
   return stat;
@@ -3395,6 +3533,9 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
  */
 icStatusCMM CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
+  if (!pProfile || !icIsValidSpectralRange(pProfile->m_Header.spectralRange))
+    return icCmmStatInvalidProfile;
+
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
 
   if (pView) {
@@ -3402,7 +3543,9 @@ icStatusCMM CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnecti
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
     icSpectralRange observerRange;
     const icFloatNumber *observer = pView->getObserver(observerRange);
-    if (!illuminant || !observer)
+    if (!illuminant || !observer ||
+        !icIsValidSpectralRange(illuminantRange) ||
+        !icIsValidSpectralRange(observerRange))
       return icCmmStatInvalidProfile;
       
     icStatusCMM stat;
@@ -3410,12 +3553,16 @@ icStatusCMM CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnecti
       return stat;
     }
     
-    pushScale(illuminantRange.steps, illuminant);
+    if ((stat=pushScaleChecked(illuminantRange.steps, illuminant))!=icCmmStatOk) {
+      return stat;
+    }
     if ((stat=pushSpecToRange(illuminantRange, observerRange))!=icCmmStatOk) {
       return stat;
     }
     
-    pushMatrix(3, observerRange.steps, observer);
+    if ((stat=pushMatrixChecked(3, observerRange.steps, observer))!=icCmmStatOk) {
+      return stat;
+    }
 
     if ((stat=pushXYZNormalize(pPcc, illuminantRange, illuminantRange))!=icCmmStatOk) {
       return stat;
@@ -3436,13 +3583,29 @@ icStatusCMM CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnecti
  */
 CIccPcsStepMatrix *CIccPcsXform::rangeMap(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
+  return rangeMap(srcRange, dstRange, NULL);
+}
+
+CIccPcsStepMatrix *CIccPcsXform::rangeMap(const icSpectralRange &srcRange, const icSpectralRange &dstRange, bool *pFailed)
+{
+  if (pFailed)
+    *pFailed = false;
+
+  if (!icIsValidSpectralRange(srcRange) || !icIsValidSpectralRange(dstRange)) {
+    if (pFailed)
+      *pFailed = true;
+    return NULL;
+  }
+
   if (srcRange.steps != dstRange.steps ||
       srcRange.start != dstRange.start ||
       srcRange.end != dstRange.end) {
     CIccPcsStepMatrix *mtx = new (std::nothrow) CIccPcsStepMatrix(dstRange.steps, srcRange.steps);
-    if (!mtx || !mtx->SetRange(srcRange, dstRange))
+    if (!mtx || !mtx->IsValid() || !mtx->SetRange(srcRange, dstRange))
     {
       delete mtx;
+      if (pFailed)
+        *pFailed = true;
       return NULL;
     }
     return mtx;
@@ -3463,6 +3626,9 @@ CIccPcsStepMatrix *CIccPcsXform::rangeMap(const icSpectralRange &srcRange, const
  */
 icStatusCMM CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
+  if (!icIsValidSpectralRange(srcRange) || !icIsValidSpectralRange(dstRange))
+    return icCmmStatInvalidProfile;
+
   if (!icSameSpectralRange(srcRange, dstRange)) {
     CIccPcsStepPtr ptr;
     ptr.ptr = rangeMap(srcRange, dstRange);
@@ -3489,6 +3655,9 @@ icStatusCMM CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const
  */
 icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
+  if (!pProfile || !pPcc || !icIsValidSpectralRange(pProfile->m_Header.spectralRange))
+    return icCmmStatInvalidProfile;
+
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
 
   if (pView) {
@@ -3498,8 +3667,14 @@ icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConne
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
     if (!illuminant)
       return icCmmStatInvalidProfile;
+    if (!icIsValidSpectralRange(illuminantRange))
+      return icCmmStatInvalidProfile;
 
-    CIccPcsStepScale *pScale = new CIccPcsStepScale(illuminantRange.steps);
+    CIccPcsStepScale *pScale = new (std::nothrow) CIccPcsStepScale(illuminantRange.steps);
+    if (!pScale || !pScale->data()) {
+      delete pScale;
+      return icCmmStatAllocErr;
+    }
     memcpy(pScale->data(), illuminant, illuminantRange.steps*sizeof(icFloatNumber));
 
     if (icSameSpectralRange(pProfile->m_Header.spectralRange, illuminantRange)) {
@@ -3507,7 +3682,21 @@ icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConne
       m_list->push_back(ptr);
     }
     else {
-      ptr.ptr  = rangeMap(pProfile->m_Header.spectralRange, illuminantRange);
+      bool mapFailed = false;
+      CIccPcsStepMatrix *toIllum = rangeMap(pProfile->m_Header.spectralRange, illuminantRange, &mapFailed);
+      if (mapFailed) {
+        delete pScale;
+        return icCmmStatInvalidProfile;
+      }
+
+      CIccPcsStepMatrix *fromIllum = rangeMap(illuminantRange, pProfile->m_Header.spectralRange, &mapFailed);
+      if (mapFailed) {
+        delete toIllum;
+        delete pScale;
+        return icCmmStatInvalidProfile;
+      }
+
+      ptr.ptr = toIllum;
       if (ptr.ptr) {
         m_list->push_back(ptr);
       }
@@ -3515,7 +3704,7 @@ icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConne
       ptr.ptr = pScale;
       m_list->push_back(ptr);
 
-      ptr.ptr = rangeMap(illuminantRange, pProfile->m_Header.spectralRange);
+      ptr.ptr = fromIllum;
       if (ptr.ptr)
         m_list->push_back(ptr);
     }
@@ -3536,6 +3725,9 @@ icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConne
  */
 icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry)
 {
+  if (!pProfile || !icIsValidSpectralRange(pProfile->m_Header.spectralRange))
+    return icCmmStatInvalidProfile;
+
   const CIccTagSpectralViewingConditions *pProfView = pProfile ? pProfile->getPccViewingConditions() : NULL;
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
   if (pProfView && pView) {
@@ -3562,8 +3754,10 @@ icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnecti
       if (!obs)
         return icCmmStatInvalidProfile;
 
-      pushMatrix(3, pProfile->m_Header.spectralRange.steps, obs);
+      icStatusCMM stat = pushMatrixChecked(3, pProfile->m_Header.spectralRange.steps, obs);
       free(obs);
+      if (stat!=icCmmStatOk)
+        return stat;
     }
     else {
       icStatusCMM stat;
@@ -3571,7 +3765,9 @@ icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnecti
         return stat;
       }
     
-      pushMatrix(3, observerRange.steps, observer);
+      if ((stat=pushMatrixChecked(3, observerRange.steps, observer))!=icCmmStatOk) {
+        return stat;
+      }
     }
     icFloatNumber k;
     if (bAbsoluteCIEColorimetry) {
@@ -3584,7 +3780,7 @@ icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnecti
       else
         k = 1.0;
     }
-    pushScale3(k, k, k);
+    return pushScale3Checked(k, k, k);
   }
   return icCmmStatOk;
 }
@@ -3601,6 +3797,11 @@ icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnecti
  */
 icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
+  if (!pProfile ||
+      !icIsValidSpectralRange(pProfile->m_Header.spectralRange) ||
+      !icIsValidSpectralRange(pProfile->m_Header.biSpectralRange))
+    return icCmmStatInvalidProfile;
+
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
 
   if (pView) {
@@ -3608,21 +3809,30 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
     const icFloatNumber *illuminant = pView->getIlluminant(illuminantRange);
     if (!illuminant)
       return icCmmStatProfileMissingTag;
+    if (!icIsValidSpectralRange(illuminantRange))
+      return icCmmStatInvalidProfile;
 
     if (icGetColorSpaceType(pProfile->m_Header.spectralPCS)==icSigSparseMatrixSpectralPcsData) {
       CIccPcsStepSrcSparseMatrix *pMtx = new (std::nothrow) CIccPcsStepSrcSparseMatrix(pProfile->m_Header.spectralRange.steps,
                   pProfile->m_Header.biSpectralRange.steps,
                   (icUInt16Number)icGetSpaceSamples((icColorSpaceSignature)pProfile->m_Header.spectralPCS));
-      if (!pMtx)
+      if (!pMtx || !pMtx->data()) {
+        delete pMtx;
         return icCmmStatAllocErr;
+      }
 
-      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange);
+      bool mapFailed = false;
+      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange, &mapFailed);
       if (illumMtx) {
         illumMtx->Apply(NULL, pMtx->data(), illuminant);
         delete illumMtx; 
       }
+      else if (!mapFailed && icSameSpectralRange(illuminantRange, pProfile->m_Header.biSpectralRange)) {
+        memcpy(pMtx->data(), illuminant, pProfile->m_Header.biSpectralRange.steps*sizeof(icFloatNumber));
+      }
       else {
-        memcpy(pMtx->data(), illuminant, illuminantRange.steps*sizeof(icFloatNumber));
+        delete pMtx;
+        return icCmmStatInvalidProfile;
       }
 
       CIccPcsStepPtr ptr;
@@ -3631,17 +3841,28 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
 
     }
     else {
-      CIccPcsStepSrcMatrix *pMtx = new (std::nothrow) CIccPcsStepSrcMatrix(pProfile->m_Header.spectralRange.steps, pProfile->m_Header.biSpectralRange.steps);
-      if (!pMtx)
-        return icCmmStatAllocErr;
+      if (!pProfile->m_Header.spectralRange.steps ||
+          !pProfile->m_Header.biSpectralRange.steps)
+        return icCmmStatInvalidProfile;
 
-      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange);
+      CIccPcsStepSrcMatrix *pMtx = new (std::nothrow) CIccPcsStepSrcMatrix(pProfile->m_Header.spectralRange.steps, pProfile->m_Header.biSpectralRange.steps);
+      if (!pMtx || !pMtx->data()) {
+        delete pMtx;
+        return icCmmStatAllocErr;
+      }
+
+      bool mapFailed = false;
+      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange, &mapFailed);
       if (illumMtx) {
         illumMtx->Apply(NULL, pMtx->data(), illuminant);
         delete illumMtx; 
       }
+      else if (!mapFailed && icSameSpectralRange(illuminantRange, pProfile->m_Header.biSpectralRange)) {
+        memcpy(pMtx->data(), illuminant, pProfile->m_Header.biSpectralRange.steps*sizeof(icFloatNumber));
+      }
       else {
-        memcpy(pMtx->data(), illuminant, illuminantRange.steps*sizeof(icFloatNumber));
+        delete pMtx;
+        return icCmmStatInvalidProfile;
       }
 
       CIccPcsStepPtr ptr;
@@ -3668,6 +3889,11 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
  */
 icStatusCMM CIccPcsXform::pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
+  if (!pProfile ||
+      !icIsValidSpectralRange(pProfile->m_Header.spectralRange) ||
+      !icIsValidSpectralRange(pProfile->m_Header.biSpectralRange))
+    return icCmmStatInvalidProfile;
+
   icStatusCMM stat = pushBiRef2Rad(pProfile, pPcc);
   if (stat!=icCmmStatOk)
     return stat;
@@ -3684,7 +3910,9 @@ icStatusCMM CIccPcsXform::pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnec
       return stat;
     }
     
-    pushMatrix(3, observerRange.steps, observer);
+    if ((stat=pushMatrixChecked(3, observerRange.steps, observer))!=icCmmStatOk) {
+      return stat;
+    }
     if ((stat=pushXYZNormalize(pPcc, pProfile->m_Header.biSpectralRange, pProfile->m_Header.spectralRange))!=icCmmStatOk) {
       return stat;
     }
@@ -3723,9 +3951,10 @@ icStatusCMM CIccPcsXform::pushBiRef2Ref(CIccProfile *pProfile, IIccProfileConnec
 
     CIccPcsStepScale *pScale = new (std::nothrow) CIccPcsStepScale(pProfile->m_Header.spectralRange.steps);
 
-    if (pScale) {
+    if (pScale && pScale->data()) {
       icFloatNumber *pData = pScale->data();
-      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.spectralRange);
+      bool mapFailed = false;
+      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.spectralRange, &mapFailed);
       int i;
 
       if (illumMtx) {
@@ -3736,18 +3965,24 @@ icStatusCMM CIccPcsXform::pushBiRef2Ref(CIccProfile *pProfile, IIccProfileConnec
         delete illumMtx;
 
       }
-      else {
+      else if (!mapFailed && icSameSpectralRange(illuminantRange, pProfile->m_Header.spectralRange)) {
         for (i=0; i<pProfile->m_Header.spectralRange.steps; i++) {
           pData[i] = 1.0f / illuminant[i];
         }
+      }
+      else {
+        delete pScale;
+        return icCmmStatInvalidProfile;
       }
 
       CIccPcsStepPtr ptr;
       ptr.ptr = pScale;
       m_list->push_back(ptr);
     }
-    else
+    else {
+      delete pScale;
       return icCmmStatAllocErr;
+    }
   }
   else
     return icCmmStatBadConnection;
@@ -4570,7 +4805,7 @@ bool CIccPcsStepOffset::isIdentity() const
 CIccPcsStepScale::CIccPcsStepScale(icUInt16Number nChannels)
 {
   m_nChannels = nChannels;
-  m_vals = new icFloatNumber[nChannels];
+  m_vals = new (std::nothrow) icFloatNumber[nChannels];
 }
 
 
@@ -4648,11 +4883,15 @@ CIccPcsStepScale *CIccPcsStepScale::Mult(const CIccPcsStepScale *scale) const
 
   CIccPcsStepScale *pNew = new (std::nothrow) CIccPcsStepScale(m_nChannels);
 
-  if (pNew) {
+  if (pNew && pNew->data()) {
     int i;
     for (i=0; i<m_nChannels; i++) {
       pNew->m_vals[i] = m_vals[i] * scale->m_vals[i]; 
     }
+  }
+  else {
+    delete pNew;
+    pNew = NULL;
   }
   return pNew;
 }
@@ -4673,15 +4912,18 @@ CIccPcsStepMatrix *CIccPcsStepScale::Mult(const CIccPcsStepMatrix *matrix) const
 
   CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(matrix->GetDstChannels(), matrix->GetSrcChannels());
 
-  if (pNew) {
-    int i, j;
-    for (j=0; j<matrix->GetDstChannels(); j++) {
-      const icFloatNumber *row = matrix->entry(j);
-      icFloatNumber *to=pNew->entry(j);
+  if (!pNew || !pNew->IsValid()) {
+    delete pNew;
+    return NULL;
+  }
 
-      for (i=0; i<m_nChannels; i++) {
-        to[i] = m_vals[i] * row[i]; 
-      }
+  int i, j;
+  for (j=0; j<matrix->GetDstChannels(); j++) {
+    const icFloatNumber *row = matrix->entry(j);
+    icFloatNumber *to=pNew->entry(j);
+
+    for (i=0; i<m_nChannels; i++) {
+      to[i] = m_vals[i] * row[i];
     }
   }
 
@@ -4704,16 +4946,19 @@ CIccPcsStepMatrix *CIccPcsStepScale::Mult(const CIccMpeMatrix *matrix) const
 
   CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(matrix->NumOutputChannels(), matrix->NumInputChannels());
 
-  if (pNew) {
-    int i, j;
-    icFloatNumber *mtx = matrix->GetMatrix();
-    for (j = 0; j < matrix->NumOutputChannels(); j++) {
-      const icFloatNumber *row = &mtx[j*matrix->NumInputChannels()];
-      icFloatNumber *to = pNew->entry(j);
+  if (!pNew || !pNew->IsValid()) {
+    delete pNew;
+    return NULL;
+  }
 
-      for (i = 0; i < m_nChannels; i++) {
-        to[i] = m_vals[i] * row[i];
-      }
+  int i, j;
+  icFloatNumber *mtx = matrix->GetMatrix();
+  for (j = 0; j < matrix->NumOutputChannels(); j++) {
+    const icFloatNumber *row = &mtx[j*matrix->NumInputChannels()];
+    icFloatNumber *to = pNew->entry(j);
+
+    for (i = 0; i < m_nChannels; i++) {
+      to[i] = m_vals[i] * row[i];
     }
   }
 
@@ -4803,17 +5048,23 @@ CIccPcsStepMatrix *CIccPcsStepMatrix::Mult(const CIccPcsStepScale *scale) const
   if (m_nRows != mCols)
     return NULL;
 
+  if (!IsValid() || !scale->data())
+    return NULL;
+
   CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(m_nRows, m_nCols);
   const icFloatNumber *data = scale->data();
 
-  if (pNew) {
-    int i, j;
-    for (j=0; j<m_nRows; j++) {
-      const icFloatNumber *row = entry(j);
-      icFloatNumber *to = pNew->entry(j);
-      for (i=0; i<m_nCols; i++) {
-        to[i] = data[j] * row[i];
-      }
+  if (!pNew || !pNew->IsValid()) {
+    delete pNew;
+    return NULL;
+  }
+
+  int i, j;
+  for (j=0; j<m_nRows; j++) {
+    const icFloatNumber *row = entry(j);
+    icFloatNumber *to = pNew->entry(j);
+    for (i=0; i<m_nCols; i++) {
+      to[i] = data[j] * row[i];
     }
   }
 
@@ -4837,21 +5088,27 @@ CIccPcsStepMatrix *CIccPcsStepMatrix::Mult(const CIccPcsStepMatrix *matrix) cons
   if (m_nRows != mCols)
     return NULL;
 
+  if (!IsValid() || !matrix->IsValid())
+    return NULL;
+
   CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(mRows, m_nCols);
 
-  if (pNew) {
-    int i, j, k;
-    for (j=0; j<mRows; j++) {
-      const icFloatNumber *row = matrix->entry(j);
-      for (i=0; i<m_nCols; i++) {
-        icFloatNumber *to = pNew->entry(j, i);
-        const icFloatNumber *from = entry(0, i);
+  if (!pNew || !pNew->IsValid()) {
+    delete pNew;
+    return NULL;
+  }
 
-        *to = 0.0f;
-        for (k=0; k<m_nRows; k++) {
-          *to += row[k] * (*from);
-          from += m_nCols;
-        }
+  int i, j, k;
+  for (j=0; j<mRows; j++) {
+    const icFloatNumber *row = matrix->entry(j);
+    for (i=0; i<m_nCols; i++) {
+      icFloatNumber *to = pNew->entry(j, i);
+      const icFloatNumber *from = entry(0, i);
+
+      *to = 0.0f;
+      for (k=0; k<m_nRows; k++) {
+        *to += row[k] * (*from);
+        from += m_nCols;
       }
     }
   }
@@ -5094,7 +5351,7 @@ CIccPcsStepSrcMatrix::CIccPcsStepSrcMatrix(icUInt16Number nRows, icUInt16Number 
 {
   m_nRows = nRows;
   m_nCols = nCols;
-  m_vals = new icFloatNumber[nCols];
+  m_vals = new (std::nothrow) icFloatNumber[nCols];
 }
 
 
@@ -5240,7 +5497,7 @@ CIccPcsStepSrcSparseMatrix::CIccPcsStepSrcSparseMatrix(icUInt16Number nRows, icU
   m_nChannels = nChannels;
   m_nBytesPerMatrix = nChannels * sizeof(icFloatNumber);
 
-  m_vals = new icFloatNumber[nCols];
+  m_vals = new (std::nothrow) icFloatNumber[nCols];
 }
 
 
@@ -5270,6 +5527,11 @@ CIccPcsStepSrcSparseMatrix::~CIccPcsStepSrcSparseMatrix()
 void CIccPcsStepSrcSparseMatrix::Apply(CIccApplyPcsStep * /* pApply */, icFloatNumber *pDst, const icFloatNumber *pSrc) const
 {
   CIccSparseMatrix mtx((icUInt8Number*)pSrc, m_nBytesPerMatrix, icSparseMatrixFloatNum, true);
+
+  if (!mtx.IsValid() || mtx.Rows() != m_nRows || mtx.Cols() != m_nCols) {
+    memset(pDst, 0, m_nRows * sizeof(icFloatNumber));
+    return;
+  }
 
   mtx.MultiplyVector(pDst, m_vals);
 }
@@ -9221,6 +9483,27 @@ icStatusCMM CIccCmm::CheckPCSConnections(bool bUsePCSConversions/*=false*/)
   return rv;
 }
 
+icStatusCMM CIccCmm::CheckXformSampleCounts()
+{
+  bool havePrev = false;
+  icUInt16Number prevDst = 0;
+
+  for (CIccXformList::iterator i = m_Xforms->begin(); i != m_Xforms->end(); i++) {
+    icUInt16Number src = i->ptr->GetNumSrcSamples();
+    icUInt16Number dst = i->ptr->GetNumDstSamples();
+
+    if ((i->ptr->GetSrcSpace() != icSigNamedData && !src) ||
+        (i->ptr->GetDstSpace() != icSigNamedData && !dst) ||
+        (havePrev && prevDst != src))
+      return icCmmStatBadSpaceLink;
+
+    prevDst = dst;
+    havePrev = true;
+  }
+
+  return icCmmStatOk;
+}
+
 icStatusCMM CIccCmm::CheckPCSRangeConversions()
 {
   icStatusCMM rv = icCmmStatOk;
@@ -9397,6 +9680,10 @@ icStatusCMM CIccCmm::Begin(bool bAllocApplyCmm/*=true*/, bool bUsePCSConversions
 
   rv = CheckPCSConnections(bUsePCSConversions);
   if (rv != icCmmStatOk && rv!=icCmmStatIdentityXform)
+    return rv;
+
+  rv = CheckXformSampleCounts();
+  if (rv != icCmmStatOk)
     return rv;
 
   // Make sure the output channel and last transform output counts match.
@@ -11531,9 +11818,14 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   SetLateBindingCC();
 
   icStatusCMM rv;
-  CIccXformList::iterator i;
+  CIccXformList::iterator i = m_Xforms->begin();
 
-  for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
+  if (m_nSrcSpace != icSigNamedData && i != m_Xforms->end()) {
+    if (i->ptr->GetNumSrcSamples() != GetSourceSamples())
+      return icCmmStatBadSpaceLink;
+  }
+
+  for (; i!=m_Xforms->end(); i++) {
     rv = i->ptr->Begin();
 
     if (rv!= icCmmStatOk) {
@@ -11544,6 +11836,16 @@ icStatusCMM CIccNamedColorCmm::AddXform(CIccProfile *pProfile,
   rv = CheckPCSConnections(bUsePcsConversion);
   if (rv != icCmmStatOk && rv!=icCmmStatIdentityXform)
     return rv;
+
+  rv = CheckXformSampleCounts();
+  if (rv != icCmmStatOk)
+    return rv;
+
+  if (m_nDestSpace != icSigNamedData) {
+    CIccXform *pLastXform = GetLastXform();
+    if (pLastXform && pLastXform->GetNumDstSamples() != GetDestSamples())
+      return icCmmStatBadSpaceLink;
+  }
 
   if (bAllocNewApply) {
     rv = icCmmStatOk;

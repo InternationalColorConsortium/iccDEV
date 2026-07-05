@@ -39,18 +39,25 @@ Use this skill for repeatable maintainer operations in
 6. For an issue, reproduce with existing project tools and saved inputs.
 7. Rebuild the affected target, then run the focused regression and registered
    CTest wrapper.
-8. Run broader CTest or GCC strict parity only after the focused check passes.
-9. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
-10. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
+8. For local PR proof, mount the reviewed worktree read-only into the published
+   image and run the Docker PR verification build (`iccDumpProfile` with the
+   strict Clang sanitizer flags) before handoff.
+9. Build the affected tool and `build-test-binaries` inside the same image when
+   the PR-specific behavior is outside `iccDumpProfile`, then run the focused
+   CTest wrapper.
+10. Run broader CTest or GCC 15.2 strict parity only after the focused check
+    passes.
+11. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
+12. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-11. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
+13. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
     `ci-qa-flags`; carry every applicable container fix to both branches.
-12. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
-13. Promote the verified immutable digest to `latest` only after all image smoke
+14. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
+15. Promote the verified immutable digest to `latest` only after all image smoke
     tests and regression CTest checks succeed: automatically from `master`, or
     explicitly from the protected Docker-testing branch with
     `publish-regression-latest=true`. Never promote it from other branches.
-14. Report exact image tag, digest, source revision, commands, results, evidence,
+16. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
 
 ## Safety Gates

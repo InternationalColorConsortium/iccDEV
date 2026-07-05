@@ -428,7 +428,7 @@ int main(int argc, const char** argv)
       printf("Error - %s\n", sConnectError.c_str());
     else
       printf("Error - Unable to begin profile application - Possibly invalid or incompatible profiles\n");
-    return -1;
+    return 1;
   }
 
   CIccCmm* pTheCmm = pConnect->GetCmm();

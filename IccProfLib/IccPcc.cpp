@@ -75,6 +75,7 @@
 #include "IccProfile.h"
 #include "IccTag.h"
 #include "IccCmm.h"
+#include <new>
 
 static bool icCanMapSpectralRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
@@ -189,11 +190,16 @@ icFloatNumber IIccProfileConnectionConditions::getObserverIlluminantScaleFactor(
     return 1.0;
 
   int i, n = illumRange.steps;
-  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, illumRange);
+  bool mapFailed = false;
+  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, illumRange, &mapFailed);
   icFloatNumber rv=0;
 
   if (mapRange) {
-    icFloatNumber *Ycmf = new icFloatNumber[illumRange.steps];
+    icFloatNumber *Ycmf = new (std::nothrow) icFloatNumber[illumRange.steps];
+    if (!Ycmf) {
+      delete mapRange;
+      return 1.0;
+    }
     mapRange->VectorMult(Ycmf, &obs[obsRange.steps]);
     delete mapRange;
 
@@ -202,13 +208,15 @@ icFloatNumber IIccProfileConnectionConditions::getObserverIlluminantScaleFactor(
     }
     delete [] Ycmf;
   }
-  else {
+  else if (!mapFailed && obsRange.steps == illumRange.steps) {
    const icFloatNumber *Ycmf = &obs[obsRange.steps];
 
     for (i=0; i<n; i++) {
       rv += Ycmf[i]*illum[i];
     }
   }
+  else
+    return 1.0;
   return rv;
 }
 
@@ -228,11 +236,16 @@ icFloatNumber IIccProfileConnectionConditions::getObserverWhiteScaleFactor(const
     return 1.0;
 
   int i, n = whiteRange.steps;
-  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, whiteRange);
+  bool mapFailed = false;
+  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, whiteRange, &mapFailed);
   icFloatNumber rv=0;
 
   if (mapRange) {
-    icFloatNumber *Ycmf = new icFloatNumber[whiteRange.steps];
+    icFloatNumber *Ycmf = new (std::nothrow) icFloatNumber[whiteRange.steps];
+    if (!Ycmf) {
+      delete mapRange;
+      return 1.0;
+    }
     mapRange->VectorMult(Ycmf, &obs[obsRange.steps]);
     delete mapRange;
 
@@ -241,13 +254,15 @@ icFloatNumber IIccProfileConnectionConditions::getObserverWhiteScaleFactor(const
     }
     delete [] Ycmf;
   }
-  else {
+  else if (!mapFailed && obsRange.steps == whiteRange.steps) {
     const icFloatNumber *Ycmf = &obs[obsRange.steps];
 
     for (i=0; i<n; i++) {
       rv += Ycmf[i]*pWhite[i];
     }
   }
+  else
+    return 1.0;
   return rv;
 }
 
@@ -276,7 +291,8 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
     obs = (icFloatNumber*)malloc(size*sizeof(icFloatNumber));
 
   if (obs) {
-    CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(observerRange, range);
+    bool mapFailed = false;
+    CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(observerRange, range, &mapFailed);
 
     //Copy observer while adjusting to range
     if (mapRange) {
@@ -289,8 +305,13 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
         }
         delete mapRange;
     }
-    else {
+    else if (!mapFailed && observerRange.steps == range.steps) {
       memcpy(obs, observer, size*sizeof(icFloatNumber));
+    }
+    else {
+      if (allocObs)
+        free(obs);
+      return NULL;
     }
 
     //Calculate scale constant 
@@ -312,6 +333,11 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
     }
 
     CIccMatrixMath observerMtx(3,range.steps);
+    if (!observerMtx.IsValid()) {
+      if (allocObs)
+        free(obs);
+      return NULL;
+    }
     memcpy(observerMtx.entry(0), obs, size*sizeof(icFloatNumber));
 
     icFloatNumber xyz[3];
@@ -334,7 +360,10 @@ CIccMatrixMath *IIccProfileConnectionConditions::getReflectanceObserver(const ic
   if (!illum || !rangeRef.steps || !illumRange.steps || !icCanMapSpectralRange(rangeRef, illumRange))
     return NULL;
 
-  pMtx = CIccMatrixMath::rangeMap(rangeRef, illumRange);
+  bool mapFailed = false;
+  pMtx = CIccMatrixMath::rangeMap(rangeRef, illumRange, &mapFailed);
+  if (mapFailed)
+    return NULL;
   if (pMtx)
     pAdjust = pMtx;
 
@@ -344,16 +373,19 @@ CIccMatrixMath *IIccProfileConnectionConditions::getReflectanceObserver(const ic
     return NULL;
   }
 
+  pMtx->VectorScale(illum);
+
   if (pAdjust) {
-    pMtx = pAdjust->Mult(pMtx);
+    CIccMatrixMath *pCombined = pAdjust->Mult(pMtx);
+    delete pMtx;
     delete pAdjust;
+    pMtx = pCombined;
   }
   pAdjust = pMtx;
 
   if (!pAdjust)
     return NULL;
 
-  pAdjust->VectorScale(illum);
   icFloatNumber rowSum = pAdjust->RowSum(1);
   if (!icNotZero(rowSum)) {
     delete pAdjust;

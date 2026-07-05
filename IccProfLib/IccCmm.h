@@ -972,7 +972,12 @@ public:
   virtual ~CIccPcsStepSrcMatrix();
 
   virtual void Apply(CIccApplyPcsStep *pApply, icFloatNumber *pDst, const icFloatNumber *pSrc) const;
-  virtual icUInt16Number GetSrcChannels() const { return m_nCols; }
+  virtual icUInt16Number GetSrcChannels() const
+  {
+    if (!m_nRows || m_nCols > (icUInt16Number)(0xffff / m_nRows))
+      return 0;
+    return (icUInt16Number)(m_nRows * m_nCols);
+  }
   virtual icUInt16Number GetDstChannels() const { return m_nRows; }
 
   icFloatNumber *data() { return m_vals;}
@@ -1022,7 +1027,7 @@ public:
   virtual ~CIccPcsStepSrcSparseMatrix();
 
   virtual void Apply(CIccApplyPcsStep *pApply, icFloatNumber *pDst, const icFloatNumber *pSrc) const;
-  virtual icUInt16Number GetSrcChannels() const { return m_nCols; }
+  virtual icUInt16Number GetSrcChannels() const { return m_nChannels; }
   virtual icUInt16Number GetDstChannels() const { return m_nRows; }
 
   icFloatNumber *data() { return m_vals;}
@@ -1106,6 +1111,7 @@ public:
   icUInt16Number MaxChannels();
 
   static CIccPcsStepMatrix *rangeMap(const icSpectralRange &srcRange, const icSpectralRange &dstRange);
+  static CIccPcsStepMatrix *rangeMap(const icSpectralRange &srcRange, const icSpectralRange &dstRange, bool *pFailed);
 
 protected:
 
@@ -1119,10 +1125,15 @@ protected:
   void pushLabToXyz(IIccProfileConnectionConditions *pPCC);
   void pushXyzToLab(IIccProfileConnectionConditions *pPCC);
   void pushXyzToXyzIn();
+  icStatusCMM pushXyzToXyzInChecked();
   void pushXyzInToXyz();
+  icStatusCMM pushXyzInToXyzChecked();
   void pushXyzToXyzLum(IIccProfileConnectionConditions *pPCC);
+  icStatusCMM pushXyzToXyzLumChecked(IIccProfileConnectionConditions *pPCC);
   void pushXyzLumToXyz(IIccProfileConnectionConditions *pPCC);
+  icStatusCMM pushXyzLumToXyzChecked(IIccProfileConnectionConditions *pPCC);
   void pushScale3(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3);
+  icStatusCMM pushScale3Checked(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3);
   void pushOffset3(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3, bool bConvertIntXyzOffset=true);
   icStatusCMM pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange);
@@ -1132,7 +1143,9 @@ protected:
   icStatusCMM pushBiRef2Ref(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   void pushScale(icUInt16Number n, const icFloatNumber *vals);
+  icStatusCMM pushScaleChecked(icUInt16Number n, const icFloatNumber *vals);
   void pushMatrix(icUInt16Number nRows, icUInt16Number nCols, const icFloatNumber *vals);
+  icStatusCMM pushMatrixChecked(icUInt16Number nRows, icUInt16Number nCols, const icFloatNumber *vals);
   void pushMatrixTransverse(icUInt16Number nRows, icUInt16Number nCols, icFloatNumber *vals);
   icStatusCMM pushXYZConvert(CIccXform *pSrcXform, CIccXform *pDstXform);
   icStatusCMM pushXYZNormalize(IIccProfileConnectionConditions *pPcc, const icSpectralRange &srcRange, const icSpectralRange &dstRange);
@@ -1143,7 +1156,6 @@ protected:
 
   icColorSpaceSignature m_dstSpace;
   icUInt16Number m_nDstSamples;
-
   CIccPcsStepList *m_list;
 };
 
@@ -1448,8 +1460,10 @@ public:
 
   ///Returns the source color space of the transform
   icColorSpaceSignature GetSrcSpace() const { return m_nSrcSpace; }
+  virtual icUInt16Number GetNumSrcSamples() const { return (icUInt16Number)icGetSpaceSamples(m_nSrcSpace); }
   ///Returns the destination color space of the transform
   icColorSpaceSignature GetDstSpace() const { return m_nDestSpace; }
+  virtual icUInt16Number GetNumDstSamples() const { return (icUInt16Number)icGetSpaceSamples(m_nDestSpace); }
 
   ///Checks if the source space of the transform is PCS
   bool IsSrcPCS() const;
@@ -1822,6 +1836,7 @@ protected:
 
   icStatusCMM CheckPCSRangeConversions();
   icStatusCMM CheckPCSConnections(bool bUsePCSConversions=false);
+  icStatusCMM CheckXformSampleCounts();
 
   CIccApplyCmm *m_pApply;
 

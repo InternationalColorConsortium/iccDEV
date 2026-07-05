@@ -12584,7 +12584,8 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
   icFloatNumber *rv = (icFloatNumber*)malloc(n*sizeof(icFloatNumber));
 
   if (rv) {
-    CIccMatrixMath *range = CIccMatrixMath::rangeMap(m_observerRange, newRange);
+    bool mapFailed = false;
+    CIccMatrixMath *range = CIccMatrixMath::rangeMap(m_observerRange, newRange, &mapFailed);
     if (range) {
       range->VectorMult(rv, m_observer);
       range->VectorMult(&rv[newRange.steps], &m_observer[m_observerRange.steps]);
@@ -12592,11 +12593,11 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
       delete range;
     }
     else {
-      if ( m_observerRange.steps > newRange.steps) {
+      if (mapFailed || !icSameSpectralRange(m_observerRange, newRange)) {
         free(rv);
         return NULL;
       }
-      memcpy(rv, m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
+      memcpy(rv, m_observer, newRange.steps*3*sizeof(icFloatNumber));
     }
   }
 
@@ -12610,9 +12611,14 @@ CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpec
   if (!observer || !observerRange.steps || !newRange.steps)
     return NULL;
 
-  CIccMatrixMath *pMtx=new CIccMatrixMath(3, newRange.steps);
+  CIccMatrixMath *pMtx=new (std::nothrow) CIccMatrixMath(3, newRange.steps);
+  if (!pMtx || !pMtx->IsValid()) {
+    delete pMtx;
+    return NULL;
+  }
 
-  CIccMatrixMath *range = CIccPcsXform::rangeMap(observerRange, newRange);
+  bool mapFailed = false;
+  CIccMatrixMath *range = CIccPcsXform::rangeMap(observerRange, newRange, &mapFailed);
   if (range) {
     range->VectorMult(pMtx->entry(0), observer);
     range->VectorMult(pMtx->entry(1), &observer[observerRange.steps]);
@@ -12620,11 +12626,11 @@ CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpec
     delete range;
   }
   else {
-    if ( observerRange.steps > newRange.steps) {
+    if (mapFailed || !icSameSpectralRange(observerRange, newRange)) {
       delete pMtx;
       return NULL;
     }
-    memcpy(pMtx->entry(0), observer, observerRange.steps*3*sizeof(icFloatNumber));
+    memcpy(pMtx->entry(0), observer, newRange.steps*3*sizeof(icFloatNumber));
   }
 
   return pMtx;

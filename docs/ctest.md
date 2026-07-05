@@ -156,6 +156,7 @@ before running the suite.
 | `iccdev.issue-1178-fromcube-devnull` | `.github/scripts/iccdev-issue-1178-fromcube-devnull-regression.sh` |
 | `iccdev.issue-1179-fromcube-regression` | `.github/scripts/iccdev-issue-1179-fromcube-regression.sh` |
 | `iccdev.issue-1379-fromcube-conformance` | `.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh` |
+| `iccdev.applyprofiles-spectral-pcs-regression` | `.github/scripts/iccdev-applyprofiles-spectral-pcs-regression.sh` |
 | `iccdev.issue-1729-spectral-data-info-sig` | `.github/scripts/iccdev-issue-1729-spectral-data-info-sig.sh` |
 | `iccdev.issue-1730-applytolink-pseq-desc` | `.github/scripts/iccdev-issue-1730-applytolink-pseq-desc.sh` |
 | `iccdev.ncl2-nonul-ascii-regression` | `.github/scripts/iccdev-ncl2-nonul-ascii-regression.sh` |

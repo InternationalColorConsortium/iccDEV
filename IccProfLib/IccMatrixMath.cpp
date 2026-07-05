@@ -12,7 +12,7 @@
  * The ICC Software License, Version 0.2
  *
  *
- * Copyright (c) 2003-2015 The International Color Consortium. All rights 
+ * Copyright (c) 2003-2015 The International Color Consortium. All rights
  * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -20,7 +20,7 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
@@ -48,20 +48,20 @@
  * ====================================================================
  *
  * This software consists of voluntary contributions made by many
- * individuals on behalf of the The International Color Consortium. 
+ * individuals on behalf of the The International Color Consortium.
  *
  *
  * Membership in the ICC is encouraged when this software is used for
- * commercial purposes. 
+ * commercial purposes.
  *
- *  
+ *
  * For more information on The International Color Consortium, please
  * see <http://www.color.org/>.
- *  
- * 
+ *
+ *
  */
 
-////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////
 // HISTORY:
 //
 // -Initial implementation by Max Derhak 5-15-2003
@@ -79,27 +79,51 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <new>
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
 
+static const size_t icMaxMatrixMathEntries = 0x1000000;
+
+static bool icCanAllocateMatrixMath(icUInt16Number nRows, icUInt16Number nCols)
+{
+  return nRows && nCols && (size_t)nRows <= icMaxMatrixMathEntries / nCols;
+}
+
+static bool icIsValidMatrixSpectralRange(const icSpectralRange &range)
+{
+  icFloatNumber start = icF16toF(range.start);
+  icFloatNumber end = icF16toF(range.end);
+
+  return range.steps >= 2 &&
+         std::isfinite(start) &&
+         std::isfinite(end) &&
+         end > start;
+}
+
 /**
 **************************************************************************
 * Name: CIccMatrixMath::CIccMatrixMath
-* 
-* Purpose: 
+*
+* Purpose:
 *  Constructor
 **************************************************************************
 */
 CIccMatrixMath::CIccMatrixMath(icUInt16Number nRows, icUInt16Number nCols, bool bInitIdentity/* =false */)
 {
-  int nTotal = nRows * nCols;
+  size_t nTotal = (size_t)nRows * nCols;
   int nMin = nRows<nCols ? nRows : nCols;
 
   m_nRows = nRows;
   m_nCols = nCols;
-  m_vals = new icFloatNumber[nTotal];
+  m_vals = icCanAllocateMatrixMath(nRows, nCols) ? new (std::nothrow) icFloatNumber[nTotal] : NULL;
+  if (!m_vals) {
+    m_nRows = 0;
+    m_nCols = 0;
+    return;
+  }
   if (bInitIdentity) {
     memset(m_vals, 0, nTotal * sizeof(icFloatNumber));
     int i;
@@ -114,17 +138,22 @@ CIccMatrixMath::CIccMatrixMath(icUInt16Number nRows, icUInt16Number nCols, bool 
 /**
 **************************************************************************
 * Name: CIccMatrixMath::CIccMatrixMath
-* 
-* Purpose: 
+*
+* Purpose:
 *  Copy Constructor
 **************************************************************************
 */
 CIccMatrixMath::CIccMatrixMath(const CIccMatrixMath &matrix)
 {
-  int nTotal = matrix.m_nRows * matrix.m_nCols;
+  size_t nTotal = (size_t)matrix.m_nRows * matrix.m_nCols;
   m_nRows = matrix.m_nRows;
   m_nCols = matrix.m_nCols;
-  m_vals = new icFloatNumber[nTotal];
+  m_vals = matrix.m_vals && icCanAllocateMatrixMath(m_nRows, m_nCols) ? new (std::nothrow) icFloatNumber[nTotal] : NULL;
+  if (!m_vals) {
+    m_nRows = 0;
+    m_nCols = 0;
+    return;
+  }
   memcpy(m_vals, matrix.m_vals, nTotal*sizeof(icFloatNumber));
 }
 
@@ -145,10 +174,20 @@ CIccMatrixMath &CIccMatrixMath::operator=(const CIccMatrixMath &matrix)
   if (this == &matrix)
     return *this;
 
-  int nTotal = matrix.m_nRows * matrix.m_nCols;
+  if (!matrix.IsValid()) {
+    delete[] m_vals;
+    m_vals = NULL;
+    m_nRows = 0;
+    m_nCols = 0;
+    return *this;
+  }
+
+  size_t nTotal = (size_t)matrix.m_nRows * matrix.m_nCols;
   // Allocate the replacement before releasing the old buffer so a failed
   // allocation leaves this object unchanged (strong exception guarantee).
-  icFloatNumber *vals = new icFloatNumber[nTotal];
+  icFloatNumber *vals = matrix.m_vals && icCanAllocateMatrixMath(matrix.m_nRows, matrix.m_nCols) ? new (std::nothrow) icFloatNumber[nTotal] : NULL;
+  if (!vals)
+    return *this;
   memcpy(vals, matrix.m_vals, nTotal*sizeof(icFloatNumber));
 
   delete[] m_vals;
@@ -163,8 +202,8 @@ CIccMatrixMath &CIccMatrixMath::operator=(const CIccMatrixMath &matrix)
 /**
 **************************************************************************
 * Name: CIccMatrixMath::~CIccMatrixMath
-* 
-* Purpose: 
+*
+* Purpose:
 *  Destructor
 **************************************************************************
 */
@@ -177,13 +216,16 @@ CIccMatrixMath::~CIccMatrixMath()
 /**
 **************************************************************************
 * Name: CIccMatrixMath::VectorMult
-* 
-* Purpose: 
+*
+* Purpose:
 *  Multiplies pSrc vector passed by a matrix resulting in a pDst vector
 **************************************************************************
 */
 void CIccMatrixMath::VectorMult(icFloatNumber *pDst, const icFloatNumber *pSrc) const
 {
+  if (!IsValid() || !pDst || !pSrc)
+    return;
+
   int i, j;
   const icFloatNumber *row = entry(0);
   for (j=0; j<m_nRows; j++) {
@@ -200,13 +242,16 @@ void CIccMatrixMath::VectorMult(icFloatNumber *pDst, const icFloatNumber *pSrc) 
 /**
 **************************************************************************
 * Name: CIccMatrixMath::dump
-* 
-* Purpose: 
+*
+* Purpose:
 *  dumps the context of the step
 **************************************************************************
 */
 void CIccMatrixMath::dumpMtx(std::string &str) const
 {
+  if (!IsValid())
+    return;
+
   const size_t bufSize = 80;
   char buf[bufSize];
   int i, j;
@@ -225,8 +270,8 @@ void CIccMatrixMath::dumpMtx(std::string &str) const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::Mult
-* 
-* Purpose: 
+*
+* Purpose:
 *  Creates a new CIccMatrixMath that is the result of concatentating
 *  another matrix with this matrix. (IE result = matrix * this).
 **************************************************************************
@@ -239,7 +284,14 @@ CIccMatrixMath *CIccMatrixMath::Mult(const CIccMatrixMath *matrix) const
   if (m_nRows != mCols)
     return NULL;
 
-  CIccMatrixMath *pNew = new CIccMatrixMath(mRows, m_nCols);
+  if (!IsValid() || !matrix->IsValid())
+    return NULL;
+
+  CIccMatrixMath *pNew = new (std::nothrow) CIccMatrixMath(mRows, m_nCols);
+  if (!pNew || !pNew->IsValid()) {
+    delete pNew;
+    return NULL;
+  }
 
   int i, j, k;
   for (j=0; j<mRows; j++) {
@@ -262,13 +314,16 @@ CIccMatrixMath *CIccMatrixMath::Mult(const CIccMatrixMath *matrix) const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::VectorScale
-* 
-* Purpose: 
+*
+* Purpose:
 *  Multiplies each row by values of vector passed in
 **************************************************************************
 */
 void CIccMatrixMath::VectorScale(const icFloatNumber *vec)
 {
+  if (!IsValid() || !vec)
+    return;
+
   int i, j;
   for (j=0; j<m_nRows; j++) {
     icFloatNumber *row = entry(j);
@@ -281,13 +336,16 @@ void CIccMatrixMath::VectorScale(const icFloatNumber *vec)
 /**
 **************************************************************************
 * Name: CIccMatrixMath::Scale
-* 
-* Purpose: 
+*
+* Purpose:
 *  Multiplies all values in matrix by a single scale factor
 **************************************************************************
 */
 void CIccMatrixMath::Scale(icFloatNumber v)
 {
+  if (!IsValid())
+    return;
+
   int i, j;
   for (j=0; j<m_nRows; j++) {
     icFloatNumber *row = entry(j);
@@ -300,14 +358,14 @@ void CIccMatrixMath::Scale(icFloatNumber v)
 /**
 **************************************************************************
 * Name: CIccMatrixMath::Invert
-* 
-* Purpose: 
+*
+* Purpose:
 *  Inverts the matrix
 **************************************************************************
 */
 bool CIccMatrixMath::Invert()
 {
-  if (m_nRows==3 && m_nCols==3) {
+  if (IsValid() && m_nRows==3 && m_nCols==3) {
     return icMatrixInvert3x3(m_vals);
   }
 
@@ -319,14 +377,17 @@ bool CIccMatrixMath::Invert()
 /**
 **************************************************************************
 * Name: CIccMatrixMath::RowSum
-* 
-* Purpose: 
+*
+* Purpose:
 *  Creates a new CIccMatrixMath step that is the result of multiplying the
 *  matrix of this object to the scale of another object.
 **************************************************************************
 */
 icFloatNumber CIccMatrixMath::RowSum(icUInt16Number nRow) const
 {
+  if (!IsValid() || nRow >= m_nRows)
+    return 0.0f;
+
   icFloatNumber rv=0;
   int i;
   const icFloatNumber *row = entry(nRow);
@@ -343,20 +404,21 @@ icFloatNumber CIccMatrixMath::RowSum(icUInt16Number nRow) const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::isIdentityMtx
-* 
-* Purpose: 
+*
+* Purpose:
 *  Determines if applying this step will result in negligible change in data
 **************************************************************************
 */
 bool CIccMatrixMath::isIdentityMtx() const
 {
-  if (m_nCols!=m_nRows)
+  if (!IsValid() || m_nCols!=m_nRows)
     return false;
 
   int i, j;
   for (j=0; j<m_nRows; j++) {
+    const icFloatNumber *row = &m_vals[(size_t)j * m_nCols];
     for (i=0; i<m_nCols; i++) {
-      icFloatNumber v = *(entry(j, i));
+      icFloatNumber v = row[i];
       if (i==j) {
         if (v<1.0f-icNearRange || v>1.0f+icNearRange)
           return false;
@@ -375,18 +437,18 @@ bool CIccMatrixMath::isIdentityMtx() const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::SetRange
-* 
-* Purpose: 
+*
+* Purpose:
 *  Fills a matrix math object that can be used to convert
 *  spectral vectors from one spectral range to another using linear interpolation.
 **************************************************************************
 */
 bool CIccMatrixMath::SetRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
-  if (m_nRows != dstRange.steps || m_nCols != srcRange.steps)
+  if (!IsValid() || m_nRows != dstRange.steps || m_nCols != srcRange.steps)
     return false;
 
-  if (srcRange.steps <= 1 || dstRange.steps <= 1)
+  if (!icIsValidMatrixSpectralRange(srcRange) || !icIsValidMatrixSpectralRange(dstRange))
     return false;
 
   icUInt16Number d;
@@ -397,13 +459,10 @@ bool CIccMatrixMath::SetRange(const icSpectralRange &srcRange, const icSpectralR
   //icFloatNumber srcDiff = srcEnd - srcStart;
   //icFloatNumber dstDiff = dstEnd - dstStart;
 
-  if (srcRange.steps <= 1 || dstRange.steps <= 1)
-    return false;
-
   icFloatNumber srcScale = (srcEnd - srcStart) / (srcRange.steps-1);
   icFloatNumber dstScale = (dstEnd - dstStart ) / (dstRange.steps - 1);
 
-  if (!std::isfinite(srcScale) || !std::isfinite(dstScale) || srcScale == 0.0f)
+  if (!std::isfinite(srcScale) || !std::isfinite(dstScale))
     return false;
 
   icFloatNumber *data=entry(0);
@@ -447,19 +506,38 @@ bool CIccMatrixMath::SetRange(const icSpectralRange &srcRange, const icSpectralR
 /**
  **************************************************************************
  * Name: CIccMatrixMath::rangeMap
- * 
- * Purpose: 
+ *
+ * Purpose:
  *  This helper function generates a matrix math object that can be used to convert
  *  spectral vectors from one spectral range to another using linear interpolation.
  **************************************************************************
  */
 CIccMatrixMath *CIccMatrixMath::rangeMap(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
+  return rangeMap(srcRange, dstRange, NULL);
+}
+
+CIccMatrixMath *CIccMatrixMath::rangeMap(const icSpectralRange &srcRange, const icSpectralRange &dstRange, bool *pFailed)
+{
+  if (pFailed)
+    *pFailed = false;
+
+  if (!icIsValidMatrixSpectralRange(srcRange) || !icIsValidMatrixSpectralRange(dstRange)) {
+    if (pFailed)
+      *pFailed = true;
+    return NULL;
+  }
+
   if (srcRange.steps != dstRange.steps ||
       srcRange.start != dstRange.start ||
       srcRange.end != dstRange.end) {
-    CIccMatrixMath *mtx = new CIccMatrixMath(dstRange.steps, srcRange.steps);
-    mtx->SetRange(srcRange, dstRange);
+    CIccMatrixMath *mtx = new (std::nothrow) CIccMatrixMath(dstRange.steps, srcRange.steps);
+    if (!mtx || !mtx->IsValid() || !mtx->SetRange(srcRange, dstRange)) {
+      delete mtx;
+      if (pFailed)
+        *pFailed = true;
+      return NULL;
+    }
 
     return mtx;
   }

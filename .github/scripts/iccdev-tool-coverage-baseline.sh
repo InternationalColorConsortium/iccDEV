@@ -929,7 +929,7 @@ else
 fi
 
 if [ -f "$TIFF_8BIT" ] && [ -f "$APPLYPROF_CALC_TEMP" ]; then
-  run_expect_exit "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" 255 \
+  run_expect_exit "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" 1 \
     "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_afl_calc_temp.tiff" 0 0 0 0 0 "$APPLYPROF_CALC_TEMP" 1
 else
   skip_test "apply-08" "ApplyProfiles: AFL calculator temp overflow profile" "regression profile unavailable"

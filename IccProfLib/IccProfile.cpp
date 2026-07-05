@@ -3867,12 +3867,10 @@ getmediaXYZ:
     icUInt32Number samples = icGetSpaceSamples((icColorSpaceSignature)sig);
     icFloatNumber *pWhite;
 
-    if (samples && pNumTag->GetNumValues()>=samples) {
+    if (samples && range.steps == samples && pNumTag->GetNumValues()>=samples) {
       pWhite = new (std::nothrow) icFloatNumber[samples];
-      if (pWhite) {
-        pNumTag->GetValues(pWhite);
-      }
-      else {
+      if (!pWhite || !pNumTag->GetValues(pWhite, 0, samples)) {
+        delete [] pWhite;
         goto getmediaXYZ;
       }
     }
@@ -3882,6 +3880,10 @@ getmediaXYZ:
 
     if (icIsSameColorSpaceType(sig, icSigReflectanceSpectralData)) {
       CIccMatrixMath *pMtx = pObservingPCC->getReflectanceObserver(range);
+      if (!pMtx) {
+        delete [] pWhite;
+        goto getmediaXYZ;
+      }
 
       pMtx->VectorMult(pXYZ, pWhite);
       delete pMtx;
@@ -3891,7 +3893,10 @@ getmediaXYZ:
     }
     else if (icIsSameColorSpaceType(sig, icSigRadiantSpectralData)) {
       CIccMatrixMath obs(3,range.steps);
-      pObservingPCC->getEmissiveObserver(range, pWhite, obs.entry(0));
+      if (!obs.IsValid() || !pObservingPCC->getEmissiveObserver(range, pWhite, obs.entry(0))) {
+        delete [] pWhite;
+        goto getmediaXYZ;
+      }
 
       obs.VectorMult(pXYZ, pWhite);
       delete [] pWhite;
