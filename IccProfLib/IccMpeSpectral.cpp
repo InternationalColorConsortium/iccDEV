@@ -87,6 +87,17 @@
 
 namespace {
   const size_t kMaxDescribeSamples = 4096;
+
+  bool icIsValidSpectralRange(const icSpectralRange &range)
+  {
+    icFloatNumber start = icF16toF(range.start);
+    icFloatNumber end = icF16toF(range.end);
+
+    return range.steps >= 2 &&
+           std::isfinite(start) &&
+           std::isfinite(end) &&
+           end > start;
+  }
 }
 
 #ifdef USEICCDEVNAMESPACE
@@ -636,13 +647,16 @@ bool CIccMpeEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiProces
   CIccMatrixMath observer(3, m_Range.steps);
   icFloat32Number *pSrc, *pMtx;
 
+  if (!observer.IsValid())
+    return false;
+
   if (!pAppliedPCC->getEmissiveObserver(m_Range, m_pWhite, observer.entry(0)))
     return false;
 
   //convert m_Matrix emission values to a matrix of XYZ column vectors
   m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3,m_nInputChannels);
 
-  if (!m_pApplyMtx)
+  if (!m_pApplyMtx || !m_pApplyMtx->IsValid())
     return false;
 
   icFloatNumber xyz[3];
@@ -718,6 +732,9 @@ bool CIccMpeInvEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiPro
   CIccMatrixMath observer(3, m_Range.steps);
   icFloat32Number *pSrc, *pMtx;
 
+  if (!observer.IsValid())
+    return false;
+
   if (!pAppliedPCC->getEmissiveObserver(m_Range, m_pWhite, observer.entry(0)))
     return false;
 
@@ -726,7 +743,7 @@ bool CIccMpeInvEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiPro
   //convert m_Matrix emission values to a matrix of XYZ column vectors
   m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3,m_nInputChannels);
 
-  if (!m_pApplyMtx)
+  if (!m_pApplyMtx || !m_pApplyMtx->IsValid())
     return false;
 
   icFloatNumber xyz[3];
@@ -1481,6 +1498,9 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
 
   CIccMatrixMath observer(3, m_Range.steps);
 
+  if (!observer.IsValid())
+    return false;
+
   if (!pAppliedPCC->getEmissiveObserver(m_Range, m_pWhite, observer.entry(0)))
     return false;
 
@@ -1579,12 +1599,14 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
 
   icSpectralRange illumRange;
   const icFloatNumber *illum = pSVC->getIlluminant(illumRange);
-  CIccMatrixMath observer(3, illumRange.steps);
 
-  if (!illum || illumRange.steps < 2 || illumRange.start >= illumRange.end)
+  if (!illum || !icIsValidSpectralRange(m_Range) || !icIsValidSpectralRange(illumRange))
     return false;
 
   CIccMatrixMath observer(3, illumRange.steps);
+
+  if (!observer.IsValid())
+    return false;
 
   if (!pAppliedPCC->getEmissiveObserver(illumRange, illum, observer.entry(0)))
     return false;
@@ -1614,12 +1636,9 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   // below feed it m_Range.steps-long reflectance vectors. That equivalence held
   // while a NULL return meant only "the ranges are identical"; a failed mapping
   // now returns NULL too, so it has to be rejected rather than absorbed.
-  if (mapFailed)
-    return false;
-
-  if (!rangeRef)
+  if (!rangeRef && !mapFailed && icSameSpectralRange(m_Range, illumRange))
     pApplyMtx = &observer;
-  else {
+  else if (rangeRef) {
     // Mult() allocates a new product and leaves both operands untouched, so
     // rangeRef is this function's to release either way -- it was previously
     // dropped here, leaking a matrix and its coefficient array on every profile
@@ -1628,9 +1647,14 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
     // straight to VectorMult() below.
     pApplyMtx = rangeRef->Mult(&observer);
     delete rangeRef;
+    rangeRef = NULL;
+  }
+  else
+    pApplyMtx = NULL;
 
-    if (!pApplyMtx)
-      return false;
+  if (!pApplyMtx || !pApplyMtx->IsValid()) {
+    delete rangeRef;
+    return false;
   }
 
   delete m_pApplyCLUT;
@@ -2117,7 +2141,7 @@ bool CIccMpeEmissionObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiProc
 
   m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3, m_Range.steps);
 
-  if (!m_pApplyMtx)
+  if (!m_pApplyMtx || !m_pApplyMtx->IsValid())
     return false;
 
   if (!pAppliedPCC->getEmissiveObserver(m_Range, m_pWhite, m_pApplyMtx->entry(0)))
@@ -2160,12 +2184,14 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
 
   icSpectralRange illumRange;
   const icFloatNumber *illum = pSVC->getIlluminant(illumRange);
-  CIccMatrixMath observer(3, illumRange.steps);
 
-  if (!illum || illumRange.steps < 2 || illumRange.start >= illumRange.end)
+  if (!illum || !icIsValidSpectralRange(m_Range) || !icIsValidSpectralRange(illumRange))
     return false;
 
   CIccMatrixMath observer(3, illumRange.steps);
+
+  if (!observer.IsValid())
+    return false;
 
   if (!pAppliedPCC->getEmissiveObserver(illumRange, illum, observer.entry(0)))
     return false;
@@ -2190,24 +2216,28 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
   bool mapFailed = false;
   CIccMatrixMath *rangeRef = CIccMatrixMath::rangeMap(m_Range, illumRange, &mapFailed);
 
-  if (mapFailed)
-    return false;
-
   // Released before being overwritten, matching what CIccMpeReflectanceCLUT::Begin()
   // does with m_pApplyCLUT: Begin() may be called more than once on the same element,
   // and the previous matrix was simply dropped. NULL on the first pass (every
   // constructor initialises it so), which delete handles.
   delete m_pApplyMtx;
 
-  if (!rangeRef)
+  if (!rangeRef && !mapFailed && icSameSpectralRange(m_Range, illumRange))
     m_pApplyMtx = new (std::nothrow) CIccMatrixMath(observer);
-  else {
+  else if (rangeRef) {
     m_pApplyMtx = rangeRef->Mult(&observer);
     delete rangeRef;
+    rangeRef = NULL;
   }
+  else
+    m_pApplyMtx = NULL;
 
-  if (!m_pApplyMtx)
+  if (!m_pApplyMtx || !m_pApplyMtx->IsValid()) {
+    delete rangeRef;
+    delete m_pApplyMtx;
+    m_pApplyMtx = NULL;
     return false;
+  }
 
   icFloatNumber xyzm[3];
 

@@ -100,6 +100,7 @@ public:
   virtual void VectorMult(icFloatNumber *pDst, const icFloatNumber *pSrc) const;
   virtual icUInt16Number GetCols() const { return m_nCols; }
   virtual icUInt16Number GetRows() const { return m_nRows; }
+  bool IsValid() const { return m_vals != NULL; }
 
   CIccMatrixMath *Mult(const CIccMatrixMath *matrix) const;
 

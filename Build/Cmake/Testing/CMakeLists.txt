@@ -4949,6 +4949,18 @@ if(TARGET iccApplyProfiles)
   set_tests_properties(iccdev.applyprofiles-observer-hbo-regression PROPERTIES
     SKIP_RETURN_CODE 77
   )
+
+  iccdev_add_script_test(
+    iccdev.applyprofiles-spectral-pcs-regression
+    180
+    "iccdev;tools;applyprofiles;spectral;asan;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applyprofiles-spectral-pcs-regression.sh"
+  )
+  set_tests_properties(iccdev.applyprofiles-spectral-pcs-regression PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+    SKIP_RETURN_CODE 77
+  )
 endif()
 
 iccdev_add_script_test(

@@ -354,6 +354,11 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
     }
 
     CIccMatrixMath observerMtx(3,range.steps);
+    if (!observerMtx.IsValid()) {
+      if (allocObs)
+        free(obs);
+      return NULL;
+    }
     memcpy(observerMtx.entry(0), obs, size*sizeof(icFloatNumber));
 
     icFloatNumber xyz[3];

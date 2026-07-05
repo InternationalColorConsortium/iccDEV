@@ -3947,7 +3947,7 @@ getmediaXYZ:
       // The constructor does not zero its coefficients either, so ignoring the
       // result left VectorMult() multiplying pWhite by 3 * range.steps floats of
       // uninitialised heap and reporting the product as the media white point.
-      if (!pObservingPCC->getEmissiveObserver(range, pWhite, obs.entry(0))) {
+      if (!obs.IsValid() || !pObservingPCC->getEmissiveObserver(range, pWhite, obs.entry(0))) {
         delete [] pWhite;
         goto getmediaXYZ;
       }
