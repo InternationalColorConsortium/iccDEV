@@ -68,11 +68,11 @@
 #include "IccCmmConfig.h"
 #include "IccCmmThread.h"
 
-#include <cmath>
-#include <cstdlib>
 #include <errno.h>
 #include <limits.h>
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <cstring>
 #include <new>
@@ -236,6 +236,25 @@ static bool icParseFloatArg(const char* arg, icFloatNumber& n)
     return false;
 
   n = (icFloatNumber)value;
+  return true;
+}
+
+static bool icParseUInt8Field(const char* arg, const char** endArg, icUInt8Number& n)
+{
+  char* end = NULL;
+  long value;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  value = strtol(arg, &end, 10);
+  if (errno || end == arg || (*end && *end != ':') || value < 0 || value > 255)
+    return false;
+
+  n = (icUInt8Number)value;
+  if (endArg)
+    *endArg = end;
   return true;
 }
 
@@ -1189,7 +1208,7 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
     m_profiles.push_back(pProf);
   }
 
-  return m_profiles.size()>0 ? nUsed : 0;
+  return m_profiles.size()>0 && nArg == 0 ? nUsed : 0;
 }
 
 bool CIccCfgProfileSequence::fromJson(json j, bool bReset)
