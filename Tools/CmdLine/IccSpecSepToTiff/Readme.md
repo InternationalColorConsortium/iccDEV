@@ -11,8 +11,11 @@ The fourth argument is a literal filename prefix. `iccSpecSepToTiff` appends the
 channel number to that prefix, so `spec_` with `start=1` opens `spec_1`, then
 `spec_2`, and so on. It is not a `printf` format string.
 
-`compress` and `sep` must be literal boolean values (`0` or `1`). The channel
-range must be exact: repeatedly adding `incr` to `start` must land on `end`.
+`compress` and `sep` must be literal boolean values (`0` or `1`). `start`,
+`end`, and `incr` must be plain decimal integers with an optional leading minus
+sign only; whitespace, `+`, `NaN`, floats, hex, and out-of-range values are
+rejected. The channel range must be exact: repeatedly adding `incr` to `start`
+must land on `end`.
 When the optional profile argument is provided, the profile file must be
 readable, non-empty, parse as ICC, pass ICC validation without non-compliance,
 and match the output sample count:

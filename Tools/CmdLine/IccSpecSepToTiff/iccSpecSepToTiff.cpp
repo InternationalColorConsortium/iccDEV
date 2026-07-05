@@ -118,6 +118,7 @@ void Usage(const char *name)
   printf("Notes:\n");
   printf("\t-h/--help are not option flags; run without arguments to print this usage.\n");
   printf("\tinfile_prefix is not a printf format string; \"spec_00\" with start=1 opens \"spec_001\".\n");
+  printf("\tstart/end/increment must be plain decimal integers; whitespace, '+', NaN, and floats are rejected.\n");
   printf("\tEmbedded profiles must parse and validate as ICC profiles. If a spectral PCS is present,\n");
   printf("\tits channel count/range steps must match the generated TIFF SamplesPerPixel.\n");
   printf("\tWithout a spectral PCS, profile data color-space samples must match TIFF SamplesPerPixel.\n");
@@ -130,11 +131,26 @@ void Usage(const char *name)
 
 static bool parseIntArg(const char *text, int &value)
 {
+  if (!text || !text[0])
+    return false;
+
+  const char *digits = text;
+  if (*digits == '-') {
+    ++digits;
+    if (!*digits)
+      return false;
+  }
+
+  for (const char *p = digits; *p; ++p) {
+    if (*p < '0' || *p > '9')
+      return false;
+  }
+
   char *end = NULL;
   errno = 0;
   long parsed = strtol(text, &end, 10);
 
-  if (errno || !text[0] || *end || parsed < INT_MIN || parsed > INT_MAX)
+  if (errno || *end || parsed < INT_MIN || parsed > INT_MAX)
     return false;
 
   value = (int)parsed;
@@ -388,18 +404,15 @@ int main(int argc, char* argv[]) {
   std::vector<CTiffImg> infile(nSamples);
 
   for (size_t i=0; i<nSamples; i++) {
-    const int max_path_length = 510;
-    char filename[ max_path_length ];
-    
     long long channelNum = (long long)start + (long long)i * (long long)step;
-    snprintf(filename, max_path_length, "%s%lld", argv[4], channelNum);
-    if (!infile[i].Open(filename)) {
-      printf("Cannot open input %s\n", filename);
+    std::string filename = std::string(argv[4]) + std::to_string(channelNum);
+    if (!infile[i].Open(filename.c_str())) {
+      printf("Cannot open input %s\n", filename.c_str());
       return -1;
     }
 
     if (infile[i].GetSamples() != 1) {
-      printf("input %s does not have 1 sample per pixel\n", filename);
+      printf("input %s does not have 1 sample per pixel\n", filename.c_str());
       return -1;
     }
 
@@ -408,7 +421,7 @@ int main(int argc, char* argv[]) {
     // PHOTO_PALETTE.  Comparing against PHOTOMETRIC_PALETTE never matched, so
     // palette input was wrongly accepted and converted (#1381).
     if (infile[i].GetPhoto() == PHOTO_PALETTE) {
-      printf("input %s is a palette based file\n", filename);
+      printf("input %s is a palette based file\n", filename.c_str());
       return -1;
     }
 
@@ -418,7 +431,7 @@ int main(int argc, char* argv[]) {
       infile[i].GetPhoto() != infile[0].GetPhoto() ||
       infile[i].GetXRes() != infile[0].GetXRes() ||
       infile[i].GetYRes() != infile[0].GetYRes())) {
-        printf("input %s does not have same format as other files\n", filename);
+        printf("input %s does not have same format as other files\n", filename.c_str());
         return -1;
     }
   }
