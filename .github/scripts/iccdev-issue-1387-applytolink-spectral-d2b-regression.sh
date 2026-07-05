@@ -92,8 +92,9 @@ require_pattern "Matrix Element \\('matf' = 6D617466\\) 6->36" "DToB3 6-to-36 ma
 echo "[PASS] SixChanInputRef fixture retains dual PCS 6->3 / 6->36 trigger shape"
 
 status=0
-# The min-range argv slot is not consumed before the #1387 channel mismatch.
-for case_args in "11 foo" "13 bar"; do
+# Use valid input ranges so this regression reaches the #1387 D2B opt-out path;
+# malformed ranges are covered separately by the NaN/SixChanInputRef test.
+for case_args in "11 0" "13 0"; do
   intent="${case_args%% *}"
   min_range="${case_args#* }"
   LOG="$OUTDIR/applytolink-intent-${intent}.log"
