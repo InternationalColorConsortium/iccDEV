@@ -97,7 +97,7 @@ inline std::string icSanitizeConsoleText(const char* szText)
       result += "\\t";
       break;
     default:
-      if (ch < 0x20 || ch == 0x7f || (ch >= 0x80 && ch <= 0x9f)) {
+      if (ch < 0x20 || ch >= 0x7f) {  // && <= 0xFF implied by data type
         result += "\\x";
         result += hex[(ch >> 4) & 0xf];
         result += hex[ch & 0xf];
