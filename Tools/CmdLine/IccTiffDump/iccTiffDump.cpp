@@ -311,27 +311,25 @@ int main(int argc, icChar* argv[])
     // Profile description and metadata
     CIccProfile *pProfile = OpenIccProfile(pProfMem, nLen);
     if (pProfile) {
+      std::string validateReport;
+      if (!pProfile->ReadTags(pProfile)) {
+        printf("\nUnable to read embedded ICC profile\n");
+        delete pProfile;
+        SrcImg.Close();
+        return -1;
+      }
+      else if (pProfile->Validate(validateReport) > icValidateWarning) {
+        printf("\nEmbedded ICC profile violates the ICC specification:\n%s",
+               validateReport.c_str());
+        delete pProfile;
+        SrcImg.Close();
+        return -1;
+      }
+
       DumpProfileInfo(pProfile, " ");
       if (argc > 2) {
         std::string dstName = icSanitizeConsoleText(argv[2]);
-        std::string validateReport;
-        if (!pProfile->ReadTags(pProfile)) {
-          printf("\nUnable to extract profile\n");
-          delete pProfile;
-          SrcImg.Close();
-          return -1;
-        }
-        // Don't rewrite a non-conformant embedded profile to disk: a parsed
-        // profile that fails required-tag validation must be reported and
-        // refused, not silently exported (#1380).
-        else if (pProfile->Validate(validateReport) > icValidateWarning) {
-          printf("\nEmbedded ICC profile violates the ICC specification; not extracting:\n%s",
-                 validateReport.c_str());
-          delete pProfile;
-          SrcImg.Close();
-          return -1;
-        }
-        else if (SaveIccProfile(argv[2], pProfile)) {
+        if (SaveIccProfile(argv[2], pProfile)) {
           printf("\nProfile extracted to: %s\n", dstName.c_str());
         }
         else {
