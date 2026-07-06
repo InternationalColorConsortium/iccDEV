@@ -3825,6 +3825,11 @@ icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnecti
  */
 icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
+  if (!pProfile ||
+      !icIsValidSpectralRange(pProfile->m_Header.spectralRange) ||
+      !icIsValidSpectralRange(pProfile->m_Header.biSpectralRange))
+    return icCmmStatInvalidProfile;
+
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
 
   if (pView) {
@@ -3869,6 +3874,10 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
 
     }
     else {
+      if (!pProfile->m_Header.spectralRange.steps ||
+          !pProfile->m_Header.biSpectralRange.steps)
+        return icCmmStatInvalidProfile;
+
       CIccPcsStepSrcMatrix *pMtx = new (std::nothrow) CIccPcsStepSrcMatrix(pProfile->m_Header.spectralRange.steps, pProfile->m_Header.biSpectralRange.steps);
       if (!pMtx)
         return icCmmStatAllocErr;
@@ -5353,7 +5362,7 @@ CIccPcsStepSrcMatrix::CIccPcsStepSrcMatrix(icUInt16Number nRows, icUInt16Number 
 {
   m_nRows = nRows;
   m_nCols = nCols;
-  m_vals = new icFloatNumber[nCols];
+  m_vals = new icFloatNumber[(size_t)nRows * nCols];
 }
 
 
