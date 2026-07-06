@@ -99,6 +99,17 @@ static bool IccCmmLegacySpectralReplayEnabled()
 namespace iccDEV {
 #endif
 
+static bool icIsValidSpectralRange(const icSpectralRange &range)
+{
+  icFloatNumber start = icF16toF(range.start);
+  icFloatNumber end = icF16toF(range.end);
+
+  return range.steps >= 2 &&
+         std::isfinite(start) &&
+         std::isfinite(end) &&
+         end > start;
+}
+
 ////
 // Useful Macros
 ////
@@ -3572,6 +3583,9 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
  */
 icStatusCMM CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
+  if (!pProfile || !icIsValidSpectralRange(pProfile->m_Header.spectralRange))
+    return icCmmStatInvalidProfile;
+
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
 
   if (pView) {
@@ -3743,6 +3757,9 @@ icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConne
  */
 icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry)
 {
+  if (!pProfile || !icIsValidSpectralRange(pProfile->m_Header.spectralRange))
+    return icCmmStatInvalidProfile;
+
   const CIccTagSpectralViewingConditions *pProfView = pProfile ? pProfile->getPccViewingConditions() : NULL;
   const CIccTagSpectralViewingConditions *pView = pPcc->getPccViewingConditions();
   if (pProfView && pView) {
@@ -3897,6 +3914,11 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
  */
 icStatusCMM CIccPcsXform::pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc)
 {
+  if (!pProfile ||
+      !icIsValidSpectralRange(pProfile->m_Header.spectralRange) ||
+      !icIsValidSpectralRange(pProfile->m_Header.biSpectralRange))
+    return icCmmStatInvalidProfile;
+
   icStatusCMM stat = pushBiRef2Rad(pProfile, pPcc);
   if (stat!=icCmmStatOk)
     return stat;
