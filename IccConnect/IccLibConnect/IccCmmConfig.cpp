@@ -74,6 +74,7 @@
 #include <fstream>
 #include <cstring>
 #include <new>
+#include "../../Tools/CmdLine/IccCmdLineUtil.h" // this should probably move into the ProfLib directory
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -2155,13 +2156,13 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     if (!pProf)
       continue;
     if (pProf->m_pccFile.size() != size_t(0)) {
-      fprintf(f, "; %s -PCC %s\n", pProf->m_iccFile.c_str(), pProf->m_pccFile.c_str());
+      fprintf(f, "; %s -PCC %s\n", icSanitizeConsoleText(pProf->m_iccFile).c_str(), icSanitizeConsoleText(pProf->m_pccFile).c_str() );
     }
     else {
-      fprintf(f, "; %s\n", pProf->m_iccFile.c_str());
+      fprintf(f, "; %s\n", icSanitizeConsoleText(pProf->m_iccFile).c_str() );
     }
   }
-fprintf(f, "\n");
+  fprintf(f, "\n");
 
   for (auto dIter = m_data.begin(); dIter != m_data.end(); dIter++) {
     CIccCfgDataEntry* pData = dIter->get();
@@ -2170,12 +2171,12 @@ fprintf(f, "\n");
 
     if (bShowDebug && pData->m_debugInfo.size() != size_t(0)) {
       for (auto l = pData->m_debugInfo.begin(); l != pData->m_debugInfo.end(); l++) {
-        fprintf(f, "; %s\n", l->c_str());
+        fprintf(f, "; %s\n", icSanitizeConsoleText(*l).c_str() );
       }
     }
 
     if (pData->m_name.size() != size_t(0)) {
-      fprintf(f, "{ \"%s\" }\t;", pData->m_name.c_str());
+      fprintf(f, "{ \"%s\" }\t;", icSanitizeConsoleText(pData->m_name).c_str() );
     }
     else {
       for (size_t i = 0; i < pData->m_values.size(); i++) {
@@ -2185,7 +2186,7 @@ fprintf(f, "\n");
     }
 
     if (pData->m_srcName.size() != size_t(0)) {
-      fprintf(f,"{ \"%s\" }", pData->m_srcName.c_str());
+      fprintf(f,"{ \"%s\" }", icSanitizeConsoleText(pData->m_srcName).c_str());
       // Echo the tint the caller supplied (m_srcValues[0]).  We used to
       // suppress this when the tint was exactly 1.0, but that hid a
       // value the caller had explicitly written -- the
