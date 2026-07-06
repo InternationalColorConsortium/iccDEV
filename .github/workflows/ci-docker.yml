@@ -243,7 +243,7 @@ jobs:
 
       - name: Attest SBOM
         if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags') && steps.sbom-size.outputs.attestable == 'true' }}
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34  # v3.0.0
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v4.1.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
