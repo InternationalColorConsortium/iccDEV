@@ -315,6 +315,54 @@ run_expect_reject \
   "$OUTDIR/non-divisible-range.tif" \
   0 0 "$SPECTRAL_PREFIX" 1 10 4
 
+run_expect_reject \
+  "specsep-nan-start" \
+  "Invalid channel range" \
+  "$OUTDIR/nan-start.tif" \
+  0 0 "$SPECTRAL_PREFIX" nan 3 1
+
+run_expect_reject \
+  "specsep-float-start" \
+  "Invalid channel range" \
+  "$OUTDIR/float-start.tif" \
+  0 0 "$SPECTRAL_PREFIX" 1.0 3 1
+
+run_expect_reject \
+  "specsep-hex-start" \
+  "Invalid channel range" \
+  "$OUTDIR/hex-start.tif" \
+  0 0 "$SPECTRAL_PREFIX" 0x1 3 1
+
+run_expect_reject \
+  "specsep-plus-start" \
+  "Invalid channel range" \
+  "$OUTDIR/plus-start.tif" \
+  0 0 "$SPECTRAL_PREFIX" +1 3 1
+
+run_expect_reject \
+  "specsep-leading-space-start" \
+  "Invalid channel range" \
+  "$OUTDIR/leading-space-start.tif" \
+  0 0 "$SPECTRAL_PREFIX" " 1" 3 1
+
+run_expect_reject \
+  "specsep-int-overflow-start" \
+  "Invalid channel range" \
+  "$OUTDIR/int-overflow-start.tif" \
+  0 0 "$SPECTRAL_PREFIX" 2147483648 3 1
+
+run_expect_reject \
+  "specsep-int-underflow-start" \
+  "Invalid channel range" \
+  "$OUTDIR/int-underflow-start.tif" \
+  0 0 "$SPECTRAL_PREFIX" -2147483649 3 1
+
+run_expect_reject \
+  "specsep-printf-pattern-prefix" \
+  "Cannot open input" \
+  "$OUTDIR/printf-pattern-prefix.tif" \
+  0 0 "$SPECTRAL_PREFIX%03d.tif" 1 3 1
+
 echo "iccSpecSepToTiff CLI argument regression: $PASS passed, $FAIL failed, $TOTAL total"
 
 if [ "$FAIL" -ne 0 ]; then
