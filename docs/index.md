@@ -21,6 +21,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 - [Maintainer regression container](regression-container.md): basic use, PR validation, issue reproduction, and CI handoff
 - [AFL++ smoke fuzzing](afl-fuzzing.md): manual bounded AFL instrumentation checks for CLI tools
 - [Maintainer QA scans](maintainer-qa-scans.md): headless CLI QA scans, ICC registry profile sweeps, and CI reporting
+- [Maintainer regression container](regression-container.md): basic use, PR validation, issue reproduction, and CI handoff
 - [Regression workflow governance](regression-workflow-governance.md): adding regression gates and tool-test workflow updates
 - [Workflow security trust boundaries](workflow-security-trust-boundaries.md): trusted-base helper model, PR workflow canaries, and visual review aids
 - [Maintainer label system](label-system.md): label taxonomy, path labeler, issue triage, and PR status labels

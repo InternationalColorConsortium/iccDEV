@@ -1449,6 +1449,9 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
   // then not consumed as the initializer.  It fell through to the weighted-PCC
   // loop below, where "-init" became a PCC path and "1" its weight, and the run
   // died with "unable to open or read PCC tags from '-init'".
+  if (nArg < 2 || stricmp(args[0], "-INIT"))
+    return 0;
+
   if (nArg >= 2 && !stricmp(args[0], "-INIT")) {
     int nIntent;
     int nType;
@@ -1512,7 +1515,7 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
   if (nArg > 0)
     return 0;
 
-  return m_profiles.size() > 0 ? nUsed : 0;
+  return m_profiles.size() > 0 && m_bInitialized ? nUsed : 0;
 }
 
 bool CIccCfgSearchApply::fromJsonProfiles(json j)

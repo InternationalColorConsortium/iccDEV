@@ -942,7 +942,7 @@ fi
 echo ""
 
 # =============================================================================
-# 9. iccApplySearch (5 tests)
+# 9. iccApplySearch (10 tests)
 # =============================================================================
 echo "--- 9. iccApplySearch ---"
 APPLYSRCH="$TOOLS/IccApplySearch/iccApplySearch"
@@ -968,6 +968,23 @@ if [ -f "$SRGB_CALC_DATA" ] && [ -f "$SRGB" ]; then
   run_test "search-05" "JSON -cfg search without pccWeights" \
     bash -c '"$1" -exportcfganddata "$2" "$3" 3 0 "$4" 1 "$4" 1 -INIT 1 >/dev/null && ! grep -Fq "\"pccWeights\"" "$2" && "$1" -cfg "$2" >/dev/null' \
     _ "$APPLYSRCH" "$OUTDIR/search-missing-pccweights.json" "$SRGB_CALC_DATA" "$SRGB"
+
+  run_expect_exit "search-06" "Reject missing search -INIT argument" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$SRGB" 1
+
+  run_expect_exit "search-07" "Reject search -INIT without value" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT
+
+  run_expect_exit "search-08" "Reject trailing search argument" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$SRGB" 1 -INIT 1 EXTRA
+
+  run_expect_exit "search-09" "Reject malformed search -ENV tag" 255 \
+    "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 -ENV:abc 1 "$SRGB" 1 "$SRGB" 1 -INIT 1
+
+  # shellcheck disable=SC2016
+  run_expect_exit "search-10" "Reject extra JSON -cfg argument" 1 \
+    bash -c '"$1" -exportcfganddata "$2" "$3" 3 0 "$4" 1 "$4" 1 -INIT 1 >/dev/null && "$1" -cfg "$2" EXTRA >/dev/null' \
+    _ "$APPLYSRCH" "$OUTDIR/search-extra-cfg-arg.json" "$SRGB_CALC_DATA" "$SRGB"
 fi
 
 echo ""

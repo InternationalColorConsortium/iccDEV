@@ -255,6 +255,11 @@ int main(int argc, const char* argv[])
   CIccCfgColorData cfgData;
 
   if (!stricmp(argv[1], "-cfg")) {
+    if (argc != 3) {
+      printf("Unexpected arguments after configuration file '%s'\n", argv[2]);
+      return EXIT_FAILURE;
+    }
+
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
       printf("Unable to read configuration from '%s'\n", argv[2]);
