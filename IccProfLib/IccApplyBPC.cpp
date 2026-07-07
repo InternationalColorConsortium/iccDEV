@@ -188,7 +188,14 @@ icFloatNumber CIccApplyBPC::calcQuadraticVertex(icFloatNumber* x, icFloatNumber*
 			icFloatNumber c = (s01*s20*s40 - s11*s10*s40 - s01*s30*s30 + s11*s20*s30 + s21*s10*s30 - s21*s20*s20)/denom;
 
 			// vertex is (-u + sqrt(u^2 - 4tc))/2t
-			vert = (icFloatNumber)((-1.0 * u + sqrt(u*u - 4*t*c)) / (2.0 * t));
+            if (t == 0.0f || !std::isfinite(t))
+              return 0.0f;
+            
+            float temp = u*u - 4*t*c;
+            if (temp < 0.0f || !std::isfinite(temp))
+              return 0.0f;
+            
+			vert = (icFloatNumber)((-1.0 * u + sqrt(temp)) / (2.0 * t));
 		}
 	}
 
