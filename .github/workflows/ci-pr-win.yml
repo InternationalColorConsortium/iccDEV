@@ -5,7 +5,8 @@
 #                 https://color.org
 #
 #
-# Intent: Windows MSVC, ClangCL, and MinGW build and test pipeline for PR validation
+# Intent: Windows MSVC, ClangCL, and MinGW build and test pipeline
+#         for PR validation
 #
 # Last Updated: 2026-04-05 23:41:13 UTC by David Hoyt
 #               Review Permissions
@@ -17,12 +18,22 @@
 
 name: ci-pr-win
 
+# Existing Windows command strings intentionally exceed the default yamllint
+# line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
   pull-requests: read  # Required by reusable PR build callers.
 
 on:
   workflow_call:
+    inputs:
+      target_sha:
+        description: "Exact commit SHA to check out"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: pr-win-${{ github.event.pull_request.number || github.ref }}
@@ -50,7 +61,7 @@ jobs:
       - name: Checkout PR source
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -179,7 +190,7 @@ jobs:
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_HEAD_SHA: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
         run: |
           Set-StrictMode -Version Latest
           $ErrorActionPreference = 'Stop'
@@ -645,7 +656,7 @@ jobs:
           GH_REPOSITORY: ${{ github.repository }}
           GH_RUN_URL: ${{ env.RUN_URL }}
           GH_EVENT_NAME: ${{ github.event_name }}
-          GH_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          GH_COMMIT_SHA: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
           GH_BUILD_TYPE: Debug
           GH_RUNNER_OS: ${{ runner.os }}
           GH_JOB_STATUS: ${{ job.status }}
@@ -680,7 +691,7 @@ jobs:
       - name: Checkout PR source
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 1
           persist-credentials: false
 

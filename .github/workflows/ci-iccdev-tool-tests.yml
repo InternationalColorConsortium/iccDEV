@@ -64,6 +64,21 @@ on:
         required: false
         default: fast
         type: string
+      ctest_recent_limit:
+        description: 'Run only the last N registered CTests; 0 means all selected tests'
+        required: false
+        default: '0'
+        type: string
+      warning_policy:
+        description: 'Compiler warning policy: warn or fail'
+        required: false
+        default: warn
+        type: string
+      target_sha:
+        description: 'Exact commit SHA to check out'
+        required: false
+        default: ''
+        type: string
       regression_image_tag:
         description: 'Trusted regression container tag'
         required: false
@@ -143,6 +158,31 @@ on:
           - fast
           - full
           - skip
+      ctest_recent_limit:
+        description: 'Run only the last N registered CTests; 0 means all selected tests'
+        required: false
+        default: '0'
+        type: choice
+        options:
+          - '0'
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
+          - '7'
+          - '8'
+          - '9'
+          - '10'
+      warning_policy:
+        description: 'Compiler warning policy'
+        required: false
+        default: warn
+        type: choice
+        options:
+          - warn
+          - fail
       thread_linkage_build_type:
         description: 'Build type for the manual RefIccMAX thread linkage check'
         required: true
@@ -201,6 +241,8 @@ jobs:
       REGRESSION_IMAGE_TAG: ${{ inputs.regression_image_tag || 'master' }}
       TOOL_BUILD_TYPE: ${{ inputs.tool_build_type || 'Debug' }}
       CTEST_MODE: ${{ inputs.ctest_mode || 'fast' }}
+      CTEST_RECENT_LIMIT: ${{ inputs.ctest_recent_limit || '0' }}
+      WARNING_POLICY: ${{ inputs.warning_policy || 'warn' }}
       BUILD_DIR: build
       SPECTRAL_PREVIEW_VENV: /tmp/iccdev-spectral-preview-venv
 
@@ -208,6 +250,7 @@ jobs:
       - name: Checkout iccDEV
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
+          ref: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
           fetch-depth: 1
 
@@ -215,7 +258,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           WORKFLOW_REF: ${{ github.ref }}
-          WORKFLOW_SHA: ${{ github.sha }}
+          WORKFLOW_SHA: ${{ inputs.target_sha || github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -223,6 +266,11 @@ jobs:
           unset GITHUB_TOKEN || true
           echo "Ref:    ${WORKFLOW_REF}"
           echo "Commit: ${WORKFLOW_SHA}"
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$WORKFLOW_SHA" ]; then
+            echo "::error title=Checkout SHA mismatch::${actual_sha} != ${WORKFLOW_SHA}"
+            exit 1
+          fi
 
       - name: Verify regression container dependencies
         env:
@@ -360,6 +408,10 @@ jobs:
           if [ "$WARNING_COUNT" -gt 0 ]; then
             echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
             grep -E 'warning:' "${BUILD_DIR}/build.log" | sort -u | sed -n '1,20p'
+            if [ "$WARNING_POLICY" = "fail" ]; then
+              echo "::error title=Compiler Warnings::warning_policy=fail rejected ${WARNING_COUNT} warning(s)"
+              exit 1
+            fi
           else
             echo "[OK] Zero compiler warnings"
           fi
@@ -405,6 +457,17 @@ jobs:
             --output-junit "${BUILD_DIR}/ctest-results.xml" \
             --selection-output "${BUILD_DIR}/recent-ctests.txt"
           )
+          case "$CTEST_RECENT_LIMIT" in
+            "0")
+              ;;
+            [1-9]|10)
+              ctest_args+=(--limit "$CTEST_RECENT_LIMIT")
+              ;;
+            *)
+              echo "::error title=Invalid CTest recent limit::${CTEST_RECENT_LIMIT}"
+              exit 1
+              ;;
+          esac
           case "$CTEST_MODE" in
             fast)
               ctest_args+=(--label-exclude slow --label-exclude calculator)
@@ -549,6 +612,9 @@ jobs:
               test_cmd="invalid ctest_mode=${CTEST_MODE}"
               ;;
           esac
+          if [ "$CTEST_RECENT_LIMIT" != "0" ]; then
+            test_cmd="${test_cmd} --limit ${CTEST_RECENT_LIMIT}"
+          fi
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
           qa_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags"
           qa_evidence="${qa_dir}/evidence.ndjson"
@@ -573,6 +639,8 @@ jobs:
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
             echo "| CTest mode | \`${CTEST_MODE}\` |"
+            echo "| CTest recent limit | \`${CTEST_RECENT_LIMIT}\` |"
+            echo "| Warning policy | \`${WARNING_POLICY}\` |"
             echo "| Test command | \`${test_cmd}\` |"
             echo ""
             echo "### Manual Reproduction"
@@ -589,10 +657,18 @@ jobs:
             echo "cmake --build build --parallel \"\$(nproc)\""
             case "$CTEST_MODE" in
               fast)
-                echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator"
+                if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator"
+                else
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}' --label-exclude slow --label-exclude calculator"
+                fi
                 ;;
               full)
-                echo "python3 .github/scripts/run-recent-ctests.py --test-dir build"
+                if [ "$CTEST_RECENT_LIMIT" = "0" ]; then
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build"
+                else
+                  echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --limit '${CTEST_RECENT_LIMIT}'"
+                fi
                 echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
                 ;;
               skip)

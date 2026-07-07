@@ -1,0 +1,234 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Read-only Docker regression verification for PR fast lanes
+#
+###############################################################
+
+name: ci-docker-pr
+
+# Existing pinned action SHAs and Docker command strings intentionally exceed
+# the default yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
+permissions:
+  contents: read
+  packages: read
+
+on:
+  workflow_call:
+    inputs:
+      target_sha:
+        description: 'Exact PR head SHA to verify'
+        required: true
+        type: string
+      warning_policy:
+        description: 'Compiler warning policy: warn or fail'
+        required: false
+        default: fail
+        type: string
+
+concurrency:
+  group: "docker-pr-${{ github.workflow }}-${{ inputs.target_sha }}"
+  cancel-in-progress: true
+
+jobs:
+  cache-policy:
+    name: "Validate workflow cache policy"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Check out target SHA
+        env:
+          BASH_ENV: /dev/null
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$TARGET_SHA" in
+            *[!0-9a-fA-F]*)
+              echo "::error title=Invalid target SHA::${TARGET_SHA}"
+              exit 1
+              ;;
+          esac
+          if [ "${#TARGET_SHA}" -ne 40 ]; then
+            echo "::error title=Invalid target SHA length::${TARGET_SHA}"
+            exit 1
+          fi
+          git fetch --no-tags --depth=1 origin "$TARGET_SHA"
+          git checkout --detach "$TARGET_SHA"
+
+      - name: Assert no GitHub Actions cache primitives
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          .github/scripts/check-workflow-cache-policy.sh .github/workflows/ci-docker-pr.yml
+
+  pr-regression-verify:
+    name: "Docker PR regression verification"
+    needs: cache-policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      TARGET_SHA: ${{ inputs.target_sha }}
+      WARNING_POLICY: ${{ inputs.warning_policy || 'fail' }}
+      TEST_IMAGE: iccdev-ci-pr-regression:test
+
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify checked out PR SHA
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$TARGET_SHA" in
+            *[!0-9a-fA-F]*)
+              echo "::error title=Invalid target SHA::${TARGET_SHA}"
+              exit 1
+              ;;
+          esac
+          if [ "${#TARGET_SHA}" -ne 40 ]; then
+            echo "::error title=Invalid target SHA length::${TARGET_SHA}"
+            exit 1
+          fi
+
+          git fetch --no-tags --depth=1 origin "$TARGET_SHA"
+          git checkout --detach "$TARGET_SHA"
+
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$TARGET_SHA" ]; then
+            echo "::error title=Checkout SHA mismatch::${actual_sha} != ${TARGET_SHA}"
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+        with:
+          cache-binary: false
+
+      - name: Build local regression image
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          docker build \
+            --pull \
+            --no-cache \
+            --build-arg "GIT_COMMIT=${TARGET_SHA}" \
+            -t "$TEST_IMAGE" \
+            -f Dockerfile.ci-regression .
+
+      - name: Verify regression image toolchain
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          docker run --rm "$TEST_IMAGE" bash -lc '
+            set -euo pipefail
+            command -v git gh clang clang++ gcc g++ cmake make realpath llvm-symbolizer
+            command -v jq curl shellcheck llvm-cov llvm-profdata file
+            clang --version | sed -n "1p"
+            clang++ --version | sed -n "1p"
+            gcc --version | sed -n "1p"
+            g++ --version | sed -n "1p"
+            cmake --version | sed -n "1p"
+            clang --version | grep -q "clang version 22\\."
+            clang++ --version | grep -q "clang version 22\\."
+            gcc --version | grep -q " 15\\."
+            g++ --version | grep -q " 15\\."
+            test "${CC}" = clang
+            test "${CXX}" = clang++
+          '
+
+      - name: Build PR tree inside regression image
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$WARNING_POLICY" in
+            warn|fail)
+              ;;
+            *)
+              echo "::error title=Invalid warning policy::${WARNING_POLICY}"
+              exit 1
+              ;;
+          esac
+
+          docker run --rm \
+            -e "TARGET_SHA=${TARGET_SHA}" \
+            -e "WARNING_POLICY=${WARNING_POLICY}" \
+            "$TEST_IMAGE" bash -lc '
+              set -euo pipefail
+              test "$PWD" = /workspace/iccDEV
+              actual_sha="$(git rev-parse HEAD)"
+              if [ "$actual_sha" != "$TARGET_SHA" ]; then
+                echo "PR tree SHA mismatch: $actual_sha != $TARGET_SHA" >&2
+                exit 1
+              fi
+              work="$(mktemp -d)"
+              SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
+              export CFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
+              export CXXFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
+              export LDFLAGS="$SAN_FLAGS"
+              CC=clang CXX=clang++ cmake -S /workspace/iccDEV/Build/Cmake -B "$work" \
+                -DCMAKE_BUILD_TYPE=Debug \
+                -DCMAKE_C_COMPILER=clang \
+                -DCMAKE_CXX_COMPILER=clang++ \
+                -DCMAKE_C_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0" \
+                -DCMAKE_CXX_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0 -std=c++17" \
+                -DENABLE_ASAN=ON \
+                -DENABLE_UBSAN=ON \
+                -DENABLE_INTEGER_SANITIZER=ON \
+                -DENABLE_FLOAT_SANITIZER=ON \
+                -DENABLE_TOOLS=ON
+              cmake --build "$work" --target iccDumpProfile --parallel "$(nproc)" 2>&1 | tee "$work/build.log"
+              warning_count="$(grep -cE "warning:" "$work/build.log" || true)"
+              if [ "$warning_count" -gt 0 ]; then
+                grep -E "warning:" "$work/build.log" | sort -u | sed -n "1,20p"
+                if [ "$WARNING_POLICY" = "fail" ]; then
+                  echo "warning_policy=fail rejected $warning_count warning(s)" >&2
+                  exit 1
+                fi
+              fi
+            '

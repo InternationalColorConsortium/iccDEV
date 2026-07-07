@@ -42,6 +42,31 @@ on:
         required: false
         default: '["gcc", "clang"]'
         type: string
+      enable-lto:
+        description: "Enable LTO in CMake"
+        required: false
+        default: false
+        type: boolean
+      warning-policy:
+        description: "Compiler warning policy: warn or fail"
+        required: false
+        default: warn
+        type: string
+      profile-test-mode:
+        description: "Profile test mode: full, smoke, or skip"
+        required: false
+        default: full
+        type: string
+      compiler-version:
+        description: "Compiler version selector: system or gcc-15"
+        required: false
+        default: system
+        type: string
+      target-sha:
+        description: "Exact commit SHA to check out"
+        required: false
+        default: ""
+        type: string
 
 # Concurrency is set at job level so each matrix cell has its own group.
 # Workflow-level concurrency cannot use github.job (empty) or matrix.* values,
@@ -95,8 +120,8 @@ jobs:
           BT="${MATRIX_BUILD_TYPE}"
 
           case "$OS" in
-            ubuntu-latest|macos-latest) ;;
-            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-latest, macos-latest"; exit 1 ;;
+            ubuntu-latest|ubuntu-24.04|macos-latest) ;;
+            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-latest, ubuntu-24.04, macos-latest"; exit 1 ;;
           esac
           case "$COMP" in
             gcc|clang) ;;
@@ -110,7 +135,7 @@ jobs:
       - name: Check out Repository
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ inputs.target-sha || github.event.pull_request.head.sha || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -121,6 +146,7 @@ jobs:
           PR_BASE_REF: ${{ github.base_ref }}
           PR_HEAD_REF: ${{ github.head_ref }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          TARGET_SHA: ${{ inputs.target-sha || github.event.pull_request.head.sha || github.sha }}
           PR_EVENT_NAME: ${{ github.event_name }}
           PR_BUILD_TYPE: ${{ matrix.build_type }}
           PR_COMPILER: ${{ matrix.compiler }}
@@ -134,7 +160,7 @@ jobs:
           safe_event="$(sanitize_line "${PR_EVENT_NAME}")"
           safe_base="$(sanitize_ref "${PR_BASE_REF}")"
           safe_head="$(sanitize_ref "${PR_HEAD_REF}")"
-          safe_sha="$(sanitize_line "${PR_HEAD_SHA}")"
+          safe_sha="$(sanitize_line "${TARGET_SHA}")"
           safe_build_type="$(sanitize_line "${PR_BUILD_TYPE}")"
           safe_compiler="$(sanitize_line "${PR_COMPILER}")"
           safe_os="$(sanitize_line "${PR_OS}")"
@@ -163,17 +189,23 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          COMPILER_VERSION: ${{ inputs.compiler-version || 'system' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           sudo apt-get update -qq
-          sudo apt-get install -y \
+          packages=(
             build-essential cmake gcc g++ clang clang-tools \
             libpng-dev libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
             python3 python3-pip curl git llvm
+          )
+          if [ "$COMPILER_VERSION" = "gcc-15" ]; then
+            packages+=(gcc-15 g++-15)
+          fi
+          sudo apt-get install -y "${packages[@]}"
 
       - name: Install Build Dependencies (macOS)
         if: runner.os == 'macOS'
@@ -192,12 +224,22 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_COMPILER: ${{ matrix.compiler }}
+          COMPILER_VERSION: ${{ inputs.compiler-version || 'system' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          if [ "$MATRIX_COMPILER" = "gcc" ]; then
+          case "$COMPILER_VERSION" in
+            system|gcc-15) ;;
+            *) echo "::error title=Invalid compiler version::${COMPILER_VERSION}"; exit 1 ;;
+          esac
+          if [ "$MATRIX_COMPILER" = "gcc" ] && [ "$COMPILER_VERSION" = "gcc-15" ]; then
+            command -v gcc-15 >/dev/null 2>&1
+            command -v g++-15 >/dev/null 2>&1
+            echo "CC=gcc-15" >> "$GITHUB_ENV"
+            echo "CXX=g++-15" >> "$GITHUB_ENV"
+          elif [ "$MATRIX_COMPILER" = "gcc" ]; then
             echo "CC=gcc" >> "$GITHUB_ENV"
             echo "CXX=g++" >> "$GITHUB_ENV"
           else
@@ -210,6 +252,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+          ENABLE_LTO: ${{ inputs.enable-lto && 'ON' || 'OFF' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -221,7 +264,7 @@ jobs:
           cmake -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}" \
                 -DCMAKE_C_COMPILER="$CC" \
                 -DCMAKE_CXX_COMPILER="$CXX" \
-                -DENABLE_LTO=OFF \
+                -DENABLE_LTO="${ENABLE_LTO}" \
                  Cmake
           echo "::group::CMake Cache"
           cat CMakeCache.txt || true
@@ -232,6 +275,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+          WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -247,6 +291,10 @@ jobs:
           if [ "$WARNING_COUNT" -gt 0 ]; then
             echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
             grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+            if [ "$WARNING_POLICY" = "fail" ]; then
+              echo "::error title=Compiler Warnings::warning-policy=fail rejected ${WARNING_COUNT} warning(s)"
+              exit 1
+            fi
           else
             echo "[OK] Zero compiler warnings"
           fi
@@ -292,9 +340,11 @@ jobs:
           fi
 
       - name: Create Profiles
+        if: ${{ inputs.profile-test-mode != 'skip' }}
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          PROFILE_TEST_MODE: ${{ inputs.profile-test-mode || 'full' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -310,6 +360,15 @@ jobs:
             fi
           done
           sh CreateAllProfiles.sh
+          if [ "$PROFILE_TEST_MODE" = "smoke" ]; then
+            echo "[OK] Smoke profile generation completed"
+            find . -iname "*.icc" | sed -n '1,20p'
+            exit 0
+          fi
+          if [ "$PROFILE_TEST_MODE" != "full" ]; then
+            echo "::error title=Invalid profile test mode::${PROFILE_TEST_MODE}"
+            exit 1
+          fi
           sh RunTests.sh
           cd HDR
           sh mkprofiles.sh
@@ -335,6 +394,9 @@ jobs:
           MATRIX_OS: ${{ matrix.os }}
           MATRIX_COMPILER: ${{ matrix.compiler }}
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+          ENABLE_LTO: ${{ inputs.enable-lto && 'ON' || 'OFF' }}
+          PROFILE_TEST_MODE: ${{ inputs.profile-test-mode || 'full' }}
+          WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -350,9 +412,15 @@ jobs:
           SANITIZED_OS=$(sanitize_line "${MATRIX_OS}")
           SANITIZED_COMPILER=$(sanitize_line "${MATRIX_COMPILER}")
           SANITIZED_BUILD_TYPE=$(sanitize_line "${MATRIX_BUILD_TYPE}")
+          SANITIZED_LTO=$(sanitize_line "${ENABLE_LTO}")
+          SANITIZED_PROFILE_TEST_MODE=$(sanitize_line "${PROFILE_TEST_MODE}")
+          SANITIZED_WARNING_POLICY=$(sanitize_line "${WARNING_POLICY}")
           {
             echo "## ci-pr-unix Build Summary"
             echo "- **OS:**         $SANITIZED_OS"
             echo "- **Compiler:**   $SANITIZED_COMPILER"
             echo "- **Build Type:** $SANITIZED_BUILD_TYPE"
+            echo "- **LTO:**        $SANITIZED_LTO"
+            echo "- **Profile Tests:** $SANITIZED_PROFILE_TEST_MODE"
+            echo "- **Warning Policy:** $SANITIZED_WARNING_POLICY"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
