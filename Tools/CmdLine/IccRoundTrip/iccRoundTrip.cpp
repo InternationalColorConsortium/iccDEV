@@ -70,6 +70,10 @@
 
 
 #include <cstdio>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include "IccUtil.h"
 #include "IccEval.h"
@@ -145,49 +149,107 @@ void CIccMinMaxEval::Compare(icFloatNumber * /*pixel*/, icFloatNumber *deviceLab
   m_nTotal += 1;
 }
 
+static void PrintUsage()
+{
+  printf("Usage: iccRoundTrip profile {rendering_intent=1 {use_mpe=0}}\n");
+  printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
+  printf("  where rendering_intent is (0=perceptual, 1=relative, 2=saturation, 3=absolute)\n");
+  printf("  where use_mpe is (0=colorimetric tags, 1=MPE/color tags)\n");
+}
+
+static bool ParseIntArg(const char *arg, int minValue, int maxValue, int &value)
+{
+  char *end = NULL;
+  long parsed;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  parsed = strtol(arg, &end, 10);
+
+  if (errno == ERANGE || end == arg || *end != '\0' ||
+      parsed < minValue || parsed > maxValue ||
+      parsed < INT_MIN || parsed > INT_MAX) {
+    return false;
+  }
+
+  value = (int)parsed;
+  return true;
+}
 
 int main(int argc, char* argv[])
 {
-  if (argc<=1) {
-    printf("Usage: iccRoundTrip profile {rendering_intent=1 {use_mpe=0}}\n");
-    printf("Built with IccProfLib version " ICCPROFLIBVER "\n");
-    printf("  where rendering_intent is (0=perceptual, 1=relative, 2=saturation, 3=absolute)\n");
+  if (argc <= 1) {
+    PrintUsage();
     return 0;
   }
 
+  if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help")) {
+    PrintUsage();
+    return 0;
+  }
+
+  if (argc > 4) {
+    printf("Unexpected extra argument: '%s'\n", argv[4]);
+    PrintUsage();
+    return 1;
+  }
+
   icRenderingIntent nIntent = icRelativeColorimetric;
-  int nUseMPE = 0;
+  bool nUseMPE = false;
 
   if (argc>2) {
-    nIntent = (icRenderingIntent)atoi(argv[2]);
-    if (argc>3) {
-      nUseMPE = atoi(argv[3]);
+    int temp = 0;
+    if (!ParseIntArg(argv[2], (int)icPerceptual, (int)icAbsoluteColorimetric, temp)) {
+      printf("Invalid rendering_intent: '%s'\n", argv[2]);
+      PrintUsage();
+      return 1;
+    }
+    nIntent = (icRenderingIntent)temp;
+    
+    if (argc > 3) {
+      int tempUseMPE = 0;
+      if (!ParseIntArg(argv[3], 0, 1, tempUseMPE)) {
+        printf("Invalid use_mpe: '%s'\n", argv[3]);
+        PrintUsage();
+        return 1;
+      }
+      nUseMPE = tempUseMPE != 0;
     }
   }
 
   CIccMinMaxEval eval;
 
-  icStatusCMM stat = eval.EvaluateProfile(argv[1], 0, nIntent, icInterpLinear, (nUseMPE!=0));
+  icStatusCMM stat = eval.EvaluateProfile(argv[1], 0, nIntent, icInterpLinear, nUseMPE);
 
   if (stat!=icCmmStatOk) {
-    printf("Unable to perform round trip on '%s'\n", argv[1]);
+    // Decode the status so callers can tell an outright failure (e.g. an
+    // unreadable profile) from a deliberate refusal such as "Too many samples
+    // used", which guards the round trip against wide device spaces (#1405).
+    printf("Unable to perform round trip on '%s': %s\n", argv[1], CIccCmm::GetStatusText(stat));
+    if (stat == icCmmStatTooManySamples) {
+      return 0;
+    }
     return -1;
   }
 
   CIccPRMG prmg;
 
-  stat = prmg.EvaluateProfile(argv[1], nIntent, icInterpLinear, (nUseMPE!=0));
-
-  if (stat!=icCmmStatOk) {
-    printf("Unable to perform PRMG analysis on '%s'\n", argv[1]);
-    return -1;
-  }
+  stat = prmg.EvaluateProfile(argv[1], nIntent, icInterpLinear, nUseMPE);
+  bool prmgOk = stat == icCmmStatOk;
+  const char *prmgStatus = CIccCmm::GetStatusText(stat);
 
   CIccInfo info;
 
   printf("Profile:          '%s'\n", argv[1]);
   printf("Rendering Intent: %s\n", info.GetRenderingIntentName(nIntent));
-  printf("Specified Gamut:  %s\n", prmg.m_bPrmgImplied ? "Perceptual Reference Medium Gamut" : "Not Specified");
+  if (prmgOk) {
+    printf("Specified Gamut:  %s\n", prmg.m_bPrmgImplied ? "Perceptual Reference Medium Gamut" : "Not Specified");
+  }
+  else {
+    printf("Specified Gamut:  Not evaluated (%s)\n", prmgStatus);
+  }
 
   printf("\nRound Trip 1\n");
   printf(  "------------\n");
@@ -205,7 +267,7 @@ int main(int argc, char* argv[])
 
   printf("Max L, a, b:   " ICFLOATFMT ", " ICFLOATFMT ", " ICFLOATFMT "\n", eval.maxLab2[0], eval.maxLab2[1], eval.maxLab2[2]);
 
-  if (prmg.m_nTotal) {
+  if (prmgOk && prmg.m_nTotal) {
     printf("\nPRMG Interoperability - Round Trip Results\n");
     printf(  "------------------------------------------------------\n");
     
@@ -217,6 +279,10 @@ int main(int argc, char* argv[])
     printf("DE <=10.0 (%8u): %5.1f%%\n", (unsigned int) prmg.m_nDE10, scaling*(float)prmg.m_nDE10);
     printf("Total     (%8u)\n", (unsigned int) prmg.m_nTotal);
   }
+  else if (!prmgOk) {
+    printf("\nPRMG Interoperability - Round Trip Results\n");
+    printf(  "------------------------------------------------------\n");
+    printf("Skipped: %s\n", prmgStatus);
+  }
   return 0;
 }
-

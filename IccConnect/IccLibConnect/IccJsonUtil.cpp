@@ -72,9 +72,12 @@
 
 #include "IccJsonUtil.h"
 #include "IccUtil.h"
+#include <cmath>
 #include <cstdio>
+#include <limits>
 #include <string>
 #include <sstream>  // For std::to_string fallback
+#include <type_traits>
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -270,7 +273,45 @@ std::string valueToJson(const char* name, const char* v, bool& bPreviousLine)
 template <typename T>
 bool jsonToValue(const json& j, T& nValue)
 {
-  if (j.is_number()) {
+  if constexpr (std::is_integral<T>::value && !std::is_same<T, bool>::value) {
+    if (j.is_number_integer()) {
+      const icInt64Number v = j.get<icInt64Number>();
+      if constexpr (std::is_signed<T>::value) {
+        if (v < static_cast<icInt64Number>(std::numeric_limits<T>::min()) ||
+            v > static_cast<icInt64Number>(std::numeric_limits<T>::max()))
+          return false;
+      }
+      else {
+        if (v < 0 || static_cast<icUInt64Number>(v) > static_cast<icUInt64Number>(std::numeric_limits<T>::max()))
+          return false;
+      }
+      nValue = static_cast<T>(v);
+      return true;
+    }
+
+    if (j.is_number_unsigned()) {
+      const icUInt64Number v = j.get<icUInt64Number>();
+      if (v > static_cast<icUInt64Number>(std::numeric_limits<T>::max()))
+        return false;
+      nValue = static_cast<T>(v);
+      return true;
+    }
+
+    return false;
+  }
+  else if constexpr (std::is_floating_point<T>::value) {
+    if (!j.is_number())
+      return false;
+
+    const double v = j.get<double>();
+    if (!std::isfinite(v) ||
+        v < -static_cast<double>(std::numeric_limits<T>::max()) ||
+        v > static_cast<double>(std::numeric_limits<T>::max()))
+      return false;
+    nValue = static_cast<T>(v);
+    return true;
+  }
+  else if (j.is_number()) {
     nValue = j.get<T>();
     return true;
   }
@@ -306,17 +347,24 @@ bool jsonToValue(const json& j, bool& value)
     return true;
   }
   else if (j.is_number_float()) {
-    // don't want to check for 0 due to floating point messiness. If the value is greater than 0.5, then
-    // it's definitely not 0.
-    value = j.get<float>() > 0.5;
+    const double v = j.get<double>();
+    if (!std::isfinite(v) || (v != 0.0 && v != 1.0))
+      return false;
+    value = v != 0.0;
     return true;
   }
   else if (j.is_number_integer()) {
-    value = j.get<int>() != 0;
+    const icInt64Number v = j.get<icInt64Number>();
+    if (v != 0 && v != 1)
+      return false;
+    value = v != 0;
     return true;
   }
   else if (j.is_number_unsigned()) {
-    value = j.get<unsigned>() != 0;
+    const icUInt64Number v = j.get<icUInt64Number>();
+    if (v > 1)
+      return false;
+    value = v != 0;
     return true;
   }
 

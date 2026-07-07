@@ -266,6 +266,35 @@ protected:
 
 /**
 ****************************************************************************
+* Class: CIccStructProfileConnectionConditions
+*
+* Purpose: Struct handler for the profileConnectionConditionsStructure ('pcc ')
+*   added by the iccMAX extended device colour space amendment (spec 12.2.y).
+*   It carries member tags that parallel the profile-level PCC tags they
+*   logically replace when a devicePccTag is used for PCS/PCC processing of an
+*   abstract profile. svcn / c2sp / s2cp / iXYZ are always required; mwpt is
+*   required for a colorimetric connection and swpt for a spectral connection.
+*****************************************************************************
+*/
+class ICCPROFLIB_API CIccStructProfileConnectionConditions : public CIccStructUnknown
+{
+public:
+  CIccStructProfileConnectionConditions(CIccTagStruct *pTagStruct = NULL);
+  virtual ~CIccStructProfileConnectionConditions();
+  virtual IIccStruct* NewCopy(CIccTagStruct *pNewTagStruct) const;
+
+  virtual const icChar *GetClassName() const { return "CIccStructProfileConnectionConditions"; }
+  virtual const icChar *GetDisplayName() const { return "profileConnectionConditionsStructure"; }
+
+  virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile = NULL) const;
+
+protected:
+
+};
+
+
+/**
+****************************************************************************
 * Class: CIccStructTintZero
 *
 * Purpose: The Named Color struct handler

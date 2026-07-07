@@ -194,6 +194,7 @@ protected:
   IIccStruct *m_pStruct; //Note: The CIccTagStruct will delete the m_pStruct in destructor
 
   void Cleanup();
+  void CopyElems(const CIccTagStruct &subTags);
   IccTagEntry* GetElem(icSignature sig) const;
   IccTagEntry* GetElem(CIccTag *pTag) const;
 

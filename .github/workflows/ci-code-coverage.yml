@@ -18,17 +18,6 @@ permissions:
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches:
-      - master
-    paths:
-      - '.github/workflows/ci-code-coverage.yml'
-      - 'Build/Cmake/**'
-      - 'IccJSON/**'
-      - 'IccProfLib/**'
-      - 'IccXML/**'
-      - 'Testing/**'
-      - 'Tools/**'
 
 concurrency:
   group: "coverage-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
@@ -893,9 +882,9 @@ jobs:
             done < coverage-report/code-stats/top-languages.md
             summary_line ""
           fi
-          summary_line "### PR Artifact Policy"
+          summary_line "### Developer Report Artifact"
           summary_line "Coverage HTML, lcov, CTest data, code stats, review data, and failure logs"
-          summary_line "remain inside the job workspace for PR safety and are not uploaded as artifacts."
+          summary_line "are packaged in the sanitized developer report artifact after a successful run."
           summary_line ""
           summary_line "### llvm-cov Text Report"
           printf '<pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
@@ -907,3 +896,96 @@ jobs:
             summary_pre_line "No coverage data available"
           fi
           printf '</pre>\n' >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: "Package developer coverage report"
+        if: ${{ success() }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "${TRUSTED_SCRIPTS}/sanitize-sed.sh"
+
+          report_dir="coverage-report/developer-report"
+          mkdir -p "$report_dir"
+
+          {
+            printf 'iccDEV coverage developer report\n'
+            printf '================================\n\n'
+            printf 'Commit: %s\n' "$(git rev-parse HEAD)"
+            printf 'Run: %s\n\n' "${GITHUB_RUN_ID:-local}"
+            printf 'Open developer-report/index.html for the presentation view.\n'
+            printf 'Coverage HTML is under html/, lcov data is in lcov.info, '
+            printf 'and supporting data is in ctest/, code-stats/, module-reports/, '
+            printf 'and profdata/.\n'
+          } > "${report_dir}/README.txt"
+
+          html="${report_dir}/index.html"
+          {
+            printf '%s\n' '<!doctype html>'
+            printf '%s\n' '<html lang="en"><head><meta charset="utf-8">'
+            printf '%s\n' '<title>iccDEV Coverage Developer Report</title>'
+            printf '%s' '<style>body{font-family:system-ui,sans-serif;margin:2rem;'
+            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%%;'
+            printf '%s' 'margin:1rem 0}th,td{border:1px solid #ddd;padding:.45rem;'
+            printf '%s' 'text-align:left}th{background:#f4f6f8}code{background:#f4f6f8;'
+            printf '%s\n' 'padding:.1rem .25rem}</style>'
+            printf '%s\n' '</head><body>'
+            printf '<h1>iccDEV Coverage Developer Report</h1>\n'
+            printf '<table><tr><th>Component</th><th>Value</th></tr>\n'
+            printf '<tr><td>Commit</td><td><code>%s</code></td></tr>\n' "$(escape_html "$(git rev-parse --short HEAD)")"
+            printf '<tr><td>Run</td><td><code>%s</code></td></tr>\n' "$(escape_html "${GITHUB_RUN_ID:-local}")"
+            printf '<tr><td>Regions</td><td>%s</td></tr>\n' "$(escape_html "${region_pct:-n/a}")"
+            printf '<tr><td>Functions</td><td>%s</td></tr>\n' "$(escape_html "${func_pct:-n/a}")"
+            printf '<tr><td>Lines</td><td>%s</td></tr>\n' "$(escape_html "${line_pct:-n/a}")"
+            printf '<tr><td>Branches</td><td>%s</td></tr>\n' "$(escape_html "${branch_pct:-n/a}")"
+            printf '<tr><td>Mismatched function records</td><td>%s</td></tr>\n' "$(escape_html "${mismatch_count:-0}")"
+            printf '</table>\n'
+
+            if [ -f coverage-report/coverage-summary.txt ]; then
+              printf '<h2>Clean Per-Signature Coverage</h2><pre>\n'
+              while IFS= read -r line; do
+                sanitize_print "$line"
+                printf '\n'
+              done < coverage-report/coverage-summary.txt
+              printf '</pre>\n'
+            fi
+
+            if [ -f coverage-report/code-stats/top-languages.md ]; then
+              printf '<h2>Top Languages</h2><pre>\n'
+              while IFS= read -r line; do
+                sanitize_print "$line"
+                printf '\n'
+              done < coverage-report/code-stats/top-languages.md
+              printf '</pre>\n'
+            fi
+
+            printf '<h2>Coverage HTML</h2><ul>\n'
+            find coverage-report/html -name index.html -type f 2>/dev/null | sort | while IFS= read -r file; do
+              rel="${file#coverage-report/}"
+              printf '<li><a href="../%s">%s</a></li>\n' \
+                "$(escape_html "$rel")" \
+                "$(escape_html "$rel")"
+            done
+            printf '</ul>\n'
+
+            printf '<h2>Included Data</h2><ul>\n'
+            find coverage-report \
+              -path 'coverage-report/developer-report' -prune -o \
+              -type f -print | sort | while IFS= read -r file; do
+              rel="${file#coverage-report/}"
+              printf '<li><a href="../%s">%s</a></li>\n' \
+                "$(escape_html "$rel")" \
+                "$(escape_html "$rel")"
+            done
+            printf '</ul></body></html>\n'
+          } > "$html"
+
+      - name: "Upload developer coverage report"
+        if: ${{ success() }}
+        # preflight: allow-untrusted-artifact reason=sanitized-developer-report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-code-coverage-developer-report
+          path: coverage-report
+          if-no-files-found: error
+          retention-days: 14

@@ -142,6 +142,9 @@ static icStatusCMM AddHintNoThrow(CIccCreateXformHintManager& Hint,
 static CIccConnectCmm* AttachStandardCmm(std::unique_ptr<CIccCmm>& pCmm,
                                          int nThreads)
 {
+  if (nThreads < 0 || nThreads > CIccThreadedCmm::GetMaxThreads())
+    return nullptr;
+
   if (nThreads == 0 || nThreads > 1) {
     CIccCmm* pRawCmm = pCmm.release();
     CIccThreadedCmm* pThreadedCmm = CIccThreadedCmm::Attach(pRawCmm, nThreads);
@@ -250,8 +253,16 @@ icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
     sErrorMsg = "unable to open ICC profile '" + pCfg->m_iccFile + "'";
   }
   else if (stat != icCmmStatOk) {
+    // AddXform rejects a profile for chain-level reasons as well as
+    // profile-level ones (e.g. icCmmStatBadSpaceLink (2) means the profile's
+    // connecting color space does not match the output space of the previous
+    // stage - or, for the first stage, the color space of the source data).
+    // A bare numeric status forced users to look up the icStatusCMM enum to
+    // triage failures (issue #1323), so decode it with
+    // CIccCmm::GetStatusText alongside the number.
     std::ostringstream oss;
-    oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat << ")";
+    oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat
+        << ": " << CIccCmm::GetStatusText(stat) << ")";
     sErrorMsg = oss.str();
   }
   return stat;
@@ -295,8 +306,12 @@ CIccConnectCmm* CIccConnectCmm::CreateNamed(const CIccCfgProfileSequence& profil
 
   icStatusCMM beginStat = pCmm->Begin();
   if (beginStat != icCmmStatOk) {
+    // Decode the status (issue #1323) - Begin() is where the named-color CMM
+    // finalizes connections between the queued xforms, so failures here are
+    // chain-compatibility problems rather than per-profile ones.
     std::ostringstream oss;
-    oss << "Begin() failed (status " << (int)beginStat << "); profile chain is incompatible";
+    oss << "Begin() failed (status " << (int)beginStat << ": "
+        << CIccCmm::GetStatusText(beginStat) << "); profile chain is incompatible";
     sErrorMsg = oss.str();
     ReleasePccList(pccList);
     return nullptr;
@@ -314,6 +329,14 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
 {
   std::string localErr;
   std::string& sErrorMsg = pErrorMsg ? *pErrorMsg : localErr;
+
+  if (nThreads < 0 || nThreads > CIccThreadedCmm::GetMaxThreads()) {
+    std::ostringstream oss;
+    oss << "invalid thread count " << nThreads << " (maximum "
+        << CIccThreadedCmm::GetMaxThreads() << ")";
+    sErrorMsg = oss.str();
+    return nullptr;
+  }
 
   IccProfilePtrList pccList;
   auto pCmm = std::unique_ptr<CIccCmm>(
@@ -394,8 +417,11 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
         pCfg->m_useV5SubProfile
       );
       if (stat != icCmmStatOk) {
+        // Same status decoding as AddXformFromConfig (issue #1323): report
+        // the icStatusCMM name, not just the raw number.
         std::ostringstream oss;
-        oss << "AddXform failed for embedded source profile (status " << (int)stat << ")";
+        oss << "AddXform failed for embedded source profile (status " << (int)stat
+            << ": " << CIccCmm::GetStatusText(stat) << ")";
         sStageErr = oss.str();
       }
     }
@@ -418,7 +444,10 @@ CIccConnectCmm* CIccConnectCmm::CreateStandard(const CIccCfgProfileSequence& pro
   icStatusCMM beginStat = pCmm->Begin();
   if (beginStat != icCmmStatOk) {
     std::ostringstream oss;
-    oss << "Begin() failed (status " << (int)beginStat
+    // Decode the status name (issue #1323) in addition to the raw number and
+    // the source/destination spaces already reported below.
+    oss << "Begin() failed (status " << std::dec << (int)beginStat << ": "
+        << CIccCmm::GetStatusText(beginStat)
         << "); profile chain is incompatible (srcSpace=0x"
         << std::hex << (unsigned)pCmm->GetSourceSpace()
         << " dstSpace=0x" << (unsigned)pCmm->GetDestSpace() << ")";
@@ -500,8 +529,11 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
       sStageErr = "unable to open ICC profile '" + pCfg->m_iccFile + "'";
     }
     else if (stat != icCmmStatOk) {
+      // Same status decoding as AddXformFromConfig (issue #1323): report
+      // the icStatusCMM name, not just the raw number.
       std::ostringstream oss;
-      oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat << ")";
+      oss << "AddXform failed for '" << pCfg->m_iccFile << "' (status " << (int)stat
+          << ": " << CIccCmm::GetStatusText(stat) << ")";
       sStageErr = oss.str();
     }
 
@@ -591,7 +623,9 @@ CIccConnectCmm* CIccConnectCmm::CreateSearch(const CIccCfgSearchApply& searchApp
   icStatusCMM beginStat = pCmm->Begin();
   if (beginStat != icCmmStatOk) {
     std::ostringstream oss;
-    oss << "Begin() failed (status " << (int)beginStat
+    // Decode the status name (issue #1323) in addition to the raw number.
+    oss << "Begin() failed (status " << (int)beginStat << ": "
+        << CIccCmm::GetStatusText(beginStat)
         << "); search-profile chain is incompatible";
     sErrorMsg = oss.str();
     ReleasePccList(pccList);

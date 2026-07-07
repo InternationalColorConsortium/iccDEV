@@ -70,7 +70,10 @@
 
 
 #include <cstdio>
+#include <cmath>
 #include <string>
+#include <vector>
+#include <list>
 #include "IccCmm.h"
 #include "IccUtil.h"
 #include "IccDefs.h"
@@ -89,16 +92,29 @@
 #include <unistd.h>
 #endif
 
-
 // ============================================================================
 
-static
-FILE* icOpenWriteBinaryFile(const char* szFname)
+static bool IccApplyToLinkDiagnosticsEnabled()
 {
-  return icOpenRegularWriteBinaryFile(szFname);
+  const char *env = getenv("ICC_APPLYTOLINK_DIAGNOSTICS");
+  return env && env[0] && env[0] != '0';
 }
 
-// ============================================================================
+static void PrintRangeDiagnostic(icFloatNumber loRange, icFloatNumber hiRange, icFloatNumber sizeRange)
+{
+  if (!IccApplyToLinkDiagnosticsEnabled()) {
+    return;
+  }
+
+  fprintf(stderr,
+          "ICC_DIAG: range min=%g max=%g size=%g finite(min,max,size)=%d,%d,%d\n",
+          loRange,
+          hiRange,
+          sizeRange,
+          std::isfinite(loRange) ? 1 : 0,
+          std::isfinite(hiRange) ? 1 : 0,
+          std::isfinite(sizeRange) ? 1 : 0);
+}
 
 class ILinkWriter
 {
@@ -139,7 +155,7 @@ public:
 
   virtual bool setFile(const char* szOutputFile)
   {
-    m_filename = szOutputFile;
+    m_filename = icSanitizeFileName( szOutputFile );
 
     return true;
   }
@@ -151,7 +167,7 @@ public:
 
   virtual void setTitle(const char* szTitle)
   {
-    m_title = szTitle;
+    m_title = icSanitizeTagText( szTitle );
   }
 
   virtual void setCmm(CIccCmm* pCmm)
@@ -187,7 +203,7 @@ public:
       return false;
     }
 
-    m_f = icOpenWriteBinaryFile(m_filename.c_str());
+    m_f = icOpenRegularWriteBinaryFile(m_filename.c_str());
     if (!m_f) {
       printf("Unable to open '%s'\n", m_filename.c_str());
       return false;
@@ -205,7 +221,7 @@ public:
     fprintf(m_f, "LUT_3D_SIZE %d\n", m_grid);
 
     if (!icIsNear(m_fMinInput, 0.0f) || !icIsNear(m_fMaxInput, 1.0f)) {
-      const size_t fmtSize = 100;
+      const size_t fmtSize = 100;   // allow for twice precision
       char fmt[fmtSize];
       snprintf(fmt, fmtSize, "LUT_3D_INPUT_RANGE %%.%df %%.%df\n", m_precision, m_precision);
       fprintf(m_f, fmt, m_fMinInput, m_fMaxInput);
@@ -224,7 +240,8 @@ public:
         const CIccTag* pDesc = pProfile->FindTagConst(icSigProfileDescriptionTag);
         std::string text;
         if (icGetTagText(pDesc, text)) {
-          fprintf(m_f, "# - %s\n", text.c_str());
+          std::string cleanText = icSanitizeTagText( text );
+          fprintf(m_f, "# - %s\n", cleanText.c_str());
         }
 
       }
@@ -233,7 +250,7 @@ public:
 
   virtual void setNextNode(icFloatNumber* pPixel)
   {
-    const size_t fmtSize = 30;
+    const size_t fmtSize = 50;  // must be larger than allowed precision
     char fmt[fmtSize];
     snprintf(fmt, fmtSize, "%%.%df", m_precision);
 
@@ -289,7 +306,7 @@ public:
 
   virtual bool setFile(const char* szOutputFile)
   {
-    m_filename = szOutputFile;
+    m_filename = icSanitizeFileName( szOutputFile );
 
     return true;
   }
@@ -301,7 +318,7 @@ public:
 
   virtual void setTitle(const char* szTitle)
   {
-    m_title = szTitle;
+    m_title = icSanitizeTagText( szTitle );
   }
 
   virtual void setCmm(CIccCmm* pCmm)
@@ -431,7 +448,9 @@ public:
           }
         }
         else if (m_pFirstProfile->m_Header.version >= icVersionNumberV5) {
-
+          // V5+ source profiles carry colorant naming through the V5 machinery
+          // rather than the legacy colorantTable tag, so there is nothing to
+          // copy across for the CLR input space here.
         }
       }
 
@@ -444,7 +463,8 @@ public:
             }
           }
           else if (m_pLastProfile->m_Header.version >= icVersionNumberV5) {
-
+            // V5+ destination DeviceLink: no legacy colorantTableOut tag to copy;
+            // V5 colorant naming is handled through the V5 machinery elsewhere.
           }
         }
         else if (m_pLastProfile->m_Header.version < icVersionNumberV5) {
@@ -454,7 +474,8 @@ public:
           }
         }
         else if (m_pLastProfile->m_Header.version >= icVersionNumberV5) {
-
+          // V5+ destination profile: no legacy colorantTable tag to copy; V5
+          // colorant naming is handled through the V5 machinery elsewhere.
         }
       }
 
@@ -596,10 +617,6 @@ protected:
   CIccTagProfileSeqDesc* m_pTagSeq = nullptr;
 };
 
-
-typedef std::list<CIccProfile*> IccProfilePtrList;
-
-
 void Usage() 
 {
   printf("iccApplyToLink built with IccProfLib version " ICCPROFLIBVER "\n\n");
@@ -614,10 +631,10 @@ void Usage()
   printf("  Where lut_size represents the number of grid entries for each lut dimension.\n\n");
   
   printf("  For option when link_type is 0:\n");
-  printf("    option represents the digits of precision for lut for .cube files\n");
-  printf("  For option when link_type is 1:\n");
   printf("    0 - version 4 profile with 16-bit table\n");
   printf("    1 - version 5 profile\n\n");
+  printf("  For option when link_type is 1:\n");
+  printf("    option represents the digits of precision for lut for .cube files\n\n");
 
   printf("  title is the title/description for the dest_link_file\n\n");
 
@@ -625,8 +642,8 @@ void Usage()
   printf("  range_max specifies the maximum input value (usually 1.0)\n\n");
 
   printf("  For first_transform:\n");
-  printf("    0 - use source transform from first profile\n");
-  printf("    1 - use destination transform from first profile\n\n");
+  printf("    0 - use destination transform from first profile\n");
+  printf("    1 - use source transform from first profile\n\n");
 
   printf("  For interp:\n");
   printf("    0 - linear interpolation\n");
@@ -660,6 +677,20 @@ void Usage()
 
 //===================================================
 
+typedef std::vector<CIccProfile*> IccProfilePtrList;
+
+// The tool owns every -PCC profile it opens until cmm.Begin() has consumed the
+// connection conditions; they are tracked in pccList and must be released on
+// every exit path.  Centralizing the release here keeps the early-return error
+// paths from stranding them (#1336).
+static void releasePccList(IccProfilePtrList& pccList)
+{
+  for (IccProfilePtrList::iterator pcc = pccList.begin(); pcc != pccList.end(); ++pcc) {
+    delete *pcc;
+  }
+  pccList.clear();
+}
+
 int main(int argc, icChar* argv[])
 {
   int minargs = 10; // minimum number of arguments
@@ -681,7 +712,7 @@ int main(int argc, icChar* argv[])
   nNumProfiles = temp/2;
 
   ILinkWriter* pLinkWriter;
-  if (atoi(argv[2])) {
+  if (atoi(argv[2]) != 0) {
     pLinkWriter = new CCubeWriter();
   }
   else {
@@ -698,20 +729,30 @@ int main(int argc, icChar* argv[])
   pWriter->setFile(argv[1]);
 
   int nLutSize = atoi(argv[3]);
-  if (nLutSize <= 0) {
-    printf("Invalid LUT sizes\n");
+  if (nLutSize < 2 || nLutSize > 255) {
+    printf("Invalid LUT size (%d), needs to be between 2 and 255\n", nLutSize );
     return -1;
   }
   
   pWriter->setLutSize(nLutSize);
 
-  pWriter->setOption(atoi(argv[4]));
+  int precision = atoi(argv[4]);
+  if (precision < 0)
+    precision = 0;
+  if (precision > 20)
+    precision = 20;
+  pWriter->setOption(precision);
 
   pWriter->setTitle(argv[5]);
 
   icFloatNumber loRange = (icFloatNumber)atof(argv[6]);
   icFloatNumber hiRange = (icFloatNumber)atof(argv[7]);
   icFloatNumber sizeRange = hiRange - loRange;
+  PrintRangeDiagnostic(loRange, hiRange, sizeRange);
+  if (!std::isfinite(loRange) || !std::isfinite(hiRange) || !std::isfinite(sizeRange)) {
+    printf("Invalid input range: range_min and range_max must be finite numbers\n");
+    return 1;
+  }
   pWriter->setInputRange(loRange, hiRange);
 
   //Retrieve command line arguments
@@ -771,7 +812,16 @@ int main(int argc, icChar* argv[])
         nType = 0;
         Hint.AddHint(new CIccApplyBPCHint());
         break;
+      default:
+        break;
       }
+      
+      // pin decoded values to valid range
+      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+        nIntent = icPerceptual;
+      
+      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+       nType = icXformLutColor;
 
       if (nLuminance) {
         Hint.AddHint(new CIccLuminanceMatchingHint());
@@ -782,6 +832,8 @@ int main(int argc, icChar* argv[])
         pPccProfile = OpenIccProfile(argv[nCount+3]);
         if (!pPccProfile) {
           printf("Unable to open Profile Connections Conditions from '%s'\n", argv[nCount+3]);
+          // Free any -PCC profiles opened on earlier loop iterations (#1336).
+          releasePccList(pccList);
           return -1;
         }
         //Keep track of pPccProfile for until after cmm.Begin is called
@@ -799,7 +851,25 @@ int main(int argc, icChar* argv[])
       stat = theCmm.AddXform(pXformProfile, nIntent<0 ? icUnknownIntent : (icRenderingIntent)nIntent, nInterp, pPccProfile,
                               (icXformLutType)nType, bUseD2BxB2DxTags, &Hint);
       if (stat) {
-        printf("Invalid Profile(%d):  %s\n", stat, argv[nCount]);
+        // AddXform can fail for reasons that have nothing to do with the
+        // profile itself.  In particular icCmmStatBadSpaceLink (2) means the
+        // profile's source color space does not connect to the output space
+        // of the previous transform in the chain (CIccCmm alternates the
+        // input/output direction of successive profiles based on the
+        // first_transform argument, so the connecting spaces depend on chain
+        // position and direction, not just the profile).  The old message
+        // here ("Invalid Profile(N)") reported any failure as an invalid
+        // profile, which misled users when a structurally valid profile was
+        // simply chained incompatibly - see issue #1322.  Decode the status
+        // with CIccCmm::GetStatusText so the real cause is visible.
+        printf("Error - Unable to add '%s' to transform chain (status %d: %s)\n", argv[nCount], stat, CIccCmm::GetStatusText(stat));
+        if (stat == icCmmStatBadSpaceLink) {
+          printf("The profile's color spaces do not connect with the previous transform in the chain.\n");
+        }
+        // AddXform already owns/frees pXformProfile on failure (#1327); the
+        // tool still owns the accumulated -PCC profiles, so release them before
+        // bailing out instead of leaking them (#1336).
+        releasePccList(pccList);
         return -1;
       }
       sigMap.clear();
@@ -809,19 +879,23 @@ int main(int argc, icChar* argv[])
 
   //All profiles have been added to CMM.  Tell CMM that we are ready to begin applying colors/pixels
   if((stat=theCmm.Begin())) {
-    printf("Error %d - Unable to begin profile application - Possibly invalid or incompatible profiles\n", stat);
+    // Begin() walks the assembled xform list and connects/optimizes the
+    // transforms; it is where cross-profile incompatibilities that AddXform
+    // could not see (PCS conversion setup, connection conditions) surface.
+    // Decode the status code into text (issue #1322 follow-through) instead
+    // of printing a bare number.
+    printf("Error - Unable to begin profile application (status %d: %s) - Possibly invalid or incompatible profiles\n", stat, CIccCmm::GetStatusText(stat));
+    // Begin() failed after the chain was assembled; the -PCC profiles are still
+    // tool-owned at this point, so release them rather than leak them (#1336).
+    releasePccList(pccList);
     return -1;
   }
 
   pWriter->setCmm(&theCmm);
 
-  //Now we can release the pccProfile nodes.
-  IccProfilePtrList::iterator pcc;
-  for (pcc=pccList.begin(); pcc!=pccList.end(); pcc++) {
-    CIccProfile *pPccProfile = *pcc;
-    delete pPccProfile;
-  }
-  pccList.clear();
+  //Now that Begin() has consumed the connection conditions we can release the
+  //-PCC profile nodes.
+  releasePccList(pccList);
 
   if (!pWriter->begin(theCmm.GetSourceSpace(), theCmm.GetDestSpace())) {
     printf("Unable to begin writing LUT\n");
@@ -836,21 +910,41 @@ int main(int argc, icChar* argv[])
   icColorSpaceSignature DestspaceSig = theCmm.GetDestSpace();
   int nDestSamples = icGetSpaceSamples(DestspaceSig);
 
-  int* idx = new int[nSrcSamples];
-  icFloatNumber* srcPixel = new icFloatNumber[nSrcSamples];
-  icFloatNumber* dstPixel = new icFloatNumber[nDestSamples];
-
-  icUInt32Number maxLut = nLutSize - 1;
-
-  int curPer, lastPer = -1;
-
-  //init idx;
-  int lutCount = 1;
+  if (nSrcSamples <= 0 || nDestSamples <= 0) {
+    printf("Invalid CMM channel count: source samples=%d destination samples=%d\n", nSrcSamples, nDestSamples);
+    return 1;
+  }
+  
+  size_t lutCount = 1;
+  size_t lutLimit = (((1ULL<<32)-1) / nLutSize);     // limit to 4 Gig(32 bits) instead of size_t(64 bits)
   for (auto si = 0; si < nSrcSamples; si++) {
-    idx[si] = 0;
+    if (lutCount > lutLimit ) {    // avoid overflow
+      printf("LUT size too large\n");
+      return -1;
+    }
     lutCount *= nLutSize;
   }
 
+  // Avoid vector(size, value) here: libstdc++ 15's fill_n countdown trips
+  // -fsanitize=integer on its internal unsigned zero-crossing.
+  std::vector<int> idx;
+  std::vector<icFloatNumber> srcPixel;
+  std::vector<icFloatNumber> dstPixel;
+  idx.reserve(nSrcSamples);
+  srcPixel.reserve(nSrcSamples);
+  dstPixel.reserve(nDestSamples);
+  for (int si = 0; si < nSrcSamples; si++) {
+    idx.push_back(0);
+    srcPixel.push_back(0.0f);
+  }
+  for (int si = 0; si < nDestSamples; si++) {
+    dstPixel.push_back(0.0f);
+  }
+
+  // 2 <= nLutSize <= 255, so maxLUT cannot be zero
+  icUInt32Number maxLut = nLutSize - 1;
+  int lastPer = -1;
+  
   int j = 0;
   for (int c = 0; j >= 0; c++) {
 
@@ -859,9 +953,9 @@ int main(int argc, icChar* argv[])
     }
 
     //Use CMM to convert SrcPixel to DestPixel
-    theCmm.Apply(dstPixel, srcPixel);
+    theCmm.Apply(&dstPixel[0], &srcPixel[0]);
 
-    pWriter->setNextNode(dstPixel);
+    pWriter->setNextNode(&dstPixel[0]);
 
     for (j = nSrcSamples - 1; j >= 0;) {
       idx[j]++;
@@ -875,17 +969,13 @@ int main(int argc, icChar* argv[])
  
     //Display status of how much we have accomplished
     if (lutCount > 0) {     // explicit check to avoid divide by zero
-        curPer = ((c + 1) * 100) / lutCount;
+        int curPer = ((c + 1) * 100) / lutCount;
         if (curPer != lastPer) {
           printf("\r%d%%", curPer);
           lastPer = curPer;
         }
     }
   }
-  
-  delete[] dstPixel;
-  delete[] srcPixel;
-  delete[] idx;
 
   if (pWriter->finish()) {
     printf("\nLUT successfully written to '%s'\n", argv[1]);

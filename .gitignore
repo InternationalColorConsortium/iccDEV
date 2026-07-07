@@ -37,6 +37,8 @@ Testing/private/**
 **/*.noindex
 **/Build
 !/Build
+!.github/ci/build
+!.github/ci/build/**
 **/xcuserdata
 **/DerivedData
 **/DataStore

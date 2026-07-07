@@ -382,6 +382,77 @@ jobs:
           fi
           echo "" >> "$RISK_REPORT_PATH"
 
+      - name: "1b. Absolute Cache Policy Audit"
+        if: always()
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          # shellcheck shell=bash
+          # shellcheck disable=SC2129
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cd "$SCAN_ROOT"
+          SANITIZER="$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          if [[ -f "$SANITIZER" ]]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          echo "## 1b. Absolute Cache Policy Audit" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "Actions cache and mutable build cache are banned for all workflows." >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+
+          mapfile -t workflow_files < <(
+            find .github/workflows -maxdepth 1 -type f \
+              \( -name '*.yml' -o -name '*.yaml' \) | sort
+          )
+          if [ "${#workflow_files[@]}" -eq 0 ]; then
+            echo "[HIGH] Absolute cache policy violation: no workflow files found" >> "$RISK_REPORT_PATH"
+            exit 1
+          fi
+
+          cache_policy="$TRUSTED_SCRIPTS/check-workflow-cache-policy.sh"
+          if [ ! -x "$cache_policy" ]; then
+            echo "[HIGH] Absolute cache policy violation: cache policy helper missing" >> "$RISK_REPORT_PATH"
+            exit 1
+          fi
+
+          policy_log="$(mktemp)"
+          set +e
+          "$cache_policy" "${workflow_files[@]}" >"$policy_log" 2>&1
+          policy_status=$?
+          set -e
+
+          if [ "$policy_status" -eq 0 ]; then
+            echo "[OK] No workflow cache primitives detected" >> "$RISK_REPORT_PATH"
+            echo "" >> "$RISK_REPORT_PATH"
+            exit 0
+          fi
+
+          echo "[HIGH] Absolute cache policy violation detected" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "<details><summary>Cache policy findings</summary>" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            echo "- \`$(sanitize_line "$line")\`" >> "$RISK_REPORT_PATH"
+          done < "$policy_log"
+          echo "" >> "$RISK_REPORT_PATH"
+          echo "</details>" >> "$RISK_REPORT_PATH"
+          echo "" >> "$RISK_REPORT_PATH"
+          exit 1
+
       - name: "2. Dangerous Trigger Detection"
         if: always()
         env:
@@ -1920,6 +1991,7 @@ jobs:
             '^\[HIGH\].*release workflow uses broad cache restore keys'
             '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
             '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
+            '^\[HIGH\] Absolute cache policy violation'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'
@@ -1983,7 +2055,11 @@ jobs:
                 ;;
               *"actions/cache in a publish/write workflow boundary"*|*"Buildx GHA cache in a publish/write workflow boundary"*)
                 cause="A publish or write-capable workflow can consume mutable GitHub Actions cache state before producing packages, releases, images, or attestations."
-                remediation="Remove Actions cache and Buildx GHA cache from publish paths; rebuild release inputs from pinned refs and verified checksums."
+                remediation="Remove Actions cache and mutable build cache from all workflows; rebuild release inputs from pinned refs and verified checksums."
+                ;;
+              *"Absolute cache policy violation"*)
+                cause="A workflow contains a cache primitive or does not explicitly disable an implicit cache control."
+                remediation="Remove cache primitives and set supported implicit cache toggles such as cache:false, cache-binary:false, or no-cache:true."
                 ;;
               *"downloads artifacts without an explicit name or pattern"*)
                 cause="A publish workflow can ingest unintended artifacts from the same run."
@@ -2118,6 +2194,7 @@ jobs:
             '^\[HIGH\].*release workflow uses broad cache restore keys'
             '^\[HIGH\].*actions/cache in a publish/write workflow boundary'
             '^\[HIGH\].*Buildx GHA cache in a publish/write workflow boundary'
+            '^\[HIGH\] Absolute cache policy violation'
             '^\[HIGH\].*downloads artifacts without an explicit name or pattern'
             '^\[HIGH\].*allows missing release artifacts'
             '^\[HIGH\] GitHub token format assumption'

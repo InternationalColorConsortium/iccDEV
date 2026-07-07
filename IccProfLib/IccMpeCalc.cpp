@@ -217,50 +217,61 @@ void IIccCalcDebugger::SetDebugger(IIccCalcDebugger *pDebugger)
     g_pDebugger = pDebugger;
 }
 
-// TODO - get rid of these macros and inline the code to reduce errors
-// shadowed variable names are way too risky
-// templates may be an option
-#define OsPopArg(X) { \
-  if (!os.pStack->size()) \
-    return false; \
-  X = *(os.pStack->rbegin()); \
-  os.pStack->pop_back(); \
+inline bool
+OsPopArg( SIccOpState &os, icFloatNumber &X )
+{
+  if (!os.pStack->size())
+    return false;
+  X = *(os.pStack->rbegin());
+  os.pStack->pop_back();
+  return true;
 }
 
-#define OsPopArgs(X, N) { \
-  icUInt32Number _nv=(N); \
-  size_t _ss = os.pStack->size(); \
-  if (_nv>_ss) \
-    return false; \
-  icFloatNumber *_sv = &(*os.pStack)[_ss-_nv]; \
-  memcpy((X), _sv, _nv*sizeof(icFloatNumber)); \
-  os.pStack->resize(_ss-_nv); \
+inline bool
+OsPopArgs( SIccOpState &os, icFloatNumber *X, const icUInt32Number N )
+{
+  size_t ss = os.pStack->size();
+  if (N > ss)
+    return false;
+  icFloatNumber *sv = &(*os.pStack)[ss-N];
+  memcpy( X, sv, N*sizeof(icFloatNumber));
+  os.pStack->resize(ss-N);
+  return true;
 }
 
-#define OsPushArg(X) { \
-  icFloatNumber _V = (X); \
-  os.pStack->push_back(_V); \
+inline void
+OsPushArg( SIccOpState &os, const icFloatNumber &X )
+{
+  os.pStack->push_back(X);
 }
 
-#define OsPushArgs(X, N) { \
-  size_t _ss = os.pStack->size(); \
-  icUInt32Number _nv=(N); \
-  os.pStack->resize(_ss+_nv); \
-  icFloatNumber *_sv = &(*os.pStack)[_ss]; \
-  memcpy(_sv, (X), _nv*sizeof(icFloatNumber)); \
+inline void
+OsPushArgs( SIccOpState &os, const icFloatNumber *X, const icUInt32Number N )
+{
+  size_t ss = os.pStack->size();
+  os.pStack->resize( ss + N );
+  icFloatNumber *sv = &(*os.pStack)[ss];
+  memcpy(sv, X, N*sizeof(icFloatNumber));
 }
 
-#define OsShrinkArgs(N) { \
-  icUInt32Number nv = (N); \
-  size_t _ss = os.pStack->size(); \
-  if (nv>_ss) \
-    return false; \
-  os.pStack->resize(_ss-nv); \
+inline bool
+OsShrinkArgs( SIccOpState &os, const int N )
+{
+  if (N < 0)
+    return false;
+  icUInt32Number nv = N;
+  size_t ss = os.pStack->size();
+  if (nv > ss)
+    return false;
+  os.pStack->resize(ss-nv);
+  return true;
 }
 
-#define OsExtendArgs(N) { \
-  size_t _ss = os.pStack->size(); \
-  os.pStack->resize(_ss+(N)); \
+inline void
+OsExtendArgs( SIccOpState &os, const size_t N )
+{
+  size_t ss = os.pStack->size();
+  os.pStack->resize(ss + N);
 }
 
 
@@ -326,8 +337,7 @@ class CIccOpDefOutputChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPopArgs(&os.output[op->data.select.v1], op->data.select.v2+1);
-    return true;
+    return OsPopArgs(os, &os.output[op->data.select.v1], op->data.select.v2+1);
   }
 };
 
@@ -336,7 +346,7 @@ class CIccOpDefInputChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPushArgs(&os.pixel[op->data.select.v1], op->data.select.v2+1);
+    OsPushArgs(os, &os.pixel[op->data.select.v1], op->data.select.v2+1);
     return true;
   }
 };
@@ -346,7 +356,7 @@ class CIccOpDefTempGetChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPushArgs(&os.temp[op->data.select.v1], op->data.select.v2+1);
+    OsPushArgs(os, &os.temp[op->data.select.v1], op->data.select.v2+1);
     return true;
   }
 };
@@ -356,8 +366,7 @@ class CIccOpDefTempPutChan : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp *op, SIccOpState &os)
   {
-    OsPopArgs(&os.temp[op->data.select.v1], op->data.select.v2+1)
-    return true;
+    return OsPopArgs(os, &os.temp[op->data.select.v1], op->data.select.v2+1);
   }
 };
 
@@ -387,20 +396,20 @@ public:
     icFloatNumber val=0.0;
 
     if (sig==icSigTrueVar) {
-      OsPushArg((icFloatNumber)1.0);
-      OsPushArg((icFloatNumber)1.0);
+      OsPushArg(os,(icFloatNumber)1.0);
+      OsPushArg(os,(icFloatNumber)1.0);
     }
     else if (sig==icSigNotDefVar) {
-      OsPushArg((icFloatNumber)0.0);
-      OsPushArg((icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
     }
     else if (os.pApply->GetEnvVar(sig, val)) {
-      OsPushArg((icFloatNumber)val);
-      OsPushArg((icFloatNumber)1.0);
+      OsPushArg(os,(icFloatNumber)val);
+      OsPushArg(os,(icFloatNumber)1.0);
     }
     else {
-      OsPushArg((icFloatNumber)0.0);
-      OsPushArg((icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
+      OsPushArg(os,(icFloatNumber)0.0);
     }
     return true;
   }
@@ -417,6 +426,8 @@ public:
 
     icUInt16Number nSrc = pElemApply->NumInputChannels();
     icUInt16Number nDst = pElemApply->NumOutputChannels();
+    if (!nSrc || !nDst)
+      return false;
 
     size_t ss = os.pStack->size();
     if (nSrc>ss)
@@ -431,6 +442,8 @@ public:
     pElemApply->Apply(d, s);
 
     size_t ns = (size_t)( ss + (int)nDst - (int)nSrc );
+    if (ns < nDst || ns > icMaxDataStackSize)
+      return false;
 
     if (ns != ss)
       os.pStack->resize(ns);
@@ -457,7 +470,7 @@ public:
       size_t ntSize = (size_t)n * (size_t)t;
       if (ntSize > size_t(icMaxDataStackSize))
         return false;
-      OsExtendArgs(ntSize);
+      OsExtendArgs(os,ntSize);
 
       icFloatNumber *to = &(*os.pStack)[stackSize];
       icFloatNumber *from = to-n;
@@ -483,7 +496,7 @@ public:
       return false;
 
     if (n && t) {
-      OsExtendArgs(t);
+      OsExtendArgs(os,(size_t)t);
 
       icFloatNumber *to = &(*os.pStack)[stackSize];
       icFloatNumber *from = to-n;
@@ -532,11 +545,12 @@ public:
 
       icFloatNumber *copyList = &(*os.pScratch)[0];
 
-      OsPopArgs(copyList, nCopy);
+      if (!OsPopArgs(os, copyList, nCopy))
+        return false;
 
       int j;
       for (j=0; j<nCopy; j++) {
-        OsPushArg(copyList[(j+next)%nCopy]);
+        OsPushArg(os,copyList[(j+next)%nCopy]);
       }
     }
     return true;
@@ -558,11 +572,12 @@ public:
 
       icFloatNumber *copyList = &(*os.pScratch)[0];
 
-      OsPopArgs(copyList, nCopy);
+      if (!OsPopArgs(os, copyList, nCopy))
+        return false;
 
       int j;
       for (j=0; j<nCopy; j++) {
-        OsPushArg(copyList[(j+next)%nCopy]);
+        OsPushArg(os,copyList[(j+next)%nCopy]);
       }
     }
     return true;
@@ -577,15 +592,22 @@ public:
     size_t ss = os.pStack->size();
     int r=op->data.select.v1+1;
     int c=op->data.select.v2+1;
-    int nSize = r*c;
+    // v1/v2 are icUInt16Number, so r and c can each reach 65536 and r*c can reach
+    // ~2^32 -- well past INT_MAX.  Computing the product in int overflowed (UBSan:
+    // "65536 * 32768 cannot be represented in type 'int'", #1448) and wrapped to a
+    // negative value that slipped past the "nSize>ss" guard, leading to a bad
+    // resize / out-of-bounds stack index.  Compute the product in size_t (as the
+    // sibling op at OsExtendArgs already does) so the guard rejects oversized
+    // requests; once it passes, nSize<=ss<=icMaxDataStackSize so it fits an int.
+    size_t nSize = (size_t)r*(size_t)c;
 
-    if (nSize>(int)ss)
+    if (nSize>ss)
       return false;
 
     if (r>1 && c>1) {
       int j, k;
 
-      if (os.pScratch->size()<(size_t)nSize)
+      if (os.pScratch->size()<nSize)
         os.pScratch->resize(nSize);
 
       icFloatNumber *ptrStack = &(*os.pStack)[ss-nSize];
@@ -615,17 +637,22 @@ public:
     size_t ss = os.pStack->size();
     int r=op->data.select.v1+1;
     int c=op->data.select.v2+1;
-    int nMSize = r*c;
-    int nSize = nMSize + c;
+    // r and c (icUInt16Number+1) can each reach 65536, so r*c can reach ~2^32 --
+    // past INT_MAX.  The int product overflowed (UBSan: "65536 * 32768 cannot be
+    // represented in type 'int'", #1447) and wrapped negative, slipping past the
+    // "nSize>ss" guard into a bad stack index.  Compute the matrix size in size_t;
+    // after the guard nSize<=ss<=icMaxDataStackSize so the narrow uses below fit.
+    size_t nMSize = (size_t)r*(size_t)c;
+    size_t nSize = nMSize + (size_t)c;
 
-    if (nSize>(int)ss)
+    if (nSize>ss)
       return false;
 
     if (r>1 && c>1) {
 
       if (os.pScratch->size()<(size_t)c)
         os.pScratch->resize(c);
-      
+
       icFloatNumber *ptrStack = &(*os.pStack)[ss-nSize];
       icFloatNumber *x = &(*os.pScratch)[0];
       icFloatNumber *mtx = ptrStack;
@@ -655,7 +682,7 @@ class CIccOpDefPi : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icPiNum);
+    OsPushArg(os,(icFloatNumber)icPiNum);
     return true;
   }
 };
@@ -665,7 +692,7 @@ class CIccOpDefPosInfinity : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icPosInfinity);
+    OsPushArg(os,(icFloatNumber)icPosInfinity);
     return true;
   }
 };
@@ -675,7 +702,7 @@ class CIccOpDefNegInfinity : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icNegInfinity);
+    OsPushArg(os,(icFloatNumber)icNegInfinity);
     return true;
   }
 };
@@ -685,7 +712,7 @@ class CIccOpDefNotANumber : public IIccOpDef
 public:
   virtual bool Exec(SIccCalcOp * /* op */, SIccOpState &os)
   {
-    OsPushArg((icFloatNumber)icNotANumber);
+    OsPushArg(os,(icFloatNumber)icNotANumber);
     return true;
   }
 };
@@ -702,13 +729,15 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] += s[1];
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       for (j=1; j<n; j++) {
         s[0] += s[j];
       }
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -726,13 +755,15 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] *= s[1];
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       for (j=1; j<n; j++) {
         s[0] *= s[j];
       }
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -750,7 +781,8 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] = icMin(s[0], s[1]);
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       icFloatNumber mv = s[0];
@@ -759,7 +791,8 @@ public:
           mv = s[j];
       }
       s[0] = mv;
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -777,7 +810,8 @@ public:
     icFloatNumber *s = &(*os.pStack)[ss-n];
     if (n==2) {
       s[0] = icMax(s[0], s[1]);
-      OsShrinkArgs(1);
+      if (!OsShrinkArgs(os,1))
+        return false;
     }
     else {
       icFloatNumber mv = s[0];
@@ -786,7 +820,8 @@ public:
           mv = s[j];
       }
       s[0] = mv;
-      OsShrinkArgs(n-1);
+      if (!OsShrinkArgs(os,n-1))
+        return false;
     }
     return true;
   }
@@ -809,8 +844,7 @@ public:
     }
     s[0] = j<n ? 0.0f : 1.0f;
 
-    OsShrinkArgs(n-1);
-    return true;
+    return OsShrinkArgs(os,n-1);
   }
 };
 
@@ -831,8 +865,7 @@ public:
     }
     s[0] = j<n ? 1.0f : 0.0f;
 
-    OsShrinkArgs(n-1);
-    return true;
+    return OsShrinkArgs(os,n-1);
   }
 };
 
@@ -850,8 +883,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = icMin(s[j], s[j+n]);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -869,8 +901,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = icMax(s[j], s[j+n]);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -888,8 +919,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (s[j]>=0.5f && s[j+n]>=0.5) ? 1.0f : 0.0f;
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -907,8 +937,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (s[j]>=0.5f || s[j+n]>=0.5) ? 1.0f : 0.0f;
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -926,8 +955,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] += s[j+n];
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -945,8 +973,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] -= s[j+n];
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -964,8 +991,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] *= s[j+n];
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -986,8 +1012,7 @@ public:
       else
         s[j] = 0.0f;
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1012,8 +1037,7 @@ public:
       else
         s[j] = (icFloatNumber)fmod(temp, tempN);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1032,8 +1056,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (icFloatNumber)pow(s[j], p);
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1052,8 +1075,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = s[j] + p;
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1072,8 +1094,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = s[j] - p;
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1092,8 +1113,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = s[j] * p;
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1119,8 +1139,7 @@ public:
         s[j] = 0.0f;
       }
     }
-    OsShrinkArgs(1);
-    return true;
+    return OsShrinkArgs(os,1);
   }
 };
 
@@ -1138,8 +1157,7 @@ public:
     for (j=0; j<n; j++) {
       s[j] = (icFloatNumber)pow(s[j], s[j+n]);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1529,8 +1547,7 @@ public:
       a2 = s[j+n];
       s[j] = (icFloatNumber)atan2(a2, a1);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1599,8 +1616,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 < a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1644,8 +1660,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 <= a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1671,8 +1686,7 @@ public:
                  (icFloatNumber)1.0 : 
                  (icFloatNumber)0.0));
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1698,8 +1712,7 @@ public:
         (icFloatNumber)0.0 :
           (icFloatNumber)1.0));
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1720,8 +1733,7 @@ public:
       a2 = s[j+n];
       s[j] = (fabs(a1-a2)<1.0e-5 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1742,8 +1754,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 >= a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -1764,8 +1775,7 @@ public:
       a2 = s[j+n];
       s[j] = (a1 > a2 ? (icFloatNumber)1.0 : (icFloatNumber)0.0);
     }
-    OsShrinkArgs(n);
-    return true;
+    return OsShrinkArgs(os,n);
   }
 };
 
@@ -2822,6 +2832,7 @@ bool CIccFuncTokenizer::GetIndex(icUInt16Number &v1, icUInt16Number &v2, icUInt1
 {
   unsigned int iv1, iv2;
   const char *pos = GetPos();
+  int nParsed = 0;
 
   if (!GetNext(true))
     return false;
@@ -2831,22 +2842,29 @@ bool CIccFuncTokenizer::GetIndex(icUInt16Number &v1, icUInt16Number &v2, icUInt1
   if (*szToken=='[' || *szToken=='(') {
     if (strchr(szToken, ',')) {
       if (*szToken=='(') 
-        sscanf(m_token->c_str(), "(%u,%u)", &iv1, &iv2);
+        nParsed = sscanf(m_token->c_str(), "(%u,%u)", &iv1, &iv2);
       else 
-        sscanf(m_token->c_str(), "[%u,%u]", &iv1, &iv2);
+        nParsed = sscanf(m_token->c_str(), "[%u,%u]", &iv1, &iv2);
+      if (nParsed != 2)
+        return false;
     }
     else {
       if (*szToken=='(')
-        sscanf(m_token->c_str(), "(%u)", &iv1);
+        nParsed = sscanf(m_token->c_str(), "(%u)", &iv1);
       else 
-        sscanf(m_token->c_str(), "[%u]", &iv1);
+        nParsed = sscanf(m_token->c_str(), "[%u]", &iv1);
+      if (nParsed != 1)
+        return false;
     }
   }
   else {
     SetPos(pos); //Undo get token
   }
-  v1 = (icUInt16Number)iv1 - initV1;
-  v2 = (icUInt16Number)iv2 - initV2;
+  if (iv1 > 0xffff || iv2 > 0xffff || iv1 < initV1 || iv2 < initV2)
+    return false;
+
+  v1 = (icUInt16Number)(iv1 - initV1);
+  v2 = (icUInt16Number)(iv2 - initV2);
 
   return true;
 }
@@ -3563,8 +3581,11 @@ bool CIccCalculatorFunc::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&m_nOps))
     return false;
 
-  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
-  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  // CWE-400/CWE-834: m_nOps is a 32-bit count with no ICC.2-imposed maximum.
+  // Reject counts at or above the shared MAX_CALC_ELEMENTS cap (IccMpeCalc.h)
+  // before allocating m_Op[] or driving the op loop below, so a corrupt or
+  // hostile count cannot force an unbounded allocation. ">= reject": a valid
+  // count is strictly less than the cap.
   if (m_nOps >= MAX_CALC_ELEMENTS)
     return false;
 
@@ -3582,7 +3603,9 @@ bool CIccCalculatorFunc::Read(icUInt32Number size, CIccIO *pIO)
     }
 
     icUInt32Number i;
-    for (i=0; i<m_nOps; i++) {
+    // CWE-400/834: m_nOps is rejected above when >= MAX_CALC_ELEMENTS; mirror that
+    // bound in the loop condition so the walk is provably finite to static analysis.
+    for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
       if (!pIO->Read32(&m_Op[i].sig))
         return false;
       if (!pIO->Read32(&m_Op[i].data.num))
@@ -3620,7 +3643,9 @@ bool CIccCalculatorFunc::Write(CIccIO *pIO)
     return false;
 
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++)  {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++)  {
     if (!pIO->Write32(&m_Op[i].sig))
       return false;
     if (!pIO->Write32(&m_Op[i].data.num))
@@ -3647,7 +3672,9 @@ bool CIccCalculatorFunc::SetOpDefs()
     return false;
 
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     m_Op[i].def = CIccCalcOpMgr::getOpDef(m_Op[i].sig);
     if (!m_Op[i].def)
       return false;
@@ -3707,7 +3734,9 @@ bool CIccCalculatorFunc::InitSelectOps()
 {
   icUInt32Number i;
 
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig==icSigSelectOp) {
       if (!InitSelectOp(&m_Op[i], m_nOps-i))
         return false;
@@ -3805,7 +3834,8 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
 
     if (op->sig==icSigIfOp) {
       icFloatNumber a1;
-      OsPopArg(a1);
+      if (!OsPopArg(os,a1))
+        return false;
 
       if (os.idx+1<nOps && ops[os.idx+1].sig==icSigElseOp) {
         os.idx++;
@@ -3854,7 +3884,8 @@ bool CIccCalculatorFunc::ApplySequence(CIccApplyMpeCalculator *pApply, icUInt32N
     }
     else if (op->sig==icSigSelectOp) {
       icFloatNumber a1;
-      OsPopArg(a1);
+      if (!OsPopArg(os,a1))
+        return false;
       icInt32Number nSel = icCalcSaturatingRound(a1);
 
       if (!op->extra) {
@@ -4064,7 +4095,9 @@ icUInt32Number CIccCalculatorFunc::GetMaxTemp() const
 {
   icUInt32Number i, nMaxTemp = 0;
 
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig == icSigTempGetChanOp || m_Op[i].sig == icSigTempPutChanOp || m_Op[i].sig == icSigTempSaveChanOp ) {
       icUInt32Number last = (icUInt32Number)(m_Op[i].data.select.v1) + (icUInt32Number)(m_Op[i].data.select.v2);
       if (last>nMaxTemp)
@@ -4425,7 +4458,9 @@ icFuncParseStatus CIccCalculatorFunc::DoesStackUnderflowOverflow(std::string &sR
 bool CIccCalculatorFunc::HasValidOperations(std::string &sReport) const
 {
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (!m_Op[i].IsValidOp(m_pCalc)) {
       std::string opDesc;
       m_Op[i].Describe(opDesc, 100); // TODO - propogate nVerboseness 
@@ -4477,8 +4512,10 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
     icUInt32Number version = pProfile->m_Header.version;
 
     icCalcOpMap map;
-    for (i = 0; i < m_nOps; i++) {
-      if (version < icVersionNumberV5_1 && 
+    // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+    // sized to it; mirror that bound here so the walk is provably finite.
+    for (i = 0; i < m_nOps && i < MAX_CALC_ELEMENTS; i++) {
+      if (version < icVersionNumberV5_1 &&
           (m_Op[i].sig == icSigNotOp ||
            m_Op[i].sig == icSigNotEqualOp)) {
         map[m_Op[i].sig] = NULL;
@@ -4516,7 +4553,9 @@ bool CIccCalculatorFunc::HasUnsupportedOperations(std::string &sReport, const CI
 bool CIccCalculatorFunc::DoesOverflowInput(icUInt16Number nInputChannels) const
 {
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig == icSigInputChanOp) {
       if (m_Op[i].data.select.v1+m_Op[i].data.select.v2 >= nInputChannels)
         return true;
@@ -4539,7 +4578,9 @@ bool CIccCalculatorFunc::DoesOverflowInput(icUInt16Number nInputChannels) const
 bool CIccCalculatorFunc::DoesOverflowOutput(icUInt16Number nOutputChannels) const
 {
   icUInt32Number i;
-  for (i=0; i<m_nOps; i++) {
+  // CWE-400/834: m_nOps is bounded by MAX_CALC_ELEMENTS at Read() and m_Op[] is
+  // sized to it; mirror that bound here so the walk is provably finite.
+  for (i=0; i<m_nOps && i<MAX_CALC_ELEMENTS; i++) {
     if (m_Op[i].sig == icSigOutputChanOp) {
       if (m_Op[i].data.select.v1 + m_Op[i].data.select.v2 >= nOutputChannels)
         return true;
@@ -4608,9 +4649,16 @@ CIccMpeCalculator::CIccMpeCalculator(const CIccMpeCalculator &channelGen)
   if (channelGen.m_nSubElem) {
     icUInt32Number i;
 
+    // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
+    // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
+    // match. A constructor/assignment cannot reject, so clamp the copy loop to
+    // that same cap (using the >= boundary shared with the reject paths) so a
+    // corrupted count can't drive an unbounded walk.
+    icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+
     m_SubElem = (CIccMultiProcessElement**)calloc(m_nSubElem, sizeof(CIccMultiProcessElement*));
     if (m_SubElem) {
-      for (i=0; i<m_nSubElem; i++) {
+      for (i=0; i<nSub; i++) {
         if (channelGen.m_SubElem[i]) {
           m_SubElem[i] = channelGen.m_SubElem[i]->NewCopy();
           m_SubElem[i]->SetParentObject(this);
@@ -4659,9 +4707,16 @@ CIccMpeCalculator &CIccMpeCalculator::operator=(const CIccMpeCalculator &channel
   if (channelGen.m_nSubElem) {
     icUInt32Number i;
 
+    // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
+    // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
+    // match. A constructor/assignment cannot reject, so clamp the copy loop to
+    // that same cap (using the >= boundary shared with the reject paths) so a
+    // corrupted count can't drive an unbounded walk.
+    icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+
     m_SubElem = (CIccMultiProcessElement**)calloc(m_nSubElem, sizeof(CIccMultiProcessElement*));
     if (m_SubElem) {
-      for (i=0; i<m_nSubElem; i++) {
+      for (i=0; i<nSub; i++) {
         if (channelGen.m_SubElem[i]) {
           m_SubElem[i] = channelGen.m_SubElem[i]->NewCopy();
           m_SubElem[i]->SetParentObject(this);
@@ -4714,7 +4769,12 @@ void CIccMpeCalculator::SetSize(icUInt16Number nInputChannels, icUInt16Number nO
   icUInt32Number i;
 
   if (m_SubElem) {
-    for (i=0; i<m_nSubElem; i++) {
+    // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
+    // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
+    // match. SetSize() cannot reject, so clamp the delete loop to that same cap
+    // (>= boundary) so a corrupted count can't drive an unbounded walk.
+    icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+    for (i=0; i<nSub; i++) {
       if (m_SubElem[i]) {
         m_SubElem[i]->SetParentObject(nullptr);
         delete m_SubElem[i];
@@ -4800,7 +4860,12 @@ void CIccMpeCalculator::Describe(std::string &sDescription, int nVerboseness)
 
     if (m_nSubElem && m_SubElem) {
       icUInt32Number i;
-      for (i=0; i<m_nSubElem; i++) {
+      // CWE-400/CWE-834: m_nSubElem is a 32-bit count bounded by the shared
+      // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) on load, with m_SubElem[] sized to
+      // match. Describe() cannot reject, so clamp the describe walk to that same
+      // cap (>= boundary) so a corrupted count can't drive an unbounded walk.
+      icUInt32Number nSub = (m_nSubElem >= MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+      for (i=0; i<nSub; i++) {
         snprintf(buf, bufSize, "BEGIN_SUBCALCELEM %u\n", (unsigned int) i);
         sDescription += buf;
         m_SubElem[i]->Describe(sDescription, nVerboseness);
@@ -4889,8 +4954,12 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
   if (!pIO->Read32(&nSubElem))
     return false;
 
-  // Prevent excessive allocation and overflows - limit to 65536 elements (reasonable max)
-  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  // CWE-400/CWE-834: nSubElem is a 32-bit count read straight from the profile
+  // with no ICC.2-imposed maximum. Reject counts at or above the shared
+  // MAX_CALC_ELEMENTS cap (IccMpeCalc.h) before sizing m_SubElem[], so a corrupt
+  // or hostile count cannot force an unbounded allocation. This is the
+  // authoritative load-time gate the copy/describe/validate clamps rely on.
+  // ">= reject": a valid count is strictly less than the cap.
   if (nSubElem >= MAX_CALC_ELEMENTS)
     return false;
 
@@ -4941,6 +5010,7 @@ bool CIccMpeCalculator::Read(icUInt32Number size, CIccIO *pIO)
 
       pIO->Seek(startPos + pos->offset, icSeekSet);
       if (!pElem->Read(pos->size, pIO)) {
+        delete pElem;
         free(posvals);
         return false;
       }
@@ -5005,10 +5075,15 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   if (!pIO->Write16(&m_nOutputChannels))
     return false;
 
-  if (!pIO->Write32(&m_nSubElem))
+  // CWE-400/CWE-834: m_nSubElem is bounded by the shared MAX_CALC_ELEMENTS cap
+  // (IccMpeCalc.h) on load; reject anything at or above it before serialising the
+  // count so a corrupted value can't be written or drive the unbounded
+  // sub-element write loop below. ">= reject" matches the load-time gate (a valid
+  // count is strictly less than the cap).
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
     return false;
 
-  if (m_nSubElem == 0xffffffffU)
+  if (!pIO->Write32(&m_nSubElem))
     return false;
 
   icUInt32Number nPos = m_nSubElem + 1;
@@ -5053,7 +5128,9 @@ bool CIccMpeCalculator::Write(CIccIO *pIO)
   pos = &posvals[1];
 
   if (m_nSubElem) {
-    for(n=0; n<m_nSubElem; n++) {
+    // CWE-400/834: m_nSubElem is bounded by MAX_CALC_ELEMENTS at Read() and
+    // m_SubElem[] is sized to it; mirror that bound here so the walk is finite.
+    for(n=0; n<m_nSubElem && n<MAX_CALC_ELEMENTS; n++) {
       if (m_SubElem[n]) {
         int64_t start = pIO->Tell();
         if (start < elemStart) {
@@ -5138,8 +5215,18 @@ bool CIccMpeCalculator::Begin(icElemInterp nInterp, CIccTagMultiProcessElement *
   if (!m_calcFunc->Begin(this, pMPE))
     return false;
 
+  // CWE-400/CWE-834: the walk below calls Begin() on each of the m_nSubElem
+  // sub-elements held in m_SubElem[]. CIccMpeCalculator::Read() rejects any
+  // m_nSubElem >= MAX_CALC_ELEMENTS and sizes m_SubElem[] to the accepted count,
+  // so on a valid element the walk never exceeds the allocation; reject that same
+  // bound here so a corrupted count can't drive an unbounded begin walk.
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   icUInt32Number n;
-  for (n=0; n<m_nSubElem; n++) {
+  // The >= MAX_CALC_ELEMENTS reject above already bounds m_nSubElem, but mirror
+  // the cap in the loop condition too so the walk is provably finite to analysis.
+  for (n=0; n<m_nSubElem && n<MAX_CALC_ELEMENTS; n++) {
     if (m_SubElem[n] && !m_SubElem[n]->Begin(nInterp, pMPE))
       return false;
   }
@@ -5161,6 +5248,14 @@ CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
 {
   //CIccApplyTagMpe *pApplyTagEx = (CIccApplyTagMpe*)pApplyTag;
 
+  // CWE-400/CWE-834: this builds the parallel apply object whose loop below clones
+  // each of the m_nSubElem sub-elements into pApply->m_SubElem[]. Read() bounds
+  // m_nSubElem by MAX_CALC_ELEMENTS and sizes m_SubElem[] to match; reject the
+  // same bound up front (before any allocation, so no leak) so a corrupted count
+  // can't drive an unbounded clone walk.
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return NULL;
+
   CIccApplyMpeCalculator *pApply = new (std::nothrow) CIccApplyMpeCalculator(this);
 
   if (!pApply)
@@ -5181,7 +5276,9 @@ CIccApplyMpe *CIccMpeCalculator::GetNewApply(CIccApplyTagMpe *pApplyTag)
     pApply->m_SubElem = (CIccSubCalcApply **)calloc(m_nSubElem, sizeof(CIccSubCalcApply*));
 
     if (m_SubElem) {
-      for (i=0; i<m_nSubElem; i++) {
+      // CWE-400/834: m_nSubElem is bounded by MAX_CALC_ELEMENTS at Read() and
+      // m_SubElem[] is sized to it; mirror that bound here so the walk is finite.
+      for (i=0; i<m_nSubElem && i<MAX_CALC_ELEMENTS; i++) {
         if (m_SubElem[i]) {
           pApply->m_SubElem[i] = new CIccSubCalcApply(m_SubElem[i]->GetNewApply(pApplyTag));
         }
@@ -5249,8 +5346,14 @@ icValidateStatus CIccMpeCalculator::Validate(std::string sigPath, std::string &s
 
   icUInt32Number i;
 
+  // CWE-400/CWE-834: the walk below validates each of the m_nSubElem sub-elements
+  // in m_SubElem[]. Read() bounds m_nSubElem by MAX_CALC_ELEMENTS and sizes
+  // m_SubElem[] to the accepted count; clamp the loop to that same bound (as Read()
+  // itself does) so a corrupted count can't drive an unbounded validation walk.
+  icUInt32Number nSub = (m_nSubElem > MAX_CALC_ELEMENTS) ? MAX_CALC_ELEMENTS : m_nSubElem;
+
   if (m_SubElem) {
-    for (i=0; i<m_nSubElem; i++) {
+    for (i=0; i<nSub; i++) {
       if (m_SubElem[i])
         rv = icMaxStatus(rv, m_SubElem[i]->Validate(mpeSigPath, sReport, pMPE, pProfile));
     }
@@ -5291,6 +5394,13 @@ bool CIccMpeCalculator::IsLateBinding() const
 {
   icUInt32Number i;
 
+  // CWE-400/CWE-834: the walk below queries each of the m_nSubElem sub-elements in
+  // m_SubElem[]. Read() bounds m_nSubElem by MAX_CALC_ELEMENTS and sizes m_SubElem[]
+  // to match; reject that same bound so a corrupted count can't drive an unbounded
+  // walk (a missing late-binding answer is the safe default).
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   if (m_SubElem) {
     for (i=0; i<m_nSubElem; i++) {
       if (m_SubElem[i] && m_SubElem[i]->IsLateBinding())
@@ -5313,10 +5423,19 @@ bool CIccMpeCalculator::IsLateBinding() const
  ******************************************************************************/
 bool CIccMpeCalculator::IsLateBindingReflectance() const
 {
+  // CWE-400/CWE-834: the walk below queries each of the m_nSubElem sub-elements in
+  // m_SubElem[]. Read() bounds m_nSubElem by MAX_CALC_ELEMENTS and sizes m_SubElem[]
+  // to match; reject that same bound so a corrupted count can't drive an unbounded
+  // walk (a missing late-binding answer is the safe default).
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   icUInt32Number i;
 
   if (m_SubElem) {
-    for (i=0; i<m_nSubElem; i++) {
+    // CWE-400/834: m_nSubElem is bounded by MAX_CALC_ELEMENTS at Read() and
+    // m_SubElem[] is sized to it; mirror that bound here so the walk is finite.
+    for (i=0; i<m_nSubElem && i<MAX_CALC_ELEMENTS; i++) {
       if (m_SubElem[i] && m_SubElem[i]->IsLateBindingReflectance())
         return true;
     }
@@ -5373,8 +5492,10 @@ bool CIccMpeCalculator::SetElem(icUInt32Number idx, CIccMultiProcessElement *pEl
 {
   bool rv = true;
 
-  // Prevent excessive allocation - limit to 65536 elements (reasonable max)
-  const icUInt32Number MAX_CALC_ELEMENTS = 65536;
+  // CWE-400/CWE-834: idx indexes (and, via idx+1, sizes) the sub-element array.
+  // Reject any index at or above the shared MAX_CALC_ELEMENTS cap (IccMpeCalc.h)
+  // before the realloc/calloc below, so a hostile index can't force an unbounded
+  // allocation.
   if (idx >= MAX_CALC_ELEMENTS)
     return false;
 
@@ -5459,9 +5580,18 @@ CIccApplyMpeCalculator::~CIccApplyMpeCalculator()
   icUInt32Number i;
 
   if (m_SubElem) {
-    for (i=0; i<m_nSubElem; i++) {
+    // CWE-400/CWE-834: m_nSubElem is bounded by the shared MAX_CALC_ELEMENTS cap
+    // (IccMpeCalc.h) in CIccMpeCalculator::Read and m_SubElem[] is allocated to
+    // match (see GetNewApply). A destructor cannot reject, so clamp the free loop
+    // defensively to that same cap (>= boundary) so a corrupted count can never
+    // drive an unbounded walk over the array.
+    icUInt32Number nSubElem = m_nSubElem;
+    if (nSubElem >= MAX_CALC_ELEMENTS)
+      nSubElem = MAX_CALC_ELEMENTS;
+    for (i=0; i<nSubElem; i++) {
       delete m_SubElem[i];
     }
+    free(m_SubElem);
   }
 }
 

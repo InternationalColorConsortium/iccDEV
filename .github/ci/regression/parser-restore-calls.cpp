@@ -38,7 +38,7 @@ public:
   {
     ++read_count;
     if (nNum >= sizeof(icUInt32Number)) {
-      *((icUInt32Number *)pBuf) = read_count == 1 ? icSigEmbeddedProfileType : 0;
+      *((icUInt32Number *)pBuf) = read_count == 1 ? (icUInt32Number)icSigEmbeddedProfileType : 0u;
       return sizeof(icUInt32Number);
     }
     return 0;

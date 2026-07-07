@@ -137,11 +137,11 @@ project(RefIccMAX LANGUAGES C CXX)
 set(PROJECT_UP_NAME "REFICCMAX")
 set(PROJECT_DOWN_NAME "reficcmax")
 
-# Version components (4-part version: 2.3.2.0)
+# Version components (4-part version: 2.3.2.2)
 set(${PROJECT_UP_NAME}_MAJOR_VERSION 2)
 set(${PROJECT_UP_NAME}_MINOR_VERSION 3)
 set(${PROJECT_UP_NAME}_MICRO_VERSION 2)
-set(${PROJECT_UP_NAME}_PATCH_VERSION 0)
+set(${PROJECT_UP_NAME}_PATCH_VERSION 2)
 
 # Composite versions
 set(${PROJECT_UP_NAME}_VERSION
@@ -161,9 +161,29 @@ execute_process(
     COMMAND git rev-parse --short=7 HEAD
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_VARIABLE GIT_COMMIT_HASH
+    RESULT_VARIABLE GIT_COMMIT_RESULT
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET
 )
+
+if(NOT GIT_COMMIT_RESULT EQUAL 0)
+    set(GIT_COMMIT_HASH "")
+endif()
+
+if(NOT GIT_COMMIT_HASH)
+    set(_ICCDEV_ENV_COMMIT "")
+    if(DEFINED ENV{GIT_COMMIT})
+        set(_ICCDEV_ENV_COMMIT "$ENV{GIT_COMMIT}")
+    elseif(DEFINED ENV{GITHUB_SHA})
+        set(_ICCDEV_ENV_COMMIT "$ENV{GITHUB_SHA}")
+    endif()
+    string(LENGTH "${_ICCDEV_ENV_COMMIT}" _ICCDEV_ENV_COMMIT_LEN)
+    if(_ICCDEV_ENV_COMMIT MATCHES "^[0-9A-Fa-f]+$" AND
+       _ICCDEV_ENV_COMMIT_LEN GREATER_EQUAL 7 AND
+       _ICCDEV_ENV_COMMIT_LEN LESS_EQUAL 40)
+        string(SUBSTRING "${_ICCDEV_ENV_COMMIT}" 0 7 GIT_COMMIT_HASH)
+    endif()
+endif()
 
 # Add git commit to version string if available
 if(GIT_COMMIT_HASH)
@@ -222,6 +242,16 @@ set(PACKAGE_DESCRIPTION
 # Define project root (relative to CMake source directory)
 # This may be overridden on CLI or CI environments
 set(PROJECT_ROOT_DIR "${CMAKE_SOURCE_DIR}/../..")
+get_filename_component(_ICCDEV_PROJECT_ROOT_DIR "${PROJECT_ROOT_DIR}" ABSOLUTE)
+get_filename_component(_ICCDEV_BINARY_DIR "${CMAKE_BINARY_DIR}" ABSOLUTE)
+
+if(_ICCDEV_BINARY_DIR STREQUAL _ICCDEV_PROJECT_ROOT_DIR)
+  message(FATAL_ERROR
+    "Refusing to use the repository root as the CMake build directory. "
+    "Use -B out/<name>, run legacy builds from Build/, or use a preset with "
+    "an isolated binaryDir."
+  )
+endif()
 
 # ----------------------------------------------------------------------
 # Build Configuration Summary
@@ -438,17 +468,61 @@ option(ENABLE_ICCJSON             "Build IccJSON library support"               
 option(ENABLE_IMAGE_TOOLS         "Build TIFF/PNG/JPEG image-dependent tools"           ON)
 option(ENABLE_CMM_TOOLS           "Build Windows CMM DLL tool"                          ON)
 option(ENABLE_IIS_TOOLS           "Build Windows IIS ISAPI tool"                        ON)
-option(ICC_JSON_ORDERED           "Use ordered_json for deterministic key order (slower)" OFF)
+option(ICCDEV_WINDOWS_UNIFIED_RUNTIME
+  "Place Windows executable and DLL runtime artifacts in one build-tree bin directory"
+  ON)
+
+if(WIN32 AND ICCDEV_WINDOWS_UNIFIED_RUNTIME)
+  set(ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR
+      "${CMAKE_BINARY_DIR}/bin"
+      CACHE PATH "Windows build-tree directory for iccDEV executable and DLL runtime artifacts")
+  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+  set(CMAKE_PDB_OUTPUT_DIRECTORY "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+  message(STATUS "Windows runtime output directory: ${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+endif()
+
+include(CheckCXXSourceCompiles)
+set(_ICC_JSON_ORDERED_DEFAULT OFF)
+
+set(_ICC_CHECK_GLIBCXX_SOURCE "
+#if defined(__has_include)
+#  if __has_include(<bits/c++config.h>)
+#    include <bits/c++config.h>
+#  endif
+#endif
+#if defined(_GLIBCXX_RELEASE) && _GLIBCXX_RELEASE < 11
+#  error libstdc++ before 11 cannot instantiate unordered basic_json here
+#endif
+int main() { return 0; }
+")
+check_cxx_source_compiles("${_ICC_CHECK_GLIBCXX_SOURCE}" _ICC_JSON_UNORDERED_STDLIB_OK)
+if(NOT _ICC_JSON_UNORDERED_STDLIB_OK)
+  set(_ICC_JSON_ORDERED_DEFAULT ON)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 11)
+  set(_ICC_JSON_ORDERED_DEFAULT ON)
+endif()
+
+option(ICC_JSON_ORDERED           "Use ordered_json for deterministic key order (auto-ON on libstdc++<11)" ${_ICC_JSON_ORDERED_DEFAULT})
+if(ICC_JSON_ORDERED AND _ICC_JSON_ORDERED_DEFAULT)
+  message(STATUS "ICC_JSON_ORDERED auto-enabled: libstdc++<11 cannot build unordered basic_json")
+endif()
 option(ICC_TRACE_NAN_ENABLED      "Enable tracing NaN inputs in debug builds"           OFF)
 option(ICC_CLUT_DEBUG             "Enable CLUT debugging support"                       OFF)
 option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"        OFF)
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
+option(ICC_VERBOSE_CALC_APPLY     "Enable verbose CIccMpeCalculator Apply debugging"    OFF)
+option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         ON)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
 option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)
 option(ENABLE_UBSAN               "Enable UndefinedBehaviorSanitizer only"              OFF)
 option(ENABLE_INTEGER_SANITIZER   "Enable IntegerSanitizer (unsigned overflow, etc.)"   OFF)
 option(ENABLE_FLOAT_SANITIZER     "Enable float-divide-by-zero + float-cast-overflow"   OFF)
+option(ENABLE_MACOS_GUARD_MALLOC  "Configure a macOS GuardMalloc/libgmalloc debug build" OFF)
+
+IF(ICC_JSON_ORDERED)
+  add_definitions(-DICC_JSON_ORDERED=1)
+ENDIF()
 option(ENABLE_TSAN                "Enable ThreadSanitizer (conflicts with ASan)"        OFF)
 option(ENABLE_MSAN                "Enable MemorySanitizer (Clang only)"                 OFF)
 option(ENABLE_LSAN                "Enable LeakSanitizer standalone"                     OFF)
@@ -482,8 +556,16 @@ if(ENABLE_ICCXML)
 endif()
 
 # --- nlohmann_json ---
-if(ENABLE_ICCJSON OR ENABLE_TOOLS)
+if(ENABLE_ICCJSON)
   find_package(nlohmann_json REQUIRED)
+endif()
+
+# --- zlib ---
+if(ICC_USE_ZLIB)
+  find_package(ZLIB REQUIRED)
+  if(VERBOSE_CONFIG)
+    message(STATUS "ZLIB                   : ${ZLIB_LIBRARIES} (version: ${ZLIB_VERSION})")
+  endif()
 endif()
 
 # --- TIFF ---
@@ -582,6 +664,11 @@ message(STATUS "GNU Install Include Dir: ${CMAKE_INSTALL_INCLUDEDIR}")
 message(STATUS "GNU Install Library Dir: ${CMAKE_INSTALL_LIBDIR}")
 message(STATUS "GNU Install CMake Dir  : ${CMAKE_INSTALL_DATAROOTDIR}/cmake")
 
+set(CMAKE_INSTALL_DOCDIR "${CMAKE_INSTALL_DATAROOTDIR}/doc/${PACKAGE_NAME}" CACHE PATH "Documentation install directory")
+set(ICCDEV_RUNTIME_COMPONENT runtime)
+set(ICCDEV_DEVELOPMENT_COMPONENT dev)
+set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "${ICCDEV_RUNTIME_COMPONENT}")
+
 # ----------------------------------------------------------------------
 # Build Feature Toggles
 # ----------------------------------------------------------------------
@@ -610,6 +697,10 @@ if(ICC_LOG_SAFE)
   add_compile_definitions(ICC_LOG_SAFE=1)
 endif()
 
+if(ICC_VERBOSE_CALC_APPLY)
+  add_compile_definitions(ICC_VERBOSE_CALC_APPLY=1)
+endif()
+
 # ----------------------------------------------------------------------
 # Build Status Output
 # ----------------------------------------------------------------------
@@ -623,15 +714,19 @@ message(STATUS "ENABLE_ICCJSON             = ${ENABLE_ICCJSON}")
 message(STATUS "ENABLE_IMAGE_TOOLS         = ${ENABLE_IMAGE_TOOLS}")
 message(STATUS "ENABLE_CMM_TOOLS           = ${ENABLE_CMM_TOOLS}")
 message(STATUS "ENABLE_IIS_TOOLS           = ${ENABLE_IIS_TOOLS}")
+message(STATUS "ICCDEV_WINDOWS_UNIFIED_RUNTIME = ${ICCDEV_WINDOWS_UNIFIED_RUNTIME}")
 message(STATUS "ICC_TRACE_NAN_ENABLED      = ${ICC_TRACE_NAN_ENABLED}")
 message(STATUS "ICC_CLUT_DEBUG             = ${ICC_CLUT_DEBUG}")
 message(STATUS "ICC_ENABLE_ASSERTS         = ${ICC_ENABLE_ASSERTS}")
 message(STATUS "ICC_LOG_SAFE               = ${ICC_LOG_SAFE}")
+message(STATUS "ICC_VERBOSE_CALC_APPLY     = ${ICC_VERBOSE_CALC_APPLY}")
+message(STATUS "ICC_USE_ZLIB               = ${ICC_USE_ZLIB}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
 message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
 message(STATUS "ENABLE_UBSAN               = ${ENABLE_UBSAN}")
 message(STATUS "ENABLE_INTEGER_SANITIZER   = ${ENABLE_INTEGER_SANITIZER}")
 message(STATUS "ENABLE_FLOAT_SANITIZER     = ${ENABLE_FLOAT_SANITIZER}")
+message(STATUS "ENABLE_MACOS_GUARD_MALLOC  = ${ENABLE_MACOS_GUARD_MALLOC}")
 message(STATUS "ENABLE_TSAN                = ${ENABLE_TSAN}")
 message(STATUS "ENABLE_MSAN                = ${ENABLE_MSAN}")
 message(STATUS "ENABLE_LSAN                = ${ENABLE_LSAN}")
@@ -657,6 +752,27 @@ endif()
 
 if(ENABLE_MSAN AND (ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_TSAN OR ENABLE_LSAN OR ENABLE_FUZZING))
   message(FATAL_ERROR "MemorySanitizer cannot be combined with other sanitizers (ENABLE_FUZZING and ENABLE_SANITIZERS include AddressSanitizer)")
+endif()
+
+if(ENABLE_MACOS_GUARD_MALLOC)
+  if(NOT APPLE)
+    message(FATAL_ERROR "ENABLE_MACOS_GUARD_MALLOC is only supported on macOS")
+  endif()
+  if(ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_FUZZING OR ENABLE_TSAN OR ENABLE_MSAN OR ENABLE_LSAN)
+    message(FATAL_ERROR "GuardMalloc interposes malloc at runtime; use a non-sanitizer Debug build")
+  endif()
+  foreach(_iccdev_macos_link_flags
+      CMAKE_EXE_LINKER_FLAGS
+      CMAKE_SHARED_LINKER_FLAGS
+      CMAKE_MODULE_LINKER_FLAGS)
+    if("${${_iccdev_macos_link_flags}}" MATCHES "(^|[ ,])-Wl,-no_uuid($|[ ,])|(^|[ ,])-no_uuid($|[ ,])")
+      message(FATAL_ERROR "GuardMalloc requires Mach-O LC_UUID load commands; remove -no_uuid from ${_iccdev_macos_link_flags}")
+    endif()
+  endforeach()
+  add_compile_options(-g -fno-omit-frame-pointer)
+  message(STATUS ">>> macOS GuardMalloc mode enabled")
+  message(STATUS ">>> Run tools with DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib")
+  message(STATUS ">>> Build target check-macos-guard-malloc verifies LC_UUID on built tools")
 endif()
 
 # Warn about ignored individual sanitizer options when using combined options
@@ -695,6 +811,10 @@ endif()
 # Compose sanitizer flags
 set(SANITIZER_FLAGS "")
 set(SANITIZER_LIST "")
+set(ICCDEV_COMPILER_IS_CLANG FALSE)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(ICCDEV_COMPILER_IS_CLANG TRUE)
+endif()
 
 if(ENABLE_FUZZING)
   message(STATUS ">>> Fuzzing instrumentation enabled (libFuzzer + ASan + UBSan)")
@@ -702,13 +822,20 @@ if(ENABLE_FUZZING)
   # DO NOT apply fuzzer flags globally - causes linker conflicts with regular tools
   # Fuzzer targets get flags via target_compile_options/target_link_options
 elseif(ENABLE_SANITIZERS)
-  message(STATUS ">>> Sanitizers enabled: ASan + UBSan + IntSan + float-divide-by-zero + float-cast-overflow")
   if(MSVC)
+    message(STATUS ">>> Sanitizers enabled: ASan")
     list(APPEND SANITIZER_FLAGS "/fsanitize=address")
     # MSVC doesn't have UBSan/IntSan, but has runtime checks via /RTC1 in debug
   else()
-    list(APPEND SANITIZER_LIST "address" "undefined" "integer"
-         "float-divide-by-zero" "float-cast-overflow")
+    list(APPEND SANITIZER_LIST "address" "undefined")
+    if(ICCDEV_COMPILER_IS_CLANG)
+      message(STATUS ">>> Sanitizers enabled: ASan + UBSan + IntSan + float-divide-by-zero + float-cast-overflow")
+      list(APPEND SANITIZER_LIST "integer" "float-divide-by-zero" "float-cast-overflow")
+    else()
+      message(STATUS ">>> Sanitizers enabled: ASan + UBSan + float-divide-by-zero + float-cast-overflow")
+      message(STATUS ">>> IntegerSanitizer requires Clang; skipping for ${CMAKE_CXX_COMPILER_ID}")
+      list(APPEND SANITIZER_LIST "float-divide-by-zero" "float-cast-overflow")
+    endif()
   endif()
 else()
   # Individual sanitizer options
@@ -730,10 +857,10 @@ else()
   endif()
   if(ENABLE_INTEGER_SANITIZER)
     message(STATUS ">>> IntegerSanitizer enabled (unsigned-integer-overflow, implicit conversions)")
-    if(MSVC)
-      message(WARNING "IntegerSanitizer not available on MSVC")
-    else()
+    if(ICCDEV_COMPILER_IS_CLANG)
       list(APPEND SANITIZER_LIST "integer")
+    else()
+      message(FATAL_ERROR "IntegerSanitizer requires Clang compiler")
     endif()
   endif()
   if(ENABLE_FLOAT_SANITIZER)
@@ -822,9 +949,73 @@ if(SANITIZER_FLAGS)
   string(JOIN " " FINAL_SAN_FLAGS ${SANITIZER_FLAGS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${FINAL_SAN_FLAGS}")
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${FINAL_SAN_FLAGS}")
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
-  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
+  if(NOT MSVC)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${FINAL_SAN_FLAGS}")
+  endif()
   message(STATUS ">>> Final sanitizer flags: ${FINAL_SAN_FLAGS}")
+endif()
+
+if(MSVC)
+  set(_iccdev_clangcl_asan OFF)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND (ENABLE_ASAN OR ENABLE_SANITIZERS OR ENABLE_FUZZING))
+    set(_iccdev_clangcl_asan ON)
+  endif()
+
+  if(_iccdev_clangcl_asan)
+    if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
+      set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+      message(STATUS ">>> ClangCL AddressSanitizer uses the non-debug MSVC DLL runtime (/MD); clang-cl rejects /MDd with /fsanitize=address")
+    elseif(CMAKE_MSVC_RUNTIME_LIBRARY MATCHES "Debug")
+      message(FATAL_ERROR "ClangCL AddressSanitizer rejects the debug MSVC runtime (/MDd). Use -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL or MultiThreaded.")
+    endif()
+
+    set(_iccdev_clangcl_asan_arch "x86_64")
+    if(CMAKE_VS_PLATFORM_NAME STREQUAL "Win32")
+      set(_iccdev_clangcl_asan_arch "i386")
+    elseif(CMAKE_VS_PLATFORM_NAME MATCHES "ARM64")
+      set(_iccdev_clangcl_asan_arch "aarch64")
+    endif()
+
+    execute_process(
+      COMMAND "${CMAKE_CXX_COMPILER}" --print-resource-dir
+      OUTPUT_VARIABLE _iccdev_clangcl_resource_dir
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+    )
+    set(_iccdev_clangcl_asan_lib_dir "${_iccdev_clangcl_resource_dir}/lib/windows")
+    find_library(_iccdev_clangcl_asan_dynamic
+      NAMES "clang_rt.asan_dynamic-${_iccdev_clangcl_asan_arch}"
+      PATHS "${_iccdev_clangcl_asan_lib_dir}"
+      NO_DEFAULT_PATH)
+    find_library(_iccdev_clangcl_asan_thunk
+      NAMES "clang_rt.asan_dynamic_runtime_thunk-${_iccdev_clangcl_asan_arch}"
+      PATHS "${_iccdev_clangcl_asan_lib_dir}"
+      NO_DEFAULT_PATH)
+    if(NOT _iccdev_clangcl_asan_dynamic OR NOT _iccdev_clangcl_asan_thunk)
+      message(FATAL_ERROR "ClangCL AddressSanitizer runtime libraries were not found in ${_iccdev_clangcl_asan_lib_dir}")
+    endif()
+    find_file(_iccdev_clangcl_asan_runtime_dll
+      NAMES "clang_rt.asan_dynamic-${_iccdev_clangcl_asan_arch}.dll"
+      PATHS "${_iccdev_clangcl_asan_lib_dir}"
+      NO_DEFAULT_PATH)
+    if(_iccdev_clangcl_asan_runtime_dll)
+      set(ICCDEV_CLANGCL_ASAN_RUNTIME_DLL
+          "${_iccdev_clangcl_asan_runtime_dll}"
+          CACHE FILEPATH "ClangCL AddressSanitizer runtime DLL staged with Windows tools")
+    endif()
+
+    add_link_options(
+      "${_iccdev_clangcl_asan_dynamic}"
+      "${_iccdev_clangcl_asan_thunk}"
+      "/include:__asan_seh_interceptor"
+      "/wholearchive:${_iccdev_clangcl_asan_thunk}"
+      "/INFERASANLIBS:NO"
+    )
+  elseif(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+  endif()
+  unset(_iccdev_clangcl_asan)
 endif()
 
 # Apply coverage instrumentation flags
@@ -883,7 +1074,23 @@ macro(_iccdev_add_cxx_flag_if_supported FLAG VAR)
     add_compile_options("${FLAG}")
   endif()
 endmacro()
-check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output LANGUAGES CXX)
+
+function(_iccdev_configure_fortify_source PLATFORM_NAME)
+  if(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+    add_compile_definitions(_FORTIFY_SOURCE=2)
+    message(STATUS "${PLATFORM_NAME}: _FORTIFY_SOURCE=2 enabled for optimized ${CMAKE_BUILD_TYPE} build")
+  elseif(NOT _is_multi_config)
+    add_compile_options(-U_FORTIFY_SOURCE)
+    message(STATUS "${PLATFORM_NAME}: _FORTIFY_SOURCE undefined for non-optimized ${CMAKE_BUILD_TYPE} build")
+  endif()
+endfunction()
+
+if(SANITIZER_FLAGS OR ENABLE_COVERAGE OR ENABLE_PROFILING)
+  set(ipo_supported TRUE)
+  set(ipo_output "IPO support not probed because instrumentation disables LTO")
+else()
+  check_ipo_supported(RESULT ipo_supported OUTPUT ipo_output LANGUAGES CXX)
+endif()
 
 if(DEFINED CMAKE_INTERPROCEDURAL_OPTIMIZATION)
   # User explicitly set LTO preference via -D flag; respect it unconditionally
@@ -948,19 +1155,23 @@ endif()
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
   # Top-level project: full install/build mode
   option(ENABLE_INSTALL_RIM "Enable install target for RefIccMAX." ON)
+  option(ENABLE_CPACK_PACKAGING "Enable CPack native packages and portable archives." ON)
   if(VERBOSE_CONFIG)
     message(STATUS "RefIccMAX is being built as a top-level project.")
     message(STATUS "ENABLE_INSTALL_RIM      = ${ENABLE_INSTALL_RIM}")
+    message(STATUS "ENABLE_CPACK_PACKAGING  = ${ENABLE_CPACK_PACKAGING}")
   endif()
 else()
   # Subproject: disable install to avoid polluting parent build
   set(ENABLE_INSTALL_RIM OFF CACHE BOOL "Install disabled in subproject mode" FORCE)
+  set(ENABLE_CPACK_PACKAGING OFF CACHE BOOL "Packaging disabled in subproject mode" FORCE)
   set(ENABLE_STATIC_LIBS ON  CACHE BOOL "Force static linking in subproject" FORCE)
   set(ENABLE_SHARED_LIBS OFF CACHE BOOL "Disable shared libs in subproject" FORCE)
 
   if(VERBOSE_CONFIG)
     message(STATUS "RefIccMAX included as subproject - installation is disabled.")
     message(STATUS "ENABLE_INSTALL_RIM      = ${ENABLE_INSTALL_RIM}")
+    message(STATUS "ENABLE_CPACK_PACKAGING  = ${ENABLE_CPACK_PACKAGING}")
     message(STATUS "ENABLE_STATIC_LIBS      = ${ENABLE_STATIC_LIBS}")
     message(STATUS "ENABLE_SHARED_LIBS      = ${ENABLE_SHARED_LIBS}")
   endif()
@@ -984,19 +1195,12 @@ endif()
 
 # Platform-Specific Flags - MINIMAL (no extra flags for Release/Debug)
 if(MSVC)
-    # Debug: CMake defaults only (no extra flags)
-    # CMAKE_CXX_FLAGS_DEBUG uses CMake defaults
-    # Release: CMake defaults only (no extra flags)
-    # CMAKE_CXX_FLAGS_RELEASE uses CMake defaults
-    if(NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL "")
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-    endif()
-    message(STATUS "Configuring MSVC runtime and flags (CMake defaults)")
-    message(STATUS "  MSVC runtime:   ${CMAKE_MSVC_RUNTIME_LIBRARY}")
-    message(STATUS "  DEBUG:          CMake defaults only")
-    message(STATUS "  RELEASE:        CMake defaults only")
-    message(STATUS "  RELWITHDEBINFO: CMake defaults only")
-    message(STATUS "  MINSIZEREL:     CMake defaults only")
+  message(STATUS "Configuring MSVC runtime and flags (CMake defaults)")
+  message(STATUS "  MSVC runtime:   ${CMAKE_MSVC_RUNTIME_LIBRARY}")
+  message(STATUS "  DEBUG:          CMake defaults only")
+  message(STATUS "  RELEASE:        CMake defaults only")
+  message(STATUS "  RELWITHDEBINFO: CMake defaults only")
+  message(STATUS "  MINSIZEREL:     CMake defaults only")
 elseif(UNIX)
     # Debug: CMake defaults only (no extra flags)
     # CMAKE_CXX_FLAGS_DEBUG uses CMake defaults
@@ -1117,10 +1321,7 @@ if(APPLE)
     message(STATUS "macOS: strict warnings DISABLED -- ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} below floor (GCC 15 / Clang 14). Base hardening still active.")
   endif()
 
-  # Fortify source for optimized builds (requires -O1 or higher)
-  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    add_compile_definitions(_FORTIFY_SOURCE=2)
-  endif()
+  _iccdev_configure_fortify_source("macOS")
 
   message(STATUS "macOS build: Warning flags and security hardening applied.")
 
@@ -1147,8 +1348,8 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
 
   # Strict warning tier: requires GCC 15+ or Clang 14+ so all contributors and
   # CI see the same diagnostics. Older toolchains still build; they get the
-  # base set above plus reduced analysis. ci-docker (ubuntu:26.04 / GCC 15)
-  # and the iccDEV Tool Tests workflow (clang-18) both meet the floor.
+  # base set above plus reduced analysis. GCC 15+ maintainer builds and the
+  # iccDEV Tool Tests workflow (clang-18) both meet the floor.
   set(_iccdev_strict_capable FALSE)
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0")
     set(_iccdev_strict_capable TRUE)
@@ -1186,10 +1387,7 @@ elseif(UNIX AND NOT APPLE AND NOT EMSCRIPTEN)
   # Hardening: RELRO and BIND_NOW for executables
   add_link_options(-Wl,-z,relro,-z,now)
 
-  # Fortify source for optimized builds (requires -O1 or higher)
-  if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    add_compile_definitions(_FORTIFY_SOURCE=2)
-  endif()
+  _iccdev_configure_fortify_source("Linux")
 
   message(STATUS "Linux build: Warning flags and security hardening applied.")
 
@@ -1235,8 +1433,10 @@ elseif(WIN32)
 
     # ASLR + DEP + CET shadow stacks
     add_link_options(/DYNAMICBASE /NXCOMPAT)
-    # CET (Control-flow Enforcement Technology) requires VS 2019 16.7+
-    if(MSVC_VERSION GREATER_EQUAL 1927)
+    string(TOLOWER "${CMAKE_GENERATOR_PLATFORM}" _iccdev_msvc_platform)
+    # CET (Control-flow Enforcement Technology) requires VS 2019 16.7+ and is
+    # not accepted by the MSVC ARM/ARM64 linker.
+    if(MSVC_VERSION GREATER_EQUAL 1927 AND NOT _iccdev_msvc_platform MATCHES "^arm")
       add_link_options(/CETCOMPAT)
     endif()
 
@@ -1377,7 +1577,6 @@ IF(ENABLE_ICCJSON)
   # ICC_JSON_ORDERED: use nlohmann::ordered_json for deterministic key order.
   # Default OFF (unordered is faster). Enable for reproducible output / CI logs.
   IF(ICC_JSON_ORDERED)
-    add_definitions(-DICC_JSON_ORDERED=1)
     message(STATUS "IccJSON key order      : ordered (deterministic)")
   ELSE()
     message(STATUS "IccJSON key order      : unordered (faster)")
@@ -1401,7 +1600,7 @@ ENDIF(ENABLE_ICCJSON)
 #
 # IccConnect library (JSON-configurable CMM transform construction)
 #
-IF(ENABLE_ICCJSON OR ENABLE_TOOLS)
+IF(ENABLE_ICCJSON)
   message(STATUS "Adding subdirectory for IccConnect.")
   add_subdirectory(IccConnect)
 
@@ -1442,13 +1641,6 @@ function(iccdev_fixup_msvc_compile_pdb TARGET_NAME)
 endfunction()
 
 IF(ENABLE_TOOLS)
-  # Verify nlohmann_json is configured properly (required for JSON tools)
-  IF(ENABLE_ICCJSON)
-    IF(NOT nlohmann_json_DIR)
-      MESSAGE(WARNING "nlohmann JSON library not found but ENABLE_ICCJSON is ON. JSON tools will be skipped.")
-    ENDIF()
-  ENDIF()
-
   # Add XML-related tools
   IF(ENABLE_ICCXML)
     ADD_SUBDIRECTORY(Tools/IccFromXml)
@@ -1462,7 +1654,11 @@ IF(ENABLE_TOOLS)
     message(STATUS "Adding Subdirectory IccToJson.")
     ADD_SUBDIRECTORY(Tools/IccToJson)
   ENDIF()
-  ADD_SUBDIRECTORY(Tools/IccApplyNamedCmm)
+  IF(TARGET_LIB_ICCCONNECT)
+    ADD_SUBDIRECTORY(Tools/IccApplyNamedCmm)
+  ELSE()
+    message(STATUS "IccJSON disabled - skipping JSON runtime-config tools.")
+  ENDIF()
   ADD_SUBDIRECTORY(Tools/IccDescribeSinkTest)
   ADD_SUBDIRECTORY(Tools/IccDumpProfile)
   ADD_SUBDIRECTORY(Tools/IccPawgReport)
@@ -1470,8 +1666,11 @@ IF(ENABLE_TOOLS)
   ADD_SUBDIRECTORY(Tools/IccFromCube)
   ADD_SUBDIRECTORY(Tools/IccV5DspObsToV4Dsp)
   ADD_SUBDIRECTORY(Tools/IccApplyToLink)
-  ADD_SUBDIRECTORY(Tools/IccApplySearch)
+  IF(TARGET_LIB_ICCCONNECT)
+    ADD_SUBDIRECTORY(Tools/IccApplySearch)
+  ENDIF()
   ADD_SUBDIRECTORY(Tools/IccProfileVisualize)
+  ADD_SUBDIRECTORY(Tools/IccProfilePlot)
 
   # Ensure IccXML-dependent tools are built after IccXML library (safety net)
   IF(ENABLE_ICCXML)
@@ -1520,7 +1719,9 @@ IF(ENABLE_TOOLS)
       if(VERBOSE_CONFIG)
         message(STATUS "Adding Subdirectory IccApplyProfiles.")
       endif()
-      ADD_SUBDIRECTORY(Tools/IccApplyProfiles)
+      IF(TARGET_LIB_ICCCONNECT)
+        ADD_SUBDIRECTORY(Tools/IccApplyProfiles)
+      ENDIF()
       if(VERBOSE_CONFIG)
         message(STATUS "Adding subdirectory IccSpecSepToTiff.")
       endif()
@@ -1563,12 +1764,16 @@ IF(ENABLE_TOOLS)
     message(STATUS "wxWidgets disabled by ENABLE_WXWIDGETS=OFF - skipping wxProfileDump.")
   endif()
 
-  foreach(_iccdev_tool_target
+  set(_iccdev_tool_targets
       iccFromXml
       iccToXml
+      iccFromJson
+      iccToJson
       iccJpegDump
       iccApplyNamedCmm
+      iccDescribeSinkTest
       iccDumpProfile
+      iccPawgReport
       iccRoundTrip
       iccFromCube
       iccV5DspObsToV4Dsp
@@ -1583,8 +1788,56 @@ IF(ENABLE_TOOLS)
       iccDumpProfileGui
       iccProfileVisualize
   )
+  foreach(_iccdev_tool_target IN LISTS _iccdev_tool_targets)
     iccdev_fixup_msvc_compile_pdb(${_iccdev_tool_target})
   endforeach()
+
+  if(APPLE AND ENABLE_MACOS_GUARD_MALLOC)
+    add_custom_target(check-macos-guard-malloc
+      COMMAND "${CMAKE_COMMAND}"
+        "-DICCDEV_BINARY_DIR=${CMAKE_BINARY_DIR}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/VerifyMacOSGuardMalloc.cmake"
+      COMMENT "Verify macOS tool binaries carry LC_UUID for libgmalloc"
+      VERBATIM)
+    foreach(_iccdev_tool_target IN LISTS _iccdev_tool_targets)
+      if(TARGET "${_iccdev_tool_target}")
+        add_dependencies(check-macos-guard-malloc "${_iccdev_tool_target}")
+      endif()
+    endforeach()
+  endif()
+
+  if(WIN32 AND ICCDEV_WINDOWS_UNIFIED_RUNTIME)
+    if(_is_multi_config)
+      set(_iccdev_windows_stage_runtime_dir "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}/$<CONFIG>")
+      set(_iccdev_windows_stage_config "$<CONFIG>")
+    else()
+      set(_iccdev_windows_stage_runtime_dir "${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}")
+      set(_iccdev_windows_stage_config "${CMAKE_BUILD_TYPE}")
+    endif()
+
+    add_custom_target(iccdev-stage-windows-runtime ALL
+      COMMAND "${CMAKE_COMMAND}"
+        "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+        "-DICCDEV_RUNTIME_DIR=${_iccdev_windows_stage_runtime_dir}"
+        "-DICCDEV_CONFIG=${_iccdev_windows_stage_config}"
+        -P "${CMAKE_CURRENT_LIST_DIR}/StageWindowsRuntime.cmake"
+      COMMENT "Stage Windows runtime DLL dependencies into ${ICCDEV_WINDOWS_RUNTIME_OUTPUT_DIR}"
+      VERBATIM)
+
+    set(_iccdev_windows_runtime_dependencies
+      ${_iccdev_tool_targets}
+      IccProfLib2
+      IccXML2
+      IccJSON2
+      IccConnect2
+      RefIccMAX
+    )
+    foreach(_iccdev_windows_runtime_dependency IN LISTS _iccdev_windows_runtime_dependencies)
+      if(TARGET "${_iccdev_windows_runtime_dependency}")
+        add_dependencies(iccdev-stage-windows-runtime "${_iccdev_windows_runtime_dependency}")
+      endif()
+    endforeach()
+  endif()
 
 ENDIF(ENABLE_TOOLS)
 
@@ -1678,14 +1931,14 @@ IF(ENABLE_INSTALL_RIM)
   INSTALL ( FILES
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
                 "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-                DESTINATION ${CMAKE_MODULES_INSTALL_DIR} COMPONENT dev
+                DESTINATION ${CMAKE_MODULES_INSTALL_DIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT}
         )
 
   # Install exported targets file alongside the Config
   INSTALL( EXPORT RefIccMAXTargets
            NAMESPACE RefIccMAX::
            DESTINATION ${CMAKE_MODULES_INSTALL_DIR}
-           COMPONENT dev
+           COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT}
   )
 ENDIF(ENABLE_INSTALL_RIM)
 
@@ -1694,3 +1947,7 @@ export( EXPORT RefIccMAXTargets
         NAMESPACE RefIccMAX::
         FILE "${CMAKE_CURRENT_BINARY_DIR}/RefIccMAXTargets.cmake"
 )
+
+if(ENABLE_CPACK_PACKAGING AND ENABLE_INSTALL_RIM)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/Packaging/RefIccMAXCPack.cmake")
+endif()

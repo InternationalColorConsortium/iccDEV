@@ -82,6 +82,7 @@
 #include <cmath>
 #include <cstring>
 #include <time.h>
+#include <cwchar>
 
 #define PI 3.1415926535897932384626433832795
 
@@ -1912,39 +1913,48 @@ const icChar *CIccInfo::GetSpectralColorSigName(icColorSpaceSignature sig)
 
 const icChar *CIccInfo::GetProfileClassSigName(icProfileClassSignature sig)
 {
+  // These strings are display-only labels for the deviceClass signature; every
+  // caller emits them as human-readable text (iccDumpProfile "Profile Class: %s",
+  // the validation report in IccProfile.cpp, the wxWidgets GUI label) and nothing
+  // parses, compares, or serializes them — XML/JSON write the raw 4CC via
+  // icGetSigStr(), independent of this helper. The glued "Class" suffix is dropped:
+  // it is not an ICC.1/ICC.2 spec identifier (in the spec "class" is a separate word
+  // tied to "profile"/"device"/"media"), it is redundant since each caller's
+  // surrounding text already supplies the context, and the CamelCaps form hampers
+  // future localization.
   switch (sig) {
   case icSigInputClass:
-    return "InputClass";
+    return "Input";
 
   case icSigDisplayClass:
-    return "DisplayClass";
+    return "Display";
 
   case icSigOutputClass:
-    return "OutputClass";
+    return "Output";
 
   case icSigLinkClass:
-    return "LinkClass";
+    return "Link";
 
   case icSigAbstractClass:
-    return "AbstractClass";
+    return "Abstract";
 
   case icSigColorSpaceClass:
-    return "ColorSpaceClass";
+    return "ColorSpace";
 
   case icSigNamedColorClass:
-    return "NamedColorClass";
+    return "NamedColor";
 
   case icSigColorEncodingClass:
-    return "ColorEncodingClass";
+    return "ColorEncoding";
 
   case icSigMultiplexIdentificationClass:
-    return "MultiplexIdentificationClass";
+    return "MultiplexIdentification";
 
   case icSigMultiplexVisualizationClass:
-    return "MultiplexVisualizationClass";
+    return "MultiplexVisualization";
 
   case icSigMultiplexLinkClass:
-    return "MultiplexLinkClass";
+    return "MultiplexLink";
 
   default:
     return GetUnknownName(sig);
@@ -1989,6 +1999,7 @@ const icChar *CIccInfo::GetCmmSigName(icCmmSignature sig)
   case icSigAgfa:
     return "Agfa";
 
+  case icSigApple_Mistake:
   case icSigApple:
     return "Apple";
 
@@ -2072,6 +2083,24 @@ const icChar *CIccInfo::GetCmmSigName(icCmmSignature sig)
 
   case icSigZoran:
     return "Zoran";
+
+  // These CMM signatures are defined in the icCmmSignature enum but previously
+  // had no name here, so GetCmmSigName() returned "Unknown..." for them and any
+  // consumer that gates on the name (e.g. iccPawgReport's S3 check) treated a
+  // legitimately registered CMM as unregistered.
+  case icSigWindowsCMS:
+    return "Windows Color System (WCS)";
+
+  case icSigOnyxGraphics:
+    return "Onyx Graphics";
+
+  // Added from registry.color.org/cmm-signatures (entries missing from the
+  // earlier "as of Mar 6, 2018" enum snapshot).
+  case icSigReprointelligence:
+    return "Reprointelligence";
+
+  case icSigICC:
+    return "International Color Consortium";
 
   default:
     return GetUnknownName(sig);
@@ -2965,6 +2994,45 @@ const unsigned short *icUtf8ToUtf16(CIccUTF16String &buf, const char *szSrc, int
   return buf.c_str();
 }
 
+const char *icWCharToUtf8(std::string &buf, const wchar_t *szSrc, size_t sizeSrc)
+{
+  if (!szSrc) {
+    buf.clear();
+    return buf.c_str();
+  }
+
+  if (!sizeSrc)
+    sizeSrc = wcslen(szSrc);
+  if (sizeSrc == 0) {
+    buf.clear();
+    return buf.c_str();
+  }
+
+  size_t n = sizeSrc * 4u;
+  if (n) {
+    char *szBuf = (char*)malloc(n + 1);
+    if (!szBuf) {
+      buf.clear();
+      return buf.c_str();
+    }
+    char *szDest = szBuf;
+#if WCHAR_MAX > 65535
+    const UTF32 *szPtr = (const UTF32 *)szSrc;
+    icConvertUTF32toUTF8(&szPtr, &szPtr[sizeSrc], (UTF8**)&szDest, (UTF8*)&szBuf[n], lenientConversion);
+#else
+    const UTF16 *szPtr = (const UTF16 *)szSrc;
+    icConvertUTF16toUTF8(&szPtr, &szPtr[sizeSrc], (UTF8**)&szDest, (UTF8*)&szBuf[n], lenientConversion);
+#endif
+    *szDest = '\0';
+    buf.assign(szBuf, (size_t)(szDest - szBuf));
+    free(szBuf);
+  } else {
+    buf.clear();
+  }
+
+  return buf.c_str();
+}
+
 // ---------------------------------------------------------------------------
 // Date/time and rendering intent string parsing
 // ---------------------------------------------------------------------------
@@ -2987,7 +3055,7 @@ icDateTimeNumber icGetDateTimeValue(const icChar *str)
     minutes = timeinfo->tm_min;
     seconds = timeinfo->tm_sec;
   } else {
-    sscanf(str, "%d-%02d-%02dT%02d:%02d:%02d", &year, &month, &day, &hours, &minutes, &seconds);
+    sscanf(str, "%u-%02u-%02uT%02u:%02u:%02u", &year, &month, &day, &hours, &minutes, &seconds);
   }
   dateTime.year    = year;
   dateTime.month   = month;

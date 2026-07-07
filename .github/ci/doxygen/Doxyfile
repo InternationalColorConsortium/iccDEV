@@ -3,13 +3,14 @@
 # Generates HTML-only API documentation for the full iccDEV source tree,
 # including IccProfLib, IccXML, IccJSON/IccLibJSON, IccConnect/IccLibConnect,
 # command-line tools such as IccPawgReport and IccProfileVisualize, Winnt tools
-# such as IccIisIsapi, the hello-iccdev example app source, and Testing docs.
+# such as IccIisIsapi and its OpenAPI contract, the hello-iccdev example app
+# source, and Testing docs.
 # Visual aids include interactive SVG call/caller graphs, class hierarchy,
 # collaboration diagrams, include graphs, directory graphs, treeview navigation,
 # client-side search, and source browsing.
 
 PROJECT_NAME           = "iccDEV"
-PROJECT_NUMBER         = "2.3.2.0"
+PROJECT_NUMBER         = "2.3.2.2"
 PROJECT_BRIEF          = "ICC Color Profile Library - ProfLib, XML, JSON, Connect, CLI, Winnt Tools, and Examples"
 OUTPUT_DIRECTORY       = docs/generated
 HTML_OUTPUT            = html
@@ -23,20 +24,32 @@ INPUT                  = README.md \
                          IccConnect/IccLibConnect \
                          Tools/CmdLine \
                          Tools/Winnt \
+                         Tools/Winnt/IccIisIsapi/iis-isapi.openapi.yaml \
                          Tools/wxWidget \
                          examples/hello-iccdev/hello-iccdev.cpp \
                          docs \
                          Testing/Readme.md
 USE_MDFILE_AS_MAINPAGE = README.md
-FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md
+FILE_PATTERNS          = *.h *.h.in *.hpp *.c *.cc *.cpp *.cxx *.md *.yaml *.yml
 RECURSIVE              = YES
 EXCLUDE                = docs/generated \
+                         IccProfLib/registry/README.md \
+                         Tools/Winnt/IccDEVCmm/README.md \
                          Build \
                          .git
 EXCLUDE_PATTERNS       = */Build/* \
                          */build/* \
                          */CMakeFiles/* \
                          */.git/*
+# Hide duplicated iccPngDump file-local helper declarations from the public API
+# index. The definitions remain in source browsing, but these helpers are not
+# library API and otherwise create duplicate @param warnings without improving
+# the hierarchy UI.
+EXCLUDE_SYMBOLS        = safe_exit \
+                         ExtractIccProfile \
+                         InjectIccProfile \
+                         PrintIccProfileInfo \
+                         PrintPngInfo
 STRIP_FROM_PATH        = .
 
 INCLUDE_PATH           = IccProfLib \
@@ -51,17 +64,22 @@ INCLUDE_PATH           = IccProfLib \
                          examples/hello-iccdev \
                          /usr/include
 
-# Extraction settings
+# Extraction settings. Keep file-local anonymous namespaces out of the public
+# hierarchy/UI: they are implementation details and make inherits.html split into
+# anonymous, iccDEV, and tool-looking islands. Also keep USEICCDEVNAMESPACE
+# undefined so documentation follows the default legacy build model instead of
+# forcing partial namespace adoption during preprocessing.
 EXTRACT_ALL            = YES
 EXTRACT_PRIVATE        = YES
 EXTRACT_STATIC         = YES
 EXTRACT_LOCAL_CLASSES  = YES
 EXTRACT_LOCAL_METHODS  = YES
-EXTRACT_ANON_NSPACES   = YES
+EXTRACT_ANON_NSPACES   = NO
 
 # Build settings
 HIDE_UNDOC_MEMBERS     = NO
 HIDE_UNDOC_CLASSES     = NO
+HIDE_SCOPE_NAMES       = YES
 BRIEF_MEMBER_DESC      = YES
 REPEAT_BRIEF           = YES
 SORT_BRIEF_DOCS        = YES
@@ -75,7 +93,6 @@ PREDEFINED             = ICCPROFLIB_API= \
                          ICCLIBXML_API= \
                          ICCLIBJSON_API= \
                          ICCLIBCONNECT_API= \
-                         USEICCDEVNAMESPACE \
                          __cplusplus=1 \
                          ICC_JSON_ORDERED=0
 

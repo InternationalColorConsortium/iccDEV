@@ -64,6 +64,9 @@ echo "Tools dir: $TOOLS_DIR"
 echo "Testing dir: $TESTING_DIR"
 echo ""
 
+bash "$(dirname "$0")/iccdev-connect-config-schema-tests.sh"
+echo ""
+
 NAMED_PROFILE=""
 for candidate in \
   "$TESTING_DIR/Named/NamedColor.icc" \
@@ -743,7 +746,7 @@ run_test "invalid-syntax"       "$APPLY_NAMED_CMM" "$TMPDIR/invalid-syntax.json"
 run_test "null-value"           "$APPLY_NAMED_CMM" "$TMPDIR/null-value.json"           true
 run_test "missing-profileseq"   "$APPLY_NAMED_CMM" "$TMPDIR/missing-profileseq.json"   true
 run_test "nonexistent-profile"  "$APPLY_NAMED_CMM" "$TMPDIR/nonexistent-profile.json"  true
-run_test "wrong-types"          "$APPLY_NAMED_CMM" "$TMPDIR/wrong-types.json"
+run_test "wrong-types"          "$APPLY_NAMED_CMM" "$TMPDIR/wrong-types.json"          true
 run_test "extreme-values"       "$APPLY_NAMED_CMM" "$TMPDIR/extreme-values.json"
 run_test "path-traversal"       "$APPLY_NAMED_CMM" "$TMPDIR/path-traversal.json"       true
 echo ""

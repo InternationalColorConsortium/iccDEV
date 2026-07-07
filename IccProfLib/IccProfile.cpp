@@ -673,6 +673,10 @@ CIccIO* CIccProfile::ConnectSubProfile(CIccIO *pIO, bool bOwnIO) const
         
         if (pEmbedIO->Attach(pIO, i->TagInfo.size - 2 * sizeof(icUInt32Number), bOwnIO))
           return pEmbedIO;
+
+        // Attach failed; release the IO wrapper so it is not leaked. The
+        // CIccEmbedIO destructor handles pIO per the ownership flag set in Attach.
+        delete pEmbedIO;
       }
     }
   }
@@ -870,8 +874,14 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
     return false;
   }
 
+  // Transient sub-profile IO wrapper. ConnectSubProfile is called here with
+  // bOwnIO=false, so this wrapper does not own pIO; it only proxies reads while
+  // the (embedded) tags are loaded into memory. It must be deleted before every
+  // return below, otherwise the wrapper object itself is leaked.
+  CIccIO *pSubIO = NULL;
+
   if (bUseSubProfile) {
-    CIccIO *pSubIO = ConnectSubProfile(pIO, false);
+    pSubIO = ConnectSubProfile(pIO, false);
 
     if (pSubIO) {
       icColorSpaceSignature parentColorSpace = m_Header.colorSpace;
@@ -879,6 +889,7 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
       m_parentColorSpace = parentColorSpace;
       if (!ReadBasic(pSubIO)) {
         Cleanup();
+        delete pSubIO;
         return false;
       }
       pIO = pSubIO;
@@ -890,10 +901,12 @@ bool CIccProfile::Read(CIccIO *pIO, bool bUseSubProfile/*=false*/)
   for (i=m_Tags.begin(); i!=m_Tags.end(); i++) {
     if (!LoadTag((IccTagEntry*)&(i->TagInfo), pIO)) {
       Cleanup();
+      delete pSubIO;
       return false;
     }
   }
 
+  delete pSubIO;
   return true;
 }
 
@@ -979,6 +992,10 @@ icValidateStatus CIccProfile::ReadValidate(CIccIO *pIO, std::string &sReport)
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
   }
+
+  // Structural layout checks (inter-tag padding, overlaps, trailing data) that
+  // the per-tag and header checks don't cover.
+  rv = icMaxStatus(rv, CheckTagLayout(pIO, sReport));
 
   if (rv==icValidateCriticalError)
     Cleanup();
@@ -1608,10 +1625,43 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
         (m_Header.deviceClass!=icSigNamedColorClass &&
          m_Header.deviceClass!=icSigMultiplexIdentificationClass &&
          m_Header.deviceClass!=icSigMultiplexVisualizationClass)) {
-    if (!Info.IsValidSpace(m_Header.colorSpace)) {
-      if (!(m_Header.version>=icVersionNumberV5 && m_Header.deviceClass==icSigAbstractClass && Info.IsValidSpectralSpace(m_Header.colorSpace) && IsTagPresent(icSigDToB0Tag))) {
+    // A v2/v4 profile's data colour space must be one of the signatures
+    // positively enumerated in ICC.1 (v4.4.0.0) 7.2.6 / Table 19.  Two families
+    // of signature are *only* legal for iccMAX (v5) and must be rejected on a
+    // v2/v4 profile: the zero "no data" space (0x00000000) and the N-channel
+    // spaces ncXXXX (introduced by iccMAX 7.2.8 / Table 15 for MultiplexLink,
+    // MultiplexVisualization and abstract profiles).  IsValidSpace() is
+    // version-blind and accepts the ncXXXX family for any version, so gate them
+    // here by major version.
+    bool bValidSpace = Info.IsValidSpace(m_Header.colorSpace);
+    bool bIccMaxOnlySpace = (m_Header.colorSpace==icSigNoColorData) ||
+                            (icGetColorSpaceType(m_Header.colorSpace)==icSigNChannelData);
+    if (m_Header.version<icVersionNumberV5 && bIccMaxOnlySpace)
+      bValidSpace = false;
+
+    if (!bValidSpace) {
+      // A spectral colour space signature (Table 21) is permitted as the data
+      // colour space of a v5 profile.  The pre-amendment form was an abstract
+      // profile carrying a DToB0 tag.  The iccMAX extended device colour space
+      // amendment (7.2.8) additionally allows spectral device colour spaces for
+      // other classes, in which case the spectral range shall be defined by a
+      // deviceSpectralRangeTag ('dsrn') or by the header spectral/bi-spectral
+      // range fields (7.2.22/7.2.23); a spectral space with neither is rejected.
+      bool bV5Spectral = (m_Header.version>=icVersionNumberV5 && Info.IsValidSpectralSpace(m_Header.colorSpace));
+      bool bAbstractSpectral = bV5Spectral && m_Header.deviceClass==icSigAbstractClass && IsTagPresent(icSigDToB0Tag);
+      bool bDeviceSpectral = bV5Spectral && (IsTagPresent(icSigDeviceSpectralRangeTag) ||
+                                             m_Header.spectralRange.steps);
+      if (!(bAbstractSpectral || bDeviceSpectral)) {
         sReport += icMsgValidateCriticalError;
-        snprintf(buf, bufSize, " - %s: Unknown color space!\n", Info.GetColorSpaceSigName(m_Header.colorSpace));
+        // For an iccMAX-only space on a v2/v4 profile report the raw value
+        // rather than the friendly descriptor: GetColorSpaceSigName() renders
+        // 0x00000000 as "NoData", which would imply a legitimate (v5-only)
+        // space on a profile where it is simply invalid.  Other unrecognised
+        // signatures keep the existing "Unknown ..." wording.
+        if (m_Header.version<icVersionNumberV5 && bIccMaxOnlySpace)
+          snprintf(buf, bufSize, " - Invalid data colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.colorSpace);
+        else
+          snprintf(buf, bufSize, " - %s: Unknown colour space!\n", Info.GetColorSpaceSigName(m_Header.colorSpace));
         sReport += buf;
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
@@ -1654,9 +1704,22 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
   }
   else {
     if (m_Header.deviceClass==icSigLinkClass) {
-      if (!Info.IsValidSpace(m_Header.pcs)) {
+      // A DeviceLink PCS holds the B-side connection (output) colour space. As
+      // with the data colour space (#1359), the iccMAX N-channel spaces (ncXXXX)
+      // are only valid for v5/iccMAX; IsValidSpace() is version-blind, so gate
+      // them by major version for v2/v4 DeviceLink profiles and report the raw
+      // value rather than the friendly descriptor when an iccMAX-only space
+      // appears on a v2/v4 profile.
+      bool bValidPcs = Info.IsValidSpace(m_Header.pcs);
+      bool bIccMaxOnlyPcs = icGetColorSpaceType(m_Header.pcs)==icSigNChannelData;
+      if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
+        bValidPcs = false;
+      if (!bValidPcs) {
         sReport += icMsgValidateCriticalError;
-        snprintf(buf, bufSize, " - %s: Unknown pcs color space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
+        if (m_Header.version<icVersionNumberV5 && bIccMaxOnlyPcs)
+          snprintf(buf, bufSize, " - Invalid pcs colour space (0x%08X) for a v2/v4 profile; only iccMAX (v5) permits this!\n", (unsigned int)m_Header.pcs);
+        else
+          snprintf(buf, bufSize, " - %s: Unknown pcs colour space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
         sReport += buf;
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
@@ -1670,7 +1733,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
 
         default:
           sReport += icMsgValidateCriticalError;
-          snprintf(buf, bufSize, " - %s: Invalid pcs color space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
+          snprintf(buf, bufSize, " - %s: Invalid pcs colour space!\n", Info.GetColorSpaceSigName(m_Header.pcs));
           sReport += buf;
           rv = icMaxStatus(rv, icValidateCriticalError);
           break;
@@ -1769,7 +1832,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
 
         default:
           sReport += icMsgValidateCriticalError;
-          snprintf(buf, bufSize, "%s: Invalid spectral PCS color space!\n", Info.GetColorSpaceSigName((icColorSpaceSignature)m_Header.spectralPCS));
+          snprintf(buf, bufSize, "%s: Invalid spectral PCS colour space!\n", Info.GetColorSpaceSigName((icColorSpaceSignature)m_Header.spectralPCS));
           sReport += buf;
           rv = icMaxStatus(rv, icValidateCriticalError);
           break;
@@ -1894,6 +1957,7 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     case icSigAdobe:
     case icSigAgfa:
     case icSigApple:
+    case icSigApple_Mistake:
     case icSigColorGear:
     case icSigColorGearLite:
     case icSigColorGearC:
@@ -1956,10 +2020,13 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
             || (!compare_float(Z, 0.8249f, 0.0004f))
             )
         ){
-      sReport += icMsgValidateNonCompliant;
+      // Non-D50 here is non-critical: the PCS is D50-adapted by definition, so
+      // the illuminant header field is informational and a CMM can ignore a
+      // non-D50 value. Report as a warning rather than non-compliant.
+      sReport += icMsgValidateWarning;
       sReport += "Non D50 Illuminant XYZ values";
       sReport +="\r\n";
-      rv = icMaxStatus(rv, icValidateNonCompliant);
+      rv = icMaxStatus(rv, icValidateWarning);
     }
   }
 
@@ -2095,31 +2162,62 @@ icValidateStatus CIccProfile::CheckTagTypes(std::string &sReport) const
   CIccInfo Info;
   
   TagEntryList::const_iterator i;
+  bool bV2TypeInV4 = false;
   for (i = m_Tags.begin(); i != m_Tags.end(); ++i) {
     icTagSignature tagsig = i->TagInfo.sig;
-    
+
     icTagTypeSignature typesig = icSigUnknownType;
     icStructSignature structSig = icSigUnknownStruct;
     icArraySignature arraySig = icSigUnknownArray;
-    
+
     // missing the internal tag data would cause a problem, issue #322
     if (i->pTag) {
       typesig = i->pTag->GetType();
       structSig = i->pTag->GetTagStructType();
       arraySig = i->pTag->GetTagArrayType();
     }
-    
+
     snprintf(buf, bufSize, "%s", Info.GetSigName(tagsig));
     if (!IsTypeValid(tagsig, typesig, structSig, arraySig)) {
-      sReport += icMsgValidateNonCompliant;
-      sReport += buf;
-      snprintf(buf,bufSize, " %s: Invalid tag type (Might be critical!).\n", Info.GetTagTypeSigName(typesig));
-      sReport += buf;
-      rv = icMaxStatus(rv, icValidateNonCompliant);
+      // An invalid tag type that is actually an ICC v2-era type appearing in a
+      // profile declaring v4 or later almost always means the version number is
+      // wrong (a v2 profile mislabeled as v4), not that the tag data is corrupt.
+      // The data is usable, so report it as a warning with version context
+      // rather than flagging it non-compliant.
+      bool bVersionLegacyType =
+        (m_Header.version >= icVersionNumberV4) &&
+        (typesig == icSigTextDescriptionType ||
+         (typesig == icSigTextType && tagsig == icSigCopyrightTag));
+
+      if (bVersionLegacyType) {
+        sReport += icMsgValidateWarning;
+        sReport += buf;
+        snprintf(buf, bufSize, " %s: ICC v2 tag type not valid in the declared profile version.\n",
+                 Info.GetTagTypeSigName(typesig));
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateWarning);
+        bV2TypeInV4 = true;
+      }
+      else {
+        sReport += icMsgValidateNonCompliant;
+        sReport += buf;
+        snprintf(buf,bufSize, " %s: Invalid tag type (Might be critical!).\n", Info.GetTagTypeSigName(typesig));
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
     }
   }
 
-  return rv;  
+  if (bV2TypeInV4) {
+    snprintf(buf, bufSize,
+             "Profile declares version %s but uses ICC v2 tag types; the profile version number may be incorrect.\n",
+             Info.GetVersionName(m_Header.version));
+    sReport += icMsgValidateWarning;
+    sReport += buf;
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+
+  return rv;
 }
 
 
@@ -2387,10 +2485,17 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
 
   case icSigCharTargetTag:
     {
-      if (typeSig!=icSigTextType)
-        return false;
-      else
+      if (m_Header.version >= icVersionNumberV5) {
+        if (typeSig != icSigUtf8TextType &&
+            typeSig != icSigZipUtf8TextType)
+          return false;
         return true;
+      }
+      else {
+        if (typeSig != icSigTextType)
+          return false;
+        return true;
+      }
     }
 
   case icSigChromaticAdaptationTag:
@@ -2468,9 +2573,7 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       else {
         if (typeSig != icSigUtf8TextType &&
             typeSig != icSigZipUtf8TextType &&
-#if defined(XRITE_ADDITIONS)
-            typeSig != icSigZipXmlType_XRITE &&
-#endif
+            typeSig != icSigZipXMLType &&
             typeSig != icSigZipXmlType)
           return false;
         return true;
@@ -2591,6 +2694,27 @@ bool CIccProfile::IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
       return false;
     else return true;
   }
+
+  case icSigDeviceSpectralRangeTag:
+    {
+      // Extended device colour space amendment (9.2.x): the deviceSpectralRangeTag
+      // carries a spectralRangeType and is only defined for iccMAX (v5) profiles.
+      if (m_Header.version >= icVersionNumberV5 && typeSig==icSigSpectralRangeType)
+        return true;
+      else
+        return false;
+    }
+
+  case icSigDevicePccTag:
+    {
+      // Extended device colour space amendment (9.2.x+1): the devicePccTag carries
+      // a tagStructType of profileConnectionConditionsStructure ('pcc ').
+      if (m_Header.version >= icVersionNumberV5 &&
+          typeSig==icSigTagStructType && structSig==icSigProfileConnectionConditionsStruct)
+        return true;
+      else
+        return false;
+    }
 
   //The Private Tag case
   default:
@@ -3071,6 +3195,155 @@ bool CIccProfile::CheckFileSize(CIccIO *pIO) const
 
 /**
  ****************************************************************************
+ * Name: CIccProfile::CheckTagLayout
+ *
+ * Purpose: Validate the structural layout of the tag table — areas the header
+ *  and per-tag checks do not cover: padding between tags (which must be no more
+ *  than three zero bytes), overlapping tag data, and unused data after the last
+ *  tag. These are non-critical: the profile is usable, but its layout deviates
+ *  from the specification.
+ *
+ * Args:
+ *  pIO - IO object positioned on the profile (used to inspect pad bytes and to
+ *        determine the file size)
+ *  sReport - string to append validation findings to
+ *
+ * Return:
+ *  icValidateOK, or a warning / non-compliant status.
+ *****************************************************************************
+ */
+icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) const
+{
+  icValidateStatus rv = icValidateOK;
+  if (!pIO || m_Tags.empty())
+    return rv;
+
+  CIccInfo Info;
+  char buf[256];
+
+  // File size (save/restore IO position so we don't disturb the caller).
+  size_t fileSize = 0;
+  int64_t savePos = pIO->Tell();
+  if (savePos >= 0 && pIO->Seek(0, icSeekEnd) >= 0) {
+    int64_t endPos = pIO->Tell();
+    if (endPos >= 0 && (uint64_t)endPos <= (uint64_t)std::numeric_limits<size_t>::max())
+      fileSize = (size_t)endPos;
+    pIO->Seek(savePos, icSeekSet);
+  }
+
+  // End of the tag directory: 128-byte header + 4-byte tag count + 12 bytes per
+  // directory entry. Tag data must not overlap this region and the first tag
+  // should follow it with minimal padding.
+  icUInt32Number tagCount = (icUInt32Number)m_Tags.size();
+  icUInt32Number tagDirEnd = 128 + 4 + tagCount * 12;
+
+  // Sort entries by offset: the directory order is not guaranteed ascending, so
+  // consecutive-entry comparisons need an offset-ordered view.
+  struct LayoutEntry { icUInt32Number offset; icUInt32Number size; icTagSignature sig; };
+  std::vector<LayoutEntry> ents;
+  ents.reserve(tagCount);
+  for (TagEntryList::const_iterator i = m_Tags.begin(); i != m_Tags.end(); ++i) {
+    LayoutEntry e = { i->TagInfo.offset, i->TagInfo.size, i->TagInfo.sig };
+    ents.push_back(e);
+  }
+  std::sort(ents.begin(), ents.end(),
+            [](const LayoutEntry &a, const LayoutEntry &b) { return a.offset < b.offset; });
+
+  // prevEnd tracks the furthest byte occupied so far (the "frontier"), not just
+  // the previous tag's end, so a tag fully contained within an earlier one does
+  // not move the reference boundary backwards and skew later gap/overlap checks.
+  icUInt32Number prevEnd = tagDirEnd;
+  std::string prevName = "the tag directory";
+
+  for (size_t k = 0; k < ents.size(); ++k) {
+    icUInt32Number off = ents[k].offset;
+    icUInt32Number sz  = ents[k].size;
+    // Clamp instead of wrapping if a (malformed) tag claims data past 4 GB so
+    // the layout comparisons below stay monotonic. A wrapped end could only
+    // mislead a report message, never index memory, but clamping keeps it sane.
+    icUInt32Number end = (sz > 0xFFFFFFFFu - off) ? 0xFFFFFFFFu : off + sz;
+    std::string name = Info.GetTagSigName(ents[k].sig);
+
+    if (off > prevEnd) {
+      icUInt32Number gap = off - prevEnd;
+      // Padding between tagged elements must be no more than three bytes.
+      if (gap > 3) {
+        sReport += icMsgValidateWarning;
+        snprintf(buf, sizeof(buf), "%u bytes of unexpected data between %s and %s.\n",
+                 gap, prevName.c_str(), name.c_str());
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateWarning);
+      }
+      // Padding bytes must be zero. Spec-allowed padding is at most three bytes;
+      // larger gaps are already reported above, so don't scan a potentially huge
+      // region one byte at a time.
+      if (gap <= 3 && fileSize && (size_t)off <= fileSize && pIO->Seek((int64_t)prevEnd, icSeekSet) >= 0) {
+        bool nonZero = false;
+        for (icUInt32Number g = 0; g < gap; ++g) {
+          icUInt8Number b = 0;
+          if (pIO->Read8(&b, 1) != 1) break;
+          if (b) { nonZero = true; break; }
+        }
+        if (nonZero) {
+          sReport += icMsgValidateWarning;
+          snprintf(buf, sizeof(buf), " - Non-zero padding bytes after %s.\n", prevName.c_str());
+          sReport += buf;
+          rv = icMaxStatus(rv, icValidateWarning);
+        }
+      }
+    }
+    else if (off < prevEnd) {
+      // Multiple tag directory entries are permitted to share a single block of
+      // tag data (e.g. AToB0/AToB1/AToB2 pointing at one common LUT). Per
+      // ICC.1:2022 section 7.3.1: "The tag table may contain multiple tags
+      // signatures that all reference the same tag data element offset, allowing
+      // efficient reuse of tag data elements. In such cases, both the offset and
+      // size of the tag data elements in the tag table shall be the same." Such
+      // an entry re-occupies an already-counted extent rather than overlapping a
+      // different one, so it is compliant. A partial overlap (same start but a
+      // different size, or a straddling offset) is not shared data and remains
+      // non-compliant.
+      bool bSharedData = false;
+      for (size_t j = 0; j < k; ++j) {
+        if (ents[j].offset == off && ents[j].size == sz) {
+          bSharedData = true;
+          break;
+        }
+      }
+      if (!bSharedData) {
+        // Tag data overlaps the preceding element (or the tag directory).
+        sReport += icMsgValidateNonCompliant;
+        snprintf(buf, sizeof(buf), " - %s overlaps %s.\n", name.c_str(), prevName.c_str());
+        sReport += buf;
+        rv = icMaxStatus(rv, icValidateNonCompliant);
+      }
+    }
+
+    // Advance the frontier only when this tag extends it (see prevEnd note).
+    if (end > prevEnd) {
+      prevEnd = end;
+      prevName = name;
+    }
+  }
+
+  // Unused data after the last tag (allow up to three bytes of final padding).
+  if (fileSize > (size_t)prevEnd + 3) {
+    sReport += icMsgValidateWarning;
+    snprintf(buf, sizeof(buf), " - %lu bytes of data after the last tag.\n",
+             (unsigned long)(fileSize - prevEnd));
+    sReport += buf;
+    rv = icMaxStatus(rv, icValidateWarning);
+  }
+
+  if (savePos >= 0)
+    pIO->Seek(savePos, icSeekSet);
+
+  return rv;
+}
+
+
+/**
+ ****************************************************************************
  * Name: CIccProfile::Validate
  * 
  * Purpose: Check the data integrity of the profile, and conformance to
@@ -3140,6 +3413,98 @@ icUInt16Number CIccProfile::GetSpaceSamples() const
 icUInt16Number CIccProfile::GetParentSpaceSamples() const
 {
   return (icUInt16Number)icGetSpaceSamples(m_parentColorSpace);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::getDevicePccElem
+ *
+ * Purpose: Look up a member sub-tag of this profile's devicePccTag ('dpcc')
+ *  profileConnectionConditionsStructure. The extended device colour space
+ *  amendment (9.2.x+1 / 12.2.y) lets an abstract profile carry alternate
+ *  replacement profile connection conditions in this structure; the PCC
+ *  interface getters consult it before the profile's own PCC tags.
+ *
+ * Args:
+ *  sigMember = the 'pcc ' member signature to retrieve,
+ *  sigType   = the required tag type of that member
+ *
+ * Return: the member tag, or NULL when no replacement applies.
+ *****************************************************************************
+ */
+CIccTag* CIccProfile::getDevicePccElem(icSignature sigMember, icTagTypeSignature sigType)
+{
+  // The devicePccTag is only defined for abstract iccMAX (v5) profiles.
+  if (m_Header.version < icVersionNumberV5 || m_Header.deviceClass != icSigAbstractClass)
+    return NULL;
+
+  CIccTag *pTag = FindTag(icSigDevicePccTag);
+  if (!pTag || pTag->GetTagStructType() != icSigProfileConnectionConditionsStruct)
+    return NULL;
+
+  return ((CIccTagStruct*)pTag)->FindElemOfType(sigMember, sigType);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::getPccViewingConditions
+ *
+ * Purpose: Get the spectral viewing conditions for profile connection,
+ *  preferring a devicePccTag svcn member when present (#626 / #1559).
+ *  getPccIlluminant/CCT/Observer and getNormIlluminantXYZ/getLumIlluminantXYZ
+ *  all derive from this getter, so overriding it here also applies the dpcc
+ *  illuminant/observer (and the iXYZ PCS illuminant, 12.2.y.2.1) to them.
+ *****************************************************************************
+ */
+const CIccTagSpectralViewingConditions *CIccProfile::getPccViewingConditions()
+{
+  // Replacement svcn from the devicePccTag structure, else the profile's own svcn.
+  CIccTag *pElem = getDevicePccElem(icSigPccSpectralViewingConditionsMbr, icSigSpectralViewingConditionsType);
+  if (pElem)
+    return (const CIccTagSpectralViewingConditions*)pElem;
+
+  return (const CIccTagSpectralViewingConditions*)FindTagOfType(icSigSpectralViewingConditionsTag,
+                                                                icSigSpectralViewingConditionsType);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::getCustomToStandardPcc
+ *
+ * Purpose: Get the custom-to-standard PCC transform, preferring a devicePccTag
+ *  c2sp member when present (#626 / #1559).
+ *****************************************************************************
+ */
+CIccTagMultiProcessElement *CIccProfile::getCustomToStandardPcc()
+{
+  // Replacement c2sp from the devicePccTag structure, else the profile's own c2sp tag.
+  CIccTag *pElem = getDevicePccElem(icSigPccCustomToStandardPccMbr, icSigMultiProcessElementType);
+  if (pElem)
+    return (CIccTagMultiProcessElement*)pElem;
+
+  return (CIccTagMultiProcessElement*)FindTagOfType(icSigCustomToStandardPccTag, icSigMultiProcessElementType);
+}
+
+
+/**
+ ****************************************************************************
+ * Name: CIccProfile::getStandardToCustomPcc
+ *
+ * Purpose: Get the standard-to-custom PCC transform, preferring a devicePccTag
+ *  s2cp member when present (#626 / #1559).
+ *****************************************************************************
+ */
+CIccTagMultiProcessElement *CIccProfile::getStandardToCustomPcc()
+{
+  // Replacement s2cp from the devicePccTag structure, else the profile's own s2cp tag.
+  CIccTag *pElem = getDevicePccElem(icSigPccStandardToCustomPccMbr, icSigMultiProcessElementType);
+  if (pElem)
+    return (CIccTagMultiProcessElement*)pElem;
+
+  return (CIccTagMultiProcessElement*)FindTagOfType(icSigStandardToCustomPccTag, icSigMultiProcessElementType);
 }
 
 
@@ -3313,7 +3678,11 @@ void CIccProfile::getLumIlluminantXYZ(icFloatNumber *pXYZ)
  */
 bool CIccProfile::getMediaWhiteXYZ(icFloatNumber *pXYZ)
 {
-  CIccTag *pTag = FindTag(icSigMediaWhitePointTag);
+  // Prefer a devicePccTag mwpt member when present; it replaces the profile's
+  // mediaWhitePointTag for an abstract profile (#626 / #1559, spec 12.2.y.2.2).
+  CIccTag *pTag = getDevicePccElem(icSigPccMediaWhitePointMbr, icSigXYZType);
+  if (!pTag)
+    pTag = FindTag(icSigMediaWhitePointTag);
   if (pTag && pTag->GetType()==icSigXYZType) {
     CIccTagXYZ *pXYZTag = (CIccTagXYZ*)pTag;
     icXYZNumber *pMediaXYZ = pXYZTag->GetXYZ(0);
@@ -3351,6 +3720,8 @@ bool CIccProfile::calcLumIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnectio
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
+    if (!illuminant)
+      return false;
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 
@@ -3397,6 +3768,8 @@ bool CIccProfile::calcNormIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnecti
   if (pCond) {
     icSpectralRange illuminantRange;
     const icFloatNumber *illuminant = pCond->getIlluminant(illuminantRange);
+    if (!illuminant)
+      return false;
 
     CIccMatrixMath *obs = pCond->getObserverMatrix(illuminantRange);
 
@@ -3409,7 +3782,15 @@ bool CIccProfile::calcNormIlluminantXYZ(icFloatNumber *pXYZ, IIccProfileConnecti
     }
 
     obs->VectorScale(illuminant);
-    obs->Scale(obs->RowSum(1));
+    icFloatNumber illumY = obs->RowSum(1);
+    if (!std::isfinite((double)illumY) || !icNotZero(illumY)) {
+      pXYZ[0] = 0.0f;
+      pXYZ[1] = 0.0f;
+      pXYZ[2] = 0.0f;
+      delete obs;
+      return false;
+    }
+    obs->Scale(1.0f / illumY);
 
     pXYZ[0] = obs->RowSum(0);
     pXYZ[1] = obs->RowSum(1);

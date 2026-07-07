@@ -122,7 +122,7 @@ void Usage();
 
 /**
  * Safely exits the program with a given reason.
- * 
+ *
  * @param reason The reason for exiting.
  */
 
@@ -333,12 +333,12 @@ void Usage() {
 // Function: InjectIccProfile
 // Description: Injects an ICC profile into a PNG file
 // =====================================================================
-static FILE* OpenPngOutputFile(const std::string& outputPng)
+static FILE* OpenPngOutputFile(const char* outputPng)
 {
     // PNG export paths are intentional caller-selected output files after regular-file validation.
 
     // codeql[cpp/path-injection]
-    return icOpenRegularWriteBinaryFile(outputPng.c_str());
+    return icOpenRegularWriteBinaryFile(outputPng);
 }
 
 static bool ReadBinaryStream(std::istream& in, std::vector<unsigned char>& data)
@@ -357,40 +357,18 @@ static bool ReadBinaryStream(std::istream& in, std::vector<unsigned char>& data)
     return in.eof() && !in.bad();
 }
 
-/**
- * Injects a new ICC profile into a PNG image and writes the output.
- *
- * @param inputPng Path to the source PNG file.
- * @param iccFile Path to the ICC file to embed.
- * @param outputPng Path to write the modified PNG file.
- * @return true on success, false on failure.
- */
-bool InjectIccProfile(const std::string& inputPng,
-                      const std::string& iccFile,
-                      const std::string& outputPng) {
-    std::ifstream iccIn(iccFile, std::ios::binary);
-    if (!iccIn.is_open()) {
-        LOG_ERROR("Failed to open ICC profile file for reading.");
-        return false;
-    }
-
-    std::vector<unsigned char> iccData;
-    if (!ReadBinaryStream(iccIn, iccData)) {
-        LOG_ERROR("Failed to read ICC profile file.");
-        return false;
-    }
-    if (iccData.empty() || iccData.size() > std::numeric_limits<png_uint_32>::max()) {
-        LOG_ERROR("Invalid ICC profile size for PNG iCCP chunk.");
-        return false;
-    }
-
-    FILE* fpIn = fopen(inputPng.c_str(), "rb");
+static bool InjectIccProfileData(const char* inputPng,
+                                 const char* outputPng,
+                                 const unsigned char* iccData,
+                                 png_uint_32 iccDataSize)
+{
+    FILE* fpIn = fopen(inputPng, "rb");
     if (!fpIn) {
         LOG_ERROR("Failed to open input PNG file.");
         return false;
     }
 
-    FILE* fpOut = OpenPngOutputFile(outputPng);
+    FILE* volatile fpOut = OpenPngOutputFile(outputPng);
     if (!fpOut) {
         fclose(fpIn);
         LOG_ERROR("Failed to open output PNG file.");
@@ -440,7 +418,7 @@ bool InjectIccProfile(const std::string& inputPng,
     }
 
     png_bytepp row_pointers = NULL;
-    png_uint_32 rowsAllocated = 0;
+    volatile png_uint_32 rowsAllocated = 0;
     if (setjmp(png_jmpbuf(write_ptr))) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         png_destroy_write_struct(&write_ptr, &write_info_ptr);
@@ -463,8 +441,33 @@ bool InjectIccProfile(const std::string& inputPng,
                  png_get_compression_type(png_ptr, info_ptr),
                  png_get_filter_type(png_ptr, info_ptr));
 
+    // libpng requires the palette (PLTE) -- and any transparency (tRNS) -- to be
+    // set on the output before png_write_info() for indexed-colour images.
+    // Copying only IHDR left paletted PNGs failing with "Valid palette required
+    // for paletted images" when injecting an ICC profile (#1383), so propagate
+    // the palette (and tRNS) from the input here.
+    if (png_get_color_type(png_ptr, info_ptr) == PNG_COLOR_TYPE_PALETTE) {
+        png_colorp palette = NULL;
+        int num_palette = 0;
+        if (!png_get_PLTE(png_ptr, info_ptr, &palette, &num_palette) || !palette || num_palette <= 0) {
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            png_destroy_write_struct(&write_ptr, &write_info_ptr);
+            fclose(fpIn); fclose(fpOut);
+            LOG_ERROR("Palette PNG is missing a valid PLTE chunk.");
+            return false;
+        }
+        png_set_PLTE(write_ptr, write_info_ptr, palette, num_palette);
+
+        png_bytep trans_alpha = NULL;
+        int num_trans = 0;
+        png_color_16p trans_color = NULL;
+        if (png_get_tRNS(png_ptr, info_ptr, &trans_alpha, &num_trans, &trans_color)) {
+            png_set_tRNS(write_ptr, write_info_ptr, trans_alpha, num_trans, trans_color);
+        }
+    }
+
     // only now is it safe to attach ICC
-    png_set_iCCP(write_ptr, write_info_ptr, "icc", 0, iccData.data(), static_cast<png_uint_32>(iccData.size()));
+    png_set_iCCP(write_ptr, write_info_ptr, "icc", 0, iccData, iccDataSize);
 
     // finally write header
     png_write_info(write_ptr, write_info_ptr);
@@ -528,6 +531,37 @@ bool InjectIccProfile(const std::string& inputPng,
         return false;
     }
     return true;
+}
+
+/**
+ * Injects a new ICC profile into a PNG image and writes the output.
+ *
+ * @param inputPng Path to the source PNG file.
+ * @param iccFile Path to the ICC file to embed.
+ * @param outputPng Path to write the modified PNG file.
+ * @return true on success, false on failure.
+ */
+bool InjectIccProfile(const std::string& inputPng,
+                      const std::string& iccFile,
+                      const std::string& outputPng) {
+    std::ifstream iccIn(iccFile, std::ios::binary);
+    if (!iccIn.is_open()) {
+        LOG_ERROR("Failed to open ICC profile file for reading.");
+        return false;
+    }
+
+    std::vector<unsigned char> iccData;
+    if (!ReadBinaryStream(iccIn, iccData)) {
+        LOG_ERROR("Failed to read ICC profile file.");
+        return false;
+    }
+    if (iccData.empty() || iccData.size() > std::numeric_limits<png_uint_32>::max()) {
+        LOG_ERROR("Invalid ICC profile size for PNG iCCP chunk.");
+        return false;
+    }
+
+    return InjectIccProfileData(inputPng.c_str(), outputPng.c_str(), iccData.data(),
+                                static_cast<png_uint_32>(iccData.size()));
 }
 
 // =====================================================================

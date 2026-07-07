@@ -601,6 +601,8 @@ bool CIccTagProfileSequenceId::Write(CIccIO *pIO)
   }
 
   pIO->Seek(endpos, icSeekSet);
+  
+  delete[] pos;
 
   return true;
 }

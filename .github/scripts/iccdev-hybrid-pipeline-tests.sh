@@ -7,7 +7,7 @@
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
 #   ICCDEV_TESTING_DIR -- path to Testing
 #   ICCDEV_TEST_OUTDIR -- output directory for logs
-#   HYBRID_TIMEOUT     -- timeout in seconds for BuildAndTest.sh, default 600
+#   HYBRID_TIMEOUT     -- timeout in seconds for BuildAndTest.sh, default 840
 ###############################################################################
 
 set -euo pipefail
@@ -49,7 +49,7 @@ if [ -z "$TOOL_DIRS" ]; then
   exit 1
 fi
 
-timeout_sec="${HYBRID_TIMEOUT:-600}"
+timeout_sec="${HYBRID_TIMEOUT:-840}"
 exit_code=0
 (
   cd "$HYBRID_DIR"

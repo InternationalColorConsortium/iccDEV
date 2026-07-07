@@ -11,11 +11,21 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <vector>
 
 static bool NearlyEqual(icFloatNumber a, icFloatNumber b)
 {
   return std::fabs(a - b) <= 1.0e-5f;
+}
+
+static std::vector<icFloatNumber> MakeZeroVector(size_t n)
+{
+  std::vector<icFloatNumber> v;
+  v.reserve(n);
+  for (size_t i = 0; i < n; ++i)
+    v.push_back(0.0f);
+  return v;
 }
 
 int main(int argc, char** argv)
@@ -55,6 +65,29 @@ int main(int argc, char** argv)
     return 1;
   }
 
+  json oversizedThreadsJson;
+  oversizedThreadsJson["threads"] = CIccThreadedCmm::GetMaxThreads() + 1;
+  CIccCfgConnectOptions oversizedOptions;
+  if (oversizedOptions.fromJson(oversizedThreadsJson, true)) {
+    std::fprintf(stderr, "oversized JSON thread count was accepted\n");
+    return 1;
+  }
+
+  std::string tooManyThreadsError;
+  std::unique_ptr<CIccConnectCmm> tooManyThreads(
+    CIccConnectCmm::CreateStandard(
+      profiles, nullptr, 0, CIccThreadedCmm::GetMaxThreads() + 1,
+      &tooManyThreadsError));
+  if (tooManyThreads) {
+    std::fprintf(stderr, "oversized thread count was accepted\n");
+    return 1;
+  }
+  if (tooManyThreadsError.find("invalid thread count") == std::string::npos) {
+    std::fprintf(stderr, "missing oversized thread count error: %s\n",
+                 tooManyThreadsError.c_str());
+    return 1;
+  }
+
   CIccCmm* pScalarCmm = scalar->GetCmm();
   CIccCmm* pThreadedCmm = threaded->GetCmm();
 
@@ -66,9 +99,9 @@ int main(int argc, char** argv)
   }
 
   const icUInt32Number nPixels = 8;
-  std::vector<icFloatNumber> src(nPixels * nSrcSamples, 0.0f);
-  std::vector<icFloatNumber> scalarDst(nPixels * nDstSamples, 0.0f);
-  std::vector<icFloatNumber> threadedDst(nPixels * nDstSamples, 0.0f);
+  std::vector<icFloatNumber> src = MakeZeroVector(nPixels * nSrcSamples);
+  std::vector<icFloatNumber> scalarDst = MakeZeroVector(nPixels * nDstSamples);
+  std::vector<icFloatNumber> threadedDst = MakeZeroVector(nPixels * nDstSamples);
 
   for (icUInt32Number p = 0; p < nPixels; ++p) {
     for (int c = 0; c < nSrcSamples; ++c) {

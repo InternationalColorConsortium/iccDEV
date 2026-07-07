@@ -610,6 +610,72 @@ IIccStruct* CIccStructProfileInfo::NewCopy(CIccTagStruct *pTagStruct) const
 
 
 
+static SIccElemNameSig g_IccStructProfileConnectionConditionsMbrTable[] = {
+  { icSigPccPcsIlluminantXYZMbr,          "pccPcsIlluminantXYZMbr" },
+  { icSigPccMediaWhitePointMbr,           "pccMediaWhitePointMbr" },
+  { icSigPccSpectralWhitePointMbr,        "pccSpectralWhitePointMbr" },
+  { icSigPccSpectralViewingConditionsMbr, "pccSpectralViewingConditionsMbr" },
+  { icSigPccCustomToStandardPccMbr,       "pccCustomToStandardPccMbr" },
+  { icSigPccStandardToCustomPccMbr,       "pccStandardToCustomPccMbr" },
+  { 0, NULL },
+};
+
+CIccStructProfileConnectionConditions::CIccStructProfileConnectionConditions(CIccTagStruct *pTagStruct)
+{
+  m_pTagStruct = pTagStruct;
+  m_pElemNameSigTable = g_IccStructProfileConnectionConditionsMbrTable;
+}
+
+
+CIccStructProfileConnectionConditions::~CIccStructProfileConnectionConditions()
+{
+
+}
+
+
+IIccStruct* CIccStructProfileConnectionConditions::NewCopy(CIccTagStruct *pTagStruct) const
+{
+  CIccStructProfileConnectionConditions *rv = new CIccStructProfileConnectionConditions(pTagStruct);
+
+  return rv;
+}
+
+
+icValidateStatus CIccStructProfileConnectionConditions::Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile/* = NULL*/) const
+{
+  icValidateStatus rv = icValidateOK;
+
+  if (m_pTagStruct) {
+    CIccInfo Info;
+    std::string sSigPathName = Info.GetSigPathName(sigPath);
+
+    // iXYZ, svcn, c2sp and s2cp are unconditionally required (spec 12.2.y, Table Y).
+    if (!m_pTagStruct->FindElem(icSigPccPcsIlluminantXYZMbr) ||
+        !m_pTagStruct->FindElem(icSigPccSpectralViewingConditionsMbr) ||
+        !m_pTagStruct->FindElem(icSigPccCustomToStandardPccMbr) ||
+        !m_pTagStruct->FindElem(icSigPccStandardToCustomPccMbr)) {
+      rv = icMaxStatus(rv, icValidateCriticalError);
+      sReport += icMsgValidateCriticalError;
+      sReport += sSigPathName;
+      sReport += " - Missing required profileConnectionConditions member(s).\n";
+    }
+
+    // mwpt is required for a colorimetric connection, swpt for a spectral one;
+    // a usable structure must provide at least one media white point member.
+    if (!m_pTagStruct->FindElem(icSigPccMediaWhitePointMbr) &&
+        !m_pTagStruct->FindElem(icSigPccSpectralWhitePointMbr)) {
+      rv = icMaxStatus(rv, icValidateWarning);
+      sReport += icMsgValidateWarning;
+      sReport += sSigPathName;
+      sReport += " - Missing media (mwpt) or spectral (swpt) white point member.\n";
+    }
+  }
+
+  return icMaxStatus(rv, CIccStructUnknown::Validate(sigPath, sReport, pProfile));
+}
+
+
+
 static SIccElemNameSig g_IccStructTintZeroMbrTable[] = {
   { icSigTnt0DeviceDataMbr, "tnt0DeviceDataMbr" },
   { icSigTnt0PcsDataMbr, "tnt0PcsDataMbr" },

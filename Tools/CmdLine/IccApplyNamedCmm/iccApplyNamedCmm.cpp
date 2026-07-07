@@ -76,6 +76,7 @@
 #include "IccDefs.h"
 #include "IccMpeCalc.h"
 #include "IccProfLibVer.h"
+#include "IccLibConnectVer.h"
 #include "IccConnect.h"
 #include "../IccCmdLineUtil.h"
 #if !defined(_WIN32)
@@ -197,7 +198,7 @@ typedef std::shared_ptr<CIccLogDebugger> LogDebuggerPtr;
 
 void Usage()
 {
-  printf("iccApplyNamedCmm built with IccProfLib version " ICCPROFLIBVER "\n\n");
+  printf("iccApplyNamedCmm built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
   printf("Usage 1: iccApplyNamedCmm -cfg config_file_path\n");
   printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");

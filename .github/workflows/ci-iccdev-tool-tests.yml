@@ -12,6 +12,11 @@
 
 name: ci-regression-checks
 
+# Existing pinned image digests, CMake commands, and reproduction strings
+# intentionally exceed the default yamllint line length. Keep the disable local
+# to this workflow.
+# yamllint disable rule:line-length
+
 permissions:
   contents: read
   packages: read
@@ -49,8 +54,48 @@ on:
         required: false
         default: false
         type: boolean
+      tool_build_type:
+        description: 'Build type for the reusable CTest tool suite'
+        required: false
+        default: Debug
+        type: string
+      ctest_mode:
+        description: 'CTest mode: fast excludes slow/calculator labels; full runs all; skip omits CTest'
+        required: false
+        default: fast
+        type: string
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
+      run_registry_qa:
+        description: 'Run ICC profile registry command-line QA scan'
+        required: false
+        default: false
+        type: boolean
+      registry_qa_timeout:
+        description: 'Timeout in seconds for each registry QA tool run'
+        required: false
+        default: '20'
+        type: string
+      registry_qa_max_profiles:
+        description: 'Maximum registry ICC profiles to scan; 0 means all'
+        required: false
+        default: '3'
+        type: string
+      registry_qa_full_matrix:
+        description: 'Run every registry QA tool variant'
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
       run_hybrid_timing:
         description: 'Run the hybrid iccApplyProfiles timing matrix'
         required: false
@@ -77,10 +122,27 @@ on:
         default: ''
         type: string
       hybrid_timing_instrument:
-        description: 'Emit iccApplyProfiles and CMM timing instrumentation'
+        description: 'Emit iccApplyProfiles apply-loop timing instrumentation'
         required: false
         default: false
         type: boolean
+      tool_build_type:
+        description: 'Build type for the CTest tool suite'
+        required: true
+        default: Debug
+        type: choice
+        options:
+          - Release
+          - Debug
+      ctest_mode:
+        description: 'CTest mode to run'
+        required: false
+        default: fast
+        type: choice
+        options:
+          - fast
+          - full
+          - skip
       thread_linkage_build_type:
         description: 'Build type for the manual RefIccMAX thread linkage check'
         required: true
@@ -94,19 +156,37 @@ on:
         required: true
         default: true
         type: boolean
+      run_registry_qa:
+        description: 'Run ICC profile registry command-line QA scan'
+        required: true
+        default: false
+        type: boolean
+      registry_qa_timeout:
+        description: 'Timeout in seconds for each registry QA tool run'
+        required: true
+        default: '20'
+        type: string
+      registry_qa_max_profiles:
+        description: 'Maximum registry ICC profiles to scan; 0 means all'
+        required: true
+        default: '3'
+        type: string
+      registry_qa_full_matrix:
+        description: 'Run every registry QA tool variant'
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tool_build_type || 'Debug' }}
   cancel-in-progress: true
 
 jobs:
   tool-tests:
-    name: "iccDEV Tools - CTest ASAN+UBSAN"
+    name: "iccDEV Tools - GCC Strict ASAN+UBSAN (${{ inputs.tool_build_type || 'Debug' }})"
     runs-on: ubuntu-24.04
     container:
-      # yamllint disable rule:line-length
-      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression@sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76
-      # yamllint enable rule:line-length
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -118,7 +198,11 @@ jobs:
 
     env:
       BASH_ENV: /dev/null
+      REGRESSION_IMAGE_TAG: ${{ inputs.regression_image_tag || 'master' }}
+      TOOL_BUILD_TYPE: ${{ inputs.tool_build_type || 'Debug' }}
+      CTEST_MODE: ${{ inputs.ctest_mode || 'fast' }}
       BUILD_DIR: build
+      SPECTRAL_PREVIEW_VENV: /tmp/iccdev-spectral-preview-venv
 
     steps:
       - name: Checkout iccDEV
@@ -148,38 +232,119 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          clang-18 --version | sed -n '1p'
-          clang++-18 --version | sed -n '1p'
+          gcc --version | sed -n '1p'
+          g++ --version | sed -n '1p'
+          if command -v clang >/dev/null 2>&1; then
+            clang --version | sed -n '1p'
+          else
+            echo "[WARN] clang not present in pinned regression image; using GCC strict canary"
+          fi
           cmake --version | sed -n '1p'
           /usr/bin/time --version | sed -n '1p'
 
-      - name: Configure iccDEV CTest build
+      - name: Check command-line warning policy
         env:
           BASH_ENV: /dev/null
-          CC: clang-18
-          CXX: clang++-18
-          UBSAN_IGNORELIST: .github/ci/ubsan-ignorelist.txt
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
+          warning_probe="${RUNNER_TEMP:-/tmp}/icc-warning-policy.cpp"
+          {
+            printf '%s\n' '#include "Tools/CmdLine/IccCmdLineUtil.h"'
+            printf '%s\n' 'int main() { return 0; }'
+          } > "$warning_probe"
+
+          g++ --version | sed -n '1p'
+          g++ -std=c++17 \
+            -Wall -Wextra -Wtype-limits -Wattributes \
+            -Werror=type-limits -Werror=attributes \
+            -fsyntax-only -I "$GITHUB_WORKSPACE" "$warning_probe"
+
+          clang_cxx=""
+          if command -v clang++-18 >/dev/null 2>&1; then
+            clang_cxx="clang++-18"
+          elif command -v clang++ >/dev/null 2>&1; then
+            clang_cxx="clang++"
+          fi
+
+          if [ -n "$clang_cxx" ]; then
+            "$clang_cxx" -std=c++17 \
+              -Wall -Wextra \
+              -Wtautological-type-limit-compare \
+              -Wunknown-attributes -Wignored-attributes \
+              -Werror=tautological-type-limit-compare \
+              -Werror=unknown-attributes -Werror=ignored-attributes \
+              -fsyntax-only -I "$GITHUB_WORKSPACE" "$warning_probe"
+          else
+            echo "[WARN] clang++ not present in pinned regression image; GCC strict canary passed"
+          fi
+
+      # preflight: allow-package-install reason=spectral-preview-codec-bootstrap
+      - name: Install spectral preview Python dependencies
+        if: ${{ inputs.ctest_mode != 'skip' }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          python3 -m venv "$SPECTRAL_PREVIEW_VENV"
+          "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install --upgrade pip --quiet
+          "$SPECTRAL_PREVIEW_VENV/bin/python" -m pip install \
+            --only-binary=:all: \
+            'numpy==2.4.2' \
+            'tifffile==2026.2.24' \
+            'pillow==12.1.1' \
+            'imagecodecs==2026.6.6' \
+            --quiet
+          "$SPECTRAL_PREVIEW_VENV/bin/python" - <<'PY'
+          import imagecodecs
+          import numpy
+          import PIL
+          import tifffile
+
+          print(f"imagecodecs {imagecodecs.__version__}")
+          print(f"numpy {numpy.__version__}")
+          print(f"pillow {PIL.__version__}")
+          print(f"tifffile {tifffile.__version__}")
+          PY
+
+      - name: Configure iccDEV CTest build
+        env:
+          BASH_ENV: /dev/null
+          CC: gcc
+          CXX: g++
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$TOOL_BUILD_TYPE" in
+            Release|Debug)
+              ;;
+            *)
+              echo "::error title=Invalid build type::${TOOL_BUILD_TYPE}"
+              exit 1
+              ;;
+          esac
+
           cmake -S Build/Cmake -B "${BUILD_DIR}" \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang-18 \
-            -DCMAKE_CXX_COMPILER=clang++-18 \
-            -DCMAKE_C_FLAGS="-O0 -g3" \
-            -DCMAKE_CXX_FLAGS="-O0 -g3 -std=c++17" \
-            -DENABLE_ASAN=ON \
-            -DENABLE_UBSAN=ON \
-            -DENABLE_INTEGER_SANITIZER=ON \
+            -DCMAKE_BUILD_TYPE="${TOOL_BUILD_TYPE}" \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DENABLE_SANITIZERS=ON \
             -DSANITIZER_RECOVER=ON \
-            -DUBSAN_IGNORELIST="${GITHUB_WORKSPACE}/${UBSAN_IGNORELIST}" \
             -DENABLE_TOOLS=ON \
             -DENABLE_TESTS=ON \
             -DENABLE_WXWIDGETS=OFF \
             -DENABLE_SHARED_LIBS=ON \
             -DENABLE_STATIC_LIBS=ON \
+            -DICC_USE_ZLIB=ON \
+            -DICCDEV_ENABLE_QA_FLAGS=ON \
+            -DICCDEV_ENABLE_STRICT_WARNINGS=ON \
             -Wno-dev
 
       - name: Build iccDEV tools
@@ -199,7 +364,19 @@ jobs:
             echo "[OK] Zero compiler warnings"
           fi
 
+      - name: Build CTest helper binaries
+        if: ${{ inputs.ctest_mode != 'skip' }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cmake --build "${BUILD_DIR}" --target build-test-binaries --parallel "$(nproc)"
+
       - name: List CTest suites
+        if: ${{ inputs.ctest_mode != 'skip' }}
         env:
           BASH_ENV: /dev/null
         run: |
@@ -211,21 +388,36 @@ jobs:
           ctest --test-dir "${BUILD_DIR}" -N --no-tests=error | tee "${CTEST_LIST}"
 
       - name: Run CTest tool suites
+        if: ${{ inputs.ctest_mode != 'skip' }}
         env:
           BASH_ENV: /dev/null
           ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
           UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
           LLVM_PROFILE_FILE: "/dev/null"
+          ICCDEV_SPECTRAL_PREVIEW_PYTHON: /tmp/iccdev-spectral-preview-venv/bin/python
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          ctest --test-dir "${BUILD_DIR}" \
-            --output-on-failure \
-            --label-exclude "slow" \
-            --no-tests=error \
-            --output-junit "${BUILD_DIR}/ctest-results.xml"
+          ctest_args=(
+            --test-dir "${BUILD_DIR}" \
+            --output-junit "${BUILD_DIR}/ctest-results.xml" \
+            --selection-output "${BUILD_DIR}/recent-ctests.txt"
+          )
+          case "$CTEST_MODE" in
+            fast)
+              ctest_args+=(--label-exclude slow --label-exclude calculator)
+              ;;
+            full)
+              ;;
+            *)
+              echo "::error title=Invalid CTest mode::${CTEST_MODE}"
+              exit 1
+              ;;
+          esac
+
+          python3 .github/scripts/run-recent-ctests.py "${ctest_args[@]}"
 
       - name: Run hybrid iccApplyProfiles timing matrix
         if: ${{ inputs.run_hybrid_timing }}
@@ -254,6 +446,58 @@ jobs:
           HYBRID_TIMING_INSTRUMENT="$HYBRID_TIMING_INSTRUMENT_INPUT" \
             .github/scripts/iccdev-hybrid-applyprofiles-timing.sh
 
+      - name: Run ICC registry profile QA scan
+        if: ${{ inputs.run_registry_qa }}
+        env:
+          BASH_ENV: /dev/null
+          ASAN_OPTIONS: "halt_on_error=0,detect_leaks=0"
+          UBSAN_OPTIONS: "halt_on_error=0,print_stacktrace=1"
+          LLVM_PROFILE_FILE: "/dev/null"
+          REGISTRY_QA_TIMEOUT_INPUT: ${{ inputs.registry_qa_timeout || '20' }}
+          REGISTRY_QA_MAX_PROFILES_INPUT: ${{ inputs.registry_qa_max_profiles || '3' }}
+          REGISTRY_QA_FULL_MATRIX_INPUT: ${{ inputs.registry_qa_full_matrix && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "$REGISTRY_QA_TIMEOUT_INPUT" in
+            ''|*[!0-9]*)
+              echo "::error title=Invalid registry QA timeout::${REGISTRY_QA_TIMEOUT_INPUT}"
+              exit 1
+              ;;
+          esac
+          case "$REGISTRY_QA_MAX_PROFILES_INPUT" in
+            ''|*[!0-9]*)
+              echo "::error title=Invalid registry QA max profiles::${REGISTRY_QA_MAX_PROFILES_INPUT}"
+              exit 1
+              ;;
+          esac
+          case "$REGISTRY_QA_FULL_MATRIX_INPUT" in
+            0|1)
+              ;;
+            *)
+              echo "::error title=Invalid registry QA matrix flag::${REGISTRY_QA_FULL_MATRIX_INPUT}"
+              exit 1
+              ;;
+          esac
+
+          registry_out="${BUILD_DIR}/Testing/ctest-output/registry-profile-qa"
+          args=(
+            --timeout "$REGISTRY_QA_TIMEOUT_INPUT"
+            --max-profiles "$REGISTRY_QA_MAX_PROFILES_INPUT"
+            --out-dir "$registry_out"
+            --fail-on "CRASH"
+          )
+          if [ "$REGISTRY_QA_FULL_MATRIX_INPUT" = "1" ]; then
+            args+=(--full-matrix)
+          fi
+
+          ICC_PAWG_REPORT="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccPawgReport/iccPawgReport" \
+          ICC_DUMP_PROFILE="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccDumpProfile/iccDumpProfile" \
+          ICC_ROUND_TRIP="$GITHUB_WORKSPACE/${BUILD_DIR}/Tools/IccRoundTrip/iccRoundTrip" \
+            .github/scripts/iccdev-registry-profile-qa.sh "${args[@]}"
+
       - name: Generate summary
         if: always()
         env:
@@ -275,12 +519,45 @@ jobs:
               printf '%s' "$s"
             }
             sanitize_line() { escape_html "$1"; }
+            sanitize_code_line() {
+              local s="$1"
+              s="${s//$'\r'/}"
+              s="${s//$'\n'/ }"
+              s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
+              s="${s//\`\`\`/\` \` \`}"
+              printf '%s' "$s"
+            }
           fi
+          sanitize_table_cell() {
+            local s
+            s="$(sanitize_line "$1")"
+            s="${s//|/\\|}"
+            printf '%s' "$s"
+          }
 
-          test_cmd="ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
+          case "$CTEST_MODE" in
+            fast)
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator --output-junit build/ctest-results.xml"
+              ;;
+            full)
+              test_cmd="python3 .github/scripts/run-recent-ctests.py --test-dir build --output-junit build/ctest-results.xml"
+              ;;
+            skip)
+              test_cmd="skipped by manual ctest_mode=skip input"
+              ;;
+            *)
+              test_cmd="invalid ctest_mode=${CTEST_MODE}"
+              ;;
+          esac
           timing_report="${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing/hybrid-applyprofiles-timing.tsv"
-          container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression@"
-          container_ref+="sha256:9e41dbc8e0fef8b06ebd932154214dcc65b0331fcf6188a89ce0989439608c76"
+          qa_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags"
+          qa_evidence="${qa_dir}/evidence.ndjson"
+          qa_summary="${qa_dir}/summary.tsv"
+          registry_qa_dir="${BUILD_DIR}/Testing/ctest-output/registry-profile-qa"
+          registry_qa_summary="${registry_qa_dir}/summary.md"
+          applytolink_debug_dir="${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug"
+          applytolink_stack_report="${applytolink_debug_dir}/stack-analysis.txt"
+          container_ref="ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${REGRESSION_IMAGE_TAG}"
 
           {
             echo "### iccDEV CTest Tool Suites"
@@ -289,53 +566,266 @@ jobs:
             echo "|-----------|-------|"
             echo "| Runner | ubuntu-24.04 |"
             echo "| Container | \`$(sanitize_line "$container_ref")\` |"
-            echo "| Compiler | $(sanitize_line "$(clang-18 --version 2>/dev/null | sed -n '1,1p')") |"
+            echo "| Build type | $(sanitize_line "$TOOL_BUILD_TYPE") |"
+            echo "| Compiled at | $(sanitize_line "$TOOL_BUILD_TYPE") with ASAN+UBSAN, zlib zipUtf8Text support, QA target flags, debug symbols, frame pointers, and CMake strict warnings |"
+            echo "| Compiler | $(sanitize_line "$(g++ --version 2>/dev/null | sed -n '1,1p')") |"
+            echo "| GCC | $(sanitize_line "$(gcc --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| CMake | $(sanitize_line "$(cmake --version 2>/dev/null | sed -n '1,1p')") |"
             echo "| Commit | $(sanitize_line "$(git log --oneline -1 | tr -cd '[:print:]')") |"
+            echo "| CTest mode | \`${CTEST_MODE}\` |"
             echo "| Test command | \`${test_cmd}\` |"
             echo ""
             echo "### Manual Reproduction"
             echo ""
             echo '```bash'
-            echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=Debug \\"
-            echo "  -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \\"
-            echo "  -DENABLE_ASAN=ON -DENABLE_UBSAN=ON -DENABLE_INTEGER_SANITIZER=ON \\"
+            echo "TOOL_BUILD_TYPE='${TOOL_BUILD_TYPE}'"
+            echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=\"\${TOOL_BUILD_TYPE}\" \\"
+            echo "  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \\"
+            echo "  -DENABLE_SANITIZERS=ON \\"
             echo "  -DSANITIZER_RECOVER=ON -DENABLE_TOOLS=ON -DENABLE_TESTS=ON \\"
-            echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON"
+            echo "  -DENABLE_WXWIDGETS=OFF -DENABLE_SHARED_LIBS=ON -DENABLE_STATIC_LIBS=ON \\"
+            echo "  -DICC_USE_ZLIB=ON -DICCDEV_ENABLE_QA_FLAGS=ON \\"
+            echo "  -DICCDEV_ENABLE_STRICT_WARNINGS=ON"
             echo "cmake --build build --parallel \"\$(nproc)\""
-            echo "ctest --test-dir build --output-on-failure --label-exclude slow --no-tests=error"
-            echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
+            case "$CTEST_MODE" in
+              fast)
+                echo "python3 .github/scripts/run-recent-ctests.py --test-dir build --label-exclude slow --label-exclude calculator"
+                ;;
+              full)
+                echo "python3 .github/scripts/run-recent-ctests.py --test-dir build"
+                echo "ctest --test-dir build -R '^iccdev\\.hybrid-pipeline$' --output-on-failure --no-tests=error"
+                ;;
+              skip)
+                echo "# CTest skipped by manual ctest_mode=skip input"
+                ;;
+            esac
             echo '```'
+            if [ -f "$qa_evidence" ]; then
+              echo ""
+              echo "## QA Target Flags Evidence"
+              echo ""
+              if [ -f "$qa_summary" ]; then
+                echo "| Case | Expected | Observed | Status | Notes |"
+                echo "|------|----------|----------|--------|-------|"
+                tail -n +2 "$qa_summary" | while IFS=$'\t' read -r \
+                  case_name expected observed status notes; do
+                  printf '| %s | %s | %s | %s | %s |\n' \
+                    "$(sanitize_table_cell "$case_name")" \
+                    "$(sanitize_table_cell "$expected")" \
+                    "$(sanitize_table_cell "$observed")" \
+                    "$(sanitize_table_cell "$status")" \
+                    "$(sanitize_table_cell "$notes")"
+                done
+                echo ""
+              fi
+              echo '```text'
+              while IFS= read -r line; do
+                sanitize_code_line "$line"
+                echo ""
+              done <"$qa_evidence"
+              echo '```'
+            fi
+            if [ -f "$applytolink_stack_report" ]; then
+              echo ""
+              echo "## iccApplyToLink NaN/SixChanInputRef Diagnostic Replay"
+              echo ""
+              echo '```text'
+              sed -n '1,90p' "$applytolink_stack_report" | while IFS= read -r line; do
+                sanitize_code_line "$line"
+                echo ""
+              done
+              echo '```'
+            fi
+            if [ -f "$registry_qa_summary" ]; then
+              echo ""
+              echo "## ICC Registry Profile QA"
+              echo ""
+              sed -n '1,120p' "$registry_qa_summary" | while IFS= read -r line; do
+                sanitize_code_line "$line"
+                echo ""
+              done
+            fi
             if [ -f "$timing_report" ]; then
               echo ""
               echo "## Hybrid \`iccApplyProfiles\` Timing"
               echo ""
               date -u '+%Y-%m-%d %H:%M:%S UTC'
               echo ""
-              printf '| %-10s | %-8s | %-7s | %-6s | %-9s | %-6s | %-8s | %-6s | %-13s | %-7s | %-9s |\n' \
-                "Case" "Threads" "Command" "Status" "Elapsed s" "User s" \
-                "System s" "RSS KB" "Minor faults" "Vol ctx" "Invol ctx"
-              printf '%s%s\n' \
-                '|------------|----------|---------|--------|-----------|--------|' \
-                '-----------|--------|---------------|----------|------------|'
+              timing_header='| Case | Threads | Command | Status | Elapsed s |'
+              timing_header+=' Loop ms | Apply ms | Apply % | Apply calls |'
+              timing_header+=' Async launches | User s | System s | RSS KB |'
+              timing_header+=' Minor faults | Vol ctx | Invol ctx |'
+              timing_rule='|------|---------|---------|--------|-----------|'
+              timing_rule+='---------|----------|---------|-------------|'
+              timing_rule+='----------------|--------|----------|--------|'
+              timing_rule+='---------------|---------|-----------|'
+              echo "$timing_header"
+              echo "$timing_rule"
               tail -n +2 "$timing_report" | while IFS=$'\t' read -r \
-                case_name threads command_name status elapsed_s user_s system_s \
-                rss faults vol_ctx invol_ctx _log_path; do
-                printf '| %-10s | %-8s | %-7s | %-6s | %-9s | %-6s | %-8s | %-6s | %-13s | %-7s | %-9s |\n' \
-                  "$(sanitize_line "$case_name")" \
-                  "$(sanitize_line "$threads")" \
-                  "$(sanitize_line "$command_name")" \
-                  "$(sanitize_line "$status")" \
-                  "$(sanitize_line "$elapsed_s")" \
-                  "$(sanitize_line "$user_s")" \
-                  "$(sanitize_line "$system_s")" \
-                  "$(sanitize_line "$rss")" \
-                  "$(sanitize_line "$faults")" \
-                  "$(sanitize_line "$vol_ctx")" \
-                  "$(sanitize_line "$invol_ctx")"
+                case_name threads command_name status elapsed_s loop_ms apply_ms \
+                apply_pct apply_calls async_launches user_s system_s rss faults \
+                vol_ctx invol_ctx _log_path; do
+                timing_row="| $(sanitize_line "$case_name")"
+                timing_row+=" | $(sanitize_line "$threads")"
+                timing_row+=" | $(sanitize_line "$command_name")"
+                timing_row+=" | $(sanitize_line "$status")"
+                timing_row+=" | $(sanitize_line "$elapsed_s")"
+                timing_row+=" | $(sanitize_line "$loop_ms")"
+                timing_row+=" | $(sanitize_line "$apply_ms")"
+                timing_row+=" | $(sanitize_line "$apply_pct")"
+                timing_row+=" | $(sanitize_line "$apply_calls")"
+                timing_row+=" | $(sanitize_line "$async_launches")"
+                timing_row+=" | $(sanitize_line "$user_s")"
+                timing_row+=" | $(sanitize_line "$system_s")"
+                timing_row+=" | $(sanitize_line "$rss")"
+                timing_row+=" | $(sanitize_line "$faults")"
+                timing_row+=" | $(sanitize_line "$vol_ctx")"
+                timing_row+=" | $(sanitize_line "$invol_ctx") |"
+                echo "$timing_row"
               done
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Package developer report
+        if: ${{ success() }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          SANITIZER="$GITHUB_WORKSPACE/.github/scripts/sanitize-sed.sh"
+          if [ -f "$SANITIZER" ]; then
+            # shellcheck disable=SC1090
+            source "$SANITIZER"
+          else
+            escape_html() {
+              local s="$1"
+              s="${s//&/&amp;}" ; s="${s//</&lt;}" ; s="${s//>/&gt;}"
+              s="${s//\"/&quot;}" ; s="${s//\'/&#39;}"
+              printf '%s' "$s"
+            }
+            sanitize_line() { escape_html "$1"; }
+          fi
+
+          report_dir="${BUILD_DIR}/Testing/ctest-output/developer-report"
+          data_dir="${report_dir}/data"
+          rm -rf "$report_dir"
+          mkdir -p "$data_dir"
+
+          copy_file_if_present() {
+            local src="$1"
+            local dst="$2"
+            if [ -f "$src" ]; then
+              mkdir -p "$(dirname "$dst")"
+              cp -f "$src" "$dst"
+            fi
+          }
+
+          copy_dir_if_present() {
+            local src="$1"
+            local dst="$2"
+            if [ -d "$src" ]; then
+              rm -rf "$dst"
+              mkdir -p "$(dirname "$dst")"
+              cp -a "$src" "$dst"
+            fi
+          }
+
+          copy_file_if_present "${BUILD_DIR}/build.log" "${data_dir}/build.log"
+          copy_file_if_present "${BUILD_DIR}/ctest-list.txt" "${data_dir}/ctest-list.txt"
+          copy_file_if_present "${BUILD_DIR}/recent-ctests.txt" "${data_dir}/recent-ctests.txt"
+          copy_file_if_present "${BUILD_DIR}/ctest-results.xml" "${data_dir}/ctest-results.xml"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/Temporary" \
+            "${data_dir}/ctest-temporary"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/iccdev-qa-target-flags" \
+            "${data_dir}/iccdev-qa-target-flags"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/iccdev-applytolink-nan-sixchan-debug" \
+            "${data_dir}/iccdev-applytolink-nan-sixchan-debug"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/hybrid-applyprofiles-timing" \
+            "${data_dir}/hybrid-applyprofiles-timing"
+          copy_dir_if_present \
+            "${BUILD_DIR}/Testing/ctest-output/registry-profile-qa" \
+            "${data_dir}/registry-profile-qa"
+          {
+            printf 'iccDEV developer report\n'
+            printf '=======================\n\n'
+            printf 'Build type: %s\n' "$TOOL_BUILD_TYPE"
+            printf 'Commit: %s\n' "$(git rev-parse HEAD)"
+            printf 'Run: %s\n\n' "${GITHUB_RUN_ID:-local}"
+            printf 'Open index.html for the presentation view.\n'
+            printf 'Data files are under data/.\n'
+          } > "${report_dir}/README.txt"
+
+          html="${report_dir}/index.html"
+          {
+            printf '%s\n' '<!doctype html>'
+            printf '%s\n' '<html lang="en"><head><meta charset="utf-8">'
+            printf '%s\n' '<title>iccDEV Developer Report</title>'
+            printf '%s' '<style>body{font-family:system-ui,sans-serif;margin:2rem;'
+            printf '%s' 'line-height:1.4}table{border-collapse:collapse;width:100%%;'
+            printf '%s' 'margin:1rem 0}th,td{border:1px solid #ddd;padding:.45rem;'
+            printf '%s' 'text-align:left}th{background:#f4f6f8}code{background:#f4f6f8;'
+            printf '%s' 'padding:.1rem .25rem}.pass{color:#116329}.warn{color:#9a6700}'
+            printf '%s\n' '.fail{color:#b42318}</style>'
+            printf '%s\n' '</head><body>'
+            printf '<h1>iccDEV Developer Report</h1>\n'
+            printf '<table><tr><th>Component</th><th>Value</th></tr>\n'
+            printf '<tr><td>Build type</td><td>%s</td></tr>\n' "$(escape_html "$TOOL_BUILD_TYPE")"
+            printf '<tr><td>Commit</td><td><code>%s</code></td></tr>\n' "$(escape_html "$(git rev-parse --short HEAD)")"
+            printf '<tr><td>Run</td><td><code>%s</code></td></tr>\n' "$(escape_html "${GITHUB_RUN_ID:-local}")"
+            printf '</table>\n'
+
+            qa_summary="${data_dir}/iccdev-qa-target-flags/summary.tsv"
+            if [ -f "$qa_summary" ]; then
+              printf '<h2>QA Target Flags Evidence</h2>\n'
+              printf '<table><tr><th>Case</th><th>Expected</th><th>Observed</th><th>Status</th><th>Notes</th></tr>\n'
+              tail -n +2 "$qa_summary" | while IFS=$'\t' read -r \
+                case_name expected observed status notes; do
+                printf '<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n' \
+                  "$(escape_html "$case_name")" \
+                  "$(escape_html "$expected")" \
+                  "$(escape_html "$observed")" \
+                  "$(escape_html "$status")" \
+                  "$(escape_html "$notes")"
+              done
+              printf '</table>\n'
+            fi
+
+            applytolink_stack="${data_dir}/iccdev-applytolink-nan-sixchan-debug/stack-analysis.txt"
+            if [ -f "$applytolink_stack" ]; then
+              printf '<h2>iccApplyToLink NaN/SixChanInputRef Diagnostic Replay</h2>\n'
+              printf '<pre><code>'
+              sed -n '1,90p' "$applytolink_stack" | while IFS= read -r line; do
+                printf '%s\n' "$(escape_html "$line")"
+              done
+              printf '</code></pre>\n'
+            fi
+
+            printf '<h2>Included Data</h2><ul>\n'
+            find "$data_dir" -type f | sort | while IFS= read -r file; do
+              rel="${file#"$report_dir"/}"
+              printf '<li><a href="%s">%s</a></li>\n' \
+                "$(escape_html "$rel")" \
+                "$(escape_html "$rel")"
+            done
+            printf '</ul></body></html>\n'
+          } > "$html"
+
+      - name: Upload developer report
+        if: ${{ success() }}
+        # preflight: allow-untrusted-artifact reason=sanitized-developer-report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: iccdev-developer-report-${{ inputs.tool_build_type || 'Debug' }}
+          path: ${{ env.BUILD_DIR }}/Testing/ctest-output/developer-report
+          if-no-files-found: error
+          retention-days: 14
 
   thread-linkage:
     name: "RefIccMAX thread linkage - manual"
@@ -435,6 +925,7 @@ jobs:
               -DENABLE_WXWIDGETS=OFF \
               -DENABLE_SHARED_LIBS=ON \
               -DENABLE_STATIC_LIBS=ON \
+              -DICC_USE_ZLIB=ON \
               -Wno-dev
 
           run_case "build shared/static IccProfLib2 and iccApplyProfiles" \
@@ -443,7 +934,11 @@ jobs:
               --parallel "$(nproc)"
 
           run_case "inspect generated thread link interface" \
-            grep -q 'INTERFACE_LINK_LIBRARIES "Threads::Threads"' \
+            grep -Eq 'INTERFACE_LINK_LIBRARIES "([^"]*;)?Threads::Threads(;|")' \
+              "${BUILD_DIR}/RefIccMAXTargets.cmake"
+
+          run_case "inspect generated zlib link interface" \
+            grep -q 'ZLIB::ZLIB' \
               "${BUILD_DIR}/RefIccMAXTargets.cmake"
 
           run_case "inspect shared library link command" \

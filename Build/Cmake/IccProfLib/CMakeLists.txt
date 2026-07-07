@@ -25,6 +25,7 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccCAM.cpp
     ${SRC_PATH}/IccProfLib/IccCmm.cpp
     ${SRC_PATH}/IccProfLib/IccCmmThread.cpp
+    ${SRC_PATH}/IccProfLib/IccColorimetry.cpp
     ${SRC_PATH}/IccProfLib/IccConvertUTF.cpp
     ${SRC_PATH}/IccProfLib/IccEncoding.cpp
     ${SRC_PATH}/IccProfLib/IccEnvVar.cpp
@@ -66,6 +67,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccCAM.h
   ${SRC_PATH}/IccProfLib/IccCmm.h
   ${SRC_PATH}/IccProfLib/IccCmmThread.h
+  ${SRC_PATH}/IccProfLib/IccColorimetry.h
   ${SRC_PATH}/IccProfLib/IccConvertUTF.h
   ${SRC_PATH}/IccProfLib/IccDefs.h
   ${SRC_PATH}/IccProfLib/IccEncoding.h
@@ -110,7 +112,7 @@ IF(ENABLE_INSTALL_RIM)
   INSTALL( FILES
     ${HEADERS_PUBLIC}
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
-    COMPONENT shared-proof )
+    COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT} )
 ENDIF(ENABLE_INSTALL_RIM)
 
 # Generate version header with git commit hash
@@ -133,7 +135,7 @@ IF(ENABLE_INSTALL_RIM)
   INSTALL( FILES
     "${CMAKE_CURRENT_BINARY_DIR}/IccProfLibVer.h"
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${TARGET_INCLUDE_FOLDER}/${TARGET_NAME}
-    COMPONENT shared-proof )
+    COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT} )
 ENDIF(ENABLE_INSTALL_RIM)
 
 # Generated header dir - propagated via target_include_directories(PUBLIC) below
@@ -153,6 +155,10 @@ ENDIF()
 # transitively but relying on that is fragile and trips up Clang-based builds.
 find_package(Threads REQUIRED)
 list(APPEND EXTRA_LIBS Threads::Threads)
+if(ICC_USE_ZLIB)
+  find_package(ZLIB REQUIRED)
+  list(APPEND EXTRA_LIBS ZLIB::ZLIB)
+endif()
 
 IF(ENABLE_SHARED_LIBS)
   ADD_LIBRARY(${TARGET_NAME} SHARED ${SOURCES})
@@ -171,6 +177,9 @@ IF(ENABLE_SHARED_LIBS)
   #   still incomplete, so shared builds intentionally keep default visibility.
   if(NOT MSVC)
     target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
+  endif()
+  if(ICC_USE_ZLIB)
+    target_compile_definitions(${TARGET_NAME} PUBLIC ICC_USE_ZLIB=1)
   endif()
 
   if(MSVC)
@@ -195,9 +204,9 @@ IF(ENABLE_SHARED_LIBS)
   IF(ENABLE_INSTALL_RIM)
     INSTALL(TARGETS ${TARGET_NAME}
             EXPORT  RefIccMAXTargets
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT shared-proof
-            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT}
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_RUNTIME_COMPONENT}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT})
   ENDIF()
 ENDIF()
 
@@ -213,6 +222,9 @@ IF(ENABLE_STATIC_LIBS)
 
   # Enforce C++17 standard per-target
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
+  if(ICC_USE_ZLIB)
+    target_compile_definitions(${TARGET_NAME}-static PUBLIC ICC_USE_ZLIB=1)
+  endif()
 
   # PUBLIC include dirs - build dir FIRST for generated version header
   target_include_directories(${TARGET_NAME}-static PUBLIC
@@ -228,7 +240,7 @@ IF(ENABLE_STATIC_LIBS)
   IF(ENABLE_INSTALL_RIM)
     INSTALL(TARGETS ${TARGET_NAME}-static
             EXPORT  RefIccMAXTargets
-            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT shared-proof)
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT ${ICCDEV_DEVELOPMENT_COMPONENT})
   ENDIF()
 
   # Create ALIAS target when no shared library (STATIC_ONLY configuration)

@@ -42,8 +42,8 @@ else()
     vcpkg_from_github(
         OUT_SOURCE_PATH SOURCE_PATH
         REPO InternationalColorConsortium/iccDEV
-        REF f6bf936c176f9645e0a271cb1f18291f9935655c
-        SHA512 0cbe2586b4dd6fb32158c2664c1f4a660afe9877f5ec2c3543e5875cdc66268a3ce5f0ac98cd22800f4a4726dae9f61f2d1c976199c7ec1aa05750040e901368
+        REF 124ecd293f2f2ab54db5587550ff307b6edc2ce5
+        SHA512 1442a6e46100004e7ba952cd9ce6cc367c95d627caccd468d8fb8c90a9cacafcd266696611d38696bf0c370af8fe01f1798b04b301524782d2c797b5f8571662
         HEAD_REF master
     )
 endif()
@@ -90,6 +90,9 @@ vcpkg_cmake_configure(
         -DENABLE_IMAGE_TOOLS=OFF
         -DENABLE_CMM_TOOLS=OFF
         -DENABLE_IIS_TOOLS=OFF
+        # vcpkg_copy_tools(AUTO_CLEAN) owns tool dependency staging for the
+        # static-only port; keep release-bundle runtime staging disabled here.
+        -DICCDEV_WINDOWS_UNIFIED_RUNTIME=OFF
         # Keep static archives linkable from non-Clang consumers by disabling
         # Release IPO/LTO in the packaged build.
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
@@ -125,7 +128,9 @@ if("tools" IN_LIST FEATURES)
         iccFromCube
         iccApplyToLink
         iccApplySearch
+        iccPawgReport
         iccV5DspObsToV4Dsp
+        iccProfileVisualize
     )
     vcpkg_copy_tools(TOOL_NAMES ${_core_tools} AUTO_CLEAN)
 

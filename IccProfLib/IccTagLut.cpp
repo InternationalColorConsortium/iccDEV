@@ -360,9 +360,16 @@ void CIccTagCurve::Describe(std::string &sDescription, int nVerboseness)
     if (nVerboseness > 75) {
       sDescription += "IN OUT\n";
 
+      // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
+      // m_Curve to match; assert that bound locally so the table walk has an
+      // explicit limit.
+      const icUInt32Number nMaxCurveEntries = 65536;
+      if (m_nSize > nMaxCurveEntries)
+        return;
+
       for (icUInt32Number i=0; i<m_nSize; i++) {
         ptr = buf;
-        
+
         icFloatNumber fraction = (m_nSize > 1) ? ((icFloatNumber)i/(m_nSize-1)) : 1.0f;
         icColorValue(buf, bufSize, fraction, icSigMCH1Data, 1);
         ptr += strlen(buf);
@@ -424,6 +431,13 @@ void CIccTagCurve::DumpLut(std::string &sDescription, const icChar *szName,
       sDescription += "IN OUT\n";
 
       sDescription.reserve(sDescription.size() + m_nSize * 20);
+
+      // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
+      // m_Curve to match; assert that bound locally so the table walk has an
+      // explicit limit.
+      const icUInt32Number nMaxCurveEntries = 65536;
+      if (m_nSize > nMaxCurveEntries)
+        return;
 
       for (i=0; i<(int)m_nSize; i++) {
         ptr = buf;
@@ -571,6 +585,13 @@ bool CIccTagCurve::IsIdentity()
     return  IsUnity(icFloatNumber(m_Curve[0]*65535.0/256.0));
   }
 
+  // CWE-400/834: SetSize() caps m_nSize at nMaxCurveEntries and allocates m_Curve
+  // to match; assert that bound locally so the table walk has an explicit upper
+  // limit.
+  const icUInt32Number nMaxCurveEntries = 65536;
+  if (m_nSize > nMaxCurveEntries)
+    return false;
+
   icUInt32Number i;
   for (i=0; i<m_nSize; i++) {
     icFloatNumber fraction = (m_nMaxIndex > 0) ? ((icFloatNumber)i/m_nMaxIndex) : 1.0f;
@@ -661,6 +682,24 @@ icValidateStatus CIccTagCurve::Validate(std::string sigPath, std::string &sRepor
           sReport += " - Curve cannot be accurately inverted.\n";
           rv = icMaxStatus(rv, icValidateWarning);
         }
+      }
+    }
+    else if (m_nSize==1) {
+      // A single-entry curve encodes a gamma value (Y = X^gamma). A gamma of
+      // zero collapses the response to a constant, and a gamma pinned at the
+      // maximum encodable value (~256) collapses it to a near-step function;
+      // both produce an unusable TRC. The specification does not explicitly
+      // forbid these, so report them as warnings rather than non-compliant.
+      if (m_Curve && (m_Curve[0]<=0.0 || m_Curve[0]>=1.0)) {
+        icChar gbuf[160];
+        icFloatNumber dGamma = (icFloatNumber)(m_Curve[0] * 65535.0 / 256.0);
+        snprintf(gbuf, sizeof(gbuf),
+                 " - Degenerate gamma value (%.1f) produces an unusable tone response curve.\n",
+                 (double)dGamma);
+        sReport += icMsgValidateWarning;
+        sReport += sSigPathName;
+        sReport += gbuf;
+        rv = icMaxStatus(rv, icValidateWarning);
       }
     }
   }
@@ -1342,6 +1381,7 @@ bool CIccTagSegmentedCurve::Read(icUInt32Number size, CIccIO *pIO)
      return true;
    }
 
+   delete pCurve;
    return false;
 }
 
@@ -1911,11 +1951,20 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
   m_DimSize[i] = m_nOutput;
   nNumPoints = m_GridPoints[i];
   for (i--; i>=0; i--) {
-    m_DimSize[i] = m_DimSize[i+1] * m_GridPoints[i+1];
+    size_t dim1 = m_DimSize[i+1];
+    size_t fullSize = dim1 * m_GridPoints[i+1];
+    if (fullSize > 0xFFFFFFFFu)
+        return false;
+    m_DimSize[i] = (icUInt32Number)fullSize;
     nNumPoints *= m_GridPoints[i];
-    if (nMaxSize && nNumPoints * m_nOutput * nBytesPerPoint > nMaxSize)
+    // carefullly protect against 64 bit overflow
+    if (nMaxSize && (nNumPoints > nMaxSize || nNumPoints * m_nOutput > nMaxSize
+            || nNumPoints * m_nOutput * nBytesPerPoint > nMaxSize) )
       return false;
   }
+
+  if (nNumPoints > 0xFFFFFFFFu)
+    return false;
   m_nNumPoints = (icUInt32Number)nNumPoints;
 
   // Use 64-bit math to catch overflows even when no nMaxSize was
@@ -1954,9 +2003,9 @@ bool CIccCLUT::Init(const icUInt8Number *pGridPoints, icUInt32Number nMaxSize, i
  */
 bool CIccCLUT::ReadData(icUInt32Number size, CIccIO *pIO, icUInt8Number nPrecision)
 {
-  icUInt32Number nNum=NumPoints() * m_nOutput;
+  size_t nNum = (size_t)NumPoints() * m_nOutput;
 
-  if (nNum * nPrecision > size)
+  if (nNum * nPrecision > (size_t)size)
     return false;
 
   if (m_pData == NULL)
@@ -2033,6 +2082,10 @@ bool CIccCLUT::Read(icUInt32Number size, CIccIO *pIO)
   if (pIO->Read8(m_GridPoints, 16)!=16 ||
       !pIO->Read8(&m_nPrecision) ||
       pIO->Read8(&m_nReserved2[0], 3)!=3)
+    return false;
+
+  // currently only 8 or 16 bits per sample
+  if (m_nPrecision < 1 || m_nPrecision > 2)
     return false;
 
   if (!Init(m_GridPoints, size - 20, m_nPrecision))
@@ -2341,6 +2394,11 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
 void CIccCLUT::Begin()
 {
   int i;
+  // CWE-400/834: m_nInput indexes the fixed 16-entry m_GridPoints/m_MaxGridPoint/
+  // m_nPower arrays and drives m_nNodes = (1<<m_nInput). Init() already rejects
+  // m_nInput>16 on load; assert the bound locally so it is explicit at point of use.
+  if (m_nInput > 16)
+    return;
   for (i=0; i<m_nInput; i++) {
     m_MaxGridPoint[i] = m_GridPoints[i] - 1;
   }
@@ -2354,6 +2412,13 @@ void CIccCLUT::Begin()
   delete [] m_nOffset;
 
   m_nOffset = new icUInt32Number[m_nNodes];
+
+  // CWE-400/CWE-834: m_nInput<=16 (asserted above) bounds m_nNodes=(1<<m_nInput) to
+  // 65536, which is also the m_nOffset[] allocation size just made; assert that
+  // bound on the field so the offset-table walks below have an explicit upper limit
+  // a corrupted CLUT cannot exceed. Value-preserving: a valid m_nNodes is <= 65536.
+  if (m_nNodes > 65536)
+    return;
 
   if (m_nInput==1) {
     m_nOffset[0] = n000 = 0;
@@ -2552,8 +2617,11 @@ void CIccCLUT::Interp1d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber x = m_UnitClipFunc(srcPixel[0]) * mx;
   
   // m_UnitClipFunc points to NoClip
-  if (x < 0)
-    x = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+    
+  if (x < 0.0f)
+    x = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2606,10 +2674,15 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber y = m_UnitClipFunc(srcPixel[1]) * my;
   
   // m_UnitClipFunc points to NoClip
-  if (x < 0.0)
-    x = 0.0;
-  if (y < 0.0)
-    y = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+    
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2669,6 +2742,11 @@ void CIccCLUT::Interp2d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
  */
 void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcPixel) const
 {
+  // CWE-400/834: m_nOutput controls the destPixel write loop below. Valid LUT
+  // profiles cap output channels at <=16 (the read path rejects larger); guard
+  // locally so the bound is explicit even if the field is corrupted in memory.
+  if (m_nOutput > 16)
+    return;
   icUInt8Number mx = m_MaxGridPoint[0];
   icUInt8Number my = m_MaxGridPoint[1];
   icUInt8Number mz = m_MaxGridPoint[2];
@@ -2678,12 +2756,19 @@ void CIccCLUT::Interp3dTetra(icFloatNumber *destPixel, const icFloatNumber *srcP
   icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
   
   // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (x < 0)
-    x = 0.0;
-  if (y < 0)
-    y = 0.0;
-  if (z < 0)
-    z = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+  if (!std::isfinite(z))
+    z = 0.0f;
+
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
+  if (z < 0.0f)
+    z = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2779,12 +2864,19 @@ void CIccCLUT::Interp3d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber z = m_UnitClipFunc(srcPixel[2]) * mz;
   
   // m_UnitClipFunc points to NoClip, so no actual clipping is done
-  if (x < 0)
-    x = 0.0;
-  if (y < 0)
-    y = 0.0;
-  if (z < 0)
-    z = 0.0;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+  if (!std::isfinite(z))
+    z = 0.0f;
+    
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
+  if (z < 0.0f)
+    z = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2900,14 +2992,23 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber z = m_UnitClipFunc(srcPixel[3]) * mz;
   
   // m_UnitClipFunc points to NoClip
-  if (w < 0)
-    w = 0.0;
-  if (x < 0)
-    x = 0.0;
-  if (y < 0)
-    y = 0.0;
-  if (z < 0)
-    z = 0.0;
+  if (!std::isfinite(w))
+    w = 0.0f;
+  if (!std::isfinite(x))
+    x = 0.0f;
+  if (!std::isfinite(y))
+    y = 0.0f;
+  if (!std::isfinite(z))
+    z = 0.0f;
+    
+  if (w < 0.0f)
+    w = 0.0f;
+  if (x < 0.0f)
+    x = 0.0f;
+  if (y < 0.0f)
+    y = 0.0f;
+  if (z < 0.0f)
+    z = 0.0f;
 
   if (x > mx)
     x = mx;
@@ -2915,7 +3016,7 @@ void CIccCLUT::Interp4d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
     y = my;
   if (z > mz)
     z = mz;
-  if (w > mx)
+  if (w > mw)
     w = mw;
 
   icUInt32Number iw = (icUInt32Number)w;
@@ -3007,16 +3108,27 @@ void CIccCLUT::Interp5d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber g4 = m_UnitClipFunc(srcPixel[4]) * m4;
   
   // m_UnitClipFunc points to NoClip
-  if (g0 < 0)
-    g0 = 0.0;
-  if (g1 < 0)
-    g1 = 0.0;
-  if (g2 < 0)
-    g2 = 0.0;
-  if (g3 < 0)
-    g3 = 0.0;
-  if (g4 < 0)
-    g4 = 0.0;
+  if (!std::isfinite(g0))
+    g0 = 0.0f;
+  if (!std::isfinite(g1))
+    g1 = 0.0f;
+  if (!std::isfinite(g2))
+    g2 = 0.0f;
+  if (!std::isfinite(g3))
+    g3 = 0.0f;
+  if (!std::isfinite(g4))
+    g4 = 0.0f;
+
+  if (g0 < 0.0f)
+    g0 = 0.0f;
+  if (g1 < 0.0f)
+    g1 = 0.0f;
+  if (g2 < 0.0f)
+    g2 = 0.0f;
+  if (g3 < 0.0f)
+    g3 = 0.0f;
+  if (g4 < 0.0f)
+    g4 = 0.0f;
     
   if (g0 > m0)
     g0 = m0;
@@ -3144,19 +3256,37 @@ void CIccCLUT::Interp6d(icFloatNumber *destPixel, const icFloatNumber *srcPixel)
   icFloatNumber g5 = m_UnitClipFunc(srcPixel[5]) * m5;
   
   // m_UnitClipFunc points to NoClip
-  if (g0 < 0)
-    g0 = 0.0;
-  if (g1 < 0)
-    g1 = 0.0;
-  if (g2 < 0)
-    g2 = 0.0;
-  if (g3 < 0)
-    g3 = 0.0;
-  if (g4 < 0)
-    g4 = 0.0;
-  if (g5 < 0)
-    g5 = 0.0;
-    
+  if (!std::isfinite(g0))
+    g0 = 0.0f;
+  if (!std::isfinite(g1))
+    g1 = 0.0f;
+  if (!std::isfinite(g2))
+    g2 = 0.0f;
+  if (!std::isfinite(g3))
+    g3 = 0.0f;
+  if (!std::isfinite(g4))
+    g4 = 0.0f;
+  // g5 needs the same NaN/Inf guard as g0..g4: the < 0 and > m5 clamps below
+  // cannot catch a non-finite value (NaN compares false against both bounds),
+  // so without this an Inf/NaN srcPixel[5] would reach the (icUInt32Number)g5
+  // cast unguarded -- undefined behaviour. (g0..g4 were guarded here; g5 was
+  // missed when this finiteness block was added.)
+  if (!std::isfinite(g5))
+    g5 = 0.0f;
+
+  if (g0 < 0.0f)
+    g0 = 0.0f;
+  if (g1 < 0.0f)
+    g1 = 0.0f;
+  if (g2 < 0.0f)
+    g2 = 0.0f;
+  if (g3 < 0.0f)
+    g3 = 0.0f;
+  if (g4 < 0.0f)
+    g4 = 0.0f;
+  if (g5 < 0.0f)
+    g5 = 0.0f;
+
   if (g0 > m0)
     g0 = m0;
   if (g1 > m1)
@@ -3314,8 +3444,23 @@ void CIccCLUT::InterpND(icFloatNumber *destPixel, const icFloatNumber *srcPixel,
   icFloatNumber* s = pApply->m_s;
   icUInt32Number* ig = pApply->m_ig;
 
+  // CWE-400/834: m_nInput drives the grid loop below and m_nNodes = (1<<m_nInput)
+  // used for the df[] loop. Input channels are capped at <=16 by Init() on load;
+  // guard locally so both bounds are explicit at point of use.
+  if (m_nInput > 16)
+    return;
+
+  // CWE-400/CWE-834: m_nNodes == (1<<m_nInput) and indexes the fixed df[]/m_nOffset
+  // arrays; assert the derived upper bound (m_nInput<=16 => m_nNodes<=65536) on the
+  // field itself so the node walks below have an explicit limit.
+  const icUInt32Number nMaxNodes = 65536;
+  if (m_nNodes > nMaxNodes)
+    return;
+
   for (i=0; i<m_nInput; i++) {
     g[i] = m_UnitClipFunc(srcPixel[i]) * m_MaxGridPoint[i];
+    if (!std::isfinite(g[i]))
+      g[i] = 0.0;
     if (g[i] < 0)
       g[i] = 0.0;
     if (g[i] > m_MaxGridPoint[i])
@@ -3388,6 +3533,16 @@ icValidateStatus CIccCLUT::Validate(std::string sigPath, std::string &sReport, c
     sReport += " - Reserved Value must be zero.\n";
 
     rv = icValidateNonCompliant;
+  }
+
+  if (m_nPrecision < 1 || m_nPrecision > 2) {
+    const size_t tempSize = 256;
+    char temp[tempSize];
+    sReport += icMsgValidateCriticalError;
+    sReport += sSigPathName;
+    snprintf(temp, tempSize, " - CLUT: Only 1 or 2 bytes per sample are allowed, not %u\n", m_nPrecision);
+    sReport += temp;
+    rv = icMaxStatus(rv, icValidateCriticalError);
   }
 
   if (sig==icSigLutAtoBType || sig==icSigLutBtoAType) {
@@ -3608,9 +3763,15 @@ void CIccMBB::Cleanup()
 {
   int i;
 
+  // CWE-400/834: the curve-pointer arrays are allocated to m_nInput/m_nOutput at
+  // load (both capped at <=16 by the lut tag read path). Clamp the delete loops to
+  // the array bound so a corrupted channel count can never walk past the allocation.
+  int nIn  = (m_nInput  > 16) ? 16 : m_nInput;
+  int nOut = (m_nOutput > 16) ? 16 : m_nOutput;
+
   if (IsInputMatrix()) {
     if (m_CurvesB) {
-      for (i=0; i<m_nInput; i++)
+      for (i=0; i<nIn; i++)
         delete m_CurvesB[i];
 
       delete [] m_CurvesB;
@@ -3618,7 +3779,7 @@ void CIccMBB::Cleanup()
     }
 
     if (m_CurvesM) {
-      for (i=0; i<m_nInput; i++)
+      for (i=0; i<nIn; i++)
         delete m_CurvesM[i];
 
       delete [] m_CurvesM;
@@ -3627,7 +3788,7 @@ void CIccMBB::Cleanup()
 
 
     if (m_CurvesA) {
-      for (i=0; i<m_nOutput; i++)
+      for (i=0; i<nOut; i++)
         delete m_CurvesA[i];
 
       delete [] m_CurvesA;
@@ -3637,7 +3798,7 @@ void CIccMBB::Cleanup()
   }
   else {
     if (m_CurvesA) {
-      for (i=0; i<m_nInput; i++)
+      for (i=0; i<nIn; i++)
         delete m_CurvesA[i];
 
       delete [] m_CurvesA;
@@ -3645,7 +3806,7 @@ void CIccMBB::Cleanup()
     }
 
     if (m_CurvesM) {
-      for (i=0; i<m_nOutput; i++)
+      for (i=0; i<nOut; i++)
         delete m_CurvesM[i];
 
       delete [] m_CurvesM;
@@ -3653,7 +3814,7 @@ void CIccMBB::Cleanup()
     }
 
     if (m_CurvesB) {
-      for (i=0; i<m_nOutput; i++)
+      for (i=0; i<nOut; i++)
         delete m_CurvesB[i];
 
       delete [] m_CurvesB;
@@ -3951,7 +4112,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nInput!=nInput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of input channels.\n";
+        sReport += " - Incorrect number of input channels (";
+        sReport += std::to_string(nInput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nInput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -3959,7 +4124,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nOutput!=nOutput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of output channels.\n";
+        sReport += " - Incorrect number of output channels (";
+        sReport += std::to_string(nOutput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nOutput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -3974,7 +4143,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nInput!=nInput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of input channels.\n";
+        sReport += " - Incorrect number of input channels (";
+        sReport += std::to_string(nInput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nInput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -3982,7 +4155,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nOutput!=nOutput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of output channels.\n";
+        sReport += " - Incorrect number of output channels (";
+        sReport += std::to_string(nOutput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nOutput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -3997,7 +4174,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
     if (m_nInput != nInput) {
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
-      sReport += " - Incorrect number of input channels.\n";
+      sReport += " - Incorrect number of input channels (";
+      sReport += std::to_string(nInput);
+      sReport += ", expected ";
+      sReport += std::to_string(m_nInput);
+      sReport += " from tag).\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
 
@@ -4005,7 +4186,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
     if (m_nOutput != nOutput) {
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
-      sReport += " - Incorrect number of output channels.\n";
+      sReport += " - Incorrect number of output channels (";
+      sReport += std::to_string(nOutput);
+      sReport += ", expected ";
+      sReport += std::to_string(m_nOutput);
+      sReport += " from tag).\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
 
@@ -4017,7 +4202,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nInput!=nInput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of input channels.\n";
+        sReport += " - Incorrect number of input channels (";
+        sReport += std::to_string(nInput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nInput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -4025,7 +4214,11 @@ icValidateStatus CIccMBB::Validate(std::string sigPath, std::string &sReport, co
       if (m_nOutput!=nOutput) {
         sReport += icMsgValidateCriticalError;
         sReport += sSigPathName;
-        sReport += " - Incorrect number of output channels.\n";
+        sReport += " - Incorrect number of output channels (";
+        sReport += std::to_string(nOutput);
+        sReport += ", expected ";
+        sReport += std::to_string(m_nOutput);
+        sReport += " from tag).\n";
         rv = icMaxStatus(rv, icValidateCriticalError);
       }
 
@@ -5733,7 +5926,9 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
               if (nCurveEntries < 2 || nCurveEntries > 4096) {
                 sReport += icMsgValidateCriticalError;
                 sReport += sSigPathName;
-                sReport += " - lut16Type input tables require 2 to 4096 entries.\n";
+                sReport += " - lut16Type input tables require 2 to 4096 entries, not ";
+                sReport += std::to_string(nCurveEntries);
+                sReport += "\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
               }
             }
@@ -5775,7 +5970,9 @@ icValidateStatus CIccTagLut16::Validate(std::string sigPath, std::string &sRepor
               if (nCurveEntries < 2 || nCurveEntries > 4096) {
                 sReport += icMsgValidateCriticalError;
                 sReport += sSigPathName;
-                sReport += " - lut16Type output tables require 2 to 4096 entries.\n";
+                sReport += " - lut16Type output tables require 2 to 4096 entries, not ";
+                sReport += std::to_string(nCurveEntries);
+                sReport += "\n";
                 rv = icMaxStatus(rv, icValidateCriticalError);
               }
             }
@@ -5988,18 +6185,26 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
     !pIO->Read16(&m_nDeviceChannels))
     return false;
 
-  if (m_nPCSChannels > 3)
+  // m_nPCSChannels can be greater than 3 according to spec
+  if (m_nPCSChannels < 3)
     return false;
 
+  // m_nDeviceChannels can be zero according to spec
   if (m_nDeviceChannels > 15)
     return false;
 
+  // NOTE: in the ICCMAX.2:2019 table a row was cut off (vertex count)
   if (!pIO->Read32(&m_NumberOfVertices) ||
     !pIO->Read32(&m_NumberOfTriangles))
     return false;
 
   // minimum number to make a solid shape
   if (m_NumberOfVertices < 4 || m_NumberOfTriangles < 4)
+    return false;
+
+  // At most, there can be 3 vertices per triangle (degenerate case, usually ~1.5 per tri).
+  // More than that is definitely a mistake.
+  if ( (icUInt64Number)m_NumberOfVertices > ((icUInt64Number)m_NumberOfTriangles * 3) )
     return false;
 
   // maximum count will be enforced by file size and tag size limitations
@@ -6024,19 +6229,15 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
     return false;
 
   m_PCSValues = new (std::nothrow) icFloatNumber[pcsSize];
-
   if (!m_PCSValues)
     return false;
 
-  if (m_nDeviceChannels > 0)
-  {
+  if (m_nDeviceChannels > 0) {
     m_DeviceValues = new (std::nothrow) icFloatNumber[deviceSize];
-
     if (!m_DeviceValues)
       return false;
   }
-  else
-  {
+  else {
     m_DeviceValues = NULL;
   }
 
@@ -6047,21 +6248,17 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
   if (!m_Triangles)
     return false;
 
-  icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
-
-  if (pIO->Read32(m_Triangles, nNum32)!=nNum32)
+  size_t nNum64 = (size_t)m_NumberOfTriangles * 3;
+  if (pIO->Read32(m_Triangles, nNum64)!=nNum64)
     return false;
 
-  nNum32 = (icUInt32Number) pcsSize;
-	
-  if (pIO->ReadFloat32Float(m_PCSValues, nNum32)!=nNum32)
+  nNum64 = pcsSize;
+  if (pIO->ReadFloat32Float(m_PCSValues, nNum64)!=nNum64)
     return false;
 
-  if (m_nDeviceChannels > 0)
-  {
-    nNum32 = (icUInt32Number) deviceSize;
-    
-    if (pIO->ReadFloat32Float(m_DeviceValues, nNum32)!=nNum32)
+  if (m_nDeviceChannels > 0)  {
+    nNum64 = deviceSize;
+    if (pIO->ReadFloat32Float(m_DeviceValues, nNum64)!=nNum64)
       return false;
   }
 
@@ -6083,48 +6280,39 @@ bool CIccTagGamutBoundaryDesc::Read(icUInt32Number size, CIccIO *pIO)
  */	
 bool CIccTagGamutBoundaryDesc::Write(CIccIO *pIO)
 {
-	
-	icTagTypeSignature sig = GetType();
-	
-	if (!pIO) {
-		return false;
-	}
-	
-	//icUInt32Number startPos = pIO->GetLength();   // unused, and no side effets
-	
-	if (!pIO->Write32(&sig) ||
-		!pIO->Write32(&m_nReserved))
-		return false;
-	
-	if (!pIO->Write16(&m_nPCSChannels) ||
-		!pIO->Write16(&m_nDeviceChannels))
-		return false;
-	
-	if (!pIO->Write32(&m_NumberOfVertices) ||
-		!pIO->Write32(&m_NumberOfTriangles))
-		return false;	
-	
-	icUInt32Number nNum32 = (icUInt32Number)((icUInt64Number)m_NumberOfTriangles*3);
-	
-	if (pIO->Write32(m_Triangles, nNum32)!=nNum32)
-		return false;	
-	
-	
-	nNum32 = m_nPCSChannels*m_NumberOfVertices;
-	
-	if (pIO->WriteFloat32Float(m_PCSValues, nNum32)!=nNum32)
-		return false;
-	
-	if (m_nDeviceChannels > 0)
-	{
-		nNum32 = m_nDeviceChannels*m_NumberOfVertices;
-		
-		if (pIO->WriteFloat32Float(m_DeviceValues, nNum32)!=nNum32)
-			return false;
-	}
-	
-	return true;
-	
+  icTagTypeSignature sig = GetType();
+
+  if (!pIO) {
+    return false;
+  }
+
+  if (!pIO->Write32(&sig) ||
+      !pIO->Write32(&m_nReserved))
+    return false;
+
+  if (!pIO->Write16(&m_nPCSChannels) ||
+      !pIO->Write16(&m_nDeviceChannels))
+    return false;
+
+  if (!pIO->Write32(&m_NumberOfVertices) ||
+       !pIO->Write32(&m_NumberOfTriangles))
+    return false;
+
+  size_t nNum32 = (size_t)m_NumberOfTriangles*3;
+  if (pIO->Write32(m_Triangles, nNum32)!=nNum32)
+    return false;
+
+  nNum32 = (size_t)m_nPCSChannels*m_NumberOfVertices;
+  if (pIO->WriteFloat32Float(m_PCSValues, nNum32)!=nNum32)
+    return false;
+
+  if (m_nDeviceChannels > 0) {
+    nNum32 = (size_t)m_nDeviceChannels*m_NumberOfVertices;
+    if (pIO->WriteFloat32Float(m_DeviceValues, nNum32)!=nNum32)
+      return false;
+  }
+
+  return true;
 }
 
 
@@ -6140,51 +6328,52 @@ bool CIccTagGamutBoundaryDesc::Write(CIccIO *pIO)
  */	
 void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerboseness)
 {
-    const size_t bufSize = 256;
-	icChar buf[bufSize];
-	
-    snprintf(buf, bufSize, "Number Of Vertices = %d, Number of Triangles = %d\n", (int) m_NumberOfVertices, (int) m_NumberOfTriangles);
-	sDescription += buf;
-	
-	snprintf(buf,bufSize, "Number Of Inputs = %d, Number of Outputs = %d\n", (int) m_nPCSChannels, (int) m_nDeviceChannels);
-	sDescription += buf;
-	
-    if (nVerboseness > 75) {
-	    int c = 0;
-	    int d = 0;
-	    for (int i=0; i<m_NumberOfVertices; i++)
-	    {
-            snprintf(buf,bufSize, "V = %d:\t",i);
-		    sDescription += buf;
-		    for (int j=0; j<m_nPCSChannels; j++)
-		    {
-			    snprintf(buf,bufSize, "%.4lf\t",m_PCSValues[c++]);
-			    sDescription += buf;
-		    }
-		    if (m_nDeviceChannels > 0)
-		    {
-			    snprintf(buf,bufSize, ":\t");
-			    sDescription += buf;
-			
-			    for (int j=0; j<m_nDeviceChannels; j++)
-			    {
-				    snprintf(buf,bufSize, "%.4lf\t",m_DeviceValues[d++]);
-				    sDescription += buf;
-			    }
-		    }
-		    snprintf(buf,bufSize, "\n");
-		    sDescription += buf;
-	    }
-	
-	    for (int i=0; i<m_NumberOfTriangles; i++)
-	    {
-            snprintf(buf,bufSize, "V1 = %u\tV2 = %u\tV3 = %u\n",
-                        (unsigned int)m_Triangles[i].m_VertexNumbers[0],
-                        (unsigned int)m_Triangles[i].m_VertexNumbers[1],
-                        (unsigned int)m_Triangles[i].m_VertexNumbers[2] );
-		        sDescription += buf;
-	    }
+  const size_t bufSize = 256;
+  icChar buf[bufSize];
+
+  snprintf(buf, bufSize, "Number Of Vertices = %d, Number of Triangles = %d\n",
+            (int) m_NumberOfVertices, (int) m_NumberOfTriangles);
+  sDescription += buf;
+
+  snprintf(buf,bufSize, "Number Of Inputs = %d, Number of Outputs = %d\n",
+            (int) m_nPCSChannels, (int) m_nDeviceChannels);
+  sDescription += buf;
+
+  if (nVerboseness > 75) {
+    int c = 0;
+    int d = 0;
+    for (int i=0; i<m_NumberOfVertices; i++) {
+      snprintf(buf,bufSize, "V = %d:\t",i);
+      sDescription += buf;
+      for (int j=0; j<m_nPCSChannels; j++) {
+        snprintf(buf,bufSize, "%.4lf\t",m_PCSValues[c++]);
+        sDescription += buf;
+      }
+      if (m_nDeviceChannels > 0) {
+        snprintf(buf,bufSize, ":\t");
+        sDescription += buf;
+
+        for (int j=0; j<m_nDeviceChannels; j++) {
+          snprintf(buf,bufSize, "%.4lf\t",m_DeviceValues[d++]);
+          sDescription += buf;
+        }
+      }
+      snprintf(buf,bufSize, "\n");
+      sDescription += buf;
     }
+
+  // CWE-400/834: m_Triangles is allocated to m_NumberOfTriangles at load and
+  // the read path bounds that count by the tag size (sizeof(triangle)*count
+  // <= tag size). Guard against a failed nothrow allocation before walking it.
+  if (m_Triangles)
+    for (int i=0; i<m_NumberOfTriangles; i++) {
+    snprintf(buf,bufSize, "V1 = %u\tV2 = %u\tV3 = %u\n",
+            (unsigned int)m_Triangles[i].m_VertexNumbers[0],
+            (unsigned int)m_Triangles[i].m_VertexNumbers[1],
+            (unsigned int)m_Triangles[i].m_VertexNumbers[2] );
+    sDescription += buf;
+    }
+  }
 }
 
 /**
@@ -6204,14 +6393,17 @@ void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerbosen
  */		
 bool CIccTagGamutBoundaryDesc::setVertex(icInt32Number vertexNumber,icFloatNumber* pcsCoords,icFloatNumber* deviceCoords)
 {
-	if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
-		return false;
-	
-	memcpy(&m_PCSValues[vertexNumber*m_nPCSChannels],pcsCoords,sizeof(icFloatNumber)*m_nPCSChannels);
-	if ((m_DeviceValues) && (deviceCoords))
-		memcpy(&m_DeviceValues[vertexNumber*m_nDeviceChannels],deviceCoords,sizeof(icFloatNumber)*m_nDeviceChannels);
-	
-	return true;
+  if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
+    return false;
+
+  memcpy(&m_PCSValues[vertexNumber*m_nPCSChannels],
+        pcsCoords,sizeof(icFloatNumber)*m_nPCSChannels);
+
+  if ((m_DeviceValues) && (deviceCoords))
+    memcpy(&m_DeviceValues[vertexNumber*m_nDeviceChannels],
+            deviceCoords,sizeof(icFloatNumber)*m_nDeviceChannels);
+
+  return true;
 }
 
 
@@ -6230,10 +6422,10 @@ bool CIccTagGamutBoundaryDesc::setVertex(icInt32Number vertexNumber,icFloatNumbe
  */			
 icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexPCSCoord(icInt32Number vertexNumber)
 {
-	if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
-		return NULL;
-	
-	return &m_PCSValues[vertexNumber*m_nPCSChannels];
+  if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
+    return NULL;
+
+  return &m_PCSValues[vertexNumber*m_nPCSChannels];
 }
 
 /**
@@ -6251,13 +6443,13 @@ icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexPCSCoord(icInt32Number vertexN
  */		
 icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexDeviceCoord(icInt32Number vertexNumber)
 {
-	if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
-		return NULL;
-	
-	if (!m_DeviceValues)
-		return NULL;
-	
-	return &m_DeviceValues[vertexNumber*m_nDeviceChannels];
+  if ((vertexNumber < 0) || (vertexNumber >= m_NumberOfVertices))
+    return NULL;
+
+  if (!m_DeviceValues)
+    return NULL;
+
+  return &m_DeviceValues[vertexNumber*m_nDeviceChannels];
 }
 
 /**
@@ -6276,12 +6468,12 @@ icFloatNumber*	CIccTagGamutBoundaryDesc::getVertexDeviceCoord(icInt32Number vert
  */		
 bool CIccTagGamutBoundaryDesc::setTriangle(icInt32Number triangleNumber,icGamutBoundaryTriangle& triangle)
 {
-	if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
-		return false;
-	
-	memcpy(&m_Triangles[triangleNumber],&triangle,sizeof(icGamutBoundaryTriangle));
-	
-	return true;
+  if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
+    return false;
+
+  memcpy(&m_Triangles[triangleNumber],&triangle,sizeof(icGamutBoundaryTriangle));
+
+  return true;
 }
 
 /**
@@ -6301,12 +6493,12 @@ bool CIccTagGamutBoundaryDesc::setTriangle(icInt32Number triangleNumber,icGamutB
 
 bool CIccTagGamutBoundaryDesc::getTriangle(icInt32Number triangleNumber,icGamutBoundaryTriangle& triangle)	
 {
-	if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
-		return false;
-	
-	memcpy(&triangle,&m_Triangles[triangleNumber],sizeof(icGamutBoundaryTriangle));
-	return true;
-}	
+  if ((triangleNumber < 0) || (triangleNumber >= m_NumberOfTriangles))
+    return false;
+
+  memcpy(&triangle,&m_Triangles[triangleNumber],sizeof(icGamutBoundaryTriangle));
+  return true;
+}
 
 
 
@@ -6326,23 +6518,25 @@ bool CIccTagGamutBoundaryDesc::getTriangle(icInt32Number triangleNumber,icGamutB
  */
 icValidateStatus CIccTagGamutBoundaryDesc::Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile/*=NULL*/) const
 {
-	icValidateStatus rv = CIccTag::Validate(sigPath, sReport, pProfile);
-	
-	CIccInfo Info;
-	std::string sSigPathName = Info.GetSigPathName(sigPath);
-	
-	if ((m_NumberOfVertices == 0) || (m_NumberOfTriangles == 0) || (m_nPCSChannels < 3)) {
-		sReport += icMsgValidateWarning;
-		sReport += sSigPathName;
-		sReport += " - Invalid tag.\n";
-		
-		rv = icMaxStatus(rv, icValidateWarning);
-		return rv;
-	}
-	
-	return rv;
-}	
+  icValidateStatus rv = CIccTag::Validate(sigPath, sReport, pProfile);
 
+  CIccInfo Info;
+  std::string sSigPathName = Info.GetSigPathName(sigPath);
+
+  if ( (m_NumberOfVertices < 4) || (m_NumberOfTriangles < 4)
+    || (m_nPCSChannels < 3)
+    || (m_nDeviceChannels > 15)
+    || (m_NumberOfVertices > (m_NumberOfTriangles * 3)) ) {
+    sReport += icMsgValidateWarning;
+    sReport += sSigPathName;
+    sReport += " - Invalid tag.\n";
+
+    rv = icMaxStatus(rv, icValidateWarning);
+    return rv;
+  }
+
+  return rv;
+}
 
 
 #ifdef USEICCDEVNAMESPACE

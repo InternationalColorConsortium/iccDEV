@@ -393,10 +393,27 @@ template <>
 bool jsonToValue<bool>(const IccJson &j, bool &value)
 {
   try {
-    if (j.is_boolean())         { value = j.get<bool>();            return true; }
-    if (j.is_number_integer())  { value = j.get<int>() != 0;       return true; }
-    if (j.is_number_unsigned()) { value = j.get<unsigned>() != 0;  return true; }
-    if (j.is_number_float())    { value = j.get<float>() > 0.5f;   return true; }
+    if (j.is_boolean())         { value = j.get<bool>(); return true; }
+    if (j.is_number_integer()) {
+      IccJson::number_integer_t v = j.get<IccJson::number_integer_t>();
+      if (v != 0 && v != 1) return false;
+      value = v != 0;
+      return true;
+    }
+    if (j.is_number_unsigned()) {
+      IccJson::number_unsigned_t v = j.get<IccJson::number_unsigned_t>();
+      if (v > 1) return false;
+      value = v != 0;
+      return true;
+    }
+    if (j.is_number_float()) {
+      double d = j.get<double>();
+      if (!std::isfinite(d) || (d != 0.0 && d != 1.0)) {
+        return false;
+      }
+      value = d != 0.0;
+      return true;
+    }
   }
   catch (...) {
   }

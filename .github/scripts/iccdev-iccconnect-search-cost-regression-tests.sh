@@ -110,6 +110,12 @@ if [ -z "$PROFLIB" ]; then
   exit 0
 fi
 
+LINK_EXTRA=()
+if [[ "$PROFLIB" == *.a ]] &&
+    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "$BUILD_ROOT/CMakeCache.txt" 2>/dev/null; then
+  LINK_EXTRA+=(-lz)
+fi
+
 SAN_FLAGS="-fsanitize=address,undefined"
 if "$HELPER_CXX" --version 2>/dev/null | grep -qi clang; then
   SAN_FLAGS="-fsanitize=address,undefined,integer -fno-sanitize-recover=undefined -fno-sanitize-recover=integer"
@@ -124,6 +130,7 @@ compile_ec=0
   "$HELPER_SRC" \
   -Wl,-rpath,"$BUILD_ROOT/IccProfLib" \
   "$PROFLIB" \
+  "${LINK_EXTRA[@]}" \
   -o "$HELPER_BIN" > "$HELPER_LOG" 2>&1 || compile_ec=$?
 
 run_helper_case() {

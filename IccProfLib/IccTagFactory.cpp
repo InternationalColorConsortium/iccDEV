@@ -142,6 +142,8 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigDateTimeTag, "dateTimeTag"},
   {icSigDeviceMfgDescTag, "deviceMfgDescTag"},
   {icSigDeviceModelDescTag, "deviceModelDescTag"},
+  {icSigDevicePccTag, "devicePccTag"},
+  {icSigDeviceSpectralRangeTag, "deviceSpectralRangeTag"},
   {icSigMetaDataTag, "metaDataTag"},
   {icSigDToB0Tag, "DToB0Tag"},
   {icSigDToB1Tag, "DToB1Tag"},
@@ -266,6 +268,7 @@ struct {
   {icSigScreeningType, "screeningType"},
   {icSigSignatureType, "signatureType"},
   {icSigSpectralDataInfoType, "spectralDataInfoType"},
+  {icSigSpectralRangeType, "spectralRangeType"},
   {icSigSpectralViewingConditionsType, "spectralViewingConditionsType"},
   {icSigTextType, "textType"},
   {icSigTextDescriptionType, "textDescriptionType"},
@@ -424,6 +427,9 @@ CIccTag* CIccSpecTagFactory::CreateTag(icTagTypeSignature tagSig)
     case icSigSpectralDataInfoType:
       return new(std::nothrow) CIccTagSpectralDataInfo;
 
+    case icSigSpectralRangeType:
+      return new(std::nothrow) CIccTagSpectralRange;
+
     case icSigSpectralViewingConditionsType:
       return new(std::nothrow) CIccTagSpectralViewingConditions;
 
@@ -488,7 +494,10 @@ const icChar* CIccSpecTagFactory::GetTagSigName(icTagSignature tagSig)
 
 icTagSignature CIccSpecTagFactory::GetTagNameSig(const icChar *szName)
 {
-  if (g_TagSigToNameMap.empty()) {
+  if (!szName || !szName[0])
+    return icSigUnknownTag;
+
+  if (g_TagNameToSigMap.empty()) {
     for (int i = 0; g_icTagNameTable[i].sig; i++)
       g_TagNameToSigMap[g_icTagNameTable[i].szName] = g_icTagNameTable[i].sig;
     for (int i = 0; g_icAltTagNameTable[i].sig; i++)
@@ -516,6 +525,9 @@ const icChar* CIccSpecTagFactory::GetTagTypeSigName(icTagTypeSignature typeSig)
 
 icTagTypeSignature CIccSpecTagFactory::GetTagTypeNameSig(const icChar *szName)
 {
+  if (!szName || !szName[0])
+    return icSigUnknownType;
+
   if (g_TagTypeNameToSigMap.empty()) {
     for (int i = 0; g_icTagTypeNameTable[i].sig; i++)
       g_TagTypeNameToSigMap[g_icTagTypeNameTable[i].szName] = g_icTagTypeNameTable[i].sig;
@@ -588,6 +600,9 @@ const icChar* CIccTagCreator::DoGetTagSigName(icTagSignature tagSig)
 
 icTagSignature CIccTagCreator::DoGetTagNameSig(const icChar *szName)
 {
+  if (!szName || !szName[0])
+    return icSigUnknownTag;
+
   CIccTagFactoryList::iterator i;
   icTagSignature rv;
 
@@ -617,6 +632,9 @@ const icChar* CIccTagCreator::DoGetTagTypeSigName(icTagTypeSignature tagTypeSig)
 
 icTagTypeSignature CIccTagCreator::DoGetTagTypeNameSig(const icChar* szName)
 {
+  if (!szName || !szName[0])
+    return icSigUnknownType;
+
   CIccTagFactoryList::iterator i;
   icTagTypeSignature rv;
 

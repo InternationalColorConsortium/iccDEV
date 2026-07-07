@@ -136,7 +136,7 @@ bool CIccMpeXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
   const size_t smallBufSize = 20;
   char line[bufSize*2];
   char buf[smallBufSize];
-  char fix[bufSize];
+  std::string fix;
   
   snprintf(line, bufSize*2, "<UnknownElement Type=\"%s\" InputChannels=\"%d\" OutputChannels=\"%d\"",
            icFixXml(fix, icGetSigStr(buf, smallBufSize, GetType())), NumInputChannels(), NumOutputChannels());
@@ -2131,7 +2131,7 @@ bool CIccMpeXmlBAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   const size_t bufSize = 256;
   char line[bufSize*2];
   char buf[bufSize/2];
-  char fix[bufSize];
+  std::string fix;
 
   snprintf(line, bufSize*2, "<BAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
                 icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
@@ -2187,7 +2187,7 @@ bool CIccMpeXmlEAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   const size_t bufSize = 256;
   char line[bufSize*2];
   char buf[bufSize/2];
-  char fix[bufSize];
+  std::string fix;
 
   snprintf(line, bufSize*2, "<EAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
     icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
@@ -2466,9 +2466,20 @@ bool CIccMpeXmlCalculator::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
   int i;
 
+  // CWE-400/CWE-834: the walk below iterates m_nSubElem over m_SubElem[].
+  // CIccMpeCalculator::Read() caps m_nSubElem at the shared MAX_CALC_ELEMENTS cap
+  // (IccMpeCalc.h, reached here via IccMpeXml.h) and sizes m_SubElem[] to match,
+  // so on a valid element the walk never exceeds the allocation. Reject the same
+  // bound with the same ">=" boundary used on load, so a corrupted count can't
+  // drive an unbounded serialization walk.
+  if (m_nSubElem >= MAX_CALC_ELEMENTS)
+    return false;
+
   if (m_SubElem && m_nSubElem) {
     xml += blanks2 + "<SubElements>\n";
-    for (i=0; i<(int)m_nSubElem; i++) {
+    // Mirror the MAX_CALC_ELEMENTS bound (rejected above) inline so the walk has an
+    // explicit cap at the point of iteration; a valid count is strictly less.
+    for (i=0; i<(int)m_nSubElem && i<(int)MAX_CALC_ELEMENTS; i++) {
       if (m_SubElem[i]) {
         IIccExtensionMpe *pExt = m_SubElem[i]->GetExtension();
         if (pExt && !strcmp(pExt->GetExtClassName(), "CIccMpeXml")) {
@@ -2643,7 +2654,15 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                   return false;
                 }
                 size = 0; extra = 0;
-                parse.GetIndex(size, extra, 1, 0);
+                const char *idx = parse.GetPos();
+                while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+                  idx++;
+                if (*idx == '[' || *idx == '(') {
+                  if (!parse.GetIndex(size, extra, 1, 0)) {
+                    parseStr += "Invalid size index for member '" + member + "' in calc element variable '" + name + "'\n";
+                    return false;
+                  }
+                }
                 size++;
                 if (size < 1) 
                   size = 1;
@@ -2708,7 +2727,15 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                   return false;
                 }
                 size = 0; extra = 0;
-                parse.GetIndex(size, extra, 1, 0);
+                const char *idx = parse.GetPos();
+                while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+                  idx++;
+                if (*idx == '[' || *idx == '(') {
+                  if (!parse.GetIndex(size, extra, 1, 0)) {
+                    parseStr += "Invalid size index for local '" + member + "' in calc element macro '" + name + "'\n";
+                    return false;
+                  }
+                }
                 size++;
                 if (size < 1)
                   size = 1;
@@ -3026,7 +3053,10 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number _voffset = 0, _vsize = 1;
-          p2.GetIndex(_voffset, _vsize, 0, 1);
+          if (!p2.GetIndex(_voffset, _vsize, 0, 1)) {
+            parseStr += "Invalid index for local '" + ref + "' in macro '" + macroName + "'\n";
+            return false;
+          }
           voffset = _voffset;
           vsize = _vsize + 1;
         }
@@ -3121,7 +3151,10 @@ bool CIccMpeXmlCalculator::Flatten(std::string &flatStr, std::string macroName, 
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number _voffset = 0, _vsize = 1;
-          p2.GetIndex(_voffset, _vsize, 0, 1);
+          if (!p2.GetIndex(_voffset, _vsize, 0, 1)) {
+            parseStr += "Invalid index for variable '" + ref + "'\n";
+            return false;
+          }
           voffset = _voffset;
           vsize = _vsize + 1;
         }
@@ -3207,11 +3240,19 @@ bool CIccMpeXmlCalculator::UpdateLocals(std::string &func, std::string sFunc, st
 
       CIccFuncTokenizer p2(tok+4);
       icUInt16Number _voffset = 0, _vsize = 1;
-      p2.GetIndex(_voffset, _vsize, 0, 1);
+      if (!p2.GetIndex(_voffset, _vsize, 0, 1)) {
+        parseStr += "Invalid local variable index\n";
+        return false;
+      }
       voffset = _voffset + nLocalsOffset;
       vsize = _vsize + 1;
 
-      if (voffset + vsize > 65535) {
+      // The temporary-variable memory holds up to 65536 slots (indices 0..65535,
+      // i.e. icMaxDataStackSize + 1); a [voffset, voffset+vsize) range fits iff
+      // voffset + vsize <= 65536. Use > 65536 to match the named-variable bounds
+      // checks above: the prior > 65535 was off-by-one and wrongly rejected a
+      // local that legitimately occupies the final slot.
+      if (voffset + vsize > 65536) {
         parseStr += "Local variable out of bounds - too many variables.\n";
         return false;
       }

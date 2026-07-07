@@ -23,7 +23,6 @@ gh run view <RUN_ID> --repo InternationalColorConsortium/iccDEV --log-failed
 | `ci-pr-win.yml` | windows-latest | MSVC | vcpkg deps, PowerShell governance |
 | `ci-sanitizer-tests.yml` | ubuntu-24.04 | clang | ASan, UBSan, TSan, MSan matrix |
 | `ci-pr-wasm.yml` | ubuntu-24.04 | emcc | Release WASM PR parity gate |
-| `ci-docker.yml` | ubuntu-24.04 | gcc | Docker build + test (Ubuntu + NixOS matrix) |
 | `ci-vcpkg-ports.yml` | win/ubuntu/macos | varies | vcpkg overlay port install + verify |
 
 ### 3. Common Failure Categories

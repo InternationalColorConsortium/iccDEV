@@ -199,7 +199,7 @@ bool CIccProfileJson::ToJson(IccJson &root)
       continue;
     sigSet.insert(i->TagInfo.sig);
 
-    CIccTag *pTag = FindTag(i->TagInfo.sig);
+    CIccTag *pTag = FindTag(*i);        // performance improvement to make this linear instead of N^2
     if (!pTag)
       continue;
 
@@ -262,7 +262,9 @@ bool CIccProfileJson::ToJson(std::string &jsonString, int indent)
   if (!ToJson(profile))
     return false;
   root["IccProfile"] = profile;
-  jsonString = root.dump(indent);
+  
+  // dump the json data to string, but replace bad text/utf8 data with valid data instead of throwing exceptions
+  jsonString = root.dump( indent,' ',true, nlohmann::detail::error_handler_t::replace );
   return true;
 }
 
@@ -378,9 +380,14 @@ bool CIccProfileJson::ParseBasic(const IccJson &header, std::string & /*parseStr
 }
 
 bool CIccProfileJson::ParseTag(const std::string &key, const IccJson &tagValue,
-                               std::map<std::string, icTagSignature> &keyToSig,
+                               KeyToSignatureMap &keyToSig,
                                std::string &parseStr)
 {
+  if (key.empty()) {
+    parseStr += "Tag entry has empty name\n";
+    return false;
+  }
+
   // Determine tag signature from the key name
   icTagSignature sig = CIccTagCreator::GetTagNameSig(key.c_str());
   if (sig == icSigUnknownTag) {
@@ -521,7 +528,7 @@ bool CIccProfileJson::ParseJson(const IccJson &root, std::string &parseStr)
       return false;
     }
 
-    std::map<std::string, icTagSignature> keyToSig;
+    KeyToSignatureMap keyToSig;
     for (const auto &entry : tags) {
       if (!entry.is_object() || entry.size() != 1) {
         parseStr += "Warning: tag entry must be a single-member object, skipping\n";

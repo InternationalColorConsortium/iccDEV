@@ -129,7 +129,8 @@ static inline icUInt16Number icJsonSafeU16(size_t n)
 
 static bool icJsonIsSafeLocalizedText(const std::string &text)
 {
-  for (unsigned char ch : text) {
+  for (size_t i = 0; i < text.size(); i++) {
+    unsigned char ch = static_cast<unsigned char>(text[i]);
     if (ch < 0x20 && ch != '\n' && ch != '\t')
       return false;
   }
@@ -447,6 +448,12 @@ bool CIccTagJsonDateTime::ParseJson(const IccJson &j, std::string & /*parseStr*/
 bool CIccTagJsonXYZ::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_XYZ is
+  // allocated to match; assert an explicit upper limit so a corrupted count can't
+  // drive an unbounded serialization walk.
+  const icUInt32Number nMaxXYZValues = 65536;
+  if (m_nSize > nMaxXYZValues)
+    return false;
   if (m_XYZ) {
     for (icUInt32Number i = 0; i < m_nSize; i++) {
       arr.push_back(IccJson::array({
@@ -730,7 +737,7 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     jGetValue(obs, "steps", steps);
     unsigned int res2 = 0;
     jGetValue(obs, "Reserved", res2);
-    if (steps < 0 || steps > 0xffff) {
+    if (steps <= 0 || steps > 0xffff) {
       parseStr += "ObserverFuncs steps out of range\n";
       return false;
     }
@@ -781,7 +788,7 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
     jGetValue(illum, "steps", steps);
     unsigned int res3 = 0;
     jGetValue(illum, "Reserved", res3);
-    if (steps < 0 || steps > 0xffff) {
+    if (steps <= 0 || steps > 0xffff) {
       parseStr += "IlluminantSPD steps out of range\n";
       return false;
     }
@@ -835,6 +842,13 @@ bool CIccTagJsonNamedColor2::ToJson(IccJson &j)
   j["colorantSuffix"] = icJsonFixedAsciiString(m_szSufix, sizeof(m_szSufix));
 
   IccJson colors = IccJson::array();
+  // CWE-400/CWE-834: Read() caps m_nSize at kMaxNamedColorEntries and m_nDeviceCoords
+  // at kMaxNamedColorDeviceCoords, allocating the entry array to match; assert those
+  // bounds locally so neither serialization walk can run unbounded.
+  const icUInt32Number kMaxNamedColorEntries = 65536;
+  const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+  if (m_nSize > kMaxNamedColorEntries || m_nDeviceCoords > kMaxNamedColorDeviceCoords)
+    return false;
   if (m_NamedColor) {
     for (icUInt32Number i = 0; i < m_nSize; i++) {
       const SIccNamedColorEntry *pColor = GetEntry(i);
@@ -1035,6 +1049,13 @@ bool CIccTagJsonSparseMatrixArray::ToJson(IccJson &j)
   icUInt32Number bytesPerMatrix = GetBytesPerMatrix();
   IccJson matrices = IccJson::array();
 
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_RawData
+  // is allocated to m_nSize*bytesPerMatrix; assert an explicit upper limit so a
+  // corrupted count can't drive an unbounded serialization walk.
+  const icUInt32Number nMaxMatrices = 0xffffff;
+  if (m_nSize > nMaxMatrices)
+    return false;
+
   for (icUInt32Number i = 0; i < m_nSize; i++) {
     mtx.Reset(m_RawData + i * bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, true);
 
@@ -1143,6 +1164,9 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
     }
     icUInt32Number nActiveRows = nJsonRows < nRows ? nJsonRows : nRows;
 
+    if (nActiveRows && !rowstart)
+      return false;
+    
     for (icUInt32Number r = 0; r < nActiveRows; r++) {
       const IccJson &jRow = jRows[r];
       rowstart[r] = (icUInt16Number)pos;
@@ -1179,9 +1203,13 @@ bool CIccTagJsonSparseMatrixArray::ParseJson(const IccJson &j, std::string &pars
       }
       pos += cnt;
     }
-    // fill remaining row-start sentinels (including end sentinel at nRows)
-    for (icUInt32Number r = nActiveRows; r <= nRows; r++)
-      rowstart[r] = (icUInt16Number)pos;
+    
+    if (rowstart) {
+      // fill remaining row-start sentinels (including end sentinel at nRows)
+      for (icUInt32Number r = nActiveRows; r <= nRows; r++)
+        rowstart[r] = (icUInt16Number)pos;
+    }
+
   }
   return true;
 }
@@ -1244,6 +1272,12 @@ template <class T, class A, icTagTypeSignature Tsig>
 bool CIccTagJsonNum<T, A, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_Num is
+  // allocated to match; assert an explicit upper limit so a corrupted count can't
+  // drive an unbounded serialization walk.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
   for (icUInt32Number i = 0; i < this->m_nSize; i++)
     arr.push_back(this->m_Num[i]);
   j["values"] = arr;
@@ -1287,7 +1321,14 @@ template <class T, class A, icTagTypeSignature Tsig>
 bool CIccTagJsonFloatNum<T, A, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
-  for (icUInt32Number i = 0; i < this->m_nSize; i++)
+  // CWE-400/CWE-834: m_nSize is bounded by the tag byte size in Read() and m_Num is
+  // allocated to match; cap this serialization walk so a corrupted count can't drive
+  // an unbounded loop. Assert the bound on the field before the walk (a valid count
+  // is strictly less) and keep it mirrored inline in the loop condition.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
+  for (icUInt32Number i = 0; i < this->m_nSize && i < nMaxNumValues; i++)
     arr.push_back((double)this->m_Num[i]);
   j["values"] = arr;
   return true;
@@ -1721,6 +1762,13 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
     j["curveType"] = "gamma";
     j["gamma"] = (double)(m_Curve[0] * 65535.0 / 256.0);
   } else {
+    // CWE-400/CWE-834: SetSize() caps m_nSize at nMaxCurveEntries and allocates
+    // m_Curve to match; assert that bound locally so the identity check and table
+    // serialization walks below have an explicit upper limit.
+    const icUInt32Number nMaxCurveEntries = 65536;
+    if (m_nSize > nMaxCurveEntries)
+      return false;
+
     // Check whether the table is a sampled identity (linear ramp 0..1).
     // Tolerance of 0.5/65535 covers 16-bit quantisation rounding.
     bool isIdentity = true;
@@ -2556,7 +2604,7 @@ bool CIccTagJsonDict::ToJson(IccJson &j)
     bool nameOverflow = false;
     int nameLen = icJsonSafeInt(wname.size(), &nameOverflow);
     if (nameOverflow) return false;
-    icUtf16ToUtf8(name, (const icUInt16Number*)wname.c_str(), nameLen);
+    icWCharToUtf8(name, wname.c_str(), nameLen);
     entry["name"] = name;
 
     // Optional value
@@ -2566,7 +2614,7 @@ bool CIccTagJsonDict::ToJson(IccJson &j)
       bool valueOverflow = false;
       int valueLen = icJsonSafeInt(wval.size(), &valueOverflow);
       if (valueOverflow) return false;
-      icUtf16ToUtf8(value, (const icUInt16Number*)wval.c_str(), valueLen);
+      icWCharToUtf8(value, wval.c_str(), valueLen);
       entry["value"] = value;
     }
 
@@ -2741,6 +2789,11 @@ bool CIccTagJsonStruct::ParseTag(const IccJson &elemEntry, std::string &parseStr
   auto it = elemEntry.begin();
   const std::string &key     = it.key();
   const IccJson     &elemObj = it.value();
+
+  if (key.empty()) {
+    parseStr += "MemberTag entry has empty name\n";
+    return false;
+  }
 
   // Determine element signature
   IIccStruct *pStruct = GetStructHandler();
@@ -3033,16 +3086,26 @@ bool CIccTagJsonGamutBoundaryDesc::ToJson(IccJson &j)
       vertices["PCSChannels"] = (int)m_nPCSChannels;
       IccJson pcsArr = IccJson::array();
       icInt32Number nPCS = m_NumberOfVertices * m_nPCSChannels;
-      for (icInt32Number i = 0; i < nPCS; i++)
-        pcsArr.push_back((double)m_PCSValues[i]);
+      for (icInt32Number i = 0; i < nPCS; i++) {
+        icFloatNumber value = m_PCSValues[i];
+        if (!std::isfinite(value)) {        // flush NaN and Inf to zero
+          value = 0.0f;
+        }
+        pcsArr.push_back((double)value);
+      }
       vertices["PCSValues"] = pcsArr;
     }
     if (m_DeviceValues) {
       vertices["DeviceChannels"] = (int)m_nDeviceChannels;
       IccJson devArr = IccJson::array();
       icInt32Number nDev = m_NumberOfVertices * m_nDeviceChannels;
-      for (icInt32Number i = 0; i < nDev; i++)
-        devArr.push_back((double)m_DeviceValues[i]);
+      for (icInt32Number i = 0; i < nDev; i++) {
+        icFloatNumber value = m_DeviceValues[i];
+        if (!std::isfinite(value)) {        // flush NaN and Inf to zero
+          value = 0.0f;
+        }
+        devArr.push_back((double)value);
+      }
       vertices["DeviceValues"] = devArr;
     }
     j["Vertices"] = vertices;

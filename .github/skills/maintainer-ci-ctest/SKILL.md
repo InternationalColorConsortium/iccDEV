@@ -118,9 +118,8 @@ docker run --rm iccdev-container-check <smoke-command>
 ```
 
 For `Dockerfile.ci-regression`, also run a no-cache build and smoke
-`clang-18`, `clang++-18`, `cmake`, and `/usr/bin/time`. Publishing requires the
-`ghcr-publish` environment branch policy to allow the branch before deployment
-approval, followed by pinning the new digest in `ci-iccdev-tool-tests.yml`.
+`clang`, `clang++`, `gcc`, `g++`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. If the image is
+published, pass the published branch or SHA tag to `ci-iccdev-tool-tests.yml`.
 
 ## GitHub Validation
 

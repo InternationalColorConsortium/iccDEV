@@ -221,6 +221,7 @@ jobs:
           cmake -DCMAKE_BUILD_TYPE="${MATRIX_BUILD_TYPE}" \
                 -DCMAKE_C_COMPILER="$CC" \
                 -DCMAKE_CXX_COMPILER="$CXX" \
+                -DENABLE_LTO=OFF \
                  Cmake
           echo "::group::CMake Cache"
           cat CMakeCache.txt || true

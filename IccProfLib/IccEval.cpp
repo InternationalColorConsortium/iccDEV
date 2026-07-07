@@ -79,6 +79,39 @@ namespace iccDEV {
 //static const icFloatNumber SMALLNUM = (icFloatNumber)0.0001; // currently unused
 //static const icFloatNumber LESSTHANONE = (icFloatNumber)(1.0 - SMALLNUM); // currently unused
 
+// A profile round trip walks an nGran^ndim grid of device samples, running two
+// CMM Apply() calls at every node.  That count explodes geometrically with the
+// channel count: a 6-channel profile at the default granularity of 33 is 33^6
+// ~= 1.3 billion samples and the evaluation runs for over an hour before it
+// returns -- a CWE-400 uncontrolled-resource-consumption hazard reachable from
+// the iccRoundTrip tool with any high-channel (or fuzzer-crafted) profile.
+// In practice no real workflow round-trips a grid this dense: such profiles do
+// not exist in the wild beyond ~4 channels (the embedded A2B grid alone would
+// be prohibitively large), so capping the total sample budget rejects nothing
+// legitimate.  A 4-channel CMYK round trip at gran 33 is 33^4 ~= 1.19M, safely
+// under the cap; 5+ channels at the default granularity exceed it.
+static const icUInt32Number icMaxRoundTripSamples = 2000000;
+
+// Return true when nGran^ndim would exceed icMaxRoundTripSamples, evaluated
+// without overflowing icUInt32Number: the running product is compared against
+// the cap divided by nGran before each multiply, so the product itself never
+// wraps.  nGran < 2 is also rejected -- it is a degenerate granularity that
+// would make the stepsize 1/(nGran-1) below divide by zero, and never reflects
+// a real sampling request.
+static bool icRoundTripSamplesExceedCap(icUInt8Number nGran, int nDim)
+{
+  if (nGran < 2 || nDim < 1)
+    return true;
+
+  icUInt32Number nSamples = 1;
+  for (int i = 0; i < nDim; i++) {
+    if (nSamples > icMaxRoundTripSamples / nGran)
+      return true;
+    nSamples *= nGran;
+  }
+  return false;
+}
+
 icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Number nGran/* =0 */,
                                              icRenderingIntent nIntent/* =icUnknownIntent */, icXformInterp nInterp/* =icInterpLinear */,
                                              bool buseMpeTags/* =true */)
@@ -96,8 +129,16 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     return icCmmStatInvalidProfile;
   }
 
-  CIccCmm dev2Lab(icSigUnknownData, icSigLabData);
-  CIccCmm Lab2Dev2Lab(icSigLabData, icSigLabData, false);
+  // Connect the round-trip CMMs through the profile's native PCS.  Forcing the
+  // connection space to Lab for an XYZ-PCS profile inserts a gratuitous XYZ<->Lab
+  // conversion pair (the L* cube root and its inverse) into every transform leg --
+  // wasted math, and numerically lossy at high chroma where the round trip should
+  // be exactly invertible.  Use XYZ directly when the profile PCS is XYZ; otherwise
+  // Lab.  Either way the comparison below is still performed in L*a*b*.
+  const bool bXyzConnect = (pProfile->m_Header.pcs == icSigXYZData);
+  const icColorSpaceSignature connSpace = bXyzConnect ? icSigXYZData : icSigLabData;
+  CIccCmm dev2Lab(icSigUnknownData, connSpace);
+  CIccCmm Lab2Dev2Lab(connSpace, connSpace, false);
   icXformLutType nLutType = buseMpeTags ? icXformLutColor : icXformLutColorimetric;
 
   icStatusCMM result;
@@ -156,6 +197,13 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     }
   }
 
+  // nGran is now resolved (passed in, or derived from the A2B grid / default 33).
+  // Refuse the evaluation when the resulting nGran^ndim sample count would blow
+  // past the budget -- otherwise the sampling loop below runs effectively
+  // forever for wide device spaces.  See issue #1405 (CWE-400).
+  if (icRoundTripSamplesExceedCap(nGran, ndim))
+    return icCmmStatTooManySamples;
+
   // ccox - what the heck are we trying to do with steps? We don't really use the values.
   const icFloatNumber stepsize = (icFloatNumber)(1.0/(icFloatNumber)(nGran-1));
   const icFloatNumber nstart = 0.0;
@@ -184,9 +232,19 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     Lab2Dev2Lab.Apply(roundPcs1, devPcs);  //First round trip gets color into output gamut
     Lab2Dev2Lab.Apply(roundPcs2, roundPcs1);  //Second round trip find reproducibility error
 
-    icLabFromPcs(devPcs);
-    icLabFromPcs(roundPcs1);
-    icLabFromPcs(roundPcs2);
+    // Decode the PCS samples to actual L*a*b* for the dE comparison.  When the
+    // connection space is XYZ the samples are internal XYZ, so undo the internal
+    // scaling (icXyzFromPcs) and convert XYZ->Lab; otherwise they are internal Lab.
+    if (bXyzConnect) {
+      icXyzFromPcs(devPcs);    icXYZtoLab(devPcs);
+      icXyzFromPcs(roundPcs1); icXYZtoLab(roundPcs1);
+      icXyzFromPcs(roundPcs2); icXYZtoLab(roundPcs2);
+    }
+    else {
+      icLabFromPcs(devPcs);
+      icLabFromPcs(roundPcs1);
+      icLabFromPcs(roundPcs2);
+    }
 
     Compare(sPixel, devPcs, roundPcs1, roundPcs2);
   }

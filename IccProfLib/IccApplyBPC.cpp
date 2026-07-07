@@ -188,7 +188,14 @@ icFloatNumber CIccApplyBPC::calcQuadraticVertex(icFloatNumber* x, icFloatNumber*
 			icFloatNumber c = (s01*s20*s40 - s11*s10*s40 - s01*s30*s30 + s11*s20*s30 + s21*s10*s30 - s21*s20*s20)/denom;
 
 			// vertex is (-u + sqrt(u^2 - 4tc))/2t
-			vert = (icFloatNumber)((-1.0 * u + sqrt(u*u - 4*t*c)) / (2.0 * t));
+            if (t == 0.0f || !std::isfinite(t))
+              return 0.0f;
+            
+            float temp = u*u - 4*t*c;
+            if (temp < 0.0f || !std::isfinite(temp))
+              return 0.0f;
+            
+			vert = (icFloatNumber)((-1.0 * u + sqrt(temp)) / (2.0 * t));
 		}
 	}
 
@@ -552,7 +559,6 @@ bool CIccApplyBPC::pixelXfm(icFloatNumber *DstPixel, icFloatNumber *SrcPixel, ic
 
 	// add the xform
 	if (cmm.AddXform(pICC, nIntent, icInterpTetrahedral, NULL, icXformLutColorimetric, pICC->m_Header.version >= icVersionNumberV5 ? false : true)!=icCmmStatOk) {
-		delete pICC;
 		return false;
 	}
 
@@ -593,7 +599,6 @@ CIccCmm* CIccApplyBPC::getBlackXfm(icRenderingIntent nIntent, const CIccProfile 
 
 	// add the xform
 	if (pCmm->AddXform(pICC1, nIntent, icInterpTetrahedral, NULL, icXformLutColor, pICC1->m_Header.version >= icVersionNumberV5 ? false : true)!=icCmmStatOk) {
-		delete pICC1;
 		delete pCmm;
 		return NULL;
 	}
@@ -607,7 +612,6 @@ CIccCmm* CIccApplyBPC::getBlackXfm(icRenderingIntent nIntent, const CIccProfile 
 
 	// add the xform
 	if (pCmm->AddXform(pICC2, icRelativeColorimetric, icInterpTetrahedral, NULL, icXformLutColor, pICC2->m_Header.version >= icVersionNumberV5 ? false : true)!=icCmmStatOk) { // uses the relative intent on the device to Lab side
-		delete pICC2;
 		delete pCmm;
 		return NULL;
 	}

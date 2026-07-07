@@ -63,11 +63,11 @@
 #include "IccUtil.h"
 #include "IccTag.h"
 #include "IccJsonConfig.h"
-#include <nlohmann/json.hpp>
+#include "../../IccProfLib/IccJsonTypes.h"
 #include <string>
 #include <vector>
 
-using IccJson = nlohmann::ordered_json;
+using IccJson = iccJson::json;
 
 // ---------------------------------------------------------------------------
 // Hex data helpers (binary blobs stored as hex strings in JSON)

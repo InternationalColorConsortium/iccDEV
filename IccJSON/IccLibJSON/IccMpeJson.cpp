@@ -1008,12 +1008,12 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
 
   icUInt16Number nIn  = (icUInt16Number)nInInt;
   icUInt16Number nOut = (icUInt16Number)nOutInt;
-  icUInt64Number nEntries64 = (icUInt64Number)nIn * nOut;
-  if (nEntries64 > 0xFFFFFFFFUL) {
-    parseStr += "MatrixElement size is too large\n";
-    return false;
-  }
-  icUInt32Number nEntries = (icUInt32Number)nEntries64;
+  // icJsonValidMatrixChannels has already bounded nIn and nOut to
+  // [1, kIccJsonMaxMatrixChannels] (255), so the entry count is at most
+  // 255*255 = 65025 and always fits icUInt32Number. The former 64-bit
+  // "> 0xFFFFFFFF" overflow guard was therefore unreachable (flagged by
+  // CodeQL cpp/constant-comparison as always false); compute directly.
+  icUInt32Number nEntries = (icUInt32Number)nIn * nOut;
 
   if (j.contains("matrix") && !j["matrix"].is_array()) {
     parseStr += "matrix must be an array in MatrixElement\n";
@@ -1027,7 +1027,7 @@ bool CIccMpeJsonMatrix::ParseJson(const IccJson &j, std::string &parseStr)
   bool bHasMatrix = j.contains("matrix") && j["matrix"].is_array();
   bool bHasConstants = j.contains("constants") && j["constants"].is_array();
 
-  if (bHasMatrix && j["matrix"].size() != nEntries64) {
+  if (bHasMatrix && j["matrix"].size() != nEntries) {
     parseStr += "matrix count does not match MatrixElement size\n";
     return false;
   }
@@ -1574,7 +1574,10 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number vo = 0, vs = 1;
-          p2.GetIndex(vo, vs, 0, 1);
+          if (!p2.GetIndex(vo, vs, 0, 1)) {
+            parseStr += "Invalid index for local '" + ref + "' in macro '" + macroName + "'\n";
+            return false;
+          }
           voffset = vo; vsize = vs + 1;
         }
         if (voffset + vsize > (int)nLocalSize) {
@@ -1640,7 +1643,10 @@ bool CIccMpeJsonCalculator::Flatten(std::string &flatStr, std::string macroName,
           CIccFuncTokenizer p2(ref.c_str());
           p2.GetNext();
           icUInt16Number vo = 0, vs = 1;
-          p2.GetIndex(vo, vs, 0, 1);
+          if (!p2.GetIndex(vo, vs, 0, 1)) {
+            parseStr += "Invalid index for variable '" + ref + "'\n";
+            return false;
+          }
           voffset = vo; vsize = vs + 1;
         }
         if (voffset + vsize > var->second.m_size) {
@@ -1713,10 +1719,18 @@ bool CIccMpeJsonCalculator::UpdateLocals(std::string &func, std::string sFunc,
       std::string op = parse.GetName();
       CIccFuncTokenizer p2(tok + 4);
       icUInt16Number vo = 0, vs = 1;
-      p2.GetIndex(vo, vs, 0, 1);
+      if (!p2.GetIndex(vo, vs, 0, 1)) {
+        parseStr += "Invalid local variable index\n";
+        return false;
+      }
       int voffset = vo + nLocalsOffset;
       int vsize   = vs + 1;
-      if (voffset + vsize > 65535) {
+      // The temporary-variable memory holds up to 65536 slots (indices 0..65535,
+      // i.e. icMaxDataStackSize + 1); a [voffset, voffset+vsize) range fits iff
+      // voffset + vsize <= 65536. Use > 65536 to match the named-variable bounds
+      // checks above: the prior > 65535 was off-by-one and wrongly rejected a
+      // local that legitimately occupies the final slot.
+      if (voffset + vsize > 65536) {
         parseStr += "Local variable out of bounds - too many variables.\n";
         return false;
       }
@@ -1826,7 +1840,15 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
             return false;
           }
           icUInt16Number msize = 0, extra = 0;
-          parse.GetIndex(msize, extra, 1, 0);
+          const char *idx = parse.GetPos();
+          while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+            idx++;
+          if (*idx == '[' || *idx == '(') {
+            if (!parse.GetIndex(msize, extra, 1, 0)) {
+              parseStr += "Invalid size index for member '" + mname + "' in variable '" + name + "'\n";
+              return false;
+            }
+          }
           msize++;
           if (msize < 1) msize = 1;
           var.m_members.push_back(CIccTempVar(mname, off, msize));
@@ -1876,7 +1898,15 @@ bool CIccMpeJsonCalculator::ParseImport(const IccJson &j, std::string importPath
             return false;
           }
           icUInt16Number lsize = 0, extra = 0;
-          parse.GetIndex(lsize, extra, 1, 0);
+          const char *idx = parse.GetPos();
+          while (*idx == ' ' || *idx == '\t' || *idx == '\r' || *idx == '\n')
+            idx++;
+          if (*idx == '[' || *idx == '(') {
+            if (!parse.GetIndex(lsize, extra, 1, 0)) {
+              parseStr += "Invalid size index for local '" + lname + "' in macro '" + name + "'\n";
+              return false;
+            }
+          }
           lsize++;
           if (lsize < 1) lsize = 1;
           var.m_members.push_back(CIccTempVar(lname, off, lsize));
@@ -1964,7 +1994,13 @@ bool CIccMpeJsonCalculator::ToJson(IccJson &j)
   // Emit sub-elements (anonymous, in order)
   if (m_SubElem && m_nSubElem) {
     IccJson elems = IccJson::array();
-    for (icUInt32Number i = 0; i < m_nSubElem; i++) {
+    // CWE-400/CWE-834: m_nSubElem is the CIccMpeCalculator field that Read() caps at
+    // MAX_CALC_ELEMENTS (IccMpeCalc.h) while sizing m_SubElem[], so this serialization
+    // walk never exceeds the allocation. Assert that bound on the field before the
+    // walk (a valid count is strictly less than the cap) and keep it mirrored inline.
+    if (m_nSubElem >= MAX_CALC_ELEMENTS)
+      return false;
+    for (icUInt32Number i = 0; i < m_nSubElem && i < MAX_CALC_ELEMENTS; i++) {
       if (!m_SubElem[i]) return false;
       IIccExtensionMpe *pExt = m_SubElem[i]->GetExtension();
       if (!pExt || strcmp(pExt->GetExtClassName(), "CIccMpeJson") != 0)
@@ -2200,12 +2236,12 @@ static bool icSpectralMatrixFromJson(const IccJson &j, CIccMpeSpectralMatrix *pM
     return false;
 
   const int nSteps = (int)range.steps;
-  icUInt64Number nMatrixValues64 = (icUInt64Number)nVectors * range.steps;
-  if (nMatrixValues64 > 0x7fffffffUL) {
-    parseStr += "spectral matrix element size is too large\n";
-    return false;
-  }
-  int nMatrixValues = (int)nMatrixValues64;
+  // nVectors is bounded to [1, kIccJsonMaxMatrixChannels] (255) above and
+  // range.steps is a 16-bit sample count (<= 65535), so the value count is at
+  // most 255*65535 = 16711425 and always fits a signed int. The former 64-bit
+  // "> 0x7fffffff" overflow guard was therefore unreachable (flagged by CodeQL
+  // cpp/constant-comparison as always false); compute directly.
+  int nMatrixValues = nVectors * (int)range.steps;
 
   if (!pMtx->SetSize((icUInt16Number)nIn, (icUInt16Number)nOut, range)) {
     parseStr += "Unable to SetSize in spectral matrix element\n";

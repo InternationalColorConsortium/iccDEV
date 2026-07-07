@@ -25,7 +25,6 @@ where it belongs.
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
 | Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
-| Regression container publisher | `.github/workflows/ci-regression-container.yml` | Builds and publishes `Dockerfile.ci-regression` through `ghcr-publish`. |
 
 ## When to Add a Script
 
@@ -166,16 +165,15 @@ separate from general source changes when practical.
 |------|--------------|-----------------------|
 | `Dockerfile` | Ubuntu release/runtime image for the published `iccdev` container. | Build locally, run at least one installed tool, and check the healthcheck target. |
 | `Dockerfile.nixos` | NixOS/scratch runtime image and closure minimization. | Build locally, run one tool, and confirm closure/secret checks remain active. |
-| `Dockerfile.ci-regression` | Dependency image for ASAN/UBSAN CTest and hybrid timing gates. | Run a no-cache build and smoke `clang-18`, `clang++-18`, `cmake`, and `/usr/bin/time`. |
+| `Dockerfile.ci-regression` | Maintainer image for ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, and `/usr/bin/time`. |
 
 For `Dockerfile.ci-regression` publishing:
 
-1. Add the branch to the `ghcr-publish` environment deployment branch policy if
-   the branch is not already allowed.
-2. Trigger `ci-regression-container` and wait for maintainer deployment approval.
-3. Read the pushed GHCR digest from the run log or summary.
-4. Pin `ci-iccdev-tool-tests.yml` to that digest and rerun the regression gate.
-5. Remove temporary branch policy entries after the branch is no longer needed.
+1. Build and smoke the target image locally with no cache.
+2. Publish through the maintainer-controlled container release path.
+3. Record the published branch or SHA tag from the release output.
+4. Pass that tag to `ci-iccdev-tool-tests.yml` and rerun the regression gate.
+5. Remove temporary branch-specific inputs after the branch is no longer needed.
 
 ## Local Validation
 

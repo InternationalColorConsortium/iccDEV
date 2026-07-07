@@ -76,8 +76,27 @@
 #define PHOTO_CIELAB      2
 #define PHOTO_ICCLAB      3
 #define PHOTO_RGB         4
+// PHOTO_PALETTE / PHOTO_UNKNOWN are CTiffImg's INTERNAL photometric values
+// (returned by GetPhoto()), and are deliberately NOT libtiff's PHOTOMETRIC_*
+// constants.  GetPhoto() must map PHOTOMETRIC_PALETTE to PHOTO_PALETTE so callers
+// can detect/reject palette input (#1381), and report anything it does not
+// recognise as PHOTO_UNKNOWN instead of silently as PHOTO_MINISWHITE (#1380).
+#define PHOTO_PALETTE     5
+#define PHOTO_UNKNOWN     0xffffffff
 
-class CTiffImg  
+// Declare CTiffImg inside the iccDEV namespace under the library-wide
+// USEICCDEVNAMESPACE convention so its definitions in TiffImg.cpp (which wraps
+// the whole translation unit in iccDEV for #1428) can enclose this class.  The
+// macro is off in the default build, so CTiffImg stays in the global namespace
+// there and the three tools that include this header (iccApplyProfiles,
+// iccTiffDump, iccSpecSepToTiff) are unaffected; only the Doxygen pass /
+// namespace-enabled builds see the wrapper.  The PHOTO_* photometric codes above
+// stay as preprocessor macros (no namespace) so callers keep using them as-is.
+#ifdef USEICCDEVNAMESPACE
+namespace iccDEV {
+#endif
+
+class CTiffImg
 {
 public:
   CTiffImg();
@@ -103,6 +122,8 @@ public:
   unsigned int GetExtraSamples() { return m_nExtraSamples; }
   unsigned int GetCompress() { return m_nCompress; }
   unsigned int GetPlanar() { return m_nPlanar; }
+  unsigned int GetSampleFormat() { return m_nSampleFormat; }
+  unsigned int GetOrientation() { return m_nOrientation; }
   float GetXRes() {return m_fXRes;}
   float GetYRes() {return m_fYRes;}
 
@@ -124,6 +145,8 @@ protected:
   icUInt16Number m_nExtraSamples;
   icUInt16Number m_nPlanar;
   icUInt16Number m_nCompress;
+  icUInt16Number m_nSampleFormat;
+  icUInt16Number m_nOrientation;
 
   float m_fXRes;
   float m_fYRes;
@@ -143,5 +166,9 @@ protected:
   unsigned char *m_pProfile;
   unsigned int m_nProfileLength;
 };
+
+#ifdef USEICCDEVNAMESPACE
+} //namespace iccDEV
+#endif
 
 #endif // !defined(_TIFFIMG_H)

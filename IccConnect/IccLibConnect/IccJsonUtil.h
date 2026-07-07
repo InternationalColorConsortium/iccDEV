@@ -72,10 +72,10 @@
 #include <list>
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
 #include "../../IccProfLib/IccDefs.h"
+#include "../../IccProfLib/IccJsonTypes.h"
 
-using json = nlohmann::ordered_json;
+using json = iccJson::json;
 
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {

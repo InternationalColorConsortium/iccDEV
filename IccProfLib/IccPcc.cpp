@@ -339,6 +339,10 @@ CIccMatrixMath *IIccProfileConnectionConditions::getReflectanceObserver(const ic
     pAdjust = pMtx;
 
   pMtx = pView->getObserverMatrix(illumRange);
+  if (!pMtx) {
+    delete pAdjust;
+    return NULL;
+  }
 
   if (pAdjust) {
     pMtx = pAdjust->Mult(pMtx);

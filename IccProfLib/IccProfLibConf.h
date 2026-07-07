@@ -69,7 +69,7 @@ namespace iccDEV {
 #endif
 
 //PC, visual C++
-#if defined(_MSC_VER) && !defined(__MWERKS__) && (defined(_M_IX86) || defined(_M_X64))
+#if defined(_MSC_VER) && !defined(__MWERKS__) && (defined(_M_IX86) || defined(_M_X64) || defined(_M_ARM) || defined(_M_ARM64) || defined(_M_ARM64EC))
 
   #include <stdint.h>
 

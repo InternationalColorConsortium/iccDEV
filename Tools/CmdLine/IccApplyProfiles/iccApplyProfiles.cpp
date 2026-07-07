@@ -79,6 +79,7 @@
 #include "IccConnect.h"
 #include "TiffImg.h"
 #include "IccProfLibVer.h"
+#include "IccLibConnectVer.h"
 #include "../IccCmdLineUtil.h"
 #if !defined(_WIN32)
 #include <fcntl.h>
@@ -100,11 +101,12 @@ static bool GetFloatRowByteCount(unsigned int nWidth, int nSamples, size_t& nByt
     return false;
 
 #if defined(__SIZEOF_INT128__)
-  const unsigned __int128 nByteCount = (unsigned __int128)nWidth *
-                                      (unsigned __int128)(unsigned int)nSamples *
-                                      (unsigned __int128)sizeof(icFloatNumber);
+  __extension__ typedef unsigned __int128 CIccUInt128;
+  const CIccUInt128 nByteCount = (CIccUInt128)nWidth *
+                                 (CIccUInt128)(unsigned int)nSamples *
+                                 (CIccUInt128)sizeof(icFloatNumber);
 
-  if (nByteCount > (unsigned __int128)((size_t)-1))
+  if (nByteCount > (CIccUInt128)((size_t)-1))
     return false;
 
   nBytes = (size_t)nByteCount;
@@ -169,7 +171,7 @@ static icUInt16Number UnitClipToUInt16(icFloatNumber v)
 
 void Usage() 
 {
-  printf("iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER "\n\n");
+  printf("iccApplyProfiles built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
 
   printf("Usage: iccApplyProfiles {-threads N} -cfg config_file\n\n");
   printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");
@@ -244,7 +246,7 @@ int main(int argc, const char** argv)
 
   if (argc > 3 && !stricmp(argv[1], "-threads")) {
     nThreadArg = atoi(argv[2]);
-    if (nThreadArg < 0) {
+    if (nThreadArg < 0 || nThreadArg > 1024) {      // arbitrary upper limit
       printf("Invalid thread count '%s'\n", argv[2]);
       Usage();
       return -1;
@@ -647,8 +649,11 @@ int main(int argc, const char** argv)
   };
 
   //Read each line
+  bool bApplySuccess = true;
   for (i=0; i<(int)SrcImg.GetHeight(); i++) {
     if (!SrcImg.ReadLine(pSBuf)) {
+      printf("Error reading line %d from Tiff file - '%s'\n", i, cfgApply.m_srcImgFile.c_str());
+      bApplySuccess = false;
       break;
     }
     if (bUseRowApply) {
@@ -699,6 +704,8 @@ int main(int argc, const char** argv)
 
     //Output the converted pixels to the destination image
     if (!DstImg.WriteLine(pDBuf)) {
+      printf("Error writing line %d to Tiff file - '%s'\n", i, cfgApply.m_dstImgFile.c_str());
+      bApplySuccess = false;
       break;
     }
 
@@ -722,5 +729,5 @@ int main(int argc, const char** argv)
 
   DstImg.Close();
 
-  return 0;
+  return bApplySuccess ? 0 : -1;
 }

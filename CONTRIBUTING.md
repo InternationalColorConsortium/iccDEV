@@ -111,7 +111,7 @@ It's an older codebase, it isn't perfect, but let's at least **try** to keep thi
 | **Use of `std` namespace** | Minimize pollution.   | 
 | **Commenting style**       | There is no consistent style. Try to match nearby code.   | 
 | **Const correctness**      | Make inputs const when possible, class functions const when appropriate, and variables const as needed. |
-| **Compiler Warnings** | Should be zero on the strict tier (GCC 15+ / Clang 14+). PRs must build clean against ci-docker (GCC 15) and the ci-regression-checks ASAN+UBSAN CTest gate (clang-18). |
+| **Compiler Warnings** | Should be zero on the strict tier (GCC 15+ / Clang 14+). PRs must build clean against the ci-regression-checks ASAN+UBSAN CTest gate and the current maintainer compiler envelope. |
 | **Static Analysis Warnings** | Should be zero (or as close as we can get across all platforms). |
 | **Templates / Generics**   | Currently minimal.  Make sure new templates are readable. | 
 | **Exceptions**             | Most of the code uses manual return values for error handling. |
@@ -155,9 +155,7 @@ auto-enables only on GCC 15+ / Clang 14+. CI exercises both:
 
 | Workflow | Compiler |
 |----------|----------|
-| `ci-regression-checks` (ASAN+UBSAN) | clang-18 |
-| `ci-docker` (ubuntu variant)      | GCC 15 (ubuntu:26.04) |
-| `ci-docker` (nixos variant)       | NixOS clang |
+| `ci-regression-checks` (ASAN+UBSAN) | Maintainer container Clang |
 
 Reproduce GCC 15 locally before pushing:
 

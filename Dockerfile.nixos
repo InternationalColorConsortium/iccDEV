@@ -21,14 +21,33 @@ LABEL org.opencontainers.image.title="iccDEV Build Container (NixOS)" \
 
 WORKDIR /workspace/iccDEV
 COPY . .
+COPY --chmod=0755 docker/iccdev-banner.sh /tmp/iccdev-banner
+COPY --chmod=0755 docker/iccdev-generate-profiles.sh /tmp/iccdev-generate-profiles
+ARG GIT_COMMIT=""
 
-RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlohmann_json zlib coreutils findutils --run "\
+RUN nix-shell -E 'with import <nixpkgs> {}; stdenv.mkDerivation { name = "iccdev-nixos-build"; hardeningDisable = [ "fortify" ]; nativeBuildInputs = [ cmake clang gcc gnumake pkg-config coreutils findutils ]; buildInputs = [ libxml2 libtiff libjpeg libpng nlohmann_json zlib ]; }' --run "\
+    export GIT_COMMIT=\"${GIT_COMMIT}\" && \
+    export SAN_FLAGS=\"-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound\" && \
+    export CC=clang && \
+    export CXX=clang++ && \
+    export CFLAGS=\"\${SAN_FLAGS} -U_FORTIFY_SOURCE -fno-omit-frame-pointer -g -O0\" && \
+    export CXXFLAGS=\"\${SAN_FLAGS} -U_FORTIFY_SOURCE -fno-omit-frame-pointer -g -O0\" && \
+    export LDFLAGS=\"\${SAN_FLAGS} \${LDFLAGS:-}\" && \
     export NIX_LDFLAGS=\"-ltiff \${NIX_LDFLAGS:-}\" && \
     sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt && \
     rm -f Build/CMakeCache.txt && rm -rf Build/CMakeFiles && \
     rm -f Build/Cmake/CMakeCache.txt && rm -rf Build/Cmake/CMakeFiles && \
-    cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release && \
+    cmake -S Build/Cmake -B Build \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_C_COMPILER=clang \
+      -DCMAKE_CXX_COMPILER=clang++ \
+      -DENABLE_ASAN=ON \
+      -DENABLE_UBSAN=ON \
+      -DENABLE_INTEGER_SANITIZER=ON \
+      -DENABLE_FLOAT_SANITIZER=ON \
+      -DENABLE_TOOLS=ON && \
     cmake --build Build --parallel \"\$(nproc)\" && \
+    cmake -E chdir Testing /tmp/iccdev-generate-profiles ../Build/Tools && \
     echo '=== Libraries ===' && \
     ls -lh /workspace/iccDEV/Build/IccProfLib/libIccProfLib2* && \
     ls -lh /workspace/iccDEV/Build/IccXML/libIccXML2* && \
@@ -41,6 +60,7 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && FINDUTILS_ROOT="$(nix-build '<nixpkgs>' -A findutils --no-out-link)" \
  && GREP_ROOT="$(nix-build '<nixpkgs>' -A gnugrep --no-out-link)" \
  && LDD_ROOT="$(nix-build '<nixpkgs>' -A glibc.bin --no-out-link)" \
+ && LLVM_ROOT="$(nix-build '<nixpkgs>' -A llvm --no-out-link)" \
  && SED_ROOT="$(nix-build '<nixpkgs>' -A gnused --no-out-link)" \
  && mkdir -p /runtime-root/bin /runtime-root/etc /runtime-root/tmp /runtime-root/usr/bin /runtime-root/workspace/iccDEV \
  && printf '%s\n' 'iccdev:x:1000:' > /runtime-root/etc/group \
@@ -49,8 +69,13 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && cp -a /workspace/iccDEV/Build /runtime-root/workspace/iccDEV/Build \
  && cp -a /workspace/iccDEV/Testing /runtime-root/workspace/iccDEV/Testing \
  && cp -a /workspace/iccDEV/LICENSE.md /workspace/iccDEV/README.md /runtime-root/workspace/iccDEV/ \
+ && cp -a /tmp/iccdev-banner /runtime-root/usr/bin/iccdev-banner \
+ && cp -a /tmp/iccdev-generate-profiles /runtime-root/usr/bin/iccdev-generate-profiles \
+ && chmod 0755 /runtime-root/usr/bin/iccdev-banner \
+ && chmod 0755 /runtime-root/usr/bin/iccdev-generate-profiles \
  && { \
       printf '%s\n' "$BUSYBOX_ROOT"; \
+      printf '%s\n' "$LLVM_ROOT"; \
       find /workspace/iccDEV/Build/Tools /workspace/iccDEV/Build/IccProfLib /workspace/iccDEV/Build/IccXML /workspace/iccDEV/Build/IccJSON \
         -type f \( -executable -o -name '*.so*' \) -print \
         | while IFS= read -r file; do \
@@ -61,10 +86,11 @@ RUN nix-shell -p cmake gcc gnumake pkg-config libxml2 libtiff libjpeg libpng nlo
  && "$FINDUTILS_ROOT/bin/xargs" -r nix-store -qR < /tmp/runtime-roots | "$COREUTILS_ROOT/bin/sort" -u > /tmp/runtime-closure \
  && "$FINDUTILS_ROOT/bin/xargs" -r -I{} "$COREUTILS_ROOT/bin/cp" -a --parents "{}" /runtime-root < /tmp/runtime-closure \
  && "$COREUTILS_ROOT/bin/ln" -s "$BUSYBOX_ROOT/bin/busybox" /runtime-root/bin/busybox \
- && for tool in sh env find wc sort basename ls sed grep cat mkdir rm true false; do \
+ && for tool in sh env find wc sort basename ls sed grep cat mkdir rm true false id whoami; do \
       "$COREUTILS_ROOT/bin/ln" -s busybox "/runtime-root/bin/$tool"; \
     done \
  && "$COREUTILS_ROOT/bin/ln" -s /bin/env /runtime-root/usr/bin/env \
+ && "$COREUTILS_ROOT/bin/ln" -s "$LLVM_ROOT/bin/llvm-symbolizer" /runtime-root/usr/bin/llvm-symbolizer \
  && if "$FINDUTILS_ROOT/bin/find" /runtime-root/nix/store -maxdepth 1 -name '*-source' -type d -print -quit | "$GREP_ROOT/bin/grep" -q .; then \
       echo 'NixOS runtime root contains /nix/store/*-source paths' >&2; \
       exit 1; \
@@ -88,6 +114,7 @@ COPY --from=builder /runtime-root/ /
 ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /workspace/iccDEV/Build/Tools/IccFromXml:\
 /workspace/iccDEV/Build/Tools/IccDumpProfile:\
+/workspace/iccDEV/Build/Tools/IccProfileVisualize:\
 /workspace/iccDEV/Build/Tools/IccPawgReport:\
 /workspace/iccDEV/Build/Tools/IccApplyNamedCmm:\
 /workspace/iccDEV/Build/Tools/IccRoundTrip:\
@@ -106,6 +133,8 @@ ENV PATH="/workspace/iccDEV/Build/Tools/IccToXml:\
 /usr/bin"
 
 ENV LD_LIBRARY_PATH="/workspace/iccDEV/Build/IccProfLib:/workspace/iccDEV/Build/IccXML:/workspace/iccDEV/Build/IccJSON"
+ENV ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer"
+ENV ICCDEV_ROOT="/workspace/iccDEV"
 ENV LANG=C
 ENV LC_ALL=C
 
@@ -115,4 +144,4 @@ WORKDIR /workspace/iccDEV
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
   CMD ["/bin/sh", "-c", "test -x /workspace/iccDEV/Build/Tools/IccDumpProfile/iccDumpProfile"]
 
-CMD ["/bin/sh"]
+CMD ["/bin/sh", "-c", "iccdev-banner; exec /bin/sh"]

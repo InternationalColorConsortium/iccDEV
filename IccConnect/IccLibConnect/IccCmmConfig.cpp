@@ -66,10 +66,15 @@
 
 
 #include "IccCmmConfig.h"
+#include "IccCmmThread.h"
+
+#include <errno.h>
+#include <limits.h>
 #include <cstdio>
 #include <fstream>
 #include <cstring>
 #include <new>
+#include "../../Tools/CmdLine/IccCmdLineUtil.h" // this should probably move into the ProfLib directory
 #if !defined(_WIN32)
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -175,6 +180,45 @@ static const char* clrEncNames[] = { "value", "float", "unitFloat", "percent",
                                      "8Bit", "16Bit", "16BitV2", nullptr };
 static icFloatColorEncoding clrEncValues[] = { icEncodeValue, icEncodeFloat, icEncodeUnitFloat, icEncodePercent,
                                                icEncode8Bit, icEncode16Bit, icEncode16BitV2, icEncodeUnknown };
+
+// Validate a caller-supplied encoding selector against the set of encodings the
+// JSON config understands.  The argument is taken as a plain int, NOT an
+// icFloatColorEncoding: the value arrives straight from a command-line integer
+// (icParseIntArg) and may be outside the enum's defined range (0..icEncodeUnknown).
+// Materializing such a value in an icFloatColorEncoding variable and then reading
+// it is undefined behavior -- UBSan's -fsanitize=enum traps the load (issue #1422,
+// "load of value 9, which is not a valid value for type 'icFloatColorEncoding'").
+// Comparing the raw int against each (promoted) table entry keeps every load in
+// range, so callers can range-check the int before they ever narrow it to the enum.
+static bool icIsJsonColorEncoding(int v)
+{
+  int i;
+  for (i = 0; clrEncNames[i]; i++) {
+    if (v == (int)clrEncValues[i])
+      return true;
+  }
+
+  return false;
+}
+
+static bool icParseIntArg(const char* arg, int& n)
+{
+  char* end = NULL;
+  long value;
+
+  if (!arg || !*arg)
+    return false;
+
+  errno = 0;
+  value = strtol(arg, &end, 10);
+  if (errno || end == arg || value < INT_MIN || value > INT_MAX)
+    return false;
+  if (*end && *end != ':')
+    return false;
+
+  n = (int)value;
+  return true;
+}
 
 icFloatColorEncoding icSetJsonColorEncoding(const char* szEncode)
 {
@@ -304,7 +348,17 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
   m_dstFile.clear();
 
   //Setup destination encoding
-  m_dstEncoding = (icFloatColorEncoding)atoi(args[1]);
+  int nDstEncoding;
+  if (!icParseIntArg(args[1], nDstEncoding))
+    return 0;
+
+  // Range-check the parsed integer while it is still an int.  Casting an
+  // out-of-range value (the fuzz PoC for #1422 passes 9; the enum only defines
+  // 0..icEncodeUnknown) to icFloatColorEncoding and then loading it is UB, so
+  // reject first and only narrow to the enum once the value is known valid.
+  if (!icIsJsonColorEncoding(nDstEncoding))
+    return 0;
+  m_dstEncoding = (icFloatColorEncoding)nDstEncoding;
 
   const char *colon = strchr(args[1], ':');
   if (colon) {
@@ -313,7 +367,7 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
     m_dstDigits = 5 + m_dstPrecision;
     colon = strchr(colon, ':');
     if (colon) {
-      m_dstDigits = atoi(colon);
+      m_dstDigits = (icUInt8Number)atoi(colon);
     }
   }
   
@@ -476,9 +530,12 @@ bool CIccCfgImageApply::fromJson(json j, bool bReset)
   if (jsonToValue(j["dstEncoding"], str))
     m_dstEncoding = icSetJsonFileEncoding(str.c_str());
 
-  jsonToValue(j["dstCompression"], m_dstCompression);
-  jsonToValue(j["dstPlanar"], m_dstPlanar);
-  jsonToValue(j["dstEmbedIcc"], m_dstEmbedIcc);
+  if (j.contains("dstCompression") && !jsonToValue(j["dstCompression"], m_dstCompression))
+    return false;
+  if (j.contains("dstPlanar") && !jsonToValue(j["dstPlanar"], m_dstPlanar))
+    return false;
+  if (j.contains("dstEmbedIcc") && !jsonToValue(j["dstEmbedIcc"], m_dstEmbedIcc))
+    return false;
 
   return true;
 }
@@ -521,7 +578,8 @@ bool CIccCfgConnectOptions::fromJson(json j, bool bReset)
 
   if (j.find("threads") != j.end()) {
     int nThreads = m_nThreads;
-    if (!jsonToValue(j["threads"], nThreads) || nThreads < 0)
+    if (!jsonToValue(j["threads"], nThreads) || nThreads < 0 ||
+        nThreads > CIccThreadedCmm::GetMaxThreads())
       return false;
     m_nThreads = nThreads;
   }
@@ -564,8 +622,14 @@ int CIccCfgCreateLink::fromArgs(const char** args, int nArg, bool bReset)
   m_linkFile = args[0];
 
   int n = atoi(args[1]);
-  m_linkGridSize = atoi(args[2]);
+  int tempGridSize = atoi(args[2]);
   int o = atoi(args[3]);
+  
+  if (tempGridSize > 255)
+    tempGridSize = 255;
+  if (tempGridSize < 2)
+    tempGridSize = 2;
+  m_linkGridSize = (icUInt8Number)tempGridSize;
 
   switch (n)
   {
@@ -686,10 +750,15 @@ static bool icGetJsonRenderingIntent(const json& j, int& v)
     else if (str == icIntentNames[icAbsolute])
       v = icAbsolute;
     else
-      v = icUnknownIntent;
+      return false;
   }
-  else if (j.is_number_integer()) {
-    v = j.get<int>();
+  else if (j.is_number()) {
+    int nIntent = icUnknownIntent;
+    if (!jsonToValue(j, nIntent) ||
+        nIntent < static_cast<int>(icPerceptual) ||
+        nIntent > static_cast<int>(icAbsolute))
+      return false;
+    v = nIntent;
   }
   else
     return false;
@@ -815,7 +884,8 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
 
   jsonToValue(j["iccFile"], parsed.m_iccFile);
 
-  icGetJsonRenderingIntent(j["intent"], parsed.m_intent);
+  if (j.contains("intent") && !icGetJsonRenderingIntent(j["intent"], parsed.m_intent))
+    return false;
 
   std::string str;
   if (jsonToValue(j["transform"], str)) {
@@ -956,7 +1026,6 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
         }
         bFirst = false;
       }
-      int nType;
       int nIntent = atoi(args[1]);
 
       pProf->m_useD2BxB2Dx = true;
@@ -981,7 +1050,7 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       nIntent = nIntent % 10000;
       pProf->m_adjustPcsLuminance = nIntent / 1000 != 0;
       nIntent = nIntent % 1000;
-      nType = abs(nIntent) / 10;
+      int nType = abs(nIntent) / 10;
       nIntent = nIntent % 10;
 
       switch (nType) {
@@ -999,6 +1068,13 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       default:
         break;
       }
+      
+      // pin decoded values to valid range
+      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+        nIntent = icPerceptual;
+      
+      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+       nType = icXformLutColor;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
       pProf->m_transform = (icXformLutType)nType;
@@ -1208,6 +1284,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
         pProf->m_useBPC = true;
         nType = icXformLutColor;
       }
+      
+      // pin decoded values to valid range
+      if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+        nIntent = icPerceptual;
+      
+      if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+       nType = icXformLutColor;
 
       pProf->m_intent = (icRenderingIntent)nIntent;
       pProf->m_transform = (icXformLutType)nType;
@@ -1249,6 +1332,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     else if (nType == 4) {
       nType = icXformLutColor;
     }
+      
+    // pin decoded values to valid range
+    if (nIntent < (int)icPerceptual || nIntent > (int)icAbsoluteColorimetric)
+      nIntent = icPerceptual;
+      
+    if (nType < (int)icXformLutMinimum || nType > (int)icXformLutMaximum)
+      nType = icXformLutColor;
 
     m_intentInitial = (icRenderingIntent)nIntent;
     m_transformInitial = (icXformLutType)nType;
@@ -1369,9 +1459,12 @@ bool CIccCfgSearchApply::fromJsonInit(json j)
 
   m_bInitialized = true;
 
-  int intent = icUnknownIntent; // just incase json parsing fails
-  icGetJsonRenderingIntent(j["intent"], intent);
-  m_intentInitial = (icRenderingIntent)intent;
+  if (j.contains("intent")) {
+    int intent = icUnknownIntent;
+    if (!icGetJsonRenderingIntent(j["intent"], intent))
+      return false;
+    m_intentInitial = (icRenderingIntent)intent;
+  }
 
   std::string str;
   if (jsonToValue(j["transform"], str)) {
@@ -1618,8 +1711,9 @@ bool CIccCfgColorData::fromLegacy(const char* filename, bool bReset)
   {
     char encodeBuf[20000];
     sscanf(tempBuf, "%19999s", encodeBuf);
-    strncpy(tempBuf, encodeBuf, tempBufSize - 1);
-    tempBuf[tempBufSize - 1] = '\0';
+    size_t encodeLen = strnlen(encodeBuf, tempBufSize - 1);
+    memcpy(tempBuf, encodeBuf, encodeLen);
+    tempBuf[encodeLen] = '\0';
   }
 
   //Setup source encoding
@@ -2062,13 +2156,13 @@ bool CIccCfgColorData::toLegacy(const char* filename, const CIccCfgProfileArray 
     if (!pProf)
       continue;
     if (pProf->m_pccFile.size() != size_t(0)) {
-      fprintf(f, "; %s -PCC %s\n", pProf->m_iccFile.c_str(), pProf->m_pccFile.c_str());
+      fprintf(f, "; %s -PCC %s\n", icSanitizeConsoleText(pProf->m_iccFile).c_str(), icSanitizeConsoleText(pProf->m_pccFile).c_str() );
     }
     else {
-      fprintf(f, "; %s\n", pProf->m_iccFile.c_str());
+      fprintf(f, "; %s\n", icSanitizeConsoleText(pProf->m_iccFile).c_str() );
     }
   }
-fprintf(f, "\n");
+  fprintf(f, "\n");
 
   for (auto dIter = m_data.begin(); dIter != m_data.end(); dIter++) {
     CIccCfgDataEntry* pData = dIter->get();
@@ -2077,12 +2171,12 @@ fprintf(f, "\n");
 
     if (bShowDebug && pData->m_debugInfo.size() != size_t(0)) {
       for (auto l = pData->m_debugInfo.begin(); l != pData->m_debugInfo.end(); l++) {
-        fprintf(f, "; %s\n", l->c_str());
+        fprintf(f, "; %s\n", icSanitizeConsoleText(*l).c_str() );
       }
     }
 
     if (pData->m_name.size() != size_t(0)) {
-      fprintf(f, "{ \"%s\" }\t;", pData->m_name.c_str());
+      fprintf(f, "{ \"%s\" }\t;", icSanitizeConsoleText(pData->m_name).c_str() );
     }
     else {
       for (size_t i = 0; i < pData->m_values.size(); i++) {
@@ -2092,7 +2186,7 @@ fprintf(f, "\n");
     }
 
     if (pData->m_srcName.size() != size_t(0)) {
-      fprintf(f,"{ \"%s\" }", pData->m_srcName.c_str());
+      fprintf(f,"{ \"%s\" }", icSanitizeConsoleText(pData->m_srcName).c_str());
       // Echo the tint the caller supplied (m_srcValues[0]).  We used to
       // suppress this when the tint was exactly 1.0, but that hid a
       // value the caller had explicitly written -- the

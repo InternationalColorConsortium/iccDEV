@@ -83,6 +83,7 @@
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
+#include "../IccCmdLineUtil.h"
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -117,7 +118,10 @@ static bool WriteStringToStdout(const std::string &contents)
   if (contents.empty())
     return true;
 
-  if (fwrite(contents.c_str(), 1, contents.length(), stdout) != contents.length()) {
+  // remove escape sequences and malicious commands
+  std::string cleanedContents = icSanitizeTagText( contents );
+  
+  if (fwrite(cleanedContents.c_str(), 1, cleanedContents.length(), stdout) != cleanedContents.length()) {
     fprintf(stderr, "Unable to write report to stdout\n");
     return false;
   }
@@ -126,7 +130,7 @@ static bool WriteStringToStdout(const std::string &contents)
 }
 
 // adds MPE element type detail for v5 profiles
-bool DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
+bool DumpTagCore(CIccProfile *pIcc, CIccTag *pTag, icTagSignature sig, int nVerboseness)
 {
   const size_t bufSize = 64;
   char buf[bufSize];
@@ -168,7 +172,7 @@ bool DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
     }
 
     std::string validateReport;
-    if (pTag->Validate("", validateReport) >= icValidateCriticalError)
+    if (pTag->Validate("", validateReport, pIcc) >= icValidateCriticalError)
       contents = validateReport;
     else
       pTag->Describe(contents, nVerboseness);
@@ -187,14 +191,14 @@ bool DumpTagCore(CIccTag *pTag, icTagSignature sig, int nVerboseness)
 bool DumpTagSig(CIccProfile *pIcc, icTagSignature sig, int nVerboseness)
 {
   CIccTag *pTag = pIcc->FindTag(sig);
-  return DumpTagCore(pTag, sig, nVerboseness);
+  return DumpTagCore(pIcc, pTag, sig, nVerboseness);
 }
 
 // This directly accesses the tag data, does not need to search
 bool DumpTagEntry(CIccProfile *pIcc, IccTagEntry &entry, int nVerboseness)
 {
   CIccTag *pTag = pIcc->FindTag(entry);
-  return DumpTagCore(pTag, entry.TagInfo.sig, nVerboseness);
+  return DumpTagCore(pIcc, pTag, entry.TagInfo.sig, nVerboseness);
 }
 
 void printUsage(void)
@@ -296,6 +300,13 @@ void DumpV5Summary(CIccProfile *pIcc)
   if (lateBindCount > 0) {
     printf("    NOTE: Late-binding elements require Profile Connection Conditions (PCC)\n");
     printf("          with spectralViewingConditionsTag (svcn) for proper rendering.\n");
+  }
+
+  // report the existance of an embedded profile, but don't dive into it
+  CIccTag* pEmbedded = pIcc->FindTag(icSigEmbeddedV5ProfileTag);
+  if (pEmbedded) {
+    printf("  Sub-Profile: Embedded\n");
+    // see code in iccTiffDump for recursively descending embedded profiles
   }
 
   printf("\n");

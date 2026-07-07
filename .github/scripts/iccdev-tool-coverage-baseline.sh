@@ -646,7 +646,7 @@ run_test "fromxml-06" "FromXml with -noid flag" \
 echo ""
 
 # =============================================================================
-# 4. iccRoundTrip (8 tests)
+# 4. iccRoundTrip (11 tests)
 # =============================================================================
 echo "--- 4. iccRoundTrip ---"
 ROUNDTRIP="$TOOLS/IccRoundTrip/iccRoundTrip"
@@ -672,8 +672,17 @@ run_test "rt-06" "RoundTrip DisplayP3 relative" \
 run_test "rt-07" "RoundTrip sRGB with MPE (use_mpe=1)" \
   "$ROUNDTRIP" "$SRGB" 1 1
 
+run_expect_exit "rt-08" "Reject invalid RoundTrip rendering intent" 1 \
+  "$ROUNDTRIP" "$SRGB" junk
+
+run_expect_exit "rt-09" "Reject invalid RoundTrip use_mpe flag" 1 \
+  "$ROUNDTRIP" "$SRGB" 1 2
+
+run_expect_exit "rt-10" "Reject extra RoundTrip arguments" 1 \
+  "$ROUNDTRIP" "$SRGB" 1 0 extra
+
 if [ "$QUICK_MODE" -eq 0 ]; then
-  run_test "rt-08" "RoundTrip AdobeRGB relative" \
+  run_test "rt-11" "RoundTrip AdobeRGB relative" \
     "$ROUNDTRIP" "$ADOBE" 1
 fi
 
@@ -725,6 +734,10 @@ run_test "ncm-04" "sRGB: 8-bit RGB data, encoding=3 (Float)" \
 
 run_expect_exit "ncm-05" "Reject final encoding=4 (8Bit)" 1 \
   "$APPLYNCM" "$SRGB_CALC_DATA" 4 0 "$SRGB" 1
+
+run_expect_exit "ncm-05b" "Reject oversized final encoding without sanitizer findings" 1 \
+  "$APPLYNCM" -exportcfganddata "$OUTDIR/ncm-oversized-encoding.json" \
+  "$SRGB_CALC_DATA" 999999999999 0 "$SRGB" 1
 
 run_test "ncm-06" "sRGB: 8-bit RGB data, encoding=5 (16Bit)" \
   "$APPLYNCM" "$SRGB_CALC_DATA" 5 0 "$SRGB" 1
@@ -924,6 +937,10 @@ run_test "search-02" "Search sRGB->sRGB perceptual" \
 run_test "search-03" "Search sRGB->sRGB float encoding" \
   "$APPLYSRCH" "$SRGB_CALC_DATA" 3 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
 
+run_expect_exit "search-03b" "Reject oversized final encoding without sanitizer findings" 1 \
+  "$APPLYSRCH" -exportcfganddata "$OUTDIR/search-oversized-encoding.json" \
+  "$SRGB_CALC_DATA" 999999999999 0 "$SRGB" 1 "$SRGB" 1 -INIT 1
+
 run_expect_exit "search-04" "Reject legacy three-profile search chain" 255 \
   "$APPLYSRCH" "$SRGB_CALC_DATA" 0 0 "$SRGB" 1 "$DISPLAY_P3" 1 "$SRGB" 1 -INIT 1
 
@@ -937,7 +954,7 @@ fi
 echo ""
 
 # =============================================================================
-# 10. iccTiffDump (9 tests)
+# 10. iccTiffDump (10 tests)
 # =============================================================================
 echo "--- 10. iccTiffDump ---"
 TIFFDUMP="$TOOLS/IccTiffDump/iccTiffDump"
@@ -945,12 +962,22 @@ TIFFDUMP="$TOOLS/IccTiffDump/iccTiffDump"
 if [ -f "$TIFF_8BIT" ]; then
   run_test "tdump-01" "Dump TIFF 8-bit metadata" \
     "$TIFFDUMP" "$TIFF_8BIT"
-
-  run_test "tdump-06" "Extract ICC from TIFF to file" \
-    "$TIFFDUMP" "$TIFF_8BIT" "$OUTDIR/tiff_extracted.icc"
 else
   skip_test "tdump-01" "Dump TIFF 8-bit metadata" "8-bit TIFF fixture unavailable"
-  skip_test "tdump-06" "Extract ICC from TIFF to file" "8-bit TIFF fixture unavailable"
+fi
+
+if [ -f "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" ]; then
+  run_test "tdump-06" "Extract ICC from TIFF to file" \
+    "$TIFFDUMP" "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" "$OUTDIR/tiff_extracted.icc"
+else
+  skip_test "tdump-06" "Extract ICC from TIFF to file" "embedded-ICC TIFF fixture unavailable"
+fi
+
+if [ -f "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" ]; then
+  run_expect_exit "tdump-06b" "Reject ICC export when TIFF has no profile" 255 \
+    "$TIFFDUMP" "$REPO_ROOT/.github/ci/test-data/spectral/spec_1" "$OUTDIR/tiff_no_profile.icc"
+else
+  skip_test "tdump-06b" "Reject ICC export when TIFF has no profile" "no-profile TIFF fixture unavailable"
 fi
 
 if [ -f "$TIFF_16BIT" ]; then

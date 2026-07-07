@@ -3,7 +3,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: iccDEV ci-docker-build
+# Intent: iccDEV container build
 #
 # Last Updated: 2026-02-12 00:14:22 UTC by David Hoyt
 #
@@ -17,9 +17,13 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
     build-essential=12.12ubuntu2 \
     cmake=4.2.3-2ubuntu2 \
+    gcc=4:15.2.0-5ubuntu1 \
+    g++=4:15.2.0-5ubuntu1 \
     lsb-release=12.1-2build1 \
     make=4.4.1-3 \
-    libxml2-dev=2.15.2+dfsg-0.1 \
+    zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
+    libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
+    libxml2-dev=2.15.2+dfsg-0.1ubuntu0.1 \
     nlohmann-json3-dev=3.12.0.really.3.12.0.really.3.11.3-3build1 \
     libtiff-dev=4.7.0-3ubuntu4 \
     libjpeg-dev=8c-2ubuntu12 \
@@ -29,15 +33,32 @@ RUN apt-get update \
 
 WORKDIR /opt/iccdev
 COPY . .
+COPY --chmod=0755 docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
+COPY --chmod=0755 docker/iccdev-generate-profiles.sh /usr/local/bin/iccdev-generate-profiles
+ARG GIT_COMMIT=""
+ENV WARN_FLAGS="-Wall -Wextra -Wpedantic -Werror"
 
 RUN sed -i '/find_package(wxWidgets COMPONENTS core base REQUIRED)/,/endif()/ s/^/# /' Build/Cmake/CMakeLists.txt \
  && rm -f Build/CMakeCache.txt \
  && rm -rf Build/CMakeFiles \
  && rm -f Build/Cmake/CMakeCache.txt \
  && rm -rf Build/Cmake/CMakeFiles \
- && cmake -S Build/Cmake -B Build -DCMAKE_BUILD_TYPE=Release \
- && cmake --build Build --parallel "$(nproc)" \
- && rm -rf .git
+ && GIT_COMMIT="$GIT_COMMIT" CC=gcc CXX=g++ \
+    cmake -S Build/Cmake -B Build \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_C_COMPILER=gcc \
+      -DCMAKE_CXX_COMPILER=g++ \
+      -DCMAKE_C_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0" \
+      -DCMAKE_CXX_FLAGS="${WARN_FLAGS} -fno-omit-frame-pointer -g -O0 -std=c++17" \
+      -DENABLE_SANITIZERS=ON \
+      -DENABLE_TOOLS=ON \
+ && cmake --build Build --parallel "$(nproc)"
+
+WORKDIR /opt/iccdev/Testing
+RUN iccdev-generate-profiles /opt/iccdev/Build/Tools
+
+WORKDIR /opt/iccdev
+RUN rm -rf .git
 
 RUN echo "=== Libraries ===" \
  && ls -lh /opt/iccdev/Build/IccProfLib/libIccProfLib2* \
@@ -58,10 +79,15 @@ LABEL org.opencontainers.image.title="iccDEV Build Container" \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6=2.43-2ubuntu2 \
-    libxml2-16=2.15.2+dfsg-0.1 \
+    libxml2-16=2.15.2+dfsg-0.1ubuntu0.1 \
     libtiff6=4.7.0-3ubuntu4 \
     libjpeg8=8c-2ubuntu12 \
     libpng16-16t64=1.6.57-1 \
+    libasan8=16-20260322-1ubuntu1 \
+    libubsan1=16-20260322-1ubuntu1 \
+    libssl3t64=3.5.5-1ubuntu3.2 \
+    llvm-21=1:21.1.8-6ubuntu1 \
+    openssl-provider-legacy=3.5.5-1ubuntu3.2 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
     python3=3.14.3-0ubuntu2 \
  && rm -rf /var/lib/apt/lists/*
@@ -70,13 +96,30 @@ COPY --from=builder /opt/iccdev/Build /opt/iccdev/Build
 COPY --from=builder /opt/iccdev/Testing /opt/iccdev/Testing
 COPY --from=builder /opt/iccdev/LICENSE.md /opt/iccdev/LICENSE.md
 COPY --from=builder /opt/iccdev/README.md /opt/iccdev/README.md
+COPY --from=builder /usr/local/bin/iccdev-banner /usr/local/bin/iccdev-banner
+COPY --from=builder /usr/local/bin/iccdev-generate-profiles /usr/local/bin/iccdev-generate-profiles
 
 RUN groupadd -r iccdev \
  && useradd -r -g iccdev -d /opt/iccdev -s /bin/bash iccdev \
+ && chmod 0755 /usr/local/bin/iccdev-banner \
+ && chmod 0755 /usr/local/bin/iccdev-generate-profiles \
+ && printf '%s\n' \
+      "if [ -z \"\${ICCDEV_BANNER_SHOWN:-}\" ]; then" \
+      "  export ICCDEV_BANNER_SHOWN=1" \
+      "  case \"\$-\" in *i*) /usr/local/bin/iccdev-banner ;; esac" \
+      "fi" > /etc/profile.d/iccdev-banner.sh \
+ && printf '%s\n' \
+      "if [ -z \"\${ICCDEV_BANNER_SHOWN:-}\" ]; then" \
+      "  export ICCDEV_BANNER_SHOWN=1" \
+      "  case \"\$-\" in *i*) /usr/local/bin/iccdev-banner ;; esac" \
+      "fi" > /opt/iccdev/.bashrc \
  && chown -R iccdev:iccdev /opt/iccdev
 
-ENV PATH="/opt/iccdev/Build/Tools/IccToXml:/opt/iccdev/Build/Tools/IccFromXml:/opt/iccdev/Build/Tools/IccDumpProfile:/opt/iccdev/Build/Tools/IccPawgReport:/opt/iccdev/Build/Tools/IccApplyNamedCmm:/opt/iccdev/Build/Tools/IccRoundTrip:/opt/iccdev/Build/Tools/IccFromCube:/opt/iccdev/Build/Tools/IccApplyProfiles:/opt/iccdev/Build/Tools/IccApplySearch:/opt/iccdev/Build/Tools/IccApplyToLink:/opt/iccdev/Build/Tools/IccJpegDump:/opt/iccdev/Build/Tools/IccPngDump:/opt/iccdev/Build/Tools/IccSpecSepToTiff:/opt/iccdev/Build/Tools/IccTiffDump:/opt/iccdev/Build/Tools/IccV5DspObsToV4Dsp:/opt/iccdev/Build/Tools/IccToJson:/opt/iccdev/Build/Tools/IccFromJson:${PATH}"
+ENV ICCDEV_ROOT="/opt/iccdev"
+ENV ICCDEV_IMAGE_PULL="docker pull ghcr.io/internationalcolorconsortium/iccdev:latest"
+ENV PATH="/opt/iccdev/Build/Tools/IccToXml:/opt/iccdev/Build/Tools/IccFromXml:/opt/iccdev/Build/Tools/IccDumpProfile:/opt/iccdev/Build/Tools/IccProfileVisualize:/opt/iccdev/Build/Tools/IccPawgReport:/opt/iccdev/Build/Tools/IccApplyNamedCmm:/opt/iccdev/Build/Tools/IccRoundTrip:/opt/iccdev/Build/Tools/IccFromCube:/opt/iccdev/Build/Tools/IccApplyProfiles:/opt/iccdev/Build/Tools/IccApplySearch:/opt/iccdev/Build/Tools/IccApplyToLink:/opt/iccdev/Build/Tools/IccJpegDump:/opt/iccdev/Build/Tools/IccPngDump:/opt/iccdev/Build/Tools/IccSpecSepToTiff:/opt/iccdev/Build/Tools/IccTiffDump:/opt/iccdev/Build/Tools/IccV5DspObsToV4Dsp:/opt/iccdev/Build/Tools/IccToJson:/opt/iccdev/Build/Tools/IccFromJson:${PATH}"
 ENV LD_LIBRARY_PATH="/opt/iccdev/Build/IccProfLib:/opt/iccdev/Build/IccXML:/opt/iccdev/Build/IccJSON"
+ENV ASAN_SYMBOLIZER_PATH="/usr/bin/llvm-symbolizer-21"
 
 USER iccdev
 WORKDIR /opt/iccdev

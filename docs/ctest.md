@@ -5,6 +5,11 @@ CTest when `ENABLE_TESTS=ON` and `ENABLE_TOOLS=ON`. The legacy shell and batch
 scripts remain the source of truth for profile generation, but CTest owns
 discovery, labels, fixtures, timeouts, logs, and the `check` target.
 
+CTest registers tests only for tools enabled by the selected CMake options.
+With `ENABLE_ICCJSON=OFF`, JSON conversion, `IccConnect`, and JSON
+runtime-configuration tool regressions are omitted; the legacy script test runs
+with JSON round-trip enforcement disabled.
+
 CTest registration is maintainer-owned infrastructure because it affects CI
 coverage, workflow pass/fail behavior, and cross-platform release confidence.
 General contributors should add or update test inputs under `Testing/` and
@@ -30,6 +35,7 @@ cmake -S Build/Cmake -B build \
   -DENABLE_STATIC_LIBS=ON
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
+cmake --build build --target build-test-binaries --parallel "$(nproc)"
 ctest --test-dir build --output-on-failure --no-tests=error
 cmake --build build --target check
 ```
@@ -42,9 +48,14 @@ cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64 ^
   -DENABLE_TOOLS=ON
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ctest --test-dir out/vs2022-x64 -C Release -N --no-tests=error
+cmake --build out/vs2022-x64 --config Release --target build-test-binaries
 ctest --test-dir out/vs2022-x64 -C Release --output-on-failure --no-tests=error
 cmake --build out/vs2022-x64 --config Release --target check
 ```
+
+Windows presets use a unified build-tree runtime directory. Visual Studio tools
+and iccDEV DLLs are under `out\vs2022-x64\bin\<Config>`; MinGW tools are under
+`out\mingw-x64\bin`.
 
 Windows MinGW single-config generators, `cmd.exe`:
 
@@ -53,6 +64,7 @@ set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
   -DENABLE_TESTS=ON
 cmake --build out/mingw-x64 --parallel
+cmake --build out/mingw-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
@@ -63,6 +75,7 @@ $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
   -DENABLE_TESTS=ON
 cmake --build out/mingw-x64 --parallel
+cmake --build out/mingw-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-x64 -R "^iccdev\.(windows-icc-dump-profile-smoke|issue-987-shared-mpe-export)$" --output-on-failure --no-tests=error
 ```
 
@@ -73,6 +86,7 @@ packages, use the dependency-light static preset. `cmd.exe`:
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
+cmake --build out/mingw-core-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
@@ -82,11 +96,18 @@ PowerShell:
 $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-core-x64 -S Build/Cmake -B out/mingw-core-x64
 cmake --build out/mingw-core-x64 --parallel
+cmake --build out/mingw-core-x64 --target build-test-binaries --parallel
 ctest --test-dir out/mingw-core-x64 -R "iccconnect|icc-dump-profile-smoke" --output-on-failure --no-tests=error
 ```
 
 Use `--no-tests=error` for discovery and execution so a registration regression
 cannot pass as a green no-op.
+
+The default `all` build intentionally excludes CTest-only helper binaries such as
+`iccFileIoSeekTellTest` and `iccParserRestoreCallsTest`. Build the
+`build-test-binaries` target before running filtered CTest commands directly, or
+use the `check` target to build tool and test dependencies before running the
+full suite.
 
 ## Registered Suites
 
@@ -102,6 +123,7 @@ cannot pass as a green no-op.
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.tool-coverage` | `.github/scripts/iccdev-tool-coverage-baseline.sh --asan --skip-hybrid` |
 | `iccdev.hybrid-pipeline` | `.github/scripts/iccdev-hybrid-pipeline-tests.sh` |
+| `iccdev.searchvec-uio-regression` | `.github/scripts/iccdev-searchvec-uio-regression.sh` |
 | `iccdev.specsep-tiff-geometry-regression` | `.github/scripts/iccdev-specsep-tiff-geometry-regression-tests.sh` |
 | `iccdev.dump-profile-header-regression` | `.github/scripts/iccdev-dump-profile-header-regression-tests.sh` |
 | `iccdev.basic-string-regressions` | `.github/scripts/iccdev-basic-string-regression-tests.sh` |
@@ -127,6 +149,8 @@ cannot pass as a green no-op.
 | `iccdev.issue-1150-output-failure-regression` | `.github/scripts/iccdev-issue-1150-output-failure-regression.sh` |
 | `iccdev.issue-1178-fromcube-devnull` | `.github/scripts/iccdev-issue-1178-fromcube-devnull-regression.sh` |
 | `iccdev.issue-1179-fromcube-regression` | `.github/scripts/iccdev-issue-1179-fromcube-regression.sh` |
+| `iccdev.issue-1379-fromcube-conformance` | `.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh` |
+| `iccdev.fromcube-cli-args` | `.github/scripts/iccdev-fromcube-cli-args-regression.sh` |
 | `iccdev.describe-sink-api` | `.github/ci/regression/iccDescribeSinkTest.cpp` |
 
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.
@@ -154,8 +178,10 @@ and inverse conversions. It guards against divide-by-zero and non-finite
 appearance state regressions without committing generated profiles.
 
 `iccdev.hybrid-pipeline` preserves the full six-phase hybrid spectral/colorimetric
-integration test as a separate `slow` CTest label. Routine CI tool sweeps run
-with `--label-exclude slow`; run the hybrid gate explicitly with
+integration test as a separate `slow` CTest label. Routine CI tool sweeps use
+the fast lane with `--label-exclude slow --label-exclude calculator`; run full
+CTest or the hybrid gate explicitly when the slow and calculator suites are in
+scope:
 `ctest --test-dir build -R '^iccdev\.hybrid-pipeline$' --output-on-failure`.
 
 Use a standalone CTest row for focused crash regressions that need clear
@@ -178,6 +204,7 @@ Windows full tool builds register these tests when all targets are available:
 | `iccdev.fileio-getlength-preserves-position` | `.github/ci/regression/fileio-getlength-position.cpp` |
 | `iccdev.fileio-seek-tell` | `.github/ci/regression/fileio-seek-tell.cpp` |
 | `iccdev.iccconnect-threaded-cmm` | `.github/ci/regression/iccconnect-threaded-cmm.cpp` |
+| `iccdev.windows-iccdevcmm-smoke` | `Tools/Winnt/IccDEVCmm/tests/IccDEVCmmSmoke.cpp` |
 | `iccdev.parser-restore-calls` | `.github/ci/regression/parser-restore-calls.cpp` |
 | `iccdev.profile-write-failure` | `.github/ci/regression/profile-write-failure.cpp` |
 | `iccdev.windows-create-profiles` | `Testing/CreateAllProfiles.bat` |
@@ -190,15 +217,21 @@ The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
 into `build/Testing/ctest-output/windows-testing`, runs the batch scripts from
 that disposable directory, verifies key output, and fails if the source
-`Testing/` tree is changed.
+`Testing/` tree is changed. It prefers the unified `bin` runtime directory and
+falls back to the older per-tool `Tools/<Tool>/<Config>` layout for existing
+build trees.
 
 Windows CTest wrappers collect build-tree DLL directories plus runtime
 dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
 vcpkg installed triplets, compiler `bin` directories, and common dependency
-library prefixes. This keeps CTest execution independent of a developer's
-interactive `PATH` for tools such as `libxml2.dll` or `libwinpthread-1.dll`.
-MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
-because GCC launches runtime-dependent compiler subprocesses during the build.
+library prefixes. MSVC builds also add the matching Debug CRT redistributable
+directory when it is present, so Debug helper binaries and DLLs can run on CI
+machines that do not have `msvcp140d.dll` or `vcruntime140d.dll` on the system
+`PATH`. This keeps CTest execution independent of a developer's interactive
+`PATH` for tools such as `libxml2.dll`, `libwinpthread-1.dll`, or the MSVC
+Debug CRT. MinGW builds still need the UCRT64 `bin` directory on the invoking
+shell `PATH` because GCC launches runtime-dependent compiler subprocesses during
+the build.
 
 Feature-disabled Windows builds register the tests whose targets are available.
 For example, `mingw-core-x64` does not build XML conversion tools, so it skips
@@ -212,7 +245,11 @@ and header/file-size diagnostic. `iccdev.issue-987-shared-mpe-export` is a
 focused Windows shared-library regression for MSVC and MinGW. It checks that
 `IccProfLib2.dll` exports `CIccTagMultiProcessElement::NumElements` with
 `dumpbin` or `objdump`, then builds and runs a small consumer against the
-build-tree DLL and import library.
+build-tree DLL and import library. `iccdev.windows-iccdevcmm-smoke` loads the
+Windows ICM CMM DLL directly, verifies the required `CM*` exports and `ICCD`
+CMM identity, validates `sRGB_v4_ICC_preference.icc`, then creates, translates
+through, and deletes a two-profile RGB transform without registering the CMM
+globally.
 
 ## Fixtures and Logs
 
@@ -228,7 +265,10 @@ CTest logs and per-suite output are written under:
 ```
 
 The CI workflows upload those paths with `ctest-results.xml` and
-`ctest-list.txt`.
+`ctest-list.txt` inside the developer report artifact. For the reusable Linux
+tool workflow, the artifact is named `iccdev-developer-report-<BuildType>` and
+contains a presentation `index.html`, CTest data, optional hybrid timing data,
+and optional all-tool FlameGraph data/SVGs.
 
 ## Maintainer Add-Test Process
 

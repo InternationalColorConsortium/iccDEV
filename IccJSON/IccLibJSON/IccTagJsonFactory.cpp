@@ -112,6 +112,7 @@ CIccTag* CIccTagJsonFactory::CreateTag(icTagTypeSignature tagSig)
   case icSigTagArrayType:            return new (std::nothrow) CIccTagJsonArray;
   case icSigUtf8TextType:            return new (std::nothrow) CIccTagJsonUtf8Text;
   case icSigZipUtf8TextType:         return new (std::nothrow) CIccTagJsonZipUtf8Text;
+  case icSigZipXMLType:
   case icSigZipXmlType:              return new (std::nothrow) CIccTagJsonZipXml;
   case icSigUtf16TextType:           return new (std::nothrow) CIccTagJsonUtf16Text;
   case icSigEmbeddedProfileType:     return new (std::nothrow) CIccTagJsonEmbeddedProfile;

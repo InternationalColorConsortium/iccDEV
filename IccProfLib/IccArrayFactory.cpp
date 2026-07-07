@@ -190,6 +190,9 @@ bool CIccArrayCreator::DoGetArraySigName(std::string &arrayName, icArraySignatur
 
 icArraySignature CIccArrayCreator::DoGetArraySig(const icChar* structName)
 {
+  if (!structName || !structName[0])
+    return (icArraySignature)0;
+
   CIccArrayFactoryList::iterator i;
 
   for (i = factoryStack.begin(); i != factoryStack.end(); i++) {

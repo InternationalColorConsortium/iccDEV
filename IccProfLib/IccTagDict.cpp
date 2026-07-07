@@ -790,6 +790,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
         free(pos);
         free(buf);
         delete ptr.ptr;
+        delete pTag;
         return false;
       }
 
@@ -841,6 +842,7 @@ bool CIccTagDict::Read(icUInt32Number size, CIccIO *pIO)
         free(pos);
         free(buf);
         delete ptr.ptr;
+        delete pTag;
         return false;
       }
 

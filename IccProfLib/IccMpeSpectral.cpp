@@ -1080,8 +1080,12 @@ bool CIccMpeSpectralCLUT::Read(icUInt32Number size, CIccIO *pIO)
     default:
       return false;
   }
+  
+  size_t nHeaderAndSamples = nPoints * nBytesPerSample + headerSize;
+  if (nHeaderAndSamples > (size_t)size)
+    return false;
 
-  if (m_Range.steps *nBytesPerSample > size - headerSize - nPoints*nBytesPerSample)
+  if (m_Range.steps * nBytesPerSample + nHeaderAndSamples > (size_t)size)
     return false;
 
   m_pWhite = (icFloatNumber *)malloc((int)m_Range.steps*sizeof(icFloatNumber));

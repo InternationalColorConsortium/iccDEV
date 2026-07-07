@@ -4,17 +4,25 @@
 # Tests iccToJson + iccFromJson against all generated ICC profiles.
 # Reports per-profile results and aggregate statistics.
 #
-# Usage: RunJsonTests.sh [build_dir]
-#   build_dir defaults to ../Build/Cmake
+# Usage: RunJsonTests.sh [build_dir|tools_dir]
+#   path defaults to ../Build/Tools
 #
 # Copyright (c) 2024-2026 The International Color Consortium.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="${1:-$SCRIPT_DIR/../Build/Cmake}"
+BUILD_DIR="${1:-$SCRIPT_DIR/../Build/Tools}"
 
-TOJSON="$BUILD_DIR/Tools/IccToJson/iccToJson"
-FROMJSON="$BUILD_DIR/Tools/IccFromJson/iccFromJson"
+if [ -x "$BUILD_DIR/IccToJson/iccToJson" ] || [ -x "$BUILD_DIR/IccFromJson/iccFromJson" ]; then
+  TOOLS_DIR="$BUILD_DIR"
+  BUILD_ROOT="$(dirname "$TOOLS_DIR")"
+else
+  BUILD_ROOT="$BUILD_DIR"
+  TOOLS_DIR="$BUILD_ROOT/Tools"
+fi
+
+TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
+FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
 
 if [ ! -x "$TOJSON" ]; then
   echo "[FAIL] iccToJson not found at $TOJSON"
@@ -25,7 +33,7 @@ if [ ! -x "$FROMJSON" ]; then
   exit 1
 fi
 
-export LD_LIBRARY_PATH="$BUILD_DIR/IccProfLib:$BUILD_DIR/IccXML:$BUILD_DIR/IccJSON:$BUILD_DIR/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 is_expected_fromjson_failure() {
   case "$1" in
@@ -44,7 +52,8 @@ TOTAL=0
 CALC_FAIL=0
 
 echo "=== IccJSON Round-Trip Parity Test ==="
-echo "Build: $BUILD_DIR"
+echo "Build: $BUILD_ROOT"
+echo "Tools: $TOOLS_DIR"
 echo ""
 
 while IFS= read -r icc; do

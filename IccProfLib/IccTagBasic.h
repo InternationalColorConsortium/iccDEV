@@ -1801,6 +1801,44 @@ public:
 };
 
 
+/**
+****************************************************************************
+* Class: CIccTagSpectralRange
+*
+* Purpose: The spectralRangeType ('srng') tag type, added by the iccMAX
+*   extended device colour space amendment (spec 10.2.w). It carries the
+*   spectral wavelength range (and, for bi-spectral spaces, the bi-spectral
+*   wavelength range) for a device colour space that uses a spectral colour
+*   space signature in the header. Used by the deviceSpectralRangeTag ('dsrn').
+*   Wire layout (Table W, 20 bytes): type signature, 4 reserved bytes, then
+*   the spectralRange and bi-spectralRange (icSpectralRange, 6 bytes each).
+*   The bi-spectral range is zero when the colour space is not bi-spectral.
+*****************************************************************************
+*/
+class ICCPROFLIB_API CIccTagSpectralRange : public CIccTag
+{
+public:
+  CIccTagSpectralRange();
+  CIccTagSpectralRange(const CIccTagSpectralRange &ITSR);
+  CIccTagSpectralRange &operator=(const CIccTagSpectralRange &SpectralRangeTag);
+  virtual CIccTag* NewCopy() const {return new CIccTagSpectralRange(*this);}
+  virtual ~CIccTagSpectralRange();
+
+  virtual icTagTypeSignature GetType() const { return icSigSpectralRangeType; }
+  virtual const icChar *GetClassName() const { return "CIccTagSpectralRange"; }
+
+  virtual bool Read(icUInt32Number size, CIccIO *pIO);
+  virtual bool Write(CIccIO *pIO);
+  virtual void Describe(std::string &sDescription, int nVerboseness);
+
+  virtual icValidateStatus Validate(std::string sigPath, std::string &sReport, const CIccProfile* pProfile=NULL) const;
+
+  icUInt32Number m_nReserved;
+  icSpectralRange m_spectralRange;
+  icSpectralRange m_biSpectralRange;
+};
+
+
 class CIccMatrixMath;
 
 /**

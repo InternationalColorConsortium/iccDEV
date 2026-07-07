@@ -16,6 +16,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `snprintf-size-mismatch` | CWE-120 | Buffer smaller than formatted output |
 | `unchecked-allocation` | CWE-252, CWE-476 | Allocation result used without null check |
 | `unbounded-profile-loop` | CWE-400, CWE-834 | Loop bound from profile field without cap |
+| `unbounded-clut-index` | CWE-125 | CLUT `GetData()` buffer indexed without a length bound (#1548) |
 | `float-to-int-cast` | CWE-681 | Float-to-integer cast without range check |
 | `division-by-zero-profile` | CWE-369 | Division by profile-derived value |
 | `world-writable-output` | CWE-732 | File created with world-writable mode |
@@ -28,7 +29,6 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `json-raw-normalized-value` | CWE-682 | JSON serialization of raw normalized ICC value |
 | `json-recursive-parse` | CWE-674, CWE-400 | Recursive JSON structure without depth limit |
 | `json-size-overflow` | CWE-680, CWE-190 | JSON array size cast to narrow integer without bounds check |
-| `json-unchecked-type-access` | CWE-704, CWE-20 | JSON `.get<T>()` without type guard |
 | `localized-text-unsafe-serialization` | CWE-116, CWE-20 | Localized ICC text emitted without XML/JSON hex fallback |
 | `multiplication-overflow-alloc` | CWE-190, CWE-680, CWE-787 | Multiplication overflow before allocation |
 | `new-array-delete-mismatch` | CWE-762 | `new[]` allocation released with scalar `delete` |

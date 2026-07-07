@@ -23,7 +23,7 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.
 Maintainer sanitizer/regression containers add pinned CI-only packages such as
-`clang-18`, `llvm-18`, `libclang-rt-18-dev`, `libssl-dev`, and GNU `time`.
+current Clang/LLVM runtimes, GCC, AFL++, `libssl-dev`, and GNU `time`.
 
 Windows examples include both `cmd.exe` and PowerShell forms where shell syntax
 differs. If CMake reports `No such preset`, fetch and switch to a branch that
@@ -59,6 +59,28 @@ To open the generated project:
 open out/macos-xcode/RefIccMAX.xcodeproj
 ```
 
+For GuardMalloc/libgmalloc crash reproduction, use a non-sanitizer Debug build
+and verify that the built Mach-O tools contain `LC_UUID`. Apple's dynamic loader
+can abort before `main()` when `DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib`
+is used with an executable that was linked without an `LC_UUID` load command.
+
+```bash
+cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
+cmake --build out/macos-clang-guard-malloc --target iccToXml -j"$(sysctl -n hw.ncpu)"
+cmake --build out/macos-clang-guard-malloc --target check-macos-guard-malloc
+
+DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib \
+MallocScribble=1 \
+MallocPreScribble=1 \
+MallocGuardEdges=1 \
+MallocStackLogging=1 \
+out/macos-clang-guard-malloc/Tools/IccToXml/iccToXml input.icc output.xml
+```
+
+Do not combine GuardMalloc with AddressSanitizer, ThreadSanitizer, or
+MemorySanitizer. Use ASan/UBSan builds for sanitizer attribution and use
+GuardMalloc separately when checking allocator-sensitive behavior.
+
 ## Windows MSVC
 
 ```cmd
@@ -67,6 +89,11 @@ cd iccdev
 cmake --preset vs2022-x64 -S Build/Cmake -B out/vs2022-x64
 cmake --build out/vs2022-x64 --config Release -- /m /maxcpucount
 ```
+
+Windows presets place iccDEV `.exe` and `.dll` runtime artifacts together under
+`bin` in the build tree. Run tools from that directory or by explicit path, for
+example `out\vs2022-x64\bin\Release\iccToXml.exe`; no manual PATH update is
+required for iccDEV project DLLs.
 
 ## Windows ClangCL
 
@@ -80,10 +107,13 @@ cmake --preset vs2022-clangcl-x64 -S Build/Cmake -B out/vs2022-clangcl-x64
 cmake --build out/vs2022-clangcl-x64 --config Release -- /m /maxcpucount
 ```
 
+The ClangCL preset uses the same `out\vs2022-clangcl-x64\bin\Release` runtime
+layout as the MSVC preset.
+
 ## Windows MinGW UCRT64
 
 Install MSYS2 UCRT64 packages for the selected feature set. A core command-line
-tool build uses GCC, CMake, Ninja, libxml2, and nlohmann-json:
+tool build with `ENABLE_ICCJSON=OFF` uses GCC, CMake, Ninja, and libxml2:
 
 `cmd.exe`:
 
@@ -93,8 +123,7 @@ pacman -S --needed ^
   mingw-w64-ucrt-x86_64-cmake ^
   mingw-w64-ucrt-x86_64-ninja ^
   mingw-w64-ucrt-x86_64-make ^
-  mingw-w64-ucrt-x86_64-libxml2 ^
-  mingw-w64-ucrt-x86_64-nlohmann-json
+  mingw-w64-ucrt-x86_64-libxml2
 
 set PATH=C:\msys64\ucrt64\bin;C:\msys64\usr\bin;%PATH%
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
@@ -109,6 +138,9 @@ cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 ^
 cmake --build out/mingw-x64 --target iccDumpProfile --parallel
 ```
 
+The MinGW preset writes runnable tools to `out\mingw-x64\bin`, for example
+`out\mingw-x64\bin\iccDumpProfile.exe`.
+
 PowerShell:
 
 ```powershell
@@ -117,8 +149,7 @@ pacman -S --needed `
   mingw-w64-ucrt-x86_64-cmake `
   mingw-w64-ucrt-x86_64-ninja `
   mingw-w64-ucrt-x86_64-make `
-  mingw-w64-ucrt-x86_64-libxml2 `
-  mingw-w64-ucrt-x86_64-nlohmann-json
+  mingw-w64-ucrt-x86_64-libxml2
 
 $env:PATH = 'C:\msys64\ucrt64\bin;C:\msys64\usr\bin;' + $env:PATH
 cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
@@ -132,6 +163,11 @@ cmake --preset mingw-x64 -S Build/Cmake -B out/mingw-x64 `
   -DENABLE_IIS_TOOLS=OFF
 cmake --build out/mingw-x64 --target iccDumpProfile --parallel
 ```
+
+Install `mingw-w64-ucrt-x86_64-nlohmann-json` and set
+`-DENABLE_ICCJSON=ON` when building `IccJSON2`, `IccConnect2`,
+`iccToJson` / `iccFromJson`, or the JSON runtime-configuration tools
+(`iccApplyNamedCmm`, `iccApplyProfiles`, and `iccApplySearch`).
 
 For a dependency-light local compiler sanity check, use the static core preset.
 It disables XML and image tools, but still builds the core library, JSON library,
@@ -167,10 +203,14 @@ cmake -S Build/Cmake -B build \
   -DENABLE_WXWIDGETS=OFF
 cmake --build build --parallel "$(nproc)"
 ctest --test-dir build -N --no-tests=error
+cmake --build build --target build-test-binaries --parallel "$(nproc)"
 ctest --test-dir build --output-on-failure --no-tests=error
 ```
 
-The `check` target runs the same CTest suite after building tool dependencies:
+The default `all` build excludes CTest-only regression helper binaries. The
+`build-test-binaries` target builds those helpers for filtered CTest runs. The
+`check` target runs the same CTest suite after building tool and test
+dependencies:
 
 ```bash
 cmake --build build --target check
@@ -186,6 +226,34 @@ cmake --build out/vs2022-x64 --config Release --target check
 
 See [CTest tool suites](ctest.md) for the registered tests, fixtures, logs, and
 add-test process.
+
+The reusable tool-test workflow can also run opt-in all-tool profiling. Dispatch
+`ci-pr-action` with `run_tool_flamegraphs=true` to include the sanitized
+FlameGraph manifest in the job summary. Each profiled tool records status,
+sample count, unknown folded-frame count, SVG availability, and skip reason.
+On successful runs, the workflow uploads an `iccdev-developer-report-<BuildType>`
+artifact with `index.html`, CTest outputs, hybrid timing data when requested,
+and FlameGraph data/SVGs when profiling was enabled. The artifact upload uses
+the reviewed sanitized developer-report governance exception.
+
+## Runtime packaging
+
+Top-level CMake builds can also emit runtime packages with CPack without changing
+the legacy `dist-bin` archive flow:
+
+```bash
+cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=Release -DENABLE_TOOLS=ON -DENABLE_SHARED_LIBS=ON
+cmake --build build --parallel "$(nproc)"
+cmake --build build --target package-sha256
+```
+
+The `runtime` install component includes command-line tools, shared runtime
+libraries, package notes, the project license, a version manifest, and a generated
+tool catalog. Development headers, CMake package exports, and static archives are
+installed by the `dev` component. Linux builds generate ZIP packages by default
+and add DEB or RPM packages when the corresponding local CPack backend is
+available. The `ci-latest-release` workflow runs the Linux CPack runtime-package
+smoke and uploads the `reficcmax-runtime-packages-linux` artifact.
 
 ## Instrumentation Builds
 
@@ -228,6 +296,8 @@ cmake --preset linux-clang-tsan -S Build/Cmake -B out/linux-clang-tsan
 cmake --preset linux-clang-msan -S Build/Cmake -B out/linux-clang-msan
 cmake --preset linux-clang-coverage -S Build/Cmake -B out/linux-clang-coverage
 cmake --preset linux-clang-profiling -S Build/Cmake -B out/linux-clang-profiling
+cmake --preset macos-clang-sanitizers -S Build/Cmake -B out/macos-clang-sanitizers
+cmake --preset macos-clang-guard-malloc -S Build/Cmake -B out/macos-clang-guard-malloc
 ```
 
 ## Maintainer Dockerfiles
@@ -238,13 +308,13 @@ should change container package pins, published image tags, or GHCR workflows.
 
 | File | Maintainer purpose | Publish/validation path |
 |------|--------------------|-------------------------|
-| `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Built by `ci-docker`; validate with a local Docker build and tool smoke test. |
-| `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Built by the NixOS container path in `ci-docker`; validate the runtime closure and secret scan. |
-| `Dockerfile.ci-regression` | Pinned Ubuntu 24.04 dependency image for `ci-regression-checks`. | Built by `ci-regression-container`; publishing uses the `ghcr-publish` environment and the consumer workflow pins the resulting digest. |
+| `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Validate with a local Docker build and tool smoke test before maintainer publishing. |
+| `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Validate locally with a Docker build, runtime closure check, and secret scan before maintainer publishing. |
+| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with Clang/LLVM 22 defaults, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; consumer workflows select the published tag. |
 
-Before publishing a branch-specific regression image, maintainers must allow the
-branch in the `ghcr-publish` environment branch policy, approve the deployment,
-then update `ci-iccdev-tool-tests.yml` to the newly published digest.
+Before using a branch-specific regression image, maintainers should publish it
+through the maintainer-controlled container release path, record the branch or
+SHA tag, then pass that tag to `ci-iccdev-tool-tests.yml`.
 
 ## vcpkg Consumers
 

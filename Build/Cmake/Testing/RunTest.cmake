@@ -5,7 +5,7 @@ EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccToXml/iccToXml $
 EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccApplyNamedCmm/iccApplyNamedCmm ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/IccApplyNamedCmm)
 EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccApplyProfiles/iccApplyProfiles ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/)
 EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccApplyToLink/iccApplyToLink ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/)
-EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccFromCube/iccApplyCube ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/)
+EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccFromCube/iccFromCube ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/)
 EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccDumpProfile/iccDumpProfile ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/)
 EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccRoundTrip/iccRoundTrip ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/)
 EXECUTE_PROCESS( COMMAND cp -av ${CMAKE_BINARY_DIR}/../Tools/IccSpecSepToTiff/iccSpecSepToTiff ${CMAKE_CURRENT_LIST_DIR}/../../../Testing/)

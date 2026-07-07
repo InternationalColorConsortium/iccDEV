@@ -5,4 +5,3 @@
       - json-raw-normalized-value.ql
       - json-recursive-parse.ql
       - json-size-overflow.ql
-      - json-unchecked-type-access.ql

@@ -69,7 +69,6 @@
 #include <map>
 #include "MiniSVG.hpp"
 
-
 /******************************************************************************/
 
 struct Rect2D {
@@ -91,6 +90,34 @@ struct Rect2D {
 
 std::ostream& operator<<( std::ostream &os, const Rect2D &r );
 std::ostream& operator<<( std::ostream &os, const point2D &r );
+
+/******************************************************************************/
+
+struct RGB8Color {
+  RGB8Color() : r(0), g(0), b(0) {}
+  
+  RGB8Color( uint8_t rr, uint8_t gg, uint8_t bb ) :
+    r(rr), g(gg), b(bb) {}
+
+  RGB8Color( uint32_t hexRGB ) {
+        r = (uint8_t)((hexRGB >> 16) & 0xFF);
+        g = (uint8_t)((hexRGB >>  8) & 0xFF);
+        b = (uint8_t)((hexRGB >>  0) & 0xFF);
+  }
+  
+  bool constexpr operator==( const RGB8Color &y ) const {
+    return (r==y.r) && (g==y.g) && (b==y.b);
+  }
+  
+  bool constexpr operator!=( const RGB8Color &y ) const {
+    return !(*this == y);
+  }
+
+public:
+  uint8_t r, g, b;
+};
+
+std::ostream& operator<<( std::ostream &os, const RGB8Color &col );
 
 /******************************************************************************/
 
@@ -122,7 +149,7 @@ public:
 
 public:
   size_t m_pageObj;
-  size_t m_outlineObj;  // not used yet
+  size_t m_outlineObj;
 };
 
 /******************************************************************************/
@@ -134,23 +161,16 @@ public:
   PDFPageParent() : PDFObject() {}
 
   virtual void WriteContent(  std::ostream &out ) final;
+  
+  void AddPage( size_t pageIndex, const std::string &pageName )
+    {
+    m_pageObjectIndices.push_back( pageIndex );
+    m_pageNames.push_back( pageName );
+    }
 
 public:
     std::vector<size_t> m_pageObjectIndices;
-};
-
-/******************************************************************************/
-
-// outline parent (currently not implemented)
-class PDFOutlineParent : public PDFObject
-{
-public:
-  PDFOutlineParent() : PDFObject() {}
-
-  virtual void WriteContent(  std::ostream &out ) final;
-
-public:
-    // nothing yet
+    std::vector<std::string> m_pageNames;
 };
 
 /******************************************************************************/
@@ -168,6 +188,14 @@ public:
 
   virtual void WriteContent(  std::ostream &out ) final;
 
+  void AddAnnotation( size_t index ) {
+    m_annotations.push_back(index);
+  }
+
+  void AddAnnotationList( const std::vector<size_t> &annots ) {
+    m_annotations.insert( m_annotations.end(), annots.begin(), annots.end() );
+  }
+
 public:
   float m_pageWidth;
   float m_pageHeight;
@@ -176,7 +204,50 @@ public:
   size_t m_procset;
   size_t m_font;
   size_t m_xobjectIndex;
+  size_t m_pageObjectIndex;
+  std::vector<size_t> m_annotations;
   std::string m_xobjectName;
+};
+
+/******************************************************************************/
+
+// outline parent
+class PDFOutlineParent : public PDFObject
+{
+public:
+  PDFOutlineParent() : PDFObject() {}
+
+  virtual void WriteContent(  std::ostream &out ) final;
+  
+  void AddOutlineObject( size_t index )
+    {
+    m_outlineObjectIndices.push_back( index );
+    }
+
+public:
+    std::vector<size_t> m_outlineObjectIndices;    // should match up with pageParent list
+};
+
+/******************************************************************************/
+
+// an outline entry that references a single page
+class PDFOutlineEntry: public PDFObject
+{
+public:
+  PDFOutlineEntry( size_t parentIndex, size_t pageIndex, const std::string &title,
+                    size_t prev, size_t next) :
+    m_outlineParentIndex(parentIndex), m_pageIndex(pageIndex),
+      m_prevIndex(prev), m_nextIndex(next), m_name(title)
+     {}
+
+  virtual void WriteContent(  std::ostream &out ) final;
+
+public:
+  size_t m_outlineParentIndex;
+  size_t m_pageIndex;
+  size_t m_prevIndex;
+  size_t m_nextIndex;
+  std::string m_name;
 };
 
 /******************************************************************************/
@@ -204,6 +275,22 @@ public:
 
 public:
   std::string m_buf;
+};
+
+/******************************************************************************/
+
+class PDFAnnotation : public PDFObject
+{
+public:
+  PDFAnnotation( Rect2D &area, size_t index) : PDFObject(),
+    m_area(area), m_pageIndex(index)
+    {}
+
+  virtual void WriteContent(  std::ostream &out ) final;
+
+public:
+  Rect2D m_area;
+  size_t m_pageIndex;
 };
 
 /******************************************************************************/
@@ -262,12 +349,12 @@ class PDFWriter
 {
 public:
   PDFWriter() : m_pageWidth(0), m_pageHeight(0), m_pageCount(0),
-            m_xrefStart(0), m_pageParentIndex(0), m_outlineIndex(0),
+            m_xrefStart(0), m_pageParentIndex(0), m_outlineParentIndex(0),
             m_fontIndex(0), m_groupIndex(0), m_procsetIndex(0)
     { }
   PDFWriter( const std::string &filename, float widthPt, float heightPt ):
             m_pageWidth(0), m_pageHeight(0), m_pageCount(0), m_xrefStart(0),
-            m_pageParentIndex(0), m_outlineIndex(0), m_fontIndex(0),
+            m_pageParentIndex(0), m_outlineParentIndex(0), m_fontIndex(0),
             m_groupIndex(0), m_procsetIndex(0)
     { OpenFile(filename, widthPt, heightPt); }
 
@@ -292,7 +379,7 @@ public:
     m_objects.push_back( obj );
   }
 
-  void AddPage( size_t content, std::string xObjectName );
+  void AddPage( std::string name, size_t content, std::string xObjectName );
 
 protected:
 
@@ -313,6 +400,22 @@ protected:
     return pageParent;
   }
 
+  PDFOutlineParent *GetOutlineParent() {
+    if (!m_outlineParentIndex) {
+      fprintf(stderr,"FATAL - PDF outline parent index not set!\n");
+      return NULL;
+    }
+    PDFObject *parentObj( m_objects[m_outlineParentIndex-1] );
+    PDFOutlineParent *outParent = dynamic_cast<PDFOutlineParent *>(parentObj);
+    return outParent;
+  }
+
+private:
+  
+  void CreateTOCFromPages();
+  void CreateOutlineFromPages();
+  size_t AddPageHidden( size_t contentIndex, const std::vector<size_t> &annots );
+
 private:
   float m_pageWidth;     // used to init pages
   float m_pageHeight;    // used to init pages
@@ -320,7 +423,7 @@ private:
   size_t m_pageCount;
   size_t m_xrefStart;
   size_t m_pageParentIndex;
-  size_t m_outlineIndex;
+  size_t m_outlineParentIndex;
 
   object_name_to_index_map m_xobjects;
   size_t m_fontIndex;       // used to init pages   // TODO - make this a map from name to object index
@@ -330,6 +433,88 @@ private:
   std::string m_filename;
   pdf_object_list m_objects;
 };
+
+/******************************************************************************/
+
+struct tableEntry {
+  tableEntry() : m_backgroundColor(0xffffff), m_textColor(0) {}
+
+public:
+  std::string m_text;
+  RGB8Color m_backgroundColor;
+  RGB8Color m_textColor;
+    // FUTURE - alignment
+
+  float m_width;        // used by layout code
+};
+
+/******************************************************************************/
+
+// row outer, column inner
+typedef std::vector< tableEntry > tableRowData;
+typedef std::vector< tableRowData > tableData;
+
+/******************************************************************************/
+
+class gridTable {
+
+public:
+  gridTable() : m_lineWeight(0.0f), m_textSize(10.0f), m_cellMargin(2.0f) {}
+  
+  void AddRow( const tableRowData &one_row ) { m_data.push_back( one_row ); }
+
+public:
+    float m_lineWeight;
+    float m_textSize;
+    float m_cellMargin;
+    RGB8Color m_lineColor;
+    tableData m_data;
+};
+
+/******************************************************************************/
+
+// utility functions to create graphics
+
+enum PDFTextAlignment {
+    kPDFTextAlignLeft = 0,
+    kPDFTextAlignCenter = 1,
+    kPDFTextAlignRight = 2,
+    kPDFTextAlignCenterLeft = 3,  // for graph top label, center then left with indent
+};
+
+std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
+                    const point2D &offset, float labelSize,
+                    const std::string &text,
+                    PDFTextAlignment align = kPDFTextAlignCenter );
+
+// this will break the text string into lines
+std::string PDFMultiLineText( const point2D &basepoint,
+                    float labelSize, float leading, float second_line_indent,
+                    const std::string &text,
+                    PDFTextAlignment align,
+                    bool allowBlankLines = true );
+
+// this takes premade lines
+std::string PDFMultiLineText( const point2D &basepoint,
+                    float textSizePts, float leading, float second_line_indent,
+                    std::vector<std::string> &lines, PDFTextAlignment align  = kPDFTextAlignLeft,
+                    bool allowBlankLines = true );
+
+// take a long string and break it up into lines based on the limit
+std::string PDFParagraphText( const point2D &basepoint,
+                    float textSizePts, float leading, float second_line_indent,
+                    size_t characterLineLimit,
+                    const std::string &text, PDFTextAlignment align = kPDFTextAlignLeft,
+                    bool allowBlankLines = true );
+
+// draw a table/grid/spreadsheet
+std::string PDFDrawGridTable( gridTable &table, const point2D &basepoint,
+                float columnWidthMinimum = 10.0, float columnWidthMaximum = 9e99 );
+
+/******************************************************************************/
+
+// Debug PDF utilities and features
+int PDFDebugPages( PDFWriter &pdffile );
 
 /******************************************************************************/
 

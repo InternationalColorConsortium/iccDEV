@@ -78,6 +78,7 @@ Copyright:  see ICC Software License
 #include <string>
 #include <time.h>
 #include <cstring>
+#include <cmath>
 
 class CIccDefaultEncProfileCacheHandler : public IIccEncProfileCacheHandler
 {
@@ -135,6 +136,22 @@ static icFloatNumber icGetParamFloatNum(CIccTagStruct *pParams, icColorEncodingP
 
 static void icYxy2XYZVector(icFloatNumber*XYZ, icFloatNumber Y, icFloatNumber *xy, icUInt8Number idxOffset=1)
 {
+  // xy[1] is the CIE y chromaticity coordinate and the divisor that converts the
+  // Yxy white/media/surround point into tristimulus XYZ.  A valid chromaticity has
+  // y in (0,1]; a malformed profile can carry a colorEncodingParams chromaticity
+  // member whose y is zero (the fuzz PoC dbz-icYxy2XYZVector ships exactly this),
+  // so Y*x/y becomes a divide by zero -- UBSAN's float-divide-by-zero check flags
+  // it here (issue #1410) and the resulting inf/NaN then poisons the header
+  // illuminant and the XYZ tags built from this vector.  Treat a non-positive,
+  // non-finite y as a degenerate point and emit (0, Y, 0): the divide is skipped
+  // and downstream sees a finite, achromatic fallback instead of inf/NaN.
+  if (!(std::isfinite(xy[1]) && xy[1] > 0.0f)) {
+    XYZ[0] = 0.0f;
+    XYZ[idxOffset] = Y;
+    XYZ[idxOffset<<1] = 0.0f;
+    return;
+  }
+
   XYZ[0] = Y*xy[0] / xy[1];
   XYZ[idxOffset] = Y;
   XYZ[idxOffset<<1] = Y*(1.0f-xy[0]-xy[1]) / xy[1];
@@ -276,6 +293,11 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
   
   pxy = (CIccTagFloat32*)pParams->FindElemOfType(icSigCeptRedPrimaryXYZMbr, icSigFloat32ArrayType);
   if (!pxy || pxy->GetSize()<2) {
+    // pMtx is not attached to pMpeTag until after all three primary lookups
+    // succeed (the Attach is at the bottom of this block), so deleting pMpeTag
+    // here does not reclaim it -- the matrix must be freed explicitly, exactly
+    // as the SetSize failure path above already does.
+    delete pMtx;
     delete pMpeTag;
     delete pIcc;
     return icEncConvertMemoryError;
@@ -286,6 +308,8 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
 
   pxy = (CIccTagFloat32*)pParams->FindElemOfType(icSigCeptGreenPrimaryXYZMbr, icSigFloat32ArrayType);
   if (!pxy || pxy->GetSize()<2) {
+    // Same unattached-matrix leak as the red-primary path above.
+    delete pMtx;
     delete pMpeTag;
     delete pIcc;
     return icEncConvertMemoryError;
@@ -296,6 +320,8 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
 
   pxy = (CIccTagFloat32*)pParams->FindElemOfType(icSigCeptBluePrimaryXYZMbr, icSigFloat32ArrayType);
   if (!pxy || pxy->GetSize()<2) {
+    // Same unattached-matrix leak as the red-primary path above.
+    delete pMtx;
     delete pMpeTag;
     delete pIcc;
     return icEncConvertMemoryError;

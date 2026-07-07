@@ -74,6 +74,7 @@
 #include "IccDefs.h"
 #include "IccMpeCalc.h"
 #include "IccProfLibVer.h"
+#include "IccLibConnectVer.h"
 #include "IccSearch.h"
 #include "IccConnect.h"
 #include "../IccCmdLineUtil.h"
@@ -203,10 +204,10 @@ bool IsSpacePCS( const icColorSpaceSignature &x )
 
 void Usage()
 {
+  printf("iccApplySearch built with IccProfLib version " ICCPROFLIBVER ", IccLibConnect Version " ICCLIBCONNECTVER "\n\n");
   printf("Usage 1: iccApplySearch -cfg config_file_path\n");
   printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
   printf("Usage 2: iccApplySearch {-debugcalc} data_file_path encoding[:precision[:digits]] interpolation {-ENV:tag value} profile1_path intent1 {{-ENV:tag value} middle_profile_path mid_intent} {-ENV:tag value} profile2_path intent2 -INIT init_intent2 {pcc_path1 weight1 ...}\n");
-  printf("Built with IccProfLib version " ICCPROFLIBVER "\n\n");
   
   printf("  For final_data_encoding:\n");
   printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -326,7 +327,7 @@ int main(int argc, const char* argv[])
     int nArg = cfgApply.fromArgs(&argv[0], argc);
     if (!nArg) {
       printf("Unable to parse configuration arguments\n");
-      return -1;
+      return EXIT_FAILURE;
     }
     argv += nArg;
     argc -= nArg;

@@ -103,6 +103,7 @@ IdList photo_types[] = {
   {PHOTO_CIELAB,     "CIELab"},
   {PHOTO_ICCLAB,     "IccLab"},
   {PHOTO_RGB,        "RGB"},
+  {PHOTO_PALETTE,    "Palette"},
   {UNKNOWNID,        "Unknown"},
 };
 
@@ -110,6 +111,7 @@ IdList compression_types[] = {
   {COMPRESSION_NONE,         "None"},
   {COMPRESSION_LZW,          "LZW"},
   {COMPRESSION_JPEG,         "JPEG"},
+  {COMPRESSION_PACKBITS,     "PackBits"},
   {COMPRESSION_DEFLATE,      "Deflate"},
   {COMPRESSION_ADOBE_DEFLATE,"Deflate"},
   {UNKNOWNID,                "Unknown"},
@@ -145,13 +147,24 @@ void Usage()
   printf("Usage: iccTiffDump tiff_file {exported_icc_file}\n\n");
 }
 
-void DumpProfileInfo(CIccProfile* pProfile, std::string prefix)
+void DumpProfileInfo(CIccProfile* pProfile, std::string prefix, int level = 1)
 {
   icHeader* pHdr = &pProfile->m_Header;
   CIccInfo Fmt;
+  const int profileRecursionLimit = 4;
+  const size_t bufSize = 64;
+  char buf[bufSize];
+
+  if (level > profileRecursionLimit) {
+    printf("%sSubprofile recursion halted\n", prefix.c_str());
+    return;
+  }
 
   printf("%sVersion:          %s\n", prefix.c_str(), Fmt.GetVersionName(pHdr->version));
 
+  printf("%sClass:            %s\n", prefix.c_str(), Fmt.GetProfileClassSigName(pHdr->deviceClass) );
+  if (pHdr->deviceSubClass)
+    printf("%sSubClass:         %s\n", prefix.c_str(), icGetSig(buf, bufSize, pHdr->deviceSubClass));
   if (pHdr->colorSpace)
     printf("%sColor Space:      %s\n", prefix.c_str(), Fmt.GetColorSpaceSigName(pHdr->colorSpace));
   if (pHdr->pcs)
@@ -200,7 +213,7 @@ void DumpProfileInfo(CIccProfile* pProfile, std::string prefix)
       CIccTagEmbeddedProfile* pEmbeddedTag = (CIccTagEmbeddedProfile*)pEmbedded;
       if (pEmbeddedTag->GetProfile()) {
         printf("%sSub-Profile:      Embedded\n", prefix.c_str());
-        DumpProfileInfo(pEmbeddedTag->GetProfile(), prefix + " ");
+        DumpProfileInfo(pEmbeddedTag->GetProfile(), prefix + " ", level+1 );
       }
     }
   }
@@ -216,12 +229,52 @@ FILE* icOpenWriteBinaryFile(const char* szFname)
 
 //===================================================
 
+static
+const char *GetSampleFormatDescription( unsigned int format )
+{
+  const int bufSize = 256;
+  static char buf[ bufSize ];
+
+  switch( format ) {
+    case SAMPLEFORMAT_UINT:
+      return "unsigned integer";
+      break;
+    case SAMPLEFORMAT_INT:
+      return "signed integer";
+      break;
+    case SAMPLEFORMAT_IEEEFP:
+      return "floating point";
+      break;
+    case SAMPLEFORMAT_VOID:
+      return "undefined";
+      break;
+    case SAMPLEFORMAT_COMPLEXINT:
+      return "complex integer";
+      break;
+    case SAMPLEFORMAT_COMPLEXIEEEFP:
+      return "complex floating point";
+      break;
+    default:
+      snprintf(buf,bufSize,"Unknown format: %u = 0x%8.8X", format, format );
+      return buf;
+      break;
+  }
+
+// unreachable
+}
+
+//===================================================
+
 int main(int argc, icChar* argv[])
 {
   int minargs = 1;
   if (argc <= minargs) {
     Usage();
     return 0;
+  }
+  else if (argc > 3) {
+    Usage();
+    return -1;
   }
 
   std::string srcName = icSanitizeConsoleText(argv[1]);
@@ -238,7 +291,9 @@ int main(int argc, icChar* argv[])
     SrcImg.GetWidth(), SrcImg.GetHeight(),
     SrcImg.GetWidthIn(), SrcImg.GetHeightIn());
   printf("Planar:            %s\n", GetId(SrcImg.GetPlanar(), planar_types));
-  printf("BitsPerSample:     %d\n", SrcImg.GetBitsPerSample());
+  printf("BitsPerSample:     %d (%s)\n", SrcImg.GetBitsPerSample(),
+            GetSampleFormatDescription( SrcImg.GetSampleFormat()) );
+
   printf("SamplesPerPixel:   %d\n", SrcImg.GetSamples());
   int nExtra = SrcImg.GetExtraSamples();
   if (nExtra)
@@ -259,7 +314,24 @@ int main(int argc, icChar* argv[])
       DumpProfileInfo(pProfile, " ");
       if (argc > 2) {
         std::string dstName = icSanitizeConsoleText(argv[2]);
-        if (pProfile->ReadTags(pProfile) && SaveIccProfile(argv[2], pProfile)) {
+        std::string validateReport;
+        if (!pProfile->ReadTags(pProfile)) {
+          printf("\nUnable to extract profile\n");
+          delete pProfile;
+          SrcImg.Close();
+          return -1;
+        }
+        // Don't rewrite a non-conformant embedded profile to disk: a parsed
+        // profile that fails required-tag validation must be reported and
+        // refused, not silently exported (#1380).
+        else if (pProfile->Validate(validateReport) > icValidateWarning) {
+          printf("\nEmbedded ICC profile violates the ICC specification; not extracting:\n%s",
+                 validateReport.c_str());
+          delete pProfile;
+          SrcImg.Close();
+          return -1;
+        }
+        else if (SaveIccProfile(argv[2], pProfile)) {
           printf("\nProfile extracted to: %s\n", dstName.c_str());
         }
         else {
@@ -284,6 +356,11 @@ int main(int argc, icChar* argv[])
     }
   } else {
     printf("Profile:           None\n");
+    if (argc > 2) {
+      printf("\nNo embedded ICC profile to extract\n");
+      SrcImg.Close();
+      return -1;
+    }
   }
 
   SrcImg.Close();

@@ -80,9 +80,14 @@ namespace iccDEV {
 
   class CIccSearchVec {
   public:
-    CIccSearchVec() {}
+    CIccSearchVec() : n(0) {}
     CIccSearchVec(unsigned int nElems) : n(nElems) {
-      val.resize(nElems, 0);
+      if (nElems) {
+        val.reserve(nElems);
+        for (unsigned int i = 0; i < nElems; i++) {
+          val.push_back(0.0f);
+        }
+      }
     }
     CIccSearchVec(std::initializer_list<icFloatNumber> c) {
       n = (unsigned int)c.size();

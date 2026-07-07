@@ -92,6 +92,10 @@ class ICCPROFLIB_API CIccMpeSpectralMatrix : public CIccMultiProcessElement
 public:
   CIccMpeSpectralMatrix();
   CIccMpeSpectralMatrix(const CIccMpeSpectralMatrix &ITPC);
+  // Match the copy constructor with a copy assignment operator (Rule of Two);
+  // copyData performs the same deep copy (with free of the prior buffers) that
+  // the concrete subclasses already rely on.
+  CIccMpeSpectralMatrix &operator=(const CIccMpeSpectralMatrix &ITPC) { copyData(ITPC); return *this; }
   virtual ~CIccMpeSpectralMatrix();
 
   virtual void Describe(std::string &sDescription, int nVerboseness);
@@ -201,6 +205,10 @@ class ICCPROFLIB_API CIccMpeSpectralCLUT : public CIccMultiProcessElement
 public:
   CIccMpeSpectralCLUT();
   CIccMpeSpectralCLUT(const CIccMpeSpectralCLUT &ITPC);
+  // Match the copy constructor with a copy assignment operator (Rule of Two);
+  // copyData performs the same deep copy (with free of the prior buffers) that
+  // the concrete subclasses already rely on.
+  CIccMpeSpectralCLUT &operator=(const CIccMpeSpectralCLUT &ITPC) { copyData(ITPC); return *this; }
   virtual ~CIccMpeSpectralCLUT();
 
   virtual void Describe(std::string &sDescription, int nVerboseness);
@@ -329,6 +337,10 @@ class ICCPROFLIB_API CIccMpeSpectralObserver : public CIccMultiProcessElement
 public:
   CIccMpeSpectralObserver();
   CIccMpeSpectralObserver(const CIccMpeSpectralObserver &ITPC);
+  // Match the copy constructor with a copy assignment operator (Rule of Two);
+  // copyData performs the same deep copy (with free of the prior buffers) that
+  // the concrete subclasses already rely on.
+  CIccMpeSpectralObserver &operator=(const CIccMpeSpectralObserver &ITPC) { copyData(ITPC); return *this; }
   virtual ~CIccMpeSpectralObserver();
 
   virtual void Describe(std::string &sDescription, int nVerboseness);

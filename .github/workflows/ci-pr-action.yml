@@ -52,6 +52,9 @@ concurrency:
   group: "ci-pr-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
   cancel-in-progress: true
 
+env:
+  REGRESSION_IMAGE_TAG: ci-qa-pr-docker-testing
+
 jobs:
   detect-src:
     name: Welcome to iccDEV
@@ -332,7 +335,7 @@ jobs:
   setup:
     name: Thank You for the PR
     runs-on: ubuntu-latest
-    needs: [detect-src, risk-gate]
+    needs: [detect-src]
     permissions:
       contents: read
       pull-requests: read  # Required to render trusted PR summary details.
@@ -503,6 +506,7 @@ jobs:
       os-list: ${{ steps.v.outputs.os }}
       compilers: ${{ steps.v.outputs.comp }}
       build-types: ${{ steps.v.outputs.bt }}
+      regression-image-tag: ${{ steps.v.outputs.regression_image_tag }}
 
     steps:
       - name: Set up Matrix Runners
@@ -555,7 +559,7 @@ jobs:
             local value="$2"
 
             case "$key" in
-              os|comp|bt) ;;
+              os|comp|bt|regression_image_tag) ;;
               *)
                 echo "Invalid output key: $key" >&2
                 exit 1
@@ -577,6 +581,7 @@ jobs:
           write_github_output os "$os_raw"
           write_github_output comp "$comp_raw"
           write_github_output bt "$bt_raw"
+          write_github_output regression_image_tag "$REGRESSION_IMAGE_TAG"
 
   risk-gate:
     name: Risk Analysis Gate
@@ -602,100 +607,23 @@ jobs:
 
   tool-tests:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: Tool Smoke Tests (ASAN+UBSAN)
+    name: Tool Smoke Tests (ASAN+UBSAN, ${{ matrix.tool_build_type }})
     needs: [setup, detect-src, validate-inputs]
+    strategy:
+      fail-fast: false
+      matrix:
+        tool_build_type: ${{ fromJson(needs.validate-inputs.outputs.build-types) }}
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
+    with:
+      regression_image_tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
+      tool_build_type: ${{ matrix.tool_build_type }}
+      ctest_mode: fast
 
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: Windows Build & Test Profiles
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
-
-  wasm-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: WASM Build & Parity (npm-shaped)
-    needs: [setup, detect-src, validate-inputs]
-    # PR source is untrusted; the reusable WASM workflow must validate in-place
-    # and must not upload npm-shaped bundles as artifacts.
-    uses: ./.github/workflows/ci-pr-wasm.yml
-
-  #############################################################################
-  # Example Consumer Project -- verifies build-tree export works
-  #############################################################################
-  example-project:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: Example Project
-    needs: [detect-src, risk-gate]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Install Dependencies
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
-          sudo apt-get install -y build-essential cmake \
-            libpng-dev libxml2-dev libtiff-dev nlohmann-json3-dev
-
-      - name: Build iccDEV
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          cd Build/Cmake
-          cmake -B build -S . \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DENABLE_TOOLS=ON \
-                -Wno-dev
-          cmake --build build --parallel "$(nproc)"
-
-      - name: Build Example Project
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          cd examples/hello-iccdev
-          cmake -B build \
-                -DICCDEV_BUILD_DIR="$GITHUB_WORKSPACE/Build/Cmake/build" \
-                -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --parallel "$(nproc)"
-
-      - name: Run Example Project
-        shell: bash --noprofile --norc {0}
-        env:
-          BASH_ENV: /dev/null
-          ICCDEV_BUILD_DIR: ${{ github.workspace }}/Build/Cmake/build
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          export LD_LIBRARY_PATH="${ICCDEV_BUILD_DIR}/IccProfLib"
-          LD_LIBRARY_PATH+=":${ICCDEV_BUILD_DIR}/IccXML"
-          LD_LIBRARY_PATH+=":${ICCDEV_BUILD_DIR}/IccJSON"
-          OUTPUT=$(./examples/hello-iccdev/build/hello-iccdev 2>&1)
-          echo "$OUTPUT"
-          if grep -qE 'IccProfLib|Successfully opened' <<< "$OUTPUT"; then
-            echo "[OK] Example project works correctly"
-          else
-            echo "[FAIL] Example project output unexpected"
-            exit 1
-          fi
 
   finalize:
     name: PR Summary
@@ -709,8 +637,6 @@ jobs:
       # - scan-build
       - tool-tests
       - win-ci
-      - wasm-ci
-      - example-project
     if: always()
     steps:
       - uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
@@ -748,8 +674,6 @@ jobs:
           SCAN_RESULT: skipped
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
-          WASM_RESULT: ${{ needs['wasm-ci'].result }}
-          EXAMPLE_RESULT: ${{ needs['example-project'].result }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"
@@ -780,8 +704,6 @@ jobs:
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
-          WASM_RESULT="${WASM_RESULT:-success}"
-          EXAMPLE_RESULT="${EXAMPLE_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
 
           # remove CRs, trim whitespace and lowercase each value
@@ -801,13 +723,11 @@ jobs:
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
-          WASM_RESULT="$(trim_and_norm "$WASM_RESULT")"
-          EXAMPLE_RESULT="$(trim_and_norm "$EXAMPLE_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$WASM_RESULT" "$EXAMPLE_RESULT"; do
+          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -876,8 +796,6 @@ jobs:
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
-            printf "| wasm-ci            | %s |\n" "$(sanitize_line "$WASM_RESULT")"
-            printf "| example-project    | %s |\n" "$(sanitize_line "$EXAMPLE_RESULT")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
             echo ""

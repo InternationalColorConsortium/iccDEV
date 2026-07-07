@@ -36,19 +36,19 @@ CIccSparseMatrix::CIccSparseMatrix(const CIccSparseMatrix &mtx)
   if (mtx.m_Data) {
     switch (m_nType) {
     case icSparseMatrixUInt8:
-      m_Data = new CIccSparseMatrixUInt8();
+      m_Data = new (std::nothrow)CIccSparseMatrixUInt8();
       break;
     case icSparseMatrixUInt16:
-      m_Data = new CIccSparseMatrixUInt16();
+      m_Data = new (std::nothrow)CIccSparseMatrixUInt16();
       break;
     case icSparseMatrixFloat16:
-      m_Data = new CIccSparseMatrixFloat16();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloat16();
       break;
     case icSparseMatrixFloat32:
-      m_Data = new CIccSparseMatrixFloat32();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloat32();
       break;
     case icSparseMatrixFloatNum:
-      m_Data = new CIccSparseMatrixFloatNum();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloatNum();
       break;    // without this, we have a memory leak!
     default:
       m_Data = NULL;
@@ -78,24 +78,25 @@ CIccSparseMatrix &CIccSparseMatrix::operator=(const CIccSparseMatrix &mtx)
   m_nRawSize = mtx.m_nRawSize;
   m_nType = mtx.m_nType;
 
-  if (mtx.m_Data) {
-    delete m_Data;
+  delete m_Data;
+  m_Data = NULL;
 
+  if (mtx.m_Data) {
     switch (m_nType) {
     case icSparseMatrixUInt8:
-      m_Data = new CIccSparseMatrixUInt8();
+      m_Data = new (std::nothrow)CIccSparseMatrixUInt8();
       break;
     case icSparseMatrixUInt16:
-      m_Data = new CIccSparseMatrixUInt16();
+      m_Data = new (std::nothrow)CIccSparseMatrixUInt16();
       break;
     case icSparseMatrixFloat16:
-      m_Data = new CIccSparseMatrixFloat16();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloat16();
       break;
     case icSparseMatrixFloat32:
-      m_Data = new CIccSparseMatrixFloat32();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloat32();
       break;
     case icSparseMatrixFloatNum:
-      m_Data = new CIccSparseMatrixFloatNum();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloatNum();
       break;    // without this, we have a memory leak!
     default:
       m_Data = NULL;
@@ -154,6 +155,7 @@ bool CIccSparseMatrix::Init(icUInt16Number nRows, icUInt16Number nCols, bool bSe
   if (nRows > kMaxSparseMatrixDim || nCols > kMaxSparseMatrixDim) {
     m_nRows = 0;
     m_nCols = 0;
+    delete m_Data;
     m_Data = NULL;
     m_RowStart = NULL;
     m_ColumnIndices = NULL;
@@ -164,36 +166,42 @@ bool CIccSparseMatrix::Init(icUInt16Number nRows, icUInt16Number nCols, bool bSe
   icUInt16Number *Dim = (icUInt16Number*)m_pMatrix;
 
   delete m_Data;
+  m_Data = NULL;
 
   switch (m_nType) {
     case icSparseMatrixUInt8:
-      m_Data = new CIccSparseMatrixUInt8();
+      m_Data = new (std::nothrow)CIccSparseMatrixUInt8();
       break;
     case icSparseMatrixUInt16:
-      m_Data = new CIccSparseMatrixUInt16();
+      m_Data = new (std::nothrow)CIccSparseMatrixUInt16();
       break;
     case icSparseMatrixFloat16:
-      m_Data = new CIccSparseMatrixFloat16();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloat16();
       break;
     case icSparseMatrixFloat32:
-      m_Data = new CIccSparseMatrixFloat32();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloat32();
       break;
     case icSparseMatrixFloatNum:
-      m_Data = new CIccSparseMatrixFloatNum();
+      m_Data = new (std::nothrow)CIccSparseMatrixFloatNum();
       break;
     default:
-      m_nRows = 0;
-      m_nCols = 0;
-      if (bSetData) {
-        Dim[0] = 0;
-        Dim[1] = 0;
-      }
       m_Data = NULL;
-      m_RowStart = NULL;
-      m_ColumnIndices = NULL;
-      m_nMaxEntries = 0;
-      return false;
+      break;
   }
+  
+  if (!m_Data) {
+    m_nRows = 0;
+    m_nCols = 0;
+    if (bSetData) {
+      Dim[0] = 0;
+      Dim[1] = 0;
+    }
+    m_RowStart = NULL;
+    m_ColumnIndices = NULL;
+    m_nMaxEntries = 0;
+    return false;
+  }
+  
   m_nRows = nRows;
   m_nCols = nCols;
   if (bSetData) {
@@ -211,6 +219,7 @@ bool CIccSparseMatrix::Init(icUInt16Number nRows, icUInt16Number nCols, bool bSe
       Dim[0] = 0;
       Dim[1] = 0;
     }
+    delete m_Data;
     m_Data = NULL;
     m_RowStart = NULL;
     m_ColumnIndices = NULL;

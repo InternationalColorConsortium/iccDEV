@@ -64,6 +64,21 @@
 #include <thread>
 
 
+static const int kIccMaxCmmThreads = 256;
+
+static int icResolveCmmThreadCount(int nThreads)
+{
+  if (nThreads < 0 || nThreads > kIccMaxCmmThreads)
+    return 0;
+
+  int nActual = nThreads > 0 ? nThreads : (int)std::thread::hardware_concurrency();
+  if (nActual <= 0)
+    return 1;
+
+  return std::min(nActual, kIccMaxCmmThreads);
+}
+
+
 //===========================================================================
 // CIccApplyThreadedCmm
 //===========================================================================
@@ -108,14 +123,22 @@ CIccApplyThreadedCmm::~CIccApplyThreadedCmm()
  */
 bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
 {
-  m_nThreads = nThreads;
-  m_workers.resize(nThreads, NULL);
+  m_nThreads = icResolveCmmThreadCount(nThreads);
+  if (m_nThreads <= 0) {
+    return false;
+  }
+  
+  m_workers.clear();
+  m_workers.reserve((size_t)m_nThreads);
 
-  for (int i = 0; i < nThreads; i++) {
+  for (int i = 0; i < m_nThreads; i++) {
     icStatusCMM status;
-    m_workers[i] = pCmm->GetNewApplyCmm(status);
-    if (!m_workers[i] || status != icCmmStatOk)
+    CIccApplyCmm* pWorker = pCmm->GetNewApplyCmm(status);
+    if (!pWorker || status != icCmmStatOk) {
+      delete pWorker;
       return false;
+    }
+    m_workers.push_back(pWorker);
   }
   return true;
 }
@@ -237,6 +260,12 @@ CIccThreadedCmm::~CIccThreadedCmm()
 }
 
 
+int CIccThreadedCmm::GetMaxThreads()
+{
+  return kIccMaxCmmThreads;
+}
+
+
 /**
  **************************************************************************
  * Name: CIccThreadedCmm::Attach
@@ -263,9 +292,12 @@ CIccThreadedCmm* CIccThreadedCmm::Attach(CIccCmm *pCmm, int nThreads, bool bDele
     return NULL;
   }
 
-  int nActual = nThreads > 0 ? nThreads : (int)std::thread::hardware_concurrency();
-  if (nActual < 1)
-    nActual = 1;
+  int nActual = icResolveCmmThreadCount(nThreads);
+  if (nActual <= 0) {
+    if (bDeleteCmm)
+      delete pCmm;
+    return NULL;
+  }
 
   CIccThreadedCmm *rv = new CIccThreadedCmm();
   rv->m_pCmm       = pCmm;

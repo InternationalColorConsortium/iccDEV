@@ -161,6 +161,46 @@ run_xml_reject_test() {
   PASS=$((PASS + 1))
 }
 
+run_fromjson_success_test() {
+  local name="$1"
+  local json_file="$2"
+  local output_file="$OUTDIR/${name}.icc"
+  local logfile="$OUTDIR/${name}.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$output_file" "$logfile"
+
+  timeout 30 "$FROMJSON" "$json_file" "$output_file" > "$logfile" 2>&1 || exit_code=$?
+
+  if ! check_sanitizers "$name" "$logfile"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -eq 124 ]; then
+    echo "  [FAIL] $name -- timed out"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ge 129 ] && [ "$exit_code" -le 192 ]; then
+    echo "  [FAIL] $name -- crashed with signal $((exit_code - 128))"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+    echo "  [FAIL] $name -- iccFromJson failed with exit=$exit_code"
+    sed -n '1,5p' "$logfile"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (iccFromJson completed without sanitizer findings)"
+  PASS=$((PASS + 1))
+}
+
 run_tojson_success_test() {
   local name="$1"
   local icc_file="$2"
@@ -457,6 +497,39 @@ write("struct-bad-member", {
     "structureSignature": "tst1",
     "memberTags": [{"badMember": {"sig": "abcd"}}]
 })
+
+write("utf16-short-text", {
+    "type": "utf16Type",
+    "text": "AA"
+})
+
+def write_tag_entry(name, entry):
+    doc = copy.deepcopy(base)
+    doc["IccProfile"]["Tags"].append(entry)
+    with open(os.path.join(outdir, name + ".json"), "w", encoding="utf-8") as f:
+        json.dump(doc, f, indent=2)
+
+write_tag_entry("empty-tag-name", {
+    "": {
+        "sig": "ZZE1",
+        "data": {
+            "type": "utf16Type",
+            "text": ""
+        }
+    }
+})
+
+write("struct-empty-member-name", {
+    "type": "tagStructType",
+    "structureType": "brdfTransformStructure",
+    "memberTags": [{
+        "": {
+            "sig": "abcd",
+            "type": "utf16Type",
+            "text": ""
+        }
+    }]
+})
 ' "$BASE_JSON" "$OUTDIR"
 
 XML_MATRIX_HUGE="$OUTDIR/xml-matrix-huge-channels.xml"
@@ -477,6 +550,22 @@ if count != 1:
     raise SystemExit("No MatrixElement InputChannels/OutputChannels pair found")
 pathlib.Path(dst_path).write_text(text, encoding="utf-8")
 ' "$XML_PROFILE" "$XML_MATRIX_HUGE"
+
+XML_EMPTY_PRIVATE_TYPE="$OUTDIR/xml-empty-private-type.xml"
+python3 -c '
+import pathlib
+import re
+import sys
+
+src_path, dst_path = sys.argv[1:3]
+text = pathlib.Path(src_path).read_text(encoding="utf-8")
+pattern = re.compile(r"<profileDescriptionTag>\s*<multiLocalizedUnicodeType>.*?</multiLocalizedUnicodeType>\s*</profileDescriptionTag>", re.S)
+replacement = "<profileDescriptionTag> <PrivateType type=\"\"><UnknownData>00</UnknownData></PrivateType> </profileDescriptionTag>"
+text, count = pattern.subn(replacement, text, count=1)
+if count != 1:
+    raise SystemExit("No profileDescriptionTag found for private type mutation")
+pathlib.Path(dst_path).write_text(text, encoding="utf-8")
+' "$XML_PROFILE" "$XML_EMPTY_PRIVATE_TYPE"
 
 TEXT_INVALID_ASCII="$OUTDIR/text-invalid-ascii.icc"
 python3 -c '
@@ -507,6 +596,20 @@ raise SystemExit("no tag large enough for textType mutation")
 ' "$PROFILE" "$TEXT_INVALID_ASCII"
 
 NAMED_PROFILE="$TESTING_DIR/Named/NamedColor.icc"
+if [ ! -f "$NAMED_PROFILE" ] && [ -f "$TESTING_DIR/Named/NamedColor.xml" ]; then
+  NAMED_PROFILE="$OUTDIR/NamedColor.icc"
+  named_exit=0
+  timeout 30 "$FROMXML" "$TESTING_DIR/Named/NamedColor.xml" "$NAMED_PROFILE" > "$OUTDIR/namedcolor-fromxml.log" 2>&1 || named_exit=$?
+  if [ "$named_exit" -ne 0 ] || [ ! -s "$NAMED_PROFILE" ]; then
+    echo "ERROR: Unable to create NamedColor.icc from NamedColor.xml"
+    sed -n '1,10p' "$OUTDIR/namedcolor-fromxml.log"
+    exit 1
+  fi
+fi
+if [ ! -f "$NAMED_PROFILE" ]; then
+  echo "ERROR: NamedColor.icc fixture not found and NamedColor.xml fallback is unavailable"
+  exit 1
+fi
 NAMED_INVALID_ASCII="$OUTDIR/namedcolor-invalid-ascii.icc"
 python3 -c '
 import pathlib
@@ -557,7 +660,11 @@ run_reject_test "spectral-white-short" "$OUTDIR/spectral-white-short.json" "whit
 run_reject_test "spectral-matrix-huge-channels" "$OUTDIR/spectral-matrix-huge-channels.json" "Invalid inputChannels or outputChannels in spectral matrix element"
 run_reject_test "spectral-offset-short" "$OUTDIR/spectral-offset-short.json" "offsetData count does not match spectral element size"
 run_reject_test "struct-bad-member" "$OUTDIR/struct-bad-member.json" "MemberTag 'badMember' missing 'type' field"
+run_fromjson_success_test "utf16-short-text" "$OUTDIR/utf16-short-text.json"
+run_reject_test "empty-tag-name" "$OUTDIR/empty-tag-name.json" "Tag entry has empty name"
+run_reject_test "struct-empty-member-name" "$OUTDIR/struct-empty-member-name.json" "MemberTag entry has empty name"
 run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid InputChannels or OutputChannels In MatrixElement"
+run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
 
@@ -658,6 +765,11 @@ else
 fi
 PROFLIB="$(find_library_file "$BUILD_ROOT/IccProfLib" "IccProfLib2" 2>/dev/null || true)"
 XMLLIB="$(find_library_file "$BUILD_ROOT/IccXML" "IccXML2" 2>/dev/null || true)"
+LINK_EXTRA=()
+if [ -n "$PROFLIB" ] && [[ "$PROFLIB" == *.a ]] &&
+    grep -q '^ICC_USE_ZLIB:BOOL=ON$' "$BUILD_ROOT/CMakeCache.txt" 2>/dev/null; then
+  LINK_EXTRA+=(-lz)
+fi
 
 if [ -z "$PROFLIB" ] || [ -z "$XMLLIB" ]; then
   {
@@ -682,6 +794,7 @@ else
     -Wl,-rpath,"$BUILD_ROOT/IccProfLib" \
     -Wl,-rpath,"$BUILD_ROOT/IccXML" \
     "$PROFLIB" "$XMLLIB" \
+    "${LINK_EXTRA[@]}" \
     -o "$HELPER_BIN" > "$HELPER_LOG" 2>&1 || helper_compile=$?
 fi
 

@@ -91,6 +91,10 @@ class ICCPROFLIB_API CIccMatrixMath
 public:
   CIccMatrixMath(icUInt16Number nRows, icUInt16Number nCols, bool bInitIdentity=false);
   CIccMatrixMath(const CIccMatrixMath &mat);
+  // Rule of Two: the copy constructor deep-copies the owned m_vals buffer and the
+  // destructor deletes it, so a matching deep-copy assignment operator is required
+  // -- the implicit one would shallow-copy m_vals and double-free on destruction.
+  CIccMatrixMath &operator=(const CIccMatrixMath &mat);
   virtual ~CIccMatrixMath();
 
   virtual void VectorMult(icFloatNumber *pDst, const icFloatNumber *pSrc) const;

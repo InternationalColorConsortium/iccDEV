@@ -405,7 +405,9 @@ typedef enum {
 #endif
     icSigDeviceMfgDescTag                  = 0x646D6E64,  /* 'dmnd' */
     icSigDeviceModelDescTag                = 0x646D6464,  /* 'dmdd' */
+    icSigDevicePccTag                      = 0x64706363,  /* 'dpcc' iccMAX extended device colour space amendment */
     icSigDeviceSettingsTag                 = 0x64657673,  /* 'devs' Removed in V4 */
+    icSigDeviceSpectralRangeTag            = 0x6473726E,  /* 'dsrn' iccMAX extended device colour space amendment */
     icSigDToB0Tag                          = 0x44324230,  /* 'D2B0' */
     icSigDToB1Tag                          = 0x44324231,  /* 'D2B1' */
     icSigDToB2Tag                          = 0x44324232,  /* 'D2B2' */
@@ -563,6 +565,7 @@ typedef enum {
     icSigSegmentedCurveType             = 0x63757266,  /* 'curf' */
     icSigSignatureType                  = 0x73696720,  /* 'sig ' */
     icSigSparseMatrixArrayType          = 0x736D6174,  /* 'smat' */
+    icSigSpectralRangeType              = 0x73726E67,  /* 'srng' iccMAX extended device colour space amendment */
     icSigSpectralViewingConditionsType  = 0x7376636e,  /* 'svcn' */
     icSigSpectralDataInfoType           = 0x7364696e,  /* 'sdin' */
     icSigTagArrayType                   = 0x74617279,  /* 'tary' */
@@ -581,9 +584,6 @@ typedef enum {
     icSigXYZType                        = 0x58595A20,  /* 'XYZ ' */
     icSigXYZArrayType                   = 0x58595A20,  /* 'XYZ ' */
     icSigZipUtf8TextType                = 0x7a757438,  /* 'zut8' */
-#if defined(XRITE_ADDITIONS)
-    icSigZipXmlType_XRITE               = 0x5a584d4c,  /* 'ZXML' - X-Rite's uppercase version of 'zxml' */
-#endif
     icSigZipXmlType                     = 0x7a786d6c,  /* 'zxml' */
 
 /*Private tag types*/
@@ -605,6 +605,7 @@ typedef enum {
     icSigColorEncodingParamsSruct       = 0x63657074,  /* 'cept' */
     icSigMeasurementInfoStruct          = 0x6d656173,  /* 'meas' */
     icSigNamedColorStruct               = 0x6e6d636c,  /* 'nmcl' */
+    icSigProfileConnectionConditionsStruct = 0x70636320,  /* 'pcc ' iccMAX extended device colour space amendment */
     icSigProfileInfoStruct              = 0x70696e66,  /* 'pinf' */
     icSigTintZeroStruct                 = 0x746e7430,  /* 'tnt0' */
     icSigUndefinedStruct                = 0x00000000,
@@ -854,6 +855,26 @@ typedef enum {
 } icTintZeroMemberSignature;
 
 
+/**
+* ProfileConnectionConditionsStructure (icSigProfileConnectionConditionsStruct)
+* Member Tag signatures (iccMAX extended device colour space amendment, 12.2.y).
+* The members parallel the profile-level PCC tags they logically replace when the
+* containing structure (a devicePccTag) is used for PCS/PCC processing.
+*/
+typedef enum {
+  icSigPccPcsIlluminantXYZMbr        = 0x6958595a,  /* 'iXYZ' PCS illuminant XYZ */
+  icSigPccMediaWhitePointMbr         = 0x6d777074,  /* 'mwpt' Media white point */
+  icSigPccSpectralWhitePointMbr      = 0x73777074,  /* 'swpt' Spectral white point */
+  icSigPccSpectralViewingConditionsMbr = 0x7376636e, /* 'svcn' Spectral viewing conditions */
+  icSigPccCustomToStandardPccMbr     = 0x63327370,  /* 'c2sp' Custom to standard PCC transform */
+  icSigPccStandardToCustomPccMbr     = 0x73326370,  /* 's2cp' Standard to custom PCC transform */
+
+/* Convenience Enum Definitions - Not defined in proposal*/
+  icSigPccUnknownMbr            = 0x3f3f3f3f,  /* '????' */
+  icMaxPccMbr                   = 0xFFFFFFFF,
+} icProfileConnectionConditionsMemberSignature;
+
+
 /** 
  * Color Space Signatures.
  * Note that only icSigXYZData and icSigLabData are valid
@@ -1016,6 +1037,7 @@ typedef enum {
     icSigMicrosoftCMM                   = 0x4D534654,  /* 'MSFT' */
     icSigAgfa                           = 0x41434D53,  /* 'ACMS' */
     icSigApple                          = 0x6170706C,  /* 'appl' */
+    icSigApple_Mistake                  = 0x4150504C,  /* 'APPL' a common mistake, but Apple, and other tools recognize it */
     icSigColorGear                      = 0x43434D53,  /* 'CCMS' */
     icSigColorGearLite                  = 0x5543434D,  /* 'UCCM' */
     icSigColorGearC                     = 0x55434D53,  /* 'UCMS' */
@@ -1030,11 +1052,11 @@ typedef enum {
     icSigMonaco                         = 0x6D6E636F,  /* 'mnco' */
     icSigLittleCMS                      = 0x6C636D73,  /* 'lcms' */
     icSigKodak                          = 0x4b434d53,  /* 'KCMS' */
-    icSigKonicaMinolta                  = 0x4d434d44,  /* 'MCML' */
+    icSigKonicaMinolta                  = 0x4d434d44,  /* 'MCML' actually this is 'MCMD'- which is right? Sent email to Dr. Phil Green. */
     icSigWindowsCMS                     = 0x57435320,  /* 'WCS ' */
     icSigMutoh                          = 0x5349474E,  /* 'SIGN' */
     icSigOnyxGraphics                   = 0x4f4e5958,  /* 'ONYX' */
-    icSigRefIccMAX                      = 0x52494343,  /* 'RIMX' */
+    icSigRefIccMAX                      = 0x52494D58,  /* 'RIMX' */
     icSigDemoIccMAX                     = 0x44494d58,  /* 'DIMX' */
     icSigIccDEV                         = 0x49434344,  /* 'ICCD' */
     icSigRolfGierling                   = 0x52474d53,  /* 'RGMS' */
@@ -1044,6 +1066,8 @@ typedef enum {
     icSigVivo                           = 0x7669766F,  /* 'VIVO' */
     icSigWareToGo                       = 0x57544720,  /* 'WTG ' */
     icSigZoran                          = 0x7a633030,  /* 'zc00' */
+    icSigReprointelligence              = 0x72657072,  /* 'repr' */
+    icSigICC                            = 0x69636364,  /* 'iccd' */
     icSigUnknownCmm                     = 0x00000000,
     
 /* Convenience Enum Definition - Not defined in ICC specification */

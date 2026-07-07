@@ -61,11 +61,17 @@ Copyright:  (c) see Software License
 #define _ICCPROFILEJSON_H
 
 #include "IccProfile.h"
-#include <nlohmann/json.hpp>
+#include "../../IccProfLib/IccJsonTypes.h"
 #include <map>
+#include <unordered_map>
 #include <string>
 
-using IccJson = nlohmann::ordered_json;
+using IccJson = iccJson::json;
+
+// currently breaking on GCC due to difference bug in basic_string.h line 495
+// unordered_map doesn't use a signed comparison
+//typedef std::map<std::string, icTagSignature>  KeyToSignatureMap;
+typedef std::unordered_map<std::string, icTagSignature>  KeyToSignatureMap;
 
 class CIccProfileJson : public CIccProfile
 {
@@ -87,7 +93,7 @@ public:
 protected:
   bool ParseBasic(const IccJson &j, std::string &parseStr);
   bool ParseTag(const std::string &key, const IccJson &tagValue,
-                std::map<std::string, icTagSignature> &keyToSig,
+                KeyToSignatureMap &keyToSig,
                 std::string &parseStr);
 };
 

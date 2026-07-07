@@ -79,6 +79,7 @@
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
 #include "IccQualityMetrics.h"
+#include "IccSignatureRegistry.h"
 
 namespace {
 
@@ -137,12 +138,6 @@ struct PawgItem {
   std::string detail;
 };
 
-struct RegistryRange {
-  uint32_t first;
-  uint32_t last;
-  const char *owner;
-};
-
 struct RuleTable {
   const icTagSignature *required;
   size_t requiredCount;
@@ -184,8 +179,18 @@ bool LoadRawProfile(const char *szFilename, RawProfile &raw)
 
   in.seekg(0, std::ios::end);
   std::streamoff end = in.tellg();
-  if (end < 0) {
-    raw.readError = "unable to determine file size";
+  // A directory (or other non-regular path) can be opened by std::ifstream
+  // successfully, yet tellg() then reports a nonsensical length: libstdc++
+  // returns LLONG_MAX (0x7fffffffffffffff) for a directory such as "/tmp".
+  // That value flowed straight into raw.data.resize() below, requesting a ~9 EB
+  // allocation that aborts under AddressSanitizer ("requested allocation size
+  // 0x7fffffffffffffff", #1519).  An ICC profile carries its size in a uint32
+  // header field, so any length that cannot fit a conformant profile is not one
+  // we could ever load; reject it here exactly like an unreadable file so the
+  // caller degrades to the same graceful "parse failed" report it already emits
+  // for a missing path, instead of crashing.
+  if (end < 0 || (uint64_t)end > 0xFFFFFFFFull) {
+    raw.readError = "input is not a readable regular file";
     return false;
   }
   in.seekg(0, std::ios::beg);
@@ -260,186 +265,29 @@ size_t CountOf(const T (&)[N])
   return N;
 }
 
-static const RegistryRange kRegisteredPrivateTagRanges[] = {
-  {0x00000000, 0x0000005a, "Sun Microsystems"},
-  {0x33324254, 0x33324254, "the imaging factory"},
-  {0x41413030, 0x41413939, "Apple Computer"},
-  {0x41475054, 0x41475054, "AGFA"},
-  {0x414d3030, 0x414d3939, "Amiable Technologies Inc."},
-  {0x41533030, 0x41533939, "Adobe Systems, Inc."},
-  {0x42445320, 0x42445320, "BARCO"},
-  {0x424b414c, 0x424b414c, "BARCO"},
-  {0x42503250, 0x42503250, "BARCO"},
-  {0x43494544, 0x43494544, "GretagMacbeth"},
-  {0x43505061, 0x4350507a, "Canon"},
-  {0x43784620, 0x43784620, "X-Rite"},
-  {0x44433030, 0x44433939, "Datacolor"},
-  {0x44435064, 0x44435064, "Dry Creek Photo"},
-  {0x44435068, 0x44435068, "Dry Creek Photo"},
-  {0x44435069, 0x44435069, "Dry Creek Photo"},
-  {0x44455644, 0x44455644, "Monaco Systems Inc."},
-  {0x44455653, 0x44455653, "Monaco Systems Inc."},
-  {0x44555000, 0x445550ff, "Dupont"},
-  {0x44657644, 0x44657644, "GretagMacbeth"},
-  {0x45474244, 0x45474244, "Esko Graphics"},
-  {0x45503030, 0x45503039, "SEIKO EPSON"},
-  {0x45554c41, 0x45554c41, "Color Solutions Software"},
-  {0x46454930, 0x46454939, "FFEI Limited"},
-  {0x46454941, 0x4645495a, "FFEI Limited"},
-  {0x46454961, 0x4645497a, "FFEI Limited"},
-  {0x46462020, 0x46462020, "Fujifilm Corporation"},
-  {0x46583030, 0x46583939, "FUJIFILM Business Innovation Corp."},
-  {0x48443030, 0x48443939, "Heidelberger Druckmaschinen AG"},
-  {0x48503030, 0x48503939, "Hewlett Packard"},
-  {0x4b303030, 0x4b303939, "Kodak"},
-  {0x4b313030, 0x4b313939, "Kodak"},
-  {0x4b434658, 0x4b434658, "Kodak"},
-  {0x4b434758, 0x4b434758, "Kodak"},
-  {0x4b435258, 0x4b435258, "Kodak"},
-  {0x4b435358, 0x4b435358, "Kodak"},
-  {0x4b6c7670, 0x4b6c7670, "Kodak"},
-  {0x4b6d6f64, 0x4b6d6f64, "Studion Soft Industries, Ltd."},
-  {0x4c445354, 0x4c445354, "Left Dakota"},
-  {0x4c4e4350, 0x4c4e4350, "Left Dakota"},
-  {0x4c534554, 0x4c534554, "Left Dakota"},
-  {0x4c535243, 0x4c535243, "Left Dakota"},
-  {0x4c555449, 0x4c555449, "SEIKO EPSON"},
-  {0x4d4f4754, 0x4d4f4754, "Color Solutions Software"},
-  {0x4d4f5354, 0x4d4f5354, "Color Solutions Software"},
-  {0x4d533030, 0x4d533939, "Microsoft"},
-  {0x4f434561, 0x4f43457a, "Oce Technologies B.V."},
-  {0x4f4e5830, 0x4f4e5839, "Onyx Graphics Corp."},
-  {0x4f4e5841, 0x4f4e585a, "Onyx Graphics Corp."},
-  {0x4f4e5861, 0x4f4e587a, "Onyx Graphics Corp."},
-  {0x50314d58, 0x50314d58, "Phase One A/S"},
-  {0x50315054, 0x50315054, "Phase One A/S"},
-  {0x50445354, 0x50445354, "basICColor"},
-  {0x50514130, 0x50514139, "PathQA Ltd"},
-  {0x50514141, 0x5051415a, "PathQA Ltd"},
-  {0x50514161, 0x5051417a, "PathQA Ltd"},
-  {0x50535243, 0x50535243, "basICColor"},
-  {0x504f4c31, 0x504f4c39, "Polaroid"},
-  {0x504f4c41, 0x504f4c5a, "Polaroid"},
-  {0x506d7472, 0x506d7472, "GretagMacbeth"},
-  {0x53414d64, 0x53414d64, "Studion Soft Industries, Ltd."},
-  {0x53414d69, 0x53414d69, "Studion Soft Industries, Ltd."},
-  {0x53414d6f, 0x53414d6f, "Studion Soft Industries, Ltd."},
-  {0x53433031, 0x53433939, "CreoScitex"},
-  {0x53434954, 0x53434954, "CreoScitex"},
-  {0x53483030, 0x53483939, "Sharp Labs"},
-  {0x53503030, 0x53593939, "Dainippon Screen"},
-  {0x54435074, 0x54435074, "Datacolor"},
-  {0x54463030, 0x54463939, "the imaging factory"},
-  {0x544b0000, 0x544b00ff, "Tektronix"},
-  {0x546b0000, 0x546b00ff, "Tektronix"},
-  {0x57544720, 0x57544720, "Ware To Go"},
-  {0x57544730, 0x57544739, "Ware To Go"},
-  {0x57544741, 0x5754475a, "Ware To Go"},
-  {0x57544761, 0x5754477a, "Ware To Go"},
-  {0x5a433030, 0x5a433939, "Zoran Corporation"},
-  {0x61616267, 0x61616267, "Apple Computer"},
-  {0x61616767, 0x61616767, "Apple Computer"},
-  {0x61617267, 0x61617267, "Apple Computer"},
-  {0x61646874, 0x61646874, "SEIKO EPSON"},
-  {0x61727473, 0x61727473, "Graham Gill"},
-  {0x626c6765, 0x626c6765, "Heidelberger Druckmaschinen AG"},
-  {0x63627238, 0x63627238, "YxyMaster GMBH"},
-  {0x63637064, 0x63637064, "Creo"},
-  {0x63637073, 0x63637073, "Creo"},
-  {0x63637078, 0x63637078, "Creo"},
-  {0x636c6272, 0x636c6272, "Calibrite LLC"},
-  {0x636c7264, 0x636c7264, "Heidelberger Druckmaschinen AG"},
-  {0x63757374, 0x63757374, "Apple Computer"},
-  {0x63766420, 0x63766420, "Kodak"},
-  {0x64696d64, 0x64696d64, "Kodak"},
-  {0x646f7467, 0x646f7467, "Entrust"},
-  {0x6472766e, 0x6472766e, "SEIKO EPSON"},
-  {0x6473636d, 0x6473636d, "Apple Computer"},
-  {0x64757000, 0x647570ff, "Dupont"},
-  {0x65626270, 0x65626270, "SEIKO EPSON"},
-  {0x65666961, 0x6566697a, "Electronics for Imaging"},
-  {0x656d6573, 0x656d6573, "SEIKO EPSON"},
-  {0x656d756c, 0x656d756c, "SEIKO EPSON"},
-  {0x6670726e, 0x6670726e, "Kodak"},
-  {0x667a6474, 0x667a6474, "SEIKO EPSON"},
-  {0x67626430, 0x67626433, "X-Rite"},
-  {0x676d7073, 0x676d7073, "GretagMacbeth"},
-  {0x68616c64, 0x68616c64, "Heidelberger Druckmaschinen AG"},
-  {0x68616c66, 0x68616c66, "Heidelberger Druckmaschinen AG"},
-  {0x6863746c, 0x6863746c, "Kothari Infotech Private Limited"},
-  {0x68643030, 0x68643939, "Heidelberger Druckmaschinen AG"},
-  {0x69545243, 0x69545243, "Konica Minolta"},
-  {0x69636864, 0x69636864, "Sun Microsystems"},
-  {0x69636865, 0x69636865, "Sun Microsystems"},
-  {0x69637370, 0x69637370, "Kodak"},
-  {0x696c6c64, 0x696c6c64, "Kodak"},
-  {0x696d6e30, 0x696d6e39, "IMATION"},
-  {0x696d6e41, 0x696d6e5a, "IMATION"},
-  {0x696d6e61, 0x696d6e7a, "IMATION"},
-  {0x696e6b73, 0x696e6b73, "SEIKO EPSON"},
-  {0x69736d70, 0x69736d70, "SEIKO EPSON"},
-  {0x6b633031, 0x6b633130, "Konica Minolta"},
-  {0x6b6d3031, 0x6b6d3130, "Konica Minolta"},
-  {0x6c696173, 0x6c696173, "Sun Microsystems"},
-  {0x6c746167, 0x6c746167, "Sun Microsystems"},
-  {0x6c766d64, 0x6c766d64, "Kodak"},
-  {0x6d646561, 0x6d646561, "SEIKO EPSON"},
-  {0x6d65636e, 0x6d65636e, "Heidelberger Druckmaschinen AG"},
-  {0x6d656464, 0x6d656464, "Heidelberger Druckmaschinen AG"},
-  {0x6d656474, 0x6d656474, "Heidelberger Druckmaschinen AG"},
-  {0x6d656f70, 0x6d656f70, "Heidelberger Druckmaschinen AG"},
-  {0x6d6d6f64, 0x6d6d6f64, "Apple Computer"},
-  {0x6e616d65, 0x6e616d65, "Apple Computer"},
-  {0x6e637069, 0x6e637069, "Apple Computer"},
-  {0x6e64696e, 0x6e64696e, "Apple Computer"},
-  {0x6e746167, 0x6e746167, "Sun Microsystems"},
-  {0x6f707266, 0x6f707266, "FFEI Limited"},
-  {0x70613262, 0x70613262, "SEIKO EPSON"},
-  {0x70623261, 0x70623261, "SEIKO EPSON"},
-  {0x70646972, 0x70646972, "SEIKO EPSON"},
-  {0x706b6430, 0x706b6439, "Polkadots Software Inc."},
-  {0x706b6461, 0x706b647a, "Polkadots Software Inc."},
-  {0x706c6179, 0x706c6179, "Sun Microsystems"},
-  {0x706c6d64, 0x706c6d64, "Heidelberger Druckmaschinen AG"},
-  {0x706c6d74, 0x706c6d74, "Heidelberger Druckmaschinen AG"},
-  {0x70727364, 0x70727364, "Heidelberger Druckmaschinen AG"},
-  {0x70727374, 0x70727374, "Heidelberger Druckmaschinen AG"},
-  {0x7073766d, 0x7073766d, "Apple Computer"},
-  {0x7265736f, 0x7265736f, "SEIKO EPSON"},
-  {0x73663634, 0x73663634, "Sun Microsystems"},
-  {0x73693038, 0x73693038, "Sun Microsystems"},
-  {0x73693136, 0x73693136, "Sun Microsystems"},
-  {0x73693332, 0x73693332, "Sun Microsystems"},
-  {0x73747970, 0x73747970, "SEIKO EPSON"},
-  {0x744b0000, 0x744b00ff, "Tektronix"},
-  {0x74616374, 0x74616374, "Heidelberger Druckmaschinen AG"},
-  {0x746b0000, 0x746b00ff, "Tektronix"},
-  {0x746d6b72, 0x746d6b72, "Typemaker Ltd."},
-  {0x746e616d, 0x746e616d, "Kodak"},
-  {0x74707274, 0x74707274, "Kodak"},
-  {0x74726320, 0x74726320, "Apple Computer"},
-  {0x75634730, 0x75634733, "Canon"},
-  {0x75636d44, 0x75636d44, "Canon"},
-  {0x75636d46, 0x75636d46, "Canon"},
-  {0x75636d49, 0x75636d49, "Canon"},
-  {0x75636d4d, 0x75636d4d, "Canon"},
-  {0x75636d50, 0x75636d50, "Canon"},
-  {0x75636d54, 0x75636d54, "Canon"},
-  {0x75636d56, 0x75636d56, "Canon"},
-  {0x76636774, 0x76636774, "Apple Computer"},
-  {0x76707461, 0x76707461, "Apple Computer"},
-  {0x76707462, 0x76707462, "Apple Computer"},
-  {0x76707467, 0x76707467, "Apple Computer"},
-  {0x76707470, 0x76707470, "Apple Computer"},
-  {0x76707477, 0x76707477, "Apple Computer"}
-};
-
-const RegistryRange *FindRegisteredPrivateTag(uint32_t sig)
+// Attribute a private (non-spec) tag signature found in a profile body to the
+// vendor that registered its signature range. Backed by the registered private
+// tag-signature ranges from registry.color.org/tag-signatures (the non-ICC
+// rows), encoded in the generated IccSignatureRegistry.h snapshot.
+const IccTagSigRange *FindRegisteredPrivateTag(uint32_t sig)
 {
-  for (size_t i = 0; i < CountOf(kRegisteredPrivateTagRanges); ++i) {
-    const RegistryRange &range = kRegisteredPrivateTagRanges[i];
+  for (size_t i = 0; i < CountOf(kIccPrivateTagSigRanges); ++i) {
+    const IccTagSigRange &range = kIccPrivateTagSigRanges[i];
     if (sig >= range.first && sig <= range.last) {
       return &range;
+    }
+  }
+  return NULL;
+}
+
+// Look up an exact manufacturer signature in the Manufacturer Signatures
+// registry snapshot. Returns the registrant's company name, or NULL if the
+// signature is not registered.
+const char *FindRegisteredManufacturer(uint32_t sig)
+{
+  for (size_t i = 0; i < CountOf(kIccManufacturerSignatures); ++i) {
+    if (kIccManufacturerSignatures[i].sig == sig) {
+      return kIccManufacturerSignatures[i].company;
     }
   }
   return NULL;
@@ -466,9 +314,57 @@ bool IsZeroOrPrintable(uint32_t sig)
   return true;
 }
 
-bool IsRegisteredVendorOrZero(uint32_t sig)
+// Per ICC.1:2022-05 section 7.2.17, the profile header 'manufacturer' and
+// 'creator' fields shall correspond to a signature in the device manufacturer
+// section of the ICC signature registry (the Manufacturer Signatures registry),
+// or be zero. The previous implementation validated these header fields against
+// the private *tag* signature ranges instead -- the wrong registry -- which
+// caused false 'unregistered' warnings for legitimately registered
+// manufacturers (e.g. 'KODA' for Kodak, which is in the Manufacturer Signatures
+// registry but not in any private tag-signature range).
+bool IsRegisteredManufacturerOrZero(uint32_t sig)
 {
-  return sig == 0 || FindRegisteredPrivateTag(sig) != NULL;
+  return sig == 0 || FindRegisteredManufacturer(sig) != NULL;
+}
+
+// Some signatures are pervasive conventions that are not (yet) in the
+// Manufacturer Signatures registry and are not the zero signature, so they still
+// fail the strict ICC.1:2022-05 section 7.2.17 check and warrant a WARN -- but
+// they are well-understood placeholders rather than malformed/unknown 4CCs, so
+// S3 reports them with softened wording and they are tracked for ICC registry
+// submission (issue #1459 Segment A) rather than presented as suspect data:
+//   'none' (0x6E6F6E65) -- explicit "no manufacturer" placeholder
+//   'ICC ' (0x49434320) -- the International Color Consortium's own reference
+//                          profiles (also used by the iccDEV regression fixtures)
+const char *KnownUnregisteredConventionNote(uint32_t sig)
+{
+  switch (sig) {
+  case 0x6E6F6E65:  // 'none'
+    return "known 'no manufacturer' placeholder";
+  case 0x49434320:  // 'ICC '
+    return "International Color Consortium reference-profile signature";
+  default:
+    return NULL;
+  }
+}
+
+// Append the per-field "(<sig> ...)" explanation for an unregistered manufacturer
+// or creator signature, softening the wording for the known conventions above.
+void AppendUnregisteredSigDetail(std::ostringstream &detail, uint32_t sig)
+{
+  if (!IsZeroOrPrintable(sig)) {
+    return;
+  }
+  const char *note = KnownUnregisteredConventionNote(sig);
+  detail << " (" << SigString(sig) << " ";
+  if (note) {
+    detail << note << ", not yet in";
+  }
+  else {
+    detail << "not in";
+  }
+  detail << " Manufacturer Signatures registry snapshot "
+         << ICCPAWG_REGISTRY_SNAPSHOT_DATE << ")";
 }
 
 std::string HeaderSignatureDetail(const RawProfile &raw,
@@ -482,11 +378,11 @@ std::string HeaderSignatureDetail(const RawProfile &raw,
          << ", platform " << (platformOk ? "registered/zero" : "unregistered")
          << ", manufacturer " << (manufacturerOk ? "registered/zero" : "unregistered")
          << ", creator " << (creatorOk ? "registered/zero" : "unregistered");
-  if (!manufacturerOk && IsZeroOrPrintable(raw.manufacturer)) {
-    detail << " (" << SigString(raw.manufacturer) << " not found in local registry)";
+  if (!manufacturerOk) {
+    AppendUnregisteredSigDetail(detail, raw.manufacturer);
   }
-  if (!creatorOk && IsZeroOrPrintable(raw.creator)) {
-    detail << " (" << SigString(raw.creator) << " not found in local registry)";
+  if (!creatorOk) {
+    AppendUnregisteredSigDetail(detail, raw.creator);
   }
   return detail.str();
 }
@@ -571,7 +467,7 @@ PrivateTagStatus AssessPrivateTags(const RawProfile &raw)
     }
 
     ++status.total;
-    const RegistryRange *entry = FindRegisteredPrivateTag(tag.sig);
+    const IccTagSigRange *entry = FindRegisteredPrivateTag(tag.sig);
     if (entry) {
       if (status.registered) {
         registered << ", ";
@@ -638,8 +534,139 @@ std::string FirstReportLine(const std::string &report)
   return "validation reported an issue without detail";
 }
 
+typedef bool (*SigValidator)(const RawProfile &raw, size_t offset, size_t end);
+
+bool ValidatePe(const RawProfile &raw, size_t offset, size_t end)
+{
+  if (offset > end || end - offset < 64) {
+    return false;
+  }
+
+  uint32_t peOff = (uint32_t)raw.data[offset + 60] |
+                   ((uint32_t)raw.data[offset + 61] << 8) |
+                   ((uint32_t)raw.data[offset + 62] << 16) |
+                   ((uint32_t)raw.data[offset + 63] << 24);
+  return peOff < 1024 && peOff <= end - offset - 4 &&
+         raw.data[offset + peOff] == 'P' && raw.data[offset + peOff + 1] == 'E';
+}
+
+bool ValidateGzipHeader(const RawProfile &raw, size_t offset, size_t end)
+{
+  const size_t kGzipHeaderLen = 10;
+  if (offset > end || end - offset < kGzipHeaderLen) {
+    return false;
+  }
+
+  const unsigned char cm = raw.data[offset + 2];
+  const unsigned char flg = raw.data[offset + 3];
+  const unsigned char xfl = raw.data[offset + 8];
+  const unsigned char os = raw.data[offset + 9];
+  if (cm != 0x08 || (flg & 0xe0) != 0 || !(xfl == 0 || xfl == 2 || xfl == 4) ||
+      !(os <= 13 || os == 255)) {
+    return false;
+  }
+
+  size_t pos = offset + kGzipHeaderLen;
+  if (flg & 0x04) {
+    if (end - pos < 2) {
+      return false;
+    }
+    const size_t extraLen = (size_t)raw.data[pos] | ((size_t)raw.data[pos + 1] << 8);
+    pos += 2;
+    if (extraLen > end - pos) {
+      return false;
+    }
+    pos += extraLen;
+  }
+  if (flg & 0x08) {
+    while (pos < end && raw.data[pos] != 0) {
+      ++pos;
+    }
+    if (pos >= end) {
+      return false;
+    }
+    ++pos;
+  }
+  if (flg & 0x10) {
+    while (pos < end && raw.data[pos] != 0) {
+      ++pos;
+    }
+    if (pos >= end) {
+      return false;
+    }
+    ++pos;
+  }
+  if (flg & 0x02) {
+    if (end - pos < 2) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool ValidateElf(const RawProfile &raw, size_t offset, size_t end)
+{
+  // Corroborate a "\x7fELF" hit against the ELF identification fields (e_ident)
+  // plus e_type/e_version, so a coincidental 4-byte match in high-entropy CLUT
+  // data does not fire S8. Need e_ident(16) + e_type(2) + e_machine(2) +
+  // e_version(4) = 24 bytes.
+  if (offset > end || end - offset < 24) {
+    return false;
+  }
+
+  const unsigned char eiClass = raw.data[offset + 4];    // 1=32-bit, 2=64-bit
+  const unsigned char eiData = raw.data[offset + 5];     // 1=little, 2=big endian
+  const unsigned char eiVersion = raw.data[offset + 6];  // EV_CURRENT == 1
+  if (!(eiClass == 1 || eiClass == 2) || !(eiData == 1 || eiData == 2) ||
+      eiVersion != 1) {
+    return false;
+  }
+
+  const bool be = (eiData == 2);
+  const unsigned char *p = raw.data.data() + offset;
+  const uint16_t eType = be ? (uint16_t)((p[16] << 8) | p[17])
+                            : (uint16_t)(p[16] | (p[17] << 8));
+  const uint32_t eVersion = be
+    ? ((uint32_t)p[20] << 24 | (uint32_t)p[21] << 16 |
+       (uint32_t)p[22] << 8 | (uint32_t)p[23])
+    : ((uint32_t)p[20] | (uint32_t)p[21] << 8 |
+       (uint32_t)p[22] << 16 | (uint32_t)p[23] << 24);
+
+  // e_type: NONE/REL/EXEC/DYN/CORE (0-4), or the OS/processor-specific reserved
+  // ranges (0xfe00-0xffff). e_version must be EV_CURRENT.
+  const bool typeOk = eType <= 4 || (eType >= 0xfe00);  // && eType <= 0xffff implied by data type
+  return typeOk && eVersion == 1;
+}
+
+bool ValidateShebang(const RawProfile &raw, size_t offset, size_t end)
+{
+  // The magic is "#!/" (3 bytes). A real shebang continues with a printable
+  // interpreter path terminated by a newline; a coincidental "#!/" inside binary
+  // CLUT data is followed by non-printable bytes well before any newline.
+  const size_t kMaxLine = 256;
+  size_t limit = end;
+  if (limit - offset > kMaxLine) {
+    limit = offset + kMaxLine;
+  }
+  for (size_t pos = offset + 3; pos < limit; ++pos) {
+    const unsigned char c = raw.data[pos];
+    if (c == '\n') {
+      return true;  // a fully-printable interpreter line
+    }
+    if (c == '\t' || c == '\r') {
+      continue;
+    }
+    if (c < 0x20 || c > 0x7e) {
+      return false;  // control/binary byte => not a script line
+    }
+  }
+  return false;  // no newline within a plausible interpreter-line length
+}
+
 bool HasSignature(const RawProfile &raw, const unsigned char *sig, size_t sigLen,
-                  size_t begin, size_t end, std::string &detail)
+                  SigValidator validate, size_t begin, size_t end,
+                  std::string &detail)
 {
   if (sigLen == 0 || begin >= end || end > raw.data.size()) {
     return false;
@@ -650,18 +677,8 @@ bool HasSignature(const RawProfile &raw, const unsigned char *sig, size_t sigLen
       continue;
     }
 
-    if (sigLen == 2 && sig[0] == 'M') {
-      if (i + 64 > end) {
-        continue;
-      }
-      uint32_t peOff = (uint32_t)raw.data[i + 60] |
-                       ((uint32_t)raw.data[i + 61] << 8) |
-                       ((uint32_t)raw.data[i + 62] << 16) |
-                       ((uint32_t)raw.data[i + 63] << 24);
-      if (peOff >= 1024 || i + peOff + 4 > end ||
-          raw.data[i + peOff] != 'P' || raw.data[i + peOff + 1] != 'E') {
-        continue;
-      }
+    if (validate && !validate(raw, i, end)) {
+      continue;
     }
 
     char msg[96];
@@ -691,6 +708,31 @@ bool HasAsciiSignatureCaseInsensitive(const RawProfile &raw, const char *sig,
       }
     }
     if (matched) {
+      // Corroborate: these signatures are dangerous only as text, so a genuine
+      // hit sits inside printable content (embedded script/markup/command line).
+      // A coincidental case-insensitive match inside binary CLUT data has little
+      // or no printable context -- require adjacent printable bytes before/after.
+      const size_t kMinContext = 16;
+      size_t printableBefore = 0;
+      for (size_t k = i; k > begin && printableBefore < kMinContext; --k) {
+        const unsigned char c = raw.data[k - 1];
+        if (c != '\t' && c != '\n' && c != '\r' && (c < 0x20 || c > 0x7e)) {
+          break;
+        }
+        ++printableBefore;
+      }
+      size_t printableAfter = 0;
+      for (size_t k = i + sigLen; k < end && printableAfter < kMinContext; ++k) {
+        const unsigned char c = raw.data[k];
+        if (c != '\t' && c != '\n' && c != '\r' && (c < 0x20 || c > 0x7e)) {
+          break;
+        }
+        ++printableAfter;
+      }
+      if (printableBefore + printableAfter < kMinContext) {
+        continue;
+      }
+
       char msg[96];
       std::snprintf(msg, sizeof(msg), "signature at offset 0x%zx", i);
       detail = msg;
@@ -718,25 +760,26 @@ bool ScanMalwareRange(const RawProfile &raw, size_t begin, size_t end,
     const unsigned char *bytes;
     size_t len;
     const char *name;
+    SigValidator validate;
   };
   static const Sig sigs[] = {
-    {elf, sizeof(elf), "ELF executable"},
-    {mz, sizeof(mz), "PE executable"},
-    {macho64, sizeof(macho64), "Mach-O executable"},
-    {macho32, sizeof(macho32), "Mach-O executable"},
-    {shebang, sizeof(shebang), "script shebang"},
-    {pdf, sizeof(pdf), "embedded PDF"},
-    {zip, sizeof(zip), "embedded ZIP archive"},
-    {rar, sizeof(rar), "embedded RAR archive"},
-    {sevenZip, sizeof(sevenZip), "embedded 7z archive"},
-    {gzip, sizeof(gzip), "embedded gzip stream"}
+    {elf, sizeof(elf), "ELF executable", ValidateElf},
+    {mz, sizeof(mz), "PE executable", ValidatePe},
+    {macho64, sizeof(macho64), "Mach-O executable", nullptr},
+    {macho32, sizeof(macho32), "Mach-O executable", nullptr},
+    {shebang, sizeof(shebang), "script shebang", ValidateShebang},
+    {pdf, sizeof(pdf), "embedded PDF", nullptr},
+    {zip, sizeof(zip), "embedded ZIP archive", nullptr},
+    {rar, sizeof(rar), "embedded RAR archive", nullptr},
+    {sevenZip, sizeof(sevenZip), "embedded 7z archive", nullptr},
+    {gzip, sizeof(gzip), "embedded gzip stream", ValidateGzipHeader}
   };
 
   const size_t kMaxScan = (size_t)10 * 1024 * 1024;
   size_t scanEnd = std::min(end, begin + kMaxScan);
   for (const Sig &sig : sigs) {
     std::string offset;
-    if (HasSignature(raw, sig.bytes, sig.len, begin, scanEnd, offset)) {
+    if (HasSignature(raw, sig.bytes, sig.len, sig.validate, begin, scanEnd, offset)) {
       detail = std::string(sig.name) + " " + offset;
       return true;
     }
@@ -1076,7 +1119,12 @@ bool ContainsTag(const icTagSignature *tags, size_t count, icTagSignature sig)
 
 bool HasAnyRequiredAlternative(CIccProfile *pIcc, const RuleTable &rule)
 {
-  for (size_t i = 0; i < rule.alternativeCount; ++i) {
+  // CWE-400/CWE-834: the RuleTable entries are static, trusted definitions whose
+  // alternative[] arrays hold only a handful of tags; clamp to an explicit upper
+  // bound so the walk can never run unbounded if a count is ever miswired.
+  const size_t nMaxRuleTags = 64;
+  size_t nAlt = (rule.alternativeCount > nMaxRuleTags) ? nMaxRuleTags : rule.alternativeCount;
+  for (size_t i = 0; i < nAlt; ++i) {
     if (HasTag(pIcc, rule.alternative[i])) {
       return true;
     }
@@ -1197,7 +1245,12 @@ bool HasRequiredTags(CIccProfile *pIcc, std::string &detail)
     }
   };
 
-  for (size_t i = 0; i < rule->requiredCount; ++i) {
+  // CWE-400/CWE-834: the RuleTable entries are static, trusted definitions whose
+  // required[] arrays hold only a handful of tags; clamp to an explicit upper bound
+  // so the walk can never run unbounded if a count is ever miswired.
+  const size_t nMaxRuleTags = 64;
+  size_t nReq = (rule->requiredCount > nMaxRuleTags) ? nMaxRuleTags : rule->requiredCount;
+  for (size_t i = 0; i < nReq; ++i) {
     requireTag(rule->required[i], SigString(rule->required[i]).c_str());
   }
 
@@ -1245,7 +1298,7 @@ PawgVerdict TagValueEncodingVerdict(CIccProfile *pIcc, std::string &detail)
     }
 
     std::string report;
-    const icValidateStatus status = tag->Validate(SigString(it->TagInfo.sig), report, pIcc);
+    const icValidateStatus status = tag->Validate(icGetSigPath(it->TagInfo.sig), report, pIcc);
     worst = icMaxStatus(worst, status);
     if (status != icValidateOK && issues.size() < 4) {
       issues.push_back(SigString(it->TagInfo.sig) + ": " + FirstReportLine(report));
@@ -1646,21 +1699,40 @@ PawgVerdict QualityCurveInvertibility(CIccProfile *pIcc, std::string &detail)
     return PawgVerdict::NotApplicable;
   }
 
+  // Monotonicity / dead-curve defects are flagged for every curve, but the
+  // round-trip inverse-error threshold applies to tone curves only: LUT A/B/M
+  // shaper curves are not required to be individually invertible (e.g. a B2A
+  // output curve's dark-end clamping plateau), so thresholding their inverse
+  // error spuriously WARNed correct CMYK output profiles (#1458).  The error is
+  // also in normalized 0-1 curve-input units, not CIEDE2000.
   int problemCount = 0;
-  double maxErr = 0.0;
+  int toneCount = 0;
+  int shaperCount = 0;
+  double toneMaxErr = 0.0;
   for (const auto &curve : metrics.curves) {
-    maxErr = std::max(maxErr, curve.maxError);
+    if (curve.isToneCurve) {
+      ++toneCount;
+      toneMaxErr = std::max(toneMaxErr, curve.maxError);
+    } else {
+      ++shaperCount;
+    }
     if (!curve.monotonic || curve.flat) {
       ++problemCount;
     }
   }
 
   std::ostringstream oss;
-  oss << metrics.curves.size() << " curve(s) checked, max inverse error=" << maxErr
-      << "; warn(non-monotonic, flat, or maxErr>" << kCurveWarnMaxError << ")";
+  oss << metrics.curves.size() << " curve(s) checked (" << toneCount << " tone, "
+      << shaperCount << " shaper)";
+  if (toneCount > 0) {
+    oss << ", max tone-curve inverse error=" << toneMaxErr << " (normalized curve units)";
+  } else {
+    oss << ", no tone curves to invert; shaper curves checked for monotonicity/flatness only";
+  }
+  oss << "; warn(non-monotonic, flat, or tone-curve inverse error>" << kCurveWarnMaxError << ")";
   detail = oss.str();
-  return (problemCount == 0 && maxErr <= kCurveWarnMaxError) ? PawgVerdict::Ok
-                                                             : PawgVerdict::Warn;
+  return (problemCount == 0 && toneMaxErr <= kCurveWarnMaxError) ? PawgVerdict::Ok
+                                                                 : PawgVerdict::Warn;
 }
 
 PawgVerdict QualitySmoothness(CIccProfile *pIcc, std::string &detail)
@@ -1791,8 +1863,8 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc)
                (raw.cmm == 0 || !StartsWith(info.GetCmmSigName((icCmmSignature)raw.cmm), "Unknown"));
   bool platformOk = raw.hasHeader &&
                     (raw.platform == 0 || !StartsWith(info.GetPlatformSigName((icPlatformSignature)raw.platform), "Unknown"));
-  bool manufacturerOk = raw.hasHeader && IsRegisteredVendorOrZero(raw.manufacturer);
-  bool creatorOk = raw.hasHeader && IsRegisteredVendorOrZero(raw.creator);
+  bool manufacturerOk = raw.hasHeader && IsRegisteredManufacturerOrZero(raw.manufacturer);
+  bool creatorOk = raw.hasHeader && IsRegisteredManufacturerOrZero(raw.creator);
   bool sigsOk = cmmOk && platformOk && manufacturerOk && creatorOk;
   AddItem(items, "S3",
           "Do Platform, Creator, Manufacturer and CMM fields correspond to registered signatures or are zero?",
@@ -1997,7 +2069,10 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc)
   std::string q2Detail;
   PawgVerdict q2 = QualityCurveInvertibility(pIcc, q2Detail);
   AddItem(items, "Q2",
-          "Curve round trip differences in CIEDE2000 (i.e. can be inverted)",
+          // The curve round-trip error is in normalized 0-1 curve-input units,
+          // not CIEDE2000 (it compares an input value to its Find(Apply(x))), so
+          // the item is labelled accordingly rather than "in CIEDE2000" (#1458).
+          "Curve round trip differences in normalized curve units (i.e. can be inverted)",
           q2,
           q2Detail);
 
@@ -2046,7 +2121,8 @@ const char *SectionName(char prefix)
 std::string JsonEscape(const std::string &s)
 {
   std::ostringstream oss;
-  for (unsigned char ch : s) {
+  for (size_t i = 0; i < s.size(); i++) {
+    unsigned char ch = static_cast<unsigned char>(s[i]);
     switch (ch) {
       case '\\':
         oss << "\\\\";

@@ -57,8 +57,13 @@ int main(int argc, char* argv[])
   int indent = 2;
   bool bSort = false;
   for (int i = 3; i < argc; i++) {
-    if (!strncmp(argv[i], "-indent=", 8))
+    if (!strncmp(argv[i], "-indent=", 8)) {
       indent = atoi(argv[i] + 8);
+      if (indent < 0)
+        indent = 0;
+      if (indent > 20)
+        indent = 20;
+    }
     else if (!strcmp(argv[i], "-sort"))
       bSort = true;
   }
