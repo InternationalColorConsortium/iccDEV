@@ -567,6 +567,13 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
 // it should be broken into functions for improved readability
   switch (nUseLutType) {
     case icXformLutColor:
+		  //The search CMM uses shared profiles that only have access to the IO object during transform creation. The following
+			//addresses a bug with the Begin() being called after the IO object is released resulting in the absolute intent
+			//not having access to the media white point tag.  The following pre-loads it so that it is available.
+      if (nIntent == icAbsoluteColorimetric && (pProfile->m_Header.pcs == icSigLabData || pProfile->m_Header.pcs == icSigXYZData)) {
+        //load media white point tag into profile object so we have it if we need it
+        pProfile->FindTag(icSigMediaWhitePointTag); //we don't really need the return value. just need it associated with the profile
+      }
       if (bInput) {
         CIccTag *pTag = NULL;
         // Spectral-only profiles have no AToBx tag to fall back to; their MPE pipeline
@@ -1457,9 +1464,9 @@ icStatusCMM CIccXform::Begin()
     if (pCond) {
       pCond->getMediaWhiteXYZ(mediaXYZ);
 
-      m_MediaXYZ.X = icFtoF16(mediaXYZ[0]);
-      m_MediaXYZ.Y = icFtoF16(mediaXYZ[1]);
-      m_MediaXYZ.Z = icFtoF16(mediaXYZ[2]);
+      m_MediaXYZ.X = icDtoF(mediaXYZ[0]);
+      m_MediaXYZ.Y = icDtoF(mediaXYZ[1]);
+      m_MediaXYZ.Z = icDtoF(mediaXYZ[2]);
     }
     else {
       CIccTag *pTag = m_pProfile->FindTag(icSigMediaWhitePointTag);
