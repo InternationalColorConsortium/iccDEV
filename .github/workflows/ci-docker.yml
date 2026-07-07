@@ -692,6 +692,7 @@ jobs:
 
           echo "Found ${CANDIDATES} versions to prune; deleting ${TOTAL} this run"
           DELETED=0
+          SKIPPED=0
           FAILED=0
           while IFS= read -r vid; do
             response="/tmp/prune-response-${vid}.json"
@@ -704,6 +705,11 @@ jobs:
             if [ "${status}" = "204" ]; then
               DELETED=$((DELETED + 1))
               rm -f "${response}"
+            elif [ "${status}" = "404" ] &&
+              grep -q '"message"[[:space:]]*:[[:space:]]*"Package not found."' "${response}"; then
+              echo "::notice::Skipping ${MATRIX_PACKAGE} version ${vid}: package version is not deletable with this workflow token"
+              rm -f "${response}"
+              SKIPPED=$((SKIPPED + 1))
             else
               echo "::warning::Failed to delete ${MATRIX_PACKAGE} version ${vid}: HTTP ${status}"
               if [ -s "${response}" ]; then
@@ -714,7 +720,7 @@ jobs:
             fi
           done < /tmp/prune-ids.txt
 
-          echo "Pruned ${DELETED}/${TOTAL} old versions (${FAILED} failed)"
+          echo "Pruned ${DELETED}/${TOTAL} old versions (${SKIPPED} skipped, ${FAILED} failed)"
           rm -f /tmp/prune-ids.txt /tmp/prune-all-ids.txt
           if [ "${FAILED}" -ne 0 ]; then
             echo "::error::${FAILED} package version delete request(s) failed"
