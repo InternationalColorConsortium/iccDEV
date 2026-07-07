@@ -267,6 +267,14 @@ jobs:
             return 0
           }
 
+          require_same_repository_pr() {
+            if [ "$target_repository" != "$GH_REPOSITORY" ]; then
+              echo "CI label and fast-lane controls are restricted to same-repository PRs: ${target_repository}" >&2
+              return 1
+            fi
+            return 0
+          }
+
           apply_fast_lane_defaults() {
             fast_lane=true
             ci_scope=fast-lane
@@ -325,6 +333,9 @@ jobs:
                 exit 1
               fi
               resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
+              if ! require_same_repository_pr; then
+                exit 1
+              fi
               apply_fast_lane_defaults
               case "$CTEST_RECENT_LIMIT_INPUT" in
                 0|1|2|3|4|5|6|7|8|9|10)
@@ -414,6 +425,9 @@ jobs:
             if ! validate_fast_lane_actor "$GH_ACTOR"; then
               exit 1
             fi
+            if ! require_same_repository_pr; then
+              exit 1
+            fi
             case "$LABEL_NAME" in
               ci:skip)
                 ci_scope=skip
@@ -425,6 +439,13 @@ jobs:
                 exit 0
                 ;;
               ci:full)
+                ci_scope=full
+                include_windows=true
+                include_docker=false
+                ctest_recent_limit=0
+                warning_policy=warn
+                write_scope_outputs true true true true false false
+                exit 0
                 ;;
               ci:fast-lane|ci:ctest-last-[1-9]|ci:ctest-last-10|ci:docker|ci:no-windows|ci:warnings-fail)
                 apply_fast_lane_defaults

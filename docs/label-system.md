@@ -25,6 +25,7 @@ readiness.
 | Issue triage | `needs-triage`, `needs-repro`, `requires:more-information` | Maintainers |
 | Issue kind | `bug`, `feature`, `question`, `security` | Maintainers |
 | PR status | `passed`, `failed`, `pending`, `Merge Ready`, `codeql-ready` | CI and maintainers |
+| PR CI controls | `ci:skip`, `ci:full`, `ci:fast-lane`, `ci:ctest-last-N`, `ci:docker`, `ci:no-windows`, `ci:warnings-fail` | Maintainers |
 | Scope | `Source`, `Documentation`, `Configuration`, `CI`, `Build`, `Testing`, `Tools`, `JSON`, `WASM`, `vcpkg`, and related area labels | Path labeler and maintainers |
 | Governance | `Governance`, `Labels`, `security`, `SAST`, `CodeQL`, `Sanitizers`, `Release` | Maintainers |
 
@@ -102,6 +103,34 @@ clean, and the review decision is approved.
 
 Do not use these status labels as the only merge gate. Branch protection and
 required checks remain authoritative.
+
+### PR CI Control Labels
+
+`ci-pr-action.yml` treats `ci:*` labels as maintainer-only, one-shot controls.
+They are evaluated only when a trusted maintainer applies the label to a
+same-repository pull request. They are not persistent policy for later pushes;
+remove and reapply the label when a new commit needs the same override.
+
+Fork PRs cannot use these controls. Keep fork PR validation on the default PR
+workflow path so the workflow does not fetch or build fork-only commits through
+the maintainer fast lane.
+
+Use the labels as follows:
+
+| Label | Effect |
+|-------|--------|
+| `ci:skip` | Skip build jobs for the current labeled event. Use only for administrative PRs where branch protection permits it. |
+| `ci:full` | Force the full source/build/test matrix for the current labeled event. |
+| `ci:fast-lane` | Run the Linux GCC Release LTO fast lane, macOS Release smoke lane, ASAN+UBSAN tool smoke tests, and Docker verification defaults. |
+| `ci:ctest-last-N` | In fast lane, run only the last `N` registered CTests, where `N` is 1 through 10. |
+| `ci:docker` | Include Docker verification in fast lane. This is part of the default fast-lane set. |
+| `ci:no-windows` | Exclude Windows when fast lane is selected. This is part of the default fast-lane set. |
+| `ci:warnings-fail` | Treat compiler warnings as failures in fast-lane jobs. This is part of the default fast-lane set. |
+
+Manual `workflow_dispatch` fast lane uses the same same-repository restriction.
+Provide an open `pr_number`, choose `ci_scope=fast-lane`, and adjust
+`ctest_recent_limit`, `include_windows`, `include_docker`, and `warning_policy`
+only for the run being started.
 
 ### CodeQL Ready
 

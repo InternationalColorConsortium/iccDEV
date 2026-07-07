@@ -39,7 +39,9 @@ Use this skill when adding, removing, or auditing labels and label automation.
    maintainers to override.
 6. If PR status labels change, preserve mutual exclusion among `passed`,
    `failed`, and `pending`.
-7. Update docs and prompts when policy or maintainer workflow changes.
+7. If PR CI control labels change, keep them maintainer-only, one-shot, and
+   restricted to same-repository pull requests.
+8. Update docs and prompts when policy or maintainer workflow changes.
 
 ## Validation
 
@@ -66,6 +68,8 @@ For workflow governance changes, also run:
 - Large PR safeguards still exist.
 - Label workflows do not execute untrusted PR content.
 - Status labels remain machine-managed and mutually exclusive.
+- PR CI control labels are documented, canonical in `.github/labels.yml`, and
+  unavailable to fork PR fast lanes.
 - `codeql-ready` still routes to the full CodeQL workflow.
 - Documentation, skills, and prompts point to the same canonical files.
 

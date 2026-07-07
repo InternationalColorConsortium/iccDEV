@@ -44,6 +44,54 @@
 - name: codeql-ready
   color: 0e8a16
   description: Run the full CodeQL security workflow for this PR
+- name: ci:skip
+  color: b60205
+  description: Maintainer one-shot request to skip PR build jobs
+- name: ci:full
+  color: 0e8a16
+  description: Maintainer one-shot request to run the full PR matrix
+- name: ci:fast-lane
+  color: 1d76db
+  description: Maintainer one-shot request to run the PR fast lane
+- name: ci:ctest-last-1
+  color: 1d76db
+  description: Fast lane runs only the most recent registered CTest
+- name: ci:ctest-last-2
+  color: 1d76db
+  description: Fast lane runs only the two most recent registered CTests
+- name: ci:ctest-last-3
+  color: 1d76db
+  description: Fast lane runs only the three most recent registered CTests
+- name: ci:ctest-last-4
+  color: 1d76db
+  description: Fast lane runs only the four most recent registered CTests
+- name: ci:ctest-last-5
+  color: 1d76db
+  description: Fast lane runs only the five most recent registered CTests
+- name: ci:ctest-last-6
+  color: 1d76db
+  description: Fast lane runs only the six most recent registered CTests
+- name: ci:ctest-last-7
+  color: 1d76db
+  description: Fast lane runs only the seven most recent registered CTests
+- name: ci:ctest-last-8
+  color: 1d76db
+  description: Fast lane runs only the eight most recent registered CTests
+- name: ci:ctest-last-9
+  color: 1d76db
+  description: Fast lane runs only the nine most recent registered CTests
+- name: ci:ctest-last-10
+  color: 1d76db
+  description: Fast lane runs only the ten most recent registered CTests
+- name: ci:docker
+  color: 0e8a16
+  description: Include Docker verification in the PR fast lane
+- name: ci:no-windows
+  color: c5def5
+  description: Exclude Windows from the PR fast lane
+- name: ci:warnings-fail
+  color: d93f0b
+  description: Treat compiler warnings as fast-lane failures
 - name: Source
   color: c2e0c6
   description: C or C++ source code changes
