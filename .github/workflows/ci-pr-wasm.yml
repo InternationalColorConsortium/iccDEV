@@ -63,6 +63,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      # preflight: allow-pr-script-execution reason=trusted-cache-policy-check
       - name: Assert no GitHub Actions cache primitives
         env:
           BASH_ENV: /dev/null
@@ -302,6 +303,7 @@ jobs:
 
           emmake make -j"$(nproc)"
 
+      # preflight: allow-pr-script-execution reason=wasm-output-validation
       - name: Validate WASM artifact magic numbers
         env:
           BASH_ENV: /dev/null
@@ -360,6 +362,7 @@ jobs:
 
           bash Build/Cmake/wasm-package/stage.sh build-wasm wasm-stage "0.0.0-pr${PR_NUMBER:-0}"
 
+      # preflight: allow-pr-script-execution reason=wasm-package-smoke
       - name: WASM smoke (test_all.js, 16 tools)
         env:
           BASH_ENV: /dev/null
@@ -393,6 +396,7 @@ jobs:
             exit 1
           fi
 
+      # preflight: allow-pr-script-execution reason=wasm-profile-parity
       - name: WASM parity gate (Testing/CreateAllProfiles.sh)
         env:
           BASH_ENV: /dev/null
