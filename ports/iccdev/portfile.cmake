@@ -42,8 +42,8 @@ else()
     vcpkg_from_github(
         OUT_SOURCE_PATH SOURCE_PATH
         REPO InternationalColorConsortium/iccDEV
-        REF d45db2f5cbf4febe8a95ff178570ea9cd52cd558
-        SHA512 78bd3cb025c8145d8dba95852132a470d4385eb91d2c7c065bfd73ab6da9082a4e0e9d9b1b9375a2895063e4e147c35095222d1766c9e1552cd7271421bba7d7
+        REF 124ecd293f2f2ab54db5587550ff307b6edc2ce5
+        SHA512 1442a6e46100004e7ba952cd9ce6cc367c95d627caccd468d8fb8c90a9cacafcd266696611d38696bf0c370af8fe01f1798b04b301524782d2c797b5f8571662
         HEAD_REF master
     )
 endif()
