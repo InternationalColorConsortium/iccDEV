@@ -1125,7 +1125,7 @@ protected:
   void pushScale3(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3);
   void pushOffset3(icFloatNumber v1, icFloatNumber v2, icFloatNumber v3, bool bConvertIntXyzOffset=true);
   icStatusCMM pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
-  void pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange);
+  icStatusCMM pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange);
   icStatusCMM pushApplyIllum(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);
   icStatusCMM pushRad2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc, bool bAbsoluteCIEColorimetry=false);
   icStatusCMM pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnectionConditions *pPcc);

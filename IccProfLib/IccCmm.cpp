@@ -2364,16 +2364,20 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
           case icSigReflectanceSpectralPcsData:
           case icSigTransmissionSpectralPcsData:
-              pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
-                              pToXform->m_pProfile->m_Header.spectralRange);
+            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
+                                    pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           case icSigRadiantSpectralPcsData:
             if ((stat=pushApplyIllum(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
               return stat;
             }
-            pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
-                            pToXform->m_pProfile->m_Header.spectralRange);
+            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
+                                        pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           default:
@@ -2433,8 +2437,10 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
 
 
           case icSigRadiantSpectralPcsData:
-                pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
-                                   pToXform->m_pProfile->m_Header.spectralRange);
+            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
+                                   pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           default:
@@ -2490,16 +2496,20 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
             if ((stat=pushBiRef2Ref(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
               return stat;
             }
-            pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
-                            pToXform->m_pProfile->m_Header.spectralRange);
+            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange,
+                                    pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           case icSigRadiantSpectralPcsData:
             if ((stat=pushBiRef2Rad(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
               return stat;
             }
-            pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
-                            pToXform->m_pProfile->m_Header.spectralRange);
+            if ((stat=pushSpecToRange(pFromXform->m_pProfile->m_Header.spectralRange, 
+                            pToXform->m_pProfile->m_Header.spectralRange))!=icCmmStatOk) {
+              return stat;
+            }
             break;
 
           case icSigBiDirReflectanceSpectralPcsData:
@@ -2821,6 +2831,8 @@ icUInt16Number CIccPcsXform::MaxChannels()
   if (s==m_list->end())
     return nMax;
   nMax = s->ptr->GetDstChannels();
+  if (s->ptr->GetSrcChannels()>nMax)
+    nMax = s->ptr->GetSrcChannels();
   s++;
   for (; s!= m_list->end(); s++) {
     if (s->ptr->GetSrcChannels()>nMax)
@@ -3297,18 +3309,28 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
   if (!illuminant || !observer)
     return icCmmStatInvalidProfile;
 
+  icStatusCMM stat=icCmmStatOk;
+    
   //make sure illuminant goes through identical conversion steps
   if (!icSameSpectralRange(srcRange, illuminantRange) || !icSameSpectralRange(dstRange, illuminantRange)) {
-    tmp.pushSpecToRange(illuminantRange, srcRange);
-    tmp.pushSpecToRange(srcRange, dstRange);
-    tmp.pushSpecToRange(dstRange, observerRange);
+    
+    if ((stat=tmp.pushSpecToRange(illuminantRange, srcRange))!=icCmmStatOk) {
+      return stat;
+    }
+    if ((stat=tmp.pushSpecToRange(srcRange, dstRange))!=icCmmStatOk) {
+      return stat;
+    }
+    if ((stat=tmp.pushSpecToRange(dstRange, observerRange))!=icCmmStatOk) {
+      return stat;
+    }
   }
   else {
-    tmp.pushSpecToRange(illuminantRange, observerRange);
+    if ((stat=tmp.pushSpecToRange(illuminantRange, observerRange))!=icCmmStatOk) {
+      return stat;
+    }
   }
   tmp.pushMatrix(3, observerRange.steps, observer);
 
-  icStatusCMM stat=icCmmStatOk;
   CIccApplyXform *pApply = tmp.GetNewApply(stat);
   if (pApply) {
     icFloatNumber xyz[3], normxyz[3], pccxyz[3];
@@ -3346,7 +3368,8 @@ icStatusCMM CIccPcsXform::pushXYZNormalize(IIccProfileConnectionConditions *pPcc
 
     delete pApply;
   }
-  return icCmmStatOk;
+  
+  return stat;
 }
 
 /**
@@ -3370,13 +3393,19 @@ icStatusCMM CIccPcsXform::pushRef2Xyz(CIccProfile *pProfile, IIccProfileConnecti
     const icFloatNumber *observer = pView->getObserver(observerRange);
     if (!illuminant || !observer)
       return icCmmStatInvalidProfile;
-
-    pushSpecToRange(pProfile->m_Header.spectralRange, illuminantRange);
+      
+    icStatusCMM stat;
+    if ((stat=pushSpecToRange(pProfile->m_Header.spectralRange, illuminantRange))!=icCmmStatOk) {
+      return stat;
+    }
+    
     pushScale(illuminantRange.steps, illuminant);
-    pushSpecToRange(illuminantRange, observerRange);
+    if ((stat=pushSpecToRange(illuminantRange, observerRange))!=icCmmStatOk) {
+      return stat;
+    }
+    
     pushMatrix(3, observerRange.steps, observer);
 
-    icStatusCMM stat;
     if ((stat=pushXYZNormalize(pPcc, illuminantRange, illuminantRange))!=icCmmStatOk) {
       return stat;
     }
@@ -3421,15 +3450,18 @@ CIccPcsStepMatrix *CIccPcsXform::rangeMap(const icSpectralRange &srcRange, const
  *  range to a destination spectral range.
  **************************************************************************
  */
-void CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
+icStatusCMM CIccPcsXform::pushSpecToRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
   if (!icSameSpectralRange(srcRange, dstRange)) {
     CIccPcsStepPtr ptr;
     ptr.ptr = rangeMap(srcRange, dstRange);
+    
+    if (!ptr.ptr)
+      return icCmmStatInvalidProfile;
 
-    if (ptr.ptr)
-      m_list->push_back(ptr);
+    m_list->push_back(ptr);
   }
+  return icCmmStatOk;
 }
 
 
@@ -3523,7 +3555,11 @@ icStatusCMM CIccPcsXform::pushRad2Xyz(CIccProfile* pProfile, IIccProfileConnecti
       free(obs);
     }
     else {
-      pushSpecToRange(pProfile->m_Header.spectralRange, observerRange);
+      icStatusCMM stat;
+      if ((stat=pushSpecToRange(pProfile->m_Header.spectralRange, observerRange))!=icCmmStatOk) {
+        return stat;
+      }
+    
       pushMatrix(3, observerRange.steps, observer);
     }
     icFloatNumber k;
@@ -3632,8 +3668,11 @@ icStatusCMM CIccPcsXform::pushBiRef2Xyz(CIccProfile *pProfile, IIccProfileConnec
     const icFloatNumber *observer = pView->getObserver(observerRange);
     if (!observer)
       return icCmmStatInvalidProfile;
-
-    pushSpecToRange(pProfile->m_Header.spectralRange, observerRange);
+    
+    if ((stat=pushSpecToRange(pProfile->m_Header.spectralRange, observerRange))!=icCmmStatOk) {
+      return stat;
+    }
+    
     pushMatrix(3, observerRange.steps, observer);
     if ((stat=pushXYZNormalize(pPcc, pProfile->m_Header.biSpectralRange, pProfile->m_Header.spectralRange))!=icCmmStatOk) {
       return stat;
@@ -8180,8 +8219,12 @@ bool CIccApplyCmm::InitPixel()
   CIccApplyXformList::iterator i;
 
   for (i=m_Xforms->begin(); i!=m_Xforms->end(); i++) {
-    if (i->ptr->GetXform()) {
-      icUInt16Number nXformSamples = i->ptr->GetXform()->GetNumDstSamples();
+    const CIccXform *xform = i->ptr->GetXform();
+    if (xform) {
+      icUInt16Number nXformSamples = xform->GetNumDstSamples();
+      if (nXformSamples>nSamples)
+        nSamples=nXformSamples;
+      nXformSamples = xform->GetNumSrcSamples();
       if (nXformSamples>nSamples)
         nSamples=nXformSamples;
     }
