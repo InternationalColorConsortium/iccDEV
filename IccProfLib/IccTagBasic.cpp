@@ -1609,7 +1609,7 @@ bool CIccTagZipUtf8Text::SetText(const icUChar *szText)
 
   deflateEnd(&zstr);
 
-  if (compress.size() > (size_t)std::numeric_limits<icUInt32Number>::max()) {
+  if (compress.size() > (size_t)(std::numeric_limits<icUInt32Number>::max)()) {
     return false;
   }
 
