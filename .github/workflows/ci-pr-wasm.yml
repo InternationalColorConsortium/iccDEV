@@ -28,6 +28,14 @@ permissions:
   pull-requests: read  # Required by reusable PR build callers.
 
 on:
+  pull_request:
+    branches:
+      - master
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   workflow_call:
   workflow_dispatch:
 
