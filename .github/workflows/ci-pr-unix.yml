@@ -195,7 +195,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          sudo apt-get update -qq
+          bash .github/scripts/ci-safe-apt-update.sh
           packages=(
             build-essential cmake gcc g++ clang clang-tools \
             libpng-dev libxml2-dev libtiff-dev \
