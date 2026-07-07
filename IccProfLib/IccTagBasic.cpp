@@ -5,7 +5,7 @@
 
     Version:    V1
 
-    Copyright:  © see ICC Software License
+    Copyright:  (c) see ICC Software License
 */
 
 /*
@@ -77,6 +77,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
+#include <limits>
 #include <new>
 #include <climits>
 #include "IccTag.h"
@@ -256,7 +257,7 @@ CIccTag::~CIccTag()
  * Purpose: Translate between the legacy integer nVerboseness gates
  *          (>25 / >50 / >75) and the structured DescribeOptions struct.
  *          Round-trip through these helpers preserves the verbosity
- *          tier — i.e. VerbosityFromOptions(OptionsFromVerbosity(v))
+ *          tier - i.e. VerbosityFromOptions(OptionsFromVerbosity(v))
  *          maps each input v back into the same gate bucket.
  *****************************************************************************
  */
@@ -270,7 +271,7 @@ DescribeOptions OptionsFromVerbosity(int v)
   o.emit_clut_channels = (v > 75);
   o.emit_clut_cells    = (v > 75);
   o.emit_spd_samples   = (v > 75);
-  // Budgets default to 0 (unbounded) — matches verbosity-only callers.
+  // Budgets default to 0 (unbounded) - matches verbosity-only callers.
   return o;
 }
 
@@ -872,6 +873,7 @@ icValidateStatus CIccTagText::Validate(std::string sigPath, std::string &sReport
   icSignature sig = icGetFirstSigPathSig(sigPath);
 
   if (m_nBufSize) {
+    const icUInt32Number kMaxTextValidateBytes = 16777215;
     switch(sig) {
     case icSigCopyrightTag:
       break;
@@ -889,8 +891,16 @@ icValidateStatus CIccTagText::Validate(std::string sigPath, std::string &sReport
       sReport += " - Unknown Tag.\n";
       rv = icMaxStatus(rv, icValidateWarning);
     }
-    int i;
-    for (i=0; i<(int)m_nBufSize && m_szText[i]; i++) {
+    if (m_nBufSize > kMaxTextValidateBytes) {
+      sReport += icMsgValidateWarning;
+      sReport += sSigPathName;
+      sReport += " - Text exceeds validation scan limit.\n";
+      rv = icMaxStatus(rv, icValidateWarning);
+      return rv;
+    }
+
+    icUInt32Number i;
+    for (i=0; i<m_nBufSize && m_szText[i]; i++) {
       if (m_szText[i]&0x80) {
         sReport += icMsgValidateWarning;
         sReport += sSigPathName;
@@ -1599,12 +1609,15 @@ bool CIccTagZipUtf8Text::SetText(const icUChar *szText)
 
   deflateEnd(&zstr);
 
-  icUChar *pBuf = AllocBuffer((icUInt32Number)compress.size());
+  if (compress.size() > (size_t)std::numeric_limits<icUInt32Number>::max()) {
+    return false;
+  }
 
-  if (pBuf) {
-    for (i = 0; i < (int)m_nBufSize; i++) {
-      pBuf[i] = compress[i];
-}
+  icUInt32Number nCompressedSize = (icUInt32Number)compress.size();
+  icUChar *pBuf = AllocBuffer(nCompressedSize);
+
+  if (pBuf && nCompressedSize) {
+    memcpy(pBuf, &compress[0], nCompressedSize);
   }
 
   return true;
@@ -1825,10 +1838,15 @@ CIccTagUtf16Text::~CIccTagUtf16Text()
 icUInt32Number CIccTagUtf16Text::GetLength() const
 {
   icUInt32Number n;
+  const icUInt32Number kMaxUtf16LengthUnits = 16777215;
   if (!m_szText || !m_nBufSize)
     return 0;
 
-  for (n=0; n<m_nBufSize && m_szText[n]; n++);
+  icUInt32Number nLimit = m_nBufSize;
+  if (m_nBufSize > kMaxUtf16LengthUnits)
+    nLimit = kMaxUtf16LengthUnits;
+
+  for (n=0; n<nLimit && m_szText[n]; n++);
 
   return n;
 }
@@ -2674,9 +2692,14 @@ icUInt16Number *CIccTagTextDescription::GetUnicodeBuffer(icUInt32Number nSize)
  */
 void CIccTagTextDescription::ReleaseUnicode()
 {
-  int i;
+  icUInt32Number i;
+  const icUInt32Number kMaxUnicodeReleaseUnits = 16777215;
+  icUInt32Number nLimit = m_nUnicodeSize;
+  if (m_nUnicodeSize > kMaxUnicodeReleaseUnits)
+    nLimit = kMaxUnicodeReleaseUnits;
+
   // even if the string is not NULL terminated, don't read over the end!
-  for (i=0; i < (int)m_nUnicodeSize && m_uzUnicodeText[i]; i++);
+  for (i=0; i < nLimit && m_uzUnicodeText[i]; i++);
 
   icUInt32Number nSize = i+1;
 
@@ -4685,16 +4708,16 @@ static struct {
 } icExampleCicpCodes[] = {
   { "1-1-0-0",    "RGB narrow range representation specified in Recommendation ITU-R BT.709-6, Item 3.4"},
   { "1-13-0-1",   "RGB full range representation specified in IEC 61966-2-1 sRGB"},
-  { "9-14-0-0",   "R’G’B’ narrow range representation specified in Recommendation ITU-R BT.2020-2, Table 5"},
-  { "9-16-0-0",   "PQ R’G’B’ narrow range representation specified in Recommendation ITU-R BT.2100-2, Table 9"},
-  { "9-16-0-1",   "PQ R’G’B’ full range representation specified in Recommendation ITU-R BT.2100-2, Table 9"},
-  { "9-18-0-0 ",  "HLG R’G’B’ narrow range representation specified in Recommendation ITU-R BT.2100-2 "},
-  { "9-18-0-1",   "HLG R’G’B’ full range representation specified in Recommendation ITU-R BT.2100-2"},
+  { "9-14-0-0",   "R'G'B' narrow range representation specified in Recommendation ITU-R BT.2020-2, Table 5"},
+  { "9-16-0-0",   "PQ R'G'B' narrow range representation specified in Recommendation ITU-R BT.2100-2, Table 9"},
+  { "9-16-0-1",   "PQ R'G'B' full range representation specified in Recommendation ITU-R BT.2100-2, Table 9"},
+  { "9-18-0-0 ",  "HLG R'G'B' narrow range representation specified in Recommendation ITU-R BT.2100-2 "},
+  { "9-18-0-1",   "HLG R'G'B' full range representation specified in Recommendation ITU-R BT.2100-2"},
   { "1-1-1-0 ",   "YCbCr representation specified in Recommendation ITU-R BT.709-6, Item 3.4"},
-  { "9-14-9-0",   "Y’Cb’Cr’ narrow range representation specified in Recommendation ITU-R BT.2020-2, Table 5"},
-  { "9-16-9-0",   "PQ Y’Cb’Cr’ narrow range representation specified in Recommendation ITU-R BT.2100-2, Table 9"},
+  { "9-14-9-0",   "Y'Cb'Cr' narrow range representation specified in Recommendation ITU-R BT.2020-2, Table 5"},
+  { "9-16-9-0",   "PQ Y'Cb'Cr' narrow range representation specified in Recommendation ITU-R BT.2100-2, Table 9"},
   { "9-16-14-0",  "PQ ICtCp narrow range representation specified in Recommendation ITU-R BT.2100-2, Table 9"},
-  { "9-18-9-0",   "HLG Y’Cb’Cr’ narrow range representation specified in Recommendation ITU-R BT.2100-2"},
+  { "9-18-9-0",   "HLG Y'Cb'Cr' narrow range representation specified in Recommendation ITU-R BT.2100-2"},
   { "9-18-14-0 ", "HLG ICtCp narrow range representation specified in Recommendation ITU-R BT.2100-2"},
   { NULL, NULL},
 };
@@ -4883,7 +4906,7 @@ CIccTagSparseMatrixArray::CIccTagSparseMatrixArray(const CIccTagSparseMatrixArra
 
   m_RawData = (icUInt8Number*)calloc(m_nSize, GetBytesPerMatrix());
   if (!m_RawData) {
-    // calloc failed — leave the object in a safe, empty state rather
+    // calloc failed - leave the object in a safe, empty state rather
     // than dereference NULL in the memcpy below.
     m_nSize = 0;
     m_bNonZeroPadding = false;
@@ -5521,7 +5544,7 @@ bool CIccTagSparseMatrixArray::Reset(icUInt32Number nNumMatrices, icUInt16Number
 
   // Do the allocation math in explicit 64-bit. On 32-bit targets
   // (wasm32 in particular, where size_t is u32) the product
-  // nNumMatrices * GetBytesPerMatrix() can wrap silently — returning
+  // nNumMatrices * GetBytesPerMatrix() can wrap silently - returning
   // a tiny allocation while leaving m_nSize huge, and the Read loop
   // then writes records past the buffer end. Also cap the total at a
   // library-wide 64 MB ceiling so a legitimately-sized tag can't
@@ -5546,7 +5569,7 @@ bool CIccTagSparseMatrixArray::Reset(icUInt32Number nNumMatrices, icUInt16Number
   //   1. icRealloc(ptr, 0) frees ptr and returns NULL (std::realloc's
   //      behaviour here is implementation-defined).
   //   2. On allocation failure (nptr == NULL && ptr != NULL) it frees
-  //      the old ptr — so the caller must NOT keep using m_RawData
+  //      the old ptr - so the caller must NOT keep using m_RawData
   //      after the call, regardless of the return value.
   //
   // Therefore we always write the result back to m_RawData and keep
@@ -5556,7 +5579,7 @@ bool CIccTagSparseMatrixArray::Reset(icUInt32Number nNumMatrices, icUInt16Number
 
   if (nSize == 0) {
     // Caller explicitly asked to clear. icRealloc returned NULL after
-    // freeing the old buffer — success, empty object.
+    // freeing the old buffer - success, empty object.
     m_nSize = 0;
     m_nChannelsPerMatrix = 0;
     return true;
@@ -10571,7 +10594,7 @@ bool CIccTagProfileSeqDesc::Read(icUInt32Number size, CIccIO *pIO)
 
     // Guard against previous iteration having advanced the cursor past
     // our tag window; otherwise (nEnd - nPos) wraps to near UINT32_MAX
-    // and is passed as `size` to the nested MLU Read — a second,
+    // and is passed as `size` to the nested MLU Read - a second,
     // independent overflow primitive.
     if (nPos >= nEnd)
       return false;

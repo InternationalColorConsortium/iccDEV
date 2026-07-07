@@ -124,7 +124,7 @@ CIccApplyThreadedCmm::~CIccApplyThreadedCmm()
 bool CIccApplyThreadedCmm::Init(CIccCmm *pCmm, int nThreads)
 {
   m_nThreads = icResolveCmmThreadCount(nThreads);
-  if (m_nThreads <= 0) {
+  if (m_nThreads <= 0 || m_nThreads > kIccMaxCmmThreads) {
     return false;
   }
 

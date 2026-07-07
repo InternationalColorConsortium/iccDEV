@@ -5,7 +5,7 @@
 
     Version:    V1
 
-    Copyright:  � see ICC Software License
+    Copyright:  (c) see ICC Software License
 */
 
 /*
@@ -1051,14 +1051,20 @@ void CIccSampledCurveSegment::Describe(std::string &sDescription, int /* nVerbos
     sDescription += "IN  OUT\n";
 
     icUInt32Number i;
+    const icUInt32Number kMaxDescribeSamples = 65536;
+    icUInt32Number nDescribeCount = m_nCount;
+    if (m_nCount > kMaxDescribeSamples)
+      nDescribeCount = kMaxDescribeSamples;
 
     icFloatNumber range = m_endPoint - m_startPoint;
     icFloatNumber last = (icFloatNumber)(m_nCount-1);
 
-    for (i=1; i<m_nCount; i++) {
+    for (i=1; i<nDescribeCount; i++) {
       snprintf(buf, bufSize, "%.8f %.8f\n", m_startPoint + (icFloatNumber)i*range/last, m_pSamples[i]);
       sDescription += buf;
     }
+    if (nDescribeCount < m_nCount)
+      sDescription += "... <!truncated!>\n";
   }
   sDescription += "\n";
 }

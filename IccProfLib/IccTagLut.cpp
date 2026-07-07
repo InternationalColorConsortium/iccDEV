@@ -6340,6 +6340,17 @@ void CIccTagGamutBoundaryDesc::Describe(std::string &sDescription, int nVerbosen
   sDescription += buf;
 
   if (nVerboseness > 75) {
+    const int kMaxDescribeVertices = 16777215;
+    const int kMaxDescribeTriangles = 16777215;
+
+    if (m_NumberOfVertices < 0 || m_NumberOfVertices > kMaxDescribeVertices ||
+        m_NumberOfTriangles < 0 || m_NumberOfTriangles > kMaxDescribeTriangles ||
+        !m_PCSValues || !m_Triangles ||
+        (m_nDeviceChannels > 0 && !m_DeviceValues)) {
+      sDescription += "Gamut boundary detail data is unavailable or exceeds describe bounds\n";
+      return;
+    }
+
     int c = 0;
     int d = 0;
     for (int i=0; i<m_NumberOfVertices; i++) {
