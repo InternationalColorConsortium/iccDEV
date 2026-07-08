@@ -28,11 +28,11 @@ pip install iccdev-mcp
 ```
 
 For full functionality with the pip-installed package, the 6 Python-native
-tools require the optional `iccdev` Python binding and the 17 CLI-backed tools
+tools are included in the `iccdev-mcp` wheel and the 17 CLI-backed tools
 require iccDEV CLI binaries. Build iccDEV locally or set `ICCDEV_TOOLS_DIR` to
-an existing tool build. The REST health endpoint reports both dependency sets
-separately, so the server remains usable for CLI-backed workflows when the
-Python binding is not installed.
+an existing tool build. The REST health endpoint reports the bundled Python API
+and CLI discovery separately, so incomplete local CLI builds are visible at
+startup.
 
 ```bash
 # Point to compiled iccDEV tools

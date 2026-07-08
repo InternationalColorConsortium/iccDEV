@@ -107,6 +107,7 @@ class TestHealthEndpoints(unittest.TestCase):
         data = resp.json()
         self.assertTrue(data["ok"])
         self.assertEqual(data["server"], "iccdev-mcp")
+        self.assertTrue(data["python_api_available"])
         self.assertIn("cli_tools", data)
         self.assertEqual(data["tools_count"], 25)
 
@@ -406,11 +407,14 @@ class TestNativeToolEndpoints(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
         self.assertIn("pixels", resp.json()["error"])
 
-    def test_enum_spaces_returns_error_without_iccdev(self):
-        """enum_spaces requires iccdev -- returns 503 if not installed."""
+    def test_enum_spaces_returns_color_spaces(self):
         resp = self.client.get("/api/enum-spaces")
-        # Either 200 (if iccdev installed) or 503 (if not)
-        self.assertIn(resp.status_code, [200, 503])
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertGreater(data["count"], 0)
+        self.assertIn(
+            "RGB", {space["name"] for space in data["color_spaces"]}
+        )
 
 
 @_skip_no_starlette

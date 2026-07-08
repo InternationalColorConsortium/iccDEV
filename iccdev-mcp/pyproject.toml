@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-native = ["iccdev>=0.1.0"]
+native = []
 rest = ["starlette>=0.37.0", "uvicorn>=0.29.0"]
 dev = ["pytest>=9.0.3,<10", "pytest-asyncio>=1.3,<2", "httpx>=0.28,<1"]
 
@@ -45,7 +45,7 @@ Documentation = "https://github.com/InternationalColorConsortium/iccDEV/tree/mas
 Issues = "https://github.com/InternationalColorConsortium/iccDEV/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["iccdev_mcp"]
+packages = ["iccdev_mcp", "iccdev"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

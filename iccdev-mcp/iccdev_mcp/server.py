@@ -337,7 +337,7 @@ def icc_sig_to_str(signature: int) -> dict:
     return {
         "signature": signature,
         "string": s,
-        "hex": f"0x{signature:08X}",
+        "hex": f"0x{signature:08x}",
     }
 
 
