@@ -31,6 +31,16 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Checkout trusted workflow scripts
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0
+        with:
+          persist-credentials: false
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: .trusted-workflow-scripts
+          sparse-checkout: .github/scripts/sanitize-sed.sh
+          sparse-checkout-cone-mode: false
+
       # preflight: allow-package-install reason=copilot-agent-bootstrap
       - name: Install build and test prerequisites
         shell: bash --noprofile --norc {0}
@@ -40,6 +50,9 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          SANITIZER="$GITHUB_WORKSPACE/.trusted-workflow-scripts/.github/scripts/sanitize-sed.sh"
+          # shellcheck source=/dev/null
+          source "$SANITIZER"
 
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
