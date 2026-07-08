@@ -144,6 +144,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
 
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           if [[ ! "$owner" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
@@ -155,7 +156,9 @@ jobs:
             exit 1
           fi
 
-          printf 'name=ghcr.io/%s/%s\n' "$owner" "$MATRIX_IMAGE" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          printf 'name=ghcr.io/%s/%s\n' \
+            "$(sanitize_line "$owner")" \
+            "$(sanitize_line "$MATRIX_IMAGE")" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
         with:

@@ -390,20 +390,22 @@ class IccWasmApp {
     if (!text) return;
     const blob = new Blob([text], { type: 'text/plain' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    a.href = url;
     a.download = filename || (this.toolName + '-output.txt');
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 0);
   }
 
   downloadBinary(data, filename) {
     if (!data) return;
     const blob = new Blob([data], { type: 'application/octet-stream' });
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
+    a.href = url;
     a.download = filename;
     a.click();
-    URL.revokeObjectURL(a.href);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 0);
   }
 
   _formatSize(bytes) {

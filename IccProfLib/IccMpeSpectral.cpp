@@ -85,6 +85,10 @@
 #include "IccUtil.h"
 #include "IccCAM.h"
 
+namespace {
+  const size_t kMaxDescribeSamples = 4096;
+}
+
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
@@ -309,7 +313,6 @@ void CIccMpeSpectralMatrix::Describe(std::string &sDescription, int /* nVerbosen
   snprintf(buf, bufSize, "RANGE %f %f %d\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
   sDescription += buf;
 
-  const size_t kMaxDescribeSamples = 4096;
   size_t rangeSteps = static_cast<size_t>(m_Range.steps);
   size_t describeSteps = rangeSteps < kMaxDescribeSamples ? rangeSteps : kMaxDescribeSamples;
 
