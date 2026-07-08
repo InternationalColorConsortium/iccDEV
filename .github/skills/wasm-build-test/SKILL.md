@@ -11,14 +11,17 @@ Build iccDEV tools as WebAssembly modules and validate the browser-based tool su
    emcmake cmake ../Build/Cmake \
      -DCMAKE_BUILD_TYPE=Release \
      -DENABLE_TOOLS=ON \
-     -DBUILD_SHARED_LIBS=OFF
+     -DENABLE_STATIC_LIBS=ON \
+     -DENABLE_SHARED_LIBS=OFF
    ```
 
-2. **Build all 18 WASM tools**
+2. **Build the 16-tool WASM suite**
    ```bash
    emmake make -j$(nproc) 2>&1 | tee build.log
    ```
-   Expected: 16 JS modules + 18 WASM binaries + 4 static libraries.
+   Expected: 16 JS modules + 18 WASM binaries + 4 static libraries. The
+   browser suite has 16 tool pages; two additional `.wasm` binaries are helper
+   outputs from the build.
 
 3. **Verify artifacts**
    ```bash
