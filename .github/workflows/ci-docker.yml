@@ -29,6 +29,7 @@ on:
       - "Dockerfile"
       - "Dockerfile.nixos"
       - "Dockerfile.ci-regression"
+      - "Dockerfile.mcp"
       - ".github/workflows/ci-docker.yml"
   workflow_dispatch:
 
@@ -103,6 +104,14 @@ jobs:
             workdir: /workspace/iccDEV
             tools_dir: /workspace/build/Tools
             run_shell: bash
+          - variant: mcp
+            runner: ubuntu-latest
+            image: iccdev-mcp
+            dockerfile: Dockerfile.mcp
+            suffix: "-mcp"
+            workdir: /opt/iccdev
+            tools_dir: /opt/iccdev/Build/Tools
+            run_shell: bash
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
@@ -141,7 +150,7 @@ jobs:
             echo "Invalid repository owner for image name" >&2
             exit 1
           fi
-          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-nixos|-ci-regression)?$ ]]; then
+          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-nixos|-ci-regression|-mcp)?$ ]]; then
             echo "Invalid Docker image name" >&2
             exit 1
           fi
