@@ -1275,6 +1275,149 @@ int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::stri
 }   // end outputResponseCurves()
 #endif
 
+/********************************************************************************/
+
+inline
+float Edge3( float a, float b, float c )
+{
+  return std::abs( b - (a+c)*0.5f );
+}
+
+/********************************************************************************/
+
+inline
+double Edge3( double a, double b, double c )
+{
+  return std::abs( b - (a+c)*0.5f );
+}
+
+/********************************************************************************/
+
+inline
+uint8_t Edge3( uint8_t a, uint8_t b, uint8_t c )
+{
+  return (uint8_t) std::abs( (int)b - ((int)(a+c)>>1) );
+}
+
+/********************************************************************************/
+
+inline
+uint16_t Edge3( uint16_t a, uint16_t b, uint16_t c )
+{
+  return (uint16_t) std::abs( (int)b - ((int)(a+c)>>1) );
+}
+
+/********************************************************************************/
+
+template<typename T>
+void FindEdgesInner( const T *input, T *output,
+            const std::vector<size_t> &dimensions_in,
+            const std::vector<size_t> &steps_in,
+            size_t channels, size_t totalSize, size_t depth )
+{
+  memset(output,0,totalSize*(depth>>3));
+  
+  size_t dimensionCount = dimensions_in.size();
+  if (dimensionCount < 1)
+    return;
+
+  std::vector<size_t> wsteps( steps_in );
+  std::vector<size_t> wdimensions( dimensions_in );
+  std::vector<size_t> loopIndices( dimensionCount );
+
+  if (dimensionCount == 1) {
+    // fake a second dimension so the loops work
+    wdimensions.push_back(1);
+    wsteps.push_back(0);
+    loopIndices.push_back(0);
+    dimensionCount = 2;
+  }
+
+  for (size_t m = 0; m < dimensionCount; ++m) {
+    size_t lastDimension = wdimensions[dimensionCount-1];
+
+    if (lastDimension <= 2)    // nothing to operate on in this dimension
+      continue;
+
+    size_t innerLimit = lastDimension-1;
+    size_t colStep = wsteps[dimensionCount-1];
+
+    std::fill( loopIndices.begin(), loopIndices.end(), 0 );
+
+    while( loopIndices[0] < wdimensions[0] ) {
+
+      size_t index = 0;
+      for (size_t n = 0; n < (dimensionCount-1); ++n)
+        index += loopIndices[n] * wsteps[n];
+
+      // ignore first pixel, edge duplication doesn't work well with edge detection
+      index += colStep;
+
+      for (size_t k = 1; k < innerLimit; ++k) {
+        for (size_t c = 0; c < channels; ++c) {
+          T prev = input[ index - colStep + c ];
+          T current = input[ index + c ];
+          T next = input[ index + colStep + c ];
+          T result = Edge3( prev, current, next );
+          T old = output[ index + c ];
+          output[ index + c ] = std::max( result, old );
+        }
+        index += colStep;
+      }
+
+      // ignore last pixel, edge duplication doesn't work well with edge detection
+
+      // increment loop counters, ignoring last dimension we iterated above
+      //    if incremented is >= limit[j], reset and roll upward in list
+      //    if we don't overflow, save the incremented value and break out of the loop
+      for (int j = ((int)dimensionCount-2); j >= 0; --j) {
+        auto increment_temp = loopIndices[(size_t)j] + 1;
+        if (increment_temp >= wdimensions[(size_t)j] && j != 0)   // we want counter 0 to overflow, to end the big loop
+          loopIndices[(size_t)j] = 0;
+        else {
+          loopIndices[(size_t)j] = increment_temp;
+          break;
+        }
+      }   // end loop counter update
+
+    }   // end voxel loop
+
+  // prepare for next dimension
+  (void)std::rotate( wsteps.begin(), wsteps.begin()+1, wsteps.end() );
+  (void)std::rotate( wdimensions.begin(), wdimensions.begin()+1, wdimensions.end() );
+
+  }   // end outer dimension loop
+
+}
+
+/********************************************************************************/
+
+template<typename T>
+void FindEdgesN( const T *input, T *output, const std::vector<size_t> &dimensions_in,
+            const std::vector<size_t> &steps_in,
+            size_t channels, size_t totalSize, size_t depth )
+{
+  if (depth == 8) {
+    FindEdgesInner( (uint8_t *)input, (uint8_t *)output,
+                    dimensions_in, steps_in,
+                    channels, totalSize, 8 );
+  } else if (depth == 16) {
+    FindEdgesInner( (uint16_t *)input, (uint16_t *)output,
+                    dimensions_in, steps_in,
+                    channels, totalSize, 16 );
+  } else if (depth == 32) {
+    FindEdgesInner( (float *)input, (float *)output,
+                    dimensions_in, steps_in,
+                    channels, totalSize, 32 );
+  } else if (depth == 64) {
+    FindEdgesInner( (double *)input, (double *)output,
+                    dimensions_in, steps_in,
+                    channels, totalSize, 64 );
+  } else {
+    LogAnError(stderr,"ERROR - unknown clut data depth %z\n", depth );
+  }
+}
+
 /******************************************************************************/
 
 static
@@ -1310,7 +1453,44 @@ int TIFFColorModelFromICCModel( icColorSpaceSignature colorSig )
       // where white = no ink, black = full ink
       return TIFF_MODE_GRAY_WHITEZERO;
       break;
+  }
 
+  // some compilers are picky, and stupid
+  return TIFF_MODE_GRAY_BLACKZERO;
+}
+
+/******************************************************************************/
+
+static
+int TIFFEdgeColorModelFromICCModel( icColorSpaceSignature colorSig )
+{
+  switch(colorSig) {
+    case icSigRgbData:
+    case icSigCmyData:
+    case icSigXYZData:
+    case icSigLuvData:
+    case icSigYCbCrData:
+    case icSigYxyData:
+    case icSigHsvData:
+    case icSigHlsData:
+    case icSigLabData:
+      return TIFF_MODE_RGB;
+      break;
+
+    case icSigCmykData:
+      return TIFF_MODE_CMYK;
+      break;
+
+    case icSigGrayData:
+    case icSigGamutData:
+      return TIFF_MODE_GRAY_BLACKZERO;
+      break;
+
+    default:
+      // and N-ink should be multichannel
+      // where white = no ink, black = full ink
+      return TIFF_MODE_GRAY_WHITEZERO;
+      break;
   }
 
   // some compilers are picky, and stupid
@@ -1366,9 +1546,77 @@ uint16_t ClipU16( const icFloatNumber &input )
 
 /******************************************************************************/
 
+void CopyLUTtoTIFF( icFloatNumber *clutData, uint8_t *imageBuf,
+            int tileWidth, int tileHeight, int tiles,
+            int outputChannels, int inputChannels,
+            int /* gridPoints */, int tilesWide, int imageWidth,
+            int bytes )
+{
+  uint16_t *imageBuf16 = (uint16_t *)imageBuf;
+  float *imageBuf32 = (float *)imageBuf;
+
+#if 0
+// TEST - same as below, just more expensive calculation
+    size_t gridCount = (size_t)tileWidth * (size_t)tileHeight * (size_t)tiles;
+    for (size_t k = 0; k < gridCount; ++k ) {
+        size_t y = (gridPoints -1) - (k % gridPoints);  // turn LAB to look as expected
+        size_t x = (k / gridPoints) % gridPoints;
+        size_t tile = k / (gridPoints*gridPoints);
+        size_t tileX = tile % tilesWide;
+        size_t tileY = tile / tilesWide;
+        size_t outputIndex = outputChannels * ((tileY * gridPoints * imageWidth) + (tileX * gridPoints) + (y * imageWidth) + x);
+        size_t inputIndex = outputChannels * k;
+        if (bytes == 4 || bytes == 8)
+          for (int c = 0; c < outputChannels; ++c)
+            imageBuf32[outputIndex+c] = clutData[inputIndex+c];
+        else if (bytes == 2)
+          for (int c = 0; c < outputChannels; ++c)
+            imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
+        else
+          for (int c = 0; c < outputChannels; ++c)
+            imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
+    }
+
+#else
+      size_t n001 = (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
+      size_t n010 = (size_t)tileHeight * (size_t)outputChannels;
+      size_t n100 = (size_t)outputChannels;
+
+      if (inputChannels < 2)
+        std::swap(n010,n100);
+
+      size_t outTileStepV = (size_t)imageWidth * (size_t)tileHeight * (size_t)outputChannels;
+      size_t outTileStepH = (size_t)tileWidth * (size_t)outputChannels;
+      size_t outColStep = (size_t)outputChannels;
+      size_t outRowStep = (size_t)imageWidth * (size_t)outputChannels;
+
+      for (int z = 0; z < tiles; ++z) {
+        int z2 = z % tilesWide; // tile # horiz
+        int z3 = z / tilesWide; // tile # vert
+        for (int x = 0; x < tileWidth; ++x)
+        for (int y = 0; y < tileHeight; ++y) {
+          size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;  // turn LAB to look as expected
+          size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
+          if (bytes == 4 || bytes == 8)
+            for (int c = 0; c < outputChannels; ++c)
+              imageBuf32[outputIndex+c] = clutData[inputIndex+c];
+          else if (bytes == 2)
+            for (int c = 0; c < outputChannels; ++c)
+              imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
+          else
+            for (int c = 0; c < outputChannels; ++c)
+              imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
+        }
+      }
+#endif
+
+}
+
+/******************************************************************************/
+
 static
 int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
-                const std::string &basename, PDFWriter &pdffile )
+                const std::string &basename, PDFWriter &pdffile, bool doEdges = true )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
@@ -1551,75 +1799,57 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
     std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
     uint8_t *imageBuf = imageBuffer.get();
-    uint16_t *imageBuf16 = (uint16_t *)imageBuf;
-    float *imageBuf32 = (float *)imageBuf;
     memset( imageBuf, 0, bufferSize );
 
     // copy data from CLUT to image buffer
     icFloatNumber *clutData = clut->GetData(0);
+    CopyLUTtoTIFF( clutData, imageBuf, tileWidth, tileHeight, tiles, outputChannels, inputChannels,
+                gridPoints, tilesWide, imageWidth, bytes );
 
-
-#if 0
-// TEST - same as below, just more expensive calculation
-    size_t gridCount = (size_t)tileWidth * (size_t)tileHeight * (size_t)tiles;
-    for (size_t k = 0; k < gridCount; ++k ) {
-        size_t y = (gridPoints -1) - (k % gridPoints);  // turn LAB to look as expected
-        size_t x = (k / gridPoints) % gridPoints;
-        size_t tile = k / (gridPoints*gridPoints);
-        size_t tileX = tile % tilesWide;
-        size_t tileY = tile / tilesWide;
-        size_t outputIndex = outputChannels * ((tileY * gridPoints * imageWidth) + (tileX * gridPoints) + (y * imageWidth) + x);
-        size_t inputIndex = outputChannels * k;
-        if (bytes == 4 || bytes == 8)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf32[outputIndex+c] = clutData[inputIndex+c];
-        else if (bytes == 2)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
-        else
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
+    // write the LUT as TIFF
+    std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
+    int tiffColor = TIFFColorModelFromICCModel( outputSpace );
+    if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
+                    imageWidth, imageHeight, outputChannels, 8*bytes )) {
+      LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
     }
 
-#else
-      size_t n001 = (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t n010 = (size_t)tileHeight * (size_t)outputChannels;
-      size_t n100 = (size_t)outputChannels;
+    if (doEdges) {
+      // build edge data from CLUT
+      bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels;
+      std::unique_ptr<icFloatNumber[]> edgeBuffer( new icFloatNumber[ bufferSize ] );
+      icFloatNumber *edgeData = edgeBuffer.get();
 
-      if (inputChannels < 2)
-        std::swap(n010,n100);
-
-      size_t outTileStepV = (size_t)imageWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t outTileStepH = (size_t)tileWidth * (size_t)outputChannels;
-      size_t outColStep = (size_t)outputChannels;
-      size_t outRowStep = (size_t)imageWidth * (size_t)outputChannels;
-
-      for (int z = 0; z < tiles; ++z) {
-        int z2 = z % tilesWide; // tile # horiz
-        int z3 = z / tilesWide; // tile # vert
-        for (int x = 0; x < tileWidth; ++x)
-        for (int y = 0; y < tileHeight; ++y) {
-          size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;  // turn LAB to look as expected
-          size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
-          if (bytes == 4 || bytes == 8)
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf32[outputIndex+c] = clutData[inputIndex+c];
-          else if (bytes == 2)
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
-          else
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
-        }
+      // build data for N-dimensional edge finding
+      size_t step = outputChannels;     // innermost column step == output channels
+      std::vector<size_t> dimensions(inputChannels);
+      for (int k = 0; k < inputChannels; ++k) {
+        dimensions[k] = clut->GridPoint(k);
       }
-#endif
 
-      std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
-      int tiffColor = TIFFColorModelFromICCModel( outputSpace );
-      if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
-                        imageWidth, imageHeight, outputChannels, 8*bytes )) {
-        LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
+      std::vector<size_t> loopSteps(inputChannels);
+      for (int i = inputChannels; i > 0; --i) {
+        loopSteps[i-1] = step;
+        step *= dimensions[i-1];
       }
+
+      // process edges from CLUT
+      FindEdgesInner( clutData, edgeData, dimensions, loopSteps, outputChannels, bufferSize, 32 );
+
+      // copy edge data to image
+      memset( imageBuf, 0, bufferSize );
+      CopyLUTtoTIFF( edgeData, imageBuf, tileWidth, tileHeight, tiles, outputChannels, inputChannels,
+                    gridPoints, tilesWide, imageWidth, bytes );
+
+      // write edge data as TIFF
+      std::string tiffPath3 = basename + "_" + sigDesc + "_edges.tif";
+      int edgeColor = TIFFEdgeColorModelFromICCModel( outputSpace );
+      if (!WriteTIFF( tiffPath3.c_str(), 100, edgeColor, imageBuf,
+                    imageWidth, imageHeight, outputChannels, 8*bytes )) {
+      LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath3.c_str());
+      }
+
+    }   // end doEdges
 
   return 1;
 }
@@ -1630,7 +1860,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 // return count of output objects created, 0 if none
 static
 int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
-        const std::string &basename, PDFWriter &pdffile )
+        const std::string &basename, PDFWriter &pdffile, bool doEdges = true )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
@@ -1648,7 +1878,7 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     case icSigLut16Type:  // CIccTagLut16
     case icSigLutAtoBType:  // CIccTagLutAtoB
     case icSigLutBtoAType:  // CIccTagLutBtoA
-      return outputMBBType( pIcc, tag, sigDesc, basename, pdffile );
+      return outputMBBType( pIcc, tag, sigDesc, basename, pdffile, doEdges );
       break;
 
     case icSigMultiProcessElementType:
@@ -2377,7 +2607,7 @@ int processLuts(CIccProfile *pIcc, const std::string &profilePath )
         {
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        outputItems += output3DLUT(pIcc, pTag, sigDesc, basename, pdffile );
+        outputItems += output3DLUT(pIcc, pTag, sigDesc, basename, pdffile, sig != icSigGamutTag  );
 // TODO - plot gamut from A2B and B2A tags into xy and LAB plots
         }
         break;
