@@ -355,7 +355,9 @@ jobs:
       # ---------------------------------------------------------------
       # Phase 9: Upload artifacts
       # ---------------------------------------------------------------
+      # preflight: allow-untrusted-artifact reason=sanitized-developer-report
       - name: Upload Python wheel
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
         with:
           name: "iccdev-python-packages-windows-2022-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"
@@ -364,8 +366,9 @@ jobs:
             python/wheelhouse/*.whl
           retention-days: 30
 
+      # preflight: allow-untrusted-artifact reason=sanitized-developer-report
       - name: Upload CTest logs
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
         with:
           name: "iccdev-ctest-windows-2022-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"

@@ -963,8 +963,9 @@ jobs:
       # ---------------------------------------------------------------
       # Phase 11: Upload artifacts
       # ---------------------------------------------------------------
+      # preflight: allow-untrusted-artifact reason=sanitized-developer-report
       - name: Upload Python packages
-        if: always()
+        if: always() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
         with:
           name: >-
@@ -975,8 +976,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      # preflight: allow-untrusted-artifact reason=sanitized-developer-report
       - name: Upload iccDEV tool binaries
-        if: always() && inputs.run-full-tests
+        if: always() && inputs.run-full-tests && github.event_name != 'pull_request'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
         with:
           name: "iccdev-tools-${{ inputs.os }}-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"
@@ -984,8 +986,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+      # preflight: allow-untrusted-artifact reason=sanitized-developer-report
       - name: Upload test logs
-        if: always() && inputs.run-full-tests
+        if: always() && inputs.run-full-tests && github.event_name != 'pull_request'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6.0.0
         with:
           name: "iccdev-test-logs-${{ inputs.os }}-py${{ inputs.python-version }}-attempt${{ github.run_attempt }}"
