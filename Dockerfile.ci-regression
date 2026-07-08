@@ -164,6 +164,9 @@ RUN if [ -f .git ]; then rm -f .git && git init --quiet; elif ! git rev-parse --
  && git config --global --add safe.directory /workspace/iccDEV \
  && (git remote set-url origin https://github.com/InternationalColorConsortium/iccDEV.git 2>/dev/null \
       || git remote add origin https://github.com/InternationalColorConsortium/iccDEV.git) \
+ && if git rev-parse --verify HEAD >/dev/null 2>&1 && [ "$GIT_COMMIT" != "unknown" ]; then \
+      test "$(git rev-parse HEAD)" = "$GIT_COMMIT"; \
+    fi \
  && mkdir -p /workspace/build \
  && SAN_FLAGS="-fsanitize=address,undefined,float-divide-by-zero,float-cast-overflow" \
  && GIT_COMMIT="$GIT_COMMIT" CC=clang CXX=clang++ cmake -S Build/Cmake -B /workspace/build \

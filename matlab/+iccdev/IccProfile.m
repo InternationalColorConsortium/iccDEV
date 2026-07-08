@@ -53,7 +53,7 @@ classdef IccProfile < handle
     end
 
     function hdr = header(obj)
-      %HEADER Alias for get_header (property-style access).
+      %HEADER Alias method for get_header; call as p.header().
       hdr = obj.get_header();
     end
 

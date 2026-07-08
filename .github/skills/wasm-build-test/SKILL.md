@@ -53,5 +53,5 @@ Build iccDEV tools as WebAssembly modules and validate the browser-based tool su
 - [ ] 17 HTML pages present (index + 16 tools)
 - [ ] All 301 tests pass
 - [ ] No JS console errors in browser
-- [ ] CSP headers prevent inline script execution
+- [ ] CSP headers restrict remote scripts; inline page scripts are explicitly allowed
 - [ ] Sanitizer strips ANSI/control chars from WASM output

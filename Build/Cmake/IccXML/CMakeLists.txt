@@ -115,13 +115,6 @@ IF(ENABLE_SHARED_LIBS)
     set_target_properties(${TARGET_NAME} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
   endif()
 
-  # Cross-platform symbol visibility for shared library
-  # On MSVC, WINDOWS_EXPORT_ALL_SYMBOLS handles exports automatically.
-  # On GCC/Clang, define ICCPROFLIBDLL_EXPORTS so ICCPROFLIB_API resolves
-  # to __attribute__((visibility("default"))) for annotated symbols.
-  if(NOT MSVC)
-    target_compile_definitions(${TARGET_NAME} PRIVATE ICCPROFLIBDLL_EXPORTS)
-  endif()
   # NOTE: -fvisibility=hidden is intentionally NOT used here.
   # IccProfLib has incomplete ICCPROFLIB_API annotations (~308 partial uses
   # across 43 headers), and IccXML has zero export annotations. Hidden

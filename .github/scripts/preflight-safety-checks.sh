@@ -512,6 +512,7 @@ for path in sys.argv[1:]:
                 print(f"[FAIL] {label}: actions/cache is prohibited", file=sys.stderr)
                 failures += 1
                 workflow_cache_canaries += 1
+                cache_publish += 1
 
             if uses.startswith("docker/build-push-action@"):
                 for key in ("cache-from", "cache-to"):
@@ -520,6 +521,8 @@ for path in sys.argv[1:]:
                               file=sys.stderr)
                         failures += 1
                         workflow_cache_canaries += 1
+                        if key == "cache-to":
+                            cache_publish += 1
 
             if uses.startswith("msys2/setup-msys2@"):
                 if str(block.get("cache", "")).strip().lower() not in {"false", "0", "no", "off"}:
@@ -538,6 +541,8 @@ for path in sys.argv[1:]:
                       file=sys.stderr)
                 failures += 1
                 workflow_cache_canaries += 1
+                if cache_key == "save-always":
+                    cache_publish += 1
 
             for cache_key in ("cache-binary", "cache-dependency-path"):
                 if cache_key not in block:
@@ -555,6 +560,7 @@ for path in sys.argv[1:]:
                       file=sys.stderr)
                 failures += 1
                 workflow_cache_canaries += 1
+                cache_publish += 1
 
             if uses.startswith("actions/download-artifact@") and publish_context:
                 if "name" not in block and "pattern" not in block:

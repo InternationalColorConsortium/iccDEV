@@ -173,6 +173,10 @@ nav.breadcrumb a { color: var(--accent); }
   background: rgba(88,166,255,0.05);
 }
 
+.drop-zone.accent-border {
+  border-color: var(--accent);
+}
+
 .drop-zone .icon {
   font-size: 2rem;
   margin-bottom: 0.5rem;

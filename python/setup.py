@@ -330,10 +330,8 @@ if PREBUILT_LIBRARY:
             zlib_runtime_dll = _find_zlib_runtime_dll(BUILD_DIR)
             if zlib_runtime_dll:
                 prebuilt_runtime_dlls.append(zlib_runtime_dll)
-    # Still compile IccWrapper.cpp (may not be in the static lib)
-    wrapper_abs = os.path.join(ICCPROFLIB_SRC, "IccWrapper.cpp")
-    if os.path.isfile(wrapper_abs):
-        extra_sources = [_relpath(wrapper_abs)]
+    # IccWrapper.cpp is part of IccProfLib2 in current CMake builds.
+    extra_sources = []
 else:
     # Standalone / PyPI mode: compile all IccProfLib sources inline.
     # Source checkout builds vendor just-in-time in build_ext so metadata and

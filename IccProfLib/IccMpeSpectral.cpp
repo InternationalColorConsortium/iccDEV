@@ -349,18 +349,17 @@ void CIccMpeSpectralMatrix::Describe(std::string &sDescription, int /* nVerbosen
     for (j=0; j<(int)nVectors && data < end; j++) {
       size_t remaining = static_cast<size_t>(end - data);
       size_t rowCount = remaining < steps ? remaining : steps;
-      if (rowCount > describeSteps)
-        rowCount = describeSteps;
-      for (i=0; i<(int)rowCount; i++) {
+      size_t describeCount = rowCount > describeSteps ? describeSteps : rowCount;
+      for (i=0; i<(int)describeCount; i++) {
         if (i)
           sDescription += " ";
         snprintf(buf, bufSize, "%12.8lf", data[i]);
         sDescription += buf;
       }
-      if (rowCount < steps)
+      if (describeCount < steps)
         sDescription += " ...";
       sDescription += "\n";
-      data += m_Range.steps;
+      data += rowCount;
     }
   }
 
