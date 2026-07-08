@@ -1546,6 +1546,18 @@ uint16_t ClipU16( const icFloatNumber &input )
 
 /******************************************************************************/
 
+static
+icFloatNumber ClipFloat( const icFloatNumber &input )
+{
+  if (std::isnan(input))
+    return 0;
+  if (std::isinf(input))
+    return 1000.0;
+  return input;
+}
+
+/******************************************************************************/
+
 void CopyLUTtoTIFF( icFloatNumber *clutData, uint8_t *imageBuf,
             int tileWidth, int tileHeight, int tiles,
             int outputChannels, int inputChannels,
@@ -1554,6 +1566,7 @@ void CopyLUTtoTIFF( icFloatNumber *clutData, uint8_t *imageBuf,
 {
   uint16_t *imageBuf16 = (uint16_t *)imageBuf;
   float *imageBuf32 = (float *)imageBuf;
+  double *imageBuf64 = (double *)imageBuf;
 
 #if 0
 // TEST - same as below, just more expensive calculation
@@ -1566,9 +1579,12 @@ void CopyLUTtoTIFF( icFloatNumber *clutData, uint8_t *imageBuf,
         size_t tileY = tile / tilesWide;
         size_t outputIndex = outputChannels * ((tileY * gridPoints * imageWidth) + (tileX * gridPoints) + (y * imageWidth) + x);
         size_t inputIndex = outputChannels * k;
-        if (bytes == 4 || bytes == 8)
+        if (bytes == 8)
           for (int c = 0; c < outputChannels; ++c)
-            imageBuf32[outputIndex+c] = clutData[inputIndex+c];
+            imageBuf64[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
+        else if (bytes == 4)
+          for (int c = 0; c < outputChannels; ++c)
+            imageBuf32[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
         else if (bytes == 2)
           for (int c = 0; c < outputChannels; ++c)
             imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
@@ -1597,9 +1613,12 @@ void CopyLUTtoTIFF( icFloatNumber *clutData, uint8_t *imageBuf,
         for (int y = 0; y < tileHeight; ++y) {
           size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;  // turn LAB to look as expected
           size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
-          if (bytes == 4 || bytes == 8)
+          if (bytes == 8)
             for (int c = 0; c < outputChannels; ++c)
-              imageBuf32[outputIndex+c] = clutData[inputIndex+c];
+              imageBuf64[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
+          else if (bytes == 4)
+            for (int c = 0; c < outputChannels; ++c)
+              imageBuf32[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
           else if (bytes == 2)
             for (int c = 0; c < outputChannels; ++c)
               imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
@@ -1823,18 +1842,17 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       // build data for N-dimensional edge finding
       size_t step = outputChannels;     // innermost column step == output channels
       std::vector<size_t> dimensions(inputChannels);
-      for (int k = 0; k < inputChannels; ++k) {
-        dimensions[k] = clut->GridPoint(k);
-      }
-
       std::vector<size_t> loopSteps(inputChannels);
-      for (int i = inputChannels; i > 0; --i) {
-        loopSteps[i-1] = step;
-        step *= dimensions[i-1];
+      
+      for (int i = inputChannels-1; i >= 0; --i) {
+        loopSteps[i] = step;
+        dimensions[i] = clut->GridPoint(i);
+        step *= dimensions[i];
       }
 
       // process edges from CLUT
-      FindEdgesInner( clutData, edgeData, dimensions, loopSteps, outputChannels, bufferSize, 32 );
+      FindEdgesInner( clutData, edgeData, dimensions, loopSteps, outputChannels,
+                        bufferSize, 8*sizeof(icFloatNumber) );
 
       // copy edge data to image
       memset( imageBuf, 0, bufferSize );
@@ -1849,7 +1867,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath3.c_str());
       }
 
-    }   // end doEdges
+    }   // end if doEdges
 
   return 1;
 }
