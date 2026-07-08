@@ -1,0 +1,7 @@
+- description: "iccdev-mcp Python security query suite"
+- query: subprocess-command-injection.ql
+- query: profile-path-traversal.ql
+- query: api-path-traversal.ql
+- query: unsafe-env-server-bind.ql
+- query: unvalidated-file-upload.ql
+- query: missing-output-sanitization.ql

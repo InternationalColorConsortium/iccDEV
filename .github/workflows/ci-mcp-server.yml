@@ -1,0 +1,116 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+## Intent: Test and package the iccdev-mcp server.
+#
+###############################################################
+
+name: "ci-mcp-server"
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - master
+      - ci-qa-mcp-server
+    paths:
+      - "Dockerfile.mcp"
+      - "iccdev-mcp/**"
+      - ".github/codeql-queries/iccdev-mcp/**"
+      - ".github/workflows/ci-mcp-server.yml"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "Dockerfile.mcp"
+      - "iccdev-mcp/**"
+      - ".github/codeql-queries/iccdev-mcp/**"
+      - ".github/workflows/ci-mcp-server.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: "mcp-server-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  cancel-in-progress: true
+
+jobs:
+  python-package:
+    name: "Python package and REST tests"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+
+      # preflight: allow-package-install reason=mcp-server-python-test-dependencies
+      - name: Install test dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          python -m pip install --upgrade pip
+          python -m pip install -e "./iccdev-mcp[dev,rest]"
+          python -m pip check
+
+      - name: Run MCP package tests
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_TESTING_DIR: ${{ github.workspace }}/Testing
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          python -m pytest iccdev-mcp/tests -q
+
+      - name: Build MCP wheel
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          python -m pip wheel --no-deps -w /tmp/iccdev-mcp-wheel ./iccdev-mcp
+          ls -l /tmp/iccdev-mcp-wheel
+
+  dockerfile:
+    name: "Dockerfile syntax"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Validate MCP Dockerfile parses
+        env:
+          BASH_ENV: /dev/null
+          DOCKER_BUILDKIT: "1"
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          docker build --check -f Dockerfile.mcp .

@@ -1,7 +1,8 @@
 # iccDEV CodeQL Queries
 
 iccDEV includes custom CodeQL queries for ICC-specific C/C++ security patterns.
-They complement GitHub's standard `cpp-security-and-quality` suite.
+They complement GitHub's standard `cpp-security-and-quality` suite. The
+`iccdev-mcp/` subdirectory contains Python queries for the MCP REST/API package.
 
 ## Query Summary
 
@@ -40,6 +41,20 @@ They complement GitHub's standard `cpp-security-and-quality` suite.
 | `u8fixed8-reconstruction-error` | CWE-682 | Incorrect u8Fixed8Number reconstruction from normalized float |
 | `unterminated-ucs2-settext` | CWE-125, CWE-170 | Unterminated UCS-2 buffer passed to `SetText()` |
 
+## iccdev-mcp Python Queries
+
+Run the MCP-specific suite against a Python CodeQL database rooted at
+`iccdev-mcp/`:
+
+```bash
+gh codeql pack install .github/codeql-queries
+gh codeql database create /tmp/codeql-db-iccdev-mcp \
+  --language=python --source-root=iccdev-mcp --overwrite
+gh codeql database analyze /tmp/codeql-db-iccdev-mcp \
+  --format=sarif-latest --output=/tmp/iccdev-mcp-security.sarif \
+  --threads=0 .github/codeql-queries/iccdev-mcp/iccdev-mcp-security-suite.qls
+```
+
 ## Running Locally
 
 Prerequisites: GitHub CodeQL CLI or `gh codeql` extension, plus a working C/C++
@@ -59,6 +74,7 @@ Results are written to `codeql-results/`:
 - `cpp-security-and-quality.sarif`
 - `iccdev-security.sarif`
 - `iccdev-jsonlib-security.sarif`
+- `iccdev-mcp-security.sarif` when the MCP Python suite is run separately
 - `report.txt`
 
 ## Adding a Query

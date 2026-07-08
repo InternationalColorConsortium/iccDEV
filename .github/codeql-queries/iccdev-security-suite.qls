@@ -1,7 +1,14 @@
-- description: "iccDEV comprehensive security query suite (excludes JSON/Connect-focused queries)"
+- description: "iccDEV C/C++ security query suite (excludes JSON/Connect and MCP Python queries)"
 - queries: .
 - exclude:
     query path:
       - json-raw-normalized-value.ql
       - json-recursive-parse.ql
       - json-size-overflow.ql
+      - json-unchecked-type-access.ql
+      - iccdev-mcp/api-path-traversal.ql
+      - iccdev-mcp/missing-output-sanitization.ql
+      - iccdev-mcp/profile-path-traversal.ql
+      - iccdev-mcp/subprocess-command-injection.ql
+      - iccdev-mcp/unsafe-env-server-bind.ql
+      - iccdev-mcp/unvalidated-file-upload.ql
