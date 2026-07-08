@@ -69,6 +69,7 @@
 
     var origRun = app.run.bind(app);
     app.run = async function() {
+      app._iccOutput = null;
       await origRun();
       if (app.module) {
         try {
@@ -79,6 +80,7 @@
           el.closest('.output-content').classList.remove('empty');
         } catch (e) {
           // ICC output may not exist if build failed
+          app._iccOutput = null;
         }
       }
     };

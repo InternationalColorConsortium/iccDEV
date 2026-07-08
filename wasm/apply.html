@@ -97,16 +97,7 @@
 
     // Handle profile file uploads
     var dzProfiles = document.getElementById('drop-zone-profiles');
-    var profileInput = dzProfiles.querySelector('input[type="file"]');
-    dzProfiles.addEventListener('click', function() { profileInput.click(); });
-    dzProfiles.addEventListener('dragover', function(e) { e.preventDefault(); dzProfiles.classList.add('dragover'); });
-    dzProfiles.addEventListener('dragleave', function() { dzProfiles.classList.remove('dragover'); });
-    dzProfiles.addEventListener('drop', function(e) {
-      e.preventDefault();
-      dzProfiles.classList.remove('dragover');
-      handleProfileFiles(e.dataTransfer.files);
-    });
-    profileInput.addEventListener('change', function(e) { handleProfileFiles(e.target.files); });
+    app.bindFileDropZone(dzProfiles, handleProfileFiles);
 
     function handleProfileFiles(files) {
       profileFiles = [];

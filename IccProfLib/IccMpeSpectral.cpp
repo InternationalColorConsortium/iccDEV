@@ -1811,6 +1811,8 @@ void CIccMpeSpectralObserver::Describe(std::string &sDescription, int /* nVerbos
   const size_t bufSize = 81;
   icChar buf[bufSize];
   int j;
+  size_t rangeSteps = static_cast<size_t>(m_Range.steps);
+  size_t describeSteps = rangeSteps > kMaxDescribeSamples ? kMaxDescribeSamples : rangeSteps;
 
   snprintf(buf, bufSize, "BEGIN_%s %d %d \n", GetDescribeName(), m_nInputChannels, m_nOutputChannels);
   sDescription += buf;
@@ -1820,12 +1822,14 @@ void CIccMpeSpectralObserver::Describe(std::string &sDescription, int /* nVerbos
 
   sDescription += "White\n";
   if (m_pWhite) {
-    for (j=0; j<(int)m_Range.steps; j++) {
+    for (j=0; j<(int)describeSteps; j++) {
       if (j)
         sDescription += " ";
       snprintf(buf, bufSize, "%12.8lf", m_pWhite[j]);
       sDescription += buf;
     }
+    if (describeSteps < rangeSteps)
+      sDescription += " ...";
   }
   sDescription += "\n";
 

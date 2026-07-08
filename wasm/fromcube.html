@@ -69,13 +69,16 @@
 
     const origRun = app.run.bind(app);
     app.run = async function() {
+      app._iccOutput = null;
       await origRun();
       if (app.module) {
         try {
           app._iccOutput = app.module.FS.readFile('/output.icc');
           var el = document.getElementById('output');
           el.textContent += '\n[ICC profile generated: ' + app._iccOutput.length + ' bytes]';
-        } catch (e) { /* build may have failed */ }
+        } catch (e) {
+          app._iccOutput = null;
+        }
       }
     };
 

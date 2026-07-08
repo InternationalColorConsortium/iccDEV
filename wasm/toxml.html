@@ -70,6 +70,7 @@
     // Override run to capture the output XML file
     const origRun = app.run.bind(app);
     app.run = async function() {
+      app._xmlOutput = null;
       await origRun();
       if (app.module) {
         try {
@@ -80,6 +81,7 @@
           app._xmlOutput = xmlData;
         } catch (e) {
           // XML output may not exist if conversion failed
+          app._xmlOutput = null;
         }
       }
     };

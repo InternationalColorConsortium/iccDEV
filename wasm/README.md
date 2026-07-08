@@ -52,17 +52,16 @@ The shared `app.js` runtime handles:
 
 ## Deployment
 
-### GitHub Pages (automatic)
+### GitHub Actions validation
 
-The `wasm-pages-deploy.yml` workflow builds WASM Release artifacts and
-deploys the site to GitHub Pages. Trigger manually from the Actions tab.
+The `ci-pr-wasm.yml` workflow validates WASM build configuration, browser-facing
+assets, and parity expectations during pull-request review.
 
 ### Local development
 
-The WASM binaries are built by the `wasm-latest-matrix.yml` workflow.
-To test locally:
+To test locally after a WASM build:
 
-1. Download the `wasm-matrix-Release` artifact from a CI run
+1. Copy or build the generated `.js` and `.wasm` modules for each tool
 2. Extract .js and .wasm files into `wasm/wasm/`
 3. Serve with any HTTP server:
 
@@ -77,10 +76,9 @@ Override with `?wasmBase=/path/to/wasm/` query parameter.
 
 ## Build
 
-WASM binaries are cross-compiled using Emscripten. See
-`wasm-latest-matrix.yml` for the full build configuration including
-third-party dependency builds (zlib, libpng, libjpeg, libtiff, libxml2,
-nlohmann-json).
+WASM binaries are cross-compiled using Emscripten with the same third-party
+dependency stack used by the native tools (zlib, libpng, libjpeg, libtiff,
+libxml2, nlohmann-json).
 
 Key Emscripten flags:
 - `INITIAL_MEMORY=128MB` -- initial heap size

@@ -79,18 +79,8 @@
     });
 
     var dzP = document.getElementById('drop-zone-profiles');
-    var pInput = dzP.querySelector('input[type="file"]');
-    dzP.addEventListener('click', function() { pInput.click(); });
-    dzP.addEventListener('dragover', function(e) { e.preventDefault(); dzP.classList.add('dragover'); });
-    dzP.addEventListener('dragleave', function() { dzP.classList.remove('dragover'); });
-    dzP.addEventListener('drop', function(e) {
-      e.preventDefault(); dzP.classList.remove('dragover');
-      profileFiles = Array.from(e.dataTransfer.files);
-      document.getElementById('profile-names').textContent =
-        profileFiles.map(function(f) { return iccSanitize.sanitizeFilename(f.name); }).join(', ');
-    });
-    pInput.addEventListener('change', function(e) {
-      profileFiles = Array.from(e.target.files);
+    app.bindFileDropZone(dzP, function(files) {
+      profileFiles = Array.from(files);
       document.getElementById('profile-names').textContent =
         profileFiles.map(function(f) { return iccSanitize.sanitizeFilename(f.name); }).join(', ');
     });

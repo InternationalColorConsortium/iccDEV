@@ -51,12 +51,16 @@ def main():
         print(f"Transform: {cmm.src_space!r} ({cmm.src_channels}ch) "
               f"-> {cmm.dst_space!r} ({cmm.dst_channels}ch)")
 
-        if len(sys.argv) >= 6:
+        required_args = 3 + cmm.src_channels
+        if len(sys.argv) >= required_args:
             # Single pixel from command line
             pixel = [float(sys.argv[i]) for i in range(3, 3 + cmm.src_channels)]
             result = cmm.apply(pixel)
             print(f"  Input:  {pixel}")
             print(f"  Output: {[round(v, 6) for v in result]}")
+        elif len(sys.argv) > 3:
+            print(f"Expected {cmm.src_channels} source channel values, got {len(sys.argv) - 3}")
+            sys.exit(1)
         else:
             # Default test pixels for RGB
             test_pixels = [

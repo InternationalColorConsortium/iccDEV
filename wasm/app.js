@@ -105,6 +105,34 @@ class IccWasmApp {
     }
   }
 
+  bindFileDropZone(dropZone, onFiles) {
+    if (!dropZone) return null;
+    const fileInput = dropZone.querySelector('input[type="file"]');
+    if (!dropZone.hasAttribute('tabindex')) dropZone.setAttribute('tabindex', '0');
+    if (!dropZone.hasAttribute('role')) dropZone.setAttribute('role', 'button');
+    dropZone.addEventListener('click', function() { if (fileInput) fileInput.click(); });
+    dropZone.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (fileInput) fileInput.click();
+      }
+    });
+    dropZone.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', function() { dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      onFiles(e.dataTransfer.files);
+    });
+    if (fileInput) {
+      fileInput.addEventListener('change', function(e) { onFiles(e.target.files); });
+    }
+    return fileInput;
+  }
+
   _setupAria() {
     // Status bar: announce state changes to screen readers
     const statusEl = document.getElementById(this.opts.statusId || 'status');

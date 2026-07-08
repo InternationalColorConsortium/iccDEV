@@ -69,6 +69,7 @@
 
     var origRun = app.run.bind(app);
     app.run = async function() {
+      app._jsonOutput = null;
       await origRun();
       if (app.module) {
         try {
@@ -79,6 +80,7 @@
           app._jsonOutput = jsonData;
         } catch (e) {
           // JSON output may not exist if conversion failed
+          app._jsonOutput = null;
         }
       }
     };
