@@ -829,7 +829,7 @@ APPLYLINK="$TOOLS/IccApplyToLink/iccApplyToLink"
 
 run_expect_exit "link-00" "Reject invalid link_type=2" 1 \
   "$APPLYLINK" "$OUTDIR/link_invalid.cube" 2 2 3 "invalid-link-type" 0.0 1.0 1 0 "$SRGB" 1
-run_expect_exit "link-00b" "Reject non-numeric LUT size" 255 \
+run_expect_exit "link-00b" "Reject non-numeric LUT size" 1 \
   "$APPLYLINK" "$OUTDIR/link_invalid_lut.cube" 1 2junk 3 "invalid-lut-size" 0.0 1.0 1 0 "$SRGB" 1
 run_expect_exit "link-00c" "Reject invalid DeviceLink option=2" 1 \
   "$APPLYLINK" "$OUTDIR/link_invalid_option.icc" 0 2 2 "invalid-device-option" 0.0 1.0 1 0 "$SRGB" 1
