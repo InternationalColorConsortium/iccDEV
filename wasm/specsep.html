@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-Fs9Ht51PTO6irYyYwWJPebUw3tPza2OVn81B74GWc8M='; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-lR3eIFRQjwATIRo84mEcJ3Jr2ny6HzlilsOgwiGNJqw='; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Perform spectral separation on TIFF images using iccSpecSepToTiff compiled to WebAssembly.">
+  <meta name="description" content="Combine single-channel spectral TIFF images using iccSpecSepToTiff compiled to WebAssembly.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2714%27 fill=%27%23005a9c%27/%3E%3Ctext x=%2716%27 y=%2721%27 font-size=%2716%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27monospace%27%3EICC%3C/text%3E%3C/svg%3E">
   <title>iccSpecSepToTiff -- WASM</title>
   <link rel="stylesheet" href="style.css">
@@ -15,7 +15,7 @@
     <nav class="breadcrumb" aria-label="Breadcrumb"><a href="index.html">iccDEV WASM Tools</a> / iccSpecSepToTiff</nav>
     <header>
       <h1>iccSpecSepToTiff</h1>
-      <p class="subtitle">Apply spectral separation using ICC profiles to TIFF data.</p>
+      <p class="subtitle">Combine single-channel spectral TIFF input into a multi-sample TIFF output.</p>
     </header>
 
     <main id="main-content">
@@ -36,12 +36,12 @@
         </div>
       </div>
       <div class="field">
-        <label for="profile-file-input">Spectral Separation Profiles</label>
+        <label for="profile-file-input">Optional ICC Profile</label>
         <div class="drop-zone accent-border" id="drop-zone-profiles" tabindex="0" role="button" aria-label="Profiles drop zone">
           <div class="icon" aria-hidden="true">&#128196;</div>
-          <div>Drop spectral ICC profiles here</div>
+          <div>Drop one ICC profile to validate and embed</div>
           <div class="filename" id="profile-names"></div>
-          <input type="file" id="profile-file-input" accept=".icc,.icm,.ICC,.ICM" multiple>
+          <input type="file" id="profile-file-input" accept=".icc,.icm,.ICC,.ICM">
         </div>
       </div>
       <div class="btn-group">
@@ -70,12 +70,16 @@
   <script>
     var profileFiles = [];
     const app = new IccWasmApp('iccSpecSepToTiff', {
-      getArgs: function(inputPath) {
-        var args = [inputPath];
-        profileFiles.forEach(function(pf) { args.push('/' + iccSanitize.sanitizeFilename(pf.name)); });
+      getArgs: function() {
+        var args = ['/output.tif', '0', '0', '/spec_', '1', '1', '1'];
+        if (profileFiles.length > 0) {
+          args.push('/' + iccSanitize.sanitizeFilename(profileFiles[0].name));
+        }
         return args;
       },
-      beforeRun: async function() {
+      beforeRun: async function(inputPath) {
+        var data = this.module.FS.readFile(inputPath);
+        this.module.FS.writeFile('/spec_1', data);
         for (var pf of profileFiles) {
           await this.writeFileToFS(pf);
         }
@@ -87,6 +91,25 @@
       profileFiles = Array.from(files);
       document.getElementById('profile-names').textContent =
         profileFiles.map(function(f) { return iccSanitize.sanitizeFilename(f.name); }).join(', ');
+    });
+
+    var origRun = app.run.bind(app);
+    app.run = async function() {
+      app._tiffOutput = null;
+      await origRun();
+      if (app.module) {
+        try {
+          app._tiffOutput = app.module.FS.readFile('/output.tif');
+          document.getElementById('output').textContent +=
+            '\n[Output TIFF: ' + app._tiffOutput.length + ' bytes]';
+        } catch (e) { /* no output */ }
+      }
+    };
+
+    document.getElementById('download-btn').addEventListener('click', function() {
+      if (app._tiffOutput) {
+        app.downloadBinary(app._tiffOutput, 'spectral-output.tif');
+      }
     });
 
     app.init();

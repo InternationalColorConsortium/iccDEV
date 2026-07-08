@@ -30,7 +30,7 @@ runs locally in the browser -- no server, no file uploads leave your machine.
 - **iccJpegDump** -- dump ICC profile from JPEG images
 
 ### Advanced
-- **iccSpecSepToTiff** -- spectral separation to TIFF
+- **iccSpecSepToTiff** -- combine single-sample spectral TIFF inputs into one TIFF
 - **iccV5DspObsToV4Dsp** -- convert v5 display+observer to v4
 
 ## Architecture
