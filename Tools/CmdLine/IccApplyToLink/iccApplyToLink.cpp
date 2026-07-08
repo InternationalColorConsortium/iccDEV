@@ -782,7 +782,7 @@ int main(int argc, icChar* argv[])
   int nLutSize = 0;
   if (!ParseIntArg(argv[3], 2, 255, nLutSize)) {
     printf("Invalid LUT size '%s': expected an integer between 2 and 255\n", argv[3]);
-    return -1;
+    return EXIT_FAILURE;
   }
   
   pWriter->setLutSize(nLutSize);
