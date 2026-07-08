@@ -1461,6 +1461,7 @@ int TIFFColorModelFromICCModel( icColorSpaceSignature colorSig )
 
 /******************************************************************************/
 
+// where black = no problem, white = big problem
 static
 int TIFFEdgeColorModelFromICCModel( icColorSpaceSignature colorSig )
 {
@@ -1477,19 +1478,11 @@ int TIFFEdgeColorModelFromICCModel( icColorSpaceSignature colorSig )
       return TIFF_MODE_RGB;
       break;
 
+    default:
     case icSigCmykData:
-      return TIFF_MODE_CMYK;
-      break;
-
     case icSigGrayData:
     case icSigGamutData:
       return TIFF_MODE_GRAY_BLACKZERO;
-      break;
-
-    default:
-      // and N-ink should be multichannel
-      // where white = no ink, black = full ink
-      return TIFF_MODE_GRAY_WHITEZERO;
       break;
   }
 
