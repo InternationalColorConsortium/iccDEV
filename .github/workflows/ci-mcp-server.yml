@@ -19,7 +19,7 @@ on:
       - master
       - ci-qa-mcp-server
     paths:
-      - "Dockerfile.mcp"
+      - "Dockerfile.ci-regression"
       - "iccdev-mcp/**"
       - ".github/codeql-queries/iccdev-mcp/**"
       - ".github/workflows/ci-mcp-server.yml"
@@ -27,7 +27,7 @@ on:
     branches:
       - master
     paths:
-      - "Dockerfile.mcp"
+      - "Dockerfile.ci-regression"
       - "iccdev-mcp/**"
       - ".github/codeql-queries/iccdev-mcp/**"
       - ".github/workflows/ci-mcp-server.yml"
@@ -91,7 +91,7 @@ jobs:
           ls -l /tmp/iccdev-mcp-wheel
 
   dockerfile:
-    name: "Dockerfile syntax"
+    name: "Regression Dockerfile syntax"
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -105,7 +105,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Validate MCP Dockerfile parses
+      - name: Validate regression Dockerfile parses
         env:
           BASH_ENV: /dev/null
           DOCKER_BUILDKIT: "1"
@@ -113,4 +113,4 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          docker build --check -f Dockerfile.mcp .
+          docker build --check -f Dockerfile.ci-regression .

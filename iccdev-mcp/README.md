@@ -10,12 +10,14 @@ and format conversion for ICC v2/v4 and iccMAX v5 profiles.
 
 ## Install
 
-For the lowest-friction setup, use the Docker image. It includes the MCP server,
-REST dependencies, all required iccDEV CLI tools, runtime libraries, and
-`Testing/` profiles, so no local iccDEV build is required.
+For the lowest-friction setup, use the iccDEV regression Docker image. It
+includes the MCP server, REST dependencies, all required iccDEV CLI tools,
+runtime libraries, maintainer utilities, and `Testing/` profiles, so no local
+iccDEV build is required.
 
 ```bash
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-mcp:latest
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  iccdev-mcp-entrypoint mcp
 ```
 
 Use `pip install` when integrating with a local source checkout or a locally
@@ -42,21 +44,24 @@ export ICCDEV_TOOLS_DIR=/path/to/iccDEV/Build/Tools
 
 ### Docker
 
-The MCP runtime image includes the Python package, REST dependencies, iccDEV
-CLI tools, runtime libraries, and `Testing/` profiles. It is the lowest-friction
-way to use all 25 MCP tools without building iccDEV locally.
+The regression image includes the Python package, REST dependencies, iccDEV
+CLI tools, runtime libraries, maintainer utilities, and `Testing/` profiles.
+It is the lowest-friction way to use CLI-backed MCP tools without building
+iccDEV locally.
 
-The `latest` image is published from the repository `master` branch. Feature
-branches can still run the Docker workflow manually; those runs build and smoke
-test the image without publishing it to GHCR.
+The `master` regression image is published from the repository `master`
+branch. Feature branches can still run the Docker workflow manually; those
+runs build and smoke test the image without publishing it to GHCR.
 
 ```bash
 # MCP stdio mode
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-mcp:latest
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  iccdev-mcp-entrypoint mcp
 
 # REST API mode on http://127.0.0.1:8080
 docker run --rm -p 127.0.0.1:8080:8080 \
-  ghcr.io/internationalcolorconsortium/iccdev-mcp:latest rest
+  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  iccdev-mcp-entrypoint rest
 ```
 
 Open <http://127.0.0.1:8080/> for the bundled REST dashboard. The dashboard
@@ -70,8 +75,8 @@ Useful runtime defaults are already configured:
 
 | Variable | Default |
 |----------|---------|
-| `ICCDEV_TOOLS_DIR` | `/opt/iccdev/Build/Tools` |
-| `ICCDEV_TESTING_DIR` | `/opt/iccdev/Testing` |
+| `ICCDEV_TOOLS_DIR` | `/workspace/build/Tools` |
+| `ICCDEV_TESTING_DIR` | `/workspace/iccDEV/Testing` |
 | `LD_LIBRARY_PATH` | iccDEV build library directories |
 
 Mount additional profiles read-only and list them through
@@ -81,14 +86,16 @@ Mount additional profiles read-only and list them through
 docker run --rm -p 127.0.0.1:8080:8080 \
   -v "$PWD/profiles:/profiles:ro" \
   -e ICCDEV_PROFILE_DIRS=/profiles \
-  ghcr.io/internationalcolorconsortium/iccdev-mcp:latest rest
+  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  iccdev-mcp-entrypoint rest
 ```
 
 Local build and smoke test:
 
 ```bash
-docker build -t iccdev-mcp:local -f Dockerfile.mcp .
-docker run --rm -p 127.0.0.1:8080:8080 iccdev-mcp:local rest
+docker build -t iccdev-ci-regression:mcp-local -f Dockerfile.ci-regression .
+docker run --rm -p 127.0.0.1:8080:8080 \
+  iccdev-ci-regression:mcp-local iccdev-mcp-entrypoint rest
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS http://127.0.0.1:8080/api/tools
 # Optional browser UI

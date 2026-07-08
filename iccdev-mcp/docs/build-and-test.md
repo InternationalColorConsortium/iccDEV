@@ -147,7 +147,7 @@ iccRoundTrip Testing/sRGB_D65_MAT.icc 1
 
 ## Install iccdev-mcp
 
-Use the Docker runtime below when you want all 25 MCP tools without building
+Use the regression Docker image below when you want MCP tools without building
 iccDEV locally. Source installs are for development and require a local
 `ICCDEV_TOOLS_DIR` for the 17 CLI-backed tools.
 
@@ -183,9 +183,9 @@ export ICCDEV_PROFILE_DIRS=/path/to/custom/profiles
 
 ### Docker Runtime
 
-The Docker runtime image includes the Python MCP package, REST dependencies,
-iccDEV CLI tools, runtime libraries, and `Testing/` profiles. Use it when you
-want the MCP server without a local CMake tool build.
+The regression Docker image includes the Python MCP package, REST dependencies,
+iccDEV CLI tools, runtime libraries, maintainer utilities, and `Testing/`
+profiles. Use it when you want the MCP server without a local CMake tool build.
 
 Published images are produced only from the repository `master` branch. Manual
 `ci-docker` runs on feature branches build and run the Docker smoke tests, but
@@ -193,11 +193,13 @@ load the image locally on the runner instead of pushing or attesting it.
 
 ```bash
 # MCP stdio mode
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-mcp:latest
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  iccdev-mcp-entrypoint mcp
 
 # REST API mode
 docker run --rm -p 127.0.0.1:8080:8080 \
-  ghcr.io/internationalcolorconsortium/iccdev-mcp:latest rest
+  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  iccdev-mcp-entrypoint rest
 
 # Health check
 curl -fsS http://127.0.0.1:8080/api/health
@@ -206,8 +208,9 @@ curl -fsS http://127.0.0.1:8080/api/health
 Build the image locally from a checkout:
 
 ```bash
-docker build -t iccdev-mcp:local -f Dockerfile.mcp .
-docker run --rm -p 127.0.0.1:8080:8080 iccdev-mcp:local rest
+docker build -t iccdev-ci-regression:mcp-local -f Dockerfile.ci-regression .
+docker run --rm -p 127.0.0.1:8080:8080 \
+  iccdev-ci-regression:mcp-local iccdev-mcp-entrypoint rest
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS http://127.0.0.1:8080/api/tools
 ```
