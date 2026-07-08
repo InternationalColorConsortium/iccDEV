@@ -634,24 +634,3 @@ jobs:
           unset GITHUB_TOKEN || true
 
           bash .github/scripts/issue-1591-profile-registry-repro.sh
-
-      - name: Upload issue 1591 diagnostics
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: issue-1591-profile-registry-diagnostics-${{ github.run_id }}
-          path: |
-            Build/build-issue-1591/build.log
-            Build/issue-1591-profile-registry/**
-            !Build/issue-1591-profile-registry/generated/**
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Upload generated issue 1591 outputs
-        if: ${{ always() && env.ISSUE_1591_UPLOAD_GENERATED_OUTPUTS == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: issue-1591-generated-outputs-${{ github.run_id }}
-          path: Build/issue-1591-profile-registry/generated/**
-          if-no-files-found: warn
-          retention-days: 7
