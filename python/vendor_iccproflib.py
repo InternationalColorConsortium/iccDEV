@@ -27,6 +27,8 @@ def vendor():
         print(f"ERROR: IccProfLib source not found at {SRC_DIR}", file=sys.stderr)
         sys.exit(1)
 
+    if os.path.isdir(DST_DIR):
+        shutil.rmtree(DST_DIR)
     os.makedirs(DST_DIR, exist_ok=True)
 
     copied = 0

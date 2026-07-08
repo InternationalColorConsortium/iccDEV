@@ -62,7 +62,7 @@ assets, and parity expectations during pull-request review.
 To test locally after a WASM build:
 
 1. Copy or build the generated `.js` and `.wasm` modules for each tool
-2. Extract .js and .wasm files into `wasm/wasm/`
+2. Place the generated `.js` and `.wasm` files in `wasm/`, next to the HTML pages
 3. Serve with any HTTP server:
 
 ```bash
@@ -71,8 +71,9 @@ cd wasm && python3 -m http.server 8080
 ```
 
 Note: WASM files must be served over HTTP (not file://). The `app.js`
-runtime loads modules from `./wasm/` relative to the page URL by default.
-Override with `?wasmBase=/path/to/wasm/` query parameter.
+runtime loads modules from `./` relative to each page URL. It intentionally
+does not read a `wasmBase` query parameter because changing script origins from
+the URL would weaken script-injection protections.
 
 ## Build
 
