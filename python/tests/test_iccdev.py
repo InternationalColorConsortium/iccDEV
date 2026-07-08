@@ -1,6 +1,9 @@
 """
 test_iccdev.py - Unit tests for iccdev Python bindings.
 
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+
 These tests verify the Python API layer. Many tests require actual ICC
 profile files and a built IccProfLib2 library to work end-to-end.
 Tests that require profiles are marked with @pytest.mark.skipif.

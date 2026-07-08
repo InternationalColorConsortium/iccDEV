@@ -2,6 +2,9 @@
 """
 read_profile.py - Example: read and inspect an ICC profile header.
 
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+
 Usage:
     python read_profile.py [profile.icc]
 """

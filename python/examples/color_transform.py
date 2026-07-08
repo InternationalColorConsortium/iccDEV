@@ -2,6 +2,9 @@
 """
 color_transform.py - Example: apply a color transform between two profiles.
 
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+
 Usage:
     python color_transform.py [input.icc output.icc] [r g b]
 

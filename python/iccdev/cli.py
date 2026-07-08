@@ -1,5 +1,8 @@
 """CLI-backed helpers for ICC profile conversion and diagnostics.
 
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+
 The Cython bindings expose in-process profile/header and CMM APIs.  XML, JSON,
 dump, and round-trip operations are implemented by the native iccDEV command
 line tools, so these helpers discover and run those tools without using a shell.

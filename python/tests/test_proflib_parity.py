@@ -1,4 +1,8 @@
-"""Native-backed parity tests for IccProfLib behavior."""
+"""Native-backed parity tests for IccProfLib behavior.
+
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+"""
 
 from __future__ import annotations
 

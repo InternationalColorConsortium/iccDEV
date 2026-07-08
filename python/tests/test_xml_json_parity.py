@@ -1,4 +1,8 @@
-"""Native tool parity tests for XML and JSON profile operations."""
+"""Native tool parity tests for XML and JSON profile operations.
+
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+"""
 
 from __future__ import annotations
 

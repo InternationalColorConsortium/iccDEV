@@ -2,6 +2,9 @@
 """
 vendor_iccproflib.py - Copy IccProfLib sources into vendor/ for sdist packaging.
 
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+
 Run before `python -m build --sdist` to create a self-contained source
 distribution that compiles IccProfLib as part of `pip install`.
 

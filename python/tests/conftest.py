@@ -1,4 +1,8 @@
-"""Shared pytest guards for Python package validation."""
+"""Shared pytest guards for Python package validation.
+
+Copyright (c) International Color Consortium.
+BSD 3-Clause License. See LICENSE.md for details.
+"""
 
 from __future__ import annotations
 
