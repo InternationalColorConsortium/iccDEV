@@ -76,12 +76,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg8 \
     libpng16-16t64 \
     libstdc++6 \
-    libssl3t64=3.5.5-1ubuntu3.2 \
+    libssl3t64 \
     libtiff6 \
     libxml2-16 \
-    openssl-provider-legacy=3.5.5-1ubuntu3.2 \
+    openssl-provider-legacy \
     python3 \
     zlib1g \
+ && for pkg in libssl3t64 openssl-provider-legacy; do \
+      version="$(dpkg-query -W -f='${Version}' "$pkg")"; \
+      dpkg --compare-versions "$version" ge 3.5.5-1ubuntu3.2 || { \
+        echo "Package $pkg version $version is below required 3.5.5-1ubuntu3.2" >&2; \
+        exit 1; \
+      }; \
+    done \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/iccdev /opt/iccdev
