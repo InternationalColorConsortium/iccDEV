@@ -1,12 +1,10 @@
-###############################################################
+# Copilot Setup Steps
 #
 # Copyright (c) 2026 International Color Consortium.
 #                 All rights reserved.
 #                 https://color.org
 #
 # Intent: Prepare GitHub Copilot coding agent dependencies.
-#
-###############################################################
 
 name: Copilot Setup Steps
 
