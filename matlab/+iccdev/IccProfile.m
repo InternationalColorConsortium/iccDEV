@@ -3,14 +3,14 @@ classdef IccProfile < handle
   %
   %   p = iccdev.IccProfile('sRGB.icc')
   %   p = iccdev.IccProfile('sRGB.icc', 'lazy', false)
-  %   h = p.header;
+  %   h = p.header();
   %   disp(h.versionString)
   %   p.close();
   %
   %   % Context-manager pattern:
   %   p = iccdev.IccProfile('sRGB.icc');
   %   c = onCleanup(@() p.close());
-  %   disp(p.header)
+  %   disp(p.header())
   %
   % Copyright (c) International Color Consortium.
   % BSD 3-Clause License. See LICENSE.md for details.
