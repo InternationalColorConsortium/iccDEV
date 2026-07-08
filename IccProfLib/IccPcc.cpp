@@ -328,9 +328,6 @@ CIccMatrixMath *IIccProfileConnectionConditions::getReflectanceObserver(const ic
   if (!pView)
     return NULL;
 
-  if (!pView)
-    return NULL;
-
   icSpectralRange illumRange;
   const icFloatNumber *illum = pView->getIlluminant(illumRange);
 

@@ -68,8 +68,7 @@
     });
 
     const origRun = app.run.bind(app);
-    document.getElementById('run-btn').removeEventListener('click', origRun);
-    document.getElementById('run-btn').addEventListener('click', async function() {
+    app.run = async function() {
       await origRun();
       if (app.module) {
         try {
@@ -78,7 +77,7 @@
           el.textContent += '\n[ICC profile generated: ' + app._iccOutput.length + ' bytes]';
         } catch (e) { /* build may have failed */ }
       }
-    });
+    };
 
     document.getElementById('download-icc-btn').addEventListener('click', function() {
       if (app._iccOutput) {

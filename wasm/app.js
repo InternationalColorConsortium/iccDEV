@@ -21,6 +21,7 @@ class IccWasmApp {
    * @param {string} [opts.indicatorId='indicator'] - ID of the status indicator dot
    * @param {string} [opts.runBtnId='run-btn'] - ID of the run button
    * @param {Function} [opts.getArgs] - Returns array of CLI args for callMain
+   * @param {Function} [opts.beforeRun] - Optional async hook after MEMFS setup and before callMain
    */
   constructor(toolName, opts = {}) {
     this.toolName = toolName;
@@ -224,6 +225,10 @@ class IccWasmApp {
       const inputPath = '/' + safeName;
       this.module.FS.writeFile(inputPath, this.fileData);
 
+      if (this.opts.beforeRun) {
+        await this.opts.beforeRun.call(this, inputPath);
+      }
+
       // Get CLI arguments from the page
       const args = this.opts.getArgs
         ? this.opts.getArgs(inputPath)
@@ -276,6 +281,20 @@ class IccWasmApp {
       }
     }
     return null;
+  }
+
+  async writeFileToFS(file) {
+    if (!this.module) {
+      throw new Error('WASM module is not initialized');
+    }
+    var safeName = file.name;
+    if (typeof iccSanitize !== 'undefined') {
+      safeName = iccSanitize.sanitizeFilename(safeName);
+    }
+    var path = '/' + safeName;
+    var buf = await file.arrayBuffer();
+    this.module.FS.writeFile(path, new Uint8Array(buf));
+    return path;
   }
 
   // --- UI helpers ---

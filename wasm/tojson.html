@@ -68,8 +68,7 @@
     });
 
     var origRun = app.run.bind(app);
-    document.getElementById('run-btn').removeEventListener('click', origRun);
-    document.getElementById('run-btn').addEventListener('click', async function() {
+    app.run = async function() {
       await origRun();
       if (app.module) {
         try {
@@ -82,7 +81,7 @@
           // JSON output may not exist if conversion failed
         }
       }
-    });
+    };
 
     document.getElementById('download-json-btn').addEventListener('click', function() {
       if (app._jsonOutput) {

@@ -76,6 +76,11 @@
         if (observerFile) args.push('/' + iccSanitize.sanitizeFilename(observerFile.name));
         args.push('/output.icc');
         return args;
+      },
+      beforeRun: async function() {
+        if (observerFile) {
+          await this.writeFileToFS(observerFile);
+        }
       }
     });
 
@@ -99,12 +104,7 @@
     });
 
     var origRun = app.run.bind(app);
-    document.getElementById('run-btn').removeEventListener('click', origRun);
-    document.getElementById('run-btn').addEventListener('click', async function() {
-      if (app.module && observerFile) {
-        var buf = await observerFile.arrayBuffer();
-        app.module.FS.writeFile('/' + iccSanitize.sanitizeFilename(observerFile.name), new Uint8Array(buf));
-      }
+    app.run = async function() {
       await origRun();
       if (app.module) {
         try {
@@ -113,7 +113,7 @@
             '\n[v4 profile generated: ' + app._iccOutput.length + ' bytes]';
         } catch (e) { /* conversion may have failed */ }
       }
-    });
+    };
 
     document.getElementById('download-btn').addEventListener('click', function() {
       if (app._iccOutput) {

@@ -87,6 +87,11 @@
           args.push('/' + iccSanitize.sanitizeFilename(pf.name));
         });
         return args;
+      },
+      beforeRun: async function() {
+        for (var pf of profileFiles) {
+          await this.writeFileToFS(pf);
+        }
       }
     });
 
@@ -115,15 +120,7 @@
 
     // Override run to write profile files to FS
     var origRun = app.run.bind(app);
-    document.getElementById('run-btn').removeEventListener('click', origRun);
-    document.getElementById('run-btn').addEventListener('click', async function() {
-      // Write profile files to virtual FS before running
-      if (app.module) {
-        for (var pf of profileFiles) {
-          var buf = await pf.arrayBuffer();
-          app.module.FS.writeFile('/' + iccSanitize.sanitizeFilename(pf.name), new Uint8Array(buf));
-        }
-      }
+    app.run = async function() {
       await origRun();
       if (app.module) {
         try {
@@ -132,7 +129,7 @@
             '\n[Output TIFF: ' + app._tiffOutput.length + ' bytes]';
         } catch (e) { /* no output */ }
       }
-    });
+    };
 
     document.getElementById('download-btn').addEventListener('click', function() {
       if (app._tiffOutput) {

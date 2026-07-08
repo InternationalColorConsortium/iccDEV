@@ -73,6 +73,11 @@
     const app = new IccWasmApp('iccApplyNamedCmm', {
       getArgs: function(inputPath) {
         return [inputPath];
+      },
+      beforeRun: async function() {
+        for (var pf of profileFiles) {
+          await this.writeFileToFS(pf);
+        }
       }
     });
 
@@ -92,19 +97,6 @@
       profileFiles = Array.from(e.target.files);
       document.getElementById('profile-names').textContent =
         profileFiles.map(function(f) { return iccSanitize.sanitizeFilename(f.name); }).join(', ');
-    });
-
-    // Write profiles to FS before running
-    var origRun = app.run.bind(app);
-    document.getElementById('run-btn').removeEventListener('click', origRun);
-    document.getElementById('run-btn').addEventListener('click', async function() {
-      if (app.module) {
-        for (var pf of profileFiles) {
-          var buf = await pf.arrayBuffer();
-          app.module.FS.writeFile('/' + iccSanitize.sanitizeFilename(pf.name), new Uint8Array(buf));
-        }
-      }
-      await origRun();
     });
 
     app.init();
