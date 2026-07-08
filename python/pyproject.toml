@@ -7,7 +7,7 @@ name = "iccdev"
 version = "0.1.0"
 description = "Python bindings for RefIccMAX (iccDEV) - ICC color profile library"
 readme = "README.md"
-license = "BSD-3-Clause"
+license = { text = "BSD-3-Clause" }
 requires-python = ">=3.9"
 authors = [
     { name = "International Color Consortium" },
