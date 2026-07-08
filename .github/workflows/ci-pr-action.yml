@@ -39,7 +39,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'Open PR number to build for workflow_dispatch fast lane'
+        description: 'Optional open PR number; omit for same-repository pre-PR branch fast lane'
         required: false
         default: ''
         type: string
@@ -332,7 +332,9 @@ jobs:
               if ! validate_fast_lane_actor "$GH_ACTOR"; then
                 exit 1
               fi
-              resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
+              if [ -n "$DISPATCH_PR_NUMBER" ]; then
+                resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
+              fi
               if ! require_same_repository_pr; then
                 exit 1
               fi
@@ -879,7 +881,7 @@ jobs:
       enable-lto: true
       warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
       profile-test-mode: smoke
-      compiler-version: gcc-15
+      compiler-version: system
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   mac-fast-ci:
