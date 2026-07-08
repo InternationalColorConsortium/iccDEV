@@ -82,10 +82,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl-provider-legacy \
     python3 \
     zlib1g \
+ && min_openssl_version="3.5.5-1ubuntu3.2" \
  && for pkg in libssl3t64 openssl-provider-legacy; do \
       version="$(dpkg-query -W -f='${Version}' "$pkg")"; \
-      dpkg --compare-versions "$version" ge 3.5.5-1ubuntu3.2 || { \
-        echo "Package $pkg version $version is below required 3.5.5-1ubuntu3.2" >&2; \
+      dpkg --compare-versions "$version" ge "$min_openssl_version" || { \
+        echo "Package $pkg version $version is below required $min_openssl_version" >&2; \
         exit 1; \
       }; \
     done \
