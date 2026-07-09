@@ -181,14 +181,6 @@ Add this repository MCP configuration under
 }
 ```
 
-For PR review, verify that the repository MCP settings JSON keeps the
-`mcpServers.iccdev.tools` allowlist synchronized with the 25-tool inventory from
-`/api/tools`. Also check that `profile_summary` keeps raw ICC signature fields
-unchanged while exposing printable `*_display` fields for UI readability; ICC
-signature values may arrive as either 4-character strings or raw 32-bit
-integers, so both forms need test coverage. Dashboard changes should preserve
-the stale-output reset when switching tools.
-
 ### Remote (SSE transport)
 
 ```bash

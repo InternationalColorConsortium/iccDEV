@@ -48,6 +48,22 @@ For regression workflow updates, use
 - Test profile workflow: `.github/instructions/testing.instructions.md`
 - Workflow governance: `.github/instructions/workflow-governance.instructions.md`
 
+## iccdev-mcp Review Notes
+
+- Keep user-facing MCP setup docs task-oriented; put reviewer and agent guidance
+  in `.github/` files or prompts.
+- When reviewing repository MCP settings, compare the `mcpServers.iccdev.tools`
+  allowlist against the MCP tool names from `iccdev_mcp/server.py`, not the REST
+  route aliases from `/api/tools`. REST names such as `sig_to_str`,
+  `list_profiles`, `to_xml`, `from_xml`, and `spec_sep` intentionally differ
+  from MCP names such as `icc_sig_to_str`, `list_available_profiles`,
+  `profile_to_xml`, `xml_to_profile`, and `spec_sep_to_tiff`.
+- For `profile_summary`, keep raw ICC signature fields unchanged and expose
+  printable `*_display` fields only for UI readability. ICC signature values may
+  arrive as either 4-character strings or raw 32-bit integers, so both forms need
+  test coverage.
+- Dashboard changes should preserve stale-output reset when switching tools.
+
 Key safety rules:
 
 - 2-space C++ indentation, K&R braces, no tabs.
