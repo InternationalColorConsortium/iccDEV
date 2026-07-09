@@ -66,8 +66,12 @@ def _validate_pixels(pixels: list[list[float]]) -> None:
                 raise ValueError(f"Pixel {i} channel {j} must be finite")
 
 
-def _printable_signature(signature: str) -> str:
+def _printable_signature(signature: str | int) -> str:
     """Return an ASCII-safe display form for a 4-byte ICC signature."""
+    if isinstance(signature, int):
+        if signature < 0 or signature > 0xFFFFFFFF:
+            raise ValueError("signature must fit in 32 bits")
+        signature = signature.to_bytes(4, "big").decode("latin-1")
     return "".join(ch if 0x20 <= ord(ch) <= 0x7E else "." for ch in signature)
 
 
