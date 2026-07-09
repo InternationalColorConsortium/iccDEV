@@ -81,14 +81,6 @@
 #include "spectralLocus.hpp"
 #include "errorLog.hpp"
 
-// #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
-#define MEMORY_LEAK_CHECK
-
-#if defined(_WIN32) || defined(WIN32)
-#include <crtdbg.h>
-#elif defined(__GLIBC__)
-#include <mcheck.h>
-#endif
 
 #ifdef _WIN32
 // work around Windows non-standard headers
@@ -2602,24 +2594,6 @@ filename_list parse_arguments( int argc, char *argv[] )
 
 int main(int argc, char* argv[])
 {
-#if defined(MEMORY_LEAK_CHECK) && defined(_DEBUG)
-#if defined(WIN32) || defined(_WIN32)
-#if 0
-  // Suppress windows dialogs for assertions and errors - send to stderr instead during batch CLI processing
-  _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-  _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
-  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-  _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-#endif
-  int tmp = _CrtSetDbgFlag(_CRTDBG_REPORT_FLAG);
-  tmp = tmp | _CRTDBG_LEAK_CHECK_DF | _CRTDBG_ALLOC_MEM_DF; // | _CRTDBG_CHECK_ALWAYS_DF;
-  _CrtSetDbgFlag(tmp);
-  //_CrtSetBreakAlloc(1163);
-#elif __GLIBC__
-  mcheck(NULL);
-#endif // WIN32
-#endif // MEMORY_LEAK_CHECK && _DEBUG
-
   if (argc <= 1) {
     printUsage();
     return 0;
