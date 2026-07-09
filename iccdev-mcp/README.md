@@ -133,6 +133,54 @@ Add to `.vscode/mcp.json`:
 }
 ```
 
+### GitHub Copilot coding agent
+
+Add this repository MCP configuration under
+`Settings` -> `Copilot` -> `MCP servers`. GitHub requires explicit `type`,
+`args`, and `tools` fields for repository MCP settings.
+
+```json
+{
+  "mcpServers": {
+    "iccdev": {
+      "type": "local",
+      "command": "iccdev-mcp",
+      "args": [],
+      "env": {
+        "ICCDEV_TOOLS_DIR": "Build/Tools"
+      },
+      "tools": [
+        "inspect_header",
+        "profile_summary",
+        "color_transform",
+        "roundtrip_delta",
+        "icc_sig_to_str",
+        "enum_spaces",
+        "list_available_profiles",
+        "health_check",
+        "dump_profile",
+        "profile_to_xml",
+        "xml_to_profile",
+        "profile_to_json",
+        "json_to_profile",
+        "tiff_dump",
+        "jpeg_dump",
+        "png_dump",
+        "from_cube",
+        "apply_profiles",
+        "apply_named_cmm",
+        "create_link",
+        "v5_to_v4",
+        "spec_sep_to_tiff",
+        "apply_search",
+        "round_trip_test",
+        "pawg_report"
+      ]
+    }
+  }
+}
+```
+
 ### Remote (SSE transport)
 
 ```bash

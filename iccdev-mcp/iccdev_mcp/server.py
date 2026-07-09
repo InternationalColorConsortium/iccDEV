@@ -66,6 +66,11 @@ def _validate_pixels(pixels: list[list[float]]) -> None:
                 raise ValueError(f"Pixel {i} channel {j} must be finite")
 
 
+def _printable_signature(signature: str) -> str:
+    """Return an ASCII-safe display form for a 4-byte ICC signature."""
+    return "".join(ch if 0x20 <= ord(ch) <= 0x7E else "." for ch in signature)
+
+
 # -------------------------------------------------------------------------
 # Tool 1: inspect_header
 # -------------------------------------------------------------------------
@@ -135,12 +140,15 @@ def profile_summary(path: str) -> dict:
             "device_class": h.device_class,
             "device_class_name": h.device_class_name,
             "color_space": h.color_space,
+            "color_space_display": _printable_signature(h.color_space),
             "color_space_name": h.color_space_name,
             "pcs": h.pcs,
+            "pcs_display": _printable_signature(h.pcs),
             "pcs_name": h.pcs_name,
             "rendering_intent": h.rendering_intent,
             "rendering_intent_name": h.rendering_intent_name,
             "platform_name": h.platform_name,
+            "platform_display": _printable_signature(h.platform),
             "profile_id": h.profile_id.hex(),
         }
     finally:

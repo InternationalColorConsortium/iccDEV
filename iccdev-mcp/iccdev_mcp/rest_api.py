@@ -672,6 +672,8 @@ function selectTool(name) {
   currentTool = name;
   renderNav();
   renderForm();
+  output('Ready.');
+  setText('runStatus', 'Idle', 'pill');
 }
 function buildRequest(tool) {
   if (tool.method === 'UPLOAD') {

@@ -242,9 +242,13 @@ class TestNativeTools:
         assert isinstance(result, dict)
         assert "version_string" in result
         assert "color_space_name" in result
+        assert "color_space_display" in result
         assert "device_class_name" in result
+        assert "pcs_display" in result
+        assert "platform_display" in result
         assert "profile_id" in result
         assert result["file_size"] > 0
+        assert all(0x20 <= ord(ch) <= 0x7E for ch in result["color_space_display"])
 
     def test_enum_spaces(self):
         from iccdev_mcp.server import enum_spaces

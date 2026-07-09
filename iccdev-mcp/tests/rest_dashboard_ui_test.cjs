@@ -264,6 +264,20 @@ async function runInUiContext(code) {
     'Color transform form should explain BadXform-prone profile classes',
   );
 
+  document.getElementById('output').textContent = 'stale output';
+  document.getElementById('runStatus').textContent = 'OK';
+  await runInUiContext("selectTool('dump_profile');");
+  assert.equal(
+    document.getElementById('output').textContent,
+    'Ready.',
+    'Selecting a new tool should clear stale output',
+  );
+  assert.equal(
+    document.getElementById('runStatus').textContent,
+    'Idle',
+    'Selecting a new tool should reset run status',
+  );
+
   console.log('REST dashboard UI regression tests passed');
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
