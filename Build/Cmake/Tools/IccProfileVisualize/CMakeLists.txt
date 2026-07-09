@@ -22,13 +22,11 @@ set_target_properties(${TARGET_NAME} PROPERTIES
 target_link_libraries(${TARGET_NAME}
   PRIVATE
     ${TARGET_LIB_ICCPROFLIB}
-    $<$<BOOL:${ENABLE_ICCXML}>:${TARGET_LIB_ICCXML}>
 )
 
 target_include_directories(${TARGET_NAME}
   PRIVATE
     ${PROJECT_ROOT_DIR}/IccProfLib
-    $<$<BOOL:${ENABLE_ICCXML}>:${PROJECT_ROOT_DIR}/IccXML/IccLibXML>
 )
 
 install(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})

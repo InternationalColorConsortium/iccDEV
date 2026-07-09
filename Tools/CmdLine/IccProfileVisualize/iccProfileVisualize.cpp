@@ -77,7 +77,6 @@
 #include "IccProfLibVer.h"
 #include "../IccCmdLineUtil.h"
 #include "MiniTIFF.hpp"
-#include "MiniSVG.hpp"
 #include "MiniPDF.hpp"
 #include "spectralLocus.hpp"
 #include "errorLog.hpp"
@@ -94,14 +93,6 @@
 #ifdef _WIN32
 // work around Windows non-standard headers
   #define strcasecmp _stricmp
-#endif
-
-/******************************************************************************/
-
-// NOTE - ccox - multipage SVG doesn't work, but we may want to use SVG for UI drawing.
-// So I'm keeping the code, but disabling output.
-#ifndef USE_SVG
-#define USE_SVG     false
 #endif
 
 /******************************************************************************/
@@ -253,48 +244,6 @@ std::vector<P> convex_hull2D(std::vector<P> points_in)
   result.resize(k-1);
   return result;
 }
-
-/******************************************************************************/
-
-#if USE_SVG
-static
-void DrawAxisSVG( SVGOut &svgfile, const point2D &basepoint, const point2D &range,
-        const point2D &tickLength, const std::string &label )
-{
-  // main line
-  svgfile.AddLine( basepoint, basepoint+range );
-
-  // big marks for 0.0, 0.5, and 1.0
-  point2D start0 = basepoint;
-  svgfile.AddLine( start0, start0+tickLength );
-  point2D start1 = basepoint + range;
-  svgfile.AddLine( start1, start1+tickLength );
-  point2D start2 = basepoint + range*0.5f;
-  svgfile.AddLine( start2, start2+tickLength );
-
-  // small marks for each tenth that isn't 0.5
-  for (int i = 1; i < 10; ++i) {
-    if (i == 5) continue;
-    point2D startN = basepoint + range*(i/10.0f);
-    svgfile.AddLine( startN, startN+tickLength*0.5f);
-  }
-
-  // small marks for each hundredth
-  for (int i = 1; i < 100; ++i) {
-    if ((i % 10) == 0) continue;
-    point2D startN = basepoint + range*(i/100.0f);
-    svgfile.AddLine( startN, startN+tickLength*0.25f);
-  }
-
-  // label near halfway
-  std::string font = "Arial";
-  std::string style = "Regular";
-  std::string align = "Center";
-  point2D labelPt = basepoint + range*0.5f + tickLength*2.0f;
-  float rotation = (range.x == 0.0) ? 90 : 0;   // horiz or vertical
-  svgfile.AddText( labelPt.x, labelPt.y, label, 14, font, style, align, rotation );
-}
-#endif  // USE_SVG
 
 /******************************************************************************/
 
@@ -908,57 +857,6 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
 
 /******************************************************************************/
 
-#if USE_SVG
-static
-void graph1DLUTSVG( CIccCurve *curve, const std::string &name,
-        const std::string &description, SVGOut &svgfile, int steps )
-{
-  svgfile.NextPage();
-  svgfile.StartGroup( name );
-
-  // draw title/description
-  std::string font = "Arial";
-  std::string style = "Bold";
-  std::string align = "Center";
-
-  std::string clean_description( description );
-  // remove any line breaks from our text, because SVG doesn't do line breaks
-  std::replace( clean_description.begin(), clean_description.end(), '\n', ' ');
-  // and wrap our text in CDATA, because SVG doesn't like < > &
-  std::string outdescription = "<![CDATA[" + name + " " + clean_description + "]]>";
-  svgfile.AddText( 8*0.5*inch2mm, 0.25f*inch2mm, outdescription, 14.0f, font, style, align );
-
-  // draw axes
-  point2D basepoint( 0.5f*inch2mm, 7.5f*inch2mm );
-  point2D rangeX( 7.0f*inch2mm, 0.0f );
-  point2D tickLengthX( 0, 5 );
-  DrawAxisSVG( svgfile, basepoint, rangeX, tickLengthX, "Input" );
-
-  point2D rangeY( 0.0, -7.0*inch2mm );
-  point2D tickLengthY( -5, 0 );
-  DrawAxisSVG( svgfile, basepoint, rangeY, tickLengthY, "Output" );
-
-  // draw the curve
-  pointList points(steps+1);
-  float scale = (7.5f-0.5f)*inch2mm;
-  point2D base( 0.5f*inch2mm, 7.5f*inch2mm );
-  for (int i = 0; i <= steps; ++i ) {
-    float input = i / (float)steps;
-    float output = curve->Apply( input );
-    if (std::isnan(output)) output = 0.0;
-    if (std::isinf(output)) output = 1.0;
-    if (output > 1.0f) output = 1.0f;
-    if (output < 0.0f) output = 0.0f;
-    points[i] = point2D( input*scale, -output*scale ) + base;
-  }
-  svgfile.AddPolyLine( points, false, false );
-
-  svgfile.EndGroup();
-}
-#endif  // USE_SVG
-
-/******************************************************************************/
-
 static
 std::string extract_LUTNameForBookmark(const std::string& str)
 {
@@ -1160,9 +1058,6 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
         }
         int size = curve->GetSize();
         int steps = std::max( 1000, size );
-#if USE_SVG
-        graph1DLUTSVG( curve, sigDesc, description, svgfile, steps );
-#endif
         graph1DLUTPDF( curve, sigDesc, description, pdffile, steps );
         return 1;
         }
@@ -1177,9 +1072,6 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
         if (describe1DLUT(pCurve, description, sigDesc, filename)) {
           return 0;
         }
-#if USE_SVG
-        graph1DLUTSVG( pCurve, sigDesc, description, svgfile, 1000 );
-#endif
         graph1DLUTPDF( pCurve, sigDesc, description, pdffile, 1000 );
         return 1;
         }
@@ -1194,9 +1086,6 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
         if (describe1DLUT(sCurve, description, sigDesc, filename)) {
           return 0;
         }
-#if USE_SVG
-        graph1DLUTSVG( sCurve, sigDesc, description, svgfile, 1000 );
-#endif
         graph1DLUTPDF( sCurve, sigDesc, description, pdffile, 1000 );
         return 1;
         }
@@ -1214,9 +1103,6 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
         if (describe1DLUT( uCurve, description, sigDesc, filename)) {
           return 0;
         }
-#if USE_SVG
-        graph1DLUTSVG( uCurve, sigDesc, description, svgfile, 1000 );
-#endif
         graph1DLUTPDF( uCurve, sigDesc, description, pdffile, 1000 );
         return 1;
         }
@@ -2554,12 +2440,6 @@ int processLuts(CIccProfile *pIcc, const std::string &profilePath )
 // write output to basename + _luts.pdf
 // write basename + _ + tag + .tiff for nD LUTs
 
-#if USE_SVG
-  std::string svgPath = basename + "_luts.svg";
-  SVGOut svgfile( svgPath );
-  svgfile.SetPageSize( 8*inch2mm, 8*inch2mm );
-#endif
-
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
 
@@ -2590,7 +2470,7 @@ int processLuts(CIccProfile *pIcc, const std::string &profilePath )
         break;
 
 #if 0
-// I can't find any examples that use the response tag
+// I can't find any profiles that use the response tag!
 // which makes it difficult to test
       case icSigOutputResponseTag:
         {
@@ -2655,9 +2535,6 @@ int processLuts(CIccProfile *pIcc, const std::string &profilePath )
   }   // end loop over tags
 
 
-#if USE_SVG
-  svgfile.CloseFile();
-#endif
   pdffile.CloseFile();
 
   return outputItems;
@@ -2748,38 +2625,38 @@ int main(int argc, char* argv[])
     return 0;
   }
 
-  filename_list files = parse_arguments(argc,argv);
+  filename_list fileList = parse_arguments(argc,argv);
 
-  for (auto &file : files) {
+  for (auto &file : fileList) {
+    std::string sanitizedFile = icSanitizeFileName( file );
+    
     try {
       ClearErrorLogs();
-      
-      // DEBUGGING printf("Processing profile '%s'\n", file.c_str() );
-// TODO - read XML and JSON profiles
-// try each in-turn, or sniff file contents for clues?
+
+// DEBUGGING printf("Processing profile '%s'\n", file.c_str() );
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
       if (!pIcc) {
-        LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", file.c_str() );
+        LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", sanitizedFile.c_str() );
         continue;
       }
 
-      auto count = processLuts( pIcc, file );
+      auto count = processLuts( pIcc, sanitizedFile );
       if (!count) {
-        LogAnError(stderr,"Profile %s had no content for output\n", file.c_str() );
+        LogAnError(stderr,"Profile %s had no content for output\n", sanitizedFile.c_str() );
       }
 
       delete pIcc;
     }   // end try
     catch (const std::exception& e) {
-      LogAnError(stderr, "%s: ERROR exception: '%s'\n", file.c_str() , e.what() );
+      LogAnError(stderr, "%s: ERROR exception: '%s'\n", sanitizedFile.c_str() , e.what() );
     }
     catch (...) {
-      LogAnError(stderr, "%s: ERROR: unknown exception\n", file.c_str() );
+      LogAnError(stderr, "%s: ERROR: unknown exception\n", sanitizedFile.c_str() );
     }
-    
+
     // NOTE - consume error logs here if needed, so exceptions are included
 
-  } // end for argc
+  } // end for file list
 
   return 0;
 }
