@@ -792,26 +792,25 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
 
   if (hasWhite) {
     std::string CCTText;
-#if 0
-// not working correctly with 9300 whitepoint displays, gives 3175K
     auto theXYZTag = dynamic_cast<CIccTagXYZ*>(whiteTag);
     if (theXYZTag) {
-      auto theXYZ = theXYZTag->GetXYZ(0);
+      icXYZNumber *theXYZ = theXYZTag->GetXYZ(0);
       if (theXYZ) {
-        auto theXY = xyFromICCXYZ( theXYZ );
+        XYColor theXY = xyFromICCXYZ( theXYZ );
         // McCamy's forumula
         // McCamy, Calvin S. (April 1992).
         // "Correlated color temperature as an explicit function of chromaticity coordinates"
         float n = (theXY.x - 0.3320f) / (0.1858f - theXY.y);
         float n2 = n*n;
         float n3 = n*n*n;
-        //float cct = -437.0f *n3 + 3601.0f *n2 - 6861.0f *n + 5514.31f;    // first eq.
-        float cct = -449.0f *n3 + 3525.0f *n2 - 6823.3f *n + 5520.33f;  // second eq.
+        //float cct = -437.0f *n3 + 3601.0f *n2 - 6861.0f *n + 5514.31f;    // first eq. from article
+        //float cct = -449.0f *n3 + 3525.0f *n2 - 6823.3f *n + 5520.33f;  // second eq. from article
+        float cct = 437.0f *n3 + 3601.0f *n2 + 6861.0f *n + 5514.31f;    // first eq.  CLOSEST!
+        //float cct = 449.0f *n3 + 3525.0f *n2 + 6823.3f *n + 5520.33f;  // second eq. CLOSE!
         int32_t cctI = (int32_t)cct; // we want the integer part, don't need precision
         CCTText = std::string("( ~") + std::to_string(cctI) + std::string("K)");
       }
     }
-#endif
 
     std::string label = std::string("White") + CCTText;
     commands << plotXYZTag( whiteTag, label, basepoint,
@@ -2607,7 +2606,7 @@ int main(int argc, char* argv[])
     try {
       ClearErrorLogs();
 
-// DEBUGGING printf("Processing profile '%s'\n", file.c_str() );
+//printf("Processing profile '%s'\n", file.c_str() );     // DEBUGGING
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
       if (!pIcc) {
         LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", sanitizedFile.c_str() );
