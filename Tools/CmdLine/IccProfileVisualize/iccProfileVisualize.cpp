@@ -1,7 +1,7 @@
 /*
   File:     iccProfileVisualize.cpp
 
-  Contains:   Console app to output LUTs as images and PDF plots
+  Contains:   Console app to output parts of a profile as images and PDF plots
 
   Version:  V1
 
@@ -740,6 +740,74 @@ std::string plotXYZTag( CIccTag *tag, std::string label, const point2D &basepoin
 /******************************************************************************/
 
 static
+float cctFromXY( const XYColor &theXY )
+{
+  // McCamy's forumula
+  // McCamy, Calvin S. (April 1992).
+  // "Correlated color temperature as an explicit function of chromaticity coordinates"
+  float n = (theXY.x - 0.3320f) / (0.1858f - theXY.y);
+  float n2 = n*n;
+  float n3 = n*n*n;
+  //float cct = -437.0f *n3 + 3601.0f *n2 - 6861.0f *n + 5514.31f;    // first eq. from article
+  //float cct = -449.0f *n3 + 3525.0f *n2 - 6823.3f *n + 5520.33f;  // second eq. from article
+  float cct = 437.0f *n3 + 3601.0f *n2 + 6861.0f *n + 5514.31f;    // first eq.  CLOSEST!
+  //float cct = 449.0f *n3 + 3525.0f *n2 + 6823.3f *n + 5520.33f;  // second eq. CLOSE!
+
+  return cct;
+}
+
+/******************************************************************************/
+
+struct XYName {
+  std::string name;
+  float x, y;
+};
+
+static constexpr
+bool matches( const XYColor &u, const XYName &k )
+{
+  float tolerance = 0.002;
+  bool matchx = fabs(u.x - k.x) < tolerance;
+  bool matchy = fabs(u.y - k.y) < tolerance;
+  return matchx && matchy;
+}
+
+std::vector<XYName> namedIlluminants = {
+  {"D50", 0.34567, 0.35850 },
+  {"D65", 0.31272, 0.32903 },
+  {"D75", 0.29902, 0.31485 },
+  {"D93", 0.28315, 0.29711 },
+  {"D55", 0.33242, 0.34743 },
+  {"Illuminant A", 0.44758, 0.40745 },	  // incandescent / tungsten
+  {"Illuminant B", 0.34842, 0.35161 },    // direct sunlight at noon
+  {"Illuminant C", 0.31006, 0.31616 },    // North sky daylight
+  {"Illuminant E", 0.33333, 0.33333 },    // equal energy
+};
+
+/******************************************************************************/
+
+static
+std::string cctStringFromXYZ( const icXYZNumber *theXYZ )
+{
+  if (!theXYZ)
+    return std::string();
+
+  XYColor theXY = xyFromICCXYZ( theXYZ );
+
+  for ( const auto &illum : namedIlluminants ) {
+    if ( matches( theXY, illum ) )
+        return std::string("(") + illum.name + std::string(")");
+  }
+
+  // if we can't find a match of common whitepoints, estimate the CCT
+  float cct = cctFromXY( theXY );
+  int32_t cctI = (int32_t)cct; // we want the integer part, don't need precision
+  return std::string("(~") + std::to_string(cctI) + std::string("K)");;
+}
+
+/******************************************************************************/
+
+static
 int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
 {
   std::ostringstream commands;
@@ -795,21 +863,8 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
     auto theXYZTag = dynamic_cast<CIccTagXYZ*>(whiteTag);
     if (theXYZTag) {
       icXYZNumber *theXYZ = theXYZTag->GetXYZ(0);
-      if (theXYZ) {
-        XYColor theXY = xyFromICCXYZ( theXYZ );
-        // McCamy's forumula
-        // McCamy, Calvin S. (April 1992).
-        // "Correlated color temperature as an explicit function of chromaticity coordinates"
-        float n = (theXY.x - 0.3320f) / (0.1858f - theXY.y);
-        float n2 = n*n;
-        float n3 = n*n*n;
-        //float cct = -437.0f *n3 + 3601.0f *n2 - 6861.0f *n + 5514.31f;    // first eq. from article
-        //float cct = -449.0f *n3 + 3525.0f *n2 - 6823.3f *n + 5520.33f;  // second eq. from article
-        float cct = 437.0f *n3 + 3601.0f *n2 + 6861.0f *n + 5514.31f;    // first eq.  CLOSEST!
-        //float cct = 449.0f *n3 + 3525.0f *n2 + 6823.3f *n + 5520.33f;  // second eq. CLOSE!
-        int32_t cctI = (int32_t)cct; // we want the integer part, don't need precision
-        CCTText = std::string("( ~") + std::to_string(cctI) + std::string("K)");
-      }
+      if (theXYZ)
+        CCTText = cctStringFromXYZ( theXYZ );
     }
 
     std::string label = std::string("White") + CCTText;
