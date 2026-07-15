@@ -482,6 +482,13 @@ typedef enum {
     icSigViewingCondDescTag                = 0x76756564,  /* 'vued' */
     icSigViewingConditionsTag              = 0x76696577,  /* 'view' */
 
+/* Third party tags */
+    icSigAppleAltBlueTRC                   = 0x61616267,  /* 'aabg' */
+    icSigAppleAltGreenTRC                  = 0x61616767,  /* 'aagg' */
+    icSigAppleAltRedTRC                    = 0x61617267,  /* 'aarg' */
+    icSigAppleDescriptionMulti             = 0x6473636d,  /* 'dscm' */
+
+
 /* Private tags*/
     icSigEmbeddedV5ProfileTag              = 0x49434335,  /* 'ICC5' */
     

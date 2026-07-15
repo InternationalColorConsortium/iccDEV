@@ -428,11 +428,15 @@ point2D spectrumLabelOffset( int nm, float textSize, PDFTextAlignment &align )
   if (nm < 515) {
     // go left
     align = kPDFTextAlignRight;
-    return point2D( -2.0f, 0.0f );
-  } else if (nm <= 520) {
+    return point2D( -0.5*textSize, 0.0f );
+  } else if (nm == 515) {
+    // go left a little bit more
+    align = kPDFTextAlignRight;
+    return point2D( -0.9*textSize, 0.0f );
+  } else if (nm <= 525) {
     // go up
     align = kPDFTextAlignCenter;
-    return point2D( -3.0f, textSize*1.55f );
+    return point2D( 0.0f, textSize*1.5f );
   } else {
     // go right
     align = kPDFTextAlignLeft;
@@ -772,16 +776,18 @@ bool matches( const XYColor &u, const XYName &k )
   return matchx && matchy;
 }
 
+// Are any FL or LED illuminants needed?
+static const
 std::vector<XYName> namedIlluminants = {
-  {"D50", 0.34567, 0.35850 },
-  {"D65", 0.31272, 0.32903 },
-  {"D75", 0.29902, 0.31485 },
-  {"D93", 0.28315, 0.29711 },
-  {"D55", 0.33242, 0.34743 },
-  {"Illuminant A", 0.44758, 0.40745 },	  // incandescent / tungsten
-  {"Illuminant B", 0.34842, 0.35161 },    // direct sunlight at noon
-  {"Illuminant C", 0.31006, 0.31616 },    // North sky daylight
-  {"Illuminant E", 0.33333, 0.33333 },    // equal energy
+  { "D50", 0.34567, 0.35850 },
+  { "D65", 0.31272, 0.32903 },
+  { "D75", 0.29902, 0.31485 },
+  { "D93", 0.28315, 0.29711 },
+  { "D55", 0.33242, 0.34743 },
+  { "Illuminant A", 0.44758, 0.40745 },	   // incandescent / tungsten
+  { "Illuminant B", 0.34842, 0.35161 },    // direct sunlight at noon
+  { "Illuminant C", 0.31006, 0.31616 },    // North sky daylight
+  { "Illuminant E", 0.33333, 0.33333 },    // equal energy
 };
 
 /******************************************************************************/
@@ -794,6 +800,7 @@ std::string cctStringFromXYZ( const icXYZNumber *theXYZ )
 
   XYColor theXY = xyFromICCXYZ( theXYZ );
 
+  // test known, named illuminants first
   for ( const auto &illum : namedIlluminants ) {
     if ( matches( theXY, illum ) )
         return std::string("(") + illum.name + std::string(")");
@@ -1092,6 +1099,7 @@ int output1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDe
   }
 
   icTagTypeSignature typeSig = tag->GetType();
+
 
   switch(typeSig) {
     case icSigCurveType:
@@ -2508,6 +2516,9 @@ int processLuts(CIccProfile *pIcc, const std::string &profilePath )
       case icSigGreenTRCTag:
       case icSigBlueTRCTag:
       case icSigGrayTRCTag:
+      case icSigAppleAltRedTRC:
+      case icSigAppleAltGreenTRC:
+      case icSigAppleAltBlueTRC:
         {
         const char *sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
@@ -2549,6 +2560,7 @@ int processLuts(CIccProfile *pIcc, const std::string &profilePath )
         }
         break;
 
+      // named color lists
       case icSigNamedColorTag:
       case icSigNamedColor2Tag:
       case icSigColorantTableTag:
@@ -2572,6 +2584,7 @@ int processLuts(CIccProfile *pIcc, const std::string &profilePath )
 // TODO - curveSetElement
 // TODO - singleSampledCurve
 // TODO - segmentedCurve
+/* need Apple tag structures: 'vcgt', 'vcgp', 'ndin' */
 
       // ignore everything else
       default:

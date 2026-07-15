@@ -218,6 +218,11 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigMultiplexTypeArrayTag, "multiplexTypeArrayTag"},
   {icSigMultiplexDefaultValuesTag, "multiplexDefaultValuesTag"},
   {icSigEmbeddedV5ProfileTag, "embeddedV5ProfileTag"},
+  {icSigAppleAltBlueTRC, "altBlueTRC"},
+  {icSigAppleAltGreenTRC, "altGreenTRC"},
+  {icSigAppleAltRedTRC, "altRedTRC"},
+  {icSigAppleDescriptionMulti, "altDescriptionMulti"},
+
   {(icTagSignature)0,""},
 };
 
