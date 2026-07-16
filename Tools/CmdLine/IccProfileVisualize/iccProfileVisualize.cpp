@@ -239,6 +239,106 @@ std::vector<P> convex_hull2D(std::vector<P> points_in)
 
 /******************************************************************************/
 
+struct namedXY {
+    namedXY() : x(0), y(0) {}
+
+    namedXY( std::string nn, float xx, float yy ) :
+        name(nn), x(xx), y(yy) {}
+
+    std::string name;
+    float x, y;
+};
+
+typedef std::vector<namedXY> namedXYList;
+
+/******************************************************************************/
+
+struct namedLAB {
+    namedLAB() : L(0), a(0), b(0) {}
+
+    namedLAB( std::string nn, float LL, float aa, float bb ) :
+        name(nn), L(LL), a(aa), b(bb) {}
+
+    std::string name;
+    float L, a, b;
+};
+
+typedef std::vector<namedLAB> namedLabList;
+
+/******************************************************************************/
+
+// parent classs for abstraction
+struct dataAbstraction {
+  virtual ~dataAbstraction() {};
+  virtual std::string getName() = 0;
+};
+
+struct xyPlotData : dataAbstraction {
+
+  xyPlotData() : printLabels(true) {}
+  
+  virtual std::string getName() { return "xyPlotData"; };
+
+  std::string object_name;        // page name in PDF
+  std::string object_label;
+  bool printLabels;
+  namedXYList points;
+  namedXYList points_outline;     // always closed
+};
+
+struct abPlotData : dataAbstraction {
+
+  abPlotData() : printLabels(true) {}
+  
+  virtual std::string getName() { return "abPlotData"; };
+  
+  std::string object_name;        // page name in PDF
+  std::string object_label;       // graph label
+  bool printLabels;
+  namedLabList points;
+  namedLabList points_outline;     // always closed
+};
+
+struct lutPlotData : dataAbstraction {
+
+  lutPlotData() : isIdentity(false) {}
+  
+  virtual std::string getName() { return "lutPlotData"; };
+  
+  std::string object_name;        // page name in PDF
+  std::string object_label;       // graph label, may be multiline
+  bool isIdentity;
+  namedLabList points;            // always connected, but not closed
+};
+
+enum imageColorModel {
+    IMAGE_MODE_GRAY_BLACKZERO = 0,
+    IMAGE_MODE_GRAY_WHITEZERO = 1,
+    IMAGE_MODE_RGB = 2,
+    IMAGE_MODE_CIELAB = 3,
+    IMAGE_MODE_CMYK = 4,
+};
+
+struct imageData : dataAbstraction {
+
+  imageData() : width(0), height(0), channels(0), depth(0),
+                mode(IMAGE_MODE_GRAY_BLACKZERO),
+                isFloatingPoint(false), data(NULL) {}
+
+  virtual std::string getName() { return "imageData"; };
+  
+  std::string object_name;  // page name in PDF
+  int width;
+  int height;
+  int channels;
+  int depth;                // bits per sample [8,16,32,64]
+  imageColorModel mode;     // TIFF mode
+  bool isFloatingPoint;
+  uint8_t *data;
+};
+
+/******************************************************************************/
+
 static
 std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
         const point2D &tickLength, const point2D &fullLength, float labelSize, const std::string &label )
@@ -322,6 +422,9 @@ void CreateAxesXobject( PDFWriter &pdfout )
   const float top = pdfout.PageHeight();
   const float right = pdfout.PageWidth();
   const Rect2D bounds ( left, right, bottom, top );
+  
+  if (pdfout.xobjectExists("Axes"))
+    return;
 
   // draw axes
   // horizontal
@@ -470,6 +573,9 @@ void CreateXYPlotXobject( PDFWriter &pdfout )
   const point2D rangeX( right-left-2*margin, 0 );
   const point2D rangeY( 0, top-bottom-2*margin );
 
+
+  if (pdfout.xobjectExists("xyPlot"))
+    return;
 
   // draw grid
   commands << "q\n";
@@ -840,10 +946,8 @@ int graphChromaticityPDF( CIccProfile *pIcc, PDFWriter &pdffile )
   if (!hasRGB)
     return 0;
 
-
-  // if the xyPlot xobject doesn't exist, create it now
-  if (!pdffile.xobjectExists("xyPlot"))
-    CreateXYPlotXobject( pdffile );
+  // create the xy background if it does not exist
+  CreateXYPlotXobject( pdffile );
 
   // add the common axes
   commands << "/xyPlot Do\n";
@@ -938,8 +1042,7 @@ void graph1DLUTPDF( CIccCurve *curve, const std::string &name,
   Rect2D bounds ( left, right, bottom, top );
 
   // if the axes xobject doesn't exist, create it now
-  if (!pdffile.xobjectExists("Axes"))
-    CreateAxesXobject( pdffile );
+  CreateAxesXobject( pdffile );
 
   // add the common axes
   commands << "/Axes Do\n";
@@ -1851,20 +1954,6 @@ int output3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
 /******************************************************************************/
 
-struct namedLAB {
-    namedLAB() : L(0), a(0), b(0) {}
-
-    namedLAB( std::string nn, float LL, float aa, float bb ) :
-        name(nn), L(LL), a(aa), b(bb) {}
-
-    std::string name;
-    float L, a, b;
-};
-
-typedef std::vector<namedLAB> namedLabList;
-
-/******************************************************************************/
-
 static
 int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &description,
                         icFloatNumber *XYZIlluminant, PDFWriter &pdffile )
@@ -1885,9 +1974,8 @@ int graphNamedColorsXYPDF( namedLabList &colorsOut, const std::string &descripti
   float textSize = 10.0f;
 
   // plot on AB grid
-  // if the xyPlot xobject doesn't exist, create it now
-  if (!pdffile.xobjectExists("xyPlot"))
-    CreateXYPlotXobject( pdffile );
+  // create the xyPlot xobject if doesn't exist
+  CreateXYPlotXobject( pdffile );
 
   // add the common axes
   commands << "/xyPlot Do\n";
