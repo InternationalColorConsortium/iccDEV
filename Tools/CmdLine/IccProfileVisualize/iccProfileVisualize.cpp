@@ -268,48 +268,103 @@ typedef std::vector<namedLAB> namedLabList;
 /******************************************************************************/
 
 // parent classs for abstraction
-struct dataAbstraction {
-  virtual ~dataAbstraction() {};
-  virtual std::string getName() = 0;
+struct dataAbstractionBase {
+  virtual ~dataAbstractionBase() {};
+  virtual std::string getDataType() const = 0;
 };
 
-struct xyPlotData : dataAbstraction {
+/******************************************************************************/
+
+// document class
+struct profileVisualizationData {
+
+  // because this class owns the pointers
+  ~profileVisualizationData() {
+    for (auto ptr : pages)
+        delete ptr;
+  }
+
+  // this class takes ownership of the pointers
+  void addPage( const dataAbstractionBase *obj ) {
+    pages.push_back(obj);
+  }
+  
+  std::string name;             // filename
+  std::string description;      // description from profile
+  std::vector<const dataAbstractionBase *> pages;
+};
+
+/******************************************************************************/
+
+struct xyPlotData : dataAbstractionBase {
 
   xyPlotData() : printLabels(true) {}
   
-  virtual std::string getName() { return "xyPlotData"; };
+  xyPlotData(const std::string &name, const std::string &label, bool printLabelFlag,
+              const namedXYList &points_alone, const namedXYList &points_outlined ) {
+    object_name = name;
+    object_label = label;
+    printLabels = printLabelFlag;
+    points_unconnected = points_alone;
+    points_connected = points_outlined;
+  }
+  
+  virtual std::string getDataType() const { return "xyPlotData"; };
 
   std::string object_name;        // page name in PDF
   std::string object_label;
   bool printLabels;
-  namedXYList points;
-  namedXYList points_outline;     // always closed
+  namedXYList points_unconnected;
+  namedXYList points_connected;     // always connected and closed
 };
 
-struct abPlotData : dataAbstraction {
+/******************************************************************************/
+
+struct abPlotData : dataAbstractionBase {
 
   abPlotData() : printLabels(true) {}
   
-  virtual std::string getName() { return "abPlotData"; };
+  abPlotData(const std::string &name, const std::string &label, bool printLabelFlag,
+              const namedLabList &points_alone, const namedLabList &points_outlined ) {
+    object_name = name;
+    object_label = label;
+    printLabels = printLabelFlag;
+    points_unconnected = points_alone;
+    points_connected = points_outlined;
+  }
+  
+  virtual std::string getDataType() const { return "abPlotData"; };
   
   std::string object_name;        // page name in PDF
   std::string object_label;       // graph label
   bool printLabels;
-  namedLabList points;
-  namedLabList points_outline;     // always closed
+  namedLabList points_unconnected;
+  namedLabList points_connected;     // always connected and closed
 };
 
-struct lutPlotData : dataAbstraction {
+/******************************************************************************/
+
+struct lutPlotData : dataAbstractionBase {
 
   lutPlotData() : isIdentity(false) {}
   
-  virtual std::string getName() { return "lutPlotData"; };
+  lutPlotData(const std::string &name, const std::string &label, bool identityFlag,
+              const pointList &points_input ) {
+    object_name = name;
+    object_label = label;
+    isIdentity = identityFlag;
+    points = points_input;
+  }
+  
+  virtual std::string getDataType() const { return "lutPlotData"; };
   
   std::string object_name;        // page name in PDF
   std::string object_label;       // graph label, may be multiline
   bool isIdentity;
-  namedLabList points;            // always connected, but not closed
+  pointList points;            // always connected, but not closed
 };
+
+/******************************************************************************/
 
 enum imageColorModel {
     IMAGE_MODE_GRAY_BLACKZERO = 0,
@@ -319,22 +374,35 @@ enum imageColorModel {
     IMAGE_MODE_CMYK = 4,
 };
 
-struct imageData : dataAbstraction {
+struct imageData : dataAbstractionBase {
 
   imageData() : width(0), height(0), channels(0), depth(0),
                 mode(IMAGE_MODE_GRAY_BLACKZERO),
                 isFloatingPoint(false), data(NULL) {}
-
-  virtual std::string getName() { return "imageData"; };
   
-  std::string object_name;  // page name in PDF
+  imageData(const std::string &name, void *imageData, int imageWidth, int imageHeight,
+            int imageChannels, int imageDepth, imageColorModel imageMode,
+            bool dataIsFloatingPoint = false ) {
+    object_name = name;
+    width = imageWidth;
+    height = imageHeight;
+    channels = imageChannels,
+    depth = imageDepth;
+    mode = imageMode;
+    isFloatingPoint = dataIsFloatingPoint;
+    data = imageData;
+  }
+
+  virtual std::string getDataType() const { return "imageData"; };
+  
+  std::string object_name;  // page name in PDF, filename on disk
   int width;
   int height;
   int channels;
   int depth;                // bits per sample [8,16,32,64]
   imageColorModel mode;     // TIFF mode
   bool isFloatingPoint;
-  uint8_t *data;
+  void *data;
 };
 
 /******************************************************************************/
@@ -705,6 +773,8 @@ void CreateABPlotXobject( PDFWriter &pdfout )
   const point2D center = 0.5f * (basepoint + point2D(right-margin,top-margin));
   const float maxRadius = std::max( right-left-2*margin, top-bottom-2*margin );
 
+  if (pdfout.xobjectExists("abPlot"))
+    return;
 
   // draw grid
   commands << "q\n";
@@ -2034,8 +2104,7 @@ int graphNamedColorsABPDF( namedLabList &colorsOut, const std::string &descripti
 
   // plot on AB grid
   // if the abPlot xobject doesn't exist, create it now
-  if (!pdffile.xobjectExists("abPlot"))
-    CreateABPlotXobject( pdffile );
+  CreateABPlotXobject( pdffile );
 
   // add the common axes
   commands << "/abPlot Do\n";
@@ -2730,7 +2799,7 @@ filename_list parse_arguments( int argc, char *argv[] )
       exit (1);
     }
     else {
-      // not a switch, treat it as a json input file
+      // not a switch, treat it as an input file
       filenames.push_back( argv[c] );
     }
 
