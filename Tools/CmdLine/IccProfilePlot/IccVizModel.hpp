@@ -1,7 +1,7 @@
 /*
   File:     IccVizModel.hpp
 
-  Contains: Data-first profile visualization model  -  public API (see the header doc-comment for usage: pick a Kind, supply a CIccProfile, call Enumerate/RenderGraph/RenderRaster).
+  Contains: Data-first profile visualization model - public API (pick a Kind, supply a CIccProfile, call Enumerate/RenderGraph/RenderRaster).
 
   Version:  V1
 
@@ -62,10 +62,10 @@
  */
 
 /**
- * IccVizModel  -  data-first profile visualization model.
+ * IccVizModel - data-first profile visualization model.
  *
- * Computes a profile's visualizations  -  tone curves, the CIE 1931 chromaticity
- * chart, named/colorant a*b* and xy scatters, and the nD CLUT lattice  -  and
+ * Computes a profile's visualizations - tone curves, the CIE 1931 chromaticity
+ * chart, named/colorant a*b* and xy scatters, and the nD CLUT lattice - and
  * *returns the underlying data* rather than finished drawings:
  *
  *   - Graph visualizations (tone curves, chromaticity, named-colour scatters)
@@ -73,53 +73,17 @@
  *     draws/rasterizes them in its own look-and-feel. NO raster is produced for
  *     graph types.
  *   - Genuine images (the nD CLUT lattice) come back as Raster: the flattened,
- *     ICC-normalized CLUT samples plus geometry  -  the caller decides how to
+ *     ICC-normalized CLUT samples plus geometry - the caller decides how to
  *     colour-manage/display them.
  *
- * Series carry a role: Primary (the profile's own data  -  primaries, white,
+ * Series carry a role: Primary (the profile's own data - primaries, white,
  * curve, named colours) vs Hint (reference geometry the caller may draw or
- * ignore  -  spectral locus, planckian curve, wavelength labels, chroma circles,
+ * ignore - spectral locus, planckian curve, wavelength labels, chroma circles,
  * identity line). No ticks/grid are shipped: those are a caller-side decision;
  * only an axis range *hint* is provided.
  *
- * -- HOW TO USE THIS API ------------------------------------------------------
- *
- *   1. Open a profile into a CIccProfile* (e.g. OpenIccProfile("foo.icc")).
- *      Everything here takes that pointer; nothing is mutated, so one parsed
- *      profile can drive many calls.
- *
- *   2. Call Enumerate(pIcc) to discover what the profile can show. It returns a
- *      vector<Descriptor>, one per available visualization, in a stable order.
- *      Each Descriptor tells you:
- *        - kind   : which visualization (see enum Kind  -  Curve1D, ChromaticityXY,
- *                   NamedColorsAB, NamedColorsXY, ClutImage). Use this to pick a
- *                   chart/lens, or to drive a menu.
- *        - output : Output::Graph (vector data) or Output::Raster (an image).
- *        - id     : the opaque handle you pass back to render this one item.
- *        - title  : a human label; tag/grp/idx address the source object.
- *
- *   3. Render the item you want, branching on Descriptor::output:
- *        - Output::Graph  -> RenderGraph (pIcc, descriptor.id) -> GraphResult.
- *          GraphResult.graph is a Graph: a list of Series (each a polyline /
- *          closed path / scatter of Vertex{x,y,label,aux}) plus x/y Axis hints.
- *          Draw the Primary series as the data; draw or skip the Hint series
- *          (locus, planckian, chroma circles) as your UI prefers.
- *        - Output::Raster -> RenderRaster(pIcc, descriptor.id) -> RasterResult.
- *          RasterResult.raster is a Raster: width/height/channels/bitsPerChannel,
- *          a photometric hint, and the row-major ICC-normalized samples. Colour-
- *          manage / convert to your display space yourself.
- *
- *   4. Check ok. On failure, error holds the reason and diagnostics carries the
- *      granular skip/warning detail (the same text iccProfileVisualize prints).
- *      By default those are also echoed to stderr; see SetSilent() / Verbosity
- *      below to suppress or redirect that for library use.
- *
- *   A caller that wants a finished report (e.g. a PDF) walks the Enumerate list,
- *   renders each descriptor, and draws the returned data with its own toolkit -
- *   see iccProfilePlot.cpp for a worked, commented example.
- *
  * Design intent: this file depends ONLY on IccProfLib + spectralLocus.hpp + the
- * C++ standard library  -  no embind, no nlohmann, no PDF/TIFF writers  -  so it is
+ * C++ standard library - no embind, no nlohmann, no PDF/TIFF writers - so it is
  * self-contained and portable between callers (CLI, browser/WASM, tests).
  */
 
@@ -143,7 +107,9 @@ enum class Kind : unsigned int {
   NamedColorsAB  = 3,   // named/colorant colours on a CIELAB a*b* chart
   NamedColorsXY  = 4,   // named/colorant colours on the xy chart
   ClutImage      = 5,   // nD CLUT lattice flattened to an image (raster)
-  // SmoothnessLattice = 6,  // reserved  -  deferred to a later phase
+  // SmoothnessLattice = 6,  // reserved - deferred to a later phase
+  // InkReversalL     = 7,   // retired - per-channel L* tone-reversal scan (removed); value reserved
+  NeutralAxisInking = 8,// device colorant along the neutral axis from a PCS->device LUT (graph)
 };
 
 enum class Output : unsigned char { Graph, Raster };
@@ -165,14 +131,14 @@ struct Series {
   std::string name;        // human/legend label
   Role  role  = Role::Primary;
   Shape shape = Shape::Polyline;
-  std::string auxKind;     // "", "Lstar", "nm", "kelvin"  -  meaning of Vertex.aux
+  std::string auxKind;     // "", "Lstar", "nm", "kelvin" - meaning of Vertex.aux
   std::string colorHint;   // optional: "R","G","B","white","neutral","locus"
   std::vector<Vertex> verts;
 };
 
 struct Axis {
   std::string label;       // "Input", "a*", "x (CIE 1931)"
-  float minHint = 0.0f;    // suggested range only  -  caller may recompute/override
+  float minHint = 0.0f;    // suggested range only - caller may recompute/override
   float maxHint = 1.0f;
   bool  equalAspect = false;  // chart wants square aspect (xy / ab plots)
 };
@@ -204,7 +170,7 @@ struct Descriptor {
   int  idx = -1;         // channel index within grp, else -1
 };
 
-// A diagnostic raised while building a visualization  -  a granular skip/warn
+// A diagnostic raised while building a visualization - a granular skip/warn
 // reason, carried here as DATA so a library caller (browser UI, CLI, test)
 // decides how to surface them (log to stderr, show inline, ignore). Additive:
 // `error` still holds the single fatal reason for the simple ok/error path,
@@ -218,7 +184,7 @@ struct RasterResult { bool ok = false; std::string error; std::vector<Diagnostic
 
 // -- diagnostic output policy -------------------------------------------------
 // Each render result ALWAYS carries its diagnostics as data (see Diagnostic). In
-// ADDITION, the model echoes them to stderr  -  reproducing the top-level
+// ADDITION, the model echoes them to stderr - reproducing the top-level
 // behaviour a command-line caller expects. A process-global switch controls
 // this; it DEFAULTS to not-silent, so a caller that never touches it (and never
 // passes a Verbosity) behaves exactly like the CLI.
@@ -233,39 +199,92 @@ enum class Verbosity {
 };
 
 void SetSilent(bool silent = true);                  // global; default state is not-silent
-bool GetSilent();
-// Optional "<name>: " prefix prepended to each stderr line  -  the CLI sets the
+bool GetSilent();                                    // read that global silent switch
+// Optional "<name>: " prefix prepended to each stderr line - the CLI sets the
 // profile filename here so its output matches iccProfileVisualize byte-for-byte.
 void SetDiagnosticContext(const std::string& name);
 
-// Ordering of Enumerate's result.
-enum class Order : unsigned char {
-  Canonical,   // fixed, deterministic signature order (default; cross-TU/WASM-safe)
-  TagTable     // approximate the profile's tag-table (directory) order, by tag offset
+// List every visualization available for the profile, in a stable canonical
+// order: chromaticity first, then in a fixed canonical signature order - TRC curves, then
+// each LUT's A/B/M curves followed by its CLUT image, then a neutral-axis inking
+// graph for each PCS->device BToA table, then named/colorant tables as a*b* then xy.
+std::vector<Descriptor> Enumerate(CIccProfile* pIcc);
+
+// RenderGraph / RenderRaster - render one graph or raster by descriptor id.
+// Re-enumerates to find the descriptor (cheap; callers should cache the parsed
+// profile). Diagnostics are echoed to stderr per the Verbosity (default -> the
+// global SetSilent() switch).
+GraphResult  RenderGraph (CIccProfile* pIcc, const std::string& id, Verbosity v = Verbosity::Default);  // graph kinds
+RasterResult RenderRaster(CIccProfile* pIcc, const std::string& id, Verbosity v = Verbosity::Default);  // ClutImage raster
+
+// -- Gamut volume -------------------------------------------------------------
+// Volume (dE*ab^3) enclosed by a profile's gamut, measured by boundary
+// voxelisation + flood-fill: sample the device-cube boundary (all facets) through
+// the AToB transform -> L*a*b*, voxelise, dilate to seal sampling gaps, flood-fill
+// the exterior, erode the dilation back, count enclosed voxels. A scalar
+// metric - not a Graph/Raster - so it sits outside the Enumerate/Render path.
+//
+// Adapted from chardata's gamut-wasm `gamutVolumeIcc`; here the device->PCS step uses
+// IccProfLib (CIccXform on `aToBTag`, device values 0..1, PCS->Lab decoded via
+// icLabFromPcs / icXyzFromPcs+icXYZtoLab). Pick (tag, intent) to select the
+// gamut: perceptual = AToB0/icPerceptual, relative = AToB1/icRelativeColorimetric,
+// saturation = AToB2/icSaturation, absolute = AToB1/icAbsoluteColorimetric.
+//
+// `volume` is a discrete-voxel estimate (resolution = voxelSize). Check
+// `degenerate`: when true the boundary sampling largely failed or collapsed, so
+// the number is unreliable and a caller cannot tell "genuinely tiny gamut" from
+// "sampling collapsed" - surface it as N/A rather than a real measurement.
+struct GamutVolumeResult {
+  bool        ok             = false;
+  std::string error;
+  double      volume         = 0.0;  // dE*ab^3 = enclosed voxels x voxelSize^3
+  long long   voxels         = 0;
+  int         samplesPerAxis = 0;    // device-cube boundary steps per free axis
+  double      voxelSize      = 0.0;  // Lab grid cell edge (dE*ab)
+  int         nColorants     = 0;    // device channels
+  bool        degenerate     = false;// boundary collapsed / mostly non-finite: volume unreliable
 };
 
-// List every visualization available for the profile.
-//
-// Order::Canonical (default) returns a fixed, deterministic order: chromaticity
-// first, then TRC curves, then each LUT's A/B/M curves followed by its CLUT
-// image, then named/colorant tables as a*b* then xy. It probes a fixed signature
-// list (never iterates the profile's tag list), so it is safe to call from a
-// module compiled separately from IccProfLib (e.g. WASM).
-//
-// Order::TagTable reorders that same set to follow the profile's tag-table order
-//  -  what iccProfileVisualize produced by walking its tag directory  -  so a report
-// generator can match that page sequence. It does so WITHOUT the cross-TU tag-list
-// iteration: it sorts by each owning tag's byte offset (via the in-library-safe
-// GetTag()), with chromaticity pinned first. Offset order matches directory order
-// for essentially all real profiles; it is an approximation only in the rare case
-// of a tag whose directory position disagrees with its offset.
-std::vector<Descriptor> Enumerate(CIccProfile* pIcc, Order order = Order::Canonical);
+// Compute the gamut volume for one device->PCS (AToB) tag at `intent`. Pass 0 for
+// samplesPerAxis / voxelSize / dilate to auto-pick them from the colorant count.
+GamutVolumeResult GamutVolume(CIccProfile* pIcc, icTagSignature aToBTag,
+                              icRenderingIntent intent,
+                              int samplesPerAxis = 0, double voxelSize = 0.0,
+                              int dilate = 0);
 
-// Render one graph / raster by descriptor id. Re-enumerates to find the
-// descriptor (cheap; callers should cache the parsed profile). Diagnostics are
-// echoed to stderr per the Verbosity (default -> the global SetSilent() switch).
-GraphResult  RenderGraph (CIccProfile* pIcc, const std::string& id, Verbosity v = Verbosity::Default);
-RasterResult RenderRaster(CIccProfile* pIcc, const std::string& id, Verbosity v = Verbosity::Default);
+// -- B2A round-trip accuracy ---------------------------------------------------
+// Round-trip of Lab through the profile: seed in-gamut L*a*b* by sampling the
+// device cube on an interior grid and pushing it through A2B, then run each
+// Lab1 -> device (B2A) -> Lab2 (A2B) and report dE*ab(Lab1, Lab2). Measures how
+// accurately the B2A (PCS->device) table inverts the A2B for that intent - a
+// method suggested by Harold Boll. A scalar metric (outside the Enumerate/Render
+// path).
+//
+// Why seed from the device cube rather than sampling L*a*b* directly: every seed
+// is then the A2B image of a real device value, so the test points are wholly
+// IN-GAMUT and the round trip measures genuine B2A/A2B agreement. A directly
+// sampled L*a*b* grid would place many points outside the gamut, where B2A only
+// clamps them and reports a large, meaningless dE. Walking the device interior on
+// a regular grid also spreads the seeds reasonably evenly, in terms of spacing,
+// through the interior of the in-gamut region of L*a*b* space.
+//
+// Needs matching AToB/BToA tags for `intent` (perceptual = A2B0/B2A0, relative &
+// absolute = A2B1/B2A1, saturation = A2B2/B2A2); `intent` also drives the PCS
+// white handling (relative vs absolute).
+struct RoundTripResult {
+  bool        ok         = false;
+  std::string error;
+  int         n          = 0;    // finite test points
+  double      meanDE     = 0.0;  // dE*ab
+  double      p90DE      = 0.0;
+  double      maxDE      = 0.0;
+  double      stdDE      = 0.0;
+  int         nColorants = 0;    // device channels
+};
+
+// samplesPerAxis 0 -> auto-pick the device seed grid from the colorant count.
+RoundTripResult RoundTripDE(CIccProfile* pIcc, icRenderingIntent intent,
+                            int samplesPerAxis = 0);
 
 } // namespace iccviz
 
