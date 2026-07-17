@@ -253,7 +253,9 @@ std::string AddGraphLabels( const point2D &basepoint, bool isVertical,
 
 static
 std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
-        const point2D &tickLength, const point2D &fullLength, float labelSize, const std::string &label )
+        const point2D &tickLength, const point2D &fullLength, float labelSize, const std::string &label,
+        bool drawIdentity = true,
+        const std::string &tickStart = "0", const std::string &tickMid = "50%", const std::string &tickEnd = "100%" )
 {
   std::ostringstream commands;
 
@@ -272,8 +274,11 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
     point2D startN = basepoint + range*(i/10.0f);
     commands << startN << " m " << (startN+fullLength) << " l S\n";
   }
-  // identity line
-  commands << basepoint << " m " << (basepoint+fullLength+range) << " l S\n";
+  // identity line: only meaningful for input/output plots where y==x. The
+  // neutral-axis graph (L* vs % ink) has no such relationship, so callers
+  // suppress it via drawIdentity=false.
+  if (drawIdentity)
+    commands << basepoint << " m " << (basepoint+fullLength+range) << " l S\n";
   // end colored grid, grestore, gsave
   commands << "Q q\n";
 
@@ -302,10 +307,12 @@ std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
     commands << startN << " m " << (startN+tickLength*0.25) << " l S\n";
   }
 
-  // labels for 0, 50, 100%
-  std::string zero("0");
-  std::string half("50%");
-  std::string full("100%");
+  // tick labels at the start / mid / end of the axis range. Defaults 0/50%/100%
+  // suit input/output plots; callers override for reversed or non-percent axes
+  // (e.g. the neutral-axis L* axis runs 100 -> 0 and is not a percentage).
+  std::string zero(tickStart);
+  std::string half(tickMid);
+  std::string full(tickEnd);
   bool isVertical = (range.x == 0);
   commands << AddGraphLabels( basepoint, isVertical, tickLength, labelSize, zero );
   commands << AddGraphLabels( basepoint+0.5f*range, isVertical, tickLength, labelSize, half );
@@ -350,6 +357,46 @@ void CreateAxesXobject( PDFWriter &pdfout )
   commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0f, "Output" );
 
   pdfout.AddXObject( bounds, commands, "Axes" );
+}
+
+/******************************************************************************/
+
+// Axes frame for the neutral-axis inking graph. Identical geometry to the shared
+// "Axes" xobject, but labelled for this plot: L* runs across (100 at white on the
+// left down to 0 at black on the right, matching the sampled data) and % ink up.
+// Built once and reused by every neutral-axis page (renderNeutralAxisGraph).
+static
+void CreateNeutralAxesXobject( PDFWriter &pdfout )
+{
+  std::string commands;
+  const float margin = 0.5f*inch2point;
+  const float tickLength = 12.0f; // pt
+
+  const float bottom = 0.0f;
+  const float left = 0.0f;
+  const float top = pdfout.PageHeight();
+  const float right = pdfout.PageWidth();
+  const Rect2D bounds ( left, right, bottom, top );
+
+  // horizontal L* axis
+  const point2D basepoint( margin, bottom+margin );
+  const point2D rangeX( right-2*margin, 0.0f );
+  const point2D tickLengthX( 0, -tickLength );
+  const point2D fullLengthX( 0, (top-margin) - (bottom+margin) );
+  // L* runs 100 (left) -> 0 (right) and is not a percentage; no identity line.
+  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, fullLengthX, 12.0f, "L* (100 to 0)",
+                           /*drawIdentity=*/false, /*start=*/"100", /*mid=*/"50", /*end=*/"0" );
+
+  // vertical % ink axis
+  const point2D rangeY( 0.0, (top-2*margin) );
+  const point2D tickLengthY( -tickLength, 0 );
+  const point2D fullLengthY( (right-margin) - (left+margin), 0 );
+  // % ink runs 0 (bottom) -> 100 (top): default tick labels are correct; only
+  // suppress the identity diagonal.
+  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0f, "% ink",
+                           /*drawIdentity=*/false );
+
+  pdfout.AddXObject( bounds, commands, "NeutralAxes" );
 }
 
 /******************************************************************************/
@@ -1188,6 +1235,99 @@ int renderCurveGraph( const iccviz::Graph &graph, PDFWriter &pdffile )
 
 /******************************************************************************/
 
+// draw the neutral-axis (GCR / ink-build) graph from an iccviz NeutralAxisInking
+// graph. Unlike renderCurveGraph (a single normalized "curve" series), this graph
+// carries one Primary series per device colorant: Vertex.x is L* (100 at white,
+// falling to 0 at black) and Vertex.y is that colorant's amount in percent. We
+// plot every colorant's ink-build polyline together on one L* vs %-ink chart,
+// each in a distinct stroke colour, with a channel-name legend, so the page shows
+// how much of each ink the B2A (PCS->device) table lays down along the neutral
+// (a*=b*=0) axis.
+static
+int renderNeutralAxisGraph( const iccviz::Graph &graph, PDFWriter &pdffile )
+{
+  std::ostringstream commands;
+
+  const float margin = 0.5f*inch2point;
+  const float top = pdffile.PageHeight();
+  const float right = pdffile.PageWidth();
+
+  // shared L*/%-ink axes frame (created lazily, like "Axes"/"xyPlot")
+  if (!pdffile.xobjectExists("NeutralAxes"))
+    CreateNeutralAxesXobject( pdffile );
+  commands << "/NeutralAxes Do\n";
+
+  // plot origin + span: the drawable area inside the axis margins. Matches the
+  // geometry CreateNeutralAxesXobject drew, so the data aligns with the ticks.
+  const point2D base( margin, margin );
+  const float scaleX = right - 2*margin;
+  const float scaleY = top - 2*margin;
+
+  // centred title along the top
+  commands << AddGraphLabels( point2D( 0.5f*right, top - 0.2f*inch2point ),
+                              false, point2D(0,0), 12.0f, graph.title );
+
+  // one distinct CMYK stroke colour per colorant (indexed; wraps past 8 inks).
+  static const char* const kInkStroke[8] = {
+    "1 0 0 0 K",     // cyan
+    "0 1 0 0 K",     // magenta
+    "0 0 1 0 K",     // yellow
+    "0 0 0 1 K",     // black
+    "0 0.55 1 0 K",  // orange
+    "1 0 1 0 K",     // green
+    "0.9 0.6 0 0 K", // blue
+    "0 0 0 0.55 K",  // grey
+  };
+
+  commands << "q\n";
+
+  // each colorant's ink-build polyline: L* 100 maps to the left edge, 0 to the
+  // right; % ink 0..100 maps bottom to top. Clamp to the plot box defensively so
+  // an out-of-range sample (untrusted profile data) can't draw outside the axes.
+  for (size_t c = 0; c < graph.series.size(); ++c) {
+    const iccviz::Series &s = graph.series[c];
+    if (s.verts.empty())
+      continue;
+    commands << kInkStroke[c % 8] << "\n";
+    bool first = true;
+    for (const auto &v : s.verts) {
+      float sx = (100.0f - v.x) / 100.0f;   // L* 100 (left) .. 0 (right)
+      float sy = v.y / 100.0f;              // 0 .. 100% ink
+      if (sx < 0.0f) sx = 0.0f; else if (sx > 1.0f) sx = 1.0f;
+      if (sy < 0.0f) sy = 0.0f; else if (sy > 1.0f) sy = 1.0f;
+      point2D p( base.x + sx*scaleX, base.y + sy*scaleY );
+      commands << p << (first ? " m\n" : " l\n");
+      first = false;
+    }
+    commands << "S\n";
+  }
+
+  // legend: a short colour swatch line + channel name per colorant, top-right.
+  const float legendX = base.x + scaleX - 1.6f*inch2point;
+  const float legendTop = base.y + scaleY - 0.2f*inch2point;
+  for (size_t c = 0; c < graph.series.size(); ++c) {
+    const float ly = legendTop - static_cast<float>(c) * 14.0f;
+    commands << kInkStroke[c % 8] << "\n";
+    point2D a( legendX, ly ), b( legendX + 18.0f, ly );
+    commands << a << " m " << b << " l S\n";
+    commands << AddGraphLabels( point2D( legendX + 22.0f, ly + 4.0f ),
+                                false, point2D(0,0), 10.0f, graph.series[c].name,
+                                kTextAlignLeft );
+  }
+
+  commands << "Q\n";
+
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+
+  pdffile.AddPage( content, "NeutralAxes" );
+
+  return 1;
+}
+
+/******************************************************************************/
+
 // output graphic representation of 1D and nD LUTs
 static
 int processLuts(CIccProfile *pIcc, const char *profilePath )
@@ -1212,9 +1352,11 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   // visualizations the profile supports, render each one's DATA, then draw it
   // with the Mini* writers. The original walked pIcc->m_Tags and extracted the
   // data inline; that work now lives behind iccviz::Enumerate / Render*.
-  // Order::TagTable reproduces iccProfileVisualize's tag-table page sequence.
+  // Enumerate now returns a single canonical order that already follows the
+  // profile's tag-table page sequence (the Order::TagTable parameter was retired
+  // upstream), so no ordering argument is passed.
   std::vector<iccviz::Descriptor> descriptors =
-      iccviz::Enumerate( pIcc, iccviz::Order::TagTable );
+      iccviz::Enumerate( pIcc );
 
   for (const auto &d : descriptors) {
 
@@ -1287,6 +1429,15 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
 
       // emitted together with its NamedColorsAB partner above
       case iccviz::Kind::NamedColorsXY:
+        break;
+
+      // neutral-axis ink-build curve (one B2A / PCS->device table per page)
+      case iccviz::Kind::NeutralAxisInking:
+        {
+        iccviz::GraphResult res = iccviz::RenderGraph( pIcc, d.id );
+        if (res.ok)
+          outputItems += renderNeutralAxisGraph( res.graph, pdffile );
+        }
         break;
 
 // Future visualizations (carried over from iccProfileVisualize's intent list).

@@ -62,13 +62,13 @@
  */
 
 /**
- * IccVizMath  -  small shared colour-math helpers for the visualization model.
+ * IccVizMath - small shared colour-math helpers for the visualization model.
  *
  * The pure scalar conversions the visualizations need: XYZ->xy chromaticity
  * projection and the Kang et al. planckian-locus approximation.
  *
- * They live in one header so the math  -  especially approxPlanck()'s polynomial
- * constants  -  has a single source. The functions are header-only (inline) and
+ * They live in one header so the math - especially approxPlanck()'s polynomial
+ * constants - has a single source. The functions are header-only (inline) and
  * depend only on the ICC scalar types, so the header carries no link dependency.
  */
 
@@ -76,6 +76,8 @@
 #define ICC_VIZ_MATH_HPP
 
 #include "IccDefs.h"           // icXYZNumber, icFloatNumber, and ICC header packing
+#include <cmath>               // std::sqrt / std::acos / std::cos (principalStdDevs)
+#include <cstddef>             // std::size_t
 
 namespace iccvizmath {
 
@@ -85,7 +87,9 @@ struct XY {
   float y = 0.0f;
 };
 
-// 16-bit ICC XYZ (s15Fixed16 stored as integer/65535) -> CIE xy chromaticity.
+// xyFromICCXYZ - project a 16-bit ICC XYZ (s15Fixed16 stored as integer/65535) to
+// CIE xy chromaticity. Separate from the float version because the integer source
+// can't be NaN/Inf, so it skips those checks; a near-zero sum returns (0,0).
 inline XY xyFromICCXYZ(const icXYZNumber* xyz) {
   // integers, so don't have to test for NaN or Inf
   float X = xyz->X / 65535.0f;
@@ -96,7 +100,9 @@ inline XY xyFromICCXYZ(const icXYZNumber* xyz) {
   return XY{X / sum, Y / sum};
 }
 
-// Float XYZ -> CIE xy chromaticity.
+// xyFromXYZFloat - project a floating-point XYZ triple to CIE xy chromaticity; the
+// float twin of xyFromICCXYZ for values that come from a transform rather than a
+// stored tag. A near-zero (or non-positive) sum returns (0,0) to avoid dividing by ~0.
 inline XY xyFromXYZFloat(const icFloatNumber* xyz) {
   float X = xyz[0];
   float Y = xyz[1];
@@ -106,7 +112,10 @@ inline XY xyFromXYZFloat(const icFloatNumber* xyz) {
   return XY{X / sum, Y / sum};
 }
 
-// Planckian (blackbody) locus approximation in CIE xy.
+// approxPlanck - approximate the planckian (blackbody) locus in CIE xy for a colour
+// temperature `t` (Kelvin), used to draw the reference curve on the chromaticity
+// chart. Uses the Kang et al. piecewise polynomial fit rather than integrating the
+// Planck radiator, which is fast, table-free and accurate enough for a plotted guide.
 //   https://en.wikipedia.org/wiki/Planckian_locus
 //   Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho;
 //   Youngsun Kim (December 2002). "Design of Advanced Color Temperature Control
@@ -160,6 +169,63 @@ inline XY approxPlanck(double t) {
   }
 
   return XY{static_cast<float>(x), static_cast<float>(y)};
+}
+
+// principalStdDevs - standard deviations of a 3-D point cloud along its principal
+// axes (s1 >= s2 >= s3, so s3 is the thinnest extent), from the closed-form
+// symmetric-3x3 eigenvalues of the covariance matrix. Used to detect a boundary
+// cloud collapsed toward a plane (s3 ~ 0) or a line (s2 ~ s3 ~ 0), where a
+// closing-based enclosed volume becomes a sheet/tube artifact. pts is x3-
+// interleaved (x,y,z, x,y,z, ...); n is the point count. Outputs 0 for n < 2.
+inline void principalStdDevs(const float* pts, std::size_t n,
+                             double& s1, double& s2, double& s3) {
+  s1 = s2 = s3 = 0.0;
+  if (!pts || n < 2) return;
+
+  double mx = 0.0, my = 0.0, mz = 0.0;
+  for (std::size_t i = 0; i < n; ++i) { mx += pts[i*3]; my += pts[i*3+1]; mz += pts[i*3+2]; }
+  const double inv = 1.0 / static_cast<double>(n);
+  mx *= inv; my *= inv; mz *= inv;
+
+  // covariance (symmetric): [cxx cxy cxz; cxy cyy cyz; cxz cyz czz]
+  double cxx = 0.0, cyy = 0.0, czz = 0.0, cxy = 0.0, cxz = 0.0, cyz = 0.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    const double dx = pts[i*3]     - mx;
+    const double dy = pts[i*3 + 1] - my;
+    const double dz = pts[i*3 + 2] - mz;
+    cxx += dx*dx; cyy += dy*dy; czz += dz*dz;
+    cxy += dx*dy; cxz += dx*dz; cyz += dy*dz;
+  }
+  cxx *= inv; cyy *= inv; czz *= inv; cxy *= inv; cxz *= inv; cyz *= inv;
+
+  // eigenvalues of a symmetric 3x3 in closed form (Smith 1961 trig method)
+  double e1, e2, e3;   // descending
+  const double p1 = cxy*cxy + cxz*cxz + cyz*cyz;
+  if (p1 <= 0.0) {                       // already diagonal
+    e1 = cxx; e2 = cyy; e3 = czz;
+    double t;
+    if (e1 < e2) { t = e1; e1 = e2; e2 = t; }
+    if (e2 < e3) { t = e2; e2 = e3; e3 = t; }
+    if (e1 < e2) { t = e1; e1 = e2; e2 = t; }
+  } else {
+    const double q  = (cxx + cyy + czz) / 3.0;
+    const double p2 = (cxx-q)*(cxx-q) + (cyy-q)*(cyy-q) + (czz-q)*(czz-q) + 2.0*p1;
+    const double p  = std::sqrt(p2 / 6.0);   // p2 >= 2*p1 > 0, so p > 0
+    const double b00 = (cxx-q)/p, b11 = (cyy-q)/p, b22 = (czz-q)/p;
+    const double b01 = cxy/p, b02 = cxz/p, b12 = cyz/p;
+    double det = b00*(b11*b22 - b12*b12) - b01*(b01*b22 - b12*b02) + b02*(b01*b12 - b11*b02);
+    double rr = det / 2.0;
+    if (rr < -1.0) rr = -1.0; else if (rr > 1.0) rr = 1.0;
+    const double phi = std::acos(rr) / 3.0;
+    const double twoPiOver3 = 2.0943951023931953;
+    e1 = q + 2.0*p*std::cos(phi);
+    e3 = q + 2.0*p*std::cos(phi + twoPiOver3);
+    e2 = 3.0*q - e1 - e3;                     // trace invariant
+  }
+
+  s1 = std::sqrt(e1 > 0.0 ? e1 : 0.0);
+  s2 = std::sqrt(e2 > 0.0 ? e2 : 0.0);
+  s3 = std::sqrt(e3 > 0.0 ? e3 : 0.0);
 }
 
 } // namespace iccvizmath
