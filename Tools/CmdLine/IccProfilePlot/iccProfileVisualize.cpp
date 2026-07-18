@@ -1267,17 +1267,28 @@ int renderNeutralAxisGraph( const iccviz::Graph &graph, PDFWriter &pdffile )
   commands << AddGraphLabels( point2D( 0.5f*right, top - 0.2f*inch2point ),
                               false, point2D(0,0), 12.0f, graph.title );
 
-  // one distinct CMYK stroke colour per colorant (indexed; wraps past 8 inks).
-  static const char* const kInkStroke[8] = {
-    "1 0 0 0 K",     // cyan
-    "0 1 0 0 K",     // magenta
-    "0 0 1 0 K",     // yellow
-    "0 0 0 1 K",     // black
-    "0 0.55 1 0 K",  // orange
-    "1 0 1 0 K",     // green
-    "0.9 0.6 0 0 K", // blue
-    "0 0 0 0.55 K",  // grey
+  // One distinct CMYK stroke colour per colorant, indexed by channel. Sized to the
+  // maximum device channel count (kMaxInkChannels = 15) so every ink in an N-colour
+  // profile draws with its own colour in the plot and legend instead of wrapping and
+  // aliasing at 8 (channels 9..15 previously repeated cyan, magenta, ...).
+  static const char* const kInkStroke[] = {
+    "1 0 0 0 K",      // cyan
+    "0 1 0 0 K",      // magenta
+    "0 0 1 0 K",      // yellow
+    "0 0 0 1 K",      // black
+    "0 0.55 1 0 K",   // orange
+    "1 0 1 0 K",      // green
+    "0.9 0.6 0 0 K",  // blue
+    "0 0 0 0.55 K",   // grey
+    "0 1 1 0 K",      // red
+    "0.5 0.85 0 0 K", // violet
+    "0.7 0 0.4 0 K",  // teal
+    "0 0.5 0.7 0.3 K",// brown
+    "0.4 0 1 0 K",    // lime
+    "0 0.5 0.25 0 K", // pink
+    "0 0 0 0.8 K",    // dark grey
   };
+  static const size_t kInkStrokeCount = sizeof(kInkStroke) / sizeof(kInkStroke[0]);
 
   commands << "q\n";
 
@@ -1288,7 +1299,7 @@ int renderNeutralAxisGraph( const iccviz::Graph &graph, PDFWriter &pdffile )
     const iccviz::Series &s = graph.series[c];
     if (s.verts.empty())
       continue;
-    commands << kInkStroke[c % 8] << "\n";
+    commands << kInkStroke[c % kInkStrokeCount] << "\n";
     bool first = true;
     for (const auto &v : s.verts) {
       float sx = (100.0f - v.x) / 100.0f;   // L* 100 (left) .. 0 (right)
@@ -1307,7 +1318,7 @@ int renderNeutralAxisGraph( const iccviz::Graph &graph, PDFWriter &pdffile )
   const float legendTop = base.y + scaleY - 0.2f*inch2point;
   for (size_t c = 0; c < graph.series.size(); ++c) {
     const float ly = legendTop - static_cast<float>(c) * 14.0f;
-    commands << kInkStroke[c % 8] << "\n";
+    commands << kInkStroke[c % kInkStrokeCount] << "\n";
     point2D a( legendX, ly ), b( legendX + 18.0f, ly );
     commands << a << " m " << b << " l S\n";
     commands << AddGraphLabels( point2D( legendX + 22.0f, ly + 4.0f ),
@@ -1352,9 +1363,9 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   // visualizations the profile supports, render each one's DATA, then draw it
   // with the Mini* writers. The original walked pIcc->m_Tags and extracted the
   // data inline; that work now lives behind iccviz::Enumerate / Render*.
-  // Enumerate now returns a single canonical order that already follows the
-  // profile's tag-table page sequence (the Order::TagTable parameter was retired
-  // upstream), so no ordering argument is passed.
+  // Enumerate now returns a single deterministic order built from a fixed canonical
+  // signature list (NOT the profile's tag-table order; the Order::TagTable parameter
+  // was retired upstream), so no ordering argument is passed.
   std::vector<iccviz::Descriptor> descriptors =
       iccviz::Enumerate( pIcc );
 
