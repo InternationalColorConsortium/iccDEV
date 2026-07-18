@@ -3,7 +3,6 @@
 # Copyright (c) 2026 The International Color Consortium.
 #                                        All rights reserved.
 #
-#  Last Updated: 2026-03-24 20:49:38 UTC by David Hoyt
 #
 # CMake Configuration:
 # - PUBLIC target_include_directories for IccProfLib2 and IccXML2
