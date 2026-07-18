@@ -64,7 +64,7 @@ emcmake cmake ../Build/Cmake \
 ```bash
 # Verify JS modules are valid (not truncated)
 for js in Tools/*/icc*.js; do
-  node -e "require('$js')" 2>/dev/null && echo "OK: $js" || echo "FAIL: $js"
+  node -e "require('./$js')" 2>/dev/null && echo "OK: $js" || echo "FAIL: $js"
 done
 
 repo_root="$(cd .. && pwd)"
