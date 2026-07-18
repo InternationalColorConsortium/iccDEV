@@ -836,6 +836,146 @@ function(iccdev_add_dpcc_pcc_replacement_test)
   endif()
 endfunction()
 
+# Guards the two scalar visualization metrics in the iccviz engine
+# (Tools/CmdLine/IccProfilePlot/IccVizModel): GamutVolume and RoundTripDE (#1712).
+# Both build CIccXform objects through CIccXform::Create(bOwnsProfile=false) +
+# ShareProfile(), the borrowed-profile ownership path touched by the review, so
+# driving them end-to-end on the stock sRGB v4 LUT profile guards the metric numbers
+# (positive 3-D gamut volume, not degenerate; small in-gamut round-trip dE) and keeps
+# that construction path under test.  The metrics live in tool sources, not
+# IccProfLib, so the test compiles IccVizModel.cpp directly and pulls the shared
+# engine headers from the IccProfilePlot dir.
+function(iccdev_add_iccviz_metrics_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccVizMetricsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccviz-gamut-roundtrip-metrics.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot/IccVizModel.cpp"
+  )
+  target_compile_features(iccVizMetricsTest PRIVATE cxx_std_17)
+  target_include_directories(iccVizMetricsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot"
+  )
+  target_link_libraries(iccVizMetricsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccVizMetricsTest)
+
+  add_test(
+    NAME iccdev.iccviz-gamut-roundtrip-metrics
+    COMMAND "$<TARGET_FILE:iccVizMetricsTest>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  set_tests_properties(iccdev.iccviz-gamut-roundtrip-metrics PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofileplot;viz;gamut;roundtrip;issue-1712;regression"
+  )
+  if(WIN32)
+    set(_iccviz_metrics_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccVizMetricsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccviz_metrics_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccviz-gamut-roundtrip-metrics PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccviz_metrics_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards the gamut-degeneracy heuristic behind GamutVolumeResult.degenerate (#1712):
+# iccvizmath::principalStdDevs() (closed-form symmetric-3x3 eigenvalues) plus the
+# "flat = s3 < 0.02*s1" coplanarity predicate that flags a boundary cloud collapsed
+# to a plane/line, which the morphological-closing volume would otherwise report as
+# a non-zero sheet/tube artifact.  A header-only unit test over synthetic blob/plane/
+# line clouds; it calibrates the 0.02 constant (ratio 0.01 must flag, 0.05 must not).
+# principalStdDevs is inline in IccVizMath.hpp, so this links IccProfLib only for the
+# ICC scalar types the header pulls in via IccDefs.h.
+function(iccdev_add_iccviz_degenerate_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccVizDegenerateTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccviz-degenerate-detection.cpp"
+  )
+  target_compile_features(iccVizDegenerateTest PRIVATE cxx_std_17)
+  target_include_directories(iccVizDegenerateTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot"
+  )
+  target_link_libraries(iccVizDegenerateTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccVizDegenerateTest)
+
+  add_test(
+    NAME iccdev.iccviz-degenerate-detection
+    COMMAND "$<TARGET_FILE:iccVizDegenerateTest>"
+  )
+  set_tests_properties(iccdev.iccviz-degenerate-detection PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofileplot;viz;gamut;degenerate;issue-1712;regression"
+  )
+  if(WIN32)
+    set(_iccviz_degen_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccVizDegenerateTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccviz_degen_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccviz-degenerate-detection PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccviz_degen_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards the DrawAxisPDF axis-label parameterization in iccProfileVisualizePlot
+# (#1712): the #1711 sync parameterized the PDF axis drawing (a drawIdentity toggle
+# plus custom start/mid/end tick labels), and the review asserted the Input/Output
+# plots stayed byte-identical.  The driver runs the tool on the stock sRGB v4 profile
+# and asserts the emitted LUT PDF carries both axis-label paths: the default identity
+# axis (Input/Output) and the parameterized custom-tick axis (L* (100 to 0) / % ink).
+# It is a content pin, not a byte-for-byte golden PDF, so a legitimate LUT
+# curve-sampling change across IccProfLib versions will not false-fail it.  Drives the
+# real tool binary (the change lives in tool sources), so it is gated on the target.
+function(iccdev_add_iccviz_pdf_axis_test)
+  if(NOT TARGET iccProfileVisualizePlot)
+    return()
+  endif()
+  add_dependencies(check iccProfileVisualizePlot)
+
+  add_test(
+    NAME iccdev.iccviz-pdf-axis-labels
+    COMMAND "${CMAKE_COMMAND}"
+      "-DVIZ_TOOL=$<TARGET_FILE:iccProfileVisualizePlot>"
+      "-DPROFILE=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      "-DWORKDIR=${ICCDEV_TEST_OUTDIR}/iccviz-pdf-axis"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunIccVizPdfAxisTest.cmake"
+  )
+  set_tests_properties(iccdev.iccviz-pdf-axis-labels PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofileplot;viz;pdf;axis;issue-1712;regression"
+  )
+  if(WIN32)
+    set(_iccviz_pdf_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfileVisualizePlot>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _iccviz_pdf_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccviz-pdf-axis-labels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_iccviz_pdf_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the IccVizModel CLUT->raster lattice walk against heap-buffer-overflow
 # reads (#1548): buildClutRaster() derived its tile-packing geometry
 # (tiles/tileWidth/tileHeight strides) from the grid arrangement, NOT from the
@@ -1478,6 +1618,9 @@ if(WIN32)
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_dpcc_pcc_replacement_test()
+  iccdev_add_iccviz_metrics_test()
+  iccdev_add_iccviz_degenerate_test()
+  iccdev_add_iccviz_pdf_axis_test()
   iccdev_add_iccprofileplot_clut_oob_test()
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
@@ -1675,6 +1818,9 @@ iccdev_add_getvalues_nstart_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_dpcc_pcc_replacement_test()
+iccdev_add_iccviz_metrics_test()
+iccdev_add_iccviz_degenerate_test()
+iccdev_add_iccviz_pdf_axis_test()
 iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
