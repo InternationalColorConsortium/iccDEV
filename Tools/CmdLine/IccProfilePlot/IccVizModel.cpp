@@ -1104,7 +1104,10 @@ bool buildNeutralAxisGraph(CIccProfile* pIcc, icTagSignature sig, Graph& out,
           } else {
             continue;
           }
-          if (!std::isfinite(lab[0])) continue;
+          // All three components feed the snprintf below, so all three must be finite -
+          // a NaN/Inf in a* or b* (e.g. from a degenerate XYZ->Lab conversion) would
+          // otherwise be formatted straight into the colour hint.
+          if (!std::isfinite(lab[0]) || !std::isfinite(lab[1]) || !std::isfinite(lab[2])) continue;
           char buf[48];
           std::snprintf(buf, sizeof buf, "%.1f,%.1f,%.1f",
                         static_cast<double>(lab[0]), static_cast<double>(lab[1]), static_cast<double>(lab[2]));
@@ -1540,6 +1543,16 @@ GamutVolumeResult GamutVolume(CIccProfile* pIcc, icTagSignature aToBTag,
   auto fail = [&](const std::string& why) -> GamutVolumeResult { r.ok = false; r.error = why; return r; };
 
   if (!pIcc) return fail("null profile");
+
+  // Only the device->PCS AToB tags describe a gamut boundary. Reject BToA (and any
+  // other) signatures up front: because we build the transform with bInput=true,
+  // CIccXform::GetSrcSpace() reports the profile's *device* colorSpace regardless of
+  // the tag's actual direction (see IccCmm.cpp), so the isPcsSpace(srcSp) guard below
+  // would NOT catch a BToA tag - its inverse LUT would run backwards and yield a
+  // plausible-but-meaningless volume. Gate on the signature itself instead.
+  if (aToBTag != icSigAToB0Tag && aToBTag != icSigAToB1Tag && aToBTag != icSigAToB2Tag)
+    return fail("not an AToB tag");
+
   CIccTag* pTag = pIcc->FindTag(aToBTag);
   if (!pTag) return fail("AToB tag not present");
 

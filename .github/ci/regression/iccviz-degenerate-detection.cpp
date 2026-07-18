@@ -24,6 +24,8 @@
 //   - Change the 0.02 constant materially and the threshold-calibration block
 //     (ratio 0.01 must flag, 0.05 must not) fails.
 //   - Break principalStdDevs' eigenvalue math and the recovered-ratio asserts fail.
+//   - Break the Smith-1961 trig branch (correlated covariance) and the rotated-cloud
+//     test fails: its s1/s2/s3 no longer match the axis-aligned reference.
 //
 // Exit code 0 = pass, 1 = a guarded regression reappeared.
 
@@ -166,6 +168,82 @@ static void test_threshold_calibration() {
 }
 
 // ---------------------------------------------------------------------------
+// Rotated anisotropic cloud: exercises principalStdDevs' *trig* branch.
+//
+// Every cloud above is axis-aligned, so its covariance matrix is diagonal
+// (p1 == cxy^2 + cxz^2 + cyz^2 == 0) and principalStdDevs takes the diagonal
+// fast-path.  The closed-form symmetric-3x3 eigenvalue path (Smith 1961:
+// p2/q/phi/acos) that handles a correlated/rotated cloud is then never run.
+//
+// Build a lattice with three *distinct* axis extents, capture its principal
+// std-devs from the (well-tested) diagonal path, then rotate every point by a
+// matrix that mixes all three axes.  Rotation is orthogonal, so it leaves the
+// principal std-devs unchanged but makes the covariance fully off-diagonal
+// (p1 > 0) -> the recovered (s1,s2,s3) must equal the pre-rotation reference,
+// which can only hold if the trig branch computes the eigenvalues correctly.
+// ---------------------------------------------------------------------------
+static std::vector<float> make_aniso_lattice(int M, double Lx, double Ly, double Lz) {
+  std::vector<float> pts;
+  pts.reserve(static_cast<std::size_t>(M) * M * M * 3);
+  for (int ix = 0; ix < M; ++ix)
+    for (int iy = 0; iy < M; ++iy)
+      for (int iz = 0; iz < M; ++iz) {
+        pts.push_back(static_cast<float>(Lx * ix / (M - 1)));
+        pts.push_back(static_cast<float>(Ly * iy / (M - 1)));
+        pts.push_back(static_cast<float>(Lz * iz / (M - 1)));
+      }
+  return pts;
+}
+
+static void rotate_points(std::vector<float> &pts, const double R[3][3]) {
+  for (std::size_t i = 0; i + 2 < pts.size(); i += 3) {
+    const double x = pts[i], y = pts[i + 1], z = pts[i + 2];
+    pts[i]     = static_cast<float>(R[0][0] * x + R[0][1] * y + R[0][2] * z);
+    pts[i + 1] = static_cast<float>(R[1][0] * x + R[1][1] * y + R[1][2] * z);
+    pts[i + 2] = static_cast<float>(R[2][0] * x + R[2][1] * y + R[2][2] * z);
+  }
+}
+
+static void test_rotated_cloud() {
+  std::printf("\n[ rotated anisotropic cloud (Smith-1961 trig branch) ]\n");
+
+  // Distinct extents Lx > Ly > Lz so the three eigenvalues are well separated.
+  std::vector<float> aligned = make_aniso_lattice(9, 1.0, 0.6, 0.25);
+  double r1 = 0, r2 = 0, r3 = 0;
+  principalStdDevs(aligned.data(), aligned.size() / 3, r1, r2, r3);
+  std::printf("      axis-aligned ref: s1=%.5f s2=%.5f s3=%.5f\n", r1, r2, r3);
+  check(r1 > r2 && r2 > r3 && r3 > 0.0, "anisotropic cloud has 3 distinct positive extents");
+
+  // R = Rz(0.9) * Ry(0.7) * Rx(0.5): mixes all three axes -> non-diagonal covariance.
+  const double cx = std::cos(0.5), sx = std::sin(0.5);
+  const double cy = std::cos(0.7), sy = std::sin(0.7);
+  const double cz = std::cos(0.9), sz = std::sin(0.9);
+  const double Rx[3][3] = {{1, 0, 0}, {0, cx, -sx}, {0, sx, cx}};
+  const double Ry[3][3] = {{cy, 0, sy}, {0, 1, 0}, {-sy, 0, cy}};
+  const double Rz[3][3] = {{cz, -sz, 0}, {sz, cz, 0}, {0, 0, 1}};
+  double RyRx[3][3], R[3][3];
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) {
+      RyRx[i][j] = Ry[i][0] * Rx[0][j] + Ry[i][1] * Rx[1][j] + Ry[i][2] * Rx[2][j];
+    }
+  for (int i = 0; i < 3; ++i)
+    for (int j = 0; j < 3; ++j) {
+      R[i][j] = Rz[i][0] * RyRx[0][j] + Rz[i][1] * RyRx[1][j] + Rz[i][2] * RyRx[2][j];
+    }
+
+  std::vector<float> rot = aligned;
+  rotate_points(rot, R);
+  double s1 = 0, s2 = 0, s3 = 0;
+  principalStdDevs(rot.data(), rot.size() / 3, s1, s2, s3);
+  std::printf("      rotated:          s1=%.5f s2=%.5f s3=%.5f\n", s1, s2, s3);
+
+  // Orthogonal rotation preserves the principal std-devs to within float noise.
+  check(std::fabs(s1 - r1) < 2e-3 * r1, "trig branch recovers s1 through rotation");
+  check(std::fabs(s2 - r2) < 2e-3 * r2, "trig branch recovers s2 through rotation");
+  check(std::fabs(s3 - r3) < 2e-3 * r3, "trig branch recovers s3 through rotation");
+}
+
+// ---------------------------------------------------------------------------
 // Degenerate inputs to principalStdDevs itself: n < 2 and null must zero out.
 // ---------------------------------------------------------------------------
 static void test_edge_inputs() {
@@ -184,6 +262,7 @@ int main() {
   test_plane();
   test_line();
   test_threshold_calibration();
+  test_rotated_cloud();
   test_edge_inputs();
 
   if (g_failures) {

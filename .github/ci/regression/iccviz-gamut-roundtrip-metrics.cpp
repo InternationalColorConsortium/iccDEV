@@ -22,6 +22,12 @@
 //   2. GamutVolume with a deliberately coarse grid (huge voxelSize) still returns
 //      ok but sets degenerate==true -- proving the degeneracy signal reaches the
 //      caller (the complement of the not-degenerate assertion in #1).
+//   2a. GamutVolume on a BToA signature fails ("not an AToB tag") instead of running
+//      the LUT backwards and returning a bogus volume (the bInput=true device-space
+//      guard cannot catch this; the explicit signature gate does).
+//   2b. GamutVolume on a synthetic planar-gamut AToB profile (device cube -> a Lab
+//      plane) sets degenerate==true with voxels > 27 -- pinning the production
+//      s3 < 0.02*s1 `flat` predicate end-to-end, not just the cell-count floor.
 //   3. RoundTripDE(relative): ok, positive point count, ordered mean<=p90<=max,
 //      all finite, and a small mean dE (a well-behaved B2A/A2B inverse pair).
 //
@@ -29,6 +35,7 @@
 
 #include "IccProfile.h"
 #include "IccDefs.h"
+#include "IccTagLut.h"
 
 #include "IccVizModel.hpp"
 
@@ -47,6 +54,80 @@ static void check(bool cond, const char *msg) {
 }
 
 static bool is_finite(double v) { return std::isfinite(v); }
+
+// --- fix c helper: a synthetic profile whose gamut collapses to a Lab plane -------
+// Fills each CLUT node so L* tracks R and a* tracks G (a full 2-D spread) while b*
+// is pinned constant.  The device-cube boundary therefore maps onto a single Lab
+// plane: many enclosed cells (well above the 27-voxel floor), all finite, but zero
+// thickness (s3 ~ 0).
+class PlanarFill : public IIccCLUTExec {
+public:
+  void PixelOp(icFloatNumber *pGridAdr, icFloatNumber *pData) override {
+    pData[0] = pGridAdr[0];   // L* <- R  (spans the axis)
+    pData[1] = pGridAdr[1];   // a* <- G  (spans the axis)
+    pData[2] = 0.5f;          // b* constant -> collapse the 3rd PCS dimension
+  }
+};
+
+// Build an RGB->Lab AToB1 (lutAtoBType) profile whose CLUT is the planar fill above.
+// Returned profile is owned by the caller.
+static CIccProfile *makePlanarGamutProfile() {
+  CIccProfile *pIcc = new CIccProfile();
+  pIcc->InitHeader();
+  pIcc->m_Header.version     = icVersionNumberV4_3;
+  pIcc->m_Header.deviceClass = icSigOutputClass;
+  pIcc->m_Header.colorSpace  = icSigRgbData;
+  pIcc->m_Header.pcs         = icSigLabData;
+
+  CIccTagLutAtoB *pLut = new CIccTagLutAtoB();
+  pLut->Init(3, 3);
+  pLut->SetColorSpaces(icSigRgbData, icSigLabData);
+  CIccCLUT *pCLUT = pLut->NewCLUT(9);   // 9^3 grid, 3->3
+  PlanarFill filler;
+  pCLUT->Iterate(&filler);
+
+  pIcc->AttachTag(icSigAToB1Tag, pLut);
+  return pIcc;
+}
+
+// fix c: GamutVolume must flag a genuinely planar gamut as degenerate through the
+// *flat* branch (principalStdDevs coplanarity), NOT the cell-count floor.  With
+// voxels well above 27 and all points finite, GamutVolume's
+//   degenerate = (finitePts*2 < nPts) || (cells <= 27) || flat
+// can only be true via `flat` -- so this pins the production s3 < 0.02*s1 predicate
+// and its constant end-to-end (delete the `flat` term and this test flips to
+// degenerate==false).
+static void test_gamut_volume_planar_is_flat() {
+  std::printf("\n[ GamutVolume planar gamut -> flat/degenerate ]\n");
+  CIccProfile *pIcc = makePlanarGamutProfile();
+
+  iccviz::GamutVolumeResult gv =
+      iccviz::GamutVolume(pIcc, icSigAToB1Tag, icRelativeColorimetric);
+  std::printf("      ok=%d volume=%.1f voxels=%lld colorants=%d degenerate=%d\n",
+              gv.ok, gv.volume, gv.voxels, gv.nColorants, gv.degenerate);
+  if (!gv.ok) {
+    std::printf("      error: %s\n", gv.error.c_str());
+    check(false, "GamutVolume runs on the synthetic planar profile");
+    delete pIcc;
+    return;
+  }
+  check(gv.ok, "GamutVolume runs on the synthetic planar profile");
+  check(gv.voxels > 27, "planar gamut still encloses more than the 27-voxel floor");
+  check(gv.degenerate, "planar gamut IS flagged degenerate (via the flat predicate)");
+  delete pIcc;
+}
+
+// fix f: GamutVolume must reject a non-AToB signature.  Because the transform is
+// built with bInput=true, GetSrcSpace() reports the device space even for a BToA
+// tag, so the device/PCS space guard would not catch it; the explicit signature
+// gate must.  (B2A1 is present on the sRGB fixture, so this reaches past FindTag.)
+static void test_gamut_volume_rejects_non_atob(CIccProfile *pIcc) {
+  std::printf("\n[ GamutVolume rejects a non-AToB (B2A1) tag ]\n");
+  iccviz::GamutVolumeResult gv =
+      iccviz::GamutVolume(pIcc, icSigBToA1Tag, icRelativeColorimetric);
+  std::printf("      ok=%d error=\"%s\"\n", gv.ok, gv.error.c_str());
+  check(!gv.ok, "GamutVolume fails on a BToA signature instead of returning a bogus volume");
+}
 
 static void test_gamut_volume(CIccProfile *pIcc) {
   std::printf("\n[ GamutVolume (A2B1, relative colorimetric) ]\n");
@@ -123,6 +204,8 @@ int main(int argc, char **argv) {
   }
 
   test_gamut_volume(pIcc);
+  test_gamut_volume_rejects_non_atob(pIcc);
+  test_gamut_volume_planar_is_flat();
   test_round_trip(pIcc);
 
   delete pIcc;
