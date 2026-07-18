@@ -32,3 +32,10 @@ Detailed rules live in `.github/copilot-instructions.md` and
 | WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |
 | MCP subprocess debug | `.github/prompts/debug-mcp-subprocess.prompt.md` |
 | Python/Cython debug | `.github/prompts/debug-python-bindings.prompt.md` |
+
+## WASM Scope
+
+WASM now ships as a staged Node/npm-style module package. Do not expect or
+restore legacy `wasm/*.html`, `wasm/*.css`, or `wasm/*.js` browser UI assets.
+Use `.github/skills/wasm-build-test/SKILL.md` for the current module smoke and
+profile parity checks.

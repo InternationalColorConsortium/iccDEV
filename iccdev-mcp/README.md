@@ -98,7 +98,7 @@ docker run --rm -p 127.0.0.1:8080:8080 \
   iccdev-ci-regression:mcp-local iccdev-mcp-entrypoint rest
 curl -fsS http://127.0.0.1:8080/api/health
 curl -fsS http://127.0.0.1:8080/api/tools
-# Optional browser UI
+# Optional REST dashboard in a browser
 xdg-open http://127.0.0.1:8080/  # or open the URL manually
 ```
 

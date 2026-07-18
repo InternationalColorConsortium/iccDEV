@@ -1,7 +1,8 @@
 # iccdev
 
 ICC color profile CLI tools as WebAssembly. 17 modules, Node.js. Consumer
-package only - no build, no browser UI.
+package only - no build, no browser UI, and no legacy `wasm/*.html`,
+`wasm/*.css`, or `wasm/*.js` assets.
 
 ## Install
 
@@ -34,6 +35,7 @@ Tool reference: ../../../docs/tools-cli-reference.md
 
 ```bash
 node test_all.js
+node regression.js
 ```
 
 ## Data

@@ -90,6 +90,7 @@ Key safety rules:
 | vcpkg debug | `.github/prompts/vcpkg-port-debug.prompt.md` |
 | Debug MCP subprocess | `.github/prompts/debug-mcp-subprocess.prompt.md` |
 | Debug Python/Cython bindings | `.github/prompts/debug-python-bindings.prompt.md` |
+| Debug WASM build | `.github/prompts/debug-wasm-build.prompt.md` |
 
 ## Skills
 
@@ -103,3 +104,11 @@ Key safety rules:
 | Version bump | `.github/skills/version-bump/SKILL.md` |
 | Python bindings tests | `.github/skills/python-bindings-test/SKILL.md` |
 | WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |
+
+## WASM Notes
+
+- The current WASM deliverable is the staged Node/npm-style module package from
+  `Build/Cmake/wasm-package/stage.sh`, not a browser UI.
+- Do not reintroduce or test legacy `wasm/*.html`, `wasm/*.css`, or
+  `wasm/*.js` assets; validate with `wasm-stage/test_all.js` and
+  `wasm-stage/regression.js`.

@@ -1,6 +1,8 @@
 # WASM Build and Test
 
-Build iccDEV tools as WebAssembly modules and validate the browser-based tool suite.
+Build iccDEV tools as WebAssembly modules and validate the staged module
+package. The legacy browser UI under `wasm/` has been removed, so this workflow
+does not assemble HTML pages or run browser/Playwright checks.
 
 ## Steps
 
@@ -15,46 +17,47 @@ Build iccDEV tools as WebAssembly modules and validate the browser-based tool su
      -DENABLE_SHARED_LIBS=OFF
    ```
 
-2. **Build the 16-tool WASM suite**
+2. **Build the WASM tool modules**
    ```bash
    emmake make -j$(nproc) 2>&1 | tee build.log
    ```
-   Expected: 16 JS modules + 18 WASM binaries + 4 static libraries. The
-   browser suite has 16 tool pages; two additional `.wasm` binaries are helper
-   outputs from the build.
+   Expected: Emscripten-generated `.js` loader modules and matching `.wasm`
+   binaries under `build-wasm/Tools/`.
 
 3. **Verify artifacts**
    ```bash
-   find build-wasm/Tools -name '*.wasm' | wc -l   # 18
-   find build-wasm/Tools -name '*.js' | wc -l      # 16
+   find build-wasm/Tools -name '*.wasm' -type f | sort
+   find build-wasm/Tools -name '*.js' -type f | sort
    ```
 
-4. **Assemble site**
+4. **Stage the npm-shaped package**
    ```bash
-   mkdir -p _site && cp wasm/*.html wasm/*.css wasm/*.js _site/
-   for d in build-wasm/Tools/*/; do
-     tool=$(basename "$d")
-     cp "$d"*.js "$d"*.wasm _site/ 2>/dev/null
-   done
+   bash Build/Cmake/wasm-package/stage.sh build-wasm wasm-stage 0.0.0-local
    ```
+   The staged package contains the generated module loaders, binaries, package
+   metadata, and Node-based regression scripts.
 
-5. **Run HTML validation tests**
+5. **Run module smoke tests**
    ```bash
-   cd iccdev-mcp && python3 -m pytest tests/test_wasm_html.py -v
+   cd wasm-stage
+   node test_all.js
    ```
-   Expected: 301 tests pass (WCAG, CSP, XSS, semantic HTML).
+   Expected: every staged WASM tool can be loaded and invoked with its usage
+   path.
 
-6. **Smoke test in browser**
-   - Open `_site/index.html` in Chrome/Firefox
-   - Load `_site/dump.html`, drop an ICC profile
-   - Verify output renders with no console errors
+6. **Run profile parity regression**
+   ```bash
+   cd wasm-stage
+   node regression.js
+   ```
+   Expected: the staged WASM tools reproduce the reference
+   `Testing/CreateAllProfiles.sh` profile outputs.
 
 ## Validation Checklist
 
-- [ ] 18 WASM binaries present
-- [ ] 16 JS modules present
-- [ ] 17 HTML pages present (index + 16 tools)
-- [ ] All 301 tests pass
-- [ ] No JS console errors in browser
-- [ ] CSP headers restrict remote scripts; inline page scripts are explicitly allowed
-- [ ] Sanitizer strips ANSI/control chars from WASM output
+- [ ] WASM binaries are present under `build-wasm/Tools/`
+- [ ] JS loader modules are present under `build-wasm/Tools/`
+- [ ] `Build/Cmake/wasm-package/stage.sh` creates `wasm-stage/`
+- [ ] `wasm-stage/test_all.js` passes
+- [ ] `wasm-stage/regression.js` passes
+- [ ] No legacy `wasm/*.html`, `wasm/*.css`, or `wasm/*.js` browser assets are required
