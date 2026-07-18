@@ -2,7 +2,6 @@
  * hello-iccdev Cmake Configuration| iccDEV Project
  * Copyright (c) 2026 The International Color Consortium. All rights reserved.
  *
- * Last Updated: 2026-04-10 05:19:00 UTC by David Hoyt
  *
  * hello-iccdev.cpp -- Minimal example linking IccProfLib2, IccXML2,
  *                     and optionally IccJSON2
