@@ -35,7 +35,6 @@ Tool reference: ../../../docs/tools-cli-reference.md
 
 ```bash
 node test_all.js
-node regression.js
 ```
 
 ## Data

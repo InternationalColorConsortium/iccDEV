@@ -63,12 +63,13 @@ emcmake cmake ../Build/Cmake \
 ### Validation Step
 ```bash
 # Verify JS modules are valid (not truncated)
-for js in Build/Tools/*/icc*.js; do
+for js in Tools/*/icc*.js; do
   node -e "require('$js')" 2>/dev/null && echo "OK: $js" || echo "FAIL: $js"
 done
 
-bash Build/Cmake/wasm-package/stage.sh build-wasm wasm-stage 0.0.0-local
-cd wasm-stage
+repo_root="$(cd .. && pwd)"
+bash "$repo_root/Build/Cmake/wasm-package/stage.sh" "$PWD" "$repo_root/wasm-stage" 0.0.0-local
+cd "$repo_root/wasm-stage"
 node test_all.js
 node regression.js
 ```
