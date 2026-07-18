@@ -72,7 +72,7 @@ jobs:
       id-token: write  # Required for artifact attestation identity.
       attestations: write  # Required to publish build provenance.
       artifact-metadata: write  # Required for artifact metadata storage records.
-    environment: ghcr-publish
+    environment: ${{ github.ref == 'refs/heads/ci-qa-pr-docker' && 'ghcr-publish-test' || 'ghcr-publish' }}
     defaults:
       run:
         shell: bash --noprofile --norc {0}
@@ -177,7 +177,7 @@ jobs:
             type=ref,event=branch,enable=${{ matrix.variant == 'regression' }}
 
       - name: Log in to GHCR
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
@@ -195,17 +195,17 @@ jobs:
           pull: true
           build-args: |
             GIT_COMMIT=${{ github.sha }}
-          load: ${{ !(github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') }}
-          push: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
-          provenance: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') && 'mode=max' || 'false' }}
-          sbom: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          load: ${{ !(github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker') }}
+          push: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
+          provenance: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker') && 'mode=max' || 'false' }}
+          sbom: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
           labels: |
             ${{ steps.meta.outputs.labels }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.ref.name=${{ github.ref_name }}
 
       - name: Generate SBOM
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0
         with:
           image: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
@@ -213,7 +213,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Measure SBOM attestation size
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
         id: sbom-size
         env:
           BASH_ENV: /dev/null
@@ -255,7 +255,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Attest build provenance
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -263,7 +263,7 @@ jobs:
           push-to-registry: true
 
       - name: Attest SBOM
-        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') && steps.sbom-size.outputs.attestable == 'true' }}
+        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker') && steps.sbom-size.outputs.attestable == 'true' }}
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v4.1.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
@@ -272,7 +272,7 @@ jobs:
           push-to-registry: true
 
       - name: Upload SBOM
-        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+        if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: iccdev${{ matrix.suffix }}-sbom
@@ -285,7 +285,7 @@ jobs:
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -304,7 +304,7 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -335,7 +335,7 @@ jobs:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
           TRIVY_IMAGE: aquasec/trivy@sha256:5c59e08f980b5d4d503329773480fcea2c9bdad7e381d846fbf9f2ecb8050f6b
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -404,7 +404,7 @@ jobs:
           MATRIX_WORKDIR: ${{ matrix.workdir }}
           MATRIX_TOOLS_DIR: ${{ matrix.tools_dir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -448,7 +448,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_VARIANT: ${{ matrix.variant }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -486,7 +486,7 @@ jobs:
           MATRIX_VARIANT: ${{ matrix.variant }}
           MATRIX_WORKDIR: ${{ matrix.workdir }}
           MATRIX_SHELL: ${{ matrix.run_shell }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
           IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
         run: |
           set -euo pipefail
@@ -524,7 +524,7 @@ jobs:
           IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
           EXPECTED_REF_NAME: ${{ github.ref_name }}
           EXPECTED_SHA: ${{ github.sha }}
-          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -666,7 +666,7 @@ jobs:
     name: "Prune old container versions"
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags'
     environment: ghcr-publish
     permissions:
       packages: write  # Required to delete old GHCR package versions.
