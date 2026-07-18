@@ -190,7 +190,7 @@ public:
   PDFObject() : m_offset(0) {}
   virtual ~PDFObject() {}
 
-  virtual void WriteContent(  std::ostream &out ) = 0;
+  virtual void WriteContent( std::ostream &out ) = 0;
 
 public:
   size_t m_offset;
@@ -207,7 +207,7 @@ public:
   PDFRoot( size_t pageObj, size_t outlineObj ) :
         PDFObject(), m_pageObj(pageObj), m_outlineObj(outlineObj) {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
   size_t m_pageObj;
@@ -222,7 +222,7 @@ class PDFPageParent : public PDFObject
 public:
   PDFPageParent() : PDFObject() {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
   
   void AddPage( size_t pageIndex, const std::string &pageName )
     {
@@ -248,7 +248,7 @@ public:
     m_xobjectName(xobjectName)
      {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
   void AddAnnotation( size_t index ) {
     m_annotations.push_back(index);
@@ -279,7 +279,7 @@ class PDFOutlineParent : public PDFObject
 public:
   PDFOutlineParent() : PDFObject() {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
   
   void AddOutlineObject( size_t index )
     {
@@ -302,7 +302,7 @@ public:
       m_prevIndex(prev), m_nextIndex(next), m_name(title)
      {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
   size_t m_outlineParentIndex;
@@ -320,7 +320,7 @@ class PDFProcSet : public PDFObject
 public:
   PDFProcSet( const std::string &proc ) : PDFObject(), m_buf(proc) {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
   std::string m_buf;
@@ -333,7 +333,7 @@ class PDFGraphic : public PDFObject
 public:
   PDFGraphic( const std::string &content ) : PDFObject(), m_buf(content) {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
   std::string m_buf;
@@ -348,7 +348,7 @@ public:
     m_area(area), m_pageIndex(index)
     {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
   Rect2D m_area;
@@ -362,7 +362,7 @@ class PDFFont : public PDFObject
 public:
   PDFFont( const std::string &font ) : PDFObject(), m_fontname(font) {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
   std::string m_fontname;
@@ -375,7 +375,7 @@ class PDFGroup : public PDFObject
 public:
   PDFGroup() : PDFObject() {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
     // nothing yet
@@ -392,7 +392,7 @@ public:
     m_font(font), m_group(group)
         {}
 
-  virtual void WriteContent(  std::ostream &out ) final;
+  virtual void WriteContent( std::ostream &out ) final;
 
 public:
   std::string m_buf;

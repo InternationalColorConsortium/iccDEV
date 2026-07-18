@@ -115,6 +115,195 @@ static bool WritePdfTextFile(FILE* outFile, const std::string& text)
 }
 
 /******************************************************************************/
+
+// very approximate, not using real font metrics
+float PDFEstimateStringWidth( const std::string &str, float textSizePts )
+{
+#if 0
+  return 0.49f * textSizePts * str.size();
+#else
+  float first = str.size();
+  float adjustment = 0.0f;
+  
+  // adjust glyphs that are far from the base size,
+  // using very approximate metrics for Helvetica and similar sans-serif type
+// TODO - extract real metrics, use a table
+//    and why doesn't PDF do this automatically?
+  for (const auto c : str ) {
+    switch(c) {
+      case '\'':
+        adjustment -= 0.57;
+        break;
+
+      case 'i':
+      case 'j':
+      case 'l':
+      case '|':
+        adjustment -= 0.52;
+        break;
+
+      case '.':
+      case ',':
+      case 'I':
+      case ':':
+      case ';':
+      case '!':
+      case 't':
+      case 'f':
+      case '/':
+      case '[':
+      case ']':
+      case ' ':
+        adjustment -= 0.42;
+        break;
+
+      case 'r':
+      case '`':
+      case '-':
+        adjustment -= 0.32;
+        break;
+
+      case '(':
+      case ')':
+      case '{':
+      case '}':
+        adjustment -= 0.30;
+        break;
+
+      case '"':
+        adjustment -= 0.28;
+        break;
+
+      case '*':
+        adjustment -= 0.2;
+        break;
+
+      case '^':
+        adjustment -= 0.05;
+        break;
+
+      case '&':
+        adjustment += 0.32;
+        break;
+
+      case '@':
+        adjustment += 0.97;
+        break;
+
+      case '%':
+        adjustment += 0.75;
+        break;
+
+      case '+':
+        adjustment += 0.17;
+        break;
+
+      case '<':
+      case '>':
+      case '=':
+      case '~':
+        adjustment += 0.17;
+        break;
+
+      case 'a':
+      case 'b':
+      case 'd':
+      case 'e':
+      case 'g':
+      case 'h':
+      case 'n':
+      case 'o':
+      case 'p':
+      case 'q':
+      case 'u':
+        adjustment += 0.09;
+        break;
+
+      case 'm':
+        adjustment += 0.64;
+        break;
+
+      case 'w':
+        adjustment += 0.42;
+        break;
+
+      case 'J':
+        adjustment += 0.0;
+        break;
+
+      case 'L':
+        adjustment += 0.1;
+        break;
+
+      case 'F':
+      case 'Z':
+      case 'T':
+        adjustment += 0.2;
+        break;
+
+      case '0':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+      case '6':
+      case '7':
+      case '8':
+      case '9':
+      case '#':
+      case '$':
+      case '_':
+        adjustment += 0.1;
+        break;
+
+      case 'A':
+      case 'B':
+      case 'E':
+      case 'K':
+      case 'P':
+      case 'S':
+      case 'V':
+      case 'X':
+      case 'Y':
+        adjustment += 0.30;
+        break;
+
+      case 'C':
+      case 'D':
+      case 'H':
+      case 'N':
+      case 'R':
+      case 'U':
+        adjustment += 0.4;
+        break;
+
+      case 'G':
+      case 'O':
+      case 'Q':
+        adjustment += 0.52;
+        break;
+
+      case 'M':
+        adjustment += 0.62;
+        break;
+
+      case 'W':
+        adjustment += 0.82;
+        break;
+
+      default:
+        break;
+    }   // end switch on glyph/character
+  
+  } // end loop over characters in string
+  
+  float combined = 0.526f * textSizePts * (first + adjustment);
+  return combined;
+#endif
+}
+
+/******************************************************************************/
 /******************************************************************************/
 
 void PDFWriter::OpenFile( const std::string &filename, float widthPt, float heightPt )
@@ -303,7 +492,7 @@ void PDFWriter::CreateTOCFromPages()
     commands << PDFSingleLineTextLabel( pointLeft, false, point2D(0,0), tocTextSize,
                             pageLabel, kPDFTextAlignLeft );
 
-    float textWidth = 0.49f * tocTextSize * pageLabel.size();
+    float textWidth = PDFEstimateStringWidth( pageLabel, tocTextSize );
     Rect2D area( left, left+textWidth, lineStartY - tocTextLeading, lineStartY );
     PDFAnnotation *annot = new PDFAnnotation( area, pageIndex );
     AddObject( annot );
@@ -604,14 +793,6 @@ void PDFWriter::AddPage( std::string name, size_t content, std::string xObjectNa
 
 /******************************************************************************/
 
-// very approximate, not using font metrics
-float PDFEstimateStringWidth( const std::string &str, float textSizePts )
-{
-    return 0.49f * textSizePts * str.size();
-}
-
-/******************************************************************************/
-
 std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
         const point2D &tickLength, float textSizePts,
         const std::string &text,
@@ -620,7 +801,6 @@ std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
   std::ostringstream commands;
 
   float textWidth = PDFEstimateStringWidth( text, textSizePts );
-  float textHalf = 0.5f * textWidth;
 
   point2D position(0,0);
   switch(align) {
@@ -631,7 +811,7 @@ std::string PDFSingleLineTextLabel( const point2D &basepoint, bool isVertical,
 
     case kPDFTextAlignCenter:
     case kPDFTextAlignCenterLeft:
-        position = point2D(-textHalf,0);
+        position = point2D(-0.5f * textWidth,0);
         break;
 
     case kPDFTextAlignRight:
@@ -940,6 +1120,42 @@ std::string random_ipsum_lines(
 std::string random_ipsum_paragraph(
 "Ut at diam leo. Mauris libero nulla auctor sit amet venenatis Stiles, lorem eget odio. Integer vitae dui Fairchild magna dignissim ICC in id diam.\n\nSed quis imperdiet lorem, vel ipsum diam. Nam varius Berns leo quis pretium. Hunt fringilla a mi a facilisis. Pellentesque Wyszecki porttitor consequat." );
 
+static
+std::string glyphs1( "abcdefghijklmnopqrstuvwxyz1234567890|/;:'\",.<>/?");
+static
+std::string glyphs2( "ABCDEFGHIJKLMNOPQRSTUVWXYZ-_`~!@#$%^&*\\\\()[]{}");
+
+static
+std::string measure1( "xxxxxxxxxx\naaaaaaaaaa\nbbbbbbbbbb\ncccccccccc\n"
+                      "dddddddddd\neeeeeeeeee\nffffffffff\ngggggggggg\n"
+                      "hhhhhhhhhh\niiiiiiiiii\njjjjjjjjjj\nkkkkkkkkkk\n"
+                      "llllllllll\nmmmmmmmmmm\nnnnnnnnnnn\noooooooooo\n"
+                      "pppppppppp\nqqqqqqqqqq\nrrrrrrrrrr\nssssssssss\n"
+                      "tttttttttt\nuuuuuuuuuu\nvvvvvvvvvv\nwwwwwwwwww\n"
+                      "xxxxxxxxxx\nyyyyyyyyyy\nzzzzzzzzzz\n"
+                      "1111111111\n2222222222\n3333333333\n4444444444\n"
+                      "9999999999\n0000000000\nxxxxxxxxxx\n");
+
+static
+std::string measure2( "xxxxxxxxxx\n::::::::::\n;;;;;;;;;;\n..........\n"
+                      ",,,,,,,,,,\n``````````\n''''''''''\n\"\"\"\"\"\"\"\"\"\"\n"
+                      "//////////\n<<<<<<<<<<\n>>>>>>>>>>\n()()()()()\n"
+                      "[][][][][]\n----------\n__________\n++++++++++\n"
+                      "==========\n%%%%%%%%%%\n~~~~~~~~~~\n{}{}{}{}{}\n"
+                      "@@@@@@@@@@\n&&&&&&&&&&\n$$$$$$$$$$\n!!!!!!!!!!\n"
+                      "**********\n^^^^^^^^^^\n##########\n"
+                      "5555555555\n6666666666\n7777777777\n8888888888\n"
+                      "x        x\nxxxxxxxxxx\n");
+
+static
+std::string measure3( "xxxxxxxxxx\nAAAAAAAAAA\nBBBBBBBBBB\nCCCCCCCCCC\n"
+                      "DDDDDDDDDD\nEEEEEEEEEE\nFFFFFFFFFF\nGGGGGGGGGG\n"
+                      "HHHHHHHHHH\nIIIIIIIIII\nJJJJJJJJJJ\nKKKKKKKKKK\n"
+                      "LLLLLLLLLL\nMMMMMMMMMM\nNNNNNNNNNN\nOOOOOOOOOO\n"
+                      "PPPPPPPPPP\nQQQQQQQQQQ\nRRRRRRRRRR\nSSSSSSSSSS\n"
+                      "TTTTTTTTTT\nUUUUUUUUUU\nVVVVVVVVVV\nWWWWWWWWWW\n"
+                      "XXXXXXXXXX\nYYYYYYYYYY\nZZZZZZZZZZ\nxxxxxxxxxx\n");
+
 // Debug PDF utilities and features
 int PDFDebugPages( PDFWriter &pdffile )
 {
@@ -973,8 +1189,7 @@ int PDFDebugPages( PDFWriter &pdffile )
   commands << PDFSingleLineTextLabel( pointCenter, false, point2D(0,0), textSizePts,
                             labelCenter, kPDFTextAlignCenter );
 
-  point2D pointCenter2( 0.5f*right, top - 3*inch2point );
-  commands << PDFSingleLineTextLabel( pointCenter2, true, point2D(0,0), textSizePts,
+  commands << PDFSingleLineTextLabel( pointCenter, true, point2D(0,0), textSizePts,
                             labelCenter, kPDFTextAlignCenter );
   
   
@@ -983,9 +1198,17 @@ int PDFDebugPages( PDFWriter &pdffile )
   commands << PDFSingleLineTextLabel( pointRight, false, point2D(0,0), textSizePts,
                             labelRight, kPDFTextAlignRight );
 
-  point2D pointRight2( right - textSizePts, top - 5*inch2point );
+  point2D pointRight2( right - textSizePts, top - 5*inch2point - 1.1*textSizePts );
   commands << PDFSingleLineTextLabel( pointRight2, true, point2D(0,0), textSizePts,
                             labelRight, kPDFTextAlignRight );
+
+  float size2 = textSizePts * 1.5f;
+  point2D pointRight3( right, bottom + 4*size2 );
+  commands << PDFSingleLineTextLabel( pointRight3, false, point2D(0,0), size2,
+                            glyphs1, kPDFTextAlignRight );
+  point2D pointRight4( right, bottom + 2*size2 );
+  commands << PDFSingleLineTextLabel( pointRight4, false, point2D(0,0), size2,
+                            glyphs2, kPDFTextAlignRight );
 
 
   // and finally create the graphics object and page
@@ -993,6 +1216,42 @@ int PDFDebugPages( PDFWriter &pdffile )
   pdffile.AddObject( graphics );
   size_t content = pdffile.ObjectCount();
   pdffile.AddPage( "DEBUG Single Line Text", content, std::string() );
+  }
+#endif
+
+// Multiline measurement of text
+#if 1
+  {
+  std::ostringstream commands;
+
+  float bottom = 0.0f;
+  float left = 0.0f;
+  float top = pdffile.PageHeight();
+  float right = pdffile.PageWidth();
+  Rect2D bounds ( left, right, bottom, top );
+
+  float textSizePts = 14.0f;
+  float leading = textSizePts * 1.1f;
+  
+  point2D pointRight( right-2.0, top - leading );
+  float rightIndent = 0.0;
+  commands << PDFMultiLineText( pointRight, textSizePts, leading,
+                rightIndent, measure1, kPDFTextAlignRight );
+  
+  point2D pointRight2( right-3*inch2point, top - leading );
+  commands << PDFMultiLineText( pointRight2, textSizePts, leading,
+                rightIndent, measure2, kPDFTextAlignRight );
+  
+  point2D pointRight3( right-6*inch2point, top - leading );
+  commands << PDFMultiLineText( pointRight3, textSizePts, leading,
+                rightIndent, measure3, kPDFTextAlignRight );
+  
+
+  // and finally create the graphics object and page
+  PDFGraphic *graphics = new PDFGraphic( commands.str() );
+  pdffile.AddObject( graphics );
+  size_t content = pdffile.ObjectCount();
+  pdffile.AddPage( "DEBUG Character Measurement", content, std::string() );
   }
 #endif
 
@@ -1023,13 +1282,13 @@ int PDFDebugPages( PDFWriter &pdffile )
   commands << PDFMultiLineText( pointCenter, textSizePts, leading,
                 centerIndent, labelCenter+random_ipsum_lines, kPDFTextAlignCenter );
   
-  point2D pointRight( right, top - 4*inch2point );
+  point2D pointRight( right, top - 6*inch2point );
   std::string labelRight( "RightAligned\n" );
   float rightIndent = 0.0;
   commands << PDFMultiLineText( pointRight, textSizePts, leading,
                 rightIndent, labelRight+random_ipsum_lines, kPDFTextAlignRight );
   
-  point2D pointCenterLeft( 0.5f*right, top - 6*inch2point );
+  point2D pointCenterLeft( 0.5f*right, top - 4*inch2point );
   std::string labelCenterLeft( "CenterLeftAligned\n" );
   float centerLeftIndent = 0.5f * inch2point;
   commands << PDFMultiLineText( pointCenterLeft, textSizePts, leading,
@@ -1070,13 +1329,13 @@ int PDFDebugPages( PDFWriter &pdffile )
   commands << PDFParagraphText( pointCenter, textSizePts, leading,
                 centerIndent, lineLimit, labelCenter+random_ipsum_paragraph, kPDFTextAlignCenter );
   
-  point2D pointRight( right, top - 4*inch2point );
+  point2D pointRight( right, top - 6*inch2point );
   std::string labelRight( "RightAlignedParagraph\n" );
   float rightIndent = 0.0;
   commands << PDFParagraphText( pointRight, textSizePts, leading,
                 rightIndent, lineLimit, labelRight+random_ipsum_paragraph, kPDFTextAlignRight );
   
-  point2D pointCenterLeft( 0.5f*right, top - 6*inch2point );
+  point2D pointCenterLeft( 0.5f*right, top - 4*inch2point );
   std::string labelCenterLeft( "CenterLeftAlignedParagraph\n" );
   float centerLeftIndent = 0.5f * inch2point;
   commands << PDFParagraphText( pointCenterLeft, textSizePts, leading,
@@ -1158,7 +1417,7 @@ int PDFDebugPages( PDFWriter &pdffile )
   commands << PDFDrawGridTable( table1, point3 );
 
   
-
+  // diagonal
   gridTable table2;
   table2.m_textSize = textSizePts;
   table2.m_lineWeight = 0.2f;
@@ -1183,7 +1442,7 @@ int PDFDebugPages( PDFWriter &pdffile )
   commands << PDFDrawGridTable( table2, point4 );
 
 
-  
+  // sparse with only single entry
   gridTable table3;
   table3.m_textSize = textSizePts;
   table3.m_lineWeight = 1.0f;

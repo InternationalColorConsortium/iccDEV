@@ -296,6 +296,7 @@ struct profileVisualizationData {
 
 /******************************************************************************/
 
+// xy chromaticity
 struct xyPlotData : dataAbstractionBase {
 
   xyPlotData() : printLabels(true) {}
@@ -320,6 +321,7 @@ struct xyPlotData : dataAbstractionBase {
 
 /******************************************************************************/
 
+// ab chromaticity
 struct abPlotData : dataAbstractionBase {
 
   abPlotData() : printLabels(true) {}
@@ -335,15 +337,16 @@ struct abPlotData : dataAbstractionBase {
   
   virtual std::string getDataType() const { return "abPlotData"; };
   
-  std::string object_name;        // page name in PDF
-  std::string object_label;       // graph label
+  std::string object_name;           // page name in PDF
+  std::string object_label;          // graph label, may be multiline
   bool printLabels;
   namedLabList points_unconnected;
-  namedLabList points_connected;     // always connected and closed
+  namedLabList points_connected;     // always connected and closed, TODO - sort and convex hull
 };
 
 /******************************************************************************/
 
+// LookUpTable Graph
 struct lutPlotData : dataAbstractionBase {
 
   lutPlotData() : isIdentity(false) {}
@@ -361,7 +364,7 @@ struct lutPlotData : dataAbstractionBase {
   std::string object_name;        // page name in PDF
   std::string object_label;       // graph label, may be multiline
   bool isIdentity;
-  pointList points;            // always connected, but not closed
+  pointList points;               // always connected, but not closed
 };
 
 /******************************************************************************/
@@ -373,6 +376,31 @@ enum imageColorModel {
     IMAGE_MODE_CIELAB = 3,
     IMAGE_MODE_CMYK = 4,
 };
+
+int imageColorToTIFFMode( imageColorModel model )
+{
+  switch( model ) {
+    default:
+    case IMAGE_MODE_GRAY_BLACKZERO:
+      return TIFF_MODE_GRAY_BLACKZERO;
+      break;
+    case IMAGE_MODE_GRAY_WHITEZERO:
+      return TIFF_MODE_GRAY_WHITEZERO;
+      break;
+    case IMAGE_MODE_RGB:
+      return TIFF_MODE_RGB;
+      break;
+    case IMAGE_MODE_CIELAB:
+      return TIFF_MODE_CIELAB;
+      break;
+    case IMAGE_MODE_CMYK:
+      return TIFF_MODE_CMYK;
+      break;
+  }
+  
+  // for derpy compilers
+  return TIFF_MODE_GRAY_BLACKZERO;
+}
 
 struct imageData : dataAbstractionBase {
 
@@ -400,8 +428,8 @@ struct imageData : dataAbstractionBase {
   int height;
   int channels;
   int depth;                // bits per sample [8,16,32,64]
-  imageColorModel mode;     // TIFF mode
-  bool isFloatingPoint;
+  imageColorModel mode;     // interpretation of channels
+  bool isFloatingPoint;     // because 32 bit integer can be useful, as well as 32 bit float
   void *data;
 };
 
