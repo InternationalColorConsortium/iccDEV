@@ -1484,7 +1484,7 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   int zstat;
   z_stream zstr;
   memset(&zstr, 0, sizeof(zstr));
-  unsigned char buf[32767] = { 0 };
+  icUtf8Vector buf(32767, 0);
 
   zstat = inflateInit(&zstr);
 
@@ -1511,8 +1511,8 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   do {
     unsigned int i, n;
 
-    zstr.next_out = buf;
-    zstr.avail_out = sizeof(buf);
+    zstr.next_out = buf.data();
+    zstr.avail_out = (uInt)buf.size();
 
     zstat = inflate(&zstr, Z_SYNC_FLUSH);
 
@@ -1521,7 +1521,7 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
       return false;
     }
 
-    n = sizeof(buf) - zstr.avail_out;
+    n = (unsigned int)buf.size() - zstr.avail_out;
 
     for (i = 0; i < n; i++) {
       str += buf[i];
@@ -1560,7 +1560,7 @@ bool CIccTagZipUtf8Text::SetText(const icUChar *szText)
 
   int zstat;
   z_stream zstr;
-  unsigned char buf[32767];
+  icUtf8Vector buf(32767);
   memset(&zstr, 0, sizeof(zstr));
 
   zstat = deflateInit(&zstr, Z_DEFAULT_COMPRESSION);
@@ -1580,8 +1580,8 @@ bool CIccTagZipUtf8Text::SetText(const icUChar *szText)
 
   do {
     int n;
-    zstr.next_out = buf;
-    zstr.avail_out = sizeof(buf);
+    zstr.next_out = buf.data();
+    zstr.avail_out = (uInt)buf.size();
 
     zstat = deflate(&zstr, Z_FINISH);
 
@@ -1590,7 +1590,7 @@ bool CIccTagZipUtf8Text::SetText(const icUChar *szText)
       return false;
     }
 
-    n = sizeof(buf) - zstr.avail_out;
+    n = (int)buf.size() - (int)zstr.avail_out;
 
     for (i = 0; i < n; i++) {
       compress.push_back(buf[i]);
@@ -8778,12 +8778,12 @@ bool CIccTagData::Read(icUInt32Number size, CIccIO *pIO)
       // unbounded allocation; mirrors the Describe() ceiling on tag data bytes.
       const icUInt32Number nMaxInflatedBytes = 0x10000000;
       icUtf8Vector out;
-      unsigned char buf[32768];
+      icUtf8Vector buf(32768);
       int zstat;
 
       do {
-        zstr.next_out = buf;
-        zstr.avail_out = sizeof(buf);
+        zstr.next_out = buf.data();
+        zstr.avail_out = (uInt)buf.size();
 
         zstat = inflate(&zstr, Z_SYNC_FLUSH);
 
@@ -8792,12 +8792,12 @@ bool CIccTagData::Read(icUInt32Number size, CIccIO *pIO)
           return false;
         }
 
-        size_t n = sizeof(buf) - zstr.avail_out;
+        size_t n = buf.size() - zstr.avail_out;
         if (out.size() + n > nMaxInflatedBytes) {
           inflateEnd(&zstr);
           return false;
         }
-        out.insert(out.end(), buf, buf + n);
+        out.insert(out.end(), buf.begin(), buf.begin() + n);
       } while (zstat != Z_STREAM_END);
 
       inflateEnd(&zstr);
@@ -8865,12 +8865,12 @@ bool CIccTagData::Write(CIccIO *pIO)
     zstr.avail_in = m_nSize;
 
     icUtf8Vector compress;
-    unsigned char buf[32768];
+    icUtf8Vector buf(32768);
     int zstat;
 
     do {
-      zstr.next_out = buf;
-      zstr.avail_out = sizeof(buf);
+      zstr.next_out = buf.data();
+      zstr.avail_out = (uInt)buf.size();
 
       zstat = deflate(&zstr, Z_FINISH);
 
@@ -8879,8 +8879,8 @@ bool CIccTagData::Write(CIccIO *pIO)
         return false;
       }
 
-      size_t n = sizeof(buf) - zstr.avail_out;
-      compress.insert(compress.end(), buf, buf + n);
+      size_t n = buf.size() - zstr.avail_out;
+      compress.insert(compress.end(), buf.begin(), buf.begin() + n);
     } while (zstat != Z_STREAM_END);
 
     deflateEnd(&zstr);

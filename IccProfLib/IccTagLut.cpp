@@ -2321,15 +2321,16 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
 {
   const size_t outSize = 200000;
   const size_t nameSize = 40;
-  icChar szOutText[outSize], szColor[nameSize];
+  std::vector<icChar> outText(outSize);
+  icChar szColor[nameSize];
   int i;
   int n;
 
   if (!sink.ShouldContinue())
     return;
 
-  n = snprintf(szOutText, outSize, "BEGIN_LUT %s %d %d\n", szName, m_nInput, m_nOutput);
-  if (n > 0) sink.Write(szOutText, (std::size_t)n);
+  n = snprintf(outText.data(), outSize, "BEGIN_LUT %s %d %d\n", szName, m_nInput, m_nOutput);
+  if (n > 0) sink.Write(outText.data(), (std::size_t)n);
 
   // Channel header + cells share the legacy nVerboseness > 75 gate.
   // Suppressing channels alone (channels=false, cells=true) is rejected
@@ -2339,16 +2340,16 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
 
   for (i=0; i<m_nInput; i++) {
     icColorIndexName(szColor, nameSize, csInput, i, m_nInput, "In");
-    n = snprintf(szOutText, outSize, " %s=%d", szColor, m_GridPoints[i]);
-    if (n > 0) sink.Write(szOutText, (std::size_t)n);
+    n = snprintf(outText.data(), outSize, " %s=%d", szColor, m_GridPoints[i]);
+    if (n > 0) sink.Write(outText.data(), (std::size_t)n);
   }
 
   sink.Write("  ", 2);
 
   for (i=0; i<m_nOutput; i++) {
     icColorIndexName(szColor, nameSize, csOutput, i, m_nOutput, "Out");
-    n = snprintf(szOutText, outSize, " %s", szColor);
-    if (n > 0) sink.Write(szOutText, (std::size_t)n);
+    n = snprintf(outText.data(), outSize, " %s", szColor);
+    if (n > 0) sink.Write(outText.data(), (std::size_t)n);
   }
 
   sink.Write("\n", 1);
@@ -2359,8 +2360,7 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
     return;
 
   // Cache the colour-space signatures so Iterate can format channel labels.
-  // Scratch buffers are threaded through Iterate as parameters, which keeps
-  // the stack arrays' lifetimes confined to this function frame.
+  // Scratch buffers are threaded through Iterate as parameters.
   m_csInput = csInput;
   m_csOutput = csOutput;
   memset(m_GridAdr, 0, 16);
@@ -2371,13 +2371,13 @@ void CIccCLUT::DumpLut(IDescribeSink &sink, const icChar *szName,
   std::size_t budgetStart = budget;
 
   Iterate(sink, 0, 0, outSize, bUseLegacy, budgetPtr,
-          szOutText, szColor, nameSize);
+          outText.data(), szColor, nameSize);
 
   // If we ran out of budget mid-dump, mark the truncation explicitly.
   if (budgetPtr && budget == 0 && sink.ShouldContinue()) {
-    n = snprintf(szOutText, outSize,
+    n = snprintf(outText.data(), outSize,
                  "[clut cells truncated after %zu]\n", budgetStart);
-    if (n > 0) sink.Write(szOutText, (std::size_t)n);
+    if (n > 0) sink.Write(outText.data(), (std::size_t)n);
   }
 }
 

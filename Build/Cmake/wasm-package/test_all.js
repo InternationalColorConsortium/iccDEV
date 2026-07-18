@@ -35,9 +35,15 @@ function getTestProfile() {
   return new Uint8Array(buf);
 }
 
+function getClutTestProfile() {
+  const testPath = path.join(__dirname, 'Testing', 'sRGB_v4_ICC_preference.icc');
+  return new Uint8Array(fs.readFileSync(testPath));
+}
+
 (async () => {
   let pass = 0, fail = 0;
   const icc = getTestProfile();
+  const clutIcc = getClutTestProfile();
 
   console.log('iccDEV WASM Tool Tests\n');
 
@@ -45,6 +51,11 @@ function getTestProfile() {
   if (await test('IccDumpProfile', require('./IccDumpProfile/iccDumpProfile.js'), mod => {
     mod.FS.writeFile('t.icc', icc);
     mod.callMain(['t.icc', 'ALL']);
+  })) pass++; else fail++;
+
+  if (await test('IccDumpProfile (CLUT)', require('./IccDumpProfile/iccDumpProfile.js'), mod => {
+    mod.FS.writeFile('clut.icc', clutIcc);
+    mod.callMain(['clut.icc', 'ALL']);
   })) pass++; else fail++;
 
   // ToXml
