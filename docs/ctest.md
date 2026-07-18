@@ -157,6 +157,9 @@ before running the suite.
 | `iccdev.issue-1379-fromcube-conformance` | `.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh` |
 | `iccdev.fromcube-cli-args` | `.github/scripts/iccdev-fromcube-cli-args-regression.sh` |
 | `iccdev.describe-sink-api` | `.github/ci/regression/iccDescribeSinkTest.cpp` |
+| `iccdev.iccviz-gamut-roundtrip-metrics` | `.github/ci/regression/iccviz-gamut-roundtrip-metrics.cpp` |
+| `iccdev.iccviz-degenerate-detection` | `.github/ci/regression/iccviz-degenerate-detection.cpp` |
+| `iccdev.iccviz-pdf-axis-labels` | `Build/Cmake/Testing/RunIccVizPdfAxisTest.cmake` |
 
 `iccdev.legacy-run-tests` requires `iccToJson` and `iccFromJson` under CTest.
 The JSON round-trip uses a temporary directory for generated `.json` and

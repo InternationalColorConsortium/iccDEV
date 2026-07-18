@@ -1629,6 +1629,9 @@ GamutVolumeResult GamutVolume(CIccProfile* pIcc, icTagSignature aToBTag,
   long long cells = 0;
   r.volume         = voxelEnclosedVolume(lab, vs, dl, cells);
   if (cells < 0) return fail("voxel grid too large for volume");   // x/ap already freed above
+  // A caller-supplied enormous/infinite voxelSize makes cells*vs^3 overflow to
+  // +/-Inf (or NaN); never report a non-finite measurement as a successful volume.
+  if (!std::isfinite(r.volume)) return fail("computed volume is not finite");
   r.voxels         = cells;
   r.samplesPerAxis = S;
   r.voxelSize      = vs;

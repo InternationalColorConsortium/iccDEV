@@ -31,6 +31,11 @@ if(NOT EXISTS "${PROFILE}")
   message(FATAL_ERROR "input profile not found: ${PROFILE}")
 endif()
 
+# Recreate the scratch dir from scratch each run: WORKDIR persists across CTest
+# invocations, so a stale "${_stem}_luts.pdf" left by a previous run could satisfy
+# the existence/content checks below even if the tool stopped emitting it. Removing
+# it first guarantees every assertion is made against a freshly produced PDF.
+file(REMOVE_RECURSE "${WORKDIR}")
 file(MAKE_DIRECTORY "${WORKDIR}")
 get_filename_component(_pname "${PROFILE}" NAME)
 get_filename_component(_stem  "${PROFILE}" NAME_WE)

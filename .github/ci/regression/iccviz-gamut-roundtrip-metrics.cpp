@@ -129,6 +129,89 @@ static void test_gamut_volume_rejects_non_atob(CIccProfile *pIcc) {
   check(!gv.ok, "GamutVolume fails on a BToA signature instead of returning a bogus volume");
 }
 
+// --- neutral-axis inking: exercise the buildNeutralAxisGraph producer end-to-end ----
+// Nothing else drives the neutral-axis graph (the PDF CTest only greps axis text and
+// the metric tests never call this producer), so a wrong PCS->device direction, a bad
+// Lab encoding, or all-zero channel output would pass unnoticed. Build a synthetic
+// BToA1 (Lab->RGB) whose CLUT ramps device ink with darkness (0 at white L*=100, full
+// at black L*=0), enumerate + render the neutral-axis graph through the public API,
+// and assert each channel yields 101 finite samples that actually span the ink range.
+class NeutralRampFill : public IIccCLUTExec {
+public:
+  void PixelOp(icFloatNumber *pGridAdr, icFloatNumber *pData) override {
+    // pGridAdr[0] is normalized L* (1.0 = white, 0.0 = black); ink = darkness.
+    const icFloatNumber ink = 1.0f - pGridAdr[0];
+    pData[0] = ink; pData[1] = ink; pData[2] = ink;   // a*/b* (grid 1,2) ignored
+  }
+};
+
+static CIccProfile *makeNeutralAxisProfile() {
+  CIccProfile *pIcc = new CIccProfile();
+  pIcc->InitHeader();
+  pIcc->m_Header.version     = icVersionNumberV4_3;
+  pIcc->m_Header.deviceClass = icSigOutputClass;
+  pIcc->m_Header.colorSpace  = icSigRgbData;
+  pIcc->m_Header.pcs         = icSigLabData;
+
+  CIccTagLutBtoA *pLut = new CIccTagLutBtoA();
+  pLut->Init(3, 3);
+  pLut->SetColorSpaces(icSigLabData, icSigRgbData);   // PCS in, device out
+  CIccCLUT *pCLUT = pLut->NewCLUT(9);
+  NeutralRampFill filler;
+  pCLUT->Iterate(&filler);
+
+  pIcc->AttachTag(icSigBToA1Tag, pLut);
+  return pIcc;
+}
+
+static void test_neutral_axis_inking() {
+  std::printf("\n[ neutral-axis inking (B2A1 -> Enumerate/RenderGraph) ]\n");
+  CIccProfile *pIcc = makeNeutralAxisProfile();
+
+  std::string neutralId;
+  for (const iccviz::Descriptor &d : iccviz::Enumerate(pIcc)) {
+    if (d.kind == iccviz::Kind::NeutralAxisInking) { neutralId = d.id; break; }
+  }
+  check(!neutralId.empty(), "profile enumerates a neutral-axis inking graph");
+  if (neutralId.empty()) { delete pIcc; return; }
+
+  iccviz::GraphResult gr = iccviz::RenderGraph(pIcc, neutralId);
+  if (!gr.ok) {
+    std::printf("      error: %s\n", gr.error.c_str());
+    check(false, "RenderGraph succeeds for the neutral-axis descriptor");
+    delete pIcc;
+    return;
+  }
+  check(gr.ok, "RenderGraph succeeds for the neutral-axis descriptor");
+
+  int primaries = 0;
+  for (const iccviz::Series &s : gr.graph.series) {
+    if (s.role != iccviz::Role::Primary) continue;
+    ++primaries;
+    bool allFinite = true;
+    float ymin = 1e30f, ymax = -1e30f;
+    for (const iccviz::Vertex &v : s.verts) {
+      if (!std::isfinite(v.x) || !std::isfinite(v.y)) allFinite = false;
+      if (v.y < ymin) ymin = v.y;
+      if (v.y > ymax) ymax = v.y;
+    }
+    std::printf("      %s: n=%zu  white(L*100)=%.1f%%  black(L*0)=%.1f%%  span=%.1f\n",
+                s.name.c_str(), s.verts.size(),
+                s.verts.empty() ? 0.0f : s.verts.front().y,
+                s.verts.empty() ? 0.0f : s.verts.back().y, ymax - ymin);
+    check(s.verts.size() == 101, "channel has 101 neutral-axis samples");
+    check(allFinite, "all neutral-axis vertices are finite");
+    // Representative values: white end low ink, black end high ink, spanning a wide
+    // range -- pins the PCS->device direction/encoding and rules out all-zero output.
+    check(!s.verts.empty() && ymax - ymin > 50.0f,
+          "channel ink spans a wide range (not flat/all-zero)");
+    check(!s.verts.empty() && s.verts.front().y < s.verts.back().y - 40.0f,
+          "ink increases from white (L*=100) to black (L*=0)");
+  }
+  check(primaries == 3, "neutral-axis graph has one primary series per device channel");
+  delete pIcc;
+}
+
 static void test_gamut_volume(CIccProfile *pIcc) {
   std::printf("\n[ GamutVolume (A2B1, relative colorimetric) ]\n");
 
@@ -163,6 +246,15 @@ static void test_gamut_volume(CIccProfile *pIcc) {
               gd.ok, gd.voxels, gd.degenerate);
   check(gd.ok, "coarse-grid GamutVolume still returns ok");
   check(gd.degenerate, "coarse-grid GamutVolume is flagged degenerate");
+
+  // An enormous voxelSize overflows cells*vs^3 to a non-finite volume; the metric
+  // must fail rather than report Inf/NaN as a successful measurement.
+  iccviz::GamutVolumeResult gnf =
+      iccviz::GamutVolume(pIcc, icSigAToB1Tag, icRelativeColorimetric,
+                          /*samplesPerAxis=*/2, /*voxelSize=*/1e120, /*dilate=*/0);
+  std::printf("      huge-voxelSize: ok=%d volume=%.3g error=\"%s\"\n",
+              gnf.ok, gnf.volume, gnf.error.c_str());
+  check(!gnf.ok, "GamutVolume rejects a non-finite (overflowed) volume instead of returning ok");
 }
 
 static void test_round_trip(CIccProfile *pIcc) {
@@ -206,6 +298,7 @@ int main(int argc, char **argv) {
   test_gamut_volume(pIcc);
   test_gamut_volume_rejects_non_atob(pIcc);
   test_gamut_volume_planar_is_flat();
+  test_neutral_axis_inking();
   test_round_trip(pIcc);
 
   delete pIcc;
