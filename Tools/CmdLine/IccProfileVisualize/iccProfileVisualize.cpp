@@ -369,38 +369,13 @@ struct lutPlotData : dataAbstractionBase {
 
 /******************************************************************************/
 
-enum imageColorModel {
-    IMAGE_MODE_GRAY_BLACKZERO = 0,
-    IMAGE_MODE_GRAY_WHITEZERO = 1,
-    IMAGE_MODE_RGB = 2,
-    IMAGE_MODE_CIELAB = 3,
-    IMAGE_MODE_CMYK = 4,
+enum {
+    IMAGE_MODE_GRAY_BLACKZERO = TIFF_MODE_GRAY_BLACKZERO,
+    IMAGE_MODE_GRAY_WHITEZERO = TIFF_MODE_GRAY_WHITEZERO,
+    IMAGE_MODE_RGB = TIFF_MODE_RGB,
+    IMAGE_MODE_CIELAB = TIFF_MODE_CIELAB,
+    IMAGE_MODE_CMYK = TIFF_MODE_CMYK,
 };
-
-int imageColorToTIFFMode( imageColorModel model )
-{
-  switch( model ) {
-    default:
-    case IMAGE_MODE_GRAY_BLACKZERO:
-      return TIFF_MODE_GRAY_BLACKZERO;
-      break;
-    case IMAGE_MODE_GRAY_WHITEZERO:
-      return TIFF_MODE_GRAY_WHITEZERO;
-      break;
-    case IMAGE_MODE_RGB:
-      return TIFF_MODE_RGB;
-      break;
-    case IMAGE_MODE_CIELAB:
-      return TIFF_MODE_CIELAB;
-      break;
-    case IMAGE_MODE_CMYK:
-      return TIFF_MODE_CMYK;
-      break;
-  }
-  
-  // for derpy compilers
-  return TIFF_MODE_GRAY_BLACKZERO;
-}
 
 struct imageData : dataAbstractionBase {
 
@@ -409,7 +384,7 @@ struct imageData : dataAbstractionBase {
                 isFloatingPoint(false), data(NULL) {}
   
   imageData(const std::string &name, void *imageData, int imageWidth, int imageHeight,
-            int imageChannels, int imageDepth, imageColorModel imageMode,
+            int imageChannels, int imageDepth, int imageMode,
             bool dataIsFloatingPoint = false ) {
     object_name = name;
     width = imageWidth;
@@ -432,7 +407,7 @@ struct imageData : dataAbstractionBase {
   int height;
   int channels;
   int depth;                // bits per sample [8,16,32,64]
-  imageColorModel mode;     // interpretation of channels
+  int mode;                 // interpretation of channels, matches TIFF modes
   bool isFloatingPoint;     // because 32 bit integer can be useful, as well as 32 bit float
   uint8_t *data;
 };
@@ -1748,25 +1723,24 @@ void CopyLUTtoTIFF( icFloatNumber *clutData, uint8_t *imageBuf,
 /******************************************************************************/
 
 static
-int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
                 const std::string &basename,  profileVisualizationData &data,
                 bool doEdges = true )
 {
   const size_t bufSize = 128;
   char buf[bufSize];
-  int outputCount = 0;
 
   icTagTypeSignature typeSig = tag->GetType();
   
     CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
     if (!lut) {
       LogAnError(stderr, "%s: Skipping %s: unable to convert LUT\n", basename.c_str(), sigDesc.c_str());
-      return outputCount;
+      return;
     }
 
     std::string description;
     if (describe3DLUT( lut, pIcc, description, sigDesc, basename)) {
-      return outputCount;
+      return;
     }
 
     // output input and output curves
@@ -1783,7 +1757,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
     if (inputChannels <= 0 || outputChannels <= 0) {
       LogAnError(stderr, "%s: Skipping %s: invalid channel count\n", basename.c_str(), sigDesc.c_str());
-      return outputCount;
+      return;
     }
 
     if (curveA) {
@@ -1833,7 +1807,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         LogAnError(stderr,"%s: ERROR - clut data could not be read for tag '%s' of type '%s'\n",
                 basename.c_str(), sigDesc.c_str(), typeDesc.c_str() );
       }
-      return outputCount;
+      return;
     }
 
     // validate is called back before the Describe call
@@ -1843,7 +1817,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     int tiles = gridPoints;
     if (gridPoints <= 0) {
       LogAnError(stderr, "%s: Skipping %s: invalid CLUT grid\n", basename.c_str(), sigDesc.c_str());
-      return outputCount;
+      return;
     }
 
     int tileWidth = 1;
@@ -1853,7 +1827,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       tileWidth = clut->GridPoint(1);
       if (tileWidth <= 0) {
         LogAnError(stderr, "%s: Skipping %s: invalid CLUT width\n", basename.c_str(), sigDesc.c_str());
-        return outputCount;
+        return;
       }
     }
 
@@ -1861,7 +1835,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       tileHeight = clut->GridPoint(2);
       if (tileHeight <= 0) {
         LogAnError(stderr, "%s: Skipping %s: invalid CLUT height\n", basename.c_str(), sigDesc.c_str());
-        return outputCount;
+        return;
       }
     }
 
@@ -1870,7 +1844,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         int extraGridPoints = clut->GridPoint(i);
         if (extraGridPoints <= 0) {
           LogAnError(stderr, "%s: Skipping %s: invalid CLUT tile count\n", basename.c_str(), sigDesc.c_str());
-          return outputCount;
+          return;
         }
         tiles *= extraGridPoints;
       }
@@ -1920,7 +1894,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     int imageHeight = tilesHigh * tileHeight;
     if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
       LogAnError(stderr, "%s: Skipping %s: invalid image geometry\n", basename.c_str(), sigDesc.c_str());
-      return outputCount;
+      return;
     }
 
     //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
@@ -1928,7 +1902,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     // NOTE that bufferSize will usually be greater than clutSize
     if (!bufferSize) {
       LogAnError(stderr, "%s: Skipping %s: empty image buffer\n", basename.c_str(), sigDesc.c_str());
-      return outputCount;
+      return;
     }
 
     std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
@@ -1941,14 +1915,17 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
                 gridPoints, tilesWide, imageWidth, bytes );
 
     // write the LUT as TIFF
-    std::string tiffPath2 = basename + "_" + sigDesc + ".tif";
+    std::string tiffPath2 = basename + "_" + sigDesc;
     int tiffColor = TIFFColorModelFromICCModel( outputSpace );
-    if (!WriteTIFF( tiffPath2.c_str(), 100, tiffColor, imageBuf,
-                    imageWidth, imageHeight, outputChannels, 8*bytes )) {
-      LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
-    }
+    imageData *image = new imageData( tiffPath2, imageBuffer.release(),
+                            imageWidth, imageHeight, outputChannels, 8*bytes, tiffColor, bytes>=4 );
+    data.addPage( image );
 
     if (doEdges) {
+      imageBuffer.reset( new uint8_t[ bufferSize ] );
+      imageBuf = imageBuffer.get();
+      memset( imageBuf, 0, bufferSize );
+    
       // build edge data from CLUT
       bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels;
       std::unique_ptr<icFloatNumber[]> edgeBuffer( new icFloatNumber[ bufferSize ] );
@@ -1975,16 +1952,13 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
                     gridPoints, tilesWide, imageWidth, bytes );
 
       // write edge data as TIFF
-      std::string tiffPath3 = basename + "_" + sigDesc + "_edges.tif";
+      std::string tiffPath3 = basename + "_" + sigDesc + "_edges";
       int edgeColor = TIFFEdgeColorModelFromICCModel( outputSpace );
-      if (!WriteTIFF( tiffPath3.c_str(), 100, edgeColor, imageBuf,
-                    imageWidth, imageHeight, outputChannels, 8*bytes )) {
-      LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath3.c_str());
-      }
+      imageData *edgeImage = new imageData( tiffPath3, imageBuffer.release(),
+                            imageWidth, imageHeight, outputChannels, 8*bytes, edgeColor, bytes>=4 );
+      data.addPage( edgeImage );
 
     }   // end if doEdges
-
-  return 1;
 }
 
 /******************************************************************************/
@@ -1992,7 +1966,7 @@ int outputMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 // output graphic representation of nD LUTs
 // return count of output objects created, 0 if none
 static
-int process3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+void process3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
         const std::string &basename, profileVisualizationData &data,
         bool doEdges = true )
 {
@@ -2001,7 +1975,7 @@ int process3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
   if (!tag) {
     LogAnError(stderr, "%s: Skipping %s: unable to load tag\n", basename.c_str(), sigDesc.c_str());
-    return 0;
+    return;
   }
 
   icTagTypeSignature typeSig = tag->GetType();
@@ -2012,7 +1986,7 @@ int process3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     case icSigLut16Type:  // CIccTagLut16
     case icSigLutAtoBType:  // CIccTagLutAtoB
     case icSigLutBtoAType:  // CIccTagLutBtoA
-      return outputMBBType( pIcc, tag, sigDesc, basename, data, doEdges );
+      processMBBType( pIcc, tag, sigDesc, basename, data, doEdges );
       break;
 
     case icSigMultiProcessElementType:
@@ -2027,8 +2001,6 @@ int process3DLUT( CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       break;
 
   }   // end switch by type
-
-  return 0; // no output was created
 
 }   // end process3DLUT()
 
@@ -2183,6 +2155,9 @@ void outputNamedColorsABPDF( abPlotData *plot, PDFWriter &pdffile )
 
   // add the common axes
   commands << "/abPlot Do\n";
+  
+  // gsave, color black
+  commands << "q 0 0 0 1 K\n";
 
   // add label
   point2D range( right - left, 0 );
@@ -2201,7 +2176,37 @@ void outputNamedColorsABPDF( abPlotData *plot, PDFWriter &pdffile )
                                 labelSize, sample.name, kPDFTextAlignLeft );
   }
 
-// WRITE ME - points connected by line
+  // connected line
+  size_t connected_count = plot->points_connected.size();
+  if (connected_count > 1) {
+    // gsave and 50% gray
+    commands << "q 0 0 0 0.5 K\n";
+    auto &sampleC = plot->points_connected[0];
+    point2D colorPt( sampleC.a*maxRadius/abChartScale, sampleC.b*maxRadius/abChartScale );
+    point2D plotCenter = center + colorPt;
+    commands << plotCenter << " m ";
+    for (size_t i = 1; i < connected_count; ++i) {
+      auto &sample = plot->points_connected[i];
+      colorPt = point2D( sample.a*maxRadius/abChartScale, sample.b*maxRadius/abChartScale );
+      plotCenter = center + colorPt;
+      commands << plotCenter << " l ";
+    }
+    // stroke and grestore
+    commands << "s Q\n";
+  }
+  
+  // connected marks and labels
+  for (size_t i = 0; i < connected_count; ++i) {
+    auto &sample = plot->points_connected[i];
+    point2D colorPt( sample.a*maxRadius/abChartScale, sample.b*maxRadius/abChartScale );
+    point2D plotCenter = center + colorPt;
+    commands << plotSquarePDF( plotCenter, symbolSize );
+    commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
+                                labelSize, sample.name, kPDFTextAlignLeft );
+  }
+  
+  // grestore
+  commands << "Q\n";
 
 
   // and finally create the graphics object and page
@@ -2760,8 +2765,7 @@ void processProfile( CIccProfile *pIcc, const std::string &basename,
         {
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-// WRITE ME - output to data
-        (void)process3DLUT(pIcc, pTag, sigDesc, basename, data, sig != icSigGamutTag  );
+        process3DLUT(pIcc, pTag, sigDesc, basename, data, sig != icSigGamutTag  );
 // TODO - plot gamut from A2B and B2A tags into xy and LAB plots
         }
         break;
@@ -2827,19 +2831,26 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
         lutPlotData *lutData = dynamic_cast<lutPlotData*>(page);
         output1DLUTPDF( lutData, pdffile );
     }
-    if (pageType == std::string("abPlotData")) {
+    else if (pageType == std::string("abPlotData")) {
         abPlotData *abData = dynamic_cast<abPlotData*>(page);
         outputNamedColorsABPDF( abData, pdffile );
     }
-    if (pageType == std::string("xyPlotData")) {
+    else if (pageType == std::string("xyPlotData")) {
         xyPlotData *xyData = dynamic_cast<xyPlotData*>(page);
         outputNamedColorsXYPDF( xyData, pdffile );
     }
-    if (pageType == std::string("imageData")) {
+    else if (pageType == std::string("imageData")) {
         imageData *image = dynamic_cast<imageData*>(page);
-// WRITE ME - output TIFF image file
+        std::string tiffPath2 = image->object_name + ".tif";
+        if (!WriteTIFF( tiffPath2.c_str(), 100, image->mode, image->data,
+                    image->width, image->height, image->channels, image->depth )) {
+            LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
+        }
     }
-  }
+    else {
+        LogAnError(stderr, "%s: unknown data type %s\n", basename.c_str(), pageType.c_str());
+    }
+  } // end iteration over pages
   
   size_t objectCount = pdffile.PageCount(); // grab page count before destroying the pages
 
