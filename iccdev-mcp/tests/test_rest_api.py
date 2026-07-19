@@ -112,9 +112,10 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertEqual(data["tools_count"], 25)
 
     def test_health_has_version(self):
+        from iccdev_mcp import __version__
         resp = self.client.get("/api/health")
         data = resp.json()
-        self.assertEqual(data["version"], "0.1.0")
+        self.assertEqual(data["version"], __version__)
 
     def test_tools_list(self):
         resp = self.client.get("/api/tools")

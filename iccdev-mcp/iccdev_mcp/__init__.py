@@ -6,9 +6,10 @@
 """
 MCP server exposing iccDEV ICC color profile tools to AI assistants.
 
-Provides 20 tools:
-- 5 Python-native (header inspection, color transforms, enums)
-- 15 subprocess-backed (dump, XML/JSON conversion, image I/O)
+Provides 25 tools:
+- 6 Python-native (header inspection, color transforms, enums)
+- 17 subprocess-backed (dump, XML/JSON conversion, image I/O)
+- 2 service tools (health and profile discovery)
 
 Quick start::
 

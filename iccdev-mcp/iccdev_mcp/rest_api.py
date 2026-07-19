@@ -41,7 +41,7 @@ try:
 except ImportError:
     HAS_UVICORN = False
 
-from iccdev_mcp import profiles, cli_tools
+from iccdev_mcp import __version__, cli_tools, profiles
 
 # Maximum upload size: 20 MB
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -891,7 +891,7 @@ async def api_health(request: Request) -> JSONResponse:
     return _json({
         "ok": True,
         "server": "iccdev-mcp",
-        "version": "0.1.0",
+        "version": __version__,
         "python_api_available": python_api,
         "cli_tools": {
             "available": tools_info["available"],

@@ -2,6 +2,10 @@
 set -euo pipefail
 
 mode="${1:-mcp}"
+if [[ "$mode" == -* ]]; then
+  exec iccdev-mcp "$@"
+fi
+
 case "$mode" in
   mcp|stdio)
     shift || true

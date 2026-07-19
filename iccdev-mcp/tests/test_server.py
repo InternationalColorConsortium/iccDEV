@@ -182,9 +182,12 @@ class TestServerImport:
         assert callable(main)
 
     def test_server_has_tools(self):
+        from iccdev_mcp import __version__
         from iccdev_mcp.server import mcp
         # FastMCP should have registered tools
         assert mcp is not None
+        options = mcp._mcp_server.create_initialization_options()
+        assert options.server_version == __version__
 
     def test_package_version(self):
         from iccdev_mcp import __version__
@@ -275,9 +278,11 @@ class TestNativeTools:
         assert result["hex"] == "0x64657363"
 
     def test_health_check(self):
+        from iccdev_mcp import __version__
         from iccdev_mcp.server import health_check
         result = health_check()
         assert result["status"] == "ok"
+        assert result["version"] == __version__
         assert result["python_api"]["available"] is True
         assert result["python_api"]["tools"] == 6
 

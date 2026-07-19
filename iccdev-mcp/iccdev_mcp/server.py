@@ -22,8 +22,8 @@ from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
+from iccdev_mcp import __version__, cli_tools
 from iccdev_mcp.profiles import list_profiles, resolve_profile_path
-from iccdev_mcp import cli_tools
 
 mcp = FastMCP(
     "iccdev-mcp",
@@ -33,6 +33,9 @@ mcp = FastMCP(
         "transforms, and format conversion for ICC.1 and ICC.2 profiles."
     ),
 )
+# FastMCP does not expose its low-level Server version parameter. Set the
+# application version explicitly so MCP initialize does not report the SDK version.
+mcp._mcp_server.version = __version__
 
 
 def _check_iccdev():
@@ -434,7 +437,7 @@ def health_check() -> dict:
 
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": __version__,
         "python_api": {
             "available": python_ok,
             "tools": native_count,
