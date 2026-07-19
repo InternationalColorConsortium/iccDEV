@@ -190,8 +190,9 @@ class TestServerImport:
         assert options.server_version == __version__
 
     def test_package_version(self):
+        from importlib.metadata import version
         from iccdev_mcp import __version__
-        assert __version__ == "0.1.0"
+        assert version("iccdev-mcp") == __version__
 
 
 # ---------------------------------------------------------------------------

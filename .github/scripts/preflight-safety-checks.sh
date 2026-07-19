@@ -398,9 +398,11 @@ def publish_like_step(step):
     block = with_block(step)
     if uses.startswith("docker/build-push-action@") and as_bool(block.get("push", False)):
         return True
-    if uses.startswith("actions/attest-build-provenance@"):
-        return True
-    if uses.startswith("actions/attest-sbom@"):
+    if uses.startswith((
+        "actions/attest@",
+        "actions/attest-build-provenance@",
+        "actions/attest-sbom@",
+    )):
         return True
     if re.search(r"\bgh\s+release\s+(create|upload|edit|delete)\b", run):
         return True

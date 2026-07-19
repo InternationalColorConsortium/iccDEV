@@ -30,6 +30,9 @@ on:
       - "Dockerfile.nixos"
       - "Dockerfile.ci-regression"
       - "Dockerfile.mcp"
+      - "iccdev-mcp/**"
+      - "python/**"
+      - ".github/scripts/preflight-safety-checks.sh"
       - ".github/workflows/ci-docker.yml"
   workflow_dispatch:
 
@@ -264,7 +267,7 @@ jobs:
 
       - name: Attest SBOM
         if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing') && steps.sbom-size.outputs.attestable == 'true' }}
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e  # v4.1.0
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
@@ -443,6 +446,59 @@ jobs:
             echo ''
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"  # sanitize_print
+
+      - name: Test MCP runtime
+        if: matrix.variant == 'mcp' || matrix.variant == 'regression'
+        env:
+          BASH_ENV: /dev/null
+          MATRIX_VARIANT: ${{ matrix.variant }}
+          PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing' }}
+          IMAGE_REF: ${{ steps.image.outputs.name }}@${{ steps.build-push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          if [ "$PUBLISH_IMAGE" = "true" ]; then
+            TEST_IMAGE="${IMAGE_REF}"
+            docker pull "${IMAGE_REF}"
+          else
+            TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
+          fi
+
+          HELP_OUTPUT="$(docker run --rm \
+            --entrypoint /usr/local/bin/iccdev-mcp-entrypoint \
+            "$TEST_IMAGE" --help)"
+          if ! grep -q '^usage: iccdev-mcp ' <<< "$HELP_OUTPUT"; then
+            echo "::error::MCP entrypoint help did not show iccdev-mcp usage"
+            exit 1
+          fi
+
+          EXPECTED_VERSION="$(docker run --rm --entrypoint python "$TEST_IMAGE" \
+            -c 'from importlib.metadata import version; print(version("iccdev-mcp"))')"
+          INIT_REQUEST='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}'
+          INIT_RESPONSE="$(printf '%s\n' "$INIT_REQUEST" | timeout 30 \
+            docker run --rm -i --entrypoint iccdev-mcp "$TEST_IMAGE")"
+          EXPECTED_VERSION="$EXPECTED_VERSION" python3 -c '
+          import json
+          import os
+          import sys
+          response = json.loads(sys.stdin.readline())
+          server = response["result"]["serverInfo"]
+          assert server["name"] == "iccdev-mcp"
+          assert server["version"] == os.environ["EXPECTED_VERSION"]
+          ' <<< "$INIT_RESPONSE"
+
+          docker run --rm --entrypoint python "$TEST_IMAGE" -c '
+          from importlib.metadata import version
+          from iccdev_mcp import __version__
+          from iccdev_mcp.server import health_check
+          health = health_check()
+          assert version("iccdev-mcp") == __version__
+          assert health["version"] == __version__
+          assert health["total_tools"] == 25
+          assert len(health["cli_tools"]["available"]) == 17
+          assert health["profile_count"] > 0
+          '
 
       - name: Test tool execution
         env:
@@ -672,7 +728,7 @@ jobs:
       packages: write  # Required to delete old GHCR package versions.
     strategy:
       matrix:
-        package: [iccdev, iccdev-nixos, iccdev-ci-regression]
+        package: [iccdev, iccdev-nixos, iccdev-ci-regression, iccdev-mcp]
     steps:
       # preflight: allow-token-exposure reason=ghcr-package-prune
       - name: Delete old package versions

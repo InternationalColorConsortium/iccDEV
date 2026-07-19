@@ -55,7 +55,7 @@ on:
         required: false
         type: boolean
         default: false
-  #checkov:skip=CKV_GHA_7: Maintainer-only manual dispatch uses constrained inputs for targeted risk scans.
+  # checkov:skip=CKV_GHA_7: Maintainer-only manual dispatch uses constrained inputs for targeted risk scans.
   workflow_dispatch:
     inputs:
       analysis_target:
@@ -1193,7 +1193,7 @@ jobs:
             if grep -qE '^\s+environment:\s*(release|ghcr-publish|publish|deploy|prod)' "$wf"; then
               has_publish_boundary=true
             fi
-            if grep -qE 'docker/build-push-action@|gh[[:space:]]+release[[:space:]]+(create|upload|edit|delete)|actions/attest-' "$wf"; then
+            if grep -qE 'docker/build-push-action@|gh[[:space:]]+release[[:space:]]+(create|upload|edit|delete)|actions/attest(@|-)' "$wf"; then
               has_publish_boundary=true
             fi
             if [[ "$has_publish_boundary" != "true" ]]; then
@@ -3423,7 +3423,7 @@ jobs:
             if ($content -match '(?m)^\s+environment:\s*(release|ghcr-publish|publish|deploy|prod)') {
               $hasPublishBoundary = $true
             }
-            if ($content -match 'docker/build-push-action@|gh\s+release\s+(create|upload|edit|delete)|actions/attest-') {
+            if ($content -match 'docker/build-push-action@|gh\s+release\s+(create|upload|edit|delete)|actions/attest(@|-)') {
               $hasPublishBoundary = $true
             }
             if (-not $hasPublishBoundary) { continue }

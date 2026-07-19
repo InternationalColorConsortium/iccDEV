@@ -1132,37 +1132,40 @@ async def api_upload(request: Request) -> JSONResponse:
                 413,
             )
         return _error("Invalid multipart upload", 400)
-    upload = form.get("file")
-    if upload is None or not isinstance(upload, UploadFile):
-        return _error("Missing file in upload")
+    try:
+        upload = form.get("file")
+        if upload is None or not isinstance(upload, UploadFile):
+            return _error("Missing file in upload")
 
-    # Read one byte past the limit so oversized uploads fail before storing.
-    content = await upload.read(MAX_UPLOAD_BYTES + 1)
-    if len(content) > MAX_UPLOAD_BYTES:
-        return _error(
-            f"File too large (max {MAX_UPLOAD_BYTES // 1024 // 1024} MB)",
-            413,
-        )
+        # Read one byte past the limit so oversized uploads fail before storing.
+        content = await upload.read(MAX_UPLOAD_BYTES + 1)
+        if len(content) > MAX_UPLOAD_BYTES:
+            return _error(
+                f"File too large (max {MAX_UPLOAD_BYTES // 1024 // 1024} MB)",
+                413,
+            )
 
-    # Sanitize filename: use UUID prefix to prevent collisions and path games
-    filename = getattr(upload, "filename", "upload.icc") or "upload.icc"
-    safe_name = Path(filename.replace("\\", "/")).name
-    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", safe_name)
-    if not safe_name or safe_name in {".", ".."} or safe_name.startswith("."):
-        safe_name = "upload.icc"
-    safe_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+        # Sanitize filename: use UUID prefix to prevent collisions and path games
+        filename = getattr(upload, "filename", "upload.icc") or "upload.icc"
+        safe_name = Path(filename.replace("\\", "/")).name
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", safe_name)
+        if not safe_name or safe_name in {".", ".."} or safe_name.startswith("."):
+            safe_name = "upload.icc"
+        safe_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
 
-    # Save to temp directory
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    dest = UPLOAD_DIR / safe_name
-    dest.write_bytes(content)
+        # Save to temp directory
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        dest = UPLOAD_DIR / safe_name
+        dest.write_bytes(content)
 
-    return _json({
-        "uploaded": True,
-        "path": str(dest),
-        "size": len(content),
-        "filename": safe_name,
-    })
+        return _json({
+            "uploaded": True,
+            "path": str(dest),
+            "size": len(content),
+            "filename": safe_name,
+        })
+    finally:
+        await form.close()
 
 
 # -- Subprocess tool endpoints --------------------------------------------
