@@ -2694,23 +2694,15 @@ std::string remove_extension( const std::string& filename)
 
 // create graphic representation of LUTs, named colors, etc.
 static
-int processProfile( CIccProfile *pIcc, const std::string &profilePath,
+void processProfile( CIccProfile *pIcc, const std::string &profilePath,
                     profileVisualizationData &data )
 {
   const size_t bufSize = 64;
   char buf1[bufSize];
-  int outputItems = 0;
 
   std::string tmpName = remove_extension( profilePath );
   std::string basename = icSanitizeFileName( tmpName );
   data.name = basename;
-
-// write next to input file
-// write output to basename + _luts.pdf
-// write basename + _ + tag + .tiff for nD LUTs
-
-  std::string pdfPath = basename + "_luts.pdf";
-  PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
 
 
   // plot RGB chromaticities, white point
@@ -2770,7 +2762,8 @@ int processProfile( CIccProfile *pIcc, const std::string &profilePath,
         {
         std::string sigDesc = icGetSigStr(buf1, bufSize, sig);
         CIccTag *pTag = pIcc->FindTag(tag); // load if needed
-        outputItems += process3DLUT(pIcc, pTag, sigDesc, basename, data, sig != icSigGamutTag  );
+// WRITE ME - output to data
+        (void)process3DLUT(pIcc, pTag, sigDesc, basename, data, sig != icSigGamutTag  );
 // TODO - plot gamut from A2B and B2A tags into xy and LAB plots
         }
         break;
@@ -2807,11 +2800,6 @@ int processProfile( CIccProfile *pIcc, const std::string &profilePath,
 
     }   // end switch over tag signatures
   }   // end loop over tags
-
-
-  pdffile.CloseFile();
-
-  return outputItems;
 
 }   // end processProfile()
 
@@ -2852,7 +2840,7 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &profi
     }
     if (pageType == std::string("imageData")) {
         imageData *image = dynamic_cast<imageData*>(page);
-// WRITE ME
+// WRITE ME - output TIFF image file
     }
   }
   
@@ -2945,13 +2933,12 @@ int main(int argc, char* argv[])
         continue;
       }
 
-      profileVisualizationData profileVisualData;
-      (void) processProfile( pIcc, sanitizedFile, profileVisualData );
-      auto count = outputDataToPDF( profileVisualData, sanitizedFile );
+      profileVisualizationData data;
+      processProfile( pIcc, sanitizedFile, data );
+      auto count = outputDataToPDF( data, sanitizedFile );
       if (!count) {
         LogAnError(stderr,"Profile %s had no content for output\n", sanitizedFile.c_str() );
       }
-      
 
       delete pIcc;
     }   // end try
