@@ -223,6 +223,9 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
   CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null || exit 1
 
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
+ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"
+
 USER iccdev-ci
 WORKDIR /workspace/iccDEV
 
