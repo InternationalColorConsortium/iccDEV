@@ -2226,7 +2226,7 @@ void processNamedColorList( namedLabList &colorsOut, const std::string &descript
   processNamedColorListAB( colorsOut, description, data );
   processNamedColorListXY( colorsOut, description, XYZIlluminant, data );
 
-// TODO - CIECAM16 plot as well?
+// DEFERRED - CIECAM16 plot as well?
     //#include "IccCAM.h" -- is CIECAM02
     // would have to add CAM16 code
 }
@@ -2793,7 +2793,6 @@ void processProfile( CIccProfile *pIcc, const std::string &basename,
 // TODO - all XYZ type tags?
 // TODO - curveSetElement
 // TODO - singleSampledCurve
-// TODO - segmentedCurve
 /* need Apple tag structures: 'vcgt', 'vcgp', 'ndin' */
 
       // ignore everything else
@@ -2813,12 +2812,9 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
   if (data.pages.size() == 0)
     return 0;
 
-//  std::string tmpName = remove_extension( profilePath );
-//  std::string basename = icSanitizeFileName( tmpName );
-
 // write next to input file
 // write output to basename + _luts.pdf
-// write basename + _ + tag + .tiff for nD LUTs
+// write basename + _ + tag + .tif for nD LUTs
 
   std::string pdfPath = basename + "_luts.pdf";
   PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
@@ -2851,7 +2847,7 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
         LogAnError(stderr, "%s: unknown data type %s\n", basename.c_str(), pageType.c_str());
     }
   } // end iteration over pages
-  
+
   size_t objectCount = pdffile.PageCount(); // grab page count before destroying the pages
 
   pdffile.CloseFile();
