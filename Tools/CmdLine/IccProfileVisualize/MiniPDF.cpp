@@ -1117,48 +1117,43 @@ std::string random_ipsum_lines(
 "porttitor consequat." );
 
 // same text, without linebreaks, and one forced linebreak
+static
 std::string random_ipsum_paragraph(
 "Ut at diam leo. Mauris libero nulla auctor sit amet venenatis Stiles, lorem eget odio. Integer vitae dui Fairchild magna dignissim ICC in id diam.\n\nSed quis imperdiet lorem, vel ipsum diam. Nam varius Berns leo quis pretium. Hunt fringilla a mi a facilisis. Pellentesque Wyszecki porttitor consequat." );
-
-static
-std::string glyphs1( "abcdefghijklmnopqrstuvwxyz1234567890|/;:'\",.<>/?");
-static
-std::string glyphs2( "ABCDEFGHIJKLMNOPQRSTUVWXYZ-_`~!@#$%^&*\\\\()[]{}");
-
-static
-std::string measure1( "xxxxxxxxxx\naaaaaaaaaa\nbbbbbbbbbb\ncccccccccc\n"
-                      "dddddddddd\neeeeeeeeee\nffffffffff\ngggggggggg\n"
-                      "hhhhhhhhhh\niiiiiiiiii\njjjjjjjjjj\nkkkkkkkkkk\n"
-                      "llllllllll\nmmmmmmmmmm\nnnnnnnnnnn\noooooooooo\n"
-                      "pppppppppp\nqqqqqqqqqq\nrrrrrrrrrr\nssssssssss\n"
-                      "tttttttttt\nuuuuuuuuuu\nvvvvvvvvvv\nwwwwwwwwww\n"
-                      "xxxxxxxxxx\nyyyyyyyyyy\nzzzzzzzzzz\n"
-                      "1111111111\n2222222222\n3333333333\n4444444444\n"
-                      "9999999999\n0000000000\nxxxxxxxxxx\n");
-
-static
-std::string measure2( "xxxxxxxxxx\n::::::::::\n;;;;;;;;;;\n..........\n"
-                      ",,,,,,,,,,\n``````````\n''''''''''\n\"\"\"\"\"\"\"\"\"\"\n"
-                      "//////////\n<<<<<<<<<<\n>>>>>>>>>>\n()()()()()\n"
-                      "[][][][][]\n----------\n__________\n++++++++++\n"
-                      "==========\n%%%%%%%%%%\n~~~~~~~~~~\n{}{}{}{}{}\n"
-                      "@@@@@@@@@@\n&&&&&&&&&&\n$$$$$$$$$$\n!!!!!!!!!!\n"
-                      "**********\n^^^^^^^^^^\n##########\n"
-                      "5555555555\n6666666666\n7777777777\n8888888888\n"
-                      "x        x\nxxxxxxxxxx\n");
-
-static
-std::string measure3( "xxxxxxxxxx\nAAAAAAAAAA\nBBBBBBBBBB\nCCCCCCCCCC\n"
-                      "DDDDDDDDDD\nEEEEEEEEEE\nFFFFFFFFFF\nGGGGGGGGGG\n"
-                      "HHHHHHHHHH\nIIIIIIIIII\nJJJJJJJJJJ\nKKKKKKKKKK\n"
-                      "LLLLLLLLLL\nMMMMMMMMMM\nNNNNNNNNNN\nOOOOOOOOOO\n"
-                      "PPPPPPPPPP\nQQQQQQQQQQ\nRRRRRRRRRR\nSSSSSSSSSS\n"
-                      "TTTTTTTTTT\nUUUUUUUUUU\nVVVVVVVVVV\nWWWWWWWWWW\n"
-                      "XXXXXXXXXX\nYYYYYYYYYY\nZZZZZZZZZZ\nxxxxxxxxxx\n");
 
 // Debug PDF utilities and features
 int PDFDebugPages( PDFWriter &pdffile )
 {
+  std::string glyphs1( "abcdefghijklmnopqrstuvwxyz1234567890|/;:'\",.<>/?");
+  std::string glyphs2( "ABCDEFGHIJKLMNOPQRSTUVWXYZ-_`~!@#$%^&*\\\\()[]{}");
+
+  std::string measure1( "xxxxxxxxxx\naaaaaaaaaa\nbbbbbbbbbb\ncccccccccc\n"
+                        "dddddddddd\neeeeeeeeee\nffffffffff\ngggggggggg\n"
+                        "hhhhhhhhhh\niiiiiiiiii\njjjjjjjjjj\nkkkkkkkkkk\n"
+                        "llllllllll\nmmmmmmmmmm\nnnnnnnnnnn\noooooooooo\n"
+                        "pppppppppp\nqqqqqqqqqq\nrrrrrrrrrr\nssssssssss\n"
+                        "tttttttttt\nuuuuuuuuuu\nvvvvvvvvvv\nwwwwwwwwww\n"
+                        "xxxxxxxxxx\nyyyyyyyyyy\nzzzzzzzzzz\n"
+                        "1111111111\n2222222222\n3333333333\n4444444444\n"
+                        "9999999999\n0000000000\nxxxxxxxxxx\n");
+
+  std::string measure2( "xxxxxxxxxx\n::::::::::\n;;;;;;;;;;\n..........\n"
+                        ",,,,,,,,,,\n``````````\n''''''''''\n\"\"\"\"\"\"\"\"\"\"\n"
+                        "//////////\n<<<<<<<<<<\n>>>>>>>>>>\n()()()()()\n"
+                        "[][][][][]\n----------\n__________\n++++++++++\n"
+                        "==========\n%%%%%%%%%%\n~~~~~~~~~~\n{}{}{}{}{}\n"
+                        "@@@@@@@@@@\n&&&&&&&&&&\n$$$$$$$$$$\n!!!!!!!!!!\n"
+                        "**********\n^^^^^^^^^^\n##########\n"
+                        "5555555555\n6666666666\n7777777777\n8888888888\n"
+                        "x        x\nxxxxxxxxxx\n");
+
+  std::string measure3( "xxxxxxxxxx\nAAAAAAAAAA\nBBBBBBBBBB\nCCCCCCCCCC\n"
+                        "DDDDDDDDDD\nEEEEEEEEEE\nFFFFFFFFFF\nGGGGGGGGGG\n"
+                        "HHHHHHHHHH\nIIIIIIIIII\nJJJJJJJJJJ\nKKKKKKKKKK\n"
+                        "LLLLLLLLLL\nMMMMMMMMMM\nNNNNNNNNNN\nOOOOOOOOOO\n"
+                        "PPPPPPPPPP\nQQQQQQQQQQ\nRRRRRRRRRR\nSSSSSSSSSS\n"
+                        "TTTTTTTTTT\nUUUUUUUUUU\nVVVVVVVVVV\nWWWWWWWWWW\n"
+                        "XXXXXXXXXX\nYYYYYYYYYY\nZZZZZZZZZZ\nxxxxxxxxxx\n");
 
 // Single line/label text
 #if 1

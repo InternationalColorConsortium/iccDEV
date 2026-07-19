@@ -418,7 +418,11 @@ struct imageData : dataAbstractionBase {
     depth = imageDepth;
     mode = imageMode;
     isFloatingPoint = dataIsFloatingPoint;
-    data = imageData;
+    data = (uint8_t*)imageData;
+  }
+
+  ~imageData() {
+    delete[] data;
   }
 
   virtual std::string getDataType() const { return "imageData"; };
@@ -430,7 +434,7 @@ struct imageData : dataAbstractionBase {
   int depth;                // bits per sample [8,16,32,64]
   imageColorModel mode;     // interpretation of channels
   bool isFloatingPoint;     // because 32 bit integer can be useful, as well as 32 bit float
-  void *data;
+  uint8_t *data;
 };
 
 /******************************************************************************/
