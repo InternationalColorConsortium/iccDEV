@@ -2498,6 +2498,20 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1395-profileclass-signame.sh"
 )
 
+# #1729 - Testing/Display/LCDDisplay.xml and LaserProjector.xml stored their
+# spectralDataInfoType tag under the unregistered signature 'smwi' (0x736D7769),
+# so a fromXml -> dump round-trip reported "Unknown 'smwi'" and never populated
+# the registered 'sdin' (spectralDataInfoTag) slot. The fixtures were corrected to
+# 'sdin'; this rebuilds each with iccFromXml and asserts iccDumpProfile recognizes
+# the tag as spectralDataInfoTag and no longer emits the "Unknown 'smwi'" line.
+iccdev_add_script_test(
+  iccdev.issue-1729-spectral-data-info-sig
+  120
+  "iccdev;tools;dump;fromxml;signame;issue-1729;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1729-spectral-data-info-sig.sh"
+)
+
 # #1394 - CIccTagXmlNum::ToXml walked m_nSize without a bound, so a malformed
 # ui08/ui16/ui32/ui64 array drove an unbounded serialization loop (CWE-400/834):
 # a ~16 MB ui08 tag ballooned to ~80 MB of XML. Asserts the 0xffffff cap refuses

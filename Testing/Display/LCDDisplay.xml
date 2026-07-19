@@ -518,7 +518,8 @@
       <XYZNumber X="0.93313599" Y="1.00000000" Z="0.93353271"/>
     </XYZType>
     <spectralDataInfoType>
-      <TagSignature>smwi</TagSignature>
+      <!-- #1729: 'sdin' is the registered spectralDataInfoTag signature; 'smwi' (0x736D7769) is unregistered and dumps as "Unknown" -->
+      <TagSignature>sdin</TagSignature>
       <SpectralSpace>656D0191h</SpectralSpace>
       <SpectralRange>
         <Wavelengths start="400.000000" end="700.000000" steps="31"/>
