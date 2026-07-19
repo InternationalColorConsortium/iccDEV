@@ -108,7 +108,7 @@ CIccArrayUnknown::~CIccArrayUnknown()
 
 IIccArray* CIccArrayUnknown::NewCopy(CIccTagArray *pTagArray) const
 {
-  CIccArrayUnknown *rv = new (std::nothrow) CIccArrayUnknown(pTagArray);
+  CIccArrayUnknown *rv = new (std::nothrow) CIccArrayUnknown(pTagArray, m_sig);
 
   return rv;
 }
@@ -126,8 +126,18 @@ icValidateStatus CIccArrayUnknown::Validate(std::string sigPath, std::string &sR
 
   if (m_pTag) {
     icUInt32Number i;
-    
-    sReport += "Unknown tag array type!\n";
+    char sig[20];
+    CIccInfo info;
+    char msg[128];
+
+    snprintf(msg, sizeof(msg),
+             " - Unknown tag array type %s with %u entries; validating array sub-tags.\n",
+             icGetSig(sig, sizeof(sig), m_sig), (unsigned int)m_pTag->GetSize());
+    sReport += icMsgValidateWarning;
+    sReport += info.GetSigPathName(sigPath);
+    sReport += msg;
+    rv = icMaxStatus(rv, icValidateWarning);
+
     for (i=0; i<m_pTag->GetSize(); i++) {
       CIccTag *pTag = m_pTag->GetIndex(i);
       if (!pTag) {

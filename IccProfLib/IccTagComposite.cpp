@@ -1611,8 +1611,27 @@ icValidateStatus CIccTagArray::Validate(std::string sigPath, std::string &sRepor
       // for entries with zero offset/size (a spec-legal empty slot) - so guard
       // the deref as Describe()/Write()/Cleanup() already do; without it,
       // validating a sparse or malformed array crashes on a NULL deref.
-      if (m_TagVals[i].ptr)
+      if (m_TagVals[i].ptr) {
+        // #1726: every element of a utf8TextTypeArray must itself be a utf8Type
+        // text tag. This is kept strict (utf8Type only, not the zip-compressed
+        // zut8Type) to agree with the MCS runtime: CIccPcsXform::Connect requires
+        // AreAllOfType(icSigUtf8TextType) and casts each entry to CIccTagUtf8Text
+        // (IccCmm.cpp), so an array we declared conformant while carrying a zut8Type
+        // element could never actually form an MCS link. Flag a wrong element type,
+        // reporting the offending index, before recursing into its own Validate.
+        icTagTypeSignature elemType = m_TagVals[i].ptr->GetType();
+        if (elemType != icSigUtf8TextType) {
+          char buf[128];
+          snprintf(buf, sizeof(buf),
+                   " - UTF-8 text array element at index %u is not a utf8Type text tag.\n",
+                   (unsigned int)i);
+          sReport += icMsgValidateCriticalError;
+          sReport += Info.GetSigPathName(sigPath);
+          sReport += buf;
+          rv = icMaxStatus(rv, icValidateCriticalError);
+        }
         rv = icMaxStatus(rv, m_TagVals[i].ptr->Validate(sigAryPath, sReport, pProfile));
+      }
     }
   }
   else {

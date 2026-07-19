@@ -21,7 +21,6 @@ SparseMatrixNamedColor	invalid-saved	Unknown color space	named-color sparse matr
 *SelectMID	invalid-saved	Invalid PCS designator for MultiplexIdentificationClass	MCS multiplex identification fixtures are tracked negative conformance vectors
 *Select-MID	invalid-saved	Invalid PCS designator for MultiplexIdentificationClass	MCS multiplex identification fixtures are tracked negative conformance vectors
 *-Mid_Overprint	invalid-saved	Invalid PCS designator for MultiplexIdentificationClass	overprint multiplex identification fixtures are tracked negative conformance vectors
-*MVIS*	invalid-saved	Unknown tag array type	MCS visualization fixtures expose known tag-array reconstruction diagnostics
 ISO22028-Encoded*	invalid-saved	Encoding Class has non-zero Header	encoding-class fixtures preserve non-zero reserved header diagnostics
 sRgbEncoding*	invalid-saved	Encoding Class has non-zero Header	encoding-class fixtures preserve non-zero reserved header diagnostics
 LCDDisplayCat8Obs	invalid-saved	Negative Z value	display category-eight observer fixture has tracked red colorant diagnostics

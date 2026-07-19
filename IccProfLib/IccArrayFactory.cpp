@@ -89,6 +89,10 @@ IIccArray* CIccBasicArrayFactory::CreateArray(icArraySignature arrayTypeSig, CIc
     case icSigColorantInfoArray:
       return new (std::nothrow) CIccArrayColorantInfo(pTagArray);
 
+    case icSigUtf8TextTypeArray:
+      // UTF-8 arrays are validated directly by CIccTagArray::Validate().
+      return NULL;
+
     default:
       return new (std::nothrow) CIccArrayUnknown(pTagArray, arrayTypeSig);
   }

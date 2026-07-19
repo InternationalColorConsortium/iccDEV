@@ -766,6 +766,41 @@ function(iccdev_add_gbd_zero_pcs_test)
   endif()
 endfunction()
 
+function(iccdev_add_utf8_textarray_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccUtf8TextArrayTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/utf8-textarray-handler.cpp"
+  )
+  target_link_libraries(iccUtf8TextArrayTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccUtf8TextArrayTest)
+
+  add_test(
+    NAME iccdev.utf8-textarray-handler
+    COMMAND "$<TARGET_FILE:iccUtf8TextArrayTest>"
+  )
+  set_tests_properties(iccdev.utf8-textarray-handler PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tag;array;issue-1726;regression"
+  )
+  if(WIN32)
+    set(_utf8_array_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccUtf8TextArrayTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _utf8_array_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.utf8-textarray-handler PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_utf8_array_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_extended_device_colorspace_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1616,6 +1651,7 @@ if(WIN32)
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_gbd_zero_pcs_test()
+  iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
   iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_iccviz_metrics_test()
@@ -1816,6 +1852,7 @@ iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_gbd_zero_pcs_test()
+iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
 iccdev_add_dpcc_pcc_replacement_test()
 iccdev_add_iccviz_metrics_test()
