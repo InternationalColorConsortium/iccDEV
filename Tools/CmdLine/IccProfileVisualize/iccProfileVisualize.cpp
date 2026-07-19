@@ -2694,14 +2694,12 @@ std::string remove_extension( const std::string& filename)
 
 // create graphic representation of LUTs, named colors, etc.
 static
-void processProfile( CIccProfile *pIcc, const std::string &profilePath,
+void processProfile( CIccProfile *pIcc, const std::string &basename,
                     profileVisualizationData &data )
 {
   const size_t bufSize = 64;
   char buf1[bufSize];
 
-  std::string tmpName = remove_extension( profilePath );
-  std::string basename = icSanitizeFileName( tmpName );
   data.name = basename;
 
 
@@ -2806,14 +2804,13 @@ void processProfile( CIccProfile *pIcc, const std::string &profilePath,
 /******************************************************************************/
 
 static
-size_t outputDataToPDF( profileVisualizationData &data, const std::string &profilePath )
+size_t outputDataToPDF( profileVisualizationData &data, const std::string &basename )
 {
   if (data.pages.size() == 0)
     return 0;
 
-  std::string tmpName = remove_extension( profilePath );
-  std::string basename = icSanitizeFileName( tmpName );
-  data.name = basename;
+//  std::string tmpName = remove_extension( profilePath );
+//  std::string basename = icSanitizeFileName( tmpName );
 
 // write next to input file
 // write output to basename + _luts.pdf
@@ -2932,10 +2929,14 @@ int main(int argc, char* argv[])
         LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", sanitizedFile.c_str() );
         continue;
       }
+      
+      std::string basename = remove_extension( sanitizedFile );
 
       profileVisualizationData data;
-      processProfile( pIcc, sanitizedFile, data );
-      auto count = outputDataToPDF( data, sanitizedFile );
+      processProfile( pIcc, basename, data );
+      
+// TODO - output to other types (JSON)
+      auto count = outputDataToPDF( data, basename );
       if (!count) {
         LogAnError(stderr,"Profile %s had no content for output\n", sanitizedFile.c_str() );
       }
