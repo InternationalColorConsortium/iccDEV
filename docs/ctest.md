@@ -155,6 +155,7 @@ before running the suite.
 | `iccdev.issue-1178-fromcube-devnull` | `.github/scripts/iccdev-issue-1178-fromcube-devnull-regression.sh` |
 | `iccdev.issue-1179-fromcube-regression` | `.github/scripts/iccdev-issue-1179-fromcube-regression.sh` |
 | `iccdev.issue-1379-fromcube-conformance` | `.github/scripts/iccdev-issue-1379-fromcube-conformance-regression.sh` |
+| `iccdev.issue-1729-spectral-data-info-sig` | `.github/scripts/iccdev-issue-1729-spectral-data-info-sig.sh` |
 | `iccdev.fromcube-cli-args` | `.github/scripts/iccdev-fromcube-cli-args-regression.sh` |
 | `iccdev.describe-sink-api` | `.github/ci/regression/iccDescribeSinkTest.cpp` |
 | `iccdev.iccviz-gamut-roundtrip-metrics` | `.github/ci/regression/iccviz-gamut-roundtrip-metrics.cpp` |
