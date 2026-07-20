@@ -944,7 +944,7 @@ struct XYName {
   float x, y;
 };
 
-static constexpr
+static
 bool matches( const XYColor &u, const XYName &k )
 {
   float tolerance = 0.002;
