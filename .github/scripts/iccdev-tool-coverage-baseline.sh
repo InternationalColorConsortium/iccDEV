@@ -844,13 +844,13 @@ run_expect_exit "link-00g" "Reject non-numeric rendering intent" 1 \
 
 if [ "$QUICK_MODE" -eq 0 ]; then
   # Device Link (type=0) with varying LUT sizes
-  run_expect_exit "link-01" "Report DeviceLink sRGB->sRGB LUT=9 v4 write failure" 255 \
+  run_test "link-01" "DeviceLink sRGB->sRGB LUT=9 v4" \
     "$APPLYLINK" "$OUTDIR/link_srgb_9.icc" 0 9 0 "sRGB-link" 0.0 1.0 0 0 "$SRGB" 1
 
   run_test "link-02" "DeviceLink sRGB->sRGB LUT=17 v5" \
     "$APPLYLINK" "$OUTDIR/link_srgb_17.icc" 0 17 1 "sRGB-link-v5" 0.0 1.0 0 0 "$SRGB" 1
 
-  run_expect_exit "link-03" "Report DeviceLink sRGB->sRGB LUT=33 write failure" 255 \
+  run_test "link-03" "DeviceLink sRGB->sRGB LUT=33 v4" \
     "$APPLYLINK" "$OUTDIR/link_srgb_33.icc" 0 33 0 "sRGB-link-33" 0.0 1.0 0 0 "$SRGB" 1
 
   # .cube output (type=1)
@@ -858,20 +858,20 @@ if [ "$QUICK_MODE" -eq 0 ]; then
     "$APPLYLINK" "$OUTDIR/link_srgb.cube" 1 9 6 "sRGB-cube" 0.0 1.0 0 0 "$SRGB" 1
 
   # Tetrahedral interpolation
-  run_expect_exit "link-05" "Report DeviceLink sRGB tetrahedral LUT=9 write failure" 255 \
+  run_test "link-05" "DeviceLink sRGB tetrahedral LUT=9 v4" \
     "$APPLYLINK" "$OUTDIR/link_srgb_tet.icc" 0 9 0 "sRGB-tet" 0.0 1.0 0 1 "$SRGB" 1
 
   # Destination transform (first_transform=1)
-  run_expect_exit "link-06" "Report DeviceLink first_transform=1 write failure" 255 \
+  run_test "link-06" "DeviceLink first_transform=1 v4" \
     "$APPLYLINK" "$OUTDIR/link_srgb_dest.icc" 0 9 0 "sRGB-dest" 0.0 1.0 1 0 "$SRGB" 1
 
   # Two-profile chain
-  run_expect_exit "link-07" "Report DeviceLink sRGB->DisplayP3 chain write failure" 255 \
+  run_test "link-07" "DeviceLink sRGB->DisplayP3 chain v4" \
     "$APPLYLINK" "$OUTDIR/link_srgb_p3.icc" 0 17 0 "sRGB-to-P3" 0.0 1.0 0 0 "$SRGB" 1 "$DISPLAY_P3" 1
 
 else
   # Quick mode: smaller LUTs only
-  run_expect_exit "link-01" "Report DeviceLink sRGB->sRGB LUT=5 write failure (quick)" 255 \
+  run_test "link-01" "DeviceLink sRGB->sRGB LUT=5 v4 (quick)" \
     "$APPLYLINK" "$OUTDIR/link_srgb_5.icc" 0 5 0 "sRGB-link-q" 0.0 1.0 0 0 "$SRGB" 1
 
   run_test "link-04" ".cube output sRGB LUT=5 (quick)" \

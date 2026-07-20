@@ -1215,6 +1215,44 @@ function(iccdev_add_applytolink_invalid_arg_test)
   endif()
 endfunction()
 
+function(iccdev_add_applytolink_v4_missing_desc_test)
+  if(NOT TARGET iccApplyToLink)
+    return()
+  endif()
+
+  add_dependencies(check iccApplyToLink)
+  add_dependencies(check-fast iccApplyToLink)
+
+  add_test(
+    NAME iccdev.applytolink-v4-missing-device-descriptions
+    COMMAND "$<TARGET_FILE:iccApplyToLink>"
+      "${ICCDEV_TEST_OUTDIR}/applytolink-v4-missing-device-descriptions.icc"
+      0 2 0 MissingDeviceDescriptions 0 1 1 0
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc" 12
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc" 12
+  )
+  set_tests_properties(iccdev.applytolink-v4-missing-device-descriptions PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tools;applytolink;pseq;regression"
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+
+  if(WIN32)
+    set(_applytolink_v4_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccApplyToLink>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _applytolink_v4_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.applytolink-v4-missing-device-descriptions PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_applytolink_v4_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_fileio_getlength_position_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1661,6 +1699,7 @@ if(WIN32)
   iccdev_add_iccprofileplot_pdf_leak_test()
   iccdev_add_iccprofileplot_exitcode_test()
   iccdev_add_applytolink_invalid_arg_test()
+  iccdev_add_applytolink_v4_missing_desc_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -1670,6 +1709,8 @@ if(NOT BASH_EXECUTABLE)
   message(WARNING "bash not found; iccDEV CTest script tests are disabled.")
   return()
 endif()
+
+iccdev_add_applytolink_v4_missing_desc_test()
 
 set(ICCDEV_TIMEOUT_COMPAT_DIR "")
 if(NOT WIN32)

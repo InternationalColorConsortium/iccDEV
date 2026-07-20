@@ -119,6 +119,25 @@ static void PrintRangeDiagnostic(icFloatNumber loRange, icFloatNumber hiRange, i
           std::isfinite(sizeRange) ? 1 : 0);
 }
 
+// Compute an integer completion percentage for the LUT-generation progress
+// display below. The device-link build walks lutCount = nLutSize^nSrcSamples
+// grid points, which for a 5-channel source at nLutSize=33 is 33^5 = 39135393
+// -- so the old `((c + 1) * 100) / lutCount` overflowed 'int' once c+1 reached
+// 21474837 (21474837 * 100 > INT_MAX), the signed-integer-overflow reported in
+// #1730. Widening the numerator to 64-bit (100ULL) keeps the product exact
+// before the divide, and the result is a 0..100 percentage that fits back in
+// 'int'. total==0 is guarded (caller also checks lutCount>0) to avoid /0.
+static constexpr int GetProgressPercent(size_t completed, size_t total)
+{
+  return total ? (int)((completed * 100ULL) / total) : 0;
+}
+
+// Pin the fix at compile time: this constant-evaluates the exact overflow case
+// from #1730, and reverting to signed `(c+1)*100` arithmetic makes the multiply
+// a compile error inside constexpr, breaking the build instead of shipping UB.
+static_assert(GetProgressPercent(21474837ULL, 39135393ULL) == 54,
+              "Large LUT progress must not overflow signed int");
+
 class ILinkWriter
 {
 public:
@@ -517,6 +536,33 @@ public:
           psd.m_deviceMfg = pProfile->m_Header.manufacturer;
           psd.m_deviceModel = pProfile->m_Header.model;
           psd.m_attributes = pProfile->m_Header.attributes;
+          psd.m_technology = icSigUndefined;
+
+          // Populate the profileSequenceDesc device-description sub-tags with
+          // valid default mluc text up front. When a source profile carried no
+          // deviceMfgDesc/deviceModelDesc tag these were left unset, and writing
+          // a V4 device link then serialized empty descriptions -- the pseq
+          // write failed and iccApplyToLink exited 255 (#1730). The real dmnd/
+          // dmdd values below overwrite these defaults when present.
+          psd.m_deviceMfgDesc.SetType(icSigMultiLocalizedUnicodeType);
+          CIccTagMultiLocalizedUnicode* pMfgDesc =
+            (CIccTagMultiLocalizedUnicode*)psd.m_deviceMfgDesc.GetTag();
+          if (pMfgDesc)
+            pMfgDesc->SetText("Unknown device manufacturer");
+
+          psd.m_deviceModelDesc.SetType(icSigMultiLocalizedUnicodeType);
+          CIccTagMultiLocalizedUnicode* pModelDesc =
+            (CIccTagMultiLocalizedUnicode*)psd.m_deviceModelDesc.GetTag();
+          if (pModelDesc) {
+            // The profile description is the best available model text when dmdd is absent.
+            std::string profileDesc;
+            const CIccTag* pDesc = pProfile->FindTagConst(icSigProfileDescriptionTag);
+            if (pDesc && icGetTagText(pDesc, profileDesc))
+              pModelDesc->SetText(profileDesc.c_str());
+            else
+              pModelDesc->SetText("Unknown device model");
+          }
+
           const CIccTag* pTag = pProfile->FindTagConst(icSigTechnologyTag);
           if (pTag && pTag->GetType() == icSigSignatureType) {
             const CIccTagSignature* pSigTag = (const CIccTagSignature*)pTag;
@@ -544,13 +590,17 @@ public:
             }
           }
 
+          // Copy the source deviceModelDesc into m_deviceModelDesc. This block
+          // previously wrote the model text into m_deviceMfgDesc (a copy/paste
+          // of the manufacturer block above), clobbering the manufacturer
+          // description and leaving the model description at its default.
           pTag = pProfile->FindTagConst(icSigDeviceModelDescTag);
           if (pTag) {
             if (pTag->GetType() == icSigTextDescriptionType) {
               const CIccTagTextDescription* pTextTag = (const CIccTagTextDescription*)pTag;
 
               psd.m_deviceModelDesc.SetType(icSigTextDescriptionType);
-              CIccTagTextDescription* pText = (CIccTagTextDescription*)psd.m_deviceMfgDesc.GetTag();
+              CIccTagTextDescription* pText = (CIccTagTextDescription*)psd.m_deviceModelDesc.GetTag();
               if (pText)
                 *pText = *pTextTag;
             }
@@ -558,7 +608,7 @@ public:
               const CIccTagMultiLocalizedUnicode* pTextTag = (const CIccTagMultiLocalizedUnicode*)pTag;
 
               psd.m_deviceModelDesc.SetType(icSigMultiLocalizedUnicodeType);
-              CIccTagMultiLocalizedUnicode* pText = (CIccTagMultiLocalizedUnicode*)psd.m_deviceMfgDesc.GetTag();
+              CIccTagMultiLocalizedUnicode* pText = (CIccTagMultiLocalizedUnicode*)psd.m_deviceModelDesc.GetTag();
               if (pText)
                 *pText = *pTextTag;
             }
@@ -1032,7 +1082,12 @@ int main(int argc, icChar* argv[])
   int lastPer = -1;
   
   int j = 0;
-  for (int c = 0; j >= 0; c++) {
+  // c indexes every grid point written to the device link and can reach
+  // lutCount-1 (up to ~4 billion for large nSrcSamples/nLutSize), so it is
+  // size_t rather than int -- an 'int' counter would itself overflow past
+  // INT_MAX before the loop's idx[] rollover sets j<0 to terminate. j stays
+  // int because it walks source channels back to -1 as the sentinel.
+  for (size_t c = 0; j >= 0; c++) {
 
     for (auto si = 0; si < nSrcSamples; si++) {
       srcPixel[si] = sizeRange * (icFloatNumber)idx[si] / maxLut + loRange;
@@ -1055,9 +1110,10 @@ int main(int argc, icChar* argv[])
  
     //Display status of how much we have accomplished
     if (lutCount > 0) {     // explicit check to avoid divide by zero
-        int curPer = ((c + 1) * 100) / lutCount;
+        int curPer = GetProgressPercent(c + 1, lutCount);
         if (curPer != lastPer) {
           printf("\r%d%%", curPer);
+          fflush(stdout);
           lastPer = curPer;
         }
     }
