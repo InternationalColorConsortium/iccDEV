@@ -923,7 +923,7 @@ bool getXYZTag( CIccTag *tag, XYColor *result = NULL )
 static
 float cctFromXY( const XYColor &theXY )
 {
-  // McCamy's forumula
+  // McCamy's formula
   // McCamy, Calvin S. (April 1992).
   // "Correlated color temperature as an explicit function of chromaticity coordinates"
   float n = (theXY.x - 0.3320f) / (0.1858f - theXY.y);
@@ -934,7 +934,10 @@ float cctFromXY( const XYColor &theXY )
   float cct = 437.0f *n3 + 3601.0f *n2 + 6861.0f *n + 5514.31f;    // first eq.  CLOSEST!
   //float cct = 449.0f *n3 + 3525.0f *n2 + 6823.3f *n + 5520.33f;  // second eq. CLOSE!
 
-  return cct;
+  if (cct < 0.0 || cct > 2e9 || !std::isfinite(cct))
+    return 0.0;
+  else
+    return cct;
 }
 
 /******************************************************************************/
