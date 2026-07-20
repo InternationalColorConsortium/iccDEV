@@ -2553,6 +2553,22 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1729-spectral-data-info-sig.sh"
 )
 
+# #1730 - when iccApplyToLink built a V4 device link, the deviceModelDesc block
+# copied the model text into psd.m_deviceMfgDesc (a copy/paste of the
+# manufacturer block), clobbering the pseq manufacturer description and leaving
+# the model description at its default. The tool still exits 0 in that state and
+# the sibling applytolink-v4-missing-device-descriptions test uses a source with
+# no dmnd/dmdd, so neither can observe it. This derives a fixture carrying
+# distinct dmnd/dmdd, builds a V4 link, and asserts each description lands in
+# its own profileSequenceDesc slot.
+iccdev_add_script_test(
+  iccdev.issue-1730-applytolink-pseq-desc
+  180
+  "iccdev;tools;applytolink;pseq;issue-1730;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1730-applytolink-pseq-desc.sh"
+)
+
 # #1394 - CIccTagXmlNum::ToXml walked m_nSize without a bound, so a malformed
 # ui08/ui16/ui32/ui64 array drove an unbounded serialization loop (CWE-400/834):
 # a ~16 MB ui08 tag ballooned to ~80 MB of XML. Asserts the 0xffffff cap refuses

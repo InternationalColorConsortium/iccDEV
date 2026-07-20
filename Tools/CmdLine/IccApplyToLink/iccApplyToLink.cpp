@@ -132,11 +132,14 @@ static constexpr int GetProgressPercent(size_t completed, size_t total)
   return total ? (int)((completed * 100ULL) / total) : 0;
 }
 
-// Pin the fix at compile time: this constant-evaluates the exact overflow case
-// from #1730, and reverting to signed `(c+1)*100` arithmetic makes the multiply
-// a compile error inside constexpr, breaking the build instead of shipping UB.
+// Pin the helper's result for the exact input that overflowed in #1730
+// (21474837 * 100 exceeds INT_MAX). This documents the case and guards the
+// computation against being narrowed back to a 32-bit type, where the multiply
+// would overflow. Note it does NOT catch reintroducing the original call-site
+// expression: both parameters are size_t, so writing `completed * 100` here
+// still evaluates in 64-bit unsigned and this assertion would still hold.
 static_assert(GetProgressPercent(21474837ULL, 39135393ULL) == 54,
-              "Large LUT progress must not overflow signed int");
+              "Large LUT progress must be computed without 32-bit overflow");
 
 class ILinkWriter
 {
