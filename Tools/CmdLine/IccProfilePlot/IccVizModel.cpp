@@ -1152,29 +1152,38 @@ const std::uint64_t kMaxVoxelCells  = 256000000ull; // total voxel ceiling (~256
 // flood-fill the
 // exterior, erode the dilation back, return the enclosed volume (dE*ab^3). Fixed
 // generous Lab box so real gamuts sit strictly interior to it; points outside the
-// box are dropped (not clamped onto its face). Returns -1 (and enclosedCells = -1)
-// if vs is not a usable voxel pitch, or if the grid would exceed kMaxVoxelCells.
+// box are dropped (not clamped onto its face). Returns -1 with enclosedCells = -2 if
+// vs is not a usable voxel pitch, and -1 with enclosedCells = -1 if the grid would
+// exceed kMaxVoxelCells; the two are distinguished so GamutVolume() can report which.
 double voxelEnclosedVolume(const std::vector<float>& lab, double vs,
                            int dilate, long long& enclosedCells) {
   const double Lmin = -20, Lmax = 120, ABmin = -150, ABmax = 150;
-  // Establish the voxel-pitch precondition locally, before it is used as a divisor.
-  // The grid dimensions below cast (Lmax - Lmin) / vs to int, and a zero, negative,
-  // NaN or infinite vs makes that quotient non-finite - undefined behaviour on the
-  // cast (CWE-681/CWE-704). GamutVolume() does already sanitise its voxelSize
-  // argument before calling here, but that clamp lives ~430 lines away at the call
-  // site: this helper must not depend on a distant caller to stay memory-safe, and a
-  // future caller (or a refactor that drops the clamp) would silently reintroduce the
-  // cast. Note std::isfinite is what rejects NaN - NaN compares false against every
-  // relational operator, so `vs < kMinVoxelSize` alone would let it through. Rejection
-  // is signalled through enclosedCells = -1, exactly like the oversized-grid case
-  // below, so GamutVolume() fails cleanly on either. This is a precondition, not a
-  // bug fix: the existing caller clamps vs to >= kMinVoxelSize, so the only value
-  // that can still reach this guard from it is +inf (which passes both `!(vs > 0.0)`
-  // and `vs < kMinVoxelSize`), and that case already failed downstream on the
-  // "computed volume is not finite" check - it now fails here instead, one step
-  // earlier and with the "voxel grid too large" message. No other caller behaviour
-  // changes.
-  if (!std::isfinite(vs) || vs < kMinVoxelSize) { enclosedCells = -1; return -1.0; }
+  // Establish the voxel-pitch precondition locally, before vs is used as a divisor.
+  // Two distinct problems are rejected here, and only the first is a memory-safety
+  // one:
+  //
+  //   vs == 0 or NaN - the quotient (Lmax - Lmin) / vs is +inf or NaN, and casting
+  //     that to int below is undefined behaviour (CWE-681/CWE-704).
+  //   vs < 0 or +inf - the quotient stays finite (e.g. 140 / -2 == -70, 140 / inf
+  //     == +0), so the cast itself is well-defined; these are rejected because they
+  //     are not usable resolutions. A negative pitch inverts the voxel mapping and a
+  //     infinite one collapses the whole Lab box into a single cell, either of which
+  //     yields a meaningless "volume" rather than a measurement.
+  //
+  // std::isfinite is what rejects NaN: NaN compares false against every relational
+  // operator, so `vs < kMinVoxelSize` alone would let it through.
+  //
+  // GamutVolume() does sanitise its voxelSize argument before calling here, but that
+  // clamp lives ~430 lines away at the call site. A helper that divides by a
+  // parameter should not depend on a distant caller to stay memory-safe, and a future
+  // caller (or a refactor that drops the clamp) would silently reintroduce the UB.
+  //
+  // Rejection is signalled through enclosedCells = -2, kept distinct from the
+  // oversized-grid signal (-1) below so GamutVolume() reports an accurate reason
+  // instead of aliasing an invalid pitch onto "grid too large". +inf is the one value
+  // that still reaches this guard from the existing caller: it passes both that
+  // caller's `!(vs > 0.0)` and `vs < kMinVoxelSize` tests.
+  if (!std::isfinite(vs) || vs < kMinVoxelSize) { enclosedCells = -2; return -1.0; }
   const int nL = std::max(1, (int)std::ceil((Lmax - Lmin) / vs));
   const int nA = std::max(1, (int)std::ceil((ABmax - ABmin) / vs));
   const int nB = nA;
@@ -1646,6 +1655,13 @@ GamutVolumeResult GamutVolume(CIccProfile* pIcc, icTagSignature aToBTag,
 
   long long cells = 0;
   r.volume         = voxelEnclosedVolume(lab, vs, dl, cells);
+  // Distinguish the two rejections voxelEnclosedVolume() can signal so the caller is
+  // told which precondition it broke: -2 is an unusable voxel pitch (non-finite or
+  // below kMinVoxelSize, reachable here only as a caller-supplied +inf voxelSize),
+  // -1 is a grid that would exceed kMaxVoxelCells. Reporting an invalid pitch as
+  // "grid too large" would be actively misleading - a +inf pitch collapses the Lab
+  // box to a single cell, which is the smallest possible grid, not the largest.
+  if (cells == -2) return fail("voxelSize is not a usable voxel pitch");  // x/ap already freed above
   if (cells < 0) return fail("voxel grid too large for volume");   // x/ap already freed above
   // A caller-supplied enormous/infinite voxelSize makes cells*vs^3 overflow to
   // +/-Inf (or NaN); never report a non-finite measurement as a successful volume.
@@ -1723,12 +1739,15 @@ RoundTripResult RoundTripDE(CIccProfile* pIcc, icRenderingIntent intent,
   if (S < 2) S = 2;
   // total is the seed grid's point count, (S+1)^N, and is later cast to size_t for
   // the des.reserve() below - so pin why that cast is well-defined here rather than
-  // at the cast. Both operands of pow() are already bounded finite integers: S >= 2
-  // by the clamp on the line above, and N is in [1, kMaxInkChannels] by the
-  // channel-count check earlier in this function. std::pow of two finite values cannot
-  // return NaN, so the only out-of-range result reachable is +inf, and the ceiling
-  // test on the next line rejects it (inf > 3000000.0 is true). total therefore
-  // lands in [9, 3000000] at the cast: never zero, never negative, never non-finite.
+  // at the cast. The proof is specific to these operands, not a general property of
+  // pow(): pow() certainly can return NaN from finite arguments (a negative base with
+  // a non-integer exponent, for instance). Here the base is S + 1 with S >= 2 from the
+  // clamp on the line above, so it is positive and at least 3, and the exponent N is a
+  // positive integer in [1, kMaxInkChannels] from the channel-count check earlier in
+  // this function. A positive base raised to a positive integral exponent is an exact
+  // finite product or, on overflow, +inf - never NaN, never negative. The ceiling test
+  // on the next line then rejects +inf (inf > 3000000.0 is true), so total lands in
+  // [3, 3000000] at the cast (the minimum is N == 1 giving 3^1, not 9).
   double total = std::pow((double)S + 1.0, N);
   if (total > 3000000.0) { delete xA; delete xB; return fail("seed grid too large"); }
 

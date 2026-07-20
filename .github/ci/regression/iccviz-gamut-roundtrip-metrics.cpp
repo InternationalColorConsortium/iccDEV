@@ -41,6 +41,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
+#include <string>
 
 static int g_failures = 0;
 
@@ -255,6 +257,27 @@ static void test_gamut_volume(CIccProfile *pIcc) {
   std::printf("      huge-voxelSize: ok=%d volume=%.3g error=\"%s\"\n",
               gnf.ok, gnf.volume, gnf.error.c_str());
   check(!gnf.ok, "GamutVolume rejects a non-finite (overflowed) volume instead of returning ok");
+
+  // A non-finite voxelSize is the one invalid pitch that survives GamutVolume's own
+  // parameter sanitisation: +inf passes both `!(vs > 0.0)` (false, so it is not
+  // replaced by the auto-picked value) and `vs < kMinVoxelSize` (false, so it is not
+  // floored), and so reaches voxelEnclosedVolume's precondition guard. That guard is
+  // what keeps the (int)((Lmax - Lmin) / vs) grid casts well-defined, so exercise it
+  // through the public API here rather than leaving it untested.
+  //
+  // The distinct enclosedCells = -2 signal is checked via the error string: an +inf
+  // pitch collapses the whole Lab box into one cell, so reporting it as "grid too
+  // large" would be backwards. Guard the substring search so a future reword fails
+  // this check loudly instead of silently passing.
+  const double kInfVoxel = std::numeric_limits<double>::infinity();
+  iccviz::GamutVolumeResult ginf =
+      iccviz::GamutVolume(pIcc, icSigAToB1Tag, icRelativeColorimetric,
+                          /*samplesPerAxis=*/2, /*voxelSize=*/kInfVoxel, /*dilate=*/0);
+  std::printf("      inf-voxelSize:  ok=%d volume=%.3g error=\"%s\"\n",
+              ginf.ok, ginf.volume, ginf.error.c_str());
+  check(!ginf.ok, "GamutVolume rejects a non-finite voxelSize");
+  check(ginf.error.find("pitch") != std::string::npos,
+        "GamutVolume reports an invalid pitch, not an oversized grid");
 }
 
 static void test_round_trip(CIccProfile *pIcc) {
