@@ -289,7 +289,7 @@ struct profileVisualizationData {
   void addPage( dataAbstractionBase *obj ) {
     pages.push_back(obj);
   }
-  
+
   std::string name;             // sanitized filename
   std::vector<dataAbstractionBase *> pages;
 };
@@ -300,7 +300,7 @@ struct profileVisualizationData {
 struct xyPlotData : dataAbstractionBase {
 
   xyPlotData() : printLabels(true) {}
-  
+
   xyPlotData(const std::string &name, const std::string &label, bool printLabelFlag,
               const namedXYList &points_alone, const namedXYList &points_outlined ) {
     object_name = name;
@@ -309,7 +309,7 @@ struct xyPlotData : dataAbstractionBase {
     points_unconnected = points_alone;
     points_connected = points_outlined;
   }
-  
+
   virtual std::string getDataType() const { return "xyPlotData"; };
 
   std::string object_name;        // page name in PDF
@@ -325,7 +325,7 @@ struct xyPlotData : dataAbstractionBase {
 struct abPlotData : dataAbstractionBase {
 
   abPlotData() : printLabels(true) {}
-  
+
   abPlotData(const std::string &name, const std::string &label, bool printLabelFlag,
               const namedLabList &points_alone, const namedLabList &points_outlined ) {
     object_name = name;
@@ -334,9 +334,9 @@ struct abPlotData : dataAbstractionBase {
     points_unconnected = points_alone;
     points_connected = points_outlined;
   }
-  
+
   virtual std::string getDataType() const { return "abPlotData"; };
-  
+
   std::string object_name;           // page name in PDF
   std::string object_label;          // graph label, may be multiline
   bool printLabels;
@@ -350,7 +350,7 @@ struct abPlotData : dataAbstractionBase {
 struct lutPlotData : dataAbstractionBase {
 
   lutPlotData() : isIdentity(false) {}
-  
+
   lutPlotData(const std::string &name, const std::string &label, bool identityFlag,
               const pointList &points_input ) {
     object_name = name;
@@ -358,9 +358,9 @@ struct lutPlotData : dataAbstractionBase {
     isIdentity = identityFlag;
     points = points_input;
   }
-  
+
   virtual std::string getDataType() const { return "lutPlotData"; };
-  
+
   std::string object_name;        // page name in PDF
   std::string object_label;       // graph label, may be multiline
   bool isIdentity;
@@ -382,7 +382,7 @@ struct imageData : dataAbstractionBase {
   imageData() : width(0), height(0), channels(0), depth(0),
                 mode(IMAGE_MODE_GRAY_BLACKZERO),
                 isFloatingPoint(false), data(NULL) {}
-  
+
   imageData(const std::string &name, void *imageData, int imageWidth, int imageHeight,
             int imageChannels, int imageDepth, int imageMode,
             bool dataIsFloatingPoint = false ) {
@@ -401,7 +401,7 @@ struct imageData : dataAbstractionBase {
   }
 
   virtual std::string getDataType() const { return "imageData"; };
-  
+
   std::string object_name;  // page name in PDF, filename on disk
   int width;
   int height;
@@ -497,7 +497,7 @@ void CreateAxesXobject( PDFWriter &pdfout )
   const float top = pdfout.PageHeight();
   const float right = pdfout.PageWidth();
   const Rect2D bounds ( left, right, bottom, top );
-  
+
   if (pdfout.xobjectExists("Axes"))
     return;
 
@@ -1020,7 +1020,7 @@ void processChromaticity( CIccProfile *pIcc, profileVisualizationData &data )
         CCTText = cctStringFromXYZ( theXYZ );
     }
     XYColor xyVal;
-    
+
     if (getXYZTag(whiteTag,&xyVal)) {
       std::string label = std::string("White") + CCTText;
       points_alone.push_back( namedXY(label,xyVal.x,xyVal.y) );
@@ -1116,7 +1116,7 @@ lutPlotData * graph1DLUT( CIccCurve *curve, const std::string &name,
                             const std::string &description, int steps )
 {
   pointList points;
-  
+
   // iterate the curve
   // optimization - draw only 3 points for identity curve
   if (curve->IsIdentity())
@@ -1133,9 +1133,9 @@ lutPlotData * graph1DLUT( CIccCurve *curve, const std::string &name,
         points[i] = point2D( input, output );  // x is input, y is output
       }
   }
-  
+
   lutPlotData *out = new lutPlotData( name, description, curve->IsIdentity(), points );
-  
+
   return out;
 }
 
@@ -1153,7 +1153,7 @@ bool describe1DLUT( CIccTagCurve *curve, std::string &description,
     description = "simpleCurve";
     return true;
   }
-  
+
   auto size = curve->GetSize();
   if (size == 0) {
     description += "Y = X";
@@ -1164,7 +1164,7 @@ bool describe1DLUT( CIccTagCurve *curve, std::string &description,
   } else {
     description += "LookupTable[" + std::to_string(size) + "]";
   }
-  
+
   return false;
 }
 
@@ -1243,7 +1243,6 @@ bool describe3DLUT( CIccMBB *curve, CIccProfile *pIcc, std::string &description,
 /******************************************************************************/
 
 // output graphic representation of 1D LUTs
-// return 1 if output created, 0 if none
 static
 void process1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
                 const std::string &filename, profileVisualizationData &data )
@@ -1330,7 +1329,6 @@ void process1DLUT(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sig
 #if 0
 // output graphic representation of response curve 1D LUTs
 //     or would, if I could find any example of profiles using response curves...
-// return number of output items created
 static
 int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::string &sigDesc,
                         PDFWriter &pdffile, const std::string &filename )
@@ -1355,7 +1353,7 @@ int outputResponseCurves(CIccProfile * /* pIcc */, CIccTag *tag, const std::stri
       LogAnError(stderr, "%s: Skipping %s: unable to convert response curves\n", filename.c_str(), sigDesc.c_str());
       return 0;
   }
-  
+
   //icUInt16Number channels = curves->GetNumChannels();
   CIccResponseCurveStruct *curveIter = curves->GetFirstCurves();
   while (curveIter != NULL) {
@@ -1412,7 +1410,7 @@ void FindEdgesInner( const T *input, T *output,
             size_t channels, size_t totalSize, size_t depth )
 {
   memset(output,0,totalSize*(depth>>3));
-  
+
   size_t dimensionCount = dimensions_in.size();
   if (dimensionCount < 1)
     return;
@@ -1731,7 +1729,7 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
   char buf[bufSize];
 
   icTagTypeSignature typeSig = tag->GetType();
-  
+
     CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
     if (!lut) {
       LogAnError(stderr, "%s: Skipping %s: unable to convert LUT\n", basename.c_str(), sigDesc.c_str());
@@ -1925,7 +1923,7 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       imageBuffer.reset( new uint8_t[ bufferSize ] );
       imageBuf = imageBuffer.get();
       memset( imageBuf, 0, bufferSize );
-    
+
       // build edge data from CLUT
       bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels;
       std::unique_ptr<icFloatNumber[]> edgeBuffer( new icFloatNumber[ bufferSize ] );
@@ -1935,7 +1933,7 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
       size_t step = outputChannels;     // innermost column step == output channels
       std::vector<size_t> dimensions(inputChannels);
       std::vector<size_t> loopSteps(inputChannels);
-      
+
       for (int i = inputChannels-1; i >= 0; --i) {
         loopSteps[i] = step;
         dimensions[i] = clut->GridPoint(i);
@@ -2075,7 +2073,7 @@ void outputNamedColorsXYPDF( xyPlotData *plot, PDFWriter &pdffile )
 
   // add the common axes
   commands << "/xyPlot Do\n";
-  
+
   // gsave, color black
   commands << "q 0 0 0 1 K\n";
 
@@ -2109,7 +2107,7 @@ void outputNamedColorsXYPDF( xyPlotData *plot, PDFWriter &pdffile )
     // stroke and grestore
     commands << "s Q\n";
   }
-  
+
   // connected marks and labels
   for (size_t i = 0; i < connected_count; ++i) {
     auto &sample = plot->points_connected[i];
@@ -2118,7 +2116,7 @@ void outputNamedColorsXYPDF( xyPlotData *plot, PDFWriter &pdffile )
     commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
                                 textSize, sample.name, kPDFTextAlignLeft );
   }
-  
+
   // grestore
   commands << "Q\n";
 
@@ -2155,7 +2153,7 @@ void outputNamedColorsABPDF( abPlotData *plot, PDFWriter &pdffile )
 
   // add the common axes
   commands << "/abPlot Do\n";
-  
+
   // gsave, color black
   commands << "q 0 0 0 1 K\n";
 
@@ -2194,7 +2192,7 @@ void outputNamedColorsABPDF( abPlotData *plot, PDFWriter &pdffile )
     // stroke and grestore
     commands << "s Q\n";
   }
-  
+
   // connected marks and labels
   for (size_t i = 0; i < connected_count; ++i) {
     auto &sample = plot->points_connected[i];
@@ -2204,7 +2202,7 @@ void outputNamedColorsABPDF( abPlotData *plot, PDFWriter &pdffile )
     commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
                                 labelSize, sample.name, kPDFTextAlignLeft );
   }
-  
+
   // grestore
   commands << "Q\n";
 
@@ -2239,9 +2237,9 @@ void processColorantTable(CIccProfile *pIcc, CIccTag *tag, const std::string &si
 {
   const size_t bufSize = 64;
   char buf[bufSize];
-  
+
   namedLabList colorsOut;
-  
+
   CIccTagColorantTable *table = dynamic_cast<CIccTagColorantTable*> (tag);
   if (!table) {
     LogAnError(stderr, "%s: Skipping %s: unable to convert colorantTable\n", filename.c_str(), sigDesc.c_str());
@@ -2259,7 +2257,7 @@ void processColorantTable(CIccProfile *pIcc, CIccTag *tag, const std::string &si
 
   icFloatNumber XYZIlluminant[3];
   pIcc->getNormIlluminantXYZ( XYZIlluminant );
-  
+
   icColorSpaceSignature pcs = pIcc->m_Header.pcs;
   if (pcs != icSigXYZData && pcs != icSigLabData) {
     if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
@@ -2312,19 +2310,18 @@ This value is not written, or read as part of the table -- so we must assume tha
 /******************************************************************************/
 
 static
-int processNamedColor2(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
+void processNamedColor2(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
                         profileVisualizationData &data, const std::string &filename )
 {
   const size_t bufSize = 64;
   char buf[bufSize];
-  int outputCount = 0;
-  
+
   namedLabList colorsOut;
-  
+
   CIccTagNamedColor2 *table = dynamic_cast<CIccTagNamedColor2*> (tag);
   if (!table) {
     LogAnError(stderr, "%s: Skipping %s: unable to convert namedColorTable\n", filename.c_str(), sigDesc.c_str());
-    return 0;
+    return;
   }
 
   std::string path(":");
@@ -2332,25 +2329,25 @@ int processNamedColor2(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDe
   std::string report;
   if (table->Validate(path, report, NULL) > icValidateWarning) {
     LogAnError(stderr,"%s: WARNING - namedColorTable failed validation:\n%s\n", filename.c_str(), report.c_str() );
-    return 0;
+    return;
   }
-  
+
   icFloatNumber XYZIlluminant[3];
   pIcc->getNormIlluminantXYZ( XYZIlluminant );
-  
+
   icColorSpaceSignature pcs = pIcc->m_Header.pcs;
   if (pcs != icSigXYZData && pcs != icSigLabData) {
     if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
       LogAnError(stderr,"%s: WARNING - unknown pcs for colors: %s\n",
                         filename.c_str(), icGetSig(buf, bufSize, pcs) );
-    return 0;
+    return;
   }
-  
+
   icColorSpaceSignature table_pcs = table->GetPCS();
   if (pcs != table_pcs) {
     LogAnError(stderr,"%s: WARNING - bad pcs for namedColorTable: %s\n",
                         filename.c_str(), icGetSig(buf, bufSize, pcs) );
-    return 0;
+    return;
   }
 
   icUInt32Number colorCount = table->GetSize();
@@ -2386,8 +2383,6 @@ int processNamedColor2(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDe
 
   std::string description("Named Color Table: ");
   processNamedColorList( colorsOut, description + sigDesc, XYZIlluminant, data );
-
-  return outputCount;
 }
 
 /******************************************************************************/
@@ -2398,7 +2393,7 @@ void processNamedColorArray(CIccProfile *pIcc, CIccTag *tag, const std::string &
 {
   const size_t bufSize = 64;
   char buf[bufSize];
-  
+
   namedLabList colorsOut;
 
   CIccTagArray *array = dynamic_cast<CIccTagArray*> (tag);
@@ -2406,7 +2401,7 @@ void processNamedColorArray(CIccProfile *pIcc, CIccTag *tag, const std::string &
     LogAnError(stderr, "%s: Skipping %s: unable to convert named color array\n", filename.c_str(), sigDesc.c_str());
     return;
   }
-  
+
   icArraySignature arrayType = array->GetTagArrayType();
   if (arrayType != icSigColorantInfoArray
     && arrayType != icSigNamedColorArray) {
@@ -2427,7 +2422,7 @@ void processNamedColorArray(CIccProfile *pIcc, CIccTag *tag, const std::string &
 
   icFloatNumber XYZIlluminant[3];
   pIcc->getNormIlluminantXYZ( XYZIlluminant );
-  
+
   icColorSpaceSignature pcs = pIcc->m_Header.pcs;
   if (pcs != icSigXYZData && pcs != icSigLabData) {
     if (pcs != icSigNoColorData)                                // TODO - remove this once we can handle spectral data
@@ -2448,18 +2443,18 @@ void processNamedColorArray(CIccProfile *pIcc, CIccTag *tag, const std::string &
     tempColorValues.clear();
 
     auto structType = thisItem->GetTagStructType();
-    
+
     if (structType != icSigColorantInfoStruct
         && structType != icSigTintZeroStruct
         && structType != icSigNamedColorStruct) {
-        
+
         LogAnError(stderr,"%s: Unknown named color struct %s for tag %s\n",
                 filename.c_str(),
                 icGetSig(buf, bufSize, structType),
                 sigDesc.c_str() );
         continue;
     }
-    
+
     CIccTagStruct *structPtr = dynamic_cast<CIccTagStruct*> (thisItem);
     if (!structPtr)
       continue;
@@ -2475,13 +2470,13 @@ CIccPcsXform::pushBiRef2Xyz
       continue;
 
     tempColorValues.clear();
-    
+
     icTagTypeSignature pcsDataType = pcsElem->GetType();
-    
+
     if (pcsDataType != icSigFloat64ArrayType
         && pcsDataType != icSigFloat32ArrayType
         && pcsDataType != icSigFloat16ArrayType) {
-        
+
         LogAnError(stderr,"%s: Unknown named color struct data type %s for tag %s\n",
                 filename.c_str(),
                 icGetSig(buf, bufSize, pcsDataType),
@@ -2492,7 +2487,7 @@ CIccPcsXform::pushBiRef2Xyz
     CIccTagNumArray *flt16 = dynamic_cast<CIccTagNumArray*> (pcsElem);
     if (!flt16)
       continue;
-    
+
     icUInt32Number dataCount = flt16->GetNumValues();
     icUInt32Number colorCount = dataCount / 3; // ignoring any partials
 
@@ -2500,9 +2495,9 @@ CIccPcsXform::pushBiRef2Xyz
     for (icUInt32Number k = 0; k < colorCount; ++k) {
         icFloatNumber valueTemp[3];
         icFloatNumber labTemp[3];
-        
+
         flt16->GetValues(valueTemp, k*3, 3);
-        
+
         if (pcs == icSigXYZData) {
             // XYZ float
             icXYZtoLab( labTemp, valueTemp, XYZIlluminant );
@@ -2520,13 +2515,13 @@ CIccPcsXform::pushBiRef2Xyz
         tempNamed.b = labTemp[2];
         tempColorValues.push_back( tempNamed );
     }
-    
-    
+
+
     // now we try to find names to match the colors
     CIccTag *nameElem = structPtr->FindElem(icSigCinfNameMbr);
     if (!nameElem)      // fallback to other tag type
       nameElem = structPtr->FindElem(icSigCinfLocalizedNameMbr);        // unused so far?
-    
+
     // if we don't have names, just skip it and still plot the color valuess
     if (nameElem) {
       icTagTypeSignature nameDataType = nameElem->GetType();
@@ -2539,7 +2534,7 @@ CIccPcsXform::pushBiRef2Xyz
             nameString = std::string( (char *)nameUTF8->GetText() );
           }
           break;
-        
+
         case icSigUtf16TextType:
           {
           CIccTagUtf16Text *nameUTF16 = dynamic_cast<CIccTagUtf16Text*> (nameElem);
@@ -2549,7 +2544,7 @@ CIccPcsXform::pushBiRef2Xyz
             }
           }
           break;
-        
+
         case icSigTextType:
           {
           CIccTagText *nameText = dynamic_cast<CIccTagText*> (nameElem);
@@ -2557,7 +2552,7 @@ CIccPcsXform::pushBiRef2Xyz
             nameString = std::string( (char *)nameText->GetText() );
           }
           break;
-          
+
         case icSigDictType: // supposed to be multiLocalizedUnicodeType, but so far unused?
         case icSigMultiLocalizedUnicodeType:
           {
@@ -2570,7 +2565,7 @@ CIccPcsXform::pushBiRef2Xyz
             }
           }
           break;
-        
+
         default:
           LogAnError(stderr,"%s: Unknown named color struct name type %s for tag %s\n",
                 filename.c_str(),
@@ -2578,12 +2573,12 @@ CIccPcsXform::pushBiRef2Xyz
                 sigDesc.c_str() );
           break;
       }
-      
+
       if (nameString.size() > 0) {
         for (auto &color: tempColorValues)
           color.name = nameString;
       }
-    
+
     } // end name element handling
 
 
@@ -2622,13 +2617,13 @@ CIccPcsXform::pushBiRef2Xyz
             // skipping this still allows colors and names, even if we don't have tint percentages
             // so don't call continue
         }
-      
+
     }   // end tint value handling
 
     // add temp values to our list
     if (tempColorValues.size() > 0)
       colorsOut.insert( colorsOut.end(), tempColorValues.begin(), tempColorValues.end() );
-    
+
   } // end loop over items in array
 
   // make sure we found some usable colors and names
@@ -2649,7 +2644,7 @@ void processNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigD
 {
   const size_t bufSize = 64;
   char buf[bufSize];
-  
+
   namedLabList colorsOut;
 
   if (!tag) {
@@ -2824,27 +2819,27 @@ size_t outputDataToPDF( profileVisualizationData &data, const std::string &basen
     std::string pageType = page->getDataType();
 
     if (pageType == std::string("lutPlotData")) {
-        lutPlotData *lutData = dynamic_cast<lutPlotData*>(page);
-        output1DLUTPDF( lutData, pdffile );
+      lutPlotData *lutData = dynamic_cast<lutPlotData*>(page);
+      output1DLUTPDF( lutData, pdffile );
     }
     else if (pageType == std::string("abPlotData")) {
-        abPlotData *abData = dynamic_cast<abPlotData*>(page);
-        outputNamedColorsABPDF( abData, pdffile );
+      abPlotData *abData = dynamic_cast<abPlotData*>(page);
+      outputNamedColorsABPDF( abData, pdffile );
     }
     else if (pageType == std::string("xyPlotData")) {
-        xyPlotData *xyData = dynamic_cast<xyPlotData*>(page);
-        outputNamedColorsXYPDF( xyData, pdffile );
+      xyPlotData *xyData = dynamic_cast<xyPlotData*>(page);
+      outputNamedColorsXYPDF( xyData, pdffile );
     }
     else if (pageType == std::string("imageData")) {
-        imageData *image = dynamic_cast<imageData*>(page);
-        std::string tiffPath2 = image->object_name + ".tif";
-        if (!WriteTIFF( tiffPath2.c_str(), 100, image->mode, image->data,
+      imageData *image = dynamic_cast<imageData*>(page);
+      std::string tiffPath2 = image->object_name + ".tif";
+      if (!WriteTIFF( tiffPath2.c_str(), 100, image->mode, image->data,
                     image->width, image->height, image->channels, image->depth )) {
-            LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
-        }
+        LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
+      }
     }
     else {
-        LogAnError(stderr, "%s: unknown data type %s\n", basename.c_str(), pageType.c_str());
+      LogAnError(stderr, "%s: unknown data type %s\n", basename.c_str(), pageType.c_str());
     }
   } // end iteration over pages
 
@@ -2926,9 +2921,9 @@ int main(int argc, char* argv[])
 
   for (auto &file : fileList) {
     std::string sanitizedFile = icSanitizeFileName( file );
-    
+
     try {
-      ClearErrorLogs();
+      ClearErrorLogs(); // NOTE - this is so we can get logs per input file
 
 //printf("Processing profile '%s'\n", file.c_str() );     // DEBUGGING
       CIccProfile *pIcc = OpenIccProfile( file.c_str() );
@@ -2936,12 +2931,12 @@ int main(int argc, char* argv[])
         LogAnError(stderr,"Unable to parse '%s' as ICC profile!\n", sanitizedFile.c_str() );
         continue;
       }
-      
+
       std::string basename = remove_extension( sanitizedFile );
 
       profileVisualizationData data;
       processProfile( pIcc, basename, data );
-      
+
 // TODO - output to other types (JSON)
       auto count = outputDataToPDF( data, basename );
       if (!count) {
