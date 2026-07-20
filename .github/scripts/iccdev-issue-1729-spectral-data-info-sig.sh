@@ -111,16 +111,17 @@ for rel in "${FIXTURES[@]}"; do
   scan_sanitizer "$fromxml_log" "iccFromXml built $rel"
 
   # Dump the profile with no -v, so iccDumpProfile does not run validation and a
-  # successful dump returns 0. (With -v it returns 0 for OK/warning/noncompliant
-  # and -1 only for a critical error, but validation is off here.) Fatal errors
-  # return negative codes -- -1 for bad args, -3 for a failed tag dump or stdout
-  # write (-> shell 255/253) -- and a crash raises a signal (>=128). So only
-  # rc>=126 (fatal returns + signals) fails the gate; a 0 success passes.
+  # successful dump returns 0. Its only other returns are fatal: -1 for bad args
+  # and -3 for a failed tag dump or stdout write (-> shell 255/253), plus a
+  # signal (>=128) on a crash -- it never returns a value in 1..125. 0 is
+  # therefore the sole success, so fail the gate on any nonzero status. (This is
+  # stricter than a >=126 test and future-proofs the gate should iccDumpProfile
+  # ever grow a small nonzero return; refs #1735.)
   "$DUMP" "$icc" ALL > "$dump_log" 2>&1
   dump_rc=$?
-  if [ "$dump_rc" -ge 126 ]; then
+  if [ "$dump_rc" -ne 0 ]; then
     sed -n '1,12p' "$dump_log"
-    regress "iccDumpProfile crashed or failed fatally on $rel (rc=$dump_rc)"
+    regress "iccDumpProfile failed on $rel (rc=$dump_rc)"
   fi
   scan_sanitizer "$dump_log" "iccDumpProfile dumped $rel"
 
