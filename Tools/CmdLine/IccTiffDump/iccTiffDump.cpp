@@ -372,7 +372,6 @@ int main(int argc, icChar* argv[])
       return 1;
     }
 
-    embeddedProfileId = GetProfileId(pProfile);
     std::string validateReport;
     if (!pProfile->ReadTags(pProfile)) {
       printf("\nUnable to read embedded ICC profile\n");
@@ -388,6 +387,7 @@ int main(int argc, icChar* argv[])
       return 1;
     }
 
+    embeddedProfileId = GetProfileId(pProfile);
     if (!bEvidenceJson)
       DumpProfileInfo(pProfile, " ");
     if (argc > 2) {
@@ -405,8 +405,7 @@ int main(int argc, icChar* argv[])
       }
     }
     delete pProfile;
-  }
-  else {
+  } else {
     if (!bEvidenceJson)
       printf("Profile:           None\n");
     if (argc > 2) {
