@@ -150,6 +150,7 @@ jobs:
             --pull \
             --no-cache \
             --build-arg "GIT_COMMIT=${TARGET_SHA}" \
+            --label "org.opencontainers.image.revision=${TARGET_SHA}" \
             -t "$TEST_IMAGE" \
             -f Dockerfile.ci-regression .
 
@@ -209,12 +210,13 @@ jobs:
             "$TEST_IMAGE" bash -lc '
               set -euo pipefail
               test "$PWD" = /workspace/iccDEV
-              actual_sha="$(git rev-parse HEAD)"
-              if [ "$actual_sha" != "$TARGET_SHA" ]; then
+              if actual_sha="$(git rev-parse --verify HEAD 2>/dev/null)" &&
+                 [ "$actual_sha" != "$TARGET_SHA" ]; then
                 echo "PR tree SHA mismatch: $actual_sha != $TARGET_SHA" >&2
                 exit 1
               fi
-              if [ "$ICCDEV_SOURCE_REVISION" != "$TARGET_SHA" ]; then
+              if [ -n "${ICCDEV_SOURCE_REVISION:-}" ] &&
+                 [ "$ICCDEV_SOURCE_REVISION" != "$TARGET_SHA" ]; then
                 echo "PR tree revision mismatch: $ICCDEV_SOURCE_REVISION != $TARGET_SHA" >&2
                 exit 1
               fi
