@@ -83,6 +83,7 @@
 #include "errorLog.hpp"
 #include "dataModel.hpp"
 #include "dataToPDF.hpp"
+#include "dataToJSON.hpp"
 
 #ifdef _WIN32
 // work around Windows non-standard headers
@@ -109,6 +110,9 @@ bool gLogErrorsToString = false;
 // global storage of accumulated error reports
 // abstracted below because this can easily become more complicated in the future
 std::string gErrorLogs;
+
+// output data to JSON instead of PDF
+bool gOutputJSON = false;
 
 /******************************************************************************/
 
@@ -201,7 +205,7 @@ std::vector<P> convex_hull2D(std::vector<P> points_in)
 
   std::vector<P> result(2*n); // worst case storage
 
-  // Sort points
+  // Sort points in x then y
   std::sort( points_in.begin(), points_in.end() );
 
   // Build lower hull
@@ -1939,6 +1943,7 @@ void printUsage(void)
 {
   printf("Usage: iccProfileVisualize <args> input_profiles\n");
   printf("\t-silent         don't output any warnings or errors.\n");
+  printf("\t-json           write data to JSON instead of PDF/TIFF.\n");
   printf("\t-V              print usage and version.\n");
   printf("\t-help           print usage and version.\n");
   printf("  output will be TIFF and PDF files next to each input profile.\n");
@@ -1958,6 +1963,9 @@ filename_list parse_arguments( int argc, char *argv[] )
 
     if ( (strcasecmp( argv[c], "-silent" ) == 0 ) ) {
       gRunSilent = true;
+    }
+    else if ( (strcasecmp( argv[c], "-json" ) == 0 ) ) {
+      gOutputJSON = true;
     }
     else if ( strcasecmp( argv[c], "-V" ) == 0
             || strcasecmp( argv[c], "--V" ) == 0
@@ -2018,8 +2026,12 @@ int main(int argc, char* argv[])
       profileVisualizationData data;
       processProfile( pIcc, basename, data );
 
-// TODO - output to other types (JSON)
-      auto count = outputDataToPDF( data, basename );
+      size_t count = 0;
+      if (gOutputJSON)
+        count = outputDataToJSON( data, basename );
+      else
+        count = outputDataToPDF( data, basename );
+      
       if (!count) {
         LogAnError(stderr,"Profile %s had no content for output\n", sanitizedFile.c_str() );
       }

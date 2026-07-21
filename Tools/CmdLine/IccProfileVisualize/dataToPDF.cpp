@@ -81,6 +81,7 @@
 label points for spectrum in nm
 sorta, kinda evenly spaced, plus endpoints
  */
+static
 std::vector<int> locusLabelWavelengths =
 {
   360,

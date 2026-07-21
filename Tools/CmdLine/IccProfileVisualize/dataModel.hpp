@@ -62,6 +62,7 @@
 #include <cstdint>
 #include <string>
 #include <memory>
+#include <vector>
 #include "MiniTIFF.hpp"     // need color modes
 
 /******************************************************************************/

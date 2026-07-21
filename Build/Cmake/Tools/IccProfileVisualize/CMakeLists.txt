@@ -11,6 +11,7 @@ set(SOURCES
 	"${SRC_ROOT}/MiniTIFF.cpp"
 	"${SRC_ROOT}/MiniPDF.cpp"
 	"${SRC_ROOT}/dataToPDF.cpp"
+	"${SRC_ROOT}/dataToJSON.cpp"
 )
 
 add_executable(${TARGET_NAME} ${SOURCES})
