@@ -23,6 +23,14 @@ where
   // Not in a context that is already guarded by isnan/isinf/isfinite
   not exists(FunctionCall guard |
     guard.getTarget().getName().regexpMatch("(?i)(isnan|isinf|isfinite|fpclassify|__builtin_isnan)") and
+    // Scope the guard to the SAME function as the cast. Without this the clause
+    // constrains only cast.getFile() (lines 32/34) and compares raw line numbers,
+    // never tying the guard to the cast's file or function - so an isfinite() on
+    // line N of one file suppresses an unguarded cast on line N of a *different*
+    // file (a soundness hole: real findings silently dropped). Equal enclosing
+    // functions pin guard and cast to one function body, hence one file; the line
+    // window below then narrows to a guard textually preceding the cast within it.
+    guard.getEnclosingFunction() = cast.getEnclosingFunction() and
     guard.getLocation().getStartLine() >= cast.getLocation().getStartLine() - 5 and
     guard.getLocation().getStartLine() <= cast.getLocation().getStartLine()
   ) and
