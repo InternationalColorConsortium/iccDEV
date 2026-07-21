@@ -120,17 +120,20 @@ Use the labels as follows:
 | Label | Effect |
 |-------|--------|
 | `ci:skip` | Skip build jobs for the current labeled event. Use only for administrative PRs where branch protection permits it. |
-| `ci:full` | Force the full source/build/test matrix for the current labeled event. |
-| `ci:fast-lane` | Run the Linux GCC Release LTO fast lane, macOS Release smoke lane, ASAN+UBSAN tool smoke tests, and Docker verification defaults. |
+| `ci:full` | Force the default long-cycle matrix: Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO, ASAN+UBSAN tool tests, Windows, and Docker verification. |
+| `ci:fast-lane` | Run the exact GCC 15.2 strict Release LTO build and the GCC 15.2 ASAN+UBSAN Release tool lane. |
 | `ci:ctest-last-N` | In fast lane, run only the last `N` registered CTests, where `N` is 1 through 10. |
-| `ci:docker` | Include Docker verification in fast lane. This is part of the default fast-lane set. |
-| `ci:no-windows` | Exclude Windows when fast lane is selected. This is part of the default fast-lane set. |
+| `ci:docker` | Add Docker verification to fast lane. Docker is already enabled in the default long cycle. |
+| `ci:no-windows` | Keep Windows excluded when fast lane is selected. Windows is enabled in the default long cycle. |
 | `ci:warnings-fail` | Treat compiler warnings as failures in fast-lane jobs. This is part of the default fast-lane set. |
 
-Manual `workflow_dispatch` fast lane uses the same same-repository restriction.
-Provide an open `pr_number`, choose `ci_scope=fast-lane`, and adjust
+Pull requests and manual dispatches default to `ci_scope=full`. Choose
+`ci_scope=auto` explicitly for path-scoped selection. Manual
+`workflow_dispatch` fast lane uses the same same-repository restriction. Provide
+an open `pr_number`, choose `ci_scope=fast-lane`, and adjust
 `ctest_recent_limit`, `include_windows`, `include_docker`, and `warning_policy`
-only for the run being started.
+only for the run being started. Fast lane defaults to the latest registered
+CTest, strict warning failure, and no Windows or Docker jobs.
 
 ### CodeQL Ready
 

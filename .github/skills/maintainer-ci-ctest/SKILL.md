@@ -72,6 +72,13 @@ when practical.
 ## Workflow Rules
 
 - Follow `.github/instructions/workflow-governance.instructions.md`.
+- Treat `ci-pr-action` `full` as the normal long-cycle maintainer gate. It runs
+  Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO in
+  the regression container, GCC 15.2 ASAN+UBSAN tool tests, Windows, and Docker.
+- Use `ci_scope=auto` only for intentional path-scoped selection.
+- Use `ci_scope=fast-lane` for the exact GCC 15.2 Release LTO and ASAN+UBSAN
+  Release tool lanes. Fast lane defaults to the latest CTest with Windows and
+  Docker disabled; add them only when the change needs those surfaces.
 - Do not use `|| true` around profile generation, CTest discovery, regression
   execution, sanitizer checks, or packaging verification.
 - Use least-privilege permissions and credential cleanup.
@@ -129,6 +136,8 @@ After pushing, trigger only the workflows affected by the change:
 
 ```bash
 gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <branch> -f ci_scope=full
+gh workflow run "ci-pr-action" --repo InternationalColorConsortium/iccDEV --ref <branch> \
+  -f ci_scope=fast-lane -f pr_number=<open-pr-number>
 gh workflow run "ci-risk-analysis" --repo InternationalColorConsortium/iccDEV --ref <branch> \
   -f analysis_target="Specific git ref" -f git_ref=<full-sha> -f severity_threshold=HIGH -f fail_on_findings=true
 ```

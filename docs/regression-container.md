@@ -179,10 +179,29 @@ pull request, dispatch it explicitly:
 gh workflow run ci-pr-action.yml \
   --repo InternationalColorConsortium/iccDEV \
   --ref <branch> \
-  -f ci_scope=auto \
-  -f include_docker=true \
-  -f warning_policy=fail
+  -f ci_scope=full
 ```
+
+The default long cycle runs the Unix GCC/Clang Release and Debug matrix, the
+regression-container GCC 15.2 strict Release LTO build, GCC 15.2 ASAN+UBSAN tool
+tests, Windows, and Docker verification. Pull request events and Web UI
+dispatches also default to `full`. Use `auto` only when path-scoped selection is
+intentional.
+
+For the fastest same-repository PR lane, provide the open PR number:
+
+```bash
+gh workflow run ci-pr-action.yml \
+  --repo InternationalColorConsortium/iccDEV \
+  --ref <branch> \
+  -f ci_scope=fast-lane \
+  -f pr_number=<pr-number>
+```
+
+Fast lane uses the regression container for exact GCC 15.2, runs strict Release
+LTO plus the GCC 15.2 ASAN+UBSAN Release tool lane, and limits CTest to the most
+recent registered test by default. Windows and Docker are opt-in fast-lane
+additions through the Web UI, CLI inputs, or maintainer labels.
 
 Watch the run:
 

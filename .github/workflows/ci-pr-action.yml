@@ -39,26 +39,26 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: 'Optional open PR number; omit for same-repository pre-PR branch fast lane'
+        description: 'Optional open PR number for same-repository fast-lane validation'
         required: false
         default: ''
         type: string
       ci_scope:
-        description: 'CI scope to run'
+        description: 'CI scope: full long cycle (default), auto path scope, or an explicit fast/specialized lane'
         required: false
-        default: auto
+        default: full
         type: choice
         options:
-          - auto
           - full
+          - fast-lane
+          - auto
           - source
           - governance
           - docs
-          - fast-lane
       ctest_recent_limit:
-        description: 'Run only the last N registered CTests; 0 means all selected tests'
+        description: 'Fast lane: run only the last N registered CTests; 0 means all'
         required: false
-        default: '0'
+        default: '1'
         type: choice
         options:
           - '0'
@@ -73,14 +73,14 @@ on:
           - '9'
           - '10'
       include_windows:
-        description: 'Include Windows in fast lane'
+        description: 'Fast lane: add Windows validation'
         required: false
         default: false
         type: boolean
       include_docker:
-        description: 'Include Docker verification in fast lane'
+        description: 'Fast lane: add Docker verification'
         required: false
-        default: true
+        default: false
         type: boolean
       warning_policy:
         description: 'Fast-lane compiler warning policy'
@@ -155,8 +155,8 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          CI_SCOPE: ${{ inputs.ci_scope || 'auto' }}
-          CTEST_RECENT_LIMIT_INPUT: ${{ inputs.ctest_recent_limit || '0' }}
+          CI_SCOPE: ${{ inputs.ci_scope || 'full' }}
+          CTEST_RECENT_LIMIT_INPUT: ${{ inputs.ctest_recent_limit || '1' }}
           INCLUDE_WINDOWS_INPUT: ${{ inputs.include_windows && 'true' || 'false' }}
           INCLUDE_DOCKER_INPUT: ${{ inputs.include_docker && 'true' || 'false' }}
           WARNING_POLICY_INPUT: ${{ inputs.warning_policy || 'fail' }}
@@ -178,15 +178,15 @@ jobs:
           git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
 
-          ci_scope="${CI_SCOPE:-auto}"
+          ci_scope="${CI_SCOPE:-full}"
           head_sha="${PR_HEAD_SHA}"
           target_repository="${PR_HEAD_REPO}"
           pr_number="${PR_NUMBER}"
           fast_lane=false
           include_windows=true
-          include_docker=false
+          include_docker=true
           ctest_recent_limit=0
-          warning_policy=warn
+          warning_policy=fail
 
           case "$ci_scope" in
             auto|full|source|governance|docs|fast-lane)
@@ -279,7 +279,7 @@ jobs:
             fast_lane=true
             ci_scope=fast-lane
             include_windows=false
-            include_docker=true
+            include_docker=false
             ctest_recent_limit=1
             warning_policy=fail
           }
@@ -323,46 +323,56 @@ jobs:
             pr_number="$number"
           }
 
-          case "$ci_scope" in
-            full|source)
-              write_scope_outputs true true true true false false
-              exit 0
-              ;;
-            fast-lane)
-              if ! validate_fast_lane_actor "$GH_ACTOR"; then
-                exit 1
-              fi
-              if [ -n "$DISPATCH_PR_NUMBER" ]; then
-                resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
-              fi
-              if ! require_same_repository_pr; then
-                exit 1
-              fi
-              apply_fast_lane_defaults
-              case "$CTEST_RECENT_LIMIT_INPUT" in
-                0|1|2|3|4|5|6|7|8|9|10)
-                  ctest_recent_limit="$CTEST_RECENT_LIMIT_INPUT"
-                  ;;
-                *)
-                  echo "Invalid ctest_recent_limit: $CTEST_RECENT_LIMIT_INPUT" >&2
+          # A newly applied ci:* label must be evaluated before the default full
+          # pull-request scope exits through the direct dispatch path.
+          if [ "$GH_EVENT_NAME" != "pull_request" ] ||
+             [ "$GH_EVENT_ACTION" != "labeled" ] ||
+             [[ "$LABEL_NAME" != ci:* ]]; then
+            case "$ci_scope" in
+              full|source)
+                include_windows=true
+                include_docker=true
+                ctest_recent_limit=0
+                warning_policy=fail
+                write_scope_outputs true true true true false false
+                exit 0
+                ;;
+              fast-lane)
+                if ! validate_fast_lane_actor "$GH_ACTOR"; then
                   exit 1
-                  ;;
-              esac
-              include_windows="$INCLUDE_WINDOWS_INPUT"
-              include_docker="$INCLUDE_DOCKER_INPUT"
-              warning_policy="$WARNING_POLICY_INPUT"
-              write_scope_outputs true true true true false false
-              exit 0
-              ;;
-            governance)
-              write_scope_outputs false false false false true false
-              exit 0
-              ;;
-            docs)
-              write_scope_outputs false false false false false true
-              exit 0
-              ;;
-          esac
+                fi
+                if [ -n "$DISPATCH_PR_NUMBER" ]; then
+                  resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
+                fi
+                if ! require_same_repository_pr; then
+                  exit 1
+                fi
+                apply_fast_lane_defaults
+                case "$CTEST_RECENT_LIMIT_INPUT" in
+                  0|1|2|3|4|5|6|7|8|9|10)
+                    ctest_recent_limit="$CTEST_RECENT_LIMIT_INPUT"
+                    ;;
+                  *)
+                    echo "Invalid ctest_recent_limit: $CTEST_RECENT_LIMIT_INPUT" >&2
+                    exit 1
+                    ;;
+                esac
+                include_windows="$INCLUDE_WINDOWS_INPUT"
+                include_docker="$INCLUDE_DOCKER_INPUT"
+                warning_policy="$WARNING_POLICY_INPUT"
+                write_scope_outputs true true true true false false
+                exit 0
+                ;;
+              governance)
+                write_scope_outputs false false false false true false
+                exit 0
+                ;;
+              docs)
+                write_scope_outputs false false false false false true
+                exit 0
+                ;;
+            esac
+          fi
 
           # Validate that both SHAs look like exact Git commit OIDs (40 hex chars).
           validate_sha() {
@@ -443,9 +453,9 @@ jobs:
               ci:full)
                 ci_scope=full
                 include_windows=true
-                include_docker=false
+                include_docker=true
                 ctest_recent_limit=0
-                warning_policy=warn
+                warning_policy=fail
                 write_scope_outputs true true true true false false
                 exit 0
                 ;;
@@ -550,7 +560,7 @@ jobs:
             echo ""
             echo "## CI Scope"
             echo ""
-            echo "- **Requested scope:** \`$(sanitize_line "${CI_SCOPE:-auto}")\`"
+            echo "- **Requested scope:** \`$(sanitize_line "${CI_SCOPE:-full}")\`"
             echo "- **Run full build matrix:** \`$(sanitize_line "${RUN_FULL_BUILD:-false}")\`"
             echo "- **Source changed:** \`$(sanitize_line "${SOURCE_CHANGED:-false}")\`"
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED:-false}")\`"
@@ -670,7 +680,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
-          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'auto' }}
+          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'full' }}
           SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed || 'false' }}
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed || 'false' }}
@@ -708,7 +718,7 @@ jobs:
           : "${GITHUB_SHA:=<none>}"
           : "${GITHUB_RUN_ID:=<none>}"
           : "${SRC_CHANGED:=false}"
-          : "${CI_SCOPE:=auto}"
+          : "${CI_SCOPE:=full}"
           : "${SOURCE_CHANGED:=false}"
           : "${BUILD_CONFIG_CHANGED:=false}"
           : "${TESTING_CHANGED:=false}"
@@ -764,9 +774,9 @@ jobs:
           BASH_ENV: /dev/null
           FAST_LANE: ${{ needs.detect-src.outputs.fast_lane || 'false' }}
           INCLUDE_WINDOWS: ${{ needs.detect-src.outputs.include_windows || 'true' }}
-          INCLUDE_DOCKER: ${{ needs.detect-src.outputs.include_docker || 'false' }}
+          INCLUDE_DOCKER: ${{ needs.detect-src.outputs.include_docker || 'true' }}
           CTEST_RECENT_LIMIT: ${{ needs.detect-src.outputs.ctest_recent_limit || '0' }}
-          WARNING_POLICY: ${{ needs.detect-src.outputs.warning_policy || 'warn' }}
+          WARNING_POLICY: ${{ needs.detect-src.outputs.warning_policy || 'fail' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -867,35 +877,16 @@ jobs:
       os-list: ${{ needs.validate-inputs.outputs.os-list }}
       build-types: ${{ needs.validate-inputs.outputs.build-types }}
       compilers: ${{ needs.validate-inputs.outputs.compilers }}
-      target-sha: ${{ needs.detect-src.outputs.target_sha }}
-
-  linux-fast-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.fast-lane == 'true' }}
-    name: Linux GCC Release LTO Fast Lane
-    needs: [setup, detect-src, validate-inputs]
-    uses: ./.github/workflows/ci-pr-unix.yml
-    with:
-      os-list: '["ubuntu-24.04"]'
-      build-types: '["Release"]'
-      compilers: '["gcc"]'
-      enable-lto: true
       warning-policy: ${{ needs.validate-inputs.outputs.warning-policy }}
-      profile-test-mode: smoke
-      compiler-version: system
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
-  mac-fast-ci:
-    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.fast-lane == 'true' }}
-    name: macOS Release Fast Lane
+  gcc15-lto-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
+    name: GCC 15.2 Strict Release LTO
     needs: [setup, detect-src, validate-inputs]
-    uses: ./.github/workflows/ci-pr-unix.yml
+    uses: ./.github/workflows/ci-pr-gcc15.yml
     with:
-      os-list: '["macos-latest"]'
-      build-types: '["Release"]'
-      compilers: '["clang"]'
-      enable-lto: false
-      warning-policy: warn
-      profile-test-mode: smoke
+      regression-image-tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
       target-sha: ${{ needs.detect-src.outputs.target_sha }}
 
   tool-tests:
@@ -925,7 +916,7 @@ jobs:
 
   docker-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-docker == 'true' }}
-    name: Docker Fast-Lane Verification
+    name: Docker Verification
     needs: [setup, detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
     with:
@@ -939,8 +930,7 @@ jobs:
       - detect-src
       - risk-gate
       - unix-ci
-      - linux-fast-ci
-      - mac-fast-ci
+      - gcc15-lto-ci
       # clang-tidy lint and scan-build are temporarily disabled above.
       # - lint
       # - scan-build
@@ -977,8 +967,7 @@ jobs:
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
           RISK_RESULT: ${{ needs.risk-gate.result }}
           UNIX_RESULT: ${{ needs.unix-ci.result }}
-          LINUX_FAST_RESULT: ${{ needs['linux-fast-ci'].result }}
-          MAC_FAST_RESULT: ${{ needs['mac-fast-ci'].result }}
+          GCC15_LTO_RESULT: ${{ needs['gcc15-lto-ci'].result }}
           # clang-tidy lint and scan-build are temporarily disabled above.
           # LINT_RESULT: ${{ needs.lint.result }}
           # SCAN_RESULT: ${{ needs['scan-build'].result }}
@@ -1018,8 +1007,7 @@ jobs:
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
-          LINUX_FAST_RESULT="${LINUX_FAST_RESULT:-success}"
-          MAC_FAST_RESULT="${MAC_FAST_RESULT:-success}"
+          GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
           DOCKER_RESULT="${DOCKER_RESULT:-success}"
 
           # remove CRs, trim whitespace and lowercase each value
@@ -1040,13 +1028,12 @@ jobs:
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
-          LINUX_FAST_RESULT="$(trim_and_norm "$LINUX_FAST_RESULT")"
-          MAC_FAST_RESULT="$(trim_and_norm "$MAC_FAST_RESULT")"
+          GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
           DOCKER_RESULT="$(trim_and_norm "$DOCKER_RESULT")"
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$RISK_RESULT" "$UNIX_RESULT" "$LINUX_FAST_RESULT" "$MAC_FAST_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT"; do
+          for s in "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -1111,8 +1098,7 @@ jobs:
             echo "|--------------------|----------|"
             printf "| risk-gate          | %s |\n" "$(sanitize_line "$RISK_RESULT")"
             printf "| unix-ci            | %s |\n" "$(sanitize_line "$UNIX_RESULT")"
-            printf "| linux-fast-ci      | %s |\n" "$(sanitize_line "$LINUX_FAST_RESULT")"
-            printf "| mac-fast-ci        | %s |\n" "$(sanitize_line "$MAC_FAST_RESULT")"
+            printf "| gcc15-lto-ci       | %s |\n" "$(sanitize_line "$GCC15_LTO_RESULT")"
             printf "| lint               | %s |\n" "$(sanitize_line "$LINT_RESULT")"
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"

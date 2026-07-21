@@ -1,0 +1,119 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Purpose: Exact GCC 15.2 strict Release LTO validation.
+#
+###############################################################
+name: GCC 15.2 Release LTO
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      regression-image-tag:
+        description: "Published iccdev-ci-regression image tag"
+        required: true
+        type: string
+      target-sha:
+        description: "Exact commit SHA to validate"
+        required: true
+        type: string
+
+jobs:
+  gcc15-release-lto:
+    name: GCC 15.2 Strict Release LTO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression-image-tag }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      BUILD_DIR: gcc15-release-lto
+    steps:
+      - name: Checkout iccDEV
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          # preflight: allow-codeql-actions reason=readonly-build-target-checkout
+          ref: ${{ inputs.target-sha }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify GCC 15.2 toolchain
+        env:
+          BASH_ENV: /dev/null
+          TARGET_SHA: ${{ inputs.target-sha }}
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(gcc -dumpfullversion)" = "15.2.0"
+          test "$(g++ -dumpfullversion)" = "15.2.0"
+          gcc --version | sed -n '1p'
+          g++ --version | sed -n '1p'
+
+      - name: Configure strict Release LTO build
+        env:
+          BASH_ENV: /dev/null
+          CC: gcc
+          CXX: g++
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cmake -S Build/Cmake -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=gcc \
+            -DCMAKE_CXX_COMPILER=g++ \
+            -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror" \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -std=c++17" \
+            -DENABLE_LTO=ON \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=ON \
+            -DENABLE_WXWIDGETS=OFF \
+            -DENABLE_SHARED_LIBS=ON \
+            -DENABLE_STATIC_LIBS=ON \
+            -DICC_USE_ZLIB=ON \
+            -Wno-dev
+
+      - name: Build with zero warnings
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          cmake --build "$BUILD_DIR" --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build.log"
+          if grep -qE 'warning:' "$BUILD_DIR/build.log"; then
+            grep -E 'warning:' "$BUILD_DIR/build.log" | sort -u | sed -n '1,40p'
+            exit 1
+          fi
+
+      - name: Smoke Release LTO tools
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          test -x "$BUILD_DIR/Tools/IccDumpProfile/iccDumpProfile"
+          "$BUILD_DIR/Tools/IccDumpProfile/iccDumpProfile" \
+            Testing/sRGB_v4_ICC_preference.icc ALL >/dev/null
+          grep -R -q -- '-flto' "$BUILD_DIR/Tools" "$BUILD_DIR/IccProfLib"

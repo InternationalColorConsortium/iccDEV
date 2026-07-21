@@ -49,10 +49,10 @@
   description: Maintainer one-shot request to skip PR build jobs
 - name: ci:full
   color: 0e8a16
-  description: Maintainer one-shot request to run the full PR matrix
+  description: Run the default long-cycle Unix, GCC 15.2 LTO, tool, Windows, and Docker matrix
 - name: ci:fast-lane
   color: 1d76db
-  description: Maintainer one-shot request to run the PR fast lane
+  description: Run exact GCC 15.2 Release LTO and ASAN+UBSAN Release tool validation
 - name: ci:ctest-last-1
   color: 1d76db
   description: Fast lane runs only the most recent registered CTest
@@ -85,10 +85,10 @@
   description: Fast lane runs only the ten most recent registered CTests
 - name: ci:docker
   color: 0e8a16
-  description: Include Docker verification in the PR fast lane
+  description: Add Docker verification to the PR fast lane
 - name: ci:no-windows
   color: c5def5
-  description: Exclude Windows from the PR fast lane
+  description: Keep Windows excluded from the PR fast lane
 - name: ci:warnings-fail
   color: d93f0b
   description: Treat compiler warnings as fast-lane failures
