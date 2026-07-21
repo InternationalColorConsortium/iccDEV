@@ -160,13 +160,23 @@ RUN python3 -m venv /opt/iccdev-mcp \
 USER iccdev-ci
 WORKDIR /workspace/iccDEV
 
-RUN if [ -f .git ]; then rm -f .git && git init --quiet; elif ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then rm -rf .git && git init --quiet; fi \
+RUN rm -rf .git \
+ && git init --quiet \
  && git config --global --add safe.directory /workspace/iccDEV \
  && (git remote set-url origin https://github.com/InternationalColorConsortium/iccDEV.git 2>/dev/null \
       || git remote add origin https://github.com/InternationalColorConsortium/iccDEV.git) \
- && if git rev-parse --verify HEAD >/dev/null 2>&1 && [ "$GIT_COMMIT" != "unknown" ]; then \
-      test "$(git rev-parse HEAD)" = "$GIT_COMMIT"; \
+ && if [ "$GIT_COMMIT" != "unknown" ]; then \
+      git fetch --depth=1 origin "$GIT_COMMIT" \
+      && git reset --mixed "$GIT_COMMIT" \
+      && test -z "$(git status --porcelain --untracked-files=all)" \
+      && git checkout --quiet --detach "$GIT_COMMIT"; \
+    else \
+      git config user.name "iccDEV CI" \
+      && git config user.email "iccdev-ci@invalid" \
+      && git add --all \
+      && git commit --quiet -m "Initialize regression container source"; \
     fi \
+ && test -z "$(git status --porcelain --untracked-files=all)" \
  && mkdir -p /workspace/build \
  && SAN_FLAGS="-fsanitize=address,undefined,float-divide-by-zero,float-cast-overflow" \
  && GIT_COMMIT="$GIT_COMMIT" CC=clang CXX=clang++ cmake -S Build/Cmake -B /workspace/build \
