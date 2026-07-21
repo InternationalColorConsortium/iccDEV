@@ -383,7 +383,7 @@ struct imageData : dataAbstractionBase {
                 mode(IMAGE_MODE_GRAY_BLACKZERO),
                 isFloatingPoint(false), data(NULL) {}
 
-  imageData(const std::string &name, void *imageData, int imageWidth, int imageHeight,
+  imageData(const std::string &name, void *imageBuffer, int imageWidth, int imageHeight,
             int imageChannels, int imageDepth, int imageMode,
             bool dataIsFloatingPoint = false ) {
     object_name = name;
@@ -393,7 +393,7 @@ struct imageData : dataAbstractionBase {
     depth = imageDepth;
     mode = imageMode;
     isFloatingPoint = dataIsFloatingPoint;
-    data = (uint8_t*)imageData;
+    data = (uint8_t*)imageBuffer;
   }
 
   ~imageData() {
