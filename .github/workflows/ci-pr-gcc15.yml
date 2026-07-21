@@ -11,6 +11,7 @@ name: GCC 15.2 Release LTO
 
 permissions:
   contents: read
+  packages: read
 
 on:
   workflow_call:
@@ -50,6 +51,14 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Checkout trusted sanitizer
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted-base
+          persist-credentials: false
+          fetch-depth: 1
+
       - name: Verify GCC 15.2 toolchain
         env:
           BASH_ENV: /dev/null
@@ -59,6 +68,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
 
           test "$(git rev-parse HEAD)" = "$TARGET_SHA"
           test "$(gcc -dumpfullversion)" = "15.2.0"
@@ -75,6 +85,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
 
           cmake -S Build/Cmake -B "$BUILD_DIR" \
             -DCMAKE_BUILD_TYPE=Release \
@@ -98,6 +109,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
 
           cmake --build "$BUILD_DIR" --parallel "$(nproc)" 2>&1 | tee "$BUILD_DIR/build.log"
           if grep -qE 'warning:' "$BUILD_DIR/build.log"; then
@@ -112,6 +124,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$GITHUB_WORKSPACE/trusted-base/.github/scripts/sanitize-sed.sh"
 
           test -x "$BUILD_DIR/Tools/IccDumpProfile/iccDumpProfile"
           "$BUILD_DIR/Tools/IccDumpProfile/iccDumpProfile" \

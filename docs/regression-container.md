@@ -200,8 +200,9 @@ gh workflow run ci-pr-action.yml \
 
 Fast lane uses the regression container for exact GCC 15.2, runs strict Release
 LTO plus the GCC 15.2 ASAN+UBSAN Release tool lane, and limits CTest to the most
-recent registered test by default. Windows and Docker are opt-in fast-lane
-additions through the Web UI, CLI inputs, or maintainer labels.
+recent registered test by default. Windows is opt-in through the Web UI or CLI
+`include_windows` input. Docker is opt-in through the Web UI or CLI
+`include_docker` input, or the `ci:docker` maintainer label.
 
 Watch the run:
 

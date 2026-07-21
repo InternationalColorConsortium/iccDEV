@@ -745,6 +745,12 @@ jobs:
       matrix:
         package: [iccdev, iccdev-nixos, iccdev-ci-regression, iccdev-mcp]
     steps:
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
       # preflight: allow-token-exposure reason=ghcr-package-prune
       - name: Delete old package versions
         env:
@@ -754,6 +760,7 @@ jobs:
         run: |
           set -euo pipefail
           git config --global credential.helper ""
+          source .github/scripts/sanitize-sed.sh
 
           ORG="InternationalColorConsortium"
           CUTOFF=$(date -u -d '3 days ago' +%Y-%m-%dT%H:%M:%SZ)
