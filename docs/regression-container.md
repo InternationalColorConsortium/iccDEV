@@ -171,9 +171,9 @@ suppression applies.
 
 ## Trigger Maintainer CI
 
-`ci-pr-action` runs automatically for pull requests targeting `master`. It does
-not have a branch push trigger. For a same-repository branch without an open
-pull request, dispatch it explicitly:
+`ci-pr-action` runs automatically for pull requests targeting `master` or
+`ci-qa-flags`. It does not have a branch push trigger. For a same-repository
+branch without an open pull request, dispatch it explicitly:
 
 ```bash
 gh workflow run ci-pr-action.yml \
@@ -231,7 +231,11 @@ Before publishing a Docker change, compare every maintained container file
 across `ci-qa-pr-docker-testing` and `ci-qa-flags`:
 
 ```bash
-git diff --name-status ci-qa-pr-docker-testing..ci-qa-flags -- \
+git fetch origin \
+  ci-qa-pr-docker-testing:refs/remotes/origin/ci-qa-pr-docker-testing \
+  ci-qa-flags:refs/remotes/origin/ci-qa-flags
+git diff --name-status \
+  origin/ci-qa-pr-docker-testing..origin/ci-qa-flags -- \
   'Dockerfile*' '**/Dockerfile*'
 ```
 

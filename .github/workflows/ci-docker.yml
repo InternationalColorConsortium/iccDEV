@@ -31,6 +31,7 @@ on:
       - "Dockerfile.ci-regression"
       - "Dockerfile.mcp"
       - "iccdev-mcp/**"
+      - "docker/**"
       - "python/**"
       - ".github/scripts/preflight-safety-checks.sh"
       - ".github/workflows/ci-docker.yml"
@@ -740,6 +741,7 @@ jobs:
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-qa-flags' || github.ref == 'refs/heads/ci-qa-pr-docker-testing'
     environment: ghcr-publish
     permissions:
+      contents: read  # Required for the trusted workflow helper checkout.
       packages: write  # Required to delete old GHCR package versions.
     strategy:
       matrix:
