@@ -167,9 +167,7 @@ RUN rm -rf .git \
       || git remote add origin https://github.com/InternationalColorConsortium/iccDEV.git) \
  && if [ "$GIT_COMMIT" != "unknown" ]; then \
       git fetch --depth=1 origin "$GIT_COMMIT" \
-      && git reset --mixed "$GIT_COMMIT" \
-      && test -z "$(git status --porcelain --untracked-files=all)" \
-      && git checkout --quiet --detach "$GIT_COMMIT"; \
+      && git checkout --quiet --force --detach "$GIT_COMMIT"; \
     else \
       git config user.name "iccDEV CI" \
       && git config user.email "iccdev-ci@invalid" \
