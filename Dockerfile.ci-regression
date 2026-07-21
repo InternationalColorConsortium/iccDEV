@@ -201,6 +201,8 @@ RUN cmake --build /workspace/build --target build-test-binaries --parallel "$(np
 
 WORKDIR /workspace/iccDEV/Testing
 RUN iccdev-generate-profiles /workspace/build/Tools
+RUN git checkout -- silence.txt \
+ && test -z "$(git status --porcelain --untracked-files=all)"
 
 USER root
 RUN chmod 0755 /usr/local/bin/iccdev-banner \
