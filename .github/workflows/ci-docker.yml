@@ -334,6 +334,19 @@ jobs:
             exit 1
           fi
 
+      - name: Reclaim workspace before image scan
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          docker buildx prune --all --force
+          docker image prune --force
+          docker system df
+          df -h "${RUNNER_TEMP:-/tmp}"
+
       - name: Scan test image
         env:
           BASH_ENV: /dev/null
