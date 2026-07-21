@@ -40,10 +40,10 @@ authoritative and must not be rescued by another Release library elsewhere in
 the checkout.
 
 The PR must also pass the `ci-json-python` workflow. That workflow validates
-Linux, macOS, and Windows builds for Python 3.9, 3.12, and 3.13, builds source
-and wheel artifacts, runs `twine check`, prints cibuildwheel identifiers for
-all target platforms, and runs a native wheel smoke build on each hosted
-platform.
+Linux builds for Python 3.12 and 3.13 and macOS and Windows builds for Python
+3.9, 3.12, and 3.13, builds source and wheel artifacts, runs `twine check`,
+prints cibuildwheel identifiers for all target platforms, and runs a native
+wheel smoke build on each hosted platform.
 
 Run pytest from the repository root with `--import-mode=importlib`. Installed
 wheel validation must also set `ICCDEV_REQUIRE_INSTALLED_PACKAGE=1`; the test
