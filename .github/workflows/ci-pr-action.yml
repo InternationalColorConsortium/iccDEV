@@ -114,6 +114,7 @@ jobs:
       build_config_changed: ${{ steps.diffcheck.outputs.build_config_changed }}
       testing_changed: ${{ steps.diffcheck.outputs.testing_changed }}
       ci_changed: ${{ steps.diffcheck.outputs.ci_changed }}
+      container_changed: ${{ steps.diffcheck.outputs.container_changed }}
       docs_only: ${{ steps.diffcheck.outputs.docs_only }}
       fast_lane: ${{ steps.diffcheck.outputs.fast_lane }}
       include_windows: ${{ steps.diffcheck.outputs.include_windows }}
@@ -204,7 +205,8 @@ jobs:
             local build_config_changed="$3"
             local testing_changed="$4"
             local ci_changed="$5"
-            local docs_only="$6"
+            local container_changed="$6"
+            local docs_only="$7"
 
             {
               printf 'src_changed=%s\n' "$run_full"
@@ -213,6 +215,7 @@ jobs:
               printf 'build_config_changed=%s\n' "$build_config_changed"
               printf 'testing_changed=%s\n' "$testing_changed"
               printf 'ci_changed=%s\n' "$ci_changed"
+              printf 'container_changed=%s\n' "$container_changed"
               printf 'docs_only=%s\n' "$docs_only"
               printf 'fast_lane=%s\n' "$fast_lane"
               printf 'include_windows=%s\n' "$include_windows"
@@ -384,7 +387,7 @@ jobs:
 
           if ! validate_sha "$head_sha"; then
             echo "Warning: invalid or missing head commit sha; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false
+            write_scope_outputs true true true true false false false
             exit 0
           fi
 
@@ -396,7 +399,7 @@ jobs:
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
-              write_scope_outputs false false false false false false
+              write_scope_outputs false false false false false false false
               exit 0
               ;;
           esac
@@ -410,7 +413,7 @@ jobs:
           # Check if merge base exists before running diff
           if ! git merge-base "origin/${base_ref}" HEAD >/dev/null 2>&1; then
             echo "Warning: no merge base found; assuming source changed for safety" >&2
-            write_scope_outputs true true true true false false
+            write_scope_outputs true true true true false false false
             exit 0
           fi
 
@@ -425,6 +428,7 @@ jobs:
           build_config_changed=false
           testing_changed=false
           ci_changed=false
+          container_changed=false
           docs_only=false
 
           if [ "$GH_EVENT_NAME" = "pull_request" ] &&
@@ -477,6 +481,10 @@ jobs:
             ci_changed=true
           fi
 
+          if has_changed_file '^Dockerfile(\..*)?$|^\.dockerignore$|^(docker|python|iccdev-mcp)/'; then
+            container_changed=true
+          fi
+
           docs_pattern='(^docs/|^README(\..*)?$|^CONTRIBUTING(\..*)?$'
           docs_pattern+='|^CHANGELOG(\..*)?$|^LICENSE(\..*)?$|\.(md|rst|txt)$)'
           if [[ -n "$changed_files" ]] &&
@@ -494,13 +502,13 @@ jobs:
               run_full=false
               ;;
             auto)
-              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$ci_changed" == "true" ]]; then
+              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$ci_changed" == "true" || "$container_changed" == "true" ]]; then
                 run_full=true
               fi
               ;;
           esac
 
-          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$docs_only"
+          write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$container_changed" "$docs_only"
 
       - name: Generate Summary
         shell: bash --noprofile --norc {0}
@@ -518,6 +526,7 @@ jobs:
           BUILD_CONFIG_CHANGED: ${{ steps.diffcheck.outputs.build_config_changed }}
           TESTING_CHANGED: ${{ steps.diffcheck.outputs.testing_changed }}
           CI_CHANGED: ${{ steps.diffcheck.outputs.ci_changed }}
+          CONTAINER_CHANGED: ${{ steps.diffcheck.outputs.container_changed }}
           DOCS_ONLY: ${{ steps.diffcheck.outputs.docs_only }}
         run: |
           set -euo pipefail
@@ -569,6 +578,7 @@ jobs:
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED:-false}")\`"
             echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED:-false}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED:-false}")\`"
+            echo "- **Container surface changed:** \`$(sanitize_line "${CONTAINER_CHANGED:-false}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY:-false}")\`"
             echo ""
             echo "If you have questions, contact a listed [Maintainer](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/CODEOWNERS)."
@@ -626,6 +636,7 @@ jobs:
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed }}
+          CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only }}
         run: |
           set -euo pipefail
@@ -670,6 +681,7 @@ jobs:
           echo "Build config changed: $(sanitize_print "$BUILD_CONFIG_CHANGED")"
           echo "Testing/regression changed: $(sanitize_print "$TESTING_CHANGED")"
           echo "CI/governance changed: $(sanitize_print "$CI_CHANGED")"
+          echo "Container surface changed: $(sanitize_print "$CONTAINER_CHANGED")"
           echo "Docs only: $(sanitize_print "$DOCS_ONLY")"
 
       - name: Generate Summary
@@ -688,6 +700,7 @@ jobs:
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed || 'false' }}
           CI_CHANGED: ${{ needs.detect-src.outputs.ci_changed || 'false' }}
+          CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed || 'false' }}
           DOCS_ONLY: ${{ needs.detect-src.outputs.docs_only || 'false' }}
         run: |
           set -euo pipefail
@@ -726,6 +739,7 @@ jobs:
           : "${BUILD_CONFIG_CHANGED:=false}"
           : "${TESTING_CHANGED:=false}"
           : "${CI_CHANGED:=false}"
+          : "${CONTAINER_CHANGED:=false}"
           : "${DOCS_ONLY:=false}"
 
           # write step summary (all dynamic values passed through sanitize_line)
@@ -745,6 +759,7 @@ jobs:
             echo "- **Build config changed:** \`$(sanitize_line "${BUILD_CONFIG_CHANGED}")\`"
             echo "- **Testing/regression changed:** \`$(sanitize_line "${TESTING_CHANGED}")\`"
             echo "- **CI/governance changed:** \`$(sanitize_line "${CI_CHANGED}")\`"
+            echo "- **Container surface changed:** \`$(sanitize_line "${CONTAINER_CHANGED}")\`"
             echo "- **Docs only:** \`$(sanitize_line "${DOCS_ONLY}")\`"
             echo ""
             echo "[OK] CI environment successfully initialized and ready for subsequent jobs."

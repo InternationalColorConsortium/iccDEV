@@ -30,6 +30,7 @@ on:
       - "Dockerfile.nixos"
       - "Dockerfile.ci-regression"
       - "Dockerfile.mcp"
+      - ".dockerignore"
       - "iccdev-mcp/**"
       - "docker/**"
       - "python/**"
