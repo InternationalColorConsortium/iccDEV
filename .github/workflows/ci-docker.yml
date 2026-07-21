@@ -759,10 +759,17 @@ jobs:
       run:
         shell: bash --noprofile --norc {0}
     steps:
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
         with:
           cache-binary: false
 
+      # preflight: allow-token-exposure reason=ghcr-verified-regression-promotion
       - name: Log in to GHCR
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
@@ -780,6 +787,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
 
           source_image="${SOURCE_REPOSITORY}:${SOURCE_TAG}"
           source_digest="$(
@@ -806,7 +814,8 @@ jobs:
             exit 1
           fi
 
-          echo "Promoted verified regression image ${source_digest} to latest"
+          printf 'Promoted verified regression image %s to latest\n' \
+            "$(sanitize_line "$source_digest")"
 
   prune:
     name: "Prune old container versions"
