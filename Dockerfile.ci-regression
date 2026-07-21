@@ -113,7 +113,7 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
       --no-cache-dir \
       'numpy==2.4.2' \
       'tifffile==2026.2.24' \
-      'pillow==12.2.0' \
+      'pillow==12.3.0' \
       'imagecodecs==2026.6.6' \
       --quiet \
  && /opt/iccdev-spectral-preview/bin/python -c 'import imagecodecs,numpy,PIL,tifffile; print(f"imagecodecs {imagecodecs.__version__}"); print(f"numpy {numpy.__version__}"); print(f"pillow {PIL.__version__}"); print(f"tifffile {tifffile.__version__}")'
