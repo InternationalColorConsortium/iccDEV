@@ -13,19 +13,19 @@ three-component (RGB) color encoding registry, colorimetry data, profile library
 
 ---
 
-## A. Manufacturer / creator header fields — RESOLVED by the #1459 S3 fix
+## A. Manufacturer / creator header fields - RESOLVED by the #1459 S3 fix
 
 **Defect:** S3 validated the header `manufacturer` and `creator` fields against
-the registered *private tag-signature ranges* (`FindRegisteredPrivateTag`) — the
-wrong registry. ICC.1:2022-05 §7.2.17 requires these fields to match a signature
+the registered *private tag-signature ranges* (`FindRegisteredPrivateTag`) - the
+wrong registry. ICC.1:2022-05 section 7.2.17 requires these fields to match a signature
 in the **device manufacturer** section of the ICC signature registry (the
 Manufacturer Signatures registry), or be zero.
 
 **Magnitude:** of the **279** signatures in the Manufacturer Signatures registry,
-**271** fall in *no* private tag-signature range — i.e. the old code would have
+**271** fall in *no* private tag-signature range - i.e. the old code would have
 emitted a false "unregistered" S3 warning for 271 of 279 legitimately registered
 manufacturers. Worked example from the issue: `KODA` (Kodak, `0x4B4F4441`) is in
-the Manufacturer Signatures registry but in no private-tag range → false warn
+the Manufacturer Signatures registry but in no private-tag range -> false warn
 before, OK after.
 
 **Fix:** new exact-match `kIccManufacturerSignatures[]` table + a dedicated
@@ -34,29 +34,35 @@ through it. The private-tag table is unchanged and still (correctly) attributes
 private tags found in a profile *body* (`AssessPrivateTags`, checks S11/C6).
 
 **Permissiveness direction:** the fix makes S3 *more correct*, not blanket more
-permissive — it accepts the 271 genuinely-registered manufacturers it used to
-reject, while still warning on signatures absent from the registry (see §D).
+permissive - it accepts the 271 genuinely-registered manufacturers it used to
+reject, while still warning on signatures absent from the registry (see section D).
 
 ---
 
-## B. CMM signature field — DEFERRED (separate IccProfLib PR)
+## B. CMM signature field - RESOLVED by the issue-1724 IccProfLib update
 
 S3's CMM check uses `CIccInfo::GetCmmSigName()` (IccProfLib/IccUtil.cpp) and
-warns when it returns an "Unknown…" name. Two independent gaps, both in core
-IccProfLib (not PawgReport-local), so they are **flagged here only** and proposed
-for a separate PR per the #1459 plan:
+warns when it returns an "Unknown..." name. Issue #1724 carries the follow-up
+IccProfLib update requested by the #1459 review: the core CMM enum, name table,
+and profile validation allow-list now match the live CMM registry rows described
+below. No PawgReport-local CMM table was added; S3 continues to consume the core
+IccProfLib lookup.
 
-### B1. Enum entries with no `GetCmmSigName()` case → false WARN
+### B1. Enum entries with no `GetCmmSigName()` case - fixed
 The `icCmmSignature` enum (icProfileHeader.h, "as of Mar 6, 2018") defines these,
-but `GetCmmSigName()` has no `case` for them, so S3 reports them Unknown:
+but `GetCmmSigName()` had no `case` for them, so S3 reported them Unknown. The
+issue-1724 update adds both name-table cases and keeps the existing enum values:
 
 | Enum | Value | ASCII |
 |------|-------|-------|
 | `icSigWindowsCMS`   | `0x57435320` | `WCS ` |
 | `icSigOnyxGraphics` | `0x4F4E5958` | `ONYX` |
 
-### B2. Live CMM registry entries absent from the IccProfLib enum → WARN
-Present in registry.color.org/cmm-signatures (30 rows) but not in the enum:
+### B2. Live CMM registry entries absent from the IccProfLib enum - fixed
+These registry.color.org/cmm-signatures entries were present in the live CMM
+registry but absent from the enum snapshot. The issue-1724 update adds enum and
+`GetCmmSigName()` coverage for all three, and `CIccProfile::Validate()` now
+accepts `repr` and `iccd` as registered CMM signatures:
 
 | Value | ASCII | Vendor |
 |-------|-------|--------|
@@ -64,41 +70,39 @@ Present in registry.color.org/cmm-signatures (30 rows) but not in the enum:
 | `0x69636364` | `iccd` | ICC |
 | `0x72657072` | `repr` | Reprointelligence |
 
-### B3. Latent value/comment mismatch (discovered while diffing)
+### B3. Latent value/comment mismatch - fixed
 `icSigRefIccMAX = 0x52494343` (= ASCII `RICC`) but its comment says `/* 'RIMX' */`,
 and the registry lists RefIccMAX's CMM signature as `RIMX = 0x52494D58`. The enum
-*value* and the registry disagree. Flagging for a maintainer decision — likely
-the value should be `0x52494D58` (RIMX) — but this changes a public enum constant
-and must be a deliberate IccProfLib change, not part of the PawgReport fix.
+*value* and the registry disagreed. The issue-1724 update changes
+`icSigRefIccMAX` to `0x52494D58` (RIMX), matching the registry and the existing
+comment.
 
-> **Decision requested:** do you want a follow-up IccProfLib PR that (a) adds the
-> missing `GetCmmSigName()` cases for WCS/ONYX, (b) extends the enum with the 3
-> live-only CMMs, and (c) reconciles the RefIccMAX value/comment? None of this is
-> done here.
+**Permissiveness direction:** this is a targeted correction for registered CMM
+signatures. Unknown or unregistered CMM signatures still warn.
 
 ---
 
-## C. Private tag-signature ranges — refreshed (data only)
+## C. Private tag-signature ranges - refreshed (data only)
 
 The private-tag range table was regenerated from registry.color.org/tag-signatures
 (non-ICC rows). Prior in-source table: **171** ranges; live snapshot: **174**.
 Differences are minor and data-only (the code path is unchanged):
 
-- Adobe `AS00` narrowed from range `0x41533030–0x41533939` to the single
+- Adobe `AS00` narrowed from range `0x41533030-0x41533939` to the single
   signature `0x41533030` (registry now lists only `AS00`).
-- X-Rite `gbd0` expanded from range `0x67626430–0x67626433` to four explicit
+- X-Rite `gbd0` expanded from range `0x67626430-0x67626433` to four explicit
   single signatures `gbd0`,`gbd1`,`gbd2`,`gbd3`.
 
 Net effect on attribution is negligible; no behavioral flag.
 
 ---
 
-## D. Known still-warns (by design) — governance, not code
+## D. Known still-warns (by design) - governance, not code
 
 Some signatures appear in ICC-*published* and widely-used profiles yet are absent
 from the online Manufacturer Signatures registry, so S3 correctly continues to
 warn until the ICC adds/clarifies them. These require registry submission or a
-policy decision (ICC governance), not a strictness change — tracked as **Segment A**
+policy decision (ICC governance), not a strictness change - tracked as **Segment A**
 of #1459 (see `GOVERNANCE_SUBMISSIONS.md`). Found by validating a 95-profile local
 corpus with the #1459-fixed tool:
 
@@ -114,15 +118,15 @@ corpus with the #1459-fixed tool:
 distinct unregistered one.)
 
 **Code behavior (per #1459 review decision):** S3 still WARNs on all of the above
-(spec-correct under §7.2.17). For the two pervasive conventions `'none'` and
+(spec-correct under section 7.2.17). For the two pervasive conventions `'none'` and
 `'ICC '`, the WARN wording is *softened* (via `KnownUnregisteredConventionNote`)
 to identify them as known placeholders/consortium signatures rather than suspect
-data — but the verdict stays WARN and nothing is silently accepted. The other
+data - but the verdict stays WARN and nothing is silently accepted. The other
 sigs keep the plain "not in Manufacturer Signatures registry" wording.
 
 ---
 
-## E. Phase P2 (live registry check) — noted, not implemented
+## E. Phase P2 (live registry check) - noted, not implemented
 
 A pluggable live check against registry.color.org is recorded as a possible
 future direction only. The registries change extremely slowly, and a live query

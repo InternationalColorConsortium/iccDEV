@@ -1986,6 +1986,8 @@ icValidateStatus CIccProfile::CheckHeader(std::string &sReport, const CIccProfil
     case icSigWareToGo:
     case icSigZoran:
     case icSigOnyxGraphics:
+    case icSigReprointelligence:
+    case icSigICC:
       break;
 
     default:
@@ -3197,7 +3199,7 @@ bool CIccProfile::CheckFileSize(CIccIO *pIO) const
  ****************************************************************************
  * Name: CIccProfile::CheckTagLayout
  *
- * Purpose: Validate the structural layout of the tag table — areas the header
+ * Purpose: Validate the structural layout of the tag table - areas the header
  *  and per-tag checks do not cover: padding between tags (which must be no more
  *  than three zero bytes), overlapping tag data, and unused data after the last
  *  tag. These are non-critical: the profile is usable, but its layout deviates
