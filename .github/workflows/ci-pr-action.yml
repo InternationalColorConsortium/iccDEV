@@ -339,8 +339,6 @@ jobs:
                 include_docker=true
                 ctest_recent_limit=0
                 warning_policy=fail
-                write_scope_outputs true true true true false false
-                exit 0
                 ;;
               fast-lane)
                 if ! validate_fast_lane_actor "$GH_ACTOR"; then
@@ -365,16 +363,8 @@ jobs:
                 include_windows="$INCLUDE_WINDOWS_INPUT"
                 include_docker="$INCLUDE_DOCKER_INPUT"
                 warning_policy="$WARNING_POLICY_INPUT"
-                write_scope_outputs true true true true false false
-                exit 0
                 ;;
-              governance)
-                write_scope_outputs false false false false true false
-                exit 0
-                ;;
-              docs)
-                write_scope_outputs false false false false false true
-                exit 0
+              governance|docs)
                 ;;
             esac
           fi
@@ -453,8 +443,6 @@ jobs:
                 include_docker=false
                 ctest_recent_limit=0
                 warning_policy=warn
-                write_scope_outputs false false false false false false
-                exit 0
                 ;;
               ci:full)
                 ci_scope=full
@@ -462,8 +450,6 @@ jobs:
                 include_docker=true
                 ctest_recent_limit=0
                 warning_policy=fail
-                write_scope_outputs true true true true false false
-                exit 0
                 ;;
               ci:fast-lane|ci:ctest-last-[1-9]|ci:ctest-last-10|ci:docker|ci:no-windows|ci:warnings-fail)
                 apply_fast_lane_defaults
@@ -498,10 +484,21 @@ jobs:
             docs_only=true
           fi
 
+          # Keep execution scope separate from the factual diff classification.
           run_full=false
-          if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$ci_changed" == "true" ]]; then
-            run_full=true
-          fi
+          case "$ci_scope" in
+            full|source|fast-lane)
+              run_full=true
+              ;;
+            governance|docs|skip)
+              run_full=false
+              ;;
+            auto)
+              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$ci_changed" == "true" ]]; then
+                run_full=true
+              fi
+              ;;
+          esac
 
           write_scope_outputs "$run_full" "$source_changed" "$build_config_changed" "$testing_changed" "$ci_changed" "$docs_only"
 
