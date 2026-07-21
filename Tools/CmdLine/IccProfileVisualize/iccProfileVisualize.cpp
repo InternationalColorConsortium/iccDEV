@@ -377,13 +377,16 @@ enum {
     IMAGE_MODE_CMYK = TIFF_MODE_CMYK,
 };
 
+// this takes ownership of the buffer pointer passed in
+// pointer must be allocated with new[]
+// TODO - can I use a unique_ptr to manage this?
 struct imageData : dataAbstractionBase {
 
   imageData() : width(0), height(0), channels(0), depth(0),
                 mode(IMAGE_MODE_GRAY_BLACKZERO),
                 isFloatingPoint(false), data(NULL) {}
 
-  imageData(const std::string &name, void *imageBuffer, int imageWidth, int imageHeight,
+  imageData(const std::string &name, uint8_t *imageBuffer, int imageWidth, int imageHeight,
             int imageChannels, int imageDepth, int imageMode,
             bool dataIsFloatingPoint = false ) {
     object_name = name;
@@ -393,7 +396,7 @@ struct imageData : dataAbstractionBase {
     depth = imageDepth;
     mode = imageMode;
     isFloatingPoint = dataIsFloatingPoint;
-    data = (uint8_t*)imageBuffer;
+    data = imageBuffer;
   }
 
   ~imageData() {
