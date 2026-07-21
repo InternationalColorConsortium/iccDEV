@@ -183,6 +183,10 @@ For `Dockerfile.ci-regression` publishing:
 4. Pass that tag to `ci-iccdev-tool-tests.yml` and rerun the regression gate.
 5. Remove temporary branch-specific inputs after the branch is no longer needed.
 
+For day-to-day image use, PR checkout, issue reproduction, evidence handling,
+and CI dispatch commands, use
+[Maintainer regression container](regression-container.md).
+
 ## Local Validation
 
 Before pushing:

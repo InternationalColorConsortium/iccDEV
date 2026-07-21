@@ -27,6 +27,9 @@ docker run --rm ghcr.io/internationalcolorconsortium/iccdev:latest \
 
 Run each tool without arguments for usage help.
 
+Maintainers using the sanitizer and QA image should follow
+[Maintainer regression container](regression-container.md).
+
 ## Build Instructions
 
 Build instructions are available in [Build](build.md). The WebAssembly/NPM

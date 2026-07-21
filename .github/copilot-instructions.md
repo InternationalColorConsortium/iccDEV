@@ -41,6 +41,10 @@ For regression workflow updates, use
 `.github/skills/regression-workflow-governance/SKILL.md` and
 `docs/regression-workflow-governance.md`.
 
+For maintainer regression-container use, PR validation, and issue reproduction,
+use `.github/skills/regression-container-maintainer/SKILL.md` and
+`docs/regression-container.md`.
+
 ## Build, Test, and Safety
 
 - User build instructions: `docs/build.md`
@@ -85,6 +89,7 @@ Key safety rules:
 | Reduce documentation noise | `.github/prompts/reduce-doc-noise.prompt.md` |
 | Build/test/coverage | `.github/prompts/build-and-test.prompt.md` |
 | Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
+| Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
 | Maintainer label triage | `.github/prompts/maintainer-label-triage.prompt.md` |
 | vcpkg debug | `.github/prompts/vcpkg-port-debug.prompt.md` |
@@ -100,6 +105,7 @@ Key safety rules:
 | Sanitizer reproduction | `.github/skills/sanitizer-repro/SKILL.md` |
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
+| Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
 | Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |
 | Python bindings tests | `.github/skills/python-bindings-test/SKILL.md` |

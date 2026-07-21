@@ -19,6 +19,7 @@ point to deeper references.
 | Threaded CMM apply (`CIccThreadedCmm`) | `docs/icc-cmm-threading.md` |
 | Bisect workflow | `docs/bisect.md` |
 | Pre-PR security cycle | `docs/pre-pr-security-cycle.md` and `.github/skills/pre-pr-security-cycle/SKILL.md` |
+| Maintainer regression container operations | `docs/regression-container.md`, `.github/skills/regression-container-maintainer/SKILL.md`, and `.github/prompts/regression-container-maintainer.prompt.md` |
 | Regression workflow updates | `docs/regression-workflow-governance.md` |
 | Maintainer label system | `docs/label-system.md`, `.github/labels.yml`, `.github/labeler.yml`, and `.github/skills/maintainer-label-system/SKILL.md` |
 | CodeQL queries | `.github/codeql-queries/README.md` |

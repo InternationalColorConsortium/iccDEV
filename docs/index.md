@@ -17,6 +17,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 - [Bisecting regressions](bisect.md): focused debug workflow
 - [Linear stack workflow](linear-stack-workflow.md): rebase feature branches and stack commits without merge commits
 - [Pre-PR security cycle](pre-pr-security-cycle.md): maintainer loop for build/test, SAST, CodeQL, dynamic checks, and fixes
+- [Maintainer regression container](regression-container.md): basic use, PR validation, issue reproduction, and CI handoff
 - [Regression workflow governance](regression-workflow-governance.md): adding regression gates and tool-test workflow updates
 - [Workflow security trust boundaries](workflow-security-trust-boundaries.md): trusted-base helper model, PR workflow canaries, and visual review aids
 - [Maintainer label system](label-system.md): label taxonomy, path labeler, issue triage, and PR status labels
