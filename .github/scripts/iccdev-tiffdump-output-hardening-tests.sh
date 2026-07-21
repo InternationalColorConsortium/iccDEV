@@ -223,7 +223,9 @@ test_noncompliant_embedded_icc_rejected() {
   local bad="$OUTDIR/noncompliant.icc"
   local tif="$OUTDIR/rgb-noncompliant-icc.tif"
   local out="$OUTDIR/extracted-noncompliant.icc"
-  local log="$OUTDIR/tiffdump-noncompliant-icc.log"
+  local dump_log="$OUTDIR/tiffdump-noncompliant-icc-dump.log"
+  local export_log="$OUTDIR/tiffdump-noncompliant-icc-export.log"
+  local status=0
   # Make a non-conformant profile by zeroing the data colour space @offset 16.
   "$PYTHON" - "$srgb" "$bad" <<'PY'
 import sys, pathlib
@@ -232,10 +234,44 @@ b[16:20] = b"\0\0\0\0"
 pathlib.Path(sys.argv[2]).write_bytes(b)
 PY
   generate_tiff_with_icc "$tif" "$bad" || return 1
+
+  "$TIFFDUMP" "$tif" > "$dump_log" 2>&1 || status=$?
+  [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
+  grep -Fq "violates the ICC specification" "$dump_log" || return 1
+
   rm -f "$out"
-  "$TIFFDUMP" "$tif" "$out" > "$log" 2>&1 || true
-  grep -Fq "violates the ICC specification" "$log" || return 1
+  status=0
+  "$TIFFDUMP" "$tif" "$out" > "$export_log" 2>&1 || status=$?
+  [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
+  grep -Fq "violates the ICC specification" "$export_log" || return 1
   [ ! -e "$out" ]   # must NOT have written the non-conformant profile (#1380)
+}
+
+test_malformed_embedded_icc_rejected() {
+  [ -n "$PYTHON" ] || { echo "    [SKIP] python3 unavailable"; return 0; }
+  local bad="$OUTDIR/malformed.icc"
+  local tif="$OUTDIR/rgb-malformed-icc.tif"
+  local out="$OUTDIR/extracted-malformed.icc"
+  local dump_log="$OUTDIR/tiffdump-malformed-icc-dump.log"
+  local export_log="$OUTDIR/tiffdump-malformed-icc-export.log"
+  local status=0
+
+  "$PYTHON" - "$bad" <<'PY'
+import pathlib, sys
+pathlib.Path(sys.argv[1]).write_bytes(b"not an ICC profile")
+PY
+  generate_tiff_with_icc "$tif" "$bad" || return 1
+
+  "$TIFFDUMP" "$tif" > "$dump_log" 2>&1 || status=$?
+  [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
+  grep -Fq "Unable to open embedded ICC profile" "$dump_log" || return 1
+
+  rm -f "$out"
+  status=0
+  "$TIFFDUMP" "$tif" "$out" > "$export_log" 2>&1 || status=$?
+  [ "$status" -ge 1 ] && [ "$status" -le 127 ] || return 1
+  grep -Fq "Unable to open embedded ICC profile" "$export_log" || return 1
+  [ ! -e "$out" ]
 }
 
 echo "=== iccTiffDump output hardening regression ==="
@@ -247,6 +283,7 @@ run_ok "tiffdump-no-profile-export-reject" test_missing_embedded_profile_export_
 run_ok "tiffdump-palette-photometric-report" test_palette_photometric_report
 run_ok "tiffdump-defaulted-packbits-gray-load" test_defaulted_packbits_gray_loads
 run_ok "tiffdump-noncompliant-embedded-icc-reject" test_noncompliant_embedded_icc_rejected
+run_ok "tiffdump-malformed-embedded-icc-reject" test_malformed_embedded_icc_rejected
 
 echo "iccTiffDump output hardening regression: $pass passed, $fail failed, $((pass + fail)) total"
 

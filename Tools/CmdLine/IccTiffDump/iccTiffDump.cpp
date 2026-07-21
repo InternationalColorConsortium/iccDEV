@@ -123,24 +123,6 @@ const char* GetId(unsigned long nId, IdList* pIdList)
   return pIdList->szName;
 }
 
-static FILE* icOpenWriteBinaryFile(const char* szFname);
-
-static bool WriteEmbeddedIccProfile(const char* szFname, const unsigned char *pProfMem, unsigned int nLen)
-{
-  if (!pProfMem || !nLen)
-    return false;
-
-  FILE *fp = icOpenWriteBinaryFile(szFname);
-  if (!fp)
-    return false;
-
-  bool failed = (fwrite(pProfMem, 1, nLen, fp) != nLen);
-  if (!icFlushAndClose(fp))
-    failed = true;
-
-  return !failed;
-}
-
 void Usage() 
 {
   printf("iccTiffDump built with IccProfLib version " ICCPROFLIBVER "\n\n");
@@ -217,14 +199,6 @@ void DumpProfileInfo(CIccProfile* pProfile, std::string prefix, int level = 1)
       }
     }
   }
-}
-
-//===================================================
-
-static
-FILE* icOpenWriteBinaryFile(const char* szFname)
-{
-  return icOpenRegularWriteBinaryFile(szFname);
 }
 
 //===================================================
@@ -310,48 +284,41 @@ int main(int argc, icChar* argv[])
 
     // Profile description and metadata
     CIccProfile *pProfile = OpenIccProfile(pProfMem, nLen);
-    if (pProfile) {
-      std::string validateReport;
-      if (!pProfile->ReadTags(pProfile)) {
-        printf("\nUnable to read embedded ICC profile\n");
-        delete pProfile;
-        SrcImg.Close();
-        return -1;
-      }
-      else if (pProfile->Validate(validateReport) > icValidateWarning) {
-        printf("\nEmbedded ICC profile violates the ICC specification:\n%s",
-               validateReport.c_str());
-        delete pProfile;
-        SrcImg.Close();
-        return -1;
-      }
-
-      DumpProfileInfo(pProfile, " ");
-      if (argc > 2) {
-        std::string dstName = icSanitizeConsoleText(argv[2]);
-        if (SaveIccProfile(argv[2], pProfile)) {
-          printf("\nProfile extracted to: %s\n", dstName.c_str());
-        }
-        else {
-          printf("\nUnable to extract profile\n");
-          delete pProfile;
-          SrcImg.Close();
-          return -1;
-        }
-      }
-      delete pProfile;
+    if (!pProfile) {
+      printf("\nUnable to open embedded ICC profile\n");
+      SrcImg.Close();
+      return 1;
     }
-    else if (argc > 2) {
+
+    std::string validateReport;
+    if (!pProfile->ReadTags(pProfile)) {
+      printf("\nUnable to read embedded ICC profile\n");
+      delete pProfile;
+      SrcImg.Close();
+      return 1;
+    }
+    else if (pProfile->Validate(validateReport) > icValidateWarning) {
+      printf("\nEmbedded ICC profile violates the ICC specification:\n%s",
+             validateReport.c_str());
+      delete pProfile;
+      SrcImg.Close();
+      return 1;
+    }
+
+    DumpProfileInfo(pProfile, " ");
+    if (argc > 2) {
       std::string dstName = icSanitizeConsoleText(argv[2]);
-      if (WriteEmbeddedIccProfile(argv[2], pProfMem, nLen)) {
-        printf("ICC profile bytes saved to: %s\n", dstName.c_str());
+      if (SaveIccProfile(argv[2], pProfile)) {
+        printf("\nProfile extracted to: %s\n", dstName.c_str());
       }
       else {
-        fprintf(stderr, "Failed to write ICC profile to %s\n", dstName.c_str());
+        printf("\nUnable to extract profile\n");
+        delete pProfile;
         SrcImg.Close();
         return -1;
       }
     }
+    delete pProfile;
   } else {
     printf("Profile:           None\n");
     if (argc > 2) {
