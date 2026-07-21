@@ -209,6 +209,11 @@ jobs:
             "$TEST_IMAGE" bash -lc '
               set -euo pipefail
               test "$PWD" = /workspace/iccDEV
+              actual_sha="$(git rev-parse HEAD)"
+              if [ "$actual_sha" != "$TARGET_SHA" ]; then
+                echo "PR tree SHA mismatch: $actual_sha != $TARGET_SHA" >&2
+                exit 1
+              fi
               if [ "$ICCDEV_SOURCE_REVISION" != "$TARGET_SHA" ]; then
                 echo "PR tree revision mismatch: $ICCDEV_SOURCE_REVISION != $TARGET_SHA" >&2
                 exit 1
