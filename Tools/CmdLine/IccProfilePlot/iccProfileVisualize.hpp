@@ -92,9 +92,10 @@
 class CIccProfile;
 
 // Render every visualization pIcc supports to PDF/TIFF written alongside
-// profilePath (used to derive the output basename). Returns the count of
-// output items produced; 0 means the profile yielded nothing to draw, which
-// the CLI treats as a per-file failure.
+// profilePath (used to derive the output basename). Returns the count accumulated
+// for rendered PDF pages and successfully rendered raster descriptors; output
+// I/O failures are logged but are not reflected in this value. 0 means the
+// profile yielded nothing to draw, which the CLI treats as a per-file failure.
 int processLuts(CIccProfile *pIcc, const char *profilePath);
 
 #endif // ICC_PROFILEVISUALIZE_HPP
