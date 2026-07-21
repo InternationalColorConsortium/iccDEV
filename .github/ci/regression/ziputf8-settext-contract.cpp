@@ -37,10 +37,54 @@
 #include "IccProfile.h"
 
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <vector>
+#include <zlib.h>
 
 static int g_fail = 0;
 #define CHECK(c) do { if(!(c)){ std::printf("FAIL line %d: %s\n", __LINE__, #c); g_fail=1; } } while(0)
+
+static std::vector<icUChar> deflateRepeatedByte(size_t nPlain, unsigned char value)
+{
+  std::vector<icUChar> out;
+  std::vector<unsigned char> in(32768, value);
+  std::vector<unsigned char> buf(32768);
+  z_stream zstr;
+  std::memset(&zstr, 0, sizeof(zstr));
+
+  if (deflateInit(&zstr, Z_BEST_COMPRESSION) != Z_OK) {
+    g_fail = 1;
+    return out;
+  }
+
+  size_t remaining = nPlain;
+  int zstat = Z_OK;
+  do {
+    const size_t chunk = remaining < in.size() ? remaining : in.size();
+    zstr.next_in = in.data();
+    zstr.avail_in = (uInt)chunk;
+    remaining -= chunk;
+
+    const int flush = remaining ? Z_NO_FLUSH : Z_FINISH;
+    do {
+      zstr.next_out = buf.data();
+      zstr.avail_out = (uInt)buf.size();
+      zstat = deflate(&zstr, flush);
+      if (zstat != Z_OK && zstat != Z_STREAM_END) {
+        std::printf("FAIL: deflate returned %d\n", zstat);
+        g_fail = 1;
+        deflateEnd(&zstr);
+        return out;
+      }
+      const size_t n = buf.size() - zstr.avail_out;
+      out.insert(out.end(), buf.begin(), buf.begin() + n);
+    } while (zstr.avail_out == 0);
+  } while (zstat != Z_STREAM_END);
+
+  deflateEnd(&zstr);
+  return out;
+}
 
 // Round-trip helper. NOTE on an existing quirk this test had to be written around:
 // SetText() deflates strlen(szText) + 1 bytes, i.e. it includes the NUL terminator
@@ -176,6 +220,35 @@ int main()
     const bool ok = tag.SetText(empty);
     checkStoredOnSuccess(tag, ok, "icUChar16 empty string");
     checkRoundTrip(tag, "", "icUChar16 empty string");
+  }
+
+  // Zip UTF-8 text can be attacker-controlled profile input. GetText(), Validate(),
+  // and Describe() must reject over-expanded streams instead of growing an
+  // unbounded std::string. The library cap is 16 MiB, so this deflated all-'Z'
+  // stream stays small on disk while crossing the inflated boundary.
+  {
+    const size_t maxInflatedBytes = 0x01000000;
+    std::vector<icUChar> compressed = deflateRepeatedByte(maxInflatedBytes + 1, 'Z');
+    CHECK(!compressed.empty());
+
+    CIccTagZipUtf8Text tag;
+    icUChar *buf = tag.AllocBuffer((icUInt32Number)compressed.size());
+    CHECK(buf != NULL);
+    if (buf) {
+      std::memcpy(buf, compressed.data(), compressed.size());
+    }
+
+    std::string out;
+    CHECK(!tag.GetText(out));
+    CHECK(out.empty());
+
+    std::string report;
+    CHECK(tag.Validate("zipUtf8", report, NULL) >= icValidateNonCompliant);
+    CHECK(report.find("Unable to get text for tag") != std::string::npos);
+
+    std::string desc;
+    tag.Describe(desc, 100);
+    CHECK(desc.find("Unable to decompress text data") != std::string::npos);
   }
 
   std::printf(g_fail ? "ziputf8-settext-contract: FAILED\n"

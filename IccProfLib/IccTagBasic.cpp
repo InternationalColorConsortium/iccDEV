@@ -1296,6 +1296,7 @@ icValidateStatus CIccTagUtf8Text::Validate(std::string sigPath, std::string &sRe
 
 #ifdef ICC_USE_ZLIB
 static const unsigned char icFaultyXmlZipData[4] = { 0,0,0,1 };
+static const size_t icMaxZipUtf8TextInflatedBytes = 0x01000000;
 #endif
 
 /**
@@ -1400,6 +1401,10 @@ bool CIccTagZipUtf8Text::Read(icUInt32Number size, CIccIO *pIO)
   icUInt32Number nSize = size - sizeof(icTagTypeSignature) - sizeof(icUInt32Number);
 
   icUChar *pBuf = AllocBuffer(nSize);
+
+  if (nSize && !pBuf) {
+    return false;
+  }
 
   if (m_nBufSize && pBuf) {
     if (pIO->Read8(pBuf, m_nBufSize) != m_nBufSize) {
@@ -1509,6 +1514,7 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   z_stream zstr;
   memset(&zstr, 0, sizeof(zstr));
   icUtf8Vector buf(32767, 0);
+  std::string out;
 
   zstat = inflateInit(&zstr);
 
@@ -1552,16 +1558,23 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
 
     n = (unsigned int)buf.size() - zstr.avail_out;
 
-    // Append the inflated bytes wholesale. The previous per-byte `str += buf[i]`
+    if (out.size() + n > icMaxZipUtf8TextInflatedBytes) {
+      inflateEnd(&zstr);
+      return false;
+    }
+
+    // Append the inflated bytes wholesale. The previous per-byte `out += buf[i]`
     // implicitly converted each icUtf8Vector element (unsigned char) to
     // std::string's signed char, which UBSan's implicit-integer-sign-change check
     // flags for any byte >= 128 (e.g. 0xC0 -> -64) even though the byte value is
     // preserved (#1789). Appending through a char* keeps
     // the exact bytes with no per-element conversion, and is faster.
-    str.append(reinterpret_cast<const char *>(buf.data()), n);
+    out.append(reinterpret_cast<const char *>(buf.data()), n);
   } while (zstat != Z_STREAM_END);
 
   inflateEnd(&zstr);
+
+  str += out;
 
   return true;
 #endif
