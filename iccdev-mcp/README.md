@@ -16,7 +16,7 @@ runtime libraries, maintainer utilities, and `Testing/` profiles, so no local
 iccDEV build is required.
 
 ```bash
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
   iccdev-mcp-entrypoint mcp
 ```
 
@@ -55,12 +55,12 @@ runs build and smoke test the image without publishing it to GHCR.
 
 ```bash
 # MCP stdio mode
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
   iccdev-mcp-entrypoint mcp
 
 # REST API mode on http://127.0.0.1:8080
 docker run --rm -p 127.0.0.1:8080:8080 \
-  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
   iccdev-mcp-entrypoint rest
 ```
 
@@ -86,7 +86,7 @@ Mount additional profiles read-only and list them through
 docker run --rm -p 127.0.0.1:8080:8080 \
   -v "$PWD/profiles:/profiles:ro" \
   -e ICCDEV_PROFILE_DIRS=/profiles \
-  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
   iccdev-mcp-entrypoint rest
 ```
 

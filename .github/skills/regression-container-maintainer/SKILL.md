@@ -21,7 +21,8 @@ Use this skill for repeatable maintainer operations in
 ## Required Inputs
 
 1. Operation: basic smoke, PR validation, or issue reproduction.
-2. Image tag or immutable SHA tag.
+2. Image tag: `latest` for initial interactive work or an immutable SHA tag for
+   reproducible validation.
 3. PR, issue, branch, or commit reference.
 4. Affected tool and smallest focused regression.
 5. Expected pass and failure signals.
@@ -30,7 +31,8 @@ Use this skill for repeatable maintainer operations in
 ## Workflow
 
 1. Read `../../../docs/regression-container.md`.
-2. Pull the image and record its digest and source revision.
+2. Pull the image and record its digest and source revision. For `latest`, verify
+   both values before using the image.
 3. Mount only an evidence directory and start a disposable container.
 4. Require a clean initial Git worktree.
 5. For a PR, fetch `pull/<number>/head` and check out the ref detached.
@@ -44,7 +46,12 @@ Use this skill for repeatable maintainer operations in
 11. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
     `ci-qa-flags`; carry every applicable container fix to both branches.
 12. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
-13. Report exact image, source, commands, results, evidence, and workflow URLs.
+13. Publish `latest` automatically from `master`, or explicitly from the
+    protected Docker-testing branch with
+    `publish-regression-latest=true`; never promote it implicitly from other
+    branches.
+14. Report exact image tag, digest, source revision, commands, results, evidence,
+    and workflow URLs.
 
 ## Safety Gates
 

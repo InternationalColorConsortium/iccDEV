@@ -10,19 +10,22 @@ Package:
 
 ## Choose an Image Tag
 
-The regression image does not publish a `latest` tag.
-
 | Tag | Use |
 |-----|-----|
-| `master` | Current maintainer baseline. |
+| `latest` | Recommended current maintainer baseline for interactive PR and issue work. |
+| `master` | Current maintainer baseline with the source branch stated explicitly. |
 | `ci-qa-flags` | Changes being validated on the maintainer QA branch. |
 | `ci-qa-pr-docker-testing` | Changes being validated for the container itself. |
 | `sha-<40-character-commit>` | Immutable build tied to one source revision. |
 
-Record the pulled digest in reports:
+Use `latest` to begin routine investigation, but record the resolved digest and
+source revision in every report. An explicit protected Docker-testing branch
+promotion can temporarily move `latest` ahead of `master`, so verify the
+revision rather than assuming the two tags match. Use the immutable SHA tag when
+another maintainer or CI job must reproduce the exact environment:
 
 ```bash
-IMAGE=ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master
+IMAGE=ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
 docker pull "$IMAGE"
 docker image inspect "$IMAGE" \
   --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
@@ -232,13 +235,23 @@ gh run watch <run-id> \
 
 Pushes to `master` or `ci-qa-flags` that touch the container surface trigger
 `ci-docker` and publish the corresponding regression branch and SHA tags.
-Publish `ci-qa-pr-docker-testing` by dispatching `ci-docker` on that branch:
+Successful `master` publication also updates `latest`.
+
+Publish `ci-qa-pr-docker-testing` by dispatching `ci-docker` on that branch. The
+protected testing branch can update `latest` only through the explicit opt-in
+input, which prevents ordinary testing runs from replacing the maintainer
+baseline:
 
 ```bash
 gh workflow run ci-docker.yml \
   --repo InternationalColorConsortium/iccDEV \
-  --ref ci-qa-pr-docker-testing
+  --ref ci-qa-pr-docker-testing \
+  -f publish-regression-latest=true
 ```
+
+After publication, pull `latest` and confirm that its digest and
+`org.opencontainers.image.revision` label match the workflow output before using
+it for PR or issue work.
 
 Before publishing a Docker change, compare every maintained container file
 across `ci-qa-pr-docker-testing` and `ci-qa-flags`:

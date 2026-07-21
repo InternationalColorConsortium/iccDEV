@@ -37,6 +37,12 @@ on:
       - ".github/scripts/preflight-safety-checks.sh"
       - ".github/workflows/ci-docker.yml"
   workflow_dispatch:
+    inputs:
+      publish-regression-latest:
+        description: "Publish iccdev-ci-regression:latest from the protected Docker testing branch"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: "docker-${{ github.workflow }}-${{ github.ref_name }}"
@@ -177,7 +183,7 @@ jobs:
           tags: |
             type=sha,enable=${{ matrix.variant != 'regression' }}
             type=ref,event=branch,enable=${{ matrix.variant != 'regression' && github.ref == 'refs/heads/ci-qa-flags' }}
-            type=raw,value=latest,enable=${{ matrix.variant != 'regression' && github.ref == 'refs/heads/master' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' || (matrix.variant == 'regression' && github.ref == 'refs/heads/ci-qa-pr-docker-testing' && inputs.publish-regression-latest == true) }}
             type=sha,format=long,enable=${{ matrix.variant == 'regression' }}
             type=ref,event=branch,enable=${{ matrix.variant == 'regression' }}
 
@@ -771,7 +777,7 @@ jobs:
           KEEP_RECENT=10
           DELETE_LIMIT=50
 
-          echo "Pruning ${MATRIX_PACKAGE} versions older than ${CUTOFF}; keeping ${KEEP_RECENT} newest non-latest versions; deleting up to ${DELETE_LIMIT}"
+          echo "Pruning ${MATRIX_PACKAGE} versions older than ${CUTOFF}; keeping ${KEEP_RECENT} newest non-protected versions; deleting up to ${DELETE_LIMIT}"
 
           pages_file="/tmp/prune-version-pages.json"
           rm -f "$pages_file"
@@ -797,7 +803,13 @@ jobs:
             | reverse
             | map(. + {
                 tags: (.metadata.container.tags // []),
-                protected: (((.metadata.container.tags // []) | index("latest")) != null)
+                protected: (
+                  (.metadata.container.tags // []) as $tags
+                  | any(
+                      [ "latest", "master", "ci-qa-flags", "ci-qa-pr-docker-testing" ][];
+                      . as $protected_tag | $tags | index($protected_tag)
+                    )
+                )
               })
             | [ .[] | select(.protected | not) ] as $candidates
             | $candidates[$keep_recent:]

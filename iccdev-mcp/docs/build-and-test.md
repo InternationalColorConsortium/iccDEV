@@ -193,12 +193,12 @@ load the image locally on the runner instead of pushing or attesting it.
 
 ```bash
 # MCP stdio mode
-docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+docker run --rm -i ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
   iccdev-mcp-entrypoint mcp
 
 # REST API mode
 docker run --rm -p 127.0.0.1:8080:8080 \
-  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest \
   iccdev-mcp-entrypoint rest
 
 # Health check

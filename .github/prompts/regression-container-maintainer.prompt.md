@@ -8,7 +8,7 @@ Canonical guide: `docs/regression-container.md`
 ## Inputs
 
 - Operation: basic smoke / PR validation / issue reproduction
-- Image tag:
+- Image tag (`latest` for initial interactive work, immutable SHA for reproducibility):
 - PR number:
 - Issue number:
 - Branch or commit:
@@ -22,7 +22,8 @@ Canonical guide: `docs/regression-container.md`
 
 ## Required Workflow
 
-1. Pull the selected image and record its digest and source revision.
+1. Pull the selected image and record its digest and source revision. If using
+   `latest`, verify both before starting.
 2. Start with a clean container Git worktree. Stop and report if it is dirty.
 3. For a PR, fetch `pull/<number>/head` and check out the fetched ref detached.
 4. For an issue, use the smallest existing project input and project tool.
@@ -36,6 +37,9 @@ Canonical guide: `docs/regression-container.md`
 11. Diff all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
     `ci-qa-flags`, then carry applicable fixes and validation to both branches.
 12. Include the `ci-qa-flags` commit and hosted run in the handoff.
+13. Promote `latest` only from `master` or with the explicit
+    `publish-regression-latest=true` dispatch on the protected Docker-testing
+    branch.
 
 ## Safety
 
