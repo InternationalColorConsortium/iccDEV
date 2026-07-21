@@ -1413,6 +1413,57 @@ function(iccdev_add_tagdata_zlib_roundtrip_test)
   endif()
 endfunction()
 
+# CIccTagZipUtf8Text::SetText() success/failure contract (#1743). SetText() used to
+# return true even when AllocBuffer() failed, so a caller could not tell "text
+# stored" from "nothing stored"; the copy was also bounded by (int)m_nBufSize,
+# narrowing an icUInt32Number to int. Pins the invariant a true return implies a
+# populated buffer, and guards the bulk copy that replaced the loop against a wrong
+# length. Same zlib gating as the #1521 test above: without ICC_USE_ZLIB, SetText()
+# always returns false and none of these invariants hold.
+function(iccdev_add_ziputf8_settext_contract_test)
+  if(NOT ICC_USE_ZLIB)
+    return()
+  endif()
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccZipUtf8SetTextContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/ziputf8-settext-contract.cpp"
+  )
+  target_compile_features(iccZipUtf8SetTextContractTest PRIVATE cxx_std_17)
+  # IccProfLib links ZLIB::ZLIB and defines ICC_USE_ZLIB=1 PUBLIC, so both
+  # propagate to this executable; link zlib explicitly as belt-and-braces.
+  target_link_libraries(iccZipUtf8SetTextContractTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  if(TARGET ZLIB::ZLIB)
+    target_link_libraries(iccZipUtf8SetTextContractTest PRIVATE ZLIB::ZLIB)
+  endif()
+  add_dependencies(check iccZipUtf8SetTextContractTest)
+
+  add_test(
+    NAME iccdev.ziputf8-settext-contract
+    COMMAND "$<TARGET_FILE:iccZipUtf8SetTextContractTest>"
+  )
+  set_tests_properties(iccdev.ziputf8-settext-contract PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;tag;zlib;compression;issue-1743;regression"
+  )
+  if(WIN32)
+    set(_ziputf8_settext_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccZipUtf8SetTextContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _ziputf8_settext_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.ziputf8-settext-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_ziputf8_settext_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_parser_restore_calls_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -1676,6 +1727,7 @@ if(WIN32)
   iccdev_add_profile_write_failure_test()
   iccdev_add_fileio_seek_tell_test()
   iccdev_add_tagdata_zlib_roundtrip_test()
+  iccdev_add_ziputf8_settext_contract_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -1880,6 +1932,7 @@ iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
 iccdev_add_tagdata_zlib_roundtrip_test()
+iccdev_add_ziputf8_settext_contract_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()

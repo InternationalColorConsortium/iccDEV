@@ -1180,6 +1180,14 @@ void CIccTagUtf8Text::SetText(const icUChar16 *szText)
 
   icConvertUTF16toUTF8(szText, &szText[len], text, lenientConversion);
 
+  // #1743: icConvertUTF16toUTF8() only appends the converted bytes - it does not
+  // NUL-terminate - but the icUChar overload of SetText() below reads its argument
+  // with strlen(). Passing &text[0] as-is runs strlen() off the end of the vector
+  // (ASAN: heap-buffer-overflow READ), and for empty input (len==0) the vector is
+  // also empty, so &text[0] is itself undefined. Push an explicit terminator to make
+  // the buffer both non-empty and a valid C string before handing it over.
+  text.push_back(0);
+
   SetText((const icUChar*)&text[0]);
 }
 
@@ -1505,6 +1513,11 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   zstat = inflateReset(&zstr);
 
   if (zstat != Z_OK) {
+    // Mirror of the deflateReset() path in SetText(): inflateInit() has already
+    // allocated the stream's internal state, so returning without inflateEnd()
+    // leaks it. The decode loop below does call inflateEnd() before its own error
+    // returns; only this early exit was missing it.
+    inflateEnd(&zstr);
     return false;
   }
 
@@ -1584,6 +1597,11 @@ bool CIccTagZipUtf8Text::SetText(const icUChar *szText)
   zstr.avail_in = nSize;
 
   if (zstat != Z_OK) {
+    // deflateInit() succeeded above, so it has already allocated the stream's
+    // internal state; bailing out here without deflateEnd() leaks it. Every other
+    // post-init failure path in this function calls deflateEnd() first - this one
+    // did not.
+    deflateEnd(&zstr);
     return false;
   }
 
@@ -1616,7 +1634,17 @@ bool CIccTagZipUtf8Text::SetText(const icUChar *szText)
   icUInt32Number nCompressedSize = (icUInt32Number)compress.size();
   icUChar *pBuf = AllocBuffer(nCompressedSize);
 
-  if (pBuf && nCompressedSize) {
+  // #1743: AllocBuffer() returns NULL when its allocation fails, leaving the tag
+  // empty (m_pZipBuf NULL, m_nBufSize 0). The copy below is guarded on pBuf, but the
+  // function used to return true regardless - reporting success while storing
+  // nothing, the same silent data loss as #1521. Every other failure path in this
+  // function returns false, so propagate the allocation result too. (The >4 GB
+  // reject above and the bulk memcpy that replaced the old (int)m_nBufSize-bounded
+  // copy loop both came from #1745; this adds only the missing failure return.)
+  if (!pBuf)
+    return false;
+
+  if (nCompressedSize) {
     memcpy(pBuf, &compress[0], nCompressedSize);
   }
 
@@ -1645,6 +1673,12 @@ bool CIccTagZipUtf8Text::SetText(const icUChar16 *szText)
   for (len=0; szText[len]; len++);
 
   icConvertUTF16toUTF8(szText, &szText[len], text, lenientConversion);
+
+  // #1743: see the matching note in CIccTagUtf8Text::SetText above. The converter
+  // leaves the bytes un-terminated and the icUChar overload strlen()s them, so an
+  // explicit terminator is required to avoid a heap over-read (and to keep &text[0]
+  // defined when len==0 leaves the vector empty).
+  text.push_back(0);
 
   return SetText((const icUChar*)&text[0]);
 }
