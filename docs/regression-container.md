@@ -52,13 +52,26 @@ ctest --test-dir /workspace/build -N --no-tests=error
 The initial Git worktree must be clean. Stop if it is not; do not use
 `git clean` to hide an image defect.
 
-Container files disappear with `--rm`. Mount a host directory for evidence:
+Container files disappear with `--rm`. Use a Docker-managed volume for evidence
+so the container user can write without changing host-directory permissions:
 
 ```bash
-mkdir -p evidence
+EVIDENCE_VOLUME="iccdev-evidence-$(date +%s)"
+docker volume create "$EVIDENCE_VOLUME"
+docker run --rm --user 0 \
+  -v "$EVIDENCE_VOLUME:/workspace/evidence" \
+  "$IMAGE" chown iccdev-ci:iccdev-ci /workspace/evidence
 docker run --rm -it \
-  -v "$PWD/evidence:/workspace/evidence" \
+  -v "$EVIDENCE_VOLUME:/workspace/evidence" \
   "$IMAGE"
+
+mkdir -p evidence
+COPY_CONTAINER="$(docker create \
+  -v "$EVIDENCE_VOLUME:/workspace/evidence:ro" \
+  "$IMAGE")"
+docker cp "$COPY_CONTAINER:/workspace/evidence/." ./evidence/
+docker rm "$COPY_CONTAINER"
+docker volume rm "$EVIDENCE_VOLUME"
 ```
 
 Do not mount the Docker socket, host SSH directory, or GitHub token into an

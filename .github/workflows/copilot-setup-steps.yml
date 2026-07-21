@@ -36,7 +36,7 @@ jobs:
         with:
           persist-credentials: false
           repository: ${{ github.repository }}
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
           path: .trusted-workflow-scripts
           sparse-checkout: .github/scripts/sanitize-sed.sh
           sparse-checkout-cone-mode: false
