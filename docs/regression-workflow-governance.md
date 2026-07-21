@@ -88,6 +88,13 @@ For every `Dockerfile*` change, compare `ci-qa-pr-docker-testing` with
 the container proving ground; `ci-qa-flags` remains a required synchronized
 maintainer branch and must be included in the hosted validation report.
 
+Branch protection should require stable aggregate contexts, not conditional
+lane job names. `PR Summary` must aggregate orchestration prerequisites and all
+selected full, fast-lane, auto, governance, or docs jobs. Keep the two risk
+audit contexts and `Init PR Build Matrix` independently required. Require WASM
+parity separately on `master`, where that workflow runs outside the
+orchestrator. See `docs/label-system.md` for the current context list.
+
 Local review should include YAML parsing, `actionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec
 checks when container files are in scope, CodeQL Actions analysis, and CodeQL

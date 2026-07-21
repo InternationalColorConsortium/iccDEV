@@ -238,6 +238,17 @@ Carry applicable fixes for `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.mcp`,
 and `Dockerfile.ci-regression` to both branches. A successful testing-branch
 image does not replace the required `ci-qa-flags` update and hosted validation.
 
+Repository rules intentionally differ by branch:
+
+- `master` requires the stable PR aggregate, matrix initialization, both risk
+  audits, and WASM parity.
+- `ci-qa-flags` requires the stable PR aggregate, matrix initialization, and
+  both risk audits.
+- `ci-qa-pr-docker-testing` permits direct maintainer iteration but requires
+  signed commits and linear fast-forward history, and blocks force pushes and
+  deletion. Its hosted `ci-pr-action` and `ci-docker` runs are dispatched after
+  the push rather than configured as pre-push required contexts.
+
 ## Maintainer Report
 
 Report:

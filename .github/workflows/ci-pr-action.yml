@@ -29,6 +29,7 @@ on:
   pull_request:
     branches:
       - master
+      - ci-qa-flags
     types:
       - opened
       - synchronize
@@ -314,10 +315,14 @@ jobs:
               echo "workflow_dispatch target PR is not open: $number" >&2
               return 1
             fi
-            if [ "$(jq -r '.base.ref' <<< "$pr_json")" != "master" ]; then
-              echo "workflow_dispatch target PR does not target master: $number" >&2
-              return 1
-            fi
+            case "$(jq -r '.base.ref' <<< "$pr_json")" in
+              master|ci-qa-flags)
+                ;;
+              *)
+                echo "workflow_dispatch target PR uses an unsupported base: $number" >&2
+                return 1
+                ;;
+            esac
             head_sha="$(jq -r '.head.sha' <<< "$pr_json")"
             target_repository="$(jq -r '.head.repo.full_name' <<< "$pr_json")"
             pr_number="$number"
@@ -396,7 +401,8 @@ jobs:
           base_ref="${PR_BASE_REF}"
 
           # Avoid fetching refs from user-controllable inputs like ($base_ref)
-          case "$base_ref" in master)
+          case "$base_ref" in
+            master|ci-qa-flags)
               ;;
             *)
               echo "Ref blocked or unsupported: $base_ref" >&2
@@ -928,6 +934,8 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - detect-src
+      - setup
+      - validate-inputs
       - risk-gate
       - unix-ci
       - gcc15-lto-ci
@@ -965,6 +973,9 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          DETECT_RESULT: ${{ needs.detect-src.result }}
+          SETUP_RESULT: ${{ needs.setup.result }}
+          VALIDATE_RESULT: ${{ needs.validate-inputs.result }}
           RISK_RESULT: ${{ needs.risk-gate.result }}
           UNIX_RESULT: ${{ needs.unix-ci.result }}
           GCC15_LTO_RESULT: ${{ needs['gcc15-lto-ci'].result }}
@@ -1000,7 +1011,10 @@ jobs:
             sanitize_print() { escape_html "$1"; }
           fi
 
-          # --- normalize upstream job results (default to success if missing) ---
+          # --- normalize upstream job results -----------------------------------
+          DETECT_RESULT="${DETECT_RESULT:-failure}"
+          SETUP_RESULT="${SETUP_RESULT:-failure}"
+          VALIDATE_RESULT="${VALIDATE_RESULT:-failure}"
           UNIX_RESULT="${UNIX_RESULT:-success}"
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
@@ -1022,6 +1036,9 @@ jobs:
             printf '%s' "$v"
           }
 
+          DETECT_RESULT="$(trim_and_norm "$DETECT_RESULT")"
+          SETUP_RESULT="$(trim_and_norm "$SETUP_RESULT")"
+          VALIDATE_RESULT="$(trim_and_norm "$VALIDATE_RESULT")"
           UNIX_RESULT="$(trim_and_norm "$UNIX_RESULT")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
@@ -1033,7 +1050,7 @@ jobs:
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT"; do
+          for s in "$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -1086,6 +1103,7 @@ jobs:
               echo "[OK] All ref names are clean ASCII"
             else
               echo "[CRITICAL] ${_ref_findings} ref name(s) contain hidden Unicode characters"
+              job_res=failure
             fi
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
@@ -1096,6 +1114,9 @@ jobs:
             echo ""
             echo "| Job                | Status   |"
             echo "|--------------------|----------|"
+            printf "| detect-src         | %s |\n" "$(sanitize_line "$DETECT_RESULT")"
+            printf "| setup              | %s |\n" "$(sanitize_line "$SETUP_RESULT")"
+            printf "| validate-inputs    | %s |\n" "$(sanitize_line "$VALIDATE_RESULT")"
             printf "| risk-gate          | %s |\n" "$(sanitize_line "$RISK_RESULT")"
             printf "| unix-ci            | %s |\n" "$(sanitize_line "$UNIX_RESULT")"
             printf "| gcc15-lto-ci       | %s |\n" "$(sanitize_line "$GCC15_LTO_RESULT")"
@@ -1108,3 +1129,7 @@ jobs:
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          if [ "$job_res" != "success" ]; then
+            exit 1
+          fi

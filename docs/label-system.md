@@ -135,6 +135,35 @@ an open `pr_number`, choose `ci_scope=fast-lane`, and adjust
 only for the run being started. Fast lane defaults to the latest registered
 CTest, strict warning failure, and no Windows or Docker jobs.
 
+### Required Check Policy
+
+Branch rules require stable aggregate contexts rather than mode-specific build
+job names. This lets full, fast-lane, auto, governance, and docs runs use one
+fail-closed policy:
+
+| Required context | Purpose |
+|------------------|---------|
+| `PR Summary` | Aggregates orchestration prerequisites and every selected build/test lane. |
+| `Init PR Build Matrix` | Validates mode inputs, image tags, matrices, and maintainer controls. |
+| `Risk Analysis Gate / Workflow Security Audit` | Enforces Linux workflow and container security canaries. |
+| `Risk Analysis Gate / Windows Security Audit (PowerShell)` | Enforces PowerShell and Windows workflow security canaries. |
+| `WASM Release Build + Parity` | Required separately on `master` because it is outside `ci-pr-action`. |
+
+Do not require individual Unix, GCC 15.2, tool-test, Windows, or Docker job
+names in branch rules. Those jobs are conditional by selected mode and are
+covered by `PR Summary`. The summary must treat failed or cancelled detection,
+setup, and input-validation prerequisites as failures; only intentionally
+skipped mode-specific jobs are acceptable.
+
+The active `ci-qa-flags` ruleset requires the four `ci-pr-action` contexts.
+`ci-pr-action` therefore runs for pull requests targeting either `master` or
+`ci-qa-flags`. WASM parity remains a `master`-only required context.
+
+The `ci-qa-pr-docker-testing` integrity ruleset does not require hosted status
+contexts before a direct maintainer push. It requires signed commits, linear
+fast-forward history, and deletion protection; maintainers dispatch
+`ci-pr-action` and `ci-docker` immediately after pushing the testing branch.
+
 ### CodeQL Ready
 
 `ci-codeql-security.yml` uses the `codeql-ready` label to trigger the full
