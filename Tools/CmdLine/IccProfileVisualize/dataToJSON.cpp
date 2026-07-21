@@ -80,6 +80,10 @@ static
 void outputNamedColorsXYJSON( xyPlotData *plot, std::ostringstream &out )
 {
   std::ostringstream commands;
+  
+  commands << "\"" << plot->object_name << "\": {\n";
+  commands << "\"type\": \"" << plot->getDataType() << "\"\n";
+  commands << "}";
 
   out << commands.str();
 }
@@ -90,6 +94,10 @@ static
 void outputNamedColorsABJSON( abPlotData *plot, std::ostringstream &out )
 {
   std::ostringstream commands;
+  
+  commands << "\"" << plot->object_name << "\": {\n";
+  commands << "\"type\": \"" << plot->getDataType() << "\"\n";
+  commands << "}";
 
   out << commands.str();
 }
@@ -100,6 +108,10 @@ static
 void output1DLUTJSON( lutPlotData *lut, std::ostringstream &out )
 {
   std::ostringstream commands;
+  
+  commands << "\"" << lut->object_name << "\": {\n";
+  commands << "\"type\": \"" << lut->getDataType() << "\"\n";
+  commands << "}";
 
   out << commands.str();
 }
@@ -110,7 +122,46 @@ static
 void outputImageJSON( imageData *image, std::ostringstream &out )
 {
   std::ostringstream commands;
+  
+  commands << "\"" << image->object_name << "\": {\n";
+  commands << "\"type\": \"" << image->getDataType() << "\"\n";
+  commands << "}";
 
+  out << commands.str();
+}
+
+/******************************************************************************/
+
+static
+void writeHeaderJSON( std::ostringstream &out, profileVisualizationData &data, const std::string &basename )
+{
+  std::ostringstream commands;
+  
+  // start of file
+  commands << "{\n";
+  
+  // global data
+  commands << "\"format\": \"iccProfileVisualizationData\",\n";
+  commands << "\"input\": \"" << basename << "\",\n";
+  commands << "\"name\": \"" << data.name << "\",\n";
+  commands << "\"pageCount\": \"" << data.pages.size() << "\",\n";
+  
+  // start page array
+  commands << "\"pageArray\": [\n";
+
+  out << commands.str();
+}
+
+/******************************************************************************/
+
+static
+void writeFooterJSON( std::ostringstream &out )
+{
+  std::ostringstream commands;
+
+  // end of page array, end of file
+  commands << "\t]\n}\n";
+  
   out << commands.str();
 }
 
@@ -123,12 +174,8 @@ static bool WriteJSONTextFile(FILE* outFile, const std::string& text)
   if (!outFile)
     return false;
 
-// header
-
   if (!text.empty() && fwrite(text.data(), 1, text.size(), outFile) != text.size())
     failed = true;
-
-// footer
 
   if (!icFlushAndClose(outFile))
     failed = true;
@@ -138,16 +185,30 @@ static bool WriteJSONTextFile(FILE* outFile, const std::string& text)
 
 /******************************************************************************/
 
+static
+std::string remove_extension( const std::string& filename )
+{
+  size_t lastdot = filename.find_last_of(".");
+  if (lastdot == std::string::npos || lastdot == 0) {
+    return filename;
+  }
+  return filename.substr(0, lastdot);
+}
+
+/******************************************************************************/
+
 size_t outputDataToJSON( profileVisualizationData &data, const std::string &basename )
 {
   if (data.pages.size() == 0)
     return 0;
 
-  std::string JSONPath = basename + "_luts.json";
+  std::string JSONPath = remove_extension(basename) + "_data.json";
   std::ostringstream out;
   out.exceptions(std::ios::badbit | std::ios::failbit);
-  
+
   size_t objectCount = 0;
+
+  writeHeaderJSON( out, data, basename );
 
   // iterate over pages in data
   for (auto &page : data.pages ) {
@@ -176,8 +237,19 @@ size_t outputDataToJSON( profileVisualizationData &data, const std::string &base
     else {
       LogAnError(stderr, "%s: unknown data type %s\n", basename.c_str(), pageType.c_str());
     }
-  } // end iteration over pages
 
+    if (objectCount > 0)
+        out << ",\n";
+
+  } // end iteration over pages
+  
+  // erase last comma and newline
+  if (objectCount > 0) {
+    out.seekp( -2, std::ios_base::end );
+    out << "\n";
+  }
+
+  writeFooterJSON( out );
 
   FILE* outFile = icOpenRegularWriteTextFile(JSONPath.c_str());
   if (!WriteJSONTextFile(outFile, out.str())) {

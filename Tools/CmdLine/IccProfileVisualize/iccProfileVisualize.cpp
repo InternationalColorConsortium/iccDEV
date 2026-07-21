@@ -1818,13 +1818,28 @@ void processNamedColors(CIccProfile *pIcc, CIccTag *tag, const std::string &sigD
 /******************************************************************************/
 
 static
-std::string remove_extension( const std::string& filename)
+std::string remove_extension( const std::string& filename )
 {
   size_t lastdot = filename.find_last_of(".");
   if (lastdot == std::string::npos || lastdot == 0) {
     return filename;
   }
   return filename.substr(0, lastdot);
+}
+
+/******************************************************************************/
+
+static
+std::string remove_path( const std::string& filename )
+{
+  size_t lastPath = filename.find_last_of("/");
+  if (lastPath == std::string::npos || lastPath == 0) {
+    lastPath = filename.find_last_of("\\");
+  }
+  if (lastPath == std::string::npos || lastPath == 0) {
+    return filename;
+  }
+  return filename.substr(lastPath+1, filename.size() );
 }
 
 /******************************************************************************/
@@ -1836,8 +1851,6 @@ void processProfile( CIccProfile *pIcc, const std::string &basename,
 {
   const size_t bufSize = 64;
   char buf1[bufSize];
-
-  data.name = basename;
 
 
   // plot RGB chromaticities, white point
@@ -2024,11 +2037,12 @@ int main(int argc, char* argv[])
       std::string basename = remove_extension( sanitizedFile );
 
       profileVisualizationData data;
+      data.name = remove_path( sanitizedFile );
       processProfile( pIcc, basename, data );
 
       size_t count = 0;
       if (gOutputJSON)
-        count = outputDataToJSON( data, basename );
+        count = outputDataToJSON( data, sanitizedFile );
       else
         count = outputDataToPDF( data, basename );
       
