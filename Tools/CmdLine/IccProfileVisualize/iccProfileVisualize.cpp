@@ -65,6 +65,7 @@
 #include <cstdarg>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <cstring>
 #include <cmath>
 #include <limits>
@@ -76,11 +77,12 @@
 #include "IccUtil.h"
 #include "IccProfLibVer.h"
 #include "../IccCmdLineUtil.h"
+#include "vizShared.hpp"
 #include "MiniTIFF.hpp"
-#include "MiniPDF.hpp"
 #include "spectralLocus.hpp"
 #include "errorLog.hpp"
-
+#include "dataModel.hpp"
+#include "dataToPDF.hpp"
 
 #ifdef _WIN32
 // work around Windows non-standard headers
@@ -168,34 +170,17 @@ void LogAnError(FILE *stream, const char* format, ...)
 
 /******************************************************************************/
 
-struct XYColor
-{
-  XYColor () : x(0), y(0) {}
-  XYColor (float xx, float yy) : x(xx), y(yy) {}
-
-  bool operator<(const XYColor& o) const {
-    if (x == o.x)
-      return y < o.y;
-    else
-      return x < o.x;
-  }
-
-public:
-  float x;
-  float y;
-};
-
-float cross(const XYColor &O, const XYColor &A, const XYColor &B)
+// Cross product 2 vectors from O to A and B
+// Returns a positive value, if OAB makes a counter-clockwise turn,
+// negative for clockwise turn, and zero if the points are collinear.
+float cross(const point2D &O, const point2D &A, const point2D &B)
 {
   return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
 }
 
 /******************************************************************************/
 
-// Cross product 2 vectors from O to A and B
-// Returns a positive value, if OAB makes a counter-clockwise turn,
-// negative for clockwise turn, and zero if the points are collinear.
-float cross(const point2D &O, const point2D &A, const point2D &B)
+float cross(const XYColor &O, const XYColor &A, const XYColor &B)
 {
   return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
 }
@@ -240,610 +225,6 @@ std::vector<P> convex_hull2D(std::vector<P> points_in)
 
 /******************************************************************************/
 
-struct namedXY {
-    namedXY() : x(0), y(0) {}
-
-    namedXY( std::string nn, float xx, float yy ) :
-        name(nn), x(xx), y(yy) {}
-
-    std::string name;
-    float x, y;
-};
-
-typedef std::vector<namedXY> namedXYList;
-
-/******************************************************************************/
-
-struct namedLAB {
-    namedLAB() : L(0), a(0), b(0) {}
-
-    namedLAB( std::string nn, float LL, float aa, float bb ) :
-        name(nn), L(LL), a(aa), b(bb) {}
-
-    std::string name;
-    float L, a, b;
-};
-
-typedef std::vector<namedLAB> namedLabList;
-
-/******************************************************************************/
-
-// parent classs for abstraction
-struct dataAbstractionBase {
-  virtual ~dataAbstractionBase() {};
-  virtual std::string getDataType() const = 0;
-};
-
-/******************************************************************************/
-
-// document class
-struct profileVisualizationData {
-
-  // because this class owns the pointers
-  ~profileVisualizationData() {
-    for (auto ptr : pages)
-        delete ptr;
-  }
-
-  // this class takes ownership of the pointers
-  void addPage( dataAbstractionBase *obj ) {
-    pages.push_back(obj);
-  }
-
-  std::string name;             // sanitized filename
-  std::vector<dataAbstractionBase *> pages;
-};
-
-/******************************************************************************/
-
-// xy chromaticity
-struct xyPlotData : dataAbstractionBase {
-
-  xyPlotData() : printLabels(true) {}
-
-  xyPlotData(const std::string &name, const std::string &label, bool printLabelFlag,
-              const namedXYList &points_alone, const namedXYList &points_outlined ) {
-    object_name = name;
-    object_label = label;
-    printLabels = printLabelFlag;
-    points_unconnected = points_alone;
-    points_connected = points_outlined;
-  }
-
-  virtual std::string getDataType() const { return "xyPlotData"; };
-
-  std::string object_name;        // page name in PDF
-  std::string object_label;       // graph label, may be multiline
-  bool printLabels;
-  namedXYList points_unconnected;
-  namedXYList points_connected;     // always connected and closed
-};
-
-/******************************************************************************/
-
-// ab chromaticity
-struct abPlotData : dataAbstractionBase {
-
-  abPlotData() : printLabels(true) {}
-
-  abPlotData(const std::string &name, const std::string &label, bool printLabelFlag,
-              const namedLabList &points_alone, const namedLabList &points_outlined ) {
-    object_name = name;
-    object_label = label;
-    printLabels = printLabelFlag;
-    points_unconnected = points_alone;
-    points_connected = points_outlined;
-  }
-
-  virtual std::string getDataType() const { return "abPlotData"; };
-
-  std::string object_name;           // page name in PDF
-  std::string object_label;          // graph label, may be multiline
-  bool printLabels;
-  namedLabList points_unconnected;
-  namedLabList points_connected;     // always connected and closed, TODO - sort and convex hull
-};
-
-/******************************************************************************/
-
-// LookUpTable Graph
-struct lutPlotData : dataAbstractionBase {
-
-  lutPlotData() : isIdentity(false) {}
-
-  lutPlotData(const std::string &name, const std::string &label, bool identityFlag,
-              const pointList &points_input ) {
-    object_name = name;
-    object_label = label;
-    isIdentity = identityFlag;
-    points = points_input;
-  }
-
-  virtual std::string getDataType() const { return "lutPlotData"; };
-
-  std::string object_name;        // page name in PDF
-  std::string object_label;       // graph label, may be multiline
-  bool isIdentity;
-  pointList points;               // always connected, but not closed
-};
-
-/******************************************************************************/
-
-enum {
-    IMAGE_MODE_GRAY_BLACKZERO = TIFF_MODE_GRAY_BLACKZERO,
-    IMAGE_MODE_GRAY_WHITEZERO = TIFF_MODE_GRAY_WHITEZERO,
-    IMAGE_MODE_RGB = TIFF_MODE_RGB,
-    IMAGE_MODE_CIELAB = TIFF_MODE_CIELAB,
-    IMAGE_MODE_CMYK = TIFF_MODE_CMYK,
-};
-
-// this takes ownership of the buffer pointer passed in
-// pointer must be allocated with new[]
-// TODO - can I use a unique_ptr to manage this?
-struct imageData : dataAbstractionBase {
-
-  imageData() : width(0), height(0), channels(0), depth(0),
-                mode(IMAGE_MODE_GRAY_BLACKZERO),
-                isFloatingPoint(false), data(NULL) {}
-
-  imageData(const std::string &name, uint8_t *imageBuffer, int imageWidth, int imageHeight,
-            int imageChannels, int imageDepth, int imageMode,
-            bool dataIsFloatingPoint = false ) {
-    object_name = name;
-    width = imageWidth;
-    height = imageHeight;
-    channels = imageChannels,
-    depth = imageDepth;
-    mode = imageMode;
-    isFloatingPoint = dataIsFloatingPoint;
-    data = imageBuffer;
-  }
-
-  ~imageData() {
-    delete[] data;
-  }
-
-  virtual std::string getDataType() const { return "imageData"; };
-
-  std::string object_name;  // page name in PDF, filename on disk
-  int width;
-  int height;
-  int channels;
-  int depth;                // bits per sample [8,16,32,64]
-  int mode;                 // interpretation of channels, matches TIFF modes
-  bool isFloatingPoint;     // because 32 bit integer can be useful, as well as 32 bit float
-  uint8_t *data;
-};
-
-/******************************************************************************/
-
-static
-std::string DrawAxisPDF( const point2D &basepoint, const point2D &range,
-        const point2D &tickLength, const point2D &fullLength, float labelSize, const std::string &label )
-{
-  std::ostringstream commands;
-
-  // save gstate
-  commands << "q\n";
-
-  // grid behind major axes
-  commands << "0.05 0 0 0 K\n";
-  for (int i = 1; i <= 100; ++i) {
-    if ((i % 10) == 0) continue;
-    point2D startN = basepoint + range*(i/100.0f);
-    commands << startN << " m " << (startN+fullLength) << " l S\n";
-  }
-  commands << "0.1 0 0 0 K\n";
-  for (int i = 1; i <= 10; ++i) {
-    point2D startN = basepoint + range*(i/10.0f);
-    commands << startN << " m " << (startN+fullLength) << " l S\n";
-  }
-  // identity line
-  commands << basepoint << " m " << (basepoint+fullLength+range) << " l S\n";
-  // end colored grid, grestore, gsave
-  commands << "Q q\n";
-
-  // main line
-  commands << basepoint << " m " << (basepoint+range) << " l S\n";
-
-  // big marks for 0.0, 0.5, and 1.0
-  point2D start0 = basepoint;
-  commands << start0 << " m " << (start0+tickLength) << " l S\n";
-  point2D start1 = basepoint + range;
-  commands << start1 << " m " << (start1+tickLength) << " l S\n";
-  point2D start2 = basepoint + range*0.5f;
-  commands << start2 << " m " << (start2+tickLength) << " l S\n";
-
-  // small marks for each tenth that isn't 0.5
-  for (int i = 1; i < 10; ++i) {
-    if (i == 5) continue;
-    point2D startN = basepoint + range*(i/10.0f);
-    commands << startN << " m " << (startN+tickLength*0.5) << " l S\n";
-  }
-
-  // small marks for each hundredth
-  for (int i = 1; i < 100; ++i) {
-    if ((i % 10) == 0) continue;
-    point2D startN = basepoint + range*(i/100.0f);
-    commands << startN << " m " << (startN+tickLength*0.25) << " l S\n";
-  }
-
-  // labels for 0, 50, 100%
-  std::string zero("0");
-  std::string half("50%");
-  std::string full("100%");
-  bool isVertical = (range.x == 0);
-  commands << PDFSingleLineTextLabel( basepoint, isVertical, tickLength, labelSize, zero );
-  commands << PDFSingleLineTextLabel( basepoint+0.5f*range, isVertical, tickLength, labelSize, half );
-  commands << PDFSingleLineTextLabel( basepoint+range, isVertical, tickLength, labelSize, full, kPDFTextAlignRight );
-
-  // IO label near 2/3
-  commands << PDFSingleLineTextLabel( basepoint + range*0.66, isVertical, tickLength, labelSize, label );
-
-  // grestore at end
-  commands << "Q\n";
-
-  return commands.str();
-}
-
-/******************************************************************************/
-
-static
-void CreateAxesXobject( PDFWriter &pdfout )
-{
-  std::string commands;
-  const float margin = 0.5f*inch2point;
-  const float tickLength = 12.0f; // pt
-
-  const float bottom = 0.0f;
-  const float left = 0.0f;
-  const float top = pdfout.PageHeight();
-  const float right = pdfout.PageWidth();
-  const Rect2D bounds ( left, right, bottom, top );
-
-  if (pdfout.xobjectExists("Axes"))
-    return;
-
-  // draw axes
-  // horizontal
-  const point2D basepoint( margin, bottom+margin );
-  const point2D rangeX( right-2*margin, 0.0f );
-  const point2D tickLengthX( 0, -tickLength );
-  const point2D fullLengthX( 0, (top-margin) - (bottom+margin) );
-  commands += DrawAxisPDF( basepoint, rangeX, tickLengthX, fullLengthX, 12.0f, "Input" );
-
-  // vertical
-  const point2D rangeY( 0.0, (top-2*margin) );
-  const point2D tickLengthY( -tickLength, 0 );
-  const point2D fullLengthY( (right-margin) - (left+margin), 0 );
-  commands += DrawAxisPDF( basepoint, rangeY, tickLengthY, fullLengthY, 12.0f, "Output" );
-
-  pdfout.AddXObject( bounds, commands, "Axes" );
-}
-
-/******************************************************************************/
-
-// https://en.wikipedia.org/wiki/Planckian_locus
-// Bongsoon Kang; Ohak Moon; Changhee Hong; Honam Lee; Bonghwan Cho; Youngsun Kim (December 2002).
-// "Design of Advanced Color Temperature Control System for HDTV Applications"
-// Journal of the Korean Physical Society. 41 (6): 865–871. S2CID 4489377
-static
-XYColor approx_planck( double t )
-{
-  const double c3a = -0.2661239;
-  const double c2a = -0.2343589;
-  const double c1a =  0.8776956;
-  const double c0a =  0.179910;
-
-  const double c3b = -3.0258469;
-  const double c2b =  2.1070379;
-  const double c1b =  0.2226347;
-  const double c0b =  0.240390;
-
-  const double k3a = -1.1063814;
-  const double k2a = -1.34811020;
-  const double k1a =  2.18555832;
-  const double k0a = -0.20219683;
-
-  const double k3b = -0.9549476;
-  const double k2b = -1.37418593;
-  const double k1b =  2.09137015;
-  const double k0b = -0.16748867;
-
-  const double k3c =  3.0817580;
-  const double k2c = -5.87338670;
-  const double k1c =  3.75112997;
-  const double k0c = -0.37001483;
-
-  double t2 = t*t;
-  double t3 = t*t*t;
-
-  double x = 0.0;
-
-  if (t < 4000.0) {
-    x = c3a*(1e9/t3) + c2a*(1e6/t2) + c1a*(1e3/t) + c0a;
-  } else {
-    x = c3b*(1e9/t3) + c2b*(1e6/t2) + c1b*(1e3/t) + c0b;
-  }
-
-  double x2 = x*x;
-  double x3 = x*x*x;
-
-  double y = 0.0;
-
-  if (t < 2222.0) {
-    y = k3a*x3 + k2a*x2 + k1a*x + k0a;
-  } else if (t < 4000.0) {
-    y = k3b*x3 + k2b*x2 + k1b*x + k0b;
-  } else {
-    y = k3c*x3 + k2c*x2 + k1c*x + k0c;
-  }
-
-  return XYColor(x,y);
-}
-
-/******************************************************************************/
-
-/*
-label points for spectrum in nm
-sorta, kinda evenly spaced, plus endpoints
- */
-std::vector<int> locusLabelWavelengths =
-{
-  360,
-  460, 450,
-  470, 475, 480, 485, 490, 495, 500, 505, 510, 515,
-  520, 530, 540, 550, 560, 570, 580, 590, 600, 610, 620,
-  640,
-  700
-};
-
-/******************************************************************************/
-
-static
-point2D spectrumLabelOffset( int nm, float textSize, PDFTextAlignment &align )
-{
-// NOTE - Yes, I could create normal vectors from the locus points, etc.
-// but this looks better with less math, and is much easier to debug.
-
-  if (nm < 515) {
-    // go left
-    align = kPDFTextAlignRight;
-    return point2D( -0.5*textSize, 0.0f );
-  } else if (nm == 515) {
-    // go left a little bit more
-    align = kPDFTextAlignRight;
-    return point2D( -0.9*textSize, 0.0f );
-  } else if (nm <= 525) {
-    // go up
-    align = kPDFTextAlignCenter;
-    return point2D( 0.0f, textSize*1.5f );
-  } else {
-    // go right
-    align = kPDFTextAlignLeft;
-    return point2D( textSize*0.5, textSize );
-  }
-
-  // unreachable
-}
-
-/******************************************************************************/
-
-// x range [ 0.00364, 0.73469 ]   for 2degree 1931 observer
-// y range [ 0.00529, 0.83409 ]
-const float chromaticityChartScale = 0.85f;
-
-static
-void CreateXYPlotXobject( PDFWriter &pdfout )
-{
-  std::ostringstream commands;
-  float margin = 0.25*inch2point;
-
-  const float fineIncrement = 0.01f;
-  const float coarseIncrement = 0.1f;
-
-  const float bottom = 0.0f;
-  const float left = 0.0f;
-  const float top = pdfout.PageHeight();
-  const float right = pdfout.PageWidth();
-  const Rect2D bounds ( left, right, bottom, top );
-  const point2D basepoint( left+margin, bottom+margin );
-  const point2D rangeX( right-left-2*margin, 0 );
-  const point2D rangeY( 0, top-bottom-2*margin );
-
-
-  if (pdfout.xobjectExists("xyPlot"))
-    return;
-
-  // draw grid
-  commands << "q\n";
-
-  // vertical fine grid
-  commands << "0.05 0 0 0 K\n";
-  for (float i = 0.0f; i <= chromaticityChartScale; i += fineIncrement) {
-    point2D startN = basepoint + i/chromaticityChartScale * rangeX;
-    commands << startN << " m " << (startN+rangeY) << " l S\n";
-  }
-  // horizontal fine grid
-  for (float i = 0.0f; i <= chromaticityChartScale; i += fineIncrement) {
-    point2D startN = basepoint + i/chromaticityChartScale * rangeY;
-    commands << startN << " m " << (startN+rangeX) << " l S\n";
-  }
-
-  // vertical coarse grid
-  commands << "0.1 0 0 0 K\n";
-  for (float i = 0.0f; i <= chromaticityChartScale; i += coarseIncrement) {
-    point2D startN = basepoint + i/chromaticityChartScale * rangeX;
-    commands << startN << " m " << (startN+rangeY) << " l S\n";
-  }
-  // horizontal coarse grid
-  for (float i = 0.0f; i <= chromaticityChartScale; i += coarseIncrement) {
-    point2D startN = basepoint + i/chromaticityChartScale * rangeY;
-    commands << startN << " m " << (startN+rangeX) << " l S\n";
-  }
-
-  // end colored grid, grestore, gsave
-  commands << "Q q\n";
-
-  // spectral locus
-  commands << "0.5 0.5 0 0 K\n";
-  const point2D scaling = (rangeX + rangeY) / chromaticityChartScale;
-  point2D firstPoint = basepoint + scaling * point2D( spectralLocus2degree[0].x , spectralLocus2degree[0].y );
-  commands << firstPoint << " m\n";
-  for (size_t k = 1; k < spectralLocus2degree.size(); ++k ) {
-    point2D thispoint = basepoint + scaling * point2D( spectralLocus2degree[k].x , spectralLocus2degree[k].y );
-    commands << thispoint << " l\n";
-  }
-  // close and stroke the shape
-  commands << "s\n";
-
-  // labels for spectral locus
-  commands << "0.5 0.5 0 0 k\n";
-  const float labelSize = 9.0f;
-  const int wavelengthOffset = spectralLocus2degree[0].wavelength;
-  for (auto &nm : locusLabelWavelengths ) {
-    PDFTextAlignment align;
-    point2D offset = spectrumLabelOffset( nm,labelSize, align );
-    size_t index = nm - wavelengthOffset;
-    point2D thispoint = basepoint + scaling * point2D( spectralLocus2degree[index].x,
-                                                       spectralLocus2degree[index].y );
-    std::string number = std::to_string(nm);
-    commands << PDFSingleLineTextLabel( thispoint + offset, false, point2D(0,0), labelSize, number, align );
-  }
-
-  // plankian white curve
-  commands << "0 0.25 0.25 0 K\n";
-  const float start_temp = 1500.0f;   // degrees Kelvin
-  const float end_temp = 20000.0f;
-  const float temp_step = 200.0f;
-
-  // scan over the planck curve and plot the lines
-  XYColor firstXY = approx_planck( start_temp );
-  firstPoint = basepoint + scaling * point2D( firstXY.x, firstXY.y );
-  commands << firstPoint << " m\n";
-  for (float temp = start_temp+temp_step; temp <= end_temp; temp += temp_step ) {
-    XYColor thisXY = approx_planck( temp );
-    point2D thispoint = basepoint + scaling * point2D( thisXY.x, thisXY.y );
-    commands << thispoint << " l\n";
-  }
-  // stroke the curve
-  commands << "S\n";
-
-  // grestore
-  commands << "Q\n";
-  std::string commandString = commands.str();
-  pdfout.AddXObject( bounds, commandString, "xyPlot" );
-}
-
-/******************************************************************************/
-
-static
-std::string plotCirclePDF( const point2D &center, float radius )
-{
-  std::ostringstream commands;
-
-  const float handle_factor = float(4.0 * (M_SQRT2 - 1.0) / 3.0);
-  const float K = radius * handle_factor;
-  const point2D rx(radius,0);
-  const point2D kx(K,0);
-  const point2D ry(0,radius);
-  const point2D ky(0,K);
-
-  commands << center+rx << " m\n";
-  commands << center+rx-ky << " " << center+kx-ry << " " << center-ry << " c\n";
-  commands << center-kx-ry << " " << center-rx-ky << " " << center-rx << " c\n";
-  commands << center-rx+ky << " " << center-kx+ry << " " << center+ry << " c\n";
-  commands << center+kx+ry << " " << center+rx+ky << " " << center+rx << " c s\n";
-
-  return commands.str();
-}
-
-/******************************************************************************/
-
-// DEFERRED - full 128+ range is probably excessive for real world use
-// what is an appropriate limit?        So far 130 looks fine.
-const float abChartScale = 2 * 130.0f;
-
-static
-void CreateABPlotXobject( PDFWriter &pdfout )
-{
-  std::ostringstream commands;
-  float margin = 0.25f*inch2point;
-
-  const float coarseIncrement = 10.0f;
-
-  const float bottom = 0.0f;
-  const float left = 0.0f;
-  const float top = pdfout.PageHeight();
-  const float right = pdfout.PageWidth();
-  const Rect2D bounds ( left, right, bottom, top );
-  const point2D basepoint( left+margin, bottom+margin );
-  const point2D rangeX( right-left-2*margin, 0 );
-  const point2D rangeY( 0, top-bottom-2*margin );
-  const point2D center = 0.5f * (basepoint + point2D(right-margin,top-margin));
-  const float maxRadius = std::max( right-left-2*margin, top-bottom-2*margin );
-
-  if (pdfout.xobjectExists("abPlot"))
-    return;
-
-  // draw grid
-  commands << "q\n";
-
-  // clip to chart area
-  commands << basepoint << " m " << (basepoint+rangeY) << " l\n";
-  commands << (basepoint+rangeY+rangeX) << " l\n";
-  commands << (basepoint+rangeX) << " l h W n\n";
-
-  // vertical grid
-  commands << "0.1 0 0 0 K\n";
-  const point2D centerX(center.x,bottom+margin);
-  for (float i = coarseIncrement; i <= abChartScale; i += coarseIncrement) {
-    point2D startN = centerX + i/abChartScale * rangeX;
-    commands << startN << " m " << (startN+rangeY) << " l S\n";
-    point2D start2 = centerX - i/abChartScale * rangeX;
-    commands << start2 << " m " << (start2+rangeY) << " l S\n";
-  }
-  // horizontal grid
-  const point2D centerY(left+margin,center.y);
-  for (float i = coarseIncrement; i <= abChartScale; i += coarseIncrement) {
-    point2D startN = centerY + i/abChartScale * rangeY;
-    commands << startN << " m " << (startN+rangeX) << " l S\n";
-    point2D start2 = centerY - i/abChartScale * rangeY;
-    commands << start2 << " m " << (start2+rangeX) << " l S\n";
-  }
-
-  // constant chroma circles are helpful
-  const float chromaIncrement = 30.0f;
-  const float chromaMax = 150.0f;
-  for (float i = chromaIncrement; i <= chromaMax; i += chromaIncrement) {
-    commands << plotCirclePDF( center, i*maxRadius/abChartScale );
-  }
-
-  // axes
-  commands << "0.4 0 0 0 K\n";
-  commands << centerX << " m " << (centerX+rangeY) << " l S\n";
-  commands << centerY << " m " << (centerY+rangeX) << " l S\n";
-
-// axes labels
-  commands << "0.4 0 0 0 k\n";
-  float labelSize = 10.0f;
-  point2D labelPtYellow(center.x,top-margin);
-  commands << PDFSingleLineTextLabel( labelPtYellow, false, point2D(0,0), labelSize, "+b Yellow", kPDFTextAlignCenter );
-  point2D labelPtBlue( center.x,bottom+margin+labelSize*1.2f);
-  commands << PDFSingleLineTextLabel( labelPtBlue, false, point2D(0,0), labelSize, "-b Blue", kPDFTextAlignCenter );
-  point2D labelPtMagenta(right-margin-8,center.y);
-  commands << PDFSingleLineTextLabel( labelPtMagenta, false, point2D(0,0), labelSize, "+a Magenta", kPDFTextAlignRight );
-  point2D labelPtTeal(left+margin,center.y);
-  commands << PDFSingleLineTextLabel( labelPtTeal, false, point2D(0,0), labelSize, "-a Green", kPDFTextAlignLeft );
-
-  // end colored grid, grestore
-  commands << "Q\n";
-  std::string commandString = commands.str();
-  pdfout.AddXObject( bounds, commandString, "abPlot" );
-}
-
-/******************************************************************************/
-
 static
 XYColor xyFromICCXYZ( const icXYZNumber *xyz )
 {
@@ -877,27 +258,6 @@ XYColor xyFromICCXYZFloat( const icFloatNumber *xyz )
   float x = X / sum;
   float y = Y / sum;
   return XYColor(x,y);
-}
-
-/******************************************************************************/
-
-static
-std::string plotSquarePDF( const point2D &center, float size )
-{
-  std::ostringstream commands;
-
-  float half = 0.5f * size;
-
-  point2D pt0(center.x-half,center.y-half);
-  point2D pt1(center.x-half,center.y+half);
-  point2D pt2(center.x+half,center.y+half);
-  point2D pt3(center.x+half,center.y-half);
-
-  commands << pt0 << " m " << pt1 << " l ";
-  commands << pt2 << " l ";
-  commands << pt3 << " l s\n";
-
-  return commands.str();
 }
 
 /******************************************************************************/
@@ -1049,70 +409,6 @@ void processChromaticity( CIccProfile *pIcc, profileVisualizationData &data )
   xyPlotData *plot = new xyPlotData( "Profile Chromaticities", "Chromaticity xy", true,
                                     points_alone, points_connected );
   data.addPage(plot);
-}
-
-/******************************************************************************/
-
-static
-std::string extract_LUTNameForBookmark(const std::string& str)
-{
-  size_t start = 0;
-  size_t end = str.find(']');
-  if (end != std::string::npos)
-    return str.substr(start, end - start + 1);
-  end = str.find('\n');
-  if (end != std::string::npos)
-    return str.substr(start, end - start);
-  return str;
-}
-
-/******************************************************************************/
-
-static
-void output1DLUTPDF( lutPlotData *lut, PDFWriter &pdffile )
-{
-  std::ostringstream commands;
-
-  float bottom = 0.0f;
-  float left = 0.0f;
-  float top = pdffile.PageHeight();
-  float right = pdffile.PageWidth();
-  Rect2D bounds ( left, right, bottom, top );
-
-  // if the axes xobject doesn't exist, create it now
-  CreateAxesXobject( pdffile );
-
-  // add the common axes
-  commands << "/Axes Do\n";
-
-  point2D labelPt( 0.5f*right, top - 0.2f*inch2point );
-  float labelSize = 12.0f;     // points
-  float leading = labelSize * 1.1f;
-  float indent = 0.5f * inch2point;
-  std::string fullName = lut->object_name + " " + lut->object_label;;
-  commands << PDFMultiLineText( labelPt, labelSize, leading, indent,
-                                    fullName, kPDFTextAlignCenterLeft );
-
-  // draw the curve
-  // optimization - draw only 3 points for identity curve
-  size_t steps = lut->points.size();
-  if (steps > 0) {
-    float scale = (7.5f-0.5f)*inch2point;
-    const point2D base( 0.5f*inch2point, 0.5f*inch2point );
-    commands << base << " m\n";
-    for (size_t i = 0; i < steps; ++i ) {
-      point2D currentPt = lut->points[i] * scale;
-      commands << (base+currentPt) << " l\n";
-    }
-    commands << "S\n";
-  }
-
-  // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
-  size_t content = pdffile.ObjectCount();
-  std::string pageName = extract_LUTNameForBookmark( fullName );
-  pdffile.AddPage( pageName, content, "Axes" );
 }
 
 /******************************************************************************/
@@ -1663,63 +959,63 @@ void CopyLUTtoTIFF( icFloatNumber *clutData, uint8_t *imageBuf,
 
 #if 0
 // TEST - same as below, just more expensive calculation
-    size_t gridCount = (size_t)tileWidth * (size_t)tileHeight * (size_t)tiles;
-    for (size_t k = 0; k < gridCount; ++k ) {
-        size_t y = (gridPoints -1) - (k % gridPoints);  // turn LAB to look as expected
-        size_t x = (k / gridPoints) % gridPoints;
-        size_t tile = k / (gridPoints*gridPoints);
-        size_t tileX = tile % tilesWide;
-        size_t tileY = tile / tilesWide;
-        size_t outputIndex = outputChannels * ((tileY * gridPoints * imageWidth) + (tileX * gridPoints) + (y * imageWidth) + x);
-        size_t inputIndex = outputChannels * k;
-        if (bytes == 8)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf64[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
-        else if (bytes == 4)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf32[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
-        else if (bytes == 2)
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
-        else
-          for (int c = 0; c < outputChannels; ++c)
-            imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
-    }
+  size_t gridCount = (size_t)tileWidth * (size_t)tileHeight * (size_t)tiles;
+  for (size_t k = 0; k < gridCount; ++k ) {
+    size_t y = (gridPoints -1) - (k % gridPoints);  // turn LAB to look as expected
+    size_t x = (k / gridPoints) % gridPoints;
+    size_t tile = k / (gridPoints*gridPoints);
+    size_t tileX = tile % tilesWide;
+    size_t tileY = tile / tilesWide;
+    size_t outputIndex = outputChannels * ((tileY * gridPoints * imageWidth) + (tileX * gridPoints) + (y * imageWidth) + x);
+    size_t inputIndex = outputChannels * k;
+    if (bytes == 8)
+      for (int c = 0; c < outputChannels; ++c)
+        imageBuf64[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
+    else if (bytes == 4)
+      for (int c = 0; c < outputChannels; ++c)
+        imageBuf32[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
+    else if (bytes == 2)
+      for (int c = 0; c < outputChannels; ++c)
+        imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
+    else
+      for (int c = 0; c < outputChannels; ++c)
+        imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
+  }
 
 #else
-      size_t n001 = (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t n010 = (size_t)tileHeight * (size_t)outputChannels;
-      size_t n100 = (size_t)outputChannels;
+  size_t n001 = (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
+  size_t n010 = (size_t)tileHeight * (size_t)outputChannels;
+  size_t n100 = (size_t)outputChannels;
 
-      if (inputChannels < 2)
-        std::swap(n010,n100);
+  if (inputChannels < 2)
+    std::swap(n010,n100);
 
-      size_t outTileStepV = (size_t)imageWidth * (size_t)tileHeight * (size_t)outputChannels;
-      size_t outTileStepH = (size_t)tileWidth * (size_t)outputChannels;
-      size_t outColStep = (size_t)outputChannels;
-      size_t outRowStep = (size_t)imageWidth * (size_t)outputChannels;
+  size_t outTileStepV = (size_t)imageWidth * (size_t)tileHeight * (size_t)outputChannels;
+  size_t outTileStepH = (size_t)tileWidth * (size_t)outputChannels;
+  size_t outColStep = (size_t)outputChannels;
+  size_t outRowStep = (size_t)imageWidth * (size_t)outputChannels;
 
-      for (int z = 0; z < tiles; ++z) {
-        int z2 = z % tilesWide; // tile # horiz
-        int z3 = z / tilesWide; // tile # vert
-        for (int x = 0; x < tileWidth; ++x)
-        for (int y = 0; y < tileHeight; ++y) {
-          size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;  // turn LAB to look as expected
-          size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
-          if (bytes == 8)
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf64[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
-          else if (bytes == 4)
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf32[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
-          else if (bytes == 2)
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
-          else
-            for (int c = 0; c < outputChannels; ++c)
-              imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
-        }
-      }
+  for (int z = 0; z < tiles; ++z) {
+    int z2 = z % tilesWide; // tile # horiz
+    int z3 = z / tilesWide; // tile # vert
+    for (int x = 0; x < tileWidth; ++x)
+    for (int y = 0; y < tileHeight; ++y) {
+      size_t inputIndex = z * n001 + x * n010 + (tileHeight-1-y) * n100;  // turn LAB to look as expected
+      size_t outputIndex = z3 * outTileStepV + z2 * outTileStepH + y * outRowStep + x * outColStep;
+      if (bytes == 8)
+        for (int c = 0; c < outputChannels; ++c)
+          imageBuf64[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
+      else if (bytes == 4)
+        for (int c = 0; c < outputChannels; ++c)
+          imageBuf32[outputIndex+c] = ClipFloat(clutData[inputIndex+c]);
+      else if (bytes == 2)
+        for (int c = 0; c < outputChannels; ++c)
+          imageBuf16[outputIndex+c] = ClipU16( clutData[inputIndex+c] * 65535.0f );
+      else
+        for (int c = 0; c < outputChannels; ++c)
+          imageBuf[outputIndex+c] = ClipU8( clutData[inputIndex+c] * 255.0f );
+    }
+  }
 #endif
 
 }
@@ -1736,233 +1032,233 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
   icTagTypeSignature typeSig = tag->GetType();
 
-    CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
-    if (!lut) {
-      LogAnError(stderr, "%s: Skipping %s: unable to convert LUT\n", basename.c_str(), sigDesc.c_str());
-      return;
-    }
+  CIccMBB *lut = dynamic_cast<CIccMBB*> (tag);
+  if (!lut) {
+    LogAnError(stderr, "%s: Skipping %s: unable to convert LUT\n", basename.c_str(), sigDesc.c_str());
+    return;
+  }
 
-    std::string description;
-    if (describe3DLUT( lut, pIcc, description, sigDesc, basename)) {
-      return;
-    }
+  std::string description;
+  if (describe3DLUT( lut, pIcc, description, sigDesc, basename)) {
+    return;
+  }
 
-    // output input and output curves
-    CIccCurve **curveA = lut->GetCurvesA();
-    CIccCurve **curveB = lut->GetCurvesB();
-    CIccCurve **curveM = lut->GetCurvesM();
-    std::string curveDesc = sigDesc + ": ";
+  // output input and output curves
+  CIccCurve **curveA = lut->GetCurvesA();
+  CIccCurve **curveB = lut->GetCurvesB();
+  CIccCurve **curveM = lut->GetCurvesM();
+  std::string curveDesc = sigDesc + ": ";
 
-    int inputChannels = lut->InputChannels();
-    int outputChannels = lut->OutputChannels();
-    icColorSpaceSignature inputSpace = lut->GetCsInput();
-    icColorSpaceSignature outputSpace = lut->GetCsOutput();
-    bool isInputMatrix = lut->IsInputMatrix();
+  int inputChannels = lut->InputChannels();
+  int outputChannels = lut->OutputChannels();
+  icColorSpaceSignature inputSpace = lut->GetCsInput();
+  icColorSpaceSignature outputSpace = lut->GetCsOutput();
+  bool isInputMatrix = lut->IsInputMatrix();
 
-    if (inputChannels <= 0 || outputChannels <= 0) {
-      LogAnError(stderr, "%s: Skipping %s: invalid channel count\n", basename.c_str(), sigDesc.c_str());
-      return;
-    }
+  if (inputChannels <= 0 || outputChannels <= 0) {
+    LogAnError(stderr, "%s: Skipping %s: invalid channel count\n", basename.c_str(), sigDesc.c_str());
+    return;
+  }
 
-    if (curveA) {
-      int curveACount = isInputMatrix ? outputChannels : inputChannels;
-      for (int i = 0; i < curveACount; ++i) {
-        if (curveA[i]) {
-          std::string channel = channelName( i, !isInputMatrix,
-                    inputSpace, outputSpace, inputChannels, outputChannels );
-          std::string channelDesc = curveDesc + "curveA[ " + channel + " ]";
-          process1DLUT( pIcc, curveA[i], channelDesc, basename, data );
-        }
+  if (curveA) {
+    int curveACount = isInputMatrix ? outputChannels : inputChannels;
+    for (int i = 0; i < curveACount; ++i) {
+      if (curveA[i]) {
+        std::string channel = channelName( i, !isInputMatrix,
+                  inputSpace, outputSpace, inputChannels, outputChannels );
+        std::string channelDesc = curveDesc + "curveA[ " + channel + " ]";
+        process1DLUT( pIcc, curveA[i], channelDesc, basename, data );
       }
     }
+  }
 
-    if (curveB) {
-      int curveBCount = isInputMatrix ? inputChannels : outputChannels;
-      for (int i = 0; i < curveBCount; ++i) {
-        if (curveB[i]) {
-          std::string channel = channelName( i, isInputMatrix,
-                    inputSpace, outputSpace, inputChannels, outputChannels );
-          std::string channelDesc = curveDesc + "curveB[ " + channel + " ]";
-          process1DLUT( pIcc, curveB[i], channelDesc, basename, data );
-        }
+  if (curveB) {
+    int curveBCount = isInputMatrix ? inputChannels : outputChannels;
+    for (int i = 0; i < curveBCount; ++i) {
+      if (curveB[i]) {
+        std::string channel = channelName( i, isInputMatrix,
+                  inputSpace, outputSpace, inputChannels, outputChannels );
+        std::string channelDesc = curveDesc + "curveB[ " + channel + " ]";
+        process1DLUT( pIcc, curveB[i], channelDesc, basename, data );
       }
     }
+  }
 
-    if (curveM) {
-      int curveMCount = isInputMatrix ? inputChannels : outputChannels;
-      for (int i = 0; i < curveMCount; ++i) {
-        if (curveM[i]) {
-          std::string channel = channelName( i, isInputMatrix,
-                    inputSpace, outputSpace, inputChannels, outputChannels );
-          std::string channelDesc = curveDesc + "curveM[ " + channel + " ]";
-          process1DLUT( pIcc, curveM[i], channelDesc, basename, data );
-        }
+  if (curveM) {
+    int curveMCount = isInputMatrix ? inputChannels : outputChannels;
+    for (int i = 0; i < curveMCount; ++i) {
+      if (curveM[i]) {
+        std::string channel = channelName( i, isInputMatrix,
+                  inputSpace, outputSpace, inputChannels, outputChannels );
+        std::string channelDesc = curveDesc + "curveM[ " + channel + " ]";
+        process1DLUT( pIcc, curveM[i], channelDesc, basename, data );
       }
     }
+  }
 
 
-    // write nD Data to TIFF
-    int bytes = lut->GetPrecision();    // currently only 1 or 2
-    CIccCLUT *clut = lut->GetCLUT();
-    if (!clut) {
-      // clut is optional in mAB and mBA tags - only report if it isn't one of those
-      if ( !(typeSig == icSigLutAtoBType || typeSig == icSigLutBtoAType) ) {
-        std::string typeDesc = icGetSigStr(buf, bufSize, typeSig);
-        LogAnError(stderr,"%s: ERROR - clut data could not be read for tag '%s' of type '%s'\n",
-                basename.c_str(), sigDesc.c_str(), typeDesc.c_str() );
-      }
+  // write nD Data to TIFF
+  int bytes = lut->GetPrecision();    // currently only 1 or 2
+  CIccCLUT *clut = lut->GetCLUT();
+  if (!clut) {
+    // clut is optional in mAB and mBA tags - only report if it isn't one of those
+    if ( !(typeSig == icSigLutAtoBType || typeSig == icSigLutBtoAType) ) {
+      std::string typeDesc = icGetSigStr(buf, bufSize, typeSig);
+      LogAnError(stderr,"%s: ERROR - clut data could not be read for tag '%s' of type '%s'\n",
+              basename.c_str(), sigDesc.c_str(), typeDesc.c_str() );
+    }
+    return;
+  }
+
+  // validate is called back before the Describe call
+  clut->Begin();  // initialize some grid information
+
+  int gridPoints = clut->GridPoints(); // gridSize[0]
+  int tiles = gridPoints;
+  if (gridPoints <= 0) {
+    LogAnError(stderr, "%s: Skipping %s: invalid CLUT grid\n", basename.c_str(), sigDesc.c_str());
+    return;
+  }
+
+  int tileWidth = 1;
+  int tileHeight = 1;
+
+  if (inputChannels >= 2) {
+    tileWidth = clut->GridPoint(1);
+    if (tileWidth <= 0) {
+      LogAnError(stderr, "%s: Skipping %s: invalid CLUT width\n", basename.c_str(), sigDesc.c_str());
       return;
     }
+  }
 
-    // validate is called back before the Describe call
-    clut->Begin();  // initialize some grid information
-
-    int gridPoints = clut->GridPoints(); // gridSize[0]
-    int tiles = gridPoints;
-    if (gridPoints <= 0) {
-      LogAnError(stderr, "%s: Skipping %s: invalid CLUT grid\n", basename.c_str(), sigDesc.c_str());
+  if (inputChannels >= 3) {
+    tileHeight = clut->GridPoint(2);
+    if (tileHeight <= 0) {
+      LogAnError(stderr, "%s: Skipping %s: invalid CLUT height\n", basename.c_str(), sigDesc.c_str());
       return;
     }
+  }
 
-    int tileWidth = 1;
-    int tileHeight = 1;
-
-    if (inputChannels >= 2) {
-      tileWidth = clut->GridPoint(1);
-      if (tileWidth <= 0) {
-        LogAnError(stderr, "%s: Skipping %s: invalid CLUT width\n", basename.c_str(), sigDesc.c_str());
+  if (inputChannels > 3) {
+    for (int i = 3; i < inputChannels; ++i) {
+      int extraGridPoints = clut->GridPoint(i);
+      if (extraGridPoints <= 0) {
+        LogAnError(stderr, "%s: Skipping %s: invalid CLUT tile count\n", basename.c_str(), sigDesc.c_str());
         return;
       }
+      tiles *= extraGridPoints;
     }
+  }
 
-    if (inputChannels >= 3) {
-      tileHeight = clut->GridPoint(2);
-      if (tileHeight <= 0) {
-        LogAnError(stderr, "%s: Skipping %s: invalid CLUT height\n", basename.c_str(), sigDesc.c_str());
-        return;
-      }
+    // special case for single dimensional LUT
+  if (inputChannels == 1) {
+    tileWidth = tiles;
+    tiles = 1;
+    tileHeight = 1;
+  }
+
+    // special case for 2 dimensional LUT
+  if (inputChannels == 2) {
+    tileHeight = tiles;
+    tiles = 1;
+  }
+
+    // find tile arrangement closest to a square
+  if (tiles <= 0) {
+    LogAnError(stderr,"%s: WARNING - tile count overflow.\n", basename.c_str() );
+    tiles = 1;
+  }
+
+  auto tempResult = std::sqrt(tiles);
+  if (tempResult > std::numeric_limits<int>::max()) {
+    LogAnError(stderr,"%s: ERROR - sqrt bad result!\n", basename.c_str() );
+    tempResult = tiles/2;
+  }
+  int tilesWide = (int)tempResult;
+
+  // some odd counts need a tweak to align and look more sane
+  if (inputChannels > 3 && (inputChannels & 1)) {
+    auto oldValue = tilesWide;
+    // round down to a multiple of the grid size to better align rows
+    tilesWide -= (tilesWide % (gridPoints*tileWidth));
+    if (tilesWide == 0) {
+      // this does happen -- should I round up in some cases?
+      tilesWide = oldValue;
     }
+  }
 
-    if (inputChannels > 3) {
-      for (int i = 3; i < inputChannels; ++i) {
-        int extraGridPoints = clut->GridPoint(i);
-        if (extraGridPoints <= 0) {
-          LogAnError(stderr, "%s: Skipping %s: invalid CLUT tile count\n", basename.c_str(), sigDesc.c_str());
-          return;
-        }
-        tiles *= extraGridPoints;
-      }
-    }
+  int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
 
-      // special case for single dimensional LUT
-    if (inputChannels == 1) {
-      tileWidth = tiles;
-      tiles = 1;
-      tileHeight = 1;
-    }
+  // multiply out by tile size
+  int imageWidth = tilesWide * tileWidth;
+  int imageHeight = tilesHigh * tileHeight;
+  if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
+    LogAnError(stderr, "%s: Skipping %s: invalid image geometry\n", basename.c_str(), sigDesc.c_str());
+    return;
+  }
 
-      // special case for 2 dimensional LUT
-    if (inputChannels == 2) {
-      tileHeight = tiles;
-      tiles = 1;
-    }
+  //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
+  size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
+  // NOTE that bufferSize will usually be greater than clutSize
+  if (!bufferSize) {
+    LogAnError(stderr, "%s: Skipping %s: empty image buffer\n", basename.c_str(), sigDesc.c_str());
+    return;
+  }
 
-      // find tile arrangement closest to a square
-    if (tiles <= 0) {
-      LogAnError(stderr,"%s: WARNING - tile count overflow.\n", basename.c_str() );
-      tiles = 1;
-    }
+  std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
+  uint8_t *imageBuf = imageBuffer.get();
+  memset( imageBuf, 0, bufferSize );
 
-    auto tempResult = std::sqrt(tiles);
-    if (tempResult > std::numeric_limits<int>::max()) {
-      LogAnError(stderr,"%s: ERROR - sqrt bad result!\n", basename.c_str() );
-      tempResult = tiles/2;
-    }
-    int tilesWide = (int)tempResult;
+  // copy data from CLUT to image buffer
+  icFloatNumber *clutData = clut->GetData(0);
+  CopyLUTtoTIFF( clutData, imageBuf, tileWidth, tileHeight, tiles, outputChannels, inputChannels,
+              gridPoints, tilesWide, imageWidth, bytes );
 
-    // some odd counts need a tweak to align and look more sane
-    if (inputChannels > 3 && (inputChannels & 1)) {
-      auto oldValue = tilesWide;
-      // round down to a multiple of the grid size to better align rows
-      tilesWide -= (tilesWide % (gridPoints*tileWidth));
-      if (tilesWide == 0) {
-        // this does happen -- should I round up in some cases?
-        tilesWide = oldValue;
-      }
-    }
+  // write the LUT as TIFF
+  std::string tiffPath2 = basename + "_" + sigDesc;
+  int tiffColor = TIFFColorModelFromICCModel( outputSpace );
+  imageData *image = new imageData( tiffPath2, imageBuffer.release(),
+                          imageWidth, imageHeight, outputChannels, 8*bytes, tiffColor, bytes>=4 );
+  data.addPage( image );
 
-    int tilesHigh = (tiles + (tilesWide-1)) / tilesWide;
-
-    // multiply out by tile size
-    int imageWidth = tilesWide * tileWidth;
-    int imageHeight = tilesHigh * tileHeight;
-    if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
-      LogAnError(stderr, "%s: Skipping %s: invalid image geometry\n", basename.c_str(), sigDesc.c_str());
-      return;
-    }
-
-    //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
-    size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
-    // NOTE that bufferSize will usually be greater than clutSize
-    if (!bufferSize) {
-      LogAnError(stderr, "%s: Skipping %s: empty image buffer\n", basename.c_str(), sigDesc.c_str());
-      return;
-    }
-
-    std::unique_ptr<uint8_t[]> imageBuffer( new uint8_t[ bufferSize ] );
-    uint8_t *imageBuf = imageBuffer.get();
+  if (doEdges) {
+    imageBuffer.reset( new uint8_t[ bufferSize ] );
+    imageBuf = imageBuffer.get();
     memset( imageBuf, 0, bufferSize );
 
-    // copy data from CLUT to image buffer
-    icFloatNumber *clutData = clut->GetData(0);
-    CopyLUTtoTIFF( clutData, imageBuf, tileWidth, tileHeight, tiles, outputChannels, inputChannels,
-                gridPoints, tilesWide, imageWidth, bytes );
+    // build edge data from CLUT
+    bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels;
+    std::unique_ptr<icFloatNumber[]> edgeBuffer( new icFloatNumber[ bufferSize ] );
+    icFloatNumber *edgeData = edgeBuffer.get();
 
-    // write the LUT as TIFF
-    std::string tiffPath2 = basename + "_" + sigDesc;
-    int tiffColor = TIFFColorModelFromICCModel( outputSpace );
-    imageData *image = new imageData( tiffPath2, imageBuffer.release(),
-                            imageWidth, imageHeight, outputChannels, 8*bytes, tiffColor, bytes>=4 );
-    data.addPage( image );
+    // build data for N-dimensional edge finding
+    size_t step = outputChannels;     // innermost column step == output channels
+    std::vector<size_t> dimensions(inputChannels);
+    std::vector<size_t> loopSteps(inputChannels);
 
-    if (doEdges) {
-      imageBuffer.reset( new uint8_t[ bufferSize ] );
-      imageBuf = imageBuffer.get();
-      memset( imageBuf, 0, bufferSize );
+    for (int i = inputChannels-1; i >= 0; --i) {
+      loopSteps[i] = step;
+      dimensions[i] = clut->GridPoint(i);
+      step *= dimensions[i];
+    }
 
-      // build edge data from CLUT
-      bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels;
-      std::unique_ptr<icFloatNumber[]> edgeBuffer( new icFloatNumber[ bufferSize ] );
-      icFloatNumber *edgeData = edgeBuffer.get();
+    // process edges from CLUT
+    FindEdgesInner( clutData, edgeData, dimensions, loopSteps, outputChannels,
+                      bufferSize, 8*sizeof(icFloatNumber) );
 
-      // build data for N-dimensional edge finding
-      size_t step = outputChannels;     // innermost column step == output channels
-      std::vector<size_t> dimensions(inputChannels);
-      std::vector<size_t> loopSteps(inputChannels);
+    // copy edge data to image
+    memset( imageBuf, 0, bufferSize );
+    CopyLUTtoTIFF( edgeData, imageBuf, tileWidth, tileHeight, tiles, outputChannels, inputChannels,
+                  gridPoints, tilesWide, imageWidth, bytes );
 
-      for (int i = inputChannels-1; i >= 0; --i) {
-        loopSteps[i] = step;
-        dimensions[i] = clut->GridPoint(i);
-        step *= dimensions[i];
-      }
+    // write edge data as TIFF
+    std::string tiffPath3 = basename + "_" + sigDesc + "_edges";
+    int edgeColor = TIFFEdgeColorModelFromICCModel( outputSpace );
+    imageData *edgeImage = new imageData( tiffPath3, imageBuffer.release(),
+                          imageWidth, imageHeight, outputChannels, 8*bytes, edgeColor, bytes>=4 );
+    data.addPage( edgeImage );
 
-      // process edges from CLUT
-      FindEdgesInner( clutData, edgeData, dimensions, loopSteps, outputChannels,
-                        bufferSize, 8*sizeof(icFloatNumber) );
-
-      // copy edge data to image
-      memset( imageBuf, 0, bufferSize );
-      CopyLUTtoTIFF( edgeData, imageBuf, tileWidth, tileHeight, tiles, outputChannels, inputChannels,
-                    gridPoints, tilesWide, imageWidth, bytes );
-
-      // write edge data as TIFF
-      std::string tiffPath3 = basename + "_" + sigDesc + "_edges";
-      int edgeColor = TIFFEdgeColorModelFromICCModel( outputSpace );
-      imageData *edgeImage = new imageData( tiffPath3, imageBuffer.release(),
-                            imageWidth, imageHeight, outputChannels, 8*bytes, edgeColor, bytes>=4 );
-      data.addPage( edgeImage );
-
-    }   // end if doEdges
+  }   // end if doEdges
 }
 
 /******************************************************************************/
@@ -2052,175 +1348,6 @@ void processNamedColorListAB( namedLabList &colorsOut, const std::string &descri
                                     true, abList, namedLabList() );
   data.addPage( plot );
 }
-
-/******************************************************************************/
-
-static
-void outputNamedColorsXYPDF( xyPlotData *plot, PDFWriter &pdffile )
-{
-  std::ostringstream commands;
-
-  const float bottom = 0.0f;
-  const float left = 0.0f;
-  const float top = pdffile.PageHeight();
-  const float right = pdffile.PageWidth();
-  Rect2D bounds ( left, right, bottom, top );
-  const float margin = 0.25f*inch2point;
-  const point2D basepoint( left+margin, bottom+margin );
-  const point2D rangeX( right-left-2*margin, 0 );
-  const point2D rangeY( 0, top-bottom-2*margin );
-  point2D scaling = (rangeX + rangeY) / chromaticityChartScale;
-  float markSize = 4.0f;
-  float textSize = 10.0f;
-
-  // plot on AB grid
-  // create the xyPlot xobject if doesn't exist
-  CreateXYPlotXobject( pdffile );
-
-  // add the common axes
-  commands << "/xyPlot Do\n";
-
-  // gsave, color black
-  commands << "q 0 0 0 1 K\n";
-
-  // add label
-  point2D range( right - left, 0 );
-  point2D labelBase( left, top );
-  point2D tickLength(0,0);
-  commands << PDFSingleLineTextLabel( labelBase + range*0.5, false, tickLength, 12, plot->object_label );
-
-  point2D labelOffset( 0, markSize + 2 + textSize );
-  for ( auto &sample : plot->points_unconnected ) {
-    point2D plotCenter = basepoint + scaling * point2D( sample.x, sample.y );
-    commands << plotSquarePDF( plotCenter, markSize);
-    commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
-                                textSize, sample.name, kPDFTextAlignLeft );
-  }
-
-  // connected line
-  size_t connected_count = plot->points_connected.size();
-  if (connected_count > 1) {
-    // gsave and 50% gray
-    commands << "q 0 0 0 0.5 K\n";
-    auto &sampleC = plot->points_connected[0];
-    point2D plotCenter = basepoint + scaling * point2D( sampleC.x, sampleC.y );
-    commands << plotCenter << " m ";
-    for (size_t i = 1; i < connected_count; ++i) {
-      auto &sample = plot->points_connected[i];
-      plotCenter = basepoint + scaling * point2D( sample.x, sample.y );
-      commands << plotCenter << " l ";
-    }
-    // stroke and grestore
-    commands << "s Q\n";
-  }
-
-  // connected marks and labels
-  for (size_t i = 0; i < connected_count; ++i) {
-    auto &sample = plot->points_connected[i];
-    point2D plotCenter = basepoint + scaling * point2D( sample.x, sample.y );
-    commands << plotSquarePDF( plotCenter, markSize );
-    commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
-                                textSize, sample.name, kPDFTextAlignLeft );
-  }
-
-  // grestore
-  commands << "Q\n";
-
-  // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
-  size_t content = pdffile.ObjectCount();
-
-  pdffile.AddPage( plot->object_name, content, "xyPlot" );
-}
-
-/******************************************************************************/
-
-static
-void outputNamedColorsABPDF( abPlotData *plot, PDFWriter &pdffile )
-{
-  std::ostringstream commands;
-
-  const float bottom = 0.0f;
-  const float left = 0.0f;
-  const float top = pdffile.PageHeight();
-  const float right = pdffile.PageWidth();
-  Rect2D bounds ( left, right, bottom, top );
-  const float margin = 0.25*inch2point;
-  const point2D basepoint( left+margin, bottom+margin );
-  const point2D rangeX( right-left-2*margin, 0 );
-  const point2D rangeY( 0, top-bottom-2*margin );
-  const point2D center = 0.5f * (basepoint + point2D(right-margin,top-margin));
-  float maxRadius = std::max( right-left-2*margin, top-bottom-2*margin );
-
-  // plot on AB grid
-  // if the abPlot xobject doesn't exist, create it now
-  CreateABPlotXobject( pdffile );
-
-  // add the common axes
-  commands << "/abPlot Do\n";
-
-  // gsave, color black
-  commands << "q 0 0 0 1 K\n";
-
-  // add label
-  point2D range( right - left, 0 );
-  point2D labelBase( left, top );
-  point2D tickLength(0,0);
-  commands << PDFSingleLineTextLabel( labelBase + range*0.5, false, tickLength, 12, plot->object_label );
-
-  float symbolSize = 4.0f;
-  float labelSize = 10.0f;
-  point2D labelOffset( 0, symbolSize + 2 + labelSize );
-  for ( auto &sample : plot->points_unconnected ) {
-    point2D colorPt( sample.a*maxRadius/abChartScale, sample.b*maxRadius/abChartScale );
-    point2D plotCenter = center + colorPt;
-    commands << plotSquarePDF( plotCenter, symbolSize);
-    commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
-                                labelSize, sample.name, kPDFTextAlignLeft );
-  }
-
-  // connected line
-  size_t connected_count = plot->points_connected.size();
-  if (connected_count > 1) {
-    // gsave and 50% gray
-    commands << "q 0 0 0 0.5 K\n";
-    auto &sampleC = plot->points_connected[0];
-    point2D colorPt( sampleC.a*maxRadius/abChartScale, sampleC.b*maxRadius/abChartScale );
-    point2D plotCenter = center + colorPt;
-    commands << plotCenter << " m ";
-    for (size_t i = 1; i < connected_count; ++i) {
-      auto &sample = plot->points_connected[i];
-      colorPt = point2D( sample.a*maxRadius/abChartScale, sample.b*maxRadius/abChartScale );
-      plotCenter = center + colorPt;
-      commands << plotCenter << " l ";
-    }
-    // stroke and grestore
-    commands << "s Q\n";
-  }
-
-  // connected marks and labels
-  for (size_t i = 0; i < connected_count; ++i) {
-    auto &sample = plot->points_connected[i];
-    point2D colorPt( sample.a*maxRadius/abChartScale, sample.b*maxRadius/abChartScale );
-    point2D plotCenter = center + colorPt;
-    commands << plotSquarePDF( plotCenter, symbolSize );
-    commands << PDFSingleLineTextLabel( plotCenter+labelOffset, false, point2D(0,0),
-                                labelSize, sample.name, kPDFTextAlignLeft );
-  }
-
-  // grestore
-  commands << "Q\n";
-
-
-  // and finally create the graphics object and page
-  PDFGraphic *graphics = new PDFGraphic( commands.str() );
-  pdffile.AddObject( graphics );
-  size_t content = pdffile.ObjectCount();
-
-  pdffile.AddPage( plot->object_name, content, "abPlot" );
-}
-
 /******************************************************************************/
 
 static
@@ -2804,58 +1931,6 @@ void processProfile( CIccProfile *pIcc, const std::string &basename,
   }   // end loop over tags
 
 }   // end processProfile()
-
-/******************************************************************************/
-
-static
-size_t outputDataToPDF( profileVisualizationData &data, const std::string &basename )
-{
-  if (data.pages.size() == 0)
-    return 0;
-
-// write next to input file
-// write output to basename + _luts.pdf
-// write basename + _ + tag + .tif for nD LUTs
-
-  std::string pdfPath = basename + "_luts.pdf";
-  PDFWriter pdffile( pdfPath, 8*inch2point, 8*inch2point );
-
-  // iterate over pages in data
-  for (auto &page : data.pages ) {
-    std::string pageType = page->getDataType();
-
-    if (pageType == std::string("lutPlotData")) {
-      lutPlotData *lutData = dynamic_cast<lutPlotData*>(page);
-      output1DLUTPDF( lutData, pdffile );
-    }
-    else if (pageType == std::string("abPlotData")) {
-      abPlotData *abData = dynamic_cast<abPlotData*>(page);
-      outputNamedColorsABPDF( abData, pdffile );
-    }
-    else if (pageType == std::string("xyPlotData")) {
-      xyPlotData *xyData = dynamic_cast<xyPlotData*>(page);
-      outputNamedColorsXYPDF( xyData, pdffile );
-    }
-    else if (pageType == std::string("imageData")) {
-      imageData *image = dynamic_cast<imageData*>(page);
-      std::string tiffPath2 = image->object_name + ".tif";
-      if (!WriteTIFF( tiffPath2.c_str(), 100, image->mode, image->data,
-                    image->width, image->height, image->channels, image->depth )) {
-        LogAnError(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath2.c_str());
-      }
-    }
-    else {
-      LogAnError(stderr, "%s: unknown data type %s\n", basename.c_str(), pageType.c_str());
-    }
-  } // end iteration over pages
-
-  size_t objectCount = pdffile.PageCount(); // grab page count before destroying the pages
-
-  pdffile.CloseFile();
-
-  return objectCount;
-
-}   // end outputDataToPDF()
 
 /******************************************************************************/
 
