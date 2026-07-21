@@ -24,7 +24,7 @@ where
   not exists(FunctionCall guard |
     guard.getTarget().getName().regexpMatch("(?i)(isnan|isinf|isfinite|fpclassify|__builtin_isnan)") and
     // Scope the guard to the SAME function as the cast. Without this the clause
-    // constrains only cast.getFile() (lines 32/34) and compares raw line numbers,
+    // constrains only the cast's file path below and compares raw line numbers,
     // never tying the guard to the cast's file or function - so an isfinite() on
     // line N of one file suppresses an unguarded cast on line N of a *different*
     // file (a soundness hole: real findings silently dropped). Equal enclosing
