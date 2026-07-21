@@ -187,9 +187,11 @@ The regression Docker image includes the Python MCP package, REST dependencies,
 iccDEV CLI tools, runtime libraries, maintainer utilities, and `Testing/`
 profiles. Use it when you want the MCP server without a local CMake tool build.
 
-Published images are produced only from the repository `master` branch. Manual
-`ci-docker` runs on feature branches build and run the Docker smoke tests, but
-load the image locally on the runner instead of pushing or attesting it.
+The Docker workflow publishes branch and immutable tags from `master` and
+`ci-qa-flags`, and from the protected `ci-qa-pr-docker-testing` branch through a
+manual dispatch. It promotes the verified regression digest to `latest` only
+after all required image checks succeed. Other feature branches build and smoke
+test locally on the runner without pushing or attesting images.
 
 ```bash
 # MCP stdio mode

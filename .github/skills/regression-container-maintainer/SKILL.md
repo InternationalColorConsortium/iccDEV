@@ -46,10 +46,10 @@ Use this skill for repeatable maintainer operations in
 11. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
     `ci-qa-flags`; carry every applicable container fix to both branches.
 12. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
-13. Publish `latest` automatically from `master`, or explicitly from the
-    protected Docker-testing branch with
-    `publish-regression-latest=true`; never promote it implicitly from other
-    branches.
+13. Promote the verified immutable digest to `latest` only after all image smoke
+    tests and regression CTest checks succeed: automatically from `master`, or
+    explicitly from the protected Docker-testing branch with
+    `publish-regression-latest=true`. Never promote it from other branches.
 14. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
 

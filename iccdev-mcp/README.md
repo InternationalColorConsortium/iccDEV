@@ -49,9 +49,12 @@ CLI tools, runtime libraries, maintainer utilities, and `Testing/` profiles.
 It is the lowest-friction way to use CLI-backed MCP tools without building
 iccDEV locally.
 
-The `master` regression image is published from the repository `master`
-branch. Feature branches can still run the Docker workflow manually; those
-runs build and smoke test the image without publishing it to GHCR.
+The Docker workflow publishes branch and immutable tags from `master` and
+`ci-qa-flags`, and from the protected `ci-qa-pr-docker-testing` branch through a
+manual dispatch. It promotes the verified regression digest to `latest` after
+successful `master` checks, or after an explicit protected Docker-testing
+branch promotion. Other feature branches build and smoke test locally on the
+runner without publishing to GHCR.
 
 ```bash
 # MCP stdio mode

@@ -193,8 +193,10 @@ For `Dockerfile.ci-regression` publishing:
 2. Publish through the maintainer-controlled container release path.
 3. Record the published branch tag, immutable SHA tag, digest, and source
    revision from the release output.
-4. Confirm `latest` resolves to the same digest after a `master` publication or
-   an explicit protected Docker-testing branch promotion.
+4. Promote `latest` only after all image smoke tests and regression CTest checks
+   succeed, then confirm it resolves to the same immutable digest after a
+   `master` publication or an explicit protected Docker-testing branch
+   promotion.
 5. Pass the immutable SHA tag to `ci-iccdev-tool-tests.yml` and rerun the
    regression gate.
 6. Remove temporary branch-specific inputs after the branch is no longer needed.

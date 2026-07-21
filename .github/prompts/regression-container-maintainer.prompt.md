@@ -37,9 +37,10 @@ Canonical guide: `docs/regression-container.md`
 11. Diff all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
     `ci-qa-flags`, then carry applicable fixes and validation to both branches.
 12. Include the `ci-qa-flags` commit and hosted run in the handoff.
-13. Promote `latest` only from `master` or with the explicit
-    `publish-regression-latest=true` dispatch on the protected Docker-testing
-    branch.
+13. Promote the verified immutable digest to `latest` only after all image smoke
+    tests and regression CTest checks succeed: from `master`, or with the
+    explicit `publish-regression-latest=true` dispatch on the protected
+    Docker-testing branch.
 
 ## Safety
 

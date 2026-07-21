@@ -235,12 +235,14 @@ gh run watch <run-id> \
 
 Pushes to `master` or `ci-qa-flags` that touch the container surface trigger
 `ci-docker` and publish the corresponding regression branch and SHA tags.
-Successful `master` publication also updates `latest`.
+After all image smoke tests and regression CTest checks succeed, a successful
+`master` publication promotes the verified immutable regression digest to
+`latest`.
 
 Publish `ci-qa-pr-docker-testing` by dispatching `ci-docker` on that branch. The
-protected testing branch can update `latest` only through the explicit opt-in
-input, which prevents ordinary testing runs from replacing the maintainer
-baseline:
+protected testing branch can promote the verified immutable digest to `latest`
+only through the explicit opt-in input, which prevents ordinary testing runs
+and failed image checks from replacing the maintainer baseline:
 
 ```bash
 gh workflow run ci-docker.yml \
