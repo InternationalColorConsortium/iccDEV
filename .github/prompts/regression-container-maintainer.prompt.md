@@ -33,6 +33,9 @@ Canonical guide: `docs/regression-container.md`
 9. Save evidence outside the disposable container.
 10. If CI is requested, use the PR trigger or explicitly dispatch
     `ci-pr-action.yml`; do not assume a branch push triggers it.
+11. Diff all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
+    `ci-qa-flags`, then carry applicable fixes and validation to both branches.
+12. Include the `ci-qa-flags` commit and hosted run in the handoff.
 
 ## Safety
 

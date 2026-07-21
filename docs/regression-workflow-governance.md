@@ -24,7 +24,7 @@ where it belongs.
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
-| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
+| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.mcp`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
 
 ## When to Add a Script
 
@@ -82,6 +82,11 @@ Maintainer-owned workflow, release, packaging, Docker, MCP, and security
 automation changes should use a conservative review loop. Run the applicable
 local security tools, patch confirmed findings, retest, and document accepted
 scanner noise with a clear rationale.
+
+For every `Dockerfile*` change, compare `ci-qa-pr-docker-testing` with
+`ci-qa-flags` and carry applicable fixes to both branches. The testing branch is
+the container proving ground; `ci-qa-flags` remains a required synchronized
+maintainer branch and must be included in the hosted validation report.
 
 Local review should include YAML parsing, `actionlint`, `yamllint`, direct
 `${{ }}` interpolation scans for `run:` blocks, Dockerfile base/remote-exec

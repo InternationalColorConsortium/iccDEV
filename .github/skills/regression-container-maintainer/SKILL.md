@@ -41,7 +41,10 @@ Use this skill for repeatable maintainer operations in
 9. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
 10. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-11. Report exact image, source, commands, results, evidence, and workflow URLs.
+11. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
+    `ci-qa-flags`; carry every applicable container fix to both branches.
+12. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
+13. Report exact image, source, commands, results, evidence, and workflow URLs.
 
 ## Safety Gates
 

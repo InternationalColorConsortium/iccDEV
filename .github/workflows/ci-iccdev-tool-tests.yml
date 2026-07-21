@@ -345,7 +345,7 @@ jobs:
             --only-binary=:all: \
             'numpy==2.4.2' \
             'tifffile==2026.2.24' \
-            'pillow==12.1.1' \
+            'pillow==12.3.0' \
             'imagecodecs==2026.6.6' \
             --quiet
           "$SPECTRAL_PREVIEW_VENV/bin/python" - <<'PY'

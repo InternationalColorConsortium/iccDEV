@@ -226,6 +226,18 @@ gh workflow run ci-docker.yml \
   --ref ci-qa-pr-docker-testing
 ```
 
+Before publishing a Docker change, compare every maintained container file
+across `ci-qa-pr-docker-testing` and `ci-qa-flags`:
+
+```bash
+git diff --name-status ci-qa-pr-docker-testing..ci-qa-flags -- \
+  'Dockerfile*' '**/Dockerfile*'
+```
+
+Carry applicable fixes for `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.mcp`,
+and `Dockerfile.ci-regression` to both branches. A successful testing-branch
+image does not replace the required `ci-qa-flags` update and hosted validation.
+
 ## Maintainer Report
 
 Report:
