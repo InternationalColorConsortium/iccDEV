@@ -82,6 +82,9 @@
 #include "MiniPDF.hpp"
 #include "spectralLocus.hpp"
 #include "IccVizModel.hpp"   // data-first visualization engine (graphs + raster)
+#include "iccProfileVisualize.hpp"   // our own processLuts() decl - keeps the
+                                     // definition below in sync with the entry
+                                     // point exposed to out-of-line callers
 
 // #define MEMORY_LEAK_CHECK to enable C RTL memory leak checking (slow!)
 #define MEMORY_LEAK_CHECK
@@ -1340,7 +1343,11 @@ int renderNeutralAxisGraph( const iccviz::Graph &graph, PDFWriter &pdffile )
 /******************************************************************************/
 
 // output graphic representation of 1D and nD LUTs
-static
+// Non-static: external linkage so an out-of-line driver (a fuzz/regression
+// harness) can link against this entry point; declared in
+// iccProfileVisualize.hpp, which the includes above pull in to keep the two
+// in sync. It was `static` (internal linkage) as the tool's private driver,
+// which is why a caller in another translation unit could not reach it.
 int processLuts(CIccProfile *pIcc, const char *profilePath )
 {
   int outputItems = 0;
@@ -1496,6 +1503,13 @@ void printUsage(void)
 
 /******************************************************************************/
 
+// The CLI entry point is just an argv loop around processLuts(). A harness that
+// links this object for processLuts() supplies its own entry point (libFuzzer
+// provides main; a regression driver defines its own), so build that harness
+// with -DICC_PROFILEVISUALIZE_NO_MAIN to drop ours and avoid a duplicate-main
+// link error. The normal tool build leaves the macro undefined and compiles
+// main() unchanged.
+#ifndef ICC_PROFILEVISUALIZE_NO_MAIN
 int main(int argc, char* argv[])
 {
 #if defined(MEMORY_LEAK_CHECK) && defined(_DEBUG)
@@ -1562,5 +1576,6 @@ int main(int argc, char* argv[])
 
   return status;
 }
+#endif // ICC_PROFILEVISUALIZE_NO_MAIN
 
 /******************************************************************************/
