@@ -762,9 +762,25 @@ jobs:
 
           echo "Pruning ${MATRIX_PACKAGE} versions older than ${CUTOFF}; keeping ${KEEP_RECENT} newest non-latest versions; deleting up to ${DELETE_LIMIT}"
 
-          gh api --paginate \
-            "/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions" |
-          jq -sr --arg cutoff "${CUTOFF}" --argjson keep_recent "${KEEP_RECENT}" '
+          pages_file="/tmp/prune-version-pages.json"
+          rm -f "$pages_file"
+          for attempt in 1 2 3; do
+            if gh api --paginate --slurp \
+                "/orgs/${ORG}/packages/container/${MATRIX_PACKAGE}/versions" \
+                > "$pages_file" &&
+              jq -e 'type == "array" and all(.[]; type == "array")' \
+                "$pages_file" >/dev/null; then
+              break
+            fi
+            rm -f "$pages_file"
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Unable to list valid package versions after ${attempt} attempts"
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
+
+          jq -r --arg cutoff "${CUTOFF}" --argjson keep_recent "${KEEP_RECENT}" '
             add
             | sort_by(.created_at)
             | reverse
@@ -777,13 +793,14 @@ jobs:
             | .[]
             | select(.created_at < $cutoff)
             | .id
-          ' > /tmp/prune-all-ids.txt
+          ' "$pages_file" > /tmp/prune-all-ids.txt
           sed -n "1,${DELETE_LIMIT}p" /tmp/prune-all-ids.txt > /tmp/prune-ids.txt
 
           TOTAL=$(wc -l < /tmp/prune-ids.txt | tr -d ' ')
           CANDIDATES=$(wc -l < /tmp/prune-all-ids.txt | tr -d ' ')
           if [ "${TOTAL}" -eq 0 ]; then
             echo "No versions to prune"
+            rm -f "$pages_file" /tmp/prune-ids.txt /tmp/prune-all-ids.txt
             exit 0
           fi
 
@@ -793,7 +810,8 @@ jobs:
           FAILED=0
           while IFS= read -r vid; do
             response="/tmp/prune-response-${vid}.json"
-            status=$(curl -sS -o "${response}" -w "%{http_code}" \
+            status=$(curl -sS --retry 3 --retry-delay 2 --retry-all-errors \
+              -o "${response}" -w "%{http_code}" \
               -X DELETE \
               -H "Authorization: Bearer ${GH_TOKEN}" \
               -H "Accept: application/vnd.github+json" \
@@ -818,7 +836,7 @@ jobs:
           done < /tmp/prune-ids.txt
 
           echo "Pruned ${DELETED}/${TOTAL} old versions (${SKIPPED} skipped, ${FAILED} failed)"
-          rm -f /tmp/prune-ids.txt /tmp/prune-all-ids.txt
+          rm -f "$pages_file" /tmp/prune-ids.txt /tmp/prune-all-ids.txt
           if [ "${FAILED}" -ne 0 ]; then
             echo "::error::${FAILED} package version delete request(s) failed"
             exit 1
