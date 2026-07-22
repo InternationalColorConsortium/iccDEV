@@ -59,8 +59,27 @@
 #ifndef vizShared_h
 #define vizShared_h
 
+#include <cstring>
+#include <cmath>
 #include <cstdint>
 #include <vector>
+
+/******************************************************************************/
+
+#ifdef _WIN32
+// work around Windows non-standard headers
+  #define strcasecmp _stricmp
+#endif
+
+/******************************************************************************/
+
+#ifndef M_SQRT2
+#define M_SQRT2  1.41421356237309504880168872420969808
+#endif
+
+#ifndef M_PI
+#define M_PI  3.14159265358979323846264338327950288
+#endif
 
 /******************************************************************************/
 

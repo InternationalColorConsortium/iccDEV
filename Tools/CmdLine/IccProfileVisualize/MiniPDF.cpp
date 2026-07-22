@@ -68,6 +68,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include "vizShared.hpp"
 #include "MiniPDF.hpp"
 #include "../IccCmdLineUtil.h"
 #include "errorLog.hpp"

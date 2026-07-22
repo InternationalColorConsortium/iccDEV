@@ -73,6 +73,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #endif
+#include "vizShared.hpp"
 #include "MiniTIFF.hpp"
 #include "errorLog.hpp"
 
