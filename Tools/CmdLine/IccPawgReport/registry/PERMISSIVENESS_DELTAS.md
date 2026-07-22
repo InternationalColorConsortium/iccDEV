@@ -39,43 +39,46 @@ reject, while still warning on signatures absent from the registry (see section 
 
 ---
 
-## B. CMM signature field - RESOLVED by the issue-1724 IccProfLib update
+## B. CMM signature field
 
 S3's CMM check uses `CIccInfo::GetCmmSigName()` (IccProfLib/IccUtil.cpp) and
-warns when it returns an "Unknown..." name. Issue #1724 carries the follow-up
-IccProfLib update requested by the #1459 review: the core CMM enum, name table,
-and profile validation allow-list now match the live CMM registry rows described
-below. No PawgReport-local CMM table was added; S3 continues to consume the core
-IccProfLib lookup.
+warns when it returns an "Unknown..." name. Two rounds of IccProfLib work bring
+the core CMM enum, name table, and profile-validation allow-list into agreement
+with the live CMM registry. No PawgReport-local CMM table was added; S3 continues
+to consume the core IccProfLib lookup.
 
-### B1. Enum entries with no `GetCmmSigName()` case - fixed
-The `icCmmSignature` enum (icProfileHeader.h, "as of Mar 6, 2018") defines these,
-but `GetCmmSigName()` had no `case` for them, so S3 reported them Unknown. The
-issue-1724 update adds both name-table cases and keeps the existing enum values:
+### B1/B2/B3 - RESOLVED by PR #1473 (enum + name table)
 
-| Enum | Value | ASCII |
-|------|-------|-------|
-| `icSigWindowsCMS`   | `0x57435320` | `WCS ` |
-| `icSigOnyxGraphics` | `0x4F4E5958` | `ONYX` |
+PR #1473 ("Reconcile icCmmSignature enum + GetCmmSigName with the CMM registry")
+already reconciled the enum values and `GetCmmSigName()` name-table cases with
+registry.color.org/cmm-signatures. Recorded here for completeness; **no code for
+these rows ships in the issue-1724 change** - they were verified present in
+`master` before this report:
 
-### B2. Live CMM registry entries absent from the IccProfLib enum - fixed
-These registry.color.org/cmm-signatures entries were present in the live CMM
-registry but absent from the enum snapshot. The issue-1724 update adds enum and
-`GetCmmSigName()` coverage for all three, and `CIccProfile::Validate()` now
-accepts `repr` and `iccd` as registered CMM signatures:
+- **B1 - name-table cases added.** `icSigWindowsCMS` (`0x57435320` `WCS `) and
+  `icSigOnyxGraphics` (`0x4F4E5958` `ONYX`) had enum entries but no
+  `GetCmmSigName()` `case`; #1473 added the names.
+- **B2 - registry entries added to the enum + names.** `RIMX` (`0x52494D58`,
+  ICC/RefIccMAX), `iccd` (`0x69636364`, ICC) and `repr` (`0x72657072`,
+  Reprointelligence) were absent from the enum snapshot; #1473 added enum values
+  and `GetCmmSigName()` coverage for all three.
+- **B3 - latent value/comment mismatch corrected.** `icSigRefIccMAX` had value
+  `0x52494343` (ASCII `RICC`) while its comment and the registry said
+  `RIMX = 0x52494D58`; #1473 changed the value to `0x52494D58` to match.
 
-| Value | ASCII | Vendor |
-|-------|-------|--------|
-| `0x52494D58` | `RIMX` | ICC (RefIccMAX) |
-| `0x69636364` | `iccd` | ICC |
-| `0x72657072` | `repr` | Reprointelligence |
+### B4. Validation allow-list catch-up - the issue-1724 change
 
-### B3. Latent value/comment mismatch - fixed
-`icSigRefIccMAX = 0x52494343` (= ASCII `RICC`) but its comment says `/* 'RIMX' */`,
-and the registry lists RefIccMAX's CMM signature as `RIMX = 0x52494D58`. The enum
-*value* and the registry disagreed. The issue-1724 update changes
-`icSigRefIccMAX` to `0x52494D58` (RIMX), matching the registry and the existing
-comment.
+#1473 named `repr`/`iccd` but did **not** add them to the CMM allow-list in
+`CIccProfile::CheckHeader()`, so `CIccProfile::Validate()` still emitted
+"Unregistered CMM signature" for the two (now-named) sigs. The issue-1724 change
+is exactly this two-line catch-up: it adds `case icSigReprointelligence:` and
+`case icSigICC:` to that switch so `repr` and `iccd` validate cleanly, matching
+the names #1473 gave them. (`WCS `/`ONYX`/`RIMX`/`ICCD` were already allow-listed.)
+All four registry memberships were re-verified against
+registry.color.org/cmm-signatures on 2026-07-21: `repr`, `iccd`, `RIMX`, `WCS `
+and `ONYX` are registered; `MSFT` is **not** a registered CMM (it is a platform
+signature), so `icSigMicrosoftCMM` is deliberately left out of the allow-list and
+still warns.
 
 **Permissiveness direction:** this is a targeted correction for registered CMM
 signatures. Unknown or unregistered CMM signatures still warn.
