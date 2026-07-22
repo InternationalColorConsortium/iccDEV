@@ -2,9 +2,6 @@
 //  dataToJSON.hpp
 //
 
-#ifndef dataToJSON_hpp
-#define dataToJSON_hpp
-
 /*
  * The ICC Software License, Version 0.2
  *
@@ -58,6 +55,9 @@
  *
  */
 
+#ifndef dataToJSON_hpp
+#define dataToJSON_hpp
+
 #include <cstdint>
 #include <string>
 #include "dataModel.hpp"
@@ -67,6 +67,5 @@
 size_t outputDataToJSON( profileVisualizationData &data, const std::string &basename );
 
 /******************************************************************************/
-
 
 #endif /* dataToJSON_hpp */

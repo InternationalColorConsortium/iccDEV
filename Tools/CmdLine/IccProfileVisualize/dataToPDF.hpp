@@ -2,9 +2,6 @@
 //  dataToPDF.hpp
 //
 
-#ifndef dataToPDF_hpp
-#define dataToPDF_hpp
-
 /*
  * The ICC Software License, Version 0.2
  *
@@ -58,16 +55,17 @@
  *
  */
 
+#ifndef dataToPDF_hpp
+#define dataToPDF_hpp
+
 #include <cstdint>
 #include <string>
 #include "dataModel.hpp"
 
 /******************************************************************************/
 
-
 size_t outputDataToPDF( profileVisualizationData &data, const std::string &basename );
 
 /******************************************************************************/
-
 
 #endif /* dataToPDF_hpp */
