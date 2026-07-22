@@ -1511,6 +1511,50 @@ function(iccdev_add_parser_restore_calls_test)
   endif()
 endfunction()
 
+# Compressed-tag Describe() labelling (#1723 Compression Paths). Two output-only
+# defects: CIccTagData::Describe() dropped the "Compressed " marker (a following
+# `=` assignment overwrote it), and the no-zlib CIccTagZipUtf8Text::Describe()
+# marker was misspelled "COMPESSED" with an unbalanced delimiter. Unlike the
+# #1521/#1743 zlib tests this needs no deflate/inflate -- the tags are built in
+# memory and only their dump strings are inspected -- so it is NOT gated on
+# ICC_USE_ZLIB and runs in every configuration (the defect-2 assertion inside the
+# test self-gates to no-zlib builds).
+function(iccdev_add_compression_describe_labels_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCompressionDescribeLabelsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/compression-describe-labels.cpp"
+  )
+  target_compile_features(iccCompressionDescribeLabelsTest PRIVATE cxx_std_17)
+  target_link_libraries(iccCompressionDescribeLabelsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCompressionDescribeLabelsTest)
+
+  add_test(
+    NAME iccdev.compression-describe-labels
+    COMMAND "$<TARGET_FILE:iccCompressionDescribeLabelsTest>"
+  )
+  set_tests_properties(iccdev.compression-describe-labels PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;tag;compression;issue-1723;regression"
+  )
+  if(WIN32)
+    set(_compression_describe_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCompressionDescribeLabelsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _compression_describe_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.compression-describe-labels PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_compression_describe_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_windows_iccdevcmm_smoke_test)
   if(NOT WIN32 OR NOT TARGET RefIccMAX)
     return()
@@ -1728,6 +1772,7 @@ if(WIN32)
   iccdev_add_fileio_seek_tell_test()
   iccdev_add_tagdata_zlib_roundtrip_test()
   iccdev_add_ziputf8_settext_contract_test()
+  iccdev_add_compression_describe_labels_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -1933,6 +1978,7 @@ iccdev_add_profile_write_failure_test()
 iccdev_add_fileio_seek_tell_test()
 iccdev_add_tagdata_zlib_roundtrip_test()
 iccdev_add_ziputf8_settext_contract_test()
+iccdev_add_compression_describe_labels_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()

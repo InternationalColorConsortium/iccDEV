@@ -1471,9 +1471,13 @@ void CIccTagZipUtf8Text::Describe(std::string &sDescription, int /* nVerboseness
   const size_t sizeSize = 30;
   char size[sizeSize];
   snprintf(size, sizeSize, "%u", (unsigned int) m_nBufSize);
-  sDescription += "BEGIN_COMPESSED_DATA[\"";
+  // Marker spelled "COMPRESSED" (was the typo "COMPESSED") to match the
+  // END_COMPRESSED_DATA line below, and the ["..."] delimiter is balanced so the
+  // byte count is quoted symmetrically. This no-zlib branch dumps the raw
+  // compressed bytes as hex because the CMM cannot inflate them here.
+  sDescription += "BEGIN_COMPRESSED_DATA[\"";
   sDescription += size;
-  sDescription += "]\n";
+  sDescription += "\"]\n";
   if (m_nBufSize) {
     icMemDump(str, m_pZipBuf, m_nBufSize);
     sDescription += str;
@@ -8986,23 +8990,27 @@ void CIccTagData::Describe(std::string &sDescription, int /* nVerboseness */)
   if (IsTypeCompressed())
     sDescription += "Compressed ";  // If data is compressed, prepend appropriate text
 
+  // Each branch below must append (+=) rather than assign (=): assigning would
+  // overwrite the leading newline and, more importantly, the "Compressed " marker
+  // set just above, so a compressed data tag would never be labelled as such in
+  // any dump. Keep the "\n"/"Compressed " prefix and add the data-kind label to it.
   if (IsTypeAscii()) {
-    sDescription = "Ascii Data:\n";
+    sDescription += "Ascii Data:\n";
 
     for (int i=0; i<(int)m_nSize; i++)
       sDescription += (icChar)m_pData[i];
   }
   else if (IsTypeUtf()) {
-    if (m_nSize>2 && 
+    if (m_nSize>2 &&
         ((m_pData[0]==0xff && m_pData[1]==0xfe) ||  //UTF-16LE
          (m_pData[0]==0xfe && m_pData[1]==0xff))) { //UTF-16BE
       snprintf(buf, bufSize, "UTF-16%s Data:", m_pData[0]==0xff ? "LE" : "BE" );
-      sDescription = buf;
+      sDescription += buf;
 
       icMemDump(sDescription, m_pData, m_nSize);
     }
     else { //UTF-8
-      sDescription = "UTF-8 Data:\n";
+      sDescription += "UTF-8 Data:\n";
 
       for (int i=0; i<(int)m_nSize; i++)
         sDescription += (icChar)m_pData[i];
@@ -9010,10 +9018,10 @@ void CIccTagData::Describe(std::string &sDescription, int /* nVerboseness */)
   }
   else {
     if (IsTypeBinary()) {
-      sDescription = "Binary Data:\n";
+      sDescription += "Binary Data:\n";
     }
     else {
-      sDescription = "Other Data:\n";
+      sDescription += "Other Data:\n";
     }
 
     icMemDump(sDescription, m_pData, m_nSize);
