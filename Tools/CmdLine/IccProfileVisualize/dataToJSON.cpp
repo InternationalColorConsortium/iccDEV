@@ -77,12 +77,123 @@
 /******************************************************************************/
 
 static
+std::string remove_extension( const std::string& filename )
+{
+  size_t lastdot = filename.find_last_of(".");
+  if (lastdot == std::string::npos || lastdot == 0) {
+    return filename;
+  }
+  return filename.substr(0, lastdot);
+}
+
+/******************************************************************************/
+
+static
+std::string remove_path( const std::string& filename )
+{
+  size_t lastPath = filename.find_last_of("/");
+  if (lastPath == std::string::npos || lastPath == 0) {
+    lastPath = filename.find_last_of("\\");
+  }
+  if (lastPath == std::string::npos || lastPath == 0) {
+    return filename;
+  }
+  return filename.substr(lastPath+1, filename.size() );
+}
+
+/******************************************************************************/
+
+std::ostream& operator<<( std::ostream &out, const namedXYList &data )
+{
+  out << "[\n";
+
+  for (const auto &entry: data ) {
+    out << "\t{ \"name\": \"" << entry.name << "\"";
+    out << " \"x\": " << entry.x;
+    out << " \"y\": " << entry.y;
+    out << " },\n";
+  }
+
+  // json doesn't like trailing commas
+  if (data.size() > 0) {
+    out.seekp( -2, std::ios_base::end );
+    out << "\n";
+  }
+
+  out << "]";
+  return out;
+}
+
+/******************************************************************************/
+
+std::ostream& operator<<( std::ostream &out, const namedLabList &data )
+{
+  out << "[\n";
+
+  for (const auto &entry: data ) {
+    out << "\t{ \"name\": \"" << entry.name << "\"";
+    out << " \"L\": " << entry.L;
+    out << " \"a\": " << entry.a;
+    out << " \"b\": " << entry.b;
+    out << " },\n";
+  }
+
+  // json doesn't like trailing commas
+  if (data.size() > 0) {
+    out.seekp( -2, std::ios_base::end );
+    out << "\n";
+  }
+
+  out << "]";
+  return out;
+}
+
+/******************************************************************************/
+
+std::ostream& operator<<( std::ostream &out, const pointList &data )
+{
+  out << "[\n";
+
+  for (const auto &entry: data ) {
+    out << "\t{ \"x\": " << entry.x;
+    out << " \"y\": " << entry.y;
+    out << " },\n";
+  }
+
+  // json doesn't like trailing commas
+  if (data.size() > 0) {
+    out.seekp( -2, std::ios_base::end );
+    out << "\n";
+  }
+
+  out << "]";
+  return out;
+}
+
+/******************************************************************************/
+
+std::string jsonBool( bool &val ) {
+    if (val)
+      return "true";
+    else
+      return "false";
+}
+
+/******************************************************************************/
+
+static
 void outputNamedColorsXYJSON( xyPlotData *plot, std::ostringstream &out )
 {
   std::ostringstream commands;
   
   commands << "\"" << plot->object_name << "\": {\n";
-  commands << "\"type\": \"" << plot->getDataType() << "\"\n";
+  commands << "\"type\": \"" << plot->getDataType() << "\",\n";
+  commands << "\"label\": \"" << plot->object_label << "\",\n";
+  commands << "\"printLabels\": " << jsonBool(plot->printLabels) << ",\n";
+  
+  commands << "\"unconnected_points\": " << plot->points_unconnected << ",\n";
+  commands << "\"connected_points\": " << plot->points_connected << "\n";
+  
   commands << "}";
 
   out << commands.str();
@@ -96,7 +207,13 @@ void outputNamedColorsABJSON( abPlotData *plot, std::ostringstream &out )
   std::ostringstream commands;
   
   commands << "\"" << plot->object_name << "\": {\n";
-  commands << "\"type\": \"" << plot->getDataType() << "\"\n";
+  commands << "\"type\": \"" << plot->getDataType() << "\",\n";
+  commands << "\"label\": \"" << plot->object_label << "\",\n";
+  commands << "\"printLabels\": " << jsonBool(plot->printLabels) << ",\n";
+  
+  commands << "\"unconnected_points\": " << plot->points_unconnected << ",\n";
+  commands << "\"connected_points\": " << plot->points_connected << "\n";
+  
   commands << "}";
 
   out << commands.str();
@@ -111,9 +228,32 @@ void output1DLUTJSON( lutPlotData *lut, std::ostringstream &out )
   
   commands << "\"" << lut->object_name << "\": {\n";
   commands << "\"type\": \"" << lut->getDataType() << "\"\n";
+  commands << "\"label\": \"" << lut->object_label << "\",\n";
+  commands << "\"isIdentity\": " << jsonBool(lut->isIdentity) << ",\n";
+  
+  commands << "\"points\": " << lut->points << "\n";
+  
   commands << "}";
 
   out << commands.str();
+}
+
+/******************************************************************************/
+
+// start with something simple
+// ccox - I can make it faster later, if necessary
+static
+std::string hexify( uint8_t *data, size_t byteCount )
+{
+  std::ostringstream commands;
+  commands << std::hex << std::setfill('0');
+
+  for (size_t i = 0; i < byteCount; ++i) {
+    int byte = data[i]; // promote to int to prevent stream from printing a character
+    commands << std::setw(2) << byte;   // why does width have to reset *every* time?
+  }
+
+  return commands.str();
 }
 
 /******************************************************************************/
@@ -123,8 +263,18 @@ void outputImageJSON( imageData *image, std::ostringstream &out )
 {
   std::ostringstream commands;
   
-  commands << "\"" << image->object_name << "\": {\n";
+  commands << "\"" << remove_path(image->object_name) << "\": {\n";
   commands << "\"type\": \"" << image->getDataType() << "\"\n";
+  commands << "\"width\": " << image->width << ",\n";
+  commands << "\"height\": " << image->height << ",\n";
+  commands << "\"channels\": " << image->channels << ",\n";
+  commands << "\"depth\": " << image->depth << ",\n";
+  commands << "\"mode\": " << image->mode << ",\n";
+  commands << "\"isFloatingPoint\": " << jsonBool(image->isFloatingPoint) << ",\n";
+  
+  size_t bytes = (size_t)image->width * (size_t)image->height * (size_t)image->channels  * (size_t)(image->depth/8);
+  commands << "\"hexData\": \"" << hexify(image->data,bytes) << "\"\n";
+  
   commands << "}";
 
   out << commands.str();
@@ -142,6 +292,7 @@ void writeHeaderJSON( std::ostringstream &out, profileVisualizationData &data, c
   
   // global data
   commands << "\"format\": \"iccProfileVisualizationData\",\n";
+  commands << "\"version\": 1,\n";
   commands << "\"input\": \"" << basename << "\",\n";
   commands << "\"name\": \"" << data.name << "\",\n";
   commands << "\"pageCount\": \"" << data.pages.size() << "\",\n";
@@ -181,18 +332,6 @@ static bool WriteJSONTextFile(FILE* outFile, const std::string& text)
     failed = true;
 
   return !failed;
-}
-
-/******************************************************************************/
-
-static
-std::string remove_extension( const std::string& filename )
-{
-  size_t lastdot = filename.find_last_of(".");
-  if (lastdot == std::string::npos || lastdot == 0) {
-    return filename;
-  }
-  return filename.substr(0, lastdot);
 }
 
 /******************************************************************************/
@@ -243,7 +382,7 @@ size_t outputDataToJSON( profileVisualizationData &data, const std::string &base
 
   } // end iteration over pages
   
-  // erase last comma and newline
+  // erase last item comma and newline
   if (objectCount > 0) {
     out.seekp( -2, std::ios_base::end );
     out << "\n";
