@@ -543,6 +543,48 @@ function(iccdev_add_mpecalc_matrix_overflow_test)
   endif()
 endfunction()
 
+# Guards CIccSparseMatrixUInt8::set / CIccSparseMatrixUInt16::set in IccSparseMatrix.h
+# (alerts #1061, #2260): (1) the clamp is NaN-safe -- `!(value > 0.0) ? 0` routes NaN
+# and value<=0 to 0 before the float->int cast, where the old `value < 0.0` test let a
+# NaN reach the undefined cast; (2) the UInt16 entry casts to (icUInt16Number), not the
+# truncating (icUInt8Number) that stored e.g. 0.5 as 0 into the 16-bit slot. The set()/
+# get() methods are inline, so the test exercises the shipped code; reverting either fix
+# fails an assertion.
+function(iccdev_add_sparsematrix_set_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSparseMatrixSetRoundtripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccsparsematrix-set-roundtrip.cpp"
+  )
+  target_link_libraries(iccSparseMatrixSetRoundtripTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSparseMatrixSetRoundtripTest)
+
+  add_test(
+    NAME iccdev.iccsparsematrix-set-roundtrip
+    COMMAND "$<TARGET_FILE:iccSparseMatrixSetRoundtripTest>"
+  )
+  set_tests_properties(iccdev.iccsparsematrix-set-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;sparsematrix;nan;roundtrip;regression"
+  )
+  if(WIN32)
+    set(_sparsematrix_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSparseMatrixSetRoundtripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sparsematrix_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccsparsematrix-set-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sparsematrix_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards CIccCmmSearch::AddXform profile ownership (#1332): the search CMM
 # rejects a NamedColor profile (no search LUT) and, like the base AddXform
 # contract (#1327), must free it.  The helper feeds a NamedColor profile through
@@ -1779,6 +1821,7 @@ if(WIN32)
   iccdev_add_pawg_q1q3_relative_intent_test()
   iccdev_add_cmm_registry_allowlist_test()
   iccdev_add_mpecalc_matrix_overflow_test()
+  iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
@@ -1985,6 +2028,7 @@ iccdev_add_pawg_q4_xyz_pcs_decode_test()
 iccdev_add_pawg_q1q3_relative_intent_test()
 iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
+iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
