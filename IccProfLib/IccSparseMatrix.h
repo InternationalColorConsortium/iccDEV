@@ -105,7 +105,10 @@ public:
   CIccSparseMatrixUInt8() {}
 
   virtual icFloatNumber get(int index) const {return (icFloatNumber)m_pData[index]/255.0f;}
-  virtual void set(int index, icFloatNumber value) {m_pData[index] = value<0.0 ? 0 : (value > 1.0 ? 255 : (icUInt8Number)(value*255.0f+0.5f));}
+  // !(value > 0.0) rejects NaN and value<=0 (both -> 0) BEFORE the cast. A plain
+  // value<0.0 test lets a NaN fall through to (icUInt8Number)(NaN*255+0.5), which is
+  // undefined behavior on the float->int cast (CWE-681, alert #1061).
+  virtual void set(int index, icFloatNumber value) {m_pData[index] = !(value > 0.0) ? 0 : (value > 1.0 ? 255 : (icUInt8Number)(value*255.0f+0.5f));}
 
 };
 
@@ -115,7 +118,11 @@ public:
   CIccSparseMatrixUInt16() {}
 
   virtual icFloatNumber get(int index) const {return (icFloatNumber)m_pData[index]/65535.0f;}
-  virtual void set(int index, icFloatNumber value) {m_pData[index] = value<0.0 ? 0 : (value > 1.0 ? 65535 : (icUInt8Number)(value*65535.0f+0.5f));}
+  // Same NaN guard as the UInt8 entry (alert #2260). Also fixes a data-loss bug: the
+  // cast is (icUInt16Number), not (icUInt8Number) -- the 8-bit cast truncated the
+  // scaled value into the 16-bit slot (e.g. 0.5 -> 32768 & 0xff == 0), breaking the
+  // set()/get() round-trip against get()'s /65535.0f above.
+  virtual void set(int index, icFloatNumber value) {m_pData[index] = !(value > 0.0) ? 0 : (value > 1.0 ? 65535 : (icUInt16Number)(value*65535.0f+0.5f));}
 
 };
 

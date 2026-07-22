@@ -314,6 +314,49 @@ function(iccdev_add_pawg_q4_xyz_pcs_decode_test)
   endif()
 endfunction()
 
+# Guards the CMM-signature validation allow-list catch-up landed for #1724 in
+# CIccProfile::CheckHeader (IccProfLib/IccProfile.cpp).  PR #1473 named the live-
+# registry CMMs 'repr' and 'iccd' but left them out of CheckHeader's accept-list,
+# so Validate() still warned "Unregistered CMM signature" for them.  This test
+# drives CheckHeader directly and pins: 'repr'/'iccd' (and the already-listed
+# 'WCS '/'RIMX') validate without a CMM warning, while 'MSFT' (a platform sig,
+# not a registered CMM) and unregistered junk still warn.  Core IccProfLib only,
+# so no extra include dirs are needed.
+function(iccdev_add_cmm_registry_allowlist_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCmmRegistryAllowlistTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/cmm-registry-allowlist.cpp"
+  )
+  target_link_libraries(iccCmmRegistryAllowlistTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCmmRegistryAllowlistTest)
+
+  add_test(
+    NAME iccdev.cmm-registry-allowlist
+    COMMAND "$<TARGET_FILE:iccCmmRegistryAllowlistTest>"
+  )
+  set_tests_properties(iccdev.cmm-registry-allowlist PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;cmm;registry;regression"
+  )
+  if(WIN32)
+    set(_cmm_allowlist_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCmmRegistryAllowlistTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _cmm_allowlist_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.cmm-registry-allowlist PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_cmm_allowlist_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards iccPawgReport's Q2 curve-invertibility scope (#1458): the round-trip
 # inverse-error metric must apply to tone-reproduction curves (rTRC/gTRC/bTRC/
 # kTRC) only, not to LUT A/B/M shaper curves.  A B2A output shaper curve
@@ -496,6 +539,48 @@ function(iccdev_add_mpecalc_matrix_overflow_test)
     endforeach()
     set_tests_properties(iccdev.mpecalc-matrix-size-overflow PROPERTIES
       ENVIRONMENT_MODIFICATION "${_mpecalc_overflow_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# Guards CIccSparseMatrixUInt8::set / CIccSparseMatrixUInt16::set in IccSparseMatrix.h
+# (alerts #1061, #2260): (1) the clamp is NaN-safe -- `!(value > 0.0) ? 0` routes NaN
+# and value<=0 to 0 before the float->int cast, where the old `value < 0.0` test let a
+# NaN reach the undefined cast; (2) the UInt16 entry casts to (icUInt16Number), not the
+# truncating (icUInt8Number) that stored e.g. 0.5 as 0 into the 16-bit slot. The set()/
+# get() methods are inline, so the test exercises the shipped code; reverting either fix
+# fails an assertion.
+function(iccdev_add_sparsematrix_set_roundtrip_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSparseMatrixSetRoundtripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccsparsematrix-set-roundtrip.cpp"
+  )
+  target_link_libraries(iccSparseMatrixSetRoundtripTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSparseMatrixSetRoundtripTest)
+
+  add_test(
+    NAME iccdev.iccsparsematrix-set-roundtrip
+    COMMAND "$<TARGET_FILE:iccSparseMatrixSetRoundtripTest>"
+  )
+  set_tests_properties(iccdev.iccsparsematrix-set-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 25
+    LABELS "iccdev;sparsematrix;nan;roundtrip;regression"
+  )
+  if(WIN32)
+    set(_sparsematrix_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSparseMatrixSetRoundtripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sparsematrix_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.iccsparsematrix-set-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sparsematrix_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -1779,7 +1864,9 @@ if(WIN32)
   iccdev_add_pawg_q4_characterization_test()
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
   iccdev_add_pawg_q1q3_relative_intent_test()
+  iccdev_add_cmm_registry_allowlist_test()
   iccdev_add_mpecalc_matrix_overflow_test()
+  iccdev_add_sparsematrix_set_roundtrip_test()
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
@@ -1985,7 +2072,9 @@ iccdev_add_pawg_q2_tonecurves_test()
 iccdev_add_pawg_q4_characterization_test()
 iccdev_add_pawg_q4_xyz_pcs_decode_test()
 iccdev_add_pawg_q1q3_relative_intent_test()
+iccdev_add_cmm_registry_allowlist_test()
 iccdev_add_mpecalc_matrix_overflow_test()
+iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
