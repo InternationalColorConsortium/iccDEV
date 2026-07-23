@@ -130,13 +130,21 @@ int main()
   // redzone catches any over-read) and require IsValid() to reject it cleanly.
   // Reverting the IsValid() hardening makes this over-read m_ColumnIndices
   // (heap-buffer-overflow at IccSparseMatrix.cpp IsValid()).
+  //
+  // Buffer size is chosen so this test specifically requires *every* row-start to
+  // be validated, not just the terminal one: for a 2-row float matrix, Init()
+  // sizes m_nMaxEntries = (nBytes - 16 - 3) / 6, so 49 bytes -> capacity exactly
+  // 5. The terminal offset (5) is therefore VALID (== GetMaxEntries()), so a
+  // terminal-only check (GetNumEntries() <= GetMaxEntries()) would pass this
+  // fixture; only the oversized *intermediate* offset (20 > 5) catches it. Index
+  // 19 still straddles the ASAN redzone, so a revert still over-reads.
   {
-    std::vector<unsigned char> m(48, 0);       // exact-size heap alloc -> ASAN redzone past end
+    std::vector<unsigned char> m(49, 0);       // capacity 5; exact-size heap alloc -> ASAN redzone past end
     m[0] = 2; m[1] = 0;                         // nRows = 2 (Reset reads these native-endian)
     m[2] = 0xA0; m[3] = 0x0F;                   // nCols = 4000 (>= every column index below)
     m[4] = 0; m[5] = 0;                         // rowStart[0] = 0
-    m[6] = 20; m[7] = 0;                        // rowStart[1] = 20  (oversized intermediate)
-    m[8] = 5; m[9] = 0;                         // rowStart[2] = 5   (small terminal)
+    m[6] = 20; m[7] = 0;                        // rowStart[1] = 20  (oversized intermediate: only this catches it)
+    m[8] = 5; m[9] = 0;                         // rowStart[2] = 5   (terminal == capacity -> a terminal-only check passes)
     for (size_t k = 0; 10 + k * 2 + 1 < m.size(); ++k) {
       m[10 + k * 2] = (unsigned char)k;         // column indices 0,1,2,... (strictly increasing, in range)
       m[10 + k * 2 + 1] = 0;
@@ -148,12 +156,19 @@ int main()
       std::printf("FAIL: Reset should succeed for in-range dims\n");
       fail = 1;
     }
+    // Guard the invariant Copilot's fixture note relies on: the terminal offset is
+    // within capacity, so only the intermediate-offset check can reject this.
+    if (mtx.GetNumEntries() > mtx.GetMaxEntries()) {
+      std::printf("FAIL: fixture no longer isolates the intermediate check (terminal %u > cap %u)\n",
+                  mtx.GetNumEntries(), mtx.GetMaxEntries());
+      fail = 1;
+    }
     if (mtx.IsValid()) {
       std::printf("FAIL: IsValid must reject oversized intermediate row-start {0,20,5}\n");
       fail = 1;
     }
-    std::printf("  IsValid {0,20,5}: reset=%d valid=%d (expect reset=1 valid=0; revert over-reads)\n",
-                (int)reset, (int)mtx.IsValid());
+    std::printf("  IsValid {0,20,5}: reset=%d cap=%u terminal=%u valid=%d (expect valid=0; revert over-reads)\n",
+                (int)reset, mtx.GetMaxEntries(), mtx.GetNumEntries(), (int)mtx.IsValid());
   }
 
   if (fail) {
