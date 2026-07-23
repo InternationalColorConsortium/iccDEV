@@ -1,0 +1,200 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Manual AFL++ smoke fuzzing for iccDEV command-line tools.
+#
+###############################################################
+
+name: "ci-afl-smoke"
+
+# Some commands and image references intentionally exceed the default
+# yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
+permissions:
+  contents: read
+  packages: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: 'Optional exact commit SHA to check out'
+        required: false
+        default: ''
+        type: string
+      afl_targets:
+        description: 'Comma-separated AFL targets: dump,toxml,fromcube'
+        required: true
+        default: dump
+        type: string
+      duration_seconds:
+        description: 'AFL runtime per target in seconds, 1-3600'
+        required: true
+        default: '300'
+        type: string
+      exec_timeout_ms:
+        description: 'AFL per-exec timeout in milliseconds, 20-30000'
+        required: true
+        default: '1000'
+        type: string
+      cmake_build_type:
+        description: 'CMake build type for AFL instrumentation'
+        required: true
+        default: Debug
+        type: choice
+        options:
+          - Debug
+          - Release
+          - RelWithDebInfo
+          - MinSizeRel
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
+  workflow_call:
+    inputs:
+      target_sha:
+        description: 'Optional exact commit SHA to check out'
+        required: false
+        default: ''
+        type: string
+      afl_targets:
+        description: 'Comma-separated AFL targets: dump,toxml,fromcube'
+        required: false
+        default: dump
+        type: string
+      duration_seconds:
+        description: 'AFL runtime per target in seconds, 1-3600'
+        required: false
+        default: '300'
+        type: string
+      exec_timeout_ms:
+        description: 'AFL per-exec timeout in milliseconds, 20-30000'
+        required: false
+        default: '1000'
+        type: string
+      cmake_build_type:
+        description: 'CMake build type for AFL instrumentation'
+        required: false
+        default: Debug
+        type: string
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
+
+concurrency:
+  group: "afl-smoke-${{ github.workflow }}-${{ github.ref }}-${{ inputs.afl_targets || 'dump' }}"
+  cancel-in-progress: false
+
+jobs:
+  afl-smoke:
+    name: "AFL++ smoke (${{ inputs.afl_targets || 'dump' }}, ${{ inputs.duration_seconds || '300' }}s)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    container:
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump' }}
+      AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
+      AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '1000' }}
+      AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
+      TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+
+    steps:
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout iccDEV
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ inputs.target_sha || github.sha }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Harden Bash environment
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          echo "AFL targets: $(sanitize_line "$AFL_TARGETS_INPUT")"
+          echo "AFL seconds: $(sanitize_line "$AFL_SECONDS_INPUT")"
+          echo "AFL exec timeout ms: $(sanitize_line "$AFL_EXEC_TIMEOUT_MS_INPUT")"
+          echo "AFL CMake build type: $(sanitize_line "$AFL_BUILD_TYPE_INPUT")"
+
+      - name: Run AFL smoke
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          AFL_TARGETS: ${{ inputs.afl_targets || 'dump' }}
+          AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
+          AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '1000' }}
+          AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
+          AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
+          AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          .github/scripts/iccdev-afl-smoke.sh \
+            --seconds "$AFL_SECONDS" \
+            --targets "$AFL_TARGETS" \
+            --build-type "$AFL_BUILD_TYPE" \
+            --exec-timeout-ms "$AFL_EXEC_TIMEOUT_MS" \
+            --build-dir "$AFL_BUILD_DIR" \
+            --work-dir "$AFL_WORK_DIR"
+
+      - name: Summarize AFL smoke
+        if: always()
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          summary="$AFL_WORK_DIR/summary.tsv"
+          {
+            echo "## AFL++ Smoke Summary"
+            echo ""
+            echo "| Target | Status | Seconds | Execs | Crashes | Hangs |"
+            echo "|--------|--------|---------|-------|---------|-------|"
+            if [ -r "$summary" ]; then
+              tail -n +2 "$summary" | while IFS="$(printf '\t')" read -r target status runtime execs crashes hangs out_dir; do
+                echo "| $(sanitize_line "$target") | $(sanitize_line "$status") | $(sanitize_line "$runtime") | $(sanitize_line "$execs") | $(sanitize_line "$crashes") | $(sanitize_line "$hangs") |"
+                printf 'Output directory: %s\n' "$(sanitize_line "$out_dir")" >/dev/null
+              done
+            else
+              echo "| unavailable | fail | 0 | 0 | 0 | 0 |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

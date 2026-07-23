@@ -6,6 +6,7 @@ long command references.
 
 | Skill | Use when |
 |-------|----------|
+| `afl-smoke` | Running or updating the manual AFL++ smoke workflow, seeds, and maintainer documentation. |
 | `docs-maintenance` | Reducing documentation noise or reorganizing docs. |
 | `pre-pr-security-cycle` | Running the maintainer pre-PR secure loop: code, build/test, SAST/CodeQL, sanitizer/DAST-style checks, fix, repeat, handoff. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |

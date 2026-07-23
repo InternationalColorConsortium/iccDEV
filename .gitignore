@@ -81,6 +81,8 @@ Makefile
 
 # AFL build artifacts
 Build-AFL/
+build-afl-smoke/
+.afl-smoke/
 # Coverage data
 *.profraw
 *.profdata
