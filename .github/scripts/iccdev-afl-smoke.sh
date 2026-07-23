@@ -360,15 +360,10 @@ run_afl_target() {
         return 1
     fi
 
-    if [ "$crashes" != "0" ]; then
+    if [ "$crashes" != "0" ] || [ "$hangs" != "0" ]; then
         printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
         echo "ERROR: AFL target $target reported crashes=$crashes hangs=$hangs" >&2
         return 1
-    fi
-    if [ "$hangs" != "0" ]; then
-        printf '%s\twarn\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
-        echo "WARNING: AFL target $target reported hangs=$hangs" >&2
-        return 0
     fi
 
     printf '%s\tpass\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
