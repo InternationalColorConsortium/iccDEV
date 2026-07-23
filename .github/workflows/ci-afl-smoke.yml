@@ -109,10 +109,10 @@ jobs:
         shell: bash --noprofile --norc {0}
     env:
       BASH_ENV: /dev/null
-      AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump' }}
-      AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
-      AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '30000' }}
-      AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
+      ICCDEV_AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump' }}
+      ICCDEV_AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
+      ICCDEV_AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '30000' }}
+      ICCDEV_AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
       AFLPLUSPLUS_REPO: https://github.com/AFLplusplus/AFLplusplus.git
@@ -170,10 +170,10 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
-          echo "AFL targets: $(sanitize_line "$AFL_TARGETS_INPUT")"
-          echo "AFL seconds: $(sanitize_line "$AFL_SECONDS_INPUT")"
-          echo "AFL exec timeout ms: $(sanitize_line "$AFL_EXEC_TIMEOUT_MS_INPUT")"
-          echo "AFL CMake build type: $(sanitize_line "$AFL_BUILD_TYPE_INPUT")"
+          echo "AFL targets: $(sanitize_line "$ICCDEV_AFL_TARGETS_INPUT")"
+          echo "AFL seconds: $(sanitize_line "$ICCDEV_AFL_SECONDS_INPUT")"
+          echo "AFL exec timeout ms: $(sanitize_line "$ICCDEV_AFL_EXEC_TIMEOUT_MS_INPUT")"
+          echo "AFL CMake build type: $(sanitize_line "$ICCDEV_AFL_BUILD_TYPE_INPUT")"
 
       # preflight: allow-package-install reason=aflplusplus-dev-toolchain-bootstrap
       - name: Build AFL++ dev toolchain
@@ -202,20 +202,63 @@ jobs:
             flex \
             libglib2.0-dev \
             libpixman-1-dev \
+            llvm-22-dev \
             python3-dev \
-            python3-setuptools
+            python3-setuptools \
+            zlib1g-dev
 
           aflplusplus_src="$RUNNER_TEMP/AFLplusplus"
           git clone --depth 1 --branch "$AFLPLUSPLUS_REF" "$AFLPLUSPLUS_REPO" "$aflplusplus_src"
-          make -C "$aflplusplus_src" -j"$(nproc)" source-only
+          python3 - "$aflplusplus_src/src/afl-fuzz-init.c" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          pattern = re.compile(
+              r'(?m)^([ \t]*)SAYF\("\\n" cLRD "\[-\] " cRST\n'
+              r'([ \t]*)"Your system is configured to send core dump '
+              r'notifications to an\\n"'
+          )
+          if len(pattern.findall(text)) != 1:
+              raise SystemExit("AFL++ Linux core_pattern warning block not found")
+
+          def guard_warning(match):
+              return (
+                  f'{match.group(1)}if (!getenv("AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES")) '
+                  f'SAYF("\\n" cLRD "[-] " cRST\n'
+                  f'{match.group(2)}"Your system is configured to send core dump '
+                  f'notifications to an\\n"'
+              )
+
+          path.write_text(pattern.sub(guard_warning, text, count=1))
+          PY
+          echo "AFL++ core_pattern warning is muted when AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1"
+          make -C "$aflplusplus_src" -j"$(nproc)" CC=clang-22 CXX=clang++-22 afl-fuzz afl-showmap
+          make -C "$aflplusplus_src" -j"$(nproc)" CC=clang-22 CXX=clang++-22 LLVM_CONFIG=llvm-config-22 -f GNUmakefile.llvm \
+            ./afl-cc \
+            ./afl-compiler-rt.o \
+            ./SanitizerCoveragePCGUARD.so \
+            ./cmplog-routines-pass.so
           for afl_tool in afl-fuzz afl-clang-fast afl-clang-fast++; do
             if [ ! -x "$aflplusplus_src/$afl_tool" ]; then
               echo "ERROR: AFL++ dev build did not produce $afl_tool" >&2
               exit 1
             fi
           done
+          probe_dir="$(mktemp -d)"
+          printf 'int main(void) { return 0; }\n' > "$probe_dir/test.c"
+          printf 'int main(void) { return 0; }\n' > "$probe_dir/test.cpp"
+          AFL_PATH="$aflplusplus_src" AFL_CC=clang-22 AFL_CXX=clang++-22 \
+            "$aflplusplus_src/afl-clang-fast" -c "$probe_dir/test.c" -o "$probe_dir/test.o"
+          AFL_PATH="$aflplusplus_src" AFL_CC=clang-22 AFL_CXX=clang++-22 \
+            "$aflplusplus_src/afl-clang-fast++" -c "$probe_dir/test.cpp" -o "$probe_dir/testxx.o"
           {
             echo "PATH=$aflplusplus_src:$PATH"
+            echo "AFL_PATH=$aflplusplus_src"
+            echo "AFL_CC=clang-22"
+            echo "AFL_CXX=clang++-22"
             echo "AFLPLUSPLUS_SRC=$aflplusplus_src"
           } >> "$GITHUB_ENV"
           "$aflplusplus_src/afl-fuzz" -V 1 >/dev/null 2>&1 || true
@@ -226,24 +269,33 @@ jobs:
         working-directory: target
         env:
           BASH_ENV: /dev/null
-          AFL_TARGETS: ${{ inputs.afl_targets || 'dump' }}
-          AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
-          AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '30000' }}
-          AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
-          AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
-          AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
+          ICCDEV_AFL_TARGETS: ${{ inputs.afl_targets || 'dump' }}
+          ICCDEV_AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
+          ICCDEV_AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '30000' }}
+          ICCDEV_AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
+          ICCDEV_AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
+          ICCDEV_AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           .github/scripts/iccdev-afl-smoke.sh \
-            --seconds "$AFL_SECONDS" \
-            --targets "$AFL_TARGETS" \
-            --build-type "$AFL_BUILD_TYPE" \
-            --exec-timeout-ms "$AFL_EXEC_TIMEOUT_MS" \
-            --build-dir "$AFL_BUILD_DIR" \
-            --work-dir "$AFL_WORK_DIR"
+            --seconds "$ICCDEV_AFL_SECONDS" \
+            --targets "$ICCDEV_AFL_TARGETS" \
+            --build-type "$ICCDEV_AFL_BUILD_TYPE" \
+            --exec-timeout-ms "$ICCDEV_AFL_EXEC_TIMEOUT_MS" \
+            --build-dir "$ICCDEV_AFL_BUILD_DIR" \
+            --work-dir "$ICCDEV_AFL_WORK_DIR"
+
+      - name: Upload AFL findings
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: afl-smoke-findings-${{ github.run_id }}
+          path: ${{ runner.temp }}/iccdev-afl-smoke/findings
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Summarize AFL smoke
         if: always()
@@ -251,12 +303,14 @@ jobs:
         env:
           BASH_ENV: /dev/null
           AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
+          AFL_FINDINGS_ARTIFACT: afl-smoke-findings-${{ github.run_id }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           summary="$AFL_WORK_DIR/summary.tsv"
+          findings="$AFL_WORK_DIR/findings.tsv"
           {
             echo "## AFL++ Smoke Summary"
             echo ""
@@ -269,5 +323,20 @@ jobs:
               done
             else
               echo "| unavailable | fail | 0 | 0 | 0 | 0 |"
+            fi
+            echo ""
+            echo "### AFL Findings"
+            echo ""
+            if [ -r "$findings" ] && [ "$(tail -n +2 "$findings" | wc -l)" -gt 0 ]; then
+              echo "Artifact: \`$(sanitize_line "$AFL_FINDINGS_ARTIFACT")\`"
+              echo ""
+              echo "| Target | Kind | File |"
+              echo "|--------|------|------|"
+              tail -n +2 "$findings" | while IFS="$(printf '\t')" read -r target kind source_file artifact_file; do
+                printf 'Source file: %s\n' "$(sanitize_line "$source_file")" >/dev/null
+                echo "| $(sanitize_line "$target") | $(sanitize_line "$kind") | $(sanitize_line "$artifact_file") |"
+              done
+            else
+              echo "No crash or hang artifacts were saved."
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

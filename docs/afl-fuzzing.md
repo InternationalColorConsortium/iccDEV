@@ -14,11 +14,42 @@ gh workflow run ci-afl-smoke.yml \
   -f cmake_build_type=Debug
 ```
 
-The workflow first builds AFL++ from
-`https://github.com/AFLplusplus/AFLplusplus/tree/dev`, puts that checkout first
-in `PATH`, then builds iccDEV with `afl-clang-fast` and runs the selected
-allow-listed target for the requested duration. It fails if AFL++ reports a
-crash, hang, setup failure, or missing instrumentation.
+The workflow runs inside the trusted regression container, then builds AFL++
+from `https://github.com/AFLplusplus/AFLplusplus/tree/dev` against the
+container's Clang/LLVM 22 toolchain. The job installs the matching LLVM
+development headers when the published image does not already contain them,
+puts the freshly built AFL++ checkout first in `PATH`, and builds iccDEV with
+`afl-clang-fast`.
+
+Do not rely on the container's packaged `afl-clang-fast` wrapper unless it has
+been rebuilt and probed against the same LLVM major version as `clang-22`.
+Known-good AFL wrapper checks compile both C and C++ probes with:
+
+```bash
+AFL_PATH=/path/to/AFLplusplus AFL_CC=clang-22 AFL_CXX=clang++-22 \
+  /path/to/AFLplusplus/afl-clang-fast -c test.c -o test.o
+AFL_PATH=/path/to/AFLplusplus AFL_CC=clang-22 AFL_CXX=clang++-22 \
+  /path/to/AFLplusplus/afl-clang-fast++ -c test.cpp -o testxx.o
+```
+
+The workflow intentionally builds only the AFL++ pieces needed by the smoke
+job: `afl-fuzz`, `afl-showmap`, `afl-cc`, `afl-compiler-rt.o`,
+`SanitizerCoveragePCGUARD.so`, and `cmplog-routines-pass.so`. The
+`cmplog-routines-pass.so` file is required because current AFL++ uses it to
+mark LLVM fast mode as available. Avoid broad `make source-only` or full
+`GNUmakefile.llvm` builds in this workflow because they enter optional GCC
+plugin or Nyx paths that are not required for iccDEV smoke fuzzing.
+
+The selected allow-listed targets run in parallel for the requested duration.
+The job fails if AFL++ reports a saved crash, setup failure, missing
+instrumentation, or zero executed test cases for any selected target. Generated
+saved hangs are reported as `warn` rows in the summary because bounded AFL
+smoke runs can produce timeout findings that require separate replay and triage
+before they are promoted to durable regression evidence.
+Saved crashes and saved hangs are copied into an `afl-smoke-findings-<run-id>`
+artifact and listed in the workflow summary whenever AFL writes testcase files.
+Artifact filenames are sanitized for GitHub artifact portability; the
+`manifest.tsv` file maps them back to the original AFL paths.
 
 Supported target names are:
 
@@ -30,6 +61,27 @@ Local maintainer smoke:
 
 ```bash
 .github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 30000
+```
+
+Local container bootstrap check, useful before changing the workflow or the
+regression image:
+
+```bash
+docker run --rm --user 0 ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master bash -lc '
+set -euo pipefail
+apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
+apt-get install -y -qq --no-install-recommends llvm-22-dev zlib1g-dev >/tmp/apt-install.log
+afl_src=$(mktemp -d)
+git clone --depth 1 --branch dev https://github.com/AFLplusplus/AFLplusplus.git "$afl_src"
+make -C "$afl_src" -j"$(nproc)" CC=clang-22 CXX=clang++-22 afl-fuzz afl-showmap
+make -C "$afl_src" -j"$(nproc)" CC=clang-22 CXX=clang++-22 LLVM_CONFIG=llvm-config-22 -f GNUmakefile.llvm \
+  ./afl-cc ./afl-compiler-rt.o ./SanitizerCoveragePCGUARD.so ./cmplog-routines-pass.so
+probe=$(mktemp -d)
+printf "int main(void) { return 0; }\n" > "$probe/test.c"
+printf "int main(void) { return 0; }\n" > "$probe/test.cpp"
+AFL_PATH="$afl_src" AFL_CC=clang-22 AFL_CXX=clang++-22 "$afl_src/afl-clang-fast" -c "$probe/test.c" -o "$probe/test.o"
+AFL_PATH="$afl_src" AFL_CC=clang-22 AFL_CXX=clang++-22 "$afl_src/afl-clang-fast++" -c "$probe/test.cpp" -o "$probe/testxx.o"
+'
 ```
 
 Manual options:
@@ -55,9 +107,12 @@ The workflow follows the repository workflow-governance model:
 - manual or reusable trigger only
 - least-privilege read permissions
 - SHA-pinned checkout actions
-- AFL++ sourced from the upstream `dev` branch
+- AFL++ sourced from the upstream `dev` branch and rebuilt against the
+  container LLVM major version
 - 240-minute job timeout covering the accepted maximum of three 3600-second
-  target runs plus build overhead
+  target runs plus build overhead; selected targets run in parallel
 - hardened bash steps
 - workflow inputs passed through environment variables
 - sanitized `GITHUB_STEP_SUMMARY` writes
+- crash and hang testcase upload through the `afl-smoke-findings-<run-id>`
+  artifact

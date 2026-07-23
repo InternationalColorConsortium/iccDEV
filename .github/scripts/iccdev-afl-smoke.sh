@@ -171,6 +171,14 @@ require_tool afl-clang-fast++
 mkdir -p "$work_dir"
 
 if [ "$skip_build" -eq 0 ]; then
+    cmake_zlib_args=()
+    if [ -e /usr/lib/x86_64-linux-gnu/libz.so ]; then
+        cmake_zlib_args+=("-DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.so")
+    fi
+    if [ -r /usr/include/zlib.h ]; then
+        cmake_zlib_args+=("-DZLIB_INCLUDE_DIR=/usr/include")
+    fi
+
     cmake -S "$repo_root/Build/Cmake" -B "$build_dir" \
         -DCMAKE_BUILD_TYPE="$build_type" \
         -DCMAKE_C_COMPILER=afl-clang-fast \
@@ -180,9 +188,11 @@ if [ "$skip_build" -eq 0 ]; then
         -DENABLE_TOOLS=ON \
         -DENABLE_TESTS=OFF \
         -DENABLE_WXWIDGETS=OFF \
+        -DENABLE_IMAGE_TOOLS=OFF \
         -DENABLE_SHARED_LIBS=OFF \
         -DENABLE_STATIC_LIBS=ON \
         -DENABLE_LTO=OFF \
+        "${cmake_zlib_args[@]}" \
         -Wno-dev
     cmake --build "$build_dir" --parallel "$(nproc)"
 fi
@@ -194,13 +204,54 @@ cp "$repo_root"/.github/ci/test-data/test-identity.cube "$seed_root/cube/"
 cp "$repo_root"/.github/ci/afl-seeds/cube/*.cube "$seed_root/cube/"
 
 summary_tsv="$work_dir/summary.tsv"
+findings_dir="$work_dir/findings"
+findings_tsv="$work_dir/findings.tsv"
 printf 'target\tstatus\tseconds\texecs_done\tsaved_crashes\tsaved_hangs\tout_dir\n' > "$summary_tsv"
+rm -rf "$findings_dir"
+mkdir -p "$findings_dir"
+printf 'target\tkind\tsource_file\tartifact_file\n' > "$findings_tsv"
+
+collect_afl_findings() {
+    local target="$1"
+    local kind=""
+    local source_dir=""
+    local dest_dir=""
+    local file=""
+    local base_name=""
+    local safe_name=""
+    local name_hash=""
+    local artifact_file=""
+
+    for kind in crashes hangs; do
+        source_dir="$work_dir/out-$target/default/$kind"
+        [ -d "$source_dir" ] || continue
+        dest_dir="$findings_dir/$target/$kind"
+        mkdir -p "$dest_dir"
+        while IFS= read -r -d '' file; do
+            base_name="$(basename "$file")"
+            safe_name="$base_name"
+            safe_name="${safe_name//\"/_}"
+            safe_name="${safe_name//:/_}"
+            safe_name="${safe_name//</_}"
+            safe_name="${safe_name//>/_}"
+            safe_name="${safe_name//|/_}"
+            safe_name="${safe_name//\*/_}"
+            safe_name="${safe_name//\?/_}"
+            name_hash="$(printf '%s' "$base_name" | sha256sum | awk '{ print substr($1, 1, 12) }')"
+            safe_name="$name_hash-$safe_name"
+            artifact_file="$target/$kind/$safe_name"
+            cp -- "$file" "$dest_dir/$safe_name"
+            printf '%s\t%s\t%s\t%s\n' "$target" "$kind" "$file" "$artifact_file" >> "$findings_tsv"
+        done < <(find "$source_dir" -maxdepth 1 -type f ! -name 'README*' -print0 | sort -z)
+    done
+}
 
 run_afl_target() {
     local target="$1"
     local binary=""
     local in_dir=""
     local out_dir="$work_dir/out-$target"
+    local result_tsv="$work_dir/result-$target.tsv"
     local generated="$work_dir/generated"
     local afl_status=0
     local stats_file=""
@@ -292,41 +343,67 @@ run_afl_target() {
     hangs="${hangs:-0}"
 
     if [ "$afl_status" -ne 0 ]; then
-        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
+        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
         return "$afl_status"
     fi
 
     case "$execs_done" in
         ''|*[!0-9]*)
-            printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
+            printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
             echo "ERROR: AFL target $target did not report a positive execs_done value" >&2
             return 1
             ;;
     esac
     if [ "$execs_done" -le 0 ]; then
-        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
+        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
         echo "ERROR: AFL target $target completed without executing test cases" >&2
         return 1
     fi
 
-    if [ "$crashes" != "0" ] || [ "$hangs" != "0" ]; then
-        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
+    if [ "$crashes" != "0" ]; then
+        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
         echo "ERROR: AFL target $target reported crashes=$crashes hangs=$hangs" >&2
         return 1
     fi
+    if [ "$hangs" != "0" ]; then
+        printf '%s\twarn\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
+        echo "WARNING: AFL target $target reported hangs=$hangs" >&2
+        return 0
+    fi
 
-    printf '%s\tpass\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
+    printf '%s\tpass\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
 }
 
 failures=0
+pids=()
 for target in "${selected_targets[@]}"; do
-    if ! run_afl_target "$target"; then
+    log_file="$work_dir/log-$target.txt"
+    rm -f "$work_dir/result-$target.tsv" "$log_file"
+    run_afl_target "$target" > "$log_file" 2>&1 &
+    pids+=("$!")
+done
+
+for index in "${!selected_targets[@]}"; do
+    target="${selected_targets[$index]}"
+    pid="${pids[$index]}"
+    log_file="$work_dir/log-$target.txt"
+    if ! wait "$pid"; then
+        failures=$((failures + 1))
+    fi
+    echo "AFL target log: $target"
+    cat "$log_file"
+    if [ -r "$work_dir/result-$target.tsv" ]; then
+        cat "$work_dir/result-$target.tsv" >> "$summary_tsv"
+        collect_afl_findings "$target"
+    else
+        printf '%s\tfail\t%s\t0\t0\t0\t%s\n' "$target" "$seconds" "$work_dir/out-$target" >> "$summary_tsv"
         failures=$((failures + 1))
     fi
 done
 
 echo "AFL smoke summary: $summary_tsv"
 cat "$summary_tsv"
+cp -- "$findings_tsv" "$findings_dir/manifest.tsv"
 
 if [ "$failures" -ne 0 ]; then
     exit 1

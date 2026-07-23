@@ -310,7 +310,7 @@ should change container package pins, published image tags, or GHCR workflows.
 |------|--------------------|-------------------------|
 | `Dockerfile` | Ubuntu release/runtime image for `ghcr.io/internationalcolorconsortium/iccdev`. | Validate with a local Docker build and tool smoke test before maintainer publishing. |
 | `Dockerfile.nixos` | NixOS/scratch runtime image and dependency-closure check. | Validate locally with a Docker build, runtime closure check, and secret scan before maintainer publishing. |
-| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with Clang/LLVM 22 defaults, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; consumer workflows select the published tag. |
+| `Dockerfile.ci-regression` | Pinned Ubuntu maintainer image for `ci-regression-checks`, with Clang/LLVM 22 defaults, GCC 15.2+, sanitizer, debugger, fuzzing, git, curl, and GitHub CLI tooling. | Validate locally with a no-cache Docker build and toolchain smoke tests before maintainer publishing; AFL wrapper changes also need the `docs/afl-fuzzing.md` container bootstrap probe; consumer workflows select the published tag. |
 
 Before using a branch-specific regression image, maintainers should publish it
 through the maintainer-controlled container release path, record the branch or
