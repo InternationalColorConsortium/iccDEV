@@ -30,7 +30,8 @@ Do not use the packaged AFL++ wrapper from the regression image unless the
 image has rebuilt and probed that wrapper against the same LLVM major version.
 Avoid broad AFL++ `source-only` or full LLVM builds in the smoke workflow when
 they enter optional GCC plugin or Nyx paths. Selected AFL targets should run in
-parallel and report deterministic per-target summaries.
+parallel with AFL++ affinity fallback enabled and report deterministic
+per-target summaries.
 
 Saved crashes should fail the smoke job. Generated saved hangs should be
 reported as `warn` summary rows only after the job verifies Linux

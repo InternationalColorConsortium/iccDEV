@@ -66,8 +66,8 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   `cmplog-routines-pass.so`. Avoid broad AFL++ targets that enter optional GCC
   plugin or Nyx paths.
 - Keep the target allow-list inside `.github/scripts/iccdev-afl-smoke.sh`.
-- Keep selected AFL targets running in parallel and merge per-target summaries
-  in a deterministic order.
+- Keep selected AFL targets running in parallel with AFL++ affinity fallback
+  enabled, and merge per-target summaries in a deterministic order.
 - Treat saved crashes as smoke failures. Report generated saved hangs as
   `warn` summary rows only after verifying Linux `core_pattern` is not piped;
   otherwise fail on saved hangs because AFL++ can misclassify crashes as

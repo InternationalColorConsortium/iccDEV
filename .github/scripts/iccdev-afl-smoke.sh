@@ -306,21 +306,21 @@ run_afl_target() {
     set +e
     case "$target" in
         dump)
-            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
               ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
               UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ ALL
             afl_status="$?"
             ;;
         toxml)
-            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
               ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
               UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/out.xml"
             afl_status="$?"
             ;;
         fromcube)
-            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
               ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
               UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/out.icc"

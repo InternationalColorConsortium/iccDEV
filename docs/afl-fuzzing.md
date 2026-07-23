@@ -41,6 +41,8 @@ mark LLVM fast mode as available. Avoid broad `make source-only` or full
 plugin or Nyx paths that are not required for iccDEV smoke fuzzing.
 
 The selected allow-listed targets run in parallel for the requested duration.
+Each `afl-fuzz` child uses AFL++ affinity fallback so three-target smoke runs
+can share smaller runners instead of aborting when no free CPU core remains.
 The job fails if AFL++ reports a saved crash, setup failure, missing
 instrumentation, or zero executed test cases for any selected target. Generated
 saved hangs are reported as `warn` rows only when Linux `core_pattern` is not
