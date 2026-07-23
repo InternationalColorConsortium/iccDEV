@@ -169,41 +169,13 @@ uint32_t ReadU32BE(const unsigned char *p)
          (uint32_t)p[3];
 }
 
-bool LoadRawProfile(const char *szFilename, RawProfile &raw)
+// Parse the ICC header fields and the tag table out of an already-populated
+// raw.data.  Factored out of LoadRawProfile so the file loader and the in-memory
+// loader (LoadRawProfileFromMemory, used by the #1775 assessment-only fuzz
+// entries) apply byte-for-byte identical header/bounds handling -- the CLI and
+// the overnight fuzzing harness must see the same view of a profile.
+static bool ParseRawProfile(RawProfile &raw)
 {
-  std::ifstream in(szFilename, std::ios::binary);
-  if (!in) {
-    raw.readError = "unable to open file";
-    return false;
-  }
-
-  in.seekg(0, std::ios::end);
-  std::streamoff end = in.tellg();
-  // A directory (or other non-regular path) can be opened by std::ifstream
-  // successfully, yet tellg() then reports a nonsensical length: libstdc++
-  // returns LLONG_MAX (0x7fffffffffffffff) for a directory such as "/tmp".
-  // That value flowed straight into raw.data.resize() below, requesting a ~9 EB
-  // allocation that aborts under AddressSanitizer ("requested allocation size
-  // 0x7fffffffffffffff", #1519).  An ICC profile carries its size in a uint32
-  // header field, so any length that cannot fit a conformant profile is not one
-  // we could ever load; reject it here exactly like an unreadable file so the
-  // caller degrades to the same graceful "parse failed" report it already emits
-  // for a missing path, instead of crashing.
-  if (end < 0 || (uint64_t)end > 0xFFFFFFFFull) {
-    raw.readError = "input is not a readable regular file";
-    return false;
-  }
-  in.seekg(0, std::ios::beg);
-
-  raw.data.resize((size_t)end);
-  if (!raw.data.empty()) {
-    in.read((char*)raw.data.data(), (std::streamsize)raw.data.size());
-    if (!in) {
-      raw.readError = "unable to read complete file";
-      return false;
-    }
-  }
-
   raw.opened = true;
   raw.hasHeader = raw.data.size() >= 128;
   if (!raw.hasHeader) {
@@ -245,6 +217,60 @@ bool LoadRawProfile(const char *szFilename, RawProfile &raw)
   }
 
   return true;
+}
+
+bool LoadRawProfile(const char *szFilename, RawProfile &raw)
+{
+  std::ifstream in(szFilename, std::ios::binary);
+  if (!in) {
+    raw.readError = "unable to open file";
+    return false;
+  }
+
+  in.seekg(0, std::ios::end);
+  std::streamoff end = in.tellg();
+  // A directory (or other non-regular path) can be opened by std::ifstream
+  // successfully, yet tellg() then reports a nonsensical length: libstdc++
+  // returns LLONG_MAX (0x7fffffffffffffff) for a directory such as "/tmp".
+  // That value flowed straight into raw.data.resize() below, requesting a ~9 EB
+  // allocation that aborts under AddressSanitizer ("requested allocation size
+  // 0x7fffffffffffffff", #1519).  An ICC profile carries its size in a uint32
+  // header field, so any length that cannot fit a conformant profile is not one
+  // we could ever load; reject it here exactly like an unreadable file so the
+  // caller degrades to the same graceful "parse failed" report it already emits
+  // for a missing path, instead of crashing.
+  if (end < 0 || (uint64_t)end > 0xFFFFFFFFull) {
+    raw.readError = "input is not a readable regular file";
+    return false;
+  }
+  in.seekg(0, std::ios::beg);
+
+  raw.data.resize((size_t)end);
+  if (!raw.data.empty()) {
+    in.read((char*)raw.data.data(), (std::streamsize)raw.data.size());
+    if (!in) {
+      raw.readError = "unable to read complete file";
+      return false;
+    }
+  }
+
+  return ParseRawProfile(raw);
+}
+
+// In-memory counterpart of LoadRawProfile, used by the assessment-only entries
+// (AssessPawgFromMemory / PawgCompressionVerdict, #1775) so a fuzzer can drive
+// the report straight from a byte buffer with no filesystem round-trip.  Applies
+// the same uint32 profile-size ceiling as the file loader (#1519): a conformant
+// profile carries its length in a uint32 header field, so a larger buffer cannot
+// be one we could load.
+bool LoadRawProfileFromMemory(const unsigned char *data, size_t size, RawProfile &raw)
+{
+  if (!data || (uint64_t)size > 0xFFFFFFFFull) {
+    raw.readError = "input is not a readable profile buffer";
+    return false;
+  }
+  raw.data.assign(data, data + size);
+  return ParseRawProfile(raw);
 }
 
 std::string SigString(uint32_t sig)
@@ -1339,6 +1365,79 @@ PawgVerdict TagTypeAllowedVerdict(CIccProfile *pIcc, std::string &detail)
   return ValidationStatusVerdict(status);
 }
 
+// True for the three DEFLATE-backed tag TYPE signatures.  The compression
+// measurement keys on the tag *type*, so it reads identically whether or not this
+// build links zlib (issue #1775: "Compression On or Off, not gzip") -- detection
+// never depends on being able to inflate.  Deliberately distinct from
+// ValidateGzipHeader()'s gzip *malware* scan, which hunts a gzip magic inside
+// private-tag payloads; here we recognise legitimate compressed ICC tag types.
+bool IsCompressedTagTypeSig(uint32_t typeSig)
+{
+  return typeSig == (uint32_t)icSigZipUtf8TextType ||   // 'zut8'
+         typeSig == (uint32_t)icSigZipXmlType ||         // 'zxml'
+         typeSig == (uint32_t)icSigZipXMLType;           // 'ZXML' (X-Rite CxF)
+}
+
+// Measures the profile's compression surface for PAWG item S14.  Enumerates
+// compressed tags from the RAW bytes -- so the measurement still runs when
+// IccProfLib could not parse the profile (fuzz robustness): a tag's 4-byte TYPE
+// signature lives at its data offset, and a 'data' tag additionally carries an
+// icCompressedData bit in its flags word at data+8.  The measurement is
+// build-independent; only how much can be *said* about the content depends on
+// zlib, which is why a compressed tag on a no-zlib build is reported as a Gap
+// (measured, but content not decodable here) rather than a silent pass.
+PawgVerdict CompressionPathVerdict(const RawProfile &raw, CIccProfile *pIcc, std::string &detail)
+{
+  (void)pIcc;  // detection is raw-bytes based; pIcc reserved for future content checks
+  const uint64_t fileSize = raw.data.size();
+  std::vector<std::string> compressed;
+
+  for (const RawTag &tag : raw.tags) {
+    const uint64_t typeOff = tag.offset;
+    if (typeOff + 4 > fileSize)
+      continue;                       // truncated/out-of-bounds tag: S6/S7 report it
+    const uint32_t typeSig = ReadU32BE(raw.data.data() + (size_t)typeOff);
+
+    bool isCompressed = IsCompressedTagTypeSig(typeSig);
+    if (!isCompressed && typeSig == (uint32_t)icSigDataType && typeOff + 12 <= fileSize) {
+      // 'data' tag on disk is [type][reserved][flags]; icCompressedData -> compressed.
+      const uint32_t flags = ReadU32BE(raw.data.data() + (size_t)typeOff + 8);
+      if (flags & (uint32_t)icCompressedData)
+        isCompressed = true;
+    }
+    if (isCompressed)
+      compressed.push_back(SigString(tag.sig) + " (" + SigString(typeSig) + ")");
+  }
+
+  if (compressed.empty()) {
+    detail = "no DEFLATE-compressed tags (zut8/zxml/compressed data) present";
+    return PawgVerdict::Ok;
+  }
+
+  std::ostringstream oss;
+  oss << compressed.size() << " compressed tag(s): ";
+  for (size_t i = 0; i < compressed.size(); ++i) {
+    if (i)
+      oss << ", ";
+    oss << compressed[i];
+  }
+#ifdef ICC_USE_ZLIB
+  // zlib linked: Describe()/GetText() can inflate and inspect the content, so the
+  // mere presence of compressed tags is not itself a finding.
+  oss << "; zlib linked in this build - compressed content is assessable";
+  detail = oss.str();
+  return PawgVerdict::Ok;
+#else
+  // No zlib: the compressed bytes are retained losslessly (Read/Write are
+  // passthrough) but cannot be decoded here, so the content is unassessed.  Flag
+  // it as a Gap so a no-zlib assessment run never implies it examined content it
+  // could not decompress.
+  oss << "; no zlib in this build - compressed content not assessed (bytes retained losslessly)";
+  detail = oss.str();
+  return PawgVerdict::Gap;
+#endif
+}
+
 bool IsKnownProfileClass(uint32_t cls)
 {
   return cls == icSigInputClass ||
@@ -1934,6 +2033,18 @@ std::vector<PawgItem> EvaluatePawg(const RawProfile &raw, CIccProfile *pIcc)
           nops ? PawgVerdict::Fail : PawgVerdict::Ok,
           nopDetail);
 
+  // S14 measures the DEFLATE compression surface (zut8/zxml/compressed data),
+  // the gap #1774 flagged and #1775 asked to close: the report keyed off tag
+  // signatures and never noticed a tag's *type* was compressed.  The measurement
+  // is build-independent (compression On/Off, not gzip); a compressed tag on a
+  // no-zlib build resolves to a Gap because its content cannot be decoded here.
+  std::string compressionDetail;
+  PawgVerdict compressionVerdict = CompressionPathVerdict(raw, pIcc, compressionDetail);
+  AddItem(items, "S14",
+          "Are DEFLATE-compressed tags (zut8/zxml/compressed data) measured, and is their content assessable in this build?",
+          compressionVerdict,
+          compressionDetail);
+
   std::string tagValueDetail;
   PawgVerdict tagValueVerdict = TagValueEncodingVerdict(pIcc, tagValueDetail);
   AddItem(items, "C1",
@@ -2284,4 +2395,51 @@ int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson)
   delete pIcc;
 
   return HasFail(items) ? 1 : 0;
+}
+
+// --- Assessment-only entry points (issue #1775) ----------------------------
+// These run the PAWG evaluation "up to the point of Output, not for Output" so
+// the overnight CI fuzzing harness can drive the report from an in-memory
+// profile image with no filesystem round-trip and no report emission.
+
+// The kPawg* codes the header exposes (so callers need not see the PawgVerdict
+// enum type) must stay in lockstep with PawgVerdict's order.
+static_assert((int)PawgVerdict::Ok == kPawgOk, "kPawgOk out of sync with PawgVerdict");
+static_assert((int)PawgVerdict::Warn == kPawgWarn, "kPawgWarn out of sync with PawgVerdict");
+static_assert((int)PawgVerdict::Fail == kPawgFail, "kPawgFail out of sync with PawgVerdict");
+static_assert((int)PawgVerdict::NotApplicable == kPawgNotApplicable, "kPawgNotApplicable out of sync");
+static_assert((int)PawgVerdict::Gap == kPawgGap, "kPawgGap out of sync with PawgVerdict");
+static_assert((int)PawgVerdict::NotRun == kPawgNotRun, "kPawgNotRun out of sync with PawgVerdict");
+
+int AssessPawgFromMemory(const unsigned char *data, size_t size)
+{
+  RawProfile raw;
+  LoadRawProfileFromMemory(data, size, raw);
+
+  // Parse a full CIccProfile from the same buffer when possible so the parsed-
+  // profile checks (C1/C3, quality) also exercise; the buffer must outlive pIcc
+  // and it does -- `data` is owned by the caller for the whole call.
+  std::string sReport;
+  icValidateStatus nStatus = icValidateOK;
+  CIccProfile *pIcc = (data && size <= 0xFFFFFFFFull)
+      ? ValidateIccProfile((const icUInt8Number *)data, (icUInt32Number)size, sReport, nStatus)
+      : nullptr;
+
+  std::vector<PawgItem> items = EvaluatePawg(raw, pIcc);
+  const bool fail = HasFail(items);
+  delete pIcc;
+  return fail ? 1 : 0;
+}
+
+int PawgCompressionVerdict(const unsigned char *data, size_t size, std::string *outDetail)
+{
+  // Focused entry: runs ONLY the S14 compression measurement.  Detection is
+  // raw-bytes based, so this needs no parsed profile -- cheap and fuzz-robust.
+  RawProfile raw;
+  LoadRawProfileFromMemory(data, size, raw);
+  std::string detail;
+  const PawgVerdict v = CompressionPathVerdict(raw, nullptr, detail);
+  if (outDetail)
+    *outDetail = detail;
+  return (int)v;
 }

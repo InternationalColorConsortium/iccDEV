@@ -1640,6 +1640,56 @@ function(iccdev_add_compression_describe_labels_test)
   endif()
 endfunction()
 
+# Guards IccPawgReport's compression-path measurement (S14, issue #1775): the
+# report classified tags by signature and never noticed a tag whose *type* was
+# DEFLATE-compressed (zut8/zxml/compressed data), the gap #1774 flagged. The test
+# drives PawgCompressionVerdict() -- the in-memory, output-free entry the fuzzing
+# harness uses -- over hand-built minimal profile images and pins: zut8/zxml and a
+# flagged 'data' tag are measured as compressed (Ok with zlib, Gap without), while
+# uncompressed controls read as the empty case. Detection is build-independent, so
+# it runs in every configuration; only the verdict value self-gates on
+# ICC_USE_ZLIB inside the test. Links PawgReport.cpp in (the entry lives in the
+# tool, not a library) plus the IccPawgReport include dir and IccProfLib.
+function(iccdev_add_pawg_compression_paths_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgCompressionPathsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-compression-paths.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport/PawgReport.cpp"
+  )
+  target_compile_features(iccPawgCompressionPathsTest PRIVATE cxx_std_17)
+  target_include_directories(iccPawgCompressionPathsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgCompressionPathsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgCompressionPathsTest)
+
+  add_test(
+    NAME iccdev.pawg-compression-paths
+    COMMAND "$<TARGET_FILE:iccPawgCompressionPathsTest>"
+  )
+  set_tests_properties(iccdev.pawg-compression-paths PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;compression;issue-1775;regression"
+  )
+  if(WIN32)
+    set(_pawg_compression_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgCompressionPathsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_compression_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-compression-paths PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_compression_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_windows_iccdevcmm_smoke_test)
   if(NOT WIN32 OR NOT TARGET RefIccMAX)
     return()
@@ -1858,6 +1908,7 @@ if(WIN32)
   iccdev_add_tagdata_zlib_roundtrip_test()
   iccdev_add_ziputf8_settext_contract_test()
   iccdev_add_compression_describe_labels_test()
+  iccdev_add_pawg_compression_paths_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -2066,6 +2117,7 @@ iccdev_add_fileio_seek_tell_test()
 iccdev_add_tagdata_zlib_roundtrip_test()
 iccdev_add_ziputf8_settext_contract_test()
 iccdev_add_compression_describe_labels_test()
+iccdev_add_pawg_compression_paths_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()

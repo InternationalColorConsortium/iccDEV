@@ -103,37 +103,45 @@ so — unlike the zlib-gated #1521/#1743 tests — it runs in **every** configur
 
 ---
 
-## D. PAWG code path — compression un-contemplated (flag-and-wait)
+## D. PAWG code path — compression measurement (S14, implemented for #1775)
 
-xsscx's note 2 is **substantiated**. `IccPawgReport` has no compression-specific
-logic anywhere (`IccPawgReport.cpp`, `PawgReport.cpp`, `IccQualityMetrics.h`,
-`IccSignatureRegistry.h`): a search for `zut8`/`zxml`/`icSigDataType`/
-`icCompressedData`/`deflate`/`inflate`/`compress` matches only prose comments
-about *gamut* compression.
+xsscx's note 2 was **substantiated** and, per the #1775 handoff ("add any needed
+compression-specific code paths then will add to overnight CI Fuzzing Harness"),
+is now closed with a dedicated measurement. Before it, `IccPawgReport` had no
+compression-specific logic: a compressed tag reached the report only indirectly —
+`TagTypeAllowedVerdict()`/`TagValueEncodingVerdict()` delegate to
+`CIccProfile::Validate()` (which already *accepts* `zut8`/`zxml`), and the
+known-vs-unknown classification (`IsSpecTag`, `AssessPrivateTags`) keys off tag
+**signature** names, never tag **type**, so a tag's compressed nature never
+entered PAWG's own classification.
 
-A compressed tag reaches the report only **indirectly**:
+**What was added (`PawgReport.cpp`):**
 
-- `TagTypeAllowedVerdict()` (`PawgReport.cpp:1324`) delegates entirely to
-  `CIccProfile::Validate()` — no tag-TYPE enumeration of its own. `Validate`
-  already *accepts* `zut8`/`zxml` for the CharTarget and CxF tags
-  (`IccProfile.cpp:2491`,`2570`), so compressed tags are not rejected.
-- `TagValueEncodingVerdict()` (`PawgReport.cpp:1283`) calls each tag's
-  `Validate()`. For a `zut8`/`zxml` tag on a no-zlib PAWG build this surfaces only
-  the generic "Zip compression not supported by CMM" Warning, not a content
-  assessment; a compressed `data` tag gets no compression-specific validation at
-  all.
-- Known-vs-unknown classification (`IsSpecTag`, `AssessPrivateTags`) keys off tag
-  **signature** names, never tag **type** — so the compressed nature of a tag
-  never enters PAWG's own classification.
+- **`CompressionPathVerdict()`** — a new measurement wired into `EvaluatePawg()` as
+  security item **S14**. It enumerates compressed tags from the **raw bytes** (a
+  tag's 4-byte TYPE signature at its data offset, plus the `icCompressedData` flag
+  word at `data+8` for a `data` tag), so it runs even when IccProfLib could not
+  parse the profile. The measurement is **build-independent** — it reports the
+  compression state (On/Off) regardless of whether zlib is linked, deliberately
+  distinct from the gzip-*malware* header scan in `ValidateGzipHeader()` (xsscx:
+  "Compression On or Off, not gzip").
+- **Verdict policy** (the decision §D previously deferred): no compressed tags →
+  `Ok` ("none present"); compressed tags **with** zlib linked → `Ok` (content is
+  decodable via `Describe()`/`GetText()`, so presence is not itself a finding);
+  compressed tags **without** zlib → **`Gap`** — the bytes are retained losslessly
+  (Read/Write are passthrough) but their content cannot be decoded in this build,
+  so the report must not imply it examined content it never inflated.
+- **Assessment-only entries** (`PawgReport.h`) for the overnight fuzzing harness —
+  "up to the point of Output, not for Output": `AssessPawgFromMemory(data, size)`
+  runs the full evaluation over an in-memory image and returns fail/ok with no
+  report emission (libFuzzer-shaped); `PawgCompressionVerdict(data, size, detail)`
+  runs only the S14 measurement. Both reuse `LoadRawProfileFromMemory()`, the
+  in-memory twin of `LoadRawProfile()` factored out via `ParseRawProfile()` so the
+  CLI and the harness apply identical header/bounds handling.
 
-**What is NOT decided here:** whether PAWG should emit a dedicated note/verdict
-for a compressed tag (e.g. "tag X is DEFLATE-compressed; CMM zlib support
-required to assess content"), and whether a compressed tag on a no-zlib report
-build should downgrade a verdict. That is a report-policy decision analogous to
-the `PERMISSIVENESS_DELTAS.md` items — recorded here for a maintainer, changed by
-nobody automatically. The library-side dump correctness (C1/C2) is fixed
-regardless, so a compressed tag now at least *labels itself* correctly wherever
-`Describe()` output feeds a report or a diagnostic scan.
+The library-side dump correctness (C1/C2) remains fixed regardless, so a
+compressed tag both *labels itself* correctly under `Describe()` and is now
+*measured* by the report.
 
 ---
 
@@ -143,8 +151,11 @@ regardless, so a compressed tag now at least *labels itself* correctly wherever
   round-trip; zlib-gated.
 - `iccdev.ziputf8-settext-contract` (#1743) — `CIccTagZipUtf8Text::SetText`
   success/failure contract; zlib-gated.
-- `iccdev.compression-describe-labels` (#1723, **new**) — dump labelling for C1/C2;
+- `iccdev.compression-describe-labels` (#1723) — dump labelling for C1/C2;
   runs in all configurations.
-
-No regression exercises `IccPawgReport` against a compressed-tag profile, matching
-the section D finding that PAWG has no compression-specific code path to pin.
+- `iccdev.pawg-compression-paths` (#1775, **new**) — the S14 measurement via the
+  in-memory `PawgCompressionVerdict()` entry: `zut8`/`zxml`/flagged-`data` tags are
+  measured as compressed (`Ok` with zlib, `Gap` without), uncompressed controls
+  read as the empty case, and a truncated buffer does not crash. Detection is
+  build-independent so it runs in **every** configuration; only the verdict value
+  self-gates on `ICC_USE_ZLIB`.

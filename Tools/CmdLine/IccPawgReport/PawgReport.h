@@ -62,6 +62,38 @@
 #ifndef ICC_PAWG_REPORT_H
 #define ICC_PAWG_REPORT_H
 
+#include <cstddef>
+#include <string>
+
 int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson);
+
+// Assessment-only entry points (issue #1775): run the PAWG evaluation "up to the
+// point of Output, not for Output" over an in-memory profile image, so the
+// overnight CI fuzzing harness can drive the code path with no filesystem
+// round-trip and no report emission.
+
+// Runs the full PAWG evaluation (all S/C/Q checks, including the S14 compression
+// measurement) over the buffer and returns 1 if any check FAILs, else 0.
+// Intended as a libFuzzer target:
+//   extern "C" int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n)
+//   { AssessPawgFromMemory(d, n); return 0; }
+int AssessPawgFromMemory(const unsigned char *data, size_t size);
+
+// Runs ONLY the S14 compression-path measurement over the buffer, returning one
+// of the kPawg* codes below and (if outDetail != nullptr) the human-readable
+// detail string.  Detection is raw-bytes based, so it needs no parsed profile.
+int PawgCompressionVerdict(const unsigned char *data, size_t size, std::string *outDetail);
+
+// Verdict codes returned by PawgCompressionVerdict.  Kept as plain ints (not the
+// internal PawgVerdict enum) so consumers need not include the report internals;
+// PawgReport.cpp static_asserts they match PawgVerdict's ordering.
+enum {
+  kPawgOk            = 0,
+  kPawgWarn          = 1,
+  kPawgFail          = 2,
+  kPawgNotApplicable = 3,
+  kPawgGap           = 4,
+  kPawgNotRun        = 5
+};
 
 #endif
