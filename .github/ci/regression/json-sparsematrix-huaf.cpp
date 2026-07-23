@@ -1,3 +1,7 @@
+// Copyright (c) 2026 The International Color Consortium. All rights reserved.
+// Licensed under the BSD 3-Clause "New" or "Revised" License; see the ICC
+// Software License in the repository root and CONTRIBUTING.md.
+//
 // Regression: heap-use-after-free in CIccTagJsonSparseMatrixArray::ToJson (#1791).
 //
 // A fuzz-crash profile carries a 'swp4' tag of type sparseMatrixArrayType whose
@@ -24,6 +28,7 @@
 #include "IccProfileJson.h"
 #include "IccTagJsonFactory.h"
 #include "IccMpeJsonFactory.h"
+#include "IccSparseMatrix.h"
 #include "IccIO.h"
 
 #include <cstdio>
@@ -110,6 +115,45 @@ int main()
   if (has(json, "sparseMatrixArrayType")) {
     std::printf("FAIL: corrupt sparseMatrixArrayType tag was walked/serialized (pre-fix behavior)\n");
     fail = 1;
+  }
+
+  // ---- IsValid() must not itself over-read on an oversized intermediate row-start
+  // #1792 review: the terminal row-start (GetNumEntries()) is checked against
+  // GetMaxEntries(), but an *intermediate* row-start was not -- and IsValid()
+  // used it directly as the column-walk loop bound. So a row-start like {0, 20, 5}
+  // (oversized intermediate 20, small terminal 5) with strictly-increasing,
+  // in-range column indices filling the buffer drives the m_ColumnIndices[] read
+  // past the allocation on row 0, before the descending-offset check on row 1 can
+  // reject it -- meaning the guard added to ToJson would still over-read *inside*
+  // IsValid(). The hardened IsValid() bounds each row-start against m_nMaxEntries
+  // first. Build that matrix directly in an exact-size heap buffer (so ASAN's
+  // redzone catches any over-read) and require IsValid() to reject it cleanly.
+  // Reverting the IsValid() hardening makes this over-read m_ColumnIndices
+  // (heap-buffer-overflow at IccSparseMatrix.cpp IsValid()).
+  {
+    std::vector<unsigned char> m(48, 0);       // exact-size heap alloc -> ASAN redzone past end
+    m[0] = 2; m[1] = 0;                         // nRows = 2 (Reset reads these native-endian)
+    m[2] = 0xA0; m[3] = 0x0F;                   // nCols = 4000 (>= every column index below)
+    m[4] = 0; m[5] = 0;                         // rowStart[0] = 0
+    m[6] = 20; m[7] = 0;                        // rowStart[1] = 20  (oversized intermediate)
+    m[8] = 5; m[9] = 0;                         // rowStart[2] = 5   (small terminal)
+    for (size_t k = 0; 10 + k * 2 + 1 < m.size(); ++k) {
+      m[10 + k * 2] = (unsigned char)k;         // column indices 0,1,2,... (strictly increasing, in range)
+      m[10 + k * 2 + 1] = 0;
+    }
+
+    CIccSparseMatrix mtx;
+    const bool reset = mtx.Reset(m.data(), m.size(), icSparseMatrixFloatNum, true);
+    if (!reset) {
+      std::printf("FAIL: Reset should succeed for in-range dims\n");
+      fail = 1;
+    }
+    if (mtx.IsValid()) {
+      std::printf("FAIL: IsValid must reject oversized intermediate row-start {0,20,5}\n");
+      fail = 1;
+    }
+    std::printf("  IsValid {0,20,5}: reset=%d valid=%d (expect reset=1 valid=0; revert over-reads)\n",
+                (int)reset, (int)mtx.IsValid());
   }
 
   if (fail) {

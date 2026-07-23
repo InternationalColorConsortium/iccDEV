@@ -516,6 +516,18 @@ bool CIccSparseMatrix::IsValid()
 
   int r, i;
   for (r=0; r<(int)m_nRows; r++) {
+    // Bound every row-start against the allocated column-index capacity BEFORE
+    // m_RowStart[r+1] is used as the inner-loop bound below. A corrupt, non-
+    // monotonic m_RowStart (e.g. {0, 0xffff, 5}) otherwise drives the
+    // m_ColumnIndices[] walk out of bounds on this row before the descending-
+    // offset check on a *later* row can reject it (heap OOB read; #1792 review of
+    // the #1791 fix). m_nMaxEntries is the number of column-index slots Init()
+    // sized from the raw buffer, so any offset above it cannot be a real entry
+    // index. This also hardens every other caller of IsValid() (e.g. the XML and
+    // JSON sparse-matrix serializers), not just the one that surfaced it.
+    if (m_RowStart[r] > m_nMaxEntries || m_RowStart[r+1] > m_nMaxEntries)
+      return false;
+
     if (m_RowStart[r]>m_RowStart[r+1])
       return false;
 
