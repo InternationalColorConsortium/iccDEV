@@ -823,6 +823,34 @@ jobs:
             return 1
           }
 
+          wait_for_image_digest_match() {
+            local image="$1"
+            local expected_digest="$2"
+            local label="$3"
+            local attempt=""
+            local digest=""
+
+            for attempt in 1 2 3 4 5; do
+              digest="$(resolve_image_digest "$image" "$label")"
+              if [ "$digest" = "$expected_digest" ]; then
+                printf '%s\n' "$digest"
+                return 0
+              fi
+
+              if [ "$attempt" -lt 5 ]; then
+                echo "::notice::Waiting for ${label} digest to match verified source" >&2
+                echo "::notice::Current ${label} digest: $(sanitize_line "$digest")" >&2
+                echo "::notice::Expected ${label} digest: $(sanitize_line "$expected_digest")" >&2
+                sleep $((attempt * 10))
+              fi
+            done
+
+            echo "::error::Promoted latest digest mismatch" >&2
+            echo "::error::Current ${label} digest: $(sanitize_line "$digest")" >&2
+            echo "::error::Expected ${label} digest: $(sanitize_line "$expected_digest")" >&2
+            return 1
+          }
+
           source_image="${SOURCE_REPOSITORY}:${SOURCE_TAG}"
           source_digest="$(resolve_image_digest "$source_image" "verified regression")"
 
@@ -832,14 +860,11 @@ jobs:
             --tag "$TARGET_IMAGE" \
             "$source_ref"
 
-          target_digest="$(resolve_image_digest "$TARGET_IMAGE" "promoted latest")"
-          if [ "$source_digest" != "$target_digest" ]; then
-            echo "::error::Promoted latest digest mismatch"
-            exit 1
-          fi
+          target_digest="$(wait_for_image_digest_match "$TARGET_IMAGE" "$source_digest" "promoted latest")"
 
-          printf 'Promoted verified regression image %s to latest\n' \
-            "$(sanitize_line "$source_digest")"
+          printf 'Promoted verified regression image %s to latest digest %s\n' \
+            "$(sanitize_line "$source_digest")" \
+            "$(sanitize_line "$target_digest")"
 
   prune:
     name: "Prune old container versions"
