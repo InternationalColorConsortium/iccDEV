@@ -127,7 +127,7 @@ assert_report_truth() {
   gap_count="$(summary_value "$logfile" "GAP")"
   not_run_count="$(summary_value "$logfile" "NOT RUN")"
 
-  if [ "$rendered_total" != "31" ] || [ "$summary_total" != "31" ]; then
+  if [ "$rendered_total" != "32" ] || [ "$summary_total" != "32" ]; then
     echo "    $name rendered $rendered_total item(s), summary reports $summary_total"
     return 1
   fi
@@ -158,7 +158,7 @@ assert_report_truth() {
   fi
 
   summary_sum=$((ok_count + warn_count + fail_count + na_count + gap_count + not_run_count))
-  if [ "$summary_sum" -ne 31 ]; then
+  if [ "$summary_sum" -ne 32 ]; then
     echo "    $name summary counts add to $summary_sum"
     return 1
   fi
@@ -327,7 +327,7 @@ run_good_profile() {
     return
   fi
 
-  pass_case "$name" "31-item PAWG report is internally consistent"
+  pass_case "$name" "32-item PAWG report is internally consistent"
 }
 
 generate_truncated_profile() {
@@ -1212,12 +1212,12 @@ with open(sys.argv[1], "r", encoding="utf-8") as handle:
 summary = report.get("summary", {})
 items = report.get("items", [])
 refs = report.get("references", [])
-assert summary.get("total") == 31
-assert len(items) == 31
+assert summary.get("total") == 32
+assert len(items) == 32
 assert items[0]["id"] == "S1"
 assert items[-1]["id"] == "Q4"
 assert any("registry.color.org/tag-signatures" in ref for ref in refs)
-assert sum(summary[k] for k in ("pass", "warn", "fail", "notApplicable", "gap", "notRun")) == 31
+assert sum(summary[k] for k in ("pass", "warn", "fail", "notApplicable", "gap", "notRun")) == 32
 PY
   then
     fail_case "$name" "JSON evidence shape is invalid"

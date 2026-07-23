@@ -180,7 +180,7 @@ includes malformed curve gamma and out-of-range numeric narrowing coverage, and
 must reject invalid numeric fields before conversion without sanitizer findings.
 
 `iccdev.pawg-report-regressions` builds the standalone `iccPawgReport` tool,
-checks the 31-item PAWG report structure, verifies summary counts against the
+checks the 32-item PAWG report structure, verifies summary counts against the
 rendered item lines, runs malformed and malware-signature dynamic inputs, and
 fails on sanitizer findings.
 

@@ -15,9 +15,9 @@ Options:
 - `--json` out instead of text report
 - `--read` eager `ReadIccProfile()` loading after validation parse failure
 
-The report prints 31 checklist items:
+The report prints 32 checklist items:
 
-- `S1` through `S13`: security checks
+- `S1` through `S14`: security checks
 - `C1` through `C14`: conformance checks
 - `Q1` through `Q4`: quality checks
 
@@ -34,7 +34,7 @@ The report prints 31 checklist items:
 
 ## Checklist coverage
 
-Security checks cover the PAWG goals for channel counts, 128-byte header encoding, registered or zero header signatures, D50 illuminant, PCS rules, tag-table bounds and layout, EOF placement, iccMAX calculator-element cost, private-tag presence, private-tag malware scans, and private-tag NOP-sled detection.
+Security checks cover the PAWG goals for channel counts, 128-byte header encoding, registered or zero header signatures, D50 illuminant, PCS rules, tag-table bounds and layout, EOF placement, iccMAX calculator-element cost, private-tag presence, private-tag malware scans, private-tag NOP-sled detection, and DEFLATE-compressed tag (`zut8`/`zxml`/compressed `data`) measurement.
 - Note that malware-signature scans are not implemented
 
 Conformance checks cover tag value encoding, `cprt`/`desc` text encoding, allowed tag types, required tags for profile class, unexpected additional tags, private-tag registration and documentation status, undocumented private-tag identification, profile-class and data-colour-space consistency, header conformance, profile-version/tag consistency, media white point encoding, reserved header bytes, and four-byte tag boundaries.

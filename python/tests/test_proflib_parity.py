@@ -137,7 +137,7 @@ def test_icc_pawg_report_known_srgb_profile_smoke():
     result = run_tool(pawg, profile_path, timeout=60)
     result.assert_success(f"iccPawgReport {profile_path.name}")
     assert "ICC PROFILE ASSESSMENT REPORT (PAWG)" in result.output
-    assert "Total checklist items:  31" in result.output
+    assert "Total checklist items:  32" in result.output
     assert "FAIL:                   0" in result.output
     assert "NOT RUN:                0" in result.output
     assert "Overall:" in result.output

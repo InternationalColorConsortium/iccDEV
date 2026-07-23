@@ -1840,7 +1840,7 @@ if(WIN32)
         "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
         "-DICCDEV_PAWG_EXE=$<TARGET_FILE:iccPawgReport>"
         "-DICCDEV_PROFILE=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
-        "-DICCDEV_EXPECTED_ITEM_COUNT=31"
+        "-DICCDEV_EXPECTED_ITEM_COUNT=32"
         -P "${CMAKE_CURRENT_LIST_DIR}/RunWindowsPawgReportSmokeTest.cmake"
     )
     set_tests_properties(iccdev.windows-pawg-report-smoke PROPERTIES
