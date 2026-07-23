@@ -897,6 +897,9 @@ public:
   CIccPcsStepMatrix(icUInt16Number nRows, icUInt16Number nCols, bool bInitIdentity=false) : CIccMatrixMath(nRows, nCols, bInitIdentity) {}
   CIccPcsStepMatrix(const CIccPcsStepMatrix &mat) : CIccMatrixMath(mat) {}
   CIccPcsStepMatrix(const CIccMatrixMath &mat) : CIccMatrixMath(mat) {}
+  static CIccPcsStepMatrix *Create(icUInt16Number nRows, icUInt16Number nCols, bool bInitIdentity=false);
+  static CIccPcsStepMatrix *Create(const CIccPcsStepMatrix &mat);
+  static CIccPcsStepMatrix *Create(const CIccMatrixMath &mat);
   // PCS steps are polymorphic and always handled through pointers (Mult/concat/
   // reduce return newly allocated objects); they are never value-assigned. The
   // base CIccMatrixMath owns a raw buffer with no copy assignment operator, so

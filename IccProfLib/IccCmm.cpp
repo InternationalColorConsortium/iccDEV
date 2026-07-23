@@ -3261,7 +3261,7 @@ icStatusCMM CIccPcsXform::pushMatrixChecked(icUInt16Number nRows, icUInt16Number
   if (!vals || !nRows || !nCols)
     return icCmmStatInvalidProfile;
 
-  CIccPcsStepMatrix *mtx = new (std::nothrow) CIccPcsStepMatrix(nRows, nCols);
+  CIccPcsStepMatrix *mtx = CIccPcsStepMatrix::Create(nRows, nCols);
   if (!mtx)
     return icCmmStatAllocErr;
   if (!mtx->IsValid()) {
@@ -3324,7 +3324,7 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
           icFloatNumber *pOffset = pMatElem->GetConstants();
 
           if (pMat && (!pOffset || (pOffset[0]==0.0 && pOffset[1]==0.0 && pOffset[2]==0.0))) {
-            CIccPcsStepMatrix *pStepMtx = new (std::nothrow) CIccPcsStepMatrix(3, 3);
+            CIccPcsStepMatrix *pStepMtx = CIccPcsStepMatrix::Create(3, 3);
 
             if (pStepMtx && pStepMtx->IsValid()) {
               memcpy(pStepMtx->entry(0,0), pMat, 9*sizeof(icFloatNumber));
@@ -3389,7 +3389,7 @@ icStatusCMM CIccPcsXform::pushXYZConvert(CIccXform *pFromXform, CIccXform *pToXf
 
           // make sure the matrix is the expected size and offsets are zero
           if (pMat && (inChannels == 3) && (outChannels == 3) && (!pOffset || offsetsZero) ) {
-            CIccPcsStepMatrix *pStepMtx = new (std::nothrow) CIccPcsStepMatrix(3, 3);
+            CIccPcsStepMatrix *pStepMtx = CIccPcsStepMatrix::Create(3, 3);
 
             if (pStepMtx && pStepMtx->IsValid()) {
               memcpy(pStepMtx->entry(0,0), pMat, 9*sizeof(icFloatNumber));
@@ -3600,7 +3600,7 @@ CIccPcsStepMatrix *CIccPcsXform::rangeMap(const icSpectralRange &srcRange, const
   if (srcRange.steps != dstRange.steps ||
       srcRange.start != dstRange.start ||
       srcRange.end != dstRange.end) {
-    CIccPcsStepMatrix *mtx = new (std::nothrow) CIccPcsStepMatrix(dstRange.steps, srcRange.steps);
+    CIccPcsStepMatrix *mtx = CIccPcsStepMatrix::Create(dstRange.steps, srcRange.steps);
     if (!mtx || !mtx->IsValid() || !mtx->SetRange(srcRange, dstRange))
     {
       delete mtx;
@@ -4907,7 +4907,7 @@ CIccPcsStepMatrix *CIccPcsStepScale::Mult(const CIccPcsStepMatrix *matrix) const
   if (matrix->GetSrcChannels() != m_nChannels)
     return NULL;
 
-  CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(matrix->GetDstChannels(), matrix->GetSrcChannels());
+  CIccPcsStepMatrix *pNew = CIccPcsStepMatrix::Create(matrix->GetDstChannels(), matrix->GetSrcChannels());
 
   if (!pNew || !pNew->IsValid()) {
     delete pNew;
@@ -4941,7 +4941,7 @@ CIccPcsStepMatrix *CIccPcsStepScale::Mult(const CIccMpeMatrix *matrix) const
   if (matrix->NumInputChannels() != m_nChannels)
     return NULL;
 
-  CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(matrix->NumOutputChannels(), matrix->NumInputChannels());
+  CIccPcsStepMatrix *pNew = CIccPcsStepMatrix::Create(matrix->NumOutputChannels(), matrix->NumInputChannels());
 
   if (!pNew || !pNew->IsValid()) {
     delete pNew;
@@ -5027,6 +5027,36 @@ void CIccPcsStepMatrix::dump(std::string &str) const
   dumpMtx(str);
 }
 
+CIccPcsStepMatrix *CIccPcsStepMatrix::Create(icUInt16Number nRows, icUInt16Number nCols, bool bInitIdentity/* =false */)
+{
+  try {
+    return new CIccPcsStepMatrix(nRows, nCols, bInitIdentity);
+  }
+  catch (const std::bad_alloc &) {
+    return NULL;
+  }
+}
+
+CIccPcsStepMatrix *CIccPcsStepMatrix::Create(const CIccPcsStepMatrix &matrix)
+{
+  try {
+    return new CIccPcsStepMatrix(matrix);
+  }
+  catch (const std::bad_alloc &) {
+    return NULL;
+  }
+}
+
+CIccPcsStepMatrix *CIccPcsStepMatrix::Create(const CIccMatrixMath &matrix)
+{
+  try {
+    return new CIccPcsStepMatrix(matrix);
+  }
+  catch (const std::bad_alloc &) {
+    return NULL;
+  }
+}
+
 
 /**
 **************************************************************************
@@ -5048,7 +5078,7 @@ CIccPcsStepMatrix *CIccPcsStepMatrix::Mult(const CIccPcsStepScale *scale) const
   if (!IsValid() || !scale->data())
     return NULL;
 
-  CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(m_nRows, m_nCols);
+  CIccPcsStepMatrix *pNew = CIccPcsStepMatrix::Create(m_nRows, m_nCols);
   const icFloatNumber *data = scale->data();
 
   if (!pNew || !pNew->IsValid()) {
@@ -5088,7 +5118,7 @@ CIccPcsStepMatrix *CIccPcsStepMatrix::Mult(const CIccPcsStepMatrix *matrix) cons
   if (!IsValid() || !matrix->IsValid())
     return NULL;
 
-  CIccPcsStepMatrix *pNew = new (std::nothrow) CIccPcsStepMatrix(mRows, m_nCols);
+  CIccPcsStepMatrix *pNew = CIccPcsStepMatrix::Create(mRows, m_nCols);
 
   if (!pNew || !pNew->IsValid()) {
     delete pNew;
