@@ -89,7 +89,7 @@ static const size_t icMaxMatrixMathEntries = 0x1000000;
 
 static bool icCanAllocateMatrixMath(icUInt16Number nRows, icUInt16Number nCols)
 {
-  return nRows && nCols && (size_t)nRows <= icMaxMatrixMathEntries / nCols;
+  return !nRows || !nCols || (size_t)nRows <= icMaxMatrixMathEntries / nCols;
 }
 
 static bool icIsValidMatrixSpectralRange(const icSpectralRange &range)
@@ -118,12 +118,9 @@ CIccMatrixMath::CIccMatrixMath(icUInt16Number nRows, icUInt16Number nCols, bool 
 
   m_nRows = nRows;
   m_nCols = nCols;
-  m_vals = icCanAllocateMatrixMath(nRows, nCols) ? new (std::nothrow) icFloatNumber[nTotal] : NULL;
-  if (!m_vals) {
-    m_nRows = 0;
-    m_nCols = 0;
-    return;
-  }
+  if (!icCanAllocateMatrixMath(nRows, nCols))
+    throw std::bad_alloc();
+  m_vals = new icFloatNumber[nTotal];
   if (bInitIdentity) {
     memset(m_vals, 0, nTotal * sizeof(icFloatNumber));
     int i;
@@ -148,13 +145,30 @@ CIccMatrixMath::CIccMatrixMath(const CIccMatrixMath &matrix)
   size_t nTotal = (size_t)matrix.m_nRows * matrix.m_nCols;
   m_nRows = matrix.m_nRows;
   m_nCols = matrix.m_nCols;
-  m_vals = matrix.m_vals && icCanAllocateMatrixMath(m_nRows, m_nCols) ? new (std::nothrow) icFloatNumber[nTotal] : NULL;
-  if (!m_vals) {
-    m_nRows = 0;
-    m_nCols = 0;
-    return;
-  }
+  if (!matrix.m_vals || !icCanAllocateMatrixMath(m_nRows, m_nCols))
+    throw std::bad_alloc();
+  m_vals = new icFloatNumber[nTotal];
   memcpy(m_vals, matrix.m_vals, nTotal*sizeof(icFloatNumber));
+}
+
+CIccMatrixMath *CIccMatrixMath::Create(icUInt16Number nRows, icUInt16Number nCols, bool bInitIdentity/* =false */)
+{
+  try {
+    return new CIccMatrixMath(nRows, nCols, bInitIdentity);
+  }
+  catch (const std::bad_alloc &) {
+    return NULL;
+  }
+}
+
+CIccMatrixMath *CIccMatrixMath::Create(const CIccMatrixMath &matrix)
+{
+  try {
+    return new CIccMatrixMath(matrix);
+  }
+  catch (const std::bad_alloc &) {
+    return NULL;
+  }
 }
 
 
@@ -185,9 +199,9 @@ CIccMatrixMath &CIccMatrixMath::operator=(const CIccMatrixMath &matrix)
   size_t nTotal = (size_t)matrix.m_nRows * matrix.m_nCols;
   // Allocate the replacement before releasing the old buffer so a failed
   // allocation leaves this object unchanged (strong exception guarantee).
-  icFloatNumber *vals = matrix.m_vals && icCanAllocateMatrixMath(matrix.m_nRows, matrix.m_nCols) ? new (std::nothrow) icFloatNumber[nTotal] : NULL;
-  if (!vals)
-    return *this;
+  if (!matrix.m_vals || !icCanAllocateMatrixMath(matrix.m_nRows, matrix.m_nCols))
+    throw std::bad_alloc();
+  icFloatNumber *vals = new icFloatNumber[nTotal];
   memcpy(vals, matrix.m_vals, nTotal*sizeof(icFloatNumber));
 
   delete[] m_vals;
@@ -287,7 +301,7 @@ CIccMatrixMath *CIccMatrixMath::Mult(const CIccMatrixMath *matrix) const
   if (!IsValid() || !matrix->IsValid())
     return NULL;
 
-  CIccMatrixMath *pNew = new (std::nothrow) CIccMatrixMath(mRows, m_nCols);
+  CIccMatrixMath *pNew = CIccMatrixMath::Create(mRows, m_nCols);
   if (!pNew || !pNew->IsValid()) {
     delete pNew;
     return NULL;
@@ -529,7 +543,7 @@ CIccMatrixMath *CIccMatrixMath::rangeMap(const icSpectralRange &srcRange, const 
   if (srcRange.steps != dstRange.steps ||
       srcRange.start != dstRange.start ||
       srcRange.end != dstRange.end) {
-    CIccMatrixMath *mtx = new (std::nothrow) CIccMatrixMath(dstRange.steps, srcRange.steps);
+    CIccMatrixMath *mtx = CIccMatrixMath::Create(dstRange.steps, srcRange.steps);
     if (!mtx || !mtx->IsValid() || !mtx->SetRange(srcRange, dstRange)) {
       delete mtx;
       if (pFailed)

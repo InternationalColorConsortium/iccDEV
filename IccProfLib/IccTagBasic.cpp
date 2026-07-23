@@ -12611,7 +12611,7 @@ CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpec
   if (!observer || !observerRange.steps || !newRange.steps)
     return NULL;
 
-  CIccMatrixMath *pMtx=new (std::nothrow) CIccMatrixMath(3, newRange.steps);
+  CIccMatrixMath *pMtx=CIccMatrixMath::Create(3, newRange.steps);
   if (!pMtx || !pMtx->IsValid()) {
     delete pMtx;
     return NULL;

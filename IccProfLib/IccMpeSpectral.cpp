@@ -654,7 +654,7 @@ bool CIccMpeEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiProces
     return false;
 
   //convert m_Matrix emission values to a matrix of XYZ column vectors
-  m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3,m_nInputChannels);
+  m_pApplyMtx = CIccMatrixMath::Create(3,m_nInputChannels);
 
   if (!m_pApplyMtx || !m_pApplyMtx->IsValid())
     return false;
@@ -741,7 +741,7 @@ bool CIccMpeInvEmissionMatrix::Begin(icElemInterp /* nInterp */, CIccTagMultiPro
   observer.VectorMult(m_xyzOffset, m_pOffset);
 
   //convert m_Matrix emission values to a matrix of XYZ column vectors
-  m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3,m_nInputChannels);
+  m_pApplyMtx = CIccMatrixMath::Create(3,m_nInputChannels);
 
   if (!m_pApplyMtx || !m_pApplyMtx->IsValid())
     return false;
@@ -2123,7 +2123,7 @@ bool CIccMpeEmissionObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiProc
   if (!pSVC)
     return false;
 
-  m_pApplyMtx = new (std::nothrow) CIccMatrixMath(3, m_Range.steps);
+  m_pApplyMtx = CIccMatrixMath::Create(3, m_Range.steps);
 
   if (!m_pApplyMtx || !m_pApplyMtx->IsValid())
     return false;
@@ -2194,7 +2194,7 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
   bool mapFailed = false;
   CIccMatrixMath *rangeRef = CIccMatrixMath::rangeMap(m_Range, illumRange, &mapFailed);
   if (!rangeRef && !mapFailed && icSameSpectralRange(m_Range, illumRange))
-    m_pApplyMtx = new (std::nothrow) CIccMatrixMath(observer);
+    m_pApplyMtx = CIccMatrixMath::Create(observer);
   else if (rangeRef) {
     m_pApplyMtx = rangeRef->Mult(&observer);
     delete rangeRef;
