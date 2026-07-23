@@ -1461,10 +1461,10 @@ public:
 
   ///Returns the source color space of the transform
   icColorSpaceSignature GetSrcSpace() const { return m_nSrcSpace; }
-  virtual icUInt16Number GetNumSrcSamples() const { return (icUInt16Number)icGetSpaceSamples(m_nSrcSpace); }
+  virtual icUInt16Number GetNumSrcSamples() const;
   ///Returns the destination color space of the transform
   icColorSpaceSignature GetDstSpace() const { return m_nDestSpace; }
-  virtual icUInt16Number GetNumDstSamples() const { return (icUInt16Number)icGetSpaceSamples(m_nDestSpace); }
+  virtual icUInt16Number GetNumDstSamples() const;
 
   ///Checks if the source space of the transform is PCS
   bool IsSrcPCS() const;

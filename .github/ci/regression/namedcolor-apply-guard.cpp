@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 static int expect_status(const char *name, icStatusCMM got, icStatusCMM want)
 {
@@ -11,6 +12,18 @@ static int expect_status(const char *name, icStatusCMM got, icStatusCMM want)
     return 1;
   }
   std::printf("%s: status %d\n", name, got);
+  return 0;
+}
+
+static int expect_samples(const char *name, icUInt16Number got, icUInt16Number want)
+{
+  if (got != want) {
+    std::printf("%s: got %u samples, expected %u\n", name,
+                static_cast<unsigned int>(got),
+                static_cast<unsigned int>(want));
+    return 1;
+  }
+  std::printf("%s: %u samples\n", name, static_cast<unsigned int>(got));
   return 0;
 }
 
@@ -47,6 +60,36 @@ static icStatusCMM run_pixel_to_name(CIccTagNamedColor2 &tag,
   return xform.Apply(NULL, name, src);
 }
 
+static icStatusCMM run_named_cmm_begin(CIccTagNamedColor2 &tag,
+                                       icColorSpaceSignature sourceSpace,
+                                       icColorSpaceSignature destSpace)
+{
+  CIccXformNamedColor *xform = new (std::nothrow) CIccXformNamedColor(&tag, icSigLabData, icSigRgbData);
+  if (!xform)
+    return icCmmStatAllocErr;
+
+  icStatusCMM status = xform->SetSrcSpace(sourceSpace);
+  if (status != icCmmStatOk) {
+    delete xform;
+    return status;
+  }
+
+  status = xform->SetDestSpace(destSpace);
+  if (status != icCmmStatOk) {
+    delete xform;
+    return status;
+  }
+
+  CIccNamedColorCmm cmm(sourceSpace, destSpace);
+  status = cmm.CIccCmm::AddXform(xform);
+  if (status != icCmmStatOk) {
+    delete xform;
+    return status;
+  }
+
+  return cmm.Begin(false);
+}
+
 int main()
 {
   icFloatNumber src[17] = {};
@@ -74,6 +117,37 @@ int main()
   failures += expect_status("too-many-device-coordinates",
                             run_pixel_to_name(tooManyDeviceCoords, icSigRgbData, name, src),
                             icCmmStatTooManySamples);
+
+  CIccTagNamedColor2 fourDeviceCoords(1, 4);
+  init_named_entry(fourDeviceCoords, "four-device-coordinates");
+
+  CIccXformNamedColor pixelToName(&fourDeviceCoords, icSigLabData, icSigRgbData);
+  failures += expect_status("four-device-coordinates-src-space",
+                            pixelToName.SetSrcSpace(icSigRgbData),
+                            icCmmStatOk);
+  failures += expect_status("four-device-coordinates-dst-space",
+                            pixelToName.SetDestSpace(icSigNamedData),
+                            icCmmStatOk);
+  failures += expect_samples("four-device-coordinates-pixel-to-name-src",
+                             pixelToName.GetNumSrcSamples(),
+                             4);
+
+  CIccXformNamedColor nameToPixel(&fourDeviceCoords, icSigLabData, icSigRgbData);
+  failures += expect_status("four-device-coordinates-name-src-space",
+                            nameToPixel.SetSrcSpace(icSigNamedData),
+                            icCmmStatOk);
+  failures += expect_status("four-device-coordinates-name-dst-space",
+                            nameToPixel.SetDestSpace(icSigRgbData),
+                            icCmmStatOk);
+  failures += expect_samples("four-device-coordinates-name-to-pixel-dst",
+                             nameToPixel.GetNumDstSamples(),
+                             4);
+
+  failures += expect_status("four-device-coordinates-pixel-to-name-begin",
+                            run_named_cmm_begin(fourDeviceCoords,
+                                                icSigRgbData,
+                                                icSigNamedData),
+                            icCmmStatBadSpaceLink);
 
   return failures ? 1 : 0;
 }

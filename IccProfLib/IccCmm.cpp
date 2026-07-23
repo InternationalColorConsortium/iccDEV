@@ -7433,6 +7433,50 @@ CIccXformNamedColor::~CIccXformNamedColor()
 {
 }
 
+icUInt16Number CIccXformNamedColor::GetNumSrcSamples() const
+{
+  if (m_nSrcSpace == icSigNamedData)
+    return 0;
+
+  if (IsSrcPCS()) {
+    if (m_pArray) {
+      if (IsSpaceSpectralPCS(m_nSrcSpace))
+        return (icUInt16Number)m_pArray->GetSpectralSamples();
+      return (icUInt16Number)m_pArray->GetPcsSamples();
+    }
+    return 3;
+  }
+
+  if (m_pArray)
+    return (icUInt16Number)m_pArray->GetDeviceSamples();
+  if (m_pTag)
+    return (icUInt16Number)m_pTag->GetDeviceCoords();
+
+  return 0;
+}
+
+icUInt16Number CIccXformNamedColor::GetNumDstSamples() const
+{
+  if (m_nDestSpace == icSigNamedData)
+    return 0;
+
+  if (IsDestPCS()) {
+    if (m_pArray) {
+      if (IsSpaceSpectralPCS(m_nDestSpace))
+        return (icUInt16Number)m_pArray->GetSpectralSamples();
+      return (icUInt16Number)m_pArray->GetPcsSamples();
+    }
+    return 3;
+  }
+
+  if (m_pArray)
+    return (icUInt16Number)m_pArray->GetDeviceSamples();
+  if (m_pTag)
+    return (icUInt16Number)m_pTag->GetDeviceCoords();
+
+  return 0;
+}
+
 /**
  **************************************************************************
  * Name: CIccXformNamedColor::Begin
