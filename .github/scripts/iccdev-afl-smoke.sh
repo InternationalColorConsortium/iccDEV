@@ -115,6 +115,10 @@ if [ "${#targets[@]}" -eq 0 ]; then
     echo "ERROR: at least one target is required" >&2
     exit 2
 fi
+if [ "${#targets[@]}" -gt 3 ]; then
+    echo "ERROR: at most three AFL target entries may be selected" >&2
+    exit 2
+fi
 
 trim_target() {
     local value="$1"
@@ -123,6 +127,34 @@ trim_target() {
     value="${value%"${value##*[![:space:]]}"}"
     printf '%s' "$value"
 }
+
+selected_targets=()
+for target in "${targets[@]}"; do
+    target="$(trim_target "$target")"
+    if [ -z "$target" ]; then
+        echo "ERROR: empty AFL target entry in --targets" >&2
+        exit 2
+    fi
+    if [[ "$target" =~ [[:space:]] ]]; then
+        echo "ERROR: malformed AFL target contains whitespace: $target" >&2
+        exit 2
+    fi
+    case "$target" in
+        dump|toxml|fromcube)
+            ;;
+        *)
+            echo "ERROR: unsupported AFL target: $target" >&2
+            exit 2
+            ;;
+    esac
+    for selected_target in "${selected_targets[@]}"; do
+        if [ "$target" = "$selected_target" ]; then
+            echo "ERROR: duplicate AFL target: $target" >&2
+            exit 2
+        fi
+    done
+    selected_targets+=("$target")
+done
 
 require_tool() {
     if ! command -v "$1" >/dev/null 2>&1; then
@@ -264,6 +296,19 @@ run_afl_target() {
         return "$afl_status"
     fi
 
+    case "$execs_done" in
+        ''|*[!0-9]*)
+            printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
+            echo "ERROR: AFL target $target did not report a positive execs_done value" >&2
+            return 1
+            ;;
+    esac
+    if [ "$execs_done" -le 0 ]; then
+        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
+        echo "ERROR: AFL target $target completed without executing test cases" >&2
+        return 1
+    fi
+
     if [ "$crashes" != "0" ] || [ "$hangs" != "0" ]; then
         printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
         echo "ERROR: AFL target $target reported crashes=$crashes hangs=$hangs" >&2
@@ -274,18 +319,7 @@ run_afl_target() {
 }
 
 failures=0
-for target in "${targets[@]}"; do
-    target="$(trim_target "$target")"
-    if [ -z "$target" ]; then
-        echo "ERROR: empty AFL target entry in --targets" >&2
-        failures=$((failures + 1))
-        continue
-    fi
-    if [[ "$target" =~ [[:space:]] ]]; then
-        echo "ERROR: malformed AFL target contains whitespace: $target" >&2
-        failures=$((failures + 1))
-        continue
-    fi
+for target in "${selected_targets[@]}"; do
     if ! run_afl_target "$target"; then
         failures=$((failures + 1))
     fi

@@ -122,7 +122,7 @@ jobs:
       - name: Checkout trusted sanitizer helpers
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
           path: trusted
           sparse-checkout: .github/scripts
           fetch-depth: 1
@@ -131,10 +131,34 @@ jobs:
       - name: Checkout iccDEV
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ inputs.target_sha || github.sha }}
+          ref: ${{ github.ref }}
           path: target
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Checkout exact target SHA
+        if: ${{ inputs.target_sha != '' }}
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          case "$TARGET_SHA" in
+            *[!0-9a-fA-F]*)
+              echo "ERROR: invalid target SHA: $(sanitize_line "$TARGET_SHA")" >&2
+              exit 1
+              ;;
+          esac
+          if [ "${#TARGET_SHA}" -ne 40 ]; then
+            echo "ERROR: invalid target SHA length: $(sanitize_line "$TARGET_SHA")" >&2
+            exit 1
+          fi
+          git fetch --no-tags --depth=1 origin "$TARGET_SHA"
+          git checkout --detach "$TARGET_SHA"
 
       - name: Harden Bash environment
         working-directory: target
@@ -162,7 +186,16 @@ jobs:
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
 
-          .github/scripts/ci-safe-apt-update.sh
+          disabled_dir="${RUNNER_TEMP:-/tmp}/iccdev-disabled-apt-sources"
+          mkdir -p "$disabled_dir"
+          for source_file in /etc/apt/sources.list.d/*; do
+            [ -e "$source_file" ] || continue
+            if grep -qs 'packages\.microsoft\.com' "$source_file"; then
+              safe_name="$(basename "$source_file")"
+              mv "$source_file" "$disabled_dir/$safe_name.disabled"
+            fi
+          done
+          apt-get -o Acquire::Retries=3 -o Dpkg::Use-Pty=0 update -qq
           apt-get install -y -qq --no-install-recommends \
             automake \
             bison \

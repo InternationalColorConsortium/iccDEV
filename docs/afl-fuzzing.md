@@ -7,7 +7,7 @@ CTest, sanitizer, CodeQL, and regression-container gates.
 Run it from GitHub Actions with `ci-afl-smoke`, normally with:
 
 ```bash
-gh workflow run ci-afl-smoke.yml --ref ci-afl-cfl \
+gh workflow run ci-afl-smoke.yml \
   -f afl_targets=dump \
   -f duration_seconds=300 \
   -f exec_timeout_ms=5000 \
