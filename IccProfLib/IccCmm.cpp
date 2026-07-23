@@ -3684,29 +3684,26 @@ icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConne
     else {
       bool mapFailed = false;
       CIccPcsStepMatrix *toIllum = rangeMap(pProfile->m_Header.spectralRange, illuminantRange, &mapFailed);
-      if (mapFailed) {
+      if (!toIllum || mapFailed) {
         delete pScale;
         return icCmmStatInvalidProfile;
       }
 
       CIccPcsStepMatrix *fromIllum = rangeMap(illuminantRange, pProfile->m_Header.spectralRange, &mapFailed);
-      if (mapFailed) {
+      if (!fromIllum || mapFailed) {
         delete toIllum;
         delete pScale;
         return icCmmStatInvalidProfile;
       }
 
       ptr.ptr = toIllum;
-      if (ptr.ptr) {
-        m_list->push_back(ptr);
-      }
+      m_list->push_back(ptr);
 
       ptr.ptr = pScale;
       m_list->push_back(ptr);
 
       ptr.ptr = fromIllum;
-      if (ptr.ptr)
-        m_list->push_back(ptr);
+      m_list->push_back(ptr);
     }
   }
   return icCmmStatOk;

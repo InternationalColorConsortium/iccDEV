@@ -974,9 +974,10 @@ public:
   virtual void Apply(CIccApplyPcsStep *pApply, icFloatNumber *pDst, const icFloatNumber *pSrc) const;
   virtual icUInt16Number GetSrcChannels() const
   {
-    if (!m_nRows || m_nCols > (icUInt16Number)(0xffff / m_nRows))
+    icUInt32Number nChannels = (icUInt32Number)m_nRows * (icUInt32Number)m_nCols;
+    if (!m_nRows || !m_nCols || nChannels > 0xffff)
       return 0;
-    return (icUInt16Number)(m_nRows * m_nCols);
+    return (icUInt16Number)nChannels;
   }
   virtual icUInt16Number GetDstChannels() const { return m_nRows; }
 
