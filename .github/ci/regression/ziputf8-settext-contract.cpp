@@ -17,6 +17,20 @@
 // green before and after the fix on a machine where allocation succeeds; they are
 // contract and regression guards, not a red-green reproduction of the OOM path.
 //
+// Also relates to #1789: GetText() appends the inflated bytes to a std::string;
+// the previous per-byte `str += buf[i]` implicitly converted each unsigned-char
+// byte to signed char, which UBSan's implicit-integer-sign-change check flags for
+// any byte >= 128 (e.g. 0xC0 -> -64). The byte VALUE was always preserved, so the
+// high-byte round trip below does NOT detect a #1789 regression on its own: the old
+// per-byte code produced the identical bytes, so this case passes on both the buggy
+// and the fixed implementation. It is a byte-preservation contract guard - it pins
+// that the bulk append keeps every high byte intact - not a red-green reproduction.
+// The actual #1789 finding is a sign-conversion diagnostic with no behavioural
+// difference, observable only under an -fsanitize=implicit-conversion build with
+// -fno-sanitize-recover (that check is recoverable by default, and it is not part
+// of iccDEV's default CI sanitizer matrix, which is address,undefined). Red-green
+// for the fix was verified locally under that build; see #1789.
+//
 // Built and registered only when ICC_USE_ZLIB is enabled (the option added in
 // #1530); without zlib SetText() always returns false and none of this applies.
 #include "IccTag.h"
@@ -90,6 +104,21 @@ int main()
     // copy leaves a truncated deflate stream that fails to inflate or inflates to
     // the wrong text.
     checkRoundTrip(tag, plain, "5000-byte plaintext");
+  }
+
+  // #1789 contract guard (not a regression gate - see the header note): high bytes
+  // (>= 128) must round-trip exactly through GetText()'s append. Each byte here is
+  // >= 0x80, which is what triggered the implicit unsigned->signed char conversion
+  // the fix removes. The bytes were always preserved, so this passes with or without
+  // the fix; it only pins that the bulk append keeps every high byte intact.
+  {
+    std::string high;
+    for (int i = 0; i < 2000; i++)
+      high += (char)(0x80 + (i % 0x60));   // 0x80..0xDF: all >= 128, none NUL
+    CIccTagZipUtf8Text tag;
+    const bool ok = tag.SetText((const icChar *)high.c_str());
+    checkStoredOnSuccess(tag, ok, "2000-byte high-byte string (#1789)");
+    checkRoundTrip(tag, high, "2000-byte high-byte string (#1789)");
   }
 
   // Empty and NULL input: SetText treats NULL as "", and deflate still emits a

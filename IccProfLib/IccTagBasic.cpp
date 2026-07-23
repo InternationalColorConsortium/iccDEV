@@ -1536,7 +1536,7 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   }
 
   do {
-    unsigned int i, n;
+    unsigned int n;
 
     zstr.next_out = buf.data();
     zstr.avail_out = (uInt)buf.size();
@@ -1550,9 +1550,13 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
 
     n = (unsigned int)buf.size() - zstr.avail_out;
 
-    for (i = 0; i < n; i++) {
-      str += buf[i];
-    }
+    // Append the inflated bytes wholesale. The previous per-byte `str += buf[i]`
+    // implicitly converted each icUtf8Vector element (unsigned char) to
+    // std::string's signed char, which UBSan's implicit-integer-sign-change check
+    // flags for any byte >= 128 (e.g. 0xC0 -> -64) even though the byte value is
+    // preserved (#1789). Appending through a char* keeps
+    // the exact bytes with no per-element conversion, and is faster.
+    str.append(reinterpret_cast<const char *>(buf.data()), n);
   } while (zstat != Z_STREAM_END);
 
   inflateEnd(&zstr);
