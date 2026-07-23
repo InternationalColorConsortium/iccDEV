@@ -1537,7 +1537,9 @@ bool CIccMpeEmissionCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement
  ******************************************************************************/
 bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElement *pMPE)
 {
-  if (!m_pCLUT || !m_pWhite || m_pCLUT->GetOutputChannels()!=m_Range.steps || m_nOutputChannels!=3)
+  if (!m_pCLUT || !m_pWhite ||
+      m_Range.steps < 2 || m_Range.start >= m_Range.end ||
+      m_pCLUT->GetOutputChannels()!=m_Range.steps || m_nOutputChannels!=3)
     return false;
 
   switch (m_nInputChannels) {
@@ -1575,9 +1577,13 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   if (!pSVC)
     return false;
 
-  CIccMatrixMath observer(3, m_Range.steps);
   icSpectralRange illumRange;
   const icFloatNumber *illum = pSVC->getIlluminant(illumRange);
+
+  if (!illum || illumRange.steps < 2 || illumRange.start >= illumRange.end)
+    return false;
+
+  CIccMatrixMath observer(3, illumRange.steps);
 
   if (!pAppliedPCC->getEmissiveObserver(illumRange, illum, observer.entry(0)))
     return false;
@@ -2117,7 +2123,9 @@ bool CIccMpeEmissionObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiProc
  ******************************************************************************/
 bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiProcessElement *pMPE)
 {
-  if (!m_pWhite || m_nInputChannels!=m_Range.steps || m_nOutputChannels!=3)
+  if (!m_pWhite ||
+      m_Range.steps < 2 || m_Range.start >= m_Range.end ||
+      m_nInputChannels!=m_Range.steps || m_nOutputChannels!=3)
     return false;
 
   IIccProfileConnectionConditions *pAppliedPCC = pMPE->GetAppliedPCC();
@@ -2128,9 +2136,13 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
   if (!pSVC)
     return false;
 
-  CIccMatrixMath observer(3, m_Range.steps);
   icSpectralRange illumRange;
   const icFloatNumber *illum = pSVC->getIlluminant(illumRange);
+
+  if (!illum || illumRange.steps < 2 || illumRange.start >= illumRange.end)
+    return false;
+
+  CIccMatrixMath observer(3, illumRange.steps);
 
   if (!pAppliedPCC->getEmissiveObserver(illumRange, illum, observer.entry(0)))
     return false;

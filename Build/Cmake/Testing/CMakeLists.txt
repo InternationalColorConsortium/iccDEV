@@ -725,6 +725,43 @@ function(iccdev_add_xform_abstorel_adjust_test)
   endif()
 endfunction()
 
+# Guards #1671: reflectance observer setup must allocate temporary observer
+# matrices with the applied illuminant range, not the element reflectance range.
+function(iccdev_add_reflectance_observer_illum_range_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccReflectanceObserverIllumRangeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/reflectance-observer-illum-range.cpp"
+  )
+  target_link_libraries(iccReflectanceObserverIllumRangeTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccReflectanceObserverIllumRangeTest)
+
+  add_test(
+    NAME iccdev.reflectance-observer-illum-range
+    COMMAND "$<TARGET_FILE:iccReflectanceObserverIllumRangeTest>"
+  )
+  set_tests_properties(iccdev.reflectance-observer-illum-range PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;mpe;spectral;pcc;issue-1671;regression;asan"
+  )
+  if(WIN32)
+    set(_reflectance_illum_range_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccReflectanceObserverIllumRangeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _reflectance_illum_range_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.reflectance-observer-illum-range PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_reflectance_illum_range_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the IccColorimetry spectral->XYZ reduction module (#1475): the registry-
 # aligned reduction methods (icXYZCalcDirectSum / icXYZCalcWeighting /
 # icXYZCalcSpragueTo1nm) and their range-reconciliation primitives
@@ -1974,6 +2011,7 @@ if(WIN32)
   iccdev_add_cmmsearch_namedcolor_ownership_test()
   iccdev_add_xform_create_tag_ownership_test()
   iccdev_add_xform_abstorel_adjust_test()
+  iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_gbd_zero_pcs_test()
@@ -2184,6 +2222,7 @@ iccdev_add_sparsematrix_set_roundtrip_test()
 iccdev_add_cmmsearch_namedcolor_ownership_test()
 iccdev_add_xform_create_tag_ownership_test()
 iccdev_add_xform_abstorel_adjust_test()
+iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_gbd_zero_pcs_test()
