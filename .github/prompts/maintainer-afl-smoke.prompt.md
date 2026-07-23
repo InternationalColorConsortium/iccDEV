@@ -33,12 +33,13 @@ they enter optional GCC plugin or Nyx paths. Selected AFL targets should run in
 parallel and report deterministic per-target summaries.
 
 Saved crashes should fail the smoke job. Generated saved hangs should be
-reported as `warn` summary rows unless maintainers explicitly choose strict
-hang gating; replay and triage hang artifacts before promoting them to
-regression evidence. Any saved crash or hang testcase files should be uploaded
-as the `afl-smoke-findings-<run-id>` artifact and listed in the workflow
-summary. Uploaded filenames should be artifact-safe, with `manifest.tsv`
-mapping back to the original AFL paths.
+reported as `warn` summary rows only after the job verifies Linux
+`core_pattern` is not piped; otherwise saved hangs must fail because AFL++ can
+misclassify crashes as timeouts under piped core handlers. Replay and triage
+hang artifacts before promoting them to regression evidence. Any saved crash or
+hang testcase files should be uploaded as the `afl-smoke-findings-<run-id>`
+artifact and listed in the workflow summary. Uploaded filenames should be
+artifact-safe, with `manifest.tsv` mapping back to the original AFL paths.
 
 ## Required Validation
 

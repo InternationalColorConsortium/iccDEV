@@ -43,9 +43,10 @@ plugin or Nyx paths that are not required for iccDEV smoke fuzzing.
 The selected allow-listed targets run in parallel for the requested duration.
 The job fails if AFL++ reports a saved crash, setup failure, missing
 instrumentation, or zero executed test cases for any selected target. Generated
-saved hangs are reported as `warn` rows in the summary because bounded AFL
-smoke runs can produce timeout findings that require separate replay and triage
-before they are promoted to durable regression evidence.
+saved hangs are reported as `warn` rows only when Linux `core_pattern` is not
+piped; otherwise saved hangs fail because AFL++ can misclassify crashes as
+timeouts under piped core handlers. Hang artifacts still require separate replay
+and triage before they are promoted to durable regression evidence.
 Saved crashes and saved hangs are copied into an `afl-smoke-findings-<run-id>`
 artifact and listed in the workflow summary whenever AFL writes testcase files.
 Artifact filenames are sanitized for GitHub artifact portability; the

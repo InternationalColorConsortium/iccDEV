@@ -69,9 +69,10 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - Keep selected AFL targets running in parallel and merge per-target summaries
   in a deterministic order.
 - Treat saved crashes as smoke failures. Report generated saved hangs as
-  `warn` summary rows unless maintainers explicitly choose strict hang gating;
-  replay and triage hang artifacts before promoting them to regression
-  evidence.
+  `warn` summary rows only after verifying Linux `core_pattern` is not piped;
+  otherwise fail on saved hangs because AFL++ can misclassify crashes as
+  timeouts under piped core handlers. Replay and triage hang artifacts before
+  promoting them to regression evidence.
 - Upload any saved crash or hang testcase files as the
   `afl-smoke-findings-<run-id>` artifact and list them in the workflow summary.
   Sanitize uploaded artifact filenames and keep a manifest that records the

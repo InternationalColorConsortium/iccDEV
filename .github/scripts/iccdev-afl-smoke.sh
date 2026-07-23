@@ -170,6 +170,21 @@ require_tool afl-clang-fast++
 
 mkdir -p "$work_dir"
 
+core_pattern_is_safe=0
+if [ -r /proc/sys/kernel/core_pattern ]; then
+    core_pattern="$(cat /proc/sys/kernel/core_pattern)"
+    case "$core_pattern" in
+        '|'*)
+            echo "WARNING: piped Linux core_pattern can make AFL crashes look like hangs" >&2
+            ;;
+        *)
+            core_pattern_is_safe=1
+            ;;
+    esac
+else
+    echo "WARNING: cannot read Linux core_pattern; AFL hangs remain blocking" >&2
+fi
+
 if [ "$skip_build" -eq 0 ]; then
     cmake_zlib_args=()
     if [ -e /usr/lib/x86_64-linux-gnu/libz.so ]; then
@@ -360,9 +375,19 @@ run_afl_target() {
         return 1
     fi
 
-    if [ "$crashes" != "0" ] || [ "$hangs" != "0" ]; then
+    if [ "$crashes" != "0" ]; then
         printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
         echo "ERROR: AFL target $target reported crashes=$crashes hangs=$hangs" >&2
+        return 1
+    fi
+    if [ "$hangs" != "0" ]; then
+        if [ "$core_pattern_is_safe" -eq 1 ]; then
+            printf '%s\twarn\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
+            echo "WARNING: AFL target $target reported hangs=$hangs" >&2
+            return 0
+        fi
+        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" > "$result_tsv"
+        echo "ERROR: AFL target $target reported hangs=$hangs with unsafe or unknown core_pattern" >&2
         return 1
     fi
 
