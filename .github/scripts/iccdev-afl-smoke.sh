@@ -403,7 +403,9 @@ done
 
 echo "AFL smoke summary: $summary_tsv"
 cat "$summary_tsv"
-cp -- "$findings_tsv" "$findings_dir/manifest.tsv"
+if [ "$(awk 'END { print NR }' "$findings_tsv")" -gt 1 ]; then
+    cp -- "$findings_tsv" "$findings_dir/manifest.tsv"
+fi
 
 if [ "$failures" -ne 0 ]; then
     exit 1
