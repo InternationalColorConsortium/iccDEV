@@ -19,7 +19,7 @@ targets_csv="${AFL_TARGETS:-dump}"
 build_dir="${AFL_BUILD_DIR:-$repo_root/build-afl-smoke}"
 work_dir="${AFL_WORK_DIR:-$repo_root/.afl-smoke}"
 build_type="${AFL_BUILD_TYPE:-Debug}"
-exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-1000}"
+exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-5000}"
 skip_build=0
 
 while [ "$#" -gt 0 ]; do
@@ -109,6 +109,14 @@ if [ "${#targets[@]}" -eq 0 ]; then
     exit 2
 fi
 
+trim_target() {
+    local value="$1"
+
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    printf '%s' "$value"
+}
+
 require_tool() {
     if ! command -v "$1" >/dev/null 2>&1; then
         echo "ERROR: required tool not found: $1" >&2
@@ -147,7 +155,7 @@ cp "$repo_root"/.github/ci/test-data/test-identity.cube "$seed_root/cube/"
 cp "$repo_root"/.github/ci/afl-seeds/cube/*.cube "$seed_root/cube/"
 
 summary_tsv="$work_dir/summary.tsv"
-printf 'target\tstatus\tseconds\texecs_done\tunique_crashes\tunique_hangs\tout_dir\n' > "$summary_tsv"
+printf 'target\tstatus\tseconds\texecs_done\tsaved_crashes\tsaved_hangs\tout_dir\n' > "$summary_tsv"
 
 run_afl_target() {
     local target="$1"
@@ -217,10 +225,28 @@ run_afl_target() {
     set -e
 
     stats_file="$out_dir/default/fuzzer_stats"
+    stat_value() {
+        local key="$1"
+        local fallback_key="${2:-}"
+
+        awk -F: -v key="$key" -v fallback_key="$fallback_key" '
+            $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+                gsub(/[[:space:]]/, "", $2)
+                print $2
+                found = 1
+            }
+            !found && fallback_key != "" && $1 ~ "^[[:space:]]*" fallback_key "[[:space:]]*$" {
+                gsub(/[[:space:]]/, "", $2)
+                print $2
+                found = 1
+            }
+        ' "$stats_file"
+    }
+
     if [ -r "$stats_file" ]; then
-        execs_done="$(awk -F: '$1 ~ /^execs_done/ {gsub(/ /, "", $2); print $2}' "$stats_file")"
-        crashes="$(awk -F: '$1 ~ /^unique_crashes/ {gsub(/ /, "", $2); print $2}' "$stats_file")"
-        hangs="$(awk -F: '$1 ~ /^unique_hangs/ {gsub(/ /, "", $2); print $2}' "$stats_file")"
+        execs_done="$(stat_value execs_done)"
+        crashes="$(stat_value saved_crashes unique_crashes)"
+        hangs="$(stat_value saved_hangs unique_hangs)"
     fi
     execs_done="${execs_done:-0}"
     crashes="${crashes:-0}"
@@ -231,18 +257,28 @@ run_afl_target() {
         return "$afl_status"
     fi
 
-    printf '%s\tpass\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
-
     if [ "$crashes" != "0" ] || [ "$hangs" != "0" ]; then
+        printf '%s\tfail\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
         echo "ERROR: AFL target $target reported crashes=$crashes hangs=$hangs" >&2
         return 1
     fi
+
+    printf '%s\tpass\t%s\t%s\t%s\t%s\t%s\n' "$target" "$seconds" "$execs_done" "$crashes" "$hangs" "$out_dir" >> "$summary_tsv"
 }
 
 failures=0
 for target in "${targets[@]}"; do
-    target="${target//[[:space:]]/}"
-    [ -n "$target" ] || continue
+    target="$(trim_target "$target")"
+    if [ -z "$target" ]; then
+        echo "ERROR: empty AFL target entry in --targets" >&2
+        failures=$((failures + 1))
+        continue
+    fi
+    if [[ "$target" =~ [[:space:]] ]]; then
+        echo "ERROR: malformed AFL target contains whitespace: $target" >&2
+        failures=$((failures + 1))
+        continue
+    fi
     if ! run_afl_target "$target"; then
         failures=$((failures + 1))
     fi

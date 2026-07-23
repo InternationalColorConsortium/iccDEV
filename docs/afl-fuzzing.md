@@ -10,11 +10,13 @@ Run it from GitHub Actions with `ci-afl-smoke`, normally with:
 gh workflow run ci-afl-smoke.yml --ref ci-afl-cfl \
   -f afl_targets=dump \
   -f duration_seconds=300 \
-  -f exec_timeout_ms=1000 \
+  -f exec_timeout_ms=5000 \
   -f cmake_build_type=Debug
 ```
 
-The workflow builds iccDEV with `afl-clang-fast` and runs the selected
+The workflow first builds AFL++ from
+`https://github.com/AFLplusplus/AFLplusplus/tree/dev`, puts that checkout first
+in `PATH`, then builds iccDEV with `afl-clang-fast` and runs the selected
 allow-listed target for the requested duration. It fails if AFL++ reports a
 crash, hang, setup failure, or missing instrumentation.
 
@@ -27,7 +29,7 @@ Supported target names are:
 Local maintainer smoke:
 
 ```bash
-.github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 1000
+.github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 5000
 ```
 
 Manual options:
@@ -51,6 +53,7 @@ The workflow follows the repository workflow-governance model:
 - manual or reusable trigger only
 - least-privilege read permissions
 - SHA-pinned checkout actions
+- AFL++ sourced from the upstream `dev` branch
 - hardened bash steps
 - workflow inputs passed through environment variables
 - sanitized `GITHUB_STEP_SUMMARY` writes

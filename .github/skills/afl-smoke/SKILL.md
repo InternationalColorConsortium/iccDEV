@@ -28,13 +28,15 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 3. Run a short local AFL smoke before pushing when AFL++ is installed:
 
    ```bash
-   .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 1000
+   .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 5000
    ```
 
 ## Update Rules
 
 - Keep workflow triggers manual or reusable unless maintainers explicitly widen
   them.
+- Keep CI AFL++ tooling sourced from
+  `https://github.com/AFLplusplus/AFLplusplus/tree/dev`.
 - Keep the target allow-list inside `.github/scripts/iccdev-afl-smoke.sh`.
 - Keep numeric workflow options validated by the script, not only by the
   Actions input UI.

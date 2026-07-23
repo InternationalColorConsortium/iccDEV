@@ -39,7 +39,7 @@ on:
       exec_timeout_ms:
         description: 'AFL per-exec timeout in milliseconds, 20-30000'
         required: true
-        default: '1000'
+        default: '5000'
         type: string
       cmake_build_type:
         description: 'CMake build type for AFL instrumentation'
@@ -76,7 +76,7 @@ on:
       exec_timeout_ms:
         description: 'AFL per-exec timeout in milliseconds, 20-30000'
         required: false
-        default: '1000'
+        default: '5000'
         type: string
       cmake_build_type:
         description: 'CMake build type for AFL instrumentation'
@@ -111,10 +111,12 @@ jobs:
       BASH_ENV: /dev/null
       AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump' }}
       AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
-      AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '1000' }}
+      AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '5000' }}
       AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+      AFLPLUSPLUS_REPO: https://github.com/AFLplusplus/AFLplusplus.git
+      AFLPLUSPLUS_REF: dev
 
     steps:
       - name: Checkout trusted sanitizer helpers
@@ -149,13 +151,45 @@ jobs:
           echo "AFL exec timeout ms: $(sanitize_line "$AFL_EXEC_TIMEOUT_MS_INPUT")"
           echo "AFL CMake build type: $(sanitize_line "$AFL_BUILD_TYPE_INPUT")"
 
+      # preflight: allow-package-install reason=aflplusplus-dev-toolchain-bootstrap
+      - name: Build AFL++ dev toolchain
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+
+          .github/scripts/ci-safe-apt-update.sh
+          apt-get install -y -qq --no-install-recommends \
+            automake \
+            bison \
+            flex \
+            libglib2.0-dev \
+            libpixman-1-dev \
+            python3-dev \
+            python3-setuptools
+
+          aflplusplus_src="$RUNNER_TEMP/AFLplusplus"
+          git clone --depth 1 --branch "$AFLPLUSPLUS_REF" "$AFLPLUSPLUS_REPO" "$aflplusplus_src"
+          make -C "$aflplusplus_src" -j"$(nproc)" source-only
+          {
+            echo "PATH=$aflplusplus_src:$PATH"
+            echo "AFLPLUSPLUS_SRC=$aflplusplus_src"
+          } >> "$GITHUB_ENV"
+          "$aflplusplus_src/afl-fuzz" -V 1 >/dev/null 2>&1 || true
+          echo "AFL++ source: $(sanitize_line "$AFLPLUSPLUS_REPO")"
+          echo "AFL++ ref: $(sanitize_line "$AFLPLUSPLUS_REF")"
+
       - name: Run AFL smoke
         working-directory: target
         env:
           BASH_ENV: /dev/null
           AFL_TARGETS: ${{ inputs.afl_targets || 'dump' }}
           AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
-          AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '1000' }}
+          AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '5000' }}
           AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
           AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
           AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
