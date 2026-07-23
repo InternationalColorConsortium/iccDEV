@@ -96,6 +96,10 @@ If CMake or C++ changed, also run:
   suppressions.
 - Workflow changes follow `.github/instructions/workflow-governance.instructions.md`.
 - PR workflow helper trust boundaries follow `docs/workflow-security-trust-boundaries.md`.
+- Copilot service review follows the three-review convergence rule in
+  `docs/regression-workflow-governance.md`: first review inventories the whole
+  PR, second review checks only fixes, and third review says `Ok to Merge` or
+  `Please Request Maintainer Review`.
 - Green workflow runs were checked for hidden log diagnostics, not only failed
   annotations.
 - Any duplicate install manifest, missing-file uninstall, vcpkg CRT, vcpkg root,

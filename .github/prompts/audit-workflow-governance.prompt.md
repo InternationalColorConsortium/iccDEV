@@ -7,6 +7,19 @@ automation, prefer conservative evidence over speed: run the applicable local
 security battery, patch confirmed findings, retest, and document accepted
 scanner noise with a rationale.
 
+## Review Convergence
+
+For Copilot service review of maintainer-owned infrastructure, use at most
+three reviews unless a maintainer requests another pass:
+
+1. First review: inventory the complete PR and review every touched file.
+2. Second review: focus only on the first-review fixes. Do not grow scope.
+3. Third review: conclude with `Ok to Merge` or
+   `Please Request Maintainer Review`.
+
+After the third review, Copilot is out of the review loop until requested by a
+maintainer.
+
 ## Audit Checklist
 
 For EVERY `run:` step in the workflow, verify:

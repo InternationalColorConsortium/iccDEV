@@ -39,7 +39,7 @@ on:
       exec_timeout_ms:
         description: 'AFL per-exec timeout in milliseconds, 20-30000'
         required: true
-        default: '5000'
+        default: '30000'
         type: string
       cmake_build_type:
         description: 'CMake build type for AFL instrumentation'
@@ -76,7 +76,7 @@ on:
       exec_timeout_ms:
         description: 'AFL per-exec timeout in milliseconds, 20-30000'
         required: false
-        default: '5000'
+        default: '30000'
         type: string
       cmake_build_type:
         description: 'CMake build type for AFL instrumentation'
@@ -111,7 +111,7 @@ jobs:
       BASH_ENV: /dev/null
       AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump' }}
       AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
-      AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '5000' }}
+      AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '30000' }}
       AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
@@ -208,6 +208,12 @@ jobs:
           aflplusplus_src="$RUNNER_TEMP/AFLplusplus"
           git clone --depth 1 --branch "$AFLPLUSPLUS_REF" "$AFLPLUSPLUS_REPO" "$aflplusplus_src"
           make -C "$aflplusplus_src" -j"$(nproc)" source-only
+          for afl_tool in afl-fuzz afl-clang-fast afl-clang-fast++; do
+            if [ ! -x "$aflplusplus_src/$afl_tool" ]; then
+              echo "ERROR: AFL++ dev build did not produce $afl_tool" >&2
+              exit 1
+            fi
+          done
           {
             echo "PATH=$aflplusplus_src:$PATH"
             echo "AFLPLUSPLUS_SRC=$aflplusplus_src"
@@ -222,7 +228,7 @@ jobs:
           BASH_ENV: /dev/null
           AFL_TARGETS: ${{ inputs.afl_targets || 'dump' }}
           AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
-          AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '5000' }}
+          AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '30000' }}
           AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
           AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
           AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke

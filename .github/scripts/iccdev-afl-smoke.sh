@@ -26,7 +26,7 @@ targets_csv="${AFL_TARGETS:-dump}"
 build_dir="${AFL_BUILD_DIR:-$repo_root/build-afl-smoke}"
 work_dir="${AFL_WORK_DIR:-$repo_root/.afl-smoke}"
 build_type="${AFL_BUILD_TYPE:-Debug}"
-exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-5000}"
+exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-30000}"
 skip_build=0
 
 while [ "$#" -gt 0 ]; do

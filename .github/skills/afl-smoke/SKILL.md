@@ -28,7 +28,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 3. Run a short local AFL smoke before pushing when AFL++ is installed:
 
    ```bash
-   .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 5000
+   .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
    ```
 
 ## Update Rules

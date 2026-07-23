@@ -24,7 +24,7 @@ bash -n .github/scripts/iccdev-afl-smoke.sh
 shellcheck .github/scripts/iccdev-afl-smoke.sh
 actionlint .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
-.github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 5000
+.github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
 ```
 
 Run `.github/scripts/preflight-safety-checks.sh --require-tools` before pushing

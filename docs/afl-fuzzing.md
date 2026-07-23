@@ -10,7 +10,7 @@ Run it from GitHub Actions with `ci-afl-smoke`, normally with:
 gh workflow run ci-afl-smoke.yml \
   -f afl_targets=dump \
   -f duration_seconds=300 \
-  -f exec_timeout_ms=5000 \
+  -f exec_timeout_ms=30000 \
   -f cmake_build_type=Debug
 ```
 
@@ -29,7 +29,7 @@ Supported target names are:
 Local maintainer smoke:
 
 ```bash
-.github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 5000
+.github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 30000
 ```
 
 Manual options:
@@ -38,6 +38,8 @@ Manual options:
   `3600`
 - `afl_targets`: comma-separated allow-list entries
 - `exec_timeout_ms`: AFL per-exec timeout, validated as `20` through `30000`
+  and defaulted to `30000` to avoid false saved-hang artifacts in longer smoke
+  runs.
 - `cmake_build_type`: `Debug`, `Release`, `RelWithDebInfo`, or `MinSizeRel`
 - `target_sha`: optional exact commit to check out
 - `regression_image_tag`: trusted maintainer container tag

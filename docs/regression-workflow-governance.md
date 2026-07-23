@@ -83,6 +83,25 @@ automation changes should use a conservative review loop. Run the applicable
 local security tools, patch confirmed findings, retest, and document accepted
 scanner noise with a clear rationale.
 
+## Pull Request Review Convergence
+
+Maintainer-owned infrastructure reviews must converge instead of repeatedly
+expanding scope. Use this direct three-review loop for Copilot service reviews
+unless a maintainer explicitly requests more review:
+
+1. First review: perform the complete inventory of the pull request and review
+   every touched file. This should be the broadest review.
+2. Second review: review only the first-review fixes. Do not add new files,
+   functions, enums, templates, or unrelated scope unless the fix itself
+   requires it.
+3. Third review: conclude with either `Ok to Merge` or
+   `Please Request Maintainer Review`.
+
+After the third Copilot service review, Copilot is out of the review loop until
+a maintainer requests another review. Later review comments should be resolved
+by maintainers or by targeted follow-up work against explicit maintainer
+requests.
+
 For every `Dockerfile*` change, compare `ci-qa-pr-docker-testing` with
 `ci-qa-flags` and carry applicable fixes to both branches. The testing branch is
 the container proving ground; `ci-qa-flags` remains a required synchronized
