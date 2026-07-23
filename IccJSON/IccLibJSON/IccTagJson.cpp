@@ -1057,7 +1057,19 @@ bool CIccTagJsonSparseMatrixArray::ToJson(IccJson &j)
     return false;
 
   for (icUInt32Number i = 0; i < m_nSize; i++) {
-    mtx.Reset(m_RawData + i * bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, true);
+    // Validate each matrix before walking it. Reset() connects m_RowStart,
+    // m_ColumnIndices and the value pointer into the raw tag buffer; a corrupt
+    // m_RowStart then makes GetColumnsForRow()/GetRowOffset()/getPtr() wild
+    // pointers, and the row/value reads below dereference freed or out-of-bounds
+    // memory (heap-use-after-free under ASAN, #1791). The XML serializer already
+    // guards exactly this (CIccTagXmlSparseMatrixArray::ToXml); mirror it here so
+    // a malformed sparse-matrix tag is refused rather than walked. Returning
+    // false makes CIccProfileJson::ToJson skip this one tag (it continues past a
+    // tag whose ToJson fails), matching the XML writer refusing the tag.
+    if (!mtx.Reset(m_RawData + i * bytesPerMatrix, bytesPerMatrix, icSparseMatrixFloatNum, true) ||
+        mtx.GetNumEntries() > mtx.GetMaxEntries() ||
+        !mtx.IsValid())
+      return false;
 
     IccJson jMtx;
     jMtx["rows"] = (int)mtx.Rows();

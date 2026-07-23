@@ -1690,6 +1690,58 @@ function(iccdev_add_pawg_compression_paths_test)
   endif()
 endfunction()
 
+# Guards the heap-use-after-free in CIccTagJsonSparseMatrixArray::ToJson (#1791):
+# the JSON sparse-matrix serializer called CIccSparseMatrix::Reset() without
+# checking the result and then walked the matrix through m_RowStart-derived
+# pointers (GetColumnsForRow/GetRowOffset/getPtr), so a corrupt sparse-matrix tag
+# dereferenced wild pointers (heap-use-after-free under ASAN; garbage otherwise).
+# The XML serializer already refuses such a tag; the fix mirrors its
+# `!Reset() || GetNumEntries()>GetMaxEntries() || !IsValid()` guard. The test
+# Read()s the fuzz PoC from memory into a CIccProfileJson and asserts the corrupt
+# sparseMatrixArrayType tag is refused (absent from the output), not walked. Needs
+# IccJSON (CIccProfileJson) + IccProfLib; skipped where IccJSON is not built.
+function(iccdev_add_json_sparsematrix_huaf_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonSparseMatrixHuafTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-sparsematrix-huaf.cpp"
+  )
+  target_compile_features(iccJsonSparseMatrixHuafTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonSparseMatrixHuafTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonSparseMatrixHuafTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonSparseMatrixHuafTest)
+
+  add_test(
+    NAME iccdev.json-sparsematrix-huaf
+    COMMAND "$<TARGET_FILE:iccJsonSparseMatrixHuafTest>"
+  )
+  set_tests_properties(iccdev.json-sparsematrix-huaf PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;json;sparsematrix;issue-1791;regression"
+  )
+  if(WIN32)
+    set(_json_huaf_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonSparseMatrixHuafTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_huaf_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-sparsematrix-huaf PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_huaf_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_windows_iccdevcmm_smoke_test)
   if(NOT WIN32 OR NOT TARGET RefIccMAX)
     return()
@@ -1909,6 +1961,7 @@ if(WIN32)
   iccdev_add_ziputf8_settext_contract_test()
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
+  iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -2118,6 +2171,7 @@ iccdev_add_tagdata_zlib_roundtrip_test()
 iccdev_add_ziputf8_settext_contract_test()
 iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
+iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
