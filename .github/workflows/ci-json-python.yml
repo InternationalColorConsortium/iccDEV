@@ -77,7 +77,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.12", "3.13"]
+        python-version: ["3.12", "3.13"]
     uses: ./.github/workflows/_build-test-windows.yml
     with:
       python-version: ${{ matrix.python-version }}
