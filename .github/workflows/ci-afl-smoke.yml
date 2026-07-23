@@ -97,7 +97,7 @@ jobs:
   afl-smoke:
     name: "AFL++ smoke (${{ inputs.afl_targets || 'dump' }}, ${{ inputs.duration_seconds || '300' }}s)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 240
     container:
       image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
       credentials:
@@ -120,7 +120,7 @@ jobs:
 
     steps:
       - name: Checkout trusted sanitizer helpers
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ github.sha }}
           path: trusted
@@ -129,7 +129,7 @@ jobs:
           persist-credentials: false
 
       - name: Checkout iccDEV
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
           ref: ${{ inputs.target_sha || github.sha }}
           path: target

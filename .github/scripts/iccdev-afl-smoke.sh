@@ -1,5 +1,12 @@
 #!/bin/bash
 ###############################################################################
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# This source file is licensed under the BSD 3-Clause "New" or "Revised"
+# License used by ICC software projects.
+#
 # Build iccDEV with AFL++ instrumentation and run bounded CLI smoke fuzzing.
 ###############################################################################
 

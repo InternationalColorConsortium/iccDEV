@@ -54,6 +54,8 @@ The workflow follows the repository workflow-governance model:
 - least-privilege read permissions
 - SHA-pinned checkout actions
 - AFL++ sourced from the upstream `dev` branch
+- 240-minute job timeout covering the accepted maximum of three 3600-second
+  target runs plus build overhead
 - hardened bash steps
 - workflow inputs passed through environment variables
 - sanitized `GITHUB_STEP_SUMMARY` writes
