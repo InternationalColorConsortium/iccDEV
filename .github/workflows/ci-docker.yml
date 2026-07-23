@@ -789,15 +789,42 @@ jobs:
           unset GITHUB_TOKEN || true
           source .github/scripts/sanitize-sed.sh
 
+          resolve_image_digest() {
+            local image="$1"
+            local label="$2"
+            local attempt=""
+            local digest=""
+            local inspect_log=""
+
+            inspect_log="$(mktemp)"
+            for attempt in 1 2 3 4 5; do
+              if docker buildx imagetools inspect "$image" > "$inspect_log" 2>&1; then
+                digest="$(awk '$1 == "Digest:" { print $2; exit }' "$inspect_log")"
+                if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                  rm -f "$inspect_log"
+                  printf '%s\n' "$digest"
+                  return 0
+                fi
+              fi
+
+              if [ "$attempt" -lt 5 ]; then
+                echo "::notice::Waiting for ${label} image digest: $(sanitize_line "$image")" >&2
+                sleep $((attempt * 10))
+              fi
+            done
+
+            echo "::error::Unable to resolve ${label} image digest: $(sanitize_line "$image")" >&2
+            if [ -s "$inspect_log" ]; then
+              while IFS= read -r line; do
+                echo "::error::$(sanitize_line "$line")" >&2
+              done < "$inspect_log"
+            fi
+            rm -f "$inspect_log"
+            return 1
+          }
+
           source_image="${SOURCE_REPOSITORY}:${SOURCE_TAG}"
-          source_digest="$(
-            docker buildx imagetools inspect "$source_image" |
-              awk '$1 == "Digest:" { print $2; exit }'
-          )"
-          if [[ ! "$source_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "::error::Unable to resolve verified regression image digest"
-            exit 1
-          fi
+          source_digest="$(resolve_image_digest "$source_image" "verified regression")"
 
           source_ref="${SOURCE_REPOSITORY}@${source_digest}"
           docker buildx imagetools create \
@@ -805,10 +832,7 @@ jobs:
             --tag "$TARGET_IMAGE" \
             "$source_ref"
 
-          target_digest="$(
-            docker buildx imagetools inspect "$TARGET_IMAGE" |
-              awk '$1 == "Digest:" { print $2; exit }'
-          )"
+          target_digest="$(resolve_image_digest "$TARGET_IMAGE" "promoted latest")"
           if [ "$source_digest" != "$target_digest" ]; then
             echo "::error::Promoted latest digest mismatch"
             exit 1
