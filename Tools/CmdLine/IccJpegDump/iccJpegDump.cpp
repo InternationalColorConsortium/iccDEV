@@ -223,12 +223,15 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
         if (m == 0xD9 || m == 0xDA) break;                  // EOI, or SOS (entropy data follows)
         if (m == 0x01 || (m >= 0xD0 && m <= 0xD7)) continue; // standalone markers (no length)
 
-        if (pos + 2 > n) break;
-        unsigned int segLen = (unsigned int)((data[pos] << 8) | data[pos + 1]);
+        if (n - pos < 2) break;
+        unsigned int segLen =
+            (static_cast<unsigned int>(data[pos]) << 8) |
+            static_cast<unsigned int>(data[pos + 1]);
         pos += 2;
-        if (segLen < 2 || pos + (segLen - 2) > n) break;
+        if (segLen < 2) break;
         size_t payloadLen = segLen - 2;
-        const unsigned char* seg = &data[pos];
+        if (payloadLen > n - pos) break;
+        const unsigned char* seg = data.data() + pos;
 
         if (m == 0xE2 && payloadLen >= 14 && memcmp(seg, kSig, 12) == 0) {
             unsigned int seq = seg[12];

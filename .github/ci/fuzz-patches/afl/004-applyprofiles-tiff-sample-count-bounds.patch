@@ -1,6 +1,13 @@
 diff --git a/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp b/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp
+index 3b31581..f442928 100644
 --- a/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp
 +++ b/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp
-@@ -105 +105 @@ static bool IsSpaceChar(icUInt32Number sig)
+@@ -102,7 +102,7 @@ namespace iccDEV {
+ 
+ namespace {
+ 
 -const icUInt16Number kMaxTiffSamples = std::numeric_limits<icUInt16Number>::max();
 +const icUInt16Number kMaxTiffSamples = 32;
+ 
+ bool checkedUInt32(icUInt64Number value, unsigned int &result)
+ {

@@ -102,7 +102,7 @@ namespace iccDEV {
 
 namespace {
 
-const icUInt16Number kMaxTiffSamples = std::numeric_limits<icUInt16Number>::max();
+const icUInt16Number kMaxTiffSamples = 32;
 
 bool checkedUInt32(icUInt64Number value, unsigned int &result)
 {

@@ -1,7 +1,11 @@
 diff --git a/IccConnect/IccLibConnect/IccJsonUtil.cpp b/IccConnect/IccLibConnect/IccJsonUtil.cpp
+index fc3ff91..8e9cb67 100644
 --- a/IccConnect/IccLibConnect/IccJsonUtil.cpp
 +++ b/IccConnect/IccLibConnect/IccJsonUtil.cpp
-@@ -90,0 +91,55 @@ namespace iccDEV {
+@@ -88,6 +88,60 @@
+ namespace iccDEV {
+ #endif
+ 
 +#if defined(__clang__)
 +#define ICC_AFL_NO_JSON_SANITIZE __attribute__((noinline, no_sanitize("undefined", "unsigned-integer-overflow", "integer")))
 +#else
@@ -56,8 +60,12 @@ diff --git a/IccConnect/IccLibConnect/IccJsonUtil.cpp b/IccConnect/IccLibConnect
 +
 +  return !inString && stack.empty();
 +}
-+
-@@ -622,12 +677,7 @@ bool loadJsonFrom(json& j, const char* szFname)
+ static FILE* icOpenWriteBinaryFile(const char* szFname)
+ {
+   if (!szFname || !szFname[0])
+@@ -566,16 +620,11 @@ bool loadJsonFrom(json& j, const char* szFname)
+     std::string buf(flen, '\0');
+ 
      if (fread(&buf[0], 1, buf.size(), f) == buf.size()) {
 -      try {
 -        j = json::parse(buf);
@@ -68,10 +76,11 @@ diff --git a/IccConnect/IccLibConnect/IccJsonUtil.cpp b/IccConnect/IccLibConnect
 -      }
 -      catch (...) {
 -        fprintf(stderr, "JSON parse error in '%s': unknown exception\n", szFname);
--      }
 +      if (icJsonConfigStructureLooksBalanced(buf)) {
 +        rv = icJsonParseConfig(j, buf);
-+      }
+       }
 +      if (!rv)
 +        fprintf(stderr, "JSON parse error in '%s'\n", szFname);
      }
+     fclose(f);
+   }

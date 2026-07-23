@@ -35,3 +35,12 @@ Retired patches:
   `IccProfLib/IccCAM.cpp` and `IccProfLib/IccEncoding.cpp` (#1817), so it no
   longer applies and has been removed, per the note above about landing upstream
   source fixes once they are stable.
+
+Before committing patch edits, run:
+
+```bash
+.github/scripts/check-fuzz-patches.sh
+```
+
+The checker validates both AFL and CFL stacks from a fresh temporary clone of
+the current checkout with `git apply --check`.
