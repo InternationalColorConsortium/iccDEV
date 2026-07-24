@@ -45,6 +45,11 @@ Canonical guide: `docs/regression-container.md`
     explicit `publish-regression-latest=true` dispatch on the protected
     Docker-testing branch.
 
+For AFL/CFL work, keep the review scope narrow: these helpers are experimental
+maintainer workflows and local validation patch stacks. They should support
+manual fuzz runs from `master` or an integration branch, not redefine required
+project CI or merge fuzz patches as source hardening.
+
 ## Safety
 
 - Do not mount the Docker socket, SSH directory, or GitHub credentials into

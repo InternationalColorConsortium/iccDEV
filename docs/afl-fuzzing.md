@@ -4,6 +4,21 @@ iccDEV has a maintainer-owned AFL++ smoke workflow for short, manual checks of
 command-line tool fuzzability. It is intentionally bounded and complements the
 CTest, sanitizer, CodeQL, and regression-container gates.
 
+## Review Scope
+
+The AFL and CFL files in this area are experimental maintainer scaffolding.
+They register manual/reusable workflows, helper scripts, seed handling, and
+documentation so maintainers can run bounded fuzzing off `master` or an
+integration branch such as `ci-afl-cfl`. They are not intended to make fuzzing a
+required merge gate, replace CTest or sanitizer regression tests, or assert that
+the current fuzz target set is complete.
+
+The patch stacks under `.github/ci/fuzz-patches/afl` and
+`.github/ci/fuzz-patches/cfl` are local validation aids. Reviewers should treat
+them as disposable patches used to keep exploratory fuzz jobs moving while
+maintainers sort and promote durable source fixes separately. A fuzz patch in
+this directory is not a proposed upstream source fix by itself.
+
 Run it from GitHub Actions with `ci-afl-smoke`, normally with:
 
 ```bash

@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2016
 ###############################################################################
 # Copyright (c) 2026 International Color Consortium.
 #                 All rights reserved.
@@ -84,14 +85,16 @@ sanitize_name() {
 }
 
 tool_for_target() {
+  local tool_root="${2:-$build_dir/Tools}"
+
   case "$1" in
-    dump) printf '%s' "$build_dir/Tools/IccDumpProfile/iccDumpProfile" ;;
-    toxml) printf '%s' "$build_dir/Tools/IccToXml/iccToXml" ;;
-    fromxml) printf '%s' "$build_dir/Tools/IccFromXml/iccFromXml" ;;
-    tojson) printf '%s' "$build_dir/Tools/IccToJson/iccToJson" ;;
-    fromjson) printf '%s' "$build_dir/Tools/IccFromJson/iccFromJson" ;;
-    roundtrip) printf '%s' "$build_dir/Tools/IccRoundTrip/iccRoundTrip" ;;
-    fromcube) printf '%s' "$build_dir/Tools/IccFromCube/iccFromCube" ;;
+    dump) printf '%s' "$tool_root/IccDumpProfile/iccDumpProfile" ;;
+    toxml) printf '%s' "$tool_root/IccToXml/iccToXml" ;;
+    fromxml) printf '%s' "$tool_root/IccFromXml/iccFromXml" ;;
+    tojson) printf '%s' "$tool_root/IccToJson/iccToJson" ;;
+    fromjson) printf '%s' "$tool_root/IccFromJson/iccFromJson" ;;
+    roundtrip) printf '%s' "$tool_root/IccRoundTrip/iccRoundTrip" ;;
+    fromcube) printf '%s' "$tool_root/IccFromCube/iccFromCube" ;;
     *) return 1 ;;
   esac
 }
@@ -123,6 +126,38 @@ build_replay_command() {
       ;;
     fromcube)
       printf 'timeout %ss %q %q %q' "$timeout_seconds" "$tool" "$input" "$out_base.icc"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+build_portable_replay_command() {
+  local target="$1"
+  local tool="$2"
+
+  case "$target" in
+    dump)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" ALL' "$timeout_seconds" "$tool"
+      ;;
+    toxml)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" "$ICCDEV_REPRO_OUT.xml"' "$timeout_seconds" "$tool"
+      ;;
+    fromxml)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" "$ICCDEV_REPRO_OUT.icc"' "$timeout_seconds" "$tool"
+      ;;
+    tojson)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" "$ICCDEV_REPRO_OUT.json"' "$timeout_seconds" "$tool"
+      ;;
+    fromjson)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" "$ICCDEV_REPRO_OUT.icc"' "$timeout_seconds" "$tool"
+      ;;
+    roundtrip)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" 1 0' "$timeout_seconds" "$tool"
+      ;;
+    fromcube)
+      printf 'timeout %ss "%s" "$ICCDEV_FINDING_INPUT" "$ICCDEV_REPRO_OUT.icc"' "$timeout_seconds" "$tool"
       ;;
     *)
       return 1
@@ -189,25 +224,42 @@ while IFS="$(printf '\t')" read -r target kind source_file artifact_file; do
   log_file="$logs_dir/$safe.log"
   repro_file="$repro_dir/$safe.cmd"
   out_base="$triage_dir/$safe.out"
-  command_line="$(build_replay_command "$target" "$source_file" "$tool" "$out_base")"
+  portable_tool="$(tool_for_target "$target" '${ICCDEV_TOOLS_DIR}' || true)"
+  command_line="$(build_portable_replay_command "$target" "$portable_tool")"
 
-  printf 'cd %q && ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1 UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 %s\n' \
-    "$repo_root" "$command_line" > "$repro_file"
+  {
+    printf 'if [ -z "${ICCDEV_FINDINGS_DIR:-}" ]; then\n'
+    printf '  if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then\n'
+    printf '    ICCDEV_FINDINGS_DIR="$(cd "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"\n'
+    printf '  else\n'
+    printf '    ICCDEV_FINDINGS_DIR="$PWD"\n'
+    printf '  fi\n'
+    printf 'fi\n'
+    printf 'ICCDEV_REPO_ROOT=${ICCDEV_REPO_ROOT:-$PWD}\n'
+    printf 'ICCDEV_TOOLS_DIR=${ICCDEV_TOOLS_DIR:-$ICCDEV_REPO_ROOT/Build/Tools}\n'
+    printf 'ICCDEV_FINDING_INPUT=${ICCDEV_FINDING_INPUT:-$ICCDEV_FINDINGS_DIR/%q}\n' "$artifact_file"
+    printf 'ICCDEV_REPRO_OUT=${ICCDEV_REPRO_OUT:-$ICCDEV_FINDINGS_DIR/triage/%q}\n' "$safe.out"
+    printf 'cd "$ICCDEV_REPO_ROOT" && ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1 UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 %s\n' "$command_line"
+  } > "$repro_file"
   {
     printf '%s %s %s\n' "$target" "$kind" "$(basename "$artifact_file")"
+    printf '# artifact input: %s\n' "$artifact_file"
     cat "$repro_file"
     printf '\n'
   } >> "$one_liners_txt"
   {
     printf '## %s %s %s\n\n' "$target" "$kind" "$(basename "$artifact_file")"
+    printf 'Artifact input: `%s`\n\n' "$artifact_file"
     printf '```bash\n'
     cat "$repro_file"
     printf '```\n\n'
   } >> "$one_liners_md"
 
   set +e
-  ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1 \
-  UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 \
+  ICCDEV_REPO_ROOT="$repo_root" \
+  ICCDEV_TOOLS_DIR="$build_dir/Tools" \
+  ICCDEV_FINDING_INPUT="$source_file" \
+  ICCDEV_REPRO_OUT="$out_base" \
   bash "$repro_file" > "$log_file" 2>&1
   exit_code="$?"
   set -e

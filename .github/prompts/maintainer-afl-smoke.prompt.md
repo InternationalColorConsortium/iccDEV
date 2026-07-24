@@ -21,6 +21,13 @@ command-line tools.
 Update the AFL smoke target, seed set, or workflow inputs while keeping the job
 manual, bounded, and governance-compliant.
 
+Treat AFL/CFL work in this branch as experimental maintainer scaffolding. The
+goal is to register manual/reusable workflows, docs, helper scripts, and local
+validation patch stacks for future runs off `master` or integration branches.
+Do not present the fuzz patch stack as production source hardening, and do not
+turn these workflows into mandatory merge gates unless a maintainer explicitly
+asks for that policy change.
+
 Keep AFL++ bootstrap aligned with the regression container's LLVM major
 version. For Clang/LLVM 22, build AFL++ `dev` with `CC=clang-22`,
 `CXX=clang++-22`, and `LLVM_CONFIG=llvm-config-22`, then probe both

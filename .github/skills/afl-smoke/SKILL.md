@@ -55,6 +55,13 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 
 ## Update Rules
 
+- Treat this area as experimental maintainer scaffolding. The workflows should
+  remain manual/reusable entry points for bounded fuzz checks from `master` or
+  integration branches, not required merge gates.
+- Do not review files under `.github/ci/fuzz-patches/afl` or
+  `.github/ci/fuzz-patches/cfl` as final upstream hardening changes. They are
+  local validation patches; durable fixes must be promoted separately as normal
+  source changes.
 - Keep workflow triggers manual or reusable unless maintainers explicitly widen
   them.
 - Keep CI AFL++ tooling sourced from

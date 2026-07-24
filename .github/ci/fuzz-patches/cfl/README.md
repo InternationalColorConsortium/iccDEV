@@ -2,6 +2,11 @@
 
 Place maintainer-local CFL fuzzing patches here as ordered `*.patch` files.
 
+These patches are experimental fuzz-run stabilizers, not source changes being
+proposed for direct merge from this directory. They let maintainers compare raw
+and patched fuzz behavior on branches such as `ci-afl-cfl`; durable fixes still
+need normal review as source changes in the affected component.
+
 `cfl/build.sh --patches` applies this directory by default through
 `.github/scripts/iccdev-apply-fuzz-patches.sh --mode cfl`.
 

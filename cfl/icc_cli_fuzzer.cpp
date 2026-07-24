@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -52,9 +53,25 @@ static bool WriteInput(const uint8_t *data, size_t size, std::string &path) {
   if (fd < 0)
     return false;
 
-  ssize_t written = write(fd, data, size);
-  close(fd);
-  if (written != static_cast<ssize_t>(size)) {
+  size_t total = 0;
+  while (total < size) {
+    ssize_t written = write(fd, data + total, size - total);
+    if (written < 0) {
+      if (errno == EINTR)
+        continue;
+      close(fd);
+      unlink(writable.data());
+      return false;
+    }
+    if (written == 0) {
+      close(fd);
+      unlink(writable.data());
+      return false;
+    }
+    total += static_cast<size_t>(written);
+  }
+
+  if (close(fd) != 0) {
     unlink(writable.data());
     return false;
   }
@@ -126,7 +143,7 @@ static std::vector<std::string> BuildArgs(const std::string &target,
 static int RunChild(const std::vector<std::string> &args) {
   pid_t pid = fork();
   if (pid < 0)
-    return 0;
+    __builtin_trap();
 
   if (pid == 0) {
     std::vector<char *> argv;
@@ -139,7 +156,7 @@ static int RunChild(const std::vector<std::string> &args) {
     setenv("UBSAN_OPTIONS", "halt_on_error=1:abort_on_error=1:print_stacktrace=1", 0);
     freopen("/dev/null", "w", stdout);
     execv(argv[0], argv.data());
-    _exit(127);
+    _exit(126);
   }
 
   for (int i = 0; i < kChildTimeoutSeconds * 100; i++) {
@@ -147,6 +164,8 @@ static int RunChild(const std::vector<std::string> &args) {
     pid_t done = waitpid(pid, &status, WNOHANG);
     if (done == pid) {
       if (WIFSIGNALED(status))
+        __builtin_trap();
+      if (WIFEXITED(status) && WEXITSTATUS(status) == 126)
         __builtin_trap();
       return WIFEXITED(status) ? WEXITSTATUS(status) : 0;
     }
@@ -165,16 +184,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   std::string target = ICCDEV_CFL_TARGET;
   std::string tool = ToolPathForTarget(target);
   if (tool.empty() || access(tool.c_str(), X_OK) != 0)
-    return 0;
+    __builtin_trap();
 
   std::string input;
   if (!WriteInput(data, size, input))
-    return 0;
+    __builtin_trap();
 
   std::string output;
   std::vector<std::string> args = BuildArgs(target, tool, input, output);
-  if (!args.empty())
-    (void)RunChild(args);
+  if (args.empty())
+    __builtin_trap();
+
+  RunChild(args);
 
   unlink(input.c_str());
   if (!output.empty())

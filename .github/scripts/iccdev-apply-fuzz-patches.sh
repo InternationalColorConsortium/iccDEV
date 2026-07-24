@@ -77,8 +77,20 @@ fi
 for patch_file in "${patches[@]}"; do
   echo "Applying $mode fuzz patch: $(basename "$patch_file")"
   if [ "$dry_run" -eq 1 ]; then
-    patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+    if patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+      echo "  dry-run: applies cleanly"
+    elif patch --batch --reverse --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+      echo "  dry-run: already applied"
+    else
+      patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+    fi
   else
-    patch --batch --forward --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+    if patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+      patch --batch --forward --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+    elif patch --batch --reverse --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+      echo "  already applied"
+    else
+      patch --batch --forward --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+    fi
   fi
 done

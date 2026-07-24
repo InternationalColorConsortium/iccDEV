@@ -4,6 +4,13 @@ This directory contains the maintainer-owned CFL smoke entry point for the
 current AFL/CFL onboarding branch. It intentionally starts with the core
 iccDEV command-line surfaces:
 
+The CFL smoke harnesses are experimental maintainer validation scaffolding.
+They are registered for manual or reusable workflow use from `master` and
+integration branches; they are not a mandatory CI quality gate and they do not
+replace normal source-level regression tests. Findings from these harnesses
+should be promoted only after replay with an existing iccDEV tool and a durable
+input artifact.
+
 - `dump`: `iccDumpProfile input.icc ALL`
 - `toxml`: `iccToXml input.icc output.xml`
 - `fromxml`: `iccFromXml input.xml output.icc`

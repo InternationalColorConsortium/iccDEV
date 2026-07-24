@@ -91,6 +91,37 @@ private predicate mentionsSameDenominator(Expr guard, Expr denom) {
   )
 }
 
+private predicate isRangeEndpointSubtraction(Expr denom) {
+  exists(SubExpr sub, VariableAccess leftAccess, VariableAccess rightAccess |
+    (sub = denom or sub = denom.getAChild*()) and
+    leftAccess = sub.getLeftOperand().getAChild*() and
+    rightAccess = sub.getRightOperand().getAChild*() and
+    isProfileRangeEndpointName(leftAccess.getTarget().getName()) and
+    isProfileRangeEndpointName(rightAccess.getTarget().getName())
+  )
+}
+
+private predicate mentionsSameRangeSubtraction(Expr guard, Expr denom) {
+  exists(SubExpr guardSub, SubExpr denomSub |
+    guardSub = guard.getAChild*() and
+    (denomSub = denom or denomSub = denom.getAChild*()) and
+    guardSub.getLeftOperand().toString() = denomSub.getLeftOperand().toString() and
+    guardSub.getRightOperand().toString() = denomSub.getRightOperand().toString()
+  )
+}
+
+private predicate guardMentionsProtectedDenominator(Expr guard, Expr denom) {
+  (
+    isRangeEndpointSubtraction(denom) and
+    mentionsSameRangeSubtraction(guard, denom)
+  )
+  or
+  (
+    not isRangeEndpointSubtraction(denom) and
+    mentionsSameDenominator(guard, denom)
+  )
+}
+
 private predicate isZeroOrFiniteCheck(Expr guard) {
   exists(FunctionCall call |
     (call = guard or call = guard.getAChild*()) and
@@ -149,7 +180,7 @@ private predicate hasNearbyZeroOrFiniteCheckForDenominator(DivExpr div) {
     check.getEnclosingFunction() = div.getEnclosingFunction() and
     check.getLocation().getStartLine() <= div.getLocation().getStartLine() and
     check.getLocation().getStartLine() >= div.getLocation().getStartLine() - 12 and
-    mentionsSameDenominator(check.getCondition(), div.getRightOperand()) and
+    guardMentionsProtectedDenominator(check.getCondition(), div.getRightOperand()) and
     isZeroOrFiniteCheckForDenominator(check.getCondition(), div.getRightOperand())
   )
 }
@@ -186,7 +217,7 @@ private predicate hasPriorFailClosedZeroOrFiniteCheckForDenominator(DivExpr div)
   exists(IfStmt check, Variable v |
     check.getEnclosingFunction() = div.getEnclosingFunction() and
     check.getLocation().getStartLine() < div.getLocation().getStartLine() and
-    mentionsSameDenominator(check.getCondition(), div.getRightOperand()) and
+    guardMentionsProtectedDenominator(check.getCondition(), div.getRightOperand()) and
     isZeroOrFiniteCheckForDenominator(check.getCondition(), div.getRightOperand()) and
     failClosedBranch(check) and
     denominatorVariable(div.getRightOperand(), v) and
@@ -199,7 +230,7 @@ private predicate conditionTrueMeansZero(Expr condition, Expr denom) {
     (eq = condition or eq = condition.getAChild*()) and
     eq.hasOperands(_, lit) and
     isZeroLiteral(lit) and
-    mentionsSameDenominator(eq, denom)
+    guardMentionsProtectedDenominator(eq, denom)
   )
 }
 
@@ -208,7 +239,7 @@ private predicate conditionTrueMeansNonZero(Expr condition, Expr denom) {
     (ne = condition or ne = condition.getAChild*()) and
     ne.hasOperands(_, lit) and
     isZeroLiteral(lit) and
-    mentionsSameDenominator(ne, denom)
+    guardMentionsProtectedDenominator(ne, denom)
   )
 }
 
