@@ -21,7 +21,8 @@ diff --git a/IccConnect/IccLibConnect/IccJsonUtil.cpp b/IccConnect/IccLibConnect
 +  bool inString = false;
 +  bool escaped = false;
 +
-+  for (unsigned char ch : buf) {
++  for (char byte : buf) {
++    unsigned char ch = static_cast<unsigned char>(byte);
 +    if (inString) {
 +      if (escaped) {
 +        escaped = false;
