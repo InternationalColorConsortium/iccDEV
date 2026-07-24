@@ -93,7 +93,7 @@ private predicate mentionsSameDenominator(Expr guard, Expr denom) {
 
 private predicate isRangeEndpointSubtraction(Expr denom) {
   exists(SubExpr sub, VariableAccess leftAccess, VariableAccess rightAccess |
-    (sub = denom or sub = denom.getAChild*()) and
+    sub = denom and
     leftAccess = sub.getLeftOperand().getAChild*() and
     rightAccess = sub.getRightOperand().getAChild*() and
     isProfileRangeEndpointName(leftAccess.getTarget().getName()) and

@@ -203,6 +203,14 @@ jobs:
           echo "AFL CMake build type: $(sanitize_line "$ICCDEV_AFL_BUILD_TYPE_INPUT")"
           echo "AFL target ref: $(sanitize_line "$TARGET_REF_INPUT")"
           echo "AFL target sha override: $(sanitize_line "${TARGET_SHA_INPUT:-none}")"
+          case "$ICCDEV_AFL_PATCH_MODE_INPUT" in
+            all|none)
+              ;;
+            *)
+              echo "ERROR: AFL patch mode must be all or none: $(sanitize_line "$ICCDEV_AFL_PATCH_MODE_INPUT")" >&2
+              exit 2
+              ;;
+          esac
           echo "AFL patch mode: $(sanitize_line "$ICCDEV_AFL_PATCH_MODE_INPUT")"
           git rev-parse --verify HEAD
           git status --short

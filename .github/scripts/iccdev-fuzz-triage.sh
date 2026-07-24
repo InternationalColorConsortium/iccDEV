@@ -67,6 +67,10 @@ case "$timeout_seconds" in
     exit 2
     ;;
 esac
+if [ "$timeout_seconds" -lt 1 ] || [ "$timeout_seconds" -gt 3600 ]; then
+  echo "ERROR: --timeout must be between 1 and 3600 seconds" >&2
+  exit 2
+fi
 
 triage_dir="$work_dir/triage"
 logs_dir="$triage_dir/logs"
