@@ -90,7 +90,7 @@ for patch_file in "${patches[@]}"; do
     elif patch --batch --reverse --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
       echo "  already applied"
     else
-      patch --batch --forward --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+      patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
     fi
   fi
 done

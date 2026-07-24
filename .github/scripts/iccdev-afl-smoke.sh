@@ -219,6 +219,9 @@ if [ "$skip_build" -eq 0 ]; then
         "$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh" --mode afl --patch-dir "$patch_dir"
     fi
 
+    export AFL_USE_ASAN=1
+    export AFL_USE_UBSAN=1
+
     cmake_zlib_args=()
     if [ -e /usr/lib/x86_64-linux-gnu/libz.so ]; then
         cmake_zlib_args+=("-DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.so")
@@ -408,50 +411,50 @@ run_afl_target() {
     case "$target" in
         dump)
             AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
-              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ ALL
             afl_status="$?"
             ;;
         toxml)
             AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
-              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/out.xml"
             afl_status="$?"
             ;;
         fromxml)
             AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
-              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/fromxml-out.icc"
             afl_status="$?"
             ;;
         tojson)
             AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
-              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/tojson-out.json"
             afl_status="$?"
             ;;
         fromjson)
             AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
-              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/fromjson-out.icc"
             afl_status="$?"
             ;;
         roundtrip)
             AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
-              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ 1 0
             afl_status="$?"
             ;;
         fromcube)
             AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
-              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
-              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=0:allocator_may_return_null=1:symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/out.icc"
             afl_status="$?"
             ;;

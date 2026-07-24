@@ -36,7 +36,7 @@ permissions:
         default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
       runs:
-        description: 'LibFuzzer runs per corpus input'
+        description: 'Total LibFuzzer executions per target'
         required: true
         default: '1'
         type: string
@@ -71,7 +71,7 @@ permissions:
         default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
       runs:
-        description: 'LibFuzzer runs per corpus input'
+        description: 'Total LibFuzzer executions per target'
         required: false
         default: '1'
         type: string
@@ -171,7 +171,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           echo "CFL targets: $(sanitize_line "$ICCDEV_CFL_TARGETS")"
-          echo "CFL runs: $(sanitize_line "$ICCDEV_CFL_RUNS")"
+          echo "CFL total runs per target: $(sanitize_line "$ICCDEV_CFL_RUNS")"
           echo "CFL target ref: $(sanitize_line "$TARGET_REF_INPUT")"
           echo "CFL target sha override: $(sanitize_line "${TARGET_SHA_INPUT:-none}")"
           echo "CFL patch mode: $(sanitize_line "$ICCDEV_CFL_PATCH_MODE_INPUT")"

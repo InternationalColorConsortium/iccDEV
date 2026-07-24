@@ -222,7 +222,7 @@ summary_tsv="$work_dir/summary.tsv"
 logs_dir="$work_dir/logs"
 artifacts_dir="$work_dir/artifacts"
 mkdir -p "$logs_dir" "$artifacts_dir"
-printf 'target\tstatus\truns\tcorpus\n' > "$summary_tsv"
+printf 'target\tstatus\ttotal_runs\tcorpus\n' > "$summary_tsv"
 
 if [ "$skip_run" -eq 0 ]; then
   for target in "${selected_targets[@]}"; do

@@ -110,6 +110,29 @@ private predicate mentionsSameRangeSubtraction(Expr guard, Expr denom) {
   )
 }
 
+private predicate isZeroOrFiniteCheckOnRangeSubtraction(Expr guard, Expr denom) {
+  exists(SubExpr guardSub, SubExpr denomSub, FunctionCall call |
+    guardSub = guard.getAChild*() and
+    (denomSub = denom or denomSub = denom.getAChild*()) and
+    guardSub.getLeftOperand().toString() = denomSub.getLeftOperand().toString() and
+    guardSub.getRightOperand().toString() = denomSub.getRightOperand().toString() and
+    call = guard.getAChild*() and
+    guardSub = call.getAChild*() and
+    call.getTarget().getName().regexpMatch("(?i)^(isfinite|isnan|isinf)$")
+  )
+  or
+  exists(SubExpr guardSub, SubExpr denomSub, ComparisonOperation cmp, Literal lit |
+    guardSub = guard.getAChild*() and
+    (denomSub = denom or denomSub = denom.getAChild*()) and
+    guardSub.getLeftOperand().toString() = denomSub.getLeftOperand().toString() and
+    guardSub.getRightOperand().toString() = denomSub.getRightOperand().toString() and
+    cmp = guard.getAChild*() and
+    guardSub = cmp.getAChild*() and
+    cmp.hasOperands(_, lit) and
+    lit.toString().regexpMatch("(?i)^-?(0(\\.0f?)?|1e-[0-9]+|1E-[0-9]+)$")
+  )
+}
+
 private predicate guardMentionsProtectedDenominator(Expr guard, Expr denom) {
   (
     isRangeEndpointSubtraction(denom) and
@@ -163,7 +186,15 @@ private predicate denominatorSubtractsOne(Expr denom) {
 }
 
 private predicate isZeroOrFiniteCheckForDenominator(Expr guard, Expr denom) {
-  isZeroOrFiniteCheck(guard)
+  (
+    isRangeEndpointSubtraction(denom) and
+    isZeroOrFiniteCheckOnRangeSubtraction(guard, denom)
+  )
+  or
+  (
+    not isRangeEndpointSubtraction(denom) and
+    isZeroOrFiniteCheck(guard)
+  )
   or
   (
     denominatorSubtractsOne(denom) and
