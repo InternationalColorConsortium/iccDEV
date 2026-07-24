@@ -209,6 +209,7 @@ jobs:
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           summary="$CFL_WORK_DIR/summary.tsv"
+          skipped_seeds="$CFL_WORK_DIR/skipped-seeds.tsv"
           {
             echo "## CFL Smoke Summary"
             echo ""
@@ -227,5 +228,17 @@ jobs:
               done
             else
               echo "| unavailable | fail | 0 | unavailable |"
+            fi
+            echo ""
+            echo "### Seed Size Review"
+            echo ""
+            if [ -r "$skipped_seeds" ] && [ "$(tail -n +2 "$skipped_seeds" | wc -l)" -gt 0 ]; then
+              echo "| Kind | Size | Seed | Reason |"
+              echo "|------|------|------|--------|"
+              tail -n +2 "$skipped_seeds" | while IFS="$(printf '\t')" read -r kind size seed reason; do
+                echo "| $(sanitize_line "$kind") | $(sanitize_line "$size") | $(sanitize_line "$(basename "$seed")") | $(sanitize_line "$reason") |"
+              done
+            else
+              echo "No oversized CFL smoke seeds were skipped."
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

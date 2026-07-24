@@ -23,6 +23,7 @@ build_dir="${ICCDEV_CFL_BUILD_DIR:-$repo_root/build-cfl-smoke}"
 work_dir="${ICCDEV_CFL_WORK_DIR:-$repo_root/.cfl-smoke}"
 targets_csv="${ICCDEV_CFL_TARGETS:-dump,toxml,fromxml,tojson,fromjson,roundtrip}"
 runs="${ICCDEV_CFL_RUNS:-1}"
+max_seed_bytes="${ICCDEV_CFL_MAX_SEED_BYTES:-49152}"
 apply_patches="${ICCDEV_CFL_APPLY_PATCHES:-0}"
 patch_dir="${ICCDEV_CFL_PATCH_DIR:-$repo_root/.github/ci/fuzz-patches/cfl}"
 skip_run=0
@@ -91,20 +92,46 @@ if [ "$runs" -lt 1 ] || [ "$runs" -gt 1000000 ]; then
   exit 2
 fi
 
+case "$max_seed_bytes" in
+  ''|*[!0-9]*)
+    echo "ERROR: ICCDEV_CFL_MAX_SEED_BYTES must be numeric" >&2
+    exit 2
+    ;;
+esac
+
+if [ "$max_seed_bytes" -lt 1024 ]; then
+  echo "ERROR: ICCDEV_CFL_MAX_SEED_BYTES must be at least 1024" >&2
+  exit 2
+fi
+
 IFS=',' read -r -a requested_targets <<< "$targets_csv"
 selected_targets=()
 for target in "${requested_targets[@]}"; do
   target="${target#"${target%%[![:space:]]*}"}"
   target="${target%"${target##*[![:space:]]}"}"
+  if [ -z "$target" ]; then
+    echo "ERROR: empty CFL target entry in --targets" >&2
+    exit 2
+  fi
+  if [[ "$target" =~ [[:space:]] ]]; then
+    echo "ERROR: malformed CFL target contains whitespace: $target" >&2
+    exit 2
+  fi
   case "$target" in
     dump|toxml|fromxml|tojson|fromjson|roundtrip)
-      selected_targets+=("$target")
       ;;
     *)
       echo "ERROR: unsupported CFL target: $target" >&2
       exit 2
       ;;
   esac
+  for selected_target in "${selected_targets[@]}"; do
+    if [ "$target" = "$selected_target" ]; then
+      echo "ERROR: duplicate CFL target: $target" >&2
+      exit 2
+    fi
+  done
+  selected_targets+=("$target")
 done
 
 for tool in cmake clang++; do
@@ -144,6 +171,8 @@ for target in "${selected_targets[@]}"; do
 done
 
 seed_root="$work_dir/seeds"
+seed_inventory_tsv="$work_dir/seed-inventory.tsv"
+skipped_seeds_tsv="$work_dir/skipped-seeds.tsv"
 mkdir -p "$seed_root/icc" "$seed_root/xml" "$seed_root/json"
 cp "$repo_root"/.github/ci/test-data/*.icc "$seed_root/icc/"
 cp "$repo_root"/.github/ci/test-data/*.xml "$seed_root/xml/" 2>/dev/null || true
@@ -158,6 +187,35 @@ if ! find "$seed_root/xml" -maxdepth 1 -type f | grep -q .; then
 fi
 if ! find "$seed_root/json" -maxdepth 1 -type f | grep -q .; then
   printf '{"IccProfile":{}}\n' > "$seed_root/json/minimal.json"
+fi
+
+printf 'kind\tsize\tfile\n' > "$seed_inventory_tsv"
+printf 'kind\tsize\tfile\treason\n' > "$skipped_seeds_tsv"
+
+prune_large_seeds() {
+  local kind="$1"
+  local dir="$2"
+  local file=""
+  local size=""
+
+  [ -d "$dir" ] || return 0
+  while IFS= read -r -d '' file; do
+    size="$(stat -c '%s' "$file")"
+    printf '%s\t%s\t%s\n' "$kind" "$size" "$file" >> "$seed_inventory_tsv"
+    if [ "$size" -gt "$max_seed_bytes" ]; then
+      printf '%s\t%s\t%s\tlarger-than-%s-bytes\n' "$kind" "$size" "$file" "$max_seed_bytes" >> "$skipped_seeds_tsv"
+      rm -f -- "$file"
+    fi
+  done < <(find "$dir" -maxdepth 1 -type f -print0 | sort -z)
+}
+
+prune_large_seeds "icc" "$seed_root/icc"
+prune_large_seeds "xml" "$seed_root/xml"
+prune_large_seeds "json" "$seed_root/json"
+
+if [ "$(awk 'END { print NR }' "$skipped_seeds_tsv")" -gt 1 ]; then
+  echo "Skipped CFL smoke seeds larger than $max_seed_bytes bytes:"
+  tail -n +2 "$skipped_seeds_tsv"
 fi
 
 summary_tsv="$work_dir/summary.tsv"
