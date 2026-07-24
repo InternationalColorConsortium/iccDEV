@@ -27,6 +27,7 @@ build_dir="${AFL_BUILD_DIR:-$repo_root/build-afl-smoke}"
 work_dir="${AFL_WORK_DIR:-$repo_root/.afl-smoke}"
 build_type="${AFL_BUILD_TYPE:-Debug}"
 exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-30000}"
+max_seed_bytes="${AFL_MAX_SEED_BYTES:-49152}"
 skip_build=0
 apply_patches="${ICCDEV_AFL_APPLY_PATCHES:-0}"
 patch_dir="${ICCDEV_AFL_PATCH_DIR:-$repo_root/.github/ci/fuzz-patches/afl}"
@@ -114,6 +115,18 @@ esac
 
 if [ "$exec_timeout_ms" -lt 20 ] || [ "$exec_timeout_ms" -gt 30000 ]; then
     echo "ERROR: --exec-timeout-ms must be between 20 and 30000" >&2
+    exit 2
+fi
+
+case "$max_seed_bytes" in
+    ''|*[!0-9]*)
+        echo "ERROR: AFL_MAX_SEED_BYTES must be numeric" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$max_seed_bytes" -lt 1024 ]; then
+    echo "ERROR: AFL_MAX_SEED_BYTES must be at least 1024" >&2
     exit 2
 fi
 
@@ -233,6 +246,8 @@ if [ "$skip_build" -eq 0 ]; then
 fi
 
 seed_root="$work_dir/seeds"
+seed_inventory_tsv="$work_dir/seed-inventory.tsv"
+skipped_seeds_tsv="$work_dir/skipped-seeds.tsv"
 mkdir -p "$seed_root/icc" "$seed_root/xml" "$seed_root/json" "$seed_root/cube"
 cp "$repo_root"/.github/ci/test-data/*.icc "$seed_root/icc/"
 cp "$repo_root"/.github/ci/test-data/*.xml "$seed_root/xml/" 2>/dev/null || true
@@ -256,6 +271,36 @@ if ! find "$seed_root/xml" -maxdepth 1 -type f | grep -q .; then
 fi
 if ! find "$seed_root/json" -maxdepth 1 -type f | grep -q .; then
     printf '{"IccProfile":{}}\n' > "$seed_root/json/minimal.json"
+fi
+
+printf 'kind\tsize\tfile\n' > "$seed_inventory_tsv"
+printf 'kind\tsize\tfile\treason\n' > "$skipped_seeds_tsv"
+
+prune_large_seeds() {
+    local kind="$1"
+    local dir="$2"
+    local file=""
+    local size=""
+
+    [ -d "$dir" ] || return 0
+    while IFS= read -r -d '' file; do
+        size="$(stat -c '%s' "$file")"
+        printf '%s\t%s\t%s\n' "$kind" "$size" "$file" >> "$seed_inventory_tsv"
+        if [ "$size" -gt "$max_seed_bytes" ]; then
+            printf '%s\t%s\t%s\tlarger-than-%s-bytes\n' "$kind" "$size" "$file" "$max_seed_bytes" >> "$skipped_seeds_tsv"
+            rm -f -- "$file"
+        fi
+    done < <(find "$dir" -maxdepth 1 -type f -print0 | sort -z)
+}
+
+prune_large_seeds "icc" "$seed_root/icc"
+prune_large_seeds "xml" "$seed_root/xml"
+prune_large_seeds "json" "$seed_root/json"
+prune_large_seeds "cube" "$seed_root/cube"
+
+if [ "$(awk 'END { print NR }' "$skipped_seeds_tsv")" -gt 1 ]; then
+    echo "Skipped AFL smoke seeds larger than $max_seed_bytes bytes:"
+    tail -n +2 "$skipped_seeds_tsv"
 fi
 
 summary_tsv="$work_dir/summary.tsv"

@@ -338,6 +338,8 @@ jobs:
           path: |
             ${{ runner.temp }}/iccdev-afl-smoke/summary.tsv
             ${{ runner.temp }}/iccdev-afl-smoke/findings.tsv
+            ${{ runner.temp }}/iccdev-afl-smoke/seed-inventory.tsv
+            ${{ runner.temp }}/iccdev-afl-smoke/skipped-seeds.tsv
             ${{ runner.temp }}/iccdev-afl-smoke/log-*.txt
             ${{ runner.temp }}/iccdev-afl-smoke/triage
           if-no-files-found: ignore
@@ -361,6 +363,7 @@ jobs:
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           summary="$AFL_WORK_DIR/summary.tsv"
           findings="$AFL_WORK_DIR/findings.tsv"
+          skipped_seeds="$AFL_WORK_DIR/skipped-seeds.tsv"
           triage="$AFL_WORK_DIR/triage/triage-summary.tsv"
           triage_report="$AFL_WORK_DIR/triage/triage-report.md"
           one_liners="$AFL_WORK_DIR/triage/reproducer-one-liners.txt"
@@ -383,6 +386,18 @@ jobs:
               done
             else
               echo "| unavailable | fail | 0 | 0 | 0 | 0 |"
+            fi
+            echo ""
+            echo "### Seed Size Review"
+            echo ""
+            if [ -r "$skipped_seeds" ] && [ "$(tail -n +2 "$skipped_seeds" | wc -l)" -gt 0 ]; then
+              echo "| Kind | Size | Seed | Reason |"
+              echo "|------|------|------|--------|"
+              tail -n +2 "$skipped_seeds" | while IFS="$(printf '\t')" read -r kind size seed reason; do
+                echo "| $(sanitize_line "$kind") | $(sanitize_line "$size") | $(sanitize_line "$(basename "$seed")") | $(sanitize_line "$reason") |"
+              done
+            else
+              echo "No oversized AFL smoke seeds were skipped."
             fi
             echo ""
             echo "### AFL Findings"
