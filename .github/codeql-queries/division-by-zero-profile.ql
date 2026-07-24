@@ -37,6 +37,11 @@ private predicate isProfileLocalDenominatorName(string name) {
   )
 }
 
+bindingset[name]
+private predicate isProfileRangeEndpointName(string name) {
+  name.regexpMatch("(?i)^((min|max)[A-Za-z0-9_]*|[A-Za-z0-9_]*(Min|Max)(L|Value|Range)?)$")
+}
+
 /**
  * Holds when `e` is a read of a `const`/`constexpr` variable whose initializer
  * folds to a non-zero compile-time constant (e.g. `const float kScale = 0.85f;`
@@ -63,6 +68,12 @@ private predicate isProfileDerivedDenominator(Expr e) {
   exists(VariableAccess va |
     va = e.getAChild*() and
     isProfileLocalDenominatorName(va.getTarget().getName())
+  )
+  or
+  exists(SubExpr sub, VariableAccess va |
+    (sub = e or sub = e.getAChild*()) and
+    va = sub.getAChild*() and
+    isProfileRangeEndpointName(va.getTarget().getName())
   )
 }
 

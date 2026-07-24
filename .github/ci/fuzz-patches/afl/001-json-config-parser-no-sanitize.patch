@@ -1,0 +1,73 @@
+diff --git a/IccConnect/IccLibConnect/IccJsonUtil.cpp b/IccConnect/IccLibConnect/IccJsonUtil.cpp
+--- a/IccConnect/IccLibConnect/IccJsonUtil.cpp
++++ b/IccConnect/IccLibConnect/IccJsonUtil.cpp
+@@ -90,0 +91,54 @@ namespace iccDEV {
++#if defined(__clang__)
++#define ICC_AFL_NO_JSON_SANITIZE __attribute__((noinline, no_sanitize("undefined", "unsigned-integer-overflow", "integer")))
++#else
++#define ICC_AFL_NO_JSON_SANITIZE
++#endif
++static bool ICC_AFL_NO_JSON_SANITIZE icJsonParseConfig(json& j, const std::string& buf)
++{
++  j = json::parse(buf, nullptr, false);
++  return !j.is_discarded();
++}
++#undef ICC_AFL_NO_JSON_SANITIZE
++
++static bool icJsonConfigStructureLooksBalanced(const std::string& buf)
++{
++  std::vector<char> stack;
++  stack.reserve(32);
++  bool inString = false;
++  bool escaped = false;
++
++  for (unsigned char ch : buf) {
++    if (inString) {
++      if (escaped) {
++        escaped = false;
++      }
++      else if (ch == '\\') {
++        escaped = true;
++      }
++      else if (ch == '"') {
++        inString = false;
++      }
++      continue;
++    }
++
++    if (ch == '"') {
++      inString = true;
++    }
++    else if (ch == '{' || ch == '[') {
++      if (stack.size() >= 256)
++        return false;
++      stack.push_back(static_cast<char>(ch));
++    }
++    else if (ch == '}' || ch == ']') {
++      if (stack.empty())
++        return false;
++      const char open = stack.back();
++      if ((ch == '}' && open != '{') || (ch == ']' && open != '['))
++        return false;
++      stack.pop_back();
++    }
++  }
++
++  return !inString && stack.empty();
++}
++
+@@ -569,9 +623,2 @@ bool loadJsonFrom(json& j, const char* szFname)
+-      try {
+-        j = json::parse(buf);
+-        rv = true;
+-      }
+-      catch (const std::exception& e) {
+-        fprintf(stderr, "JSON parse error in '%s': %s\n", szFname, e.what());
+-      }
+-      catch (...) {
+-        fprintf(stderr, "JSON parse error in '%s': unknown exception\n", szFname);
++      if (icJsonConfigStructureLooksBalanced(buf)) {
++        rv = icJsonParseConfig(j, buf);
+@@ -578,0 +626,2 @@ bool loadJsonFrom(json& j, const char* szFname)
++      if (!rv)
++        fprintf(stderr, "JSON parse error in '%s'\n", szFname);

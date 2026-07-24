@@ -19,7 +19,7 @@ They complement GitHub's standard `cpp-security-and-quality` suite. The
 | `unbounded-profile-loop` | CWE-400, CWE-834 | Loop bound from profile field without cap |
 | `unbounded-clut-index` | CWE-125 | CLUT `GetData()` buffer indexed without a length bound (#1548) |
 | `float-to-int-cast` | CWE-681 | Float-to-integer cast without range check |
-| `division-by-zero-profile` | CWE-369 | Division by profile-derived value |
+| `division-by-zero-profile` | CWE-369 | Division by profile-derived value, including min/max range expressions |
 | `world-writable-output` | CWE-732 | File created with world-writable mode |
 | `unsafe-tag-downcast` | CWE-843 | `FindTag()` result cast without type check |
 | `tainted-format-string` | CWE-134 | Variable used as a `printf` format string |

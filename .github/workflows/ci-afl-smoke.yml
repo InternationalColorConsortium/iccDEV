@@ -1,3 +1,4 @@
+---
 ###############################################################
 #
 # Copyright (c) 2026 International Color Consortium.
@@ -18,18 +19,23 @@ permissions:
   contents: read
   packages: read
 
-on:
+'on':
   workflow_dispatch:
     inputs:
+      target_ref:
+        description: 'Branch, tag, or ref to check out before optional target_sha'
+        required: true
+        default: ci-afl-cfl
+        type: string
       target_sha:
         description: 'Optional exact commit SHA to check out'
         required: false
         default: ''
         type: string
       afl_targets:
-        description: 'Comma-separated AFL targets: dump,toxml,fromcube'
+        description: 'Comma-separated AFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip'
         required: true
-        default: dump
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
       duration_seconds:
         description: 'AFL runtime per target in seconds, 1-3600'
@@ -51,6 +57,14 @@ on:
           - Release
           - RelWithDebInfo
           - MinSizeRel
+      patch_mode:
+        description: 'Patch stack mode'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - none
       regression_image_tag:
         description: 'Trusted regression container tag'
         required: false
@@ -58,15 +72,20 @@ on:
         type: string
   workflow_call:
     inputs:
+      target_ref:
+        description: 'Branch, tag, or ref to check out before optional target_sha'
+        required: false
+        default: ''
+        type: string
       target_sha:
         description: 'Optional exact commit SHA to check out'
         required: false
         default: ''
         type: string
       afl_targets:
-        description: 'Comma-separated AFL targets: dump,toxml,fromcube'
+        description: 'Comma-separated AFL targets'
         required: false
-        default: dump
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
       duration_seconds:
         description: 'AFL runtime per target in seconds, 1-3600'
@@ -83,6 +102,11 @@ on:
         required: false
         default: Debug
         type: string
+      patch_mode:
+        description: 'Patch stack mode: all or none'
+        required: false
+        default: all
+        type: string
       regression_image_tag:
         description: 'Trusted regression container tag'
         required: false
@@ -90,7 +114,7 @@ on:
         type: string
 
 concurrency:
-  group: "afl-smoke-${{ github.workflow }}-${{ github.ref }}-${{ inputs.afl_targets || 'dump' }}"
+  group: "afl-smoke-${{ github.workflow }}-${{ inputs.target_ref || github.ref }}-${{ inputs.target_sha || 'ref' }}-${{ inputs.afl_targets || 'dump' }}"
   cancel-in-progress: false
 
 jobs:
@@ -109,10 +133,13 @@ jobs:
         shell: bash --noprofile --norc {0}
     env:
       BASH_ENV: /dev/null
-      ICCDEV_AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump' }}
+      ICCDEV_AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
       ICCDEV_AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
       ICCDEV_AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '30000' }}
       ICCDEV_AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
+      ICCDEV_AFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
+      ICCDEV_AFL_APPLY_PATCHES_INPUT: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
+      TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
       AFLPLUSPLUS_REPO: https://github.com/AFLplusplus/AFLplusplus.git
@@ -131,7 +158,7 @@ jobs:
       - name: Checkout iccDEV
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ inputs.target_ref || github.ref }}
           path: target
           fetch-depth: 1
           persist-credentials: false
@@ -174,6 +201,11 @@ jobs:
           echo "AFL seconds: $(sanitize_line "$ICCDEV_AFL_SECONDS_INPUT")"
           echo "AFL exec timeout ms: $(sanitize_line "$ICCDEV_AFL_EXEC_TIMEOUT_MS_INPUT")"
           echo "AFL CMake build type: $(sanitize_line "$ICCDEV_AFL_BUILD_TYPE_INPUT")"
+          echo "AFL target ref: $(sanitize_line "$TARGET_REF_INPUT")"
+          echo "AFL target sha override: $(sanitize_line "${TARGET_SHA_INPUT:-none}")"
+          echo "AFL patch mode: $(sanitize_line "$ICCDEV_AFL_PATCH_MODE_INPUT")"
+          git rev-parse --verify HEAD
+          git status --short
 
       # preflight: allow-package-install reason=aflplusplus-dev-toolchain-bootstrap
       - name: Build AFL++ dev toolchain
@@ -269,10 +301,11 @@ jobs:
         working-directory: target
         env:
           BASH_ENV: /dev/null
-          ICCDEV_AFL_TARGETS: ${{ inputs.afl_targets || 'dump' }}
+          ICCDEV_AFL_TARGETS: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
           ICCDEV_AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
           ICCDEV_AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '30000' }}
           ICCDEV_AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
+          ICCDEV_AFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
           ICCDEV_AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
           ICCDEV_AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
         run: |
@@ -297,6 +330,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+      - name: Upload AFL smoke logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: afl-smoke-logs-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/iccdev-afl-smoke/summary.tsv
+            ${{ runner.temp }}/iccdev-afl-smoke/findings.tsv
+            ${{ runner.temp }}/iccdev-afl-smoke/log-*.txt
+            ${{ runner.temp }}/iccdev-afl-smoke/triage
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Summarize AFL smoke
         if: always()
         working-directory: target
@@ -304,6 +350,10 @@ jobs:
           BASH_ENV: /dev/null
           AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
           AFL_FINDINGS_ARTIFACT: afl-smoke-findings-${{ github.run_id }}
+          AFL_LOGS_ARTIFACT: afl-smoke-logs-${{ github.run_id }}
+          AFL_TARGET_REF: ${{ inputs.target_ref || github.ref }}
+          AFL_TARGET_SHA: ${{ inputs.target_sha || '' }}
+          AFL_PATCH_MODE: ${{ inputs.patch_mode || 'all' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -311,8 +361,18 @@ jobs:
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           summary="$AFL_WORK_DIR/summary.tsv"
           findings="$AFL_WORK_DIR/findings.tsv"
+          triage="$AFL_WORK_DIR/triage/triage-summary.tsv"
+          triage_report="$AFL_WORK_DIR/triage/triage-report.md"
+          one_liners="$AFL_WORK_DIR/triage/reproducer-one-liners.txt"
           {
             echo "## AFL++ Smoke Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Target ref | \`$(sanitize_line "$AFL_TARGET_REF")\` |"
+            echo "| Target SHA override | \`$(sanitize_line "${AFL_TARGET_SHA:-none}")\` |"
+            echo "| Patch mode | \`$(sanitize_line "$AFL_PATCH_MODE")\` |"
+            echo "| Logs artifact | \`$(sanitize_line "$AFL_LOGS_ARTIFACT")\` |"
             echo ""
             echo "| Target | Status | Seconds | Execs | Crashes | Hangs |"
             echo "|--------|--------|---------|-------|---------|-------|"
@@ -338,5 +398,30 @@ jobs:
               done
             else
               echo "No crash or hang artifacts were saved."
+            fi
+            echo ""
+            echo "### Triage Replay"
+            echo ""
+            if [ -r "$triage" ]; then
+              echo "| Target | Kind | Classification | Exit | Reproducer |"
+              echo "|--------|------|----------------|------|------------|"
+              tail -n +2 "$triage" | while IFS="$(printf '\t')" read -r target kind classification exit_code input log_file repro_file; do
+                printf 'Input: %s\nLog: %s\n' "$(sanitize_line "$input")" "$(sanitize_line "$log_file")" >/dev/null
+                echo "| $(sanitize_line "$target") | $(sanitize_line "$kind") | $(sanitize_line "$classification") | $(sanitize_line "$exit_code") | $(sanitize_line "$repro_file") |"
+              done
+              echo ""
+              echo "The uploaded artifact includes \`triage/reproducer-one-liners.txt\`, \`triage/reproducer-one-liners.md\`, per-finding \`.cmd\` files, and replay logs."
+              if [ -r "$one_liners" ]; then
+                echo ""
+                echo "#### Copy-paste Reproducers"
+                echo ""
+                echo '```bash'
+                sanitize_print "$(cat "$one_liners")"
+                echo '```'
+              fi
+            elif [ -r "$triage_report" ]; then
+              sanitize_print "$(cat "$triage_report")"
+            else
+              echo "No triage replay was needed."
             fi
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

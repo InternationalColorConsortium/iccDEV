@@ -1,0 +1,231 @@
+---
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Manual CFL smoke fuzzing for core iccDEV command-line tools.
+#
+###############################################################
+
+name: "ci-cfl-smoke"
+
+# yamllint disable rule:line-length
+
+permissions:
+  contents: read
+  packages: read
+
+'on':
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: 'Branch, tag, or ref to check out before optional target_sha'
+        required: true
+        default: ci-afl-cfl
+        type: string
+      target_sha:
+        description: 'Optional exact commit SHA to check out'
+        required: false
+        default: ''
+        type: string
+      cfl_targets:
+        description: 'Comma-separated CFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip'
+        required: true
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
+        type: string
+      runs:
+        description: 'LibFuzzer runs per corpus input'
+        required: true
+        default: '1'
+        type: string
+      patch_mode:
+        description: 'Patch stack mode'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - none
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
+  workflow_call:
+    inputs:
+      target_ref:
+        description: 'Branch, tag, or ref to check out before optional target_sha'
+        required: false
+        default: ''
+        type: string
+      target_sha:
+        description: 'Optional exact commit SHA to check out'
+        required: false
+        default: ''
+        type: string
+      cfl_targets:
+        description: 'Comma-separated CFL targets'
+        required: false
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
+        type: string
+      runs:
+        description: 'LibFuzzer runs per corpus input'
+        required: false
+        default: '1'
+        type: string
+      patch_mode:
+        description: 'Patch stack mode: all or none'
+        required: false
+        default: all
+        type: string
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
+
+concurrency:
+  group: "cfl-smoke-${{ github.workflow }}-${{ inputs.target_ref || github.ref }}-${{ inputs.target_sha || 'ref' }}-${{ inputs.cfl_targets || 'core' }}"
+  cancel-in-progress: false
+
+jobs:
+  cfl-smoke:
+    name: "CFL smoke (${{ inputs.cfl_targets || 'core' }})"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container:
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      ICCDEV_CFL_TARGETS_INPUT: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
+      ICCDEV_CFL_RUNS_INPUT: ${{ inputs.runs || '1' }}
+      ICCDEV_CFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
+      ICCDEV_CFL_APPLY_PATCHES_INPUT: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
+      TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
+      TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+
+    steps:
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout iccDEV
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.target_ref || github.ref }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout exact target SHA
+        if: ${{ inputs.target_sha != '' }}
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          case "$TARGET_SHA" in
+            *[!0-9a-fA-F]*)
+              echo "ERROR: invalid target SHA: $(sanitize_line "$TARGET_SHA")" >&2
+              exit 1
+              ;;
+          esac
+          if [ "${#TARGET_SHA}" -ne 40 ]; then
+            echo "ERROR: invalid target SHA length: $(sanitize_line "$TARGET_SHA")" >&2
+            exit 1
+          fi
+          git fetch --no-tags --depth=1 origin "$TARGET_SHA"
+          git checkout --detach "$TARGET_SHA"
+
+      - name: Run CFL smoke
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_CFL_TARGETS: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
+          ICCDEV_CFL_RUNS: ${{ inputs.runs || '1' }}
+          ICCDEV_CFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
+          ICCDEV_CFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-cfl-smoke
+          ICCDEV_CFL_WORK_DIR: ${{ runner.temp }}/iccdev-cfl-smoke
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          echo "CFL targets: $(sanitize_line "$ICCDEV_CFL_TARGETS")"
+          echo "CFL runs: $(sanitize_line "$ICCDEV_CFL_RUNS")"
+          echo "CFL target ref: $(sanitize_line "$TARGET_REF_INPUT")"
+          echo "CFL target sha override: $(sanitize_line "${TARGET_SHA_INPUT:-none}")"
+          echo "CFL patch mode: $(sanitize_line "$ICCDEV_CFL_PATCH_MODE_INPUT")"
+          git rev-parse --verify HEAD
+          git status --short
+          cfl/build.sh \
+            --targets "$ICCDEV_CFL_TARGETS" \
+            --runs "$ICCDEV_CFL_RUNS" \
+            --build-dir "$ICCDEV_CFL_BUILD_DIR" \
+            --work-dir "$ICCDEV_CFL_WORK_DIR"
+
+      - name: Upload CFL smoke logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: cfl-smoke-logs-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/iccdev-cfl-smoke/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Summarize CFL smoke
+        if: always()
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          CFL_WORK_DIR: ${{ runner.temp }}/iccdev-cfl-smoke
+          CFL_LOGS_ARTIFACT: cfl-smoke-logs-${{ github.run_id }}
+          CFL_TARGET_REF: ${{ inputs.target_ref || github.ref }}
+          CFL_TARGET_SHA: ${{ inputs.target_sha || '' }}
+          CFL_PATCH_MODE: ${{ inputs.patch_mode || 'all' }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          summary="$CFL_WORK_DIR/summary.tsv"
+          {
+            echo "## CFL Smoke Summary"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Target ref | \`$(sanitize_line "$CFL_TARGET_REF")\` |"
+            echo "| Target SHA override | \`$(sanitize_line "${CFL_TARGET_SHA:-none}")\` |"
+            echo "| Patch mode | \`$(sanitize_line "$CFL_PATCH_MODE")\` |"
+            echo "| Logs artifact | \`$(sanitize_line "$CFL_LOGS_ARTIFACT")\` |"
+            echo ""
+            echo "| Target | Status | Runs | Corpus |"
+            echo "|--------|--------|------|--------|"
+            if [ -r "$summary" ]; then
+              tail -n +2 "$summary" | while IFS="$(printf '\t')" read -r target status runs corpus; do
+                echo "| $(sanitize_line "$target") | $(sanitize_line "$status") | $(sanitize_line "$runs") | $(sanitize_line "$corpus") |"
+              done
+            else
+              echo "| unavailable | fail | 0 | unavailable |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

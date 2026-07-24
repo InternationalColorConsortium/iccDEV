@@ -15,9 +15,9 @@ set -euo pipefail
 usage() {
     sed -n '2,4p' "$0" | sed 's/^# \?//'
     echo ""
-    echo "Usage: $0 [--seconds N] [--targets CSV] [--build-type TYPE] [--exec-timeout-ms N] [--build-dir DIR] [--work-dir DIR] [--skip-build]"
+    echo "Usage: $0 [--seconds N] [--targets CSV] [--build-type TYPE] [--exec-timeout-ms N] [--build-dir DIR] [--work-dir DIR] [--patches [DIR]] [--skip-build]"
     echo ""
-    echo "Targets: dump, toxml, fromcube"
+    echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip, fromcube"
 }
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -28,6 +28,8 @@ work_dir="${AFL_WORK_DIR:-$repo_root/.afl-smoke}"
 build_type="${AFL_BUILD_TYPE:-Debug}"
 exec_timeout_ms="${AFL_EXEC_TIMEOUT_MS:-30000}"
 skip_build=0
+apply_patches="${ICCDEV_AFL_APPLY_PATCHES:-0}"
+patch_dir="${ICCDEV_AFL_PATCH_DIR:-$repo_root/.github/ci/fuzz-patches/afl}"
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -64,6 +66,20 @@ while [ "$#" -gt 0 ]; do
         --skip-build)
             skip_build=1
             shift
+            ;;
+        --patches)
+            apply_patches=1
+            if [ "$#" -ge 2 ] && [ "${2#--}" = "$2" ]; then
+                patch_dir="$2"
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        --patch-dir)
+            [ "$#" -ge 2 ] || { echo "ERROR: --patch-dir requires a value" >&2; exit 2; }
+            patch_dir="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -115,8 +131,8 @@ if [ "${#targets[@]}" -eq 0 ]; then
     echo "ERROR: at least one target is required" >&2
     exit 2
 fi
-if [ "${#targets[@]}" -gt 3 ]; then
-    echo "ERROR: at most three AFL target entries may be selected" >&2
+if [ "${#targets[@]}" -gt 7 ]; then
+    echo "ERROR: at most seven AFL target entries may be selected" >&2
     exit 2
 fi
 
@@ -140,7 +156,7 @@ for target in "${targets[@]}"; do
         exit 2
     fi
     case "$target" in
-        dump|toxml|fromcube)
+        dump|toxml|fromxml|tojson|fromjson|roundtrip|fromcube)
             ;;
         *)
             echo "ERROR: unsupported AFL target: $target" >&2
@@ -186,6 +202,10 @@ else
 fi
 
 if [ "$skip_build" -eq 0 ]; then
+    if [ "$apply_patches" != "0" ]; then
+        "$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh" --mode afl --patch-dir "$patch_dir"
+    fi
+
     cmake_zlib_args=()
     if [ -e /usr/lib/x86_64-linux-gnu/libz.so ]; then
         cmake_zlib_args+=("-DZLIB_LIBRARY=/usr/lib/x86_64-linux-gnu/libz.so")
@@ -213,10 +233,30 @@ if [ "$skip_build" -eq 0 ]; then
 fi
 
 seed_root="$work_dir/seeds"
-mkdir -p "$seed_root/icc" "$seed_root/cube"
+mkdir -p "$seed_root/icc" "$seed_root/xml" "$seed_root/json" "$seed_root/cube"
 cp "$repo_root"/.github/ci/test-data/*.icc "$seed_root/icc/"
+cp "$repo_root"/.github/ci/test-data/*.xml "$seed_root/xml/" 2>/dev/null || true
 cp "$repo_root"/.github/ci/test-data/test-identity.cube "$seed_root/cube/"
 cp "$repo_root"/.github/ci/afl-seeds/cube/*.cube "$seed_root/cube/"
+
+if [ -x "$build_dir/Tools/IccToXml/iccToXml" ]; then
+    first_icc="$(find "$seed_root/icc" -maxdepth 1 -type f -name '*.icc' | sort | head -n 1)"
+    if [ -n "$first_icc" ]; then
+        "$build_dir/Tools/IccToXml/iccToXml" "$first_icc" "$seed_root/xml/generated-from-seed.xml" >/dev/null 2>&1 || true
+    fi
+fi
+if [ -x "$build_dir/Tools/IccToJson/iccToJson" ]; then
+    first_icc="$(find "$seed_root/icc" -maxdepth 1 -type f -name '*.icc' | sort | head -n 1)"
+    if [ -n "$first_icc" ]; then
+        "$build_dir/Tools/IccToJson/iccToJson" "$first_icc" "$seed_root/json/generated-from-seed.json" >/dev/null 2>&1 || true
+    fi
+fi
+if ! find "$seed_root/xml" -maxdepth 1 -type f | grep -q .; then
+    printf '<IccProfile></IccProfile>\n' > "$seed_root/xml/minimal.xml"
+fi
+if ! find "$seed_root/json" -maxdepth 1 -type f | grep -q .; then
+    printf '{"IccProfile":{}}\n' > "$seed_root/json/minimal.json"
+fi
 
 summary_tsv="$work_dir/summary.tsv"
 findings_dir="$work_dir/findings"
@@ -285,6 +325,22 @@ run_afl_target() {
             binary="$build_dir/Tools/IccToXml/iccToXml"
             in_dir="$seed_root/icc"
             ;;
+        fromxml)
+            binary="$build_dir/Tools/IccFromXml/iccFromXml"
+            in_dir="$seed_root/xml"
+            ;;
+        tojson)
+            binary="$build_dir/Tools/IccToJson/iccToJson"
+            in_dir="$seed_root/icc"
+            ;;
+        fromjson)
+            binary="$build_dir/Tools/IccFromJson/iccFromJson"
+            in_dir="$seed_root/json"
+            ;;
+        roundtrip)
+            binary="$build_dir/Tools/IccRoundTrip/iccRoundTrip"
+            in_dir="$seed_root/icc"
+            ;;
         fromcube)
             binary="$build_dir/Tools/IccFromCube/iccFromCube"
             in_dir="$seed_root/cube"
@@ -317,6 +373,34 @@ run_afl_target() {
               ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
               UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
               afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/out.xml"
+            afl_status="$?"
+            ;;
+        fromxml)
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/fromxml-out.icc"
+            afl_status="$?"
+            ;;
+        tojson)
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/tojson-out.json"
+            afl_status="$?"
+            ;;
+        fromjson)
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ "$generated/fromjson-out.icc"
+            afl_status="$?"
+            ;;
+        roundtrip)
+            AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_TRY_AFFINITY=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 \
+              ASAN_OPTIONS=abort_on_error=1,detect_leaks=0,allocator_may_return_null=1,symbolize=0 \
+              UBSAN_OPTIONS=halt_on_error=1,print_stacktrace=1 \
+              afl-fuzz -i "$in_dir" -o "$out_dir" -V "$seconds" -t "$exec_timeout_ms" -- "$binary" @@ 1 0
             afl_status="$?"
             ;;
         fromcube)
@@ -425,6 +509,19 @@ echo "AFL smoke summary: $summary_tsv"
 cat "$summary_tsv"
 if [ "$(awk 'END { print NR }' "$findings_tsv")" -gt 1 ]; then
     cp -- "$findings_tsv" "$findings_dir/manifest.tsv"
+    triage_status=0
+    "$repo_root/.github/scripts/iccdev-fuzz-triage.sh" \
+        --work-dir "$work_dir" \
+        --build-dir "$build_dir" \
+        --findings "$findings_tsv" \
+        --timeout 20 || triage_status="$?"
+    if [ -d "$work_dir/triage" ]; then
+        rm -rf "$findings_dir/triage"
+        cp -R "$work_dir/triage" "$findings_dir/triage"
+    fi
+    if [ "$triage_status" -ne 0 ]; then
+        failures=$((failures + 1))
+    fi
 fi
 
 if [ "$failures" -ne 0 ]; then

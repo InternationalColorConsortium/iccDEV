@@ -49,6 +49,7 @@ Useful smoke commands:
 git status --short --branch
 iccDumpProfile -v Testing/sRGB_v4_ICC_preference.icc
 iccRoundTrip Testing/sRGB_v4_ICC_preference.icc
+iccdev-fuzz-env
 ctest --test-dir /workspace/build -N --no-tests=error
 ```
 
@@ -184,6 +185,44 @@ Exit status is authoritative:
 Attribute ASAN/UBSAN findings by stack-frame source paths, not by the input
 filename. Treat sanitizer diagnostics as failures unless a documented
 suppression applies.
+
+## AFL/CFL Onboarding Checks
+
+The regression image includes packaged AFL++ tools for maintainer inspection
+and lightweight local checks, and includes Clang/libFuzzer support for CFL
+harness builds. The `ci-afl-smoke` workflow still rebuilds AFL++ dev wrappers
+against LLVM 22 before instrumentation so the CI wrapper and compiler versions
+stay aligned.
+
+Inspect the fuzzing environment:
+
+```bash
+iccdev-fuzz-env
+```
+
+Run a short patched AFL smoke from the image checkout:
+
+```bash
+.github/scripts/iccdev-afl-smoke.sh \
+  --patches \
+  --seconds 10 \
+  --targets dump \
+  --exec-timeout-ms 30000
+```
+
+Run the current core CFL smoke:
+
+```bash
+cfl/build.sh \
+  --patches \
+  --targets dump,toxml,fromxml,tojson,fromjson,roundtrip \
+  --runs 1
+```
+
+Use these checks after changing `Dockerfile.ci-regression`, AFL/CFL scripts,
+patch stacks, seeds, or maintainer workflow inputs. Do not commit generated
+`build-afl-smoke`, `.afl-smoke`, `cfl/bin`, `.cfl-smoke`, crash artifacts, or
+coverage/profiler outputs.
 
 ## Trigger Maintainer CI
 

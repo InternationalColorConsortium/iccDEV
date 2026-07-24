@@ -104,6 +104,11 @@ if [ -n "$qa_tools" ]; then
   printf 'Maintainer QA tools on PATH: %s\n' "$qa_tools"
 fi
 
+if command -v iccdev-fuzz-env >/dev/null 2>&1; then
+  printf '%s\n' ''
+  printf '%s\n' 'AFL/CFL helper: iccdev-fuzz-env'
+fi
+
 printf '%s\n' ''
 printf '%s\n' 'Open an Issue with Comments or Feedback at URL:'
 printf '%s\n' 'https://github.com/InternationalColorConsortium/iccDEV/issues'

@@ -19,6 +19,7 @@ Canonical guide: `docs/regression-container.md`
 - Expected pass signal:
 - Expected failure signal:
 - Evidence directory:
+- AFL/CFL scope: none / AFL smoke / CFL smoke / both
 
 ## Required Workflow
 
@@ -31,13 +32,15 @@ Canonical guide: `docs/regression-container.md`
 6. Run the focused regression first and its CTest wrapper when registered.
 7. Scan output for compiler warnings, ASAN, UBSAN, and signal termination.
 8. Classify exit `1-127` as graceful and `128+` as signal termination.
-9. Save evidence outside the disposable container.
-10. If CI is requested, use the PR trigger or explicitly dispatch
+9. For AFL/CFL work, run `iccdev-fuzz-env`, verify patch-stack counts, and run
+   the smallest patched or unpatched smoke that matches the requested scope.
+10. Save evidence outside the disposable container.
+11. If CI is requested, use the PR trigger or explicitly dispatch
     `ci-pr-action.yml`; do not assume a branch push triggers it.
-11. Diff all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
+12. Diff all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
     `ci-qa-flags`, then carry applicable fixes and validation to both branches.
-12. Include the `ci-qa-flags` commit and hosted run in the handoff.
-13. Promote the verified immutable digest to `latest` only after all image smoke
+13. Include the `ci-qa-flags` commit and hosted run in the handoff.
+14. Promote the verified immutable digest to `latest` only after all image smoke
     tests and regression CTest checks succeed: from `master`, or with the
     explicit `publish-regression-latest=true` dispatch on the protected
     Docker-testing branch.
@@ -58,6 +61,7 @@ Report:
 - Image tag, digest, and revision.
 - Tested PR, issue, branch, and commit.
 - Build and test commands.
+- `iccdev-fuzz-env` output summary when AFL/CFL is in scope.
 - Focused and CTest results.
 - Exit status and sanitizer classification.
 - Evidence paths.

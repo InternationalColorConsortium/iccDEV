@@ -1,0 +1,17 @@
+diff --git a/Tools/CmdLine/IccJpegDump/iccJpegDump.cpp b/Tools/CmdLine/IccJpegDump/iccJpegDump.cpp
+--- a/Tools/CmdLine/IccJpegDump/iccJpegDump.cpp
++++ b/Tools/CmdLine/IccJpegDump/iccJpegDump.cpp
+@@ -226,2 +226,4 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
+-        if (pos + 2 > n) break;
+-        unsigned int segLen = (unsigned int)((data[pos] << 8) | data[pos + 1]);
++        if (n - pos < 2) break;
++        unsigned int segLen =
++            (static_cast<unsigned int>(data[pos]) << 8) |
++            static_cast<unsigned int>(data[pos + 1]);
+@@ -229 +231 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
+-        if (segLen < 2 || pos + (segLen - 2) > n) break;
++        if (segLen < 2) break;
+@@ -231 +233,2 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
+-        const unsigned char* seg = &data[pos];
++        if (payloadLen > n - pos) break;
++        const unsigned char* seg = data.data() + pos;

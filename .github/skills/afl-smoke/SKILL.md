@@ -29,6 +29,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 
    ```bash
    .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
+   cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --runs 1
    ```
 
 4. When changing AFL++ bootstrap behavior, validate the regression-container
@@ -66,6 +67,14 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   `cmplog-routines-pass.so`. Avoid broad AFL++ targets that enter optional GCC
   plugin or Nyx paths.
 - Keep the target allow-list inside `.github/scripts/iccdev-afl-smoke.sh`.
+- Keep core onboarding focused on
+  `dump,toxml,fromxml,tojson,fromjson,roundtrip` until those AFL/CFL lanes are
+  stable.
+- Use `.github/ci/fuzz-patches/afl` and `.github/ci/fuzz-patches/cfl` for
+  maintainer-local patch stacks when `--patches` is requested.
+- Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the
+  branch, tag, or ref to check out, optional `target_sha` pins an exact commit,
+  and `patch_mode` selects `all` or `none`.
 - Keep selected AFL targets running in parallel with AFL++ affinity fallback
   enabled, and merge per-target summaries in a deterministic order.
 - Treat saved crashes as smoke failures. Report generated saved hangs as
@@ -77,6 +86,10 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   `afl-smoke-findings-<run-id>` artifact and list them in the workflow summary.
   Sanitize uploaded artifact filenames and keep a manifest that records the
   original AFL paths.
+- Upload smoke logs and summary TSVs as separate artifacts so maintainers can
+  debug failed builds even when no crash or hang artifact was generated.
+- Replay saved findings with `.github/scripts/iccdev-fuzz-triage.sh` and report
+  the generated summary, logs, and one-line reproducers.
 - Keep numeric workflow options validated by the script, not only by the
   Actions input UI.
 - Pass workflow inputs through `env:` before shell use, but do not use unknown

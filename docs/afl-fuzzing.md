@@ -8,7 +8,7 @@ Run it from GitHub Actions with `ci-afl-smoke`, normally with:
 
 ```bash
 gh workflow run ci-afl-smoke.yml \
-  -f afl_targets=dump \
+  -f afl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip \
   -f duration_seconds=300 \
   -f exec_timeout_ms=30000 \
   -f cmake_build_type=Debug
@@ -53,18 +53,53 @@ Saved crashes and saved hangs are copied into an `afl-smoke-findings-<run-id>`
 artifact and listed in the workflow summary whenever AFL writes testcase files.
 Artifact filenames are sanitized for GitHub artifact portability; the
 `manifest.tsv` file maps them back to the original AFL paths.
+When findings are present, the smoke driver also runs
+`.github/scripts/iccdev-fuzz-triage.sh` against the same sanitized tool build.
+The triage output records one-line reproducers, logs, classifications, and a
+Markdown report under the AFL work directory.
 
-Supported target names are:
+The core onboarding target names are:
 
 - `dump`: `iccDumpProfile @@ ALL`
 - `toxml`: `iccToXml @@ generated.xml`
+- `fromxml`: `iccFromXml @@ generated.icc`
+- `tojson`: `iccToJson @@ generated.json`
+- `fromjson`: `iccFromJson @@ generated.icc`
+- `roundtrip`: `iccRoundTrip @@ 1 0`
 - `fromcube`: `iccFromCube @@ generated.icc`
+
+`fromcube` remains available as a non-core compatibility target. Stabilize the
+six core targets before adding more command-line tools.
 
 Local maintainer smoke:
 
 ```bash
 .github/scripts/iccdev-afl-smoke.sh --seconds 60 --targets dump --exec-timeout-ms 30000
 ```
+
+The AFL and CFL smoke workflows default to applying their maintainer-local
+patch stacks before building. This branch therefore tests local fuzzing fixes
+before a developer promotes them to normal source PRs. Apply maintainer-local
+AFL patches locally before configuring iccDEV with:
+
+```bash
+.github/scripts/iccdev-afl-smoke.sh --patches --seconds 60 --targets dump
+```
+
+The default AFL patch directory is `.github/ci/fuzz-patches/afl`. CFL uses the
+parallel `.github/ci/fuzz-patches/cfl` stack through `cfl/build.sh --patches`.
+Both stacks are local validation aids; stable source fixes should still land as
+normal source changes.
+
+Manual AFL and CFL workflow dispatches accept `target_ref`, optional
+`target_sha`, and `patch_mode`. Use `target_ref` for branch or tag validation,
+`target_sha` when a replay must pin an exact commit, `patch_mode=all` for the
+maintainer patch stack, and `patch_mode=none` for raw branch comparison.
+
+When AFL saves crashes or hangs, the smoke workflow replays them with iccDEV
+command-line tools. The uploaded findings artifact includes raw inputs,
+per-finding `.cmd` replay files, replay logs, and
+`triage/reproducer-one-liners.txt` / `.md` bundles for copy-paste review.
 
 Local container bootstrap check, useful before changing the workflow or the
 regression image:
@@ -119,3 +154,21 @@ The workflow follows the repository workflow-governance model:
 - sanitized `GITHUB_STEP_SUMMARY` writes
 - crash and hang testcase upload through the `afl-smoke-findings-<run-id>`
   artifact
+
+## CFL Core Smoke
+
+The matching CFL smoke entry point is `cfl/build.sh` and the manual
+`ci-cfl-smoke` workflow:
+
+```bash
+cfl/build.sh --runs 1
+
+gh workflow run ci-cfl-smoke.yml \
+  -f cfl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip \
+  -f runs=1
+```
+
+The current CFL harnesses are conservative CLI-fidelity wrappers: libFuzzer
+writes each input to a temporary file and replays the matching sanitized iccDEV
+tool. This keeps the branch stable while deeper in-process harnesses are
+reviewed separately.

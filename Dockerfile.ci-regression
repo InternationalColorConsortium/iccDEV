@@ -143,6 +143,7 @@ RUN groupadd --system iccdev-ci \
 
 COPY --chown=iccdev-ci:iccdev-ci . /workspace/iccDEV
 COPY --chmod=0755 docker/iccdev-banner.sh /usr/local/bin/iccdev-banner
+COPY --chmod=0755 docker/iccdev-fuzz-env.sh /usr/local/bin/iccdev-fuzz-env
 COPY --chmod=0755 docker/iccdev-generate-profiles.sh /usr/local/bin/iccdev-generate-profiles
 COPY --chmod=0755 iccdev-mcp/docker/docker-entrypoint.sh /usr/local/bin/iccdev-mcp-entrypoint
 
@@ -204,6 +205,7 @@ RUN git checkout -- silence.txt \
 
 USER root
 RUN chmod 0755 /usr/local/bin/iccdev-banner \
+ && chmod 0755 /usr/local/bin/iccdev-fuzz-env \
  && chmod 0755 /usr/local/bin/iccdev-generate-profiles \
  && chmod 0755 /usr/local/bin/iccdev-mcp-entrypoint \
  && find /workspace/build/Tools -mindepth 2 -maxdepth 2 -type f -executable \
@@ -221,7 +223,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null || exit 1
+  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null || exit 1
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"
