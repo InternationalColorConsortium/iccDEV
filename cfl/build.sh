@@ -224,6 +224,7 @@ artifacts_dir="$work_dir/artifacts"
 mkdir -p "$logs_dir" "$artifacts_dir"
 printf 'target\tstatus\ttotal_runs\tcorpus\n' > "$summary_tsv"
 
+failures=0
 if [ "$skip_run" -eq 0 ]; then
   for target in "${selected_targets[@]}"; do
     case "$target" in
@@ -232,15 +233,26 @@ if [ "$skip_run" -eq 0 ]; then
         *) corpus="$seed_root/icc" ;;
     esac
     log_file="$logs_dir/$target.log"
+    set +e
     ICCDEV_CFL_TOOL_DIR="$build_dir/Tools" \
       ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:allocator_may_return_null=1 \
       UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 \
       "$bin_dir/icc_${target}_fuzzer" \
         -artifact_prefix="$artifacts_dir/$target-" \
         -runs="$runs" "$corpus" 2>&1 | tee "$log_file"
-    printf '%s\tpass\t%s\t%s\n' "$target" "$runs" "$corpus" >> "$summary_tsv"
+    fuzzer_status="${PIPESTATUS[0]}"
+    set -e
+    if [ "$fuzzer_status" -eq 0 ]; then
+      printf '%s\tpass\t%s\t%s\n' "$target" "$runs" "$corpus" >> "$summary_tsv"
+    else
+      printf '%s\tfail\t%s\t%s\n' "$target" "$runs" "$corpus" >> "$summary_tsv"
+      failures=$((failures + 1))
+    fi
   done
 fi
 
 echo "CFL smoke summary: $summary_tsv"
 cat "$summary_tsv"
+if [ "$failures" -ne 0 ]; then
+  exit 1
+fi

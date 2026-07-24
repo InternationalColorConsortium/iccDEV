@@ -121,7 +121,7 @@ private predicate isZeroOrFiniteCheckOnRangeSubtraction(Expr guard, Expr denom) 
     call.getTarget().getName().regexpMatch("(?i)^(isfinite|isnan|isinf)$")
   )
   or
-  exists(SubExpr guardSub, SubExpr denomSub, ComparisonOperation cmp, Literal lit |
+  exists(SubExpr guardSub, SubExpr denomSub, EQExpr cmp, Literal lit |
     guardSub = guard.getAChild*() and
     (denomSub = denom or denomSub = denom.getAChild*()) and
     guardSub.getLeftOperand().toString() = denomSub.getLeftOperand().toString() and

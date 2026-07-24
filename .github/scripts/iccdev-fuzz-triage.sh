@@ -246,7 +246,7 @@ while IFS="$(printf '\t')" read -r target kind source_file artifact_file; do
     printf 'cd "$ICCDEV_REPO_ROOT" && ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1 UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 %s\n' "$command_line"
   } > "$repro_file"
   {
-    printf '%s %s %s\n' "$target" "$kind" "$(basename "$artifact_file")"
+    printf '# %s %s %s\n' "$target" "$kind" "$(basename "$artifact_file")"
     printf '# artifact input: %s\n' "$artifact_file"
     cat "$repro_file"
     printf '\n'
