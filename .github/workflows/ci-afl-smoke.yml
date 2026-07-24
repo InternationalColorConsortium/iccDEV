@@ -416,7 +416,10 @@ jobs:
                 echo "#### Copy-paste Reproducers"
                 echo ""
                 echo '```bash'
-                sanitize_print "$(cat "$one_liners")"
+                while IFS= read -r line; do
+                  sanitize_code_line "$line"
+                  echo ""
+                done < "$one_liners"
                 echo '```'
               fi
             elif [ -r "$triage_report" ]; then
