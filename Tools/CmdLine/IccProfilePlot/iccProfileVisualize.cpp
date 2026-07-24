@@ -1344,6 +1344,11 @@ static
 int processLuts(CIccProfile *pIcc, const char *profilePath )
 {
   int outputItems = 0;
+  // Counted separately from outputItems purely so the success line below can name
+  // how many rasters actually reached disk. outputItems is deliberately left alone:
+  // it is the pre-existing signal main() turns into the process exit code (#1550),
+  // and narrowing it to "writes that succeeded" would change that contract.
+  int tiffsWritten = 0;
 
   std::string tmpName = remove_extension( profilePath );
   std::string basename = icSanitizeFileName( tmpName );
@@ -1385,6 +1390,9 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
                       res.raster.width, res.raster.height,
                       res.raster.channels, res.raster.bitsPerChannel )) {
         fprintf(stderr, "%s: Failed to write TIFF: %s\n", basename.c_str(), tiffPath.c_str());
+      }
+      else {
+        ++tiffsWritten;
       }
       ++outputItems;
       continue;
@@ -1479,6 +1487,22 @@ int processLuts(CIccProfile *pIcc, const char *profilePath )
   }   // end loop over descriptors
 
   pdffile.CloseFile();
+
+  // Confirm success on stdout. Until now the tool printed NOTHING on a successful
+  // run - every message in this file is an error on stderr - so a user had no
+  // indication that anything had been produced and had to go stat the output
+  // directory to tell a working run from a silent no-op (#1777 QA feedback). The
+  // line names the artefacts rather than printing a bare "Ok" so that it is useful
+  // when several profiles are processed in one invocation, and it goes to stdout so
+  // that redirecting diagnostics does not also swallow the confirmation. Nothing is
+  // printed when outputItems == 0: main() already reports that case as a failure on
+  // stderr and exits nonzero, and a "wrote nothing" success line would contradict it.
+  if (outputItems > 0) {
+    printf("%s: wrote %s", basename.c_str(), pdfPath.c_str());
+    if (tiffsWritten > 0)
+      printf(" and %d TIFF raster(s)", tiffsWritten);
+    printf("\n");
+  }
 
   return outputItems;
 

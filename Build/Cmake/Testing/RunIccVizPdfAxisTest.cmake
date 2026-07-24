@@ -14,6 +14,9 @@
 #   * parameterized custom-tick axis (drawIdentity=false + explicit start/mid/end
 #     tick labels) -> the neutral-axis-inking plot's "(L* (100 to 0))" / "(% ink)".
 #
+# It additionally pins the CLI's success confirmation on stdout (#1777), which shares
+# this driver because the same end-to-end run already produces and captures it.
+#
 # This is a *content* pin, not a byte-for-byte golden PDF: it fails if the axis
 # parameterization regresses (a label goes missing, the drawIdentity / custom-tick
 # wiring breaks, or a plot stops emitting its axis) without false-failing when the
@@ -52,6 +55,19 @@ execute_process(
 )
 if(NOT _rc EQUAL 0)
   message(FATAL_ERROR "iccProfileVisualizePlot exited ${_rc}\nstdout:\n${_out}\nstderr:\n${_err}")
+endif()
+
+# #1777 (QA feedback): the tool used to print nothing whatsoever on a successful run
+# -- every message in it is an error on stderr -- so neither a person nor a script
+# could tell "wrote the plots" from "quietly did nothing"; the only way to check was
+# to go stat the output directory. Pin the confirmation here rather than in a test of
+# its own: this driver already runs the CLI end to end and captures its stdout, and
+# the message is only meaningful on a run that actually produced the PDF asserted
+# below. Match the emitted artefact name rather than a bare "Ok" so that a message
+# which stops naming what it wrote fails too.
+if(NOT _out MATCHES "wrote ${_stem}_luts\\.pdf")
+  message(FATAL_ERROR "iccProfileVisualizePlot printed no success confirmation naming "
+                      "${_stem}_luts.pdf on stdout -- see #1777.\nstdout:\n${_out}")
 endif()
 
 set(_pdf "${WORKDIR}/${_stem}_luts.pdf")
