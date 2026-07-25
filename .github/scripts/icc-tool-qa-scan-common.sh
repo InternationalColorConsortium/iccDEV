@@ -160,6 +160,10 @@ if ! [[ "$LOG_TAIL_LINES" =~ ^[0-9]+$ ]]; then
   exit 2
 fi
 
+TIMEOUT_SECONDS=$((10#$TIMEOUT_SECONDS))
+MAX_FILES=$((10#$MAX_FILES))
+LOG_TAIL_LINES=$((10#$LOG_TAIL_LINES))
+
 list_variants() {
   printf "variant\tbefore_input\tafter_input\n"
   while IFS='|' read -r variant before after; do

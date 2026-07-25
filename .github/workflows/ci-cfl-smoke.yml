@@ -183,6 +183,7 @@ jobs:
             echo "ERROR: CFL duration seconds must be between 1 and 3600: $(sanitize_line "$ICCDEV_CFL_SECONDS")" >&2
             exit 2
           fi
+          cfl_seconds=$((10#$ICCDEV_CFL_SECONDS))
           target_count="$(printf '%s\n' "$ICCDEV_CFL_TARGETS" | tr ',' '\n' | sed '/^[[:space:]]*$/d' | wc -l)"
           target_count="${target_count//[[:space:]]/}"
           max_total_seconds=5400
@@ -190,7 +191,7 @@ jobs:
             echo "ERROR: CFL targets must include at least one target" >&2
             exit 2
           fi
-          if [ $((ICCDEV_CFL_SECONDS * target_count)) -gt "$max_total_seconds" ]; then
+          if [ $((cfl_seconds * target_count)) -gt "$max_total_seconds" ]; then
             echo "ERROR: CFL duration seconds times selected target count must be at most 5400" >&2
             exit 2
           fi
