@@ -39,9 +39,9 @@ PROFILE="$REPO_ROOT/Testing/sRGB_v4_ICC_preference.icc"
 TEXT_PROFILE="$REPO_ROOT/Tools/CmdLine/IccSpecSepToTiff/Readme.md"
 EMPTY_PROFILE="$OUTDIR/empty-profile.icc"
 FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
-SPECTRAL_XML="$REPO_ROOT/Testing/hybrid/MultSpectralRGB.xml"
-SPECTRAL_PROFILE="$OUTDIR/MultSpectralRGB.icc"
-SPECTRAL36_DIR="$OUTDIR/spectral36"
+SPECTRAL_XML="$REPO_ROOT/Testing/ICS/Spec400_10_700-D50_2deg-Part1.xml"
+SPECTRAL_PROFILE="$OUTDIR/Spec400_10_700-D50_2deg-Part1.icc"
+SPECTRAL31_DIR="$OUTDIR/spectral31"
 
 PASS=0
 FAIL=0
@@ -161,12 +161,12 @@ check_tiffinfo_contains() {
   return 0
 }
 
-generate_spectral36_inputs() {
+generate_spectral31_inputs() {
   if ! command -v python3 >/dev/null 2>&1; then
     return 1
   fi
 
-  python3 - "$SPECTRAL36_DIR" <<'PY'
+  python3 - "$SPECTRAL31_DIR" <<'PY'
 import pathlib
 import struct
 import sys
@@ -209,7 +209,7 @@ def write_tiff(path, fill):
     path.write_bytes(data)
 
 
-for i in range(1, 37):
+for i in range(1, 32):
     write_tiff(root / f"spec_{i}", i * 7)
 PY
 }
@@ -219,9 +219,9 @@ prepare_spectral_profile() {
     return 1
   fi
 
-  "$FROMXML" "$SPECTRAL_XML" "$SPECTRAL_PROFILE" > "$OUTDIR/fromxml-MultSpectralRGB.log" 2>&1 &&
+  "$FROMXML" "$SPECTRAL_XML" "$SPECTRAL_PROFILE" > "$OUTDIR/fromxml-Spec400_10_700-D50_2deg-Part1.log" 2>&1 &&
     [ -s "$SPECTRAL_PROFILE" ] &&
-    generate_spectral36_inputs
+    generate_spectral31_inputs
 }
 
 echo "=== iccSpecSepToTiff CLI argument regression ==="
@@ -253,17 +253,17 @@ check_tiffinfo_contains "specsep-fast-separate-planes" "$OUTDIR/fast-separate.ti
 
 if prepare_spectral_profile; then
   run_expect_success \
-    "specsep-spectral-profile-matching-36ch" \
-    "$OUTDIR/spectral-profile-matching-36ch.tif" \
-    0 0 "$SPECTRAL36_DIR/spec_" 1 36 1 "$SPECTRAL_PROFILE"
+    "specsep-spectral-profile-matching-31ch" \
+    "$OUTDIR/spectral-profile-matching-31ch.tif" \
+    0 0 "$SPECTRAL31_DIR/spec_" 1 31 1 "$SPECTRAL_PROFILE"
 
   run_expect_reject \
     "specsep-spectral-profile-sample-mismatch" \
     "do not match TIFF SamplesPerPixel" \
     "$OUTDIR/spectral-profile-sample-mismatch.tif" \
-    0 0 "$SPECTRAL36_DIR/spec_" 1 4 1 "$SPECTRAL_PROFILE"
+    0 0 "$SPECTRAL31_DIR/spec_" 1 4 1 "$SPECTRAL_PROFILE"
 else
-  echo "  [SKIP] specsep-spectral-profile-alignment -- missing iccFromXml or MultSpectralRGB.xml"
+  echo "  [SKIP] specsep-spectral-profile-alignment -- missing iccFromXml or Spec400_10_700-D50_2deg-Part1.xml"
 fi
 
 run_expect_reject \
