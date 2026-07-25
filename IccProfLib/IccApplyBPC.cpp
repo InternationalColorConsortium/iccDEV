@@ -427,6 +427,11 @@ bool CIccApplyBPC::calcDstBlackPoint(const CIccProfile* pProfile, const CIccXfor
 		}
 		pcs2lab(Pixel, pProfile);
 		icFloatNumber MaxL = Pixel[0];
+  
+        if (MaxL <= MinL) {
+			delete pCmm;
+			return false;
+        }
 
 		// check if quadratic estimation needs to be done
 		bool bStraightMidRange = false;
@@ -502,7 +507,12 @@ bool CIccApplyBPC::calcDstBlackPoint(const CIccProfile* pProfile, const CIccXfor
 				return false;
 			}
 			pcs2lab(Pixel, pProfile);
-			y[i] = (Pixel[0] - MinL)/(MaxL - MinL);
+            icFloatNumber range = MaxL - MinL;
+            if (fabsf(range) < 1e-8) {
+				delete pCmm;
+				return false;
+			}
+			y[i] = (Pixel[0] - MinL)/range;
 		}
 
 		// check for y values in the range and rearrange

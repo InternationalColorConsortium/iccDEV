@@ -274,7 +274,7 @@ bool getXYZTag( CIccTag *tag, XYColor *result = NULL )
 /******************************************************************************/
 
 static
-float cctFromXY( const XYColor &theXY )
+int cctFromXY( const XYColor &theXY )
 {
   // McCamy's formula
   // McCamy, Calvin S. (April 1992).
@@ -282,15 +282,16 @@ float cctFromXY( const XYColor &theXY )
   float n = (theXY.x - 0.3320f) / (0.1858f - theXY.y);
   float n2 = n*n;
   float n3 = n*n*n;
-  //float cct = -437.0f *n3 + 3601.0f *n2 - 6861.0f *n + 5514.31f;    // first eq. from article
-  //float cct = -449.0f *n3 + 3525.0f *n2 - 6823.3f *n + 5520.33f;  // second eq. from article
+  //float cct = -437.0f *n3 + 3601.0f *n2 - 6861.0f *n + 5514.31f    // first eq. from article
+  //float cct = -449.0f *n3 + 3525.0f *n2 - 6823.3f *n + 5520.33f  // second eq. from article
   float cct = 437.0f *n3 + 3601.0f *n2 + 6861.0f *n + 5514.31f;    // first eq.  CLOSEST!
-  //float cct = 449.0f *n3 + 3525.0f *n2 + 6823.3f *n + 5520.33f;  // second eq. CLOSE!
+  //float cct = 449.0f *n3 + 3525.0f *n2 + 6823.3f *n + 5520.33f  // second eq. CLOSE!
 
-  if (cct < 0.0 || cct > 2e9 || !std::isfinite(cct))
-    return 0.0;
-  else
-    return cct;
+  if (cct < 0.0f || cct > 2e9f || !std::isfinite(cct))
+    cct = 0.0f;
+
+  int cctI = (int)cct;  // don't need precision beyond the integer temp
+  return cctI;
 }
 
 /******************************************************************************/
@@ -340,9 +341,11 @@ std::string cctStringFromXYZ( const icXYZNumber *theXYZ )
   }
 
   // if we can't find a match of common whitepoints, estimate the CCT
-  float cct = cctFromXY( theXY );
-  int32_t cctI = (int32_t)cct; // we want the integer part, don't need precision
-  return std::string("(~") + std::to_string(cctI) + std::string("K)");;
+  int cct = cctFromXY( theXY );
+  if (cct <= 0)
+    return std::string();
+  else
+    return std::string("(~") + std::to_string(cct) + std::string("K)");;
 }
 
 /******************************************************************************/
@@ -1089,6 +1092,14 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
 
   // write nD Data to TIFF
   int bytes = lut->GetPrecision();    // currently only 1 or 2
+  if (bytes > 2 || bytes < 1) {
+    std::string typeDesc = icGetSigStr(buf, bufSize, typeSig);
+    LogAnError(stderr,"%s: ERROR - bad clut precision for tag '%s' of type '%s'\n",
+              basename.c_str(), sigDesc.c_str(), typeDesc.c_str() );
+    return;
+  }
+  
+  
   CIccCLUT *clut = lut->GetCLUT();
   if (!clut) {
     // clut is optional in mAB and mBA tags - only report if it isn't one of those
@@ -1160,8 +1171,8 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
   }
 
   auto tempResult = std::sqrt(tiles);
-  if (tempResult > std::numeric_limits<int>::max()) {
-    LogAnError(stderr,"%s: ERROR - sqrt bad result!\n", basename.c_str() );
+  if (tempResult > std::numeric_limits<int>::max() || tempResult <= 0 || !std::isfinite(tempResult)) {
+    LogAnError(stderr,"%s: WARNING - sqrt bad result!\n", basename.c_str() );
     tempResult = tiles/2;
   }
   int tilesWide = (int)tempResult;
@@ -1187,10 +1198,10 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     return;
   }
 
-  //size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels;
+  size_t clutSize = (size_t)tiles * (size_t)tileWidth * (size_t)tileHeight * (size_t)outputChannels * bytes;
   size_t bufferSize = (size_t)imageWidth * (size_t)imageHeight * (size_t)outputChannels * bytes;
   // NOTE that bufferSize will usually be greater than clutSize
-  if (!bufferSize) {
+  if (!bufferSize || bufferSize < clutSize) {
     LogAnError(stderr, "%s: Skipping %s: empty image buffer\n", basename.c_str(), sigDesc.c_str());
     return;
   }

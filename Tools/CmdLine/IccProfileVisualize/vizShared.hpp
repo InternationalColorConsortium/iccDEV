@@ -84,7 +84,7 @@
 /******************************************************************************/
 
 const float inch2mm = 25.4f;                 // 25.4 millimeters per inch, international standard
-const float mm2point = 72.0f / inch2mm;      // 2.834645669 (Shows up several places)
+//const float mm2point = 72.0f / inch2mm;      // 2.834645669 (Shows up several places)  NOTE - Currently unused.
 const float inch2point = 72.0f;              // 72 points per inch, DTP and W3C standard
 
 /******************************************************************************/
