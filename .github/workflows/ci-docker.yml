@@ -667,6 +667,10 @@ jobs:
             g++ --version | grep -q " 15\\."
             test "${CC}" = clang
             test "${CXX}" = clang++
+            printf "int main(void) { return 0; }\n" > /tmp/afl-probe.c
+            printf "int main(void) { return 0; }\n" > /tmp/afl-probe.cpp
+            AFL_CC=clang AFL_CXX=clang++ afl-clang-fast -c /tmp/afl-probe.c -o /tmp/afl-probe.o
+            AFL_CC=clang AFL_CXX=clang++ afl-clang-fast++ -c /tmp/afl-probe.cpp -o /tmp/afl-probexx.o
             printf "int main(void){return 0;}\n" > /tmp/asan-smoke.c
             clang -fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound \
               -fno-omit-frame-pointer -g -O0 /tmp/asan-smoke.c -o /tmp/asan-smoke

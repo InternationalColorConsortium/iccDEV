@@ -36,7 +36,7 @@ permissions:
         default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
       duration_seconds:
-        description: 'LibFuzzer runtime per target in seconds, 1-3600'
+        description: 'LibFuzzer seconds per target, 1-3600; total selected runtime <= 5400'
         required: true
         default: '30'
         type: string
@@ -71,7 +71,7 @@ permissions:
         default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
       duration_seconds:
-        description: 'LibFuzzer runtime per target in seconds, 1-3600'
+        description: 'LibFuzzer seconds per target, 1-3600; total selected runtime <= 5400'
         required: false
         default: '30'
         type: string
@@ -181,6 +181,17 @@ jobs:
           esac
           if [ "$ICCDEV_CFL_SECONDS" -lt 1 ] || [ "$ICCDEV_CFL_SECONDS" -gt 3600 ]; then
             echo "ERROR: CFL duration seconds must be between 1 and 3600: $(sanitize_line "$ICCDEV_CFL_SECONDS")" >&2
+            exit 2
+          fi
+          target_count="$(printf '%s\n' "$ICCDEV_CFL_TARGETS" | tr ',' '\n' | sed '/^[[:space:]]*$/d' | wc -l)"
+          target_count="${target_count//[[:space:]]/}"
+          max_total_seconds=5400
+          if [ "$target_count" -lt 1 ]; then
+            echo "ERROR: CFL targets must include at least one target" >&2
+            exit 2
+          fi
+          if [ $((ICCDEV_CFL_SECONDS * target_count)) -gt "$max_total_seconds" ]; then
+            echo "ERROR: CFL duration seconds times selected target count must be at most 5400" >&2
             exit 2
           fi
           case "$ICCDEV_CFL_PATCH_MODE_INPUT" in

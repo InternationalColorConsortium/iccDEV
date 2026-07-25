@@ -143,7 +143,9 @@ AFL_PATH="$afl_src" AFL_CC=clang-22 AFL_CXX=clang++-22 "$afl_src/afl-clang-fast+
 Manual options:
 
 - `duration_seconds`: seconds per selected target, validated as `1` through
-  `3600`
+  `3600`. CFL workflow dispatch also requires `duration_seconds` multiplied by
+  selected target count to stay at or below `5400` seconds so the job can finish
+  inside its hosted runner timeout.
 - `afl_targets`: comma-separated allow-list entries
 - `exec_timeout_ms`: AFL per-exec timeout, validated as `20` through `30000`
   and defaulted to `30000` to avoid false saved-hang artifacts in longer smoke

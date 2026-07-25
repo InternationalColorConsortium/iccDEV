@@ -537,19 +537,19 @@ jobs:
 
           case "$REGISTRY_QA_TIMEOUT_INPUT" in
             ''|*[!0-9]*)
-              echo "::error title=Invalid registry QA timeout::${REGISTRY_QA_TIMEOUT_INPUT}"
+              echo "::error title=Invalid registry QA timeout::Value must be numeric"
               exit 1
               ;;
           esac
           case "$REGISTRY_QA_MAX_PROFILES_INPUT" in
             ''|*[!0-9]*)
-              echo "::error title=Invalid registry QA max profiles::${REGISTRY_QA_MAX_PROFILES_INPUT}"
+              echo "::error title=Invalid registry QA max profiles::Value must be numeric"
               exit 1
               ;;
           esac
           case "$REGISTRY_QA_LOG_TAIL_LINES_INPUT" in
             ''|*[!0-9]*)
-              echo "::error title=Invalid registry QA log tail lines::${REGISTRY_QA_LOG_TAIL_LINES_INPUT}"
+              echo "::error title=Invalid registry QA log tail lines::Value must be numeric"
               exit 1
               ;;
           esac
@@ -557,7 +557,7 @@ jobs:
             0|1)
               ;;
             *)
-              echo "::error title=Invalid registry QA matrix flag::${REGISTRY_QA_FULL_MATRIX_INPUT}"
+              echo "::error title=Invalid registry QA matrix flag::Value must be 0 or 1"
               exit 1
               ;;
           esac

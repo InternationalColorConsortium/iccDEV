@@ -41,10 +41,8 @@ while [ "$#" -gt 0 ]; do
       shift 2
       ;;
     --runs)
-      [ "$#" -ge 2 ] || { echo "ERROR: --runs requires a value" >&2; exit 2; }
-      echo "WARNING: --runs is deprecated for CFL smoke; use --seconds" >&2
-      seconds="$2"
-      shift 2
+      echo "ERROR: --runs used an execution-count unit and is no longer accepted; use --seconds" >&2
+      exit 2
       ;;
     --build-dir)
       [ "$#" -ge 2 ] || { echo "ERROR: --build-dir requires a directory" >&2; exit 2; }
