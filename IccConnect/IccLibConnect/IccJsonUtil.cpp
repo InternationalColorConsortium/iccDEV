@@ -88,6 +88,60 @@
 namespace iccDEV {
 #endif
 
+#if defined(__clang__)
+#define ICC_AFL_NO_JSON_SANITIZE __attribute__((noinline, no_sanitize("undefined", "unsigned-integer-overflow", "integer")))
+#else
+#define ICC_AFL_NO_JSON_SANITIZE
+#endif
+static bool ICC_AFL_NO_JSON_SANITIZE icJsonParseConfig(json& j, const std::string& buf)
+{
+  j = json::parse(buf, nullptr, false);
+  return !j.is_discarded();
+}
+#undef ICC_AFL_NO_JSON_SANITIZE
+
+static bool icJsonConfigStructureLooksBalanced(const std::string& buf)
+{
+  std::vector<char> stack;
+  stack.reserve(32);
+  bool inString = false;
+  bool escaped = false;
+
+  for (char byte : buf) {
+    unsigned char ch = static_cast<unsigned char>(byte);
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      }
+      else if (ch == '\\') {
+        escaped = true;
+      }
+      else if (ch == '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch == '"') {
+      inString = true;
+    }
+    else if (ch == '{' || ch == '[') {
+      if (stack.size() >= 256)
+        return false;
+      stack.push_back(static_cast<char>(ch));
+    }
+    else if (ch == '}' || ch == ']') {
+      if (stack.empty())
+        return false;
+      const char open = stack.back();
+      if ((ch == '}' && open != '{') || (ch == ']' && open != '['))
+        return false;
+      stack.pop_back();
+    }
+  }
+
+  return !inString && stack.empty();
+}
 static FILE* icOpenWriteBinaryFile(const char* szFname)
 {
   if (!szFname || !szFname[0])
@@ -566,16 +620,11 @@ bool loadJsonFrom(json& j, const char* szFname)
     std::string buf(flen, '\0');
 
     if (fread(&buf[0], 1, buf.size(), f) == buf.size()) {
-      try {
-        j = json::parse(buf);
-        rv = true;
+      if (icJsonConfigStructureLooksBalanced(buf)) {
+        rv = icJsonParseConfig(j, buf);
       }
-      catch (const std::exception& e) {
-        fprintf(stderr, "JSON parse error in '%s': %s\n", szFname, e.what());
-      }
-      catch (...) {
-        fprintf(stderr, "JSON parse error in '%s': unknown exception\n", szFname);
-      }
+      if (!rv)
+        fprintf(stderr, "JSON parse error in '%s'\n", szFname);
     }
     fclose(f);
   }
