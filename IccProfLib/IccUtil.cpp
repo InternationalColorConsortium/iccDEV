@@ -2481,6 +2481,69 @@ const icChar *CIccInfo::GetColorantEncoding(icColorantEncoding colorant)
   }
 }
 
+/**
+******************************************************************************
+* Name: CIccInfo::CheckData
+*
+* Purpose: Validates the components of an XYZNumber.
+*
+*  Sign policy (#1808): a negative X or Y is reported as NonCompliant, but a
+*  negative Z is only a Warning. The asymmetry is deliberate and follows from
+*  how tristimulus values are produced.
+*
+*  A direct CIE integral cannot go negative. X/Y/Z are integrals of S(l)*R(l)
+*  against the colour-matching functions, and the CIE 1931 2-deg / 1964 10-deg
+*  observers have xbar, ybar, zbar >= 0 at every wavelength (by design -- unlike
+*  the CIE RGB functions r/g/b, which carry large negative lobes near 440-550nm).
+*  With a physical illuminant and a physical reflectance each integrand is a
+*  product of non-negatives, so a negative component can only appear when one of
+*  those assumptions is broken. Three mechanisms do so:
+*
+*   1. A non-CIE basis. Custom observers, cone-fundamental-derived CMFs or the
+*      raw CIE RGB functions have negative lobes, so a stimulus carrying energy
+*      in such a lobe integrates negative.
+*   2. A signed linear transform applied after the integral. Chromatic
+*      adaptation (Bradford / CAT02 / von Kries) and PCS/PCC matrices all have
+*      negative off-diagonal terms, so the result is a signed combination rather
+*      than an integral against a non-negative basis. Adapting a saturated,
+*      gamut-boundary primary between two different white points can push a
+*      component just below zero. This is the #1808 case: iccV5DspObsToV4Dsp
+*      integrates against a custom observer and then applies a custom->standard
+*      (D65->D50) PCC, and the red colorant emerges with Z < 0.
+*   3. Non-physical spectral input. Measurement noise near the floor, or
+*      least-squares spectral reconstruction overshoot, can yield a reflectance
+*      that dips below zero in some band.
+*
+*  Those mechanisms are not channel-specific in principle, but their practical
+*  incidence is very uneven, which is why only Z is relaxed:
+*
+*   Z - common. zbar has the narrowest support (~400-500nm, ~0 above 560nm), so
+*       most colorants have a near-zero Z that a small signed correction flips,
+*       and D65<->D50 adaptation applies its strongest signed scaling to the
+*       short-wave channel. Both mechanisms load onto Z.
+*   X - rarer. xbar's secondary red lobe, combined with certain adaptation
+*       matrices, can make an X row net-negative for a saturated cyan/green at
+*       the gamut boundary. Possible, but in practice a negative X much more
+*       often signals a bad matrix or bad input than legitimate colorimetry.
+*   Y - effectively never. ybar is the luminance channel: broad support, and
+*       adaptation transforms are constructed to preserve luminance. A negative
+*       Y is negative luminance, i.e. corruption.
+*
+*  So Z warns and X/Y stay NonCompliant. Should a real profile ever exhibit a
+*  legitimately negative X arising from a documented adaptation or custom-observer
+*  path, extending the same treatment to X would be justified -- but that should
+*  be driven by such evidence rather than relaxed pre-emptively.
+*
+* Args:
+*  sReport - string to add validation report to
+*  XYZ - the XYZNumber to validate
+*  sDesc - description of the item being validated (prefixed to any message)
+*
+* Return:
+*  icValidateOK, icValidateWarning (negative Z) or icValidateNonCompliant
+*  (negative X or Y)
+******************************************************************************
+*/
 icValidateStatus CIccInfo::CheckData(std::string &sReport, const icXYZNumber &XYZ, std::string sDesc/*=""*/)
 {
   icValidateStatus rv = icValidateOK;
@@ -2499,11 +2562,15 @@ icValidateStatus CIccInfo::CheckData(std::string &sReport, const icXYZNumber &XY
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
+  // "Negative z-values can arise in some computations (e.g. chromatic adaptation)
+  // and are legal" -- Phil Green, ICC (#1808). Warn rather than reject, so such a
+  // profile is no longer marked NonCompliant; see the sign-policy note above for
+  // why this applies to Z but not to the X and Y checks preceding it.
   if (XYZ.Z < 0) {
-    sReport += icMsgValidateNonCompliant;
+    sReport += icMsgValidateWarning;
     sReport += sDesc;
     sReport += " - XYZNumber: Negative Z value!\n";
-    rv = icMaxStatus(rv, icValidateNonCompliant);
+    rv = icMaxStatus(rv, icValidateWarning);
   }
 
   return rv;
@@ -2527,11 +2594,15 @@ icValidateStatus CIccInfo::CheckData(std::string &sReport, const icFloatXYZNumbe
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
+  // Same sign policy as the fixed-point XYZNumber overload above (#1808): negative
+  // Z warns, negative X/Y stay NonCompliant. Legality is a property of the physical
+  // quantity rather than its encoding, so both paths must agree or the same colour
+  // would validate differently depending only on how the tag stores it.
   if (XYZ.Z < 0) {
-    sReport += icMsgValidateNonCompliant;
+    sReport += icMsgValidateWarning;
     sReport += sDesc;
     sReport += " - FloatXYZNumber: Negative Z value!\n";
-    rv = icMaxStatus(rv, icValidateNonCompliant);
+    rv = icMaxStatus(rv, icValidateWarning);
   }
 
   return rv;
