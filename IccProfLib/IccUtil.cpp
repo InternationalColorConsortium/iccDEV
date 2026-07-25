@@ -3108,10 +3108,94 @@ const char *icWCharToUtf8(std::string &buf, const wchar_t *szSrc, size_t sizeSrc
 // Date/time and rendering intent string parsing
 // ---------------------------------------------------------------------------
 
+// Consume up to nMaxDigits ASCII decimal digits into nOut. Returns false if there
+// is no digit at all, or if the value could not be stored in the icUInt16Number
+// fields of icDateTimeNumber without changing it (#1831). Only '0'-'9' advance the
+// cursor: no sign and no whitespace is accepted, which is the point -- the "%u" this
+// replaces took a leading '-' and negated it into a huge unsigned value.
+static bool icParseDateTimeField(const icChar *&p, int nMaxDigits, unsigned int &nOut)
+{
+  unsigned int v = 0;
+  int nDigits = 0;
+
+  // nMaxDigits is at most 5 here, so v stays <= 99999 and the accumulation itself
+  // cannot overflow before the range test below rejects the value.
+  while (nDigits < nMaxDigits && *p >= '0' && *p <= '9') {
+    v = v * 10 + (unsigned int)(*p - '0');
+    ++p;
+    ++nDigits;
+  }
+
+  if (!nDigits || v > 65535u)
+    return false;
+
+  nOut = v;
+  return true;
+}
+
+static bool icParseDateTimeSep(const icChar *&p, icChar sep)
+{
+  if (*p != sep)
+    return false;
+  ++p;
+  return true;
+}
+
+/**
+******************************************************************************
+* Name: icGetDateTimeValue
+*
+* Purpose: Parses an ISO-8601-style "YYYY-MM-DDTHH:MM:SS" string (or "now") into
+*  an icDateTimeNumber.
+*
+*  This used to be a bare sscanf("%u-%02u-%02uT%02u:%02u:%02u") whose return value
+*  was discarded (#1831). That was unsafe in three ways, all reachable from
+*  iccFromXml/iccFromJson on attacker-supplied input:
+*
+*   1. The conversion count was ignored, so a string that matched only part of the
+*      format left the remaining fields holding whatever the previous iteration or
+*      initialisation had put there.
+*   2. "%u" accepts a leading '-' and negates the result into a large unsigned
+*      value, so "-1" parsed as 4294967295.
+*   3. Every field was assigned into the icUInt16Number members of
+*      icDateTimeNumber before anything checked its range, so an out-of-range value
+*      was silently truncated -- UBSan reported year 590359881 arriving as 11593.
+*
+*  Parsing is now explicit: each field must be a run of decimal digits that fits in
+*  icUInt16Number, each separator must be present, and the whole string must be
+*  consumed apart from surrounding whitespace. Anything else yields an all-zero
+*  icDateTimeNumber, which is the conventional ICC "date unknown" value and is what
+*  CIccInfo::CheckData already reports on (as an "Invalid month/day" warning), so a
+*  malformed date still surfaces to the user rather than becoming a plausible-looking
+*  wrong one.
+*
+*  The accepted grammar is "YYYY-MM-DD" optionally followed by "THH:MM:SS". Both
+*  denote a complete instant -- a date alone means midnight on that day, which is
+*  what the old sscanf produced for it -- so both are kept. Reduced-precision forms
+*  such as "YYYY-MM" are not accepted, because a zero day is not a calendar date;
+*  the old code turned those into 2026-07-00, a date that never existed. Once a 'T'
+*  appears it promises a time, so an incomplete one after it is rejected rather than
+*  silently zero-filled.
+*
+*  Note the range test is deliberately only the icUInt16Number bound, not the
+*  calendar bounds: a structurally valid but nonsensical date such as month 59 is
+*  still passed through so that CheckData can report precisely which field is wrong.
+*  Tightening it here would replace that specific diagnostic with a bare zeroed date.
+*
+* Args:
+*  str - the string to parse, or "now" for the current local time
+*
+* Return:
+*  the parsed icDateTimeNumber, or an all-zero value if str is null or malformed
+******************************************************************************
+*/
 icDateTimeNumber icGetDateTimeValue(const icChar *str)
 {
   unsigned int day=0, month=0, year=0, hours=0, minutes=0, seconds=0;
   icDateTimeNumber dateTime = {};
+
+  if (!str)
+    return dateTime;
 
   if (!stricmp(str, "now")) {
     time_t rawtime;
@@ -3126,14 +3210,53 @@ icDateTimeNumber icGetDateTimeValue(const icChar *str)
     minutes = timeinfo->tm_min;
     seconds = timeinfo->tm_sec;
   } else {
-    sscanf(str, "%u-%02u-%02uT%02u:%02u:%02u", &year, &month, &day, &hours, &minutes, &seconds);
+    const icChar *p = str;
+
+    // XML/JSON text nodes can carry surrounding whitespace, which the old sscanf
+    // skipped implicitly; keep accepting it so existing documents still parse.
+    while (*p==' ' || *p=='\t' || *p=='\r' || *p=='\n')
+      ++p;
+
+    // The year is written with a variable width ("%d"/"%04u" across the writers,
+    // and the fuzz corpus contains 5-digit years), so allow up to 5 digits there
+    // and exactly the 2 the writers emit for the remaining fields.
+    bool bOk = icParseDateTimeField(p, 5, year) &&
+               icParseDateTimeSep(p, '-') &&
+               icParseDateTimeField(p, 2, month) &&
+               icParseDateTimeSep(p, '-') &&
+               icParseDateTimeField(p, 2, day);
+
+    // The time part is optional: a bare "YYYY-MM-DD" is a valid ISO-8601 date and
+    // already meant midnight on that day under the old sscanf (it matched three
+    // fields and left the rest at their zero initialisation), so it keeps that
+    // meaning here -- iccFromXml/iccFromJson are authoring tools and a hand-written
+    // date without a time is entirely reasonable input. The 'T' designator is what
+    // promises a time, so once it appears the whole HH:MM:SS must follow.
+    if (bOk && *p == 'T') {
+      ++p;
+      bOk = icParseDateTimeField(p, 2, hours) &&
+            icParseDateTimeSep(p, ':') &&
+            icParseDateTimeField(p, 2, minutes) &&
+            icParseDateTimeSep(p, ':') &&
+            icParseDateTimeField(p, 2, seconds);
+    }
+
+    if (bOk) {
+      while (*p==' ' || *p=='\t' || *p=='\r' || *p=='\n')
+        ++p;
+      bOk = (*p == '\0');
+    }
+
+    if (!bOk)
+      return dateTime;
   }
-  dateTime.year    = year;
-  dateTime.month   = month;
-  dateTime.day     = day;
-  dateTime.hours   = hours;
-  dateTime.minutes = minutes;
-  dateTime.seconds = seconds;
+
+  dateTime.year    = (icUInt16Number)year;
+  dateTime.month   = (icUInt16Number)month;
+  dateTime.day     = (icUInt16Number)day;
+  dateTime.hours   = (icUInt16Number)hours;
+  dateTime.minutes = (icUInt16Number)minutes;
+  dateTime.seconds = (icUInt16Number)seconds;
   return dateTime;
 }
 

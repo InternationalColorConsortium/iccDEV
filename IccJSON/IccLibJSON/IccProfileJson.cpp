@@ -276,20 +276,59 @@ bool CIccProfileJson::ToJson(std::string &jsonString, int indent)
 // Parsing: JSON object -> profile
 // ---------------------------------------------------------------------------
 
-static icUInt32Number icJsonParseBCDByte(const char *s)
+// Convert one decimal version component (0-99) to the BCD byte the ICC header
+// stores. Returns false for an empty component, more than two digits, or any
+// character that is not a digit -- notably a sign (#1830). This used to be
+// atoi(), which accepts a leading '-': "-1" produced v == -1, and
+// ((v/10)%10)*16 + (v%10) then evaluated to -1, which reinterpreted as
+// icUInt32Number is 0xFFFFFFFF. That value went on to wrap both shifts below,
+// which UBSan reported as "left shift of 4294967295 by 8 places cannot be
+// represented in type icUInt32Number". atoi() is also undefined on an
+// out-of-range input, which a digit-by-digit parse of at most two digits cannot
+// hit.
+static bool icJsonParseBCDByte(const std::string &sPart, icUInt32Number &nOut)
 {
-  int v = atoi(s);
-  return (icUInt32Number)(((v / 10) % 10) * 16 + (v % 10));
+  if (sPart.empty() || sPart.size() > 2)
+    return false;
+
+  unsigned int v = 0;
+  for (size_t i = 0; i < sPart.size(); i++) {
+    if (sPart[i] < '0' || sPart[i] > '9')
+      return false;
+    v = v * 10 + (unsigned int)(sPart[i] - '0');
+  }
+
+  nOut = (icUInt32Number)(((v / 10) % 10) * 16 + (v % 10));
+  return true;
 }
 
+// Parse "<major>.<minor>" (as written by CIccInfo::GetVersionName, e.g. "4.30")
+// into the packed BCD pair 0xMMmm. A malformed string yields 0, which is the
+// version the zeroed header already carries, and which GetVersionName renders
+// back as a plain "0.00" rather than a wrapped value. Because each component is
+// now guaranteed to be a valid BCD byte (<= 0x99), the result is at most 0x9999
+// and the caller's further "<< 16" cannot overflow either.
 static icUInt32Number icJsonParseBCDVersionStr(const char *szVer)
 {
+  if (!szVer)
+    return 0;
+
   std::string part;
   for (; *szVer && *szVer != '.'; szVer++) part += *szVer;
-  icUInt32Number hi = icJsonParseBCDByte(part.c_str()); part.clear();
+
+  icUInt32Number hi = 0, lo = 0;
+  if (!icJsonParseBCDByte(part, hi))
+    return 0;
+
+  part.clear();
   if (*szVer) szVer++;
   for (; *szVer; szVer++) part += *szVer;
-  icUInt32Number lo = part.empty() ? 0 : icJsonParseBCDByte(part.c_str());
+
+  // A missing minor component stays 0 ("4" == "4.0"), matching the previous
+  // behaviour; a present but malformed one rejects the whole version.
+  if (!part.empty() && !icJsonParseBCDByte(part, lo))
+    return 0;
+
   return (hi << 8) | lo;
 }
 

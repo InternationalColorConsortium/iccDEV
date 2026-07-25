@@ -1819,6 +1819,95 @@ function(iccdev_add_json_sparsematrix_huaf_test)
   endif()
 endfunction()
 
+# #1830: the JSON BCD version parser used atoi() per component, which accepts a
+# leading '-'; "-1" produced 0xFFFFFFFF and wrapped both the "<< 8" in
+# icJsonParseBCDVersionStr and the caller's "<< 16" (UBSan: "left shift of
+# 4294967295 by 8 places"). Each component must now be one or two digits, so the
+# packed pair is at most 0x9999 and neither shift can overflow. The test drives the
+# public CIccProfileJson::ParseJson, so it needs IccJSON + IccProfLib and is skipped
+# where IccJSON is not built.
+function(iccdev_add_json_bcd_version_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonBcdVersionTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-bcd-version-parse.cpp"
+  )
+  target_compile_features(iccJsonBcdVersionTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonBcdVersionTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonBcdVersionTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonBcdVersionTest)
+
+  add_test(
+    NAME iccdev.json-bcd-version-parse
+    COMMAND "$<TARGET_FILE:iccJsonBcdVersionTest>"
+  )
+  set_tests_properties(iccdev.json-bcd-version-parse PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;json;header;issue-1830;regression"
+  )
+  if(WIN32)
+    set(_json_bcd_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonBcdVersionTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_bcd_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-bcd-version-parse PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_bcd_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #1831: icGetDateTimeValue discarded its sscanf conversion count and assigned every
+# field into the icUInt16Number members of icDateTimeNumber without a range check, so
+# "%u" turned "-1" into 4294967295 and a year of 590359881 was truncated to 11593
+# (UBSan implicit-conversion). The parse is now explicit and a malformed string
+# yields the all-zero "date unknown" value. Pure IccProfLib, no fixture needed.
+function(iccdev_add_datetime_parse_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccDateTimeParseTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/datetime-parse-strict.cpp"
+  )
+  target_link_libraries(iccDateTimeParseTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccDateTimeParseTest)
+
+  add_test(
+    NAME iccdev.datetime-parse-strict
+    COMMAND "$<TARGET_FILE:iccDateTimeParseTest>"
+  )
+  set_tests_properties(iccdev.datetime-parse-strict PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;issue-1831;regression"
+  )
+  if(WIN32)
+    set(_datetime_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccDateTimeParseTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _datetime_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.datetime-parse-strict PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_datetime_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_windows_iccdevcmm_smoke_test)
   if(NOT WIN32 OR NOT TARGET RefIccMAX)
     return()
@@ -2039,6 +2128,8 @@ if(WIN32)
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
   iccdev_add_json_sparsematrix_huaf_test()
+  iccdev_add_json_bcd_version_test()
+  iccdev_add_datetime_parse_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -2251,6 +2342,8 @@ iccdev_add_ziputf8_settext_contract_test()
 iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
+iccdev_add_json_bcd_version_test()
+iccdev_add_datetime_parse_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
