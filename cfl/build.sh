@@ -13,7 +13,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 [--targets CSV] [--runs N] [--build-dir DIR] [--work-dir DIR] [--patches [DIR]] [--skip-run]"
+  echo "Usage: $0 [--targets CSV] [--seconds N] [--build-dir DIR] [--work-dir DIR] [--patches [DIR]] [--skip-run]"
   echo "Targets: dump, toxml, fromxml, tojson, fromjson, roundtrip"
 }
 
@@ -22,7 +22,7 @@ repo_root="$(cd "$script_dir/.." && pwd)"
 build_dir="${ICCDEV_CFL_BUILD_DIR:-$repo_root/build-cfl-smoke}"
 work_dir="${ICCDEV_CFL_WORK_DIR:-$repo_root/.cfl-smoke}"
 targets_csv="${ICCDEV_CFL_TARGETS:-dump,toxml,fromxml,tojson,fromjson,roundtrip}"
-runs="${ICCDEV_CFL_RUNS:-1}"
+seconds="${ICCDEV_CFL_SECONDS:-30}"
 max_seed_bytes="${ICCDEV_CFL_MAX_SEED_BYTES:-49152}"
 apply_patches="${ICCDEV_CFL_APPLY_PATCHES:-0}"
 patch_dir="${ICCDEV_CFL_PATCH_DIR:-$repo_root/.github/ci/fuzz-patches/cfl}"
@@ -35,9 +35,15 @@ while [ "$#" -gt 0 ]; do
       targets_csv="$2"
       shift 2
       ;;
+    --seconds|--duration-seconds)
+      [ "$#" -ge 2 ] || { echo "ERROR: $1 requires a value" >&2; exit 2; }
+      seconds="$2"
+      shift 2
+      ;;
     --runs)
       [ "$#" -ge 2 ] || { echo "ERROR: --runs requires a value" >&2; exit 2; }
-      runs="$2"
+      echo "WARNING: --runs is deprecated for CFL smoke; use --seconds" >&2
+      seconds="$2"
       shift 2
       ;;
     --build-dir)
@@ -80,15 +86,15 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-case "$runs" in
+case "$seconds" in
   ''|*[!0-9]*)
-    echo "ERROR: --runs must be numeric" >&2
+    echo "ERROR: --seconds must be numeric" >&2
     exit 2
     ;;
 esac
 
-if [ "$runs" -lt 1 ] || [ "$runs" -gt 1000000 ]; then
-  echo "ERROR: --runs must be between 1 and 1000000" >&2
+if [ "$seconds" -lt 1 ] || [ "$seconds" -gt 3600 ]; then
+  echo "ERROR: --seconds must be between 1 and 3600" >&2
   exit 2
 fi
 
@@ -222,7 +228,7 @@ summary_tsv="$work_dir/summary.tsv"
 logs_dir="$work_dir/logs"
 artifacts_dir="$work_dir/artifacts"
 mkdir -p "$logs_dir" "$artifacts_dir"
-printf 'target\tstatus\ttotal_runs\tcorpus\n' > "$summary_tsv"
+printf 'target\tstatus\tduration_seconds\tcorpus\n' > "$summary_tsv"
 
 failures=0
 if [ "$skip_run" -eq 0 ]; then
@@ -239,13 +245,13 @@ if [ "$skip_run" -eq 0 ]; then
       UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 \
       "$bin_dir/icc_${target}_fuzzer" \
         -artifact_prefix="$artifacts_dir/$target-" \
-        -runs="$runs" "$corpus" 2>&1 | tee "$log_file"
+        -max_total_time="$seconds" "$corpus" 2>&1 | tee "$log_file"
     fuzzer_status="${PIPESTATUS[0]}"
     set -e
     if [ "$fuzzer_status" -eq 0 ]; then
-      printf '%s\tpass\t%s\t%s\n' "$target" "$runs" "$corpus" >> "$summary_tsv"
+      printf '%s\tpass\t%s\t%s\n' "$target" "$seconds" "$corpus" >> "$summary_tsv"
     else
-      printf '%s\tfail\t%s\t%s\n' "$target" "$runs" "$corpus" >> "$summary_tsv"
+      printf '%s\tfail\t%s\t%s\n' "$target" "$seconds" "$corpus" >> "$summary_tsv"
       failures=$((failures + 1))
     fi
   done

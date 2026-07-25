@@ -21,7 +21,7 @@ input artifact.
 Run the local smoke with:
 
 ```bash
-cfl/build.sh --runs 1
+cfl/build.sh --seconds 30
 ```
 
 Apply the local CFL patch stack before configuring iccDEV with `--patches`.
@@ -30,7 +30,7 @@ The
 patch branches test local fixes before they are promoted to source PRs:
 
 ```bash
-cfl/build.sh --patches --runs 1
+cfl/build.sh --patches --seconds 30
 ```
 
 The default patch directory is `.github/ci/fuzz-patches/cfl`. The harnesses are

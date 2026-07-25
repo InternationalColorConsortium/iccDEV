@@ -155,6 +155,11 @@ Report:
 - Expected counts changed or confirmed unchanged.
 - Local commands and outcomes.
 - GitHub run IDs, conclusions, artifacts, and any annotations.
+- For registry QA runs, report `summary.md`, `results.tsv`, and `findings.txt`
+  as authoritative evidence. Note whether per-run logs were bounded by
+  `registry_qa_log_tail_lines`; use `0` only when full raw logs are needed.
+  If the developer report omits downloaded profile payloads, use
+  `download-manifest.tsv` to recreate them.
 - Remaining Windows, packaging, or release validation that requires hosted
   runners.
 

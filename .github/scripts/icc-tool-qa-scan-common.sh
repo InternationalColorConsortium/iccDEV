@@ -82,6 +82,7 @@ PROGRESS=0
 LIST_VARIANTS=0
 VARIANT_FILTER=""
 MAX_FILES=0
+LOG_TAIL_LINES="${ICC_QA_LOG_TAIL_LINES:-0}"
 FAIL_ON="${ICC_QA_FAIL_ON:-CRASH,TIMEOUT}"
 SUMMARY_MD=""
 
@@ -101,6 +102,9 @@ Options:
   --all-lines       echo every output line, not only matched findings
   --variant NAME    run one variant from --list-variants
   --max-files N     stop after N input files, useful for smoke tests
+  --log-tail-lines N
+                    after classification, keep bounded log excerpts with the
+                    first 200 lines and final N lines; 0 keeps full logs
   --fail-on LIST    comma-separated statuses that make the script fail
                     default: $FAIL_ON; use "none" to always exit 0
   --summary-md PATH write Markdown summary, default: <out-dir>/summary.md
@@ -131,6 +135,7 @@ while [[ $# -gt 0 ]]; do
     --all-lines) SHOW_ALL=1; shift ;;
     --variant) VARIANT_FILTER="$2"; shift 2 ;;
     --max-files) MAX_FILES="$2"; shift 2 ;;
+    --log-tail-lines) LOG_TAIL_LINES="$2"; shift 2 ;;
     --fail-on) FAIL_ON="$2"; shift 2 ;;
     --summary-md) SUMMARY_MD="$2"; shift 2 ;;
     --list-variants) LIST_VARIANTS=1; shift ;;
@@ -147,6 +152,11 @@ fi
 
 if ! [[ "$MAX_FILES" =~ ^[0-9]+$ ]]; then
   echo "ERROR: --max-files must be a non-negative integer" >&2
+  exit 2
+fi
+
+if ! [[ "$LOG_TAIL_LINES" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --log-tail-lines must be a non-negative integer" >&2
   exit 2
 fi
 
@@ -265,11 +275,33 @@ emit_findings() {
   fi
 }
 
+compact_logfile() {
+  local logfile="$1"
+  local line_count="$2"
+  local keep_tail="$LOG_TAIL_LINES"
+  local keep_head=200
+  local tmp
+
+  [[ "$keep_tail" -gt 0 ]] || return 0
+  [[ "$line_count" -gt $((keep_head + keep_tail)) ]] || return 0
+
+  tmp="${logfile}.compact"
+  {
+    printf '%s\n' \
+      "--- log excerpt: first ${keep_head} lines, final ${keep_tail} lines; original had ${line_count} lines ---"
+    head -n "$keep_head" "$logfile"
+    printf '\n%s\n\n' \
+      "--- middle omitted: $((line_count - keep_head - keep_tail)) lines ---"
+    tail -n "$keep_tail" "$logfile"
+  } > "$tmp"
+  mv -f "$tmp" "$logfile"
+}
+
 run_variant() {
   local input="$1" rel="$2" variant="$3" before="$4" after="$5"
   local logfile exit_code sanitizer signals errors warnings
   local qa_fail_count qa_warn_count qa_gap_count qa_not_run_count compliant_count
-  local issue_count status
+  local issue_count status line_count
   local -a before_args=()
   local -a after_args=()
 
@@ -293,6 +325,7 @@ run_variant() {
   qa_gap_count="$(count_matches "$QA_GAP_RE" "$logfile")"
   qa_not_run_count="$(count_matches "$QA_NOT_RUN_RE" "$logfile")"
   compliant_count="$(count_matches "$COMPLIANT_RE" "$logfile")"
+  line_count="$(wc -l < "$logfile" | tr -d '[:space:]')"
   issue_count=$((errors + warnings + qa_fail_count + qa_warn_count + qa_gap_count + qa_not_run_count))
   status="$(classify_exit "$exit_code" "$sanitizer" "$signals" "$issue_count")"
 
@@ -312,6 +345,7 @@ run_variant() {
     "$errors" "$warnings" "$qa_fail_count" "$qa_warn_count" "$qa_gap_count" \
     "$qa_not_run_count" "$compliant_count" >> "$RESULTS"
   emit_findings "$rel" "$variant" "$logfile" "$status" "$exit_code" | tee -a "$FINDINGS"
+  compact_logfile "$logfile" "$line_count"
 }
 
 total_files=0

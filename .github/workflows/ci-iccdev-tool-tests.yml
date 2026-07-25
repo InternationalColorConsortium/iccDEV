@@ -104,6 +104,11 @@ on:
         required: false
         default: false
         type: boolean
+      registry_qa_log_tail_lines:
+        description: 'Final log lines to retain for each registry QA run; 0 keeps full logs'
+        required: false
+        default: '2000'
+        type: string
   workflow_dispatch:
     inputs:
       regression_image_tag:
@@ -216,6 +221,11 @@ on:
         required: true
         default: false
         type: boolean
+      registry_qa_log_tail_lines:
+        description: 'Final log lines to retain for each registry QA run; 0 keeps full logs'
+        required: true
+        default: '2000'
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tool_build_type || 'Debug' }}
@@ -519,6 +529,7 @@ jobs:
           REGISTRY_QA_TIMEOUT_INPUT: ${{ inputs.registry_qa_timeout || '20' }}
           REGISTRY_QA_MAX_PROFILES_INPUT: ${{ inputs.registry_qa_max_profiles || '3' }}
           REGISTRY_QA_FULL_MATRIX_INPUT: ${{ inputs.registry_qa_full_matrix && '1' || '0' }}
+          REGISTRY_QA_LOG_TAIL_LINES_INPUT: ${{ inputs.registry_qa_log_tail_lines || '2000' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -536,6 +547,12 @@ jobs:
               exit 1
               ;;
           esac
+          case "$REGISTRY_QA_LOG_TAIL_LINES_INPUT" in
+            ''|*[!0-9]*)
+              echo "::error title=Invalid registry QA log tail lines::${REGISTRY_QA_LOG_TAIL_LINES_INPUT}"
+              exit 1
+              ;;
+          esac
           case "$REGISTRY_QA_FULL_MATRIX_INPUT" in
             0|1)
               ;;
@@ -549,6 +566,7 @@ jobs:
           args=(
             --timeout "$REGISTRY_QA_TIMEOUT_INPUT"
             --max-profiles "$REGISTRY_QA_MAX_PROFILES_INPUT"
+            --log-tail-lines "$REGISTRY_QA_LOG_TAIL_LINES_INPUT"
             --out-dir "$registry_out"
             --fail-on "CRASH"
           )
@@ -828,6 +846,14 @@ jobs:
           copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/registry-profile-qa" \
             "${data_dir}/registry-profile-qa"
+          if [ -d "${data_dir}/registry-profile-qa/profiles" ]; then
+            rm -rf "${data_dir}/registry-profile-qa/profiles"
+            {
+              printf 'Registry profile payloads are omitted from this developer report.\n'
+              printf 'Use download-manifest.tsv for source URLs, byte counts, and SHA-256 values.\n'
+              printf 'Rerun .github/scripts/iccdev-registry-profile-qa.sh to recreate the profile directory.\n'
+            } > "${data_dir}/registry-profile-qa/profiles.README.txt"
+          fi
           {
             printf 'iccDEV developer report\n'
             printf '=======================\n\n'

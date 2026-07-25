@@ -184,7 +184,7 @@ jobs:
             printf "#include <stddef.h>\n#include <stdint.h>\nextern \"C\" int LLVMFuzzerTestOneInput(const uint8_t*, size_t){return 0;}\n" > /tmp/cfl-smoke.cpp
             clang++ -fsanitize=fuzzer,address,undefined -fno-omit-frame-pointer -g -O1 \
               /tmp/cfl-smoke.cpp -o /tmp/cfl-smoke
-            /tmp/cfl-smoke -runs=1
+            /tmp/cfl-smoke -max_total_time=1
           '
 
       - name: Build PR tree inside regression image

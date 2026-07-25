@@ -45,11 +45,14 @@ Manual dispatches should expose the same operator controls on AFL and CFL:
 commit pin, and `patch_mode` with `all` or `none`. Use `all` when validating
 maintainer-local patch stacks before promoting them to source PRs, and `none`
 when comparing raw branch behavior.
+Expose CFL runtime as seconds per target, not LibFuzzer iteration or execution
+counts, so the manual UI matches AFL's duration model.
 
-Do not use the packaged AFL++ wrapper from the regression image unless the
-image has rebuilt and probed that wrapper against the same LLVM major version.
-Avoid broad AFL++ `source-only` or full LLVM builds in the smoke workflow when
-they enter optional GCC plugin or Nyx paths. Selected AFL targets should run in
+The regression image packages the compiler runtime needed by its packaged
+AFL++ wrapper for short local smoke checks. The AFL workflow should still
+rebuild and probe AFL++ wrappers against the selected LLVM major version. Avoid
+broad AFL++ `source-only` or full LLVM builds in the smoke workflow when they
+enter optional GCC plugin or Nyx paths. Selected AFL targets should run in
 parallel with AFL++ affinity fallback enabled and report deterministic
 per-target summaries.
 
@@ -73,7 +76,7 @@ shellcheck .github/scripts/iccdev-afl-smoke.sh
 actionlint .github/workflows/ci-afl-smoke.yml
 yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
 .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --runs 1
+cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30
 ```
 
 Run `.github/scripts/preflight-safety-checks.sh --require-tools` before pushing

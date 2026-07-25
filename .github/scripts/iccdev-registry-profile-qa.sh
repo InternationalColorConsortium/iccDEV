@@ -14,6 +14,7 @@ TIMEOUT_SECONDS="${ICCDEV_REGISTRY_QA_TIMEOUT:-20}"
 MAX_PROFILES=0
 FULL_MATRIX=0
 SKIP_DOWNLOAD=0
+LOG_TAIL_LINES="${ICCDEV_REGISTRY_QA_LOG_TAIL_LINES:-2000}"
 FAIL_ON="${ICCDEV_REGISTRY_QA_FAIL_ON:-CRASH,TIMEOUT}"
 
 usage() {
@@ -27,6 +28,7 @@ Options:
   --timeout SEC        per-tool timeout, default: 20
   --max-profiles N     scan only first N .icc files after download
   --full-matrix        run every variant for each tool; default runs CI smoke variants
+  --log-tail-lines N   bound archived per-run logs after classification; 0 keeps full logs
   --fail-on LIST       statuses that fail the script, default: CRASH,TIMEOUT
   --skip-download      use --profile-dir or <out-dir>/profiles without network
   -h, --help           show this help
@@ -46,6 +48,7 @@ while [[ $# -gt 0 ]]; do
     --timeout) TIMEOUT_SECONDS="$2"; shift 2 ;;
     --max-profiles) MAX_PROFILES="$2"; shift 2 ;;
     --full-matrix) FULL_MATRIX=1; shift ;;
+    --log-tail-lines) LOG_TAIL_LINES="$2"; shift 2 ;;
     --fail-on) FAIL_ON="$2"; shift 2 ;;
     --skip-download) SKIP_DOWNLOAD=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -61,6 +64,11 @@ fi
 
 if ! [[ "$MAX_PROFILES" =~ ^[0-9]+$ ]]; then
   echo "ERROR: --max-profiles must be a non-negative integer" >&2
+  exit 2
+fi
+
+if ! [[ "$LOG_TAIL_LINES" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --log-tail-lines must be a non-negative integer" >&2
   exit 2
 fi
 
@@ -120,6 +128,7 @@ run_scan() {
   local name="$1" script="$2" variant="$3"
   local -a args=()
   args+=(--timeout "$TIMEOUT_SECONDS" --out-dir "$OUTDIR/$name")
+  args+=(--log-tail-lines "$LOG_TAIL_LINES")
   args+=(--fail-on "$FAIL_ON")
   if [[ "$MAX_PROFILES" -gt 0 ]]; then
     args+=(--max-files "$MAX_PROFILES")
@@ -142,7 +151,9 @@ run_scan roundtrip "$SCRIPT_DIR/icc-roundtrip-qa-scan.sh" intent-1 || status=1
   printf '| URL list | `%s` |\n' "$URL_LIST"
   printf '| Profile directory | `%s` |\n' "$PROFILE_DIR"
   printf '| ICC profiles | %s |\n' "$ICC_COUNT"
+  printf '| Max profiles | %s |\n' "$MAX_PROFILES"
   printf '| Timeout | %s seconds |\n' "$TIMEOUT_SECONDS"
+  printf '| Log tail lines | %s |\n' "$LOG_TAIL_LINES"
   printf '| Full matrix | %s |\n' "$FULL_MATRIX"
   printf '| Fail-on | `%s` |\n' "$FAIL_ON"
   printf '| Manifest | `%s` |\n\n' "$MANIFEST"

@@ -36,9 +36,11 @@ development headers when the published image does not already contain them,
 puts the freshly built AFL++ checkout first in `PATH`, and builds iccDEV with
 `afl-clang-fast`.
 
-Do not rely on the container's packaged `afl-clang-fast` wrapper unless it has
-been rebuilt and probed against the same LLVM major version as `clang-22`.
-Known-good AFL wrapper checks compile both C and C++ probes with:
+The regression image keeps the packaged `afl-clang-fast` wrapper usable for
+short local smoke checks by installing its matching compiler runtime. For CI,
+use the rebuilt wrapper path and explicitly probe it against the same LLVM
+major version as `clang-22`. Known-good AFL wrapper checks compile both C and
+C++ probes with:
 
 ```bash
 AFL_PATH=/path/to/AFLplusplus AFL_CC=clang-22 AFL_CXX=clang++-22 \
@@ -176,14 +178,17 @@ The matching CFL smoke entry point is `cfl/build.sh` and the manual
 `ci-cfl-smoke` workflow:
 
 ```bash
-cfl/build.sh --runs 1
+cfl/build.sh --seconds 30
 
 gh workflow run ci-cfl-smoke.yml \
   -f cfl_targets=dump,toxml,fromxml,tojson,fromjson,roundtrip \
-  -f runs=1
+  -f duration_seconds=30
 ```
 
 The current CFL harnesses are conservative CLI-fidelity wrappers: libFuzzer
 writes each input to a temporary file and replays the matching sanitized iccDEV
 tool. This keeps the branch stable while deeper in-process harnesses are
 reviewed separately.
+
+CFL smoke duration is wall-clock seconds per selected target, implemented with
+LibFuzzer `-max_total_time`. It is not an iteration or execution count.

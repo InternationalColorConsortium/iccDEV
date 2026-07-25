@@ -47,6 +47,7 @@ RUN apt-get update \
     gpgv=2.4.8-4ubuntu3 \
     jq=1.8.1-4ubuntu2 \
     libclang-rt-22-dev=1:22.1.2-1ubuntu1 \
+    libclang-rt-21-dev=1:21.1.8-6ubuntu1 \
     libjpeg-dev=8c-2ubuntu12 \
     libtiff-tools=4.7.0-3ubuntu4 \
     liblzma-dev=5.8.3-1 \

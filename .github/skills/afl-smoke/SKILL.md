@@ -29,7 +29,7 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 
    ```bash
    .github/scripts/iccdev-afl-smoke.sh --seconds 10 --targets dump --exec-timeout-ms 30000
-   cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --runs 1
+   cfl/build.sh --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30
    ```
 
 4. When changing AFL++ bootstrap behavior, validate the regression-container
@@ -67,8 +67,9 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - Keep CI AFL++ tooling sourced from
   `https://github.com/AFLplusplus/AFLplusplus/tree/dev` and rebuilt against
   the regression container's Clang/LLVM major version.
-- Do not rely on packaged `afl-clang-fast` unless the regression image rebuilds
-  and probes it against the selected LLVM version.
+- The regression image packages the compiler runtime needed by its packaged
+  `afl-clang-fast` for short local smoke checks. The AFL workflow must still
+  rebuild and probe AFL++ wrappers against the selected LLVM version.
 - Keep the workflow bootstrap narrow: build `afl-fuzz`, `afl-showmap`,
   `afl-cc`, `afl-compiler-rt.o`, `SanitizerCoveragePCGUARD.so`, and
   `cmplog-routines-pass.so`. Avoid broad AFL++ targets that enter optional GCC
@@ -81,7 +82,8 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   maintainer-local patch stacks when `--patches` is requested.
 - Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the
   branch, tag, or ref to check out, optional `target_sha` pins an exact commit,
-  and `patch_mode` selects `all` or `none`.
+  and `patch_mode` selects `all` or `none`. CFL duration must be expressed as
+  seconds per target, not LibFuzzer iteration or execution counts.
 - Keep selected AFL targets running in parallel with AFL++ affinity fallback
   enabled, and merge per-target summaries in a deterministic order.
 - Treat saved crashes as smoke failures. Report generated saved hangs as

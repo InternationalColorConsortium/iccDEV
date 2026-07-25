@@ -188,11 +188,11 @@ suppression applies.
 
 ## AFL/CFL Onboarding Checks
 
-The regression image includes packaged AFL++ tools for maintainer inspection
-and lightweight local checks, and includes Clang/libFuzzer support for CFL
-harness builds. The `ci-afl-smoke` workflow still rebuilds AFL++ dev wrappers
-against LLVM 22 before instrumentation so the CI wrapper and compiler versions
-stay aligned.
+The regression image includes packaged AFL++ tools plus their matching compiler
+runtime for maintainer inspection and lightweight local checks, and includes
+Clang/libFuzzer support for CFL harness builds. The `ci-afl-smoke` workflow
+still rebuilds AFL++ dev wrappers against LLVM 22 before instrumentation so the
+CI wrapper and compiler versions stay aligned.
 
 Inspect the fuzzing environment:
 
@@ -216,7 +216,7 @@ Run the current core CFL smoke:
 cfl/build.sh \
   --patches \
   --targets dump,toxml,fromxml,tojson,fromjson,roundtrip \
-  --runs 1
+  --seconds 30
 ```
 
 Use these checks after changing `Dockerfile.ci-regression`, AFL/CFL scripts,

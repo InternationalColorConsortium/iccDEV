@@ -27,6 +27,11 @@ Each tool scanner writes:
 | `findings.txt` | matched diagnostic lines plus synthetic timeout/signal rows |
 | `summary.md` | sanitized Markdown summary suitable for CI artifacts or review |
 
+Use `--log-tail-lines N` to bound archived per-run logs after classification.
+Counts, status, and `findings.txt` are computed from the complete original
+output before truncation. Use `--log-tail-lines 0` when preserving complete raw
+logs is more important than artifact size.
+
 Statuses are:
 
 | Status | Meaning |
@@ -86,6 +91,7 @@ Run the default CI-sized sweep:
 ```bash
 .github/scripts/iccdev-registry-profile-qa.sh \
   --timeout 20 \
+  --log-tail-lines 2000 \
   --out-dir "$PWD/out/registry-qa"
 ```
 
@@ -134,10 +140,22 @@ Workflow inputs:
 | `registry_qa_timeout` | `20` | Per-tool timeout in seconds. |
 | `registry_qa_max_profiles` | `3` | Maximum ICC registry profiles for CI smoke; `0` means all. |
 | `registry_qa_full_matrix` | `false` | Run every PAWG, DumpProfile, and RoundTrip variant. |
+| `registry_qa_log_tail_lines` | `2000` | Final per-run log lines retained in the artifact after classification; `0` keeps full logs. |
 
 Failure policy in the workflow is `CRASH`. `QA-ISSUE`, `FAIL`, and `TIMEOUT`
 rows remain reporting signal unless maintainers promote a specific finding to a
 focused regression.
+
+Large external profiles can produce hundreds of thousands of validation lines.
+The workflow keeps bounded log excerpts by default so artifacts stay reviewable;
+use `results.tsv`, `findings.txt`, and `summary.md` for authoritative status,
+and rerun with `registry_qa_log_tail_lines=0` only when complete raw output is
+needed for diagnosis.
+
+The developer report artifact omits downloaded `profiles/` payloads to avoid
+duplicating large external registry inputs. Use `download-manifest.tsv` for the
+source URLs, byte counts, and SHA-256 values, then rerun the registry script to
+recreate the profile directory when raw inputs are needed.
 
 Suggested use:
 

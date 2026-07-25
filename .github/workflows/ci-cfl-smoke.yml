@@ -35,10 +35,10 @@ permissions:
         required: true
         default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
-      runs:
-        description: 'Total LibFuzzer executions per target'
+      duration_seconds:
+        description: 'LibFuzzer runtime per target in seconds, 1-3600'
         required: true
-        default: '1'
+        default: '30'
         type: string
       patch_mode:
         description: 'Patch stack mode'
@@ -70,10 +70,10 @@ permissions:
         required: false
         default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
-      runs:
-        description: 'Total LibFuzzer executions per target'
+      duration_seconds:
+        description: 'LibFuzzer runtime per target in seconds'
         required: false
-        default: '1'
+        default: '30'
         type: string
       patch_mode:
         description: 'Patch stack mode: all or none'
@@ -92,7 +92,7 @@ concurrency:
 
 jobs:
   cfl-smoke:
-    name: "CFL smoke (${{ inputs.cfl_targets || 'core' }})"
+    name: "CFL smoke (${{ inputs.cfl_targets || 'core' }}, ${{ inputs.duration_seconds || '30' }}s)"
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     container:
@@ -107,7 +107,7 @@ jobs:
     env:
       BASH_ENV: /dev/null
       ICCDEV_CFL_TARGETS_INPUT: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
-      ICCDEV_CFL_RUNS_INPUT: ${{ inputs.runs || '1' }}
+      ICCDEV_CFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '30' }}
       ICCDEV_CFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
       ICCDEV_CFL_APPLY_PATCHES_INPUT: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
       TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
@@ -161,7 +161,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           ICCDEV_CFL_TARGETS: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
-          ICCDEV_CFL_RUNS: ${{ inputs.runs || '1' }}
+          ICCDEV_CFL_SECONDS: ${{ inputs.duration_seconds || '30' }}
           ICCDEV_CFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
           ICCDEV_CFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-cfl-smoke
           ICCDEV_CFL_WORK_DIR: ${{ runner.temp }}/iccdev-cfl-smoke
@@ -171,9 +171,19 @@ jobs:
           unset GITHUB_TOKEN || true
           source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
           echo "CFL targets: $(sanitize_line "$ICCDEV_CFL_TARGETS")"
-          echo "CFL total runs per target: $(sanitize_line "$ICCDEV_CFL_RUNS")"
+          echo "CFL duration seconds per target: $(sanitize_line "$ICCDEV_CFL_SECONDS")"
           echo "CFL target ref: $(sanitize_line "$TARGET_REF_INPUT")"
           echo "CFL target sha override: $(sanitize_line "${TARGET_SHA_INPUT:-none}")"
+          case "$ICCDEV_CFL_SECONDS" in
+            ''|*[!0-9]*)
+              echo "ERROR: CFL duration seconds must be numeric: $(sanitize_line "$ICCDEV_CFL_SECONDS")" >&2
+              exit 2
+              ;;
+          esac
+          if [ "$ICCDEV_CFL_SECONDS" -lt 1 ] || [ "$ICCDEV_CFL_SECONDS" -gt 3600 ]; then
+            echo "ERROR: CFL duration seconds must be between 1 and 3600: $(sanitize_line "$ICCDEV_CFL_SECONDS")" >&2
+            exit 2
+          fi
           case "$ICCDEV_CFL_PATCH_MODE_INPUT" in
             all|none)
               ;;
@@ -187,7 +197,7 @@ jobs:
           git status --short
           cfl/build.sh \
             --targets "$ICCDEV_CFL_TARGETS" \
-            --runs "$ICCDEV_CFL_RUNS" \
+            --seconds "$ICCDEV_CFL_SECONDS" \
             --build-dir "$ICCDEV_CFL_BUILD_DIR" \
             --work-dir "$ICCDEV_CFL_WORK_DIR"
 
@@ -228,11 +238,11 @@ jobs:
             echo "| Patch mode | \`$(sanitize_line "$CFL_PATCH_MODE")\` |"
             echo "| Logs artifact | \`$(sanitize_line "$CFL_LOGS_ARTIFACT")\` |"
             echo ""
-            echo "| Target | Status | Runs | Corpus |"
+            echo "| Target | Status | Seconds | Corpus |"
             echo "|--------|--------|------|--------|"
             if [ -r "$summary" ]; then
-              tail -n +2 "$summary" | while IFS="$(printf '\t')" read -r target status runs corpus; do
-                echo "| $(sanitize_line "$target") | $(sanitize_line "$status") | $(sanitize_line "$runs") | $(sanitize_line "$corpus") |"
+              tail -n +2 "$summary" | while IFS="$(printf '\t')" read -r target status seconds corpus; do
+                echo "| $(sanitize_line "$target") | $(sanitize_line "$status") | $(sanitize_line "$seconds") | $(sanitize_line "$corpus") |"
               done
             else
               echo "| unavailable | fail | 0 | unavailable |"
