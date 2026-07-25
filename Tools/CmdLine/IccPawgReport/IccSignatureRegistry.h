@@ -62,6 +62,7 @@ static const IccManufacturerSig kIccManufacturerSignatures[] = {
   {0x43454c78, "Crossfield"},
   {0x43475320, "CGS Publishing Technologies International GmbH"},
   {0x43484d20, "Rochester Robotics"},
+  {0x63636F78, "Chris Cox"},
   {0x4349474c, "Colour Imaging Group, London"},
   {0x43495449, "Citizen"},
   {0x434c3030, "Candela, Ltd."},
