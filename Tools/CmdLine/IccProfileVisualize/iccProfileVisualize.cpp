@@ -1193,7 +1193,7 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
   // multiply out by tile size
   int imageWidth = tilesWide * tileWidth;
   int imageHeight = tilesHigh * tileHeight;
-  if (imageWidth <= 0 || imageHeight <= 0 || bytes <= 0) {
+  if (imageWidth <= 0 || imageHeight <= 0) {
     LogAnError(stderr, "%s: Skipping %s: invalid image geometry\n", basename.c_str(), sigDesc.c_str());
     return;
   }
@@ -1219,7 +1219,7 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
   std::string tiffPath2 = basename + "_" + sigDesc;
   int tiffColor = TIFFColorModelFromICCModel( outputSpace );
   imageData *image = new imageData( tiffPath2, imageBuffer.release(),
-                          imageWidth, imageHeight, outputChannels, 8*bytes, tiffColor, bytes>=4 );
+                          imageWidth, imageHeight, outputChannels, 8*bytes, tiffColor, false );
   data.addPage( image );
 
   if (doEdges) {
@@ -1256,7 +1256,7 @@ void processMBBType(CIccProfile *pIcc, CIccTag *tag, const std::string &sigDesc,
     std::string tiffPath3 = basename + "_" + sigDesc + "_edges";
     int edgeColor = TIFFEdgeColorModelFromICCModel( outputSpace );
     imageData *edgeImage = new imageData( tiffPath3, imageBuffer.release(),
-                          imageWidth, imageHeight, outputChannels, 8*bytes, edgeColor, bytes>=4 );
+                          imageWidth, imageHeight, outputChannels, 8*bytes, edgeColor, false );
     data.addPage( edgeImage );
 
   }   // end if doEdges
