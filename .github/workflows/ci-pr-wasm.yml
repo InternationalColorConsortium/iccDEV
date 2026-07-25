@@ -537,6 +537,14 @@ jobs:
           fetch-depth: 50
           persist-credentials: false
 
+      - name: Checkout trusted workflow helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: .trusted-workflow
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - name: Install diagnostic dependencies
         env:
           BASH_ENV: /dev/null
@@ -546,7 +554,7 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           export DEBIAN_FRONTEND=noninteractive
-          bash .github/scripts/ci-safe-apt-update.sh
+          bash .trusted-workflow/.github/scripts/ci-safe-apt-update.sh
           sudo apt-get \
             -o Acquire::Retries=3 \
             -o Dpkg::Use-Pty=0 \
@@ -633,4 +641,4 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          bash .github/scripts/issue-1591-profile-registry-repro.sh
+          bash .trusted-workflow/.github/scripts/issue-1591-profile-registry-repro.sh
