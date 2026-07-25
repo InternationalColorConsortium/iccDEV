@@ -224,7 +224,7 @@ RUN chmod 0755 /usr/local/bin/iccdev-banner \
  && chown iccdev-ci:iccdev-ci /workspace/.bashrc
 
 HEALTHCHECK --interval=5m --timeout=10s --start-period=30s --retries=3 \
-  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null || exit 1
+  CMD clang --version >/dev/null && cmake --version >/dev/null && command -v iccDumpProfile >/dev/null && command -v iccdev-mcp-rest >/dev/null && command -v iccdev-fuzz-env >/dev/null && test -x /workspace/iccDEV/.github/scripts/check-fuzz-patches.sh || exit 1
 
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 ENV ICCDEV_SOURCE_REVISION="${GIT_COMMIT}"

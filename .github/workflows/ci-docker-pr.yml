@@ -155,6 +155,7 @@ jobs:
             -t "$TEST_IMAGE" \
             -f Dockerfile.ci-regression .
 
+      # preflight: allow-pr-script-execution reason=verify-pr-built-regression-image
       - name: Verify regression image toolchain
         env:
           BASH_ENV: /dev/null
@@ -168,13 +169,26 @@ jobs:
             command -v git gh clang clang++ gcc g++ cmake make realpath llvm-symbolizer
             command -v afl-fuzz afl-showmap iccdev-fuzz-env
             command -v jq curl shellcheck llvm-cov llvm-profdata file
+            test -x .github/scripts/check-fuzz-patches.sh
+            test -x .github/scripts/iccdev-apply-fuzz-patches.sh
+            test -x .github/scripts/iccdev-fuzz-patch-check-tests.sh
+            test -x .github/scripts/iccdev-afl-smoke.sh
             clang --version | sed -n "1p"
             clang++ --version | sed -n "1p"
             gcc --version | sed -n "1p"
             g++ --version | sed -n "1p"
             cmake --version | sed -n "1p"
             afl-fuzz -V 1 2>&1 | sed -n "1p" || true
-            iccdev-fuzz-env | sed -n "1,40p"
+            fuzz_env_output="$(iccdev-fuzz-env)"
+            sed -n "1,40p" <<< "$fuzz_env_output"
+            if ! grep -q "^Patch checker: " <<< "$fuzz_env_output" || grep -q "missing or not executable" <<< "$fuzz_env_output"; then
+              echo "ERROR: iccdev-fuzz-env did not report an executable patch checker" >&2
+              exit 1
+            fi
+            .github/scripts/iccdev-fuzz-patch-check-tests.sh
+            .github/scripts/check-fuzz-patches.sh
+            .github/scripts/iccdev-apply-fuzz-patches.sh --mode afl --dry-run --strict
+            .github/scripts/iccdev-apply-fuzz-patches.sh --mode cfl --dry-run --strict
             clang --version | grep -q "clang version 22\\."
             clang++ --version | grep -q "clang version 22\\."
             gcc --version | grep -q " 15\\."

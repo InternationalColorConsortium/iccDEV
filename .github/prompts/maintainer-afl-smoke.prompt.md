@@ -9,6 +9,7 @@ command-line tools.
 - Driver: `.github/scripts/iccdev-afl-smoke.sh`
 - AFL++ source: `https://github.com/AFLplusplus/AFLplusplus/tree/dev`
 - Container: `ghcr.io/internationalcolorconsortium/iccdev-ci-regression`
+- Container workflow: `.github/workflows/ci-docker.yml`
 - Seeds: `.github/ci/test-data/` and `.github/ci/afl-seeds/`
 - Local patch stacks: `.github/ci/fuzz-patches/afl` and
   `.github/ci/fuzz-patches/cfl`
@@ -84,6 +85,10 @@ workflow changes.
 
 When changing AFL++ bootstrap behavior, also run the regression-container
 bootstrap probe documented in `docs/afl-fuzzing.md`.
+
+When changing fuzz patch stacks, the patch checker, the patch applicator, or
+`cfl/` build behavior, verify that `.github/workflows/ci-docker.yml` still
+rebuilds and tests the regression image for those paths.
 
 ## Handoff
 

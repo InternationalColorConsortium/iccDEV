@@ -100,6 +100,10 @@ If CMake or C++ changed, also run:
   `docs/regression-workflow-governance.md`: first review inventories the whole
   PR, second review checks only fixes, and third review says `Ok to Merge` or
   `Please Request Maintainer Review`.
+- The PR was checked against the repeat-review findings in
+  `docs/regression-workflow-governance.md`: scope split, script headers,
+  trigger parity, trusted-base helpers, exact SHA validation, input rejection,
+  timeout bounds, reproducible docs, and temporary-artifact cleanup.
 - Green workflow runs were checked for hidden log diagnostics, not only failed
   annotations.
 - Any duplicate install manifest, missing-file uninstall, vcpkg CRT, vcpkg root,

@@ -42,7 +42,16 @@ for mode in afl cfl; do
 done
 printf '\n'
 
+checker="$root/.github/scripts/check-fuzz-patches.sh"
+if [ -x "$checker" ]; then
+  printf 'Patch checker: %s\n' "$checker"
+else
+  printf 'Patch checker: missing or not executable: %s\n' "$checker"
+fi
+printf '\n'
+
 printf '%s\n' 'Examples:'
+printf '%s\n' '  .github/scripts/check-fuzz-patches.sh'
 printf '%s\n' '  .github/scripts/iccdev-afl-smoke.sh --patches --seconds 10 --targets dump'
 printf '%s\n' '  cfl/build.sh --patches --targets dump,toxml,fromxml,tojson,fromjson,roundtrip --seconds 30'
 printf '\n'

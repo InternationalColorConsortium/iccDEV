@@ -29,7 +29,9 @@ the smallest useful evidence.
      packaging changes.
 5. Fix every confirmed issue and repeat the relevant checks until the same
    command set is clean.
-6. Produce a golfed handoff: branch, commit, changed surface, command results,
+6. Run the repeat-review avoidance checklist for the changed surface.
+   See `docs/regression-workflow-governance.md` ("Recent maintainer PRs...") for the canonical checklist.
+7. Produce a golfed handoff: branch, commit, changed surface, command results,
    hosted run IDs, known skips or deferred items, and merge-readiness signal.
 
 ## SAST, DAST, and CodeQL Boundaries

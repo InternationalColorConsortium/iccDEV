@@ -67,8 +67,17 @@ For EVERY `run:` step in the workflow, verify:
 - [ ] No `curl|bash`, `wget|bash`, remote `ADD`, or secret-like `ARG`/`ENV`
 - [ ] Runtime images use non-root users unless explicitly justified
 - [ ] Container changes have runtime smoke and image/config scan evidence
+- [ ] Push triggers, PR verification, reusable workflow calls, and manual
+      dispatches test the same changed helper behavior where practical
+- [ ] Branch-specific publish or promotion logic has matching branch triggers
+      and documentation
+- [ ] Documented container commands work from a fresh checkout or clean
+      container, with explicit ref fetches when comparing branches
 
-### 9. Full Run Log Audit
+### 9. Review-Churn Prevention
+- [ ] Review the repeat-review avoidance checklist for the changed surface (canonical: `docs/regression-workflow-governance.md`, section "Recent maintainer PRs...").
+
+### 10. Full Run Log Audit
 - [ ] Full log archive downloaded with `gh api /repos/OWNER/REPO/actions/runs/RUN_ID/logs`
 - [ ] Runtime diagnostics grepped across every job, not only failed jobs
 - [ ] Echoed shell source filtered out before classifying findings

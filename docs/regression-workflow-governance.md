@@ -102,6 +102,37 @@ a maintainer requests another review. Later review comments should be resolved
 by maintainers or by targeted follow-up work against explicit maintainer
 requests.
 
+Recent maintainer PRs show the same avoidable review findings recurring. Before
+requesting review, check the PR against this list:
+
+- Keep the PR scope narrow. Split unrelated registry QA, Docker, CodeQL, and
+  C/C++ hardening work unless one failing gate requires the combination.
+- For every new executable script, include the ICC copyright and BSD 3-Clause
+  notice expected by `CONTRIBUTING.md`, run ShellCheck, and verify ASCII.
+- Keep push, pull-request, reusable, and manual-dispatch validation paths
+  equivalent for the changed surface. If a workflow tests a helper on push,
+  the PR fast lane should test the same helper or document why it cannot.
+- Keep branch triggers and publish conditions aligned. If workflow logic names
+  `ci-qa-pr-docker-testing`, the push trigger and docs must name it too.
+- Keep Docker and regression-container docs reproducible from a fresh checkout
+  or clean container. Fetch branch refs explicitly and avoid relying on local
+  remote-tracking state, generated files, or preexisting host permissions.
+- Validate trusted-base helper boundaries in PR workflows. PR-controlled
+  checkouts must not provide sanitizer, summary, release, or package helpers
+  unless the step is a reviewed test-only exception.
+- Validate exact SHAs where documentation promises exact SHAs. Do not let
+  branch or tag names pass through a field described as an exact commit.
+- Reject invalid workflow inputs instead of silently coercing them. This is
+  especially important for `patch_mode`, timeout, duration, target lists, and
+  numeric strings with leading zeroes.
+- Keep bounded jobs actually bounded. Runtime maxima must fit the job timeout
+  after multiplying by target count and build/setup time.
+- Do not leave temporary clones, generated profiles, crash artifacts, or other
+  local proof material behind unless the PR intentionally adds test fixtures.
+- For AFL/CFL and Docker changes, probe both the advertised user path and the
+  CI path: wrapper compile probes, patch-stack checks, dry-run patch
+  application, `iccdev-fuzz-env`, and container healthcheck semantics.
+
 For every `Dockerfile*` change, compare `ci-qa-pr-docker-testing` with
 `ci-qa-flags` and carry applicable fixes to both branches. The testing branch is
 the container proving ground; `ci-qa-flags` remains a required synchronized

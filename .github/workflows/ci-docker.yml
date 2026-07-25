@@ -26,13 +26,20 @@ permissions:
     branches:
       - master
       - ci-qa-flags
+      - ci-qa-pr-docker-testing
     paths:
       - "Dockerfile"
       - "Dockerfile.nixos"
       - "Dockerfile.ci-regression"
       - "Dockerfile.mcp"
       - ".dockerignore"
+      - ".github/ci/fuzz-patches/**"
+      - ".github/scripts/check-fuzz-patches.sh"
+      - ".github/scripts/iccdev-afl-smoke.sh"
+      - ".github/scripts/iccdev-apply-fuzz-patches.sh"
+      - ".github/scripts/iccdev-fuzz-patch-check-tests.sh"
       - "iccdev-mcp/**"
+      - "cfl/**"
       - "docker/**"
       - "python/**"
       - ".github/scripts/preflight-safety-checks.sh"
@@ -638,6 +645,10 @@ jobs:
             command -v clang-tidy cppcheck scan-build valgrind gdb gdbserver lldb lld ld.lld lcov gcovr jq curl shellcheck
             command -v llvm-cov llvm-profdata file strace
             command -v iccdev-fuzz-env
+            test -x .github/scripts/check-fuzz-patches.sh
+            test -x .github/scripts/iccdev-apply-fuzz-patches.sh
+            test -x .github/scripts/iccdev-fuzz-patch-check-tests.sh
+            test -x .github/scripts/iccdev-afl-smoke.sh
             git --version | sed -n "1p"
             gh --version | sed -n "1p"
             curl --version | sed -n "1p"
@@ -654,7 +665,16 @@ jobs:
             g++ --version | sed -n "1p"
             cmake --version | sed -n "1p"
             afl-fuzz -V 1 2>&1 | sed -n "1p" || true
-            iccdev-fuzz-env | sed -n "1,40p"
+            fuzz_env_output="$(iccdev-fuzz-env)"
+            sed -n "1,40p" <<< "$fuzz_env_output"
+            if ! grep -q "^Patch checker: " <<< "$fuzz_env_output" || grep -q "missing or not executable" <<< "$fuzz_env_output"; then
+              echo "ERROR: iccdev-fuzz-env did not report an executable patch checker" >&2
+              exit 1
+            fi
+            .github/scripts/iccdev-fuzz-patch-check-tests.sh
+            .github/scripts/check-fuzz-patches.sh
+            .github/scripts/iccdev-apply-fuzz-patches.sh --mode afl --dry-run --strict
+            .github/scripts/iccdev-apply-fuzz-patches.sh --mode cfl --dry-run --strict
             /usr/bin/time --version | sed -n "1p"
             clang --version | grep -q "clang version 22\\."
             clang++ --version | grep -q "clang version 22\\."

@@ -71,6 +71,9 @@ Choose the smallest dynamic check that proves the changed behavior:
 - Dockerfile checks must not be advisory-only when container files changed:
   run `hadolint` and Trivy config, then build, scan, or smoke the affected image
   when practical.
+- For Docker PR fast lanes, validate the same helper checks that the publishing
+  workflow validates, including patch checkers, applicators, environment
+  banners, and healthcheck semantics.
 - WASM validation and parity for Emscripten changes.
 - Release ZIP/checksum/artifact shape check for release packaging changes.
 - vcpkg consumer smoke for port/export changes.

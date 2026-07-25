@@ -200,6 +200,13 @@ Inspect the fuzzing environment:
 iccdev-fuzz-env
 ```
 
+Validate that the AFL/CFL local patch stacks match the checked-out source and
+workflow applicator semantics:
+
+```bash
+.github/scripts/check-fuzz-patches.sh
+```
+
 Run a short patched AFL smoke from the image checkout:
 
 ```bash

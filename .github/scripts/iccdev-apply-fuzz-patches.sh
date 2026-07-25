@@ -13,7 +13,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 --mode afl|cfl [--patch-dir DIR] [--dry-run]"
+  echo "Usage: $0 --mode afl|cfl [--patch-dir DIR] [--dry-run] [--strict]"
 }
 
 run_patch_check() {
@@ -28,6 +28,7 @@ repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 mode=""
 patch_dir=""
 dry_run=0
+strict=0
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -43,6 +44,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --dry-run)
       dry_run=1
+      shift
+      ;;
+    --strict)
+      strict=1
       shift
       ;;
     -h|--help)
@@ -98,6 +103,10 @@ for patch_file in "${patches[@]}"; do
     elif run_reverse_check "$patch_file" >/dev/null; then
       echo "  dry-run: already applied"
     else
+      if [ "$strict" -eq 1 ]; then
+        echo "  [ERROR] dry-run: patch did not apply"
+        run_patch_check "$patch_file"
+      fi
       echo "  [WARN] dry-run: patch did not apply; skipping"
       run_patch_check "$patch_file" || true
     fi
@@ -107,6 +116,10 @@ for patch_file in "${patches[@]}"; do
     elif run_reverse_check "$patch_file" >/dev/null; then
       echo "  already applied"
     else
+      if [ "$strict" -eq 1 ]; then
+        echo "  [ERROR] patch did not apply"
+        run_patch_check "$patch_file"
+      fi
       echo "  [WARN] patch did not apply; skipping"
       run_patch_check "$patch_file" || true
     fi
