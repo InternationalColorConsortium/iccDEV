@@ -146,7 +146,8 @@ for tool in cmake clang++; do
 done
 
 if [ "$apply_patches" != "0" ]; then
-  "$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh" --mode cfl --patch-dir "$patch_dir"
+  patch_applicator="${ICCDEV_FUZZ_PATCH_APPLICATOR:-$repo_root/.github/scripts/iccdev-apply-fuzz-patches.sh}"
+  "$patch_applicator" --mode cfl --patch-dir "$patch_dir"
 fi
 
 cmake -S "$repo_root/Build/Cmake" -B "$build_dir" \

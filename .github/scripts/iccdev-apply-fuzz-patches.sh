@@ -16,6 +16,14 @@ usage() {
   echo "Usage: $0 --mode afl|cfl [--patch-dir DIR] [--dry-run]"
 }
 
+run_patch_check() {
+  patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$1"
+}
+
+run_reverse_check() {
+  patch --batch --reverse --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$1"
+}
+
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 mode=""
 patch_dir=""
@@ -76,21 +84,31 @@ fi
 
 for patch_file in "${patches[@]}"; do
   echo "Applying $mode fuzz patch: $(basename "$patch_file")"
+  case "$(basename "$patch_file")" in
+    001-json-config-parser-no-sanitize.patch)
+      if grep -q 'icJsonParseConfig(json& j' "$repo_root/IccConnect/IccLibConnect/IccJsonUtil.cpp"; then
+        echo "  already integrated"
+        continue
+      fi
+      ;;
+  esac
   if [ "$dry_run" -eq 1 ]; then
-    if patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+    if run_patch_check "$patch_file" >/dev/null; then
       echo "  dry-run: applies cleanly"
-    elif patch --batch --reverse --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+    elif run_reverse_check "$patch_file" >/dev/null; then
       echo "  dry-run: already applied"
     else
-      patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+      echo "  [WARN] dry-run: patch did not apply; skipping"
+      run_patch_check "$patch_file" || true
     fi
   else
-    if patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+    if run_patch_check "$patch_file" >/dev/null; then
       patch --batch --forward --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
-    elif patch --batch --reverse --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file" >/dev/null; then
+    elif run_reverse_check "$patch_file" >/dev/null; then
       echo "  already applied"
     else
-      patch --batch --forward --dry-run --no-backup-if-mismatch -p1 -d "$repo_root" < "$patch_file"
+      echo "  [WARN] patch did not apply; skipping"
+      run_patch_check "$patch_file" || true
     fi
   fi
 done

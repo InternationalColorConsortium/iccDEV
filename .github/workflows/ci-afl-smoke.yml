@@ -154,6 +154,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Checkout workflow patch applicator
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: workflow-scripts
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Checkout iccDEV
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
@@ -185,6 +194,19 @@ jobs:
           fi
           git fetch --no-tags --depth=1 origin "$TARGET_SHA"
           git checkout --detach "$TARGET_SHA"
+
+      - name: Install workflow patch applicator
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          PATCH_APPLICATOR: ${{ github.workspace }}/workflow-scripts/.github/scripts/iccdev-apply-fuzz-patches.sh
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          install -m 0755 "$PATCH_APPLICATOR" .github/scripts/iccdev-apply-fuzz-patches.sh
+          echo "Using workflow patch applicator: $(sanitize_line "$PATCH_APPLICATOR")"
 
       - name: Harden Bash environment
         working-directory: target
@@ -313,6 +335,7 @@ jobs:
           ICCDEV_AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '30000' }}
           ICCDEV_AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
           ICCDEV_AFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
+          ICCDEV_FUZZ_PATCH_APPLICATOR: ${{ github.workspace }}/workflow-scripts/.github/scripts/iccdev-apply-fuzz-patches.sh
           ICCDEV_AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
           ICCDEV_AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
         run: |
