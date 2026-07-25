@@ -28,7 +28,7 @@ permissions:
         default: master
         type: string
       target_sha:
-        description: 'Optional exact commit SHA to check out'
+        description: 'Optional full 40-character commit SHA to check out'
         required: false
         default: ''
         type: string
@@ -78,7 +78,7 @@ permissions:
         default: ''
         type: string
       target_sha:
-        description: 'Optional exact commit SHA to check out'
+        description: 'Optional full 40-character commit SHA to check out'
         required: false
         default: ''
         type: string
@@ -138,7 +138,6 @@ jobs:
       ICCDEV_AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '30000' }}
       ICCDEV_AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
       ICCDEV_AFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
-      ICCDEV_AFL_APPLY_PATCHES_INPUT: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
       TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts

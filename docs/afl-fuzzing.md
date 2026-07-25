@@ -110,8 +110,9 @@ normal source changes.
 
 Manual AFL and CFL workflow dispatches accept `target_ref`, optional
 `target_sha`, and `patch_mode`. Use `target_ref` for branch or tag validation,
-`target_sha` when a replay must pin an exact commit, `patch_mode=all` for the
-maintainer patch stack, and `patch_mode=none` for raw branch comparison.
+`target_sha` when a replay must pin a full 40-character exact commit,
+`patch_mode=all` for the maintainer patch stack, and `patch_mode=none` for raw
+branch comparison.
 
 When AFL saves crashes or hangs, the smoke workflow replays them with iccDEV
 command-line tools. The uploaded findings artifact includes raw inputs,
@@ -148,7 +149,7 @@ Manual options:
   and defaulted to `30000` to avoid false saved-hang artifacts in longer smoke
   runs.
 - `cmake_build_type`: `Debug`, `Release`, `RelWithDebInfo`, or `MinSizeRel`
-- `target_sha`: optional exact commit to check out
+- `target_sha`: optional full 40-character exact commit to check out
 - `regression_image_tag`: trusted maintainer container tag
 
 Use the local script for instrumentation health and seed sanity only. Long AFL

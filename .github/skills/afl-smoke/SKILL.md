@@ -81,9 +81,10 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - Use `.github/ci/fuzz-patches/afl` and `.github/ci/fuzz-patches/cfl` for
   maintainer-local patch stacks when `--patches` is requested.
 - Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the
-  branch, tag, or ref to check out, optional `target_sha` pins an exact commit,
-  and `patch_mode` selects `all` or `none`. CFL duration must be expressed as
-  seconds per target, not LibFuzzer iteration or execution counts.
+  branch, tag, or ref to check out, optional `target_sha` pins a full
+  40-character exact commit, and `patch_mode` selects `all` or `none`. CFL
+  duration must be expressed as seconds per target, not LibFuzzer iteration or
+  execution counts.
 - Keep selected AFL targets running in parallel with AFL++ affinity fallback
   enabled, and merge per-target summaries in a deterministic order.
 - Treat saved crashes as smoke failures. Report generated saved hangs as

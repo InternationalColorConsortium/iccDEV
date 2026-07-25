@@ -26,7 +26,7 @@ permissions:
         default: master
         type: string
       target_sha:
-        description: 'Optional exact commit SHA to check out'
+        description: 'Optional full 40-character commit SHA to check out'
         required: false
         default: ''
         type: string
@@ -61,7 +61,7 @@ permissions:
         default: ''
         type: string
       target_sha:
-        description: 'Optional exact commit SHA to check out'
+        description: 'Optional full 40-character commit SHA to check out'
         required: false
         default: ''
         type: string
@@ -71,7 +71,7 @@ permissions:
         default: dump,toxml,fromxml,tojson,fromjson,roundtrip
         type: string
       duration_seconds:
-        description: 'LibFuzzer runtime per target in seconds'
+        description: 'LibFuzzer runtime per target in seconds, 1-3600'
         required: false
         default: '30'
         type: string
@@ -109,7 +109,6 @@ jobs:
       ICCDEV_CFL_TARGETS_INPUT: ${{ inputs.cfl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
       ICCDEV_CFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '30' }}
       ICCDEV_CFL_PATCH_MODE_INPUT: ${{ inputs.patch_mode || 'all' }}
-      ICCDEV_CFL_APPLY_PATCHES_INPUT: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
       TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
       TARGET_SHA_INPUT: ${{ inputs.target_sha || '' }}
       TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts

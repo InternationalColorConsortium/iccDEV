@@ -41,10 +41,10 @@ The current core onboarding target set is
 adding more command-line tools.
 
 Manual dispatches should expose the same operator controls on AFL and CFL:
-`target_ref` for a branch, tag, or ref, optional `target_sha` for an exact
-commit pin, and `patch_mode` with `all` or `none`. Use `all` when validating
-maintainer-local patch stacks before promoting them to source PRs, and `none`
-when comparing raw branch behavior.
+`target_ref` for a branch, tag, or ref, optional `target_sha` for a full
+40-character exact commit pin, and `patch_mode` with `all` or `none`. Use `all`
+when validating maintainer-local patch stacks before promoting them to source
+PRs, and `none` when comparing raw branch behavior.
 Expose CFL runtime as seconds per target, not LibFuzzer iteration or execution
 counts, so the manual UI matches AFL's duration model.
 
