@@ -70,9 +70,8 @@ Choose the smallest gate that proves the behavior:
 - For registry QA workflow runs, preserve `summary.md`, `results.tsv`, and
   `findings.txt` as the review source of truth. The workflow may retain bounded
   log excerpts by default; rerun with `registry_qa_log_tail_lines=0` only when
-  complete raw per-tool logs are required. Downloaded registry profile payloads
-  may be omitted from developer reports; use `download-manifest.tsv` to recreate
-  them.
+  complete raw per-tool logs are required. Preserve downloaded registry profile
+  payloads in developer reports so failing inputs remain available for review.
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.

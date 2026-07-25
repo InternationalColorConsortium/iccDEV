@@ -152,10 +152,9 @@ use `results.tsv`, `findings.txt`, and `summary.md` for authoritative status,
 and rerun with `registry_qa_log_tail_lines=0` only when complete raw output is
 needed for diagnosis.
 
-The developer report artifact omits downloaded `profiles/` payloads to avoid
-duplicating large external registry inputs. Use `download-manifest.tsv` for the
-source URLs, byte counts, and SHA-256 values, then rerun the registry script to
-recreate the profile directory when raw inputs are needed.
+The developer report artifact preserves downloaded `profiles/` payloads when
+registry QA is enabled. Keep `download-manifest.tsv` with the payloads so
+reviewers can verify source URLs, byte counts, and SHA-256 values.
 
 Suggested use:
 

@@ -846,14 +846,6 @@ jobs:
           copy_dir_if_present \
             "${BUILD_DIR}/Testing/ctest-output/registry-profile-qa" \
             "${data_dir}/registry-profile-qa"
-          if [ -d "${data_dir}/registry-profile-qa/profiles" ]; then
-            rm -rf "${data_dir}/registry-profile-qa/profiles"
-            {
-              printf 'Registry profile payloads are omitted from this developer report.\n'
-              printf 'Use download-manifest.tsv for source URLs, byte counts, and SHA-256 values.\n'
-              printf 'Rerun .github/scripts/iccdev-registry-profile-qa.sh to recreate the profile directory.\n'
-            } > "${data_dir}/registry-profile-qa/profiles.README.txt"
-          fi
           {
             printf 'iccDEV developer report\n'
             printf '=======================\n\n'
