@@ -111,6 +111,8 @@ static std::string ToolPathForTarget(const std::string &target) {
     return JoinPath(tool_dir, "IccFromJson/iccFromJson");
   if (target == "roundtrip")
     return JoinPath(tool_dir, "IccRoundTrip/iccRoundTrip");
+  if (target == "fromcube")
+    return JoinPath(tool_dir, "IccFromCube/iccFromCube");
   return "";
 }
 
@@ -138,6 +140,10 @@ static std::vector<std::string> BuildArgs(const std::string &target,
   }
   if (target == "roundtrip")
     return {tool, input, "1", "0"};
+  if (target == "fromcube") {
+    output = MakeOutputPath(".icc");
+    return {tool, input, output};
+  }
   return {};
 }
 
