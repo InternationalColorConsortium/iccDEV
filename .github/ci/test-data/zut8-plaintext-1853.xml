@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  #1853 case A PoC.  A v5 RGB matrix/TRC display profile whose charTargetTag is
+  a utf8ZipType ('zut8') tag authored in the PLAIN-TEXT form: a <TextData>
+  element rather than <HexCompressedData>.
+
+  Byte-identical to zip-text-hexdata-control-1853.xml except for the body of
+  charTargetTag, so anything it exercises other than the plain-text branch of
+  CIccTagXmlZipUtf8Text::ParseXml is a known-good path.
+
+  Pre-fix this converted "correctly" and stored an EMPTY string: the tag's
+  ParseXml walked pNode to NULL looking for <HexCompressedData>, then handed
+  that NULL to icXmlParseTextString(), which opens with its own `while (pNode)`
+  and so returned true having appended nothing.  The marker text below must
+  survive into the written profile.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>now</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant> <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/> </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+    <ProfileID>0</ProfileID>
+  </Header>
+
+  <Tags>
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV #1853 zut8 plain-text PoC]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.43606567" Y="0.22248840" Z="0.01391602"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.38514709" Y="0.71687317" Z="0.09707642"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.14306641" Y="0.06060791" Z="0.71409607"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (c) 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+
+    <charTargetTag> <utf8ZipType>
+      <TextData><![CDATA[iccDEV-1853-ZIPTEXT-ROUNDTRIP-MARKER]]></TextData>
+    </utf8ZipType> </charTargetTag>
+
+  </Tags>
+</IccProfile>

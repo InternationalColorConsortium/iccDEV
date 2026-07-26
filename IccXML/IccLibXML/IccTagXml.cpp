@@ -433,6 +433,13 @@ bool CIccTagXmlUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
 
 bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
+  // The scan below consumes pNode: it only falls out of the loop once pNode is
+  // NULL (the <HexCompressedData> match returns from inside the loop), so the
+  // plain-text fallback after it cannot reuse the walking pointer.  Keep the
+  // head of the sibling list for icXmlParseTextString(), which does its own
+  // walk and would otherwise be handed a guaranteed-NULL list.
+  xmlNode *pFirstNode = pNode;
+
   while (pNode) {
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
@@ -452,7 +459,7 @@ bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
   }
 
   std::string outStr;
-  if( !icXmlParseTextString(pNode, parseStr, outStr, false) )
+  if( !icXmlParseTextString(pFirstNode, parseStr, outStr, false) )
     return false;
 
   return SetText(outStr.c_str());
@@ -460,6 +467,11 @@ bool CIccTagXmlZipUtf8Text::ParseXml(xmlNode *pNode, std::string &parseStr)
 
 bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
+  // Same consumed-pointer problem as CIccTagXmlZipUtf8Text::ParseXml above; see
+  // the note there.  This is a separate copy of the code rather than a shared
+  // helper, so it needed the same correction.
+  xmlNode *pFirstNode = pNode;
+
   while (pNode) {
     if (pNode->type==XML_ELEMENT_NODE) {
       if (!icXmlStrCmp(pNode->name, "HexCompressedData") && pNode->children && pNode->children->content) {
@@ -479,7 +491,7 @@ bool CIccTagXmlZipXml::ParseXml(xmlNode *pNode, std::string &parseStr)
   }
 
   std::string outStr;
-  if( !icXmlParseTextString(pNode, parseStr, outStr, false) )
+  if( !icXmlParseTextString(pFirstNode, parseStr, outStr, false) )
     return false;
 
   return SetText(outStr.c_str());

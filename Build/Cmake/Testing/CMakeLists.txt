@@ -3045,6 +3045,25 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1810-ricc-header-signatures.sh"
 )
 
+# #1853: plain <TextData> silently dropped by the compressed-text XML readers.
+# CIccTagXmlZipUtf8Text::ParseXml and CIccTagXmlZipXml::ParseXml scanned the
+# sibling list for <HexCompressedData> and, on falling out of that loop, passed
+# the now-NULL walking pointer to the plain-text reader.  icXmlParseTextString()
+# starts with its own `while (pNode)`, so it did not crash -- it returned true
+# having read nothing, and the tag became SetText("").  Fail-open data loss:
+# iccFromXml reported success and wrote an empty tag.  Case A covers zut8, case
+# B the separate copy of the same code in zxml, and case C closes the loop
+# through iccToXml, which re-emits both in the hex form.  A HexCompressedData
+# control runs first so over-rejection or a no-zlib build is reported as a skip
+# rather than as a #1853 regression.  No sanitizer required.
+iccdev_add_script_test(
+  iccdev.issue-1853-zip-text-plaintext-regression
+  60
+  "iccdev;xml;compression;roundtrip;issue-1853;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1853-zip-text-plaintext-regression.sh"
+)
+
 # #1356: XML serializer corrupts a zero (NoData) header colour-space signature
 # on round-trip.  iccToXml wrote the literal "NULL" for a 0x00000000 data
 # colour space / PCS; iccFromXml then reparsed "NULL" to 0x4E554C4C, so the
