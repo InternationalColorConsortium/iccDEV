@@ -179,6 +179,8 @@ classify_log() {
     printf 'ubsan'
   elif [ "$exit_code" -eq 124 ]; then
     printf 'timeout'
+  elif [ "$exit_code" -eq 255 ] && grep -qaE 'Invalid profile|Unable to perform round trip|Invalid Input|Invalid file' "$log_file"; then
+    printf 'graceful-fail'
   elif [ "$exit_code" -ge 128 ]; then
     printf 'signal'
   elif [ "$exit_code" -eq 0 ]; then
@@ -243,7 +245,16 @@ while IFS="$(printf '\t')" read -r target kind source_file artifact_file; do
     printf 'ICCDEV_TOOLS_DIR=${ICCDEV_TOOLS_DIR:-$ICCDEV_REPO_ROOT/Build/Tools}\n'
     printf 'ICCDEV_FINDING_INPUT=${ICCDEV_FINDING_INPUT:-$ICCDEV_FINDINGS_DIR/%q}\n' "$artifact_file"
     printf 'ICCDEV_REPRO_OUT=${ICCDEV_REPRO_OUT:-$ICCDEV_FINDINGS_DIR/triage/%q}\n' "$safe.out"
-    printf 'cd "$ICCDEV_REPO_ROOT" && ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1 UBSAN_OPTIONS=halt_on_error=1:abort_on_error=1:print_stacktrace=1 %s\n' "$command_line"
+    printf 'ICCDEV_UBSAN_OPTIONS=${ICCDEV_UBSAN_OPTIONS:-halt_on_error=1:abort_on_error=1:print_stacktrace=1}\n'
+    printf 'case "$ICCDEV_UBSAN_OPTIONS" in\n'
+    printf '  *suppressions=*) ;;\n'
+    printf '  *)\n'
+    printf '    if [ -f "$ICCDEV_REPO_ROOT/Testing/silence.txt" ]; then\n'
+    printf '      ICCDEV_UBSAN_OPTIONS="suppressions=$ICCDEV_REPO_ROOT/Testing/silence.txt:$ICCDEV_UBSAN_OPTIONS"\n'
+    printf '    fi\n'
+    printf '    ;;\n'
+    printf 'esac\n'
+    printf 'cd "$ICCDEV_REPO_ROOT" && ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:symbolize=1:allocator_may_return_null=1 UBSAN_OPTIONS="$ICCDEV_UBSAN_OPTIONS" %s\n' "$command_line"
   } > "$repro_file"
   {
     printf '# %s %s %s\n' "$target" "$kind" "$(basename "$artifact_file")"

@@ -99,6 +99,11 @@ on:
         required: false
         default: ''
         type: string
+      fuzz_patch_mode:
+        description: 'Maintainer fuzz patch stack to apply before configure: none, afl, or cfl'
+        required: false
+        default: none
+        type: string
       regression_image_tag:
         description: 'Trusted unified image tag'
         required: false
@@ -261,6 +266,15 @@ on:
         required: true
         default: '2000'
         type: string
+      fuzz_patch_mode:
+        description: 'Maintainer fuzz patch stack to apply before configure'
+        required: true
+        default: none
+        type: choice
+        options:
+          - none
+          - afl
+          - cfl
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tool_build_type || 'Debug' }}
@@ -289,6 +303,7 @@ jobs:
       CTEST_RECENT_LIMIT: ${{ inputs.ctest_recent_limit || '0' }}
       EXCLUDE_EXTENDED_PR_TESTS: ${{ inputs.exclude_extended_pr_tests && 'true' || 'false' }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'warn' }}
+      FUZZ_PATCH_MODE: ${{ inputs.fuzz_patch_mode || 'none' }}
       BUILD_DIR: build
       SPECTRAL_PREVIEW_VENV: /tmp/iccdev-spectral-preview-venv
 
@@ -380,6 +395,24 @@ jobs:
           else
             echo "[WARN] clang++ not present in pinned regression image; GCC strict canary passed"
           fi
+
+      - name: Apply maintainer fuzz patch stack
+        if: ${{ inputs.fuzz_patch_mode != 'none' }}
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          case "$FUZZ_PATCH_MODE" in
+            afl|cfl)
+              ;;
+            *)
+              echo "::error title=Invalid fuzz patch mode::${FUZZ_PATCH_MODE}"
+              exit 2
+              ;;
+          esac
+          .github/scripts/iccdev-apply-fuzz-patches.sh --mode "$FUZZ_PATCH_MODE" --strict
 
       # preflight: allow-package-install reason=spectral-preview-codec-bootstrap
       - name: Install spectral preview Python dependencies
@@ -787,11 +820,16 @@ jobs:
             echo "| CTest recent limit | \`${CTEST_RECENT_LIMIT}\` |"
             echo "| Extended PR tests | \`${EXCLUDE_EXTENDED_PR_TESTS}\` |"
             echo "| Warning policy | \`${WARNING_POLICY}\` |"
+            echo "| Fuzz patch mode | \`${FUZZ_PATCH_MODE}\` |"
             echo "| Test command | \`${test_cmd}\` |"
             echo ""
             echo "### Manual Reproduction"
             echo ""
             echo '```bash'
+            echo "FUZZ_PATCH_MODE='${FUZZ_PATCH_MODE}'"
+            echo "if [ \"\${FUZZ_PATCH_MODE}\" != none ]; then"
+            echo "  .github/scripts/iccdev-apply-fuzz-patches.sh --mode \"\${FUZZ_PATCH_MODE}\" --strict"
+            echo "fi"
             echo "TOOL_BUILD_TYPE='${TOOL_BUILD_TYPE}'"
             echo "cmake -S Build/Cmake -B build -DCMAKE_BUILD_TYPE=\"\${TOOL_BUILD_TYPE}\" \\"
             echo "  -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ \\"

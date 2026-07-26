@@ -54,7 +54,7 @@ git clone --quiet "$REPO_ROOT" "$dirty_repo"
 git -C "$dirty_repo" reset --quiet --hard HEAD
 cp "$REPO_ROOT/.github/scripts/check-fuzz-patches.sh" "$dirty_repo/.github/scripts/check-fuzz-patches.sh"
 cp "$REPO_ROOT/.github/scripts/iccdev-apply-fuzz-patches.sh" "$dirty_repo/.github/scripts/iccdev-apply-fuzz-patches.sh"
-printf '%s\n' '# dirty local edit' >> "$dirty_repo/.github/ci/fuzz-patches/afl/001-json-config-parser-no-sanitize.patch"
+printf '%s\n' '# dirty local edit' >> "$dirty_repo/.github/ci/fuzz-patches/afl/002-jpegdump-segment-bounds.patch"
 
 if "$dirty_repo/.github/scripts/check-fuzz-patches.sh" >"$dirty_output" 2>&1; then
     echo "FAIL: clone-backed check accepted dirty fuzz patch inputs" >&2
