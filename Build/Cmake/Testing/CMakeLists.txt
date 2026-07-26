@@ -1908,6 +1908,41 @@ function(iccdev_add_datetime_parse_test)
   endif()
 endfunction()
 
+function(iccdev_add_encoding_surround_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingSurroundTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-surround-ratio-divzero.cpp"
+  )
+  target_link_libraries(iccEncodingSurroundTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingSurroundTest)
+
+  add_test(
+    NAME iccdev.encoding-surround-ratio-divzero
+    COMMAND "$<TARGET_FILE:iccEncodingSurroundTest>"
+  )
+  set_tests_properties(iccdev.encoding-surround-ratio-divzero PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;issue-1817;regression"
+  )
+  if(WIN32)
+    set(_encsurround_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingSurroundTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _encsurround_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-surround-ratio-divzero PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_encsurround_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_windows_iccdevcmm_smoke_test)
   if(NOT WIN32 OR NOT TARGET RefIccMAX)
     return()
@@ -2130,6 +2165,7 @@ if(WIN32)
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_datetime_parse_test()
+  iccdev_add_encoding_surround_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -2344,6 +2380,7 @@ iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_datetime_parse_test()
+iccdev_add_encoding_surround_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()

@@ -432,7 +432,22 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
     pCstmConvert->SetParameter_La(La);
     pCstmConvert->SetParameter_Yb(Lw);
 
-    icFloatNumber SWr = Lsw / Lw;
+    // Lw is the white-point luminance read from the profile a few lines above
+    // (icSigCeptWhitePointLuminanceMbr, defaulting to 100), so a malformed profile
+    // can set it to zero and turn this ratio into a division by zero. This is the
+    // companion site to the H_FunctionInv guard in IccCAM.cpp: the AFL patch stack
+    // pairs the two as one defect, and a constructed colorEncodingParams struct
+    // with a zero white-point luminance reproduces it directly (#1817).
+    //
+    // SWr only selects one of the three surround categories below, so a degenerate
+    // ratio resolves to 0.0f, which falls through to Dark surround -- the
+    // conservative choice when the white luminance is zero or non-finite. Only one
+    // case changes: Lsw > 0 with Lw == 0 previously produced +infinity and so
+    // selected Average surround, the least conservative option, off a white point
+    // that carries no luminance at all. Every finite non-zero Lw is unaffected.
+    icFloatNumber SWr = 0.0f;
+    if (std::isfinite((double)Lsw) && std::isfinite((double)Lw) && Lw != 0.0f)
+      SWr = Lsw / Lw;
 
     if (SWr>0.2) { //Average Surround
       pCstmConvert->SetParameter_C(0.69f);

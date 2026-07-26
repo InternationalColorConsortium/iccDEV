@@ -147,7 +147,38 @@ CIccCamConverter::H_FunctionInv (icFloatNumber	y)
 {
 	icFloatNumber	x;
 
-	x = (icFloatNumber) (pow (27.13*y / (400.0-y), 1.0/m_exp));
+	// H_Function above maps [0,inf) onto [0,400), so its inverse is only defined
+	// for 0 <= y < 400. Outside that interval the expression below is not merely
+	// inaccurate, it is undefined: y == 400 makes the denominator zero, and y < 0
+	// or y > 400 makes the base negative, which pow() with a fractional exponent
+	// answers with NaN. Both then propagate through HyperbolicInv() into the whole
+	// XYZ triplet.
+	//
+	// The domain has to be enforced rather than assumed because y is derived from
+	// profile-supplied viewing conditions: JabToXYZ() feeds rgbP[] into
+	// HyperbolicInv(), which scales by H_Function(m_Fl), and m_Fl comes from m_La.
+	// A large m_Fl makes H_Function(m_Fl) round to exactly 400.0f in float, so a
+	// crafted profile lands the argument precisely on the pole (#1817 -- UBSan
+	// reported "division by zero" here via iccApplyNamedCmm).
+	//
+	// m_exp is guarded for the same reason: 1.0/m_exp would divide by zero. It is
+	// a fixed constant today, but operator= copies it, so a degenerate source
+	// object can carry a zero in.
+	//
+	// Degenerate input resolves to 0.0f, matching how the rest of this converter
+	// already handles a degenerate state -- see the m_cc and F_Function guards in
+	// Hyperbolic()/HyperbolicInv() and the denominator guard in
+	// ReferenceConditionsInv(). The true limit as y -> 400 is +infinity, but
+	// returning an infinity here would poison every downstream channel, whereas a
+	// finite zero keeps the result consistent with those neighbouring guards and
+	// with the degenerate-state contract the CAM regression already pins.
+	double dy = (double)y;
+	double denom = 400.0 - dy;
+	if (!std::isfinite(dy) || dy < 0.0 || denom <= 0.0 ||
+	    !std::isfinite((double)m_exp) || m_exp == 0.0f)
+		return 0.0f;
+
+	x = (icFloatNumber) (pow (27.13*dy / denom, 1.0/m_exp));
 
 	return x;
 }

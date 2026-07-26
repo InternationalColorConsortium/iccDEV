@@ -21,12 +21,17 @@ Current patches:
   turning dependency-internal integer sanitizer reports into AFL crashes.
 - `002-jpegdump-segment-bounds.patch` uses subtraction-based JPEG segment
   bounds checks before reading marker length bytes.
-- `003-applyprofiles-cam-encoding-div-zero.patch` guards malformed CAM inverse
-  and encoding surround-ratio denominators found by `iccApplyProfiles` AFL
-  replays.
 - `004-applyprofiles-tiff-sample-count-bounds.patch` constrains malformed TIFF
   sample counts before `iccApplyProfiles` replay paths can allocate or iterate
   over unbounded sample planes.
 - `005-applytolink-bpc-degenerate-lrange.patch` rejects degenerate BPC
   destination L* ranges before `iccApplyToLink` can divide by `MaxL - MinL`
   during quadratic black-point normalization.
+
+Retired patches:
+
+- `003-applyprofiles-cam-encoding-div-zero.patch` guarded the CAM inverse and
+  encoding surround-ratio denominators. Superseded by the durable fix in
+  `IccProfLib/IccCAM.cpp` and `IccProfLib/IccEncoding.cpp` (#1817), so it no
+  longer applies and has been removed, per the note above about landing upstream
+  source fixes once they are stable.
