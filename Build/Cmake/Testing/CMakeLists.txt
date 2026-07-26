@@ -3025,6 +3025,26 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1851-parametriccurve-functiontype-regression.sh"
 )
 
+# #1810: 'RICC' in the CMM and platform header fields of 15 Testing fixtures.
+# 'RICC' was never registered -- icSigRefIccMAX itself carried 0x52494343
+# ('RICC') against a comment and a registry that both said 'RIMX', until #1473
+# corrected the enum.  Fixtures authored in the meantime kept the bad value, so
+# 13 reported "Unregistered CMM signature" and 2 reported "Unknown platform
+# signature".  Case A is a text guard against reintroduction and needs no build,
+# so it still asserts in jobs that do not produce the tools.  Case B converts
+# every corrected fixture and uses the validator itself as the oracle, so the
+# registered-signature allow-list is not duplicated in shell.  Because nothing
+# should warn after the fix, a control first injects an unregistered 'ZZZZ' and
+# requires the finding to appear -- otherwise a validator that had stopped
+# checking the field would make case B a vacuous pass.
+iccdev_add_script_test(
+  iccdev.issue-1810-ricc-header-signatures
+  120
+  "iccdev;xml;header;signatures;issue-1810;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1810-ricc-header-signatures.sh"
+)
+
 # #1356: XML serializer corrupts a zero (NoData) header colour-space signature
 # on round-trip.  iccToXml wrote the literal "NULL" for a 0x00000000 data
 # colour space / PCS; iccFromXml then reparsed "NULL" to 0x4E554C4C, so the

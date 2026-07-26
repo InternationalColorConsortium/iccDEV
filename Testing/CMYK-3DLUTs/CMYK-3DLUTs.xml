@@ -7,7 +7,7 @@
   	<DataColourSpace>CMYK</DataColourSpace>
   	<PCS>Lab </PCS>
   	<CreationDateTime>now</CreationDateTime>
-  	<PrimaryPlatform>RICC</PrimaryPlatform>
+  	<PrimaryPlatform></PrimaryPlatform>
   	<ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
   	<DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
   	<RenderingIntent>Perceptual</RenderingIntent>

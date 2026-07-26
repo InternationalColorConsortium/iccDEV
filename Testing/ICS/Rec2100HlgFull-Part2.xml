@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <IccProfile>
   <Header>
-    <PreferredCMMType>RICC</PreferredCMMType>
+    <PreferredCMMType>RIMX</PreferredCMMType>
     <ProfileVersion>5.00</ProfileVersion>
     <ProfileSubClassVersion>2.00</ProfileSubClassVersion>
     <ProfileDeviceClass>mntr</ProfileDeviceClass>
