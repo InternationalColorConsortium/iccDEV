@@ -105,6 +105,12 @@ intentional PR-controlled `.github/scripts` or `.github/tests` execution must be
 read-only, test-only, and marked on the step with
 `# preflight: allow-pr-script-execution reason=<short-reason>`.
 
+Maintainer AFL/CFL validation workflows may apply ordered patch stacks from
+`.github/ci/fuzz-patches/{afl,cfl}` before CMake configure. Keep those patches as
+separate numbered files so maintainers can enable, swap, or retire one finding at
+a time; do not hide branch-specific CI stabilizers as direct source edits when
+the intent is patch-stack validation.
+
 Do not use YAML anchors, aliases, or merge keys in workflow files. They make
 review non-local and can outpace static analyzers when the GitHub Actions parser
 changes. Keep repeated policy explicit unless it is moved into a trusted reusable
@@ -233,6 +239,12 @@ Use tiered CodeQL coverage. Workflow and Python script changes must run the
 pre-flight CodeQL Actions/Python analysis. C/C++/CMake/query/config changes use
 the full CodeQL database workflow through scheduled runs, the `codeql-ready` PR
 label, or explicit maintainer `workflow_dispatch`.
+
+Issue-specific sanitizer transaction workflows are acceptable for maintainer
+integration branches when they are narrowly scoped to a committed PoC and source
+fix.  Keep them read-only, bounded, SHA-pinned, and summary-only; build the
+known vulnerable ref and patched ref in separate directories, print exact replay
+commands and exit codes, and sanitize every summary line.
 
 ## Full Run Log Audit
 

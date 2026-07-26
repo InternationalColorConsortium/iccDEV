@@ -81,7 +81,10 @@ if [ ! -d "$patch_dir" ]; then
   exit 2
 fi
 
-mapfile -t patches < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | sort)
+patches=()
+while IFS= read -r patch_file; do
+  patches+=("$patch_file")
+done < <(find "$patch_dir" -maxdepth 1 -type f -name '*.patch' | sort)
 if [ "${#patches[@]}" -eq 0 ]; then
   echo "ERROR: no $mode fuzz patches found in $patch_dir" >&2
   exit 2
@@ -89,14 +92,6 @@ fi
 
 for patch_file in "${patches[@]}"; do
   echo "Applying $mode fuzz patch: $(basename "$patch_file")"
-  case "$(basename "$patch_file")" in
-    001-json-config-parser-no-sanitize.patch)
-      if grep -q 'icJsonParseConfig(json& j' "$repo_root/IccConnect/IccLibConnect/IccJsonUtil.cpp"; then
-        echo "  already integrated"
-        continue
-      fi
-      ;;
-  esac
   if [ "$dry_run" -eq 1 ]; then
     if run_patch_check "$patch_file" >/dev/null; then
       echo "  dry-run: applies cleanly"
