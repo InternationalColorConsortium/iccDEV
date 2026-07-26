@@ -1011,9 +1011,43 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
         icXmlCopyFixedString(m_szSufix, sizeof(m_szSufix), icUtf8ToAnsi(str, szSufix));
 
-        icUInt32Number newDeviceCoords = atoi(szDeviceCoords);
+        // CountOfDeviceCoords is attacker-controlled text, and atoi() is the wrong
+        // tool for it twice over: it accepts a leading '-', and it is undefined on
+        // a value that does not fit an int.  The #1846/#1847 PoC carries
+        // CountOfDeviceCoords="333333333333", which truncates to -1674115755 and
+        // then changes value again on the way into this icUInt32Number -- the
+        // "implicit conversion from type 'int' of value -1674115755 ... changed
+        // the value to 2620851541" that UBSan reports here.
+        //
+        // icXmlAttrToUInt() (the #1346 helper near the top of this file) is
+        // deliberately not used: it floors negatives to 0 but passes large
+        // positive counts through untouched, and this attribute sizes an
+        // allocation.  Bound it instead with the same two constants
+        // CIccTagNamedColor2::Read (IccTagBasic.cpp) and CIccTagXmlNamedColor2::
+        // ToXml above already enforce, so the XML reader stops being the one
+        // entry point able to install counts that the binary reader and both
+        // writers reject.
+        const icUInt32Number kMaxNamedColorEntries = 65536;
+        const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+
+        icUInt32Number newDeviceCoords = 0;
+        if (!icXmlParseU32(szDeviceCoords, newDeviceCoords, kMaxNamedColorDeviceCoords))
+          return false;
+
         icUInt32Number n = icXmlNodeCount3(pNode->children, "NamedColor", "LabNamedColor", "XYZNamedColor");
-        SetSize(n, newDeviceCoords);
+        if (n > kMaxNamedColorEntries)
+          return false;
+
+        // SetSize allocates the entry array that the loop below walks in
+        // m_nColorEntrySize strides, and it returns false when that allocation
+        // fails.  Discarding the result left m_NamedColor pointing at the
+        // single-entry buffer the constructor allocated while the loop still
+        // wrote one entry per XML node -- a heap-buffer-overflow write (CWE-787)
+        // that ASan catches at the pcsCoords store below.  The bound above makes
+        // the huge-count case unreachable, but the allocation can still fail, so
+        // the result is checked rather than assumed.
+        if (!SetSize(n, (icInt32Number)newDeviceCoords))
+          return false;
 
         icUInt32Number i;
 
@@ -1104,8 +1138,12 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
                 // CWE-400/CWE-834: clamp the field to the same load-time bound as
                 // the float branch below (deviceCoords[] is sized to it) so a
-                // corrupted count can't drive an out-of-range copy.
-                const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+                // corrupted count can't drive an out-of-range copy.  All three
+                // encoding branches share the single kMaxNamedColorDeviceCoords
+                // declared at the top of this parse block -- the same bound
+                // CountOfDeviceCoords was accepted against above -- rather than
+                // each redeclaring its own, which would shadow it (-Wshadow is
+                // -Werror in the strict build profiles).
                 icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
                                               ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
                 icUInt32Number j;
@@ -1121,8 +1159,9 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
 
                 // CWE-400/CWE-834: clamp the field to the same load-time bound as
                 // the float branch below (deviceCoords[] is sized to it) so a
-                // corrupted count can't drive an out-of-range copy.
-                const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+                // corrupted count can't drive an out-of-range copy.  Shares the
+                // single kMaxNamedColorDeviceCoords declared at the top of this
+                // parse block, as the int8 branch above does.
                 icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
                                               ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
                 icUInt32Number j;
@@ -1139,8 +1178,9 @@ bool CIccTagXmlNamedColor2::ParseXml(xmlNode *pNode, std::string & /*parseStr*/)
                 // CWE-400/CWE-834: m_nDeviceCoords is capped at
                 // kMaxNamedColorDeviceCoords on load and sizes deviceCoords[];
                 // clamp to that bound so a corrupted count can't drive an
-                // unbounded or out-of-range copy.
-                const icUInt32Number kMaxNamedColorDeviceCoords = 256;
+                // unbounded or out-of-range copy.  Shares the single
+                // kMaxNamedColorDeviceCoords declared at the top of this parse
+                // block, as the int8/int16 branches above do.
                 icUInt32Number nDevCoords = (m_nDeviceCoords > kMaxNamedColorDeviceCoords)
                                               ? kMaxNamedColorDeviceCoords : m_nDeviceCoords;
                 icUInt32Number j;

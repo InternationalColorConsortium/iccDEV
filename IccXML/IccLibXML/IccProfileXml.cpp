@@ -336,13 +336,34 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
   return true;
 }
 
-static unsigned char parseVersion(const char *szVer)
+// Convert one decimal version component (0-99) into the BCD byte the ICC header
+// stores.  Returns false for an empty component, a sign, a non-digit, or a value
+// too large to fit one BCD byte.
+//
+// This used to be atoi(), which accepts a leading '-'.  The #1845 PoC carries
+// <ProfileVersion>-12.</ProfileVersion>: atoi gave -12, ((val/10)%10)*16 +
+// (val%10) then evaluated to -18, and storing that in an unsigned char produced
+// 238 (0xEE) -- UBSan reports it as "implicit conversion from type 'int' of
+// value -18 ... changed the value to 238".  0xE is not a valid BCD digit, so
+// CIccInfo::GetVersionName can only render the result back as "Invalid BCD
+// version", yet iccFromXml still wrote the profile out carrying that byte.
+// Values above 99 were silently truncated by the same expression ("100" became
+// 0x00), and atoi() is undefined outright on an input too large for an int.
+//
+// icXmlParseU32 is the existing strict attribute parser (IccUtilXml.h): it
+// rejects the sign, non-digits and trailing garbage, and its max_value argument
+// performs the range check.  This is the XML twin of the JSON defect fixed for
+// #1830, whose icJsonParseBCDByte in IccProfileJson.cpp now carries the same
+// contract.
+static bool parseVersion(const std::string &sPart, unsigned long &rv)
 {
-  unsigned char rv;
-  int val = atoi(szVer);
-  rv = ((val / 10) % 10) * 16 + (val % 10);
+  icUInt32Number v = 0;
 
-  return rv;
+  if (!icXmlParseU32(sPart.c_str(), v, 99))
+    return false;
+
+  rv = ((v / 10) % 10) * 16 + (v % 10);
+  return true;
 }
 
 /**
@@ -376,44 +397,58 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       const char *szVer = (const char*)pNode->children->content;
       std::string ver;
       unsigned long verMajor=0, verMinor=0, verClassMajor=0, verClassMinor=0;
+      // A malformed component now rejects the whole version rather than letting a
+      // wrapped or partly-parsed value reach the header, matching the policy
+      // icJsonParseBCDVersionStr applies on the JSON side (#1830).
+      bool bVerOk = false;
 
       for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
         ver += *szVer;
       }
-      verMajor = parseVersion(ver.c_str());
+      bVerOk = parseVersion(ver, verMajor);
       ver.clear();
       if (*szVer)
         szVer++;
 
-      if (*szVer) {
+      if (bVerOk && *szVer) {
         for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
           ver += *szVer;
         }
-        verMinor = parseVersion(ver.c_str());
+        bVerOk = parseVersion(ver, verMinor);
         ver.clear();
         if (*szVer)
           szVer++;
 
-        if (*szVer) {
+        if (bVerOk && *szVer) {
           for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
             ver = *szVer;
           }
-          verClassMajor = parseVersion(ver.c_str());
+          bVerOk = parseVersion(ver, verClassMajor);
           ver.clear();
           if (*szVer)
             szVer++;
 
-          if (*szVer) {
+          if (bVerOk && *szVer) {
             for (; *szVer && *szVer != '.' && *szVer != ','; szVer++) {
               ver = *szVer;
             }
-            verClassMinor = parseVersion(ver.c_str());
+            bVerOk = parseVersion(ver, verClassMinor);
             ver.clear();
           }
         }
       }
 
-      m_Header.version = icUInt32Number( (verMajor << 24) | (verMinor << 16) | (verClassMajor << 8) | verClassMinor );
+      if (!bVerOk) {
+        // Leave the memset-zeroed header version in place.  0 is what
+        // GetVersionName renders as a plain "0.00", where the old wrapped byte
+        // rendered as "Invalid BCD version" -- and the profile was still saved.
+        parseStr += "Cannot parse ProfileVersion '";
+        parseStr += (const char*)pNode->children->content;
+        parseStr += "'\n";
+      }
+      else {
+        m_Header.version = icUInt32Number( (verMajor << 24) | (verMinor << 16) | (verClassMajor << 8) | verClassMinor );
+      }
     }
     else if (!icXmlStrCmp((const char*)pNode->name, "ProfileSubClassVersion")) {
       if (!pNode->children || !pNode->children->content) {

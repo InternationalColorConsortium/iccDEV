@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.20</ProfileVersion>
+    <ProfileDeviceClass>nmcl</ProfileDeviceClass>
+    <DataColourSpace></DataColourSpace>
+	  <PCS>Lab </PCS>
+    <DataColourSpace>CMYK</DataColourSpace>
+    <CreationDateTime>now</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant> <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/> </PCSIlluminant>
+    <ProfileCreator>ccox</ProfileCreator>
+    <ProfileID>1</ProfileID>
+  </Header>
+
+  <Tags>
+    <multiLocalizedUnicodeType>
+      <TagSignature>desc</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Named Color Example v4]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+
+    <namedColor2Tag> <namedColor2Type>
+      <NamedColors VendorFlag="0" CountOfDeviceCoords="333333333333" DeviceEncoding="int16" Prefix="" Suffix="">
+        <LabNamedColor Name="Violet-Red" L="48" a="74" b="15">3932 65535 29490 1311</LabNamedColor>
+        <LabNamedColor Name="Red" L="46" a="68" b="38">1966 65535 65535 3277</LabNamedColor>
+        <LabNamedColor Name="Red-Orange" L="59" a="66.49" b="59.38">0 58982 65535 0</LabNamedColor>
+        <LabNamedColor Name="Orange" L="69" a="54.07" b="77.99">0 39976 65535 0</LabNamedColor>
+        <LabNamedColor Name="Yellow-Orange" L="73" a="46.39" b="82.9">0 32768 65535 0</LabNamedColor>
+        <LabNamedColor Name="Yellow" L="91" a="-4.59" b="97.38">3232 0 65535 0</LabNamedColor>
+        <LabNamedColor Name="Yellow-Green" L="74.53" a="-41.67" b="69.34">36699 0 65535 0</LabNamedColor>
+        <LabNamedColor Name="Green" L="43.27" a="-57.85" b="21.37">65535 10486 65535 8520</LabNamedColor>
+        <LabNamedColor Name="Aquamarine" L="67.93" a="-43.01" b="-19.61">57671 0 15728 0</LabNamedColor>
+        <LabNamedColor Name="Blue" L="36.9" a="-2.15" b="-58.41">65535 44564 13762 3932</LabNamedColor>
+        <LabNamedColor Name="Indigo" L="25.44" a="27.95" b="-58.05">65535 50462 20316 27525</LabNamedColor>
+        <LabNamedColor Name="Magenta" L="45.65" a="71.53" b="-8.47">17694 65535 5243 0</LabNamedColor>
+        <LabNamedColor Name="Turquoise" L="58.92" a="-39.95" b="-33.66">65535 1311 11796 0</LabNamedColor>
+        <LabNamedColor Name="Goldenrod" L="80.08" a="15.22" b="82.38">1966 15073 65535 0</LabNamedColor>
+        <LabNamedColor Name="Spring Green" L="84.69" a="-15.72" b="63.82">14418 0 58326 0</LabNamedColor>
+        <LabNamedColor Name="Caribbean Green" L="68.37" a="-63.34" b="1.57">63569 0 33423 0</LabNamedColor>
+        <LabNamedColor Name="Ocean Deep Blue" L="38.95" a="-20.88" b="-36.61">65535 38010 17694 9175</LabNamedColor>
+        <LabNamedColor Name="Cerulean" L="40.63" a="-14.9" b="-55.44">65535 36044 9830 2621</LabNamedColor>
+        <LabNamedColor Name="Fuchsia" L="43.64" a="69.35" b="-31.29">31457 65535 0 0</LabNamedColor>
+        <LabNamedColor Name="Violet" L="31.79" a="43.76" b="-43.42">59637 65535 7864 12452</LabNamedColor>
+       </NamedColors>
+    </namedColor2Type> </namedColor2Tag>
+
+	<XYZType>
+      <TagSignature>wtpt</TagSignature>
+      <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
+    </XYZType>
+
+	<multiLocalizedUnicodeType>
+      <TagSignature>cprt</TagSignature>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType>
+
+  </Tags>
+</IccProfile>

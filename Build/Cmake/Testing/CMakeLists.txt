@@ -2976,6 +2976,36 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1342-1343-imageparse-signed-unsigned-regression.sh"
 )
 
+# #1845: negative <ProfileVersion> component in the XML importer.  parseVersion()
+# used atoi(), so "-12" produced the non-BCD version byte 0xEE, and iccFromXml
+# reported "parsed and saved correctly" while writing it.  Unlike the #1342/#1346
+# tests this one carries a functional assertion as well as the sanitizer one --
+# the saved major-version byte must be a valid BCD pair -- so it is meaningful on
+# every build, not only an integer/implicit-conversion one.
+iccdev_add_script_test(
+  iccdev.issue-1845-profileversion-bcd-regression
+  60
+  "iccdev;xml;header;issue-1845;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1845-profileversion-bcd-regression.sh"
+)
+
+# #1846/#1847: unvalidated CountOfDeviceCoords in the XML namedColor2 reader.
+# Case A replays the reported out-of-int-range count and needs the
+# integer/implicit-conversion sanitizer.  Case B replays a large POSITIVE count,
+# which is the memory-unsafe half the issues do not describe: SetSize() failed,
+# its result was discarded, and the entry loop then wrote past the constructor's
+# single-entry buffer.  Case B needs no sanitizer at all to be meaningful -- with
+# ASan it reports heap-buffer-overflow, without it the corrupted heap metadata
+# SEGVs inside malloc -- so this test has teeth in the ordinary CI jobs.
+iccdev_add_script_test(
+  iccdev.issue-1846-1847-namedcolor-devicecoords-regression
+  60
+  "iccdev;xml;namedcolor;issue-1846;issue-1847;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1846-namedcolor-devicecoords-regression.sh"
+)
+
 # #1356: XML serializer corrupts a zero (NoData) header colour-space signature
 # on round-trip.  iccToXml wrote the literal "NULL" for a 0x00000000 data
 # colour space / PCS; iccFromXml then reparsed "NULL" to 0x4E554C4C, so the
