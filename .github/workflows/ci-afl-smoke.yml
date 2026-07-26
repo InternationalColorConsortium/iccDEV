@@ -33,9 +33,9 @@ permissions:
         default: ''
         type: string
       afl_targets:
-        description: 'Comma-separated AFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip'
+        description: 'Comma-separated AFL targets: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube'
         required: true
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube
         type: string
       duration_seconds:
         description: 'AFL runtime per target in seconds, 1-3600'
@@ -85,7 +85,7 @@ permissions:
       afl_targets:
         description: 'Comma-separated AFL targets'
         required: false
-        default: dump,toxml,fromxml,tojson,fromjson,roundtrip
+        default: dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube
         type: string
       duration_seconds:
         description: 'AFL runtime per target in seconds, 1-3600'
@@ -133,7 +133,7 @@ jobs:
         shell: bash --noprofile --norc {0}
     env:
       BASH_ENV: /dev/null
-      ICCDEV_AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
+      ICCDEV_AFL_TARGETS_INPUT: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube' }}
       ICCDEV_AFL_SECONDS_INPUT: ${{ inputs.duration_seconds || '300' }}
       ICCDEV_AFL_EXEC_TIMEOUT_MS_INPUT: ${{ inputs.exec_timeout_ms || '30000' }}
       ICCDEV_AFL_BUILD_TYPE_INPUT: ${{ inputs.cmake_build_type || 'Debug' }}
@@ -330,12 +330,12 @@ jobs:
         working-directory: target
         env:
           BASH_ENV: /dev/null
-          ICCDEV_AFL_TARGETS: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip' }}
+          ICCDEV_AFL_TARGETS: ${{ inputs.afl_targets || 'dump,toxml,fromxml,tojson,fromjson,roundtrip,fromcube' }}
           ICCDEV_AFL_SECONDS: ${{ inputs.duration_seconds || '300' }}
           ICCDEV_AFL_EXEC_TIMEOUT_MS: ${{ inputs.exec_timeout_ms || '30000' }}
           ICCDEV_AFL_BUILD_TYPE: ${{ inputs.cmake_build_type || 'Debug' }}
           ICCDEV_AFL_APPLY_PATCHES: ${{ (inputs.patch_mode || 'all') == 'all' && '1' || '0' }}
-          ICCDEV_FUZZ_PATCH_APPLICATOR: ${{ github.workspace }}/workflow-scripts/.github/scripts/iccdev-apply-fuzz-patches.sh
+          ICCDEV_FUZZ_PATCH_APPLICATOR: .github/scripts/iccdev-apply-fuzz-patches.sh
           ICCDEV_AFL_BUILD_DIR: ${{ runner.temp }}/iccdev-build-afl-smoke
           ICCDEV_AFL_WORK_DIR: ${{ runner.temp }}/iccdev-afl-smoke
         run: |

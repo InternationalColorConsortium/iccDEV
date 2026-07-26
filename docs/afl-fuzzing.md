@@ -110,13 +110,53 @@ Run `.github/scripts/check-fuzz-patches.sh` before committing patch-stack
 edits; it validates both stacks with `git apply --check` from a fresh temporary
 clone.
 Both stacks are local validation aids; stable source fixes should still land as
-normal source changes.
+normal source changes.  When a fuzz patch is promoted into source, remove or
+retire the local patch entry and keep the regression as test data plus a replay
+script instead of carrying the same fix in two places.
+Keep the AFL and CFL patch stacks aligned unless a finding is specific to one
+engine. The current shared local stack covers JPEG segment length bounds,
+TIFF separated sample-count bounds, and XML formula-segment `Reserved2` /
+`FunctionType` narrowing; the JSON config parser patch is retired because the
+fail-closed parser is now integrated in source.
 
 Manual AFL and CFL workflow dispatches accept `target_ref`, optional
 `target_sha`, and `patch_mode`. Use `target_ref` for branch or tag validation,
 `target_sha` when a replay must pin a full 40-character exact commit,
 `patch_mode=all` for the maintainer patch stack, and `patch_mode=none` for raw
 branch comparison.
+
+The `ci-pr-action` workflow on `ci-afl-cfl` also accepts `fuzz_patch_mode` with
+`none`, `afl`, or `cfl`. The default is `none`, so the profile matrix and
+ASAN/UBSAN CTest tool suites validate the raw branch unless a maintainer
+explicitly selects a patch stack in the Actions UI or passes
+`-f fuzz_patch_mode=afl` / `-f fuzz_patch_mode=cfl` with `gh workflow run`.
+
+Issue-specific sanitizer proofs use `ci-afl-regression-repro`.  The workflow
+builds a known vulnerable ref and the patched checkout with ASan/UBSan/IntegerSan,
+then replays the committed PoC through the matching iccDEV command-line tool.
+For issue #1851, the transaction is:
+
+```bash
+gh workflow run ci-afl-regression-repro.yml \
+  --ref ci-afl-cfl \
+  -f vulnerable_ref=809411cc4c8aa7675dec93067056477f4a2b25af
+```
+
+The corresponding local replay is
+`.github/scripts/iccdev-issue-1851-transaction.sh`.  It must show the vulnerable
+`iccFromXml` run reproducing the implicit-conversion sanitizer breadcrumb and
+the patched run failing closed without sanitizer findings or an output profile.
+
+Issue #1677 has a separate maintainer reproduction workflow because the issue is
+still open and the expected result is the ASan `CIccPcsXform::pushBiRef2Rad`
+breadcrumb, not a patched/no-sanitizer comparison:
+
+```bash
+gh workflow run ci-afl-issue-1677-repro.yml \
+  --ref ci-afl-cfl \
+  -f target_ref=ci-afl-cfl \
+  -f expect_sanitizer=true
+```
 
 When AFL saves crashes or hangs, the smoke workflow replays them with iccDEV
 command-line tools. The uploaded findings artifact includes raw inputs,
@@ -261,6 +301,12 @@ The workflow follows the repository workflow-governance model:
 - sanitized `GITHUB_STEP_SUMMARY` writes
 - crash and hang testcase upload through the `afl-smoke-findings-<run-id>`
   artifact
+
+The `ci-afl-regression-repro` transaction workflow follows the same hardening
+model but is issue-specific: it has read-only permissions, SHA-pinned checkouts,
+sanitized summaries, bounded runtime, and no artifact upload.  Its output is the
+complete command-line transaction needed to compare unpatched and patched
+behavior.
 
 ## CFL Core Smoke
 

@@ -67,6 +67,11 @@ on:
         required: false
         default: ""
         type: string
+      fuzz-patch-mode:
+        description: "Maintainer fuzz patch stack to apply before configure: none, afl, or cfl"
+        required: false
+        default: none
+        type: string
 
 # Concurrency is set at job level so each matrix cell has its own group.
 # Workflow-level concurrency cannot use github.job (empty) or matrix.* values,
@@ -169,6 +174,7 @@ jobs:
           PR_BUILD_TYPE: ${{ matrix.build_type }}
           PR_COMPILER: ${{ matrix.compiler }}
           PR_OS: ${{ matrix.os }}
+          FUZZ_PATCH_MODE: ${{ inputs.fuzz-patch-mode || 'none' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -182,6 +188,7 @@ jobs:
           safe_build_type="$(sanitize_line "${PR_BUILD_TYPE}")"
           safe_compiler="$(sanitize_line "${PR_COMPILER}")"
           safe_os="$(sanitize_line "${PR_OS}")"
+          safe_fuzz_patch_mode="$(sanitize_line "${FUZZ_PATCH_MODE}")"
 
           echo "Triggered by:  ${safe_event}"
           echo "Base branch:   ${safe_base}"
@@ -190,6 +197,7 @@ jobs:
           echo "Build Type:    ${safe_build_type}"
           echo "Compiler:      ${safe_compiler}"
           echo "OS:            ${safe_os}"
+          echo "Fuzz patches:  ${safe_fuzz_patch_mode}"
 
           {
             echo "### PR Branch Details"
@@ -201,7 +209,29 @@ jobs:
             echo "**Build Type:**    ${safe_build_type}"
             echo "**Compiler:**      ${safe_compiler}"
             echo "**OS:**            ${safe_os}"
+            echo "**Fuzz patches:**  ${safe_fuzz_patch_mode}"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Apply maintainer fuzz patch stack
+        if: ${{ inputs.fuzz-patch-mode != 'none' }}
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          FUZZ_PATCH_MODE: ${{ inputs.fuzz-patch-mode || 'none' }}
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          case "$FUZZ_PATCH_MODE" in
+            afl|cfl)
+              ;;
+            *)
+              echo "::error title=Invalid fuzz patch mode::${FUZZ_PATCH_MODE}"
+              exit 2
+              ;;
+          esac
+          .github/scripts/iccdev-apply-fuzz-patches.sh --mode "$FUZZ_PATCH_MODE" --strict
       - name: Install Build Dependencies (Linux)
         if: runner.os == 'Linux'
         shell: bash --noprofile --norc {0}
@@ -468,6 +498,7 @@ jobs:
           ENABLE_LTO: ${{ inputs.enable-lto && 'ON' || 'OFF' }}
           PROFILE_TEST_MODE: ${{ inputs.profile-test-mode || 'full' }}
           WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
+          FUZZ_PATCH_MODE: ${{ inputs.fuzz-patch-mode || 'none' }}
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -484,6 +515,7 @@ jobs:
           SANITIZED_LTO=$(sanitize_line "${ENABLE_LTO}")
           SANITIZED_PROFILE_TEST_MODE=$(sanitize_line "${PROFILE_TEST_MODE}")
           SANITIZED_WARNING_POLICY=$(sanitize_line "${WARNING_POLICY}")
+          SANITIZED_FUZZ_PATCH_MODE=$(sanitize_line "${FUZZ_PATCH_MODE}")
           {
             echo "## ci-pr-unix Build Summary"
             echo "- **OS:**         $SANITIZED_OS"
@@ -492,4 +524,5 @@ jobs:
             echo "- **LTO:**        $SANITIZED_LTO"
             echo "- **Profile Tests:** $SANITIZED_PROFILE_TEST_MODE"
             echo "- **Warning Policy:** $SANITIZED_WARNING_POLICY"
+            echo "- **Fuzz Patch Mode:** $SANITIZED_FUZZ_PATCH_MODE"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

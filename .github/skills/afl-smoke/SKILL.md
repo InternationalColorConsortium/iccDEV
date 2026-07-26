@@ -6,7 +6,9 @@ description: Run or update the iccDEV AFL++ manual smoke workflow, seeds, and ma
 # AFL++ Smoke Workflow
 
 Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
-`.github/scripts/iccdev-afl-smoke.sh`, or AFL smoke seed documentation.
+`.github/workflows/ci-afl-regression-repro.yml`,
+`.github/scripts/iccdev-afl-smoke.sh`, issue-specific AFL replay scripts, or
+AFL smoke seed documentation.
 
 ## Local Checks
 
@@ -14,14 +16,16 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 
    ```bash
    bash -n .github/scripts/iccdev-afl-smoke.sh
-   shellcheck .github/scripts/iccdev-afl-smoke.sh
+   bash -n .github/scripts/iccdev-issue-1851-transaction.sh
+   shellcheck .github/scripts/iccdev-afl-smoke.sh .github/scripts/iccdev-issue-1851-transaction.sh
    ```
 
 2. Validate workflow syntax and governance:
 
    ```bash
    actionlint .github/workflows/ci-afl-smoke.yml
-   yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml
+   actionlint .github/workflows/ci-afl-regression-repro.yml
+   yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, truthy: disable}}' .github/workflows/ci-afl-smoke.yml .github/workflows/ci-afl-regression-repro.yml
    .github/scripts/preflight-safety-checks.sh --require-tools
    ```
 
@@ -62,8 +66,15 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   `.github/ci/fuzz-patches/cfl` as final upstream hardening changes. They are
   local validation patches; durable fixes must be promoted separately as normal
   source changes.
+- Once a fuzz patch is promoted into source, remove or retire the duplicate
+  local patch and keep the finding locked with committed test data plus an
+  issue-specific replay script.  `ci-afl-regression-repro.yml` and issue #1851
+  are the reference pattern for unpatched-vs-patched sanitizer proof.
 - Keep workflow triggers manual or reusable unless maintainers explicitly widen
   them.
+- Issue-specific transaction workflows may also run on pushes to maintainer
+  integration branches when the trigger paths are narrowly scoped to that issue's
+  source fix, fixture, scripts, and workflow.
 - Keep CI AFL++ tooling sourced from
   `https://github.com/AFLplusplus/AFLplusplus/tree/dev` and rebuilt against
   the unified image's Clang/LLVM major version.
@@ -89,6 +100,9 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   needs a corpus that still contains a CLUT seed (#2120).
 - Use `.github/ci/fuzz-patches/afl` and `.github/ci/fuzz-patches/cfl` for
   maintainer-local patch stacks when `--patches` is requested.
+- Keep the AFL and CFL patch stacks aligned for shared parser/tool findings.
+  When retiring an integrated patch, remove stale patch-applicator special cases
+  and update patch-check tests that name the retired file.
 - Keep `ci-docker.yml` push paths and regression-image verification in sync
   with AFL/CFL patch-stack helpers so container rebuilds happen when the
   checker, applicator, smoke script, `.github/ci/cfl/`, or fuzz patches change.
@@ -114,6 +128,9 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
   debug failed builds even when no crash or hang artifact was generated.
 - Replay saved findings with `.github/scripts/iccdev-fuzz-triage.sh` and report
   the generated summary, logs, and one-line reproducers.
+- For promoted sanitizer findings, report the transaction workflow URL, the
+  vulnerable baseline ref, the patched ref, both replay commands, both exit
+  codes, and whether the patched replay failed closed without sanitizer output.
 - Keep numeric workflow options validated by the script, not only by the
   Actions input UI.
 - Pass workflow inputs through `env:` before shell use, but do not use unknown

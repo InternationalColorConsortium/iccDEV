@@ -1,0 +1,22 @@
+diff --git a/IccXML/IccLibXML/IccMpeXml.cpp b/IccXML/IccLibXML/IccMpeXml.cpp
+index dbf184b..8386173 100644
+--- a/IccXML/IccLibXML/IccMpeXml.cpp
++++ b/IccXML/IccLibXML/IccMpeXml.cpp
+@@ -308,9 +308,15 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
+     return false;
+   }
+ 
++  icUInt16Number nFunctionType = 0;
++  if (!icXmlParseU16(icXmlAttrValue(pNode, "Reserved2", "0"), m_nReserved2) ||
++      !icXmlParseU16(icXmlAttrValue(funcType), nFunctionType)) {
++    parseStr += "Invalid Reserved2 or FunctionType value in Formula Segment\n";
++    return false;
++  }
++
+   m_nReserved  = atoi(icXmlAttrValue(pNode, "Reserved",  "0"));
+-  m_nReserved2 = atoi(icXmlAttrValue(pNode, "Reserved2", "0"));
+-  m_nFunctionType = atoi(icXmlAttrValue(funcType));
++  m_nFunctionType = nFunctionType;
+ 
+ 
+   switch(m_nFunctionType) {
