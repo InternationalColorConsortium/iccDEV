@@ -3535,7 +3535,34 @@ bool CIccTagXmlParametricCurve::ParseXml(xmlNode *pNode, std::string & /*parseSt
         if (!functionType)
           return false;    
 
-        if (!SetFunctionType(atoi(functionType))){
+        // ICC.1 encodes the parametric curve function type as 0-4 (see the
+        // switch in CIccTagParametricCurve::SetFunctionType), so parse it as a
+        // bounded unsigned value rather than through atoi().
+        //
+        // atoi() returned a signed int that was then narrowed to
+        // SetFunctionType()'s icUInt16Number parameter, which is undefined for
+        // anything outside 0..65535 and silently truncating inside it (#1851):
+        //
+        //   IccTagXml.cpp:3538:30: runtime error: implicit conversion from type
+        //   'int' of value 96948242 (32-bit, signed) to type 'icUInt16Number'
+        //   (aka 'unsigned short') changed the value to 20498 (16-bit, unsigned)
+        //
+        // Truncation is the part that matters beyond the sanitizer diagnostic:
+        // any input congruent to a legal type mod 65536 was laundered into that
+        // legal type, so "65540" was accepted as function type 4 and the profile
+        // was written as though the file had said 4.  atoi() also stops at the
+        // first non-digit, so "96948242 1.23 0.44994" parsed as a number at all.
+        //
+        // The existing `if (!SetFunctionType(...))` guard could not catch either
+        // case: SetFunctionType is documented "Return: always true!!" and ends in
+        // an unconditional `return true`, so this test has never rejected
+        // anything.  Out-of-range types fell through its switch to nNumParam = 0,
+        // leaving the truncated value stored in m_nFunctionType and written back
+        // out by Write16().  icXmlParseU16 rejects trailing garbage, a leading
+        // '-', and anything above the bound, which makes the guard live.
+        icUInt16Number nFunctionType = 0;
+        if (!icXmlParseU16(functionType, nFunctionType, 4) ||
+            !SetFunctionType(nFunctionType)){
           return false;
         }
         CIccFloatArray data;

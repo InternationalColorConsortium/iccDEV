@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  #1851 case B: the breadcrumb exactly as reported, from the AFL corpus.
+
+  Identical to param-functiontype-control-1851.xml except that redTRCTag
+  carries FunctionType="96948242 1.23 0.44994".  atoi() stops at the first
+  non-digit and returns 96948242, which narrowing to icUInt16Number changes to
+  20498:
+
+    IccTagXml.cpp:3538:30: runtime error: implicit conversion from type 'int'
+    of value 96948242 (32-bit, signed) to type 'icUInt16Number' (aka 'unsigned
+    short') changed the value to 20498 (16-bit, unsigned)
+
+  20498 is not a legal function type, so the tag was rejected downstream by the
+  parameter-count check even before the fix.  This case therefore has no
+  functional tell and is only observable under an integer/implicit-conversion
+  sanitizer build; the regression script skips it cleanly elsewhere.  Case A
+  is the one that fails on an ordinary build.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.30</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>now</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant> <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/> </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+    <ProfileID>0</ProfileID>
+  </Header>
+
+  <Tags>
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV #1851 ParametricCurve control]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.43606567" Y="0.22248840" Z="0.01391602"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.38514709" Y="0.71687317" Z="0.09707642"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.14306641" Y="0.06060791" Z="0.71409607"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="96948242 1.23 0.44994">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="4">
+        2.39999390 0.94786072 0.05213928 0.07739258 0.04045105 0.00000000 0.00000000
+      </ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright 2026 International Color Consortium]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+
+  </Tags>
+</IccProfile>

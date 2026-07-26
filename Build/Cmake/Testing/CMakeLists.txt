@@ -3006,6 +3006,25 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1846-namedcolor-devicecoords-regression.sh"
 )
 
+# #1851: unvalidated ParametricCurve FunctionType in the XML parametricCurveType
+# reader.  atoi() fed SetFunctionType(icUInt16Number), and the surrounding
+# `if (!SetFunctionType(...))` could never reject anything because that function
+# always returns true.  Case A is the half that has teeth in the ordinary CI
+# jobs: FunctionType="65540" narrows to the legal type 4, so the malformed
+# attribute was laundered into a valid one and iccFromXml wrote a profile
+# byte-identical to the FunctionType="4" control.  Case B replays the reported
+# breadcrumb (96948242 -> 20498), which the parameter-count check already
+# rejected pre-fix, so it is gated on an integer/implicit-conversion build
+# rather than passing vacuously.  A control profile guards against over-
+# rejection of legitimate type-4 curves.
+iccdev_add_script_test(
+  iccdev.issue-1851-parametriccurve-functiontype-regression
+  60
+  "iccdev;xml;parametriccurve;issue-1851;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1851-parametriccurve-functiontype-regression.sh"
+)
+
 # #1356: XML serializer corrupts a zero (NoData) header colour-space signature
 # on round-trip.  iccToXml wrote the literal "NULL" for a 0x00000000 data
 # colour space / PCS; iccFromXml then reparsed "NULL" to 0x4E554C4C, so the
