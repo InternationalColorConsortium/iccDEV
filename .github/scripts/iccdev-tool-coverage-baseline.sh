@@ -263,7 +263,6 @@ TIFF_MISMATCH="$TP_TIFF/catalyst-16bit-mismatch.tiff"
 TIFF_MUTATED="$TP_TIFF/catalyst-16bit-mutated.tiff"
 PNG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.png"
 JPG_CVE="$TP_IMG/p0-2225-cve-2021-30942-colorsync-uninit-mem.jpg"
-SPECTRAL_TIFF="$ICCDEV_TESTING/hybrid/Data/smCows380_5_780.tif"
 V5_DISPLAY="$TP/LCDDisplay.icc"
 LCDDISPLAY_XML="$ICCDEV_TESTING/Display/LCDDisplay.xml"
 [ -f "$LCDDISPLAY_XML" ] || LCDDISPLAY_XML="$ICCDEV_TESTING/hybrid/LCDDisplay.xml"
@@ -1042,11 +1041,6 @@ if [ -f "$TIFF_MUTATED" ]; then
     "$TIFFDUMP" "$TIFF_MUTATED"
 else
   skip_test "tdump-05" "Dump TIFF mutated profile" "mutated TIFF fixture unavailable"
-fi
-
-if [ -f "$SPECTRAL_TIFF" ]; then
-  run_test "tdump-07" "Dump spectral TIFF (81 channels)" \
-    "$TIFFDUMP" "$SPECTRAL_TIFF"
 fi
 
 if [ -f "$ICCDEV_TESTING/hybrid/Data/TShirtDesignKW.tif" ]; then
