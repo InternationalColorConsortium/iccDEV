@@ -1943,6 +1943,55 @@ function(iccdev_add_encoding_surround_test)
   endif()
 endfunction()
 
+# CIccPRMG::GetChroma normalized an arbitrary hue angle into [0, 360) with
+# "while (h < 0.0) h += 360.0;" / "while (h >= 360.0) h -= 360.0;". Those loops do
+# not terminate once |h| is large enough that 360 falls below the float's ULP
+# (around 1e20): the addition rounds back to the original value and the condition
+# never changes. The isfinite() guard at the top of the function does not catch it
+# because such values are finite. fmod performs the same reduction exactly and in
+# one step. The test drives the public GetChroma with hues that hang the old
+# loops, so the unfixed code fails by TIMEOUT; the value checks additionally
+# confirm the reduction matches an independently computed fmod, and that the
+# NaN/infinity/L-range rejections are unchanged. IccProfLib only.
+function(iccdev_add_prmg_hue_normalization_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPrmgHueNormalizationTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/prmg-hue-normalization.cpp"
+  )
+  target_compile_features(iccPrmgHueNormalizationTest PRIVATE cxx_std_17)
+  target_include_directories(iccPrmgHueNormalizationTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccPrmgHueNormalizationTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPrmgHueNormalizationTest)
+
+  add_test(
+    NAME iccdev.prmg-hue-normalization
+    COMMAND "$<TARGET_FILE:iccPrmgHueNormalizationTest>"
+  )
+  set_tests_properties(iccdev.prmg-hue-normalization PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;prmg;regression"
+  )
+  if(WIN32)
+    set(_prmghue_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPrmgHueNormalizationTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _prmghue_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.prmg-hue-normalization PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_prmghue_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_windows_iccdevcmm_smoke_test)
   if(NOT WIN32 OR NOT TARGET RefIccMAX)
     return()
@@ -2194,6 +2243,7 @@ if(WIN32)
   iccdev_add_iccprofileplot_exitcode_test()
   iccdev_add_applytolink_invalid_arg_test()
   iccdev_add_applytolink_v4_missing_desc_test()
+  iccdev_add_prmg_hue_normalization_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
 
   return()
@@ -2407,6 +2457,7 @@ iccdev_add_iccviz_pdf_axis_test()
 iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
+iccdev_add_prmg_hue_normalization_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")

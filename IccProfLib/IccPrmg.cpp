@@ -144,11 +144,26 @@ icFloatNumber CIccPRMG::GetChroma(icFloatNumber L, icFloatNumber h)
   if (L < 3.5 || L > 100.0)
     return -1;
 
-  // Normalize h to the range [0, 360)
-  while (h < 0.0)
-    h += 360.0;
-  while (h >= 360.0)
-    h -= 360.0;
+  // Normalize h to the range [0, 360). The index arithmetic below relies on that
+  // invariant: nHIndex is derived as h/10 and indexes icPRMG_Chroma's 37 hue rows.
+  //
+  // This used to be a pair of "while (h < 0.0) h += 360.0;" / "while (h >= 360.0)
+  // h -= 360.0;" loops, which do not terminate for large-magnitude h. 360 falls
+  // below the ULP of a float once |h| is around 1e20 or greater, so h += 360.0
+  // rounds back to h and the loop spins forever making no progress. The isfinite
+  // check above does not help: values like 1e30f are perfectly finite, just too
+  // large for a step of 360 to move. fmod does the same reduction in one exact
+  // operation (fmod is exact in IEEE-754, so no accuracy is given up for the
+  // hue values that already worked), and it cannot loop.
+  h = (icFloatNumber)std::fmod((double)h, 360.0);
+  if (h < 0.0)
+    h += 360.0f;
+
+  // fmod keeps the sign of h, so a small negative hue lands just below zero and
+  // the correction above can round up to exactly 360.0f in float. Fold that back
+  // to 0 so the [0, 360) invariant holds for every input, not just most of them.
+  if (h >= 360.0f)
+    h = 0.0f;
 
   int nHIndex = (int)(h / 10.0);
   icFloatNumber dHFraction = (h - nHIndex * 10.0f) / 10.0f;
