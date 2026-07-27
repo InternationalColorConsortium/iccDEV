@@ -379,14 +379,33 @@ int CIccCfgDataApply::fromArgs(const char** args, int nArg, bool bReset)
     return 0;
   m_dstEncoding = (icFloatColorEncoding)nDstEncoding;
 
+  // Decode the optional encoding[:precision[:digits]] formatting suffix.
+  // Two defects here (#1860): the digits field was read with the cursor still
+  // parked ON its ':' separator, so "0:2:8" ran atoi(":8") and silently produced
+  // 0 -- the requested total width was discarded and output came out unpadded.
+  // And both fields used bare atoi(), which cannot fail: "0:x:y" quietly became
+  // precision 0 / digits 0 rather than being rejected, and a value above 255 was
+  // truncated by the narrowing cast to icUInt8Number.  Parse and range-check both
+  // fields the same way the encoding selector above is handled, and bound them to
+  // what the "%<digits>.<precision>lf " format string can meaningfully carry.
   const char *colon = strchr(args[1], ':');
   if (colon) {
+    int nPrecision;
+
     colon++;
-    m_dstPrecision = (icUInt8Number)atoi(colon);
-    m_dstDigits = 5 + m_dstPrecision;
+    if (!icParseIntArg(colon, nPrecision, true) || nPrecision < 0 || nPrecision > 99)
+      return 0;
+    m_dstPrecision = (icUInt8Number)nPrecision;
+    m_dstDigits = (icUInt8Number)(5 + m_dstPrecision);
+
     colon = strchr(colon, ':');
     if (colon) {
-      m_dstDigits = (icUInt8Number)atoi(colon);
+      int nDigits;
+
+      colon++;
+      if (!icParseIntArg(colon, nDigits) || nDigits < 0 || nDigits > 99)
+        return 0;
+      m_dstDigits = (icUInt8Number)nDigits;
     }
   }
   
@@ -1355,7 +1374,13 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     m_profiles.push_back(pProf);
   }
 
-  if (nArg >= 2 && !strcmp(args[0], "-INIT")) {
+  // Match -INIT case-insensitively, exactly as the profile loop above does when
+  // it breaks out on this token (#1860).  The two tests used to disagree --
+  // stricmp there, strcmp here -- so "-init 1" ended the profile loop but was
+  // then not consumed as the initializer.  It fell through to the weighted-PCC
+  // loop below, where "-init" became a PCC path and "1" its weight, and the run
+  // died with "unable to open or read PCC tags from '-init'".
+  if (nArg >= 2 && !stricmp(args[0], "-INIT")) {
     int nIntent;
     int nType;
     if (!icParseIntArg(args[1], nIntent) || nIntent == INT_MIN)
@@ -1408,6 +1433,15 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     nArg -= 2;
     nUsed += 2;
   }
+
+  // Every loop above consumes tokens in pairs, so an odd token left over is one
+  // the caller wrote and this parser never interpreted (#1860).  Returning nUsed
+  // regardless meant the caller silently dropped it: a stray trailing argument,
+  // or a "-PCC path" with no weight, ran to completion and exited 0 as though the
+  // whole command line had been honoured.  Reject instead -- iccApplySearch turns
+  // a 0 return into "Unable to parse profile sequence arguments".
+  if (nArg > 0)
+    return 0;
 
   return m_profiles.size() > 0 ? nUsed : 0;
 }

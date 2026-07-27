@@ -197,6 +197,68 @@ function(iccdev_add_iccconnect_config_parser_test)
   endif()
 endfunction()
 
+function(iccdev_add_cmmsearch_init_pcc_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCmmSearchInitPccTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/cmmsearch-init-pcc.cpp"
+  )
+  target_link_libraries(iccCmmSearchInitPccTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccCmmSearchInitPccTest)
+
+  # sRGB_D65_MAT.icc is the regression case: a tracked v5 profile carrying an
+  # 'svcn' tag that declares D65, so a PCC that fails to resolve falls back to
+  # the D50 default and a spurious adaptation is spliced in (issue #1860).
+  # sRGB_v4_ICC_preference.icc is the control: it has no 'svcn', both ends of the
+  # chain default to D50 either way, and its results must not move.
+  set(_cmmsearch_init_pcc_cases
+    "d65-svcn=${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
+    "v4-no-svcn=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+
+  foreach(_case IN LISTS _cmmsearch_init_pcc_cases)
+    string(REGEX REPLACE "=.*$" "" _case_name "${_case}")
+    string(REGEX REPLACE "^[^=]*=" "" _case_profile "${_case}")
+
+    if(WIN32)
+      add_test(
+        NAME iccdev.cmmsearch-init-pcc.${_case_name}
+        COMMAND "$<TARGET_FILE:iccCmmSearchInitPccTest>" "${_case_profile}"
+      )
+    else()
+      add_test(
+        NAME iccdev.cmmsearch-init-pcc.${_case_name}
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          ${ICCDEV_TEST_ENV}
+          "$<TARGET_FILE:iccCmmSearchInitPccTest>"
+          "${_case_profile}"
+      )
+    endif()
+    set_tests_properties(iccdev.cmmsearch-init-pcc.${_case_name} PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 120
+      LABELS "iccdev;iccprofLib;cmmsearch;pcc;regression"
+    )
+    if(WIN32)
+      set(_cmmsearch_init_pcc_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCmmSearchInitPccTest>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _cmmsearch_init_pcc_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.cmmsearch-init-pcc.${_case_name} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_cmmsearch_init_pcc_windows_env_mods}"
+      )
+    endif()
+  endforeach()
+endfunction()
+
 function(iccdev_add_embedio_read8_bounds_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -2203,6 +2265,7 @@ if(WIN32)
 
   iccdev_add_iccconnect_thread_test()
   iccdev_add_iccconnect_config_parser_test()
+  iccdev_add_cmmsearch_init_pcc_test()
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
@@ -2419,6 +2482,7 @@ set(ICCDEV_TEST_ENV
 
 iccdev_add_iccconnect_thread_test()
 iccdev_add_iccconnect_config_parser_test()
+iccdev_add_cmmsearch_init_pcc_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()

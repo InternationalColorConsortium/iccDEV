@@ -85,6 +85,91 @@ int main()
                       "search apply rejects non-finite PCC weight");
   }
 
+  // #1860: -INIT was matched with stricmp where the profile loop breaks out of
+  // the sequence but with strcmp where the initializer is consumed.  A lowercase
+  // "-init" therefore ended the profile loop and then fell through to the
+  // weighted-PCC loop, where it was taken as a PCC path and its intent as the
+  // weight.  Both tests are stricmp now, so either spelling parses identically.
+  {
+    CIccCfgSearchApply search;
+    const char* args[] = {
+      "1", "target.icc", "1", "src.icc", "101", "-init", "1"
+    };
+    failures += check(search.fromArgs(args, 7, true) == 7,
+                      "search apply accepts lowercase -init");
+  }
+
+  {
+    CIccCfgSearchApply search;
+    const char* argsUpper[] = {
+      "1", "target.icc", "1", "src.icc", "101", "-INIT", "1"
+    };
+    CIccCfgSearchApply searchLower;
+    const char* argsLower[] = {
+      "1", "target.icc", "1", "src.icc", "101", "-init", "1"
+    };
+    failures += check(search.fromArgs(argsUpper, 7, true) ==
+                        searchLower.fromArgs(argsLower, 7, true) &&
+                      search.isInitialized() && searchLower.isInitialized(),
+                      "search apply treats -INIT and -init identically");
+  }
+
+  // #1860: every loop in CIccCfgSearchApply::fromArgs consumes tokens in pairs,
+  // so a leftover odd token is one the caller wrote and the parser never read.
+  // It used to be dropped silently and the run exited 0 as if fully honoured.
+  {
+    CIccCfgSearchApply search;
+    const char* args[] = {
+      "1", "target.icc", "1", "src.icc", "101", "-INIT", "1", "TRAILING"
+    };
+    failures += check(search.fromArgs(args, 8, true) == 0,
+                      "search apply rejects unconsumed trailing argument");
+  }
+
+  {
+    CIccCfgSearchApply search;
+    const char* args[] = {
+      "1", "target.icc", "1", "src.icc", "101", "-INIT", "1", "pcc.icc"
+    };
+    failures += check(search.fromArgs(args, 8, true) == 0,
+                      "search apply rejects PCC path with no weight");
+  }
+
+  // #1860: the digits field of encoding[:precision[:digits]] was read with the
+  // cursor still on its ':' separator, so atoi(":8") silently yielded 0 and the
+  // requested total width was discarded.
+  {
+    CIccCfgDataApply data;
+    const char* args[] = { "data.txt", "0:2:8" };
+    failures += check(data.fromArgs(args, 2, true) == 2 &&
+                        data.m_dstPrecision == 2 && data.m_dstDigits == 8,
+                      "data apply decodes encoding:precision:digits");
+  }
+
+  {
+    CIccCfgDataApply data;
+    const char* args[] = { "data.txt", "3:6" };
+    failures += check(data.fromArgs(args, 2, true) == 2 &&
+                        data.m_dstPrecision == 6 && data.m_dstDigits == 11,
+                      "data apply defaults digits to 5 + precision");
+  }
+
+  // #1860: both fields used bare atoi(), which cannot fail -- malformed text
+  // became 0 and an out-of-range value was truncated by the icUInt8Number cast.
+  {
+    CIccCfgDataApply data;
+    const char* args[] = { "data.txt", "0:x:y" };
+    failures += check(data.fromArgs(args, 2, true) == 0,
+                      "data apply rejects malformed precision and digits");
+  }
+
+  {
+    CIccCfgDataApply data;
+    const char* args[] = { "data.txt", "0:2:999" };
+    failures += check(data.fromArgs(args, 2, true) == 0,
+                      "data apply rejects out-of-range digits");
+  }
+
   {
     CIccCfgProfile profile;
     failures += check(!profile.fromJson("{\"iccFile\":\"profile.icc\",\"transform\":\"missing\"}", true),

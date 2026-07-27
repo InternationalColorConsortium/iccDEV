@@ -131,7 +131,13 @@ icFloatNumber CIccApplyCmmSearch::costFunc(CIccSearchVec& point)
   if (nApply > pCmm->m_weight.size())
     nApply = pCmm->m_weight.size();
   for (size_t i = 0; i < nApply; i++) {
-    pCmm->m_dst_to_mid[i]->Apply(&m_pixel[0], &point.vec()[0]);
+    // A failed reverse transform leaves m_pixel holding the previous candidate's
+    // values, which would silently score this point against stale data (#1860).
+    // costFunc has no status channel, so report the point as infeasible instead:
+    // the same sentinel the bounds barrier uses keeps the optimizer away from it
+    // rather than letting it converge on a garbage minimum.
+    if (pCmm->m_dst_to_mid[i]->Apply(&m_pixel[0], &point.vec()[0]) != icCmmStatOk)
+      return overBoundsCost;
 
     if (m_bNeedPcsToLab) {
       icLabFromPcs(&m_pixel[0]);
@@ -203,11 +209,20 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
     if (nApply > pCmm->m_src_to_mid.size())
       nApply = pCmm->m_src_to_mid.size();
     for (size_t i = 0; i < nApply; i++) {
-      pCmm->m_src_to_mid[i]->Apply(&m_mid_data[i][0], SrcPixel);
+      // Propagate the per-PCC forward transform status (#1860).  Swallowing it
+      // left m_mid_data[i] holding whatever the previous pixel wrote, so the
+      // search then optimised against a stale target and still reported success.
+      icStatusCMM statMid = pCmm->m_src_to_mid[i]->Apply(&m_mid_data[i][0], SrcPixel);
+      if (statMid != icCmmStatOk)
+        return statMid;
     }
   }
 
-  pCmm->m_mid_to_dst->Apply(&m_startPixel[0], &m_mid_data[0][0]);
+  // Same for the transform that seeds the search's starting point: if it fails
+  // m_startPixel is stale and every subsequent simplex vertex derives from it.
+  icStatusCMM statStart = pCmm->m_mid_to_dst->Apply(&m_startPixel[0], &m_mid_data[0][0]);
+  if (statStart != icCmmStatOk)
+    return statStart;
 
   //Cost function needs delteEab so convert from PCS encoding to Lab for comparisons
   if (m_bNeedPcsToLab) {
@@ -233,7 +248,13 @@ icStatusCMM CIccApplyCmmSearch::Apply(icFloatNumber* DstPixel, const icFloatNumb
   icUInt32Number nDstSamples = pCmm->GetDestSamples();
 
   for (icUInt32Number i = 0; i < nPixels; i++) {
-    Apply(DstPixel, SrcPixel);
+    // Stop on the first failing pixel and report it (#1860).  The single-pixel
+    // overload above now returns real statuses, but discarding them here would
+    // still hand the caller a buffer of partially-transformed pixels alongside
+    // icCmmStatOk -- the same masking the per-stage Apply() calls had.
+    icStatusCMM stat = Apply(DstPixel, SrcPixel);
+    if (stat != icCmmStatOk)
+      return stat;
     DstPixel += nDstSamples;
     SrcPixel += nSrcSamples;
   }
@@ -374,6 +395,33 @@ icStatusCMM CIccCmmSearch::Begin(bool /* bAllocNewApply */, bool /* bUsePcsConve
 
   if (m_nAttached < 2)
     return icCmmStatBadXform;
+
+  // Resolve every attached profile's connection conditions before any sub-CMM is
+  // built (#1860).  The sub-chains below mix the two CIccCmm::AddXform overloads:
+  // the src/mid/dst profiles go in by reference, which copy-constructs the profile
+  // and then detaches the copy from its file IO (CopyAttach(nullptr)), while the
+  // -INIT initial-destination profile goes in by pointer and keeps its IO.  A
+  // detached copy can no longer load spectralViewingConditions on demand, so when
+  // CIccCmm::Begin() reaches CheckPCSConnections()/pushXYZConvert() it reads the
+  // D50/2-degree default for one end of the chain and the profile's real PCC for
+  // the other.  isEquivalentPcc() then reports a mismatch and splices a bogus
+  // chromatic-adaptation CIccPcsXform into mid_to_dst.  For a v5 profile carrying
+  // a non-D50 'svcn' (e.g. Testing/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc,
+  // which declares D65) that turned an identity sRGB->sRGB search into a D50<->D65
+  // adaptation, and because the search is fenced by a 1e6 out-of-gamut barrier the
+  // resulting start point could not be recovered from.  Loading the three PCC tags
+  // here means the reference-overload copies inherit them, so both ends of every
+  // sub-chain agree and only genuinely differing PCCs get an adaptation.
+  // CIccConnectCmm::CreateSearch() already does exactly this for the weighted PCC
+  // profiles it attaches; this extends the same treatment to the chain profiles.
+  if (m_pSrcProfile)
+    m_pSrcProfile->ReadPccTags();
+  if (m_pMidProfile)
+    m_pMidProfile->ReadPccTags();
+  if (m_pDstProfile)
+    m_pDstProfile->ReadPccTags();
+  if (m_pDstInitProfile)
+    m_pDstInitProfile->ReadPccTags();
 
   if (m_nAttached == 2) {
     //mid_to_dst
