@@ -1210,7 +1210,13 @@ double voxelEnclosedVolume(const std::vector<float>& lab, double vs,
     return ((std::size_t)l * nA + a) * nB + b;
   };
   auto cl = [](int v, int hi) { return v < 0 ? 0 : (v >= hi ? hi - 1 : v); };
-  std::vector<unsigned char> g((std::size_t)nL * nA * nB, 0);  // 0 empty, 1 solid, 2 exterior
+  // Value-initialised, not fill-constructed - see the note in buildNeutralAxisGraph
+  // (#1777), whose "applied to every fill-construction below" missed this one. It
+  // is the last two-argument vector construction in this file. `(n)` and `(n, 0)`
+  // both zero every element for unsigned char, so the stored grid is unchanged;
+  // only the libstdc++ path differs, and the one-argument overload avoids the
+  // decrement-past-zero loop that -fsanitize=integer reports on the other.
+  std::vector<unsigned char> g((std::size_t)nL * nA * nB);  // 0 empty, 1 solid, 2 exterior
 
   const int nPts = (int)(lab.size() / 3);
   for (int i = 0; i < nPts; ++i) {

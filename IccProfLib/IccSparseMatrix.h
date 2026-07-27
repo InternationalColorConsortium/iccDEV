@@ -68,6 +68,11 @@ Copyright:  (c) see Software License
 #ifndef _ICCSPARSEMATRIX_H
 #define _ICCSPARSEMATRIX_H
 
+// For std::isfinite in the UInt8/UInt16 set() guards below. This header is
+// installed and included on its own, so it cannot rely on a translation unit
+// pulling <cmath> in first.
+#include <cmath>
+
 #include "IccDefs.h"
 #include "IccUtil.h"
 
@@ -105,10 +110,29 @@ public:
   CIccSparseMatrixUInt8() {}
 
   virtual icFloatNumber get(int index) const {return (icFloatNumber)m_pData[index]/255.0f;}
-  // !(value > 0.0) rejects NaN and value<=0 (both -> 0) BEFORE the cast. A plain
-  // value<0.0 test lets a NaN fall through to (icUInt8Number)(NaN*255+0.5), which is
-  // undefined behavior on the float->int cast (CWE-681, alert #1061).
-  virtual void set(int index, icFloatNumber value) {m_pData[index] = !(value > 0.0) ? 0 : (value > 1.0 ? 255 : (icUInt8Number)(value*255.0f+0.5f));}
+
+  // Saturation is tested FIRST so that +INF clamps to full scale like any other
+  // out-of-range positive. Leading with !isfinite() instead would store 0 for +INF,
+  // silently inverting the value.
+  //
+  // The second branch then routes NaN, -INF and value<=0 to 0 BEFORE the cast. A
+  // plain value<0.0 test lets a NaN reach (icUInt8Number)(NaN*255+0.5), undefined
+  // behaviour on the float->int cast (CWE-681, alert #1061).
+  //
+  // isfinite() is spelt as a call rather than as the equally correct relational
+  // guard !(value > 0.0) because iccdev/float-to-int-cast only recognises
+  // isnan/isinf/isfinite calls within five lines above a cast; the relational form
+  // leaves this cast flagged on every scan (alerts #2318/#2317, dismissed as
+  // query-blind false positives).
+  virtual void set(int index, icFloatNumber value)
+  {
+    if (value > 1.0f)
+      m_pData[index] = 255;
+    else if (!std::isfinite(value) || value <= 0.0f)
+      m_pData[index] = 0;
+    else
+      m_pData[index] = (icUInt8Number)(value*255.0f+0.5f);
+  }
 
 };
 
@@ -118,11 +142,23 @@ public:
   CIccSparseMatrixUInt16() {}
 
   virtual icFloatNumber get(int index) const {return (icFloatNumber)m_pData[index]/65535.0f;}
-  // Same NaN guard as the UInt8 entry (alert #2260). Also fixes a data-loss bug: the
-  // cast is (icUInt16Number), not (icUInt8Number) -- the 8-bit cast truncated the
+
+  // Same branch order and the same isfinite() call as the UInt8 entry above; see
+  // the note there for why saturation is tested first and why the guard is a call
+  // (alert #2260 is this entry's counterpart to #1061).
+  //
+  // The cast is (icUInt16Number), not (icUInt8Number): the 8-bit cast truncated the
   // scaled value into the 16-bit slot (e.g. 0.5 -> 32768 & 0xff == 0), breaking the
   // set()/get() round-trip against get()'s /65535.0f above.
-  virtual void set(int index, icFloatNumber value) {m_pData[index] = !(value > 0.0) ? 0 : (value > 1.0 ? 65535 : (icUInt16Number)(value*65535.0f+0.5f));}
+  virtual void set(int index, icFloatNumber value)
+  {
+    if (value > 1.0f)
+      m_pData[index] = 65535;
+    else if (!std::isfinite(value) || value <= 0.0f)
+      m_pData[index] = 0;
+    else
+      m_pData[index] = (icUInt16Number)(value*65535.0f+0.5f);
+  }
 
 };
 
