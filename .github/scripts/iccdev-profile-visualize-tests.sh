@@ -90,6 +90,7 @@ require_tiff() {
   return 0
 }
 
+# shellcheck disable=SC2329
 require_svg() {
   # shellcheck disable=SC2317
   local name="$1"

@@ -4,44 +4,9 @@ Systematic code review workflow for finding security bugs in iccDEV.
 Based on analysis of 80+ upstream issues and 19 findings from manual
 code review (April 2026).
 
-## 5-Category Hunt
+## 4-Category Hunt
 
-### Category 1: Division by Zero (CWE-369)
-
-Search `Apply()` methods for unguarded divisors from profile data.
-
-```bash
-grep -rn 'Apply.*/' IccProfLib/ | grep -v '//' | grep -v 'test'
-```
-
-Pattern: parametric curve types 1-4 have denominators derived from
-`m_Params[]` which are file-controlled. A profile with `g=0` or `a=0`
-causes IEEE 754 NaN/Inf propagation.
-
-**Key locations**:
-- `CIccTagParametricCurve::Apply()` -- IccTagLut.cpp
-- `CIccMpeCalculator` Divide/Modulo ops -- IccMpeCalc.cpp
-- `CIccFormulaCurveSegment::Apply()` -- IccMpeBasic.cpp
-
-**UBSAN flag gap**: `-fsanitize=undefined` does NOT catch float
-division by zero (IEEE 754 defines float/0 as NaN). Must add
-`-fsanitize=float-divide-by-zero` explicitly. This is why PoCs
-produce silent NaN corruption (DeltaE=0) instead of UBSAN output.
-
-Build with float sanitizer:
-```bash
-cd Build && rm -rf CMakeCache.txt CMakeFiles/
-CC=clang CXX=clang++ cmake Cmake \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DENABLE_TOOLS=ON \
-  -DENABLE_ASAN=ON \
-  -DENABLE_UBSAN=ON \
-  -DENABLE_INTEGER_SANITIZER=ON \
-  -DENABLE_FLOAT_SANITIZER=ON
-make -j"$(nproc)"
-```
-
-### Category 2: Serialization Mismatch (CWE-345)
+### Category 1: Serialization Mismatch (CWE-345)
 
 Audit Read/Write pairs for field order or type mismatches.
 
@@ -57,7 +22,7 @@ the round-trip corrupts data.
 Check: for every Read() in a tag class, verify the matching Write() uses
 the same type and order.
 
-### Category 3: Format String (CWE-134)
+### Category 2: Format String (CWE-134)
 
 Search `printf`/`sprintf`/`Describe` for user-controlled format args.
 
@@ -72,7 +37,7 @@ with mismatched format specifiers. Common: `%d` for `icUInt32Number`
 
 CodeQL query: `cpp/wrong-type-format-argument`
 
-### Category 4: Dead Code Audit (CWE-561)
+### Category 3: Dead Code Audit (CWE-561)
 
 Before labeling any finding as CRITICAL, verify reachability.
 
@@ -86,7 +51,7 @@ Pattern: iccDEV uses `NewCopy()` (calls copy constructor) for cloning.
 The `operator=` may have bugs but is never called from any code path.
 These findings should be LOW/informational, not CRITICAL.
 
-### Category 5: Unchecked Return Values (CWE-252)
+### Category 4: Unchecked Return Values (CWE-252)
 
 Search for `Read()`, `Begin()`, `fromJson()` calls where the return
 value is discarded.
@@ -131,12 +96,11 @@ Before filing an issue:
 
 1. [ ] Reproduced on latest master with fresh clone
 2. [ ] Built with full sanitizer flags (including `-fsanitize=integer`)
-3. [ ] For float bugs, added `-fsanitize=float-divide-by-zero`
-4. [ ] Verified reachability from CLI tool entry point
-5. [ ] PoC file in fuzz corpus with descriptive name
-6. [ ] 1-liner repro command that produces sanitizer output
-7. [ ] Tested the exact `wget` URL downloads correctly
-8. [ ] One bug per issue
+3. [ ] Verified reachability from CLI tool entry point
+4. [ ] PoC file in fuzz corpus with descriptive name
+5. [ ] 1-liner repro command that produces sanitizer output
+6. [ ] Tested the exact `wget` URL downloads correctly
+7. [ ] One bug per issue
 
 ## Anti-Patterns
 
@@ -146,16 +110,14 @@ Before filing an issue:
 | 2 | Use synthesized PoC in issue | Breaks when synthesis script changes |
 | 3 | Label dead code as CRITICAL | Wastes maintainer time on unreachable paths |
 | 4 | Miss `-fsanitize=integer` | UIO bugs invisible |
-| 5 | Miss `-fsanitize=float-divide-by-zero` | Div-by-zero bugs produce silent NaN |
-| 6 | Bundle multiple bugs in one issue | Blocks per-bug tracking and labeling |
-| 7 | Include shadow byte legend | 17 lines of noise (cut unless UAF) |
-| 8 | Use downstream-patched tools | Masks upstream behavior |
+| 5 | Bundle multiple bugs in one issue | Blocks per-bug tracking and labeling |
+| 6 | Include shadow byte legend | 17 lines of noise (cut unless UAF) |
+| 7 | Use downstream-patched tools | Masks upstream behavior |
 
 ## CWE Quick Reference
 
 | CWE | Name | iccDEV Hotspots |
 |-----|------|----------------|
-| CWE-369 | Divide by Zero | Apply() methods with file-controlled denominators |
 | CWE-134 | Format String | Describe(), sprintf in tag serialization |
 | CWE-345 | Insufficient Verification | Read/Write field order mismatches |
 | CWE-252 | Unchecked Return | Begin(), Read(), fromJson() |
