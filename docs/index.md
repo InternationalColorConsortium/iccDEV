@@ -16,6 +16,7 @@ working with ICC.1 and ICC.2/iccMAX color profiles.
 - [CIccThreadedCmm](icc-cmm-threading.md): parallel CMM apply decorator
 - [Bisecting regressions](bisect.md): focused debug workflow
 - [Linear stack workflow](linear-stack-workflow.md): rebase feature branches and stack commits without merge commits
+- [Stacked PR workflow](stacked-pr-workflow.md): create and submit linked draft PR stacks with `gh stack`
 - [Pre-PR security cycle](pre-pr-security-cycle.md): maintainer loop for build/test, SAST, CodeQL, dynamic checks, and fixes
 - [Maintainer regression container](regression-container.md): basic use, PR validation, issue reproduction, and CI handoff
 - [AFL++ smoke fuzzing](afl-fuzzing.md): manual bounded AFL instrumentation checks for CLI tools

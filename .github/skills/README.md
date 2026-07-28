@@ -11,6 +11,7 @@ long command references.
 | `pre-pr-security-cycle` | Running the maintainer pre-PR secure loop: code, build/test, SAST/CodeQL, sanitizer/DAST-style checks, fix, repeat, handoff. |
 | `sanitizer-repro` | Reproducing ASAN/UBSAN findings or security advisories. |
 | `json-config-regression` | Editing JSON/profile config parsing or tests. |
+| `iccdev-stacked-pr` | Creating, validating, and submitting GitHub Stacked PR chains with `gh stack`. |
 | `maintainer-ci-ctest` | Updating maintainer-owned CI, CTest, CPack, sanitizer, workflow, or release gates. |
 | `maintainer-label-system` | Maintaining label taxonomy, path labeler rules, issue triage, PR status labels, and CodeQL label routing. |
 | `regression-container-maintainer` | Using the published maintainer container for smoke tests, PR validation, issue reproduction, sanitizer review, and CI handoff. |
