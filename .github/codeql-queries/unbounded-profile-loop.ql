@@ -78,7 +78,7 @@ where
     minCall.getTarget().getName().matches("%min%") and
     // Scope the min() exemption to the loop's own function. Without this it matched
     // any *min*-named call within three lines of ANY loop in ANY file, suppressing
-    // unrelated loops (the same soundness hole fixed in float-to-int-cast.ql). The
+    // unrelated loops through a cross-function line-number match. The
     // sibling guards above - hasPriorBoundGuardInFunction and
     // hasSetupBoundGuardInSameType - are already function-scoped; only this
     // exemption was left comparing bare line numbers. Mirror them.
