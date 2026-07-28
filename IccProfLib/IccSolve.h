@@ -111,6 +111,13 @@ public:
 * with the status of false.
 *****************************************************************************
 */
+// Exported DATA rather than a function: on a Windows shared build this does not
+// link from outside the library, because WINDOWS_EXPORT_ALL_SYMBOLS covers
+// functions but not global data and IccProfLib carries no dllexport/dllimport
+// on its variables (see #764 and the note in IccUtil.h). A downstream consumer
+// installing its own solver against IccProfLib2.dll gets LNK2019. Prefer the
+// IccSetMatrixSolver() setter below, which is a function and therefore links
+// normally. See #1888.
 ICCPROFLIB_API extern IIccMatrixSolver *g_pIccMatrixSolver;
 
 /**
@@ -173,6 +180,8 @@ public:
 * Purpose: Keep tracks of pointer to matrix inverter object.  
 *****************************************************************************
 */
+// Exported DATA: not linkable from outside the library on Windows shared
+// builds; prefer IccSetMatrixInverter(). See g_pIccMatrixSolver above and #1888.
 ICCPROFLIB_API extern IIccMatrixInverter *g_pIccMatrixInverter;
 
 /**

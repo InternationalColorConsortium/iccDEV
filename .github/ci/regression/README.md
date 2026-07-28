@@ -28,6 +28,7 @@ Test 18 (Regression Bisect).
 | `iccdev.iccviz-degenerate-detection` | #1712 | `principalStdDevs` eigenvalues and the `s3 < 0.02*s1` flat predicate that flags a collapsed gamut cloud were unpinned | Header-only unit test over blob/plane/line and a rotated anisotropic cloud; calibrates the 0.02 constant and exercises the Smith-1961 trig branch (non-diagonal covariance) |
 | `iccdev.mpe-empty-identity` | #1809 | `CIccTagMultiProcessElement::Validate()` raised `icValidateWarning` for a zero-element tag with equal input and output channel counts, although `Read()`/`Write()`/`Begin()`/`Apply()` all define that shape as the identity transform; 79 reference profiles under `Testing/` (148 messages) sat in the warning cohort as a result | Validates a zero-element tag through a Lab/Lab profile and asserts the equal-channel case is `icValidateOK` reported at information level, the unequal-channel case stays a critical error, and the runtime behaviour that justifies the split (`Begin()` true / `Apply()` identity for equal channels, `Begin()` false for unequal) |
 | `iccdev.mpexml-unknown-reserved` | #1886 | `CIccMpeXmlUnknown::ToXml()` formatted the `Reserved` attribute into `line` but appended `buf`, which still held the element's type signature, so the value was dropped and the signature was injected into the attribute list before the start tag closed — the emitted document did not parse; `ParseXml()` had never read `Reserved` back either | Drives the writer on an element carrying a non-zero `Reserved`, parsing the output with libxml2 rather than grepping it (the defect produced text a substring check would accept), and asserts the value survives a parse/write round-trip, an out-of-range value is refused, and a document without the attribute still reads as zero |
+| `iccdev.proflib-exported-data-linkage` | #1888 | Exported IccProfLib global *variables* could not be linked from a regression executable on Windows shared builds — `WINDOWS_EXPORT_ALL_SYMBOLS` exports functions but not data, so the first test to reference `icMsgValidate*` failed with LNK2019 on the Windows leg alone | Links the exported globals through `${ICCDEV_TEST_LIB_ICCPROFLIB}` so the Windows leg fails here if that fallback is dropped, and pins the report prefixes, D50 constants, solver pointers and `icInfo` that IccXML-linking tests hard-code because they cannot link them |
 | `iccdev.iccviz-pdf-axis-labels` | #1712, #1777 | `DrawAxisPDF` axis-label and custom start/mid/end tick parameterization could regress silently; the CLI also confirmed nothing on a successful run | Runs `iccProfileVisualizePlot` on `sRGB_v4_ICC_preference.icc` in a freshly recreated scratch dir and asserts the emitted LUT PDF carries the axis titles plus the default (`50%`/`100%`) vs reversed (`100`/`50`) tick operators, and that the run prints a success line naming the written PDF (#1777) |
 
 | Script | Issue | Bug | Check |
@@ -52,6 +53,58 @@ Test 18 (Regression Bisect).
 |----------|-------|---------|-------|
 | `.github/workflows/ci-pr-win.yml` | MinGW toolchain | Keep normal Windows PR CI from regressing MinGW CMake/tool support | Runs a UCRT64 MinGW Release static build and the full registered MinGW CTest set, including `iccdev.windows-icc-dump-profile-smoke` and `iccdev.iccconnect-threaded-cmm` |
 | `.github/workflows/ci-pr-win.yml` | #1025, #1036 | Keep Windows ClangCL warning output focused on source signal instead of known CRT/deprecation noise | Runs the ClangCL smoke build with ClangCL-only noise-control flags, classifies warning categories, and uploads sanitized warning logs |
+
+## Referencing exported IccProfLib globals (#1888)
+
+A test may call any exported IccProfLib **function** freely. Referencing an
+exported global **variable** is different, and gets it wrong on Windows only.
+
+On a Windows shared build the library is `IccProfLib2.dll`, exported by CMake's
+`WINDOWS_EXPORT_ALL_SYMBOLS` rather than by `__declspec` annotations — MSVC is
+deliberately excluded from the `ICCPROFLIBDLL_EXPORTS` definition, a decision
+taken in #764. That mechanism auto-exports functions but **not global data**, and
+IccProfLib carries no `dllexport`/`dllimport` on its variables. A test compiling
+with `ICCPROFLIB_API` empty therefore emits a direct data reference with no
+`__imp_` indirection, and the link fails:
+
+```
+mpe-empty-identity.obj : error LNK2019: unresolved external symbol
+  "char const * const icMsgValidateWarning" (?icMsgValidateWarning@@3PEBDEB)
+fatal error LNK1120: 3 unresolved externals
+```
+
+Linux and macOS have no import-library model, so **a green local pre-flight will
+not catch this** — only the Windows CI leg will.
+
+The eight affected symbols:
+
+| Symbol | Header |
+|---|---|
+| `g_pIccMatrixSolver`, `g_pIccMatrixInverter` | `IccProfLib/IccSolve.h` |
+| `icD50XYZ[3]`, `icD50XYZxx[3]` | `IccProfLib/IccUtil.h` |
+| `icMsgValidateWarning`, `icMsgValidateNonCompliant`, `icMsgValidateCriticalError`, `icMsgValidateInformation` | `IccProfLib/IccUtil.h` |
+
+`IccUtil.h` declares a ninth, `icInfo`, but it is a **dangling declaration** —
+there is no definition anywhere in the tree, so referencing it fails to link on
+every platform rather than only on Windows. Nothing in-tree uses it. That is a
+separate defect from the export problem described here.
+
+Choose by what else the test links:
+
+- **IccProfLib only** — link `${ICCDEV_TEST_LIB_ICCPROFLIB}` instead of
+  `${TARGET_LIB_ICCPROFLIB}`. It resolves to the static library on Windows shared
+  builds, the same fallback `iccDumpProfile`, `iccProfilePlot` and
+  `wxProfileDump` already use.
+- **Also links IccXML or IccJson** — you cannot use that fallback. Those
+  libraries link `${TARGET_LIB_ICCPROFLIB}` `PUBLIC`, so pulling in the static
+  IccProfLib as well would load the library twice in one process, once inside
+  the DLL and once in the executable, giving two copies of its globals. Assert on
+  literal values instead, as `mpe-empty-identity.cpp` and
+  `pawg-q4-xyz-pcs-decode.cpp` do.
+
+Literals copied out of the library drift silently, so
+`iccdev.proflib-exported-data-linkage` pins the real globals. If it fails after a
+library change, update the hard-coded copies it names.
 
 ## Adding a new PoC
 

@@ -133,6 +133,8 @@ ICCPROFLIB_API icFloatNumber icU16toF(icUInt16Number num);
 ICCPROFLIB_API icUInt8Number icABtoU8(icFloatNumber num);
 ICCPROFLIB_API icFloatNumber icU8toAB(icUInt8Number num);
 
+// Exported DATA: not linkable from outside the library on Windows shared
+// builds. See the note beside icMsgValidateWarning below and #1888.
 ICCPROFLIB_API extern icFloatNumber icD50XYZ[3];
 ICCPROFLIB_API extern icFloatNumber icD50XYZxx[3];
 
@@ -197,6 +199,18 @@ bool ICCPROFLIB_API icSameSpectralRange(const icSpectralRange &rng1, const icSpe
 
 ICCPROFLIB_API icUInt8Number icGetStorageTypeBytes(icUInt16Number nStorageType);
 
+// Exported DATA, not functions. On a Windows shared build these do not link
+// from outside the library: exports come from WINDOWS_EXPORT_ALL_SYMBOLS (see
+// Build/Cmake/IccProfLib/CMakeLists.txt and #764), which covers functions but
+// not global data, and IccProfLib carries no dllexport/dllimport annotation on
+// its variables. Referencing one from a tool or test gives LNK2019/LNK1120 on
+// MSVC while every function beside it links normally; Linux and macOS are
+// unaffected, so this does not show up in a local pre-flight. See #1888.
+// Tools work around it by linking IccProfLib2-static on Windows shared builds;
+// tests use ${ICCDEV_TEST_LIB_ICCPROFLIB}, or assert on literal values when
+// they also link IccXML. The literals are pinned by
+// .github/ci/regression/proflib-exported-data-linkage.cpp -- update it if these
+// strings change.
 ICCPROFLIB_API extern const char *icMsgValidateWarning;
 ICCPROFLIB_API extern const char *icMsgValidateNonCompliant;
 ICCPROFLIB_API extern const char *icMsgValidateCriticalError;
@@ -426,6 +440,11 @@ public:
 
 
 
+// NOTE: this declaration has no definition anywhere in the library, so any
+// reference to it fails to link on every platform, not only on Windows --
+// `nm -DC libIccProfLib2.so` lists the other exported globals and not this one.
+// Nothing in-tree uses it. Construct a CIccInfo where one is needed. Kept as
+// declared rather than removed because it is public API surface; see #1888.
 extern ICCPROFLIB_API CIccInfo icInfo;
 
 // ---------------------------------------------------------------------------

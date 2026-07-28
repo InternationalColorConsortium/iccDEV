@@ -255,6 +255,52 @@ and add DEB or RPM packages when the corresponding local CPack backend is
 available. The `ci-latest-release` workflow runs the Linux CPack runtime-package
 smoke and uploads the `reficcmax-runtime-packages-linux` artifact.
 
+## Shared library exports
+
+`ENABLE_SHARED_LIBS` defaults to `ON`, so a default Windows build links against
+`IccProfLib2.dll`. Its exports come from CMake's `WINDOWS_EXPORT_ALL_SYMBOLS`
+rather than from `__declspec` annotations: MSVC is deliberately excluded from the
+`ICCPROFLIBDLL_EXPORTS` definition in `Build/Cmake/IccProfLib/CMakeLists.txt`.
+That arrangement dates from #764, and the same file records why hidden visibility
+is not used on GCC/Clang — `ICCPROFLIB_API` annotations are incomplete
+(~308 partial uses across 43 headers) and `IccXML` has none at all.
+
+One consequence is worth knowing before it costs a CI round (#1888):
+
+> `WINDOWS_EXPORT_ALL_SYMBOLS` auto-exports **functions**. Exported global
+> **variables** still require explicit `dllexport`/`dllimport`, which IccProfLib
+> does not carry. Referencing one from outside the library fails to link on
+> Windows shared builds with `LNK2019`/`LNK1120`, while every function in the
+> same header links normally.
+
+Linux and macOS have no import-library model and are unaffected, so this never
+appears in a local pre-flight on those platforms.
+
+Affected symbols are `g_pIccMatrixSolver` and `g_pIccMatrixInverter`
+(`IccSolve.h`), and `icD50XYZ`, `icD50XYZxx` and the four `icMsgValidate*`
+message prefixes (`IccUtil.h`). Each declaration carries a note. `IccUtil.h`
+also declares `icInfo`, but that one has no definition anywhere in the tree and
+so fails to link on every platform — a dangling declaration rather than an export
+problem.
+
+Existing consumers handle it in one of two ways:
+
+- **Tools** link `IccProfLib2-static` on Windows shared builds — see
+  `Build/Cmake/Tools/{IccDumpProfile,IccProfilePlot,wxProfileDump}/CMakeLists.txt`.
+  Regression executables get the same fallback through
+  `${ICCDEV_TEST_LIB_ICCPROFLIB}`.
+- **Consumers that also link `IccXML`/`IccJson`** cannot use that fallback, since
+  those libraries link `IccProfLib` `PUBLIC` and the static copy would load the
+  library twice in one process. They avoid the symbol and use literal values.
+
+Prefer the setter functions where they exist: `IccSetMatrixSolver()` and
+`IccSetMatrixInverter()` are functions, so they link normally and are the
+supported way to install a custom solver against the DLL.
+
+See `.github/ci/regression/README.md` for the test-side rules and
+`iccdev.proflib-exported-data-linkage`, which pins both the linkage and the
+literal values that dependent tests hard-code.
+
 ## Instrumentation Builds
 
 Use CMake options instead of hand-written sanitizer flags. Clean the cache when

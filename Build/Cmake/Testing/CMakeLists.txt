@@ -49,6 +49,37 @@ function(iccdev_add_regression_executable TARGET_NAME)
   add_dependencies(build-test-binaries "${TARGET_NAME}")
 endfunction()
 
+# Link target for regression executables that reference an exported IccProfLib
+# global *variable* rather than only its functions (#1888).
+#
+# On a Windows shared build the library is IccProfLib2.dll, exported by CMake's
+# WINDOWS_EXPORT_ALL_SYMBOLS rather than by __declspec annotations: MSVC is
+# deliberately excluded from the ICCPROFLIBDLL_EXPORTS definition in
+# Build/Cmake/IccProfLib/CMakeLists.txt, a decision made in #764 and recorded in
+# the comment there. WINDOWS_EXPORT_ALL_SYMBOLS auto-exports functions; global
+# data still needs explicit dllexport/dllimport, which IccProfLib does not carry.
+# A consumer compiling with ICCPROFLIB_API empty therefore emits a direct data
+# reference with no __imp_ indirection and fails to link (LNK2019/LNK2001), while
+# every function in the same header thunks normally. Linux and macOS are immune,
+# so a green local pre-flight says nothing about this.
+#
+# The three tools with the same problem already resolve it this way -- see
+# Build/Cmake/Tools/{IccDumpProfile,IccProfilePlot,wxProfileDump}/CMakeLists.txt.
+#
+# USE THIS ONLY FOR TESTS THAT LINK IccProfLib ALONE. IccXML2 and IccJson link
+# ${TARGET_LIB_ICCPROFLIB} PUBLIC, so a test that links one of those *and* the
+# static IccProfLib pulls the library into the process twice -- once inside the
+# DLL, once in the executable -- giving two copies of its globals. Tests that
+# link IccXML/IccJson must keep using ${TARGET_LIB_ICCPROFLIB} and must not
+# reference exported library data at all; assert on literal values instead, as
+# .github/ci/regression/{mpe-empty-identity,pawg-q4-xyz-pcs-decode}.cpp do.
+if(WIN32 AND ENABLE_SHARED_LIBS AND TARGET IccProfLib2-static)
+  set(ICCDEV_TEST_LIB_ICCPROFLIB IccProfLib2-static)
+else()
+  set(ICCDEV_TEST_LIB_ICCPROFLIB ${TARGET_LIB_ICCPROFLIB})
+endif()
+message(STATUS "ICCDEV_TEST_LIB_ICCPROFLIB  = ${ICCDEV_TEST_LIB_ICCPROFLIB}")
+
 add_custom_target(check-fast
   COMMAND "${CMAKE_CTEST_COMMAND}"
           ${ICCDEV_CTEST_CONFIG_ARGS}
@@ -2118,6 +2149,53 @@ function(iccdev_add_mpexml_unknown_reserved_test)
   endif()
 endfunction()
 
+# #1888: proves a regression executable can link an exported IccProfLib global
+# *variable*. WINDOWS_EXPORT_ALL_SYMBOLS exports functions but not data, so on a
+# Windows shared build this only links via ${ICCDEV_TEST_LIB_ICCPROFLIB}; if that
+# fallback is dropped the Windows leg fails here rather than in whichever new
+# test next reaches for library data. Also pins the values that the tests which
+# cannot link these symbols -- anything co-linking IccXML -- hard-code instead.
+# Links IccProfLib only, by design: co-linking IccXML would load IccProfLib twice.
+function(iccdev_add_proflib_exported_data_linkage_test)
+  if(NOT TARGET "${ICCDEV_TEST_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccProfLibExportedDataLinkageTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/proflib-exported-data-linkage.cpp"
+  )
+  target_compile_features(iccProfLibExportedDataLinkageTest PRIVATE cxx_std_17)
+  target_include_directories(iccProfLibExportedDataLinkageTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccProfLibExportedDataLinkageTest PRIVATE
+    ${ICCDEV_TEST_LIB_ICCPROFLIB})
+  add_dependencies(check iccProfLibExportedDataLinkageTest)
+
+  add_test(
+    NAME iccdev.proflib-exported-data-linkage
+    COMMAND "$<TARGET_FILE:iccProfLibExportedDataLinkageTest>"
+  )
+  set_tests_properties(iccdev.proflib-exported-data-linkage PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;build;linkage;issue-1888;regression"
+  )
+  if(WIN32)
+    set(_exported_data_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccProfLibExportedDataLinkageTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${ICCDEV_TEST_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _exported_data_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.proflib-exported-data-linkage PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_exported_data_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1830: the JSON BCD version parser used atoi() per component, which accepts a
 # leading '-'; "-1" produced 0xFFFFFFFF and wrapped both the "<< 8" in
 # icJsonParseBCDVersionStr and the caller's "<< 16" (UBSan: "left shift of
@@ -2514,6 +2592,7 @@ if(WIN32)
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_mpexml_unknown_reserved_test()
+  iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
@@ -2736,6 +2815,7 @@ iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_mpexml_unknown_reserved_test()
+iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
