@@ -119,11 +119,8 @@ public:
   // plain value<0.0 test lets a NaN reach (icUInt8Number)(NaN*255+0.5), undefined
   // behaviour on the float->int cast (CWE-681, alert #1061).
   //
-  // isfinite() is spelt as a call rather than as the equally correct relational
-  // guard !(value > 0.0) because iccdev/float-to-int-cast only recognises
-  // isnan/isinf/isfinite calls within five lines above a cast; the relational form
-  // leaves this cast flagged on every scan (alerts #2318/#2317, dismissed as
-  // query-blind false positives).
+  // Keep the finiteness guard local to the cast so the conversion precondition
+  // remains obvious during review.
   virtual void set(int index, icFloatNumber value)
   {
     if (value > 1.0f)
@@ -143,9 +140,9 @@ public:
 
   virtual icFloatNumber get(int index) const {return (icFloatNumber)m_pData[index]/65535.0f;}
 
-  // Same branch order and the same isfinite() call as the UInt8 entry above; see
-  // the note there for why saturation is tested first and why the guard is a call
-  // (alert #2260 is this entry's counterpart to #1061).
+  // Same branch order and local isfinite() guard as the UInt8 entry above; see
+  // the note there for why saturation is tested first (alert #2260 is this
+  // entry's counterpart to #1061).
   //
   // The cast is (icUInt16Number), not (icUInt8Number): the 8-bit cast truncated the
   // scaled value into the 16-bit slot (e.g. 0.5 -> 32768 & 0xff == 0), breaking the

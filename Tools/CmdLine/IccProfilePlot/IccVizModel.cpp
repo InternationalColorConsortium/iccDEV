@@ -1768,15 +1768,13 @@ RoundTripResult RoundTripDE(CIccProfile* pIcc, icRenderingIntent intent,
   // finite product or, on overflow, +inf - never NaN, never negative. Even though NaN
   // is therefore unreachable, the guard below rejects any non-finite total explicitly
   // with std::isfinite rather than leaning on the ceiling test alone to catch +inf:
-  // that makes the cast's precondition local and executable (and clears the
-  // float-to-int-cast scanner at #2335, which recognises an isfinite/isnan call as the
-  // guard but cannot follow the pow() argument above). total thus lands in [3, 3000000]
-  // at the cast (the minimum is N == 1 giving 3^1, not 9).
+  // that makes the cast's precondition local and executable instead of relying
+  // on the pow() argument proof above. total thus lands in [3, 3000000] at the
+  // cast (the minimum is N == 1 giving 3^1, not 9).
   double total = std::pow((double)S + 1.0, N);
   if (!std::isfinite(total) || total > 3000000.0) { delete xA; delete xB; return fail("seed grid too large"); }
-  // Reserve the delta-E accumulator now, while the (size_t)total cast still sits within
-  // a few lines of the isfinite guard above (the float-to-int-cast scanner, #2335, ties
-  // a guard to a cast only when it is <=5 lines above). total is finite, in [3,3000000].
+  // Reserve the delta-E accumulator now, while the (size_t)total cast still sits
+  // close to the isfinite guard above. total is finite, in [3,3000000].
   std::vector<double> des;
   des.reserve((size_t)total);
 
@@ -1815,7 +1813,7 @@ RoundTripResult RoundTripDE(CIccProfile* pIcc, icRenderingIntent intent,
   // 90th-percentile index = floor(0.90 * (n-1)) for integer n = des.size(). Compute it
   // as exact integer arithmetic (9*(n-1))/10 rather than std::floor on a double: it is
   // the same index for every n (des.size() <= 3,000,000 here, so 9*(n-1) cannot
-  // overflow), and it avoids a float-to-int cast the scanner would flag as NaN-unsafe.
+  // overflow), and it avoids an unnecessary float-to-int cast.
   const std::size_t p90i = (9 * (des.size() - 1)) / 10;
 
   r.ok = true;
