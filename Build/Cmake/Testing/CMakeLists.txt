@@ -1060,6 +1060,49 @@ function(iccdev_add_extended_device_colorspace_test)
   endif()
 endfunction()
 
+# #1843: the round-trip and PRMG evaluators accept only the four device classes that
+# carry a device<->PCS transform pair, and used to refuse every other class with
+# icCmmStatInvalidProfile -- so iccRoundTrip called a cleanly-validating abstract or
+# namedColor profile "Invalid profile", and no caller could tell a damaged profile from
+# an inapplicable one. Both now return icCmmStatUnsupportedProfileClass. The test drives
+# the CIccProfile* overloads directly, which needs no fixture and is the only way to
+# reach CIccPRMG's copy of the class test (every tool runs it after the round-trip
+# evaluation has already succeeded). Header + IccProfLib only.
+function(iccdev_add_unsupported_profile_class_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccUnsupportedProfileClassTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/unsupported-profile-class-status.cpp"
+  )
+  target_link_libraries(iccUnsupportedProfileClassTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccUnsupportedProfileClassTest)
+
+  add_test(
+    NAME iccdev.unsupported-profile-class-status
+    COMMAND "$<TARGET_FILE:iccUnsupportedProfileClassTest>"
+  )
+  set_tests_properties(iccdev.unsupported-profile-class-status PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;status;issue-1843;regression"
+  )
+  if(WIN32)
+    set(_unsupclass_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccUnsupportedProfileClassTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _unsupclass_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.unsupported-profile-class-status PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_unsupclass_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_dpcc_pcc_replacement_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -2297,6 +2340,7 @@ if(WIN32)
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
+  iccdev_add_unsupported_profile_class_test()
   iccdev_add_dpcc_pcc_replacement_test()
   iccdev_add_iccviz_metrics_test()
   iccdev_add_iccviz_degenerate_test()
@@ -2514,6 +2558,7 @@ iccdev_add_gbd_zero_pcs_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
+iccdev_add_unsupported_profile_class_test()
 iccdev_add_dpcc_pcc_replacement_test()
 iccdev_add_iccviz_metrics_test()
 iccdev_add_iccviz_degenerate_test()

@@ -104,6 +104,15 @@ typedef enum {
   icCmmStatTooManySamples     = 16,
   icCmmStatBadMCSLink         = 17,
   icCmmStatUnsupported        = 18,
+  // Reported when a profile is well formed but its class is outside the domain
+  // of the requested operation -- e.g. the round-trip and PRMG evaluators accept
+  // only the four device classes that carry a device<->PCS transform pair
+  // (input, display, output, colorSpace), so an abstract, deviceLink, namedColor
+  // or encoding profile is refused here.  Distinct from icCmmStatInvalidProfile,
+  // which means the profile itself is broken; conflating the two made
+  // iccRoundTrip report a perfectly valid profile as "Invalid profile" (#1843).
+  // Appended at the end of the enum so no existing value is renumbered.
+  icCmmStatUnsupportedProfileClass = 19,
 } icStatusCMM;
 
 /// CMM Interpolation types

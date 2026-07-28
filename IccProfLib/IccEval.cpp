@@ -121,12 +121,18 @@ icStatusCMM CIccEvalCompare::EvaluateProfile(CIccProfile *pProfile, icUInt8Numbe
     return icCmmStatCantOpenProfile;
   }
 
+  // The round trip below builds a device->PCS transform and its inverse, so it is
+  // defined only for the four classes that carry that pair.  An abstract,
+  // deviceLink, namedColor or encoding profile is perfectly valid, it simply has
+  // nothing to round trip -- reporting icCmmStatInvalidProfile here made
+  // iccRoundTrip print "Invalid profile" for such profiles and left no way to
+  // tell that apart from a genuinely damaged one (#1843).
   if (pProfile->m_Header.deviceClass!=icSigInputClass &&
     pProfile->m_Header.deviceClass!=icSigDisplayClass &&
     pProfile->m_Header.deviceClass!=icSigOutputClass &&
     pProfile->m_Header.deviceClass!=icSigColorSpaceClass)
   {
-    return icCmmStatInvalidProfile;
+    return icCmmStatUnsupportedProfileClass;
   }
 
   // Connect the round-trip CMMs through the profile's native PCS.  Forcing the

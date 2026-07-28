@@ -8531,6 +8531,12 @@ const icChar* CIccCmm::GetStatusText(icStatusCMM stat)
   // messages for issues #1322/#1323 so every enum value decodes to text.
   case icCmmStatUnsupported:
     return "Unsupported operation";
+  // The evaluators refuse a profile whose class carries no device<->PCS
+  // transform pair rather than reporting it as damaged; keep the text about the
+  // *class* so the caller can tell "this profile is broken" from "this
+  // operation does not apply to this kind of profile" (#1843).
+  case icCmmStatUnsupportedProfileClass:
+    return "Unsupported profile class";
   default:
     return "Unknown CMM Status value";
 

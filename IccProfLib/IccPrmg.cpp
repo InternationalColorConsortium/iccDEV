@@ -226,12 +226,20 @@ icStatusCMM CIccPRMG::EvaluateProfile(CIccProfile *pProfile, icRenderingIntent n
     return icCmmStatCantOpenProfile;
   }
 
+  // Same domain restriction as CIccEvalCompare::EvaluateProfile(): the gamut
+  // evaluation below drives a Lab->device->Lab chain, which only the four device
+  // classes provide.  Report the class as unsupported rather than the profile as
+  // invalid, for the reasons given there (#1843).  The in-tree callers reach this
+  // evaluation only once the round-trip one has already succeeded, so in practice
+  // only a direct library caller sees this particular return -- but the two copies
+  // of the test have to agree, or the same profile would be described one way by
+  // one entry point and another way by the other.
   if (pProfile->m_Header.deviceClass!=icSigInputClass &&
     pProfile->m_Header.deviceClass!=icSigDisplayClass &&
     pProfile->m_Header.deviceClass!=icSigOutputClass &&
     pProfile->m_Header.deviceClass!=icSigColorSpaceClass)
   {
-    return icCmmStatInvalidProfile;
+    return icCmmStatUnsupportedProfileClass;
   }
 
   m_bPrmgImplied = false;
