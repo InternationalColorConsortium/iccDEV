@@ -2568,6 +2568,29 @@ icStatusCMM CIccPcsXform::ConnectFirst(CIccXform* pToXform, icColorSpaceSignatur
   if (!pToXform)
     return icCmmStatBadXform;
 
+  // Describe the edge conversion this object performs, exactly as Connect()
+  // does for an interior connection.  A CIccPcsXform built here is pushed onto
+  // the xform list by CheckPCSConnections(), after which CIccCmm::Begin() and
+  // the Apply chain read GetSrcSpace()/GetNumSrcSamples()/GetDstSpace()/
+  // GetNumDstSamples() off it like any other xform; leaving all four at the
+  // CIccXform defaults ('????' and 0 samples) leaves the chain undescribed at
+  // its own boundary (#1748).  The trailing-edge counterpart in ConnectLast()
+  // is where that is actually fatal today - see the note there.
+  //
+  // This transform runs from the CMM's source space into whatever the following
+  // transform consumes, so the source side is derived from srcSpace and the
+  // destination side is taken from pToXform.  Spectral PCS signatures are
+  // reduced to their colorimetric type the same way Connect() reduces them,
+  // because the steps pushed below operate on colorimetric PCS values.
+  m_srcSpace = srcSpace;
+  if (IsSpaceSpectralPCS(m_srcSpace))
+    m_srcSpace = icGetColorSpaceType(m_srcSpace);
+  m_nSrcSamples = (icUInt16Number)icGetSpaceSamples(m_srcSpace);
+
+  m_dstSpace = pToXform->GetSrcSpace();
+  if (IsSpaceSpectralPCS(m_dstSpace))
+    m_dstSpace = icGetColorSpaceType(m_dstSpace);
+  m_nDstSamples = pToXform->GetNumSrcSamples();
 
   if (srcSpace == icSigXYZData) {
     pushXyzInToXyz();
@@ -2644,6 +2667,35 @@ icStatusCMM CIccPcsXform::ConnectLast(CIccXform* pFromXform, icColorSpaceSignatu
   if (!pFromXform)
     return icCmmStatBadXform;
   icColorSpaceSignature srcSpace = pFromXform->GetDstSpace();
+
+  // Mirror of the block in ConnectFirst() above, for the trailing edge: this
+  // transform runs from whatever the preceding transform produced into the
+  // CMM's destination space, so the source side comes from pFromXform and the
+  // destination side is derived from dstSpace.
+  //
+  // This is the copy that has to be right for the chain to run at all.
+  // CheckPCSConnections() appends this object, and CIccCmm::Begin() then
+  // compares the last transform's GetNumDstSamples() against GetDestSamples()
+  // before allocating the apply chain - a guard added against heap overflow,
+  // and one that explicitly expects a transform to have been appended here.
+  // With the count left at 0 it rejected every chain whose PCS edge space
+  // differs from the profile's own PCS, e.g. driving a Lab-PCS profile with an
+  // XYZ destination space returned icCmmStatBadSpaceLink for a profile and a
+  // chain that were both perfectly valid (#1748).
+  //
+  // Note the local srcSpace above is rewritten to icSigXYZData further down
+  // when a destination-PCS adjustment is inserted; m_srcSpace deliberately
+  // records the space actually entering this object, which is the space
+  // pFromXform emits.
+  m_srcSpace = srcSpace;
+  if (IsSpaceSpectralPCS(m_srcSpace))
+    m_srcSpace = icGetColorSpaceType(m_srcSpace);
+  m_nSrcSamples = pFromXform->GetNumDstSamples();
+
+  m_dstSpace = dstSpace;
+  if (IsSpaceSpectralPCS(m_dstSpace))
+    m_dstSpace = icGetColorSpaceType(m_dstSpace);
+  m_nDstSamples = (icUInt16Number)icGetSpaceSamples(m_dstSpace);
 
   if (pFromXform->NeedAdjustDstPCS() && IsSpaceColorimetricPCS(dstSpace)) {
     if (srcSpace == icSigLabData) {

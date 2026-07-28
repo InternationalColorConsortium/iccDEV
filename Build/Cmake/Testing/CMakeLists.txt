@@ -950,6 +950,50 @@ function(iccdev_add_gbd_zero_pcs_test)
   endif()
 endfunction()
 
+# #1748: CIccPcsXform::ConnectFirst()/ConnectLast() build the PCS transforms at the two
+# outer edges of a CMM chain, and CheckPCSConnections() pushes them onto the xform list
+# like any other xform. Unlike Connect(), they left m_srcSpace/m_nSrcSamples/m_dstSpace/
+# m_nDstSamples at the CIccXform defaults, so the guard in CIccCmm::Begin() that compares
+# the last xform's output count against GetDestSamples() read 0 and rejected the chain
+# with icCmmStatBadSpaceLink. The test pins the four fields on both entry points and then
+# drives whole CMMs whose PCS edge space differs from the fixture's own PCS, checking that
+# the XYZ route agrees numerically with the Lab route. It uses a tracked fixture and no
+# LUT interpolation of any size, so it is fast.
+function(iccdev_add_pcs_edge_metadata_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsEdgeMetadataTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-edge-metadata.cpp"
+  )
+  target_link_libraries(iccPcsEdgeMetadataTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPcsEdgeMetadataTest)
+
+  add_test(
+    NAME iccdev.pcs-edge-metadata
+    COMMAND "$<TARGET_FILE:iccPcsEdgeMetadataTest>"
+  )
+  set_tests_properties(iccdev.pcs-edge-metadata PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;pcs;issue-1748;regression"
+  )
+  if(WIN32)
+    set(_pcs_edge_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsEdgeMetadataTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcs_edge_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-edge-metadata PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcs_edge_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1808: a negative Z in an XYZNumber is legal (it arises from chromatic adaptation,
 # e.g. the custom-observer -> D50 PCC in iccV5DspObsToV4Dsp) and must validate as a
 # Warning, while a negative X or Y stays NonCompliant. The test drives
@@ -2337,6 +2381,7 @@ if(WIN32)
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_gbd_zero_pcs_test()
+  iccdev_add_pcs_edge_metadata_test()
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
   iccdev_add_extended_device_colorspace_test()
@@ -2555,6 +2600,7 @@ iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_gbd_zero_pcs_test()
+iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()
 iccdev_add_extended_device_colorspace_test()
