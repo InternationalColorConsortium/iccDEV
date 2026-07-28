@@ -239,25 +239,6 @@ static bool icParseFloatArg(const char* arg, icFloatNumber& n)
   return true;
 }
 
-static bool icParseUInt8Field(const char* arg, const char** endArg, icUInt8Number& n)
-{
-  char* end = NULL;
-  long value;
-
-  if (!arg || !*arg)
-    return false;
-
-  errno = 0;
-  value = strtol(arg, &end, 10);
-  if (errno || end == arg || (*end && *end != ':') || value < 0 || value > 255)
-    return false;
-
-  n = (icUInt8Number)value;
-  if (endArg)
-    *endArg = end;
-  return true;
-}
-
 icFloatColorEncoding icSetJsonColorEncoding(const char* szEncode)
 {
 
