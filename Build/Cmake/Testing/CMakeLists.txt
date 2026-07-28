@@ -950,6 +950,48 @@ function(iccdev_add_gbd_zero_pcs_test)
   endif()
 endfunction()
 
+# #1809: a multiProcessElementType tag with zero processing elements and equal input and
+# output channel counts is the identity transform -- Read()/Write()/Begin()/Apply() all
+# treat it as a defined state, and Apply() memcpy()s source to destination. Validate()
+# alone reported it at warning level, putting 79 reference profiles (148 messages, mostly
+# the PCC, ICS and mcs fixtures that author DToB3/BToD3 as identity on purpose) into the
+# warning cohort. The test pins the information-level reporting, the unchanged critical
+# error for unequal channel counts, and the runtime behaviour that justifies the split.
+function(iccdev_add_mpe_empty_identity_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeEmptyIdentityTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpe-empty-identity.cpp"
+  )
+  target_link_libraries(iccMpeEmptyIdentityTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMpeEmptyIdentityTest)
+
+  add_test(
+    NAME iccdev.mpe-empty-identity
+    COMMAND "$<TARGET_FILE:iccMpeEmptyIdentityTest>"
+  )
+  set_tests_properties(iccdev.mpe-empty-identity PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;tag;issue-1809;regression"
+  )
+  if(WIN32)
+    set(_mpe_empty_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeEmptyIdentityTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpe_empty_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpe-empty-identity PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpe_empty_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1748: CIccPcsXform::ConnectFirst()/ConnectLast() build the PCS transforms at the two
 # outer edges of a CMM chain, and CheckPCSConnections() pushes them onto the xform list
 # like any other xform. Unlike Connect(), they left m_srcSpace/m_nSrcSamples/m_dstSpace/
@@ -2437,6 +2479,7 @@ if(WIN32)
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_gbd_zero_pcs_test()
+  iccdev_add_mpe_empty_identity_test()
   iccdev_add_pcs_edge_metadata_test()
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
@@ -2657,6 +2700,7 @@ iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_gbd_zero_pcs_test()
+iccdev_add_mpe_empty_identity_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()

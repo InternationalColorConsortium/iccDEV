@@ -1597,18 +1597,33 @@ icValidateStatus CIccTagMultiProcessElement::Validate(std::string sigPath, std::
   std::string sSigPathName = Info.GetSigPathName(sigPath);
   bool bMatchChannels = true;
 
+  // An element list that is absent or empty carries no transform of its own.  The
+  // rest of this class already assigns that state a single, well defined meaning,
+  // and the two branches below report it at the level that meaning warrants.
   if (!m_list || !m_list->size()) {
     if (m_nInputChannels != m_nOutputChannels) {
+      // Nothing can bridge the channel-count change: Begin() refuses this shape
+      // outright (returns false above the element walk) and Apply()'s empty-list
+      // path copies m_nInputChannels samples into a buffer sized for a different
+      // output width.  The tag is unusable, so this stays a critical error.
       sReport += icMsgValidateCriticalError;
       sReport += sSigPathName;
       sReport += " No processing elements and input and output channels do not match!\n";
       rv = icMaxStatus(rv, icValidateCriticalError);
     }
     else {
-      sReport += icMsgValidateWarning;
+      // Equal channel counts: this is the identity transform, and it is a defined
+      // state rather than an unfinished one.  Read() accepts a zero element count,
+      // Write() emits one, Begin() returns true without building an apply list, and
+      // Apply() memcpy()s source to destination.  Reporting a concern about a shape
+      // the library implements deliberately gave no reader an action to take, while
+      // pushing 79 of the reference profiles under Testing/ into the warning cohort
+      // (148 messages) and burying findings that do need attention.  Report it as
+      // information and leave rv alone; the text is retained so existing log scans
+      // still surface the tag.
+      sReport += icMsgValidateInformation;
       sReport += sSigPathName;
-      sReport += " No processing elements.\n";
-      rv = icMaxStatus(rv, icValidateWarning);
+      sReport += " No processing elements - equal channel counts, applied as an identity transform.\n";
     }
   }
 

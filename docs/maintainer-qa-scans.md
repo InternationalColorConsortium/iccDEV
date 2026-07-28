@@ -48,6 +48,51 @@ for stricter gates. The registry workflow intentionally uses `--fail-on CRASH`
 because its source list includes malformed profiles and full-matrix variants
 that exercise expected non-pass validation paths.
 
+## Validation report levels
+
+`iccDumpProfile -v` prints one line per finding, prefixed by the level the
+validator assigned, and a single verdict line derived from the highest level
+reached:
+
+| Prefix | Verdict contribution | Meaning |
+|--------|----------------------|---------|
+| `Information - ` | none | A defined, conformant state worth naming in the report. Does not affect the verdict. |
+| `Warning! - ` | `Profile has warning(s)` | Conforms, but with something a reader may want to act on. |
+| `NonCompliant! - ` | `Profile violates ICC specification` | Does not conform; may still be usable. Note that `iccDumpProfile` still exits 0 here — parse the text, not `$?`, when this verdict matters. |
+| `Error! - ` | `Profile has Critical Error(s)` | Does not conform and is not usable. |
+
+Because a `QA-ISSUE` status keys off warning indicators, a diagnostic emitted at
+the wrong level inflates the cohort a scan reports and buries the findings that
+need attention. When a scan surfaces a large uniform cohort, check whether the
+level is right before treating the profiles as suspect.
+
+### Empty multi-process-element tags (#1809)
+
+A `multiProcessElementType` tag holding zero processing elements is reported at
+information level when its input and output channel counts are equal, and as a
+critical error when they are not. The split follows what the library does with
+the tag rather than a separate validation rule:
+
+- Equal counts are the identity transform. `CIccTagMultiProcessElement::Read()`
+  accepts a zero element count, `Write()` emits one, `Begin()` returns true
+  without building an apply list, and `Apply()` copies the source pixel to the
+  destination unchanged.
+- Unequal counts have nothing to bridge the change, so `Begin()` refuses the
+  shape and the tag cannot be applied at all.
+
+Profiles are therefore not expected to omit an optional intent tag merely because
+its chain is empty. Presence with an identity chain and absence are different
+statements — the `PCC`, `ICS` and `mcs` fixtures under `Testing/` declare
+`DToB3`/`BToD3` and the `AToB`/`BToA`/`AToM0` intent tags this way on purpose, to
+advertise the channel counts of a pass-through connection.
+
+Reporting the equal-channel case at information level moved 74 of the 210
+profiles in a freshly generated corpus from `Profile has warning(s)` to
+`Profile is valid`, with the critical-error count unchanged. Note that corpus
+counts only reproduce from a clean checkout plus
+`Testing/CreateAllProfiles.sh` — a working tree that has accumulated profiles
+from earlier runs will report higher numbers.
+
 ## Local examples
 
 Build the tools first, then run scans from the repository root:
