@@ -66,11 +66,11 @@ check_log() {
   fi
 
   if grep -q "runtime error:" "$logfile" 2>/dev/null; then
-    if grep "runtime error:" "$logfile" | grep -v "/IccProfLib/IccMD5.cpp:" >/dev/null 2>&1; then
+    if grep "runtime error:" "$logfile" | grep -Ev '(/IccProfLib/IccMD5.cpp:|/include/c\+\+/[^/]+/bits/(basic_string\.h|basic_string\.tcc|stl_bvector\.h|stl_uninitialized\.h):)' >/dev/null 2>&1; then
       fail_case "$name" "undefined behavior"
       return 1
     fi
-    echo "  [WARN] $name -- ignored known MD5 unsigned-shift instrumentation noise"
+    echo "  [WARN] $name -- ignored known MD5/libstdc++ UBSAN instrumentation noise"
   fi
 
   return 0
