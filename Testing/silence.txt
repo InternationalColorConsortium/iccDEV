@@ -1,3 +1,9 @@
 unsigned-integer-overflow:*/IccMD5.cpp
 shift-base:*/IccMD5.cpp
 shift-exponent:*/IccMD5.cpp
+# Recoverable runtime UBSAN noise from libstdc++ implementation internals.
+# Fatal IntegerSanitizer builds require the compile-time ignorelist instead.
+unsigned-integer-overflow:*/include/c++/*/bits/basic_string.h
+unsigned-integer-overflow:*/include/c++/*/bits/basic_string.tcc
+unsigned-integer-overflow:*/include/c++/*/bits/stl_bvector.h
+unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h

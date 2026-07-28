@@ -14,5 +14,15 @@
 [unsigned-integer-overflow]
 fun:*MD5Transform*
 
+# libstdc++ 15 container internals use unsigned decrement / subtract idioms at
+# loop and capacity boundaries. IntegerSanitizer reports these implementation
+# details before iccDEV code has an actionable frame. Keep this scoped to
+# standard-library source paths; do not add project-owned Icc*, Tools,
+# IccConnect, AFL, or CFL paths here for this noise class.
+src:*/include/c++/*/bits/basic_string.h
+src:*/include/c++/*/bits/basic_string.tcc
+src:*/include/c++/*/bits/stl_bvector.h
+src:*/include/c++/*/bits/stl_uninitialized.h
+
 [unsigned-shift-base]
 fun:*MD5Transform*
