@@ -1729,6 +1729,15 @@ bool CIccMpeXmlTintArray::ToXml(std::string &xml, std::string blanks/* = ""*/)
     xml += line;
 
     //convert the rest of the tag to xml
+    // Left strict on purpose while the profile-level and struct-member loops
+    // were relaxed for #1779.  The array is not an optional decoration here: a
+    // TintArrayElement is defined by it, so a <TintArrayElement> emitted without
+    // one would be structurally meaningless.  The JSON writer takes the same
+    // position -- CIccMpeJsonTintArray::ToJson returns false when its array tag
+    // cannot be serialized (IccMpeJson.cpp) -- so relaxing this site would not be
+    // parity with JSON, it would go beyond it.  The failure is no longer fatal to
+    // the document in any case: it propagates up to the containing tag, which the
+    // profile-level loop now skips while still writing the remaining tags out.
     if (!pTagXml->ToXml(xml, "    ")) {
       printf("Unable to output tag with type %s\n", icGetSigStr(buf, bufSize, m_Array->GetType()));
       return false;

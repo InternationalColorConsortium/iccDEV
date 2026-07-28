@@ -121,6 +121,39 @@ const char *icFixXml(std::string &buf, const char *szStr)
   return buf.c_str();
 }
 
+// Escape a string for use as the *text of an XML comment*, which is a different
+// problem from icFixXml above.  Entity references are not recognised inside a
+// comment, so icFixXml's "&amp;"/"&lt;" substitutions would appear literally
+// there; conversely '<' and '&' are perfectly legal comment text.  What XML 1.0
+// section 2.5 does forbid is the two-character sequence "--" anywhere in a
+// comment, and a '-' immediately before the closing "-->".
+//
+// This matters because the only strings passed here are tag/type signatures
+// taken from a possibly corrupt profile.  icGetSigStr falls back to an "%08Xh"
+// rendering when a signature byte is non-printable, but '-' *is* printable and
+// so is passed straight through: a fuzzed signature such as "a--b" would emit a
+// malformed comment and render the whole document unparseable -- precisely the
+// whole-document loss that emitting the comment is meant to avoid.  Mapping '-'
+// to '_' removes both the "--" and the trailing-'-' hazard in one step, and any
+// byte outside printable ASCII is folded to '?' so the comment stays readable
+// and encoding-safe.
+const char *icFixXmlComment(std::string &buf, const char *szStr)
+{
+  buf = "";
+  while (*szStr) {
+    icUInt8Number c = (icUInt8Number)*szStr;
+    if (c == '-')
+      buf += '_';
+    else if (c < 0x20 || c > 0x7E)
+      buf += '?';
+    else
+      buf += (char)c;
+    szStr++;
+  }
+
+  return buf.c_str();
+}
+
 const char *icFixXml(char *szDest, const char *szStr)
 {
   char *m_ptr = szDest; 

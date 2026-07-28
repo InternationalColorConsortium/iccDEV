@@ -248,6 +248,12 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
           if (prevTag == offsetTags.end()) {
             const icChar* tagSig = icGetTagSigTypeName(pTag->GetType());
 
+            // Remember where this tag's markup begins.  The opening elements are
+            // appended below *before* ToXml() is called, so if the tag turns out
+            // not to be serializable the buffer has to be rewound to here -- see
+            // the skip path after the ToXml() call.
+            const size_t nTagStart = xml.size();
+
             if (tagName && strncmp(tagName, "Unknown ", 8)) {
               snprintf(line, bufSize, "    <%s> ", icFixXml(fix, tagName));
             }
@@ -290,8 +296,41 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
 #endif
             //convert the rest of the tag to xml
             if (!pTagXml->ToXml(xml, blanks + "      ")) {
-              printf("Unable to output tag with type %s\n", icGetSigStr(buf, bufSize, i->TagInfo.sig));
-              return false;
+              // Says "skipped" because this is no longer fatal: the conversion
+              // continues and exits successfully, so an unqualified "Unable to
+              // output ..." on stdout would now describe a run that in fact
+              // succeeded, and any caller treating that text as a failure signal
+              // would misread it (the #1394 regression test made exactly that
+              // mistake).  The leading text is kept verbatim so existing searches
+              // for this message still match.
+              printf("Unable to output tag with type %s - tag skipped\n", icGetSigStr(buf, bufSize, i->TagInfo.sig));
+
+              // Skip just this tag rather than abandoning the whole profile.
+              // Returning false here meant a single unserializable tag -- which
+              // on a corrupt or fuzzed profile is common -- discarded the entire
+              // document and iccToXml wrote no file at all, while iccToJson
+              // dropped the one bad tag and still produced output (#1779).  The
+              // JSON writer's top-level loop does exactly this: "if
+              // (!pJsonTag->ToJson(tagData)) continue;" (IccProfileJson.cpp).
+              //
+              // ToXml() may have appended a partial fragment before failing, and
+              // the opening elements were emitted above, so rewind to nTagStart
+              // to keep the document well-formed, then leave a comment recording
+              // what was dropped so the loss is visible rather than silent.
+              // Top-level tags are keyed by signature, not by position, so
+              // omitting one is representable -- the same reason the JSON writer
+              // can drop a key here.
+              std::string sigFix, typeFix;
+              xml.resize(nTagStart);
+              snprintf(line, bufSize, "    <!-- tag %s (type %s): unable to serialize, skipped -->\n\n",
+                       icFixXmlComment(sigFix, icGetSigStr(buf, bufSize, i->TagInfo.sig)),
+                       icFixXmlComment(typeFix, tagSig ? tagSig : ""));
+              xml += blanks + line;
+
+              // Deliberately not recorded in offsetTags: a later tag sharing this
+              // offset must serialize itself in full rather than emit a SameAs
+              // reference pointing at a tag that is no longer in the document.
+              continue;
             }
             snprintf(line, bufSize, "    </%s> </%s>\n\n", tagSig, tagName);
             xml += blanks + line;

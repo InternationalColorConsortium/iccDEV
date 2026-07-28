@@ -15,6 +15,11 @@
 # in-bounds ui08 array still round-trips to <Array> XML.  Pure-python fixture
 # generation (no PIL), python3-gated.
 #
+# Note on the over-cap assertions: they check the output, not the exit code.  See
+# the comment at that check -- #1779 made the writer skip an unserializable tag
+# and keep the document, so iccToXml now exits 0 on this fixture while still
+# refusing the array.
+#
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
 #   ICCDEV_TEST_OUTDIR -- output directory for temporary files and logs
@@ -108,9 +113,31 @@ check_sanitizers "$LOGFILE" || regress "sanitizer error converting over-cap ui08
 
 xml_bytes=0
 [ -f "$DOS_XML" ] && xml_bytes="$(stat -c %s "$DOS_XML" 2>/dev/null || stat -f %z "$DOS_XML" 2>/dev/null || echo 0)"
-if [ "$rc" -eq 0 ] || [ "${xml_bytes:-0}" -gt 1048576 ]; then
+
+# The property under test is that the over-cap array is never walked: the output
+# must not balloon and must not contain the serialized <Array>.
+#
+# This deliberately no longer keys off a non-zero exit code.  Until #1779 the XML
+# writer abandoned the whole document as soon as any tag's ToXml() returned false,
+# so "iccToXml failed" was a usable stand-in for "the cap fired".  The writer now
+# skips just the offending tag and still emits the rest of the profile, so a zero
+# exit code is the correct result here and is no longer evidence either way.  The
+# assertions below therefore check the thing that actually matters, and are
+# strictly stronger than the old exit-code proxy: the array must be absent from
+# the output, and the refusal must be recorded rather than the tag silently
+# vanishing.
+if [ "${xml_bytes:-0}" -gt 1048576 ]; then
   sed -n '1,20p' "$LOGFILE"
-  regress "over-cap ui08 array was serialized (rc=$rc, xml=${xml_bytes} bytes) -- unbounded loop not capped"
+  regress "over-cap ui08 array ballooned the output (rc=$rc, xml=${xml_bytes} bytes) -- unbounded loop not capped"
+fi
+if [ -f "$DOS_XML" ] && grep -q "<Array>" "$DOS_XML"; then
+  sed -n '1,20p' "$LOGFILE"
+  regress "over-cap ui08 array was serialized into the document -- unbounded loop not capped"
+fi
+if ! grep -q "Unable to output tag with type tu08" "$LOGFILE" \
+   && ! { [ -f "$DOS_XML" ] && grep -q "unable to serialize, skipped" "$DOS_XML"; }; then
+  sed -n '1,20p' "$LOGFILE"
+  regress "over-cap ui08 array was neither refused nor recorded as skipped -- cap did not fire"
 fi
 
 # 2) In-bounds ui08 array must still serialize to an <Array> element.

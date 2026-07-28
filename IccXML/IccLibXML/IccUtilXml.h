@@ -72,6 +72,7 @@
 
 const char *icFixXml(char *szDest, const char *szStr);
 const char *icFixXml(std::string &buf, const char *szStr);
+const char *icFixXmlComment(std::string &buf, const char *szStr);
 const char *icAnsiToUtf8(std::string &buf, const char *szSrc);
 const char *icUtf8ToAnsi(std::string &buf, const char *szSrc);
 

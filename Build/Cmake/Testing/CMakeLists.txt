@@ -1968,6 +1968,61 @@ function(iccdev_add_json_sparsematrix_huaf_test)
   endif()
 endfunction()
 
+# Guards the XML writer's failure policy (#1779): a single tag whose serialize
+# returned false made CIccProfileXml::ToXml abandon the ENTIRE document, so
+# iccToXml wrote no file at all where iccToJson -- which skips the offending tag
+# and keeps going -- produced one. Top-level tags and struct members are now
+# skipped with an XML comment in their place; array elements and the MPE tint
+# array stay strict, because an array position cannot be left empty in this
+# format and the JSON writer is equally strict there. The test also pins a
+# pre-existing markup defect the fix exposed: privateStruct/privateArray were
+# written self-closed while still emitting a matching end tag, which is why the
+# assertions parse the output back with libxml2 rather than only checking that a
+# document appeared. Needs IccXML (CIccProfileXml) + IccProfLib; skipped where
+# IccXML is not built.
+function(iccdev_add_xml_writer_graceful_degrade_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlWriterGracefulDegradeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-writer-graceful-degrade.cpp"
+  )
+  target_compile_features(iccXmlWriterGracefulDegradeTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlWriterGracefulDegradeTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlWriterGracefulDegradeTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlWriterGracefulDegradeTest)
+
+  add_test(
+    NAME iccdev.xml-writer-graceful-degrade
+    COMMAND "$<TARGET_FILE:iccXmlWriterGracefulDegradeTest>"
+  )
+  set_tests_properties(iccdev.xml-writer-graceful-degrade PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;writer;issue-1779;regression"
+  )
+  if(WIN32)
+    set(_xml_degrade_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlWriterGracefulDegradeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _xml_degrade_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-writer-graceful-degrade PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_xml_degrade_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1830: the JSON BCD version parser used atoi() per component, which accepts a
 # leading '-'; "-1" produced 0xFFFFFFFF and wrapped both the "<< 8" in
 # icJsonParseBCDVersionStr and the caller's "<< 16" (UBSan: "left shift of
@@ -2362,6 +2417,7 @@ if(WIN32)
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
   iccdev_add_json_sparsematrix_huaf_test()
+  iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
@@ -2581,6 +2637,7 @@ iccdev_add_ziputf8_settext_contract_test()
 iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
+iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
