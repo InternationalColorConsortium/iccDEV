@@ -2916,6 +2916,14 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-fromcube-cli-args-regression.sh"
 )
 
+iccdev_add_script_test(
+  iccdev.issue-1843-fromcube-clut-order
+  60
+  "iccdev;tools;fromcube;clut;issue-1843;asan;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1843-fromcube-clut-order-regression.sh"
+)
+
 if(TARGET iccApplyNamedCmm AND TARGET iccDumpProfile)
   iccdev_add_script_test(
     iccdev.calculator-regressions

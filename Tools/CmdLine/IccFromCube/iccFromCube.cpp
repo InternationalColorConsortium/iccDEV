@@ -266,6 +266,8 @@ public:
     if ((uint64_t)nSizeLut != temp*3)
       return false;
 
+    const icUInt32Number nGrid = (icUInt32Number)m_sizeLut3D;
+
     icUInt32Number n = 0;
     for (; n < num && !isEOF();) {
       std::string line = getNextLine();
@@ -274,15 +276,32 @@ public:
       if (line.empty() || line[0] == '#')
         continue;
       const char* cursor = line.c_str();
-      if (!parseNextFloat(cursor, *toLut++)) {
+
+      // A .cube table and an ICC CLUT disagree about which input axis varies
+      // fastest, so the rows cannot be copied across in file order.  A .cube
+      // table runs the red index fastest and blue slowest, while CIccCLUT::Init()
+      // lays the grid out the other way round: m_DimSize[] shrinks as the channel
+      // index rises, so input channel 0 (red) carries the largest stride and
+      // varies slowest.  Streaming row n into entry n therefore transposes the
+      // first and last input axes, which is why an identity .cube used to swap
+      // red and blue -- source (1,0,0) came back as (0,0,1) (#1843).  Recover the
+      // row's (r,g,b) grid coordinate from its ordinal and write the triplet at
+      // the matching ICC offset instead.  num is bounded by 255^3 above, so the
+      // offset cannot overflow icUInt32Number.
+      const icUInt32Number r = n % nGrid;
+      const icUInt32Number g = (n / nGrid) % nGrid;
+      const icUInt32Number b = n / (nGrid * nGrid);
+      icFloatNumber* pEntry = toLut + 3 * ((r * nGrid + g) * nGrid + b);
+
+      if (!parseNextFloat(cursor, pEntry[0])) {
         printf("Invalid 3DLUT entry\n");
         return false;
       }
-      if (!parseNextFloat(cursor, *toLut++)) {
+      if (!parseNextFloat(cursor, pEntry[1])) {
         printf("Invalid 3DLUT entry\n");
         return false;
       }
-      if (!parseNextFloat(cursor, *toLut++)) {
+      if (!parseNextFloat(cursor, pEntry[2])) {
         printf("Invalid 3DLUT entry\n");
         return false;
       }
@@ -420,21 +439,33 @@ protected:
 
   bool isEOF() { return m_f ? feof(m_f)!=0 : true; }
 
-#define MAX_LINE_LEN 255
+// Longest line iccFromCube keeps the text of.  The .cube format sets no line
+// length limit, but reading a line unbounded would let one pathological line
+// drive an unbounded allocation, so a cap stays -- sized so that real titles,
+// comment blocks and table rows all fit well inside it rather than sitting just
+// above the longest row seen in practice.
+#define MAX_LINE_LEN 8192u
 
   std::string getNextLine()
   {
     std::string rv;
-    for (int n=0; n<MAX_LINE_LEN && !isEOF(); n++) {
-      int c = fgetc(m_f);
+    int c;
 
-      if (c == EOF || c == '\n')
-        break;
-
+    // Consume to the end of the physical line, not merely to MAX_LINE_LEN.  The
+    // previous loop stopped once it had taken MAX_LINE_LEN characters *without*
+    // consuming the rest of the line, so the tail came back as the following
+    // call's "line" and was then parsed as a keyword or a table row in its own
+    // right.  A 300-character comment was enough to make a legal .cube fail with
+    // "Unknown keyword 'xxx...'" (#1843).  Characters past the cap are dropped
+    // from the returned text instead of being re-read: that leaves an over-long
+    // table row short of its three floats, so it is rejected explicitly by
+    // parse3DTable() rather than silently misread as a different row.
+    while ((c = fgetc(m_f)) != EOF && c != '\n') {
       if (c == '\r') //skip unsupported carriage returns
         continue;
 
-      rv += static_cast<char>(static_cast<unsigned char>(c));
+      if (rv.size() < MAX_LINE_LEN)
+        rv += static_cast<char>(static_cast<unsigned char>(c));
     }
 
     return rv;
