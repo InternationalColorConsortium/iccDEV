@@ -1161,8 +1161,16 @@ bool CIccMpeJsonExtCLUT::ParseJson(const IccJson &j, std::string &parseStr)
 
 bool CIccMpeJsonBAcs::ToJson(IccJson &j)
 {
-  char buf[32]; icGetSigStr(buf, sizeof(buf), m_signature);
-  j["signature"] = buf;
+  // Zero is a legal BAcs signature -- IccProfLib names it icSigAcsZero -- but
+  // icGetSigStr(0) renders it as the literal text "NULL", and ParseJson() below
+  // inverts the text with icGetSigVal(), which packs "NULL" into 0x4E554C4C.
+  // Emit an empty string for zero instead; ParseJson() already skips an empty
+  // signature and leaves m_signature at its zero-initialised value (#1843).
+  // The helper call sits inside the conditional rather than above it so this
+  // matches the `field ? helper(...) : ""` idiom that the project's own CodeQL
+  // query signature-serialized-without-zero-guard.ql recognises as a guard.
+  char buf[32];
+  j["signature"] = m_signature ? std::string(icGetSigStr(buf, sizeof(buf), m_signature)) : std::string();
   j["data"] = icJsonDumpHexData(m_pData, m_nDataSize);
   return true;
 }
@@ -1186,8 +1194,10 @@ bool CIccMpeJsonBAcs::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 
 bool CIccMpeJsonEAcs::ToJson(IccJson &j)
 {
-  char buf[32]; icGetSigStr(buf, sizeof(buf), m_signature);
-  j["signature"] = buf;
+  // Guard the zero case exactly as in CIccMpeJsonBAcs::ToJson above -- icSigAcsZero
+  // must not be written as the text "NULL", which reparses to 0x4E554C4C.
+  char buf[32];
+  j["signature"] = m_signature ? std::string(icGetSigStr(buf, sizeof(buf), m_signature)) : std::string();
   j["data"] = icJsonDumpHexData(m_pData, m_nDataSize);
   return true;
 }

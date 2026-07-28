@@ -2133,8 +2133,16 @@ bool CIccMpeXmlBAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   char buf[bufSize/2];
   std::string fix;
 
+  // The BAcs signature is legitimately zero -- IccProfLib names that value
+  // icSigAcsZero.  icGetSigStr(0) renders zero as the literal text "NULL", which
+  // is a display convention; ParseXml() below inverts the attribute through
+  // icXmlStrToSig() -> icGetSigVal(), and icGetSigVal("NULL") packs the ASCII
+  // bytes into 0x4E554C4C.  Writing "NULL" would therefore turn an icSigAcsZero
+  // element into a bogus one on round trip (#1843).  Emit an empty attribute for
+  // zero: icXmlAttrValue() hands the empty string to icGetSigVal(), which
+  // returns 0.
   snprintf(line, bufSize*2, "<BAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
-                icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
+                m_signature ? icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)) : "");
   xml += blanks + line;
 
   if (m_nReserved) {
@@ -2189,8 +2197,10 @@ bool CIccMpeXmlEAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
   char buf[bufSize/2];
   std::string fix;
 
+  // Guard the zero case exactly as in CIccMpeXmlBAcs::ToXml above -- icSigAcsZero
+  // must not be written as the text "NULL", which reparses to 0x4E554C4C.
   snprintf(line, bufSize*2, "<EAcsElement InputChannels=\"%d\" OutputChannels=\"%d\" Signature=\"%s\"", NumInputChannels(), NumOutputChannels(),
-    icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)));
+    m_signature ? icFixXml(fix, icGetSigStr(buf, bufSize/2, m_signature)) : "");
   xml += blanks + line;
 
   if (m_nReserved) {

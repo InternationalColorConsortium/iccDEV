@@ -779,7 +779,17 @@ bool CIccTagXmlSignature::ToXml(std::string &xml, std::string blanks/* = ""*/)
   const size_t lineSize = 256;
   char line[lineSize];
 
-  snprintf(line, lineSize, "<Signature>%s</Signature>\n", icFixXml(fix, icGetSigStr(buf, 40, m_nSig)));
+  // A signatureType tag holds one four-character signature and zero is a legal
+  // value for it -- the technologyTag of a profile with no recorded technology is
+  // icSigUndefined, which is 0.  icGetSigStr(0) returns the literal text "NULL" as
+  // a display convention, but the inverse used by ParseXml() below,
+  // icGetSigVal("NULL"), packs the ASCII bytes into 0x4E554C4C.  Writing "NULL"
+  // here therefore silently rewrites the tag's four payload bytes on round trip,
+  // and because 0x4E554C4C is merely an unrecognised signature rather than a
+  // malformed one the validator still reports the profile as valid, so the
+  // corruption is invisible (#1843).  Emit an empty element for zero: ParseXml()
+  // passes empty content to icGetSigVal(), which returns 0.
+  snprintf(line, lineSize, "<Signature>%s</Signature>\n", m_nSig ? icFixXml(fix, icGetSigStr(buf, 40, m_nSig)) : "");
 
   xml += blanks + line;
   return true;
@@ -2631,10 +2641,21 @@ bool icProfDescToXml(std::string &xml, CIccProfileDescStruct &p, std::string bla
   snprintf(buf, bufSize, "<ProfileDesc>\n");
   xml += blanks + buf;
 
-  snprintf(buf, bufSize, "<DeviceManufacturerSignature>%s</DeviceManufacturerSignature>\n", icFixXml(fix, icGetSigStr(data, bufSize, p.m_deviceMfg)));
+  // Each profileSequenceDescType entry carries three four-character signatures,
+  // and all three are legitimately zero for a profile whose origin is unrecorded
+  // -- a technology of zero is the named value icSigUndefined.  icGetSigStr(0)
+  // returns the literal text "NULL", which is a *display* convention: the inverse
+  // icGetSigVal("NULL") packs the ASCII bytes 'N','U','L','L' into 0x4E554C4C, so
+  // a zero written here comes back as a bogus signature and the reparsed profile
+  // fails validation ("Unknown technology") even though the original was clean
+  // (#1843).  Emit an empty element for zero instead -- the reader below runs the
+  // content through icXmlStrToSig(), and icGetSigVal("") returns 0, restoring the
+  // original value.  Commit 751a0c6b (PR #1365) applied this same guard to the
+  // header signatures; the profileSequenceDesc struct was missed.
+  snprintf(buf, bufSize, "<DeviceManufacturerSignature>%s</DeviceManufacturerSignature>\n", p.m_deviceMfg ? icFixXml(fix, icGetSigStr(data, bufSize, p.m_deviceMfg)) : "");
   xml += blanks + blanks + buf;
 
-  snprintf(buf, bufSize, "<DeviceModelSignature>%s</DeviceModelSignature>\n", icFixXml(fix, icGetSigStr(data, bufSize, p.m_deviceModel)));
+  snprintf(buf, bufSize, "<DeviceModelSignature>%s</DeviceModelSignature>\n", p.m_deviceModel ? icFixXml(fix, icGetSigStr(data, bufSize, p.m_deviceModel)) : "");
   xml += blanks + blanks + buf;
 
   std::string szAttributes = icGetDeviceAttrName(p.m_attributes);
@@ -2642,7 +2663,10 @@ bool icProfDescToXml(std::string &xml, CIccProfileDescStruct &p, std::string bla
   //xml += buf;
   xml += blanks + blanks + icGetDeviceAttrName(p.m_attributes);
 
-  snprintf(buf, bufSize, "<Technology>%s</Technology>\n", icFixXml(fix, icGetSigStr(data, bufSize, p.m_technology)));
+  // Guard the zero case as above.  This is the field the round trip actually trips
+  // over in practice: iccFromCube leaves the technology as icSigUndefined, so every
+  // profile it writes used to acquire a 0x4E554C4C technology on the way back in.
+  snprintf(buf, bufSize, "<Technology>%s</Technology>\n", p.m_technology ? icFixXml(fix, icGetSigStr(data, bufSize, p.m_technology)) : "");
   xml += blanks + blanks + buf;
 
   CIccTag *pTag = p.m_deviceMfgDesc.GetTag();

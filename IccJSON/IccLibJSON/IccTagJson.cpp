@@ -406,15 +406,31 @@ bool CIccTagJsonTextDescription::ParseJson(const IccJson &j, std::string & /*par
 
 bool CIccTagJsonSignature::ToJson(IccJson &j)
 {
-  j["signature"] = sigToStr(m_nSig);
+  // Zero is a legal signatureType payload (icSigUndefined), but sigToStr() wraps
+  // icGetSigStr(), which renders zero as the literal text "NULL".  ParseJson()
+  // below inverts the text with icGetSigVal(), and icGetSigVal("NULL") packs the
+  // ASCII bytes into 0x4E554C4C -- so a zero signature does not survive an
+  // ICC -> JSON -> ICC round trip, and the result still validates because
+  // 0x4E554C4C is only an unrecognised signature, not a malformed one (#1843).
+  // Emit an empty string for zero; ParseJson() below maps that back to 0.
+  j["signature"] = m_nSig ? sigToStr(m_nSig) : std::string();
   return true;
 }
 
 bool CIccTagJsonSignature::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 {
   std::string sig;
-  jGetString(j, "signature", sig);
-  if (!sig.empty())
+
+  // Distinguish "no signature field at all" from "a field holding the empty
+  // string".  Only the latter means a zero signature, and it is what ToJson()
+  // above now writes for one.  Testing the *string* for emptiness instead of the
+  // field's presence would leave m_nSig at the CIccTagSignature constructor's
+  // 0x3F3F3F3F ("????") sentinel, which is no more correct than the 0x4E554C4C
+  // this fix set out to remove -- it would merely change which wrong value a
+  // zero signature came back as (#1843).  icGetSigVal("") returns 0, so passing
+  // the empty string straight through restores the original value, while an
+  // absent field still leaves the constructor's sentinel untouched.
+  if (jGetString(j, "signature", sig))
     m_nSig = (icSignature)icGetSigVal(sig.c_str());
   return true;
 }
@@ -1456,10 +1472,19 @@ static bool icProfDescToJson(IccJson &jDesc, const CIccProfileDescStruct &p)
   const size_t bufSize = 16;
   char buf[bufSize];
 
-  jDesc["deviceManufacturerSignature"] = icGetSigStr(buf, bufSize, p.m_deviceMfg);
-  jDesc["deviceModelSignature"]        = icGetSigStr(buf, bufSize, p.m_deviceModel);
+  // All three signatures below are legitimately zero for a profile whose origin is
+  // unrecorded -- a technology of zero is the named value icSigUndefined, and
+  // iccFromCube emits exactly that.  icGetSigStr(0) returns the literal text
+  // "NULL" as a *display* convention, but icJsonParseProfDesc() inverts the text
+  // with icGetSigVal(), which packs "NULL" into 0x4E554C4C, so writing it here
+  // rewrites the value on round trip and the reparsed profile fails validation
+  // with an unknown technology (#1843).  Emit an empty string for zero: the parser
+  // below already special-cases the empty string and restores 0.  This mirrors the
+  // guard commit 751a0c6b (PR #1365) added to the header signatures.
+  jDesc["deviceManufacturerSignature"] = p.m_deviceMfg   ? std::string(icGetSigStr(buf, bufSize, p.m_deviceMfg))   : std::string();
+  jDesc["deviceModelSignature"]        = p.m_deviceModel ? std::string(icGetSigStr(buf, bufSize, p.m_deviceModel)) : std::string();
   jDesc["deviceAttributes"]            = icJsonGetDeviceAttr(p.m_attributes);
-  jDesc["technology"]                  = icGetSigStr(buf, bufSize, p.m_technology);
+  jDesc["technology"]                  = p.m_technology  ? std::string(icGetSigStr(buf, bufSize, p.m_technology))  : std::string();
 
   auto serializeDescText = [](IccJson &jField, const CIccProfileDescText &descText) -> bool {
     CIccTag *pTag = descText.GetTag();

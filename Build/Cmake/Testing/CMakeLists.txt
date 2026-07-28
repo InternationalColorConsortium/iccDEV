@@ -3230,6 +3230,27 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1361-header-sig-roundtrip-regression.sh"
 )
 
+# #1843: carries #1356/#1361 past the profile header into the tag and element
+# writers that had the same unguarded icGetSig*(0) -> "NULL" -> 0x4E554C4C hole
+# on BOTH the XML and JSON sides -- profileSequenceDescType's manufacturer/model/
+# technology, signatureType tags, and BAcs/EAcs elements.  The pseq case is what
+# made #1843 look like an iccFromCube defect: iccFromCube leaves the technology
+# as icSigUndefined, so every profile it wrote came back NonCompliant with
+# "Unknown 'NULL' = 4E554C4C".  The signatureType case is silent -- four payload
+# bytes change and the profile still validates -- so that section asserts a
+# byte-exact round trip rather than a clean validation report.  Note the two
+# earlier tests only had to cover XML: for those header fields JSON already
+# guarded the zero case, which is exactly the asymmetry the companion CodeQL
+# query keys off.  Here neither serializer guarded, so both are exercised.
+# Plain functional test -- skips cleanly if the tools/fixtures are absent.
+iccdev_add_script_test(
+  iccdev.issue-1843-zero-signature-roundtrip
+  90
+  "iccdev;xml;json;signature;roundtrip;issue-1843;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1843-zero-signature-roundtrip-regression.sh"
+)
+
 # #1355 - matrix/TRC (PCSXYZ) profiles must round-trip near-exactly. Guards the
 # two CMM/eval fixes (ConnectFirst actual->internal XYZ rescale; native-PCS
 # round-trip connection): iccRoundTrip RT1 mean dE was ~20 before, ~0 after.
