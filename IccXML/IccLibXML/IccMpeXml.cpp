@@ -143,8 +143,14 @@ bool CIccMpeXmlUnknown::ToXml(std::string &xml, std::string blanks/* = ""*/)
   xml += blanks + line;
 
   if (m_nReserved) {
+    // The attribute is formatted into line, so line is what must be appended.
+    // Appending buf instead dropped the Reserved value and injected the type
+    // signature buf still held from the icGetSigStr call above into the middle
+    // of the attribute list, leaving the start tag unterminated and the whole
+    // document unparseable. Sized against bufSize while line is bufSize*2, so
+    // the write cannot reach the end of the buffer.
     snprintf(line, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
-    xml += buf;
+    xml += line;
   }
   xml += ">\n";
 
@@ -173,6 +179,23 @@ bool CIccMpeXmlUnknown::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
   SetChannels(nIn, nOut);
+
+  // Reserved is read back so the value the writer now emits survives a
+  // round-trip. Until the writer was corrected above it never reached the
+  // document, so nothing here had anything to parse and the omission was
+  // invisible; the sibling element readers (CIccMpeXmlCLUT, the tint array,
+  // the sampled/formula curve segments) have always restored it. The default
+  // keeps a document without the attribute -- every one written before this
+  // change -- reading as zero rather than failing. Parsed with the same
+  // range-checked helper used for the channel counts just above rather than
+  // the legacy atoi still used by those siblings, so a value that cannot fit
+  // icUInt32Number is refused instead of silently wrapping.
+  icUInt32Number nReserved = 0;
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Reserved", "0"), nReserved)) {
+    parseStr += "Invalid Reserved attribute on Unknown MPE element\n";
+    return false;
+  }
+  m_nReserved = nReserved;
 
   if (pNode->children && pNode->children->type == XML_TEXT_NODE && pNode->children->content) {
     icUInt32Number nSize = icXmlGetHexDataSize((const char *)pNode->children->content);

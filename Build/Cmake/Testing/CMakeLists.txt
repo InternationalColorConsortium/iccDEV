@@ -2065,6 +2065,59 @@ function(iccdev_add_xml_writer_graceful_degrade_test)
   endif()
 endfunction()
 
+# #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
+# and then appended `buf`, which still held the element's type signature from the
+# icGetSigStr call above it. The value was dropped and the signature was injected
+# into the attribute list before the start tag was closed, so the document did
+# not parse at all. The reader had never parsed Reserved either -- invisible
+# while the writer could not emit it -- so both directions are pinned here. The
+# assertions parse the writer's output with libxml2 because the defect produced
+# text containing every substring a grep would look for while being malformed
+# overall. Needs IccXML (CIccMpeXmlUnknown) + IccProfLib; skipped where IccXML is
+# not built.
+function(iccdev_add_mpexml_unknown_reserved_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMpeXmlUnknownReservedTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mpexml-unknown-reserved.cpp"
+  )
+  target_compile_features(iccMpeXmlUnknownReservedTest PRIVATE cxx_std_17)
+  target_include_directories(iccMpeXmlUnknownReservedTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccMpeXmlUnknownReservedTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccMpeXmlUnknownReservedTest)
+
+  add_test(
+    NAME iccdev.mpexml-unknown-reserved
+    COMMAND "$<TARGET_FILE:iccMpeXmlUnknownReservedTest>"
+  )
+  set_tests_properties(iccdev.mpexml-unknown-reserved PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;xml;writer;issue-1886;regression"
+  )
+  if(WIN32)
+    set(_mpexml_reserved_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMpeXmlUnknownReservedTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mpexml_reserved_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mpexml-unknown-reserved PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mpexml_reserved_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1830: the JSON BCD version parser used atoi() per component, which accepts a
 # leading '-'; "-1" produced 0xFFFFFFFF and wrapped both the "<< 8" in
 # icJsonParseBCDVersionStr and the caller's "<< 16" (UBSan: "left shift of
@@ -2460,6 +2513,7 @@ if(WIN32)
   iccdev_add_pawg_compression_paths_test()
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_xml_writer_graceful_degrade_test()
+  iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
@@ -2681,6 +2735,7 @@ iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
+iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
