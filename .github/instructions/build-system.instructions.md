@@ -142,9 +142,9 @@ coverage are both OFF. Consumers using non-LTO-aware linkers should pass
 ## Adding a New Tool
 
 1. Create `Tools/CmdLine/NewTool/`.
-2. Add a `CMakeLists.txt` with `add_executable()` and the required
-   `target_link_libraries()` entries.
-3. Add `add_subdirectory(NewTool)` to the parent `Tools/CmdLine/CMakeLists.txt`.
+2. Add `Build/Cmake/Tools/NewTool/CMakeLists.txt` with `ADD_EXECUTABLE()` and
+   the required `TARGET_LINK_LIBRARIES()` entries.
+3. Add `ADD_SUBDIRECTORY(Tools/NewTool)` to `Build/Cmake/CMakeLists.txt`.
 4. Link `IccXML2` only when XML features are required.
 5. Guard GUI-only or unsupported tools with `if(EMSCRIPTEN)`.
 6. If the tool should ship in vcpkg, update the `_core_tools` list in

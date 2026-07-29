@@ -83,6 +83,8 @@ Use this skill when changing `.github/workflows/ci-afl-smoke.yml`,
 - Keep `ci-docker.yml` push paths and regression-image verification in sync
   with AFL/CFL patch-stack helpers so container rebuilds happen when the
   checker, applicator, smoke script, `cfl/`, or fuzz patches change.
+- Run `.github/scripts/check-fuzz-patches.sh` after editing either patch stack
+  so malformed hunks or stale context are caught before workflow dispatch.
 - Keep manual AFL and CFL workflow inputs aligned: `target_ref` selects the
   branch, tag, or ref to check out, optional `target_sha` pins a full
   40-character exact commit, and `patch_mode` selects `all` or `none`. CFL

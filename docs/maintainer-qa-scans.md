@@ -197,6 +197,81 @@ use `results.tsv`, `findings.txt`, and `summary.md` for authoritative status,
 and rerun with `registry_qa_log_tail_lines=0` only when complete raw output is
 needed for diagnosis.
 
+## Sanitizer Suppression Maintenance
+
+Maintainers should keep sanitizer suppression changes small and evidence-backed.
+There are two separate suppression surfaces:
+
+| File | Purpose |
+|------|---------|
+| `Testing/silence.txt` | Runtime UBSAN suppressions for recoverable local or CI runs. |
+| `.github/ci/ubsan-ignorelist.txt` | Compile-time sanitizer ignorelist for known-benign instrumentation sites. |
+
+Use `Testing/silence.txt` when the sanitizer runtime loads suppressions and the
+run is allowed to recover. Use `.github/ci/ubsan-ignorelist.txt` when a fatal
+Clang IntegerSanitizer build aborts before runtime suppression can help, or when
+the instrumentation site must be omitted during compilation. GCC does not use
+the compile-time ignorelist path; keep a normal GCC build in the test matrix to
+confirm Clang-only suppression flags are not applied to GCC.
+
+Safe suppression candidates:
+
+- Intentional unsigned wrapping arithmetic with a cited algorithm or invariant.
+- Standard-library implementation paths, such as `*/include/c++/*/bits/...`,
+  after stack triage shows no actionable project-owned frame.
+
+Unsafe suppression candidates:
+
+- Broad project paths such as `*/IccProfLib/*`, `*/IccConnect/*`, `*/Tools/*`,
+  `*/cfl/*`, or workflow helper scripts.
+- A sanitizer report whose first actionable frame is in iccDEV code.
+- A timeout, signal, or graceful failure without sanitizer evidence.
+
+For additions:
+
+1. Save the exact unsuppressed replay command and sanitizer summary.
+2. Add the narrowest pattern possible.
+3. Rebuild when changing `.github/ci/ubsan-ignorelist.txt`.
+4. Replay the same input and confirm the sanitizer report is gone.
+5. Run normal GCC and Clang builds to verify suppression config does not break
+   unsanitized compiler paths.
+6. Run the sanitizer helper smoke tests:
+
+   ```bash
+   bash .github/tests/test_sanitization.sh
+   ```
+
+7. For CI parity, run GCC normal and Clang IntegerSanitizer builds in the
+   regression Docker image:
+
+   ```bash
+   docker run --rm -v "$PWD":/work -w /work \
+     ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+     bash -lc '
+       CC=gcc CXX=g++ cmake -S Build/Cmake -B /tmp/iccdev-gcc-normal \
+         -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF -DENABLE_IMAGE_TOOLS=OFF \
+         -DENABLE_CMM_TOOLS=ON -DENABLE_ICCXML=OFF -DENABLE_ICCJSON=ON &&
+       cmake --build /tmp/iccdev-gcc-normal --target iccApplyNamedCmm -j2 &&
+       CC=clang CXX=clang++ cmake -S Build/Cmake -B /tmp/iccdev-intsan \
+         -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF -DENABLE_IMAGE_TOOLS=OFF \
+         -DENABLE_CMM_TOOLS=ON -DENABLE_ICCXML=OFF -DENABLE_ICCJSON=ON \
+         -DENABLE_INTEGER_SANITIZER=ON \
+         -DUBSAN_IGNORELIST=.github/ci/ubsan-ignorelist.txt &&
+       cmake --build /tmp/iccdev-intsan --target iccApplyNamedCmm -j2
+     '
+   ```
+
+For removals:
+
+1. Delete one pattern at a time.
+2. Rebuild if it was an ignorelist entry.
+3. Replay a representative input.
+4. Keep the removal only when the old noise does not return, or when it returns
+   as a project-owned report that is fixed separately.
+
+Record the issue number, before/after commands, exit codes, and whether the
+result depended on runtime suppression or compile-time ignorelist rebuild.
+
 The developer report artifact preserves downloaded `profiles/` payloads when
 registry QA is enabled. Keep `download-manifest.tsv` with the payloads so
 reviewers can verify source URLs, byte counts, and SHA-256 values.

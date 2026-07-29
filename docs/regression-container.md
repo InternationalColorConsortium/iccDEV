@@ -122,6 +122,83 @@ ctest --test-dir /workspace/build \
   --output-on-failure --no-tests=error
 ```
 
+## Prove a Local PR Worktree
+
+When reviewing a PR or issue fix from a local worktree, prefer the maintainer
+regression image before handoff. It provides the current strict compiler stack,
+including GCC 15.2 and the Clang sanitizer toolchain used by the PR Docker
+verification lane. Mount the local tree read-only so the container proves the
+exact files under review without changing host permissions. Copy that mount to
+container-local scratch space before configuring so CTest fixtures can generate
+profiles under `Testing/`:
+
+```bash
+IMAGE=ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
+WORKTREE=/path/to/iccDEV
+docker pull "$IMAGE"
+docker run --rm -v "$WORKTREE:/workspace/review:ro" "$IMAGE" bash -lc '
+  set -euo pipefail
+  scratch="$(mktemp -d)"
+  source_dir="$scratch/iccDEV"
+  build_dir="$scratch/build"
+  mkdir -p "$source_dir"
+  cp -a /workspace/review/. "$source_dir/"
+  cd "$source_dir"
+  target=iccApplyProfiles
+  focused_ctest=iccdev.applyprofiles-spectral-pcs-regression
+  SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
+  CC=clang CXX=clang++ cmake -S "$source_dir/Build/Cmake" -B "$build_dir" \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_C_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0" \
+    -DCMAKE_CXX_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0 -std=c++17" \
+    -DENABLE_ASAN=ON \
+    -DENABLE_UBSAN=ON \
+    -DENABLE_INTEGER_SANITIZER=ON \
+    -DENABLE_FLOAT_SANITIZER=ON \
+    -DENABLE_TOOLS=ON \
+    -DENABLE_TESTS=ON
+  cmake --build "$build_dir" --target "$target" --parallel "$(nproc)"
+  cmake --build "$build_dir" --target iccFromXml --parallel "$(nproc)"
+  cmake --build "$build_dir" --target build-test-binaries --parallel "$(nproc)"
+  ctest --test-dir "$build_dir" -R "^${focused_ctest}$" \
+    --output-on-failure --no-tests=error
+'
+```
+
+For direct parity with the Docker PR verification job, build `iccDumpProfile`
+first and reject compiler warnings:
+
+```bash
+docker run --rm -v "$WORKTREE:/workspace/iccDEV:ro" "$IMAGE" bash -lc '
+  set -euo pipefail
+  work="$(mktemp -d)"
+  SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
+  CC=clang CXX=clang++ cmake -S /workspace/iccDEV/Build/Cmake -B "$work" \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_C_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0" \
+    -DCMAKE_CXX_FLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0 -std=c++17" \
+    -DENABLE_ASAN=ON \
+    -DENABLE_UBSAN=ON \
+    -DENABLE_INTEGER_SANITIZER=ON \
+    -DENABLE_FLOAT_SANITIZER=ON \
+    -DENABLE_TOOLS=ON
+  cmake --build "$work" --target iccDumpProfile --parallel "$(nproc)" \
+    2>&1 | tee "$work/build.log"
+  warning_count="$(grep -cE "warning:" "$work/build.log" || true)"
+  test "$warning_count" -eq 0
+'
+```
+
+Use a focused CTest after the Docker PR verification build when the changed
+behavior is not exercised by `iccDumpProfile`. For tool changes, build the
+affected tool and `build-test-binaries`, then run the registered CTest wrapper.
+Record the image digest, image source revision, mounted worktree commit, command,
+exit status, warning count, and sanitizer result in the PR or issue handoff.
+
 The prebuilt image uses the maintainer Clang sanitizer configuration. For exact
 `ci-iccdev-tool-tests.yml` GCC strict parity, configure a separate build:
 

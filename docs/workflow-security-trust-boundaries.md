@@ -29,7 +29,7 @@ flowchart LR
 ## Clean Preflight Sentinels
 
 ```text
-workflow files: 20
+workflow files: 21
 cache publish canaries: 0
 artifact intake canaries: 0
 artifact publish canaries: 0
@@ -47,6 +47,9 @@ Reviewed exceptions should appear as:
 ```text
 [OK] ... reviewed ... exception reason=<short-reason>
 ```
+
+The workflow-file count is a branch-local sentinel. Update it when adding or
+removing files under `.github/workflows/`.
 
 ## Commands
 

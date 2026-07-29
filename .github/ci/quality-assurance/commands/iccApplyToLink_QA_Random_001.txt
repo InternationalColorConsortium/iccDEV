@@ -1,0 +1,59 @@
+# 01 EXPECT SUCCESS: v4 DeviceLink, linear, relative
+iccApplyToLink Links/qa_aptec_001.icc 0 17 0 "QA APTEC v4 linear relative" 0 1 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 02 EXPECT SUCCESS: v4 DeviceLink, tetrahedral, perceptual
+iccApplyToLink Links/qa_aptec_002.icc 0 33 0 "QA APTEC v4 tetra perceptual" 0 1 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 0 ../sRGB_v4_ICC_preference.icc 0
+
+# 03 EXPECT SUCCESS: v5 DeviceLink
+iccApplyToLink Links/qa_aptec_003.icc 0 17 1 "QA APTEC v5 relative" 0 1 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 04 EXPECT SUCCESS: restricted input range
+iccApplyToLink Links/qa_aptec_004.icc 0 17 0 "QA APTEC restricted range" 0.001 0.999 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 05 EXPECT SUCCESS: saturation intent
+iccApplyToLink Links/qa_aptec_005.icc 0 9 0 "QA APTEC saturation" 0 1 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 2 ../sRGB_v4_ICC_preference.icc 2
+
+# 06 EXPECT SUCCESS: absolute intent
+iccApplyToLink Links/qa_aptec_006.icc 0 17 1 "QA APTEC absolute" 0 1 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 3 ../sRGB_v4_ICC_preference.icc 3
+
+# 07 EXPECT SUCCESS: relative with BPC
+iccApplyToLink Links/qa_aptec_007.icc 0 33 0 "QA APTEC relative BPC" 0 1 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 41 ../sRGB_v4_ICC_preference.icc 41
+
+# 08 EXPECT SUCCESS OR PROFILE-DEPENDENT: luminance PCS adjustment
+iccApplyToLink Links/qa_aptec_008.icc 0 17 1 "QA APTEC luminance PCS" 0 1 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 101 ../sRGB_v4_ICC_preference.icc 101
+
+# 09 EXPECT SUCCESS OR PROFILE-DEPENDENT: V5 sub-profile modifier
+iccApplyToLink Links/qa_aptec_009.icc 0 17 1 "QA APTEC V5 subprofile" 0 1 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1001 ../sRGB_v4_ICC_preference.icc 1001
+
+# 10 EXPECT SUCCESS OR PROFILE-DEPENDENT: V5 plus luminance modifiers
+iccApplyToLink Links/qa_aptec_010.icc 0 33 1 "QA APTEC V5 luminance" 0.001 0.999 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1101 ../sRGB_v4_ICC_preference.icc 1101
+
+# 11 EXPECT SUCCESS OR PROFILE-DEPENDENT: environment variables
+iccApplyToLink Links/qa_aptec_011.icc 0 17 0 "QA APTEC environment" 0 1 1 1 -ENV:bkgX 0.0985 -ENV:bkgY 0.159 -ENV:bkgZ 0.122 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 12 EXPECT SUCCESS OR PROFILE-DEPENDENT: PCC after first transform
+iccApplyToLink Links/qa_aptec_012.icc 0 17 1 "QA APTEC PCC" 0 1 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 -PCC ICC/Spec400_10_700-IllumA_2deg-Abs.icc ../sRGB_v4_ICC_preference.icc 1
+
+# 13 EXPECT REJECTION: missing interp; profile shifts into interp position
+iccApplyToLink Links/qa_aptec_bad_013.icc 0 17 0 "QA missing interp" 0 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 14 EXPECT REJECTION: LUT size below minimum
+iccApplyToLink Links/qa_aptec_bad_014.icc 0 1 0 "QA LUT too small" 0 1 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 15 EXPECT REJECTION: LUT size above maximum
+iccApplyToLink Links/qa_aptec_bad_015.icc 0 256 0 "QA LUT too large" 0 1 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 16 EXPECT REJECTION: invalid DeviceLink option
+iccApplyToLink Links/qa_aptec_bad_016.icc 0 17 2 "QA invalid DeviceLink option" 0 1 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 17 EXPECT REJECTION: invalid first_transform
+iccApplyToLink Links/qa_aptec_bad_017.icc 0 17 0 "QA invalid first transform" 0 1 2 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 18 EXPECT REJECTION: invalid interpolation
+iccApplyToLink Links/qa_aptec_bad_018.icc 0 17 0 "QA invalid interpolation" 0 1 1 2 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 19 EXPECT REJECTION: zero-width range
+iccApplyToLink Links/qa_aptec_bad_019.icc 0 17 0 "QA zero width range" 1 1 1 0 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1
+
+# 20 EXPECT REJECTION: reversed range
+iccApplyToLink Links/qa_aptec_bad_020.icc 0 17 0 "QA reversed range" 1 0 1 1 APTEC_CMYKOGV_Coated_LinearCTV_2025.icc 1 ../sRGB_v4_ICC_preference.icc 1

@@ -13,6 +13,7 @@ command-line tools.
 - Seeds: `.github/ci/test-data/` and `.github/ci/afl-seeds/`
 - Local patch stacks: `.github/ci/fuzz-patches/afl` and
   `.github/ci/fuzz-patches/cfl`
+- Patch stack validation: `.github/scripts/check-fuzz-patches.sh`
 - CFL smoke: `cfl/build.sh` and `.github/workflows/ci-cfl-smoke.yml`
 - Governance: `.github/instructions/workflow-governance.instructions.md`
 - Docs: `docs/afl-fuzzing.md`

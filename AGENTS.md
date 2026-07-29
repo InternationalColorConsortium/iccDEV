@@ -34,6 +34,7 @@ Detailed rules live in `.github/copilot-instructions.md` and
 | WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |
 | MCP subprocess debug | `.github/prompts/debug-mcp-subprocess.prompt.md` |
 | Python/Cython debug | `.github/prompts/debug-python-bindings.prompt.md` |
+| Documentation maintenance | `docs/documentation-maintenance.md` |
 
 ## WASM Scope
 

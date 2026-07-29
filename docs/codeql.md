@@ -1,19 +1,30 @@
 # CodeQL Security Analysis
 
-iccDEV ships custom CodeQL queries for ICC-specific security patterns. The
+iccDEV ships custom CodeQL queries for ICC-specific security patterns. These
+queries are maintainer-local training and triage tools because recent custom
+query rounds produced both useful findings and noisy false positives. The
 canonical query reference lives with the queries:
 
 - [`.github/codeql-queries/README.md`](https://github.com/InternationalColorConsortium/iccDEV/blob/master/.github/codeql-queries/README.md)
 
 The targeted JSON query suite covers both `IccJSON` and `IccConnect` JSON
-configuration code. Keep `.github/codeql-config.yml`, the CodeQL workflow path
-filters, and the local runner help text in sync when that scope changes.
+configuration code. Keep `.github/codeql-config.yml` and the local runner help
+text in sync when that scope changes.
 
 Run local analysis with:
 
 ```bash
 .github/scripts/run-codeql-local.sh
 ```
+
+The GitHub Actions CodeQL workflow uploads only the standard
+`cpp-security-and-quality` SARIF. Run custom iccDEV query suites locally and
+attach report excerpts to issues or PRs only after maintainer triage.
+This includes the division-by-zero profile query, which has produced useful
+fixes but also guard-sensitive false positives.
+The XML narrowing query is scoped to high-signal channel and spectral-step
+attributes; broader enum, reserved, storage-type, and explicit-cast cases are
+left for separate local experiments.
 
 Workflow and Python-script governance uses the preflight CodeQL gates instead
 of the C/C++ database runner:

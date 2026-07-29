@@ -4,16 +4,14 @@
 
 Use this prompt when bumping the iccDEV version number (`OLD_VERSION` -> `NEW_VERSION`).
 
-## Version Location Map (6 locations, 5 files)
+## Version Location Map
 
-| # | File | Symbol | Type |
-|---|------|--------|------|
-| 1 | `IccProfLib/IccProfLibVer.h` | `ICCPROFLIBVER` | Hardcoded string |
-| 2 | `IccXML/IccLibXML/IccLibXMLVer.h` | `ICCLIBXMLVER` | Hardcoded string |
-| 3 | `IccXML/IccLibXML/IccLibXMLVer.h` | `ICCPROFLIBLIBXMLVER` | Hardcoded string |
-| 4 | `Build/Cmake/CMakeLists.txt` | `PATCH_VERSION` + comment | CMake variable |
-| 5 | `.github/copilot-instructions.md` | Version string in header | Documentation |
-| 6 | `.github/instructions/build-system.instructions.md` | Version string | Documentation |
+| File | Symbol or content | Type |
+|------|-------------------|------|
+| `Build/Cmake/CMakeLists.txt` | `REFICCMAX_*_VERSION` variables | CMake variables |
+| `IccProfLib/IccProfLibVer.h` | `ICCPROFLIBVER`, when intentionally maintained as a source header | Source header |
+| `.github/copilot-instructions.md` | Version string, if present | Documentation |
+| `.github/instructions/build-system.instructions.md` | Version string, if present | Documentation |
 
 ## Files That Do NOT Need Updating
 
@@ -22,6 +20,8 @@ version from `CMakeLists.txt` at configure time:
 
 - `IccProfLib/IccProfLibVer.h.in` -- uses `@ICCPROFLIB_VERSION_STRING@`
 - `IccXML/IccLibXML/IccLibXMLVer.h.in` -- uses `@ICCLIBXML_VERSION_STRING@`
+- `IccJSON/IccLibJSON/IccLibJSONVer.h.in` -- uses `@ICCLIBJSON_VERSION_STRING@`
+- `IccConnect/IccLibConnect/IccLibConnectVer.h.in` -- uses `@ICCLIBCONNECT_VERSION_STRING@`
 - `Build/Cmake/RefIccMAXConfig.cmake.in` -- uses `@REFICCMAX_PATCH_VERSION@` etc.
 - `Build/Cmake/RefIccMAXUninstall.cmake.in` -- no version references
 
@@ -29,7 +29,7 @@ version from `CMakeLists.txt` at configure time:
 
 ### 1. Update version strings
 
-Replace OLD_VERSION with NEW_VERSION in all 6 locations listed above.
+Replace OLD_VERSION with NEW_VERSION in the active locations listed above.
 
 For CMakeLists.txt, update both the PATCH_VERSION number and the comment:
 ```
@@ -54,6 +54,8 @@ Must return 0 hits. If any remain, update them.
 ```bash
 grep -n 'OLD_VERSION' IccProfLib/IccProfLibVer.h.in \
   IccXML/IccLibXML/IccLibXMLVer.h.in \
+  IccJSON/IccLibJSON/IccLibJSONVer.h.in \
+  IccConnect/IccLibConnect/IccLibConnectVer.h.in \
   Build/Cmake/RefIccMAXConfig.cmake.in
 ```
 

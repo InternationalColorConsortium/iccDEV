@@ -105,6 +105,9 @@ AFL patches locally before configuring iccDEV with:
 
 The default AFL patch directory is `.github/ci/fuzz-patches/afl`. CFL uses the
 parallel `.github/ci/fuzz-patches/cfl` stack through `cfl/build.sh --patches`.
+Run `.github/scripts/check-fuzz-patches.sh` before committing patch-stack
+edits; it validates both stacks with `git apply --check` from a fresh temporary
+clone.
 Both stacks are local validation aids; stable source fixes should still land as
 normal source changes.
 
@@ -118,6 +121,89 @@ When AFL saves crashes or hangs, the smoke workflow replays them with iccDEV
 command-line tools. The uploaded findings artifact includes raw inputs,
 per-finding `.cmd` replay files, replay logs, and
 `triage/reproducer-one-liners.txt` / `.md` bundles for copy-paste review.
+
+## Sanitizer Noise Suppression
+
+AFL and CFL smoke jobs can expose sanitizer reports from three places:
+
+- iccDEV project code, such as `IccProfLib`, `IccConnect`, `Tools`, `cfl`, or
+  workflow helper code. Treat these as actionable until triage proves otherwise.
+- Maintainer-local fuzz patches under `.github/ci/fuzz-patches`. Fix or retire
+  the patch if the patch introduced the sanitizer report.
+- Standard-library implementation code, usually from paths such as
+  `*/include/c++/*/bits/...`. These can be IntegerSanitizer noise when the stack
+  does not enter project-owned code before the report.
+
+Use two different mechanisms:
+
+- `Testing/silence.txt` is a runtime UBSAN suppression list. It is useful for
+  recoverable runs where `UBSAN_OPTIONS=suppressions=$PWD/Testing/silence.txt`
+  is honored by the runtime.
+- `.github/ci/ubsan-ignorelist.txt` is a compile-time ignorelist. It is the
+  right mechanism for fatal Clang IntegerSanitizer noise because the offending
+  instrumentation must be omitted during build. GCC builds ignore this setting;
+  use the normal GCC build as a regression check that suppression config does
+  not leak Clang-only flags into non-Clang compilers.
+
+When adding a suppression:
+
+1. Reproduce the finding without a new suppression and record the exact tool
+   command, exit code, and sanitizer summary.
+2. Attribute the first meaningful project-owned stack frame. Do not suppress a
+   project-owned frame in this noise file.
+3. If the report is standard-library implementation noise, add the narrowest
+   path pattern under the matching sanitizer kind.
+4. For fatal Clang IntegerSanitizer builds, rebuild with:
+
+   ```bash
+   CC=clang CXX=clang++ cmake -S Build/Cmake -B build-intsan \
+     -DENABLE_TOOLS=ON \
+     -DENABLE_INTEGER_SANITIZER=ON \
+     -DUBSAN_IGNORELIST=.github/ci/ubsan-ignorelist.txt
+   cmake --build build-intsan --target iccApplyNamedCmm -j"$(nproc)"
+   ```
+
+5. Replay the same finding against the rebuilt binary. A successful noise
+   suppression changes the result to normal tool behavior without hiding new
+   sanitizer reports from project code.
+6. Document additions and removals in the issue or PR. Include why the pattern
+   is safe, the command that failed before, and the command that passed after
+   rebuild.
+
+Before opening or updating a PR, verify the suppression config under the local
+compiler matrix:
+
+```bash
+CC=gcc CXX=g++ cmake -S Build/Cmake -B build-gcc-normal -DENABLE_TOOLS=ON
+cmake --build build-gcc-normal --target iccApplyNamedCmm -j"$(nproc)"
+
+CC=clang CXX=clang++ cmake -S Build/Cmake -B build-clang-normal -DENABLE_TOOLS=ON
+cmake --build build-clang-normal --target iccApplyNamedCmm -j"$(nproc)"
+```
+
+For Docker parity with CI, mount the checkout and run the same smoke checks in
+the regression image:
+
+```bash
+docker run --rm -v "$PWD":/work -w /work \
+  ghcr.io/internationalcolorconsortium/iccdev-ci-regression:master \
+  bash -lc '
+    CC=gcc CXX=g++ cmake -S Build/Cmake -B /tmp/iccdev-gcc-normal \
+      -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF -DENABLE_IMAGE_TOOLS=OFF \
+      -DENABLE_CMM_TOOLS=ON -DENABLE_ICCXML=OFF -DENABLE_ICCJSON=ON &&
+    cmake --build /tmp/iccdev-gcc-normal --target iccApplyNamedCmm -j2 &&
+    CC=clang CXX=clang++ cmake -S Build/Cmake -B /tmp/iccdev-intsan \
+      -DENABLE_TOOLS=ON -DENABLE_TESTS=OFF -DENABLE_IMAGE_TOOLS=OFF \
+      -DENABLE_CMM_TOOLS=ON -DENABLE_ICCXML=OFF -DENABLE_ICCJSON=ON \
+      -DENABLE_INTEGER_SANITIZER=ON \
+      -DUBSAN_IGNORELIST=.github/ci/ubsan-ignorelist.txt &&
+    cmake --build /tmp/iccdev-intsan --target iccApplyNamedCmm -j2
+  '
+```
+
+To remove a suppression, delete the narrow pattern, rebuild the sanitizer
+target, and replay a representative input. Keep the removal only when the report
+does not return or when the returned report now has a project-owned fix.
 
 Local container bootstrap check, useful before changing the workflow or the
 regression image:

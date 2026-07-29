@@ -118,6 +118,13 @@ For `Dockerfile.ci-regression`, use a no-cache build and smoke `clang`,
 publish through the maintainer-controlled container release path, then pass the
 published branch or SHA tag to `ci-iccdev-tool-tests.yml`.
 
+For PR or issue proof with the published maintainer image, follow
+[Prove a Local PR Worktree](../../docs/regression-container.md#prove-a-local-pr-worktree).
+For tool-specific behavior, build the affected target and
+`build-test-binaries`, then run the focused registered CTest. Record the image
+digest, image source revision, tested worktree commit, command, exit status,
+warning count, and sanitizer result before handoff.
+
 Workflow YAML:
 
 ```bash

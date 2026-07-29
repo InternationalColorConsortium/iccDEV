@@ -1,0 +1,7 @@
+*** stack smashing detected ***: terminated
+==4141==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x414141414141
+READ of size 8 at 0x414141414141 thread T0
+    #0 0x000000414141 in synthetic_issue_style_reproducer /home/runner/work/iccDEV/iccDEV/.github/ci/qa-flags/sanitizer-stack-smash-sample.cpp:41
+    #1 0x000000515151 in __stack_chk_fail
+SUMMARY: AddressSanitizer: stack-buffer-overflow synthetic_issue_style_reproducer
+==4141==ABORTING

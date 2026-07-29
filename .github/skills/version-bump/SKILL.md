@@ -18,14 +18,16 @@ Use this skill when updating the iccDEV release version.
 
 | File | Symbol or content |
 |------|-------------------|
+| `Build/Cmake/CMakeLists.txt` | `REFICCMAX_*_VERSION` variables |
 | `IccProfLib/IccProfLibVer.h` | `ICCPROFLIBVER` |
-| `IccXML/IccLibXML/IccLibXMLVer.h` | `ICCLIBXMLVER` |
-| `IccXML/IccLibXML/IccLibXMLVer.h` | `ICCPROFLIBLIBXMLVER` |
-| `Build/Cmake/CMakeLists.txt` | patch version variable and comment |
 | `.github/copilot-instructions.md` | version or release note references, if present |
 | `.github/instructions/build-system.instructions.md` | version references, if present |
 
-Do not hardcode versions in `.in` templates that use CMake substitution.
+Do not hardcode versions in generated XML, JSON, or Connect version headers.
+`IccXML/IccLibXML/IccLibXMLVer.h.in`,
+`IccJSON/IccLibJSON/IccLibJSONVer.h.in`, and
+`IccConnect/IccLibConnect/IccLibConnectVer.h.in` use CMake substitution and
+inherit the version from `Build/Cmake/CMakeLists.txt`.
 
 ## Workflow
 

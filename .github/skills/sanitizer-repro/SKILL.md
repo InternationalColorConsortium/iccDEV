@@ -26,11 +26,22 @@ manual findings involving iccDEV command-line tools.
 6. Inspect tool argument semantics before writing a one-liner. If a tool
    appends channel numbers, expands prefixes, or parses config files, preserve
    that behavior in the command instead of copying artifacts to synthetic names.
-7. Minimize reproduction steps while keeping them copy-pasteable. When a
+7. For sanitizer noise triage, distinguish runtime suppressions from compile-time
+   ignorelists:
+   - Use `Testing/silence.txt` only for recoverable runtime UBSAN suppressions.
+   - Use `.github/ci/ubsan-ignorelist.txt` plus a rebuild for fatal
+     Clang IntegerSanitizer noise from known-benign sites.
+   - Verify normal GCC and Clang builds still configure and compile; GCC ignores
+     the Clang-only compile-time ignorelist path.
+   - Keep patterns narrow. Standard-library implementation paths such as
+     `*/include/c++/*/bits/...` can be noise; project-owned `Icc*`, `Tools`,
+     `IccConnect`, AFL, and CFL paths stay actionable unless a separate source
+     fix or issue proves otherwise.
+8. Minimize reproduction steps while keeping them copy-pasteable. When a
    maintainer asks for no substitutions, the command must start with the tool
    binary and use literal arguments only; do not use shell variables, loops,
    `mktemp`, or copy helpers.
-8. File or update issues using the canonical security format.
+9. File or update issues using the canonical security format.
 
 ## Build
 
@@ -44,6 +55,20 @@ nm Tools/IccDumpProfile/iccDumpProfile | grep -c __asan
 Use `CC=clang`, not `C=clang`; after any failed compiler configure, delete both
 `CMakeCache.txt` and `CMakeFiles/` before retrying. Do not enable coverage for a
 sanitizer reproduction because coverage instrumentation can mask findings.
+
+For fatal Clang IntegerSanitizer noise that requires the compile-time
+ignorelist:
+
+```bash
+CC=clang CXX=clang++ cmake -S Build/Cmake -B build-intsan \
+  -DENABLE_TOOLS=ON \
+  -DENABLE_INTEGER_SANITIZER=ON \
+  -DUBSAN_IGNORELIST=.github/ci/ubsan-ignorelist.txt
+cmake --build build-intsan --target iccApplyNamedCmm -j"$(nproc)"
+```
+
+Verify CMake prints `-fsanitize-ignorelist=` in the final sanitizer flags before
+claiming that an ignorelist entry was tested.
 
 ## References
 

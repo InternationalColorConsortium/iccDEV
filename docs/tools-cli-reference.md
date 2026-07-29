@@ -12,6 +12,7 @@ single index for common command shapes and shared option tables.
 | `iccToJson` | Convert ICC binary to JSON | `iccToJson input.icc output.json -indent=2` |
 | `iccFromJson` | Convert JSON to ICC binary | `iccFromJson input.json output.icc` |
 | `iccDumpProfile` | Dump and validate ICC profile contents | `iccDumpProfile -v profile.icc ALL` |
+| `iccDumpProfile` | Emit gated QA evidence flags | `iccDumpProfile --qa-flags --evidence-json --diag -v 100 profile.icc` |
 | `iccProfileVisualize` | Dump profile LUT data as images and PDF graphs | `iccProfileVisualize profile.icc` |
 
 ## Applying Profiles
@@ -39,6 +40,7 @@ its destination transform.
 | `iccPngDump` | Inspect PNG metadata and embedded ICC | `iccPngDump image.png` |
 | `iccJpegDump` | Inspect JPEG metadata and embedded ICC | `iccJpegDump image.jpg` |
 | `iccPawgReport` | Emit an ICC PAWG profile assessment checklist report for security, conformance, and quality review | `iccPawgReport profile.icc` |
+| `iccPawgReport` | Emit gated QA evidence flags | `iccPawgReport --qa-flags --evidence-json profile.icc` |
 | `iccSpecSepToTiff` | Combine spectral separation TIFFs | `iccSpecSepToTiff output.tif 0 0 spectral/spec_ 1 10 1` |
 | `iccV5DspObsToV4Dsp` | Convert v5 display/observer profiles to v4 display | `iccV5DspObsToV4Dsp display.icc observer.icc output.icc` |
 | `iccFromCube` | Convert `.cube` 3D LUT to ICC.2 DeviceLink | `iccFromCube input.cube output.icc` |
@@ -100,3 +102,57 @@ which combine an output-side stem (`named` / `namedColorimetric` /
 and [`Tools/CmdLine/IccApplyNamedCmm/Readme.md`](../Tools/CmdLine/IccApplyNamedCmm/Readme.md).
 
 Tool-specific details remain in each `Tools/CmdLine/*/Readme.md` file.
+
+## Maintainer QA evidence flags
+
+`iccDumpProfile` and `iccPawgReport` expose `--qa-flags --evidence-json` only
+when the build enables `-DICCDEV_ENABLE_QA_FLAGS=ON`. `iccApplyNamedCmm` and
+`iccTiffDump` expose `--evidence-json` for their transform and embedded-profile
+write/extract evidence. The shared output schema is `iccdev-qa-evidence/v1` and
+is intended for CI and manual QA evidence, not normal user output. Sanitizer-log
+evidence remains a post-exit classifier in the `iccdev.qa-target-flags` CTest
+harness because a crashing process cannot reliably emit its own final JSON.
+
+```sh
+iccDumpProfile --qa-flags --evidence-json --diag -v 100 profile.icc
+iccPawgReport --qa-flags --evidence-json profile.icc
+iccApplyNamedCmm --evidence-json -cfg apply-config-with-dstFile.json
+iccTiffDump --evidence-json image.tif extracted.icc
+```
+
+The CTest `iccdev.qa-target-flags` demonstrates true-positive, negative-control,
+malformed marker-only, PAWG validation, transform, embedded-profile write/extract,
+and fixture-only sanitizer-log evidence. Its evidence covers:
+
+| Flag | Required evidence |
+|------|-------------------|
+| `ICCDEV_FLAG_LOAD` | Load mode, profile size, and profile ID. |
+| `ICCDEV_FLAG_VALIDATE` | Validation status plus tag signature, offset, and size. |
+| `ICCDEV_FLAG_TAG_PAYLOAD` | Private `qaFL` marker plus generated nonce or controlled `0x41414141` bytes. |
+| `ICCDEV_FLAG_TRANSFORM` | Input digest, profile ID, and output digest. |
+| `ICCDEV_FLAG_WRITE` | Output digest plus embedded/extracted ICC profile ID. |
+| `ICCDEV_FLAG_SANITIZER` | Exit classification, sanitizer summary, and stack frame file path. |
+
+The CI tool-test workflow writes a sanitized Markdown table plus sanitized
+NDJSON evidence lines to the GitHub Actions job summary.
+
+## Headless maintainer QA scans
+
+Maintainers can run broad command-line QA sweeps without adding a permanent CTest
+row for every external profile:
+
+```sh
+.github/scripts/icc-pawg-qa-scan.sh --timeout 10 Testing
+.github/scripts/icc-dumpprofile-qa-scan.sh --variant validate-all Testing
+.github/scripts/icc-roundtrip-qa-scan.sh --variant intent-1 Testing
+```
+
+For ICC registry compatibility checks, use:
+
+```sh
+.github/scripts/iccdev-registry-profile-qa.sh --timeout 20
+```
+
+The scanners write per-run logs, `results.tsv`, `findings.txt`, and
+`summary.md`. See [`docs/maintainer-qa-scans.md`](maintainer-qa-scans.md) for
+failure policy, registry-profile source management, and CI reporting guidance.

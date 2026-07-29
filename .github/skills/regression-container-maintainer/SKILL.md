@@ -39,21 +39,28 @@ Use this skill for repeatable maintainer operations in
 6. For an issue, reproduce with existing project tools and saved inputs.
 7. Rebuild the affected target, then run the focused regression and registered
    CTest wrapper.
-8. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
-   run the smallest matching smoke (`iccdev-afl-smoke.sh --patches` or
-   `cfl/build.sh --patches`) before broader validation.
-9. Run broader CTest or GCC strict parity only after the focused check passes.
-10. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
-11. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
+8. For local PR proof, mount the reviewed worktree read-only into the published
+   image and run the Docker PR verification build (`iccDumpProfile` with the
+   strict Clang sanitizer flags) before handoff.
+9. Build the affected tool and `build-test-binaries` inside the same image when
+   the PR-specific behavior is outside `iccDumpProfile`, then run the focused
+   CTest wrapper.
+10. For AFL/CFL work, run `iccdev-fuzz-env`, record the patch-stack counts, and
+    run the smallest matching smoke (`iccdev-afl-smoke.sh --patches` or
+    `cfl/build.sh --patches`) before broader validation.
+11. Run broader CTest or GCC 15.2 strict parity only after the focused check
+    passes.
+12. Scan logs for compiler warnings, ASAN, UBSAN, and signal termination.
+13. Trigger `ci-pr-action.yml` explicitly for a pre-PR branch; a push alone does
     not trigger that workflow.
-12. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
+14. Compare all `Dockerfile*` files between `ci-qa-pr-docker-testing` and
     `ci-qa-flags`; carry every applicable container fix to both branches.
-13. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
-14. Promote the verified immutable digest to `latest` only after all image smoke
+15. Confirm the `ci-qa-flags` branch update and hosted validation explicitly.
+16. Promote the verified immutable digest to `latest` only after all image smoke
     tests and regression CTest checks succeed: automatically from `master`, or
     explicitly from the protected Docker-testing branch with
     `publish-regression-latest=true`. Never promote it from other branches.
-15. Report exact image tag, digest, source revision, commands, results, evidence,
+17. Report exact image tag, digest, source revision, commands, results, evidence,
     and workflow URLs.
 
 ## Safety Gates

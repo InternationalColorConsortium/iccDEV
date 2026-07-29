@@ -52,41 +52,30 @@ int main(int argc, char *argv[])
 }
 ```
 
-## Step 3: Create CMakeLists.txt
+## Step 3: Create Build/Cmake Tool Registration
 
-Create `Tools/CmdLine/IccNewTool/CMakeLists.txt`:
+Create `Build/Cmake/Tools/IccNewTool/CMakeLists.txt`:
 
 ```cmake
-add_executable(iccNewTool iccNewTool.cpp)
+SET( SRC_PATH ../../../.. )
+SET( SOURCES ${SRC_PATH}/Tools/CmdLine/IccNewTool/iccNewTool.cpp )
+SET( TARGET_NAME iccNewTool )
 
-target_link_libraries(iccNewTool
-  PRIVATE
-    IccProfLib2-static
-    $<$<BOOL:${ENABLE_ICCXML}>:IccXML2-static>
-)
+ADD_EXECUTABLE( ${TARGET_NAME} ${SOURCES} )
+TARGET_LINK_LIBRARIES( ${TARGET_NAME} ${TARGET_LIB_ICCPROFLIB} )
 
-target_include_directories(iccNewTool
-  PRIVATE
-    ${PROJECT_SOURCE_DIR}/IccProfLib
-    $<$<BOOL:${ENABLE_ICCXML}>:${PROJECT_SOURCE_DIR}/IccXML/IccLibXML>
-)
-
-install(TARGETS iccNewTool DESTINATION bin)
-
-# Emscripten WASM support
-if(EMSCRIPTEN)
-  set_target_properties(iccNewTool PROPERTIES
-    SUFFIX ".js"
-    LINK_FLAGS "-sMODULARIZE=1 -sINVOKE_RUN=0 -sEXPORTED_RUNTIME_METHODS=callMain,FS -sALLOW_MEMORY_GROWTH=1"
-  )
-endif()
+IF(ENABLE_INSTALL_RIM)
+  INSTALL(TARGETS ${TARGET_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR})
+ENDIF()
 ```
 
-## Step 4: Register in Parent CMakeLists.txt
+## Step 4: Register in Top-Level CMakeLists.txt
 
-Edit `Tools/CmdLine/CMakeLists.txt`:
+Edit `Build/Cmake/CMakeLists.txt` near the other command-line tool
+registrations:
+
 ```cmake
-add_subdirectory(IccNewTool)
+ADD_SUBDIRECTORY(Tools/IccNewTool)
 ```
 
 ## Step 5: Build and Test
@@ -133,8 +122,8 @@ Add the same to `Testing/RunTests.bat` for Windows.
 ## Checklist
 
 - [ ] Source file with ICC copyright header
-- [ ] CMakeLists.txt with IccProfLib2-static link
-- [ ] Registered in parent CMakeLists.txt
+- [ ] `Build/Cmake/Tools/IccNewTool/CMakeLists.txt` with the correct library link
+- [ ] Registered in `Build/Cmake/CMakeLists.txt`
 - [ ] Emscripten `if(EMSCRIPTEN)` guard for WASM
 - [ ] Builds clean with `clang++ -Wall -Wextra`
 - [ ] 0 ASan/UBSan findings on test profiles
