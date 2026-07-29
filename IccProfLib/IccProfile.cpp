@@ -3867,16 +3867,41 @@ getmediaXYZ:
     icUInt32Number samples = icGetSpaceSamples((icColorSpaceSignature)sig);
     icFloatNumber *pWhite;
 
+    // GetValues() declares nStart = 0 and nVectorSize = 1 as defaults, so the
+    // single-argument call this used to make copied exactly one value into a
+    // buffer sized for the whole spectrum. Everything downstream -- VectorMult()
+    // against the reflectance observer, getEmissiveObserver()'s k accumulation --
+    // then read all `samples` entries, so samples - 1 uninitialised heap floats
+    // were folded into the media white point and out through the returned XYZ.
+    // Asking for the whole vector and honouring the result fixes both halves.
     if (samples && pNumTag->GetNumValues()>=samples) {
       pWhite = new (std::nothrow) icFloatNumber[samples];
-      if (pWhite) {
-        pNumTag->GetValues(pWhite);
-      }
-      else {
+      if (!pWhite || !pNumTag->GetValues(pWhite, 0, samples)) {
+        delete [] pWhite;
         goto getmediaXYZ;
       }
     }
     else {
+      goto getmediaXYZ;
+    }
+
+    // Both spectral branches below pair pWhite with an observer dimensioned from
+    // range.steps, while pWhite was allocated from samples. Those are the same
+    // length only when the range describes the vector that was just read, and a
+    // profile can disagree with itself here: Testing/Display/LaserProjector.icc
+    // declares a 401-channel radiant signature in its spectralDataInfo tag and a
+    // 31-step range in the same tag, so the 3 x 31 observer was applied to a
+    // 401-entry white vector and returned a denormal XYZ as success.
+    //
+    // Restricted to these two signature types on purpose. icGetSpaceSamples()
+    // reports bispectral and sparse-matrix spaces as steps * birange.steps --
+    // 1271 == 31 * 41 for Testing/Named/FluorescentNamedColor.icc -- so equality
+    // is the wrong test for them. They are neither reflectance nor radiant and
+    // fall through to the media white point tag below regardless.
+    if ((icIsSameColorSpaceType(sig, icSigReflectanceSpectralData) ||
+         icIsSameColorSpaceType(sig, icSigRadiantSpectralData)) &&
+        range.steps != samples) {
+      delete [] pWhite;
       goto getmediaXYZ;
     }
 
@@ -3902,7 +3927,17 @@ getmediaXYZ:
     }
     else if (icIsSameColorSpaceType(sig, icSigRadiantSpectralData)) {
       CIccMatrixMath obs(3,range.steps);
-      pObservingPCC->getEmissiveObserver(range, pWhite, obs.entry(0));
+
+      // getEmissiveObserver() fills obs only on the paths that succeed; when it
+      // rejects the viewing conditions -- no observer, an unmappable range, or a
+      // zero white-scaling constant k -- it returns NULL having written nothing.
+      // The constructor does not zero its coefficients either, so ignoring the
+      // result left VectorMult() multiplying pWhite by 3 * range.steps floats of
+      // uninitialised heap and reporting the product as the media white point.
+      if (!pObservingPCC->getEmissiveObserver(range, pWhite, obs.entry(0))) {
+        delete [] pWhite;
+        goto getmediaXYZ;
+      }
 
       obs.VectorMult(pXYZ, pWhite);
       delete [] pWhite;

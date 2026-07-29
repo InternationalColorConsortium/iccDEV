@@ -1604,12 +1604,33 @@ bool CIccMpeReflectanceCLUT::Begin(icElemInterp nInterp, CIccTagMultiProcessElem
   }
 
   //concatenate reflectance range mapping to observer+illuminant
-  CIccMatrixMath *rangeRef = CIccMatrixMath::rangeMap(m_Range, illumRange);
+  bool mapFailed = false;
+  CIccMatrixMath *rangeRef = CIccMatrixMath::rangeMap(m_Range, illumRange, &mapFailed);
   CIccMatrixMath *pApplyMtx;
-  if (!rangeRef) 
+
+  // Falling through to the unmapped observer treats a 3 x illumRange.steps
+  // matrix as though it were m_Range.steps wide, and the VectorMult() calls
+  // below feed it m_Range.steps-long reflectance vectors. That equivalence held
+  // while a NULL return meant only "the ranges are identical"; a failed mapping
+  // now returns NULL too, so it has to be rejected rather than absorbed.
+  if (mapFailed)
+    return false;
+
+  if (!rangeRef)
     pApplyMtx = &observer;
-  else
+  else {
+    // Mult() allocates a new product and leaves both operands untouched, so
+    // rangeRef is this function's to release either way -- it was previously
+    // dropped here, leaking a matrix and its coefficient array on every profile
+    // whose reflectance range differed from the illuminant range. Mult() also
+    // returns NULL when the operand shapes disagree, which the old code passed
+    // straight to VectorMult() below.
     pApplyMtx = rangeRef->Mult(&observer);
+    delete rangeRef;
+
+    if (!pApplyMtx)
+      return false;
+  }
 
   delete m_pApplyCLUT;
 
@@ -2161,11 +2182,30 @@ bool CIccMpeReflectanceObserver::Begin(icElemInterp /* nInterp */, CIccTagMultiP
   }
 
   //concatenate reflectance range mapping to observer+illuminant
-  CIccMatrixMath *rangeRef = CIccMatrixMath::rangeMap(m_Range, illumRange);
-  if (!rangeRef) 
-    m_pApplyMtx = new CIccMatrixMath(observer);
-  else
+  // Same three problems as the CLUT variant above: a failed mapping must not be
+  // mistaken for "ranges already match", rangeRef is leaked once Mult() has
+  // copied what it needs, and Mult() can hand back NULL.
+  bool mapFailed = false;
+  CIccMatrixMath *rangeRef = CIccMatrixMath::rangeMap(m_Range, illumRange, &mapFailed);
+
+  if (mapFailed)
+    return false;
+
+  // Released before being overwritten, matching what CIccMpeReflectanceCLUT::Begin()
+  // does with m_pApplyCLUT: Begin() may be called more than once on the same element,
+  // and the previous matrix was simply dropped. NULL on the first pass (every
+  // constructor initialises it so), which delete handles.
+  delete m_pApplyMtx;
+
+  if (!rangeRef)
+    m_pApplyMtx = new (std::nothrow) CIccMatrixMath(observer);
+  else {
     m_pApplyMtx = rangeRef->Mult(&observer);
+    delete rangeRef;
+  }
+
+  if (!m_pApplyMtx)
+    return false;
 
   icFloatNumber xyzm[3];
 

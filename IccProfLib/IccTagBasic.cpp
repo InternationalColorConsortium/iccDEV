@@ -12591,12 +12591,21 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
       range->VectorMult(&rv[newRange.steps*2], &m_observer[m_observerRange.steps*2]);
       delete range;
     }
-    else {
-      if ( m_observerRange.steps > newRange.steps) {
-        free(rv);
-        return NULL;
-      }
+    // rv is three consecutive rows of newRange.steps, so copying the observer in
+    // wholesale is only right when the two ranges are the same length: otherwise
+    // row 1 of the source lands at m_observerRange.steps while row 1 of the
+    // destination begins at newRange.steps, scrambling the rows and leaving the
+    // tail of rv uninitialised. The old m_observerRange.steps > newRange.steps
+    // test caught only the over-write half of that. Requiring the ranges to be
+    // identical is the actual precondition -- it is what a NULL used to mean
+    // before rangeMap() could also fail, and matching step counts alone would
+    // still silently reinterpret one wavelength span as another.
+    else if (icSameSpectralRange(m_observerRange, newRange)) {
       memcpy(rv, m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
+    }
+    else {
+      free(rv);
+      return NULL;
     }
   }
 
@@ -12619,12 +12628,17 @@ CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpec
     range->VectorMult(pMtx->entry(2), &observer[observerRange.steps*2]);
     delete range;
   }
-  else {
-    if ( observerRange.steps > newRange.steps) {
-      delete pMtx;
-      return NULL;
-    }
+  // Same row-layout precondition as applyRangeToObserver() above. This one is
+  // already reachable on unfixed sources: CIccPcsXform::rangeMap() has always
+  // returned NULL when SetRange() rejects the ranges, so a viewing-conditions
+  // tag whose observer range cannot be mapped onto newRange already reaches this
+  // branch with unequal step counts and yields a matrix that is part stale heap.
+  else if (icSameSpectralRange(observerRange, newRange)) {
     memcpy(pMtx->entry(0), observer, observerRange.steps*3*sizeof(icFloatNumber));
+  }
+  else {
+    delete pMtx;
+    return NULL;
   }
 
   return pMtx;

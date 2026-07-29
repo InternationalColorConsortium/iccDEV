@@ -120,6 +120,10 @@ public:
   bool SetRange(const icSpectralRange &from, const icSpectralRange &to);
 
   static CIccMatrixMath* rangeMap(const icSpectralRange &from, const icSpectralRange &to);  //Caller is responsible for deleting returned matrix
+  //As above, but sets *pFailed when NULL means "a conversion was needed and could not be built"
+  //rather than "the ranges are identical". Callers that fall back to using one range's length
+  //against the other array need this to tell those two cases apart.
+  static CIccMatrixMath* rangeMap(const icSpectralRange &from, const icSpectralRange &to, bool *pFailed);
 
 protected:
   icUInt16Number m_nRows, m_nCols;

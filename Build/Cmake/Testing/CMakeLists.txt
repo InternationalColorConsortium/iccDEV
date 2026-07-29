@@ -946,6 +946,92 @@ function(iccdev_add_getvalues_nstart_test)
   endif()
 endfunction()
 
+# #1853: CIccMatrixMath::rangeMap() discarded SetRange()'s verdict and returned a matrix
+# whose coefficients were never written, so a rejected spectral range pair fed
+# uninitialized heap into the colour math (CWE-908). Pins the corrected NULL return, the
+# pFailed overload that keeps callers able to tell "no matrix needed" from "no matrix
+# possible", and the observer row-layout guard in CIccTagSpectralViewingConditions.
+# Header + IccProfLib only.
+function(iccdev_add_rangemap_uninitialized_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccRangeMapUninitializedTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/rangemap-uninitialized.cpp"
+  )
+  target_link_libraries(iccRangeMapUninitializedTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccRangeMapUninitializedTest)
+
+  add_test(
+    NAME iccdev.rangemap-uninitialized
+    COMMAND "$<TARGET_FILE:iccRangeMapUninitializedTest>"
+  )
+  set_tests_properties(iccdev.rangemap-uninitialized PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;spectral;issue-1853;regression"
+  )
+  if(WIN32)
+    set(_rangemap_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccRangeMapUninitializedTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _rangemap_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.rangemap-uninitialized PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_rangemap_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #1853: CIccProfile::calcMediaWhiteXYZ() read the spectral white point tag with
+# GetValues()'s default nVectorSize of 1, so all but the first sample of the white vector
+# were uninitialized heap by the time they reached the returned XYZ. Builds its profiles
+# in memory and checks the XYZ against a closed-form expectation, which is what
+# iccdev.rangemap-uninitialized cannot see from the matrix helper alone.
+#
+# No FIXTURES_REQUIRED and no Testing/ paths on purpose: the generated PCC profiles this
+# first used are written into the source tree by iccdev.create-profiles but into the build
+# tree by iccdev.windows-create-profiles, so a path-based test satisfied the fixture and
+# still found nothing on Windows. Header + IccProfLib only.
+function(iccdev_add_spectral_media_white_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralMediaWhiteTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-media-white.cpp"
+  )
+  target_link_libraries(iccSpectralMediaWhiteTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSpectralMediaWhiteTest)
+
+  add_test(
+    NAME iccdev.spectral-media-white
+    COMMAND "$<TARGET_FILE:iccSpectralMediaWhiteTest>"
+  )
+  set_tests_properties(iccdev.spectral-media-white PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;spectral;pcc;issue-1853;regression"
+  )
+  if(WIN32)
+    set(_spectralwhite_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralMediaWhiteTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectralwhite_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-media-white PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectralwhite_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1581: CIccTagGamutBoundaryDesc::Read must reject a gbd tag with 0 PCS channels,
 # which otherwise collapses the vertex-count size bound and lets a tiny tag declare a
 # near-2^31 vertex count (CWE-400 hang in Describe()). The test exercises Read() over a
@@ -2659,6 +2745,8 @@ if(WIN32)
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
+  iccdev_add_rangemap_uninitialized_test()
+  iccdev_add_spectral_media_white_test()
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_mpe_empty_identity_test()
   iccdev_add_pcc_reflectance_observer_range_test()
@@ -2883,6 +2971,8 @@ iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
+iccdev_add_rangemap_uninitialized_test()
+iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
 iccdev_add_pcc_reflectance_observer_range_test()

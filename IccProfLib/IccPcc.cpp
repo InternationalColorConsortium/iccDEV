@@ -75,6 +75,7 @@
 #include "IccProfile.h"
 #include "IccTag.h"
 #include "IccCmm.h"
+#include <new>
 
 static bool icCanMapSpectralRange(const icSpectralRange &srcRange, const icSpectralRange &dstRange)
 {
@@ -189,11 +190,16 @@ icFloatNumber IIccProfileConnectionConditions::getObserverIlluminantScaleFactor(
     return 1.0;
 
   int i, n = illumRange.steps;
-  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, illumRange);
+  bool mapFailed = false;
+  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, illumRange, &mapFailed);
   icFloatNumber rv=0;
 
   if (mapRange) {
-    icFloatNumber *Ycmf = new icFloatNumber[illumRange.steps];
+    icFloatNumber *Ycmf = new (std::nothrow) icFloatNumber[illumRange.steps];
+    if (!Ycmf) {
+      delete mapRange;
+      return 1.0;
+    }
     mapRange->VectorMult(Ycmf, &obs[obsRange.steps]);
     delete mapRange;
 
@@ -202,13 +208,24 @@ icFloatNumber IIccProfileConnectionConditions::getObserverIlluminantScaleFactor(
     }
     delete [] Ycmf;
   }
-  else {
+  // The no-matrix branch reads n == illumRange.steps entries starting at
+  // obs[obsRange.steps], and obs is only 3 * obsRange.steps long. That stays in
+  // bounds solely because rangeMap() used to return NULL just for identical
+  // ranges, which made obsRange.steps == illumRange.steps hold by construction.
+  // Now that it also returns NULL when a needed mapping could not be built, the
+  // equality has to be tested rather than assumed -- otherwise an illuminant
+  // range more than twice the observer's would walk off the end of the observer
+  // array. Returning the neutral 1.0 matches every other bail-out here.
+  else if (!mapFailed && obsRange.steps == illumRange.steps) {
    const icFloatNumber *Ycmf = &obs[obsRange.steps];
 
     for (i=0; i<n; i++) {
       rv += Ycmf[i]*illum[i];
     }
   }
+  else
+    return 1.0;
+
   return rv;
 }
 
@@ -228,11 +245,16 @@ icFloatNumber IIccProfileConnectionConditions::getObserverWhiteScaleFactor(const
     return 1.0;
 
   int i, n = whiteRange.steps;
-  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, whiteRange);
+  bool mapFailed = false;
+  CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(obsRange, whiteRange, &mapFailed);
   icFloatNumber rv=0;
 
   if (mapRange) {
-    icFloatNumber *Ycmf = new icFloatNumber[whiteRange.steps];
+    icFloatNumber *Ycmf = new (std::nothrow) icFloatNumber[whiteRange.steps];
+    if (!Ycmf) {
+      delete mapRange;
+      return 1.0;
+    }
     mapRange->VectorMult(Ycmf, &obs[obsRange.steps]);
     delete mapRange;
 
@@ -241,13 +263,21 @@ icFloatNumber IIccProfileConnectionConditions::getObserverWhiteScaleFactor(const
     }
     delete [] Ycmf;
   }
-  else {
+  // Same reasoning as getObserverIlluminantScaleFactor() above: this branch
+  // indexes whiteRange.steps entries out of an observer array sized by
+  // obsRange.steps, which is only safe while a NULL return means the two ranges
+  // matched. pWhite is supplied by the caller and is whiteRange.steps long, so
+  // a mismatch over-reads the observer rather than pWhite.
+  else if (!mapFailed && obsRange.steps == whiteRange.steps) {
     const icFloatNumber *Ycmf = &obs[obsRange.steps];
 
     for (i=0; i<n; i++) {
       rv += Ycmf[i]*pWhite[i];
     }
   }
+  else
+    return 1.0;
+
   return rv;
 }
 
@@ -276,7 +306,8 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
     obs = (icFloatNumber*)malloc(size*sizeof(icFloatNumber));
 
   if (obs) {
-    CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(observerRange, range);
+    bool mapFailed = false;
+    CIccMatrixMath *mapRange=CIccMatrixMath::rangeMap(observerRange, range, &mapFailed);
 
     //Copy observer while adjusting to range
     if (mapRange) {
@@ -289,8 +320,19 @@ icFloatNumber *IIccProfileConnectionConditions::getEmissiveObserver(const icSpec
         }
         delete mapRange;
     }
-    else {
+    // This memcpy moves size == 3 * range.steps floats out of observer, which
+    // holds 3 * observerRange.steps. The two counts are equal only when the
+    // ranges match, which is what a NULL return used to guarantee. Without the
+    // test a range wider than the observer's copies heap past the end of the
+    // observer array into a buffer this function then returns to its caller, so
+    // the over-read reaches the computed colorimetry rather than staying local.
+    else if (!mapFailed && observerRange.steps == range.steps) {
       memcpy(obs, observer, size*sizeof(icFloatNumber));
+    }
+    else {
+      if (allocObs)
+        free(obs);
+      return NULL;
     }
 
     //Calculate scale constant 
@@ -334,7 +376,16 @@ CIccMatrixMath *IIccProfileConnectionConditions::getReflectanceObserver(const ic
   if (!illum || !rangeRef.steps || !illumRange.steps || !icCanMapSpectralRange(rangeRef, illumRange))
     return NULL;
 
-  pMtx = CIccMatrixMath::rangeMap(rangeRef, illumRange);
+  // A NULL here has always meant "rangeRef and illumRange are identical, so the
+  // observer matrix needs no re-sampling" -- the pMtx built below is then
+  // illumRange.steps wide and is handed back to a caller that multiplies it by a
+  // rangeRef.steps-long vector. Since rangeMap() can now also fail, carrying on
+  // with pAdjust == NULL would return a matrix of the wrong width and over-read
+  // that vector. Refuse instead; every caller already handles a NULL result.
+  bool mapFailed = false;
+  pMtx = CIccMatrixMath::rangeMap(rangeRef, illumRange, &mapFailed);
+  if (mapFailed)
+    return NULL;
   if (pMtx)
     pAdjust = pMtx;
 
