@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <ProfileVersion>5.00</ProfileVersion>
+    <ProfileDeviceClass>scnr</ProfileDeviceClass>
+    <DataColourSpace>BCLR</DataColourSpace>
+    <PCS>rs0024</PCS>
+    <CreationDateTime>2026-07-29T07:51:49</CreationDateTime>
+    <ProfileFileSignature>acsp</ProfileFileSignature>
+    <RenderingIntent>Absolute</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.96420288" Y="1.00000000" Z="0.82490540"/>
+    </PCSIlluminant>
+    <SpectralPCS>rs0024</SpectralPCS>
+    <SpectralRange>
+      <Wavelengths start="380" end="730" steps="36"/>
+    </SpectralRange>
+  </Header>
+  <Tags>
+    <multiProcessElementType>
+      <TagSignature>D2B3</TagSignature>
+      <MultiProcessElements InputChannels="11" OutputChannels="36">
+        <ReflectanceObserverElement InputChannels="11" OutputChannels="3">
+          <Wavelengths start="380" end="730" steps="360200"/>
+          <WhiteData>1 1 1</WhiteData>
+        </ReflectanceObserverElement>
+      </MultiProcessElements>
+    </multiProcessElementType>
+  </Tags>
+</IccProfile>

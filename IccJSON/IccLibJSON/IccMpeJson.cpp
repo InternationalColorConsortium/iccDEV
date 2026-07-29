@@ -86,6 +86,9 @@ static inline icUInt32Number icJsonSafeU32(size_t n, bool *overflow = nullptr)
 // Match the defensive cap used by CIccMpeMatrix::Read for user-controlled
 // matrix-family payloads before narrowing channel counts.
 static const int kIccJsonMaxMatrixChannels = 255;
+// kIccJsonMaxChannels / icJsonValidChannels are shared with the tag-level
+// reader and live in IccUtilJson.h. The matrix family is capped more tightly
+// than its u16 storage and keeps its own constant above.
 static const int kIccJsonMaxSpectralSteps = 65535;
 
 static bool icJsonValidMatrixChannels(int nIn, int nOut)
@@ -150,11 +153,16 @@ bool CIccMpeJsonUnknown::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccMpeJsonUnknown::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccMpeJsonUnknown::ParseJson(const IccJson &j, std::string &parseStr)
 {
   int nIn = 0, nOut = 0;
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
+
+  if (!icJsonValidChannels(nIn, nOut)) {
+    parseStr += "Invalid inputChannels or outputChannels in unknown element\n";
+    return false;
+  }
   m_nInputChannels  = (icUInt16Number)nIn;
   m_nOutputChannels = (icUInt16Number)nOut;
   if (j.contains("unknownData") && j["unknownData"].is_string()) {
@@ -617,7 +625,7 @@ bool CIccMpeJsonCurveSet::ParseJson(const IccJson &j, std::string &parseStr)
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
 
-  if (!nIn || nIn != nOut) {
+  if (!icJsonValidChannels(nIn, nOut) || nIn != nOut) {
     parseStr += "Invalid inputChannels or outputChannels in CurveSetElement\n";
     return false;
   }
@@ -697,6 +705,11 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
   int nIn = 0, nOut = 0;
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
+
+  if (!icJsonValidChannels(nIn, nOut)) {
+    parseStr += "Invalid inputChannels or outputChannels in TintArrayElement\n";
+    return false;
+  }
   m_nInputChannels  = (icUInt16Number)nIn;
   m_nOutputChannels = (icUInt16Number)nOut;
 
@@ -905,7 +918,7 @@ bool CIccMpeJsonToneMap::ParseJson(const IccJson &j, std::string &parseStr)
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
 
-  if (!nIn || !nOut || nIn != nOut + 1) {
+  if (!icJsonValidChannels(nIn, nOut) || nIn != nOut + 1) {
     parseStr += "Invalid inputChannels or outputChannels in ToneMapElement\n";
     return false;
   }
@@ -1093,7 +1106,7 @@ bool CIccMpeJsonCLUT::ParseJson(const IccJson &j, std::string &parseStr)
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
 
-  if (!nIn || !nOut) {
+  if (!icJsonValidChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in CLutElement\n";
     return false;
   }
@@ -1134,7 +1147,7 @@ bool CIccMpeJsonExtCLUT::ParseJson(const IccJson &j, std::string &parseStr)
   jGetValue(j, "storageType",    storageType);
   jGetValue(j, "reserved2",      reserved2);
 
-  if (!nIn || !nOut) {
+  if (!icJsonValidChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in ExtCLutElement\n";
     return false;
   }
@@ -2044,7 +2057,7 @@ bool CIccMpeJsonCalculator::ParseJson(const IccJson &j, std::string &parseStr)
   int nIn = 0, nOut = 0;
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
-  if (!nIn || !nOut) {
+  if (!icJsonValidChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in CalculatorElement\n";
     return false;
   }
@@ -2284,7 +2297,7 @@ bool CIccMpeJsonEmissionMatrix::ParseJson(const IccJson &j, std::string &parseSt
   int nIn = 0, nOut = 0;
   jGetValue(j, "inputChannels", nIn);
   jGetValue(j, "outputChannels", nOut);
-  if (nIn < 1 || nOut != 3) {
+  if (!icJsonValidChannels(nIn, nOut) || nOut != 3) {
     parseStr += "Invalid inputChannels or outputChannels in EmissionMatrixElement\n";
     return false;
   }
@@ -2329,7 +2342,7 @@ static bool icSpectralCLUTParseJson(const IccJson &j, std::string &parseStr,
   flags       = (icUInt32Number)iFlags;
   storageType = (icUInt16Number)iStorageType;
 
-  if (!nIn || !nOut) {
+  if (!icJsonValidChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in spectral CLUT element\n";
     return false;
   }
@@ -2448,7 +2461,7 @@ bool CIccMpeJsonEmissionObserver::ParseJson(const IccJson &j, std::string &parse
   jGetValue(j, "flags",          flags);
   m_flags = (icUInt16Number)flags;
 
-  if (!nIn || !nOut) {
+  if (!icJsonValidChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in EmissionObserverElement\n";
     return false;
   }
@@ -2489,7 +2502,7 @@ bool CIccMpeJsonReflectanceObserver::ParseJson(const IccJson &j, std::string &pa
   jGetValue(j, "flags",          flags);
   m_flags = (icUInt16Number)flags;
 
-  if (!nIn || !nOut) {
+  if (!icJsonValidChannels(nIn, nOut)) {
     parseStr += "Invalid inputChannels or outputChannels in ReflectanceObserverElement\n";
     return false;
   }

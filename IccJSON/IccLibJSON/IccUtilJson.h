@@ -140,6 +140,22 @@ bool jGetString(const IccJson &j, const char *field, std::string &value);
 template <typename T>
 bool jGetArray(const IccJson &j, const char *field, T *vals, int n);
 
+// Upper bound for a multi-process-element channel count. Both counts are
+// stored in an icUInt16Number, so this is the width of the destination rather
+// than a policy limit.
+const int kIccJsonMaxChannels = 0xFFFF;
+
+// True when a parsed inputChannels / outputChannels pair can be stored without
+// changing value. The readers pull both counts into an int and then cast to
+// u16; the "!nIn || !nOut" test they applied rejected zero and nothing else,
+// so "outputChannels": 360200 passed it and the explicit cast -- which UBSan
+// does not instrument -- stored 32520 in its place. The element was then built
+// at, and re-serialized with, a size the document never asked for (#1901,
+// #1902). A negative count wrapped through the same cast just as quietly.
+// Callers with a tighter constraint (nIn == nOut, nOut == 3, ...) still apply
+// it themselves; this only establishes that the narrowing is lossless.
+bool icJsonValidChannels(int nIn, int nOut);
+
 // ---------------------------------------------------------------------------
 // Typed array helpers (parallel to CIccXmlArrayType)
 // ---------------------------------------------------------------------------

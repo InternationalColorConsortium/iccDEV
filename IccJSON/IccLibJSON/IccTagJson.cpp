@@ -2522,6 +2522,15 @@ bool CIccTagJsonMultiProcessElement::ParseJson(const IccJson &j, std::string &pa
   int nIn = 0, nOut = 0;
   jGetValue(j, "inputChannels",  nIn);
   jGetValue(j, "outputChannels", nOut);
+
+  // The tag-level counts were stored with no bound at all, so the narrowing
+  // cast below turned "outputChannels": 360200 into 32520 and the tag was
+  // built at that size (#1901). Mirrors the XML reader in
+  // CIccTagXmlMultiProcessElement::ParseXml.
+  if (!icJsonValidChannels(nIn, nOut)) {
+    parseStr += "Invalid inputChannels or outputChannels in multiProcessElementType\n";
+    return false;
+  }
   m_nInputChannels  = (icUInt16Number)nIn;
   m_nOutputChannels = (icUInt16Number)nOut;
 

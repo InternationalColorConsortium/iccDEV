@@ -4745,8 +4745,17 @@ bool CIccTagXmlMultiProcessElement::ParseXml(xmlNode *pNode, std::string &parseS
     return false;
   }
 
-  m_nInputChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pInputChannels));
-  m_nOutputChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pOutputChannels));
+  // icXmlAttrToUInt floors a negative to zero but returns icUInt32Number, and
+  // the explicit narrowing cast that followed both changed the value and
+  // suppressed the sanitizer check that would have reported it -- exactly the
+  // caller shape described at the helper's definition near the top of this
+  // file. InputChannels="360200" was therefore stored as 32520 and written
+  // back out on save (#1901). icXmlParseU16 refuses the count instead.
+  if (!icXmlParseU16(icXmlAttrValue(pInputChannels), m_nInputChannels) ||
+      !icXmlParseU16(icXmlAttrValue(pOutputChannels), m_nOutputChannels)) {
+    parseStr += "Invalid channels in MultiProcessElements\n";
+    return false;
+  }
 
   if (!m_list) {
     m_list = new (std::nothrow) CIccMultiProcessElementList();

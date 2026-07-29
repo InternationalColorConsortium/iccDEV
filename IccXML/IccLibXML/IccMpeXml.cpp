@@ -87,6 +87,12 @@ namespace iccDEV {
 // Match the defensive cap used by CIccMpeMatrix::Read before narrowing
 // user-controlled matrix-family XML channel counts.
 static const icUInt16Number kIccXmlMaxMatrixChannels = 255;
+// Every MPE element stores its channel counts in an icUInt16Number, so this is
+// the type bound rather than a policy limit: a document asking for more than
+// this cannot be represented, whatever the element. Element families that are
+// bounded more tightly than their storage -- the matrix family above -- pass
+// their own cap instead.
+static const icUInt16Number kIccXmlMaxChannels = 0xFFFF;
 static const int kIccXmlMaxSpectralSteps = 65535;
 
 static int icXmlBoundedSpectralSteps(const icSpectralRange &range)
@@ -94,14 +100,25 @@ static int icXmlBoundedSpectralSteps(const icSpectralRange &range)
   return std::min<int>((int)range.steps, kIccXmlMaxSpectralSteps);
 }
 
-static bool icXmlParseMatrixChannels(xmlNode *pNode, icUInt16Number &nInputChannels,
-                                     icUInt16Number &nOutputChannels,
-                                     const char *elementName, std::string &parseStr)
+// Parses the InputChannels / OutputChannels attribute pair shared by the MPE
+// element readers. Serves every element family, not just the matrix one it was
+// introduced for, so it takes the cap as a parameter -- see kIccXmlMaxChannels.
+//
+// The range check is the point. atoi() returns int and the counts are u16, so
+// before this a document declaring OutputChannels="360200" was narrowed on
+// assignment to 32520 and that value -- one the document never asked for --
+// was stored in the element and written back out on save (#1898/#1899/#1900/
+// #1903). atoi() is equally blind to a negative count and to trailing garbage.
+// icXmlParseU16 refuses all three rather than substituting a different number.
+static bool icXmlParseChannels(xmlNode *pNode, icUInt16Number &nInputChannels,
+                               icUInt16Number &nOutputChannels,
+                               const char *elementName, std::string &parseStr,
+                               icUInt16Number maxChannels = kIccXmlMaxChannels)
 {
   if (!icXmlParseU16(icXmlAttrValue(pNode, "InputChannels"), nInputChannels,
-                     kIccXmlMaxMatrixChannels) ||
+                     maxChannels) ||
       !icXmlParseU16(icXmlAttrValue(pNode, "OutputChannels"), nOutputChannels,
-                     kIccXmlMaxMatrixChannels) ||
+                     maxChannels) ||
       !nInputChannels || !nOutputChannels) {
     parseStr += std::string("Invalid InputChannels or OutputChannels In ") + elementName + "\n";
     return false;
@@ -1324,9 +1341,14 @@ static icCurveSetCurvePtr ParseXmlCurve(xmlNode* pNode, std::string parseStr)
 
 bool CIccMpeXmlCurveSet::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  icUInt16Number nChannels = (icUInt16Number)atoi(icXmlAttrValue(pNode, "InputChannels"));
+  icUInt16Number nChannels = 0, nOutputChannels = 0;
+  if (!icXmlParseChannels(pNode, nChannels, nOutputChannels,
+                          "CurveSetElement", parseStr)) {
+    return false;
+  }
 
-  if (!nChannels || atoi(icXmlAttrValue(pNode, "OutputChannels")) != nChannels) {
+  // A curve set carries one curve per channel, so the two counts must agree.
+  if (nOutputChannels != nChannels) {
     parseStr += "Invalid InputChannels or OutputChannels In CurveSetElement\n";
     return false;
   }
@@ -1437,8 +1459,8 @@ bool CIccMpeXmlMatrix::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   icUInt16Number nInputChannels = 0;
   icUInt16Number nOutputChannels = 0;
-  if (!icXmlParseMatrixChannels(pNode, nInputChannels, nOutputChannels,
-                                "MatrixElement", parseStr)) {
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "MatrixElement", parseStr, kIccXmlMaxMatrixChannels)) {
     return false;
   }
 
@@ -1553,8 +1575,8 @@ bool CIccMpeXmlEmissionMatrix::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   icUInt16Number nInputChannels = 0;
   icUInt16Number nOutputChannels = 0;
-  if (!icXmlParseMatrixChannels(pNode, nInputChannels, nOutputChannels,
-                                "EmissionMatrixElement", parseStr)) {
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "EmissionMatrixElement", parseStr, kIccXmlMaxMatrixChannels)) {
     return false;
   }
   if (nOutputChannels != 3) {
@@ -1676,8 +1698,8 @@ bool CIccMpeXmlInvEmissionMatrix::ParseXml(xmlNode *pNode, std::string &parseStr
 {
   icUInt16Number nInputChannels = 0;
   icUInt16Number nOutputChannels = 0;
-  if (!icXmlParseMatrixChannels(pNode, nInputChannels, nOutputChannels,
-                                "InvEmissionMatrixElement", parseStr)) {
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "InvEmissionMatrixElement", parseStr, kIccXmlMaxMatrixChannels)) {
     return false;
   }
   if (nInputChannels != 3 || nOutputChannels != 3) {
@@ -1777,10 +1799,9 @@ bool CIccMpeXmlTintArray::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlTintArray::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  icUInt16Number nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  icUInt16Number nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  if (!nInputChannels || !nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In TintArrayElement\n";
+  icUInt16Number nInputChannels = 0, nOutputChannels = 0;
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "TintArrayElement", parseStr)) {
     return false;
   }
   m_nInputChannels = nInputChannels;
@@ -1988,9 +2009,13 @@ bool CIccMpeXmlToneMap::ToXml(std::string& xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlToneMap::ParseXml(xmlNode* pNode, std::string& parseStr)
 {
-  icUInt16Number nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  icUInt16Number nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  if (!nInputChannels || !nOutputChannels || nInputChannels!=nOutputChannels+1) {
+  icUInt16Number nInputChannels = 0, nOutputChannels = 0;
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "ToneMapElement", parseStr)) {
+    return false;
+  }
+
+  if (nInputChannels!=nOutputChannels+1) {
     parseStr += "Invalid InputChannels or OutputChannels In ToneMapElement\n";
     return false;
   }
@@ -2096,11 +2121,8 @@ bool CIccMpeXmlCLUT::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-
-  if (!m_nInputChannels || !m_nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In CLutElement\n";
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "CLutElement", parseStr)) {
     return false;
   }
 
@@ -2140,11 +2162,8 @@ bool CIccMpeXmlExtCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
   m_storageType = (icUInt16Number)atoi(icXmlAttrValue(pNode, "StorageType", "0"));
   m_nReserved2 = atoi(icXmlAttrValue(pNode, "Reserved2", "0"));
 
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-
-  if (!m_nInputChannels || !m_nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In ExtCLutElement\n";
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "ExtCLutElement", parseStr)) {
     return false;
   }
 
@@ -2199,11 +2218,8 @@ bool CIccMpeXmlBAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlBAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-
-  if (!m_nInputChannels || !m_nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In BAcsElement\n";
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "BAcsElement", parseStr)) {
     return false;
   }
 
@@ -2255,11 +2271,8 @@ bool CIccMpeXmlEAcs::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlEAcs::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-
-  if (!m_nInputChannels || !m_nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In EAcsElement\n";
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "EAcsElement", parseStr)) {
     return false;
   }
 
@@ -2411,8 +2424,10 @@ bool CIccMpeXmlJabToXYZ::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlJabToXYZ::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "JabToXYZElement", parseStr)) {
+    return false;
+  }
 
   if (m_nInputChannels!=3 || m_nOutputChannels!=3) {
     parseStr += "Invalid InputChannels or OutputChannels In JabToXYZElement\n";
@@ -2463,8 +2478,10 @@ bool CIccMpeXmlXYZToJab::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlXYZToJab::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "XYZToJabElement", parseStr)) {
+    return false;
+  }
 
   if (m_nInputChannels!=3 || m_nOutputChannels!=3) {
     parseStr += "Invalid InputChannels or OutputChannels In XYZToJabElement\n";
@@ -3418,8 +3435,13 @@ bool CIccMpeXmlCalculator::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (!pNode)
     return false;
 
-  SetSize(atoi(icXmlAttrValue(pNode, "InputChannels")),
-          atoi(icXmlAttrValue(pNode, "OutputChannels")));
+  icUInt16Number nInputChannels = 0, nOutputChannels = 0;
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "CalculatorElement", parseStr)) {
+    return false;
+  }
+
+  SetSize(nInputChannels, nOutputChannels);
 
   clean();
 
@@ -3560,14 +3582,11 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   m_nStorageType = (icUInt16Number)atoi(icXmlAttrValue(pNode, "StorageType", "0"));
 
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
-
-  if (!m_nInputChannels || !m_nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In CLutElement\n";
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "CLutElement", parseStr)) {
     return false;
   }
+  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
 
   xmlNode *pData;
 
@@ -3575,9 +3594,9 @@ bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (pData) {
     icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
     icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
-    icUInt16Number nSteps = atoi(icXmlAttrValue(pData, "steps"));
+    icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd ||!nSteps) {
+    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }
@@ -3669,14 +3688,11 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
   m_nStorageType = (icUInt16Number)atoi(icXmlAttrValue(pNode, "StorageType", "0"));
 
-  m_nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  m_nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
-
-  if (!m_nInputChannels || !m_nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In CLutElement\n";
+  if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
+                          "CLutElement", parseStr)) {
     return false;
   }
+  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
 
   xmlNode *pData;
 
@@ -3684,9 +3700,9 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (pData) {
     icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
     icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
-    icUInt16Number nSteps = atoi(icXmlAttrValue(pData, "steps"));
+    icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd ||!nSteps) {
+    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) || !nSteps) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }
@@ -3734,14 +3750,12 @@ bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 
 bool CIccMpeXmlEmissionObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  icUInt16Number nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  icUInt16Number nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
-
-  if (!nInputChannels || !nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In EmissionObserverElement\n";
+  icUInt16Number nInputChannels = 0, nOutputChannels = 0;
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "EmissionObserverElement", parseStr)) {
     return false;
   }
+  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
 
   xmlNode *pData;
 
@@ -3749,9 +3763,10 @@ bool CIccMpeXmlEmissionObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
   if (pData) {
     icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
     icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
-    icUInt16Number nSteps = atoi(icXmlAttrValue(pData, "steps"));
+    icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd || nSteps != nInputChannels) {
+    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
+        nSteps != nInputChannels) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }
@@ -3817,14 +3832,12 @@ bool CIccMpeXmlEmissionObserver::ToXml(std::string &xml, std::string blanks/* = 
 
 bool CIccMpeXmlReflectanceObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  icUInt16Number nInputChannels = atoi(icXmlAttrValue(pNode, "InputChannels"));
-  icUInt16Number nOutputChannels = atoi(icXmlAttrValue(pNode, "OutputChannels"));
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
-
-  if (!nInputChannels || !nOutputChannels) {
-    parseStr += "Invalid InputChannels or OutputChannels In ReflectanceObserverElement\n";
+  icUInt16Number nInputChannels = 0, nOutputChannels = 0;
+  if (!icXmlParseChannels(pNode, nInputChannels, nOutputChannels,
+                          "ReflectanceObserverElement", parseStr)) {
     return false;
   }
+  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
 
   xmlNode *pData;
 
@@ -3832,9 +3845,10 @@ bool CIccMpeXmlReflectanceObserver::ParseXml(xmlNode *pNode, std::string &parseS
   if (pData) {
     icFloatNumber dStart = (icFloatNumber)atof(icXmlAttrValue(pData, "start"));
     icFloatNumber dEnd = (icFloatNumber)atof(icXmlAttrValue(pData, "end"));
-    icUInt16Number nSteps = atoi(icXmlAttrValue(pData, "steps"));
+    icUInt16Number nSteps = 0;
 
-    if (dStart >= dEnd || nSteps != nInputChannels) {
+    if (dStart >= dEnd || !icXmlParseU16(icXmlAttrValue(pData, "steps"), nSteps) ||
+        nSteps != nInputChannels) {
       parseStr += "Invalid Spectral Range\n";
       return false;
     }

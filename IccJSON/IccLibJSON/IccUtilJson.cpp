@@ -474,6 +474,15 @@ bool jsonExistsField(const IccJson &j, const char *field)
   return j.is_object() && j.contains(field);
 }
 
+// See IccUtilJson.h for the rationale -- bounds a channel-count pair before
+// the readers narrow it to icUInt16Number.
+bool icJsonValidChannels(int nIn, int nOut)
+{
+  return nIn > 0 && nOut > 0 &&
+         nIn <= kIccJsonMaxChannels &&
+         nOut <= kIccJsonMaxChannels;
+}
+
 template <typename T>
 bool jGetValue(const IccJson &j, const char *field, T &value)
 {

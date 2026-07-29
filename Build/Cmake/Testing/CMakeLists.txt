@@ -3692,6 +3692,26 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1851-parametriccurve-functiontype-regression.sh"
 )
 
+# #1898/#1899/#1900/#1901/#1902/#1903: unbounded MPE channel and spectral-step
+# counts in the XML and JSON readers.  Six issues, one defect -- the counts are
+# u16 and every reader parsed them into an int behind a "!nIn || !nOut" guard
+# that rejects zero and nothing else, so 360200 reached storage as 32520.  Case A
+# has teeth in the ordinary CI jobs: four documents converted with exit 0 and the
+# written profile re-serializes with a channel count the source never contained,
+# on the XML side and the JSON side both.  Case B covers the reported breadcrumbs
+# whose narrowed value was already caught by a later constraint (the CLUT and the
+# two observer elements), so it is gated on an integer/implicit-conversion build
+# rather than passing vacuously.  Two controls: a legal count, and 32520 itself --
+# the second is what shows the fix refuses unrepresentable counts rather than
+# having lowered the channel ceiling.
+iccdev_add_script_test(
+  iccdev.issue-1898-mpe-channel-narrowing-regression
+  120
+  "iccdev;xml;json;mpe;issue-1898;issue-1901;issue-1902;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1898-mpe-channel-narrowing-regression.sh"
+)
+
 # #1810: 'RICC' in the CMM and platform header fields of 15 Testing fixtures.
 # 'RICC' was never registered -- icSigRefIccMAX itself carried 0x52494343
 # ('RICC') against a comment and a registry that both said 'RIMX', until #1473

@@ -1,0 +1,54 @@
+{
+  "IccProfile": {
+    "Header": {
+      "ProfileVersion": "5.00",
+      "ProfileDeviceClass": "scnr",
+      "DataColourSpace": "BCLR",
+      "PCS": "rs0024",
+      "CreationDateTime": "2026-07-29T07:51:49",
+      "ProfileFileSignature": "acsp",
+      "PrimaryPlatform": "APPL",
+      "CMMFlags": {
+        "EmbeddedInFile": true,
+        "UseWithEmbeddedDataOnly": false
+      },
+      "DeviceAttributes": {
+        "ReflectiveOrTransparency": "reflective",
+        "GlossyOrMatte": "glossy",
+        "MediaPolarity": "negative",
+        "MediaColour": "colour"
+      },
+      "RenderingIntent": "Absolute",
+      "PCSIlluminant": [
+        0.96420288,
+        1.0,
+        0.8249054
+      ],
+      "SpectralPCS": "rs0024",
+      "SpectralRange": {
+        "start": 380,
+        "end": 730,
+        "steps": 36
+      }
+    },
+    "Tags": [
+      {
+        "DToB3Tag": {
+          "data": {
+            "type": "multiProcessElementType",
+            "inputChannels": 11,
+            "outputChannels": 360200,
+            "elements": [
+              {
+                "type": "CalculatorElement",
+                "inputChannels": 11,
+                "outputChannels": 3,
+                "mainFunction": "{ in(0,11) out(0,11) }"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
