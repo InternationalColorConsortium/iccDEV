@@ -981,6 +981,50 @@ function(iccdev_add_gbd_zero_pcs_test)
   endif()
 endfunction()
 
+# #1853: getReflectanceObserver() scaled the combined observer/range-map matrix by the
+# illuminant instead of the observer matrix. The combined matrix is rangeRef.steps wide
+# while the illuminant SPD holds illumRange.steps samples, so a reflectance range finer
+# than the illuminant read past the end of the SPD, and every mapped range weighted the
+# reflectance axis rather than the wavelength axis. Mult() also returns a new matrix
+# without consuming its operands, so the observer matrix leaked. The test pins the
+# physical invariant -- resampling a flat reflectance over the same span must not move
+# the white point -- which fails on value comparison alone, while the sanitizer legs
+# additionally catch the overflow and the leak. Links IccProfLib only.
+function(iccdev_add_pcc_reflectance_observer_range_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPccReflectanceObserverRangeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcc-reflectance-observer-range.cpp"
+  )
+  target_link_libraries(iccPccReflectanceObserverRangeTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPccReflectanceObserverRangeTest)
+
+  add_test(
+    NAME iccdev.pcc-reflectance-observer-range
+    COMMAND "$<TARGET_FILE:iccPccReflectanceObserverRangeTest>"
+  )
+  set_tests_properties(iccdev.pcc-reflectance-observer-range PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;pcc;spectral;issue-1853;regression"
+  )
+  if(WIN32)
+    set(_pcc_refl_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPccReflectanceObserverRangeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcc_refl_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcc-reflectance-observer-range PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcc_refl_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1809: a multiProcessElementType tag with zero processing elements and equal input and
 # output channel counts is the identity transform -- Read()/Write()/Begin()/Apply() all
 # treat it as a defined state, and Apply() memcpy()s source to destination. Validate()
@@ -2613,6 +2657,7 @@ if(WIN32)
   iccdev_add_getvalues_nstart_test()
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_mpe_empty_identity_test()
+  iccdev_add_pcc_reflectance_observer_range_test()
   iccdev_add_pcs_edge_metadata_test()
   iccdev_add_xyz_negative_z_test()
   iccdev_add_utf8_textarray_test()
@@ -2836,6 +2881,7 @@ iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
+iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()
 iccdev_add_utf8_textarray_test()

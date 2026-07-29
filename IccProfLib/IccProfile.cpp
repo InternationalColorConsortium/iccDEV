@@ -3883,6 +3883,17 @@ getmediaXYZ:
     if (icIsSameColorSpaceType(sig, icSigReflectanceSpectralData)) {
       CIccMatrixMath *pMtx = pObservingPCC->getReflectanceObserver(range);
 
+      // getReflectanceObserver() returns NULL for any PCC it cannot build an
+      // observer from -- no viewing conditions tag, a missing or degenerate
+      // illuminant or observer, ranges that cannot be mapped onto each other,
+      // or a zero luminance row sum. All of those are reachable from a
+      // malformed profile, so fall through to the tag-based white point rather
+      // than dereferencing the result.
+      if (!pMtx) {
+        delete [] pWhite;
+        goto getmediaXYZ;
+      }
+
       pMtx->VectorMult(pXYZ, pWhite);
       delete pMtx;
       delete [] pWhite;

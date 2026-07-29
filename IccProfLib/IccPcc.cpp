@@ -344,16 +344,32 @@ CIccMatrixMath *IIccProfileConnectionConditions::getReflectanceObserver(const ic
     return NULL;
   }
 
+  // The illuminant weights the observer sample-for-sample, so it has to be
+  // applied while the matrix is still expressed in the illuminant's own range:
+  // getObserverMatrix() returns a 3 x illumRange.steps matrix, which is exactly
+  // as wide as illum is long. Applying it after the Mult() below scaled the
+  // combined matrix instead, which is rangeRef.steps wide -- weighting the
+  // reflectance axis rather than the wavelength axis, and reading past the end
+  // of the illuminant SPD whenever the reflectance range carried more steps
+  // than the illuminant. Nothing changes when the two ranges are identical,
+  // since rangeMap() then returns NULL and this matrix is the result.
+  pMtx->VectorScale(illum);
+
   if (pAdjust) {
-    pMtx = pAdjust->Mult(pMtx);
+    // Mult() returns a newly allocated product and leaves both operands alone,
+    // so the observer matrix has to be released here. Assigning the product
+    // over pMtx dropped the only pointer to it, leaking the matrix and its
+    // coefficient array on every profile whose range needed mapping.
+    CIccMatrixMath *pCombined = pAdjust->Mult(pMtx);
+    delete pMtx;
     delete pAdjust;
+    pMtx = pCombined;
   }
   pAdjust = pMtx;
 
   if (!pAdjust)
     return NULL;
 
-  pAdjust->VectorScale(illum);
   icFloatNumber rowSum = pAdjust->RowSum(1);
   if (!icNotZero(rowSum)) {
     delete pAdjust;
