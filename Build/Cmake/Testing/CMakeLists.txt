@@ -3855,6 +3855,20 @@ if(TARGET iccApplyNamedCmm)
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1422-cfg-encoding-enum-load.sh"
    )
+
+  # #1674: iccApplyNamedCmm accepted argument lists it did not honour -- extra
+  # arguments after "-cfg <path>", and anything trailing the profile/intent pairs,
+  # were parsed past and the transform ran as though they had not been supplied,
+  # exiting 0. Pins rejection of both, alongside the encoding, interpolation,
+  # intent and -ENV forms that were already strict, so a later relaxation of any
+  # of them is caught here.
+  iccdev_add_script_test(
+    iccdev.applynamedcmm-cli-args
+    120
+    "iccdev;cmm;config;cli;security;issue-1674;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applynamedcmm-cli-args-regression.sh"
+   )
 endif()
 
 # Legacy v2 namedColor2Type stores each rootName in a fixed 32-byte field. A

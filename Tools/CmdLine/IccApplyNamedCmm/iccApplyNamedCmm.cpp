@@ -259,6 +259,14 @@ int main(int argc, const char* argv[])
   CIccCfgColorData cfgData;
 
   if (argc > 2 && !stricmp(argv[1], "-cfg")) {
+    // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
+    // there is nothing a further argument could mean. Anything beyond argv[2] was
+    // read as configured-and-applied when it had in fact been ignored (#1674).
+    if (argc != 3) {
+      printf("Unexpected extra arguments for -cfg\n");
+      return EXIT_FAILURE;
+    }
+
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
       printf("Unable to read configuration from '%s'\n", argv[2]);
@@ -339,6 +347,19 @@ int main(int argc, const char* argv[])
     nArg = cfgProfiles.fromArgs(&argv[0], argc);
     if (!nArg) {
       printf("Unable to parse profile sequence arguments\n");
+      return EXIT_FAILURE;
+    }
+    // fromArgs() reports how many arguments it consumed and stops at the first it
+    // does not recognise, so anything left over was silently discarded -- a
+    // mistyped trailing profile path or intent ran the transform as though it had
+    // not been given, and the tool exited 0. Consume the count and refuse the
+    // remainder rather than reporting success for a command line that was not
+    // fully honoured (#1674).
+    argv += nArg;
+    argc -= nArg;
+
+    if (argc) {
+      printf("Unexpected extra arguments\n");
       return EXIT_FAILURE;
     }
 
@@ -454,7 +475,7 @@ int main(int argc, const char* argv[])
   int nDestSamples = icGetSpaceSamples(DestspaceSig);
   
   //Allocate pixel buffers for performing encoding transformations
-  char SrcNameBuf[256], DestNameBuf[256];
+  char DestNameBuf[256];
   CIccPixelBuf SrcPixel(nSrcSamples+16), DestPixel(nDestSamples+16), Pixel(icIntMax(nSrcSamples, nDestSamples)+16);
 
   CIccCfgColorData outData;
@@ -529,7 +550,14 @@ int main(int argc, const char* argv[])
           }
         case icApplyNamed2Named:
           {
-            if(pNamedCmm->Apply(DestNameBuf, SrcNameBuf, tint)) {
+            // szName is the colour name read from the input row, and is what the
+            // icApplyNamed2Pixel case above passes. This one passed SrcNameBuf, a
+            // stack buffer that is never written to anywhere in this file, so every
+            // named-to-named lookup was performed against 256 bytes of uninitialized
+            // stack rather than the requested colour (CWE-457). The result was
+            // whatever the named-colour search made of that garbage, reported as
+            // success.
+            if(pNamedCmm->Apply(DestNameBuf, szName, tint)) {
               printf("Profile application failed.\n");
               return EXIT_FAILURE;
             }

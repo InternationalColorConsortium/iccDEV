@@ -1057,10 +1057,18 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
     CIccCfgProfilePtr pProf = CIccCfgProfilePtr(new CIccCfgProfile());
 
     while (nArg >= 2 && !strnicmp(args[0], "-ENV:", 5)) {  //check for -ENV: to allow for Cmm Environment variables to be defined for next transform
-      icSignature sig = icGetSigVal(args[0] + 5);
+      // icGetSigVal() reads four bytes to assemble the signature, so it must not be
+      // handed a name shorter than that: "-ENV:x" leaves a two-byte string and the
+      // read runs past the end of the argv entry (CWE-125). A longer name is
+      // silently truncated to its first four characters, which accepts a command
+      // line that does not mean what it says. An ICC signature is exactly four
+      // characters, so require that before reading (#1674).
+      icSignature sig;
       icFloatNumber val;
-      if (!icParseFloatArg(args[1], val))
+      if (strlen(args[0] + 5) != 4 || !icParseFloatArg(args[1], val))
         return 0;
+
+      sig = icGetSigVal(args[0] + 5);
       args += 2;
       nArg -= 2;
       nUsed += 2;
@@ -1290,10 +1298,18 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
     CIccCfgProfilePtr pProf = CIccCfgProfilePtr(new CIccCfgProfile());
 
     while (nArg >= 2 && !strnicmp(args[0], "-ENV:", 5)) {  //check for -ENV: to allow for Cmm Environment variables to be defined for next transform
-      icSignature sig = icGetSigVal(args[0] + 5);
+      // icGetSigVal() reads four bytes to assemble the signature, so it must not be
+      // handed a name shorter than that: "-ENV:x" leaves a two-byte string and the
+      // read runs past the end of the argv entry (CWE-125). A longer name is
+      // silently truncated to its first four characters, which accepts a command
+      // line that does not mean what it says. An ICC signature is exactly four
+      // characters, so require that before reading (#1674).
+      icSignature sig;
       icFloatNumber val;
-      if (!icParseFloatArg(args[1], val))
+      if (strlen(args[0] + 5) != 4 || !icParseFloatArg(args[1], val))
         return 0;
+
+      sig = icGetSigVal(args[0] + 5);
       args += 2;
       nArg -= 2;
       nUsed += 2;
