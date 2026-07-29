@@ -31,10 +31,13 @@
 // prefixes, both icD50XYZ arrays, and both solver pointers. The ninth, icInfo,
 // is excluded because it has no definition at all; see the note in main().
 //
-// It also has a job on every platform. Because exported data cannot be linked
-// from a test that also links IccXML (that would load IccProfLib twice, once
-// inside the DLL and once in the executable), those tests assert on hard-coded
-// literals instead -- see mpe-empty-identity.cpp and pawg-q4-xyz-pcs-decode.cpp.
+// It also has a job on every platform. Several tests assert on hard-coded copies
+// of these values rather than reading the globals: mpe-empty-identity.cpp spells
+// out three of the icMsgValidate* prefixes and pawg-q4-xyz-pcs-decode.cpp spells
+// out the icD50XYZ triple. Both of those link IccProfLib alone and predate
+// ${ICCDEV_TEST_LIB_ICCPROFLIB}, so they hard-code by history rather than by
+// necessity; a test that also links IccXML or IccJson has no choice, because
+// adding the static IccProfLib would load the library twice in one process.
 // Hard-coded copies drift silently. Pinning the real globals here means a change
 // to icMsgValidateWarning or icD50XYZ fails HERE, naming the literals that must
 // be updated, rather than leaving those tests quietly asserting stale text.

@@ -72,7 +72,11 @@ endfunction()
 # DLL, once in the executable -- giving two copies of its globals. Tests that
 # link IccXML/IccJson must keep using ${TARGET_LIB_ICCPROFLIB} and must not
 # reference exported library data at all; assert on literal values instead, as
-# .github/ci/regression/{mpe-empty-identity,pawg-q4-xyz-pcs-decode}.cpp do.
+# .github/ci/regression/{json-sparsematrix-huaf,xml-writer-graceful-degrade,
+# json-bcd-version-parse}.cpp do -- those three are the tests that actually link
+# one of the two libraries. mpe-empty-identity.cpp and pawg-q4-xyz-pcs-decode.cpp
+# also hard-code literals, but they link IccProfLib alone and simply predate this
+# variable; they are eligible for it, not barred from it.
 if(WIN32 AND ENABLE_SHARED_LIBS AND TARGET IccProfLib2-static)
   set(ICCDEV_TEST_LIB_ICCPROFLIB IccProfLib2-static)
 else()
