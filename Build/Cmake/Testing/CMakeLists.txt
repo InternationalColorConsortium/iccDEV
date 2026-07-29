@@ -2544,6 +2544,54 @@ function(iccdev_add_windows_iccdevcmm_smoke_test)
   )
 endfunction()
 
+
+function(iccdev_add_zip_utf8_text_zlib_test)
+  if(NOT ICC_USE_ZLIB OR NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccZipUtf8TextZlibTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/zip-utf8-text-zlib.cpp"
+  )
+  target_compile_features(iccZipUtf8TextZlibTest PRIVATE cxx_std_17)
+  target_link_libraries(iccZipUtf8TextZlibTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccZipUtf8TextZlibTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.zip-utf8-text-zlib
+      COMMAND "$<TARGET_FILE:iccZipUtf8TextZlibTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.zip-utf8-text-zlib
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccZipUtf8TextZlibTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.zip-utf8-text-zlib PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;zlib;ziputf8;regression"
+  )
+  if(WIN32)
+    set(_zip_utf8_text_zlib_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccZipUtf8TextZlibTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _zip_utf8_text_zlib_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.zip-utf8-text-zlib PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_zip_utf8_text_zlib_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
     set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
@@ -2766,6 +2814,7 @@ if(WIN32)
   iccdev_add_applytolink_v4_missing_desc_test()
   iccdev_add_prmg_hue_normalization_test()
   iccdev_add_windows_iccdevcmm_smoke_test()
+  iccdev_add_zip_utf8_text_zlib_test()
 
   return()
 endif()
@@ -2989,6 +3038,7 @@ iccdev_add_iccprofileplot_clut_oob_test()
 iccdev_add_iccprofileplot_pdf_leak_test()
 iccdev_add_iccprofileplot_exitcode_test()
 iccdev_add_prmg_hue_normalization_test()
+iccdev_add_zip_utf8_text_zlib_test()
 
 function(iccdev_add_script_test NAME TIMEOUT LABELS WORKING_DIRECTORY SCRIPT)
   if(NOT EXISTS "${SCRIPT}")
@@ -3119,7 +3169,7 @@ set_tests_properties(iccdev.tiffdump-output-hardening PROPERTIES
 iccdev_add_script_test(
   iccdev.spectral-tiff-preview
   120
-  "iccdev;tiff;spectral;preview;regression"
+  "iccdev;tiff;spectral;preview;regression;slow"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-spectral-tiff-preview-tests.sh"
 )
@@ -3202,6 +3252,21 @@ iccdev_add_script_test(
   "iccdev;tools;cmm;applytolink;debug;asan;ubsan"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applytolink-nan-sixchan-debug.sh"
+)
+
+if(ICC_USE_ZLIB)
+  set(_hextext_compression_mode "ON")
+else()
+  set(_hextext_compression_mode "OFF")
+endif()
+
+iccdev_add_script_test(
+  iccdev.hextext-compression-ab-regression
+  120
+  "iccdev;xml;hextext;zlib;compression;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-hextext-compression-ab-regression.sh"
+  "${_hextext_compression_mode}"
 )
 
 if(TARGET iccApplyProfiles)
@@ -3350,6 +3415,18 @@ if(TARGET iccApplyProfiles)
   set_tests_properties(iccdev.issue-1097-applyprofiles-hbo PROPERTIES
     SKIP_RETURN_CODE 77
   )
+
+  iccdev_add_script_test(
+    iccdev.applyprofiles-observer-hbo-regression
+    120
+    "iccdev;tools;applyprofiles;asan;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applyprofiles-observer-hbo-regression.sh"
+  )
+  set_tests_properties(iccdev.applyprofiles-observer-hbo-regression PROPERTIES
+    SKIP_RETURN_CODE 77
+  )
+
 endif()
 
 iccdev_add_script_test(

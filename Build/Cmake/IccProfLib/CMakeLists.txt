@@ -260,6 +260,17 @@ IF(ENABLE_STATIC_LIBS)
 
 ENDIF()
 
+if(ICC_USE_ZLIB)
+  if(ENABLE_SHARED_LIBS AND TARGET ${TARGET_NAME})
+    target_compile_definitions(${TARGET_NAME} PUBLIC ICC_USE_ZLIB=1)
+    target_link_libraries(${TARGET_NAME} PUBLIC ZLIB::ZLIB)
+  endif()
+  if(ENABLE_STATIC_LIBS AND TARGET ${TARGET_NAME}-static)
+    target_compile_definitions(${TARGET_NAME}-static PUBLIC ICC_USE_ZLIB=1)
+    target_link_libraries(${TARGET_NAME}-static PUBLIC ZLIB::ZLIB)
+  endif()
+endif()
+
 # Target selection logic for parent use
 IF(ENABLE_SHARED_LIBS)
   SET(TARGET_LIB ${TARGET_NAME})

@@ -29,6 +29,12 @@ Windows examples include both `cmd.exe` and PowerShell forms where shell syntax
 differs. If CMake reports `No such preset`, fetch and switch to a branch that
 contains the matching `Build/Cmake/CMakePresets.json` update.
 
+Visual Studio presets use vcpkg through `VCPKG_ROOT`. For the Visual Studio
+Community system vcpkg layout, set `VCPKG_ROOT` to
+`C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg`, or pass
+`-DCMAKE_TOOLCHAIN_FILE=C:/Program Files/Microsoft Visual Studio/2022/Community/VC/vcpkg/scripts/buildsystems/vcpkg.cmake`
+on the configure command line.
+
 ## Ubuntu
 
 ```bash
@@ -227,14 +233,56 @@ cmake --build out/vs2022-x64 --config Release --target check
 See [CTest tool suites](ctest.md) for the registered tests, fixtures, logs, and
 add-test process.
 
+QA flag evidence builds are enabled by `ICCDEV_ENABLE_QA_FLAGS=ON`. Convenience
+presets turn on tests, tools, zlib-backed compressed tag support
+(`ICC_USE_ZLIB=ON`), and QA evidence hooks for the common local toolchains:
+
+```bash
+cmake --preset linux-clang-qa-flags -S Build/Cmake -B out/linux-clang-qa-flags
+cmake --build out/linux-clang-qa-flags --parallel "$(nproc)"
+ctest --test-dir out/linux-clang-qa-flags -R "^iccdev\.qa-target-flags$" --output-on-failure --no-tests=error
+
+cmake --preset linux-clang-qa-sanitizers -S Build/Cmake -B out/linux-clang-qa-sanitizers
+```
+
+QA builds also enable `ICCDEV_ENABLE_STRICT_WARNINGS` by default so CMake, not
+workflow command lines, owns maintainer warning policy. The strict tier adds
+`-Wpedantic -Werror` plus compiler-specific diagnostics: GCC treats type-limit
+and attribute diagnostics as errors, while Clang treats the matching
+tautological type-limit and attribute diagnostics as errors. Pass
+`-DICCDEV_ENABLE_STRICT_WARNINGS=OFF` to collect QA evidence without promoting
+warnings to errors. GCC and Clang QA builds also add debug symbols and frame
+pointers so Release and Debug reports can be symbolized consistently.
+On ELF platforms, verify the compression dependency with `ldd TOOL_PATH |
+grep -E 'libz|zlib'`; `liblzma` is a separate LibXml2 dependency and is
+expected only for XML-linked tools.
+
+For local FlameGraph capture of the hybrid `iccApplyProfiles` path, use the
+profiling helper after building tools:
+
+```bash
+ICCDEV_TOOLS_DIR=$PWD/build/Tools ICCDEV_TESTING_DIR=$PWD/Testing ICCDEV_PROFILE_MODE=record ICCDEV_FLAMEGRAPH_DIR=/tmp/FlameGraph .github/scripts/iccdev-hybrid-applyprofiles-profile.sh
+```
+
+The helper defaults to user-space samples, DWARF call graphs, a higher sample
+frequency, and a minimum sample threshold so short or kernel-heavy captures do
+not produce misleading SVGs with large `unknown` blocks.
+
 The reusable tool-test workflow can also run opt-in all-tool profiling. Dispatch
 `ci-pr-action` with `run_tool_flamegraphs=true` to include the sanitized
 FlameGraph manifest in the job summary. Each profiled tool records status,
 sample count, unknown folded-frame count, SVG availability, and skip reason.
 On successful runs, the workflow uploads an `iccdev-developer-report-<BuildType>`
-artifact with `index.html`, CTest outputs, hybrid timing data when requested,
-and FlameGraph data/SVGs when profiling was enabled. The artifact upload uses
-the reviewed sanitized developer-report governance exception.
+artifact with `index.html`, CTest outputs, QA target-flag evidence, hybrid timing
+data when requested, and FlameGraph data/SVGs when profiling was enabled. The
+artifact upload uses the reviewed sanitized developer-report governance exception.
+
+```cmd
+set VCPKG_ROOT=C:\Program Files\Microsoft Visual Studio\2022\Community\VC\vcpkg
+cmake --preset vs2022-x64-qa-flags -S Build/Cmake -B out/vs2022-x64-qa-flags
+cmake --preset vs2022-clangcl-x64-qa-flags -S Build/Cmake -B out/vs2022-clangcl-x64-qa-flags
+cmake --preset mingw-x64-qa-flags -S Build/Cmake -B out/mingw-x64-qa-flags
+```
 
 ## Runtime packaging
 
