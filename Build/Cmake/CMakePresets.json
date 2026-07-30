@@ -15,6 +15,16 @@
       }
     },
     {
+      "name": "qa-flags-base",
+      "hidden": true,
+      "cacheVariables": {
+        "ENABLE_TESTS": "ON",
+        "ENABLE_TOOLS": "ON",
+        "ICC_USE_ZLIB": "ON",
+        "ICCDEV_ENABLE_QA_FLAGS": "ON"
+      }
+    },
+    {
       "name": "vs2022-x64",
       "inherits": "default-base",
       "displayName": "Windows MSVC (VS2022)",
@@ -33,6 +43,16 @@
       "displayName": "Windows ClangCL (VS2022)",
       "description": "Builds with the Visual Studio LLVM toolset and the same unified bin/<Config> runtime layout as vs2022-x64.",
       "toolset": "ClangCL"
+    },
+    {
+      "name": "vs2022-x64-qa-flags",
+      "inherits": ["vs2022-x64", "qa-flags-base"],
+      "displayName": "Windows MSVC (VS2022) QA flags"
+    },
+    {
+      "name": "vs2022-clangcl-x64-qa-flags",
+      "inherits": ["vs2022-clangcl-x64", "qa-flags-base"],
+      "displayName": "Windows ClangCL (VS2022) QA flags"
     },
     {
       "name": "mingw-ucrt64-base",
@@ -59,6 +79,11 @@
         "ENABLE_CMM_TOOLS": "OFF",
         "ENABLE_IIS_TOOLS": "OFF"
       }
+    },
+    {
+      "name": "mingw-x64-qa-flags",
+      "inherits": ["mingw-x64", "qa-flags-base"],
+      "displayName": "Windows MinGW UCRT64 QA flags"
     },
     {
       "name": "mingw-core-x64",
@@ -97,6 +122,11 @@
       }
     },
     {
+      "name": "linux-clang-qa-flags",
+      "inherits": ["linux-clang", "qa-flags-base"],
+      "displayName": "Linux Clang QA flags"
+    },
+    {
       "name": "linux-gcc-asan",
       "inherits": "linux-gcc",
       "displayName": "Linux GCC with AddressSanitizer",
@@ -122,6 +152,11 @@
         "ENABLE_SANITIZERS": "ON",
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "linux-clang-qa-sanitizers",
+      "inherits": ["linux-clang-sanitizers", "qa-flags-base"],
+      "displayName": "Linux Clang QA flags with ASan, UBSan, IntSan, and float sanitizers"
     },
     {
       "name": "linux-clang-ubsan-int-float",

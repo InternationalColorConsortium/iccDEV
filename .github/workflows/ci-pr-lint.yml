@@ -1,0 +1,408 @@
+###############################################################
+#
+# Copyright (c) 2025-2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Reusable/manual C++ static lint report for iccDEV pull requests.
+#
+###############################################################
+
+name: "ci-pr-lint"
+
+# Pinned action SHAs, package names, and report strings exceed the default
+# yamllint line length. Keep the disable local to this workflow.
+# yamllint disable rule:line-length
+
+permissions:
+  contents: read
+  pull-requests: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      ubuntu-version:
+        description: "Ubuntu runner image"
+        required: false
+        default: "ubuntu-24.04"
+        type: choice
+        options:
+          - ubuntu-24.04
+          - ubuntu-22.04
+          - ubuntu-latest
+      lint-scope:
+        description: "Files to lint"
+        required: false
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - full
+      run-cppcheck:
+        description: "Run cppcheck"
+        required: false
+        default: true
+        type: boolean
+      run-clang-tidy:
+        description: "Run clang-tidy"
+        required: false
+        default: true
+        type: boolean
+
+  workflow_call:
+    inputs:
+      ubuntu-version:
+        description: "Ubuntu runner image"
+        required: false
+        default: "ubuntu-24.04"
+        type: string
+      lint-scope:
+        description: "auto for PR-changed C++ files, full for source tree"
+        required: false
+        default: "auto"
+        type: string
+      run-cppcheck:
+        description: "Run cppcheck"
+        required: false
+        default: true
+        type: boolean
+      run-clang-tidy:
+        description: "Run clang-tidy"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: "ci-pr-lint-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}"
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: "cppcheck / clang-tidy report"
+    runs-on: ${{ inputs['ubuntu-version'] || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      LINT_SCOPE_INPUT: ${{ inputs['lint-scope'] || 'auto' }}
+      RUN_CPPCHECK_INPUT: ${{ inputs['run-cppcheck'] && 'true' || 'false' }}
+      RUN_CLANG_TIDY_INPUT: ${{ inputs['run-clang-tidy'] && 'true' || 'false' }}
+      BUILD_DIR: /tmp/iccdev-pr-lint-build
+
+    steps:
+      - name: Checkout target repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          fetch-depth: 50
+          persist-credentials: false
+
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate lint inputs
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          case "${LINT_SCOPE_INPUT}" in
+            auto|full)
+              ;;
+            *)
+              echo "Invalid lint scope" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${RUN_CPPCHECK_INPUT}" in
+            true|false)
+              ;;
+            *)
+              echo "Invalid cppcheck toggle" >&2
+              exit 1
+              ;;
+          esac
+
+          case "${RUN_CLANG_TIDY_INPUT}" in
+            true|false)
+              ;;
+            *)
+              echo "Invalid clang-tidy toggle" >&2
+              exit 1
+              ;;
+          esac
+
+      # preflight: allow-package-install reason=static-lint-tool-bootstrap
+      - name: Install lint dependencies
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential cmake gcc g++ clang clang-tools clang-tidy \
+            cppcheck pkg-config jq \
+            libpng-dev libxml2-dev libtiff-dev libjpeg-dev zlib1g-dev \
+            nlohmann-json3-dev libwxgtk3.2-dev wx-common llvm
+
+          mkdir -p lint_reports
+          {
+            echo "### ci-pr-lint Environment"
+            echo ""
+            echo "| Tool | Version |"
+            echo "|------|---------|"
+            printf '| cppcheck | %s |\n' "$(sanitize_line "$(cppcheck --version 2>&1)")"
+            printf '| clang-tidy | %s |\n' "$(sanitize_line "$(clang-tidy --version 2>&1 | sed -n '1p')")"
+            printf '| cmake | %s |\n' "$(sanitize_line "$(cmake --version | sed -n '1p')")"
+            printf '| runner | %s |\n' "$(sanitize_line "${RUNNER_OS:-unknown}")"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Determine source files
+        id: files
+        env:
+          GH_EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.base_ref || 'master' }}
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          base_ref="${PR_BASE_REF}"
+          case "$base_ref" in
+            master)
+              ;;
+            "")
+              base_ref="master"
+              ;;
+            *)
+              echo "Unsupported base ref: $(sanitize_line "$base_ref")" >&2
+              echo "file_count=0" >> "$GITHUB_OUTPUT"  # elements-sanitized
+              echo "lint_scope=none" >> "$GITHUB_OUTPUT"  # elements-sanitized
+              : > changed_files.txt
+              exit 0
+              ;;
+          esac
+
+          if [ "${LINT_SCOPE_INPUT}" = "full" ] || [ "${GH_EVENT_NAME}" != "pull_request" ]; then
+            find IccProfLib IccXML IccJSON IccConnect Tools \
+              -type f \
+              \( -name '*.cpp' -o -name '*.cxx' -o -name '*.cc' \
+                 -o -name '*.c' -o -name '*.h' -o -name '*.hpp' \
+                 -o -name '*.hh' \) \
+              -print0 | sort -z > changed_files.txt
+            lint_scope="full"
+          else
+            git -c protocol.version=2 fetch --no-tags origin \
+              "refs/heads/${base_ref}:refs/remotes/origin/${base_ref}" \
+              --depth=50
+            git diff --name-only "origin/${base_ref}...HEAD" -- \
+              IccProfLib IccXML IccJSON IccConnect Tools \
+              | tr -cd '[:alnum:]./_\-\n' \
+              | grep -E '\.(cpp|cxx|cc|c|h|hpp|hh)$' \
+              | sort -u \
+              | tr '\n' '\0' > changed_files.txt || true
+            lint_scope="pr"
+          fi
+
+          file_count="$(tr '\0' '\n' < changed_files.txt | sed '/^$/d' | wc -l | tr -d ' ')"
+          printf 'file_count=%s\n' "$file_count" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          printf 'lint_scope=%s\n' "$lint_scope" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          printf 'Source files selected for lint: %s\n' "$(sanitize_line "$file_count")"
+
+      - name: Configure compile database
+        if: steps.files.outputs.file_count != '0'
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          rm -rf "$BUILD_DIR"
+          cmake -S Build/Cmake -B "$BUILD_DIR" \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_TESTS=ON \
+            -DENABLE_WXWIDGETS=OFF \
+            -DICC_USE_ZLIB=ON \
+            -DICCDEV_ENABLE_QA_FLAGS=ON \
+            -DICCDEV_ENABLE_STRICT_WARNINGS=ON \
+            -Wno-dev
+
+          cmake --build "$BUILD_DIR" --target IccProfLib2 --parallel "$(nproc)"
+
+      - name: Run cppcheck
+        if: steps.files.outputs.file_count != '0' && env.RUN_CPPCHECK_INPUT == 'true'
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          mkdir -p lint_reports
+          components=(IccProfLib IccXML IccJSON IccConnect Tools)
+          for component in "${components[@]}"; do
+            report="lint_reports/cppcheck_${component}.txt"
+            if ! tr '\0' '\n' < changed_files.txt | grep -E "^${component}/" > "lint_reports/${component}.files"; then
+              : > "$report"
+              printf 'cppcheck %s: 0 files\n' "$(sanitize_line "$component")"
+              continue
+            fi
+
+            cppcheck \
+              --language=c++ \
+              --std=c++17 \
+              --enable=warning,performance,portability,style \
+              --suppress=missingIncludeSystem \
+              --suppress=unusedStructMember \
+              --suppress=unknownMacro:Tools/wxWidget/wxProfileDump/wxProfileDump.cpp \
+              -DICCPROFLIBVER='"cppcheck"' \
+              -DICFLOATSFX='"f"' \
+              -j "$(nproc)" \
+              --project="$BUILD_DIR/compile_commands.json" \
+              --file-filter="${component}/*" \
+              2> "$report" || true
+            printf 'cppcheck %s: %s lines\n' \
+              "$(sanitize_line "$component")" \
+              "$(sanitize_line "$(wc -l < "$report" | tr -d ' ')")"
+          done
+
+          : > lint_reports/cppcheck.txt
+          for report in lint_reports/cppcheck_*.txt; do
+            [ -f "$report" ] && cat "$report" >> lint_reports/cppcheck.txt
+          done
+
+      - name: Run clang-tidy
+        if: steps.files.outputs.file_count != '0' && env.RUN_CLANG_TIDY_INPUT == 'true'
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          mkdir -p lint_reports
+          tidy_checks='modernize-*,readability-*,cppcoreguidelines-*'
+          tidy_checks+=',clang-analyzer-core.*,clang-analyzer-security.*'
+          tidy_checks+=',clang-analyzer-alpha.core.*,clang-analyzer-alpha.security.*'
+
+          xargs -0 run-clang-tidy \
+            -j "$(nproc)" \
+            -p "$BUILD_DIR" \
+            -checks="$tidy_checks" \
+            < changed_files.txt \
+            > lint_reports/clang_tidy.txt 2>&1 || true
+          printf 'clang-tidy: %s lines\n' \
+            "$(sanitize_line "$(wc -l < lint_reports/clang_tidy.txt | tr -d ' ')")"
+
+      - name: Generate lint summary
+        if: always()
+        env:
+          SELECTED_FILE_COUNT: ${{ steps.files.outputs.file_count || '0' }}
+          SELECTED_LINT_SCOPE: ${{ steps.files.outputs.lint_scope || 'unknown' }}
+        run: |
+          set -euo pipefail
+          git config --add safe.directory "$PWD"
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
+
+          mkdir -p lint_reports
+          [ -f lint_reports/cppcheck.txt ] || : > lint_reports/cppcheck.txt
+          [ -f lint_reports/clang_tidy.txt ] || : > lint_reports/clang_tidy.txt
+
+          sanitize_code_line() {
+            local s="$1"
+            s="${s//$'\r'/}"
+            s="${s//$'\n'/ }"
+            s="$(printf '%s' "$s" | tr -d '\000-\011\013\014\016-\037\177')"
+            s="${s//\`\`\`/\` \` \`}"
+            sanitize_line "$s"
+          }
+
+          {
+            echo "## ci-pr-lint Report"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Scope | $(sanitize_line "$SELECTED_LINT_SCOPE") |"
+            echo "| Source files | $(sanitize_line "$SELECTED_FILE_COUNT") |"
+            echo "| cppcheck enabled | $(sanitize_line "$RUN_CPPCHECK_INPUT") |"
+            echo "| clang-tidy enabled | $(sanitize_line "$RUN_CLANG_TIDY_INPUT") |"
+            echo ""
+            echo "### Finding counts"
+            echo ""
+            echo "| Tool | Lines | Warnings | Errors |"
+            echo "|------|------:|---------:|-------:|"
+            cpp_lines="$(wc -l < lint_reports/cppcheck.txt | tr -d ' ')"
+            cpp_warns="$(grep -c 'warning:' lint_reports/cppcheck.txt || true)"
+            cpp_errs="$(grep -c 'error:' lint_reports/cppcheck.txt || true)"
+            tidy_lines="$(wc -l < lint_reports/clang_tidy.txt | tr -d ' ')"
+            tidy_warns="$(grep -c 'warning:' lint_reports/clang_tidy.txt || true)"
+            tidy_errs="$(grep -c 'error:' lint_reports/clang_tidy.txt || true)"
+            printf '| cppcheck | %s | %s | %s |\n' \
+              "$(sanitize_line "$cpp_lines")" \
+              "$(sanitize_line "$cpp_warns")" \
+              "$(sanitize_line "$cpp_errs")"
+            printf '| clang-tidy | %s | %s | %s |\n' \
+              "$(sanitize_line "$tidy_lines")" \
+              "$(sanitize_line "$tidy_warns")" \
+              "$(sanitize_line "$tidy_errs")"
+            echo ""
+            echo "<details><summary>cppcheck tail</summary>"
+            echo ""
+            echo '```text'
+            tail -n 50 lint_reports/cppcheck.txt | while IFS= read -r line; do
+              sanitize_code_line "$line"
+              echo ""
+            done
+            echo '```'
+            echo "</details>"
+            echo ""
+            echo "<details><summary>clang-tidy tail</summary>"
+            echo ""
+            echo '```text'
+            tail -n 50 lint_reports/clang_tidy.txt | while IFS= read -r line; do
+              sanitize_code_line "$line"
+              echo ""
+            done
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+      - name: Upload lint reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ci-pr-lint-reports
+          retention-days: 3
+          if-no-files-found: warn
+          path: lint_reports/

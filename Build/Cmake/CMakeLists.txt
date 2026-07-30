@@ -512,6 +512,7 @@ option(ICC_ENABLE_ASSERTS         "Enable ICC_ASSERT traps and debug assertions"
 option(ICC_LOG_SAFE               "Enable ICC_LOG_SAFE_VAL bounds-checked logging"      OFF)
 option(ICC_VERBOSE_CALC_APPLY     "Enable verbose CIccMpeCalculator Apply debugging"    OFF)
 option(ICC_USE_ZLIB               "Enable zlib-backed compressed ICC text tags"         ON)
+option(ICCDEV_ENABLE_QA_FLAGS     "Enable opt-in maintainer QA evidence options"        OFF)
 option(ENABLE_SANITIZERS          "Enable runtime sanitizers (ASan, UBSan, etc.)"       OFF)
 option(ENABLE_ASAN                "Enable AddressSanitizer only"                        OFF)
 option(ENABLE_FUZZING             "Enable libFuzzer harnesses (Clang only)"             OFF)
@@ -701,6 +702,10 @@ if(ICC_VERBOSE_CALC_APPLY)
   add_compile_definitions(ICC_VERBOSE_CALC_APPLY=1)
 endif()
 
+if(ICCDEV_ENABLE_QA_FLAGS)
+  add_compile_definitions(ICCDEV_ENABLE_QA_FLAGS=1)
+endif()
+
 # ----------------------------------------------------------------------
 # Build Status Output
 # ----------------------------------------------------------------------
@@ -721,6 +726,7 @@ message(STATUS "ICC_ENABLE_ASSERTS         = ${ICC_ENABLE_ASSERTS}")
 message(STATUS "ICC_LOG_SAFE               = ${ICC_LOG_SAFE}")
 message(STATUS "ICC_VERBOSE_CALC_APPLY     = ${ICC_VERBOSE_CALC_APPLY}")
 message(STATUS "ICC_USE_ZLIB               = ${ICC_USE_ZLIB}")
+message(STATUS "ICCDEV_ENABLE_QA_FLAGS     = ${ICCDEV_ENABLE_QA_FLAGS}")
 message(STATUS "ENABLE_SANITIZERS          = ${ENABLE_SANITIZERS}")
 message(STATUS "ENABLE_ASAN                = ${ENABLE_ASAN}")
 message(STATUS "ENABLE_UBSAN               = ${ENABLE_UBSAN}")
