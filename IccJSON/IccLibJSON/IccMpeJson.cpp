@@ -299,9 +299,10 @@ public:
     j["type"] = "SampledSegment";
     IccJson samples = IccJson::array();
     const icUInt32Number nCount = m_nCount;
+    samples.get_ref<IccJson::array_t &>().reserve(nCount);
     for (icUInt32Number i = 0; i < nCount; i++)
       samples.push_back((double)m_pSamples[i]);
-    j["samples"] = samples;
+    j["samples"] = std::move(samples);
     return true;
   }
 
@@ -349,9 +350,9 @@ bool CIccSegmentedCurveJson::ToJson(IccJson &j)
     else {
       return false;
     }
-    segs.push_back(jSeg);
+    segs.push_back(std::move(jSeg));
   }
-  j["segments"] = segs;
+  j["segments"] = std::move(segs);
   return true;
 }
 
@@ -411,9 +412,10 @@ public:
       j["reserved"] = (int)m_nReserved;
     IccJson samples = IccJson::array();
     const icUInt32Number nCount = m_nCount;
+    samples.get_ref<IccJson::array_t &>().reserve(nCount);
     for (icUInt32Number i = 0; i < nCount; i++)
       samples.push_back((double)m_pSamples[i]);
-    j["samples"] = samples;
+    j["samples"] = std::move(samples);
     return true;
   }
 
@@ -613,9 +615,9 @@ bool CIccMpeJsonCurveSet::ToJson(IccJson &j)
     else if (!icToJsonCurve(jCurve, m_curve[i])) {
       return false;
     }
-    curves.push_back(jCurve);
+    curves.push_back(std::move(jCurve));
   }
-  j["curves"] = curves;
+  j["curves"] = std::move(curves);
   return true;
 }
 
@@ -774,7 +776,7 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
       delete[] buf;
 
       IccJson jValues;
-      jValues["values"] = jArr;
+      jValues["values"] = std::move(jArr);
       if (!pTagJson->ParseJson(jValues, parseStr)) { delete pTag; return false; }
     }
     else if (format == "binary") {
@@ -789,7 +791,7 @@ bool CIccMpeJsonTintArray::ParseJson(const IccJson &j, std::string &parseStr)
       delete pIO;
 
       IccJson jValues;
-      jValues["values"] = jArr;
+      jValues["values"] = std::move(jArr);
       if (!pTagJson->ParseJson(jValues, parseStr)) { delete pTag; return false; }
     }
     else {
@@ -993,9 +995,10 @@ bool CIccMpeJsonMatrix::ToJson(IccJson &j)
     IccJson matrix = IccJson::array();
     icUInt64Number nEntries64 = (icUInt64Number)m_nInputChannels * m_nOutputChannels;
     icUInt32Number nEntries = (icUInt32Number)nEntries64;
+    matrix.get_ref<IccJson::array_t &>().reserve(nEntries);
     for (icUInt32Number i = 0; i < nEntries; i++)
       matrix.push_back((double)m_pMatrix[i]);
-    j["matrix"] = matrix;
+    j["matrix"] = std::move(matrix);
   }
   // Preserve serialized matrix constants even when they are all zero.
   if (m_pConstants) {
@@ -1003,7 +1006,7 @@ bool CIccMpeJsonMatrix::ToJson(IccJson &j)
     const icUInt16Number nOutputChannels = m_nOutputChannels;
     for (icUInt16Number i = 0; i < nOutputChannels; i++)
       constants.push_back((double)m_pConstants[i]);
-    j["constants"] = constants;
+    j["constants"] = std::move(constants);
   }
   return true;
 }

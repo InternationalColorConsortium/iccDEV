@@ -185,7 +185,7 @@ bool CIccProfileJson::ToJson(IccJson &root)
   if (m_Header.mcs)
     header["MCS"] = icGetColorSigStr(buf, bufSize, m_Header.mcs);
 
-  root["Header"] = header;
+  root["Header"] = std::move(header);
 
   // Tags -- stored as a JSON array to preserve tag order.
   // Each element is a single-member object: { "<tagName>": { ... } }
@@ -223,8 +223,8 @@ bool CIccProfileJson::ToJson(IccJson &root)
     if (prevIt != ptrToFirstKey.end()) {
       tagObj["sameAs"] = prevIt->second;
       IccJson entry;
-      entry[key] = tagObj;
-      tags.push_back(entry);
+      entry[key] = std::move(tagObj);
+      tags.push_back(std::move(entry));
       continue;
     }
 
@@ -247,14 +247,18 @@ bool CIccProfileJson::ToJson(IccJson &root)
 
     if (pTag->m_nReserved)
       tagObj["Reserved"] = (unsigned int)pTag->m_nReserved;
-    tagObj["data"] = tagData;
+    // Each of these hand-offs used to deep-copy the whole tag payload and then
+    // destroy the source. For a tag carrying a large CLUT that is the dominant
+    // cost of serialization, and it happened three times per tag on the way up
+    // to the root: tagData -> tagObj -> entry -> tags.
+    tagObj["data"] = std::move(tagData);
 
     IccJson entry;
-    entry[key] = tagObj;
-    tags.push_back(entry);
+    entry[key] = std::move(tagObj);
+    tags.push_back(std::move(entry));
     ptrToFirstKey[pTag] = key;
   }
-  root["Tags"] = tags;
+  root["Tags"] = std::move(tags);
 
   return true;
 }
@@ -265,7 +269,9 @@ bool CIccProfileJson::ToJson(std::string &jsonString, int indent)
   IccJson profile;
   if (!ToJson(profile))
     return false;
-  root["IccProfile"] = profile;
+  // profile is the entire document; copying it here doubled peak memory for the
+  // whole serialized profile immediately before the dump.
+  root["IccProfile"] = std::move(profile);
   
   // dump the json data to string, but replace bad text/utf8 data with valid data instead of throwing exceptions
   jsonString = root.dump( indent,' ',true, nlohmann::detail::error_handler_t::replace );

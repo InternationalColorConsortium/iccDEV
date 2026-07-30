@@ -91,7 +91,9 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
       }
       IccJson wrapper;
-      wrapper["IccProfile"] = j;
+      // j is the whole document and is dead after this hand-off; copying it here
+      // doubled peak memory before the sort pass even started.
+      wrapper["IccProfile"] = std::move(j);
       nlohmann::ordered_json sorted = sortJsonKeys(wrapper);
       jsonStr = sorted.dump(indent);
     }

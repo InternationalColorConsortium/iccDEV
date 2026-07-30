@@ -693,10 +693,12 @@ bool CIccTagJsonSpectralViewingConditions::ToJson(IccJson &j)
       obs["Reserved"] = (int)m_reserved2;
     IccJson data = IccJson::array();
     icUInt32Number nTotal = (icUInt32Number)m_observerRange.steps * 3;
+    // Sample count is known before the walk, so size the backing vector once.
+    data.get_ref<IccJson::array_t &>().reserve(nTotal);
     for (icUInt32Number i = 0; i < nTotal; i++)
       data.push_back((double)m_observer[i]);
-    obs["data"] = data;
-    j["ObserverFuncs"] = obs;
+    obs["data"] = std::move(data);
+    j["ObserverFuncs"] = std::move(obs);
   }
 
   j["StdIlluminant"]    = info.GetIlluminantName(m_stdIlluminant);
@@ -710,10 +712,11 @@ bool CIccTagJsonSpectralViewingConditions::ToJson(IccJson &j)
     if (m_reserved3)
       illum["Reserved"] = (int)m_reserved3;
     IccJson data = IccJson::array();
+    data.get_ref<IccJson::array_t &>().reserve(m_illuminantRange.steps);
     for (int i = 0; i < (int)m_illuminantRange.steps; i++)
       data.push_back((double)m_illuminant[i]);
-    illum["data"] = data;
-    j["IlluminantSPD"] = illum;
+    illum["data"] = std::move(data);
+    j["IlluminantSPD"] = std::move(illum);
   }
 
   j["SurroundXYZ"] = IccJson::array({ (double)m_surroundXYZ.X,
@@ -872,13 +875,14 @@ bool CIccTagJsonNamedColor2::ToJson(IccJson &j)
       c["name"] = icJsonFixedAsciiString(pColor->rootName, sizeof(pColor->rootName));
       c["pcsCoords"] = IccJson::array({ pColor->pcsCoords[0], pColor->pcsCoords[1], pColor->pcsCoords[2] });
       IccJson dev = IccJson::array();
+      dev.get_ref<IccJson::array_t &>().reserve(m_nDeviceCoords);
       for (icUInt32Number d = 0; d < m_nDeviceCoords; d++)
         dev.push_back(icJsonDeviceCoordToU16(pColor->deviceCoords[d]));
-      c["deviceCoords"] = dev;
-      colors.push_back(c);
+      c["deviceCoords"] = std::move(dev);
+      colors.push_back(std::move(c));
     }
   }
-  j["colors"] = colors;
+  j["colors"] = std::move(colors);
   return true;
 }
 
@@ -1100,18 +1104,21 @@ bool CIccTagJsonSparseMatrixArray::ToJson(IccJson &j)
 
       icUInt16Number *cols = mtx.GetColumnsForRow(r);
       icFloatNumber  *data = (icFloatNumber*)mtx.GetData()->getPtr(mtx.GetRowOffset(r));
+      // The stored column count for this row bounds both walks.
+      jIdx.get_ref<IccJson::array_t &>().reserve(n);
+      jData.get_ref<IccJson::array_t &>().reserve(n);
       for (int k = 0; k < n; k++) {
         jIdx.push_back(cols[k]);
         jData.push_back(data[k]);
       }
-      jRow["colIndices"] = jIdx;
-      jRow["colData"]    = jData;
-      jRows.push_back(jRow);
+      jRow["colIndices"] = std::move(jIdx);
+      jRow["colData"]    = std::move(jData);
+      jRows.push_back(std::move(jRow));
     }
-    jMtx["sparseRows"] = jRows;
-    matrices.push_back(jMtx);
+    jMtx["sparseRows"] = std::move(jRows);
+    matrices.push_back(std::move(jMtx));
   }
-  j["matrices"] = matrices;
+  j["matrices"] = std::move(matrices);
   return true;
 }
 
@@ -1257,9 +1264,10 @@ template <class T, icTagTypeSignature Tsig>
 bool CIccTagJsonFixedNum<T, Tsig>::ToJson(IccJson &j)
 {
   IccJson arr = IccJson::array();
+  arr.get_ref<IccJson::array_t &>().reserve(this->m_nSize);
   for (icUInt32Number i = 0; i < this->m_nSize; i++)
     arr.push_back(icFtoD(this->m_Num[i]));
-  j["values"] = arr;
+  j["values"] = std::move(arr);
   return true;
 }
 
@@ -1306,9 +1314,10 @@ bool CIccTagJsonNum<T, A, Tsig>::ToJson(IccJson &j)
   const icUInt32Number nMaxNumValues = 0xffffff;
   if (this->m_nSize > nMaxNumValues)
     return false;
+  arr.get_ref<IccJson::array_t &>().reserve(this->m_nSize);
   for (icUInt32Number i = 0; i < this->m_nSize; i++)
     arr.push_back(this->m_Num[i]);
-  j["values"] = arr;
+  j["values"] = std::move(arr);
   return true;
 }
 
@@ -1356,9 +1365,10 @@ bool CIccTagJsonFloatNum<T, A, Tsig>::ToJson(IccJson &j)
   const icUInt32Number nMaxNumValues = 0xffffff;
   if (this->m_nSize > nMaxNumValues)
     return false;
+  arr.get_ref<IccJson::array_t &>().reserve(this->m_nSize);
   for (icUInt32Number i = 0; i < this->m_nSize && i < nMaxNumValues; i++)
     arr.push_back((double)this->m_Num[i]);
-  j["values"] = arr;
+  j["values"] = std::move(arr);
   return true;
 }
 
@@ -1821,6 +1831,7 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
     } else {
       j["curveType"] = "table";
       IccJson arr = IccJson::array();
+      arr.get_ref<IccJson::array_t &>().reserve(m_nSize);
       for (icUInt32Number i = 0; i < m_nSize; i++) {
         switch (nType) {
           case icConvert8Bit:
@@ -1836,7 +1847,7 @@ bool CIccTagJsonCurve::ToJson(IccJson &j, icConvertType nType)
         j["precision"] = 1;
       else if (nType == icConvert16Bit || nType == icConvertVariable)
         j["precision"] = 2;
-      j["table"] = arr;
+      j["table"] = std::move(arr);
     }
   }
   return true;

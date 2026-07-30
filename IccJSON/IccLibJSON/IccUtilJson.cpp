@@ -162,7 +162,9 @@ bool icCLUTDataToJson(IccJson &j, CIccCLUT *pCLUT, icConvertType nType, bool bSa
     IccJson gridPts = IccJson::array();
     for (i = 0; i < nInput; i++)
       gridPts.push_back((int)pCLUT->GridPoint(i));
-    j["gridPoints"] = gridPts;
+    // gridPts is dead after this hand-off, so transfer the array rather than
+    // deep-copying it and then destroying the original.
+    j["gridPoints"] = std::move(gridPts);
   }
 
   // Resolve variable precision the same way IccXML does
@@ -179,6 +181,11 @@ bool icCLUTDataToJson(IccJson &j, CIccCLUT *pCLUT, icConvertType nType, bool bSa
   icUInt32Number nTotal = pCLUT->NumPoints() * (icUInt32Number)nOutput;
   icFloatNumber *pData  = pCLUT->GetData(0);
 
+  // The sample count is known exactly before the loop. A JSON array is backed by
+  // a std::vector, so without this the push_back below reallocates and moves the
+  // whole array O(log nTotal) times; large CLUTs make that the visible cost.
+  data.get_ref<IccJson::array_t &>().reserve(nTotal);
+
   for (icUInt32Number k = 0; k < nTotal; k++) {
     switch (nType) {
       case icConvert8Bit:
@@ -192,7 +199,9 @@ bool icCLUTDataToJson(IccJson &j, CIccCLUT *pCLUT, icConvertType nType, bool bSa
         break;
     }
   }
-  j["data"] = data;
+  // data holds every CLUT sample and is dead after this hand-off. Copying it here
+  // duplicated the entire sample array and then freed the original.
+  j["data"] = std::move(data);
   return true;
 }
 
@@ -202,7 +211,9 @@ bool icCLUTToJson(IccJson &j, CIccCLUT *pCLUT, icConvertType nType,
   IccJson clut;
   if (!icCLUTDataToJson(clut, pCLUT, nType, bSaveGridPoints))
     return false;
-  j[szName] = clut;
+  // Second copy of the same payload on the old path: clut carries the sample array
+  // just built above, and is dead once it has been handed to j.
+  j[szName] = std::move(clut);
   return true;
 }
 

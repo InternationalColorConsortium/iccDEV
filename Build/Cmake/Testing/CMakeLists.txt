@@ -2424,6 +2424,56 @@ function(iccdev_add_json_bcd_version_test)
   endif()
 endfunction()
 
+# #1911: the JSON writers handed every payload up to the document root by value, so a
+# CLUT-bearing tag's samples were deep-copied and destroyed once per level of the
+# chain (data -> clut -> tagData -> tagObj -> entry -> Tags -> IccProfile). Those
+# hand-offs are now std::move, and the sample arrays reserve() their known size. The
+# risk that introduces is a misplaced move: nlohmann leaves a moved-from value as
+# null, which a writer that only reports success cannot detect. This test walks the
+# emitted document and asserts the payload actually arrived -- element counts, values
+# and no null where data belongs. Header + IccProfLib/IccJSON only, no fixture.
+function(iccdev_add_json_writer_move_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonWriterMoveTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-writer-move-integrity.cpp"
+  )
+  target_compile_features(iccJsonWriterMoveTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonWriterMoveTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonWriterMoveTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonWriterMoveTest)
+
+  add_test(
+    NAME iccdev.json-writer-move-integrity
+    COMMAND "$<TARGET_FILE:iccJsonWriterMoveTest>"
+  )
+  set_tests_properties(iccdev.json-writer-move-integrity PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;json;performance;issue-1911;regression"
+  )
+  if(WIN32)
+    set(_json_move_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonWriterMoveTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_move_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-writer-move-integrity PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_move_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1831: icGetDateTimeValue discarded its sscanf conversion count and assigned every
 # field into the icUInt16Number members of icDateTimeNumber without a range check, so
 # "%u" turned "-1" into 4294967295 and a year of 590359881 was truncated to 11593
@@ -2821,6 +2871,7 @@ if(WIN32)
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_json_bcd_version_test()
+  iccdev_add_json_writer_move_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
   iccdev_add_parser_restore_calls_test()
@@ -3049,6 +3100,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_json_bcd_version_test()
+iccdev_add_json_writer_move_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
 iccdev_add_parser_restore_calls_test()
