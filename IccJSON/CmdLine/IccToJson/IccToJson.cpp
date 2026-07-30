@@ -29,12 +29,20 @@ static nlohmann::ordered_json sortJsonKeys(const IccJson &j)
   }
   if (j.is_array()) {
     nlohmann::ordered_json arr = nlohmann::ordered_json::array();
+    // Element count is known up front, so size the backing vector once instead of
+    // letting push_back reallocate and copy its way up. CLUT-bearing tags dominate
+    // the document, and those arrays are where nearly all of the elements live.
+    arr.get_ref<nlohmann::ordered_json::array_t &>().reserve(j.size());
     for (const auto &elem : j)
       arr.push_back(sortJsonKeys(elem));
     return arr;
   }
-  // Primitives: convert via dump/parse to cross nlohmann type boundary
-  return nlohmann::ordered_json::parse(j.dump());
+  // Primitives: nlohmann converts directly between two basic_json instantiations.
+  // Its converting constructor dispatches on the source's value_t and moves the
+  // scalar across by type, so there is no need to serialize to text and re-parse.
+  // When IccJson already IS ordered_json that constructor is excluded (same type)
+  // and the ordinary copy constructor runs, so this is correct in both builds.
+  return nlohmann::ordered_json(j);
 }
 
 int main(int argc, char* argv[])

@@ -3400,6 +3400,22 @@ if(ICCDEV_HAS_JSON_TOOLS)
   set_tests_properties(iccdev.json-parser-regressions PROPERTIES
     FIXTURES_REQUIRED iccdev_profiles
   )
+
+  # Issue #1920. iccToJson -sort had no coverage at all, so nothing objected when
+  # its scalar path became the most expensive part of the conversion. This pins
+  # the properties the sort pass must preserve - ascending keys, content equal to
+  # the unsorted document, deterministic and still readable by iccFromJson - so
+  # that the scalar copy it performs can be changed without silently altering data.
+  iccdev_add_script_test(
+    iccdev.json-sort-regression
+    300
+    "iccdev;json;sort;regression;issue-1920;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-sort-regression.sh"
+  )
+  set_tests_properties(iccdev.json-sort-regression PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
 endif()
 
 iccdev_add_script_test(
