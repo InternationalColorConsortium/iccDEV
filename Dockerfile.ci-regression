@@ -108,7 +108,11 @@ ENV CC=clang \
     PATH="/opt/iccdev-mcp/bin:${PATH}"
 
 RUN python3 -m venv /opt/iccdev-spectral-preview \
- && /opt/iccdev-spectral-preview/bin/python -m pip install --upgrade pip --quiet \
+ && /opt/iccdev-spectral-preview/bin/python -m pip install \
+      --upgrade \
+      'pip>=25.1.1' \
+      'setuptools>=78.1.1' \
+      --quiet \
  && /opt/iccdev-spectral-preview/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
@@ -117,7 +121,12 @@ RUN python3 -m venv /opt/iccdev-spectral-preview \
       'pillow==12.3.0' \
       'imagecodecs==2026.6.6' \
       --quiet \
- && /opt/iccdev-spectral-preview/bin/python -c 'import imagecodecs,numpy,PIL,tifffile; print(f"imagecodecs {imagecodecs.__version__}"); print(f"numpy {numpy.__version__}"); print(f"pillow {PIL.__version__}"); print(f"tifffile {tifffile.__version__}")'
+ && /opt/iccdev-spectral-preview/bin/python -m pip check \
+ && /opt/iccdev-spectral-preview/bin/python -c 'import imagecodecs,numpy,PIL,tifffile; print(f"imagecodecs {imagecodecs.__version__}"); print(f"numpy {numpy.__version__}"); print(f"pillow {PIL.__version__}"); print(f"tifffile {tifffile.__version__}")' \
+ && rm -rf \
+      /opt/iccdev-spectral-preview/bin/pip* \
+      /opt/iccdev-spectral-preview/lib/python*/site-packages/pip \
+      /opt/iccdev-spectral-preview/lib/python*/site-packages/pip-*.dist-info
 
 RUN hadolint_version="2.14.0" \
  && hadolint_sha256="6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47" \
@@ -129,15 +138,24 @@ RUN hadolint_version="2.14.0" \
  && hadolint --version
 
 RUN python3 -m venv /opt/iccdev-workflow-qa \
- && /opt/iccdev-workflow-qa/bin/python -m pip install --upgrade pip --quiet \
+ && /opt/iccdev-workflow-qa/bin/python -m pip install \
+      --upgrade \
+      'pip>=25.1.1' \
+      'setuptools>=78.1.1' \
+      --quiet \
  && /opt/iccdev-workflow-qa/bin/python -m pip install \
       --only-binary=:all: \
       --no-cache-dir \
       'zizmor==1.26.1' \
       --quiet \
+ && /opt/iccdev-workflow-qa/bin/python -m pip check \
  && ln -s /opt/iccdev-workflow-qa/bin/zizmor /usr/local/bin/zizmor \
  && zizmor --version \
- && yamllint --version
+ && yamllint --version \
+ && rm -rf \
+      /opt/iccdev-workflow-qa/bin/pip* \
+      /opt/iccdev-workflow-qa/lib/python*/site-packages/pip \
+      /opt/iccdev-workflow-qa/lib/python*/site-packages/pip-*.dist-info
 
 RUN groupadd --system iccdev-ci \
  && useradd --system --gid iccdev-ci --home-dir /workspace --create-home --shell /bin/bash iccdev-ci
@@ -151,13 +169,22 @@ COPY --chmod=0755 iccdev-mcp/docker/docker-entrypoint.sh /usr/local/bin/iccdev-m
 RUN find /workspace/iccDEV/.github/scripts -maxdepth 1 -type f -name '*.sh' -exec chmod 0755 '{}' +
 
 RUN python3 -m venv /opt/iccdev-mcp \
- && /opt/iccdev-mcp/bin/python -m pip install --upgrade pip --quiet \
+ && /opt/iccdev-mcp/bin/python -m pip install \
+      --upgrade \
+      'pip>=25.1.1' \
+      'setuptools>=78.1.1' \
+      'msgpack>=1.2.1' \
+      --quiet \
  && /opt/iccdev-mcp/bin/python -m pip install \
       --no-cache-dir \
       "/workspace/iccDEV/iccdev-mcp[rest]" \
       --quiet \
  && /opt/iccdev-mcp/bin/python -m pip check \
- && /opt/iccdev-mcp/bin/python -c 'import iccdev_mcp; print(f"iccdev-mcp {iccdev_mcp.__version__}")'
+ && /opt/iccdev-mcp/bin/python -c 'import iccdev_mcp; print(f"iccdev-mcp {iccdev_mcp.__version__}")' \
+ && rm -rf \
+      /opt/iccdev-mcp/bin/pip* \
+      /opt/iccdev-mcp/lib/python*/site-packages/pip \
+      /opt/iccdev-mcp/lib/python*/site-packages/pip-*.dist-info
 
 USER iccdev-ci
 WORKDIR /workspace/iccDEV

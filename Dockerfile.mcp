@@ -45,14 +45,23 @@ RUN rm -f CMakeCache.txt \
  && rm -rf /opt/iccdev/.git
 
 RUN python3 -m venv /opt/iccdev-mcp-venv \
- && /opt/iccdev-mcp-venv/bin/python -m pip install --no-cache-dir --upgrade pip \
+ && /opt/iccdev-mcp-venv/bin/python -m pip install --no-cache-dir \
+      --upgrade \
+      'pip>=25.1.1' \
+      'setuptools>=78.1.1' \
+      'msgpack>=1.2.1' \
  && ICCDEV_BUILD_DIR=/opt/iccdev/Build \
     /opt/iccdev-mcp-venv/bin/python -m pip install --no-cache-dir \
       /opt/iccdev/python \
-      "/opt/iccdev/iccdev-mcp[rest]"
+      "/opt/iccdev/iccdev-mcp[rest]" \
+ && /opt/iccdev-mcp-venv/bin/python -m pip check \
+ && rm -rf \
+      /opt/iccdev-mcp-venv/bin/pip* \
+      /opt/iccdev-mcp-venv/lib/python*/site-packages/pip \
+      /opt/iccdev-mcp-venv/lib/python*/site-packages/pip-*.dist-info
 
 RUN echo "=== MCP Python packages ===" \
- && /opt/iccdev-mcp-venv/bin/python -m pip show iccdev iccdev-mcp \
+ && /opt/iccdev-mcp-venv/bin/python -c 'from importlib.metadata import version; print("iccdev", version("iccdev")); print("iccdev-mcp", version("iccdev-mcp"))' \
  && echo "=== MCP CLI tools ===" \
  && find /opt/iccdev/Build/Tools -type f -executable | sort
 
