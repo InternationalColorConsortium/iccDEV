@@ -32,7 +32,7 @@ TOOLS_DIR="${ICCDEV_TOOLS_DIR:-build/Tools}"
 BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd -P)"
 export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
-export UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1,silence_unsigned_overflow=1
+export UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1
 
 TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
 FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"

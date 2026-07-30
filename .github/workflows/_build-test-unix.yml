@@ -848,7 +848,6 @@ jobs:
           PY_TAG="cp${PYTHON_VERSION//./}"
           export CIBW_BUILD="${PY_TAG}-*"
           export CIBW_ARCHS="auto"
-          export CIBW_DEPENDENCY_VERSIONS="latest"
           rm -rf build iccdev/*.so iccdev/*.pyd
           cp ../LICENSE.md LICENSE.md
           python vendor_iccproflib.py
