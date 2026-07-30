@@ -96,7 +96,13 @@ run_case() {
   local log
   log="$OUTDIR/$(basename "$xml").log"
   # Keep ASan quiet about any unrelated leaks so UBSan's conversion diagnostic
-  # is the only thing we key on; the tool itself exits 0 on this valid profile.
+  # is the only thing we key on. The exit status is deliberately not asserted:
+  # what this test pins is the absence of a signed->unsigned conversion, and the
+  # tool's verdict on the profile has since changed. #1346 floored the negative
+  # ColorPrimaries to 0 and saved the profile; #1909 refuses the attribute
+  # instead, because storing 0 for a document that said -1 is the same
+  # substitution of a value the document never contained. Either way no
+  # conversion is performed, which is the property under test here.
   ASAN_OPTIONS="detect_leaks=0:halt_on_error=0:exitcode=0" \
   UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=0" \
     "$FROMXML" "$xml" "$OUTDIR/$(basename "$xml").out" > "$log" 2>&1

@@ -177,6 +177,8 @@ const std::string icGetPadSpace(double value);
 //   if (!icXmlParseU16(icXmlAttrValue(node, "Rows"), nRows))
 //     return false;
 //
+bool icXmlParseU8(const char *s, icUInt8Number &out,
+                  icUInt8Number max_value = 0xFFu);
 bool icXmlParseU16(const char *s, icUInt16Number &out,
                    icUInt16Number max_value = 0xFFFFu);
 bool icXmlParseU32(const char *s, icUInt32Number &out,

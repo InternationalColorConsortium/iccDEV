@@ -3827,6 +3827,33 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1898-mpe-channel-narrowing-regression.sh"
 )
 
+# #1909: the same narrowing at the tag-level readers #1908 left behind -- cicp
+# code points, CLUT grid granularity, tag spectral step counts, SparseMatrix
+# dimensions and GamutBoundaryDesc channel counts.  Here the cast is explicit at
+# every site, so UBSan never saw it and the tell is entirely functional: six
+# documents converted with exit 0 and re-serialize carrying a value the source
+# never contained (265 -> 9, 65937 -> 401, 65539 -> 3, 65567 -> 31, 66304 -> 768),
+# and GridGranularity="258" produced a profile byte-identical to "2".  Each is
+# paired with the wrapped value itself as a control, which is what shows the fix
+# refuses values that do not fit the field rather than having lowered a ceiling.
+# Two further cases are not laundering at all, both from the same unchecked
+# CIccSparseMatrix::Init() return: an over-large <SparseMatrix> reached the
+# row-start fill with a NULL pointer (that one keys on the exit status, since a
+# rejection and a segfault both leave no profile behind), and an array whose
+# outputChannels cannot hold its own declared row count used to convert with
+# exit 0 while the tool printed "Profile is invalid, but saved correctly".
+# The latter is pinned because honouring Init() changes acceptance on purpose.
+# Fixtures are mutated from tracked Testing/ XML
+# at run time and the script fails if a mutation did not apply, so a donor
+# edited upstream cannot turn this into a silent no-op.
+iccdev_add_script_test(
+  iccdev.issue-1909-xml-narrowing-regression
+  120
+  "iccdev;xml;tags;issue-1909;regression;asan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1909-xml-narrowing-regression.sh"
+)
+
 # #1810: 'RICC' in the CMM and platform header fields of 15 Testing fixtures.
 # 'RICC' was never registered -- icSigRefIccMAX itself carried 0x52494343
 # ('RICC') against a comment and a registry that both said 'RIMX', until #1473

@@ -107,6 +107,30 @@ static icUInt32Number icXmlAttrToUInt(const char *szValue)
   return nValue < 0 ? 0u : (icUInt32Number)nValue;
 }
 
+// Reads the "steps" attribute of a <Wavelengths> element into the
+// icUInt16Number field of an icSpectralRange.
+//
+// The count is what tells every consumer how many samples the range holds, so
+// narrowing it modulo 65536 substitutes a different spectrum rather than
+// failing: steps="65937" was stored -- and written back out on save -- as 401
+// (#1909). This is the same defect #1908 fixed for the MPE elements, at the
+// tag-level readers those elements sit beside.
+//
+// The attribute defaults to "0" rather than "" so that an absent "steps" still
+// yields a zero-step range exactly as it did before. Only a value that is
+// present and cannot be represented stops the parse; existing documents that
+// omit the attribute keep loading.
+static bool icXmlParseSpectralSteps(xmlNode *pNode, icUInt16Number &steps,
+                                    const char *szRangeName, std::string &parseStr)
+{
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "steps", "0"), steps)) {
+    parseStr += std::string("Invalid ") + szRangeName + " Wavelengths steps\n";
+    return false;
+  }
+
+  return true;
+}
+
 static void icXmlCopyFixedString(char *dst, size_t dstSize, const char *src)
 {
   if (!dst || !dstSize) {
@@ -855,7 +879,8 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
   m_spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
-  m_spectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
+  if (!icXmlParseSpectralSteps(pChild, m_spectralRange.steps, "SpectralRange", parseStr))
+    return false;
 
   pChild = icXmlFindNode(pNode, "BiSpectralRange");
 
@@ -863,7 +888,8 @@ bool CIccTagXmlSpectralDataInfo::ParseXml(xmlNode *pNode, std::string &parseStr)
     if ((pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
       m_biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
       m_biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
-      m_biSpectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
+      if (!icXmlParseSpectralSteps(pChild, m_biSpectralRange.steps, "BiSpectralRange", parseStr))
+        return false;
     }
   }
 
@@ -908,7 +934,8 @@ bool CIccTagXmlSpectralRange::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
   m_spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
-  m_spectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
+  if (!icXmlParseSpectralSteps(pChild, m_spectralRange.steps, "SpectralRange", parseStr))
+    return false;
 
   pChild = icXmlFindNode(pNode, "BiSpectralRange");
 
@@ -916,7 +943,8 @@ bool CIccTagXmlSpectralRange::ParseXml(xmlNode *pNode, std::string &parseStr)
     if ((pChild = icXmlFindNode(pChild->children, "Wavelengths"))) {
       m_biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "start")));
       m_biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(pChild, "end")));
-      m_biSpectralRange.steps = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(pChild, "steps"));
+      if (!icXmlParseSpectralSteps(pChild, m_biSpectralRange.steps, "BiSpectralRange", parseStr))
+        return false;
     }
   }
 
@@ -1344,35 +1372,51 @@ bool CIccTagXmlCicp::ToXml(std::string& xml, std::string blanks/* = ""*/)
 }
 
 
-bool CIccTagXmlCicp::ParseXml(xmlNode* pNode, std::string& /*parseStr*/)
+// Reads one cicp code point. All four are 8-bit syntax elements in ITU-T H.273
+// and are stored in icUInt8Number members, so a value above 255 is not a code
+// point the document could have meant. The (icUInt8Number) cast that used to
+// stand here narrowed it instead and, being explicit, hid the truncation from
+// UBSan too: ColorPrimaries="265" was stored -- and written back out on save --
+// as 9, a different and entirely valid primary (#1909). A missing attribute is
+// still defaulted to 0 by the caller, exactly as before; only a value that is
+// present and unrepresentable now stops the parse.
+static bool icXmlParseCicpField(xmlNode *pNode, const char *szName,
+                                icUInt8Number &out, std::string &parseStr)
+{
+  xmlAttr *attr = icXmlFindAttr(pNode, szName);
+
+  if (!attr) {
+    out = 0;
+    return true;
+  }
+
+  if (!icXmlParseU8(icXmlAttrValue(attr), out)) {
+    parseStr += std::string("Invalid ") + szName + " in cicpFields\n";
+    return false;
+  }
+
+  return true;
+}
+
+bool CIccTagXmlCicp::ParseXml(xmlNode* pNode, std::string& parseStr)
 {
 
   pNode = icXmlFindNode(pNode, "cicpFields");
 
   if (pNode) {
-    xmlAttr* attr;
-    if ((attr = icXmlFindAttr(pNode, "ColorPrimaries")))
-      m_nColorPrimaries = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
-    else
-      m_nColorPrimaries = 0;
-
-    if ((attr = icXmlFindAttr(pNode, "TransferCharacteristics")))
-      m_nTransferCharacteristics = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
-    else
-      m_nTransferCharacteristics = 0;
-
-    if ((attr = icXmlFindAttr(pNode, "MatrixCoefficients")))
-      m_nMatrixCoefficients = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
-    else
-      m_nMatrixCoefficients = 0;
-
-    if ((attr = icXmlFindAttr(pNode, "VideoFullRangeFlag")))
-      m_nVideoFullRangeFlag = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(attr));
-    else
-      m_nVideoFullRangeFlag = 0;
+    // parseStr was previously unnamed here, so this reader had no way to say why
+    // it had refused a tag. It now reports through the same channel every other
+    // ParseXml uses, which is what makes the rejections above visible to callers.
+    if (!icXmlParseCicpField(pNode, "ColorPrimaries", m_nColorPrimaries, parseStr) ||
+        !icXmlParseCicpField(pNode, "TransferCharacteristics", m_nTransferCharacteristics, parseStr) ||
+        !icXmlParseCicpField(pNode, "MatrixCoefficients", m_nMatrixCoefficients, parseStr) ||
+        !icXmlParseCicpField(pNode, "VideoFullRangeFlag", m_nVideoFullRangeFlag, parseStr))
+      return false;
   }
-  else
+  else {
+    parseStr += "Cannot find cicpFields\n";
     return false;
+  }
 
   return true;
 }
@@ -1439,7 +1483,16 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
     xmlAttr *matrixType = icXmlFindAttr(pNode, "matrixType");
 
     if (outputChan && matrixType) {
-      icUInt32Number nChannelsPerMatrix = icXmlAttrToUInt(icXmlAttrValue(outputChan));
+      // Reset() below takes the channel count as an icUInt16Number, so parsing
+      // it wider and casting on the way in narrowed it modulo 65536:
+      // outputChannels="66304" was stored -- and written back out on save -- as
+      // 768 (#1909). It also sizes GetBytesPerMatrix(), which is what the raw
+      // data buffer for every matrix in the array is allocated from.
+      icUInt16Number nChannelsPerMatrix = 0;
+      if (!icXmlParseU16(icXmlAttrValue(outputChan), nChannelsPerMatrix)) {
+        parseStr += "Invalid SparseMatrixArray outputChannels\n";
+        return false;
+      }
       icSparseMatrixType nMatrixType = (icSparseMatrixType)atoi(icXmlAttrValue(matrixType));
 
       xmlNode *pChild;
@@ -1451,7 +1504,7 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
           n++;
 
       }
-      Reset(n, (icUInt16Number)nChannelsPerMatrix);
+      Reset(n, nChannelsPerMatrix);
       m_nMatrixType = (icSparseMatrixType)nMatrixType;
 
       icUInt32Number bytesPerMatrix = GetBytesPerMatrix();
@@ -1466,12 +1519,29 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
             xmlAttr *cols = icXmlFindAttr(pChild, "cols");
 
             if (rows && cols) {
-              icUInt16Number nRows, nCols;
+              icUInt16Number nRows = 0, nCols = 0;
 
-              nRows = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(rows));
-              nCols = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(cols));
+              // Dimensions are icUInt16Number throughout CIccSparseMatrix, so
+              // the casts that stood here wrapped anything larger back into
+              // range: rows="65567" was stored -- and written back out on save
+              // -- as 31 (#1909).
+              if (!icXmlParseU16(icXmlAttrValue(rows), nRows) ||
+                  !icXmlParseU16(icXmlAttrValue(cols), nCols)) {
+                parseStr += "Invalid SparseMatrix rows or cols\n";
+                return false;
+              }
 
-              mtx.Init(nRows, nCols, true);
+              // Init() enforces CIccSparseMatrix's own dimension ceiling and
+              // returns false having left the matrix empty -- GetRowStart()
+              // NULL and GetMaxEntries() 0. Its result was discarded here, so a
+              // matrix that declared more rows than Init() accepts and carried
+              // no SparseRow children fell straight through to the row-start
+              // fill below and wrote through the NULL pointer. Representable
+              // but out-of-domain dimensions are refused here instead.
+              if (!mtx.Init(nRows, nCols, true)) {
+                parseStr += "Invalid SparseMatrix dimensions\n";
+                return false;
+              }
 
               icUInt16Number *rowstart = mtx.GetRowStart();
               icUInt32Number nMaxEntries = mtx.GetMaxEntries();
@@ -1527,12 +1597,26 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
             xmlAttr *cols = icXmlFindAttr(pChild, "cols");
 
             if (rows && cols) {
-              icUInt16Number nRows, nCols;
+              icUInt16Number nRows = 0, nCols = 0;
 
-              nRows = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(rows));
-              nCols = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(cols));
+              // Same narrowing as the SparseMatrix branch above. Here the
+              // laundered value also has to agree with the element count for
+              // the data to be accepted, so it is the wrapped dimensions that
+              // survive: rows="65567" with 31x41 values loaded as 31 rows.
+              if (!icXmlParseU16(icXmlAttrValue(rows), nRows) ||
+                  !icXmlParseU16(icXmlAttrValue(cols), nCols)) {
+                parseStr += "Invalid FullMatrix rows or cols\n";
+                return false;
+              }
 
-              mtx.Init(nRows, nCols, true);
+              // FillFromFullMatrix() below checks for the empty matrix a failed
+              // Init() leaves behind, so this branch does not have the NULL
+              // write the SparseMatrix branch did -- but it silently produced a
+              // profile with an unpopulated matrix. Refuse the dimensions.
+              if (!mtx.Init(nRows, nCols, true)) {
+                parseStr += "Invalid FullMatrix dimensions\n";
+                return false;
+              }
 
               CIccFloatArray data;
               data.ParseTextArray(pChild);
@@ -3964,12 +4048,22 @@ CIccCLUT *icCLutFromXml(xmlNode *pNode, int nIn, int nOut, icConvertType nType, 
     }
   }
   else {
-    icUInt8Number nGridGranularity;
+    icUInt8Number nGridGranularity = 0;
 
     xmlAttr *gridGranularity = icXmlFindAttr(pNode, "GridGranularity");
 
     if (gridGranularity) {
-      nGridGranularity = (icUInt8Number)icXmlAttrToUInt(icXmlAttrValue(gridGranularity));
+      // A CLUT stores one grid point count per input channel in an
+      // icUInt8Number, so 255 is what the field can hold and the cast that
+      // stood here silently reduced anything larger modulo 256 --
+      // GridGranularity="258" became 2, an ordinary grid that pCLUT->Init()
+      // accepted, producing a profile byte-identical to the one "2" gives
+      // (#1909). Refuse the count rather than substitute one.
+      if (!icXmlParseU8(icXmlAttrValue(gridGranularity), nGridGranularity)) {
+        parseStr += "Invalid GridGranularity value.\n";
+        delete pCLUT;
+        return NULL;
+      }
     }
     else {
       delete pCLUT;
@@ -5726,9 +5820,14 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
   subNode = icXmlFindNode(childNode->children, "PCSValues");
 
   if (subNode) {
-    m_nPCSChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(subNode, "channels", "0"));
-
-    if (!m_nPCSChannels) {
+    // The count divides the parsed value list into vertices below, so wrapping
+    // it produces a different vertex geometry rather than an error:
+    // channels="65539" was stored -- and written back out on save -- as 3, and
+    // the value list was then read as three-channel vertices (#1909). The zero
+    // check that follows already rejected the exact multiples of 65536; every
+    // other out-of-range count reached it as a plausible small number.
+    if (!icXmlParseU16(icXmlAttrValue(subNode, "channels", "0"), m_nPCSChannels) ||
+        !m_nPCSChannels) {
       parseStr += "Bad PCSValues channels\n";
       return false;
     }
@@ -5762,9 +5861,9 @@ bool CIccTagXmlGamutBoundaryDesc::ParseXml(xmlNode *pNode, std::string &parseStr
   subNode = icXmlFindNode(childNode->children, "DeviceValues");
 
   if (subNode) {
-    m_nDeviceChannels = (icUInt16Number)icXmlAttrToUInt(icXmlAttrValue(subNode, "channels", "0"));
-
-    if (!m_nDeviceChannels) {
+    // Same narrowing as PCSValues above, on the device side of the same tag.
+    if (!icXmlParseU16(icXmlAttrValue(subNode, "channels", "0"), m_nDeviceChannels) ||
+        !m_nDeviceChannels) {
       parseStr += "Bad DeviceValues channels\n";
       return false;
     }
