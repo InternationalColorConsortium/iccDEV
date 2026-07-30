@@ -1,0 +1,80 @@
+---
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: ci-afl-issue-1677-repro
+#
+# The workflow is for Maintainer CI, Testing & PR Checks
+#
+###############################################################
+
+name: "ci-afl-issue-1677-repro"
+
+permissions:
+  contents: read
+
+'on':
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: 'Reference branch/ref/SHA for the commented example'
+        required: false
+        default: master
+        type: string
+
+
+concurrency:
+  group: >-
+    ci-afl-issue-1677-repro-${{ github.workflow }}-${{
+    inputs.target_ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  maintainer-reference:
+    name: "ci-afl-issue-1677-repro"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      TARGET_REF_INPUT: ${{ inputs.target_ref || github.ref }}
+
+    steps:
+      - name: Keep workflow registered
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          # Maintainer example only. The issue #1677 reproduction is now fixed.
+          # To manually rebuild and replay on a local checkout, adapt:
+          #
+          #   git fetch origin "${TARGET_REF_INPUT}"
+          #   git checkout FETCH_HEAD
+          #   cmake -S Build/Cmake -B build-issue-1677 \
+          #     -DCMAKE_BUILD_TYPE=Debug \
+          #     -DCMAKE_C_COMPILER=clang \
+          #     -DCMAKE_CXX_COMPILER=clang++ \
+          #     -DCMAKE_C_FLAGS="-fsanitize=address,undefined,integer -g3 -O0" \
+          #     -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,integer -g3 -O0" \
+          #     -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+          #     -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+          #     -DENABLE_TOOLS=ON \
+          #     -DENABLE_WXWIDGETS=OFF
+          #   cmake --build build-issue-1677 \
+          #     --target iccPcsBiReflIlluminantRangeTest \
+          #     --parallel "$(nproc)"
+          #   ctest --test-dir build-issue-1677 \
+          #     --output-on-failure \
+          #     -R '^iccdev\.pcs-birefl-illuminant-range$'
+          #
+          # The CTest is labeled issue-1677 for suite-level selection:
+          #   ctest --test-dir build-issue-1677 -L issue-1677 --output-on-failure
+          printf 'ci-afl-issue-1677-repro.\n'
