@@ -3830,8 +3830,7 @@ iccdev_add_script_test(
 # JSON serializer guards but the XML serializer did not -- PreferredCMMType
 # (cmmId), ProfileDeviceClass (deviceClass) and ProfileCreator (creator).
 # Zeroes those three fields in a real profile and fails if any is corrupted to
-# 0x4E554C4C ("NULL") on an iccToXml -> iccFromXml round-trip.  Companion to the
-# static CodeQL query signature-serialized-without-zero-guard.ql.  Plain
+# 0x4E554C4C ("NULL") on an iccToXml -> iccFromXml round-trip. Plain
 # functional test -- skips cleanly if the tools/fixture are absent.
 iccdev_add_script_test(
   iccdev.issue-1361-header-sig-roundtrip-regression

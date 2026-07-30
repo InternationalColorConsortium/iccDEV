@@ -9,9 +9,8 @@
 # reparses it to 0x4E554C4C, so a zero signature did not round-trip. The same
 # unguarded pattern existed for the other header signature fields that the JSON
 # serializer already guards -- PreferredCMMType (cmmId), ProfileDeviceClass
-# (deviceClass) and ProfileCreator (creator). The companion CodeQL query
-# .github/codeql-queries/signature-serialized-without-zero-guard.ql detects the
-# pattern statically; this test exercises it dynamically.
+# (deviceClass) and ProfileCreator (creator). This test keeps the historical
+# zero-signature round-trip coverage as a plain functional regression.
 #
 # It zeroes those three header fields in a real profile, serialises it to XML
 # and parses it back, and FAILS if any field is corrupted to 0x4E554C4C
