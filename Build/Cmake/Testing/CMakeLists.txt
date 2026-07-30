@@ -987,6 +987,51 @@ function(iccdev_add_rangemap_uninitialized_test)
   endif()
 endfunction()
 
+# #1677: the bi-spectral PCS connection steps treated CIccPcsXform::rangeMap()'s NULL as
+# "the ranges are identical" when it also means "a conversion was needed but SetRange()
+# refused it". pushBiRef2Rad() then copied illuminantRange.steps floats into a buffer sized
+# to biSpectralRange.steps -- a 324-byte write into a 1-byte region for the reported
+# reproducer (CWE-787), reached from CIccCmm::Begin() before any pixel is applied.
+# pushBiRef2Ref() has the mirror fault and overruns the illuminant on read instead.
+#
+# Also pins the controls: only one bi-spectral profile exists in Testing/ and it is not
+# usable as a colour xform, so nothing else in the suite would notice a guard here that
+# rejected conformant spectral profiles. Header + IccProfLib only, no fixture.
+function(iccdev_add_pcs_birefl_illuminant_range_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsBiReflIlluminantRangeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-birefl-illuminant-range.cpp"
+  )
+  target_link_libraries(iccPcsBiReflIlluminantRangeTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPcsBiReflIlluminantRangeTest)
+
+  add_test(
+    NAME iccdev.pcs-birefl-illuminant-range
+    COMMAND "$<TARGET_FILE:iccPcsBiReflIlluminantRangeTest>"
+  )
+  set_tests_properties(iccdev.pcs-birefl-illuminant-range PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;spectral;issue-1677;regression"
+  )
+  if(WIN32)
+    set(_pcs_birefl_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsBiReflIlluminantRangeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcs_birefl_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-birefl-illuminant-range PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcs_birefl_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1853: CIccProfile::calcMediaWhiteXYZ() read the spectral white point tag with
 # GetValues()'s default nVectorSize of 1, so all but the first sample of the white vector
 # were uninitialized heap by the time they reached the returned XYZ. Builds its profiles
@@ -2794,6 +2839,7 @@ if(WIN32)
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_rangemap_uninitialized_test()
+  iccdev_add_pcs_birefl_illuminant_range_test()
   iccdev_add_spectral_media_white_test()
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_mpe_empty_identity_test()
@@ -3021,6 +3067,7 @@ iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_rangemap_uninitialized_test()
+iccdev_add_pcs_birefl_illuminant_range_test()
 iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()

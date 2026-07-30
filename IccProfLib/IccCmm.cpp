@@ -2466,7 +2466,13 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
       case icSigSparseMatrixSpectralPcsData:
         switch (m_dstSpace) {
           case icSigLabPcsData:
-            pushBiRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions);
+            // This was the one call among the nine status-returning push* helpers whose
+            // result was discarded; the bi-spectral cases below it, and pushXYZConvert()
+            // on the next line, all propagate. Swallowing it let a refused illuminant
+            // step leave the chain a step short and Begin() still report success.
+            if ((stat=pushBiRef2Xyz(pFromXform->m_pProfile, pFromXform->m_pConnectionConditions))!=icCmmStatOk) {
+              return stat;
+            }
             if ((stat=pushXYZConvert(pFromXform, pToXform))!=icCmmStatOk) {
               return stat;
             }
@@ -3668,12 +3674,26 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
       if (!pMtx)
         return icCmmStatAllocErr;
 
-      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange);
-      if (illumMtx) {
+      // rangeMap() folds two different answers into NULL: "no conversion is needed
+      // because the ranges are identical", and "a conversion is needed but cannot be
+      // built". SetRange() refuses any pair carrying <= 1 step, a non-finite endpoint or
+      // a zero-width span, all of which a malformed header can ask for. Only the first
+      // answer makes the wholesale copy below correct -- it writes illuminantRange.steps
+      // floats into m_vals, which the constructor sized to biSpectralRange.steps. Testing
+      // the identical case up front, the way pushSpecToRange() already does, leaves a
+      // failed map as an unambiguous reject rather than a copy past the end of m_vals.
+      if (!icSameSpectralRange(illuminantRange, pProfile->m_Header.biSpectralRange)) {
+        CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange);
+        if (!illumMtx) {
+          delete pMtx;
+          return icCmmStatInvalidProfile;
+        }
         illumMtx->Apply(NULL, pMtx->data(), illuminant);
-        delete illumMtx; 
+        delete illumMtx;
       }
       else {
+        // The ranges match, so illuminantRange.steps == biSpectralRange.steps and the
+        // copy is an exact fit for the buffer.
         memcpy(pMtx->data(), illuminant, illuminantRange.steps*sizeof(icFloatNumber));
       }
 
@@ -3687,10 +3707,18 @@ icStatusCMM CIccPcsXform::pushBiRef2Rad(CIccProfile *pProfile, IIccProfileConnec
       if (!pMtx)
         return icCmmStatAllocErr;
 
-      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange);
-      if (illumMtx) {
+      // Same NULL ambiguity as the sparse branch above, and the same buffer contract:
+      // m_vals holds biSpectralRange.steps floats. This is the site reached by the #1677
+      // reproducer, where a header declaring biSpectralRange.steps == 0 made SetRange()
+      // refuse the pair, so the copy pushed a whole illuminant into a zero-length array.
+      if (!icSameSpectralRange(illuminantRange, pProfile->m_Header.biSpectralRange)) {
+        CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.biSpectralRange);
+        if (!illumMtx) {
+          delete pMtx;
+          return icCmmStatInvalidProfile;
+        }
         illumMtx->Apply(NULL, pMtx->data(), illuminant);
-        delete illumMtx; 
+        delete illumMtx;
       }
       else {
         memcpy(pMtx->data(), illuminant, illuminantRange.steps*sizeof(icFloatNumber));
@@ -3777,18 +3805,26 @@ icStatusCMM CIccPcsXform::pushBiRef2Ref(CIccProfile *pProfile, IIccProfileConnec
 
     if (pScale) {
       icFloatNumber *pData = pScale->data();
-      CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.spectralRange);
       int i;
 
-      if (illumMtx) {
+      // Third instance of the NULL ambiguity described in pushBiRef2Rad(). Here the
+      // fallback walks illuminant[] to spectralRange.steps, but that array only holds
+      // illuminantRange.steps entries, so a refused map reads past its end rather than
+      // writing past one. pData is sized spectralRange.steps either way.
+      if (!icSameSpectralRange(illuminantRange, pProfile->m_Header.spectralRange)) {
+        CIccPcsStepMatrix *illumMtx = rangeMap(illuminantRange, pProfile->m_Header.spectralRange);
+        if (!illumMtx) {
+          delete pScale;
+          return icCmmStatInvalidProfile;
+        }
         illumMtx->Apply(NULL, pData, illuminant);
         for (i=0; i<pProfile->m_Header.spectralRange.steps; i++)
           pData[i] = 1.0f / pData[i];
 
         delete illumMtx;
-
       }
       else {
+        // Ranges match, so this reads exactly illuminantRange.steps entries.
         for (i=0; i<pProfile->m_Header.spectralRange.steps; i++) {
           pData[i] = 1.0f / illuminant[i];
         }
