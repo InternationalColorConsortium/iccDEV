@@ -1263,6 +1263,20 @@ const char* CIccTagJsonFixedNum<T, Tsig>::GetClassName() const
 template <class T, icTagTypeSignature Tsig>
 bool CIccTagJsonFixedNum<T, Tsig>::ToJson(IccJson &j)
 {
+  // CWE-400/CWE-834: m_nSize is derived from the tag byte size in
+  // CIccTagFixedNum::Read() and m_Num is allocated to match; assert the same explicit
+  // upper limit the CIccTagJsonNum and CIccTagJsonFloatNum siblings below already use,
+  // and that the XML mirror CIccTagXmlFixedNum::ToXml applies, so a corrupted count
+  // can't drive an unbounded serialization walk. This was the only m_nSize-driven walk
+  // in the JSON writer left without a cap. Assert it before the reserve() as well as
+  // the loop: reserve() commits m_nSize json nodes in one allocation, and each node is
+  // wider than the 4-byte fixed-point value it carries, so that is the larger cost.
+  // Returning false skips just this tag -- CIccProfileJson::ToJson continues past a
+  // failed tag rather than discarding the document.
+  const icUInt32Number nMaxNumValues = 0xffffff;
+  if (this->m_nSize > nMaxNumValues)
+    return false;
+
   IccJson arr = IccJson::array();
   arr.get_ref<IccJson::array_t &>().reserve(this->m_nSize);
   for (icUInt32Number i = 0; i < this->m_nSize; i++)
