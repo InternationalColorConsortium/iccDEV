@@ -72,6 +72,10 @@ Choose the smallest gate that proves the behavior:
   log excerpts by default; rerun with `registry_qa_log_tail_lines=0` only when
   complete raw per-tool logs are required. Preserve downloaded registry profile
   payloads in developer reports so failing inputs remain available for review.
+- On `ci-qa-pr-docker-testing`, Docker PR verification is advisory. If it fails,
+  keep the orchestrator result successful when required non-Docker gates pass,
+  add `bump-sha-pins`, update pinned action or container SHAs, and rerun Docker
+  before claiming the container lane is verified.
 - When adding cases inside an existing script-backed suite, document that the
   CTest suite count is unchanged and validate both direct script execution and
   the CTest wrapper.

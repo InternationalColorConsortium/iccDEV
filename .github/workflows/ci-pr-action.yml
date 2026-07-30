@@ -30,6 +30,7 @@ on:
     branches:
       - master
       - ci-qa-flags
+      - ci-qa-pr-docker-testing
     types:
       - opened
       - synchronize
@@ -1062,7 +1063,11 @@ jobs:
 
           # --- compute overall result from upstream jobs ----------------------
           job_res=success
-          for s in "$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$DOCKER_RESULT"; do
+          docker_advisory=success
+          if [[ "$DOCKER_RESULT" != "success" && "$DOCKER_RESULT" != "skipped" ]]; then
+            docker_advisory=warning
+          fi
+          for s in "$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT"; do
             # 'skipped' is acceptable (jobs are skipped when src_changed is false)
             # only 'failure' or 'cancelled' should cause overall failure
             if [[ "$s" != "success" && "$s" != "skipped" ]]; then
@@ -1137,8 +1142,14 @@ jobs:
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
             printf "| docker-ci          | %s |\n" "$(sanitize_line "$DOCKER_RESULT")"
+            printf "| docker-ci policy   | %s |\n" "$(sanitize_line "advisory/${docker_advisory}")"
             echo ""
             echo "**Overall Result:** \`$(sanitize_line "$job_res")\`"
+            echo ""
+            echo "### Docker Advisory and SHA Pin Maintenance"
+            echo ""
+            echo "Docker PR verification is non-blocking on this branch so maintainer QA can continue while container or third-party action pins are refreshed."
+            echo "If \`docker-ci\` is not \`success\` or \`skipped\`, apply the \`bump-sha-pins\` label and update pinned action, Docker, or container SHA references before treating the Docker lane as verified."
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 

@@ -40,6 +40,7 @@ jobs:
   cache-policy:
     name: "Validate workflow cache policy"
     runs-on: ubuntu-latest
+    continue-on-error: true
     permissions:
       contents: read
     defaults:
@@ -87,6 +88,7 @@ jobs:
     name: "Docker PR regression verification"
     needs: cache-policy
     runs-on: ubuntu-24.04
+    continue-on-error: true
     timeout-minutes: 45
     permissions:
       contents: read

@@ -26,6 +26,7 @@ readiness.
 | Issue kind | `bug`, `feature`, `question`, `security` | Maintainers |
 | PR status | `passed`, `failed`, `pending`, `Merge Ready`, `codeql-ready` | CI and maintainers |
 | PR CI controls | `ci:skip`, `ci:full`, `ci:fast-lane`, `ci:ctest-last-N`, `ci:docker`, `ci:no-windows`, `ci:warnings-fail` | Maintainers |
+| Dependency maintenance | `bump-sha-pins` | Maintainers |
 | Scope | `Source`, `Documentation`, `Configuration`, `CI`, `Build`, `Testing`, `Tools`, `JSON`, `WASM`, `vcpkg`, and related area labels | Path labeler and maintainers |
 | Governance | `Governance`, `Labels`, `security`, `SAST`, `CodeQL`, `Sanitizers`, `Release` | Maintainers |
 
@@ -135,6 +136,12 @@ an open `pr_number`, choose `ci_scope=fast-lane`, and adjust
 only for the run being started. Fast lane defaults to the latest registered
 CTest, strict warning failure, and no Windows or Docker jobs.
 
+On `ci-qa-pr-docker-testing`, Docker PR verification is advisory so branch QA
+can continue while container and third-party action pins are refreshed. If the
+summary reports a non-success `docker-ci` result, add `bump-sha-pins`, update
+the pinned GitHub Action, Docker, or container SHA references, and rerun the
+Docker lane before treating the container check as verified.
+
 ### Required Check Policy
 
 Branch rules require stable aggregate contexts rather than mode-specific build
@@ -163,6 +170,9 @@ The `ci-qa-pr-docker-testing` integrity ruleset does not require hosted status
 contexts before a direct maintainer push. It requires signed commits, linear
 fast-forward history, and deletion protection; maintainers dispatch
 `ci-pr-action` and `ci-docker` immediately after pushing the testing branch.
+Pull requests targeting `ci-qa-pr-docker-testing` also run `ci-pr-action`; its
+Docker PR lane is non-blocking but records SHA-pin maintenance guidance in the
+workflow summary.
 
 ### CodeQL Ready
 

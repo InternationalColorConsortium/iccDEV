@@ -70,6 +70,8 @@ For workflow governance changes, also run:
 - Status labels remain machine-managed and mutually exclusive.
 - PR CI control labels are documented, canonical in `.github/labels.yml`, and
   unavailable to fork PR fast lanes.
+- `bump-sha-pins` is documented as a maintainer follow-up label for pinned
+  GitHub Action, Docker, or container SHA refreshes.
 - `codeql-ready` still routes to the full CodeQL workflow.
 - Documentation, skills, and prompts point to the same canonical files.
 

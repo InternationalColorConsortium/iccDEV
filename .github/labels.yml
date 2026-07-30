@@ -92,6 +92,9 @@
 - name: ci:warnings-fail
   color: d93f0b
   description: Treat compiler warnings as fast-lane failures
+- name: bump-sha-pins
+  color: fbca04
+  description: Update pinned GitHub Action, Docker, or container SHA references
 - name: Source
   color: c2e0c6
   description: C or C++ source code changes
