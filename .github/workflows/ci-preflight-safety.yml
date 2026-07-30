@@ -382,7 +382,11 @@ jobs:
             local label="$1"
             local value="unavailable"
             if [[ -n "$output_file" && -f "$output_file" ]]; then
-              value="$(awk -v prefix="${label}: " 'index($0, prefix) == 1 { value = substr($0, length(prefix) + 1) } END { print value }' "$output_file")"
+              value="$(
+                awk -v prefix="${label}: " \
+                  'index($0, prefix) == 1 { value = substr($0, length(prefix) + 1) } END { print value }' \
+                  "$output_file"
+              )"
               if [[ -z "$value" ]]; then
                 value="unavailable"
               fi
