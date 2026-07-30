@@ -32,10 +32,11 @@ TOOLS_DIR="${ICCDEV_TOOLS_DIR:-build/Tools}"
 BUILD_ROOT="$(cd "$TOOLS_DIR/.." 2>/dev/null && pwd -P)"
 export LD_LIBRARY_PATH="$BUILD_ROOT/IccProfLib:$BUILD_ROOT/IccXML:$BUILD_ROOT/IccJSON:$BUILD_ROOT/IccConnect${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export ASAN_OPTIONS=halt_on_error=0,detect_leaks=0
-export UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1
+export UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1,silence_unsigned_overflow=1
 
 TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
 FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
+TESTING_DIR="${ICCDEV_TESTING_DIR:-Testing}"
 
 PASS=0
 FAIL=0
@@ -64,9 +65,9 @@ fi
 # Entries are <profile>|<comma separated indents>; commas rather than spaces so
 # that each entry survives word splitting as a single token.
 PROFILE_MATRIX="
-Testing/SpecRef/srgbRef.icc|0,2,4
-Testing/CMYK-3DLUTs/CMYK-3DLUTs.icc|2
-Testing/Display/LaserProjector.icc|2
+SpecRef/srgbRef.icc|0,2,4
+CMYK-3DLUTs/CMYK-3DLUTs.icc|2
+Display/LaserProjector.icc|2
 "
 
 # Recursively assert ascending key order, and compare sorted against unsorted
@@ -121,7 +122,8 @@ echo " iccToJson -sort regression (issue #1920)"
 echo "=================================================================="
 
 for entry in $PROFILE_MATRIX; do
-  icc="${entry%%|*}"
+  profile="${entry%%|*}"
+  icc="$TESTING_DIR/$profile"
   indents="$(echo "${entry#*|}" | tr ',' ' ')"
   if [ ! -f "$icc" ]; then
     echo "[SKIP] $icc not present"

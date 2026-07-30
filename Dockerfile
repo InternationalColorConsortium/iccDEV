@@ -88,9 +88,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng16-16t64=1.6.57-1 \
     libasan8=16-20260322-1ubuntu1 \
     libubsan1=16-20260322-1ubuntu1 \
-    libssl3t64=3.5.5-1ubuntu3.2 \
+    libssl3t64=3.5.5-1ubuntu3.3 \
     llvm-21=1:21.1.8-6ubuntu1 \
-    openssl-provider-legacy=3.5.5-1ubuntu3.2 \
+    openssl-provider-legacy=3.5.5-1ubuntu3.3 \
     zlib1g=1:1.3.dfsg+really1.3.1-1ubuntu3 \
     python3=3.14.3-0ubuntu2 \
  && rm -rf /var/lib/apt/lists/*

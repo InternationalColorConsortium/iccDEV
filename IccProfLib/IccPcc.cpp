@@ -492,7 +492,8 @@ CIccCombinedConnectionConditions::~CIccCombinedConnectionConditions()
 
 const CIccTagSpectralViewingConditions *CIccCombinedConnectionConditions::getPccViewingConditions()
 {
-  return m_pViewingConditions;
+  if (m_pViewingConditions)
+    return m_pViewingConditions;
   if (m_pPCC)
     return m_pPCC->getPccViewingConditions();
   return NULL;

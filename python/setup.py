@@ -372,7 +372,8 @@ if sys.platform == "win32":
     define_macros = [("WIN32", "1")]
 elif sys.platform == "darwin":
     extra_compile_args = ["-std=c++17", "-stdlib=libc++",
-                          "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2"]
+                          "-fstack-protector-strong", "-D_FORTIFY_SOURCE=2",
+                          "-Wno-unreachable-code-fallthrough"]
     extra_link_args = ["-stdlib=libc++"]
 else:
     extra_compile_args = ["-std=c++17",
