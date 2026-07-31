@@ -1,0 +1,184 @@
+---
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Maintainer Windows ASAN CTest before/after repro.
+#
+###############################################################
+
+name: "Maintainer Windows ASAN CTest Repro"
+
+permissions:
+  contents: read
+
+'on':
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: 'iccDEV ref to test'
+        required: true
+        default: ci-qa-maintainer-repro-1
+        type: string
+
+concurrency:
+  group: >-
+    windows-asan-ctest-repro-${{ github.workflow }}-${{
+    inputs.target_ref || 'ci-qa-maintainer-repro-1' }}
+  cancel-in-progress: false
+
+jobs:
+  windows-asan-before-after:
+    name: "Windows ASAN CTest before and after"
+    runs-on: windows-2022
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: 1
+      POWERSHELL_UPDATECHECK: Off
+      TARGET_REF_INPUT: ${{ inputs.target_ref || 'ci-qa-maintainer-repro-1' }}
+
+    steps:
+      - name: Checkout trusted scripts
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout target ref
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.target_ref || 'ci-qa-maintainer-repro-1' }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure Windows ASAN tree
+        working-directory: target
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+
+          git config --global --add safe.directory $PWD.Path
+          if (-not (Test-Path env:VCPKG_ROOT) -and (Test-Path 'C:\vcpkg\vcpkg.exe')) {
+            $env:VCPKG_ROOT = 'C:\vcpkg'
+          }
+
+          .\.github\ci\build\windows-asan.ps1 `
+            -UseCurrentCheckout `
+            -WorkRoot $PWD.Path `
+            -BuildDir 'out\windows-asan-repro' `
+            -Configuration Debug `
+            -ConfigureOnly
+
+          "Configured target ref: $(Sanitize-Line (git rev-parse HEAD))"
+
+      - name: Build Windows ASAN tools
+        working-directory: target
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+
+          cmake --build out\windows-asan-repro --config Debug --parallel
+          if ($LASTEXITCODE -ne 0) {
+            throw "cmake build failed with exit code $LASTEXITCODE"
+          }
+
+          "Built target ref: $(Sanitize-Line (git rev-parse HEAD))"
+
+      - name: Before fix - colon separated ASAN_OPTIONS fails on MSVC
+        working-directory: target
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+
+          $env:ASAN_OPTIONS = 'detect_leaks=0:halt_on_error=1:abort_on_error=1'
+          $tool = Join-Path $PWD.Path 'out\windows-asan-repro\bin\Debug\iccDumpProfile.exe'
+          $profile = Join-Path $PWD.Path 'Testing\CalcTest\calcUnderStack_add.icc'
+          $log = Join-Path $env:RUNNER_TEMP 'before-colon-asan-options.log'
+          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+
+          & $tool $profile ALL *> $log
+          $exitCode = $LASTEXITCODE
+          $content = Get-Content -LiteralPath $log -Raw
+          if ($exitCode -eq 0 -or $content -notmatch 'AddressSanitizer: ERROR: expected ''.*'' in ASAN_OPTIONS') {
+            Get-Content -LiteralPath $log
+            throw "legacy colon-separated ASAN_OPTIONS did not reproduce; exit=$exitCode"
+          }
+
+          '[BEFORE] colon-separated ASAN_OPTIONS failed as expected'
+          Get-Content -LiteralPath $log
+
+      - name: Before fix - MSVC LeakSanitizer test mode is unsupported
+        working-directory: target
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+
+          $env:ASAN_OPTIONS = 'detect_leaks=1'
+          $tool = Join-Path $PWD.Path 'out\windows-asan-repro\bin\Debug\iccProfileVisualizePlot.exe'
+          $profile = Join-Path $PWD.Path 'Testing\sRGB_v4_ICC_preference.icc'
+          $log = Join-Path $env:RUNNER_TEMP 'before-msvc-lsan.log'
+          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+
+          & $tool $profile *> $log
+          $exitCode = $LASTEXITCODE
+          $content = Get-Content -LiteralPath $log -Raw
+          if ($exitCode -eq 0 -or $content -notmatch 'detect_leaks is not supported on this platform') {
+            Get-Content -LiteralPath $log
+            throw "MSVC LeakSanitizer unsupported-mode repro did not trigger; exit=$exitCode"
+          }
+
+          '[BEFORE] MSVC detect_leaks=1 failed as expected'
+          Get-Content -LiteralPath $log
+
+      - name: After fix - full Windows ASAN CTest script passes
+        working-directory: target
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+
+          if (-not (Test-Path env:VCPKG_ROOT) -and (Test-Path 'C:\vcpkg\vcpkg.exe')) {
+            $env:VCPKG_ROOT = 'C:\vcpkg'
+          }
+
+          .\.github\ci\build\windows-asan.ps1 `
+            -UseCurrentCheckout `
+            -WorkRoot $PWD.Path `
+            -BuildDir 'out\windows-asan-repro' `
+            -Configuration Debug `
+            -SkipVcpkgInstall `
+            -CTestRegex '.'
+
+          '[AFTER] fixed Windows ASAN CTest script completed'

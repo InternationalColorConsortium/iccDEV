@@ -95,7 +95,7 @@ Write-Host "Branch: $Branch"
 Write-Host "Preset: $Preset"
 Write-Host "Configuration: $Configuration"
 
-$env:ASAN_OPTIONS = "detect_leaks=0:halt_on_error=1:abort_on_error=1"
+$env:ASAN_OPTIONS = "detect_leaks=0,halt_on_error=1,abort_on_error=1"
 
 Initialize-VcpkgRoot
 $repoRoot = Get-RepositoryRoot
@@ -148,6 +148,14 @@ foreach ($artifact in $artifacts) {
 }
 
 if (-not $SkipTests) {
+    Write-Section "Build CTest dependencies"
+    Invoke-Checked "cmake" @(
+        "--build", $buildPath,
+        "--config", $Configuration,
+        "--target", "build-test-binaries",
+        "--parallel"
+    ) $repoRoot
+
     Write-Section "CTest smoke"
     Invoke-Checked "ctest" @(
         "--test-dir", $buildPath,

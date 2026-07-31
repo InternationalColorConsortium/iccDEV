@@ -726,6 +726,12 @@ function(iccdev_add_cmmsearch_namedcolor_ownership_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
   endif()
+  if(MSVC)
+    message(STATUS
+      "Skipping iccdev.cmmsearch-namedcolor-ownership: MSVC AddressSanitizer "
+      "does not support LeakSanitizer detect_leaks=1")
+    return()
+  endif()
 
   iccdev_add_regression_executable(iccCmmSearchNamedColorOwnershipTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/cmmsearch-namedcolor-ownership.cpp"
@@ -775,6 +781,12 @@ endfunction()
 # unreachable and reported by the ASan/LSan CI job.
 function(iccdev_add_xform_create_tag_ownership_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+  if(MSVC)
+    message(STATUS
+      "Skipping iccdev.xform-create-tag-ownership: MSVC AddressSanitizer "
+      "does not support LeakSanitizer detect_leaks=1")
     return()
   endif()
 
@@ -1714,6 +1726,12 @@ endfunction()
 # whereas the pre-fix writer leaks (non-zero exit).
 function(iccdev_add_iccprofileplot_pdf_leak_test)
   if(NOT TARGET iccProfileVisualizePlot)
+    return()
+  endif()
+  if(MSVC)
+    message(STATUS
+      "Skipping iccdev.iccprofileplot-pdf-leak: MSVC AddressSanitizer "
+      "does not support LeakSanitizer detect_leaks=1")
     return()
   endif()
   add_dependencies(check iccProfileVisualizePlot)
@@ -3059,7 +3077,12 @@ endfunction()
 
 if(WIN32)
   function(iccdev_add_windows_batch_test NAME TIMEOUT LABELS SCRIPT)
-    set(_one_value_args EXPECTED_PROFILE_PARSE_COUNT EXPECTED_OUTPUT FORBIDDEN_REGEX)
+    set(_one_value_args
+      EXPECTED_PROFILE_PARSE_COUNT
+      EXPECTED_GENERATED_PROFILE_COUNT
+      EXPECTED_OUTPUT
+      FORBIDDEN_REGEX
+    )
     cmake_parse_arguments(ICCDEV_WIN_TEST "" "${_one_value_args}" "" ${ARGN})
 
     if(NOT EXISTS "${SCRIPT}")
@@ -3081,6 +3104,11 @@ if(WIN32)
     if(DEFINED ICCDEV_WIN_TEST_EXPECTED_PROFILE_PARSE_COUNT)
       list(APPEND _test_args
         "-DICCDEV_EXPECTED_PROFILE_PARSE_COUNT=${ICCDEV_WIN_TEST_EXPECTED_PROFILE_PARSE_COUNT}")
+    endif()
+
+    if(DEFINED ICCDEV_WIN_TEST_EXPECTED_GENERATED_PROFILE_COUNT)
+      list(APPEND _test_args
+        "-DICCDEV_EXPECTED_GENERATED_PROFILE_COUNT=${ICCDEV_WIN_TEST_EXPECTED_GENERATED_PROFILE_COUNT}")
     endif()
 
     if(DEFINED ICCDEV_WIN_TEST_EXPECTED_OUTPUT)
@@ -3113,10 +3141,10 @@ if(WIN32)
       300
       "iccdev;windows;setup;profiles"
       "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
-      # 130 before #1883; the Testing/V2 section adds the three v2 fixtures.
-      # Measured against both scripts, not derived from the invocation count --
-      # CreateAllProfiles has 131 iccFromXml calls but 130 of them report a parse.
-      EXPECTED_PROFILE_PARSE_COUNT 133
+      # Validate the disposable Windows Testing tree by artifact count. The
+      # batch file echoes commands through cmd.exe, and tool stdout can be lost
+      # in that layer even when profiles are generated successfully.
+      EXPECTED_GENERATED_PROFILE_COUNT 133
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles

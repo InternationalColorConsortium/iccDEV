@@ -233,10 +233,10 @@ Windows full tool builds register these tests when all targets are available:
 The batch-backed Windows tests run through
 `Build/Cmake/Testing/RunWindowsBatchTest.cmake`. The wrapper copies `Testing/`
 into `build/Testing/ctest-output/windows-testing`, runs the batch scripts from
-that disposable directory, verifies key output, and fails if the source
-`Testing/` tree is changed. It prefers the unified `bin` runtime directory and
-falls back to the older per-tool `Tools/<Tool>/<Config>` layout for existing
-build trees.
+that disposable directory, verifies key output or generated-profile artifact
+counts, and fails if the source `Testing/` tree is changed. It prefers the
+unified `bin` runtime directory and falls back to the older per-tool
+`Tools/<Tool>/<Config>` layout for existing build trees.
 
 Windows CTest wrappers collect build-tree DLL directories plus runtime
 dependency directories from `CMakeCache.txt`, including `CMAKE_PREFIX_PATH`,
@@ -250,6 +250,20 @@ Debug CRT by building a bounded runtime `PATH` from tool, DLL, vcpkg, MSVC CRT,
 and Windows system directories.
 MinGW builds still need the UCRT64 `bin` directory on the invoking shell `PATH`
 because GCC launches runtime-dependent compiler subprocesses during the build.
+
+Windows MSVC AddressSanitizer uses comma-separated `ASAN_OPTIONS`
+(`detect_leaks=0,halt_on_error=1`) and does not support LeakSanitizer
+`detect_leaks=1`. Leak-only CTest regressions are therefore registered on
+LeakSanitizer-capable toolchains and skipped for MSVC builds.
+
+For issue #1948 `CIccIO` strict-aliasing writer divergence, use the manual
+registered `.github/workflows/ci-afl-issue-1677-repro.yml` workflow. The same
+reproduction logic is also kept in
+`.github/workflows/ci-issue-1948-segmented-curve-repro.yml` for direct
+issue-specific review. These workflows compare Linux clang Release/LTO output
+with clang `-fno-strict-aliasing` and gcc output for
+`Testing/Calc/RGBWProjector.xml`, then record Windows MSVC readback counts in
+the workflow summary for platform discussion.
 
 Feature-disabled Windows builds register the tests whose targets are available.
 For example, `mingw-core-x64` does not build XML conversion tools, so it skips

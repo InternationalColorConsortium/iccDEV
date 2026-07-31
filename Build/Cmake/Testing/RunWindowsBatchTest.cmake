@@ -194,6 +194,12 @@ if(NOT EXISTS "${ICCDEV_WINDOWS_WORK_DIR}")
   file(COPY "${_source_testing_dir}/" DESTINATION "${ICCDEV_WINDOWS_WORK_DIR}")
 endif()
 
+set(_run_batch_script "${ICCDEV_BATCH_SCRIPT}")
+set(_copied_batch_script "${ICCDEV_WINDOWS_WORK_DIR}/${_script_name}")
+if(EXISTS "${_copied_batch_script}")
+  set(_run_batch_script "${_copied_batch_script}")
+endif()
+
 execute_process(
   COMMAND
     "${CMAKE_COMMAND}" -E env
@@ -202,7 +208,7 @@ execute_process(
     "ICCDEV_TOOLS_DIR=${_tools_dir_env}"
     "ICCDEV_TESTING_DIR=${ICCDEV_WINDOWS_WORK_DIR}"
     "ICCDEV_BUILD_DIR=${ICCDEV_BUILD_DIR}"
-    cmd.exe /c call "${ICCDEV_BATCH_SCRIPT}"
+    cmd.exe /c cd /d "${ICCDEV_WINDOWS_WORK_DIR}" && call "${_run_batch_script}"
   WORKING_DIRECTORY "${ICCDEV_WINDOWS_WORK_DIR}"
   RESULT_VARIABLE _result
   OUTPUT_VARIABLE _stdout
@@ -270,6 +276,26 @@ if(DEFINED ICCDEV_EXPECTED_PROFILE_PARSE_COUNT AND NOT "${ICCDEV_EXPECTED_PROFIL
       "expected ${ICCDEV_EXPECTED_PROFILE_PARSE_COUNT}; see ${_log_file}")
   endif()
   message(STATUS "${ICCDEV_TEST_NAME} parsed ${_profile_parse_count} profiles")
+endif()
+
+if(DEFINED ICCDEV_EXPECTED_GENERATED_PROFILE_COUNT
+    AND NOT "${ICCDEV_EXPECTED_GENERATED_PROFILE_COUNT}" STREQUAL "")
+  file(GLOB_RECURSE _source_profiles
+    LIST_DIRECTORIES FALSE
+    "${_source_testing_dir}/*.icc")
+  list(LENGTH _source_profiles _source_profile_count)
+  file(GLOB_RECURSE _generated_profiles
+    LIST_DIRECTORIES FALSE
+    "${ICCDEV_WINDOWS_WORK_DIR}/*.icc")
+  list(LENGTH _generated_profiles _generated_profile_count)
+  math(EXPR _generated_profile_delta
+    "${_generated_profile_count} - ${_source_profile_count}")
+  if(NOT _generated_profile_delta EQUAL ICCDEV_EXPECTED_GENERATED_PROFILE_COUNT)
+    message(FATAL_ERROR
+      "${ICCDEV_TEST_NAME} generated ${_generated_profile_delta} profiles, "
+      "expected ${ICCDEV_EXPECTED_GENERATED_PROFILE_COUNT}; see ${_log_file}")
+  endif()
+  message(STATUS "${ICCDEV_TEST_NAME} generated ${_generated_profile_delta} profiles")
 endif()
 
 message(STATUS "${ICCDEV_TEST_NAME} completed successfully")

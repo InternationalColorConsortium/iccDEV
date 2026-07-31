@@ -1,0 +1,708 @@
+---
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Reproduce issue #1932 on the current upstream master HEAD.
+#
+###############################################################
+
+name: "ci-afl-issue-1932-repro"
+
+permissions:
+  contents: read
+  packages: read
+
+'on':
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: 'iccDEV ref to prove vulnerable; default tracks master HEAD'
+        required: true
+        default: master
+        type: string
+      regression_image_tag:
+        description: 'Trusted regression container tag'
+        required: false
+        default: master
+        type: string
+
+concurrency:
+  group: >-
+    afl-issue-1932-repro-${{ github.workflow }}-${{
+    inputs.target_ref || 'master' }}
+  cancel-in-progress: false
+
+jobs:
+  issue-1932-master-head:
+    name: "Issue #1932 CIccSparseMatrix::MultiplyVector HBO"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    container:
+      image: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:${{ inputs.regression_image_tag || 'master' }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user 0
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      TARGET_REF_INPUT: ${{ inputs.target_ref || 'master' }}
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+      WORKFLOW_FIXTURE: >-
+        ${{ github.workspace }}/workflow-assets/.github/ci/test-data/issue-1932-applyprofiles-sparsematrix-hbo.tif
+      FIXTURE_SHA256: 798428ff472d3e93040318429ac458f531b555b4367a0cd114d9b0ce6f46097f
+
+    steps:
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout workflow repro fixture
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: workflow-assets
+          sparse-checkout: .github/ci/test-data/issue-1932-applyprofiles-sparsematrix-hbo.tif
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout target iccDEV ref
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.target_ref || 'master' }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build ASAN iccApplyProfiles target
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global --add safe.directory "$PWD"
+
+          cmake -S Build/Cmake -B build-issue-1932 \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined,integer -g3 -O0" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,integer -g3 -O0" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_WXWIDGETS=OFF
+          cmake --build build-issue-1932 \
+            --target iccApplyProfiles iccFromXml \
+            --parallel "$(nproc)"
+
+          echo "Built target ref: $(sanitize_line "$(git rev-parse HEAD)")"
+
+      - name: Reproduce issue 1932 on target ref
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          REPRO_DIR: ${{ runner.temp }}/issue-1932-repro
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global --add safe.directory "$PWD"
+
+          mkdir -p "$REPRO_DIR/hybrid/ICC"
+          install -m 0644 "$WORKFLOW_FIXTURE" "$REPRO_DIR/issue-1932-applyprofiles-sparsematrix-hbo.tif"
+          actual_sha="$(sha256sum "$REPRO_DIR/issue-1932-applyprofiles-sparsematrix-hbo.tif" | awk '{print $1}')"
+          if [ "$actual_sha" != "$FIXTURE_SHA256" ]; then
+            echo "ERROR: fixture SHA-256 mismatch" >&2
+            echo "Expected: $(sanitize_line "$FIXTURE_SHA256")" >&2
+            echo "Actual: $(sanitize_line "$actual_sha")" >&2
+            exit 1
+          fi
+
+          build_dir="$PWD/build-issue-1932"
+          apply="$build_dir/Tools/IccApplyProfiles/iccApplyProfiles"
+          fromxml="$build_dir/Tools/IccFromXml/iccFromXml"
+          pcc="$REPRO_DIR/hybrid/ICC/Spec400_10_700-F11_2deg-Abs.icc"
+          output_tiff="$REPRO_DIR/issue-1932-output.tif"
+          log="$REPRO_DIR/issue-1932-applyprofiles.log"
+          report="$REPRO_DIR/issue-1932-report.md"
+
+          old_ld_library_path="${LD_LIBRARY_PATH:-}"
+          export LD_LIBRARY_PATH="$build_dir/IccProfLib:$build_dir/IccXML"
+          export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$build_dir/IccJSON:$build_dir/IccConnect:$old_ld_library_path"
+          export ASAN_OPTIONS="print_scariness=1:halt_on_error=1:abort_on_error=1:detect_leaks=0"
+          export UBSAN_OPTIONS="halt_on_error=1:abort_on_error=1:print_stacktrace=1"
+
+          "$fromxml" \
+            Testing/hybrid/Data/Spec400_10_700-F11_2deg-Abs.xml \
+            "$pcc" > "$REPRO_DIR/fromxml.log" 2>&1
+
+          cmd=(
+            "$apply"
+            "$REPRO_DIR/issue-1932-applyprofiles-sparsematrix-hbo.tif"
+            "$output_tiff"
+            1
+            1
+            0
+            1
+            1
+            -embedded
+            10003
+            -pcc
+            "$pcc"
+            Testing/sRGB_v4_ICC_preference.icc
+            1
+          )
+
+          set +e
+          timeout 60 "${cmd[@]}" > "$log" 2>&1
+          exit_code=$?
+          set -e
+
+          has_sanitizer=0
+          sanitizer_pattern='ERROR: AddressSanitizer|heap-buffer-overflow'
+          sanitizer_pattern="$sanitizer_pattern|CIccSparseMatrix::MultiplyVector"
+          sanitizer_pattern="$sanitizer_pattern|IccSparseMatrix.cpp|SCARINESS: 17"
+          if grep -qE "$sanitizer_pattern" "$log"; then
+            has_sanitizer=1
+          fi
+          printf -v command_line '%q ' "${cmd[@]}"
+
+          {
+            echo "# Issue #1932 master HEAD reproduction"
+            echo ""
+            echo "- Issue: https://github.com/InternationalColorConsortium/iccDEV/issues/1932"
+            echo "- Title: Bisect: 1f0a9dd CIccSparseMatrix::MultiplyVector() hbo-17r"
+            echo "- Attributed frame: \`CIccSparseMatrix::MultiplyVector() at IccSparseMatrix.cpp:312\`"
+            echo "- Bisect note: introduced around \`1f0a9dd\`"
+            echo "- Target ref input: \`$TARGET_REF_INPUT\`"
+            echo "- Target commit: \`$(git rev-parse HEAD)\`"
+            echo "- Fixture SHA-256: \`$FIXTURE_SHA256\`"
+            echo "- Expected ASAN heap-buffer-overflow: \`1\`"
+            echo "- Observed sanitizer: \`$has_sanitizer\`"
+            echo "- Exit code: \`$exit_code\`"
+            echo ""
+            echo "## Replay command"
+            echo ""
+            echo '```bash'
+            echo "$command_line"
+            echo '```'
+            echo ""
+            echo "## Complete replay log and stack trace"
+            echo ""
+            echo '```text'
+            cat "$log"
+            echo '```'
+          } > "$report"
+
+          echo "## Replay command"
+          printf '%s\n' "$command_line"
+          echo "## Complete replay log and stack trace"
+          cat "$log"
+
+          {
+            in_code_block=0
+            while IFS= read -r line; do
+              if [ "$line" = '```text' ] || [ "$line" = '```bash' ] || [ "$line" = '```' ]; then
+                printf '%s\n' "$line"
+                if [ "$in_code_block" -eq 0 ]; then
+                  in_code_block=1
+                else
+                  in_code_block=0
+                fi
+              elif [ "$in_code_block" -eq 1 ]; then
+                printf '%s\n' "$(sanitize_code_line "$line")"
+              else
+                printf '%s\n' "$(sanitize_line "$line")"
+              fi
+            done < "$report"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          if [ "$has_sanitizer" -ne 1 ]; then
+            echo "[FAIL] issue #1932 did not reproduce on target ref" >&2
+            cat "$log" >&2
+            exit 1
+          fi
+
+          echo "[PASS] issue #1932 reproduces on target ref $(sanitize_line "$(git rev-parse HEAD)")"
+
+  issue-1932-macos-asan:
+    name: "Issue #1932 macOS ASAN repro"
+    runs-on: macos-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      TARGET_REF_INPUT: ${{ inputs.target_ref || 'master' }}
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+      WORKFLOW_FIXTURE: >-
+        ${{ github.workspace }}/workflow-assets/.github/ci/test-data/issue-1932-applyprofiles-sparsematrix-hbo.tif
+      FIXTURE_SHA256: 798428ff472d3e93040318429ac458f531b555b4367a0cd114d9b0ce6f46097f
+
+    steps:
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout workflow repro fixture
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: workflow-assets
+          sparse-checkout: .github/ci/test-data/issue-1932-applyprofiles-sparsematrix-hbo.tif
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout target iccDEV ref
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.target_ref || 'master' }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install macOS ASAN dependencies
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+
+          brew install nlohmann-json
+
+      - name: Build macOS ASAN iccApplyProfiles target
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global --add safe.directory "$PWD"
+
+          cmake -S Build/Cmake -B build-issue-1932-macos-asan \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_CXX_COMPILER=clang++ \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined,integer -g3 -O0" \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined,integer -g3 -O0" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined,integer" \
+            -DENABLE_TOOLS=ON \
+            -DENABLE_WXWIDGETS=OFF
+          cmake --build build-issue-1932-macos-asan \
+            --target iccApplyProfiles iccFromXml \
+            --parallel "$(sysctl -n hw.logicalcpu)"
+
+          echo "Built macOS target ref: $(sanitize_line "$(git rev-parse HEAD)")"
+
+      - name: Reproduce issue 1932 on macOS ASAN
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+          REPRO_DIR: ${{ runner.temp }}/issue-1932-macos-repro
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global --add safe.directory "$PWD"
+
+          mkdir -p "$REPRO_DIR/hybrid/ICC"
+          install -m 0644 "$WORKFLOW_FIXTURE" "$REPRO_DIR/issue-1932-applyprofiles-sparsematrix-hbo.tif"
+          actual_sha="$(shasum -a 256 "$REPRO_DIR/issue-1932-applyprofiles-sparsematrix-hbo.tif" | awk '{print $1}')"
+          if [ "$actual_sha" != "$FIXTURE_SHA256" ]; then
+            echo "ERROR: fixture SHA-256 mismatch" >&2
+            echo "Expected: $(sanitize_line "$FIXTURE_SHA256")" >&2
+            echo "Actual: $(sanitize_line "$actual_sha")" >&2
+            exit 1
+          fi
+
+          build_dir="$PWD/build-issue-1932-macos-asan"
+          apply="$build_dir/Tools/IccApplyProfiles/iccApplyProfiles"
+          fromxml="$build_dir/Tools/IccFromXml/iccFromXml"
+          pcc="$REPRO_DIR/hybrid/ICC/Spec400_10_700-F11_2deg-Abs.icc"
+          output_tiff="$REPRO_DIR/issue-1932-output.tif"
+          log="$REPRO_DIR/issue-1932-applyprofiles-macos.log"
+          report="$REPRO_DIR/issue-1932-macos-report.md"
+
+          old_dyld_library_path="${DYLD_LIBRARY_PATH:-}"
+          export DYLD_LIBRARY_PATH="$build_dir/IccProfLib:$build_dir/IccXML"
+          export DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH:$build_dir/IccJSON:$build_dir/IccConnect:$old_dyld_library_path"
+          export ASAN_OPTIONS="print_scariness=1:halt_on_error=1:abort_on_error=1:detect_leaks=0"
+          export UBSAN_OPTIONS="halt_on_error=1:abort_on_error=1:print_stacktrace=1"
+
+          "$fromxml" \
+            Testing/hybrid/Data/Spec400_10_700-F11_2deg-Abs.xml \
+            "$pcc" > "$REPRO_DIR/fromxml.log" 2>&1
+
+          cmd=(
+            "$apply"
+            "$REPRO_DIR/issue-1932-applyprofiles-sparsematrix-hbo.tif"
+            "$output_tiff"
+            1
+            1
+            0
+            1
+            1
+            -embedded
+            10003
+            -pcc
+            "$pcc"
+            Testing/sRGB_v4_ICC_preference.icc
+            1
+          )
+
+          set +e
+          "${cmd[@]}" > "$log" 2>&1
+          exit_code=$?
+          set -e
+
+          has_sanitizer=0
+          sanitizer_pattern='ERROR: AddressSanitizer|heap-buffer-overflow'
+          sanitizer_pattern="$sanitizer_pattern|CIccSparseMatrix::MultiplyVector"
+          sanitizer_pattern="$sanitizer_pattern|IccSparseMatrix.cpp|SCARINESS: 17"
+          if grep -qE "$sanitizer_pattern" "$log"; then
+            has_sanitizer=1
+          fi
+          printf -v command_line '%q ' "${cmd[@]}"
+
+          {
+            echo "# Issue #1932 macOS ASAN reproduction"
+            echo ""
+            echo "- Issue: https://github.com/InternationalColorConsortium/iccDEV/issues/1932"
+            echo "- Target ref input: \`$TARGET_REF_INPUT\`"
+            echo "- Target commit: \`$(git rev-parse HEAD)\`"
+            echo "- Fixture SHA-256: \`$FIXTURE_SHA256\`"
+            echo "- Expected ASAN heap-buffer-overflow: \`1\`"
+            echo "- Observed sanitizer: \`$has_sanitizer\`"
+            echo "- Exit code: \`$exit_code\`"
+            echo ""
+            echo "## Replay command"
+            echo ""
+            echo '```bash'
+            echo "$command_line"
+            echo '```'
+            echo ""
+            echo "## Complete replay log and stack trace"
+            echo ""
+            echo '```text'
+            cat "$log"
+            echo '```'
+          } > "$report"
+
+          echo "## Replay command"
+          printf '%s\n' "$command_line"
+          echo "## Complete replay log and stack trace"
+          cat "$log"
+
+          {
+            in_code_block=0
+            while IFS= read -r line; do
+              if [ "$line" = '```text' ] || [ "$line" = '```bash' ] || [ "$line" = '```' ]; then
+                printf '%s\n' "$line"
+                if [ "$in_code_block" -eq 0 ]; then
+                  in_code_block=1
+                else
+                  in_code_block=0
+                fi
+              elif [ "$in_code_block" -eq 1 ]; then
+                printf '%s\n' "$(sanitize_code_line "$line")"
+              else
+                printf '%s\n' "$(sanitize_line "$line")"
+              fi
+            done < "$report"
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          if [ "$has_sanitizer" -ne 1 ]; then
+            echo "[FAIL] issue #1932 did not reproduce on macOS ASAN" >&2
+            cat "$log" >&2
+            exit 1
+          fi
+
+          echo "[PASS] issue #1932 reproduces on macOS ASAN target ref $(sanitize_line "$(git rev-parse HEAD)")"
+
+  issue-1932-windows-asan:
+    name: "Issue #1932 Windows ASAN repro"
+    runs-on: windows-2022
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+    env:
+      POWERSHELL_TELEMETRY_OPTOUT: 1
+      POWERSHELL_UPDATECHECK: Off
+      TARGET_REF_INPUT: ${{ inputs.target_ref || 'master' }}
+      WORKFLOW_FIXTURE: >-
+        ${{ github.workspace }}\workflow-assets\.github\ci\test-data\issue-1932-applyprofiles-sparsematrix-hbo.tif
+      FIXTURE_SHA256: 798428ff472d3e93040318429ac458f531b555b4367a0cd114d9b0ce6f46097f
+
+    steps:
+      - name: Checkout trusted sanitizer helpers
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout trusted Windows ASAN scripts
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ci-qa-flags
+          path: ci-qa-flags
+          sparse-checkout: .github/ci/build/windows-asan.ps1
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout workflow repro fixture
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: workflow-assets
+          sparse-checkout: .github/ci/test-data/issue-1932-applyprofiles-sparsematrix-hbo.tif
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout target iccDEV ref
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ inputs.target_ref || 'master' }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download vcpkg exported dependencies
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .\trusted\.github\scripts\sanitize.ps1
+
+          $vcpkgExportUrl = 'https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip'
+          $targetRoot = Join-Path $env:GITHUB_WORKSPACE 'target'
+          $zipPath = Join-Path $targetRoot 'deps.zip'
+          Invoke-WebRequest -Uri $vcpkgExportUrl -OutFile $zipPath
+          tar -xf $zipPath -C $targetRoot
+          Remove-Item -LiteralPath $zipPath -Force
+          if (-not (Test-Path -LiteralPath (Join-Path $targetRoot 'scripts\buildsystems\vcpkg.cmake'))) {
+            throw "vcpkg toolchain not found in target checkout"
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $targetRoot 'installed\x64-windows'))) {
+            throw "x64-windows vcpkg packages not found in exported dependencies"
+          }
+
+          @(
+            "$targetRoot\installed\x64-windows\bin",
+            "$targetRoot\installed\x64-windows\debug\bin"
+          ) | Out-File -FilePath $env:GITHUB_PATH -Append
+          "Using vcpkg export: $(Sanitize-Line $vcpkgExportUrl)"
+
+      - name: Configure Windows ASAN iccDEV
+        working-directory: target
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+
+          git config --global --add safe.directory $PWD.Path
+          cmake -B out\windows-asan-issue-1932 -S Build\Cmake `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$PWD\scripts\buildsystems\vcpkg.cmake" `
+            -DVCPKG_MANIFEST_MODE=OFF `
+            -DENABLE_ASAN=ON `
+            -DENABLE_TESTS=ON `
+            -DENABLE_TOOLS=ON `
+            -DICCDEV_WINDOWS_UNIFIED_RUNTIME=ON `
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL `
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON `
+            -Wno-dev
+          if ($LASTEXITCODE -ne 0) {
+            throw "CMake configure failed with exit code $LASTEXITCODE"
+          }
+
+          "Configured Windows ASAN target ref: $(Sanitize-Line (git rev-parse HEAD))"
+
+      - name: Build Windows ASAN repro tools
+        working-directory: target
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+
+          cmake --build out\windows-asan-issue-1932 --config Release --target iccApplyProfiles iccFromXml --parallel
+          if ($LASTEXITCODE -ne 0) {
+            throw "cmake build failed with exit code $LASTEXITCODE"
+          }
+          "Built Windows ASAN target ref: $(Sanitize-Line (git rev-parse HEAD))"
+
+      - name: Reproduce issue 1932 on Windows ASAN
+        working-directory: target
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . ..\trusted\.github\scripts\sanitize.ps1
+          git config --global --add safe.directory $PWD.Path
+
+          $reproDir = Join-Path $env:RUNNER_TEMP 'issue-1932-windows-repro'
+          $pccDir = Join-Path $reproDir 'hybrid\ICC'
+          New-Item -ItemType Directory -Force -Path $pccDir | Out-Null
+          $inputTiff = Join-Path $reproDir 'issue-1932-applyprofiles-sparsematrix-hbo.tif'
+          Copy-Item -LiteralPath $env:WORKFLOW_FIXTURE -Destination $inputTiff -Force
+          $actualSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $inputTiff).Hash.ToLowerInvariant()
+          if ($actualSha -ne $env:FIXTURE_SHA256) {
+            throw "fixture SHA-256 mismatch expected=$env:FIXTURE_SHA256 actual=$actualSha"
+          }
+
+          $buildDir = Join-Path $PWD.Path 'out\windows-asan-issue-1932'
+          $runtimeDir = Join-Path $buildDir 'bin\Release'
+          if (-not (Test-Path -LiteralPath $runtimeDir)) {
+            $runtimeDir = Join-Path $buildDir 'bin'
+          }
+          $apply = Join-Path $runtimeDir 'iccApplyProfiles.exe'
+          $fromXml = Join-Path $runtimeDir 'iccFromXml.exe'
+          $pcc = Join-Path $pccDir 'Spec400_10_700-F11_2deg-Abs.icc'
+          $outputTiff = Join-Path $reproDir 'issue-1932-output.tif'
+          $log = Join-Path $reproDir 'issue-1932-applyprofiles-windows.log'
+          $fromXmlLog = Join-Path $reproDir 'fromxml.log'
+
+          $asanRuntime = Get-ChildItem `
+            -Path "${env:ProgramFiles}\Microsoft Visual Studio" `
+            -Recurse `
+            -File `
+            -Filter 'clang_rt.asan_dynamic-x86_64.dll' `
+            -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\VC\\Tools\\MSVC\\[^\\]+\\bin\\Hostx64\\x64\\clang_rt\.asan_dynamic-x86_64\.dll$' } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $asanRuntime) {
+            throw 'MSVC Hostx64/x64 clang_rt.asan_dynamic-x86_64.dll was not found under Visual Studio'
+          }
+          "Using ASAN runtime: $(Sanitize-Line $asanRuntime.FullName)"
+
+          $vcpkgReleaseBin = Join-Path $PWD.Path 'installed\x64-windows\bin'
+          $vcpkgDebugBin = Join-Path $PWD.Path 'installed\x64-windows\debug\bin'
+          $env:PATH = @(
+            $runtimeDir,
+            $asanRuntime.DirectoryName,
+            $vcpkgReleaseBin,
+            $vcpkgDebugBin,
+            $env:PATH
+          ) -join ';'
+          $env:ASAN_OPTIONS = 'print_scariness=1,halt_on_error=1,abort_on_error=1,detect_leaks=0'
+          $env:UBSAN_OPTIONS = 'halt_on_error=1:abort_on_error=1:print_stacktrace=1'
+          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
+
+          & $fromXml 'Testing\hybrid\Data\Spec400_10_700-F11_2deg-Abs.xml' $pcc *> $fromXmlLog
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content -LiteralPath $fromXmlLog -TotalCount 180
+            throw "iccFromXml failed with exit code $LASTEXITCODE"
+          }
+
+          $cmdArgs = @(
+            $inputTiff,
+            $outputTiff,
+            '1',
+            '1',
+            '0',
+            '1',
+            '1',
+            '-embedded',
+            '10003',
+            '-pcc',
+            $pcc,
+            'Testing\sRGB_v4_ICC_preference.icc',
+            '1'
+          )
+
+          & $apply @cmdArgs *> $log
+          $exitCode = $LASTEXITCODE
+          $content = Get-Content -LiteralPath $log -Raw
+          $hasSanitizer = 0
+          if ($content -match 'heap-buffer-overflow' -and
+              ($content -match 'CIccSparseMatrix::MultiplyVector' -or $content -match 'IccSparseMatrix.cpp')) {
+            $hasSanitizer = 1
+          }
+
+          $report = Join-Path $reproDir 'issue-1932-windows-report.md'
+          $commandLine = "$apply $($cmdArgs -join ' ')"
+          @(
+            '# Issue #1932 Windows ASAN reproduction',
+            '',
+            '- Issue: https://github.com/InternationalColorConsortium/iccDEV/issues/1932',
+            "- Target ref input: ``$env:TARGET_REF_INPUT``",
+            "- Target commit: ``$(git rev-parse HEAD)``",
+            "- Fixture SHA-256: ``$env:FIXTURE_SHA256``",
+            '- Expected ASAN heap-buffer-overflow: `1`',
+            "- Observed sanitizer: ``$hasSanitizer``",
+            "- Exit code: ``$exitCode``",
+            '',
+            '## Replay command',
+            '',
+            '```powershell',
+            $commandLine,
+            '```',
+            '',
+            '## Complete replay log and stack trace',
+            '',
+            '```text'
+          ) | Set-Content -LiteralPath $report
+          Get-Content -LiteralPath $log | Add-Content -LiteralPath $report
+          '```' | Add-Content -LiteralPath $report
+
+          '## Replay command'
+          $commandLine
+          '## Complete replay log and stack trace'
+          Get-Content -LiteralPath $log
+
+          Get-Content -LiteralPath $report | ForEach-Object {
+            Safe-EchoForSummary $_ | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          }
+
+          if ($hasSanitizer -ne 1) {
+            Get-Content -LiteralPath $log
+            throw 'issue #1932 did not reproduce on Windows ASAN'
+          }
+
+          "[PASS] issue #1932 reproduces on Windows ASAN target ref $(Sanitize-Line (git rev-parse HEAD))"
