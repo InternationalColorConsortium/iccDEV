@@ -411,6 +411,41 @@ function(iccdev_add_pawg_q4_xyz_pcs_decode_test)
   endif()
 endfunction()
 
+function(iccdev_add_tointernal_fixedint_roundtrip_test)
+  if(NOT TARGET "${ICCDEV_TEST_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccToInternalFixedIntRoundtripTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tointernal-fixedint-roundtrip.cpp"
+  )
+  target_link_libraries(iccToInternalFixedIntRoundtripTest PRIVATE ${ICCDEV_TEST_LIB_ICCPROFLIB})
+  add_dependencies(check iccToInternalFixedIntRoundtripTest)
+
+  add_test(
+    NAME iccdev.tointernal-fixedint-roundtrip
+    COMMAND "$<TARGET_FILE:iccToInternalFixedIntRoundtripTest>"
+  )
+  set_tests_properties(iccdev.tointernal-fixedint-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;regression"
+  )
+  if(WIN32)
+    set(_tointernal_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccToInternalFixedIntRoundtripTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${ICCDEV_TEST_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tointernal_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tointernal-fixedint-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tointernal_env_mods}"
+    )
+  endif()
+endfunction()
+
 # Guards the CMM-signature validation allow-list catch-up landed for #1724 in
 # CIccProfile::CheckHeader (IccProfLib/IccProfile.cpp).  PR #1473 named the live-
 # registry CMMs 'repr' and 'iccd' but left them out of CheckHeader's accept-list,
@@ -3069,6 +3104,7 @@ if(WIN32)
   iccdev_add_pawg_q2_tonecurves_test()
   iccdev_add_pawg_q4_characterization_test()
   iccdev_add_pawg_q4_xyz_pcs_decode_test()
+  iccdev_add_tointernal_fixedint_roundtrip_test()
   iccdev_add_pawg_q1q3_relative_intent_test()
   iccdev_add_cmm_registry_allowlist_test()
   iccdev_add_mpecalc_matrix_overflow_test()
