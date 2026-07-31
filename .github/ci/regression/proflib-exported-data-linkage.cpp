@@ -27,9 +27,11 @@
 // do. If that fallback is removed or the export model changes, this stops
 // linking and the Windows leg goes red instead of the next author discovering it.
 //
-// It covers eight of the nine exported globals -- the four icMsgValidate*
-// prefixes, both icD50XYZ arrays, and both solver pointers. The ninth, icInfo,
-// is excluded because it has no definition at all; see the note in main().
+// It covers all eight exported globals -- the four icMsgValidate* prefixes,
+// both icD50XYZ arrays, and both solver pointers. A ninth declaration, icInfo,
+// was excluded here because it had no definition at all; #1897 removed it, and
+// iccdev.proflib-exported-global-definitions now audits the headers against the
+// built library so a replacement cannot appear unnoticed. See the note in main().
 //
 // It also has a job on every platform. Several tests assert on hard-coded copies
 // of these values rather than reading the globals: mpe-empty-identity.cpp spells
@@ -115,13 +117,16 @@ int main()
   check(g_pIccMatrixSolver != NULL, "3: g_pIccMatrixSolver is null");
   check(g_pIccMatrixInverter != NULL, "3: g_pIccMatrixInverter is null");
 
-  // icInfo (IccUtil.h) is deliberately NOT covered. It is declared
-  // `extern ICCPROFLIB_API CIccInfo icInfo;` but has no definition anywhere in
-  // the tree, so referencing it fails to link on every platform, not just
-  // Windows -- `nm -DC libIccProfLib2.so` lists the other exported globals and
-  // not this one. That is a dangling public declaration rather than the export
-  // problem this test covers, and nothing in-tree uses it. Adding it here would
-  // break the Linux build too.
+  // There is no ninth check. IccUtil.h used to declare
+  // `extern ICCPROFLIB_API CIccInfo icInfo;` with no definition anywhere in the
+  // tree, so referencing it failed to link on every platform, not just Windows
+  // -- `nm -DC libIccProfLib2.so` listed the eight globals above and not that
+  // one. It could not be covered here for that exact reason: adding it would
+  // have broken this test's own link rather than failing an assertion. #1897
+  // removed the declaration; the audit that generalizes it,
+  // iccdev.proflib-exported-global-definitions, reads the symbol table instead
+  // of referencing the symbols, which is why it can report the case this test
+  // structurally cannot.
 
   if (!g_fail)
     std::printf("[proflib-exported-data-linkage] all assertions passed\n");

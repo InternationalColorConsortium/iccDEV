@@ -326,10 +326,14 @@ appears in a local pre-flight on those platforms.
 
 Affected symbols are `g_pIccMatrixSolver` and `g_pIccMatrixInverter`
 (`IccSolve.h`), and `icD50XYZ`, `icD50XYZxx` and the four `icMsgValidate*`
-message prefixes (`IccUtil.h`). Each declaration carries a note. `IccUtil.h`
-also declares `icInfo`, but that one has no definition anywhere in the tree and
-so fails to link on every platform — a dangling declaration rather than an export
-problem.
+message prefixes (`IccUtil.h`). Each declaration carries a note. `IccUtil.h` also
+declared `icInfo` until #1897, but that one had no definition anywhere in the tree
+and so failed to link on every platform — a dangling declaration rather than an
+export problem. It is gone; construct a `CIccInfo` where one is needed. The
+`iccdev.proflib-exported-global-definitions` CTest now checks every
+`ICCPROFLIB_API extern` declaration in these headers against the built library's
+symbol table, so a declaration added without a definition fails CI rather than
+reaching a consumer.
 
 Existing consumers handle it in one of two ways:
 

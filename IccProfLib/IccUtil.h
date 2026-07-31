@@ -440,12 +440,32 @@ public:
 
 
 
-// NOTE: this declaration has no definition anywhere in the library, so any
-// reference to it fails to link on every platform, not only on Windows --
-// `nm -DC libIccProfLib2.so` lists the other exported globals and not this one.
-// Nothing in-tree uses it. Construct a CIccInfo where one is needed. Kept as
-// declared rather than removed because it is public API surface; see #1888.
-extern ICCPROFLIB_API CIccInfo icInfo;
+// REMOVED (#1897): `extern ICCPROFLIB_API CIccInfo icInfo;` used to sit here.
+// It was declared in the initial 2015 import and never defined -- in any build,
+// on any platform. Construct a CIccInfo where one is needed; every method that
+// would have been reached through the global is a non-static member, so a local
+// instance does the same job. Three reasons it is gone rather than defined:
+//
+//   1. Nothing could ever have used it. Referencing it failed at link time
+//      everywhere, so removing the declaration turns a link error into a
+//      compile error -- no code that builds today stops building.
+//   2. A consumer could not have supplied the definition either. On a Windows
+//      shared build ICCPROFLIB_API expands to __declspec(dllimport) on the
+//      consuming side, and dllimport data cannot be defined locally.
+//   3. Defining it would have been worse than removing it. CIccInfo::Get*Name()
+//      return pointers into the per-instance m_szStr/m_szSigStr scratch
+//      buffers, so one process-wide instance would hand every caller the same
+//      128-byte buffer -- unsafe across threads, and even single-threaded the
+//      next call from anywhere invalidates the pointer the last one returned.
+//      The constructor also heap-allocates m_str, which a namespace-scope
+//      object would run before main() and free during static destruction.
+//
+// The eight genuinely exported globals -- icD50XYZ, icD50XYZxx, the four
+// icMsgValidate* prefixes (above) and the two solver pointers (IccSolve.h) --
+// are unaffected; those are the Windows-only export problem of #1888, which is
+// a different defect. iccdev.proflib-exported-global-definitions now checks
+// every such declaration against the built library, so a declaration added
+// without a definition fails CI here instead of in a consumer's link.
 
 // ---------------------------------------------------------------------------
 // UTF-16 string class and conversion helpers

@@ -2410,6 +2410,66 @@ function(iccdev_add_proflib_exported_data_linkage_test)
   endif()
 endfunction()
 
+# #1897: audits every ICCPROFLIB_API extern global declared in the public headers
+# against the symbol table of the library those headers describe, and fails naming
+# any that is declared but defined nowhere. icInfo (IccUtil.h) was exactly that
+# from the 2015 import until #1897 removed it: nothing in-tree referenced it, so
+# no build ever tried to resolve it and CI stayed green while the declaration
+# promised a symbol no consumer could ever link.
+#
+# Deliberately NOT a C++ executable like its iccdev.proflib-exported-data-linkage
+# sibling above. Referencing an undefined global does not fail an assertion, it
+# fails the link -- such a test would stop BUILDING rather than report a defect,
+# which is a far worse failure to diagnose. Reading the symbol table sidesteps
+# that, and lets the list of globals come from the headers rather than from a
+# hand-maintained copy that would drift the same way icInfo did.
+#
+# Reads the symbol table with nm, so it is restricted to the ELF and Mach-O
+# legs. Windows is skipped explicitly rather than by letting find_program come
+# up empty: a Windows runner may well have an nm on PATH from a MinGW or
+# Git-for-Windows install, and GNU nm cannot list the export table of an
+# MSVC-produced DLL -- it would find none of the globals, trip the control-symbol
+# check and report the audit as broken on every Windows run. Skipping costs
+# nothing in coverage, because a missing definition is missing on every platform:
+# the Linux and macOS legs catch it. The Windows-specific half of this area is
+# already covered by iccdev.proflib-exported-data-linkage, which exists precisely
+# to fail there (#1888).
+function(iccdev_add_proflib_exported_global_definitions_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  if(WIN32 OR MSVC)
+    message(STATUS
+      "Windows - skipping iccdev.proflib-exported-global-definitions "
+      "(nm cannot read a DLL export table; see #1897)")
+    return()
+  endif()
+
+  find_program(ICCDEV_NM_EXECUTABLE NAMES nm llvm-nm)
+  if(NOT ICCDEV_NM_EXECUTABLE)
+    message(STATUS
+      "nm not found - skipping iccdev.proflib-exported-global-definitions")
+    return()
+  endif()
+
+  add_dependencies(check ${TARGET_LIB_ICCPROFLIB})
+
+  add_test(
+    NAME iccdev.proflib-exported-global-definitions
+    COMMAND "${CMAKE_COMMAND}"
+      "-DHEADERS=${ICCDEV_REPO_ROOT}/IccProfLib/IccUtil.h;${ICCDEV_REPO_ROOT}/IccProfLib/IccSolve.h"
+      "-DLIBRARY=$<TARGET_FILE:${TARGET_LIB_ICCPROFLIB}>"
+      "-DNM_TOOL=${ICCDEV_NM_EXECUTABLE}"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunProfLibExportedGlobalDefinitionsTest.cmake"
+  )
+  set_tests_properties(iccdev.proflib-exported-global-definitions PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;build;linkage;api;issue-1897;regression"
+  )
+endfunction()
+
 # #1830: the JSON BCD version parser used atoi() per component, which accepts a
 # leading '-'; "-1" produced 0xFFFFFFFF and wrapped both the "<< 8" in
 # icJsonParseBCDVersionStr and the caller's "<< 16" (UBSan: "left shift of
@@ -3092,6 +3152,7 @@ if(WIN32)
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
+  iccdev_add_proflib_exported_global_definitions_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_json_writer_move_test()
   iccdev_add_json_fixednum_size_cap_test()
@@ -3339,6 +3400,7 @@ iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
+iccdev_add_proflib_exported_global_definitions_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_json_writer_move_test()
 iccdev_add_json_fixednum_size_cap_test()
