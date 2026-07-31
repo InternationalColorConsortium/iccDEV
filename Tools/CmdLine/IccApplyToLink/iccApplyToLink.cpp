@@ -141,6 +141,48 @@ static constexpr int GetProgressPercent(size_t completed, size_t total)
 static_assert(GetProgressPercent(21474837ULL, 39135393ULL) == 54,
               "Large LUT progress must be computed without 32-bit overflow");
 
+// Decide whether a device link grid of nGridSize^nSrcSamples nodes, each
+// holding nDstSamples output values, is one CIccCLUT can actually hold, and
+// report the node count through nNodes when it is.
+//
+// CIccCLUT keeps the whole grid in a single flat array of NumPoints() *
+// output-channel floats, so CIccCLUT::Init (IccTagLut.cpp) enforces two
+// distinct 32-bit limits: the node count on its own, and the node count
+// multiplied by the output channel count. The cap main() applied below only
+// ever bounded the node count, and the factor it omitted is exactly the
+// output channel count -- so an ordinary CMYK source at the documented
+// maximum lut_size of 255 (255^4 = 4,228,250,625 nodes, and 12,684,751,875
+// samples once a 3-channel destination is accounted for) satisfied the tool
+// and was then refused by Init.
+//
+// That refusal was invisible to the caller. Init nulls m_pData before the
+// return but has already committed m_nNumPoints, and CIccMBB::NewCLUT
+// discards Init's false and hands the CLUT back regardless, so the writer
+// received a CLUT advertising 4.2 billion nodes with no storage behind it:
+// GetData(0) produced NULL, the non-zero NumPoints() satisfied the countdown
+// guard in setNextNode(), and the first node written memcpy'd to address zero
+// (#1781). Applying both of Init's limits keeps the rejection ahead of any
+// CLUT being built, and makes the "LUT size too large" diagnostic mean what
+// it says.
+static bool IccLinkGridFits(int nGridSize, int nSrcSamples, int nDstSamples,
+                            icUInt64Number& nNodes)
+{
+  nNodes = 1;
+  for (int si = 0; si < nSrcSamples; si++) {
+    nNodes *= (icUInt64Number)nGridSize;
+    // Checked every step so the running product cannot itself overflow:
+    // nGridSize is capped at 255 by the caller, so the largest value reachable
+    // here is 255 * 0xFFFFFFFF, well inside 64 bits.
+    if (nNodes > 0xFFFFFFFFu)
+      return false;
+  }
+
+  // Init's second limit, and its rejection of an empty grid.
+  const icUInt64Number nSamples = nNodes * (icUInt64Number)nDstSamples;
+
+  return nSamples != 0 && nSamples <= 0xFFFFFFFFu;
+}
+
 class ILinkWriter
 {
 public:
@@ -436,7 +478,23 @@ public:
 
       CIccMpeCLUT* pMpeCLUT = new CIccMpeCLUT();
       CIccCLUT* pCLUT = new CIccCLUT((icUInt8Number)nSrcSamples, (icUInt8Number)nDstSamples);
-      pCLUT->Init(m_grid);
+      // Init() returns false without having allocated when the grid is larger
+      // than CIccCLUT can address, leaving m_pData NULL while m_nNumPoints has
+      // already been set -- so taking GetData(0)/NumPoints() unchecked yields a
+      // NULL write target paired with a non-zero countdown, and the first node
+      // written lands on address zero (#1781). main() now rejects the
+      // arithmetic case before begin() is called; this check also covers the
+      // allocation failure that no amount of pre-checking can predict.
+      if (!pCLUT->Init(m_grid)) {
+        printf("Unable to allocate a %d-point CLUT for %u source and %u destination channels\n",
+               m_grid, (unsigned)nSrcSamples, (unsigned)nDstSamples);
+        // None of these are owned by anything yet: SetCLUT/Attach below are
+        // what transfer ownership, and m_pProfile is freed by the destructor.
+        delete pCLUT;
+        delete pMpeCLUT;
+        delete pTag;
+        return false;
+      }
       m_pLutPtr = pCLUT->GetData(0);
       m_nCountdown = pCLUT->NumPoints();
 
@@ -514,7 +572,30 @@ public:
       for (icUInt16Number i = 0; i < nDstSamples; i++) {
         pCurves[i] = new CIccTagCurve();
       }
-      CIccCLUT* pCLUT = pTagLut->NewCLUT(m_grid);
+      // CIccMBB::NewCLUT() calls CIccCLUT::Init() but discards its result and
+      // returns the CLUT either way, so a grid Init refused arrived here as a
+      // CLUT with m_pData NULL and m_nNumPoints already committed: GetData(0)
+      // gave a NULL write target that setNextNode()'s countdown guard did not
+      // stop, and the first node memcpy'd to address zero (#1781). Build and
+      // initialize the CLUT explicitly -- as the V5 branch above already does
+      // -- so Init()'s result is visible here, then hand it over with
+      // SetCLUT(), which is what NewCLUT() would have done internally.
+      CIccCLUT* pCLUT = new CIccCLUT((icUInt8Number)nSrcSamples, (icUInt8Number)nDstSamples);
+      if (!pCLUT->Init(m_grid)) {
+        printf("Unable to allocate a %d-point CLUT for %u source and %u destination channels\n",
+               m_grid, (unsigned)nSrcSamples, (unsigned)nDstSamples);
+        delete pCLUT;
+        delete pTagLut;
+        return false;
+      }
+      // SetCLUT() takes ownership on success and deletes the CLUT itself if the
+      // dimensions disagree with the tag's, so pCLUT must not be freed here.
+      if (!pTagLut->SetCLUT(pCLUT)) {
+        printf("CLUT dimensions do not match the %u x %u LUT tag\n",
+               (unsigned)nSrcSamples, (unsigned)nDstSamples);
+        delete pTagLut;
+        return false;
+      }
       m_pLutPtr = pCLUT->GetData(0);
       m_nCountdown = pCLUT->NumPoints();
 
@@ -695,7 +776,10 @@ void Usage()
   printf("  title is the title/description for the dest_link_file\n\n");
 
   printf("  range_min specifies the minimum input value (usually 0.0)\n");
-  printf("  range_max specifies the maximum input value (usually 1.0)\n\n");
+  printf("  range_max specifies the maximum input value (usually 1.0)\n");
+  printf("    range_max must be greater than range_min\n");
+  printf("    a range other than 0.0 to 1.0 needs option 1 (v5) or link_type 1 (.cube);\n");
+  printf("    a version 4 device link has nowhere to record it\n\n");
 
   printf("  For first_transform:\n");
   printf("    0 - use destination transform from first profile\n");
@@ -869,6 +953,46 @@ int main(int argc, icChar* argv[])
     printf("Invalid input range: range_min and range_max must be finite numbers\n");
     return 1;
   }
+
+  // range_min/range_max bound the *input* domain the grid samples, not the
+  // values stored in it: the generation loop at the bottom of main() computes
+  // srcPixel = sizeRange * idx / maxLut + loRange, so node 0 samples range_min
+  // and the final node samples range_max, evenly spaced on every channel.
+  //
+  // Only finiteness was checked, so a zero-width range (every node sampling
+  // the identical input, giving a link whose CLUT is a single constant
+  // repeated) and a reversed range (the domain walked backwards) both wrote a
+  // file and exited 0 -- QA cases 19 and 20 in #1781.
+  //
+  // Zero-width is degenerate on its own terms. Reversed is refused as well
+  // because the QA table in #1781 records case 20, like case 19, as
+  // "Fail - no early range rejection": the maintainer's stated expectation is
+  // that an ordering violation is caught up front rather than spending a full
+  // grid generation to produce a link nobody asked for. Requiring strictly
+  // increasing bounds satisfies both.
+  if (!(loRange < hiRange)) {
+    printf("Invalid input range: range_max (%g) must be greater than range_min (%g)\n",
+           (double)hiRange, (double)loRange);
+    return 1;
+  }
+
+  // Recording the input domain in the output is something only two of the
+  // three writers can do: the .cube writer emits a LUT_3D_INPUT_RANGE line,
+  // and the V5 device-link branch attaches a CIccSingleSampledCurve spanning
+  // [range_min, range_max]. The V4 branch of CDevLinkWriter::begin() writes
+  // identity A-curves and never reads m_fMinInput/m_fMaxInput at all, so a V4
+  // link built over a restricted range sampled that range while declaring the
+  // usual [0,1] domain -- QA case 04 in #1781 produced exactly such a file and
+  // reported success, because nothing about writing it fails. Refuse the
+  // combination rather than emit a link whose declared domain is wrong; the
+  // identical range on option 1 or link_type 1 is unaffected.
+  if (nLinkType == 0 && nOption == 0 &&
+      (!icIsNear(loRange, 0.0f) || !icIsNear(hiRange, 1.0f))) {
+    printf("V4 device links cannot record a non-default input range; "
+           "use option 1 (V5) or link_type 1 (.cube), or use range 0 1\n");
+    return 1;
+  }
+
   pWriter->setInputRange(loRange, hiRange);
 
   //Retrieve command line arguments
@@ -1036,11 +1160,6 @@ int main(int argc, icChar* argv[])
   //-PCC profile nodes.
   releasePccList(pccList);
 
-  if (!pWriter->begin(theCmm.GetSourceSpace(), theCmm.GetDestSpace())) {
-    printf("Unable to begin writing LUT\n");
-      return -1;
-  }
-
   //Get and validate the source color space from the Cmm.
   icColorSpaceSignature SrcspaceSig = theCmm.GetSourceSpace();
   int nSrcSamples = icGetSpaceSamples(SrcspaceSig);
@@ -1053,15 +1172,25 @@ int main(int argc, icChar* argv[])
     printf("Invalid CMM channel count: source samples=%d destination samples=%d\n", nSrcSamples, nDestSamples);
     return 1;
   }
-  
-  size_t lutCount = 1;
-  size_t lutLimit = (((1ULL<<32)-1) / nLutSize);     // limit to 4 Gig(32 bits) instead of size_t(64 bits)
-  for (auto si = 0; si < nSrcSamples; si++) {
-    if (lutCount > lutLimit ) {    // avoid overflow
-      printf("LUT size too large\n");
+
+  // The channel counts and the grid capacity are both settled here, before
+  // pWriter->begin() -- which is what actually builds the CLUT. Previously
+  // begin() ran first and the capacity check second, so the tool allocated the
+  // CLUT and only afterwards decided the grid was too large; on the path where
+  // CIccCLUT::Init refused the grid, begin() had already handed the writer a
+  // NULL data pointer to fill (#1781). Checking first means begin() is never
+  // given a grid it cannot represent, and the caller still gets the specific
+  // "LUT size too large" wording instead of begin()'s generic failure.
+  icUInt64Number nLutNodes = 0;
+  if (!IccLinkGridFits(nLutSize, nSrcSamples, nDestSamples, nLutNodes)) {
+    printf("LUT size too large\n");
+    return -1;
+  }
+  const size_t lutCount = (size_t)nLutNodes;
+
+  if (!pWriter->begin(theCmm.GetSourceSpace(), theCmm.GetDestSpace())) {
+    printf("Unable to begin writing LUT\n");
       return -1;
-    }
-    lutCount *= nLutSize;
   }
 
   // Avoid vector(size, value) here: libstdc++ 15's fill_n countdown trips

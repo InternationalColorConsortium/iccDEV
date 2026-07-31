@@ -4346,6 +4346,29 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1405-roundtrip-sample-cap.sh"
 )
 
+# #1781 - the iccApplyToLink QA matrix, recalibrated to run in CI, plus the
+# three defects working through it exposed. CIccCLUT::Init limits both the node
+# count and the node count times the output channel count, but the tool's own
+# cap omitted the output-channel factor -- so a CMYK source at the documented
+# maximum lut_size of 255 passed the cap and was then refused by Init. Init
+# leaves m_pData NULL while m_nNumPoints is already committed and NewCLUT
+# discards its result, so the writer got a NULL data pointer with a non-zero
+# countdown and the first node memcpy'd to address zero: SIGSEGV on both the v4
+# and v5 paths. Also pins the two range defects -- a zero-width or reversed
+# range wrote a file and exited 0 (QA cases 19/20), and a v4 link took a
+# restricted range it has nowhere to record, declaring [0,1] while sampling
+# something else (QA case 04). Argument rejections 13-18 are pinned so the new
+# range checks cannot disturb them. Builds its own CMYK source from the tracked
+# CMYK-3DLUTs.xml, so no Testing/ profile generation is required.
+# iccFromXml-gated.
+iccdev_add_script_test(
+  iccdev.issue-1781-applytolink-qa-matrix
+  300
+  "iccdev;tools;applytolink;security;issue-1781;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus
