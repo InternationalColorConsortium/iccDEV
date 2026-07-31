@@ -2474,6 +2474,54 @@ function(iccdev_add_json_writer_move_test)
   endif()
 endfunction()
 
+# CodeQL #2343: CIccTagJsonFixedNum::ToJson was the only m_nSize-driven walk in the
+# JSON writer without an explicit upper bound -- its Num/FloatNum siblings and its XML
+# mirror CIccTagXmlFixedNum::ToXml all cap at 0xffffff. This pins the cap in both
+# directions: the largest legal count still serializes in full, and one past it is
+# rejected. The boundary case builds a 64 MB tag, so allow more time than the 60s the
+# lighter regressions use.
+function(iccdev_add_json_fixednum_size_cap_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonFixedNumSizeCapTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-fixednum-size-cap.cpp"
+  )
+  target_compile_features(iccJsonFixedNumSizeCapTest PRIVATE cxx_std_17)
+  target_include_directories(iccJsonFixedNumSizeCapTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonFixedNumSizeCapTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonFixedNumSizeCapTest)
+
+  add_test(
+    NAME iccdev.json-fixednum-size-cap
+    COMMAND "$<TARGET_FILE:iccJsonFixedNumSizeCapTest>"
+  )
+  set_tests_properties(iccdev.json-fixednum-size-cap PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 180
+    LABELS "iccdev;json;codeql;alert-2343;regression"
+  )
+  if(WIN32)
+    set(_json_fixednum_cap_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonFixedNumSizeCapTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_fixednum_cap_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-fixednum-size-cap PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_fixednum_cap_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1831: icGetDateTimeValue discarded its sscanf conversion count and assigned every
 # field into the icUInt16Number members of icDateTimeNumber without a range check, so
 # "%u" turned "-1" into 4294967295 and a year of 590359881 was truncated to 11593
@@ -2872,6 +2920,7 @@ if(WIN32)
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_json_bcd_version_test()
   iccdev_add_json_writer_move_test()
+  iccdev_add_json_fixednum_size_cap_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
   iccdev_add_parser_restore_calls_test()
@@ -3101,6 +3150,7 @@ iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_json_writer_move_test()
+iccdev_add_json_fixednum_size_cap_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
 iccdev_add_parser_restore_calls_test()
