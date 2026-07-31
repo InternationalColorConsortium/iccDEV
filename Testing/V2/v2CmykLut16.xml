@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>2.10</ProfileVersion>
+    <ProfileDeviceClass>prtr</ProfileDeviceClass>
+    <DataColourSpace>CMYK</DataColourSpace>
+    <PCS>Lab </PCS>
+    <CreationDateTime>2026-07-31T01:05:03</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <AToB0Tag> <lut16Type>
+      <Channels InputChannels="4" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+      <CLUT GridGranularity="3">
+        <TableData>
+          65535 32768 32768 32768 32768 32768     0 32768 32768
+          62258 32768 44236 31129 32768 38502     0 32768 32768
+          58981 32768 55705 29491 32768 44236     0 32768 32768
+          56360 44236 32768 28180 38502 32768     0 32768 32768
+          53083 44236 44236 26542 38502 38502     0 32768 32768
+          49807 44236 55705 24903 38502 44236     0 32768 32768
+          47185 55705 32768 23593 44236 32768     0 32768 32768
+          43908 55705 44236 21954 44236 38502     0 32768 32768
+          40632 55705 55705 20316 44236 44236     0 32768 32768
+          55705 21299 21299 27852 27033 27033     0 32768 32768
+          52428 21299 32768 26214 27033 32768     0 32768 32768
+          49151 21299 44236 24576 27033 38502     0 32768 32768
+          46530 32768 21299 23265 32768 27033     0 32768 32768
+          43253 32768 32768 21627 32768 32768     0 32768 32768
+          39976 32768 44236 19988 32768 38502     0 32768 32768
+          37355 44236 21299 18677 38502 27033     0 32768 32768
+          34078 44236 32768 17039 38502 32768     0 32768 32768
+          30801 44236 44236 15401 38502 38502     0 32768 32768
+          45874  9830  9830 22937 21299 21299     0 32768 32768
+          42598  9830 21299 21299 21299 27033     0 32768 32768
+          39321  9830 32768 19661 21299 32768     0 32768 32768
+          36700 21299  9830 18350 27033 21299     0 32768 32768
+          33423 21299 21299 16711 27033 27033     0 32768 32768
+          30146 21299 32768 15073 27033 32768     0 32768 32768
+          27525 32768  9830 13762 32768 21299     0 32768 32768
+          24248 32768 21299 12124 32768 27033     0 32768 32768
+          20971 32768 32768 10486 32768 32768     0 32768 32768
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </ACurves>
+    </lut16Type> </AToB0Tag>
+
+    <BToA0Tag> <lut16Type>
+      <Channels InputChannels="3" OutputChannels="4"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+      <CLUT GridGranularity="3">
+        <TableData>
+          65535  6554     0 65535 65535     0 32768 65535 55705     0 65535 65535
+          42598 39321     0 65535 32768 32768 32768 65535 22937 26214 65535 65535
+           9830 65535     0 65535     0 65535 32768 65535     0 58981 65535 65535
+          65535  6554     0 32768 65535     0 32768 32768 55705     0 65535 32768
+          42598 39321     0 32768 32768 32768 32768 32768 22937 26214 65535 32768
+           9830 65535     0 32768     0 65535 32768 32768     0 58981 65535 32768
+          65535  6554     0     0 65535     0 32768     0 55705     0 65535     0
+          42598 39321     0     0 32768 32768 32768     0 22937 26214 65535     0
+           9830 65535     0     0     0 65535 32768     0     0 58981 65535     0
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </ACurves>
+    </lut16Type> </BToA0Tag>
+
+    <AToB1Tag> <lut16Type>
+      <Channels InputChannels="4" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+      <CLUT GridGranularity="3">
+        <TableData>
+          65535 32768 32768 32768 32768 32768     0 32768 32768
+          62258 32768 44236 31129 32768 38502     0 32768 32768
+          58981 32768 55705 29491 32768 44236     0 32768 32768
+          56360 44236 32768 28180 38502 32768     0 32768 32768
+          53083 44236 44236 26542 38502 38502     0 32768 32768
+          49807 44236 55705 24903 38502 44236     0 32768 32768
+          47185 55705 32768 23593 44236 32768     0 32768 32768
+          43908 55705 44236 21954 44236 38502     0 32768 32768
+          40632 55705 55705 20316 44236 44236     0 32768 32768
+          55705 21299 21299 27852 27033 27033     0 32768 32768
+          52428 21299 32768 26214 27033 32768     0 32768 32768
+          49151 21299 44236 24576 27033 38502     0 32768 32768
+          46530 32768 21299 23265 32768 27033     0 32768 32768
+          43253 32768 32768 21627 32768 32768     0 32768 32768
+          39976 32768 44236 19988 32768 38502     0 32768 32768
+          37355 44236 21299 18677 38502 27033     0 32768 32768
+          34078 44236 32768 17039 38502 32768     0 32768 32768
+          30801 44236 44236 15401 38502 38502     0 32768 32768
+          45874  9830  9830 22937 21299 21299     0 32768 32768
+          42598  9830 21299 21299 21299 27033     0 32768 32768
+          39321  9830 32768 19661 21299 32768     0 32768 32768
+          36700 21299  9830 18350 27033 21299     0 32768 32768
+          33423 21299 21299 16711 27033 27033     0 32768 32768
+          30146 21299 32768 15073 27033 32768     0 32768 32768
+          27525 32768  9830 13762 32768 21299     0 32768 32768
+          24248 32768 21299 12124 32768 27033     0 32768 32768
+          20971 32768 32768 10486 32768 32768     0 32768 32768
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </ACurves>
+    </lut16Type> </AToB1Tag>
+
+    <BToA1Tag> <lut16Type>
+      <Channels InputChannels="3" OutputChannels="4"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+      <CLUT GridGranularity="3">
+        <TableData>
+          65535  6554     0 65535 65535     0 32768 65535 55705     0 65535 65535
+          42598 39321     0 65535 32768 32768 32768 65535 22937 26214 65535 65535
+           9830 65535     0 65535     0 65535 32768 65535     0 58981 65535 65535
+          65535  6554     0 32768 65535     0 32768 32768 55705     0 65535 32768
+          42598 39321     0 32768 32768 32768 32768 32768 22937 26214 65535 32768
+           9830 65535     0 32768     0 65535 32768 32768     0 58981 65535 32768
+          65535  6554     0     0 65535     0 32768     0 55705     0 65535     0
+          42598 39321     0     0 32768 32768 32768     0 22937 26214 65535     0
+           9830 65535     0     0     0 65535 32768     0     0 58981 65535     0
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </ACurves>
+    </lut16Type> </BToA1Tag>
+
+    <AToB2Tag> <lut16Type>
+      <Channels InputChannels="4" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+      <CLUT GridGranularity="3">
+        <TableData>
+          65535 32768 32768 32768 32768 32768     0 32768 32768
+          62258 32768 44236 31129 32768 38502     0 32768 32768
+          58981 32768 55705 29491 32768 44236     0 32768 32768
+          56360 44236 32768 28180 38502 32768     0 32768 32768
+          53083 44236 44236 26542 38502 38502     0 32768 32768
+          49807 44236 55705 24903 38502 44236     0 32768 32768
+          47185 55705 32768 23593 44236 32768     0 32768 32768
+          43908 55705 44236 21954 44236 38502     0 32768 32768
+          40632 55705 55705 20316 44236 44236     0 32768 32768
+          55705 21299 21299 27852 27033 27033     0 32768 32768
+          52428 21299 32768 26214 27033 32768     0 32768 32768
+          49151 21299 44236 24576 27033 38502     0 32768 32768
+          46530 32768 21299 23265 32768 27033     0 32768 32768
+          43253 32768 32768 21627 32768 32768     0 32768 32768
+          39976 32768 44236 19988 32768 38502     0 32768 32768
+          37355 44236 21299 18677 38502 27033     0 32768 32768
+          34078 44236 32768 17039 38502 32768     0 32768 32768
+          30801 44236 44236 15401 38502 38502     0 32768 32768
+          45874  9830  9830 22937 21299 21299     0 32768 32768
+          42598  9830 21299 21299 21299 27033     0 32768 32768
+          39321  9830 32768 19661 21299 32768     0 32768 32768
+          36700 21299  9830 18350 27033 21299     0 32768 32768
+          33423 21299 21299 16711 27033 27033     0 32768 32768
+          30146 21299 32768 15073 27033 32768     0 32768 32768
+          27525 32768  9830 13762 32768 21299     0 32768 32768
+          24248 32768 21299 12124 32768 27033     0 32768 32768
+          20971 32768 32768 10486 32768 32768     0 32768 32768
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </ACurves>
+    </lut16Type> </AToB2Tag>
+
+    <BToA2Tag> <lut16Type>
+      <Channels InputChannels="3" OutputChannels="4"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+      <CLUT GridGranularity="3">
+        <TableData>
+          65535  6554     0 65535 65535     0 32768 65535 55705     0 65535 65535
+          42598 39321     0 65535 32768 32768 32768 65535 22937 26214 65535 65535
+           9830 65535     0 65535     0 65535 32768 65535     0 58981 65535 65535
+          65535  6554     0 32768 65535     0 32768 32768 55705     0 65535 32768
+          42598 39321     0 32768 32768 32768 32768 32768 22937 26214 65535 32768
+           9830 65535     0 32768     0 65535 32768 32768     0 58981 65535 32768
+          65535  6554     0     0 65535     0 32768     0 55705     0 65535     0
+          42598 39321     0     0 32768 32768 32768     0 22937 26214 65535     0
+           9830 65535     0     0     0 65535 32768     0     0 58981 65535     0
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </ACurves>
+    </lut16Type> </BToA2Tag>
+
+    <gamutTag> <lut16Type>
+      <Channels InputChannels="3" OutputChannels="1"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+      <CLUT GridGranularity="3">
+        <TableData>
+              0     0     0
+              0     0     0
+              0     0     0
+              0     0     0
+              0     0     0
+              0     0     0
+              0     0     0
+              0     0     0
+              0     0     0
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="2"/>
+      </ACurves>
+    </lut16Type> </gamutTag>
+
+    <profileDescriptionTag> <textDescriptionType>
+      <TextData><![CDATA[iccDEV v2 CMYK output profile (lut16Type / legacy PCS)]]></TextData>
+    </textDescriptionType> </profileDescriptionTag>
+
+    <copyrightTag> <textType>
+      <TextData><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></TextData>
+    </textType> </copyrightTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+  </Tags>
+</IccProfile>

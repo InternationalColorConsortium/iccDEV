@@ -131,9 +131,10 @@ jobs:
             ICCDEV_TEST_OUTDIR="$BUILD_JSON/Testing/ctest-output/ci-json-create-profiles" \
             bash CreateAllProfiles.sh 2>&1 | tee "$CREATE_LOG"
 
+          # 130 before #1883; the Testing/V2 section adds the three v2 fixtures.
           profile_parse_count="$(grep -c 'Profile parsed and saved correctly' "$CREATE_LOG" || true)"
-          if [ "$profile_parse_count" -ne 130 ]; then
-            echo "[FAIL] Expected 130 generated profiles, got ${profile_parse_count}"
+          if [ "$profile_parse_count" -ne 133 ]; then
+            echo "[FAIL] Expected 133 generated profiles, got ${profile_parse_count}"
             exit 1
           fi
           echo "[OK] Generated ${profile_parse_count} test profiles"

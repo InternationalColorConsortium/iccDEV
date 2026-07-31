@@ -294,6 +294,26 @@ then
 fi
 cd ..
 
+echo "====================== V2 =========================="
+
+# Issue #1883: before these, the corpus held no ICC v2 profile at all -- a clean
+# checkout's 210 profiles are 208 v5 and 2 v4, with no 'mft2' or 'mft1' tag
+# anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These three cover
+# the v2 shapes that path depends on: lut16Type ('mft2', which is what selects
+# UseLegacyPCS), lut8Type ('mft1'), and the matrix/TRC form most real v2 display
+# profiles take.
+cd V2
+find . -iname "*\.icc" -delete
+if [ "$1" != "clean" ]
+then
+	set -x
+	iccFromXml v2CmykLut16.xml   v2CmykLut16.icc
+	iccFromXml v2RgbLut8.xml     v2RgbLut8.icc
+	iccFromXml v2RgbMatrixTRC.xml v2RgbMatrixTRC.icc
+	set +x
+fi
+cd ..
+
 echo "====================== Summary Count =========================="
 
 # Count number of ICCs that exist to confirm

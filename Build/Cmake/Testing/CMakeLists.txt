@@ -2522,6 +2522,142 @@ function(iccdev_add_json_fixednum_size_cap_test)
   endif()
 endfunction()
 
+# #1883: the Testing corpus carried no ICC v2 profile at all -- a clean checkout's
+# 210 profiles are 208 v5 and 2 v4, with 0 'mft2' and 0 'mft1' tags -- so every
+# UseLegacyPCS()==true branch was dead code as far as CI was concerned. That
+# predicate selects the v2 16-bit Lab encoding (0..0xff00 rather than 0..0xffff)
+# in CIccXform::AdjustPCS and in the PCS step CIccCmm::Begin splices onto a
+# legacy transform. This test builds both a v2 'mft2' and a v4 'mAB ' profile
+# over identical CLUT content in memory and asserts the two disagree by exactly
+# the 65535/65280 factor, so it cannot be disabled by a corpus change. Links
+# IccProfLib alone and references no exported library data, so it is eligible for
+# ${ICCDEV_TEST_LIB_ICCPROFLIB}.
+function(iccdev_add_v2_legacy_pcs_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccV2LegacyPcsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/v2-legacy-pcs.cpp"
+  )
+  target_compile_features(iccV2LegacyPcsTest PRIVATE cxx_std_17)
+  target_include_directories(iccV2LegacyPcsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccV2LegacyPcsTest PRIVATE ${ICCDEV_TEST_LIB_ICCPROFLIB})
+  add_dependencies(check iccV2LegacyPcsTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.v2-legacy-pcs
+      COMMAND "$<TARGET_FILE:iccV2LegacyPcsTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.v2-legacy-pcs
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccV2LegacyPcsTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.v2-legacy-pcs PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;iccprofLib;v2;legacy-pcs;cmm;issue-1883;regression"
+  )
+  if(WIN32)
+    set(_v2_legacy_pcs_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccV2LegacyPcsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _v2_legacy_pcs_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.v2-legacy-pcs PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_v2_legacy_pcs_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# #1883, second half: pin the tracked v2 XML fixtures themselves. Testing/**/*.icc
+# is gitignored, so Testing/V2/*.xml is the tracked artifact and the profile is
+# generated from it by CreateAllProfiles.sh. Each case asserts the fixture still
+# parses through the same CIccProfileXml::LoadXml path iccFromXml uses, still
+# declares a 2.x header, still carries the LUT type it exists to provide, and
+# still validates without a critical error -- a fixture that silently drifted to
+# v4 would otherwise restore the original coverage gap while looking healthy.
+# Needs IccXML (CIccProfileXml) + IccProfLib; skipped where IccXML is not built,
+# and barred from ${ICCDEV_TEST_LIB_ICCPROFLIB} because it co-links IccXML.
+function(iccdev_add_v2_xml_fixtures_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccV2XmlFixturesTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/v2-xml-fixtures.cpp"
+  )
+  target_compile_features(iccV2XmlFixturesTest PRIVATE cxx_std_17)
+  target_include_directories(iccV2XmlFixturesTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccV2XmlFixturesTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccV2XmlFixturesTest)
+
+  # <case name>=<fixture>|<expected AToB0 tag type, or none>
+  set(_v2_xml_fixture_cases
+    "cmyk-lut16=${ICCDEV_TESTING_DIR}/V2/v2CmykLut16.xml|mft2"
+    "rgb-lut8=${ICCDEV_TESTING_DIR}/V2/v2RgbLut8.xml|mft1"
+    "rgb-matrix-trc=${ICCDEV_TESTING_DIR}/V2/v2RgbMatrixTRC.xml|none"
+  )
+
+  foreach(_case IN LISTS _v2_xml_fixture_cases)
+    string(REGEX REPLACE "=.*$" "" _case_name "${_case}")
+    string(REGEX REPLACE "^[^=]*=" "" _case_rest "${_case}")
+    string(REGEX REPLACE "\\|.*$" "" _case_xml "${_case_rest}")
+    string(REGEX REPLACE "^[^|]*\\|" "" _case_sig "${_case_rest}")
+
+    if(WIN32)
+      add_test(
+        NAME iccdev.v2-xml-fixtures.${_case_name}
+        COMMAND "$<TARGET_FILE:iccV2XmlFixturesTest>" "${_case_xml}" "${_case_sig}"
+      )
+    else()
+      add_test(
+        NAME iccdev.v2-xml-fixtures.${_case_name}
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          ${ICCDEV_TEST_ENV}
+          "$<TARGET_FILE:iccV2XmlFixturesTest>"
+          "${_case_xml}" "${_case_sig}"
+      )
+    endif()
+    set_tests_properties(iccdev.v2-xml-fixtures.${_case_name} PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 60
+      LABELS "iccdev;xml;v2;fixtures;issue-1883;regression"
+    )
+    if(WIN32)
+      set(_v2_xml_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccV2XmlFixturesTest>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _v2_xml_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.v2-xml-fixtures.${_case_name} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_v2_xml_windows_env_mods}"
+      )
+    endif()
+  endforeach()
+endfunction()
+
 # #1831: icGetDateTimeValue discarded its sscanf conversion count and assigned every
 # field into the icUInt16Number members of icDateTimeNumber without a range check, so
 # "%u" turned "-1" into 4294967295 and a year of 590359881 was truncated to 11593
@@ -2791,7 +2927,10 @@ if(WIN32)
       300
       "iccdev;windows;setup;profiles"
       "${ICCDEV_TESTING_DIR}/CreateAllProfiles.bat"
-      EXPECTED_PROFILE_PARSE_COUNT 130
+      # 130 before #1883; the Testing/V2 section adds the three v2 fixtures.
+      # Measured against both scripts, not derived from the invocation count --
+      # CreateAllProfiles has 131 iccFromXml calls but 130 of them report a parse.
+      EXPECTED_PROFILE_PARSE_COUNT 133
     )
     set_tests_properties(iccdev.windows-create-profiles PROPERTIES
       FIXTURES_SETUP iccdev_profiles
@@ -2921,6 +3060,8 @@ if(WIN32)
   iccdev_add_json_bcd_version_test()
   iccdev_add_json_writer_move_test()
   iccdev_add_json_fixednum_size_cap_test()
+  iccdev_add_v2_legacy_pcs_test()
+  iccdev_add_v2_xml_fixtures_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
   iccdev_add_parser_restore_calls_test()
@@ -3151,6 +3292,8 @@ iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_json_writer_move_test()
 iccdev_add_json_fixednum_size_cap_test()
+iccdev_add_v2_legacy_pcs_test()
+iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
 iccdev_add_parser_restore_calls_test()

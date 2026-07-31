@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>2.10</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>Lab </PCS>
+    <CreationDateTime>2026-07-31T01:05:03</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Perceptual</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <AToB0Tag> <lut8Type>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+      </BCurves>
+      <CLUT GridGranularity="5">
+        <TableData>
+            0 128 128   5 128 102   9 128  77  14 128  51  18 128  26
+           46 102 153  50 102 128  55 102 102  59 102  77  64 102  51
+           91  77 178  96  77 153 100  77 128 105  77 102 110  77  77
+          137  51 204 141  51 178 146  51 153 151  51 128 155  51 102
+          182  26 229 187  26 204 192  26 178 196  26 153 201  26 128
+           14 153 128  18 153 102  23 153  77  27 153  51  32 153  26
+           59 128 153  64 128 128  68 128 102  73 128  77  78 128  51
+          105 102 178 109 102 153 114 102 128 119 102 102 123 102  77
+          150  77 204 155  77 178 160  77 153 164  77 128 169  77 102
+          196  51 229 201  51 204 205  51 178 210  51 153 214  51 128
+           27 178 128  32 178 102  36 178  77  41 178  51  46 178  26
+           73 153 153  77 153 128  82 153 102  87 153  77  91 153  51
+          118 128 178 123 128 153 128 128 128 132 128 102 137 128  77
+          164 102 204 168 102 178 173 102 153 178 102 128 182 102 102
+          209  77 229 214  77 204 219  77 178 223  77 153 228  77 128
+           41 204 128  45 204 102  50 204  77  54 204  51  59 204  26
+           86 178 153  91 178 128  95 178 102 100 178  77 105 178  51
+          132 153 178 136 153 153 141 153 128 146 153 102 150 153  77
+          177 128 204 182 128 178 187 128 153 191 128 128 196 128 102
+          223 102 229 228 102 204 232 102 178 237 102 153 241 102 128
+           54 229 128  59 229 102  63 229  77  68 229  51  73 229  26
+          100 204 153 104 204 128 109 204 102 114 204  77 118 204  51
+          145 178 178 150 178 153 155 178 128 159 178 102 164 178  77
+          191 153 204 196 153 178 200 153 153 205 153 128 209 153 102
+          237 128 229 241 128 204 246 128 178 250 128 153 255 128 128
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+      </ACurves>
+    </lut8Type> </AToB0Tag>
+
+    <BToA0Tag> <lut8Type>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+      </BCurves>
+      <CLUT GridGranularity="5">
+        <TableData>
+            0  38 102   0  38  51   0  38   0   0  38   0   0  38   0
+            0  19 102   0  19  51   0  19   0   0  19   0   0  19   0
+            0   0 102   0   0  51   0   0   0   0   0   0   0   0   0
+           51   0 102  51   0  51  51   0   0  51   0   0  51   0   0
+          102   0 102 102   0  51 102   0   0 102   0   0 102   0   0
+            0 102 166   0 102 115   0 102  64   0 102  13   0 102   0
+           13  83 166  13  83 115  13  83  64  13  83  13  13  83   0
+           64  64 166  64  64 115  64  64  64  64  64  13  64  64   0
+          115  45 166 115  45 115 115  45  64 115  45  13 115  45   0
+          166  26 166 166  26 115 166  26  64 166  26  13 166  26   0
+           26 166 229  26 166 178  26 166 128  26 166  77  26 166  26
+           77 147 229  77 147 178  77 147 128  77 147  77  77 147  26
+          128 128 229 128 128 178 128 128 128 128 128  77 128 128  26
+          178 108 229 178 108 178 178 108 128 178 108  77 178 108  26
+          229  89 229 229  89 178 229  89 128 229  89  77 229  89  26
+           89 229 255  89 229 242  89 229 191  89 229 140  89 229  89
+          140 210 255 140 210 242 140 210 191 140 210 140 140 210  89
+          191 191 255 191 191 242 191 191 191 191 191 140 191 191  89
+          242 172 255 242 172 242 242 172 191 242 172 140 242 172  89
+          255 153 255 255 153 242 255 153 191 255 153 140 255 153  89
+          153 255 255 153 255 255 153 255 255 153 255 204 153 255 153
+          204 255 255 204 255 255 204 255 255 204 255 204 204 255 153
+          255 255 255 255 255 255 255 255 255 255 255 204 255 255 153
+          255 236 255 255 236 255 255 236 255 255 236 204 255 236 153
+          255 217 255 255 217 255 255 217 255 255 217 204 255 217 153
+        </TableData>
+      </CLUT>
+      <ACurves>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+        <Curve IdentitySize="256"/>
+      </ACurves>
+    </lut8Type> </BToA0Tag>
+
+    <profileDescriptionTag> <textDescriptionType>
+      <TextData><![CDATA[iccDEV v2 RGB display profile (lut8Type)]]></TextData>
+    </textDescriptionType> </profileDescriptionTag>
+
+    <copyrightTag> <textType>
+      <TextData><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></TextData>
+    </textType> </copyrightTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+  </Tags>
+</IccProfile>

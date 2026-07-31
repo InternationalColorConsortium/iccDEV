@@ -249,3 +249,23 @@ REM RefEstimationImport.xml is not a standalone XML file
 :end_SpecRef
 
 cd ..
+
+REM Issue #1883: before these, the corpus held no ICC v2 profile at all -- a clean
+REM checkout's 210 profiles are 208 v5 and 2 v4, with no 'mft2' or 'mft1' tag
+REM anywhere -- so the v2 legacy Lab encoding path was exercised by nothing. These three cover
+REM the v2 shapes that path depends on: lut16Type ('mft2', which is what selects
+REM UseLegacyPCS), lut8Type ('mft1'), and the matrix/TRC form most real v2 display
+REM profiles take.
+cd V2
+if not "%1"=="clean" goto do_V2
+del /F/Q *.icc 2>NUL:
+goto end_V2
+:do_V2
+@echo on
+iccFromXml v2CmykLut16.xml v2CmykLut16.icc
+iccFromXml v2RgbLut8.xml v2RgbLut8.icc
+iccFromXml v2RgbMatrixTRC.xml v2RgbMatrixTRC.icc
+@echo off
+:end_V2
+
+cd ..
