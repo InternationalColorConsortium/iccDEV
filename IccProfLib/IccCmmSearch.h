@@ -135,6 +135,7 @@ public:
   icFloatVector m_pixel;
   icFloatVector m_startPixel;
   size_t m_nApply;
+  size_t m_nCostApply;
   icUInt16Number m_nSamples;
 
   bool m_bUnitBounds;

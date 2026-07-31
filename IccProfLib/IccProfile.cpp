@@ -1104,6 +1104,9 @@ bool CIccProfile::Write(CIccIO *pIO, icProfileIDSaveMethod nWriteId)
           return false;
 
         i->TagInfo.offset = (icUInt32Number)tagOffset;
+				if (pIO->Seek(tagOffset, icSeekSet)<0)
+					return false;
+				
         if (!i->pTag->Write(pIO))
           return false;
 
