@@ -3267,6 +3267,20 @@ set(ICCDEV_TEST_ENV
   "CXX=${CMAKE_CXX_COMPILER}"
   "ASAN_OPTIONS=halt_on_error=0,detect_leaks=0"
   "UBSAN_OPTIONS=halt_on_error=0,print_stacktrace=1"
+  # print_stacktrace=1 above makes every sanitizer report symbolize its stack.
+  # llvm-symbolizer consults DEBUGINFOD_URLS while doing so, and the regression
+  # container inherits Ubuntu's default (https://debuginfod.ubuntu.com) because
+  # ci-docker.yml runs ctest under a login shell, which sources /etc/profile.d.
+  # That host resolves from the container but never completes a connection, so
+  # each report blocks on the fetch for roughly 90 seconds - time attributed to
+  # whichever test happened to trip the report, not to the network. That is
+  # what timed out
+  # iccdev.json-sort-regression (issue #1928): a single benign libstdc++
+  # unsigned-overflow report inside std::sort turned a ~4s run into a >300s one.
+  # Emptying the variable keeps stack traces fully symbolized - our binaries
+  # carry their own -g DWARF, and debuginfod only ever supplied *system*
+  # library debug info - while removing the network dependency from every test.
+  "DEBUGINFOD_URLS="
   "LLVM_PROFILE_FILE=/dev/null"
   "ICCDEV_TOOLS_DIR=${ICCDEV_TOOLS_DIR}"
   "ICCDEV_TESTING_DIR=${ICCDEV_TESTING_DIR}"
