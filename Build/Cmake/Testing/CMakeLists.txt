@@ -3537,6 +3537,30 @@ set_tests_properties(iccdev.legacy-run-tests PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
+# #1809: the corpus mixes conformant examples, profiles carrying a baselined
+# warning, and fixtures that are malformed on purpose. A sweep that only asks
+# whether iccDumpProfile exited non-zero cannot tell a deliberate rejection from a
+# regression, so the 78 negative fixtures either read as unexplained failures or,
+# if the sweep tolerates them, mask a conformant profile that has newly turned
+# critical. Testing/qa-profile-manifest.tsv records the expected verdict per
+# profile and this test enforces it. It runs after iccdev.create-profiles because
+# 133 of the 213 profiles do not exist until that fixture generates them.
+# The manifest is expressed in terms of what iccDumpProfile -v reports, so the test
+# is only meaningful where that tool was built.
+if(TARGET iccDumpProfile)
+  iccdev_add_script_test(
+    iccdev.qa-profile-manifest
+    300
+    "iccdev;qa;manifest;profiles;validation;issue-1809;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-qa-profile-manifest.sh"
+    check
+  )
+  set_tests_properties(iccdev.qa-profile-manifest PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
+
 if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.tool-coverage

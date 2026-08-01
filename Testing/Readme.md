@@ -66,3 +66,43 @@ fixtures during `iccFromXml` XML-to-ICC round-trip testing.
 Use this split when interpreting CI output: the generated corpus includes both
 spec-valid examples and negative regression profiles that intentionally exercise
 ICC/iccMAX validation failures.
+
+## QA Profile Manifest
+
+`expected-invalid-fromxml.tsv` above covers the XML-to-ICC direction.
+`qa-profile-manifest.tsv` covers the other half: the validation verdict each
+profile in the corpus is expected to produce when `iccDumpProfile -v` reads it.
+
+Every profile is assigned to one of three suites, and the suite follows from the
+verdict rather than from a hand-adjudicated list:
+
+| suite | expected status | rule |
+|---|---|---|
+| `positive` | `valid` | must validate clean; any new diagnostic is a regression |
+| `compatibility` | `warning` | a known diagnostic is baselined; escalation beyond it fails |
+| `negative` | `critical` | rejection is the expected result; acceptance is a failure |
+
+A sanitizer finding or fatal signal fails every suite, negatives included: a
+malformed fixture is meant to be *rejected*, not to crash the validator.
+
+`sha256` is populated only for the profiles git tracks. The generated corpus
+cannot carry a stable digest because nearly every source XML sets
+`<CreationDateTime>now</CreationDateTime>`, which resolves through `localtime_r`
+at conversion time and feeds the recomputed profile ID — two conversions a second
+apart differ, and two machines in different time zones differ as well. For those
+rows `expected_status` and `expected_exit` carry the contract instead.
+
+The manifest also records `expected_status` and `expected_exit` as independent
+fields rather than deriving one from the other, because `iccDumpProfile` maps
+`noncompliant` to exit 0: a harness reading `$?` and a harness parsing the report
+do not see the same verdict.
+
+The CTest `iccdev.qa-profile-manifest` enforces the manifest. To re-baseline it
+deliberately, after a change that is meant to move verdicts:
+
+```sh
+.github/scripts/iccdev-qa-profile-manifest.sh generate
+```
+
+Review the resulting diff — it is the list of profiles whose validation outcome
+changed.

@@ -1,0 +1,258 @@
+# Testing/qa-profile-manifest.tsv - expected validation verdict per corpus profile (#1809)
+#
+# Regenerate with:  .github/scripts/iccdev-qa-profile-manifest.sh generate
+# Enforced by CTest: iccdev.qa-profile-manifest
+#
+# Columns (tab separated):
+#   path                repository path, relative to Testing/
+#   suite               positive | compatibility | negative
+#   expected_status     valid | warning | noncompliant | critical
+#   expected_exit       decimal exit code from iccDumpProfile -v
+#   expected_sanitizer  none  (a sanitizer finding fails every suite, negatives included)
+#   source              tracked | generated
+#   sha256              digest of the tracked git blob, or - when generated
+#   rationale           why this row reads the way it does
+#
+# Suite policy:
+#   positive       must validate clean; any new diagnostic is a regression
+#   compatibility  a known diagnostic is baselined; escalation beyond it fails
+#   negative       rejection is the expected result; acceptance is a failure
+#
+# iccDumpProfile status-to-exit mapping (Tools/CmdLine/IccDumpProfile/iccDumpProfile.cpp).
+# Note that the text verdict and the exit code deliberately disagree for one status,
+# so a harness reading $? and a harness reading the report do not see the same thing:
+#   valid         "Profile is valid"                            exit 0
+#   warning       "Profile has warning(s)"                      exit 0
+#   noncompliant  "Profile violates ICC specification"          exit 0    <-- asymmetry
+#   critical      "Profile has Critical Error(s) ..."           exit 255
+#   unknown       "Profile has unknown status!"                 exit 254
+# The manifest therefore records expected_status and expected_exit as independent
+# fields rather than deriving one from the other. No profile in the corpus currently
+# validates as overall noncompliant, so no row exercises that pairing today; the
+# mapping is recorded here so the contract is explicit if one appears.
+#
+# sha256 is populated only for git-tracked profiles. The generated corpus resolves
+# <CreationDateTime>now</CreationDateTime> through localtime_r at conversion time and
+# recomputes the profile ID from it, so its bytes are neither clock- nor timezone-stable.
+#
+# Scope: this manifest covers Testing/ only. The repository also tracks 24 profiles
+# under .github/ci/regression/ and .github/ci/test-data/ - deliberately malformed PoC
+# and fuzz fixtures - which are deliberately NOT listed here. Each is already the
+# input to a dedicated regression test that asserts a specific behaviour, and those
+# assertions are narrower than a whole-profile validation verdict. Extending the
+# manifest to cover them would be a separate change.
+#
+# path	suite	expected_status	expected_exit	expected_sanitizer	source	sha256	rationale
+ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc	compatibility	warning	0	none	tracked	317a85b01c29550c5289e505079a549c12aaf92cfebc80d04b6626f717675fce	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+CMYK-3DLUTs/CMYK-3DLUTs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+CMYK-3DLUTs/CMYK-3DLUTs2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Calc/CameraModel.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Calc/ElevenChanKubelkaMunk.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Calc/RGBWProjector.icc	compatibility	warning	0	none	generated	-	baselined: sampled curve has a range of zero
+Calc/argbCalc.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Calc/srgbCalc++Test.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Calc/srgbCalcTest.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+CalcTest/calcCheckInit.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+CalcTest/calcExercizeOps.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+CalcTest/calcOverMem_tget.icc	negative	critical	255	none	tracked	c173bcf5237b7233a62ff860d4eef07a62cc71766a65f45ce618a28abccd8274	negative fixture: illegal temporary channel access must be rejected
+CalcTest/calcOverMem_tput.icc	negative	critical	255	none	tracked	910a30b6e0f3141356855816b6ad01c384f058ba5f3cbeaccf48612e3e8ed51f	negative fixture: illegal temporary channel access must be rejected
+CalcTest/calcOverMem_tsav.icc	negative	critical	255	none	tracked	1faaf2d2d6883587987d090f087bfb3d150b714586d4b8f5af6a380336734a54	negative fixture: illegal temporary channel access must be rejected
+CalcTest/calcUnderStack_abs.icc	negative	critical	255	none	tracked	55491c621d748b06a170a7cf957c6abca6f2f3f4daf64d3eb5f882e3a9cf53c5	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_acos.icc	negative	critical	255	none	tracked	c2a4088f5c8bb2c9917e8aa6b2f2b02dc10a7018f0ca28fe05fbb298cc832ecb	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_add.icc	negative	critical	255	none	tracked	b834ca6a6c3eacc71c7ad719e820679725e14e6385dbba88845dabe15bbdf0e7	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_and.icc	negative	critical	255	none	tracked	001550770824b27ccae6c62128275b821943699225ae4bdf76ea8fc7ffb2b22d	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_asin.icc	negative	critical	255	none	tracked	75fc42038663df61ff0c4af64063b5e2235a70d8b3707bab51e24a34983f76be	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_atan.icc	negative	critical	255	none	tracked	dc16f0cf6f5970813e4a16583e9f1bc83208595f1b045d005be40906fda412c2	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_atn2.icc	negative	critical	255	none	tracked	6d112c17ce211eb0ae7f86ef79031f5ec44cefc209326422258f6b6d5c165280	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_calc.icc	negative	critical	255	none	tracked	63a834309fc26e9866a3c66d1eed3b8fe5252ee755d8cfb7adb76524d288051e	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_cb.icc	negative	critical	255	none	tracked	74916825af46fedee5e83f112cfb8f70150bff4cac2d8c5a1a0d162e0a41e49f	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_cbrt.icc	negative	critical	255	none	tracked	4c9728673c2376a763bfcfff5065c7e9b535742ebe4e44b73a30fc896b7f1745	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_ceil.icc	negative	critical	255	none	tracked	23d07ab318dbc5dc9c2f88c21ce4cd1313581c3d92c43cb477f85d3bca25b8e2	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_clut.icc	negative	critical	255	none	tracked	ef04de439f4d2ea473455d2c6599671e354e43090c127403cc581433efe6ab77	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_copy.icc	negative	critical	255	none	tracked	af14c27221bb58482c3a215b4762f5a9b780a5e9f30c749d12a7a767f47ea394	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_cos.icc	negative	critical	255	none	tracked	c0688a061c6cdd9ea54c0b63168b441ca7eb79567c5188c564a8f3c928b17e02	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_ctop.icc	negative	critical	255	none	tracked	75956f56252e1c51b8ad9f42e25f01bbfc108bbac96f4e7239dcb6c6e4e59d75	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_curv.icc	negative	critical	255	none	tracked	f78e4ba63f66975e9a3007fcf702720ff3e58bfaad96b0a3f5f1d73d2d9f441b	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_div.icc	negative	critical	255	none	tracked	48c4c2a0ad067a98f74d19f0a926a58b34eb39eac9743e759a6203cd4f26362e	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_elem.icc	negative	critical	255	none	tracked	97e4a9037b4051a08c6f82c7b3c51c673cda7084be4ef43d4acafce2a8d74027	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_eq.icc	negative	critical	255	none	tracked	9d8db6ddf955488a8f0ed1229ebccc9fddef98819f9c823ea01a5ea10b060d09	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_exp.icc	negative	critical	255	none	tracked	9f8513df40bf79f521ab91261d058722de6779db761362b995c4bc015849a69d	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_fJab.icc	negative	critical	255	none	tracked	e85ff92894cd45fc4c1c7cc92c786a1d1ce12e83348af5b2f76b7729ba8c305b	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_fLab.icc	negative	critical	255	none	tracked	f9d701306787e57d6d97e54f0950526632247403a30c88ea0c345780abc2a2ca	negative fixture: invalid calculator operation must be rejected
+CalcTest/calcUnderStack_flip.icc	negative	critical	255	none	tracked	be5ae0b734bbc862f0c928186d5e6e5d566efaa32ca8bdd88858ab06c933ae4c	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_flor.icc	negative	critical	255	none	tracked	914d2e7c9a42fc8a4add67b2d9635f99166e8de060e334eae0fa8ddae6f74c88	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_gama.icc	negative	critical	255	none	tracked	4157041c786e98bb4d9f960ec37c705bbc65d4f42754780151cb8243a2ab4010	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_ge.icc	negative	critical	255	none	tracked	220cfc7f4ffe589ba0e11fac673ec7b34ad23948b679401482444e505b0ca861	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_gt.icc	negative	critical	255	none	tracked	19a9ea2cfa4e79ea1c1a1b9d41ea38e873f4bd160ad1b5443ee400de5eacffbe	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_if.icc	negative	critical	255	none	tracked	d494109fa9df23ad820d177711321c6bed2dc9f72e338924ffd0b66fef9a5811	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_le.icc	negative	critical	255	none	tracked	917f8d74598b20cb98c41fe90d87e6703b4133f3708a058749c8e38bcd812fe5	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_ln.icc	negative	critical	255	none	tracked	546fe11cd54fa3fea3b5cf1edf9202e1bc6bd4ee8c9cb31f94ed266bbd6aecc7	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_log.icc	negative	critical	255	none	tracked	72c1239f98ac2c2f6a63e9abbbae322dc3ba90a53014395ee05e8008f44b10bd	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_lt.icc	negative	critical	255	none	tracked	4b3d61e7dd57ae56a6ce0ed3e01efac3c80d7c50c2a261e80e838bcb0ed6f828	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_max.icc	negative	critical	255	none	tracked	1a231b367f33878cb1b972b72ba50b7c8f020371136682a7c620f0dec2d1f338	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_min.icc	negative	critical	255	none	tracked	61e5bc90b18322db1611d6650d8f4b2dc68ee80269f879dab695779394c9ab67	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_mod.icc	negative	critical	255	none	tracked	02b1290612894a7dbf75b4d1ea29f3b597784f263ffaba9042c5494c38d156b2	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_mtx.icc	negative	critical	255	none	tracked	1d13a8a7e0518e2a7eabc54a6211e3cae96666641781a4234d1ef28f38b733b9	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_mul.icc	negative	critical	255	none	tracked	faab71dfb3fb303124baafde99a77afe87ad6581ff0f692e9a50ea50120f800f	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_near.icc	negative	critical	255	none	tracked	78dc625fccbeab44cbffd99c74e459b839e9449df3ca08584bc777e42758c2bd	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_neg.icc	negative	critical	255	none	tracked	0c362fa351473f147ffc79dfd1b4066ab39b60f7d7ef0aae8572c9e42cb5fb5b	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_not.icc	negative	critical	255	none	tracked	2ff1814404fb970dcef91477c650af561cfd5c5fd827c8b6e84d4b64b088cf45	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_or.icc	negative	critical	255	none	tracked	d0284f3855f2a3bcd4b30269a8ed490adb1a4b79e9921ead04100d9f1875afde	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_out.icc	negative	critical	255	none	tracked	b21524c7ad300f5b4de29df1f2fc4850f5609b15b23fce452447f8bf52afa0d8	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_pop.icc	negative	critical	255	none	tracked	68dc10f1cc27cec14a9cd6850a23a383f9e807b422b2870a607af3f4ce8603ef	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_posd.icc	negative	critical	255	none	tracked	562789d54d942bd4462d0dedf516615c2bbe9f514cfb1fc7449e89a8b004a8fa	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_pow.icc	negative	critical	255	none	tracked	0bbeb8094a52b0501cd668642652baf0a5afa5bc185ca8b7e90db83280909906	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_prod.icc	negative	critical	255	none	tracked	1efe436d22abcfe5991294c424dbf2e6e6a5bae00af27708788ed95ba69c2a69	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_ptoc.icc	negative	critical	255	none	tracked	c597d1d624f8542fa48106e172862211cca1e1df93eb755abcc9ac1989ecef63	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_rnum.icc	negative	critical	255	none	tracked	fb7c4771203de70c151e0c64a00e92b20ca901fedc670f8bcb1a20a61567cf59	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_rond.icc	negative	critical	255	none	tracked	9bb57fe98d445bdf4f1be1b6d7681ae75ae2fa03955f00e31205bd6a0e701a3b	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_rotl.icc	negative	critical	255	none	tracked	23bef4fa6674b2bda6c0890054961cd7ec28d7492adef25e33d97c3e4e7c0b36	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_rotr.icc	negative	critical	255	none	tracked	37b94e0dad136f57f42aee409aa167a28f8e5593f6dc4b27f716c84367577e43	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sadd.icc	negative	critical	255	none	tracked	ba93db85e082d774279db19b6bd89ecdf5f02d22de75a3c62fbb076bb131d91f	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sdiv.icc	negative	critical	255	none	tracked	c9ded33e1d96de30d2971302d0d058de723a8f78e175bb39b9d294b4517d60ed	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sel.icc	negative	critical	255	none	tracked	01d48b3d346734ed887079dfe244f6eab164ccfb533417e3a9536cf5d54b807a	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sign.icc	negative	critical	255	none	tracked	72dc8c6140280c00c8451deb09e7539055aa67bf6bc44dcddea7013d3545e276	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sin.icc	negative	critical	255	none	tracked	1e764439291ea2330d7a13350c639ce8aa568267bc640345bec22fbba11f92f7	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_smul.icc	negative	critical	255	none	tracked	c65e8a9c8104af9334de6d4f8ef3ff46157ec8482737b311906a8ab995f5eb4c	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_solv.icc	negative	critical	255	none	tracked	3fcd34a23d034b46d290411a2720c356587040d87615fffb8fe8e18a96e283ab	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sq.icc	negative	critical	255	none	tracked	c2cccd7583bd8fce546c8b85271dd83a299e58afa3786dd52ee124b81084e04e	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sqrt.icc	negative	critical	255	none	tracked	b135b8db39df174ce3ca3fe14b8f05e1510adcbe4e4d24f7dbc3131c91a6830d	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_ssub.icc	negative	critical	255	none	tracked	747b6a93f678140b2599c1f855bcea7ef4381361345339bcff92c77b1e751f0c	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sub.icc	negative	critical	255	none	tracked	d2948d5113c445f0c964852721238ef926b5fc607c4e0d55884d68e3832fde0b	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_sum.icc	negative	critical	255	none	tracked	377aa0136787b69899c939c50c98849f419d1d948ae8f694ba923c44abc98e99	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_tJab.icc	negative	critical	255	none	tracked	83ccfc547011aa6a46e88a5f01161b276f9a59d042cf15fa06a653642e825f46	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_tLab.icc	negative	critical	255	none	tracked	ff4c36c885fe62ee146f4989b620e222d0a8d46e40b06b3b2b378d57ef138a27	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_tint.icc	negative	critical	255	none	tracked	e8dcc33ccea64916c50b3959dfd6eeefd17b57ba5334a6bd5e456f77097beca8	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_tput.icc	negative	critical	255	none	tracked	a830629daf1ca891e53fce7d1652fd852bdc50fbf40fde0125ba4059bd02379f	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_tran.icc	negative	critical	255	none	tracked	f183be035cc400bd3a3cbb8b6def27e57d314384935813f512dd08c0e4362186	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_trnc.icc	negative	critical	255	none	tracked	486a484f65e09eb3784385d77b5c580200fbff73799a5415843a28392ee3b184	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_tsav.icc	negative	critical	255	none	tracked	d6d0171e887a7f514b302d54948cbbc75cfaf1e2c844846456e7ac1082f4cf91	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_vand.icc	negative	critical	255	none	tracked	c80514c393719ad855db9d19e3260eb392cbd3221ccd6a4c70fe13b78eed43f1	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_vmax.icc	negative	critical	255	none	tracked	b6470cf53f981bb6830150c05ed49bfa1838eda66edc00f3ef1d5d3fd410b0e5	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_vmin.icc	negative	critical	255	none	tracked	cd1f4f7e1af19ab0025a2afccd460626ce7616236177fc7bc60baf0110c2faae	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/calcUnderStack_vor.icc	negative	critical	255	none	tracked	154a8645e48e3cef1c72801488013b3d50dd252a3fb392f8c6f4685780d21628	negative fixture: calculator evaluation stack underflow must be rejected
+CalcTest/uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238.icc	negative	critical	255	none	tracked	e482d1defb841192735881d80b4b7ca0540f5b859164153f0be2080ce6167800	negative fixture: fuzz-derived malformed profile must be rejected
+Display/GrayGSDF.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/LCDDisplay.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Display/LaserProjector.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Display/Rec2020rgbColorimetric.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/Rec2020rgbSpectral.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Display/Rec2100HlgFull.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/Rec2100HlgNarrow.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/RgbGSDF.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/sRGB_D65_MAT-300lx.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/sRGB_D65_MAT-500lx.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Display/sRGB_D65_MAT.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Display/sRGB_D65_colorimetric.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Encoding/ISO22028-Encoded-bg-sRGB.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Encoding/ISO22028-Encoded-sRGB.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Encoding/sRgbEncoding.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Encoding/sRgbEncodingOverrides.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+ICS/Lab_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+ICS/Lab_int-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+ICS/Rec2100HlgFull-Part1.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+ICS/Rec2100HlgFull-Part2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+ICS/Rec2100HlgFull-Part3.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+ICS/Spec400_10_700-D50_2deg-Part1.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+ICS/Spec400_10_700-D93_2deg-Part2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+ICS/XYZ_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+ICS/XYZ_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+ICS/XYZ_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+ICS/XYZ_int-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Named/FluorescentNamedColor.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Named/NamedColor.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Named/NamedColorV4.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+Named/SparseMatrixNamedColor.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+Overprint/17ChanPart1.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Lab_float-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Lab_float-D93_2deg-MAT.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+PCC/Lab_int-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Lab_int-D65_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Lab_int-IllumA_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec380_10_730-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec380_10_730-D65_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec380_1_780-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec380_5_780-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-B_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-B_2deg-CAM.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-B_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-B_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_10deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_10deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_20yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_40yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_60yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D50_80yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_10deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_10deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_20yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_40yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_60yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D65_80yo2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D93_10deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D93_10deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D93_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-D93_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DB_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DB_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DB_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DG_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DG_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DG_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DR_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DR_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-DR_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-F11_2deg-CAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-F11_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-G_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-G_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-G_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-IllumA_10deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-IllumA_10deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-IllumA_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-IllumA_2deg-CAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-IllumA_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-N_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-N_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-N_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-R1_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-R1_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-R1_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-R2_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-R2_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-R2_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-Y_2deg-Abs.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-Y_2deg-CAT02.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/Spec400_10_700-Y_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/XYZ_float-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/XYZ_float-D65_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/XYZ_int-D50_2deg.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/XYZ_int-D65_2deg-MAT-Lvl2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+PCC/XYZ_int-D65_2deg-MAT.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+SpecRef/RefDecC.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+SpecRef/RefDecH.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+SpecRef/RefIncW.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+SpecRef/SixChanCameraRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+SpecRef/SixChanInputRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+SpecRef/argbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+SpecRef/srgbRef.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
+V2/v2CmykLut16.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+V2/v2RgbLut8.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+V2/v2RgbMatrixTRC.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/17ChanWithSpots-MVIS.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/18ChanWithSpots-MVIS.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/6ChanSelect-MID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/4ChanSelect-MID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/7ChanSelect-MID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/CGYK-SelectMID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/CMPK-SelectMID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/CMYK-SelectMID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/CMYKOGP-MVIS-Smooth.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+mcs/Flexo-CMYKOGP/OMYK-SelectMID.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+sRGB_v4_ICC_preference.icc	positive	valid	0	none	tracked	83174717332326ddc198d9df188a4daec27b8979ba152cebbfc470c793d0bb11	conformant example profile; validates clean
