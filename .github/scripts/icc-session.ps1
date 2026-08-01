@@ -18,10 +18,14 @@ icc-session
 #>
 
 param(
-  [string]$Root,
-  [string]$Suffix = "",
-  [datetime]$Date = (Get-Date),
-  [switch]$NoLocation
+  [Alias("Root")]
+  [string]$IccSessionRoot,
+  [Alias("Suffix")]
+  [string]$IccSessionSuffix = "",
+  [Alias("Date")]
+  [datetime]$IccSessionDate = (Get-Date),
+  [Alias("NoLocation")]
+  [switch]$IccSessionNoLocation
 )
 
 function Get-IccSessionDefaultRoot {
@@ -63,7 +67,7 @@ function New-IccSession {
   }
 
   $resolvedRoot = [System.IO.Path]::GetFullPath($Root)
-  New-Item -ItemType Directory -Path $resolvedRoot -Force | Out-Null
+  [System.IO.Directory]::CreateDirectory($resolvedRoot) | Out-Null
 
   $datePart = $Date.ToString("dd-MMM-yyyy", [System.Globalization.CultureInfo]::InvariantCulture).ToLowerInvariant()
   $pattern = "^{0}-(\d{{3}})(?:-.+)?$" -f [regex]::Escape($datePart)
@@ -88,7 +92,7 @@ function New-IccSession {
 
     $path = Join-Path $resolvedRoot $name
     try {
-      New-Item -ItemType Directory -Path $path -ErrorAction Stop | Out-Null
+      [System.IO.Directory]::CreateDirectory($path) | Out-Null
       break
     } catch [System.IO.IOException] {
       $nextNumber++
@@ -103,8 +107,8 @@ function New-IccSession {
   return $path
 }
 
-Set-Alias -Name icc-session -Value New-IccSession -Scope Global
-
 if ($MyInvocation.InvocationName -ne ".") {
-  New-IccSession -Root $Root -Suffix $Suffix -Date $Date -NoLocation:$NoLocation
+  New-IccSession -Root $IccSessionRoot -Suffix $IccSessionSuffix -Date $IccSessionDate -NoLocation:$IccSessionNoLocation
+} else {
+  Set-Alias -Name icc-session -Value New-IccSession -Scope Global
 }
