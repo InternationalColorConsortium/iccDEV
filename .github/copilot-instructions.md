@@ -51,7 +51,7 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
 - Maintainer build and sanitizer policy: `.github/instructions/build-system.instructions.md`
 - Test profile workflow: `.github/instructions/testing.instructions.md`
 - Workflow governance: `.github/instructions/workflow-governance.instructions.md`
-- Windows session helper: dot-source `.github/scripts/icc-session.ps1`, then
+- Windows session helper: dot-source `.\.github\scripts\icc-session.ps1`, then
   run `icc-session` to create the next `DD-mmm-YYYY-NNN` workspace directory.
 
 ## iccdev-mcp Review Notes
