@@ -1,2 +1,12 @@
 *.sh text eol=lf
+*.c text eol=lf
+*.cc text eol=lf
+*.cpp text eol=lf
+*.cxx text eol=lf
+*.h text eol=lf
+*.hh text eol=lf
+*.hpp text eol=lf
+*.hxx text eol=lf
+*.patch text eol=lf
+*.ps1 text eol=lf
 .githooks/* text eol=lf
