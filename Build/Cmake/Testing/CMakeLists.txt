@@ -1067,6 +1067,53 @@ function(iccdev_add_pcs_birefl_illuminant_range_test)
   endif()
 endfunction()
 
+# #1932: CIccPcsXform::Connect() sized the spectral PCS steps it pushes from the header's
+# spectralRange while the pixel buffers those steps run in are sized from the channel
+# count in the spectralPCS signature, and never checked that the two agreed. A header
+# declaring "rs" + 36 channels alongside spectralRange.steps == 184 produced a 3x184
+# observer matrix reading a 36-float pixel (CWE-125 heap over-read in
+# CIccSparseMatrix::MultiplyVector). CIccProfile::Validate() already calls that a critical
+# error, but nothing on the apply path calls Validate().
+#
+# Drives Connect() directly through stub xforms, so the assertions are on returned status
+# and need no sanitizer. Pins the deliberate sparse-matrix exclusion and the conformant
+# shapes too: the check fronts every spectral branch, so a guard that rejected too much
+# would break spectral colour management wholesale. Header + IccProfLib only, no fixture.
+function(iccdev_add_spectral_pcs_range_consistency_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSpectralPcsRangeConsistencyTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/spectral-pcs-range-consistency.cpp"
+  )
+  target_link_libraries(iccSpectralPcsRangeConsistencyTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSpectralPcsRangeConsistencyTest)
+
+  add_test(
+    NAME iccdev.spectral-pcs-range-consistency
+    COMMAND "$<TARGET_FILE:iccSpectralPcsRangeConsistencyTest>"
+  )
+  set_tests_properties(iccdev.spectral-pcs-range-consistency PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;spectral;issue-1932;regression"
+  )
+  if(WIN32)
+    set(_spectral_pcs_range_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSpectralPcsRangeConsistencyTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _spectral_pcs_range_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.spectral-pcs-range-consistency PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_spectral_pcs_range_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1853: CIccProfile::calcMediaWhiteXYZ() read the spectral white point tag with
 # GetValues()'s default nVectorSize of 1, so all but the first sample of the white vector
 # were uninitialized heap by the time they reached the returned XYZ. Builds its profiles
@@ -3178,6 +3225,7 @@ if(WIN32)
   iccdev_add_getvalues_nstart_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
+  iccdev_add_spectral_pcs_range_consistency_test()
   iccdev_add_spectral_media_white_test()
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_mpe_empty_identity_test()
@@ -3425,6 +3473,7 @@ iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
+iccdev_add_spectral_pcs_range_consistency_test()
 iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()

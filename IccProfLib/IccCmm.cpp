@@ -2121,6 +2121,56 @@ CIccPcsXform::~CIccPcsXform()
 
 /**
  **************************************************************************
+ * Name: icSpectralPcsMatchesRange
+ *
+ * Purpose:
+ *  Reports whether a header's spectral PCS signature and its spectral range
+ *  definition describe the same number of samples.
+ *
+ *  A spectral PCS signature carries its channel count in its low 16 bits, and that
+ *  count is the pixel width the CMM moves across the connection: it is what
+ *  CIccXform::GetNumSrcSamples()/GetNumDstSamples() report, and in turn what
+ *  CIccApplyCmm::InitPixel() sizes m_Pixel/m_Pixel2 from. The PCS steps that
+ *  CIccPcsXform::Connect() pushes are sized from the header's spectralRange /
+ *  biSpectralRange instead. When the two disagree, a step operates on a wider
+ *  vector than the pixel buffer holding it.
+ *
+ *  CIccProfile::Validate() already reports both disagreements as critical errors
+ *  (IccProfile.cpp, the bi-spectral product and the plain spectral count in the
+ *  spectralPCS switch), but nothing on the apply path consults it - iccApplyProfiles
+ *  and the CMM never call Validate() - so the check has to exist here too.
+ *
+ *  The scoping deliberately mirrors the validator's. icSigNoSpectralData has no
+ *  spectral PCS to be inconsistent with, and the sparse-matrix PCS is excluded
+ *  because there the channel count is the size of the encoded matrix blob carried in
+ *  the pixel rather than a sample count, so it is independent of the ranges by design
+ *  (see CIccPcsStepSrcSparseMatrix, which takes the two separately).
+ **************************************************************************
+ */
+static bool icSpectralPcsMatchesRange(const icHeader &hdr)
+{
+  icColorSpaceSignature sig = (icColorSpaceSignature)hdr.spectralPCS;
+
+  switch (icGetColorSpaceType(sig)) {
+    case icSigReflectanceSpectralData:
+    case icSigTransmisionSpectralData:
+    case icSigRadiantSpectralData:
+      return icNumColorSpaceChannels(sig) == (icUInt32Number)hdr.spectralRange.steps;
+
+    case icSigBiSpectralReflectanceData:
+      // One sample per (spectral, bi-spectral) wavelength pair. Widened before the
+      // multiply so a large pair cannot wrap the 16-bit product into a value that
+      // happens to match the channel count.
+      return icNumColorSpaceChannels(sig) ==
+             (icUInt32Number)hdr.biSpectralRange.steps * (icUInt32Number)hdr.spectralRange.steps;
+
+    default:
+      return true;
+  }
+}
+
+/**
+ **************************************************************************
  * Name: CIccPcsXform::Connect
  * 
  * Purpose: 
@@ -2212,6 +2262,29 @@ icStatusCMM CIccPcsXform::Connect(CIccXform *pFromXform, CIccXform *pToXform)
       m_dstSpace = icGetColorSpaceType(m_dstSpace);
 
     m_nDstSamples = pToXform->GetNumSrcSamples();
+
+    // m_nSrcSamples and m_nDstSamples were just taken from the neighbouring xforms, which
+    // derive them from their profile's PCS signature. Every spectral branch of the switch
+    // below instead sizes the steps it pushes from that profile's spectralRange, so a
+    // header whose two statements of the same quantity disagree produces a chain that
+    // reads or writes past the pixel buffer the caller allocated from the signature.
+    //
+    // Issue #1932 is that read: a header pairing an "rs" spectral PCS of 36 channels with
+    // spectralRange.steps == 184 reached pushRef2Xyz(), whose 3x184 observer matrix -
+    // well formed in itself - indexed a 36-float pixel buffer. Rejecting the profile is
+    // the only correct outcome; there is no way to tell which of the two numbers the
+    // producer meant, and Validate() already treats the disagreement as a critical error.
+    //
+    // Named pSpectralSrc/pSpectralDst rather than the pFromProfile/pToProfile used
+    // elsewhere in this function: the icSigRadiantSpectralPcsData case below declares its
+    // own pFromProfile, and reusing the name here would shadow it under -Wshadow.
+    CIccProfile *pSpectralSrc = pFromXform->GetProfilePtr();
+    CIccProfile *pSpectralDst = pToXform->GetProfilePtr();
+
+    if ((pSpectralSrc && !icSpectralPcsMatchesRange(pSpectralSrc->m_Header)) ||
+        (pSpectralDst && !icSpectralPcsMatchesRange(pSpectralDst->m_Header))) {
+      return icCmmStatInvalidProfile;
+    }
 
     switch (m_srcSpace) {
       case icSigLabPcsData:
