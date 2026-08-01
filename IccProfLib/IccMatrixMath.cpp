@@ -12,7 +12,7 @@
  * The ICC Software License, Version 0.2
  *
  *
- * Copyright (c) 2003-2015 The International Color Consortium. All rights 
+ * Copyright (c) 2003-2015 The International Color Consortium. All rights
  * reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -20,7 +20,7 @@
  * are met:
  *
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer. 
+ *    notice, this list of conditions and the following disclaimer.
  *
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
@@ -48,20 +48,20 @@
  * ====================================================================
  *
  * This software consists of voluntary contributions made by many
- * individuals on behalf of the The International Color Consortium. 
+ * individuals on behalf of the The International Color Consortium.
  *
  *
  * Membership in the ICC is encouraged when this software is used for
- * commercial purposes. 
+ * commercial purposes.
  *
- *  
+ *
  * For more information on The International Color Consortium, please
  * see <http://www.color.org/>.
- *  
- * 
+ *
+ *
  */
 
-////////////////////////////////////////////////////////////////////// 
+//////////////////////////////////////////////////////////////////////
 // HISTORY:
 //
 // -Initial implementation by Max Derhak 5-15-2003
@@ -88,8 +88,8 @@ namespace iccDEV {
 /**
 **************************************************************************
 * Name: CIccMatrixMath::CIccMatrixMath
-* 
-* Purpose: 
+*
+* Purpose:
 *  Constructor
 **************************************************************************
 */
@@ -115,8 +115,8 @@ CIccMatrixMath::CIccMatrixMath(icUInt16Number nRows, icUInt16Number nCols, bool 
 /**
 **************************************************************************
 * Name: CIccMatrixMath::CIccMatrixMath
-* 
-* Purpose: 
+*
+* Purpose:
 *  Copy Constructor
 **************************************************************************
 */
@@ -164,8 +164,8 @@ CIccMatrixMath &CIccMatrixMath::operator=(const CIccMatrixMath &matrix)
 /**
 **************************************************************************
 * Name: CIccMatrixMath::~CIccMatrixMath
-* 
-* Purpose: 
+*
+* Purpose:
 *  Destructor
 **************************************************************************
 */
@@ -178,8 +178,8 @@ CIccMatrixMath::~CIccMatrixMath()
 /**
 **************************************************************************
 * Name: CIccMatrixMath::VectorMult
-* 
-* Purpose: 
+*
+* Purpose:
 *  Multiplies pSrc vector passed by a matrix resulting in a pDst vector
 **************************************************************************
 */
@@ -201,8 +201,8 @@ void CIccMatrixMath::VectorMult(icFloatNumber *pDst, const icFloatNumber *pSrc) 
 /**
 **************************************************************************
 * Name: CIccMatrixMath::dump
-* 
-* Purpose: 
+*
+* Purpose:
 *  dumps the context of the step
 **************************************************************************
 */
@@ -226,8 +226,8 @@ void CIccMatrixMath::dumpMtx(std::string &str) const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::Mult
-* 
-* Purpose: 
+*
+* Purpose:
 *  Creates a new CIccMatrixMath that is the result of concatentating
 *  another matrix with this matrix. (IE result = matrix * this).
 **************************************************************************
@@ -263,8 +263,8 @@ CIccMatrixMath *CIccMatrixMath::Mult(const CIccMatrixMath *matrix) const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::VectorScale
-* 
-* Purpose: 
+*
+* Purpose:
 *  Multiplies each row by values of vector passed in
 **************************************************************************
 */
@@ -282,8 +282,8 @@ void CIccMatrixMath::VectorScale(const icFloatNumber *vec)
 /**
 **************************************************************************
 * Name: CIccMatrixMath::Scale
-* 
-* Purpose: 
+*
+* Purpose:
 *  Multiplies all values in matrix by a single scale factor
 **************************************************************************
 */
@@ -301,8 +301,8 @@ void CIccMatrixMath::Scale(icFloatNumber v)
 /**
 **************************************************************************
 * Name: CIccMatrixMath::Invert
-* 
-* Purpose: 
+*
+* Purpose:
 *  Inverts the matrix
 **************************************************************************
 */
@@ -320,8 +320,8 @@ bool CIccMatrixMath::Invert()
 /**
 **************************************************************************
 * Name: CIccMatrixMath::RowSum
-* 
-* Purpose: 
+*
+* Purpose:
 *  Creates a new CIccMatrixMath step that is the result of multiplying the
 *  matrix of this object to the scale of another object.
 **************************************************************************
@@ -344,8 +344,8 @@ icFloatNumber CIccMatrixMath::RowSum(icUInt16Number nRow) const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::isIdentityMtx
-* 
-* Purpose: 
+*
+* Purpose:
 *  Determines if applying this step will result in negligible change in data
 **************************************************************************
 */
@@ -376,8 +376,8 @@ bool CIccMatrixMath::isIdentityMtx() const
 /**
 **************************************************************************
 * Name: CIccMatrixMath::SetRange
-* 
-* Purpose: 
+*
+* Purpose:
 *  Fills a matrix math object that can be used to convert
 *  spectral vectors from one spectral range to another using linear interpolation.
 **************************************************************************
