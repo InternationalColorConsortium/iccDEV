@@ -20,13 +20,13 @@ permissions:
       target_ref:
         description: 'iccDEV ref to test'
         required: true
-        default: ci-qa-maintainer-repro-1
+        default: master
         type: string
 
 concurrency:
   group: >-
     windows-asan-ctest-repro-${{ github.workflow }}-${{
-    inputs.target_ref || 'ci-qa-maintainer-repro-1' }}
+    inputs.target_ref || 'master' }}
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
     env:
       POWERSHELL_TELEMETRY_OPTOUT: 1
       POWERSHELL_UPDATECHECK: Off
-      TARGET_REF_INPUT: ${{ inputs.target_ref || 'ci-qa-maintainer-repro-1' }}
+      TARGET_REF_INPUT: ${{ inputs.target_ref || 'master' }}
 
     steps:
       - name: Checkout trusted scripts
@@ -55,7 +55,8 @@ jobs:
       - name: Checkout target ref
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
-          ref: ${{ inputs.target_ref || 'ci-qa-maintainer-repro-1' }}
+          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
+          ref: ${{ inputs.target_ref || 'master' }}
           path: target
           fetch-depth: 1
           persist-credentials: false

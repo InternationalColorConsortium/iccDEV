@@ -79,6 +79,7 @@ jobs:
       - name: Checkout target iccDEV ref
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
+          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
           ref: ${{ inputs.target_ref || 'master' }}
           path: target
           fetch-depth: 1
@@ -277,6 +278,7 @@ jobs:
       - name: Checkout target iccDEV ref
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
+          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
           ref: ${{ inputs.target_ref || 'master' }}
           path: target
           fetch-depth: 1
@@ -289,7 +291,9 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
 
+          # preflight: allow-package-install reason=macos-asan-dependency
           brew install nlohmann-json
 
       - name: Build macOS ASAN iccApplyProfiles target
@@ -471,15 +475,6 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Checkout trusted Windows ASAN scripts
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
-        with:
-          ref: ci-qa-flags
-          path: ci-qa-flags
-          sparse-checkout: .github/ci/build/windows-asan.ps1
-          fetch-depth: 1
-          persist-credentials: false
-
       - name: Checkout workflow repro fixture
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
@@ -492,6 +487,7 @@ jobs:
       - name: Checkout target iccDEV ref
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
         with:
+          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
           ref: ${{ inputs.target_ref || 'master' }}
           path: target
           fetch-depth: 1
@@ -507,7 +503,8 @@ jobs:
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
           . .\trusted\.github\scripts\sanitize.ps1
 
-          $vcpkgExportUrl = 'https://github.com/InternationalColorConsortium/iccDEV/releases/download/v2.3.1/vcpkg-exported-deps.zip'
+          $vcpkgExportUrl = 'https://github.com/InternationalColorConsortium/iccDEV/' +
+            'releases/download/v2.3.1/vcpkg-exported-deps.zip'
           $targetRoot = Join-Path $env:GITHUB_WORKSPACE 'target'
           $zipPath = Join-Path $targetRoot 'deps.zip'
           Invoke-WebRequest -Uri $vcpkgExportUrl -OutFile $zipPath
@@ -611,7 +608,10 @@ jobs:
             -File `
             -Filter 'clang_rt.asan_dynamic-x86_64.dll' `
             -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '\\VC\\Tools\\MSVC\\[^\\]+\\bin\\Hostx64\\x64\\clang_rt\.asan_dynamic-x86_64\.dll$' } |
+            Where-Object {
+              $_.FullName -match
+                '\\VC\\Tools\\MSVC\\[^\\]+\\bin\\Hostx64\\x64\\clang_rt\.asan_dynamic-x86_64\.dll$'
+            } |
             Sort-Object FullName -Descending |
             Select-Object -First 1
           if (-not $asanRuntime) {
