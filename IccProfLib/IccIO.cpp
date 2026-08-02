@@ -222,16 +222,28 @@ size_t CIccIO::Write16(void *pBuf16, size_t nNum)
 #ifndef ICC_BYTE_ORDER_LITTLE_ENDIAN
   return Write8(pBuf16, nNum<<1)>>1;
 #else
-  icUInt16Number *ptr = (icUInt16Number*)pBuf16;
-  icUInt16Number tmp;
+  // Walk the caller's buffer as icUInt8Number and reorder the bytes into a
+  // scratch buffer, rather than loading it as an icUInt16Number and swapping
+  // the value. Callers hand these writers float buffers as well as integer
+  // ones -- WriteFloat32Float forwards straight into Write32 when icFloatNumber
+  // and icFloat32Number are the same width -- and reading a float through a
+  // wide integer lvalue is undefined (#1948). unsigned char may alias any
+  // object, so this form is well defined for every caller. It also mirrors
+  // icSwab16Array/icSwab32Array in IccUtil.h, which the read path has always
+  // used and which is why readers were never affected.
+  //
+  // The bytes are shuffled directly instead of via memcpy because memcpy is
+  // intercepted under ASAN: a call per element measurably slowed the sanitizer
+  // lanes, where these writers carry every CLUT a profile contains.
+  const icUInt8Number *ptr = (const icUInt8Number*)pBuf16;
+  icUInt8Number tmp[2];
   size_t i;
 
   for (i=0; i<nNum; i++) {
-    tmp = *ptr;
-    icSwab16(tmp);
-    if (Write8(&tmp, 2)!=2)
+    tmp[0] = ptr[1]; tmp[1] = ptr[0];
+    if (Write8(tmp, 2)!=2)
       break;
-    ptr++;
+    ptr += 2;
   }
 
   return i;
@@ -260,16 +272,19 @@ size_t CIccIO::Write32(void *pBuf32, size_t nNum)
 #ifndef ICC_BYTE_ORDER_LITTLE_ENDIAN
   return Write8(pBuf32, nNum<<2)>>2;
 #else
-  icUInt32Number *ptr = (icUInt32Number*)pBuf32;
-  icUInt32Number tmp;
+  // See the note in Write16: the buffer is walked as unsigned char because
+  // WriteFloat32Float routes float data through here, and a wide-integer load
+  // of a float object is undefined (#1948). This is the writer that flattened
+  // segmented-curve breakpoints to 0.0 under clang -O3 with LTO.
+  const icUInt8Number *ptr = (const icUInt8Number*)pBuf32;
+  icUInt8Number tmp[4];
   size_t i;
 
   for (i=0; i<nNum; i++) {
-    tmp = *ptr;
-    icSwab32(tmp);
-    if (Write8(&tmp, 4)!=4)
+    tmp[0] = ptr[3]; tmp[1] = ptr[2]; tmp[2] = ptr[1]; tmp[3] = ptr[0];
+    if (Write8(tmp, 4)!=4)
       break;
-    ptr++;
+    ptr += 4;
   }
 
   return i;
@@ -298,16 +313,19 @@ size_t CIccIO::Write64(void *pBuf64, size_t nNum)
 #ifndef ICC_BYTE_ORDER_LITTLE_ENDIAN
   return Write8(pBuf64, nNum<<3)>>3;
 #else
-  icUInt64Number *ptr = (icUInt64Number*)pBuf64;
-  icUInt64Number tmp;
+  // See the note in Write16. Kept in the same form as its 16- and 32-bit
+  // siblings: icFloatNumber is configurable, so a build where it is 64 bits
+  // wide reaches this writer with float data by the same route.
+  const icUInt8Number *ptr = (const icUInt8Number*)pBuf64;
+  icUInt8Number tmp[8];
   size_t i;
 
   for (i=0; i<nNum; i++) {
-    tmp = *ptr;
-    icSwab64(tmp);
-    if (Write8(&tmp, 8)!=8)
+    tmp[0] = ptr[7]; tmp[1] = ptr[6]; tmp[2] = ptr[5]; tmp[3] = ptr[4];
+    tmp[4] = ptr[3]; tmp[5] = ptr[2]; tmp[6] = ptr[1]; tmp[7] = ptr[0];
+    if (Write8(tmp, 8)!=8)
       break;
-    ptr++;
+    ptr += 8;
   }
 
   return i;

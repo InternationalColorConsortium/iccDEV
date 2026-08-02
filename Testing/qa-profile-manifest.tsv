@@ -48,7 +48,7 @@ CMYK-3DLUTs/CMYK-3DLUTs.icc	positive	valid	0	none	generated	-	conformant example
 CMYK-3DLUTs/CMYK-3DLUTs2.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Calc/CameraModel.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 Calc/ElevenChanKubelkaMunk.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
-Calc/RGBWProjector.icc	compatibility	warning	0	none	generated	-	baselined: sampled curve has a range of zero
+Calc/RGBWProjector.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Calc/argbCalc.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 Calc/srgbCalc++Test.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 Calc/srgbCalcTest.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
