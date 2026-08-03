@@ -772,7 +772,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read  # Required to derive the PR build matrix.
-    needs: [setup, detect-src]
+    needs: [detect-src]
 
     outputs:
       os-list: ${{ steps.v.outputs.os }}
@@ -888,7 +888,7 @@ jobs:
   unix-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.fast-lane != 'true' }}
     name: Unix Build & Test Profiles
-    needs: [setup, detect-src, validate-inputs]
+    needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-unix.yml
     # pass minimized inputs
     with:
@@ -902,7 +902,7 @@ jobs:
   gcc15-lto-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: GCC 15.2 Strict Release LTO
-    needs: [setup, detect-src, validate-inputs]
+    needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-gcc15.yml
     with:
       regression-image-tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
@@ -911,7 +911,7 @@ jobs:
   tool-tests:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
     name: Tool Smoke Tests (ASAN+UBSAN, ${{ matrix.tool_build_type }})
-    needs: [setup, detect-src, validate-inputs]
+    needs: [detect-src, validate-inputs]
     strategy:
       fail-fast: false
       matrix:
@@ -928,7 +928,7 @@ jobs:
   win-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-windows == 'true' }}
     name: Windows Build & Test Profiles
-    needs: [setup, detect-src, validate-inputs]
+    needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-pr-win.yml
     with:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
@@ -936,7 +936,7 @@ jobs:
   docker-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-docker == 'true' }}
     name: Docker Verification
-    needs: [setup, detect-src, validate-inputs]
+    needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
     with:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
