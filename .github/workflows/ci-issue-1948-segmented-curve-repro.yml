@@ -7,6 +7,13 @@
 #
 # Intent: Reproduce issue #1948 CIccIO strict-aliasing writer defect.
 #
+# The linux-clang-version-sweep job answers the #1952 question of whether the
+# defect is a property of a particular clang release.  It is not: every clang
+# major in the Ubuntu 24.04 pockets reproduces it, including the exact package
+# 1:20.1.2-0ubuntu1~24.04.3 that was reported as immune.  Each row also carries
+# its own -fno-strict-aliasing and ENABLE_LTO=OFF controls, so a null result can
+# be told apart from an invalid experiment.
+#
 ###############################################################
 
 name: "Issue 1948 CIccIO strict-aliasing repro"
@@ -27,6 +34,13 @@ permissions:
         description: 'Trusted regression container tag for Linux comparison'
         required: false
         default: master
+        type: string
+      sweep_ref:
+        description: >-
+          Known-defective ref the clang version sweep builds. Must predate the
+          #1948 fix (c7883bd1) or every row correctly reports no defect.
+        required: false
+        default: v2.3.2.1
         type: string
 
 concurrency:
@@ -177,6 +191,207 @@ jobs:
             echo "[FAIL] issue #1948 strict-aliasing discriminator did not reproduce" >&2
             exit 1
           fi
+
+  linux-clang-version-sweep:
+    name: "Linux clang ${{ matrix.clang }} sweep"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        clang: ['17', '18', '19', '20']
+    container:
+      image: ubuntu:24.04
+      options: --user 0
+    defaults:
+      run:
+        shell: bash --noprofile --norc {0}
+    env:
+      BASH_ENV: /dev/null
+      CLANG_SUFFIX: ${{ matrix.clang }}
+      SWEEP_REF_INPUT: ${{ inputs.sweep_ref || 'v2.3.2.1' }}
+      TRUSTED_SCRIPTS: ${{ github.workspace }}/trusted/.github/scripts
+      DEBIAN_FRONTEND: noninteractive
+
+    steps:
+      # A bare Ubuntu 24.04 image is deliberate rather than the regression
+      # container: the pockets carry four clang majors side by side, and the
+      # clang-20 package here is 1:20.1.2-0ubuntu1~24.04.3 -- the exact build
+      # reported on #1952 as not reproducing.  The regression image pins one
+      # newer toolchain and so cannot host that comparison.
+      # preflight: allow-package-install reason=clang-version-sweep-toolchain
+      - name: Install clang and build dependencies
+        run: |
+          set -euo pipefail
+          apt-get update -qq
+          # llvm-N is not optional padding: it carries llvm-ar and llvm-ranlib,
+          # and without them CMake's check_ipo_supported probe fails to archive
+          # its test object, reports "LTO not supported", and quietly configures
+          # the arm with LTO off -- which is the one setting that makes this
+          # defect disappear.  Measured: strict arm read 10 correct segments.
+          apt-get install -y -qq --no-install-recommends \
+            "clang-${CLANG_SUFFIX}" "lld-${CLANG_SUFFIX}" \
+            "llvm-${CLANG_SUFFIX}" "llvm-${CLANG_SUFFIX}-linker-tools" \
+            ca-certificates cmake git make xxd \
+            libjpeg-dev libpng-dev libtiff-dev libxml2-dev \
+            nlohmann-json3-dev zlib1g-dev
+          # xxd is absent from the bare image and sanitize-sed.sh reaches for it
+          # on its hidden-character path; the regression container ships it, so
+          # the dependency is invisible until a summary line trips that branch.
+
+      - name: Checkout trusted scripts
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Checkout sweep ref
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
+        with:
+          # preflight: allow-codeql-actions reason=manual-readonly-target-checkout
+          ref: ${{ inputs.sweep_ref || 'v2.3.2.1' }}
+          path: target
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Build strict, no-strict and no-LTO arms and measure
+        working-directory: target
+        env:
+          BASH_ENV: /dev/null
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source "$TRUSTED_SCRIPTS/sanitize-sed.sh"
+          git config --global --add safe.directory "$PWD"
+
+          cc="clang-${CLANG_SUFFIX}"
+          cxx="clang++-${CLANG_SUFFIX}"
+          clang_banner="$("$cc" --version | head -1)"
+          clang_package="$(dpkg-query -s "clang-${CLANG_SUFFIX}" |
+            awk '/^Version:/ {print $2}')"
+
+          lto_on='>>> Link-Time Optimization (LTO) enabled for Release builds'
+          lto_off='>>> Link-Time Optimization (LTO) disabled: ENABLE_LTO=OFF'
+
+          # Assert the LTO state each arm was meant to have rather than merely
+          # printing whatever CMake decided.  ENABLE_LTO=OFF alone flips this
+          # defect clean, so an arm that silently loses LTO returns a false
+          # negative; matching only "Link-Time Optimization" would accept the
+          # "not supported" line and hide exactly that.
+          build_arm() {
+            arm="$1"
+            lto_expect="$2"
+            shift 2
+            cmake -S Build/Cmake -B "out/$arm" -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_COMPILER="$cc" -DCMAKE_CXX_COMPILER="$cxx" \
+              -DENABLE_TOOLS=ON -DENABLE_WXWIDGETS=OFF "$@" \
+              > "configure-$arm.log" 2>&1
+            if ! grep -F "$lto_expect" "configure-$arm.log"; then
+              echo "[INVALID] $arm arm did not configure as '$lto_expect'" >&2
+              grep -E '>>> Link-Time Optimization' "configure-$arm.log" >&2 ||
+                echo "[INVALID] no LTO verdict in configure output" >&2
+              exit 2
+            fi
+            cmake --build "out/$arm" --target iccFromXml iccToXml \
+              --parallel "$(nproc)" > "build-$arm.log" 2>&1
+          }
+
+          # The sweep ref may be years old, so locate the tools instead of
+          # hard-coding a build-tree layout that has moved since 2015.
+          # -print -quit rather than a pipe into head: under pipefail a head
+          # that closes the pipe early leaves find killed by SIGPIPE, and the
+          # assignment would then abort the step under set -e.
+          measure_arm() {
+            arm="$1"
+            from_xml="$(find "out/$arm" -type f -name iccFromXml -perm -u+x \
+              -print -quit)"
+            to_xml="$(find "out/$arm" -type f -name iccToXml -perm -u+x \
+              -print -quit)"
+            "$from_xml" Testing/Calc/RGBWProjector.xml "rgbw-$arm.icc" >/dev/null
+            "$to_xml" "rgbw-$arm.icc" "rgbw-$arm.readback.xml" >/dev/null
+          }
+
+          build_arm strict "$lto_on"
+          build_arm nostrict "$lto_on" \
+            -DCMAKE_C_FLAGS_RELEASE="-O3 -DNDEBUG -fno-strict-aliasing" \
+            -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -fno-strict-aliasing"
+          build_arm nolto "$lto_off" -DENABLE_LTO=OFF
+
+          measure_arm strict
+          measure_arm nostrict
+          measure_arm nolto
+
+          zero_segment='SampledSegment Start="0.00000000" End="0.00000000"'
+          one_segment='SampledSegment Start="0.00000000" End="1.00000000"'
+          strict_zero="$(grep -c "$zero_segment" rgbw-strict.readback.xml || true)"
+          strict_one="$(grep -c "$one_segment" rgbw-strict.readback.xml || true)"
+          nostrict_zero="$(grep -c "$zero_segment" \
+            rgbw-nostrict.readback.xml || true)"
+          nostrict_one="$(grep -c "$one_segment" \
+            rgbw-nostrict.readback.xml || true)"
+          nolto_zero="$(grep -c "$zero_segment" rgbw-nolto.readback.xml || true)"
+          nolto_one="$(grep -c "$one_segment" rgbw-nolto.readback.xml || true)"
+
+          # Print the counts to stdout as well as to the summary: on #1952 the
+          # pass/fail sentence alone could not distinguish a clean compiler from
+          # a measurement taken against a stale build tree.
+          echo "counts: strict_zero=$strict_zero strict_one=$strict_one" \
+            "nostrict_zero=$nostrict_zero nostrict_one=$nostrict_one" \
+            "nolto_zero=$nolto_zero nolto_one=$nolto_one"
+
+          {
+            echo "## Issue #1948 clang $(sanitize_line "$CLANG_SUFFIX") sweep"
+            echo ""
+            echo "- Sweep ref: \`$(sanitize_line "$SWEEP_REF_INPUT")\`"
+            echo "- Sweep commit: \`$(sanitize_line "$(git rev-parse HEAD)")\`"
+            echo "- Compiler: \`$(sanitize_line "$clang_banner")\`"
+            echo "- Package version: \`$(sanitize_line "$clang_package")\`"
+            echo ""
+            echo "| arm | zero-end | one-end | expected |"
+            echo "|---|---|---|---|"
+            echo "| strict, LTO on | \`$(sanitize_line "$strict_zero")\` |" \
+              "\`$(sanitize_line "$strict_one")\` | defect |"
+            echo "| -fno-strict-aliasing | \`$(sanitize_line "$nostrict_zero")\` |" \
+              "\`$(sanitize_line "$nostrict_one")\` | clean |"
+            echo "| ENABLE_LTO=OFF | \`$(sanitize_line "$nolto_zero")\` |" \
+              "\`$(sanitize_line "$nolto_one")\` | clean |"
+            echo ""
+            echo "### strict readback sampled segments"
+            echo '```text'
+            grep -n 'SampledSegment' rgbw-strict.readback.xml | head -12 |
+              while IFS= read -r line; do
+                sanitize_code_line "$line"
+              done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
+
+          # Each leg gets its own message and exit code.  A broken control and a
+          # compiler that genuinely writes correct profiles are different
+          # results, and collapsing them into one sentence is what made the
+          # earlier clang-20 run read as immunity.
+          if [ "$nostrict_one" -eq 0 ] || [ "$nostrict_zero" -ne 0 ]; then
+            echo "[INVALID] -fno-strict-aliasing control did not write a" \
+              "correct profile; the experiment says nothing about clang" \
+              "$CLANG_SUFFIX" >&2
+            exit 2
+          fi
+          if [ "$nolto_one" -eq 0 ] || [ "$nolto_zero" -ne 0 ]; then
+            echo "[INVALID] ENABLE_LTO=OFF control did not write a correct" \
+              "profile; the experiment says nothing about clang" \
+              "$CLANG_SUFFIX" >&2
+            exit 2
+          fi
+          if [ "$strict_zero" -eq 0 ]; then
+            echo "[NO DEFECT] clang $CLANG_SUFFIX wrote a correct profile at" \
+              "$SWEEP_REF_INPUT with strict aliasing and LTO on" >&2
+            exit 1
+          fi
+          echo "[REPRODUCED] clang $CLANG_SUFFIX flattened $strict_zero" \
+            "segmented-curve breakpoints at $SWEEP_REF_INPUT"
 
   windows-msvc:
     name: "Windows MSVC"
