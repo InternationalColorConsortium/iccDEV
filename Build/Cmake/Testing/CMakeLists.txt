@@ -4306,6 +4306,34 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1909-xml-narrowing-regression.sh"
 )
 
+# #1954/#1931: the same narrowing at the MPE element readers, which is the
+# surface #1908 and #1909 did not cover.  The reported breadcrumbs are negatives
+# (FunctionType="-143" -> 65393, "-1" -> 65535), but those wrap to a function
+# type the switch already refuses, so the cases with teeth in an ordinary job
+# are the overflows that land on a value it accepts: FunctionType="65536" is
+# stored and re-serialized as 0, a supported function, and Reserved2="-1" as
+# 65535.  Flags="-1" on the spectral CLUT was accepted outright, since
+# 0xFFFFFFFF is a value that 32-bit field is willing to hold.
+# One case covers the writer, which had to change in the same commit: it cast
+# m_flags to unsigned and then printed it with "%d", so a legal Flags of
+# 0x80000002 was written back out as "-2147483646".  That round-tripped only
+# because the reader's atoi() wrapped the negative straight back, so tightening
+# the reader alone would have stopped those profiles loading -- the case asserts
+# the attribute is emitted unsigned and survives XML -> ICC -> XML -> ICC.
+# Controls pair every rejection with the value it wrapped to (0, 65535, 0) plus
+# Flags="2147483650" itself, which must still be accepted: that is what shows
+# the fix refuses unrepresentable values rather than having lowered a ceiling.
+# Fixtures are mutated from tracked Testing/ XML at run time and the script
+# fails if a mutation did not apply, so a donor edited upstream cannot turn
+# this into a silent no-op.
+iccdev_add_script_test(
+  iccdev.issue-1954-mpe-attr-narrowing-regression
+  120
+  "iccdev;xml;mpe;issue-1954;issue-1931;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1954-mpe-attr-narrowing-regression.sh"
+)
+
 # #1810: 'RICC' in the CMM and platform header fields of 15 Testing fixtures.
 # 'RICC' was never registered -- icSigRefIccMAX itself carried 0x52494343
 # ('RICC') against a comment and a registry that both said 'RIMX', until #1473
