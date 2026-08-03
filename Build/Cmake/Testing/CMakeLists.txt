@@ -3639,7 +3639,7 @@ if(ICCDEV_HAS_JSON_RUNTIME_CONFIG_TOOLS AND ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.tool-coverage
     300
-    "iccdev;tools;asan;regression"
+    "iccdev;tools;asan;regression;slow"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-tool-coverage-baseline.sh"
     --asan
