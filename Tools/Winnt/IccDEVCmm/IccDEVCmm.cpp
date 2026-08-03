@@ -2086,9 +2086,15 @@ BOOL WINAPI CMTranslateRGBsExt(
             }
             icUInt16Number *bits = (icUInt16Number*)lpDestBits;
 
-            *bits++ = (icUInt8Number)(UnitClip(destPixel[0]) * 255.0 + 0.5);
-            *bits++ = (icUInt8Number)(UnitClip(destPixel[1]) * 255.0 + 0.5);
-            *bits   = (icUInt8Number)(UnitClip(destPixel[2]) * 255.0 + 0.5);
+            // 16-bit samples are full-range: the matching reader above divides
+            // by 65535, BM_16b_GRAY below multiplies by 65535, and so does the
+            // 16-bit output path in CMTranslateColors.  Scaling by 255 through
+            // an icUInt8Number cast wrote an 8-bit value into a 16-bit sample,
+            // so a full-scale channel came back as 255/65535 -- under 0.4% of
+            // the intended level -- and the format did not round-trip (#1953).
+            *bits++ = (icUInt16Number)(UnitClip(destPixel[0]) * 65535.0 + 0.5);
+            *bits++ = (icUInt16Number)(UnitClip(destPixel[1]) * 65535.0 + 0.5);
+            *bits   = (icUInt16Number)(UnitClip(destPixel[2]) * 65535.0 + 0.5);
 
             lpDestBits += 6;
           }
@@ -2101,9 +2107,11 @@ BOOL WINAPI CMTranslateRGBsExt(
           {
             icUInt16Number *bits = (icUInt16Number*)lpDestBits;
 
-            *bits++ = (icUInt8Number)(UnitClip(destPixel[0]) * 255.0 + 0.5);
-            *bits++ = (icUInt8Number)(UnitClip(destPixel[1]) * 255.0 + 0.5);
-            *bits   = (icUInt8Number)(UnitClip(destPixel[2]) * 255.0 + 0.5);
+            // Same full-range 16-bit contract as BM_16b_Lab above; these four
+            // formats shared the 255-through-icUInt8Number quantization (#1953).
+            *bits++ = (icUInt16Number)(UnitClip(destPixel[0]) * 65535.0 + 0.5);
+            *bits++ = (icUInt16Number)(UnitClip(destPixel[1]) * 65535.0 + 0.5);
+            *bits   = (icUInt16Number)(UnitClip(destPixel[2]) * 65535.0 + 0.5);
 
             lpDestBits += 6;
           }
@@ -2156,12 +2164,29 @@ BOOL WINAPI CMTranslateRGBsExt(
       lpSrcBits = lpSrcLine + dwInputStride;
     }
 
+    // Both blocks re-base a walking pointer onto the next row: the inner loop
+    // leaves lpSrcBits/lpDestBits just past the last pixel it touched, and the
+    // row start was saved in lpSrcLine/lpDestLine above.  A zero stride means
+    // "no explicit stride", so the row is DWORD-padded the way Windows packs
+    // bitmap scanlines; a non-zero stride is the caller's own row pitch.
+    //
+    // The output block re-based lpSrcBits rather than lpDestBits, so a caller
+    // supplying dwOutputStride got two wrong results at once.  lpDestBits was
+    // left wherever the inner loop stopped, so rows landed at the pixel pitch
+    // instead of the caller's stride and the padding between rows was never
+    // written.  And lpSrcBits was overwritten with an address inside the
+    // *destination* bitmap, so from row 1 on the input pixels were read back
+    // out of the destination rather than from the source.  Both are silent:
+    // the clobbered pointer stays within the destination allocation for the
+    // usual geometries, so the transform returns TRUE with wrong pixels rather
+    // than faulting.  It has to be lpDestBits here, exactly as the input block
+    // above re-bases lpSrcBits (#1953).
     if (!dwOutputStride) {
       size_t dwAlignedSize = (((lpDestBits - lpDestLine) + 3)>>2)<<2;
       lpDestBits = lpDestLine + dwAlignedSize;
     }
     else {
-      lpSrcBits = lpDestLine + dwOutputStride;
+      lpDestBits = lpDestLine + dwOutputStride;
     }
   }
   return TRUE;
