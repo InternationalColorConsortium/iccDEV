@@ -3861,7 +3861,7 @@ if(ICCDEV_HAS_JSON_TOOLS)
   iccdev_add_script_test(
     iccdev.json-sort-regression
     300
-    "iccdev;json;sort;regression;issue-1920;asan"
+    "iccdev;json;sort;regression;issue-1920;asan;slow"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-json-sort-regression.sh"
   )
