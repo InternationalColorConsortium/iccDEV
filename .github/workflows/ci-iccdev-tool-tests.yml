@@ -344,6 +344,7 @@ jobs:
         if: ${{ inputs.ctest_mode != 'skip' }}
         env:
           BASH_ENV: /dev/null
+          PIP_NO_CACHE_DIR: "1"
         run: |
           set -euo pipefail
           git config --global credential.helper ""
