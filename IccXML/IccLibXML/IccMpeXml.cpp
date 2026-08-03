@@ -282,10 +282,21 @@ bool CIccFormulaCurveSegmentXml::ToXml(std::string &xml, std::string blanks)
   xml += line;
 
   if (m_nReserved) {
-    snprintf(line, bufSize, " Reserved=\"%d\"", (unsigned int) m_nReserved);
+    // m_nReserved is an icUInt32Number that Read32() fills from the element
+    // header, so every value up to 0xFFFFFFFF is representable on disk.  The
+    // (unsigned int) cast below was already there and says what was intended,
+    // but "%d" reinterprets the argument as signed, so anything with bit 31
+    // set was written out negative -- 0x80000002 became "-2147483646" (#1931).
+    // The reader then wrapped that back through atoi(), so the value survived
+    // only because the two defects cancelled; "%u" is what makes the attribute
+    // correct on its own.  CIccMpeXmlCLUT::ToXml below already prints its
+    // Reserved this way, so this brings the segment writer in line with it.
+    snprintf(line, bufSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   if (m_nReserved2) {
+    // m_nReserved2 is an icUInt16Number, which promotes to a non-negative int,
+    // so "%d" cannot misprint it and is left alone.
     snprintf(line, bufSize, " Reserved2=\"%d\"", m_nReserved2);
     xml += line;
   }
@@ -308,11 +319,30 @@ bool CIccFormulaCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
     return false;
   }
 
-  m_nReserved  = atoi(icXmlAttrValue(pNode, "Reserved",  "0"));
-  m_nReserved2 = atoi(icXmlAttrValue(pNode, "Reserved2", "0"));
-  m_nFunctionType = atoi(icXmlAttrValue(funcType));
+  // atoi() returns a signed int, and these three members are unsigned, so a
+  // negative or oversized attribute used to change value on the way in rather
+  // than be refused: Reserved2="-1" became 65535 and FunctionType="65536"
+  // became 0, which the switch below then accepted as the perfectly valid
+  // "Y = a*X^g" type (#1931).  icXmlParseU16/U32 (IccUtilXml.h, added by
+  // #1925) refuse the sign, trailing garbage and the overflow instead, so a
+  // value that cannot be represented stops the parse rather than silently
+  // becoming a different one.  The defaults stay "0" so documents that omit
+  // the attribute keep loading exactly as before.
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Reserved", "0"), m_nReserved)) {
+    parseStr += "Invalid Reserved in Formula Segment\n";
+    return false;
+  }
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "Reserved2", "0"), m_nReserved2)) {
+    parseStr += "Invalid Reserved2 in Formula Segment\n";
+    return false;
+  }
+  if (!icXmlParseU16(icXmlAttrValue(funcType), m_nFunctionType)) {
+    parseStr += "Invalid FunctionType in Formula Segment\n";
+    return false;
+  }
 
-
+  // The switch still decides which function types are supported; the parse
+  // above only guarantees the value reaching it is the one the document said.
   switch(m_nFunctionType) {
     case 0x0000:
       m_nParameters = 4;
@@ -494,7 +524,20 @@ bool CIccSampledCurveSegmentXml::ParseXml(xmlNode *pNode, std::string &parseStr)
       icUInt16Number storageType = icValueTypeFloat32;
       xmlAttr *attr = icXmlFindAttr(pNode, "StorageType");
       if (attr) {
-       storageType = (icUInt16Number)atoi(icXmlAttrValue(attr));
+        // The explicit (icUInt16Number) cast here hid the same narrowing the
+        // Formula Segment above suffered from: it silenced UBSan without
+        // making the value correct, so StorageType="65536" arrived as 0 and
+        // selected icValueTypeUInt8 in the chain below rather than being
+        // refused (#1931).  Parse strictly and reject instead -- the storage
+        // type picks which reader interprets the binary file that follows, so
+        // a substituted value reads the samples at the wrong width.
+        // `file` is owned here -- every other failure exit in this branch
+        // releases it before returning, so this one must too.
+        if (!icXmlParseU16(icXmlAttrValue(attr), storageType)) {
+          parseStr += "Invalid StorageType in Sampled Curve Segment\n";
+          delete file;
+          return false;
+        }
       }
 
       if (storageType == icValueTypeUInt8){
@@ -737,10 +780,23 @@ bool CIccSampledCalculatorCurveXml::ParseXml(xmlNode *pNode, std::string &parseS
     return false;
   }
 
-  m_nDesiredSize = (icUInt32Number)atoi(icXmlAttrValue(attr));
-
-  m_nReserved  = (icUInt32Number)atoi(icXmlAttrValue(pNode, "Reserved",  "0"));
-  m_nReserved2 = (icUInt16Number)atoi(icXmlAttrValue(pNode, "Reserved2", "0"));
+  // Same signed-to-unsigned narrowing as the Formula Segment above, but behind
+  // explicit casts, which suppress the UBSan check without changing the
+  // outcome: DesiredSize="-1" became 4294967295 and was then used as the
+  // interpolation sample count (#1931).  Parse strictly so the count that
+  // reaches the curve is the one the document actually asked for.
+  if (!icXmlParseU32(icXmlAttrValue(attr), m_nDesiredSize)) {
+    parseStr += "Invalid DesiredSize in Sampled Calculator Curve\n";
+    return false;
+  }
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Reserved", "0"), m_nReserved)) {
+    parseStr += "Invalid Reserved in Sampled Calculator Curve\n";
+    return false;
+  }
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "Reserved2", "0"), m_nReserved2)) {
+    parseStr += "Invalid Reserved2 in Sampled Calculator Curve\n";
+    return false;
+  }
 
   xmlNode *pCalcNode = icXmlFindNode(pNode->children, "CalculatorElement");
   if (pCalcNode) {
@@ -824,19 +880,34 @@ bool CIccSingleSampledCurveXml::ParseXml(xmlNode *pNode, std::string &parseStr)
 
   m_lastEntry = (icFloatNumber)atof(icXmlAttrValue(attr));
 
+  // As above: the explicit casts made these three narrowings invisible to
+  // UBSan without making them safe.  StorageType and ExtensionType each select
+  // behaviour rather than carrying data -- the storage type picks the sample
+  // width and the extension type picks the clip/extend rule -- so a wrapped
+  // value silently changes how the curve is read (#1931).  Both keep their
+  // pre-existing defaults when the attribute is absent.
   m_storageType = icValueTypeFloat32;
   attr = icXmlFindAttr(pNode, "StorageType");
   if (attr) {
-    m_storageType = (icUInt16Number)atoi(icXmlAttrValue(attr));
+    if (!icXmlParseU16(icXmlAttrValue(attr), m_storageType)) {
+      parseStr += "Invalid StorageType in Single Sampled Curve\n";
+      return false;
+    }
   }
 
   m_extensionType = icClipSingleSampledCurve;
   attr = icXmlFindAttr(pNode, "ExtensionType");
   if (attr) {
-    m_extensionType = (icUInt16Number)atoi(icXmlAttrValue(attr));
+    if (!icXmlParseU16(icXmlAttrValue(attr), m_extensionType)) {
+      parseStr += "Invalid ExtensionType in Single Sampled Curve\n";
+      return false;
+    }
   }
 
-  m_nReserved = (icUInt32Number)atoi(icXmlAttrValue(pNode, "Reserved", "0"));
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Reserved", "0"), m_nReserved)) {
+    parseStr += "Invalid Reserved in Single Sampled Curve\n";
+    return false;
+  }
 
   const char *filename = icXmlAttrValue(pNode, "Filename");
 
@@ -1300,7 +1371,14 @@ bool CIccMpeXmlCurveSet::ToXml(std::string &xml, std::string blanks/* = ""*/)
   return true;
 }
 
-static icCurveSetCurvePtr ParseXmlCurve(xmlNode* pNode, std::string parseStr)
+// parseStr is taken by reference rather than by value: each branch below hands
+// it to a curve's ParseXml(), which appends the reason a curve failed, but the
+// by-value parameter meant every one of those messages was written into a copy
+// and discarded at the return.  Callers were left with only their own generic
+// "Unable to parse element ..." line, which is why a malformed segment reported
+// nothing about the attribute that actually caused it (#1931).  Both call sites
+// already hold a std::string& of their own, so the reason now reaches the user.
+static icCurveSetCurvePtr ParseXmlCurve(xmlNode* pNode, std::string &parseStr)
 {
   icCurveSetCurvePtr rv = NULL;
   
@@ -1890,10 +1968,14 @@ bool CIccXmlToneMapFunc::ToXml(std::string& xml, std::string blanks /* = "" */)
   xml += blanks + line;
 
   if (m_nReserved) {
-    snprintf(line, lineSize, " Reserved=\"%d\"", (unsigned int) m_nReserved);
+    // Same u32-printed-as-signed defect the Formula Segment writer had: the
+    // (unsigned int) cast states the intent but "%d" ignores it, so bit 31
+    // came back out negative.  See CIccFormulaCurveSegmentXml::ToXml above.
+    snprintf(line, lineSize, " Reserved=\"%u\"", (unsigned int) m_nReserved);
     xml += line;
   }
   if (m_nReserved2) {
+    // icUInt16Number: promotes to a non-negative int, so "%d" is safe here.
     snprintf(line, lineSize, " Reserved2=\"%d\"", m_nReserved2);
     xml += line;
   }
@@ -1916,8 +1998,24 @@ bool CIccXmlToneMapFunc::ParseXml(xmlNode* pNode, std::string& parseStr)
     return false;
   }
 
-  m_nReserved2 = atoi(icXmlAttrValue(pNode, "Reserved2"));
-  m_nFunctionType = atoi(icXmlAttrValue(funcType));
+  // FunctionType="-143" reached this icUInt16Number as 65393 (#1954), and the
+  // same wrap let FunctionType="65536" arrive as 0 -- a supported type -- so
+  // the switch below could not tell a malformed document from a valid one.
+  //
+  // Note the "0" default added to Reserved2: this call site, unlike its
+  // Formula Segment counterpart, relied on icXmlAttrValue() returning "" for
+  // an absent attribute and atoi("") yielding 0.  icXmlParseU16 rejects the
+  // empty string, so the default has to be spelled out here or every tone map
+  // function that omits Reserved2 -- which is all of them in the corpus --
+  // would stop parsing.
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "Reserved2", "0"), m_nReserved2)) {
+    parseStr += "Invalid Reserved2 in Tone Map Function\n";
+    return false;
+  }
+  if (!icXmlParseU16(icXmlAttrValue(funcType), m_nFunctionType)) {
+    parseStr += "Invalid FunctionType in Tone Map Function\n";
+    return false;
+  }
 
   switch (m_nFunctionType) {
   case 0x0000:
@@ -2159,8 +2257,17 @@ bool CIccMpeXmlExtCLUT::ToXml(std::string &xml, std::string blanks/* = ""*/)
 
 bool CIccMpeXmlExtCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_storageType = (icUInt16Number)atoi(icXmlAttrValue(pNode, "StorageType", "0"));
-  m_nReserved2 = atoi(icXmlAttrValue(pNode, "Reserved2", "0"));
+  // Both members are icUInt16Number; StorageType went through an explicit cast
+  // and Reserved2 through an implicit one, but each wrapped a negative or
+  // oversized attribute into a different value rather than refusing it (#1931).
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "StorageType", "0"), m_storageType)) {
+    parseStr += "Invalid StorageType in ExtCLutElement\n";
+    return false;
+  }
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "Reserved2", "0"), m_nReserved2)) {
+    parseStr += "Invalid Reserved2 in ExtCLutElement\n";
+    return false;
+  }
 
   if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
                           "ExtCLutElement", parseStr)) {
@@ -2695,8 +2802,17 @@ bool CIccMpeXmlCalculator::ParseImport(xmlNode *pNode, std::string importPath, s
                 return false;
               }
             }
+            // `offset` above is deliberately left as a signed int: CIccTempDeclVar
+            // stores it in an `int m_pos` whose -1 means "no position given", so
+            // atoi() there is reading a genuinely signed field and is correct.
+            // `size` is the icUInt16Number, and it is the one that wrapped --
+            // Size="-1" became 65535 and was accepted as a 65535-element
+            // declaration rather than rejected (#1931).
             if ((attr = icXmlFindAttr(pNext, "Size"))) {
-              size = (icUInt16Number)atoi(icXmlAttrValue(attr));
+              if (!icXmlParseU16(icXmlAttrValue(attr), size)) {
+                parseStr += "Invalid Size in calculator variable declaration\n";
+                return false;
+              }
             }
             if (size < 1) size = 1;
 
@@ -3549,7 +3665,15 @@ bool CIccMpeXmlEmissionCLUT::ToXml(std::string &xml, std::string blanks/* = ""*/
     xml +=  buf;
   }
 
-  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%d\" StorageType=\"%d\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags, (unsigned int) m_nStorageType);
+  // m_flags is 32-bit and already cast to unsigned, so the "%d" was the only
+  // thing left reinterpreting it as signed: a profile whose Flags had bit 31
+  // set was written out as a negative number (0x80000002 -> "-2147483646"),
+  // and only the reader's matching atoi() wrap carried it back intact (#1931).
+  // With the parser above now refusing a negative Flags, emitting "%u" here is
+  // what keeps such profiles round-tripping.  StorageType keeps "%d": it is an
+  // icUInt16Number, which promotes to a non-negative int, so that conversion
+  // was never able to misprint it.
+  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%u\" StorageType=\"%d\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags, (unsigned int) m_nStorageType);
   xml += buf;
 
   snprintf(buf, bufSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
@@ -3580,13 +3704,26 @@ bool CIccMpeXmlEmissionCLUT::ToXml(std::string &xml, std::string blanks/* = ""*/
 
 bool CIccMpeXmlEmissionCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_nStorageType = (icUInt16Number)atoi(icXmlAttrValue(pNode, "StorageType", "0"));
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "StorageType", "0"), m_nStorageType)) {
+    parseStr += "Invalid StorageType in EmissionCLutElement\n";
+    return false;
+  }
 
   if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
                           "CLutElement", parseStr)) {
     return false;
   }
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
+  // m_flags is an icUInt32Number carrying the icRelativeSpectralData /
+  // icLabSpectralData bits, and Read32() accepts the whole 32-bit range from
+  // disk, so the parser has to as well.  Flags="-1" reached it as 0xFFFFFFFF
+  // (#1931), and atoi() cannot even express the upper half of the range: it
+  // returns a negative for "2147483650", which then wrapped back to the right
+  // number only by accident of two's complement.  icXmlParseU32 accepts the
+  // full range directly and refuses anything outside it.
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Flags", "0"), m_flags)) {
+    parseStr += "Invalid Flags in EmissionCLutElement\n";
+    return false;
+  }
 
   xmlNode *pData;
 
@@ -3655,7 +3792,8 @@ bool CIccMpeXmlReflectanceCLUT::ToXml(std::string &xml, std::string blanks/* = "
     xml +=  buf;
   }
 
-  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%d\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags);
+  // 32-bit m_flags printed as signed, exactly as in CIccMpeXmlEmissionCLUT::ToXml.
+  snprintf(buf, bufSize, " InputChannels=\"%d\" OutputChannels=\"%d\" Flags=\"%u\">\n", NumInputChannels(), NumOutputChannels(), (unsigned int) m_flags);
   xml += buf;
 
   snprintf(buf, bufSize, "  <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n", icF16toF(m_Range.start), icF16toF(m_Range.end), m_Range.steps);
@@ -3686,13 +3824,21 @@ bool CIccMpeXmlReflectanceCLUT::ToXml(std::string &xml, std::string blanks/* = "
 
 bool CIccMpeXmlReflectanceCLUT::ParseXml(xmlNode *pNode, std::string &parseStr)
 {
-  m_nStorageType = (icUInt16Number)atoi(icXmlAttrValue(pNode, "StorageType", "0"));
+  // Same pair of fields, same widths, same defect as CIccMpeXmlEmissionCLUT
+  // above -- both derive from CIccMpeSpectralCLUT, so m_flags is 32-bit here too.
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "StorageType", "0"), m_nStorageType)) {
+    parseStr += "Invalid StorageType in ReflectanceCLutElem\n";
+    return false;
+  }
 
   if (!icXmlParseChannels(pNode, m_nInputChannels, m_nOutputChannels,
                           "CLutElement", parseStr)) {
     return false;
   }
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
+  if (!icXmlParseU32(icXmlAttrValue(pNode, "Flags", "0"), m_flags)) {
+    parseStr += "Invalid Flags in ReflectanceCLutElem\n";
+    return false;
+  }
 
   xmlNode *pData;
 
@@ -3755,7 +3901,13 @@ bool CIccMpeXmlEmissionObserver::ParseXml(xmlNode *pNode, std::string &parseStr)
                           "EmissionObserverElement", parseStr)) {
     return false;
   }
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
+  // The observer elements derive from CIccMpeSpectralObserver, whose m_flags is
+  // an icUInt16Number rather than the CLUT elements' 32-bit one, so this is the
+  // narrower parse -- and correspondingly the writer's "%d" is already safe here.
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "Flags", "0"), m_flags)) {
+    parseStr += "Invalid Flags in EmissionObserverElement\n";
+    return false;
+  }
 
   xmlNode *pData;
 
@@ -3837,7 +3989,11 @@ bool CIccMpeXmlReflectanceObserver::ParseXml(xmlNode *pNode, std::string &parseS
                           "ReflectanceObserverElement", parseStr)) {
     return false;
   }
-  m_flags = atoi(icXmlAttrValue(pNode, "Flags", "0"));
+  // 16-bit m_flags, as in CIccMpeXmlEmissionObserver above.
+  if (!icXmlParseU16(icXmlAttrValue(pNode, "Flags", "0"), m_flags)) {
+    parseStr += "Invalid Flags in ReflectanceObserverElement\n";
+    return false;
+  }
 
   xmlNode *pData;
 
