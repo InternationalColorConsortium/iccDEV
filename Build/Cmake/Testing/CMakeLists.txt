@@ -2708,7 +2708,7 @@ function(iccdev_add_json_fixednum_size_cap_test)
   set_tests_properties(iccdev.json-fixednum-size-cap PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
     TIMEOUT 180
-    LABELS "iccdev;json;codeql;alert-2343;regression"
+    LABELS "iccdev;json;codeql;alert-2343;regression;slow"
   )
   if(WIN32)
     set(_json_fixednum_cap_windows_env_mods
@@ -4609,7 +4609,7 @@ iccdev_add_script_test(
 iccdev_add_script_test(
   iccdev.issue-1781-applytolink-qa-matrix
   300
-  "iccdev;tools;applytolink;security;issue-1781;regression"
+  "iccdev;tools;applytolink;security;issue-1781;regression;slow"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
 )
