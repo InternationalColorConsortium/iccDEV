@@ -54,6 +54,26 @@ use `.github/skills/regression-container-maintainer/SKILL.md` and
 - Windows session helper: dot-source `.\.github\scripts\icc-session.ps1`, then
   run `icc-session` to create the next `DD-mmm-YYYY-NNN` workspace directory.
 
+## Pull Requests
+
+- Follow `CONTRIBUTING.md`: discuss the change in an issue first, keep the PR
+  focused, and do not modify maintainer-owned infrastructure unless a
+  maintainer requested it.
+- Before opening, updating, or finalizing a PR, use the pre-PR security cycle:
+  `docs/pre-pr-security-cycle.md`,
+  `.github/skills/pre-pr-security-cycle/SKILL.md`, and
+  `.github/prompts/pre-pr-security-cycle.prompt.md`.
+- Run the smallest complete validation for the changed surface. For workflow,
+  Docker, release, CMake, parser, or security automation changes, follow the
+  additional checks required by the path-specific instructions and pre-PR
+  security cycle.
+- PR handoffs must state the branch and commit, changed surface, local and
+  hosted validation, known skips or deferrals, and merge-readiness. Cite
+  workflow URLs or run IDs rather than copying raw logs.
+- Do not call a PR ready or green while required `ci-pr-action`,
+  `ci-preflight-safety`, or `ci-pr-risk-security-analysis` checks are pending,
+  skipped unexpectedly, or failing.
+
 ## iccdev-mcp Review Notes
 
 - Keep user-facing MCP setup docs task-oriented; put reviewer and agent guidance
@@ -93,6 +113,7 @@ Key safety rules:
 | Regression workflow gate | `.github/prompts/add-regression-workflow.prompt.md` |
 | Maintainer regression container | `.github/prompts/regression-container-maintainer.prompt.md` |
 | Workflow governance audit | `.github/prompts/audit-workflow-governance.prompt.md` |
+| Pre-PR security cycle | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Maintainer label triage | `.github/prompts/maintainer-label-triage.prompt.md` |
 | vcpkg debug | `.github/prompts/vcpkg-port-debug.prompt.md` |
 | Debug MCP subprocess | `.github/prompts/debug-mcp-subprocess.prompt.md` |
@@ -108,6 +129,7 @@ Key safety rules:
 | JSON/config regressions | `.github/skills/json-config-regression/SKILL.md` |
 | Regression workflow governance | `.github/skills/regression-workflow-governance/SKILL.md` |
 | Regression container maintainer | `.github/skills/regression-container-maintainer/SKILL.md` |
+| Pre-PR security cycle | `.github/skills/pre-pr-security-cycle/SKILL.md` |
 | Maintainer label system | `.github/skills/maintainer-label-system/SKILL.md` |
 | Version bump | `.github/skills/version-bump/SKILL.md` |
 | Python bindings tests | `.github/skills/python-bindings-test/SKILL.md` |

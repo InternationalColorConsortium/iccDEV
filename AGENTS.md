@@ -18,6 +18,9 @@ Detailed rules live in `.github/copilot-instructions.md` and
 | Need | File |
 |------|------|
 | Build, test, style, CI | `.github/copilot-instructions.md` |
+| Pull request preparation and handoff | `docs/pre-pr-security-cycle.md` |
+| Pre-PR security skill | `.github/skills/pre-pr-security-cycle/SKILL.md` |
+| Pre-PR security prompt | `.github/prompts/pre-pr-security-cycle.prompt.md` |
 | Regression bisect workflow | `.github/prompts/bisect-regression.prompt.md` |
 | Maintainer regression container | `docs/regression-container.md` |
 | Regression container prompt | `.github/prompts/regression-container-maintainer.prompt.md` |
