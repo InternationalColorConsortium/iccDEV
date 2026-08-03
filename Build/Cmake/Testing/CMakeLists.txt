@@ -3625,7 +3625,7 @@ if(TARGET iccDumpProfile)
   iccdev_add_script_test(
     iccdev.qa-profile-manifest
     300
-    "iccdev;qa;manifest;profiles;validation;issue-1809;regression"
+    "iccdev;qa;manifest;profiles;validation;issue-1809;regression;slow"
     "${ICCDEV_REPO_ROOT}"
     "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-qa-profile-manifest.sh"
     check
