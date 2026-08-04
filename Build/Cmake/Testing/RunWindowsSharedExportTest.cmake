@@ -37,7 +37,21 @@ set(_log_file "${ICCDEV_TEST_OUTDIR}/output.log")
 set(_exports_log "${ICCDEV_TEST_OUTDIR}/iccproflib-exports.txt")
 set(_consumer_root "${ICCDEV_TEST_OUTDIR}/consumer-work")
 if(DEFINED ENV{TEMP} AND NOT "$ENV{TEMP}" STREQUAL "")
-  set(_consumer_root "$ENV{TEMP}/iccdev-issue-987-shared-mpe-export-${ICCDEV_CONFIG}")
+  # The consumer tree is built under %TEMP% rather than the test output directory
+  # to keep the nested CMake configure clear of the long build-tree path, since
+  # the generated project pushes several directory levels deeper again and the
+  # classic 260-character limit still applies to the compiler tool chain.
+  #
+  # Derive the leaf name from the build directory, test name and configuration
+  # instead of naming the test literally. The literal name distinguished only the
+  # configuration, so two build trees on one machine at the same configuration
+  # resolved to a single path - and the REMOVE_RECURSE below clears this directory
+  # whole, so concurrent runs did not merely share it, they deleted each other's
+  # sources mid-configure. All three inputs are validated non-empty above. The
+  # digest is also shorter than the name it replaces, which buys back path budget.
+  string(SHA256 _consumer_hash "${ICCDEV_BUILD_DIR}|${ICCDEV_TEST_NAME}|${ICCDEV_CONFIG}")
+  string(SUBSTRING "${_consumer_hash}" 0 12 _consumer_hash)
+  set(_consumer_root "$ENV{TEMP}/iccdev-issue-987-${_consumer_hash}")
 endif()
 set(_consumer_src_dir "${_consumer_root}/consumer")
 set(_consumer_build_dir "${_consumer_root}/consumer-build")

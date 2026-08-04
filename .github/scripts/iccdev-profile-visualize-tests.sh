@@ -90,28 +90,6 @@ require_tiff() {
   return 0
 }
 
-# shellcheck disable=SC2329
-require_svg() {
-  # shellcheck disable=SC2317
-  local name="$1"
-  # shellcheck disable=SC2317
-  local path="$2"
-
-  # shellcheck disable=SC2317
-  require_file "$name" "$path" || return 1
-
-  # shellcheck disable=SC2317
-  if ! grep -Fq "<svg" "$path" 2>/dev/null; then
-    # shellcheck disable=SC2317
-    fail_case "$name" "missing svg root: $path"
-    # shellcheck disable=SC2317
-    return 1
-  fi
-
-  # shellcheck disable=SC2317
-  return 0
-}
-
 require_pdf() {
   local name="$1"
   local path="$2"

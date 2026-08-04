@@ -30,7 +30,13 @@ fi
 FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
 DUMP="$TOOLS_DIR/IccDumpProfile/iccDumpProfile"
 APPLYNCM="$TOOLS_DIR/IccApplyNamedCmm/iccApplyNamedCmm"
-ISSUE_1103_CALC_UNDERFLOW_PROFILE="$TESTING_DIR/CalcTest/uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238.icc"
+# Read the issue-1103 fixture from the regression corpus rather than from
+# Testing/CalcTest. The two paths hold the same blob, and the sha256 below is
+# checked before use either way, but Testing/ is the generated-profile corpus
+# that CreateAllProfiles.sh rewrites, whereas .github/ci/regression/ holds
+# fixtures that exist only to pin a defect. Pointing at the latter keeps this
+# test from depending on corpus contents it does not own.
+ISSUE_1103_CALC_UNDERFLOW_PROFILE="$REPO_ROOT/.github/ci/regression/issue-1103-calculator-window-underflow.icc"
 ISSUE_1103_CALC_UNDERFLOW_SHA256="e482d1defb841192735881d80b4b7ca0540f5b859164153f0be2080ce6167800"
 
 export ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=0:detect_leaks=0}"
