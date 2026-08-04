@@ -43,6 +43,16 @@ static dependencies aren't linked.
 **Fix**: Either add the missing deps to `vcpkg.json` or disable the
 feature that requires them.
 
+#### Missing zlib for Compressed Tags
+```
+Could NOT find ZLIB
+```
+**Cause**: `ICC_USE_ZLIB=ON` is active, but zlib is missing from one of the
+first-party manifests or from the overlay port dependency list.
+**Fix**: Keep `zlib` in the root `vcpkg.json`, `Build/Cmake/vcpkg.json`, and
+`ports/iccdev/vcpkg.json`; keep `-DICC_USE_ZLIB=ON` explicit in
+`ports/iccdev/portfile.cmake`; increment the overlay `port-version`.
+
 #### Windows LNK1104 (cannot open .lib)
 ```
 LINK : fatal error LNK1104: cannot open file 'IccProfLib2d.lib'
@@ -124,8 +134,11 @@ $PREFIX/tools/iccdev/iccApplyNamedCmm --help
 
 | File | Purpose |
 |------|---------|
+| `vcpkg.json` | Repository-root manifest used by Windows and manifest-mode builds |
+| `Build/Cmake/vcpkg.json` | CMake-source manifest used when configuring from `Build/Cmake` |
 | `ports/iccdev/portfile.cmake` | Static-only vcpkg build script |
 | `ports/iccdev/vcpkg.json` | Port manifest (deps, features) |
+| `examples/hello-iccdev/vcpkg.json` | Consumer manifest; relies on `iccdev` transitive dependencies |
 | `.github/workflows/ci-vcpkg-ports.yml` | Cross-platform CI workflow |
 | `Build/Cmake/CMakeLists.txt` | Upstream CMake options used by the port |
 

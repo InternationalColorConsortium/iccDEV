@@ -69,6 +69,12 @@ an immutable `REF` commit and matching `SHA512`. Refresh both together.
 | `xml` | OFF | `ENABLE_ICCXML` | libxml2 |
 | `json` | OFF | `ENABLE_ICCJSON` | nlohmann-json; also builds IccConnect |
 
+The core port always enables `ICC_USE_ZLIB=ON` and declares `zlib` as a direct
+dependency. Keep zlib synchronized in the root `vcpkg.json`,
+`Build/Cmake/vcpkg.json`, and `ports/iccdev/vcpkg.json`. The
+`examples/hello-iccdev/vcpkg.json` manifest consumes the `iccdev` port and must
+not duplicate its transitive dependencies.
+
 ## Installed Artifacts
 
 - **Headers**: `include/RefIccMAX/IccProfLib2/*.h` (52 files)
@@ -95,6 +101,9 @@ When updating the port:
 1. Update `"version"` in `ports/iccdev/vcpkg.json`
 2. For source-only refreshes without an upstream version bump, increment
    `"port-version"` instead of changing `"version"`.
-3. Update `REF` and `SHA512` in `portfile.cmake` for non-local consumers.
-4. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
+3. For dependency changes, synchronize the root, `Build/Cmake`, and overlay
+   port manifests, then increment `"port-version"`.
+4. Update `REF` and `SHA512` in `portfile.cmake` for non-local consumers when
+   the pinned source changes.
+5. Test locally before pushing: set `VCPKG_ICCDEV_SOURCE` and run
    `vcpkg install iccdev --overlay-ports=ports --classic`

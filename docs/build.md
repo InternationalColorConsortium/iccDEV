@@ -16,9 +16,9 @@ listed below. Maintainer-level sanitizer, Docker, and CMake policy details live 
 
 | Platform | Packages |
 |----------|----------|
-| Ubuntu | `libpng-dev libjpeg-dev libtiff-dev libxml2-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
-| macOS | `libpng jpeg-turbo libtiff libxml2 wxwidgets nlohmann-json` |
-| Windows | MSVC 2022 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `wxwidgets`, `nlohmann-json` |
+| Ubuntu | `libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev wx-common wx3.2-headers nlohmann-json3-dev cmake make ninja-build` |
+| macOS | `libpng jpeg-turbo libtiff libxml2 zlib wxwidgets nlohmann-json` |
+| Windows | MSVC 2022 with vcpkg-managed `libpng`, `libjpeg-turbo`, `libtiff`, `libxml2`, `zlib`, `wxwidgets`, `nlohmann-json` |
 
 Thread support is provided by the platform C/C++ runtime and CMake's
 `Threads::Threads` imported target; no separate Ubuntu package is required.
@@ -38,7 +38,7 @@ on the configure command line.
 ## Ubuntu
 
 ```bash
-sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libxml2-dev \
+sudo apt install -y libpng-dev libjpeg-dev libtiff-dev libxml2-dev zlib1g-dev \
   libwxgtk3.2-dev libwxgtk-media3.2-dev libwxgtk-webview3.2-dev \
   wx-common wx3.2-headers nlohmann-json3-dev curl git make cmake \
   clang clang-tools build-essential ninja-build
@@ -52,7 +52,7 @@ cmake --build out/linux-clang -j"$(nproc)"
 ## macOS
 
 ```bash
-brew install nlohmann-json libxml2 wxwidgets libtiff libpng jpeg-turbo
+brew install nlohmann-json libxml2 zlib wxwidgets libtiff libpng jpeg-turbo
 git clone https://github.com/InternationalColorConsortium/iccDEV.git iccdev
 cd iccdev
 cmake --preset macos-xcode -S Build/Cmake -B out/macos-xcode

@@ -26,6 +26,20 @@ refresh `ports/iccdev/portfile.cmake` `REF` plus `SHA512` together. CI should
 use local source mode (`VCPKG_ICCDEV_SOURCE` and `VCPKG_KEEP_ENV_VARS`) so it
 tests the checked-out branch, not the GitHub archive fallback.
 
+## Dependency Manifest Sync
+
+For direct build dependencies, compare and synchronize:
+
+- `vcpkg.json`
+- `Build/Cmake/vcpkg.json`
+- `ports/iccdev/vcpkg.json`
+
+Keep dependency-specific CMake options explicit in
+`ports/iccdev/portfile.cmake`. For zlib, all three manifests declare `zlib`,
+the portfile passes `-DICC_USE_ZLIB=ON`, and the overlay `port-version` is
+incremented. Do not add zlib directly to `examples/hello-iccdev/vcpkg.json`;
+that consumer receives it through the `iccdev` port.
+
 ## Staleness Check
 
 1. Compare the tested ref with the current PR head:
@@ -94,13 +108,21 @@ Run local checks before pushing:
 
 ```bash
 git diff --check -- \
+  vcpkg.json \
+  Build/Cmake/vcpkg.json \
+  ports/iccdev/vcpkg.json \
+  ports/iccdev/portfile.cmake \
   Build/Cmake/RefIccMAXUninstall.cmake.in \
   .github/workflows/ci-vcpkg-ports.yml \
   .github/skills/vcpkg-export-consumer-debug/SKILL.md
 
+python3 -c "import json; [json.load(open(p)) for p in ['vcpkg.json', 'Build/Cmake/vcpkg.json', 'ports/iccdev/vcpkg.json', 'examples/hello-iccdev/vcpkg.json']]; print('vcpkg JSON OK')"
 python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci-vcpkg-ports.yml')); print('YAML parse OK')"
 actionlint -no-color .github/workflows/ci-vcpkg-ports.yml
-file Build/Cmake/RefIccMAXUninstall.cmake.in .github/skills/vcpkg-export-consumer-debug/SKILL.md
+file vcpkg.json Build/Cmake/vcpkg.json ports/iccdev/vcpkg.json \
+  ports/iccdev/portfile.cmake \
+  Build/Cmake/RefIccMAXUninstall.cmake.in \
+  .github/skills/vcpkg-export-consumer-debug/SKILL.md
 ```
 
 Final proof for these failures requires a GitHub-hosted Windows runner. Monitor

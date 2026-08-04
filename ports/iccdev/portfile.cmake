@@ -87,6 +87,7 @@ vcpkg_cmake_configure(
         -DENABLE_SHARED_LIBS=OFF
         -DENABLE_STATIC_LIBS=ON
         -DENABLE_WXWIDGETS=OFF
+        -DICC_USE_ZLIB=ON
         -DENABLE_IMAGE_TOOLS=OFF
         -DENABLE_CMM_TOOLS=OFF
         -DENABLE_IIS_TOOLS=OFF
@@ -159,16 +160,20 @@ file(REMOVE_RECURSE
     "${CURRENT_PACKAGES_DIR}/debug/share"
 )
 
-# Remove stray dependency DLLs that cmake installs alongside tools.
-# These are already provided by their own vcpkg ports (libiconv, libxml2, zlib).
-file(GLOB _stray_dlls
+# Remove runtime files that are not part of the static-only port. Dependency
+# DLLs come from their own ports, and the plot helpers are not shipped tools.
+file(GLOB _stray_runtime_files
     "${CURRENT_PACKAGES_DIR}/bin/*.dll"
     "${CURRENT_PACKAGES_DIR}/debug/bin/*.dll"
+    "${CURRENT_PACKAGES_DIR}/bin/iccProfilePlot.exe"
+    "${CURRENT_PACKAGES_DIR}/debug/bin/iccProfilePlot.exe"
+    "${CURRENT_PACKAGES_DIR}/bin/iccProfileVisualizePlot.exe"
+    "${CURRENT_PACKAGES_DIR}/debug/bin/iccProfileVisualizePlot.exe"
 )
-if(_stray_dlls)
-    file(REMOVE ${_stray_dlls})
+if(_stray_runtime_files)
+    file(REMOVE ${_stray_runtime_files})
 endif()
-# Remove empty bin directories left after DLL cleanup
+# Remove empty bin directories left after runtime cleanup.
 foreach(_bindir "${CURRENT_PACKAGES_DIR}/bin" "${CURRENT_PACKAGES_DIR}/debug/bin")
     if(IS_DIRECTORY "${_bindir}")
         file(GLOB _remaining "${_bindir}/*")

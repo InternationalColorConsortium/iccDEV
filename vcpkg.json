@@ -12,7 +12,8 @@
     "libxml2",
     "libiconv",
     "nlohmann-json",
-    "libjpeg-turbo"
+    "libjpeg-turbo",
+    "zlib"
   ],
   "overrides": []
 }
