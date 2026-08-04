@@ -352,13 +352,13 @@ int main(int argc, const char* argv[])
     // fromArgs() reports how many arguments it consumed and stops at the first it
     // does not recognise, so anything left over was silently discarded -- a
     // mistyped trailing profile path or intent ran the transform as though it had
-    // not been given, and the tool exited 0. Consume the count and refuse the
-    // remainder rather than reporting success for a command line that was not
-    // fully honoured (#1674).
-    argv += nArg;
-    argc -= nArg;
-
-    if (argc) {
+    // not been given, and the tool exited 0. Refuse the remainder rather than
+    // reporting success for a command line that was not fully honoured (#1674).
+    // This is the last use of the argument vector, so compare the consumed count
+    // against what was offered instead of advancing argv/argc once more: the
+    // pointer bump that paired with the count above would be a store no later
+    // read could observe (#1958).
+    if (nArg != argc) {
       printf("Unexpected extra arguments\n");
       return EXIT_FAILURE;
     }

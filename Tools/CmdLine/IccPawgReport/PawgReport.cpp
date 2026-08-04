@@ -2343,15 +2343,32 @@ int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson)
   RawProfile raw;
   LoadRawProfile(szFilename, raw);
 
+  // sReport/nStatus exist only to satisfy ValidateIccProfile's out-parameters:
+  // this entry point reports the PAWG checklist, not the validation log, and the
+  // checklist derives its own verdict from the profile.  TagTypeAllowedVerdict()
+  // re-runs Validate() on the parsed profile and turns that status into the C-item
+  // the report actually prints, so nothing downstream of here reads either local.
   std::string sReport;
   icValidateStatus nStatus = icValidateOK;
   CIccProfile *pIcc = ValidateIccProfile(szFilename, sReport, nStatus);
 
+  // --read is meant to still assess a profile the strict path rejected.  As things
+  // stand it can never recover one: ValidateIccProfile() returns NULL only when
+  // ReadValidate() reaches icValidateCriticalError, and the sole two ways it does
+  // that -- ReadBasic() failing, and any LoadTag() failing -- are exactly the two
+  // conditions CIccProfile::Read() bails on, so ReadIccProfile() returns NULL for
+  // the same inputs.  (CheckTagLayout(), the only other contributor, tops out at
+  // icValidateWarning.)  This branch therefore holds a profile pointer that is
+  // always NULL.
+  //
+  // It used to run a second full Validate() over that never-non-NULL profile and
+  // store the status into nStatus, which no later statement reads -- the discarded
+  // store scan-build reported (#1959).  Dropping it costs nothing even if the two
+  // read paths later diverge and this branch goes live: EvaluatePawg() validates
+  // whichever profile it is handed, and TagTypeAllowedVerdict() turns that status
+  // into the C-item the report prints.
   if (bUseRead && !pIcc) {
     pIcc = ReadIccProfile(szFilename);
-    if (pIcc) {
-      nStatus = pIcc->Validate(sReport);
-    }
   }
 
   std::vector<PawgItem> items = EvaluatePawg(raw, pIcc);
