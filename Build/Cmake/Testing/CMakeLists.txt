@@ -1079,6 +1079,57 @@ function(iccdev_add_pcs_birefl_illuminant_range_test)
   endif()
 endfunction()
 
+# #1853 (ci-qa-flags bucket 4): the PCS step chain could be left disagreeing with itself,
+# and the temporaries it runs through were sized assuming it never is.
+#
+# pushApplyIllum() held the last two of the six CIccPcsXform::rangeMap() call sites still
+# reading the ambiguous NULL as "no conversion needed" when, inside the else of an
+# icSameSpectralRange() test, it can only mean SetRange() refused the pair. It dropped the
+# step and returned icCmmStatOk, leaving a scale running at illuminantRange.steps over a
+# spectralRange.steps-wide vector -- and when the dropped step is the return leg, that
+# width is what the caller reads back.
+#
+# CIccPcsXform::MaxChannels() then failed to contain it: it took GetDstChannels() from the
+# first step only, so no later step had the width it writes into m_temp1/m_temp2 counted.
+#
+# Header + IccProfLib only, no fixture. Also pins the controls -- no spectral profile in
+# Testing/ exercises a refused illuminant map, and none would notice a MaxChannels() that
+# started answering smaller.
+function(iccdev_add_pcs_applyillum_chain_sizing_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPcsApplyIllumChainSizingTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pcs-applyillum-chain-sizing.cpp"
+  )
+  target_link_libraries(iccPcsApplyIllumChainSizingTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPcsApplyIllumChainSizingTest)
+
+  add_test(
+    NAME iccdev.pcs-applyillum-chain-sizing
+    COMMAND "$<TARGET_FILE:iccPcsApplyIllumChainSizingTest>"
+  )
+  set_tests_properties(iccdev.pcs-applyillum-chain-sizing PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;security;spectral;issue-1853;regression"
+  )
+  if(WIN32)
+    set(_pcs_applyillum_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPcsApplyIllumChainSizingTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pcs_applyillum_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pcs-applyillum-chain-sizing PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pcs_applyillum_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1932: CIccPcsXform::Connect() sized the spectral PCS steps it pushes from the header's
 # spectralRange while the pixel buffers those steps run in are sized from the channel
 # count in the spectralPCS signature, and never checked that the two agreed. A header
@@ -3298,6 +3349,7 @@ if(WIN32)
   iccdev_add_getvalues_nstart_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
+  iccdev_add_pcs_applyillum_chain_sizing_test()
   iccdev_add_spectral_pcs_range_consistency_test()
   iccdev_add_spectral_media_white_test()
   iccdev_add_gbd_zero_pcs_test()
@@ -3547,6 +3599,7 @@ iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
+iccdev_add_pcs_applyillum_chain_sizing_test()
 iccdev_add_spectral_pcs_range_consistency_test()
 iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()

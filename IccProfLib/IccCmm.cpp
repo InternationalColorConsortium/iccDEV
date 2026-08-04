@@ -2964,22 +2964,35 @@ CIccApplyXform *CIccPcsXform::GetNewApply(icStatusCMM &status)
  * 
  * Purpose: 
  *  Returns the maximum number of channels used by PCS xform steps
+ *
+ *  This is what CIccApplyPcsXform::Init() sizes m_temp1/m_temp2 from, and
+ *  CIccApplyPcsXform::Apply() hands those two buffers to every step in the list
+ *  except the last, so the count has to cover each step's output width as well as
+ *  each step's input width.
+ *
+ *  The walk used to take GetDstChannels() from the first step only and
+ *  GetSrcChannels() from all of them. On a chain whose steps agree -- step i's
+ *  output width equalling step i+1's input width -- that reaches the same answer,
+ *  which is why it has held up: every intermediate output is also the next step's
+ *  input and gets counted in that role. It stops holding as soon as a chain does not
+ *  agree with itself, and then the miss is an undersized destination for a step that
+ *  is about to write through it. Counting both widths at every step removes the
+ *  dependence on that assumption; the result is never smaller than before, so a chain
+ *  that sized correctly still sizes the same.
  **************************************************************************
  */
 icUInt16Number CIccPcsXform::MaxChannels()
 {
   icUInt16Number nMax = 0;
-  CIccPcsStepList::const_iterator s = m_list->begin();
-  if (s==m_list->end())
-    return nMax;
-  nMax = s->ptr->GetDstChannels();
-  if (s->ptr->GetSrcChannels()>nMax)
-    nMax = s->ptr->GetSrcChannels();
-  s++;
-  for (; s!= m_list->end(); s++) {
+  CIccPcsStepList::const_iterator s;
+
+  for (s = m_list->begin(); s != m_list->end(); s++) {
     if (s->ptr->GetSrcChannels()>nMax)
       nMax = s->ptr->GetSrcChannels();
+    if (s->ptr->GetDstChannels()>nMax)
+      nMax = s->ptr->GetDstChannels();
   }
+
   return nMax;
 }
 
@@ -3638,17 +3651,47 @@ icStatusCMM CIccPcsXform::pushApplyIllum(CIccProfile *pProfile, IIccProfileConne
       m_list->push_back(ptr);
     }
     else {
-      ptr.ptr  = rangeMap(pProfile->m_Header.spectralRange, illuminantRange);
-      if (ptr.ptr) {
-        m_list->push_back(ptr);
+      // Control reaches here only because the ranges differ, so rangeMap() returning
+      // NULL can carry just one of its two meanings: not "no conversion is needed" but
+      // "a conversion was needed and SetRange() refused to build one" -- it rejects any
+      // pair carrying <= 1 step, a non-finite endpoint or a zero-width source span.
+      // Skipping the step on that answer is what the outer if() already handles for the
+      // identical case; here it silently shortens the chain instead, leaving the scale
+      // running at illuminantRange.steps over a vector that is spectralRange.steps wide.
+      // Nothing downstream contains that: CIccApplyPcsXform::Init() sizes its
+      // temporaries from the steps that survived, and Begin() still reports success.
+      // Of the six rangeMap() call sites in this file the other four -- pushSpecToRange()
+      // and the three in pushBiRef2Rad()/pushBiRef2Ref() -- already reject a refused map;
+      // these two were the last that did not.
+      //
+      // The return leg is the more damaging of the two to drop, because it is the last
+      // step pushed here and so its output is what the caller reads back: without it the
+      // chain hands illuminantRange.steps values to a consumer expecting
+      // spectralRange.steps, writing past the end of the destination pixel whenever the
+      // illuminant is the wider of the two. The two legs also fail independently -- an
+      // illuminant declaring a zero-width span is refused as a resampling source while
+      // still being usable as a destination -- so both are built before either is pushed,
+      // which leaves the step list untouched on a reject the way the sibling sites do.
+      CIccPcsStepMatrix *pToIllum = rangeMap(pProfile->m_Header.spectralRange, illuminantRange);
+      CIccPcsStepMatrix *pFromIllum = pToIllum ? rangeMap(illuminantRange, pProfile->m_Header.spectralRange) : NULL;
+
+      if (!pToIllum || !pFromIllum) {
+        // Nothing has been pushed, so these are still owned here; a step handed to
+        // m_list is deleted by the destructor instead.
+        delete pToIllum;
+        delete pFromIllum;
+        delete pScale;
+        return icCmmStatInvalidProfile;
       }
+
+      ptr.ptr = pToIllum;
+      m_list->push_back(ptr);
 
       ptr.ptr = pScale;
       m_list->push_back(ptr);
 
-      ptr.ptr = rangeMap(illuminantRange, pProfile->m_Header.spectralRange);
-      if (ptr.ptr)
-        m_list->push_back(ptr);
+      ptr.ptr = pFromIllum;
+      m_list->push_back(ptr);
     }
   }
   return icCmmStatOk;
