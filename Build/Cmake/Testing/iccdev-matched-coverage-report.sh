@@ -24,6 +24,18 @@ REPORT_DIR="$3"
 LLVM_COV="${LLVM_COV:-llvm-cov-18}"
 LLVM_PROFDATA="${LLVM_PROFDATA:-llvm-profdata-18}"
 IGNORE_REGEX="${IGNORE_FILENAME_REGEX:-(third_party|/usr/|test)}"
+FIND="${FIND:-$(command -v gfind || command -v find)}"
+SORT="${SORT:-$(command -v gsort || command -v sort)}"
+
+if ! "$FIND" "$BUILD_DIR" -maxdepth 0 -printf '' >/dev/null 2>&1; then
+  echo "GNU find is required; install findutils or set FIND to gfind" >&2
+  exit 1
+fi
+
+if ! printf '' | "$SORT" -z >/dev/null; then
+  echo "GNU sort is required; install coreutils or set SORT to gsort" >&2
+  exit 1
+fi
 
 mkdir -p \
   "$REPORT_DIR/html" \
@@ -45,15 +57,15 @@ lcov_file="$REPORT_DIR/lcov.info"
 : > "$env_file"
 : > "$lcov_file"
 
-find "$BUILD_DIR" -path '*/Tools/*' -type f -executable \
+"$FIND" "$BUILD_DIR" -path '*/Tools/*' -type f -executable \
   ! -name iccDumpProfileGui -print >> "$candidates_file"
-find "$BUILD_DIR" -name 'lib*.so' \( -type f -o -type l \) \
+"$FIND" "$BUILD_DIR" -name 'lib*.so' \( -type f -o -type l \) \
   -print >> "$candidates_file"
-sort -u -o "$candidates_file" "$candidates_file"
+"$SORT" -u -o "$candidates_file" "$candidates_file"
 
-find "$PROFRAW_DIR" -name '*.profraw' -printf '%f\n' \
+"$FIND" "$PROFRAW_DIR" -name '*.profraw' -printf '%f\n' \
   | sed -nE 's/.*-([0-9]+(_[0-9]+)?)\.profraw$/\1/p' \
-  | sort -u > "$signatures_file"
+  | "$SORT" -u > "$signatures_file"
 
 if [ ! -s "$candidates_file" ]; then
   echo "no coverage objects found under $BUILD_DIR" >&2
@@ -132,7 +144,6 @@ sum_branches=0
 sum_missed_branches=0
 matched_count=0
 unmatched_count=0
-max_mismatch=0
 max_html_mismatch=0
 
 printf 'signature\tobject\tprofraw_files\tcovered_score\n' > "$mapping_file"
@@ -140,7 +151,7 @@ printf 'signature\tobject\tprofraw_files\tcovered_score\n' > "$mapping_file"
 while IFS= read -r signature; do
   profdata="$REPORT_DIR/profdata/${signature}.profdata"
   mapfile -d '' -t profraw_files < <(
-    find "$PROFRAW_DIR" -name "*-${signature}.profraw" -print0 | sort -z
+    "$FIND" "$PROFRAW_DIR" -name "*-${signature}.profraw" -print0 | "$SORT" -z
   )
   if [ "${#profraw_files[@]}" -eq 0 ]; then
     unmatched_count=$((unmatched_count + 1))
@@ -260,7 +271,7 @@ if [ "$unmatched_count" -ne 0 ]; then
   exit 1
 fi
 
-if [ "$max_mismatch" -ne 0 ] || [ "$max_html_mismatch" -ne 0 ]; then
+if [ "$max_html_mismatch" -ne 0 ]; then
   echo "matched reports still produced llvm-cov mismatch diagnostics" >&2
   exit 1
 fi
