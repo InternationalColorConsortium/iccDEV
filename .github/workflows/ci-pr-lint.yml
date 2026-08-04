@@ -116,6 +116,8 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
 
           case "${LINT_SCOPE_INPUT}" in
             auto|full)
@@ -195,8 +197,8 @@ jobs:
               ;;
             *)
               echo "Unsupported base ref: $(sanitize_line "$base_ref")" >&2
-              echo "file_count=0" >> "$GITHUB_OUTPUT"  # elements-sanitized
-              echo "lint_scope=none" >> "$GITHUB_OUTPUT"  # elements-sanitized
+              printf 'file_count=%s\n' "$(sanitize_line "0")" >> "$GITHUB_OUTPUT"  # elements-sanitized
+              printf 'lint_scope=%s\n' "$(sanitize_line "none")" >> "$GITHUB_OUTPUT"  # elements-sanitized
               : > changed_files.txt
               exit 0
               ;;
@@ -224,8 +226,8 @@ jobs:
           fi
 
           file_count="$(tr '\0' '\n' < changed_files.txt | sed '/^$/d' | wc -l | tr -d ' ')"
-          printf 'file_count=%s\n' "$file_count" >> "$GITHUB_OUTPUT"  # elements-sanitized
-          printf 'lint_scope=%s\n' "$lint_scope" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          printf 'file_count=%s\n' "$(sanitize_line "$file_count")" >> "$GITHUB_OUTPUT"  # elements-sanitized
+          printf 'lint_scope=%s\n' "$(sanitize_line "$lint_scope")" >> "$GITHUB_OUTPUT"  # elements-sanitized
           printf 'Source files selected for lint: %s\n' "$(sanitize_line "$file_count")"
 
       - name: Configure compile database
@@ -238,6 +240,8 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          # shellcheck disable=SC1091
+          source trusted/.github/scripts/sanitize-sed.sh
 
           rm -rf "$BUILD_DIR"
           cmake -S Build/Cmake -B "$BUILD_DIR" \
@@ -399,7 +403,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized
 
       - name: Upload lint reports
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: ci-pr-lint-reports
