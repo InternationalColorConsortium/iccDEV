@@ -46,6 +46,7 @@ export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=1,print_stacktrace=1}"
 
 PASS=0
 FAIL=0
+SKIP=0
 TOTAL=0
 
 # A helper is compiled here and linked against the library the build produced, so
@@ -100,6 +101,19 @@ pass_case() {
   local reason="$2"
   echo "  [PASS] $name -- $reason"
   PASS=$((PASS + 1))
+}
+
+# A case that could not run at all is neither a pass nor a regression, and it
+# must not be reported as either. Counting it as a pass is what makes a check
+# quietly stop checking: ctest prints a script test's output only when it fails,
+# so a case that degraded into a no-op would look exactly like one that ran. The
+# script exits 77 when this fires and the test is registered SKIP_RETURN_CODE 77,
+# so ctest reports the run as Skipped rather than Passed.
+skip_case() {
+  local name="$1"
+  local reason="$2"
+  echo "  [SKIP] $name -- $reason"
+  SKIP=$((SKIP + 1))
 }
 
 run_cam_degenerate_helper() {
@@ -231,7 +245,7 @@ run_cam_divzero_helper() {
        "$CXX" -x c++ -std=c++17 -fsanitize=float-divide-by-zero - \
          -o "$helper_bin" >/dev/null 2>&1; then
     rm -f "$helper_bin"
-    pass_case "$name" "skipped -- $CXX does not support -fsanitize=float-divide-by-zero"
+    skip_case "$name" "$CXX does not support -fsanitize=float-divide-by-zero"
     return
   fi
   rm -f "$helper_bin"
@@ -279,10 +293,20 @@ echo "=== CAM degenerate-state regression ==="
 run_cam_degenerate_helper
 run_cam_divzero_helper
 
-echo "CAM degenerate-state regression: $PASS passed, $FAIL failed, $TOTAL total"
+echo "CAM degenerate-state regression: $PASS passed, $FAIL failed, $SKIP skipped, $TOTAL total"
 
+# A real regression outranks an incomplete run, so failures are reported first.
 if [ "$FAIL" -ne 0 ]; then
   exit 1
+fi
+
+# Otherwise any skipped case downgrades the whole test to Skipped. That is
+# deliberately conservative: the only case that can skip is the divide-by-zero
+# detector, and without it this script has not verified the thing it is named
+# for, so reporting Passed would overstate what ran. The cases that did run
+# still print their own [PASS] lines above.
+if [ "$SKIP" -ne 0 ]; then
+  exit 77
 fi
 
 exit 0

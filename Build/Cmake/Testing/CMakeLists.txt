@@ -3970,6 +3970,13 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-cam-degenerate-regression-tests.sh"
 )
+# The #1950 divide-by-zero case needs -fsanitize=float-divide-by-zero from the
+# compiler driving the test. A toolchain without it cannot run that case, and the
+# script exits 77 so this reports as Skipped instead of a Passed run that checked
+# less than its name claims.
+set_tests_properties(iccdev.cam-degenerate-regressions PROPERTIES
+  SKIP_RETURN_CODE 77
+)
 
 if(TARGET iccApplyProfiles)
   iccdev_add_script_test(
