@@ -26,8 +26,16 @@
 #
 # Commit 751a0c6b (PR #1365) fixed this same defect class for the profile header
 # fields by writing an empty element for zero.  This test covers the writers that
-# were missed.  Readers on both sides already map empty text back to zero, so the
-# fix is writer-only and the assertions below are all "what comes back out".
+# were missed.  For the zero-signature defect the readers on both sides already
+# map empty text back to zero, so that fix is writer-only and the assertions are
+# all "what comes back out".
+#
+# Section 3 additionally covers a *reader* defect found in the same two acs
+# element handlers: CIccMpeJsonBAcs/EAcs::ParseJson dropped the input/output
+# channel counts that the JSON writer had stamped on them, so an acs bookend
+# reloaded from JSON reported zero channels and failed element-chain validation.
+# Its assertions are the byte comparison and the validation report, not the
+# serialized text, because the text was never wrong.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -215,19 +223,41 @@ fi
 #
 # Zero is a named, legal acs signature -- IccProfLib calls it icSigAcsZero -- so
 # an element carrying it must not acquire one on the way through either format.
-# The element is grafted onto a tracked MPE fixture because the corpus has no
-# profile with an acs bookend of its own.
+# The elements are grafted onto a tracked MPE fixture because the corpus has no
+# profile with an acs bookend of its own; the begin bookend goes first in the
+# element chain and the end bookend last, which is where they belong.
+#
+# This section also covers a second, independent defect in the same two readers.
+# CIccTagJsonMultiProcessElement::ToJson stamps inputChannels/outputChannels onto
+# every element generically, and each element's ParseJson reads them back --
+# except CIccMpeJsonBAcs/EAcs::ParseJson, which did not.  Since
+# CIccMpeCreator::CreateElement builds these through CIccMpeBAcs(nChannels = 0),
+# an acs bookend came back from JSON reporting 0 in and 0 out however many the
+# document declared, and the profile that had just been written out valid
+# reloaded as
+#
+#   Error! - AToB1Tag:Mis-matching number of input channels in first process element!
+#
+# The XML reader was always correct here (CIccMpeXmlBAcs::ParseXml calls
+# icXmlParseChannels), which is why only the JSON round trip was affected.  An
+# earlier revision of this test excluded the JSON round trip from the byte
+# comparison below for exactly that reason; both formats are now checked.
 # ===========================================================================
 MPE_XML="$REPO_ROOT/Testing/Display/sRGB_D65_MAT-300lx.xml"
 if [ -f "$MPE_XML" ]; then
   awk '{
+    if (!de && $0 ~ /<\/MultiProcessElements>/) {
+      print "        <EAcsElement InputChannels=\"3\" OutputChannels=\"3\" Signature=\"\"/>"
+      de = 1
+    }
     print
-    if (!done && $0 ~ /<MultiProcessElements InputChannels="3" OutputChannels="3">/) {
+    if (!db && $0 ~ /<MultiProcessElements InputChannels="3" OutputChannels="3">/) {
       print "        <BAcsElement InputChannels=\"3\" OutputChannels=\"3\" Signature=\"\"/>"
-      done = 1
+      db = 1
     }
   }' "$MPE_XML" > "$OUTDIR/acs-in.xml"
   assert_present "$OUTDIR/acs-in.xml" "<BAcsElement" "the grafted BAcsElement"
+  assert_present "$OUTDIR/acs-in.xml" "<EAcsElement" "the grafted EAcsElement"
 
   run acs-build "$FROMXML" "$OUTDIR/acs-in.xml" "$OUTDIR/acs.icc"
 
@@ -238,18 +268,54 @@ if [ -f "$MPE_XML" ]; then
   run acs-tojson "$TOJSON" "$OUTDIR/acs.icc" "$OUTDIR/acs.json"
   assert_absent "$OUTDIR/acs.json" '"signature": "NULL"' "BAcsElement signature"
 
-  # As above, assert on the bytes that come back rather than only on the text
-  # that went out.  Only the XML round trip is checked this way: the JSON parser
-  # for acs elements does not restore the element's input/output channel counts,
-  # so an ICC -> JSON -> ICC profile is not byte-identical for reasons that have
-  # nothing to do with the signature.  That is a separate defect; asserting
-  # byte-equality here would tie this test to it.
-  run acs-fromxml "$FROMXML" "$OUTDIR/acs.xml" "$OUTDIR/acs-rt.icc"
-  if ! cmp -s "$OUTDIR/acs.icc" "$OUTDIR/acs-rt.icc"; then
-    cmp -l "$OUTDIR/acs.icc" "$OUTDIR/acs-rt.icc" 2>/dev/null | sed -n '1,6p' | sed 's/^/    /'
-    fail "an ICC -> XML -> ICC round trip changed the bytes of an icSigAcsZero element (#1843)"
+  # The writer half was never at fault -- assert that, so a future failure here
+  # is attributed to the reader rather than to the counts going missing upstream.
+  #
+  # This has to be scoped to the acs element objects rather than grepped for
+  # across the file: the fixture is 3-channel throughout, so a bare search for
+  # '"inputChannels": 3' matches a dozen other elements and would still pass with
+  # the acs counts gone.  Isolate each element object by brace and test inside
+  # it, which also keeps the check independent of key order -- ICC_JSON_ORDERED
+  # changes that, and a fixed-offset context window would silently stop matching.
+  assert_acs_counts() {
+    local file="$1" elem="$2" block
+    block="$(awk -v e="$elem" '
+      /\{/  { buf = "" }
+              { buf = buf $0 "\n" }
+      /\}/  { if (buf ~ "\"type\": \"" e "\"") printf "%s", buf; buf = "" }
+    ' "$file")"
+    [ -n "$block" ] || fail "$elem is missing from the JSON entirely (#1843)"
+    printf '%s' "$block" | grep -qF '"inputChannels": 3' \
+      || fail "$elem lost its inputChannels in the JSON writer (#1843)"
+    printf '%s' "$block" | grep -qF '"outputChannels": 3' \
+      || fail "$elem lost its outputChannels in the JSON writer (#1843)"
+  }
+  assert_acs_counts "$OUTDIR/acs.json" BAcsElement
+  assert_acs_counts "$OUTDIR/acs.json" EAcsElement
+
+  # Assert on the bytes that come back rather than only on the text that went
+  # out.  Checking the serialized text alone is too weak: it passes as soon as
+  # the writer stops emitting "NULL", even if the reader then restores some other
+  # wrong value -- which is precisely what the dropped channel counts did.
+  run acs-fromxml  "$FROMXML"  "$OUTDIR/acs.xml"  "$OUTDIR/acs-rt-xml.icc"
+  run acs-fromjson "$FROMJSON" "$OUTDIR/acs.json" "$OUTDIR/acs-rt-json.icc"
+  for fmt in xml json; do
+    if ! cmp -s "$OUTDIR/acs.icc" "$OUTDIR/acs-rt-$fmt.icc"; then
+      cmp -l "$OUTDIR/acs.icc" "$OUTDIR/acs-rt-$fmt.icc" 2>/dev/null | sed -n '1,6p' | sed 's/^/    /'
+      fail "an ICC -> ${fmt} -> ICC round trip changed the bytes of an icSigAcsZero element (#1843)"
+    fi
+  done
+
+  # The byte comparison above is the strict assertion, but it reports a diff
+  # rather than the symptom a user would see, so check the symptom too: before
+  # the reader fix the reloaded profile failed element-chain validation.
+  "$DUMP" -v "$OUTDIR/acs-rt-json.icc" > "$OUTDIR/acs-validate-json.log" 2>&1
+  if grep -q "Mis-matching number of input channels" "$OUTDIR/acs-validate-json.log"; then
+    grep -n "Mis-matching number of input channels" "$OUTDIR/acs-validate-json.log" \
+      | sed -n '1,3p' | sed 's/^/    /'
+    fail "the JSON round trip dropped the acs element channel counts (#1843)"
   fi
-  echo "    BAcsElement: icSigAcsZero survives both writers, XML byte-exact"
+  echo "    BAcs/EAcsElement: icSigAcsZero and the channel counts survive both round trips, byte-exact"
 else
   echo "    [note] $MPE_XML absent -- BAcs section skipped"
 fi

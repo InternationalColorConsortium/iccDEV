@@ -1188,8 +1188,39 @@ bool CIccMpeJsonBAcs::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccMpeJsonBAcs::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccMpeJsonBAcs::ParseJson(const IccJson &j, std::string &parseStr)
 {
+  // CIccTagJsonMultiProcessElement::ToJson stamps inputChannels/outputChannels
+  // onto every element generically in its element-array loop, and each element's
+  // own ParseJson is responsible for reading them back.  Of the eighteen
+  // CIccMpeJson*::ParseJson implementations these two -- BAcs and EAcs -- were
+  // the only ones that did not, so the counts were written and then dropped.
+  //
+  // Nothing left them at a wrong value: CIccMpeCreator::CreateElement builds the
+  // element through CIccMpeBAcs(nChannels = 0), so an acs bookend read back from
+  // JSON always reported 0 in and 0 out however many the document declared.  The
+  // element chain then no longer matched the tag, and a profile that was valid
+  // going in came back with
+  //
+  //   Error! - AToB1Tag:Mis-matching number of input channels in first process element!
+  //
+  // The XML reader has always done this -- CIccMpeXmlBAcs::ParseXml calls
+  // icXmlParseChannels() and refuses the element without it -- which is why the
+  // XML round trip of the same profile is byte-exact and only the JSON one is
+  // not.  icJsonValidChannels is the JSON-side equivalent of that helper's
+  // "both present, both non-zero, both within the channel ceiling" test, and is
+  // what every other element reader in this file already uses (#1843).
+  int nIn = 0, nOut = 0;
+  jGetValue(j, "inputChannels",  nIn);
+  jGetValue(j, "outputChannels", nOut);
+
+  if (!icJsonValidChannels(nIn, nOut)) {
+    parseStr += "Invalid inputChannels or outputChannels in BAcsElement\n";
+    return false;
+  }
+  m_nInputChannels  = (icUInt16Number)nIn;
+  m_nOutputChannels = (icUInt16Number)nOut;
+
   std::string sig, hex;
   jGetString(j, "signature", sig);
   jGetString(j, "data", hex);
@@ -1215,8 +1246,23 @@ bool CIccMpeJsonEAcs::ToJson(IccJson &j)
   return true;
 }
 
-bool CIccMpeJsonEAcs::ParseJson(const IccJson &j, std::string & /*parseStr*/)
+bool CIccMpeJsonEAcs::ParseJson(const IccJson &j, std::string &parseStr)
 {
+  // The end-of-chain bookend carries the same two attributes as the begin
+  // bookend above and had the same defect; CIccMpeEAcs(nChannels = 0) leaves the
+  // counts at zero in exactly the same way.  See CIccMpeJsonBAcs::ParseJson for
+  // the reasoning and for why the XML side was already correct (#1843).
+  int nIn = 0, nOut = 0;
+  jGetValue(j, "inputChannels",  nIn);
+  jGetValue(j, "outputChannels", nOut);
+
+  if (!icJsonValidChannels(nIn, nOut)) {
+    parseStr += "Invalid inputChannels or outputChannels in EAcsElement\n";
+    return false;
+  }
+  m_nInputChannels  = (icUInt16Number)nIn;
+  m_nOutputChannels = (icUInt16Number)nOut;
+
   std::string sig, hex;
   jGetString(j, "signature", sig);
   jGetString(j, "data", hex);
