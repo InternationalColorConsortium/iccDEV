@@ -300,6 +300,54 @@ CIccCamConverter::CalcCoefficients ()
 {
 	icFloatNumber	k, La5, rgbC[3], rgbP[3];
 
+	// m_La is the absolute luminance of the adapting field in cd/m^2, so it is
+	// meaningful only when it is finite and non-negative. It is not validated
+	// upstream: IccEncoding.cpp:432 passes it straight from the profile's
+	// colorEncodingParams structure, defaulting to the white-point luminance
+	// divided by five, and any of those numbers can be negative in a malformed
+	// profile.
+	//
+	// Two things go wrong once m_La is negative, and they share this root cause:
+	//
+	//   - k below divides by 5*m_La + 1, which is exactly zero when m_La is
+	//     -0.2f. The pole is hit precisely rather than approached, because
+	//     5.0f * -0.2f rounds to exactly -1.0f in float. #1950 reached it with
+	//     an s15Fixed16 ceptWhitePointLuminanceMbr of -1.0, which makes the
+	//     ambient luminance default to -1.0/5 == -0.2 and made UBSan report
+	//     "division by zero" at this line through iccApplyProfiles.
+	//
+	//   - La5 is then negative, so pow(La5, 0.333333) on the m_Fl line is a
+	//     fractional power of a negative number, which is NaN. That happens for
+	//     every negative m_La, not just the one that divides by zero, and left
+	//     NaN sitting in m_Fl for the rest of the object's life.
+	//
+	// Resolving to the degenerate all-zero state matches how this converter
+	// already answers a state it cannot compute with -- see the m_WhitePoint[1]
+	// and n_pow guards immediately below, and the domain guard in
+	// H_FunctionInv() (#1817). It is also what every one of these inputs already
+	// produced through the public API: the NaN above propagated into
+	// Hyperbolic()/HyperbolicInv(), whose own guards flushed the result to zero,
+	// so XYZToJab() and JabToXYZ() returned finite zeros for every negative,
+	// infinite and NaN adapting luminance before this guard existed. The guard
+	// therefore removes the undefined behaviour and the NaN state without moving
+	// any colour value.
+	//
+	// m_La == 0 is deliberately left on the path below. It is degenerate in its
+	// own way, but it divides by 1, keeps m_Fl finite, and currently returns a
+	// non-zero J -- changing that is a separate question from this defect.
+	if (!std::isfinite((double)m_La) || m_La < 0.0f) {
+		m_D = 0.0f;
+		m_Fl = 0.0f;
+		m_n = 0.0f;
+		m_factor = 0.0f;
+		m_Nbb = 0.0f;
+		m_z = 0.0f;
+		m_x0 = 0.0f;
+		m_cc = 0.0f;
+		m_AWhite = 0.0f;
+		return;
+	}
+
 	double epow = pow (2.7182818, (-((double)m_La + 42.0)/92.0) );
 	m_D = (icFloatNumber) (m_F *(1.0 - (epow/ 3.6)) );
 

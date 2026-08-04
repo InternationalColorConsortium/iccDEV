@@ -150,9 +150,106 @@ run_cam_degenerate_helper() {
   pass_case "$name" "degenerate CAM state produces finite zero output"
 }
 
+# #1950: CalcCoefficients divided by 5*m_La + 1 with no domain check on m_La,
+# and that denominator is exactly zero at m_La == -0.2f.
+#
+# This needs its own helper rather than another case in cam-degenerate.cpp. The
+# division happens inside IccProfLib, so it is only instrumented when the library
+# itself was compiled with -fsanitize=float-divide-by-zero -- and no CI lane both
+# enables that and runs ctest (the float-sanitized build in ci-docker-pr.yml
+# builds iccDumpProfile only). Sanitizer flags on the helper alone would not see
+# it, so the helper compiles IccCAM.cpp into its own binary instead. Its copy of
+# the converter then wins for the calls the helper makes, and the check works
+# against an ordinary non-sanitized library build.
+#
+# The value contract for these luminances is asserted separately, as case 7 of
+# cam-degenerate.cpp; it cannot catch the division, because a negative m_La
+# already produced finite zeros through the public API. See the comment there.
+run_cam_divzero_helper() {
+  local name="cam-la-divide-by-zero"
+  local helper_cpp="$REPO_ROOT/.github/ci/regression/cam-la-divzero.cpp"
+  local cam_cpp="$REPO_ROOT/IccProfLib/IccCAM.cpp"
+  local helper_bin="${TMPDIR:-/tmp}/iccdev-${name}-helper-$$"
+  local compile_log="$OUTDIR/$name.compile.log"
+  local run_log="$OUTDIR/$name.run.log"
+  local lib_dir="$BUILD_DIR/IccProfLib"
+  local lib_arg=""
+  local run_ec=0
+
+  TOTAL=$((TOTAL + 1))
+
+  if [ -z "$BUILD_DIR" ] || [ ! -d "$lib_dir" ]; then
+    fail_case "$name" "missing build directory with IccProfLib"
+    return
+  fi
+
+  for lib_name in IccProfLib2d IccProfLib2; do
+    if [ -f "$lib_dir/lib${lib_name}.so" ] || [ -f "$lib_dir/lib${lib_name}.dylib" ]; then
+      lib_arg="-l${lib_name}"
+      break
+    fi
+  done
+
+  if [ -z "$lib_arg" ]; then
+    fail_case "$name" "missing shared IccProfLib library in $lib_dir"
+    return
+  fi
+
+  if [ ! -f "$helper_cpp" ] || [ ! -f "$cam_cpp" ]; then
+    fail_case "$name" "missing helper source $helper_cpp or $cam_cpp"
+    return
+  fi
+
+  # Not every supported compiler carries this check; skip rather than fail so a
+  # toolchain without it does not turn into a false regression.
+  if ! echo 'int main(){return 0;}' |
+       "$CXX" -x c++ -std=c++17 -fsanitize=float-divide-by-zero - \
+         -o "$helper_bin" >/dev/null 2>&1; then
+    rm -f "$helper_bin"
+    pass_case "$name" "skipped -- $CXX does not support -fsanitize=float-divide-by-zero"
+    return
+  fi
+  rm -f "$helper_bin"
+
+  if ! "$CXX" -std=c++17 -fsanitize=float-divide-by-zero -g \
+      -DICCPROFLIB_EXPORTS \
+      -I"$REPO_ROOT/IccProfLib" \
+      -I"$BUILD_DIR/IccProfLib" \
+      "$helper_cpp" "$cam_cpp" \
+      -L"$lib_dir" "$lib_arg" -Wl,-rpath,"$lib_dir" \
+      -o "$helper_bin" > "$compile_log" 2>&1; then
+    fail_case "$name" "failed to compile helper"
+    sed -n '1,80p' "$compile_log"
+    rm -f "$helper_bin"
+    return
+  fi
+
+  UBSAN_OPTIONS="print_stacktrace=0" \
+    LD_LIBRARY_PATH="$lib_dir:${LD_LIBRARY_PATH:-}" "$helper_bin" \
+    > "$run_log" 2>&1 || run_ec=$?
+
+  if grep -q "runtime error:" "$run_log" 2>/dev/null; then
+    fail_case "$name" "division by zero in CalcCoefficients for a negative adapting luminance"
+    sed -n '1,80p' "$run_log"
+    rm -f "$helper_bin"
+    return
+  fi
+
+  if [ "$run_ec" -ne 0 ]; then
+    fail_case "$name" "helper exited $run_ec"
+    sed -n '1,80p' "$run_log"
+    rm -f "$helper_bin"
+    return
+  fi
+
+  rm -f "$helper_bin"
+  pass_case "$name" "negative adapting luminance does not divide by zero"
+}
+
 echo "=== CAM degenerate-state regression ==="
 
 run_cam_degenerate_helper
+run_cam_divzero_helper
 
 echo "CAM degenerate-state regression: $PASS passed, $FAIL failed, $TOTAL total"
 

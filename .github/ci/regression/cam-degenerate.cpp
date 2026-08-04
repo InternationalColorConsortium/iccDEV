@@ -83,8 +83,14 @@ int main()
   // 400. A very large m_La matters specifically: it makes H_Function(m_Fl) round
   // to exactly 400.0f in float, which is how a crafted profile lands the argument
   // precisely on the division by zero rather than merely past it.
+  // The negative, infinite and NaN entries are #1950. This sweep originally ran
+  // over non-negative adapting luminances only, which is exactly the gap that
+  // defect lived in -- see case 7 below.
   static const icFloatNumber kLa[] = {0.0f, 1e-6f, 0.01f, 1.0f, 100.0f,
-                                      1e6f, 1e12f, 1e30f, 1e38f};
+                                      1e6f, 1e12f, 1e30f, 1e38f,
+                                      -1e-6f, -0.1f, -0.2f, -0.5f, -1.0f,
+                                      -100.0f, -1e6f, -1e30f,
+                                      INFINITY, -INFINITY, NAN};
   static const icFloatNumber kYb[] = {0.0f, 1e-6f, 20.0f, 100.0f, 1e6f, 1e30f};
   static const icFloatNumber kJ[]  = {-1e30f, -100.0f, 0.0f, 50.0f, 100.0f,
                                       1e6f, 1e30f, 1e38f};
@@ -147,6 +153,57 @@ int main()
                    " channel %d: %g -> %g\n",
                    i, (double)midXyz[i], (double)backXyz[i]);
       return 6;
+    }
+  }
+
+  // --- #1950: negative adapting luminance ------------------------------------
+  //
+  // CalcCoefficients computed k = 1.0f / (5.0f * m_La + 1.0f) with no domain
+  // check on m_La. The denominator is exactly zero at m_La == -0.2f, because
+  // 5.0f * -0.2f rounds to exactly -1.0f in float, so the pole is landed on
+  // rather than approached. iccApplyProfiles reached it from profile data: the
+  // colorEncodingParams white-point luminance defaults the ambient luminance to
+  // Lw/5, so an s15Fixed16 Lw of -1.0 produces m_La == -0.2 exactly.
+  //
+  // Read case 7 together with the dbz helper in
+  // .github/scripts/iccdev-cam-degenerate-regression-tests.sh. This case cannot
+  // detect the division on its own and is not written as though it can: every
+  // negative m_La, the one that divided by zero included, already returned
+  // finite zeros through the public API, because the NaN that the same line
+  // produced downstream was flushed to zero by the Hyperbolic()/HyperbolicInv()
+  // guards. What case 7 pins is that contract -- that the guard added for the
+  // division resolves to the degenerate zero state and does not start returning
+  // NaN, infinity or some new non-zero answer for these luminances. The division
+  // itself is caught by the helper, which compiles IccCAM.cpp with
+  // -fsanitize=float-divide-by-zero regardless of how the library was built.
+  static const icFloatNumber kNegLa[] = {-0.2f, -0.5f, -1.0f, -1e6f};
+
+  for (size_t i = 0; i < sizeof(kNegLa) / sizeof(kNegLa[0]); i++) {
+    CIccCamConverter negCam;
+    icFloatNumber negWhite[3] = {0.9642f, 1.0f, 0.8249f};
+
+    negCam.SetParameter_WhitePoint(negWhite);
+    negCam.SetParameter_La(kNegLa[i]);
+    negCam.SetParameter_Yb(20.0f);
+
+    icFloatNumber negXyz[3] = {0.25f, 0.50f, 0.75f};
+    icFloatNumber negJab[3] = {-1.0f, -1.0f, -1.0f};
+    negCam.XYZToJab(negXyz, negJab, 1);
+
+    icFloatNumber negInJab[3] = {50.0f, 1.0f, -1.0f};
+    icFloatNumber negOutXyz[3] = {-1.0f, -1.0f, -1.0f};
+    negCam.JabToXYZ(negInJab, negOutXyz, 1);
+
+    if (!is_finite_triplet(negJab) || !is_zero_triplet(negJab) ||
+        !is_finite_triplet(negOutXyz) || !is_zero_triplet(negOutXyz)) {
+      std::fprintf(stderr,
+                   "[cam-degenerate] FAIL (#1950): La=%g -> jab=%g %g %g"
+                   " xyz=%g %g %g\n",
+                   (double)kNegLa[i],
+                   (double)negJab[0], (double)negJab[1], (double)negJab[2],
+                   (double)negOutXyz[0], (double)negOutXyz[1],
+                   (double)negOutXyz[2]);
+      return 7;
     }
   }
 
