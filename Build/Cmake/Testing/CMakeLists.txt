@@ -4334,6 +4334,34 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1954-mpe-attr-narrowing-regression.sh"
 )
 
+# #1954/#1931 follow-up: the same narrowing at the atoi() sites OUTSIDE
+# IccMpeXml.cpp, which the test above deliberately left for a separate change.
+# As there, the cases with teeth are the overflows rather than the reported
+# negatives, because they land on values the rest of the library accepts:
+# SpectralRange steps="65567" is stored and re-serialized as 31, BiSpectralRange
+# steps="65577" as 41, and SparseMatrixArray matrixType="65540" as 4 --
+# icSparseMatrixFloat32, a fully supported type -- with iccFromXml reporting
+# "Profile parsed and saved correctly" in every case.
+# Two cases cover the writers, which had to change in the same commit. The
+# embedded-image tags print two unsigned 32-bit fields with "%d": for
+# EncodingFormat that cancels against the reader, so master accepts
+# EncodingFormat="-12623518" and re-emits it verbatim, while for
+# SeamlessIndicator it does not, so the legal value 2147483650 round-trips to 0
+# and is destroyed. A third asserts the ObserverFuncs "end" wavelength keeps its
+# fraction, since that reader used atoi() where its own sibling uses atof().
+# A fourth pins a writer typo found beside them: the BiSpectralRange format
+# string ended "/>\n)" and emitted a stray ')' text node into every profile
+# carrying a bi-spectral range.
+# Controls pair every rejection with the value it wrapped to (31, 41, 4), so a
+# fix that simply lowered a ceiling would fail here.
+iccdev_add_script_test(
+  iccdev.issue-1954-xml-attr-narrowing-followup-regression
+  120
+  "iccdev;xml;header;sparsematrix;issue-1954;issue-1931;regression;ubsan"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1954-xml-attr-narrowing-followup-regression.sh"
+)
+
 # #1810: 'RICC' in the CMM and platform header fields of 15 Testing fixtures.
 # 'RICC' was never registered -- icSigRefIccMAX itself carried 0x52494343
 # ('RICC') against a comment and a registry that both said 'RIMX', until #1473
