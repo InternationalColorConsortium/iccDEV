@@ -1493,7 +1493,20 @@ bool CIccTagXmlSparseMatrixArray::ParseXml(xmlNode *pNode, std::string &parseStr
         parseStr += "Invalid SparseMatrixArray outputChannels\n";
         return false;
       }
-      icSparseMatrixType nMatrixType = (icSparseMatrixType)atoi(icXmlAttrValue(matrixType));
+      // icSparseMatrixType has a fixed underlying type of uint16_t, so the cast
+      // narrowed the same way the outputChannels above used to: matrixType="65540"
+      // became 4 -- icSparseMatrixFloat32, a fully supported type -- and the
+      // profile then "parsed and saved correctly", leaving no way to tell a
+      // malformed document from a valid one.  That is the #1931 shape exactly.
+      // Parse into the width the enum is stored in and reject what does not fit;
+      // the switch-like dispatch on m_nMatrixType below still decides which of
+      // the types are actually supported.
+      icUInt16Number nMatrixTypeVal = 0;
+      if (!icXmlParseU16(icXmlAttrValue(matrixType), nMatrixTypeVal)) {
+        parseStr += "Invalid SparseMatrixArray matrixType\n";
+        return false;
+      }
+      icSparseMatrixType nMatrixType = (icSparseMatrixType)nMatrixTypeVal;
 
       xmlNode *pChild;
 
@@ -2602,14 +2615,28 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "end");
     if (attr) {
-      m_observerRange.end = icFtoF16((icFloatNumber)atoi(icXmlAttrValue(attr)));
+      // This alone among the four range endpoints in this function parsed with
+      // atoi() rather than atof().  "end" is a wavelength in nm held as a
+      // float16, so the integer parse silently truncated the fraction: an
+      // ObserverFuncs range ending at end="702.5" was stored as 702, and the
+      // writer at the top of this file then emitted the truncated value.  The
+      // matching "start" three lines above, and both endpoints of the
+      // IlluminantSPD range below, already use atof() -- this brings the odd one
+      // out in line with them.
+      m_observerRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(attr)));
     }
     attr = icXmlFindAttr(pChild, "steps");
     if (attr) {
-      int tempSteps = atoi(icXmlAttrValue(attr));
-      if (tempSteps <= 0 || tempSteps > 0xffff)
+      // The <=0 / >0xffff guard below already refused every value that could not
+      // reach the icUInt16Number field, so unlike the sites above this one was
+      // not narrowing.  What remained was atoi() itself: its behaviour is
+      // undefined -- not merely wrong -- when the text does not fit an int, so
+      // steps="99999999999999999999" was UB before the guard could look at it.
+      // icXmlParseU16 uses strtoul and reports the overflow instead.  A value of
+      // 0 now reaches the shared "if these are not set correctly" check below
+      // rather than returning here, which is the same refusal one step later.
+      if (!icXmlParseU16(icXmlAttrValue(attr), m_observerRange.steps))
         return false;
-      m_observerRange.steps = (icUInt16Number)tempSteps;
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
@@ -2660,10 +2687,12 @@ bool CIccTagXmlSpectralViewingConditions::ParseXml(xmlNode *pNode, std::string &
     }
     attr = icXmlFindAttr(pChild, "steps");
     if (attr) {
-      int tempSteps = atoi(icXmlAttrValue(attr));
-      if (tempSteps <= 0 || tempSteps > 0xffff)
+      // Same reasoning as the ObserverFuncs steps above: already range-guarded,
+      // so this replaces atoi()'s undefined behaviour on an out-of-int input,
+      // not a narrowing.  Zero is caught by the m_illuminantRange.steps == 0
+      // check a few lines below.
+      if (!icXmlParseU16(icXmlAttrValue(attr), m_illuminantRange.steps))
         return false;
-      m_illuminantRange.steps = (icUInt16Number)tempSteps;
     }
     attr = icXmlFindAttr(pChild, "reserved");
     if (attr) {
@@ -4530,15 +4559,23 @@ bool icMBBFromXml(CIccMBB *pMBB, xmlNode *pNode, icConvertType nType, std::strin
   if (!in || !out)
     return false;
 
-  int nIn = atoi(icXmlAttrValue(in));
-  int nOut = atoi(icXmlAttrValue(out));
+  // The 1..15 range checks below already refused everything that could not be
+  // used, so these two were never narrowing.  atoi() is still undefined when the
+  // attribute does not fit an int, though, so the parse happens through
+  // icXmlParseU16 first and the range checks then apply to a value that is
+  // defined.  The 15-channel ceiling is passed as the parser's max_value so an
+  // over-large count is rejected at the parse rather than after it; the explicit
+  // "< 1" test below still rejects 0, which the unsigned parse accepts.
+  icUInt16Number nInVal = 0, nOutVal = 0;
+  if (!icXmlParseU16(icXmlAttrValue(in), nInVal, 15) ||
+      !icXmlParseU16(icXmlAttrValue(out), nOutVal, 15))
+    return false;
+
+  int nIn = (int)nInVal;
+  int nOut = (int)nOutVal;
 
   // must have at least 1 input and 1 output
   if (nIn < 1 || nOut < 1)
-    return false;
-
-  // and the current limit is for 15 channels
-  if (nIn > 15 || nOut > 15)
     return false;
 
   pMBB->Init(nIn, nOut);
@@ -5976,14 +6013,34 @@ bool CIccTagXmlEmbeddedHeightImage::ParseXml(xmlNode *pNode, std::string &parseS
     return false;
 
   // SeamlessIndicator is stored as an unsigned 32-bit indicator (the binary
-  // Read() path uses Read32).  atoi() returns a signed int, so a negative XML
-  // attribute used to wrap to a huge unsigned value through the implicit
-  // int -> icUInt32Number conversion (#1342).  The value is now parsed into a
-  // signed temporary and any negative (invalid) input is floored to 0, so the
-  // stored indicator is always a well-defined non-negative number.
-  int nSeamlessIndicator = atoi(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"));
-  m_nSeamlesIndicator = nSeamlessIndicator < 0 ? 0 : (icUInt32Number)nSeamlessIndicator;
-  m_nEncodingFormat = (icImageEncodingType)atoi(icXmlAttrValue(tagNode, "EncodingFormat", "0"));
+  // Read() path uses Read32).  #1342 stopped the negative wrap by flooring a
+  // negative atoi() result to 0, which removed the UBSan finding but left the
+  // upper half of the range unreachable: atoi() is undefined above INT_MAX, so
+  // SeamlessIndicator="2147483650" -- a perfectly ordinary 32-bit value -- came
+  // out of the parse negative and was then floored, i.e. written as 0.  Parsing
+  // with icXmlParseU32 makes the whole 32-bit range read back as itself and
+  // refuses what genuinely does not fit instead of laundering it into 0.
+  if (!icXmlParseU32(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"), m_nSeamlesIndicator)) {
+    parseStr += "Invalid SeamlessIndicator in HeightImage\n";
+    return false;
+  }
+
+  // icImageEncodingType has a fixed underlying type of icUInt32Number and its
+  // own header defines icImageTypeMaximum = 0xffffffff, so the full unsigned
+  // range is representable.  The cast from atoi()'s signed int therefore did not
+  // narrow so much as re-label: EncodingFormat="-12623518" was accepted as
+  // 4282343778, and the writer below -- which printed the value with "%d" --
+  // turned it straight back into "-12623518", so the malformed attribute
+  // survived a full round-trip unchanged.  The two defects cancelled, which is
+  // why neither showed up on its own; both are fixed here, exactly as #1962 had
+  // to fix the MPE Flags reader and writer together.
+  icUInt32Number nEncodingFormat = 0;
+  if (!icXmlParseU32(icXmlAttrValue(tagNode, "EncodingFormat", "0"), nEncodingFormat)) {
+    parseStr += "Invalid EncodingFormat in HeightImage\n";
+    return false;
+  }
+  m_nEncodingFormat = (icImageEncodingType)nEncodingFormat;
+
   m_fMetersMinPixelValue = (icFloatNumber)atof(icXmlAttrValue(tagNode, "MetersMinPixelValue", "0.0"));
   m_fMetersMaxPixelValue = (icFloatNumber)atof(icXmlAttrValue(tagNode, "MetersMaxPixelValue", "0.0"));
 
@@ -6050,10 +6107,19 @@ bool CIccTagXmlEmbeddedHeightImage::ToXml(std::string &xml, std::string blanks/*
   char buf[bufSize];
 
   xml += blanks + "<HeightImage";
-  snprintf(buf, bufSize, " SeamlessIndicator=\"%d\"", (unsigned int) m_nSeamlesIndicator);
+  // Both fields are unsigned 32-bit -- m_nSeamlesIndicator is an icUInt32Number
+  // and icImageEncodingType has a fixed underlying type of icUInt32Number, with
+  // icImageTypeMaximum = 0xffffffff defined in icProfileHeader.h.  The
+  // (unsigned int) casts already said as much, but "%d" reinterprets the
+  // argument as signed, so anything with bit 31 set was written out negative:
+  // an encoding format of icImageTypeMaximum was emitted as
+  // EncodingFormat="-1".  "%u" is what makes these attributes correct on their
+  // own rather than only in combination with a reader that wraps them back
+  // (#1931); the ParseXml above no longer does that.
+  snprintf(buf, bufSize, " SeamlessIndicator=\"%u\"", (unsigned int) m_nSeamlesIndicator);
   xml += buf;
 
-  snprintf(buf, bufSize, " EncodingFormat=\"%d\"", (unsigned int) m_nEncodingFormat);
+  snprintf(buf, bufSize, " EncodingFormat=\"%u\"", (unsigned int) m_nEncodingFormat);
   xml += buf;
 
   snprintf(buf, bufSize, " MetersMinPixelValue=\"%.12f\"", m_fMetersMinPixelValue);
@@ -6085,15 +6151,22 @@ bool CIccTagXmlEmbeddedNormalImage::ParseXml(xmlNode *pNode, std::string &parseS
   if (!tagNode)
     return false;
 
-  // SeamlessIndicator is stored as an unsigned 32-bit indicator (the binary
-  // Read() path uses Read32).  atoi() returns a signed int, so a negative XML
-  // attribute used to wrap to a huge unsigned value through the implicit
-  // int -> icUInt32Number conversion (#1343).  The value is now parsed into a
-  // signed temporary and any negative (invalid) input is floored to 0, so the
-  // stored indicator is always a well-defined non-negative number.
-  int nSeamlessIndicator = atoi(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"));
-  m_nSeamlesIndicator = nSeamlessIndicator < 0 ? 0 : (icUInt32Number)nSeamlessIndicator;
-  m_nEncodingFormat = (icImageEncodingType)atoi(icXmlAttrValue(tagNode, "EncodingFormat", "0"));
+  // The normal-image tag carries the same two attributes as the height-image
+  // tag above and had the same pair of defects; #1343 is the twin of #1342.  See
+  // CIccTagXmlEmbeddedHeightImage::ParseXml for the reasoning -- the flooring
+  // that closed the negative wrap also made every value above INT_MAX read back
+  // as 0, and the EncodingFormat reader cancelled against its own writer.
+  if (!icXmlParseU32(icXmlAttrValue(tagNode, "SeamlessIndicator", "0"), m_nSeamlesIndicator)) {
+    parseStr += "Invalid SeamlessIndicator in NormalImage\n";
+    return false;
+  }
+
+  icUInt32Number nEncodingFormat = 0;
+  if (!icXmlParseU32(icXmlAttrValue(tagNode, "EncodingFormat", "0"), nEncodingFormat)) {
+    parseStr += "Invalid EncodingFormat in NormalImage\n";
+    return false;
+  }
+  m_nEncodingFormat = (icImageEncodingType)nEncodingFormat;
 
   xmlNode *pImageNode;
   pImageNode = icXmlFindNode(tagNode->children, "Image");
@@ -6157,10 +6230,12 @@ bool CIccTagXmlEmbeddedNormalImage::ToXml(std::string &xml, std::string blanks/*
   char buf[bufSize];
 
   xml += blanks + "<NormalImage";
-  snprintf(buf, bufSize, " SeamlessIndicator=\"%d\"", (unsigned int) m_nSeamlesIndicator);
+  // Same two unsigned 32-bit fields, same "%d"-on-an-unsigned-value defect as
+  // CIccTagXmlEmbeddedHeightImage::ToXml above.
+  snprintf(buf, bufSize, " SeamlessIndicator=\"%u\"", (unsigned int) m_nSeamlesIndicator);
   xml += buf;
 
-  snprintf(buf, bufSize, " EncodingFormat=\"%d\"", (unsigned int) m_nEncodingFormat);
+  snprintf(buf, bufSize, " EncodingFormat=\"%u\"", (unsigned int) m_nEncodingFormat);
   xml += buf;
 
   if (!m_nSize) {

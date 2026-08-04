@@ -205,7 +205,19 @@ bool CIccProfileXml::ToXmlWithBlanks(std::string &xml, std::string blanks)
     }
     if (m_Header.biSpectralRange.steps) {
       xml += blanks + "    <BiSpectralRange>\n";
-      snprintf(line, bufSize, "     <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n)",
+      // The format string used to end "/>\n)", so a stray ')' was appended after
+      // the newline and landed immediately before the closing tag, i.e. every
+      // profile carrying a biSpectralRange was written out with a junk text node
+      // inside the element:
+      //
+      //      <Wavelengths start="300.00000000" end="700.00000000" steps="41"/>
+      //  )    </BiSpectralRange>
+      //
+      // It round-tripped only because the reader locates <Wavelengths> with
+      // icXmlFindNode(), which walks past text nodes, so nothing ever looked at
+      // it.  The SpectralRange writer directly above is the same statement
+      // without the typo and is what this now matches.
+      snprintf(line, bufSize, "     <Wavelengths start=\"" icXmlHalfFmt "\" end=\"" icXmlHalfFmt "\" steps=\"%d\"/>\n",
               icF16toF(m_Header.biSpectralRange.start), icF16toF(m_Header.biSpectralRange.end), m_Header.biSpectralRange.steps);
       xml += blanks + line;
       xml += blanks + "    </BiSpectralRange>\n";
@@ -627,7 +639,20 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       if (start && end && steps) {
         m_Header.spectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(start)));
         m_Header.spectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(end)));
-        m_Header.spectralRange.steps = (icUInt16Number)atoi(icXmlAttrValue(steps));
+
+        // steps is the sample count for the whole spectral PCS, so narrowing it
+        // modulo 65536 substitutes a different spectrum rather than failing:
+        // steps="65567" was stored -- and written back out on save -- as 31,
+        // while iccFromXml still reported "Profile parsed and saved correctly".
+        // The explicit (icUInt16Number) cast made that silent to UBSan as well.
+        // This is the header-level twin of what #1925 fixed in the tag readers
+        // and #1908 in the MPE elements, and it feeds the very disagreement
+        // #1932 had to reject downstream in CIccPcsXform::Connect -- a
+        // spectralPCS channel count that does not match spectralRange.steps.
+        if (!icXmlParseU16(icXmlAttrValue(steps), m_Header.spectralRange.steps)) {
+          parseStr += "Invalid SpectralRange Wavelengths steps\n";
+          return false;
+        }
       }
     }
     else if (!icXmlStrCmp(pNode->name, "BiSpectralRange")) {
@@ -640,7 +665,15 @@ bool CIccProfileXml::ParseBasic(xmlNode *pNode, std::string &parseStr)
       if (start && end && steps) {
         m_Header.biSpectralRange.start = icFtoF16((icFloatNumber)atof(icXmlAttrValue(start)));
         m_Header.biSpectralRange.end = icFtoF16((icFloatNumber)atof(icXmlAttrValue(end)));
-        m_Header.biSpectralRange.steps = (icUInt16Number)atoi(icXmlAttrValue(steps));
+
+        // Same defect and same reasoning as the spectralRange steps above; this
+        // count sizes the bi-spectral (fluorescence) axis, which #1677 showed
+        // must agree with the PCS steps or the mapping is built from a range the
+        // profile does not actually carry.
+        if (!icXmlParseU16(icXmlAttrValue(steps), m_Header.biSpectralRange.steps)) {
+          parseStr += "Invalid BiSpectralRange Wavelengths steps\n";
+          return false;
+        }
       }
     }
     else if (!icXmlStrCmp(pNode->name, "MCS")) {

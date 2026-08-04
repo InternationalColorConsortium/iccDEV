@@ -14,9 +14,18 @@
 #   IccTagXml.cpp:5548:25: runtime error: implicit conversion from type 'int'
 #   of value -98 ... to type 'icUInt32Number' ... changed the value to ...
 #
-# The fix parses into a signed temporary and floors negatives to 0, so no
-# signed->unsigned wrap occurs.  This test replays the two fuzz PoCs through
-# iccFromXml and fails if the implicit-conversion runtime error reappears.
+# The original fix parsed into a signed temporary and floored negatives to 0, so
+# no signed->unsigned wrap occurred.  The #1954/#1931 follow-up replaced that
+# with icXmlParseU32, which refuses the value outright instead of laundering it
+# into 0 -- flooring had left everything above INT_MAX unreachable, so a legal
+# SeamlessIndicator of 2147483650 was silently stored as 0.  Either way no
+# implicit signed->unsigned conversion occurs, which is all this test asserts;
+# the two PoCs are now rejected earlier than they used to be, and the value
+# preservation that replaced the flooring is covered by
+# iccdev.issue-1954-xml-attr-narrowing-followup-regression.
+#
+# This test replays the two fuzz PoCs through iccFromXml and fails if the
+# implicit-conversion runtime error reappears.
 #
 # This check is only meaningful when iccFromXml was built with the UBSan
 # integer / implicit-conversion sanitizer (the ci-iccdev-tool-tests workflow
