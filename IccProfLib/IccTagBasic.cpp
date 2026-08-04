@@ -12615,8 +12615,7 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
   icFloatNumber *rv = (icFloatNumber*)malloc(n*sizeof(icFloatNumber));
 
   if (rv) {
-    bool mapFailed = false;
-    CIccMatrixMath *range = CIccMatrixMath::rangeMap(m_observerRange, newRange, &mapFailed);
+    CIccMatrixMath *range = CIccMatrixMath::rangeMap(m_observerRange, newRange);
     if (range) {
       range->VectorMult(rv, m_observer);
       range->VectorMult(&rv[newRange.steps], &m_observer[m_observerRange.steps]);
@@ -12632,12 +12631,12 @@ icFloatNumber *CIccTagSpectralViewingConditions::applyRangeToObserver(const icSp
     // identical is the actual precondition -- it is what a NULL used to mean
     // before rangeMap() could also fail, and matching step counts alone would
     // still silently reinterpret one wavelength span as another.
+    else if (icSameSpectralRange(m_observerRange, newRange)) {
+      memcpy(rv, m_observer, m_observerRange.steps*3*sizeof(icFloatNumber));
+    }
     else {
-      if (mapFailed || !icSameSpectralRange(m_observerRange, newRange)) {
-        free(rv);
-        return NULL;
-      }
-      memcpy(rv, m_observer, newRange.steps*3*sizeof(icFloatNumber));
+      free(rv);
+      return NULL;
     }
   }
 
@@ -12651,14 +12650,9 @@ CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpec
   if (!observer || !observerRange.steps || !newRange.steps)
     return NULL;
 
-  CIccMatrixMath *pMtx=new (std::nothrow) CIccMatrixMath(3, newRange.steps);
-  if (!pMtx || !pMtx->IsValid()) {
-    delete pMtx;
-    return NULL;
-  }
+  CIccMatrixMath *pMtx=new CIccMatrixMath(3, newRange.steps);
 
-  bool mapFailed = false;
-  CIccMatrixMath *range = CIccPcsXform::rangeMap(observerRange, newRange, &mapFailed);
+  CIccMatrixMath *range = CIccPcsXform::rangeMap(observerRange, newRange);
   if (range) {
     range->VectorMult(pMtx->entry(0), observer);
     range->VectorMult(pMtx->entry(1), &observer[observerRange.steps]);
@@ -12670,12 +12664,12 @@ CIccMatrixMath *CIccTagSpectralViewingConditions::getObserverMatrix(const icSpec
   // returned NULL when SetRange() rejects the ranges, so a viewing-conditions
   // tag whose observer range cannot be mapped onto newRange already reaches this
   // branch with unequal step counts and yields a matrix that is part stale heap.
+  else if (icSameSpectralRange(observerRange, newRange)) {
+    memcpy(pMtx->entry(0), observer, observerRange.steps*3*sizeof(icFloatNumber));
+  }
   else {
-    if (mapFailed || !icSameSpectralRange(observerRange, newRange)) {
-      delete pMtx;
-      return NULL;
-    }
-    memcpy(pMtx->entry(0), observer, newRange.steps*3*sizeof(icFloatNumber));
+    delete pMtx;
+    return NULL;
   }
 
   return pMtx;
