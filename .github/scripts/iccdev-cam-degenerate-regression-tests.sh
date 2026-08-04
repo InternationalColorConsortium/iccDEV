@@ -137,7 +137,11 @@ run_cam_degenerate_helper() {
     return
   fi
 
-  san_flags=("${SAN_FLAGS[@]}")
+  # Expanded through the ${x[@]+"${x[@]}"} form because the script runs under
+  # "set -u" and an empty array expansion is an unbound-variable error in the
+  # bash 3.2 that ships as /bin/bash on macOS. SAN_FLAGS is empty whenever the
+  # build enabled no sanitizers at all.
+  san_flags=(${SAN_FLAGS[@]+"${SAN_FLAGS[@]}"})
 
   if ! "$CXX" -std=c++17 "${san_flags[@]}" \
       -I"$REPO_ROOT/IccProfLib" \
@@ -235,7 +239,7 @@ run_cam_divzero_helper() {
   # The library's own sanitizers first, so the link resolves, then
   # float-divide-by-zero unconditionally: it is the check this case exists for,
   # and it must apply whether or not the build enabled ENABLE_FLOAT_SANITIZER.
-  if ! "$CXX" -std=c++17 "${SAN_FLAGS[@]}" -fsanitize=float-divide-by-zero -g \
+  if ! "$CXX" -std=c++17 ${SAN_FLAGS[@]+"${SAN_FLAGS[@]}"} -fsanitize=float-divide-by-zero -g \
       -DICCPROFLIB_EXPORTS \
       -I"$REPO_ROOT/IccProfLib" \
       -I"$BUILD_DIR/IccProfLib" \
