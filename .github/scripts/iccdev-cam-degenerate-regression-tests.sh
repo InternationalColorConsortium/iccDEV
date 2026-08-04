@@ -48,6 +48,46 @@ PASS=0
 FAIL=0
 TOTAL=0
 
+# A helper is compiled here and linked against the library the build produced, so
+# it has to be built with the same sanitizers the library was, or the link fails
+# on the runtime symbols the library references. Both helpers below need this, so
+# work it out once.
+#
+# ENABLE_FLOAT_SANITIZER is deliberately handled alongside the others: it is a
+# standalone option rather than something ENABLE_ASAN or ENABLE_UBSAN implies, so
+# a build that enables only it produces a library needing
+# __ubsan_handle_float_cast_overflow_abort, which used to fail to link here.
+SAN_FLAGS=()
+
+compute_san_flags() {
+  [ -f "$BUILD_DIR/CMakeCache.txt" ] || return 0
+
+  if grep -q '^ENABLE_SANITIZERS:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+    if "$CXX" --version 2>/dev/null | grep -qi clang; then
+      SAN_FLAGS+=("-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow")
+    else
+      SAN_FLAGS+=("-fsanitize=address,undefined")
+    fi
+    return 0
+  fi
+
+  if grep -q '^ENABLE_ASAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+    SAN_FLAGS+=("-fsanitize=address")
+  fi
+  if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+    SAN_FLAGS+=("-fsanitize=undefined")
+  fi
+  if grep -q '^ENABLE_INTEGER_SANITIZER:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt" &&
+     "$CXX" --version 2>/dev/null | grep -qi clang; then
+    SAN_FLAGS+=("-fsanitize=integer")
+  fi
+  if grep -q '^ENABLE_FLOAT_SANITIZER:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
+    SAN_FLAGS+=("-fsanitize=float-divide-by-zero,float-cast-overflow")
+  fi
+}
+
+compute_san_flags
+
 fail_case() {
   local name="$1"
   local reason="$2"
@@ -97,26 +137,7 @@ run_cam_degenerate_helper() {
     return
   fi
 
-  if [ -f "$BUILD_DIR/CMakeCache.txt" ]; then
-    if grep -q '^ENABLE_SANITIZERS:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
-      if "$CXX" --version 2>/dev/null | grep -qi clang; then
-        san_flags+=("-fsanitize=address,undefined,integer,float-divide-by-zero,float-cast-overflow")
-      else
-        san_flags+=("-fsanitize=address,undefined")
-      fi
-    else
-      if grep -q '^ENABLE_ASAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
-        san_flags+=("-fsanitize=address")
-      fi
-      if grep -q '^ENABLE_UBSAN:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt"; then
-        san_flags+=("-fsanitize=undefined")
-      fi
-      if grep -q '^ENABLE_INTEGER_SANITIZER:BOOL=ON$' "$BUILD_DIR/CMakeCache.txt" &&
-         "$CXX" --version 2>/dev/null | grep -qi clang; then
-        san_flags+=("-fsanitize=integer")
-      fi
-    fi
-  fi
+  san_flags=("${SAN_FLAGS[@]}")
 
   if ! "$CXX" -std=c++17 "${san_flags[@]}" \
       -I"$REPO_ROOT/IccProfLib" \
@@ -211,7 +232,10 @@ run_cam_divzero_helper() {
   fi
   rm -f "$helper_bin"
 
-  if ! "$CXX" -std=c++17 -fsanitize=float-divide-by-zero -g \
+  # The library's own sanitizers first, so the link resolves, then
+  # float-divide-by-zero unconditionally: it is the check this case exists for,
+  # and it must apply whether or not the build enabled ENABLE_FLOAT_SANITIZER.
+  if ! "$CXX" -std=c++17 "${SAN_FLAGS[@]}" -fsanitize=float-divide-by-zero -g \
       -DICCPROFLIB_EXPORTS \
       -I"$REPO_ROOT/IccProfLib" \
       -I"$BUILD_DIR/IccProfLib" \
