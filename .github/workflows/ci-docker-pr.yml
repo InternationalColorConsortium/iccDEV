@@ -145,7 +145,7 @@ jobs:
 
           docker pull "$TEST_IMAGE"
           docker image inspect \
-            --format 'image={{.Id}} digest={{range .RepoDigests}}{{.}}{{end}}' \
+            --format 'image={{.Id}} digest={{index .RepoDigests 0}}' \
             "$TEST_IMAGE"
 
       # preflight: allow-pr-script-execution reason=verify-maintainer-regression-image
