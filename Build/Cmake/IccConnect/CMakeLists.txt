@@ -77,6 +77,12 @@ IF(ENABLE_SHARED_LIBS)
 
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
 
+  # Issue #1856. The JSON config reader in IccJsonUtil.cpp shares the bound
+  # applied to profile JSON, so a -cfg document and a profile document are
+  # accepted or refused at the same size rather than at 100 MiB and 64 MiB.
+  target_compile_definitions(${TARGET_NAME} PRIVATE
+    ICC_JSON_MAX_FILE_BYTES=${ICC_JSON_MAX_FILE_BYTES})
+
   target_include_directories(${TARGET_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../IccConnect/IccLibConnect>
@@ -105,6 +111,10 @@ IF(ENABLE_STATIC_LIBS)
   set_target_properties(${TARGET_NAME}-static PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
 
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
+
+  # Keep the static archive on the same bound as the shared library above.
+  target_compile_definitions(${TARGET_NAME}-static PRIVATE
+    ICC_JSON_MAX_FILE_BYTES=${ICC_JSON_MAX_FILE_BYTES})
 
   target_include_directories(${TARGET_NAME}-static PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>

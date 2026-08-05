@@ -3601,6 +3601,10 @@ set(ICCDEV_TEST_ENV
   "ICCDEV_TESTING_DIR=${ICCDEV_TESTING_DIR}"
   "ICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
   "ICCDEV_REQUIRE_JSON_ROUNDTRIP=${ICCDEV_REQUIRE_JSON_ROUNDTRIP}"
+  # Issue #1856. The JSON size bound is configurable, so a test that asserts on
+  # a document size has to know which limit the readers were actually built
+  # with rather than assuming the default.
+  "ICC_JSON_MAX_FILE_MB=${ICC_JSON_MAX_FILE_MB}"
 )
 
 iccdev_add_iccconnect_thread_test()

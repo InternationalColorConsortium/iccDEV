@@ -90,6 +90,12 @@ IF(ENABLE_SHARED_LIBS)
 
   target_compile_features(${TARGET_NAME} PUBLIC cxx_std_17)
 
+  # Issue #1856. PRIVATE because the bound is an implementation detail of this
+  # library's reader, not part of its interface; IccProfileJson.cpp carries a
+  # matching fallback so non-CMake builds still compile with a finite cap.
+  target_compile_definitions(${TARGET_NAME} PRIVATE
+    ICC_JSON_MAX_FILE_BYTES=${ICC_JSON_MAX_FILE_BYTES})
+
   target_include_directories(${TARGET_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../../../IccJSON/IccLibJSON>
@@ -119,6 +125,10 @@ IF(ENABLE_STATIC_LIBS)
   # Disable LTO per-target as defense-in-depth.  (See GitHub issue #814.)
   set_target_properties(${TARGET_NAME}-static PROPERTIES INTERPROCEDURAL_OPTIMIZATION OFF)
   target_compile_features(${TARGET_NAME}-static PUBLIC cxx_std_17)
+
+  # Keep the static archive on the same bound as the shared library above.
+  target_compile_definitions(${TARGET_NAME}-static PRIVATE
+    ICC_JSON_MAX_FILE_BYTES=${ICC_JSON_MAX_FILE_BYTES})
 
   target_include_directories(${TARGET_NAME}-static PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>

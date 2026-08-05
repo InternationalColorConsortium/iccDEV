@@ -465,6 +465,36 @@ option(ENABLE_SHARED_LIBS         "Build dynamic link libraries"                
 option(ENABLE_STATIC_LIBS         "Build static libraries"                              ON)
 option(ENABLE_ICCXML              "Build IccXML library support"                        ON)
 option(ENABLE_ICCJSON             "Build IccJSON library support"                       ON)
+
+# Maximum raw JSON input accepted by the IccJSON profile reader and by the
+# IccConnect JSON config reader. Both bound the file before nlohmann expands
+# it in memory, so this is a denial-of-service boundary rather than a format
+# limit. It is a configure-time knob instead of a literal because the former
+# fixed caps (64 MiB and 100 MiB) were set against an estimate the corpus does
+# not support, and the smaller one sat below what iccToJson itself emits at its
+# own documented -indent=4 - see issue #1856.
+#
+# 128 MiB clears every tracked fixture at -indent=4 (92.9 MiB) with headroom to
+# -indent=5, which is the range the defect was about. It is deliberately not
+# raised to icXmlMaxTextFileBytes' 256 MiB: a byte count is a weak proxy for the
+# memory this is meant to bound, because whitespace inflates the file without
+# inflating the parsed document. Measured peak RSS per input byte ranges from
+# 1.4x on an indented profile to 16.3x on a dense array of small values, so the
+# cap admits roughly 2 GiB on hostile input and doubling it would double that.
+set(ICC_JSON_MAX_FILE_MB "128" CACHE STRING
+    "Maximum JSON input size in MiB accepted by IccJSON and the JSON config readers")
+if(NOT ICC_JSON_MAX_FILE_MB MATCHES "^[1-9][0-9]*$")
+  message(FATAL_ERROR
+    "ICC_JSON_MAX_FILE_MB must be a positive integer (got '${ICC_JSON_MAX_FILE_MB}')")
+endif()
+# The point of the cap is that it is finite, so refuse a value large enough to
+# be equivalent to removing it.
+if(ICC_JSON_MAX_FILE_MB GREATER 1024)
+  message(FATAL_ERROR
+    "ICC_JSON_MAX_FILE_MB must not exceed 1024 MiB (got '${ICC_JSON_MAX_FILE_MB}')")
+endif()
+math(EXPR ICC_JSON_MAX_FILE_BYTES "${ICC_JSON_MAX_FILE_MB} * 1024 * 1024")
+
 option(ENABLE_IMAGE_TOOLS         "Build TIFF/PNG/JPEG image-dependent tools"           ON)
 option(ENABLE_CMM_TOOLS           "Build Windows CMM DLL tool"                          ON)
 option(ENABLE_IIS_TOOLS           "Build Windows IIS ISAPI tool"                        ON)
@@ -716,6 +746,7 @@ message(STATUS "ENABLE_SHARED_LIBS         = ${ENABLE_SHARED_LIBS}")
 message(STATUS "ENABLE_STATIC_LIBS         = ${ENABLE_STATIC_LIBS}")
 message(STATUS "ENABLE_ICCXML              = ${ENABLE_ICCXML}")
 message(STATUS "ENABLE_ICCJSON             = ${ENABLE_ICCJSON}")
+message(STATUS "ICC_JSON_MAX_FILE_MB       = ${ICC_JSON_MAX_FILE_MB}")
 message(STATUS "ENABLE_IMAGE_TOOLS         = ${ENABLE_IMAGE_TOOLS}")
 message(STATUS "ENABLE_CMM_TOOLS           = ${ENABLE_CMM_TOOLS}")
 message(STATUS "ENABLE_IIS_TOOLS           = ${ENABLE_IIS_TOOLS}")

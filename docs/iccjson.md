@@ -11,8 +11,52 @@ iccToJson src_profile.icc dest_profile.json [-indent=N]
 iccFromJson src_profile.json dest_profile.icc [-noid]
 ```
 
-- `-indent=N`: pretty-print with N spaces of indentation (default: 2)
+- `-indent=N`: pretty-print with N spaces of indentation (default: 2, clamped to 0-20)
 - `-noid`: suppress writing the profile ID into the saved file
+
+## Input Size Limit
+
+`iccFromJson` and the JSON configuration readers bound the raw file before
+parsing it, because the underlying parser has no effective size or nesting
+limit of its own. The default bound is **128 MiB**, and a file above it is
+refused with a diagnostic and a non-zero exit status, leaving no output file.
+
+Builds that need a different bounded limit can configure
+`-DICC_JSON_MAX_FILE_MB=<positive MiB value>`; values above 1024 are rejected
+at CMake configuration time, and the compiled-in value is what the diagnostic
+reports.
+
+Note that `iccToJson` can still emit documents larger than the bound, because
+its output grows roughly linearly with `-indent`. Measured on the profile built
+from `Testing/hybrid/CMYK-W_Overprint_Profile.xml` (3,721,864 bytes as `.icc`),
+one of the largest the tracked corpus produces:
+
+| `-indent` | emitted JSON | within the 128 MiB default |
+|---|---|---|
+| 2 (default) | 58,159,328 bytes (55.5 MiB) | yes |
+| 4 | 97,444,884 bytes (92.9 MiB) | yes |
+| 5 | 117,087,662 bytes (111.7 MiB) | yes |
+| 6 | 136,730,440 bytes (130.4 MiB) | no |
+| 20 (maximum) | 411,729,332 bytes (392.7 MiB) | no |
+
+So a round trip holds for every tracked profile up to `-indent=5`; beyond that
+a large profile can still produce a file this reader will not accept back.
+
+Raise `ICC_JSON_MAX_FILE_MB` if that matters for a given build, but note what
+the bound does and does not buy. It limits input bytes, which is only a proxy
+for the memory the parser then commits, and the two are loosely coupled:
+indentation inflates the file without inflating the parsed document, so peak
+memory is governed by document shape rather than by file size.
+
+| input | peak RSS | per input byte |
+|---|---|---|
+| profile at `-indent=2` (58.2 MB) | 79 MB | 1.4x |
+| same profile at `-indent=0` (18.9 MB) | 79 MB | 4.3x |
+| dense object of small pairs (10.9 MB) | 109 MiB | 10.5x |
+| dense array of small values (20.0 MB) | 312 MiB | 16.3x |
+
+At the 128 MiB default the worst of those shapes implies roughly 2 GiB of peak
+resident memory, and raising the bound scales that proportionally.
 
 After creating a profile, validate it with:
 

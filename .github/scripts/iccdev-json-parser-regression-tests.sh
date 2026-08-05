@@ -22,6 +22,18 @@ TESTING_DIR="${ICCDEV_TESTING_DIR:-Testing}"
 OUTDIR="${ICCDEV_TEST_OUTDIR:-/tmp/iccdev-json-parser-regressions}"
 mkdir -p "$OUTDIR"
 
+# Resolve both to absolute paths before deriving any tool path from them. CTest
+# passes these already absolute, but the defaults above are relative to the repo
+# root, and a test that has to run a tool from another working directory (the
+# issue #1856 fixture below builds its profile from Testing/hybrid, whose XML
+# references sibling data files) would otherwise fail to find the binary.
+if [ -d "$TOOLS_DIR" ]; then
+  TOOLS_DIR="$(cd "$TOOLS_DIR" && pwd)"
+fi
+if [ -d "$TESTING_DIR" ]; then
+  TESTING_DIR="$(cd "$TESTING_DIR" && pwd)"
+fi
+
 TOJSON="$TOOLS_DIR/IccToJson/iccToJson"
 FROMJSON="$TOOLS_DIR/IccFromJson/iccFromJson"
 FROMXML="$TOOLS_DIR/IccFromXml/iccFromXml"
@@ -32,9 +44,14 @@ export UBSAN_OPTIONS="${UBSAN_OPTIONS:-halt_on_error=0,print_stacktrace=1}"
 
 PASS=0
 FAIL=0
+SKIPPED=0
 ASAN_FINDINGS=0
 UBSAN_FINDINGS=0
 TOTAL=0
+
+# Bound the JSON readers were built with, so a size-threshold test can tell a
+# real regression from a build that simply configured a different limit.
+JSON_MAX_FILE_MB="${ICC_JSON_MAX_FILE_MB:-128}"
 
 check_sanitizers() {
   local name="$1"
@@ -312,6 +329,105 @@ run_tojson_valid_json_test() {
 
   echo "  [PASS] $name (iccToJson emitted valid JSON)"
   PASS=$((PASS + 1))
+}
+
+# Issue #1856. iccToJson emits, at its own documented -indent=4, a document that
+# the reader's former fixed 64 MiB cap refused, so the tool could write a file it
+# could not read back. This pins that round trip.
+#
+# The two thresholds are deliberately distinct. Below 64 MiB the fixture has
+# stopped exercising anything and the test has lost its teeth, which is a
+# failure. Above the bound this build was actually configured with, refusal is
+# correct behaviour rather than a regression, so the case is skipped instead.
+run_large_indented_roundtrip_test() {
+  local xml_name="$1"
+  local name="issue-1856-indent4"
+  local profile="$OUTDIR/$name-source.icc"
+  local json_file="$OUTDIR/$name.json"
+  local output_file="$OUTDIR/$name.icc"
+  local fromxml_log="$OUTDIR/$name-fromxml.log"
+  local tojson_log="$OUTDIR/$name-tojson.log"
+  local fromjson_log="$OUTDIR/$name-fromjson.log"
+  local exit_code=0
+  local json_size=0
+  local former_cap=$((64 * 1024 * 1024))
+  local configured_cap=$((JSON_MAX_FILE_MB * 1024 * 1024))
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$profile" "$json_file" "$output_file" "$fromxml_log" "$tojson_log" "$fromjson_log"
+
+  if [ ! -f "$TESTING_DIR/hybrid/$xml_name" ]; then
+    echo "  [FAIL] $name -- missing fixture $TESTING_DIR/hybrid/$xml_name"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  # Only the source XML is tracked; the profile it builds is ~3.7 MB and the
+  # JSON it then emits is ~93 MiB, so both are generated here. iccFromXml runs
+  # with Testing/hybrid as its working directory because the XML pulls in
+  # sibling data files by relative path.
+  ( cd "$TESTING_DIR/hybrid" && timeout 300 "$FROMXML" "$xml_name" "$profile" ) \
+    > "$fromxml_log" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name-fromxml" "$fromxml_log"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$profile" ]; then
+    echo "  [FAIL] $name -- iccFromXml failed to build the fixture with exit=$exit_code"
+    sed -n '1,5p' "$fromxml_log"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  exit_code=0
+  timeout 300 "$TOJSON" "$profile" "$json_file" -indent=4 > "$tojson_log" 2>&1 || exit_code=$?
+  if ! check_sanitizers "$name-tojson" "$tojson_log"; then
+    FAIL=$((FAIL + 1))
+    rm -f "$profile" "$json_file"
+    return
+  fi
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$json_file" ]; then
+    echo "  [FAIL] $name -- iccToJson failed with exit=$exit_code"
+    sed -n '1,5p' "$tojson_log"
+    FAIL=$((FAIL + 1))
+    rm -f "$profile" "$json_file"
+    return
+  fi
+
+  json_size="$(wc -c < "$json_file")"
+  if [ "$json_size" -le "$former_cap" ]; then
+    echo "  [FAIL] $name -- fixture emits $json_size bytes, no longer above the former 64 MiB cap"
+    FAIL=$((FAIL + 1))
+    rm -f "$profile" "$json_file"
+    return
+  fi
+  if [ "$json_size" -gt "$configured_cap" ]; then
+    echo "  [SKIP] $name -- $json_size bytes exceeds this build's ${JSON_MAX_FILE_MB} MiB limit; refusal is correct"
+    SKIPPED=$((SKIPPED + 1))
+    TOTAL=$((TOTAL - 1))
+    rm -f "$profile" "$json_file"
+    return
+  fi
+
+  exit_code=0
+  timeout 300 "$FROMJSON" "$json_file" "$output_file" > "$fromjson_log" 2>&1 || exit_code=$?
+  # Drop the multi-MiB intermediates as soon as they have been read, so this
+  # test's peak disk footprint is not carried through the rest of the suite.
+  rm -f "$profile" "$json_file"
+  if ! check_sanitizers "$name-fromjson" "$fromjson_log"; then
+    FAIL=$((FAIL + 1))
+    return
+  fi
+  if [ "$exit_code" -ne 0 ] || [ ! -s "$output_file" ]; then
+    echo "  [FAIL] $name -- iccFromJson rejected $json_size bytes under a ${JSON_MAX_FILE_MB} MiB limit (exit=$exit_code)"
+    sed -n '1,5p' "$fromjson_log"
+    FAIL=$((FAIL + 1))
+    return
+  fi
+
+  echo "  [PASS] $name (${json_size} byte -indent=4 document round-tripped)"
+  PASS=$((PASS + 1))
+  rm -f "$output_file"
 }
 
 if [ ! -x "$TOJSON" ] || [ ! -x "$FROMJSON" ] || [ ! -x "$FROMXML" ]; then
@@ -667,6 +783,7 @@ run_xml_reject_test "xml-matrix-huge-channels" "$XML_MATRIX_HUGE" "Invalid Input
 run_xml_reject_test "xml-empty-private-type" "$XML_EMPTY_PRIVATE_TYPE" "Invalid private tag type attribute"
 run_tojson_valid_json_test "text-invalid-ascii-tojson" "$TEXT_INVALID_ASCII"
 run_tojson_success_test "namedcolor-invalid-ascii-tojson" "$NAMED_INVALID_ASCII"
+run_large_indented_roundtrip_test "CMYK-W_Overprint_Profile.xml"
 
 HELPER_SRC="$OUTDIR/json-config-helper-test.cpp"
 HELPER_BIN="$OUTDIR/json-config-helper-test"
@@ -819,6 +936,7 @@ echo "JSON/XML parser/config regression summary:"
 echo "  Total:      $TOTAL"
 echo "  Passed:     $PASS"
 echo "  Failed:     $FAIL"
+echo "  Skipped:    $SKIPPED"
 echo "  ASAN:       $ASAN_FINDINGS"
 echo "  UBSAN:      $UBSAN_FINDINGS"
 

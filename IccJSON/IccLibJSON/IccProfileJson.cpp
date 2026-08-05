@@ -68,6 +68,15 @@
 #include <sstream>
 #include <set>
 #include <map>
+#include <string>
+
+// Issue #1856. The build system is the source of truth for this bound (CMake
+// cache variable ICC_JSON_MAX_FILE_MB); this fallback only keeps builds that do
+// not go through Build/Cmake compiling, and must stay finite for the same
+// reason the cap exists at all.
+#ifndef ICC_JSON_MAX_FILE_BYTES
+#define ICC_JSON_MAX_FILE_BYTES (128ULL * 1024 * 1024)
+#endif
 
 typedef std::map<icUInt32Number, icTagSignature> IccOffsetTagSigMap;
 
@@ -611,14 +620,32 @@ bool CIccProfileJson::LoadJson(const char *szFilename, std::string *parseStr)
 
   // Cap raw JSON size. nlohmann's default nesting + size limits are
   // effectively "everything fits in memory", which is a DoS primitive
-  // when the JSON comes from an untrusted source. 64 MB is generous
-  // for any legitimate ICC profile round-trip - real JSON dumps of
-  // even big iccMAX spectral profiles top out around 5 MB.
+  // when the JSON comes from an untrusted source, so the bound stays.
+  //
+  // Issue #1856: the previous fixed 64 MiB was chosen against an estimate
+  // that "even big iccMAX spectral profiles top out around 5 MB", which the
+  // tracked corpus does not support - the profile built from
+  // Testing/hybrid/CMYK-W_Overprint_Profile.xml emits 55.5 MiB at the default
+  // -indent=2 and 92.9 MiB at the documented -indent=4, so iccToJson could
+  // write a document iccFromJson then refused.
+  // The bound is now a build-time knob (ICC_JSON_MAX_FILE_MB) defaulting to
+  // 128 MiB, which clears every tracked fixture through -indent=5. It does not
+  // remove the asymmetry entirely, since -indent accepts up to 20 (392.7 MiB on
+  // the same profile), and a byte count is only a proxy for the memory this
+  // guards: indentation inflates the file without inflating the parsed
+  // document, so the cost per admitted byte varies by an order of magnitude
+  // with document shape.
   static const std::streamsize kMaxJsonFileBytes =
-      static_cast<std::streamsize>(64) * 1024 * 1024;
+      static_cast<std::streamsize>(ICC_JSON_MAX_FILE_BYTES);
   auto sz = f.tellg();
   if (sz < 0 || sz > kMaxJsonFileBytes) {
-    if (parseStr) *parseStr += std::string("JSON file exceeds 64 MB limit\n");
+    if (parseStr) {
+      // Report the bound that was actually compiled in, so a build that
+      // configured a different limit does not print a misleading number.
+      *parseStr += "JSON file exceeds " +
+                   std::to_string(kMaxJsonFileBytes / (1024 * 1024)) +
+                   " MiB limit\n";
+    }
     return false;
   }
   f.seekg(0, std::ios::beg);

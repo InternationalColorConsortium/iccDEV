@@ -23,6 +23,9 @@ for `iccApplyNamedCmm`, `iccApplyProfiles`, or `iccApplySearch`.
 - Propagate failed nested `ParseJson()` or `fromJson()` calls.
 - Reject bad struct members instead of skipping them.
 - Reset stale state before parse and honor reset/fromJson flags.
+- Keep raw-input size bounds finite, and keep the profile reader and the `-cfg`
+  reader on the same bound. When changing one, check it against what `iccToJson`
+  itself emits at its documented `-indent` settings, not against an estimate.
 
 ## Validation
 

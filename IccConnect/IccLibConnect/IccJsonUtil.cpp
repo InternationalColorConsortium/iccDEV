@@ -84,6 +84,14 @@
 #include <unistd.h>
 #endif
 
+// Issue #1856. Kept in step with the IccJSON profile reader so a JSON config
+// document and a profile document are bounded at the same size. The build
+// system is the source of truth (CMake cache variable ICC_JSON_MAX_FILE_MB);
+// this fallback only keeps non-CMake builds compiling with a finite cap.
+#ifndef ICC_JSON_MAX_FILE_BYTES
+#define ICC_JSON_MAX_FILE_BYTES (128ULL * 1024 * 1024)
+#endif
+
 #ifdef USEICCDEVNAMESPACE
 namespace iccDEV {
 #endif
@@ -561,7 +569,9 @@ bool loadJsonFrom(json& j, const char* szFname)
     long pos = ftell(f);
     if (pos <= 0) { fclose(f); return false; }
     unsigned long flen = (unsigned long)pos;
-    if (flen > 100 * 1024 * 1024) { fclose(f); return false; }
+    // Compared in a width that cannot narrow the configured bound on a
+    // platform where unsigned long is 32-bit.
+    if ((unsigned long long)flen > (unsigned long long)ICC_JSON_MAX_FILE_BYTES) { fclose(f); return false; }
     if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return false; }
     std::string buf(flen, '\0');
 
