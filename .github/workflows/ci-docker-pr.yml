@@ -225,6 +225,11 @@ jobs:
               source_dir="$work/iccDEV"
               mkdir -p "$source_dir"
               cp -a /src/. "$source_dir/"
+              actual_sha="$(git -C "$source_dir" rev-parse HEAD)"
+              if [[ "$actual_sha" != "$TARGET_SHA" ]]; then
+                echo "::error title=Workspace revision mismatch::Expected ${TARGET_SHA}, found ${actual_sha}"
+                exit 1
+              fi
               SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
               export CFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
               export CXXFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
