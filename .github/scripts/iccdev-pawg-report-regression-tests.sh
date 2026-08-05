@@ -277,6 +277,57 @@ run_directory_input_crash_guard() {
   pass_case "$name" "directory input handled gracefully (no crash, non-zero exit, report rendered)"
 }
 
+# #1977: --read claimed to load a profile the strict validation parse rejected, via
+# ReadIccProfile(). It could never do so -- every condition that makes
+# ValidateIccProfile() return NULL also makes CIccProfile::Read() fail -- so the
+# option was retired. Pin the retirement: it must be rejected like any other unknown
+# switch rather than quietly accepted and ignored, which would leave callers
+# believing a fallback ran.
+run_retired_read_option_rejected() {
+  local name="pawg-read-option-retired"
+  local logfile="$OUTDIR/$name.log"
+  local exit_code=0
+
+  TOTAL=$((TOTAL + 1))
+  rm -f "$logfile"
+
+  if [ ! -x "$PAWG" ]; then
+    fail_case "$name" "missing executable: $PAWG"
+    return
+  fi
+  if [ ! -f "$GOOD_PROFILE" ]; then
+    fail_case "$name" "missing test profile: $GOOD_PROFILE"
+    return
+  fi
+
+  timeout 60 "$PAWG" --read "$GOOD_PROFILE" > "$logfile" 2>&1 || exit_code=$?
+
+  if [ "$exit_code" -eq 124 ]; then
+    fail_case "$name" "timed out"
+    return
+  fi
+  if [ "$exit_code" -ge 128 ]; then
+    fail_case "$name" "crashed with signal $((exit_code - 128))"
+    sed -n '1,40p' "$logfile"
+    return
+  fi
+  if [ "$exit_code" -eq 0 ]; then
+    fail_case "$name" "--read was accepted (expected non-zero exit; the option is retired)"
+    return
+  fi
+  if ! grep -F -q 'Unknown option "--read"' "$logfile"; then
+    fail_case "$name" "--read rejected without naming it as an unknown option"
+    sed -n '1,20p' "$logfile"
+    return
+  fi
+  if grep -F -q "[ SECURITY ]" "$logfile"; then
+    fail_case "$name" "--read still produced a report body"
+    return
+  fi
+
+  pass_case "$name" "retired --read option is rejected as an unknown switch"
+}
+
 run_good_profile() {
   local name="$1"
   local flag="$2"
@@ -1448,7 +1499,7 @@ run_static_source_audit
 run_binary_size_guard
 run_directory_input_crash_guard
 run_good_profile "pawg-valid-profile-fidelity" ""
-run_good_profile "pawg-read-option-fidelity" "--read"
+run_retired_read_option_rejected
 run_json_report
 run_truncated_profile
 run_private_malware_profile

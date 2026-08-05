@@ -2338,8 +2338,14 @@ bool HasFail(const std::vector<PawgItem> &items)
 
 } // namespace
 
-int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson)
+int DumpPawgReport(const char *szFilename, bool bJson)
 {
+  // The raw byte read is deliberately unconditional and comes first: it does not
+  // depend on IccProfLib parsing the file at all, so a profile the library refuses
+  // still receives the full raw-byte security assessment below, with the
+  // parsed-profile items reported as NOT RUN. That graceful degradation is what
+  // makes a strict-only load acceptable -- and is why the --read fallback that
+  // used to sit further down was never needed (#1977).
   RawProfile raw;
   LoadRawProfile(szFilename, raw);
 
@@ -2351,25 +2357,6 @@ int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson)
   std::string sReport;
   icValidateStatus nStatus = icValidateOK;
   CIccProfile *pIcc = ValidateIccProfile(szFilename, sReport, nStatus);
-
-  // --read is meant to still assess a profile the strict path rejected.  As things
-  // stand it can never recover one: ValidateIccProfile() returns NULL only when
-  // ReadValidate() reaches icValidateCriticalError, and the sole two ways it does
-  // that -- ReadBasic() failing, and any LoadTag() failing -- are exactly the two
-  // conditions CIccProfile::Read() bails on, so ReadIccProfile() returns NULL for
-  // the same inputs.  (CheckTagLayout(), the only other contributor, tops out at
-  // icValidateWarning.)  This branch therefore holds a profile pointer that is
-  // always NULL.
-  //
-  // It used to run a second full Validate() over that never-non-NULL profile and
-  // store the status into nStatus, which no later statement reads -- the discarded
-  // store scan-build reported (#1959).  Dropping it costs nothing even if the two
-  // read paths later diverge and this branch goes live: EvaluatePawg() validates
-  // whichever profile it is handed, and TagTypeAllowedVerdict() turns that status
-  // into the C-item the report prints.
-  if (bUseRead && !pIcc) {
-    pIcc = ReadIccProfile(szFilename);
-  }
 
   std::vector<PawgItem> items = EvaluatePawg(raw, pIcc);
 

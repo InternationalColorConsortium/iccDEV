@@ -73,26 +73,27 @@
 
 static void printUsage()
 {
-  printf("Usage: iccPawgReport {--read} {--json} profile\n");
+  printf("Usage: iccPawgReport {--json} profile\n");
   printf("\nEmits an ICC PAWG profile assessment checklist report aligned with\n");
   printf("https://www.color.org/profiles/assessment/index.xalter\n");
-  printf("  --read   Use ReadIccProfile (eager load) fallback after validation parse failure\n");
   printf("  --json   Emit machine-readable JSON evidence instead of text\n");
   printf("iccPawgReport built with IccProfLib version " ICCPROFLIBVER "\n\n");
 }
 
 int main(int argc, char *argv[])
 {
-  bool bUseRead = false;
   bool bJson = false;
   std::string profilePath;
 
+  // --read used to select a ReadIccProfile() fallback here after the strict
+  // validation parse returned NULL. It could never recover a profile -- every
+  // condition that makes ValidateIccProfile() return NULL also makes
+  // CIccProfile::Read() fail -- so it was retired (#1977). It is deliberately
+  // not accepted-and-ignored: falling through to the unrecognised-switch branch
+  // below tells a caller still passing it, rather than silently doing nothing.
   for (int k = 1; k < argc; k++) {
-  
-    if (strcasecmp(argv[k], "--read") == 0) {
-      bUseRead = true;
-    }
-    else if (strcasecmp(argv[k], "--json") == 0) {
+
+    if (strcasecmp(argv[k], "--json") == 0) {
       bJson = true;
     }
     else if ( strcasecmp( argv[k], "-V" ) == 0
@@ -124,7 +125,7 @@ int main(int argc, char *argv[])
 
 
   try {
-    return DumpPawgReport(profilePath.c_str(), bUseRead, bJson);
+    return DumpPawgReport(profilePath.c_str(), bJson);
   }
   catch (const std::exception& e) {
     fprintf(stderr, "ERROR - exception while processing PAWG report for '%s': %s\n", profilePath.c_str(), e.what() );

@@ -7,13 +7,16 @@
 ```sh
 iccPawgReport profile.icc
 iccPawgReport --json profile.icc
-iccPawgReport --read profile.icc
 ```
 
 Options:
 
 - `--json` out instead of text report
-- `--read` eager `ReadIccProfile()` loading after validation parse failure
+
+A profile that IccProfLib refuses to parse is still assessed: the raw-byte checks run from the
+file contents directly, and the checks that need a parsed profile are reported as `NOT RUN`.
+(A `--read` option previously claimed to load such a profile via `ReadIccProfile()`. It could
+never do so and was retired in #1977.)
 
 The report prints 32 checklist items:
 

@@ -65,7 +65,7 @@
 #include <cstddef>
 #include <string>
 
-int DumpPawgReport(const char *szFilename, bool bUseRead, bool bJson);
+int DumpPawgReport(const char *szFilename, bool bJson);
 
 // Assessment-only entry points (issue #1775): run the PAWG evaluation "up to the
 // point of Output, not for Output" over an in-memory profile image, so the
