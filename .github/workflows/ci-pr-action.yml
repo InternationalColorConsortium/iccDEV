@@ -98,7 +98,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGRESSION_IMAGE_TAG: ci-qa-pr-docker-testing
+  REGRESSION_IMAGE_TAG: sha-547c4bed27b0432942b2b34c57d5bd5495191798
 
 jobs:
   detect-src:
