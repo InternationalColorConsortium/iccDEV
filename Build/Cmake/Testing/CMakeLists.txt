@@ -3032,6 +3032,49 @@ function(iccdev_add_encoding_surround_test)
   endif()
 endfunction()
 
+# CIccDefaultEncProfileConverter::ConvertFromParams deleted the luma/chroma
+# matrix element it had only borrowed from the caller's colorEncodingParams
+# struct via FindElemOfType, leaving the entry in the struct's element list. The
+# owner's later teardown walked that list and wrote through, then freed, the
+# dangling pointer -- a heap use-after-free write followed by a virtual-destructor
+# dispatch on freed memory and a second free, all on profile-controlled input.
+# The regression asserts the borrowed element survives the call intact on both
+# the succeeding and the failing return path (#1985).
+function(iccdev_add_encoding_lumamtx_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingLumaMtxTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-lumamtx-double-free.cpp"
+  )
+  target_link_libraries(iccEncodingLumaMtxTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingLumaMtxTest)
+
+  add_test(
+    NAME iccdev.encoding-lumamtx-double-free
+    COMMAND "$<TARGET_FILE:iccEncodingLumaMtxTest>"
+  )
+  set_tests_properties(iccdev.encoding-lumamtx-double-free PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;issue-1985;regression"
+  )
+  if(WIN32)
+    set(_enclumamtx_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingLumaMtxTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _enclumamtx_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-lumamtx-double-free PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_enclumamtx_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # CIccPRMG::GetChroma normalized an arbitrary hue angle into [0, 360) with
 # "while (h < 0.0) h += 360.0;" / "while (h >= 360.0) h -= 360.0;". Those loops do
 # not terminate once |h| is large enough that 360 falls below the float's ULP
@@ -3375,6 +3418,7 @@ if(WIN32)
   iccdev_add_v2_xml_fixtures_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
+  iccdev_add_encoding_lumamtx_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -3631,6 +3675,7 @@ iccdev_add_v2_legacy_pcs_test()
 iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
+iccdev_add_encoding_lumamtx_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
@@ -4671,6 +4716,29 @@ iccdev_add_script_test(
   "iccdev;encoding;security;ub;issue-1410;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1410-encoding-yxy-xyz-dbz.sh"
+ )
+
+# #1985 - CIccDefaultEncProfileConverter::ConvertFromParams (IccEncoding.cpp)
+# deleted the luma/chroma matrix element it had only borrowed from the profile's
+# colorEncodingParams ("cept") struct via FindElemOfType, leaving the entry in the
+# element list. icConvertEncodingProfile then destroyed the struct, and
+# CIccTagStruct::Cleanup wrote a null parent into the freed chunk before deleting
+# it a second time -- ASAN heap-use-after-free, SCARINESS 52
+# (8-byte-write-heap-use-after-free). The API-level regression is the
+# iccdev.encoding-lumamtx-double-free CTest; this one covers reachability, adding
+# a 'cenc' PoC profile as a transform profile through iccApplyToLink so
+# CIccXform::Create routes it into the converter. It asserts on two signals so it
+# is meaningful on every lane: a crash (measured 3/3 as exit 139 on an
+# unsanitized clang Debug build, against 255 for the fixed library's ordinary
+# rejection) and an ASAN report naming the converter. The ASAN lanes are the
+# authoritative ones -- the crash depends on the allocator recycling the chunk,
+# which is also what defeats glibc's tcache double-free check.
+iccdev_add_script_test(
+  iccdev.issue-1985-encoding-lumamtx-uaf
+  120
+  "iccdev;encoding;security;asan;issue-1985;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1985-encoding-lumamtx-uaf-regression-tests.sh"
  )
 
 # #1421 - CIccCfgProfileSequence::fromArgs decodes a packed rendering-intent code

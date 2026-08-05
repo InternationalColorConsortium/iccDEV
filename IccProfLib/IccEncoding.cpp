@@ -250,13 +250,29 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
       delete pIcc;
       return icEncConvertMemoryError;
     }
-    if (!pMtx->SetSize(3, 3))
+    // pMtx is not handed to pMpeTag until the Attach below, so this early return
+    // owns all three objects, exactly as the second matrix element's identical
+    // SetSize failure path further down already recognises.
+    if (!pMtx->SetSize(3, 3)) {
+      delete pMtx;
+      delete pMpeTag;
+      delete pIcc;
       return icEncConvertMemoryError;
+    }
 
+    // Both GetValues calls copy the matrix out -- into the element pMpeTag now
+    // owns, and into lumMtx for the primaries block below -- so nothing reads
+    // pLumMtx again. It must not be deleted here: FindElemOfType returns
+    // pEntry->pTag borrowed from pParams (IccTagComposite.cpp), the entry stays
+    // in the struct's element list, and the caller's later "delete pParams"
+    // walks that list through CIccTagStruct::Cleanup, which writes a null parent
+    // into each element before deleting it. Freeing it here therefore left a
+    // dangling entry that Cleanup wrote through and then freed a second time.
+    // The white point, media white point, transfer curves and primaries read out
+    // of pParams by the same call are all left alone for that reason (#1985).
     pLumMtx->GetValues(pMtx->GetMatrix(), 0, 9);
     pLumMtx->GetValues(&lumMtx[0], 0, 9);
     pMpeTag->Attach(pMtx);
-    delete pLumMtx;
     bHaveLumMtx = true;
   }
 
