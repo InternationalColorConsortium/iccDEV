@@ -9983,6 +9983,19 @@ icStatusCMM CIccCmm::ToInternalEncoding(icColorSpaceSignature nSpace, icFloatCol
           }
         
         case icEncodeFloat:
+          {
+            // icEncodeFloat is the unbounded float encoding, so it is deliberately
+            // not clipped and bClip does not apply to it: values above 1.0 and
+            // below 0.0 pass through unmodified, allowing extended range PCS data
+            // and HDR device data (where 1.0 denotes SDR diffuse white and headroom
+            // is a multiple above it) to survive the conversion to the internal
+            // encoding.  icEncodeUnitFloat below is the encoding that carries the
+            // 0.0 to 1.0 contract.  FromInternalEncoding() has always drawn the
+            // distinction this way, and both command line tools already document it
+            // (see the final_data_encoding usage text in iccApplyNamedCmm.cpp).
+            break;
+          }
+
         case icEncodeUnitFloat:
           {
             if (bClip) {
@@ -9993,7 +10006,7 @@ icStatusCMM CIccCmm::ToInternalEncoding(icColorSpaceSignature nSpace, icFloatCol
             }
             break;
           }
-          
+
         case icEncode8Bit:
           {
             for(i=0; i<nSamples; i++) {

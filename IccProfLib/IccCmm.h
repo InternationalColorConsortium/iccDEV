@@ -1615,15 +1615,27 @@ public:
 
 /**
  **************************************************************************
-  Color data passed to/from the CMM is encoded as floating point numbers ranging from 0.0 to 1.0
-  Often data is encoded using other ranges.  The icFloatColorEncoding enum is used by the
-  ToInternalEncoding() and FromInternalEncoding() functions to convert to/from the internal
-  encoding.  The valid encoding transforms for the following color space signatures are given
-  below.
+  Color data passed to/from the CMM is encoded as floating point numbers, nominally ranging
+  from 0.0 to 1.0.  Often data is encoded using other ranges.  The icFloatColorEncoding enum
+  is used by the ToInternalEncoding() and FromInternalEncoding() functions to convert to/from
+  the internal encoding.  The valid encoding transforms for the following color space
+  signatures are given below.
+
+  The two float encodings differ in how they treat the nominal range, and the difference
+  matters for extended range and HDR data:
+
+    icEncodeUnitFloat: 0.0 <= value <= 1.0, and clipped to that range when the caller
+      passes bClip (which both conversion functions default to true).
+
+    icEncodeFloat: unbounded.  Values above 1.0 and below 0.0 are carried through unmodified
+      in both directions and bClip does not apply, so that extended range PCS data, and HDR
+      device data in which 1.0 denotes SDR diffuse white and headroom is expressed as a
+      multiple above it, survive the conversion.
 
   'CMYK', 'RGB ', 'GRAY', 'CMY ', 'Luv ', 'YCbr', 'Yxy ', 'HSV ', 'HLS ', 'gamt'
     icEncodePercent: 0.0 <= value <= 100.0
-    icEncodeFloat: 0.0 <= value <= 1.0
+    icEncodeUnitFloat: 0.0 <= value <= 1.0 (clipped)
+    icEncodeFloat: unbounded (see above)
     icEncode8Bit: 0.0 <= value <= 255
     icEncode16Bit: 0.0 <= value <= 65535
     icEncode16BitV2: 0.0 <= value <= 65535
@@ -1631,14 +1643,16 @@ public:
   'XCLR'
     icEncodeValue: (if X>=3) 0.0 <= L <= 100.0; -128.0 <= a,b <= 127.0 others 0.0 <= value <= 1.0
     icEncodePercent: 0.0 <= value <= 100.0
-    icEncodeFloat: 0.0 <= value <= 1.0
+    icEncodeUnitFloat: 0.0 <= value <= 1.0 (clipped)
+    icEncodeFloat: unbounded (see above)
     icEncode8Bit: 0.0 <= value <= 255
     icEncode16Bit: 0.0 <= value <= 65535
     icEncode16BitV2: 0.0 <= value <= 65535
 
   'Lab '
     icEncodeValue: 0.0 <= L <= 100.0; -128.0 <= a,b <= 127.0
-    icEncodeFloat: 0.0 <= L,a,b <= 1.0 - ICC PCS encoding (See ICC Specification)
+    icEncodeUnitFloat, icEncodeFloat: 0.0 <= L,a,b <= 1.0 - ICC PCS encoding, passed through
+      unmodified by both encodings (See ICC Specification)
     icEncode8BIt: ICC 8 bit Lab Encoding - See ICC Specification
     icEncode16Bit: ICC 16 bit V4 Lab Encoding - See ICC Specification
     icEncode16BitV2: ICC 16 bit V2 Lab Encoding - See ICC Specification
@@ -1646,7 +1660,11 @@ public:
   'XYZ '
     icEncodeValue: 0.0 <= X,Y,Z < 1.999969482421875
     icEncodePercent: 0.0 <= X,Y,Z < 199.9969482421875
-    icEncodeFloat: 0.0 <= L,a,b <= 1.0 - ICC PCS encoding (See ICC Specification
+    icEncodeUnitFloat, icEncodeFloat: ICC PCS encoding of XYZ, i.e. the icEncodeValue range
+      scaled by 32768/65535, so that X,Y,Z of 1.0 encodes as 0.5000076...  Neither float
+      encoding clips here, so values above the 1.999969482421875 that icU1Fixed15 can hold
+      are representable internally - but they cannot be serialized through the 16 bit
+      encodings below.  (See ICC Specification)
     icEncode16Bit: ICC 16 bit XYZ Encoding - (icU1Fixed15) See ICC Specification
     icEncode16BitV2: ICC 16 bit XYZ Encoding - (icU1Fixed15) See ICC Specification
  **************************************************************************
