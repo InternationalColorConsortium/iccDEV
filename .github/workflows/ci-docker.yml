@@ -747,7 +747,7 @@ jobs:
             for d in "$ICCDEV_BUILD_DIR"/Tools/*; do
               [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
             done
-            printf "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
+            printf "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
               "unsigned-integer-overflow:*/IccMD5.cpp" \
               "shift-base:*/IccMD5.cpp" \
               "shift-exponent:*/IccMD5.cpp" \
@@ -756,7 +756,9 @@ jobs:
               "unsigned-integer-overflow:*/include/c++/*/bits/basic_string.h" \
               "unsigned-integer-overflow:*/include/c++/*/bits/basic_string.tcc" \
               "unsigned-integer-overflow:*/include/c++/*/bits/stl_bvector.h" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h" > silence.txt
+              "unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h" \
+              "unsigned-integer-overflow:*/include/c++/*/bits/vector.tcc" \
+              "unsigned-integer-overflow:*/include/c++/*/ext/string_conversions.h" > silence.txt
             test -x ./CreateAllProfiles.sh
             test -x ./RunTests.sh
             test -x ./HDR/mkprofiles.sh

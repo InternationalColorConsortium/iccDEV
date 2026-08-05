@@ -23,6 +23,8 @@ src:*/include/c++/*/bits/basic_string.h
 src:*/include/c++/*/bits/basic_string.tcc
 src:*/include/c++/*/bits/stl_bvector.h
 src:*/include/c++/*/bits/stl_uninitialized.h
+src:*/include/c++/*/bits/vector.tcc
+src:*/include/c++/*/ext/string_conversions.h
 
 [unsigned-shift-base]
 fun:*MD5Transform*

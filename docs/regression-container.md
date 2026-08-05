@@ -157,6 +157,7 @@ docker run --rm -v "$WORKTREE:/workspace/review:ro" "$IMAGE" bash -lc '
     -DENABLE_UBSAN=ON \
     -DENABLE_INTEGER_SANITIZER=ON \
     -DENABLE_FLOAT_SANITIZER=ON \
+    -DUBSAN_IGNORELIST="$source_dir/.github/ci/ubsan-ignorelist.txt" \
     -DENABLE_TOOLS=ON \
     -DENABLE_TESTS=ON
   cmake --build "$build_dir" --target "$target" --parallel "$(nproc)"
@@ -167,15 +168,22 @@ docker run --rm -v "$WORKTREE:/workspace/review:ro" "$IMAGE" bash -lc '
 '
 ```
 
-For direct parity with the Docker PR verification job, build `iccDumpProfile`
-first and reject compiler warnings:
+The Docker PR verification job pulls the published `latest` maintainer image
+instead of rebuilding `Dockerfile.ci-regression` for each PR. It mounts the PR
+tree read-only, copies it to container-local scratch space for writable CTest
+fixtures, then builds the configured tool and test target set with strict Clang
+sanitizers. Its routine PR CTest envelope excludes the separately labelled
+`slow` and `calculator` suites:
 
 ```bash
-docker run --rm -v "$WORKTREE:/workspace/iccDEV:ro" "$IMAGE" bash -lc '
+docker run --rm -v "$WORKTREE:/src:ro" "$IMAGE" bash -lc '
   set -euo pipefail
   work="$(mktemp -d)"
+  source_dir="$work/iccDEV"
+  mkdir -p "$source_dir"
+  cp -a /src/. "$source_dir/"
   SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
-  CC=clang CXX=clang++ cmake -S /workspace/iccDEV/Build/Cmake -B "$work" \
+  CC=clang CXX=clang++ cmake -S "$source_dir/Build/Cmake" -B "$work/build" \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_C_COMPILER=clang \
     -DCMAKE_CXX_COMPILER=clang++ \
@@ -185,19 +193,25 @@ docker run --rm -v "$WORKTREE:/workspace/iccDEV:ro" "$IMAGE" bash -lc '
     -DENABLE_UBSAN=ON \
     -DENABLE_INTEGER_SANITIZER=ON \
     -DENABLE_FLOAT_SANITIZER=ON \
-    -DENABLE_TOOLS=ON
-  cmake --build "$work" --target iccDumpProfile --parallel "$(nproc)" \
+    -DUBSAN_IGNORELIST="$source_dir/.github/ci/ubsan-ignorelist.txt" \
+    -DENABLE_TOOLS=ON \
+    -DENABLE_TESTS=ON
+  cmake --build "$work/build" --target all build-test-binaries --parallel "$(nproc)" \
     2>&1 | tee "$work/build.log"
   warning_count="$(grep -cE "warning:" "$work/build.log" || true)"
   test "$warning_count" -eq 0
+  ASAN_OPTIONS="halt_on_error=0,detect_leaks=0" \
+  UBSAN_OPTIONS="halt_on_error=0,print_stacktrace=1" \
+  LLVM_PROFILE_FILE="/dev/null" \
+  ctest --test-dir "$work/build" --output-on-failure --no-tests=error \
+    --label-exclude "^(slow|calculator)$"
 '
 ```
 
-Use a focused CTest after the Docker PR verification build when the changed
-behavior is not exercised by `iccDumpProfile`. For tool changes, build the
-affected tool and `build-test-binaries`, then run the registered CTest wrapper.
-Record the image digest, image source revision, mounted worktree commit, command,
-exit status, warning count, and sanitizer result in the PR or issue handoff.
+Use a focused or full CTest explicitly when the change affects a suite excluded
+from the routine Docker PR envelope. Record the resolved image digest, mounted
+worktree commit, command, exit status, warning count, and sanitizer result in
+the PR or issue handoff.
 
 The prebuilt image uses the maintainer Clang sanitizer configuration. For exact
 `ci-iccdev-tool-tests.yml` GCC strict parity, configure a separate build:

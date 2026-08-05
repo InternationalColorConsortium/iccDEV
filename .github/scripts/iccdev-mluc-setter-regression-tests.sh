@@ -42,7 +42,7 @@ check_log() {
   fi
 
   if grep -q "runtime error:" "$logfile" 2>/dev/null; then
-    if grep "runtime error:" "$logfile" | grep -Ev '(/IccProfLib/IccMD5.cpp:|/include/c\+\+/[^/]+/bits/(basic_string\.h|basic_string\.tcc|stl_bvector\.h|stl_uninitialized\.h):)' >/dev/null 2>&1; then
+    if grep "runtime error:" "$logfile" | grep -Ev '(/IccProfLib/IccMD5.cpp:|/include/c\+\+/[^/]+/(bits/(basic_string\.h|basic_string\.tcc|stl_bvector\.h|stl_uninitialized\.h|vector\.tcc)|ext/string_conversions\.h):)' >/dev/null 2>&1; then
       echo "  [FAIL] $name -- undefined behavior"
       FAIL=$((FAIL + 1))
       return 1

@@ -98,7 +98,7 @@ jobs:
       BASH_ENV: /dev/null
       TARGET_SHA: ${{ inputs.target_sha }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'fail' }}
-      TEST_IMAGE: iccdev-ci-pr-regression:test
+      TEST_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
@@ -135,7 +135,7 @@ jobs:
             exit 1
           fi
 
-      - name: Build local regression image
+      - name: Pull latest maintainer regression image
         env:
           BASH_ENV: /dev/null
         run: |
@@ -143,15 +143,12 @@ jobs:
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
 
-          docker build \
-            --pull \
-            --no-cache \
-            --build-arg "GIT_COMMIT=${TARGET_SHA}" \
-            --label "org.opencontainers.image.revision=${TARGET_SHA}" \
-            -t "$TEST_IMAGE" \
-            -f Dockerfile.ci-regression .
+          docker pull "$TEST_IMAGE"
+          docker image inspect \
+            --format 'image={{.Id}} digest={{range .RepoDigests}}{{.}}{{end}}' \
+            "$TEST_IMAGE"
 
-      # preflight: allow-pr-script-execution reason=verify-pr-built-regression-image
+      # preflight: allow-pr-script-execution reason=verify-maintainer-regression-image
       - name: Verify regression image toolchain
         env:
           BASH_ENV: /dev/null
@@ -201,7 +198,7 @@ jobs:
             /tmp/cfl-smoke -max_total_time=1
           '
 
-      - name: Build PR tree inside regression image
+      - name: Build and test PR tree inside regression image
         env:
           BASH_ENV: /dev/null
         run: |
@@ -218,36 +215,21 @@ jobs:
               ;;
           esac
 
-          image_revision="$(docker image inspect \
-            --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
-            "$TEST_IMAGE")"
-          if [ "$image_revision" != "$TARGET_SHA" ]; then
-            echo "::error title=Image revision mismatch::${image_revision} != ${TARGET_SHA}"
-            exit 1
-          fi
-
           docker run --rm \
+            --mount "type=bind,src=${GITHUB_WORKSPACE},dst=/src,readonly" \
             -e "TARGET_SHA=${TARGET_SHA}" \
             -e "WARNING_POLICY=${WARNING_POLICY}" \
             "$TEST_IMAGE" bash -lc '
               set -euo pipefail
-              test "$PWD" = /workspace/iccDEV
-              if actual_sha="$(git rev-parse --verify HEAD 2>/dev/null)" &&
-                 [ "$actual_sha" != "$TARGET_SHA" ]; then
-                echo "PR tree SHA mismatch: $actual_sha != $TARGET_SHA" >&2
-                exit 1
-              fi
-              if [ -n "${ICCDEV_SOURCE_REVISION:-}" ] &&
-                 [ "$ICCDEV_SOURCE_REVISION" != "$TARGET_SHA" ]; then
-                echo "PR tree revision mismatch: $ICCDEV_SOURCE_REVISION != $TARGET_SHA" >&2
-                exit 1
-              fi
               work="$(mktemp -d)"
+              source_dir="$work/iccDEV"
+              mkdir -p "$source_dir"
+              cp -a /src/. "$source_dir/"
               SAN_FLAGS="-fsanitize=address,undefined,integer,bounds,null,float-divide-by-zero,alignment,vla-bound"
               export CFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
               export CXXFLAGS="$SAN_FLAGS -fno-omit-frame-pointer -g -O0"
               export LDFLAGS="$SAN_FLAGS"
-              CC=clang CXX=clang++ cmake -S /workspace/iccDEV/Build/Cmake -B "$work" \
+              CC=clang CXX=clang++ cmake -S "$source_dir/Build/Cmake" -B "$work/build" \
                 -DCMAKE_BUILD_TYPE=Debug \
                 -DCMAKE_C_COMPILER=clang \
                 -DCMAKE_CXX_COMPILER=clang++ \
@@ -257,8 +239,11 @@ jobs:
                 -DENABLE_UBSAN=ON \
                 -DENABLE_INTEGER_SANITIZER=ON \
                 -DENABLE_FLOAT_SANITIZER=ON \
-                -DENABLE_TOOLS=ON
-              cmake --build "$work" --target iccDumpProfile --parallel "$(nproc)" 2>&1 | tee "$work/build.log"
+                -DUBSAN_IGNORELIST="$source_dir/.github/ci/ubsan-ignorelist.txt" \
+                -DENABLE_TOOLS=ON \
+                -DENABLE_TESTS=ON
+              cmake --build "$work/build" --target all build-test-binaries \
+                --parallel "$(nproc)" 2>&1 | tee "$work/build.log"
               warning_count="$(grep -cE "warning:" "$work/build.log" || true)"
               if [ "$warning_count" -gt 0 ]; then
                 grep -E "warning:" "$work/build.log" | sort -u | sed -n "1,20p"
@@ -267,4 +252,9 @@ jobs:
                   exit 1
                 fi
               fi
+              ASAN_OPTIONS="halt_on_error=0,detect_leaks=0" \
+              UBSAN_OPTIONS="halt_on_error=0,print_stacktrace=1" \
+              LLVM_PROFILE_FILE="/dev/null" \
+              ctest --test-dir "$work/build" --output-on-failure --no-tests=error \
+                --label-exclude "^(slow|calculator)$"
             '

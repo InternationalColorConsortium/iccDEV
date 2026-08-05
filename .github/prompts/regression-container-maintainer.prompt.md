@@ -30,11 +30,13 @@ Canonical guide: `docs/regression-container.md`
 4. For an issue, use the smallest existing project input and project tool.
 5. Rebuild the affected target or the full configured build.
 6. Run the focused regression first and its CTest wrapper when registered.
-7. For local PR proof, mount the reviewed worktree read-only into the published
-   image and run the Docker PR verification build: strict Clang sanitizer flags,
-   `iccDumpProfile`, and zero compiler warnings.
-8. If the changed behavior is outside `iccDumpProfile`, build the affected tool
-   and `build-test-binaries` inside the same image, then run the focused CTest.
+7. For local PR proof, pull the published `latest` image, record its resolved
+   digest, mount the reviewed worktree read-only, and copy it to container-local
+   scratch space. Run the Docker PR verification build: strict Clang sanitizer
+   flags, the configured tool and test target set, zero compiler warnings, and
+   CTest excluding only the `slow` and `calculator` labels.
+8. If the changed behavior is in an excluded suite, run its focused CTest in
+   addition to the routine Docker PR envelope.
 9. Scan output for compiler warnings, ASAN, UBSAN, and signal termination.
 10. Classify exit `1-127` as graceful and `128+` as signal termination.
 11. For AFL/CFL work, run `iccdev-fuzz-env`, verify patch-stack counts, and run
