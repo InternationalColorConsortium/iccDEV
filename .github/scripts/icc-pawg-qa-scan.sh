@@ -17,5 +17,11 @@ export ICC_QA_TIMEOUT_DEFAULT="${ICC_PAWG_QA_TIMEOUT:-60}"
 export ICC_QA_VARIANTS='text||
 json|--json|'
 
+# The source= directive records the path for anyone running shellcheck -x; without
+# -x, which is how the pre-flight gate invokes it, shellcheck still reports SC1091
+# for the unfollowed file, so suppress it here as well. Pre-existing, and surfaced
+# only because the gate lints changed files and this is the first change to touch
+# this one -- the two sibling icc-*-qa-scan.sh scripts carry the same latent finding.
 # shellcheck source=.github/scripts/icc-tool-qa-scan-common.sh
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/icc-tool-qa-scan-common.sh"
