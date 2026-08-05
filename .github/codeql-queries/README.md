@@ -1,9 +1,9 @@
 # iccDEV CodeQL Queries
 
 iccDEV includes custom CodeQL queries for ICC-specific C/C++ security patterns.
-They are maintainer-local training and triage tools; custom iccDEV SARIF is not
-uploaded to GitHub code scanning by default. The `iccdev-mcp/` subdirectory
-contains Python queries for the MCP REST/API package.
+The CodeQL security workflow uploads their SARIF to GitHub code scanning under
+the `iccdev-custom-security` category. The `iccdev-mcp/` subdirectory contains
+Python queries for the MCP REST/API package.
 
 ## Query Summary
 
@@ -17,10 +17,8 @@ contains Python queries for the MCP REST/API package.
 | `unsafe-header-cast` | CWE-681 | Header field cast to narrower type |
 | `snprintf-size-mismatch` | CWE-120 | Buffer smaller than formatted output |
 | `unchecked-allocation` | CWE-252, CWE-476 | Allocation result used without null check |
-| `division-by-zero-profile` | CWE-369 | Division by profile-derived denominator without explicit finite/non-zero guard |
 | `unbounded-profile-loop` | CWE-400, CWE-834 | Loop bound from profile field without cap |
 | `unbounded-clut-index` | CWE-125 | CLUT `GetData()` buffer indexed without a length bound (#1548) |
-| `xml-controlled-narrowing` | CWE-190, CWE-681 | XML channel or spectral step attribute narrowed into small ICC fields without range-checked parse (#1898, #1899, #1900) |
 | `world-writable-output` | CWE-732 | File created with world-writable mode |
 | `unsafe-tag-downcast` | CWE-843 | `FindTag()` result cast without type check |
 | `tainted-format-string` | CWE-134 | Variable used as a `printf` format string |
@@ -88,5 +86,5 @@ Results are written to `codeql-results/`:
 
 Standard-suite findings such as CLI path input or intentional float comparisons
 may be informational rather than vulnerabilities; triage them in context.
-The DBZ query is intentionally local-only: closed alerts show useful fixes, but
-guard-sensitive false positives still need maintainer review before escalation.
+New custom queries must demonstrate useful results against the relevant
+pre-fix and fixed revisions before they are added to the uploaded suite.
