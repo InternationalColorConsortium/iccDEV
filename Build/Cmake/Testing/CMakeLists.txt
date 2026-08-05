@@ -993,6 +993,50 @@ function(iccdev_add_getvalues_nstart_test)
   endif()
 endfunction()
 
+# #1976: two defects on the gamt path. CIccXform::Create() forces bInput false to walk
+# the B-to-A shaped gamut tag, but m_bInput also drove GetDstSpace()/GetNumDstSamples(),
+# so the xform advertised the profile's device space while CIccCmm::AddXform() had
+# recorded PCS -> icSigGamutData; Begin() rejected every gamt-bearing profile in Testing/
+# with icCmmStatBadSpaceLink. Separately CIccCmm::IsInGamut() applied an 8-bit 1/255
+# threshold to a tag that may be lut16Type, so 16-bit out-of-gamut codes below 258 read
+# as in gamut. Pins the corrected connection metadata and the exact-zero classification;
+# builds its gamt profile in memory because the corpus gamt profiles are generated from
+# XML rather than tracked. Header + IccProfLib only.
+function(iccdev_add_gamut_xform_semantics_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccGamutXformSemanticsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/gamut-xform-semantics.cpp"
+  )
+  target_link_libraries(iccGamutXformSemanticsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccGamutXformSemanticsTest)
+
+  add_test(
+    NAME iccdev.gamut-xform-semantics
+    COMMAND "$<TARGET_FILE:iccGamutXformSemanticsTest>"
+  )
+  set_tests_properties(iccdev.gamut-xform-semantics PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;cmm;gamut;issue-1976;regression"
+  )
+  if(WIN32)
+    set(_gamut_xform_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccGamutXformSemanticsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _gamut_xform_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.gamut-xform-semantics PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_gamut_xform_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1853: CIccMatrixMath::rangeMap() discarded SetRange()'s verdict and returned a matrix
 # whose coefficients were never written, so a rejected spectral range pair fed
 # uninitialized heap into the colour math (CWE-908). Pins the corrected NULL return, the
@@ -3347,6 +3391,7 @@ if(WIN32)
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
+  iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
   iccdev_add_pcs_applyillum_chain_sizing_test()
@@ -3597,6 +3642,7 @@ iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
+iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()
 iccdev_add_pcs_applyillum_chain_sizing_test()

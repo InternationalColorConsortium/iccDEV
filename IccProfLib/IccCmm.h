@@ -435,6 +435,11 @@ public:
   //ShareProfile should only be called when the profile is shared between transforms 
   void ShareProfile() { m_bOwnsProfile = false; } 
   void SetPcsAdjustXform() { m_bPcsAdjustXform = true; }
+  /// Marks this xform as the gamut check for its profile.  The gamt tag is
+  /// B-to-A shaped, so Create() traverses it with bInput false; without this
+  /// flag the !m_bInput branches of GetDstSpace()/GetNumDstSamples() would
+  /// report the profile's device space instead of the single gamut channel.
+  void SetGamutXform() { m_bGamutXform = true; }
 
   virtual icStatusCMM Begin();
 
@@ -522,6 +527,9 @@ protected:
   CIccProfile *m_pProfile;
   bool m_bOwnsProfile = true;
   bool m_bPcsAdjustXform = false;
+  /// Set by SetGamutXform().  Decouples the reported destination of a gamut
+  /// xform from m_bInput, which selects LUT traversal direction only.
+  bool m_bGamutXform = false;
   bool m_bInput;
   icRenderingIntent m_nIntent;
   icRenderingIntent m_nTagIntent;

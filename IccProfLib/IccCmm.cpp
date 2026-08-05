@@ -1241,6 +1241,12 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
       rv->m_pConnectionConditions = pProfile;
 
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel, nMCS);
+
+    // The icXformLutGamut case above forced bInput false to walk the gamt tag
+    // in its stored B-to-A direction.  Record that this is a gamut xform so the
+    // reported destination stays icSigGamutData rather than the device space.
+    if (nLutType == icXformLutGamut)
+      rv->SetGamutXform();
   }
   else if (bOwnsProfile) {
     // No xform was produced. pProfile never reached SetParams(), so free it here
@@ -1894,6 +1900,14 @@ icUInt16Number CIccXform::GetNumSrcSamples() const
 */
 icColorSpaceSignature CIccXform::GetDstSpace() const
 {
+  // A gamut xform consumes the PCS and produces the single gamut channel, so
+  // its destination is icSigGamutData whatever the profile's device space is.
+  // m_bInput is false here purely to traverse the B-to-A shaped gamt tag; the
+  // !m_bInput branch below would otherwise report m_Header.colorSpace and
+  // contradict the PCS -> gamt link CIccCmm::AddXform() already recorded.
+  if (m_bGamutXform)
+    return icSigGamutData;
+
   icColorSpaceSignature rv;
   icProfileClassSignature deviceClass = m_pProfile->m_Header.deviceClass;
 
@@ -1936,6 +1950,12 @@ icColorSpaceSignature CIccXform::GetDstSpace() const
 */
 icUInt16Number CIccXform::GetNumDstSamples() const
 {
+  // Must track GetDstSpace() above: CIccCmm::Begin() rejects the chain with
+  // icCmmStatBadSpaceLink when this disagrees with the CMM destination sample
+  // count, and CIccApplyCmm sizes its pixel buffers from it.
+  if (m_bGamutXform)
+    return (icUInt16Number)icGetSpaceSamples(icSigGamutData);
+
   icUInt16Number rv;
 
   if (m_nMCS==icToMCS) {
@@ -8056,6 +8076,12 @@ CIccXform *CIccXformMpe::Create(CIccProfile *pProfile, bool bInput/* =true */, i
 
   if (rv) {
     rv->SetParams(pProfile, bInput, nIntent, nTagIntent, bUseSpectralPCS, nInterp, pHintManager, bAbsToRel);
+
+    // Same reasoning as the icXformLutGamut case in CIccXform::Create(): this
+    // overload has no in-tree caller, but it is public API and its gamut case
+    // forces bInput false the same way, so it needs the same marking.
+    if (nLutType == icXformLutGamut)
+      rv->SetGamutXform();
   }
   else if (bOwnsProfile) {
     // No xform was produced; pProfile never reached SetParams(), so free it here
@@ -9735,9 +9761,9 @@ icStatusCMM CIccCmm::RemoveAllIO()
  ** Name: CIccCmm::IsInGamut
  **
  ** Purpose:
- **  Function to check if internal representation of gamut is in gamut.  Note
- **  that the gamut table is 8 bit and a color is considered to be out of gamut
- **  if the value is not zero.
+ **  Function to check if internal representation of gamut is in gamut.  A
+ **  colour is in gamut only when the gamut value is zero; every non-zero
+ **  value means out of gamut.
  **
  **  Args:
  **   pInternal = internal pixel representation of gamut value
@@ -9747,10 +9773,22 @@ icStatusCMM CIccCmm::RemoveAllIO()
  **************************************************************************/
 bool CIccCmm::IsInGamut(icFloatNumber *pInternal)
 {
-  // replace float->int conversion with simple float comparison
-  if (*pInternal < (1.0f/255.0f))
-    return true;
-  return false;
+  // The gamt tag may be lut8Type, lut16Type or lutBToAType, so what reaches us
+  // is a normalized float, not an 8-bit code.  Treating anything below 1/255 as
+  // in gamut (and the equivalent (unsigned)(v*255.0) truncation it replaced)
+  // accepted every 16-bit code below 258; 1/255 is exactly 257/65535.
+  //
+  // Stored nodes rarely land there - all 7 gamt tables in Testing/ hold 8-bit
+  // values replicated x257, so wherever a non-zero node exists the smallest is
+  // exactly 257, i.e. 1/255, which the old test judged correctly.  Interpolation
+  // is what exposes the threshold: between a zero node and a 257 node every
+  // intermediate value falls under the cutoff.  Sweeping 3444 Lab coordinates
+  // through CMYK-3DLUTs.icc yields 92 out-of-gamut results the old test called
+  // in gamut, the smallest ~7.1e-15.
+  //
+  // Compare against zero, which is what the tag definition specifies.  NaN and
+  // infinity both fail this test and so report out of gamut, the safe verdict.
+  return *pInternal == 0.0f;
 }
 
 
