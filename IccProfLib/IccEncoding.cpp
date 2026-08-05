@@ -390,6 +390,23 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
       pIcc->m_Header.illuminant.Y!=icDtoF(icD50XYZ[1]) ||
       pIcc->m_Header.illuminant.Z!=icDtoF(icD50XYZ[2])) {
 
+    // ICC.2:2023 12.2.3.2.6 defines 'wlum' as the colour-space white-point
+    // luminance in cd/m2, and supplies no exception admitting zero. Everything
+    // this block derives treats it as a physical luminance: it scales the
+    // illuminant and surround XYZ written into the viewing-conditions tag below,
+    // it defaults the ambient luminance La and the viewing surround Lsw, and it
+    // becomes the CAM Yb parameter and the divisor of the surround ratio. A
+    // profile supplies it, so a crafted one can make it zero, negative or
+    // non-finite; reject the parameters here rather than propagate a value that
+    // cannot describe a white point. This is read before the viewing-conditions
+    // tag is allocated so that the rejection path has nothing to release but the
+    // profile itself.
+    icFloatNumber Lw = pParams->GetElemNumberValue(icSigCeptWhitePointLuminanceMbr, 100);
+    if (!(std::isfinite((double)Lw) && Lw > 0.0f)) {
+      delete pIcc;
+      return icEncConvertBadParams;
+    }
+
      //Set Spectral Viewing Conditions
     CIccTagSpectralViewingConditions *pCond = (CIccTagSpectralViewingConditions*)CIccTag::Create(icSigSpectralViewingConditionsType);
     if (!pCond) {
@@ -398,7 +415,6 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
     }
 
     icFloatNumber illXYZ[3];
-    icFloatNumber Lw = pParams->GetElemNumberValue(icSigCeptWhitePointLuminanceMbr, 100);
     pCond->setIlluminant(XYZWhite);
     //pCond->m_stdIlluminant = icIlluminantCustom;
     illXYZ[0] = pCond->m_illuminantXYZ.X = Lw * XYZWhite[0];
@@ -432,19 +448,19 @@ icStatusEncConvert CIccDefaultEncProfileConverter::ConvertFromParams(CIccProfile
     pCstmConvert->SetParameter_La(La);
     pCstmConvert->SetParameter_Yb(Lw);
 
-    // Lw is the white-point luminance read from the profile a few lines above
-    // (icSigCeptWhitePointLuminanceMbr, defaulting to 100), so a malformed profile
-    // can set it to zero and turn this ratio into a division by zero. This is the
-    // companion site to the H_FunctionInv guard in IccCAM.cpp: the AFL patch stack
-    // pairs the two as one defect, and a constructed colorEncodingParams struct
-    // with a zero white-point luminance reproduces it directly (#1817).
+    // This ratio was the division by zero reported in #1817, reached when a
+    // malformed profile set the white-point luminance to zero. It is the
+    // companion site to the H_FunctionInv guard in IccCAM.cpp, which the AFL
+    // patch stack pairs with it as one defect.
     //
-    // SWr only selects one of the three surround categories below, so a degenerate
-    // ratio resolves to 0.0f, which falls through to Dark surround -- the
-    // conservative choice when the white luminance is zero or non-finite. Only one
-    // case changes: Lsw > 0 with Lw == 0 previously produced +infinity and so
-    // selected Average surround, the least conservative option, off a white point
-    // that carries no luminance at all. Every finite non-zero Lw is unaffected.
+    // The Lw terms below are now redundant: the #1980 check above rejects the
+    // parameters unless Lw is finite and strictly positive, so no zero or
+    // non-finite Lw reaches this point. They are kept because they are cheap and
+    // because they state the precondition this expression depends on at the site
+    // that depends on it. Lsw is a separate profile-supplied value with its own
+    // default and no such precondition, so its isfinite test remains load-bearing:
+    // a non-finite Lsw still resolves SWr to 0.0f and falls through to Dark
+    // surround, the conservative category.
     icFloatNumber SWr = 0.0f;
     if (std::isfinite((double)Lsw) && std::isfinite((double)Lw) && Lw != 0.0f)
       SWr = Lsw / Lw;

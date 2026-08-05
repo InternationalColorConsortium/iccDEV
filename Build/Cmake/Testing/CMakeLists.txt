@@ -3015,7 +3015,7 @@ function(iccdev_add_encoding_surround_test)
   set_tests_properties(iccdev.encoding-surround-ratio-divzero PROPERTIES
     WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
     TIMEOUT 60
-    LABELS "iccdev;encoding;issue-1817;regression"
+    LABELS "iccdev;encoding;issue-1817;issue-1980;regression"
   )
   if(WIN32)
     set(_encsurround_windows_env_mods

@@ -1,44 +1,45 @@
-// Regression for the second half of #1817: the surround ratio in
-// CIccDefaultEncProfileConverter::ConvertFromParams must not divide by a
-// profile-supplied zero.
+// Regression for the second half of #1817 and for #1980: the colour-space
+// white-point luminance in CIccDefaultEncProfileConverter::ConvertFromParams
+// must be a physically meaningful value before anything is derived from it.
 //
-// The converter reads the white-point luminance straight out of the encoding
-// parameters and then formed the surround ratio unguarded:
+// The converter reads the luminance straight out of the encoding parameters:
 //
 //     icFloatNumber Lw  = pParams->GetElemNumberValue(icSigCeptWhitePointLuminanceMbr, 100);
 //     ...
 //     icFloatNumber SWr = Lsw / Lw;
 //
-// Lw is attacker-controlled, so a profile carrying a zero white-point luminance
-// made this a division by zero. The same AFL corpus that produced the
-// IccCAM.cpp:150 report reaches this path through iccApplyProfiles.
+// Lw is profile-supplied, so a crafted profile controls it. #1817 reported the
+// division above: a zero Lw with a positive viewing surround yielded +infinity,
+// and "+inf > 0.2" selected *Average* surround -- the least conservative
+// setting, chosen off a white point carrying no luminance at all.
 //
-// SWr only picks one of three surround categories, so the guard resolves a
-// degenerate ratio to 0.0f, which selects Dark surround. Exactly one case
-// changes: Lsw > 0 with Lw == 0 used to yield +infinity, and "+inf > 0.2"
-// selected *Average* surround -- the least conservative setting, chosen off a
-// white point carrying no luminance at all. That is the case exercised below.
+// Guarding the division alone left the rest of the block reading from the same
+// value. Lw also scales the illuminant and surround XYZ written into the
+// viewing-conditions tag, defaults the ambient luminance La and the viewing
+// surround Lsw, and becomes the CAM Yb parameter. A negative Lw therefore
+// propagated a negative luminance into all of that state; the CAM adapting-
+// luminance guard added for #1950 contains only the last of those consequences.
+// #1980 rejects the parameters outright instead: ICC.2:2023 12.2.3.2.6 defines
+// 'wlum' as a luminance in cd/m2 and admits no zero or negative exception.
+//
+// NOTE: this changes the #1817 contract deliberately. A zero white-point
+// luminance used to convert with status icEncConvertOk (having resolved the
+// guarded ratio to Dark surround); it is now rejected as bad parameters. The
+// zero case is kept below precisely so that change stays visible and asserted
+// rather than being dropped along with the defect.
+//
+// Detection no longer depends on the build. The pre-#1817 defect was only
+// observable under -fsanitize=float-divide-by-zero, because an infinite ratio
+// merely mis-selected a surround category that is not reachable from the
+// returned profile. Rejection is observable from the return status in every
+// configuration, so these cases are deterministic contract checks and a plain
+// build now carries the same signal as an ASAN+UBSAN one.
 //
 // The test drives the public IIccEncProfileConverter handler with the smallest
 // parameter structure that reaches the surround block. Two things are required
 // to get there: the primaries must form an invertible matrix, and the white
 // point must not be D50, because the block is inside a "header illuminant is not
 // D50" branch. D65 primaries satisfy both.
-//
-// Detection depends on the build, and it is worth being precise about that. The
-// unfixed converter still returns icEncConvertOk here -- the infinite ratio only
-// mis-selects the surround, which is not observable from the returned profile
-// without reaching into the CAM converter it builds internally. So this test
-// catches the regression through the sanitizer, not through its return value:
-// under -fsanitize=float-divide-by-zero it aborts with
-//
-//     IccProfLib/IccEncoding.cpp:435:29: runtime error: division by zero
-//
-// That is the configuration ENABLE_SANITIZERS produces, and the one the CI
-// ASAN+UBSAN jobs build, so the coverage is real -- but on a plain build this
-// test only confirms the path still converts cleanly. Note that plain
-// -fsanitize=undefined is *not* enough on either gcc or clang;
-// float-divide-by-zero has to be requested explicitly.
 //
 // Returns 0 on success; non-zero on failure.
 
@@ -50,6 +51,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <limits>
 
 #ifdef USEICCDEVNAMESPACE
 using namespace iccDEV;
@@ -82,20 +84,18 @@ bool attachFloats(CIccTagStruct *pParams, icSignature sig,
   return true;
 }
 
-} // namespace
-
-int main()
+// Build the minimal colorEncodingParams struct that reaches the viewing-
+// conditions block. pWhiteLum == NULL omits the white-point luminance member
+// entirely, which is the common case: the converter then defaults it to 100.
+CIccTagStruct *buildParams(const icFloatNumber *pWhiteLum)
 {
   CIccTagStruct *pParams = (CIccTagStruct *)CIccTag::Create(icSigTagStructType);
-  if (!pParams) {
-    std::fprintf(stderr, "[encoding-surround] could not create params struct\n");
-    return 1;
-  }
+  if (!pParams)
+    return NULL;
 
   if (!pParams->SetTagStructType(icSigColorEncodingParamsSruct)) {
-    std::fprintf(stderr, "[encoding-surround] could not set struct type\n");
     delete pParams;
-    return 1;
+    return NULL;
   }
 
   // D65 white point: not D50, so the viewing-conditions block that carries the
@@ -105,10 +105,8 @@ int main()
   const icFloatNumber green[2] = {0.3000f, 0.6000f};
   const icFloatNumber blue[2]  = {0.1500f, 0.0600f};
 
-  // The #1817 input: a zero white-point luminance, with a positive viewing
-  // surround so the ratio is +inf rather than NaN. That is the combination that
-  // previously selected Average surround.
-  const icFloatNumber whiteLum[1] = {0.0f};
+  // A positive viewing surround, so a zero Lw makes the ratio +inf rather than
+  // NaN. That is the #1817 combination that selected Average surround.
   const icFloatNumber surround[1] = {1.0f};
 
   bool ok =
@@ -117,12 +115,28 @@ int main()
     attachFloats(pParams, icSigCeptRedPrimaryXYZMbr, red, 2) &&
     attachFloats(pParams, icSigCeptGreenPrimaryXYZMbr, green, 2) &&
     attachFloats(pParams, icSigCeptBluePrimaryXYZMbr, blue, 2) &&
-    attachFloats(pParams, icSigCeptWhitePointLuminanceMbr, whiteLum, 1) &&
     attachFloats(pParams, icSigCeptViewingSurroundMbr, surround, 1);
 
+  if (ok && pWhiteLum)
+    ok = attachFloats(pParams, icSigCeptWhitePointLuminanceMbr, pWhiteLum, 1);
+
   if (!ok) {
-    std::fprintf(stderr, "[encoding-surround] could not build params struct\n");
     delete pParams;
+    return NULL;
+  }
+
+  return pParams;
+}
+
+// Convert once with the given white-point luminance and check the outcome.
+// pWhiteLum == NULL omits the member. Returns 0 on success.
+int runCase(const char *szName, const icFloatNumber *pWhiteLum,
+            icStatusEncConvert expectStat)
+{
+  CIccTagStruct *pParams = buildParams(pWhiteLum);
+  if (!pParams) {
+    std::fprintf(stderr, "[encoding-surround] %s: could not build params struct\n",
+                 szName);
     return 1;
   }
 
@@ -136,35 +150,87 @@ int main()
 
   IIccEncProfileConverter *pConverter = IIccEncProfileConverter::GetHandler();
   if (!pConverter) {
-    std::fprintf(stderr, "[encoding-surround] no encoding converter handler\n");
+    std::fprintf(stderr, "[encoding-surround] %s: no encoding converter handler\n",
+                 szName);
     delete pParams;
     return 1;
   }
 
-  // Pre-fix, this call divided 1.0f by 0.0f while choosing the surround. Under a
-  // float-divide-by-zero build it aborts here rather than returning.
   CIccProfilePtr newIcc = NULL;
   icStatusEncConvert stat = pConverter->ConvertFromParams(newIcc, pParams, &hdr);
 
   delete pParams;
 
-  if (stat != icEncConvertOk) {
+  int rc = 0;
+
+  if (stat != expectStat) {
     std::fprintf(stderr,
-                 "[encoding-surround] FAIL: zero white-point luminance did not "
-                 "convert cleanly (status %d)\n", (int)stat);
-    if (newIcc)
-      delete newIcc;
-    return 2;
+                 "[encoding-surround] FAIL: %s: expected status %d, got %d\n",
+                 szName, (int)expectStat, (int)stat);
+    rc = 2;
   }
 
-  if (!newIcc) {
-    std::fprintf(stderr, "[encoding-surround] FAIL: converter reported success "
-                         "but produced no profile\n");
-    return 3;
+  // A rejected conversion must leave no profile behind, and an accepted one must
+  // produce one. The rejection path releases the profile it had already built,
+  // so a leak here is what a sanitizer build reports.
+  const bool bWantProfile = (expectStat == icEncConvertOk);
+  if (!rc && ((newIcc != NULL) != bWantProfile)) {
+    std::fprintf(stderr,
+                 "[encoding-surround] FAIL: %s: %s\n", szName,
+                 bWantProfile ? "converter reported success but produced no profile"
+                              : "rejected parameters produced a profile");
+    rc = 3;
   }
 
-  delete newIcc;
+  if (newIcc)
+    delete newIcc;
 
-  std::fprintf(stdout, "[encoding-surround] zero white-point luminance handled\n");
+  if (!rc)
+    std::fprintf(stdout, "[encoding-surround] ok: %s\n", szName);
+
+  return rc;
+}
+
+} // namespace
+
+int main()
+{
+  const icFloatNumber zero     = 0.0f;
+  const icFloatNumber negative = -1.0f;
+  const icFloatNumber nan      = std::numeric_limits<icFloatNumber>::quiet_NaN();
+  const icFloatNumber inf      = std::numeric_limits<icFloatNumber>::infinity();
+  const icFloatNumber valid    = 100.0f;
+
+  int rc = 0;
+
+  // The #1817 input. Previously converted with icEncConvertOk; rejected as of
+  // #1980. See the contract note at the top of this file.
+  rc |= runCase("zero white-point luminance rejected", &zero,
+                icEncConvertBadParams);
+
+  // The #1980 input: a negative luminance reached the illuminant, surround, CAM
+  // Yb and default La state before any guard downstream could contain it.
+  rc |= runCase("negative white-point luminance rejected", &negative,
+                icEncConvertBadParams);
+
+  rc |= runCase("NaN white-point luminance rejected", &nan,
+                icEncConvertBadParams);
+
+  rc |= runCase("infinite white-point luminance rejected", &inf,
+                icEncConvertBadParams);
+
+  // Controls: the guard must not narrow the accepted range. A plain positive
+  // luminance converts, and so does a struct that omits the member altogether --
+  // the overwhelmingly common case, which defaults to 100 cd/m2.
+  rc |= runCase("valid white-point luminance accepted", &valid,
+                icEncConvertOk);
+
+  rc |= runCase("absent white-point luminance accepted", NULL,
+                icEncConvertOk);
+
+  if (rc)
+    return rc;
+
+  std::fprintf(stdout, "[encoding-surround] all white-point luminance cases passed\n");
   return 0;
 }
