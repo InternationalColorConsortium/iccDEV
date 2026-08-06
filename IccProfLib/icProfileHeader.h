@@ -421,6 +421,7 @@ typedef enum {
     icSigGamutBoundaryDescription1Tag      = 0x67626431,  /* 'gbd1' */
     icSigGamutBoundaryDescription2Tag      = 0x67626432,  /* 'gbd2' */
     icSigGamutBoundaryDescription3Tag      = 0x67626433,  /* 'gbd3' */
+    icSigHeadroomAdaptiveGainCurveTag      = 0x48414743,  /* 'HAGC' */
     icSigHToS0Tag                          = 0x48325330,  /* 'H2S0' */
     icSigHToS1Tag                          = 0x48325331,  /* 'H2S1' */
     icSigHToS2Tag                          = 0x48325332,  /* 'H2S2' */
@@ -555,6 +556,7 @@ typedef enum {
     icSigFloat32ArrayType               = 0x666c3332,  /* 'fl32' */
     icSigFloat64ArrayType               = 0x666c3634,  /* 'fl64' */
     icSigGamutBoundaryDescType	        = 0x67626420,  /* 'gbd ' */
+    icSigHeadroomAdaptiveGainCurveType  = 0x68616763,  /* 'hagc' */
     icSigLut16Type                      = 0x6d667432,  /* 'mft2' */
     icSigLut8Type                       = 0x6d667431,  /* 'mft1' */
     icSigLutAtoBType                    = 0x6d414220,  /* 'mAB ' */

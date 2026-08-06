@@ -157,6 +157,7 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigGrayTRCTag, "grayTRCTag"},
   {icSigGreenColorantTag, "greenColorantTag"},
   {icSigGreenTRCTag, "greenTRCTag"},
+  {icSigHeadroomAdaptiveGainCurveTag, "headroomAdaptiveGainCurveTag"},
   {icSigHToS0Tag, "HToS0Tag"},
   {icSigHToS1Tag, "HToS1Tag"},
   {icSigHToS2Tag, "HTSB2Tag"},
@@ -258,6 +259,7 @@ struct {
   {icSigEmbeddedHeightImageType, "embeddedHeightImageType"},
   {icSigEmbeddedNormalImageType, "embeddedNormalImageType" },
   {icSigGamutBoundaryDescType, "gamutBoundaryDescType"},
+  {icSigHeadroomAdaptiveGainCurveType, "headroomAdaptiveGainCurveType"},
   {icSigLut16Type, "lut16Type"},
   {icSigLut8Type, "lut8Type"},
   {icSigLutAtoBType, "lutAtoBType"},
@@ -336,6 +338,9 @@ CIccTag* CIccSpecTagFactory::CreateTag(icTagTypeSignature tagSig)
 
     case icSigCicpType:
       return new(std::nothrow) CIccTagCicp;
+
+    case icSigHeadroomAdaptiveGainCurveType:
+      return new(std::nothrow) CIccTagHagc;
 
     case icSigUInt8ArrayType:
       return new(std::nothrow) CIccTagUInt8;

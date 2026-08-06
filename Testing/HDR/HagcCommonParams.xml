@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A v4 RGB Display profile whose headroomAdaptiveGainCurveTag exercises the two
+  sharing flags, which are the part of the encoding most likely to be decoded
+  wrongly without anything appearing to go wrong.
+
+  Common Component Mixing (proposal 1.1.2.8) means only alternate 0 carries the
+  mixing byte and, for type 3, its coefficient array; Common Curve Parameters
+  (1.1.2.9) means only alternate 0 carries the control point count, the PCHIP
+  flag and the X coordinate array. Alternates 1 and 2 therefore consist of a
+  headroom and a Y array and nothing else. Y coordinates and slope angles stay
+  per alternate even when the curve parameters are shared, which is what makes
+  a shared X grid worth having.
+
+  Nothing in the block states how long each alternate's record is, so a decoder
+  that mishandles either flag reads the following alternate's headroom as a Y
+  coordinate and still returns three plausible curves. The XML round-trip test
+  is what distinguishes that from a correct decode.
+
+  Everything else is deliberately the short form: no custom HDR reference white
+  (so the "k" offset in Table 2 collapses to zero and every later field moves
+  two bytes earlier) and named BT.2020 chromaticities (so the sixteen byte
+  custom array is absent entirely).
+
+  All three alternates sit below the 4.0 stop baseline, so every control point Y
+  decodes negative; the sign is not stored and is re-derived from the headroom
+  ordering on each read (proposal 0.1.3.6).
+
+  Note when editing: control point slope angles are encoded as integers in
+  hundredths of a degree, so an M value here is quantised to that grid on the
+  way out and will not read back as the exact decimal written. M is omitted
+  where PchipSlope is true, because the slopes are then derived rather than
+  carried.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.636962890625" Y="0.262695312500" Z="0.000000000000"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.144622802734" Y="0.677978515625" Z="0.028076171875"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.168869018555" Y="0.059326171875" Z="1.060989379883"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
+      <HagcMetadata ApplicationVersion="1" MinApplicationVersion="1"
+                    BaselineHeadroom="4.0000" HeadroomAdaptiveToneMap="true"
+                    ChromaticitiesMode="2" CommonComponentMixing="true" CommonCurveParameters="true">
+       <AlternateImage Headroom="0.0000" ComponentMixingType="0" PchipSlope="false">
+        <ControlPoints>
+         <ControlPoint X="0.1250" Y="-0.05000" M="-0.500000"/>
+         <ControlPoint X="0.5000" Y="-0.25000" M="-0.400000"/>
+         <ControlPoint X="1.0000" Y="-0.50000" M="-0.300000"/>
+        </ControlPoints>
+       </AlternateImage>
+       <AlternateImage Headroom="1.5000" ComponentMixingType="0" PchipSlope="false">
+        <ControlPoints>
+         <ControlPoint X="0.1250" Y="-0.03000" M="-0.350000"/>
+         <ControlPoint X="0.5000" Y="-0.16000" M="-0.280000"/>
+         <ControlPoint X="1.0000" Y="-0.32000" M="-0.210000"/>
+        </ControlPoints>
+       </AlternateImage>
+       <AlternateImage Headroom="3.0000" ComponentMixingType="0" PchipSlope="false">
+        <ControlPoints>
+         <ControlPoint X="0.1250" Y="-0.01000" M="-0.120000"/>
+         <ControlPoint X="0.5000" Y="-0.06000" M="-0.100000"/>
+         <ControlPoint X="1.0000" Y="-0.12000" M="-0.080000"/>
+        </ControlPoints>
+       </AlternateImage>
+      </HagcMetadata>
+    </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile, HAGC with shared mixing and curve parameters]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

@@ -262,6 +262,27 @@ public:
 };
 
 
+// The headroomAdaptiveGainCurveType shim. Unlike CIccTagXmlCicp above, this one
+// overrides NewCopy(): the base tag owns a heap allocated raw metadata block, so
+// a copy made through CIccTag::NewCopy() would slice away the XML extension and
+// the profile would lose the ability to serialize the tag back out. Every other
+// shim in this file that wraps a tag holding allocated data does the same.
+class ICCPROFLIB_API CIccTagXmlHagc : public CIccTagHagc, public CIccTagXml
+{
+public:
+  virtual ~CIccTagXmlHagc() {}
+
+  virtual CIccTag* NewCopy() const { return new CIccTagXmlHagc(*this); }
+
+  virtual const char* GetClassName() const { return "CIccTagXmlHagc"; }
+
+  virtual IIccExtensionTag* GetExtension() { return this; }
+
+  virtual bool ToXml(std::string& xml, std::string blanks = "");
+  virtual bool ParseXml(xmlNode* pNode, std::string& parseStr);
+};
+
+
 class ICCPROFLIB_API CIccTagXmlSparseMatrixArray : public CIccTagSparseMatrixArray, public CIccTagXml
 {
 public:

@@ -50,6 +50,7 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccTagDict.cpp
     ${SRC_PATH}/IccProfLib/IccTagEmbedIcc.cpp
     ${SRC_PATH}/IccProfLib/IccTagFactory.cpp
+    ${SRC_PATH}/IccProfLib/IccTagHagc.cpp
     ${SRC_PATH}/IccProfLib/IccTagLut.cpp
     ${SRC_PATH}/IccProfLib/IccTagMPE.cpp
     ${SRC_PATH}/IccProfLib/IccTagProfSeqId.cpp
@@ -96,6 +97,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccTagDict.h
   ${SRC_PATH}/IccProfLib/IccTagEmbedIcc.h
   ${SRC_PATH}/IccProfLib/IccTagFactory.h
+  ${SRC_PATH}/IccProfLib/IccTagHagc.h
   ${SRC_PATH}/IccProfLib/IccTag.h
   ${SRC_PATH}/IccProfLib/IccTagLut.h
   ${SRC_PATH}/IccProfLib/IccTagMPE.h

@@ -86,6 +86,9 @@ CIccTag* CIccTagXmlFactory::CreateTag(icTagTypeSignature tagSig)
   case icSigCicpType:
     return new(std::nothrow) CIccTagXmlCicp;
 
+  case icSigHeadroomAdaptiveGainCurveType:
+    return new(std::nothrow) CIccTagXmlHagc;
+
   case icSigUInt8ArrayType:
     return new(std::nothrow) CIccTagXmlUInt8;
 

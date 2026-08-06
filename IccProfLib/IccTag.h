@@ -88,5 +88,6 @@
 #include "IccTagDict.h"
 #include "IccTagComposite.h"
 #include "IccTagEmbedIcc.h"
+#include "IccTagHagc.h"
 
 #endif //_ICCTAG_H

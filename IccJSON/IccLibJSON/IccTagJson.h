@@ -253,6 +253,21 @@ public:
   virtual bool ParseJson(const IccJson &j, std::string &parseStr);
 };
 
+// headroomAdaptiveGainCurveType. NewCopy() is overridden here for the same
+// reason as in the XML shim: the base tag owns a heap allocated raw metadata
+// block, and CIccTag::NewCopy() would slice the JSON extension off the copy.
+class CIccTagJsonHagc : public CIccTagHagc, public CIccTagJson
+{
+public:
+  virtual ~CIccTagJsonHagc() {}
+  virtual CIccTag *NewCopy() const { return new CIccTagJsonHagc(*this); }
+  virtual const char *GetClassName() const { return "CIccTagJsonHagc"; }
+  virtual IIccExtensionTag *GetExtension() { return this; }
+
+  virtual bool ToJson(IccJson &j);
+  virtual bool ParseJson(const IccJson &j, std::string &parseStr);
+};
+
 class CIccTagJsonMeasurement : public CIccTagMeasurement, public CIccTagJson
 {
 public:

@@ -1422,6 +1422,310 @@ bool CIccTagXmlCicp::ParseXml(xmlNode* pNode, std::string& parseStr)
 }
 
 
+// ---------------------------------------------------------------------------
+// CIccTagXmlHagc - headroomAdaptiveGainCurveType
+//
+// Two mutually exclusive representations are accepted, and the tag emits the
+// structured one. <HagcMetadata> is the human-authorable form: fixtures need to
+// be readable and editable, and the SMPTE block's field layout is far too
+// positional for anyone to hand-assemble as hex. <HexData> carries the SMPTE
+// block verbatim for the cases the structured form cannot express - a block
+// this build cannot decode, or one whose exact bytes are the point of the test.
+//
+// Round tripping through the structured form is a re-encode, not a byte copy:
+// a tag read from a profile and written out as XML then back is byte identical
+// only because the encode and decode formulas are exact inverses. A tag whose
+// metadata did not decode has nothing to write structurally, so it falls back
+// to <HexData> and stays byte exact that way.
+// ---------------------------------------------------------------------------
+
+static const char *icHagcCoefAttrName[icHagcNumCoefficients] = {
+  "kRed", "kGreen", "kBlue", "kMax", "kMin", "kComponent"
+};
+
+static bool icXmlHagcBoolAttr(xmlNode *pNode, const char *szName, bool bDefault)
+{
+  xmlAttr *attr = icXmlFindAttr(pNode, szName);
+  if (!attr)
+    return bDefault;
+
+  const char *szValue = icXmlAttrValue(attr);
+  return !strcmp(szValue, "true") || !strcmp(szValue, "1");
+}
+
+bool CIccTagXmlHagc::ToXml(std::string& xml, std::string blanks/* = ""*/)
+{
+  const size_t bufSize = 512;
+  char buf[bufSize];
+  int i, j;
+
+  const icHagcMetadata &m = GetMetadata();
+
+  // A block that would not decode has no structured form to emit. Writing the
+  // raw bytes keeps the XML a faithful representation of the tag rather than a
+  // silent truncation of it.
+  if (!m.m_bUnpacked) {
+    xml += blanks + "<HexData>\n";
+    icXmlDumpHexData(xml, blanks + " ", (void*)GetRawMetadata(), GetRawMetadataSize());
+    xml += blanks + "</HexData>\n";
+    return true;
+  }
+
+  snprintf(buf, bufSize, "<HagcMetadata ApplicationVersion=\"%u\" MinApplicationVersion=\"%u\"",
+           m.m_nApplicationVersion, m.m_nMinApplicationVersion);
+  xml += blanks + buf;
+
+  // Presence of the attribute is the Custom HDR Reference White flag: omitting
+  // it and carrying an explicit 203.0 are different byte layouts, and both are
+  // legal, so the XML has to distinguish them the same way the encoding does.
+  if (m.m_bCustomReferenceWhite) {
+    snprintf(buf, bufSize, " HDRReferenceWhite=\"%.4f\"", m.m_referenceWhite);
+    xml += buf;
+  }
+
+  snprintf(buf, bufSize, " BaselineHeadroom=\"%.4f\" HeadroomAdaptiveToneMap=\"%s\"",
+           m.m_baselineHeadroom, m.m_bHeadroomAdaptiveToneMap ? "true" : "false");
+  xml += buf;
+
+  if (m.m_bReferenceWhiteToneMapping) {
+    // Proposal 1.2.2.5: nothing follows, and the remaining bit fields are zero.
+    xml += " ReferenceWhiteToneMapping=\"true\"/>\n";
+    return true;
+  }
+
+  snprintf(buf, bufSize, " ChromaticitiesMode=\"%u\" CommonComponentMixing=\"%s\" CommonCurveParameters=\"%s\">\n",
+           (unsigned)m.m_nChromaticitiesMode,
+           m.m_bCommonComponentMixing ? "true" : "false",
+           m.m_bCommonCurveParameters ? "true" : "false");
+  xml += buf;
+
+  if (m.m_nChromaticitiesMode == icHagcChromaticitiesCustom) {
+    snprintf(buf, bufSize, "<Chromaticities>%.6f %.6f %.6f %.6f %.6f %.6f %.6f %.6f</Chromaticities>\n",
+             m.m_chromaticities[0], m.m_chromaticities[1], m.m_chromaticities[2], m.m_chromaticities[3],
+             m.m_chromaticities[4], m.m_chromaticities[5], m.m_chromaticities[6], m.m_chromaticities[7]);
+    xml += blanks + " " + buf;
+  }
+
+  for (i = 0; i < (int)m.GetNumAlternates(); i++) {
+    const icHagcAlternateImage *pAlt = m.GetAlternate((icUInt8Number)i);
+    if (!pAlt)
+      continue;
+
+    snprintf(buf, bufSize, "<AlternateImage Headroom=\"%.4f\" ComponentMixingType=\"%u\" PchipSlope=\"%s\">\n",
+             pAlt->m_headroom, (unsigned)pAlt->m_nMixingType,
+             pAlt->m_bPchipSlope ? "true" : "false");
+    xml += blanks + " " + buf;
+
+    // Coefficients are emitted only for mixing type 3. For types 0 to 2 they
+    // are fixed by the type, and writing them out would invite a fixture that
+    // sets both and disagrees with itself.
+    if (pAlt->m_nMixingType == icHagcMixingCustom) {
+      xml += blanks + "  <Coefficients";
+      for (j = 0; j < icHagcNumCoefficients; j++) {
+        snprintf(buf, bufSize, " %s=\"%.6f\"", icHagcCoefAttrName[j], pAlt->m_coef[j]);
+        xml += buf;
+      }
+      xml += "/>\n";
+    }
+
+    xml += blanks + "  <ControlPoints>\n";
+    for (j = 0; j < (int)pAlt->m_nControlPoints; j++) {
+      if (pAlt->m_bPchipSlope)
+        snprintf(buf, bufSize, "<ControlPoint X=\"%.4f\" Y=\"%.5f\"/>\n", pAlt->m_x[j], pAlt->m_y[j]);
+      else
+        snprintf(buf, bufSize, "<ControlPoint X=\"%.4f\" Y=\"%.5f\" M=\"%.6f\"/>\n",
+                 pAlt->m_x[j], pAlt->m_y[j], pAlt->m_slope[j]);
+      xml += blanks + "   " + buf;
+    }
+    xml += blanks + "  </ControlPoints>\n";
+
+    xml += blanks + " </AlternateImage>\n";
+  }
+
+  xml += blanks + "</HagcMetadata>\n";
+
+  return true;
+}
+
+bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
+{
+  xmlNode *pHex = icXmlFindNode(pNode, "HexData");
+
+  if (pHex) {
+    if (!pHex->children || !pHex->children->content) {
+      parseStr += "Empty HexData in headroomAdaptiveGainCurveType\n";
+      return false;
+    }
+
+    icUInt32Number nSize = icXmlGetHexDataSize((const icChar*)pHex->children->content);
+    if (!nSize) {
+      parseStr += "Empty HexData in headroomAdaptiveGainCurveType\n";
+      return false;
+    }
+
+    CIccUInt8Array buf;
+    if (!buf.SetSize(nSize) ||
+        icXmlGetHexData(buf.GetBuf(), (const icChar*)pHex->children->content, nSize) != nSize) {
+      parseStr += "Unable to parse HexData in headroomAdaptiveGainCurveType\n";
+      return false;
+    }
+
+    // Deliberately not an error if the block does not decode: HexData exists
+    // precisely so a block this build cannot parse can still be authored.
+    return SetRawMetadata(buf.GetBuf(), nSize);
+  }
+
+  xmlNode *pMeta = icXmlFindNode(pNode, "HagcMetadata");
+  if (!pMeta) {
+    parseStr += "Cannot find HagcMetadata or HexData in headroomAdaptiveGainCurveType\n";
+    return false;
+  }
+
+  icHagcMetadata m;
+  xmlAttr *attr;
+  xmlNode *pChild;
+  int j;
+
+  if (!icXmlParseU8(icXmlAttrValue(pMeta, "ApplicationVersion", "0"), m.m_nApplicationVersion) ||
+      !icXmlParseU8(icXmlAttrValue(pMeta, "MinApplicationVersion", "0"), m.m_nMinApplicationVersion)) {
+    parseStr += "Invalid application version in HagcMetadata\n";
+    return false;
+  }
+
+  attr = icXmlFindAttr(pMeta, "HDRReferenceWhite");
+  if (attr) {
+    m.m_bCustomReferenceWhite = true;
+    m.m_referenceWhite = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(attr));
+  }
+
+  m.m_baselineHeadroom = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pMeta, "BaselineHeadroom", "0"));
+  m.m_bHeadroomAdaptiveToneMap = icXmlHagcBoolAttr(pMeta, "HeadroomAdaptiveToneMap", false);
+  m.m_bReferenceWhiteToneMapping = icXmlHagcBoolAttr(pMeta, "ReferenceWhiteToneMapping", false);
+
+  if (!m.m_bReferenceWhiteToneMapping) {
+    icUInt8Number nMode = 0;
+    if (!icXmlParseU8(icXmlAttrValue(pMeta, "ChromaticitiesMode", "0"), nMode) || nMode > 3) {
+      parseStr += "Invalid ChromaticitiesMode in HagcMetadata\n";
+      return false;
+    }
+    m.m_nChromaticitiesMode = (icHagcChromaticitiesMode)nMode;
+    m.m_bCommonComponentMixing = icXmlHagcBoolAttr(pMeta, "CommonComponentMixing", false);
+    m.m_bCommonCurveParameters = icXmlHagcBoolAttr(pMeta, "CommonCurveParameters", false);
+
+    for (pChild = pMeta->children; pChild; pChild = pChild->next) {
+      if (pChild->type != XML_ELEMENT_NODE)
+        continue;
+
+      if (!icXmlStrCmp(pChild->name, "Chromaticities")) {
+        CIccFloatArray vals;
+        if (!vals.ParseArray(pChild->children) || vals.GetSize() != 8) {
+          parseStr += "HagcMetadata Chromaticities needs exactly 8 values\n";
+          return false;
+        }
+        for (j = 0; j < 8; j++)
+          m.m_chromaticities[j] = vals.GetBuf()[j];
+      }
+      else if (!icXmlStrCmp(pChild->name, "AlternateImage")) {
+        icUInt8Number nIndex = m.GetNumAlternates();
+
+        // The count is not authored; it is however many AlternateImage nodes
+        // there are. SetNumAlternates() refuses past the maximum, which is what
+        // stops a fixture from describing five.
+        if (!m.SetNumAlternates((icUInt8Number)(nIndex + 1))) {
+          parseStr += "HagcMetadata has more alternate images than the maximum of 4\n";
+          return false;
+        }
+
+        icHagcAlternateImage *pAlt = m.GetAlternate(nIndex);
+        icUInt8Number nMixType = 0;
+
+        pAlt->m_headroom = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pChild, "Headroom", "0"));
+        if (!icXmlParseU8(icXmlAttrValue(pChild, "ComponentMixingType", "0"), nMixType) || nMixType > 3) {
+          parseStr += "Invalid ComponentMixingType in AlternateImage\n";
+          return false;
+        }
+        pAlt->m_nMixingType = (icHagcMixingType)nMixType;
+        pAlt->m_bPchipSlope = icXmlHagcBoolAttr(pChild, "PchipSlope", false);
+
+        // Types 0 to 2 fix their coefficients; fill them in here so the model
+        // is complete however the fixture was authored, then let an explicit
+        // <Coefficients> node override for type 3.
+        switch (pAlt->m_nMixingType) {
+          case icHagcMixingMax:
+            pAlt->m_coef[icHagcCoefMax] = 1.0f;
+            break;
+          case icHagcMixingComponent:
+            pAlt->m_coef[icHagcCoefComponent] = 1.0f;
+            break;
+          case icHagcMixingWeighted:
+            pAlt->m_coef[icHagcCoefRed] = pAlt->m_coef[icHagcCoefGreen] =
+              pAlt->m_coef[icHagcCoefBlue] = (icFloatNumber)(1.0 / 6.0);
+            pAlt->m_coef[icHagcCoefMax] = 0.5f;
+            break;
+          case icHagcMixingCustom:
+            break;
+        }
+
+        xmlNode *pAltChild;
+        for (pAltChild = pChild->children; pAltChild; pAltChild = pAltChild->next) {
+          if (pAltChild->type != XML_ELEMENT_NODE)
+            continue;
+
+          if (!icXmlStrCmp(pAltChild->name, "Coefficients")) {
+            for (j = 0; j < icHagcNumCoefficients; j++) {
+              attr = icXmlFindAttr(pAltChild, icHagcCoefAttrName[j]);
+              if (attr)
+                pAlt->m_coef[j] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(attr));
+            }
+          }
+          else if (!icXmlStrCmp(pAltChild->name, "ControlPoints")) {
+            xmlNode *pPoint;
+            int nPoints = 0;
+
+            for (pPoint = pAltChild->children; pPoint; pPoint = pPoint->next) {
+              if (pPoint->type != XML_ELEMENT_NODE || icXmlStrCmp(pPoint->name, "ControlPoint"))
+                continue;
+
+              if (nPoints >= icHagcMaxControlPoints) {
+                parseStr += "AlternateImage has more control points than the maximum of 32\n";
+                return false;
+              }
+
+              pAlt->m_x[nPoints] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pPoint, "X", "0"));
+              pAlt->m_y[nPoints] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pPoint, "Y", "0"));
+              pAlt->m_slope[nPoints] = icXmlStrToFloat((const xmlChar*)icXmlAttrValue(pPoint, "M", "0"));
+              nPoints++;
+            }
+
+            if (!nPoints) {
+              parseStr += "AlternateImage has no control points\n";
+              return false;
+            }
+            pAlt->m_nControlPoints = (icUInt8Number)nPoints;
+          }
+        }
+
+        if (!pAlt->m_nControlPoints) {
+          parseStr += "AlternateImage is missing its ControlPoints\n";
+          return false;
+        }
+      }
+    }
+  }
+
+  // SetMetadata() packs the model, so the tag ends up holding the same raw
+  // block it would have had if it had been read from a profile. Everything
+  // downstream - Write(), Describe(), Validate() - then behaves identically
+  // whichever direction the tag was created from.
+  if (!SetMetadata(m)) {
+    parseStr += "Unable to encode HagcMetadata\n";
+    return false;
+  }
+
+  return true;
+}
+
+
 bool CIccTagXmlSparseMatrixArray::ToXml(std::string &xml, std::string blanks/* = ""*/)
 {
   const size_t bufSize = 256;

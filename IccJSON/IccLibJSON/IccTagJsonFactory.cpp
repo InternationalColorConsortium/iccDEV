@@ -74,6 +74,8 @@ CIccTag* CIccTagJsonFactory::CreateTag(icTagTypeSignature tagSig)
   case icSigTextType:                return new (std::nothrow) CIccTagJsonText;
   case icSigXYZArrayType:            return new (std::nothrow) CIccTagJsonXYZ;
   case icSigCicpType:                return new (std::nothrow) CIccTagJsonCicp;
+  case icSigHeadroomAdaptiveGainCurveType:
+                                     return new (std::nothrow) CIccTagJsonHagc;
   case icSigUInt8ArrayType:          return new (std::nothrow) CIccTagJsonUInt8;
   case icSigUInt16ArrayType:         return new (std::nothrow) CIccTagJsonUInt16;
   case icSigUInt32ArrayType:         return new (std::nothrow) CIccTagJsonUInt32;

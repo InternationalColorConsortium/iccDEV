@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NEGATIVE FIXTURE. This profile is expected to reconstruct from XML and then be
+  reported non-compliant. Do not "fix" the control points below.
+
+  The gain evaluator (proposal informative annex 1) defines each curve segment
+  as a cubic in t = (x - x_i) / (x_i+1 - x_i). Control point X values that are
+  not strictly increasing therefore do not merely produce an oddly ordered curve
+  - they make that parameter divide by zero or run backwards, and the piecewise
+  cubic is undefined. Nothing in the encoding prevents it: X is an independent
+  uInt16 per point with no ordering constraint on the wire, so the only place
+  the requirement can be enforced is CIccTagHagc::Validate().
+
+  Alternate 0 repeats X = 0.5000 at indices 1 and 2, which is the degenerate
+  case a naive check for "decreasing" would miss: the values never go down, but
+  the segment between them has zero width. Alternate 1 then goes strictly
+  backwards, so both shapes of the defect are covered.
+
+  Expected: iccFromXml saves the profile, and iccDumpProfile -v reports
+    "HAGC alternate image 0 control point X values are not strictly increasing"
+  See Testing/expected-invalid-fromxml.tsv.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
+      <HagcMetadata ApplicationVersion="1" MinApplicationVersion="1"
+                    BaselineHeadroom="3.0000" HeadroomAdaptiveToneMap="true"
+                    ChromaticitiesMode="0" CommonComponentMixing="false" CommonCurveParameters="false">
+       <AlternateImage Headroom="0.0000" ComponentMixingType="0" PchipSlope="true">
+        <ControlPoints>
+         <ControlPoint X="0.2500" Y="-0.10000"/>
+         <ControlPoint X="0.5000" Y="-0.20000"/>
+         <ControlPoint X="0.5000" Y="-0.30000"/>
+         <ControlPoint X="1.0000" Y="-0.40000"/>
+        </ControlPoints>
+       </AlternateImage>
+       <AlternateImage Headroom="1.0000" ComponentMixingType="0" PchipSlope="true">
+        <ControlPoints>
+         <ControlPoint X="1.0000" Y="-0.05000"/>
+         <ControlPoint X="0.5000" Y="-0.10000"/>
+         <ControlPoint X="0.2500" Y="-0.15000"/>
+        </ControlPoints>
+       </AlternateImage>
+      </HagcMetadata>
+    </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR negative fixture: HAGC control point X values are not strictly increasing]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

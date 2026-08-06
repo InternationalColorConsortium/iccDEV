@@ -1391,6 +1391,50 @@ function(iccdev_add_mpe_empty_identity_test)
   endif()
 endfunction()
 
+# T1 (HDR profiles): codec regression for the headroomAdaptiveGainCurveTag ('HAGC')
+# and headroomAdaptiveGainCurveType ('hagc'), which wrap SMPTE ST 2094-50:2026
+# metadata. The wire format is variable length in four independent ways and none
+# of those lengths is stored in the block, so a decoder that mis-reads one field
+# does not fail -- it reframes everything after it and returns a plausible curve.
+# The test pins Pack -> Unpack -> Pack byte equality across the layout's shape
+# space, every decode formula at its clamp boundaries, refusal of truncated and
+# over-count blocks, and the raw-blob retention that lets a block this build
+# cannot parse still survive a load/save cycle byte for byte.
+function(iccdev_add_hagc_codec_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHagcCodecTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hagc-codec-roundtrip.cpp"
+  )
+  target_link_libraries(iccHagcCodecTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccHagcCodecTest)
+
+  add_test(
+    NAME iccdev.hagc-codec-roundtrip
+    COMMAND "$<TARGET_FILE:iccHagcCodecTest>"
+  )
+  set_tests_properties(iccdev.hagc-codec-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;tag;hdr;regression"
+  )
+  if(WIN32)
+    set(_hagc_codec_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHagcCodecTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _hagc_codec_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hagc-codec-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_hagc_codec_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1748: CIccPcsXform::ConnectFirst()/ConnectLast() build the PCS transforms at the two
 # outer edges of a CMM chain, and CheckPCSConnections() pushes them onto the xform list
 # like any other xform. Unlike Connect(), they left m_srcSpace/m_nSrcSamples/m_dstSpace/
@@ -3399,6 +3443,7 @@ if(WIN32)
   iccdev_add_spectral_media_white_test()
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_mpe_empty_identity_test()
+  iccdev_add_hagc_codec_test()
   iccdev_add_pcc_reflectance_observer_range_test()
   iccdev_add_pcs_edge_metadata_test()
   iccdev_add_xyz_negative_z_test()
@@ -3654,6 +3699,7 @@ iccdev_add_spectral_pcs_range_consistency_test()
 iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
+iccdev_add_hagc_codec_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()

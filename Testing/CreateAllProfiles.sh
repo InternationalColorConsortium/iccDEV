@@ -314,6 +314,41 @@ then
 fi
 cd ..
 
+echo "====================== HDR =========================="
+
+# Testing/HDR/ has carried ten BT.2100 fixtures and its own mkprofiles.sh since
+# before the HAGC work, but nothing ever ran it: the directory was absent from
+# this script, so no .icc was produced from it, and everything downstream keys
+# off the .icc files found under Testing/. That left the HDR fixtures outside the
+# qa-profile-manifest baseline and outside the iccToXml/iccFromXml CI sweeps,
+# which both enumerate "find Testing -name '*.icc'". Adding the directory here is
+# what gives the HAGC fixtures - and the ten that were already here - any effect.
+# All fourteen were checked before this was added: the ten BT.2100 profiles and
+# the three HAGC positives validate clean, and HagcInvalidXOrder is a deliberate
+# negative recorded in Testing/expected-invalid-fromxml.tsv.
+cd HDR
+find . -iname "*\.icc" -delete
+if [ "$1" != "clean" ]
+then
+	set -x
+	iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
+	iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
+	iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
+	iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
+	iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
+	iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
+	iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
+	iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
+	iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
+	iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
+	iccFromXml HagcDisplay.xml HagcDisplay.icc
+	iccFromXml HagcCommonParams.xml HagcCommonParams.icc
+	iccFromXml HagcHexData.xml HagcHexData.icc
+	iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
+	set +x
+fi
+cd ..
+
 echo "====================== Summary Count =========================="
 
 # Count number of ICCs that exist to confirm

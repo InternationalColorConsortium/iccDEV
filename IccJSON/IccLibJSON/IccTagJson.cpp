@@ -561,6 +561,284 @@ bool CIccTagJsonCicp::ParseJson(const IccJson &j, std::string & /*parseStr*/)
 }
 
 // ===========================================================================
+// CIccTagJsonHagc
+//
+// Parity with CIccTagXmlHagc: a structured object for anything that decodes,
+// and a hex string under "rawMetadata" for anything that does not, so a block
+// this build cannot parse still survives a JSON round trip byte for byte.
+// ===========================================================================
+
+static const char *icHagcJsonCoefName[icHagcNumCoefficients] = {
+  "kRed", "kGreen", "kBlue", "kMax", "kMin", "kComponent"
+};
+
+static std::string icHagcJsonToHex(const icUInt8Number *pData, icUInt32Number nSize)
+{
+  std::string s;
+  char buf[8];
+  for (icUInt32Number i = 0; i < nSize; i++) {
+    snprintf(buf, sizeof(buf), "%02x", pData[i]);
+    s += buf;
+  }
+  return s;
+}
+
+// Rejecting a non-hex character rather than treating it as zero matters here:
+// this string is the tag's entire content in the undecodable case, so a silent
+// substitution would write a different profile than the document described.
+static int icHagcHexDigit(char c)
+{
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+static bool icHagcJsonFromHex(const std::string &s, std::vector<icUInt8Number> &out)
+{
+  if (s.empty() || (s.size() & 1))
+    return false;
+
+  out.clear();
+  out.reserve(s.size() / 2);
+
+  for (size_t i = 0; i < s.size(); i += 2) {
+    int hi = icHagcHexDigit(s[i]);
+    int lo = icHagcHexDigit(s[i + 1]);
+    if (hi < 0 || lo < 0)
+      return false;
+    out.push_back((icUInt8Number)((hi << 4) | lo));
+  }
+  return true;
+}
+
+bool CIccTagJsonHagc::ToJson(IccJson &j)
+{
+  const icHagcMetadata &m = GetMetadata();
+  int i, k;
+
+  if (!m.m_bUnpacked) {
+    j["rawMetadata"] = icHagcJsonToHex(GetRawMetadata(), GetRawMetadataSize());
+    return true;
+  }
+
+  j["applicationVersion"] = (int)m.m_nApplicationVersion;
+  j["minApplicationVersion"] = (int)m.m_nMinApplicationVersion;
+
+  // Emitted only when the tag carries one: absence is the Custom HDR Reference
+  // White flag being clear, which is a different byte layout than an explicit
+  // 203.0 and has to stay distinguishable.
+  if (m.m_bCustomReferenceWhite)
+    j["hdrReferenceWhite"] = (double)m.m_referenceWhite;
+
+  j["baselineHeadroom"] = (double)m.m_baselineHeadroom;
+  j["headroomAdaptiveToneMap"] = m.m_bHeadroomAdaptiveToneMap;
+
+  if (m.m_bReferenceWhiteToneMapping) {
+    j["referenceWhiteToneMapping"] = true;
+    return true;
+  }
+
+  j["chromaticitiesMode"] = (int)m.m_nChromaticitiesMode;
+  j["commonComponentMixing"] = m.m_bCommonComponentMixing;
+  j["commonCurveParameters"] = m.m_bCommonCurveParameters;
+
+  if (m.m_nChromaticitiesMode == icHagcChromaticitiesCustom) {
+    IccJson chrom = IccJson::array();
+    for (i = 0; i < 8; i++)
+      chrom.push_back((double)m.m_chromaticities[i]);
+    j["chromaticities"] = chrom;
+  }
+
+  IccJson alts = IccJson::array();
+  for (i = 0; i < (int)m.GetNumAlternates(); i++) {
+    const icHagcAlternateImage *pAlt = m.GetAlternate((icUInt8Number)i);
+    if (!pAlt)
+      continue;
+
+    IccJson alt = IccJson::object();
+    alt["headroom"] = (double)pAlt->m_headroom;
+    alt["componentMixingType"] = (int)pAlt->m_nMixingType;
+    alt["pchipSlope"] = pAlt->m_bPchipSlope;
+
+    if (pAlt->m_nMixingType == icHagcMixingCustom) {
+      IccJson coef = IccJson::object();
+      for (k = 0; k < icHagcNumCoefficients; k++)
+        coef[icHagcJsonCoefName[k]] = (double)pAlt->m_coef[k];
+      alt["coefficients"] = coef;
+    }
+
+    IccJson points = IccJson::array();
+    for (k = 0; k < (int)pAlt->m_nControlPoints; k++) {
+      IccJson pt = IccJson::object();
+      pt["x"] = (double)pAlt->m_x[k];
+      pt["y"] = (double)pAlt->m_y[k];
+      if (!pAlt->m_bPchipSlope)
+        pt["m"] = (double)pAlt->m_slope[k];
+      points.push_back(pt);
+    }
+    alt["controlPoints"] = points;
+
+    alts.push_back(alt);
+  }
+  j["alternateImages"] = alts;
+
+  return true;
+}
+
+bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
+{
+  if (jsonExistsField(j, "rawMetadata") && j["rawMetadata"].is_string()) {
+    std::vector<icUInt8Number> raw;
+    if (!icHagcJsonFromHex(j["rawMetadata"].get<std::string>(), raw)) {
+      parseStr += "Invalid rawMetadata hex in headroomAdaptiveGainCurveType\n";
+      return false;
+    }
+    return SetRawMetadata(&raw[0], (icUInt32Number)raw.size());
+  }
+
+  icHagcMetadata m;
+  int applicationVersion = 0, minApplicationVersion = 0;
+  int chromaticitiesMode = 0;
+  double baselineHeadroom = 0.0, hdrReferenceWhite = 0.0;
+  bool bFlag = false;
+  int i, k;
+
+  jGetValue(j, "applicationVersion", applicationVersion);
+  jGetValue(j, "minApplicationVersion", minApplicationVersion);
+  m.m_nApplicationVersion = (icUInt8Number)(applicationVersion & 0x07);
+  m.m_nMinApplicationVersion = (icUInt8Number)(minApplicationVersion & 0x07);
+
+  if (jGetValue(j, "hdrReferenceWhite", hdrReferenceWhite)) {
+    m.m_bCustomReferenceWhite = true;
+    m.m_referenceWhite = (icFloatNumber)(hdrReferenceWhite);
+  }
+
+  jGetValue(j, "baselineHeadroom", baselineHeadroom);
+  m.m_baselineHeadroom = (icFloatNumber)(baselineHeadroom);
+
+  bFlag = false; jGetValue(j, "headroomAdaptiveToneMap", bFlag);
+  m.m_bHeadroomAdaptiveToneMap = bFlag;
+
+  bFlag = false; jGetValue(j, "referenceWhiteToneMapping", bFlag);
+  m.m_bReferenceWhiteToneMapping = bFlag;
+
+  if (!m.m_bReferenceWhiteToneMapping) {
+    jGetValue(j, "chromaticitiesMode", chromaticitiesMode);
+    if (chromaticitiesMode < 0 || chromaticitiesMode > 3) {
+      parseStr += "Invalid chromaticitiesMode in headroomAdaptiveGainCurveType\n";
+      return false;
+    }
+    m.m_nChromaticitiesMode = (icHagcChromaticitiesMode)chromaticitiesMode;
+
+    bFlag = false; jGetValue(j, "commonComponentMixing", bFlag);
+    m.m_bCommonComponentMixing = bFlag;
+    bFlag = false; jGetValue(j, "commonCurveParameters", bFlag);
+    m.m_bCommonCurveParameters = bFlag;
+
+    if (jsonExistsField(j, "chromaticities") && j["chromaticities"].is_array()) {
+      const IccJson &chrom = j["chromaticities"];
+      if (chrom.size() != 8) {
+        parseStr += "headroomAdaptiveGainCurveType chromaticities needs exactly 8 values\n";
+        return false;
+      }
+      double vals[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+      jsonToArray(chrom, vals, 8);
+      for (i = 0; i < 8; i++)
+        m.m_chromaticities[i] = (icFloatNumber)(vals[i]);
+    }
+
+    if (jsonExistsField(j, "alternateImages") && j["alternateImages"].is_array()) {
+      const IccJson &alts = j["alternateImages"];
+
+      if (alts.size() > icHagcMaxAlternates) {
+        parseStr += "headroomAdaptiveGainCurveType has more alternate images than the maximum of 4\n";
+        return false;
+      }
+      if (!m.SetNumAlternates((icUInt8Number)alts.size()))
+        return false;
+
+      for (i = 0; i < (int)alts.size(); i++) {
+        const IccJson &alt = alts[i];
+        icHagcAlternateImage *pAlt = m.GetAlternate((icUInt8Number)i);
+        double headroom = 0.0;
+        int mixType = 0;
+
+        jGetValue(alt, "headroom", headroom);
+        pAlt->m_headroom = (icFloatNumber)(headroom);
+
+        jGetValue(alt, "componentMixingType", mixType);
+        if (mixType < 0 || mixType > 3) {
+          parseStr += "Invalid componentMixingType in headroomAdaptiveGainCurveType\n";
+          return false;
+        }
+        pAlt->m_nMixingType = (icHagcMixingType)mixType;
+
+        bFlag = false; jGetValue(alt, "pchipSlope", bFlag);
+        pAlt->m_bPchipSlope = bFlag;
+
+        // Types 0 to 2 fix their coefficients; fill them in so the model is
+        // complete however the document was authored, then let an explicit
+        // "coefficients" object override for type 3.
+        switch (pAlt->m_nMixingType) {
+          case icHagcMixingMax:
+            pAlt->m_coef[icHagcCoefMax] = 1.0f;
+            break;
+          case icHagcMixingComponent:
+            pAlt->m_coef[icHagcCoefComponent] = 1.0f;
+            break;
+          case icHagcMixingWeighted:
+            pAlt->m_coef[icHagcCoefRed] = pAlt->m_coef[icHagcCoefGreen] =
+              pAlt->m_coef[icHagcCoefBlue] = (icFloatNumber)(1.0 / 6.0);
+            pAlt->m_coef[icHagcCoefMax] = 0.5f;
+            break;
+          case icHagcMixingCustom:
+            break;
+        }
+
+        if (jsonExistsField(alt, "coefficients") && alt["coefficients"].is_object()) {
+          const IccJson &coef = alt["coefficients"];
+          for (k = 0; k < icHagcNumCoefficients; k++) {
+            double v = 0.0;
+            if (jGetValue(coef, icHagcJsonCoefName[k], v))
+              pAlt->m_coef[k] = (icFloatNumber)(v);
+          }
+        }
+
+        if (!jsonExistsField(alt, "controlPoints") || !alt["controlPoints"].is_array()) {
+          parseStr += "headroomAdaptiveGainCurveType alternate image is missing its controlPoints\n";
+          return false;
+        }
+
+        const IccJson &points = alt["controlPoints"];
+        if (!points.size() || points.size() > icHagcMaxControlPoints) {
+          parseStr += "headroomAdaptiveGainCurveType alternate image has 0 or more than 32 control points\n";
+          return false;
+        }
+
+        for (k = 0; k < (int)points.size(); k++) {
+          double x = 0.0, y = 0.0, mm = 0.0;
+          jGetValue(points[k], "x", x);
+          jGetValue(points[k], "y", y);
+          jGetValue(points[k], "m", mm);
+          pAlt->m_x[k] = (icFloatNumber)(x);
+          pAlt->m_y[k] = (icFloatNumber)(y);
+          pAlt->m_slope[k] = (icFloatNumber)(mm);
+        }
+        pAlt->m_nControlPoints = (icUInt8Number)points.size();
+      }
+    }
+  }
+
+  if (!SetMetadata(m)) {
+    parseStr += "Unable to encode headroomAdaptiveGainCurveType metadata\n";
+    return false;
+  }
+
+  return true;
+}
+
+// ===========================================================================
 // CIccTagJsonMeasurement
 // ===========================================================================
 

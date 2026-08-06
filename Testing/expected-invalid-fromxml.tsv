@@ -5,6 +5,7 @@
 #
 # Keep this manifest narrow. New diagnostics should fail CI until a maintainer
 # either fixes the fixture/tool behavior or classifies the profile here.
+HagcInvalidXOrder	invalid-saved	not strictly increasing	headroomAdaptiveGainCurveTag negative fixture: control point X values must be strictly increasing or the gain evaluator's segment parameter divides by zero
 calcUnderStack_*	parse-fail	Unable to parse element of type CIccMpeXmlCalculator	calculator under-stack negative profiles intentionally reject invalid stack operations
 uio-CIccCalculatorFunc-CheckUnderflowOverflow-IccMpeCalc_cpp-Line4238	parse-fail	Unable to Parse	calculator underflow/overflow fixture intentionally emits malformed unknown-element XML
 calcOverMem_*	invalid-saved	accesses illegal temporary channels	calculator over-memory negative profiles intentionally validate illegal temporary channel access

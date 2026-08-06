@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A v4 RGB Display profile whose headroomAdaptiveGainCurveTag is authored as raw
+  SMPTE ST 2094-50:2026 bytes rather than as the structured form.
+
+  The <HexData> child exists because the structured form is a re-encode, not a
+  byte copy. Two things need the byte-exact path: a metadata block carrying
+  fields a future SMPTE revision defines and this build cannot decode, and a
+  test that needs a specific byte pattern rather than a specific curve. Neither
+  can be expressed by <HagcMetadata>.
+
+  The five bytes here are the shortest well formed block the format admits:
+
+    00  Application Version 0, Minimum Application Version 0, reserved 0
+    00  Custom HDR Reference White flag 0, Headroom Adaptive Tone Map flag 0,
+        reserved 0, so no reference white follows and the default 203.0 cd/m^2
+        applies (proposal 1.2.2.3)
+    00 00  Baseline HDR Headroom 0
+    00  Reference White Tone Mapping flag 0, count of alternate images 0,
+        chromaticities mode 0 (BT.709), neither sharing flag
+
+  A count of zero is meaningful rather than empty: proposal 1.2.2.6 says no tone
+  mapping is to be performed and the baseline image should be clamped to the
+  target colour volume. It is also the one shape in which the tag carries no
+  alternate image records at all, so it is the boundary of the record loop.
+
+  The block is five bytes, which is not a multiple of four. The tag pads itself
+  to 20 bytes total (12 byte header, 5 byte block, 3 null pad) rather than
+  leaving the alignment to the profile writer, because CIccProfile records a
+  tag's size before calling Align32() and annex 1 note 2 requires the recorded
+  length to be a multiple of four.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
+      <HexData>
+       0000000000
+      </HexData>
+    </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile, HAGC authored as raw SMPTE bytes]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

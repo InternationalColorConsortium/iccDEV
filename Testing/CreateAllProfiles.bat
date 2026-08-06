@@ -269,3 +269,32 @@ iccFromXml v2RgbMatrixTRC.xml v2RgbMatrixTRC.icc
 :end_V2
 
 cd ..
+
+REM Testing/HDR/ has carried ten BT.2100 fixtures and its own mkprofiles since
+REM before the HAGC work, but nothing ever ran it: the directory was absent from
+REM this script, so no .icc was produced from it, and everything downstream keys
+REM off the .icc files found under Testing/.
+cd HDR
+if not "%1"=="clean" goto do_HDR
+del /F/Q *.icc 2>NUL:
+goto end_HDR
+:do_HDR
+@echo on
+iccFromXml BT2100HlgFullScene.xml BT2100HlgFullScene.icc
+iccFromXml BT2100HlgNarrowScene.xml BT2100HlgNarrowScene.icc
+iccFromXml BT2100HlgFullDisplay.xml BT2100HlgFullDisplay.icc
+iccFromXml BT2100HlgNarrowDisplay.xml BT2100HlgNarrowDisplay.icc
+iccFromXml BT2100PQFullScene.xml BT2100PQFullScene.icc
+iccFromXml BT2100PQNarrowScene.xml BT2100PQNarrowScene.icc
+iccFromXml BT2100PQFullDisplay.xml BT2100PQFullDisplay.icc
+iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
+iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
+iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
+iccFromXml HagcDisplay.xml HagcDisplay.icc
+iccFromXml HagcCommonParams.xml HagcCommonParams.icc
+iccFromXml HagcHexData.xml HagcHexData.icc
+iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
+@echo off
+:end_HDR
+
+cd ..

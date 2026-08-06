@@ -104,6 +104,19 @@ classify_rationale() {
         echo "baselined: profile validates with warnings"
       fi
       ;;
+    noncompliant)
+      # suite() has always mapped noncompliant alongside critical to the negative
+      # suite, but this branch did not exist until the corpus first contained a
+      # noncompliant profile: every negative before it reported critical, so the
+      # status fell through to "unclassified". A noncompliant verdict is a
+      # specification violation the profile still survives - iccDumpProfile even
+      # exits 0 for it - so it is a distinct kind of negative from a critical one.
+      if grep -Fq 'not strictly increasing' "$log"; then
+        echo "negative fixture: HAGC gain curve control point X values must be strictly increasing"
+      else
+        echo "negative fixture: profile violates the specification and must be reported"
+      fi
+      ;;
     critical)
       # Header damage is checked first because it is the broader defect: the one
       # fuzz-derived fixture in this corpus reports a truncated header *and* a

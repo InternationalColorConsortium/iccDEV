@@ -11,3 +11,12 @@ iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
 
 iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
 iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
+
+REM headroomAdaptiveGainCurveTag ('HAGC') coverage. The three positives cover the
+REM three shapes the encoding takes: the full layout, the two sharing flags that
+REM delete fields from every alternate after the first, and the raw-byte authoring
+REM path. HagcInvalidXOrder is a negative -- see Testing/expected-invalid-fromxml.tsv.
+iccFromXml HagcDisplay.xml HagcDisplay.icc
+iccFromXml HagcCommonParams.xml HagcCommonParams.icc
+iccFromXml HagcHexData.xml HagcHexData.icc
+iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
