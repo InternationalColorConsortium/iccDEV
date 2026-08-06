@@ -583,12 +583,14 @@ xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *
     return NULL;
   }
 
-  // xmlReadMemory takes the length as int; the bound above keeps every
-  // accepted size well inside that, and this states the dependency.
-  if ((unsigned long long)pos > (unsigned long long)std::numeric_limits<int>::max()) {
-    fclose(f);
-    return NULL;
-  }
+  // xmlReadMemory takes the length as int, so icXmlMaxTextFileBytes has to stay
+  // inside int range for the (int)len cast below to be lossless. Stated as a
+  // compile-time assertion rather than a runtime test: the bound checked just
+  // above already refuses anything larger, so a runtime test is unreachable
+  // while the constant is 256 MiB, and it would only convert a constant retuned
+  // past INT_MAX into a silent NULL return - where this refuses to build.
+  static_assert(icXmlMaxTextFileBytes <= (size_t)std::numeric_limits<int>::max(),
+                "icXmlMaxTextFileBytes must fit the int length xmlReadMemory takes");
 
   size_t len = (size_t)pos;
 
