@@ -771,6 +771,10 @@ void CIccCfgProfile::reset()
   m_useV5SubProfile = false;
   m_interpolation = icInterpTetrahedral;
   m_nOverprint = icNamedColorOverWhite;
+  // Zero, not 1.0: it means "no HDR hint at all", which is not the same as a
+  // hint asking for an SDR target.  See CIccCfgProfile's declaration.
+  m_hdrTargetHeadroom = 0.0;
+  m_hdrToneMap = icHdrToneMapAuto;
 }
 
 static const char* icIntentNames[] = { "perceptual", "relative", "saturation", "absolute" };
@@ -882,6 +886,27 @@ static const char* icInterpNames[] = { "linear", "tetrahedral", nullptr };
 
 static icXformInterp icInterpValues[] = { icInterpLinear, icInterpTetrahedral, icInterpTetrahedral };
 
+// The tone-mapping descriptor policy of ICC.1 clause 8.10.3, by name.  The two
+// arrays are index-parallel and the trailing entry of the value array is the
+// fallback the writer uses for an unrecognised policy, matching the convention
+// icInterpValues above already sets.
+static const char* icHdrToneMapNames[] = { "auto", "hagc", "lut", "off", nullptr };
+
+static icHdrToneMapPolicy icHdrToneMapValues[] = {
+  icHdrToneMapAuto, icHdrToneMapPreferHagc, icHdrToneMapPreferLut, icHdrToneMapDisable,
+  icHdrToneMapAuto
+};
+
+static const char* icGetHdrToneMapName(icHdrToneMapPolicy nPolicy)
+{
+  int i;
+  for (i = 0; icHdrToneMapNames[i]; i++) {
+    if (nPolicy == icHdrToneMapValues[i])
+      return icHdrToneMapNames[i];
+  }
+  return icHdrToneMapNames[0];
+}
+
 bool jsonToValue(const json& j, icCmmEnvSigMap& v)
 {
   if (!j.is_array())
@@ -970,6 +995,31 @@ bool CIccCfgProfile::fromJson(json j, bool bReset)
     parsed.m_interpolation = icInterpValues[i];
   }
 
+  // ICC.1 clause 8.10.  A headroom at or below zero has no log2 and is
+  // rejected rather than silently corrected, because the two plausible
+  // corrections - "treat as SDR" and "treat as unset" - differ in whether the
+  // HDR path engages at all.
+  if (j.contains("hdrTargetHeadroom")) {
+    if (!jsonToValue(j["hdrTargetHeadroom"], parsed.m_hdrTargetHeadroom))
+      return false;
+    if (!(parsed.m_hdrTargetHeadroom > 0.0))
+      return false;
+  }
+
+  str.clear();
+  if (j.contains("hdrToneMap") && !jsonToValue(j["hdrToneMap"], str))
+    return false;
+  if (!str.empty()) {
+    int i;
+    for (i = 0; icHdrToneMapNames[i]; i++) {
+      if (str == icHdrToneMapNames[i])
+        break;
+    }
+    if (!icHdrToneMapNames[i])
+      return false;
+    parsed.m_hdrToneMap = icHdrToneMapValues[i];
+  }
+
   *this = parsed;
   return true;
 }
@@ -1017,6 +1067,14 @@ void CIccCfgProfile::toJson(json& j) const
     j["useV5SubProfile"] = m_useV5SubProfile;
   if (m_useD2BxB2Dx)
     j["useD2BxB2Dx"] = m_useD2BxB2Dx;
+  // Written only when the HDR path is actually engaged, so a config that never
+  // asked for it round-trips byte for byte.  The policy follows the headroom
+  // rather than standing on its own, since without a headroom it selects
+  // nothing.
+  if (m_hdrTargetHeadroom > 0.0) {
+    j["hdrTargetHeadroom"] = m_hdrTargetHeadroom;
+    j["hdrToneMap"] = icGetHdrToneMapName(m_hdrToneMap);
+  }
   int i;
   for (i = 0; icInterpNames[i]; i++)
     if (icInterpValues[i] == m_interpolation)
@@ -1074,6 +1132,37 @@ int CIccCfgProfileSequence::fromArgs(const char** args, int nArg, bool bReset)
       nUsed += 2;
 
       pProf->m_iccEnvVars[sig] = val;
+    }
+
+    // -HDR <headroom> engages the tone-mapping step of ICC.1 clause 8.10.2 for
+    // the profile that follows, with the target headroom as a linear ratio of
+    // peak luminance to HDR reference white (1.0 SDR, 4.0 two stops).  An
+    // optional -HDRMAP <auto|hagc|lut|off> selects the descriptor policy of
+    // 8.10.3.  Both sit in the same prefixed-flag position as -ENV: and -PCC,
+    // and both are per profile - a chain can tone map one stage and not another.
+    // Without -HDR nothing changes, which is the whole point: the target
+    // headroom is not in the profile and must be stated, not guessed.
+    while (nArg >= 2 && (!stricmp(args[0], "-HDR") || !stricmp(args[0], "-HDRMAP"))) {
+      if (!stricmp(args[0], "-HDR")) {
+        icFloatNumber headroom;
+        if (!icParseFloatArg(args[1], headroom) || !(headroom > 0.0))
+          return 0;
+        pProf->m_hdrTargetHeadroom = headroom;
+      }
+      else {
+        int i;
+        for (i = 0; icHdrToneMapNames[i]; i++) {
+          if (!stricmp(args[1], icHdrToneMapNames[i]))
+            break;
+        }
+        if (!icHdrToneMapNames[i])
+          return 0;
+        pProf->m_hdrToneMap = icHdrToneMapValues[i];
+      }
+
+      args += 2;
+      nArg -= 2;
+      nUsed += 2;
     }
 
     if (nArg >= 2) {
@@ -1315,6 +1404,37 @@ int CIccCfgSearchApply::fromArgs(const char** args, int nArg, bool bReset)
       nUsed += 2;
 
       pProf->m_iccEnvVars[sig] = val;
+    }
+
+    // -HDR <headroom> engages the tone-mapping step of ICC.1 clause 8.10.2 for
+    // the profile that follows, with the target headroom as a linear ratio of
+    // peak luminance to HDR reference white (1.0 SDR, 4.0 two stops).  An
+    // optional -HDRMAP <auto|hagc|lut|off> selects the descriptor policy of
+    // 8.10.3.  Both sit in the same prefixed-flag position as -ENV: and -PCC,
+    // and both are per profile - a chain can tone map one stage and not another.
+    // Without -HDR nothing changes, which is the whole point: the target
+    // headroom is not in the profile and must be stated, not guessed.
+    while (nArg >= 2 && (!stricmp(args[0], "-HDR") || !stricmp(args[0], "-HDRMAP"))) {
+      if (!stricmp(args[0], "-HDR")) {
+        icFloatNumber headroom;
+        if (!icParseFloatArg(args[1], headroom) || !(headroom > 0.0))
+          return 0;
+        pProf->m_hdrTargetHeadroom = headroom;
+      }
+      else {
+        int i;
+        for (i = 0; icHdrToneMapNames[i]; i++) {
+          if (!stricmp(args[1], icHdrToneMapNames[i]))
+            break;
+        }
+        if (!icHdrToneMapNames[i])
+          return 0;
+        pProf->m_hdrToneMap = icHdrToneMapValues[i];
+      }
+
+      args += 2;
+      nArg -= 2;
+      nUsed += 2;
     }
 
     if (nArg >= 2) {

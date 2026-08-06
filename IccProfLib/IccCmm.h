@@ -73,6 +73,11 @@
 #include "IccTag.h"
 #include "IccUtil.h"
 #include "IccMatrixMath.h"
+// The clause 8.10 tone-mapping step, for CIccXformMatrixTrcHdr's members and
+// for the BT.2100 defaults CIccCreateHdrXformHint starts from.  Costs nothing
+// extra to include here: IccTag.h above already pulls in IccTagHagc.h, which
+// is the only heavy dependency this adds.
+#include "IccHdrToneMap.h"
 #include <list>
 #include <cstring>
 #include <cstdlib>
@@ -181,6 +186,15 @@ typedef enum {
   icXformTypeNamedColor = 4,  //Creator uses icNamedColorXformHint
   icXformTypeMpe        = 5,
 	icXformTypeMonochrome = 6,
+
+  // The matrix/TRC chain of an ICC.1 clause 8.10 HDR Profile: the same three
+  // matrix column tags, but with the analytic EOTF named by the cicpTag in
+  // place of the sampled TRCs and the tone-mapping step of 8.10.2 inserted
+  // between the linearisation and the matrix.  A distinct type rather than a
+  // mode of icXformTypeMatrixTRC because the two share only the matrix, and
+  // because CIccXformCreator's factory chain is how an application replaces
+  // one of these wholesale.
+  icXformTypeMatrixTrcHdr = 7,
 
   icXformTypePCS        = 0x7fffffe,
   icXformTypeUnknown    = 0x7ffffff,
@@ -366,6 +380,93 @@ public:
   virtual const char *GetHintType() const { return "CIccLuminanceMatchingHint"; }
 };
 
+/**
+ **************************************************************************
+ * How the tone-mapping descriptors of ICC.1 clause 8.10.3 are to be chosen
+ * between.  The clause states a recommended ranking, not a requirement, and
+ * names cases where a consumer would sensibly depart from it - so the choice
+ * belongs to the consumer rather than to the library.
+ **************************************************************************
+ */
+typedef enum {
+  /** Follow the recommended ranking of 8.10.3: the HAGC tag when the profile
+   * carries one this build can evaluate; otherwise the profile's own
+   * pre-rendered AToB0/BToA0 when it has one; otherwise the matrix/TRC chain
+   * with an identity tone-mapping operator, which NOTE 6 of 8.10.2 permits
+   * and which still applies the analytic EOTF the cicpTag names. */
+  icHdrToneMapAuto = 0,
+
+  /** Use the HAGC tag whenever it is present and evaluable, in preference to
+   * a pre-rendered AToB0 even when one exists.  This is the ranking 8.10.3
+   * recommends stated as a requirement. */
+  icHdrToneMapPreferHagc = 1,
+
+  /** Use the profile's pre-rendered AToB0/BToA0 when present, in preference
+   * to the HAGC tag.  For a consumer that wants the author's baked rendering
+   * rather than a re-evaluation of the curve. */
+  icHdrToneMapPreferLut = 2,
+
+  /** Do not engage the HDR path at all; behave exactly as a CMM that does not
+   * implement clause 8.10. */
+  icHdrToneMapDisable = 3,
+} icHdrToneMapPolicy;
+
+/**
+ **************************************************************************
+ * Type: Class
+ *
+ * Purpose:
+ *  Hint that engages the tone-mapping step of ICC.1 clause 8.10.2 and
+ *  supplies the target headroom it needs.
+ *
+ *  THE HINT IS THE SWITCH.  Without it a profile is processed exactly as it
+ *  is today, whatever it declares in its cicpTag: a baked AToB0 wins, and a
+ *  profile without one falls through to the conventional matrix/TRC chain.
+ *  That is deliberate.  H_target is not encoded in the profile (8.10.2
+ *  NOTE 5) and cannot be inferred from it, so a CMM that engaged HDR
+ *  processing on its own would have to invent one, and the same profile would
+ *  render differently depending on which build read it.  Requiring the
+ *  consumer to say "I am doing HDR, and this is my headroom" keeps the
+ *  default deterministic and identical to a pre-amendment CMM.
+ **************************************************************************
+ */
+class ICCPROFLIB_API CIccCreateHdrXformHint : public IIccCreateXformHint
+{
+public:
+  CIccCreateHdrXformHint() {
+    m_targetHeadroom = 1.0;
+    m_bHasDisplayHeadroom = false;
+    m_displayHeadroom = 1.0;
+    m_nPolicy = icHdrToneMapAuto;
+    m_hlgGamma = (icFloatNumber)icHlgDefaultGamma;
+    m_hlgPeakLuminance = (icFloatNumber)icHlgDefaultPeakLuminance;
+  }
+
+  virtual const char *GetHintType() const { return "CIccCreateHdrXformHint"; }
+
+  /** Target headroom as a linear ratio of peak luminance to HDR reference
+   * white, matching the encoding of the DERH entry of clause 8.10.5. 1.0 is
+   * SDR; 4.0 is two stops of headroom. The evaluator works in log2 space,
+   * as the HAGC tag encodes headrooms, and the conversion happens once at
+   * Begin(). A value at or below zero is treated as 1.0. */
+  icFloatNumber m_targetHeadroom;
+
+  /** Override for the display headroom the profile's own HDR Display
+   * metadata resolves to (clause 8.10.5). Set m_bHasDisplayHeadroom to use
+   * it. Distinct from m_targetHeadroom: the target is what the consumer is
+   * rendering *for*, while this describes what the profile's destination
+   * device can do. They coincide in the common case, which is why leaving
+   * this unset simply uses the target. */
+  bool m_bHasDisplayHeadroom;
+  icFloatNumber m_displayHeadroom;
+
+  icHdrToneMapPolicy m_nPolicy;
+
+  /** HLG OOTF parameters, used only when cicpTag.TransferCharacteristics is
+   * 18. Defaults are the BT.2100 nominal pair. */
+  icFloatNumber m_hlgGamma;
+  icFloatNumber m_hlgPeakLuminance;
+};
 
 
 //forward reference to CIccXform used by CIccApplyXform
@@ -1310,13 +1411,84 @@ protected:
   const LPIccCurve* m_ApplyCurvePtr;
 };
 
+/**
+ **************************************************************************
+ * Type: Class
+ *
+ * Purpose: The matrix/TRC Xform of an ICC.1 clause 8.10 HDR Profile - the
+ *  conventional chain of Annex F.3 augmented by the tone-mapping step of
+ *  clause 8.10.2.
+ *
+ *  A subclass rather than a branch inside CIccXformMatrixTRC::Apply().  That
+ *  Apply() is the hot path of every legacy matrix profile in existence, and
+ *  the HDR chain does not add a stage to it - it replaces the linearisation
+ *  (an analytic EOTF instead of the sampled TRC tags, because a sampled
+ *  curveType clamps its output at 1.0 and so cannot express display-linear
+ *  light above reference white at all) *and* inserts the gain step *and*
+ *  changes what the values mean between the two.  Branching on that inside
+ *  the base would leave a function with two disjoint bodies sharing only the
+ *  three lines of matrix arithmetic.
+ *
+ *  What is shared, and inherited: the matrix column tags, their inversion for
+ *  the output direction, the PCS absolute/relative handling, and - for
+ *  TransferCharacteristics = 8 (Linear) only - the profile's own TRC curves.
+ *
+ *  All numerics live in IccHdrToneMap; this class orchestrates them.
+ **************************************************************************
+ */
+class ICCPROFLIB_API CIccXformMatrixTrcHdr : public CIccXformMatrixTRC
+{
+public:
+  CIccXformMatrixTrcHdr();
+  virtual ~CIccXformMatrixTrcHdr();
+
+  virtual icXformType GetXformType() const { return icXformTypeMatrixTrcHdr; }
+
+  /** Reads the hint set at creation. Called by CIccXformCreator's factory
+   * before the xform is handed a profile, so it records the parameters and
+   * defers everything profile-dependent to Begin(). */
+  void SetHdrParams(const CIccCreateHdrXformHint *pHint);
+
+  virtual icStatusCMM Begin();
+  virtual void Apply(CIccApplyXform *pApplyXform, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const;
+
+  /** True when a gain curve is actually being evaluated, as opposed to the
+   * identity tone-mapping operator NOTE 6 of 8.10.2 permits. Exposed for
+   * trace and test output: "the HDR path engaged" and "the HDR path changed
+   * any value" are different claims and both are worth being able to make. */
+  bool IsToneMapping() const { return m_bToneMap; }
+
+  const CIccHagcEvaluator &GetEvaluator() const { return m_evaluator; }
+  const CIccHdrTransfer &GetTransfer() const { return m_transfer; }
+
+protected:
+
+  virtual bool HasPerceptualHandling() { return false; }
+
+  CIccHdrTransfer m_transfer;
+  CIccHagcEvaluator m_evaluator;
+
+  /** Target headroom as a linear ratio, from the hint. */
+  icFloatNumber m_targetHeadroom;
+  icHdrToneMapPolicy m_nPolicy;
+  icFloatNumber m_hlgGamma;
+  icFloatNumber m_hlgPeakLuminance;
+
+  /** Set by Begin(): a gain curve is in play and Apply() must evaluate it. */
+  bool m_bToneMap;
+
+  /** Set by Begin(): the HAGC tag carries no alternate images, which proposal
+   * 1.2.2.6 defines as "clamp the baseline to the target colour volume"
+   * rather than as an absent curve. */
+  bool m_bClampToTarget;
+};
 
 /**
  **************************************************************************
  * Type: Class
- * 
+ *
  * Purpose: This is the general 3D-LUT Xform
- * 
+ *
  **************************************************************************
  */
 class ICCPROFLIB_API CIccXform3DLut : public CIccXform

@@ -202,7 +202,7 @@ void Usage()
 
   printf("Usage 1: iccApplyNamedCmm -cfg config_file_path\n");
   printf("  Where config_file_path is a json formatted ICC profile application configuration file\n\n");
-  printf("Usage 2: iccApplyNamedCmm (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
+  printf("Usage 2: iccApplyNamedCmm (-exportcfg/-exportcfganddata config_file_path} {-debugcalc} data_file_path final_data_encoding{:FmtPrecision{:FmtDigits}} interpolation {{-ENV:Name value} {-HDR headroom} {-HDRMAP policy} profile_file_path Rendering_intent {-PCC connection_conditions_path}}\n\n");
   
   printf("  For final_data_encoding:\n");
   printf("    0 - icEncodeValue (converts to/from lab encoding when samples=3)\n");
@@ -215,6 +215,21 @@ void Usage()
 
   printf("    FmtPrecision - formatting for # of digits after decimal (default=4)\n");
   printf("    FmtDigits - formatting for total # of digits (default=5+FmtPrecision)\n\n");
+
+  // ICC.1 clause 8.10.  Documented as a pair because -HDRMAP alone does
+  // nothing: the target headroom is what engages the HDR path at all.
+  printf("  For -HDR headroom (ICC.1 clause 8.10 HDR Profiles):\n");
+  printf("    The target headroom as a ratio of peak luminance to HDR reference white:\n");
+  printf("    1.0 = SDR, 2.0 = one stop, 4.0 = two stops. Applies to the profile that\n");
+  printf("    follows it. Without -HDR an HDR Profile is processed exactly as it is by a\n");
+  printf("    CMM that does not implement clause 8.10, because the target headroom is not\n");
+  printf("    carried in the profile and cannot be inferred from it.\n\n");
+
+  printf("  For -HDRMAP policy (only meaningful alongside -HDR):\n");
+  printf("    auto - the recommended descriptor ranking of clause 8.10.3 (default)\n");
+  printf("    hagc - always use the headroomAdaptiveGainCurveTag when present\n");
+  printf("    lut  - prefer the profile's baked AToB0/BToA0 pair\n");
+  printf("    off  - do not engage the HDR path\n\n");
 
   printf("  For interpolation:\n");
   printf("    0 - Linear\n");

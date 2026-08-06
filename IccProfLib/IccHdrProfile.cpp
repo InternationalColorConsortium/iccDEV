@@ -202,6 +202,35 @@ static bool icHdrXyzToChromaticity(icFloatNumber X, icFloatNumber Y, icFloatNumb
 
 /**
  ****************************************************************************
+ * Name: icHdrFindTag
+ *
+ * Purpose: Fetch a tag by signature, loading it if the profile has not.
+ *
+ *  CIccProfile::FindTagConst() returns a tag only when it is already in
+ *  memory; it deliberately does not load one, because loading needs the
+ *  profile's attached IO object and is not a const operation. That is wrong
+ *  for everything in this file. A profile opened rather than read - which is
+ *  what CIccCmm does for every profile it is given a path to - carries a tag
+ *  directory and no tag objects, so FindTagConst() returns NULL for tags that
+ *  are demonstrably present and every question this module answers comes back
+ *  "no cicpTag, not an HDR Profile". The failure is silent and direction
+ *  dependent: read the same file eagerly and the answers are right.
+ *
+ *  So the lookup goes through FindTag(), which loads on demand, via a cast.
+ *  The cast is sound in the way that matters: loading a tag populates a cache
+ *  and changes nothing about the profile's value, which is exactly the reason
+ *  FindTag() exists rather than requiring callers to pre-load. Keeping the
+ *  const on the interface is worth this much - a caller has no business being
+ *  handed a mutable profile to ask whether it is an HDR Profile.
+ *****************************************************************************
+ */
+static const CIccTag *icHdrFindTag(const CIccProfile *pProfile, icSignature sig)
+{
+  return ((CIccProfile*)pProfile)->FindTag(sig);
+}
+
+/**
+ ****************************************************************************
  * Name: icHdrGetXyzTag
  *
  * Purpose: Fetch one XYZType tag's first triplet as floats.
@@ -210,7 +239,7 @@ static bool icHdrXyzToChromaticity(icFloatNumber X, icFloatNumber Y, icFloatNumb
 static bool icHdrGetXyzTag(const CIccProfile *pProfile, icTagSignature sig,
                            icFloatNumber *pXYZ)
 {
-  const CIccTag *pTag = pProfile->FindTagConst(sig);
+  const CIccTag *pTag = icHdrFindTag(pProfile, sig);
   if (!pTag || pTag->GetType() != icSigXYZArrayType)
     return false;
 
@@ -268,7 +297,7 @@ bool icGetProfilePrimaries(const CIccProfile *pProfile, icCicpPrimaries &primari
    * inverse reports D50-adapted chromaticities as though they were the
    * display's own - which moves the white point by roughly 0.035 in x, far
    * more than the tolerance any downstream gamut computation would expect. */
-  const CIccTag *pChad = pProfile->FindTagConst(icSigChromaticAdaptationTag);
+  const CIccTag *pChad = icHdrFindTag(pProfile, icSigChromaticAdaptationTag);
   if (pChad && pChad->GetType() == icSigS15Fixed16ArrayType) {
     const CIccTagS15Fixed16 *pChadTag = (const CIccTagS15Fixed16*)pChad;
 
@@ -561,7 +590,7 @@ bool CIccHdrMetadataReader::Read(const CIccProfile *pProfile)
   if (!pProfile)
     return false;
 
-  const CIccTag *pTag = pProfile->FindTagConst(icSigMetaDataTag);
+  const CIccTag *pTag = icHdrFindTag(pProfile, icSigMetaDataTag);
   if (!pTag || pTag->GetType() != icSigDictType)
     return false;
 
@@ -795,7 +824,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
   info.bVersion4_5 = (pProfile->m_Header.version >= icVersionNumberV4_5 &&
                       pProfile->m_Header.version < icVersionNumberV5);
 
-  const CIccTag *pCicp = pProfile->FindTagConst(icSigCicpTag);
+  const CIccTag *pCicp = icHdrFindTag(pProfile, icSigCicpTag);
   if (pCicp && pCicp->GetType() == icSigCicpType) {
     /* GetFields() is not const, so the read goes through a non-const view of a
      * tag this function only ever reads. Casting here rather than taking a
@@ -823,7 +852,7 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
   bool bHasMeta = meta.Read(pProfile);
 
   if (info.bHasHagc) {
-    const CIccTag *pHagc = pProfile->FindTagConst(icSigHeadroomAdaptiveGainCurveTag);
+    const CIccTag *pHagc = icHdrFindTag(pProfile, icSigHeadroomAdaptiveGainCurveTag);
     if (pHagc && pHagc->GetType() == icSigHeadroomAdaptiveGainCurveType) {
       const CIccTagHagc *pHagcTag = (const CIccTagHagc*)pHagc;
       if (pHagcTag->GetMetadata().m_bUnpacked) {

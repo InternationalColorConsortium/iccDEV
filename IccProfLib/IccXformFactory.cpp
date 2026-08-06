@@ -83,6 +83,25 @@ CIccXform* CIccBaseXformFactory::CreateXform(icXformType xformSig, CIccTag *pTag
    case icXformTypeMatrixTRC:
      return new(std::nothrow) CIccXformMatrixTRC();
 
+   case icXformTypeMatrixTrcHdr:
+     {
+       // One of the two xform types that does read the hint here rather than
+       // in SetParams(): the target headroom and the descriptor policy have to
+       // be in place before Begin(), and Begin() is the first thing that sees
+       // the profile.  A missing hint is not an error - CIccXform::Create only
+       // asks for this type when one is present, but a caller reaching the
+       // factory directly gets a well-defined SDR default rather than NULL.
+       CIccXformMatrixTrcHdr *pXform = new(std::nothrow) CIccXformMatrixTrcHdr();
+
+       if (pXform && pHintManager) {
+         IIccCreateXformHint *pHint = pHintManager->GetHint("CIccCreateHdrXformHint");
+         if (pHint)
+           pXform->SetHdrParams((CIccCreateHdrXformHint*)pHint);
+       }
+
+       return pXform;
+     }
+
    case icXformType3DLut:
      return new(std::nothrow) CIccXform3DLut(pTag);
 

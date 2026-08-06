@@ -86,6 +86,9 @@
 #include "IccSparseMatrix.h"
 #include "IccEncoding.h"
 #include "IccMatrixMath.h"
+// Clause 8.10 HDR Profile classification and the resolved cicp/metadata
+// values CIccXformMatrixTrcHdr::Begin() sets itself up from.
+#include "IccHdrProfile.h"
 #include <cassert>
 
 #ifdef USEICCDEVNAMESPACE
@@ -498,24 +501,107 @@ void CIccXform::DetachAll()
 }
 
 /**
+**************************************************************************
+* Name: icUseHdrToneMapPath
+*
+* Purpose:
+*  Decide whether to build the clause 8.10.2 tone-mapping chain for this
+*  profile instead of resolving it through the ordinary A2B/B2A cascade.
+*
+*  This runs *before* the cascade, not after it, because the cascade's whole
+*  job is to find a LUT and the HDR path's whole point is that a LUT is the
+*  last-choice descriptor (8.10.3 c), below both the HAGC tag and a
+*  CMM-supplied operator.  Asking afterwards would mean the question is only
+*  ever reached for profiles that have no LUT at all.
+*
+*  The decision is deliberately one-sided: with no hint the answer is always
+*  no, and processing is what it was before this amendment existed.  See
+*  CIccCreateHdrXformHint for why that is the safe default rather than a
+*  timid one.
+*
+* Args:
+*  pProfile = the profile being resolved
+*  bInput = which direction is being built; it selects which of the paired
+*   LUT tags counts as descriptor c)
+*  pHintManager = the creation hints, searched for CIccCreateHdrXformHint
+*
+* Return:
+*  true when the caller should build an icXformTypeMatrixTrcHdr.
+**************************************************************************
+*/
+static bool icUseHdrToneMapPath(CIccProfile *pProfile, bool bInput,
+                                CIccCreateXformHintManager *pHintManager)
+{
+  if (!pHintManager || !pProfile)
+    return false;
+
+  IIccCreateXformHint *pHint = pHintManager->GetHint("CIccCreateHdrXformHint");
+
+  if (!pHint)
+    return false;
+
+  CIccCreateHdrXformHint *pHdrHint = (CIccCreateHdrXformHint*)pHint;
+
+  if (pHdrHint->m_nPolicy == icHdrToneMapDisable)
+    return false;
+
+  icHdrProfileInfo info;
+
+  if (!icGetHdrProfileInfo(pProfile, info))
+    return false;
+
+  // Only a profile that satisfies clause 8.10.1 in full.  icHdrProfileIntended
+  // is not enough: a profile carrying HDR machinery without the version, the
+  // matrix-based RGB structure or a conforming cicpTag has no defined chain to
+  // augment, and running one anyway would render it differently from every
+  // conforming implementation - which would refuse it outright.
+  if (info.nClass != icHdrProfileConforming)
+    return false;
+
+  bool bHasLut = bInput ? info.bHasAToB0 : info.bHasBToA0;
+
+  switch (pHdrHint->m_nPolicy) {
+    case icHdrToneMapPreferHagc:
+      // The recommended ranking of 8.10.3 stated as a requirement.  Note this
+      // still engages when the profile carries no HAGC tag: the chain is then
+      // the identity tone-mapping operator of NOTE 6, which is not a no-op -
+      // it is the analytic EOTF applied without a sampled TRC's 1.0 ceiling.
+      return true;
+
+    case icHdrToneMapPreferLut:
+      // Descriptor c) first.  With no LUT in this direction there is nothing
+      // to prefer, so the HDR chain is still better than the conventional one.
+      return !bHasLut;
+
+    case icHdrToneMapAuto:
+    default:
+      // The recommended ranking: HAGC, then the CMM's own operator, then the
+      // baked LUT.  This build's "own operator" is the identity of NOTE 6,
+      // which ranks below a LUT the author actually rendered - so a profile
+      // with a LUT and no HAGC goes through the cascade.
+      return info.bHasHagc || !bHasLut;
+  }
+}
+
+/**
  **************************************************************************
  * Name: CIccXform::Create
- * 
+ *
  * Purpose:
  *  This is a static Creation function that creates derived CIccXform objects and
  *  initializes them.
- * 
- * Args: 
+ *
+ * Args:
  *  pProfile = pointer to a CIccProfile object that will be owned by the transform.  This object will
  *   be destroyed when the returned CIccXform object is destroyed.  The means that the CIccProfile
  *   object needs to be allocated on the heap.
  *  bInput = flag to indicate whether to use the input or output side of the profile,
- *  nIntent = the rendering intent to apply to the profile,   
+ *  nIntent = the rendering intent to apply to the profile,
  *  nInterp = the interpolation algorithm to use for N-D luts.
  *  nLutType = selection of which transform lut to use
  *  bUseD2BxB2DxTags = flag to indicate the use MPE flags if available
  *  pHintManager = pointer to object that contains xform creation hints
- * 
+ *
  * Return: 
  *  A suitable pXform object
  **************************************************************************
@@ -591,7 +677,15 @@ CIccXform *CIccXform::Create(CIccProfile *pProfile,
         //load media white point tag into profile object so we have it if we need it
         pProfile->FindTag(icSigMediaWhitePointTag); //we don't really need the return value. just need it associated with the profile
       }
-      if (bInput) {
+      // ICC.1 clause 8.10: an HDR Profile's chain is the matrix/TRC one with a
+      // tone-mapping step inserted, and the tone-mapping descriptor it uses
+      // outranks the AToB0/BToA0 pair the cascade below would find.  Asked
+      // here, ahead of that cascade, and only when the consumer supplied a
+      // CIccCreateHdrXformHint - so nothing about the hint-less path changes.
+      if (icUseHdrToneMapPath(pProfile, bInput, pHintManager)) {
+        rv = CIccXformCreator::CreateXform(icXformTypeMatrixTrcHdr, NULL, pHintManager);
+      }
+      else if (bInput) {
         CIccTag *pTag = NULL;
         // Spectral-only profiles have no AToBx tag to fall back to; their MPE pipeline
         // lives in DToBx tags regardless of how the caller set bUseD2BTags. Opening
@@ -6158,8 +6252,276 @@ LPIccCurve* CIccXformMatrixTRC::ExtractOutputCurves()
 
 /**
  **************************************************************************
+ * Name: CIccXformMatrixTrcHdr::CIccXformMatrixTrcHdr
+ *
+ * Purpose:
+ *  Constructor.  The HDR parameters start at the values a hint-less creation
+ *  would imply, so that an instance built without SetHdrParams() behaves as
+ *  an SDR target with the recommended descriptor ranking rather than as an
+ *  uninitialised object.
+ **************************************************************************
+ */
+CIccXformMatrixTrcHdr::CIccXformMatrixTrcHdr()
+{
+  m_targetHeadroom = 1.0;
+  m_nPolicy = icHdrToneMapAuto;
+  m_hlgGamma = (icFloatNumber)icHlgDefaultGamma;
+  m_hlgPeakLuminance = (icFloatNumber)icHlgDefaultPeakLuminance;
+  m_bToneMap = false;
+  m_bClampToTarget = false;
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXformMatrixTrcHdr::~CIccXformMatrixTrcHdr
+ *
+ * Purpose:
+ *  Destructor.  Nothing of its own to release: the transfer and the
+ *  evaluator are values, and the curves and matrix belong to the base.
+ **************************************************************************
+ */
+CIccXformMatrixTrcHdr::~CIccXformMatrixTrcHdr()
+{
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXformMatrixTrcHdr::SetHdrParams
+ *
+ * Purpose:
+ *  Record the consumer's HDR parameters.  Called at creation, before the
+ *  profile is attached, so nothing here may touch m_pProfile.
+ *
+ * Args:
+ *  pHint = the hint that engaged this xform; NULL leaves the defaults.
+ **************************************************************************
+ */
+void CIccXformMatrixTrcHdr::SetHdrParams(const CIccCreateHdrXformHint *pHint)
+{
+  if (!pHint)
+    return;
+
+  // A non-positive headroom has no log2 and would make the whole blend
+  // undefined; 1.0 (SDR) is the value the hint documents for it.
+  m_targetHeadroom = (pHint->m_targetHeadroom > 0.0) ? pHint->m_targetHeadroom : (icFloatNumber)1.0;
+  m_nPolicy = pHint->m_nPolicy;
+  m_hlgGamma = pHint->m_hlgGamma;
+  m_hlgPeakLuminance = pHint->m_hlgPeakLuminance;
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXformMatrixTrcHdr::Begin
+ *
+ * Purpose:
+ *  Set up the augmented chain of clause 8.10.2: the base class's matrix and
+ *  curves, the analytic EOTF the cicpTag names, and - when the selected
+ *  tone-mapping descriptor is the HAGC tag - a gain evaluator fixed at the
+ *  consumer's target headroom.
+ *
+ *  Everything that depends only on the profile and the target is resolved
+ *  here, which is what leaves Apply() a const function of the pixel alone.
+ *
+ * Return:
+ *  icCmmStatOk, or a status naming what could not be set up.
+ **************************************************************************
+ */
+icStatusCMM CIccXformMatrixTrcHdr::Begin()
+{
+  // The base sets up the three matrix columns, inverts them for the output
+  // direction, and loads the TRC curves.  The curves are only *used* for
+  // TransferCharacteristics = 8; for PQ and HLG the analytic EOTF replaces
+  // them.  They are still loaded because the base owns that bookkeeping
+  // (m_bFreeCurve, the identity check) and because the profile is required to
+  // carry them - clause 8.10.1 makes an HDR Profile matrix-based, so their
+  // absence is a structural failure worth reporting through the base's own
+  // icCmmStatProfileMissingTag rather than silently tolerating.
+  icStatusCMM status = CIccXformMatrixTRC::Begin();
+
+  if (status != icCmmStatOk)
+    return status;
+
+  icHdrProfileInfo info;
+
+  if (!icGetHdrProfileInfo(m_pProfile, info))
+    return icCmmStatInvalidProfile;
+
+  if (!info.bHasCicp) {
+    // Clause 8.10.1 requires the cicpTag of every HDR Profile.  Without it
+    // there is no EOTF to apply and no way to know what the TRC output means.
+    return icCmmStatProfileMissingTag;
+  }
+
+  if (!m_transfer.Init(info.nTransferCharacteristics, info.contentReferenceWhite,
+                       m_hlgGamma, m_hlgPeakLuminance)) {
+    return icCmmStatUnsupported;
+  }
+
+  m_bToneMap = false;
+  m_bClampToTarget = false;
+
+  // Descriptor selection, per clause 8.10.3 and the policy the consumer set.
+  // icHdrToneMapPreferLut never reaches here - CIccXform::Create resolves it
+  // by leaving the LUT cascade alone - so the two cases below are the ones
+  // where the HAGC tag is to be consulted.
+  if (info.bHasHagc && m_nPolicy != icHdrToneMapPreferLut) {
+    CIccTag *pTag = m_pProfile->FindTag(icSigHeadroomAdaptiveGainCurveTag);
+
+    if (pTag && pTag->GetType() == icSigHeadroomAdaptiveGainCurveType) {
+      CIccTagHagc *pHagc = (CIccTagHagc*)pTag;
+
+      if (m_evaluator.Init(pHagc->GetMetadata())) {
+        // The tag encodes headrooms in log2 space and the hint carries a
+        // linear ratio, so this is the one place the two meet.
+        m_evaluator.SetTargetHeadroom((icFloatNumber)(log((double)m_targetHeadroom) / log(2.0)));
+
+        m_bClampToTarget = m_evaluator.ClampsToTargetVolume();
+        m_bToneMap = !m_evaluator.IsIdentity();
+      }
+      // An evaluator that declines the tag is not an error: clause 8.10.3
+      // ranks descriptors so that a CMM which cannot run one falls to the
+      // next, and the next here is the identity operator NOTE 6 permits.
+    }
+  }
+
+  if (!m_bInput && m_bToneMap && !m_evaluator.IsInvertible()) {
+    // The output direction needs the gain curve inverted, and this
+    // configuration has no inverse - either its component mixing couples the
+    // channels irrecoverably or the curve is not monotone.  Reporting it is
+    // the honest answer: the alternative, quietly dropping the tone-mapping
+    // step, would emit device values that do not correspond to the PCS values
+    // asked for, with nothing to say so.  A consumer that hits this should
+    // use the profile's BToA0 instead (icHdrToneMapPreferLut).
+    return icCmmStatUnsupported;
+  }
+
+  return icCmmStatOk;
+}
+
+/**
+ **************************************************************************
+ * Name: CIccXformMatrixTrcHdr::Apply
+ *
+ * Purpose:
+ *  The augmented chain of clause 8.10.2, in its three named steps.
+ *
+ *  Input direction (device to PCS):
+ *    a) HDR EOTF - the analytic transfer the cicpTag names, renormalised so
+ *       that 1.0 is the HDR reference white
+ *    b) tone mapping - the gain curve at the consumer's target headroom
+ *    c) colour matrix - the three matrix column tags, then the same XYZ
+ *       scaling the conventional matrix/TRC path uses
+ *
+ *  Output direction (PCS to device): the same three, inverted and reversed.
+ *
+ *  The XYZScale() applied at the end of the input direction is the base
+ *  class's convention and is kept deliberately, so that an HDR xform and a
+ *  conventional one hand the same numbers to whatever follows.  It is also
+ *  where the 16-bit PCS ceiling bites: internal 1.0 is XYZ 1.99997, so a
+ *  chain that quantises the PCS to 16 bits carries about one stop of
+ *  headroom and no more.  A float PCS carries the values unharmed.
+ *
+ * Args:
+ *  pApply = ApplyXform object containing temporary storage used during Apply
+ *  DstPixel = Destination pixel where the result is stored
+ *  SrcPixel = Source pixel which is to be applied
+ **************************************************************************
+ */
+void CIccXformMatrixTrcHdr::Apply(CIccApplyXform* pApply, icFloatNumber *DstPixel, const icFloatNumber *SrcPixel) const
+{
+  icFloatNumber Pixel[3];
+
+  if (m_bSrcPcsConversion)
+    SrcPixel = CheckSrcAbs(pApply, SrcPixel);
+
+  Pixel[0] = SrcPixel[0];
+  Pixel[1] = SrcPixel[1];
+  Pixel[2] = SrcPixel[2];
+
+  if (m_bInput) {
+    if (m_transfer.UsesProfileCurves()) {
+      // TransferCharacteristics = 8 (Linear): the profile's own TRC tags are
+      // the linearisation, exactly as in the conventional chain.
+      if (m_ApplyCurvePtr) {
+        Pixel[0] = m_ApplyCurvePtr[0]->Apply(Pixel[0]);
+        Pixel[1] = m_ApplyCurvePtr[1]->Apply(Pixel[1]);
+        Pixel[2] = m_ApplyCurvePtr[2]->Apply(Pixel[2]);
+      }
+    }
+    else {
+      m_transfer.ToLinear(Pixel, Pixel);
+    }
+
+    if (m_bToneMap) {
+      m_evaluator.Apply(Pixel, Pixel);
+    }
+    else if (m_bClampToTarget) {
+      // HAGC proposal 1.2.2.6: no alternate images means no tone mapping and
+      // a clamp of the baseline to the target colour volume.  The target
+      // headroom is the luminance extent of that volume in the reference
+      // white relative units this stage works in.
+      icUInt8Number i;
+      for (i = 0; i < 3; i++) {
+        if (Pixel[i] > m_targetHeadroom)
+          Pixel[i] = m_targetHeadroom;
+      }
+    }
+
+    DstPixel[0] = XYZScale((icFloatNumber)(m_e[0] * Pixel[0] + m_e[1] * Pixel[1] + m_e[2] * Pixel[2]));
+    DstPixel[1] = XYZScale((icFloatNumber)(m_e[3] * Pixel[0] + m_e[4] * Pixel[1] + m_e[5] * Pixel[2]));
+    DstPixel[2] = XYZScale((icFloatNumber)(m_e[6] * Pixel[0] + m_e[7] * Pixel[1] + m_e[8] * Pixel[2]));
+  }
+  else {
+    double X = XYZDescale(Pixel[0]);
+    double Y = XYZDescale(Pixel[1]);
+    double Z = XYZDescale(Pixel[2]);
+
+    icFloatNumber Lin[3];
+
+    Lin[0] = (icFloatNumber)(m_e[0] * X + m_e[1] * Y + m_e[2] * Z);
+    Lin[1] = (icFloatNumber)(m_e[3] * X + m_e[4] * Y + m_e[5] * Z);
+    Lin[2] = (icFloatNumber)(m_e[6] * X + m_e[7] * Y + m_e[8] * Z);
+
+    if (m_bToneMap) {
+      // Begin() refused to start an output xform whose evaluator has no
+      // inverse, so a false return here can only mean a value the curve
+      // destroyed (a zero gain).  Leaving the linear values as they are is
+      // the closest defined answer.
+      m_evaluator.Invert(Lin, Lin);
+    }
+
+    if (m_transfer.UsesProfileCurves()) {
+      if (m_ApplyCurvePtr) {
+        // RGBClip is the base class's own guard and the right one here: for
+        // Linear transfer characteristics the values are already in the
+        // curve's 0..1 domain, and a sampled inverse curve outside it is
+        // undefined.
+        DstPixel[0] = RGBClip(Lin[0], m_ApplyCurvePtr[0]);
+        DstPixel[1] = RGBClip(Lin[1], m_ApplyCurvePtr[1]);
+        DstPixel[2] = RGBClip(Lin[2], m_ApplyCurvePtr[2]);
+      }
+      else {
+        DstPixel[0] = Lin[0];
+        DstPixel[1] = Lin[1];
+        DstPixel[2] = Lin[2];
+      }
+    }
+    else {
+      // No RGBClip: clamping display-linear light to 1.0 before the inverse
+      // EOTF is exactly the mistake that makes a sampled TRC unusable for HDR.
+      // CIccHdrTransfer::FromLinear applies the transfer's own ceiling instead.
+      m_transfer.FromLinear(DstPixel, Lin);
+    }
+  }
+
+  if (m_bDstPcsConversion)
+    CheckDstAbs(DstPixel);
+}
+
+/**
+ **************************************************************************
  * Name: CIccXform3DLut::CIccXform3DLut
- * 
+ *
  * Purpose: 
  *  Constructor
  *

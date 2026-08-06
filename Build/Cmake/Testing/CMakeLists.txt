@@ -1484,6 +1484,60 @@ function(iccdev_add_hdr_profile_test)
   endif()
 endfunction()
 
+# T3 (HDR profiles): the tone-mapping step of clause 8.10.2 - the analytic PQ
+# and HLG transfer functions, the Headroom Adaptive Gain Curve evaluator, and
+# the CMM path that inserts them between the TRC linearisation and the 3x3
+# matrix.
+#
+# The first behavioural HDR test in the tree: everything HDR before it checked
+# that bytes survive a round trip or that a classifier answers correctly, so
+# there is no baseline here and every number is either hand-computed from the
+# published formulas or an independently known anchor. Four things it pins that
+# a plausible-looking implementation gets wrong. The transfer functions have to
+# be analytic, because a sampled curveType TRC clamps at 1.0 and so cannot
+# represent light above HDR reference white at all - the PQ code 0.75 anchor,
+# at nearly five times reference white, is what catches that. The headroom
+# blend interpolates gain *exponents*, which agrees with interpolating gains at
+# both endpoints and differs only in between. The annex's extrapolation above
+# the last control point makes gain(x)*x constant, i.e. a hard clip, which is a
+# property of the whole expression rather than of any term. And the inverse is
+# a bisection that must saturate rather than run off its bracket where the
+# forward map is flat.
+function(iccdev_add_hdr_tonemap_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHdrToneMapTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hdr-tonemap.cpp"
+  )
+  target_link_libraries(iccHdrToneMapTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccHdrToneMapTest)
+
+  add_test(
+    NAME iccdev.hdr-tonemap
+    COMMAND "$<TARGET_FILE:iccHdrToneMapTest>"
+  )
+  set_tests_properties(iccdev.hdr-tonemap PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;cmm;hdr;regression"
+  )
+  if(WIN32)
+    set(_hdr_tonemap_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHdrToneMapTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _hdr_tonemap_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hdr-tonemap PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_hdr_tonemap_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1748: CIccPcsXform::ConnectFirst()/ConnectLast() build the PCS transforms at the two
 # outer edges of a CMM chain, and CheckPCSConnections() pushes them onto the xform list
 # like any other xform. Unlike Connect(), they left m_srcSpace/m_nSrcSamples/m_dstSpace/
@@ -3494,6 +3548,7 @@ if(WIN32)
   iccdev_add_mpe_empty_identity_test()
   iccdev_add_hagc_codec_test()
   iccdev_add_hdr_profile_test()
+  iccdev_add_hdr_tonemap_test()
   iccdev_add_pcc_reflectance_observer_range_test()
   iccdev_add_pcs_edge_metadata_test()
   iccdev_add_xyz_negative_z_test()
@@ -3751,6 +3806,7 @@ iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
 iccdev_add_hagc_codec_test()
 iccdev_add_hdr_profile_test()
+iccdev_add_hdr_tonemap_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()

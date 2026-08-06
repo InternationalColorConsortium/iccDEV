@@ -177,7 +177,7 @@ void Usage()
   printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");
   printf("  Optional: -cfg config_file (use JSON formatted configuration file to define apply options)\n\n");
 
-  printf("Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
+  printf("Alt-Usage: iccApplyProfiles {-threads N} {-exportcfg config_file} src_tiff_file dst_tiff_file dst_sample_encoding dst_compression dst_planar dst_embed_icc interpolation {{-ENV:sig value} {-HDR headroom} {-HDRMAP policy} profile_file_path rendering_intent {-PCC connection_conditions_path}}\n\n");
   printf("  Optional: -threads [N] (use N worker threads; 0=hardware concurrency, 1=single-threaded)\n");
   printf("  Optional: -exportcfg config_file (create config_file based on rest of arguments)\n\n");
   printf("  For dst_sample_encoding:\n");
@@ -197,6 +197,21 @@ void Usage()
   printf("  For dst_embed_icc:\n");
   printf("    0 - Do not Embed\n");
   printf("    1 - Embed Last ICC\n\n");
+
+  // ICC.1 clause 8.10.  Documented as a pair because -HDRMAP alone does
+  // nothing: the target headroom is what engages the HDR path at all.
+  printf("  For -HDR headroom (ICC.1 clause 8.10 HDR Profiles):\n");
+  printf("    The target headroom as a ratio of peak luminance to HDR reference white:\n");
+  printf("    1.0 = SDR, 2.0 = one stop, 4.0 = two stops. Applies to the profile that\n");
+  printf("    follows it. Without -HDR an HDR Profile is processed exactly as it is by a\n");
+  printf("    CMM that does not implement clause 8.10, because the target headroom is not\n");
+  printf("    carried in the profile and cannot be inferred from it.\n\n");
+
+  printf("  For -HDRMAP policy (only meaningful alongside -HDR):\n");
+  printf("    auto - the recommended descriptor ranking of clause 8.10.3 (default)\n");
+  printf("    hagc - always use the headroomAdaptiveGainCurveTag when present\n");
+  printf("    lut  - prefer the profile's baked AToB0/BToA0 pair\n");
+  printf("    off  - do not engage the HDR path\n\n");
 
   printf("  For interpolation:\n");
   printf("    0 - Linear\n");

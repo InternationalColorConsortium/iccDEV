@@ -40,10 +40,13 @@ iccFromXml HagcHexData.xml HagcHexData.icc
 iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
 
 # Clause 8.10 HDR Profile coverage: a conforming profile carrying HDR Image and
-# HDR Display metadata but no tone-mapping descriptor, and two negatives for the
-# TransferCharacteristics restriction and the AToBx/BToAx pairing rule.
+# HDR Display metadata but no tone-mapping descriptor, one whose only descriptor
+# is a baked AToB0/BToA0 pair (which is what makes the 8.10.3 precedence
+# observable), and two negatives for the TransferCharacteristics restriction and
+# the AToBx/BToAx pairing rule.
 iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
 iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
+iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
 

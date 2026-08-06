@@ -150,6 +150,19 @@ public:
 	bool m_useHToS;
 	bool m_useV5SubProfile;
 	icXformInterp m_interpolation;
+
+	// ICC.1 clause 8.10 HDR Profiles.  The target headroom of 8.10.2 is a
+	// linear ratio of peak luminance to HDR reference white - 1.0 for SDR, 4.0
+	// for two stops - and is the switch for the whole HDR path: zero means no
+	// CIccCreateHdrXformHint is attached and an HDR Profile is processed exactly
+	// as a pre-amendment CMM would process it.  That default is deliberate; see
+	// CIccCreateHdrXformHint.  m_hdrToneMap only matters when a headroom is set.
+	//
+	// The HLG OOTF parameters the hint also carries are not exposed here and
+	// stay at their BT.2100 defaults (gamma 1.2 at 1000 cd/m^2).  A caller that
+	// needs a different display peak builds the hint in C++.
+	icFloatNumber m_hdrTargetHeadroom;
+	icHdrToneMapPolicy m_hdrToneMap;
 };
 
 typedef std::shared_ptr<CIccCfgProfile> CIccCfgProfilePtr;

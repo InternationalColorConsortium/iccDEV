@@ -180,6 +180,27 @@ icStatusCMM CIccConnectCmm::AddXformFromConfig(CIccCmm* pCmm,
     }
   }
 
+  // ICC.1 clause 8.10: the target headroom is what engages the tone-mapping
+  // step, and a config that does not name one gets no hint - so an HDR Profile
+  // read through this path behaves exactly as it did before the amendment
+  // unless the caller asked otherwise.  This is the path profiletool's WASM
+  // build uses, which is why the switch is a config key rather than something
+  // inferred from the profile.
+  if (pCfg->m_hdrTargetHeadroom > 0.0) {
+    CIccCreateHdrXformHint* pHdrHint = new (std::nothrow) CIccCreateHdrXformHint();
+    if (!pHdrHint) {
+      sErrorMsg = "failed to allocate HDR tone-mapping hint for '" + pCfg->m_iccFile + "'";
+      return icCmmStatAllocErr;
+    }
+    pHdrHint->m_targetHeadroom = pCfg->m_hdrTargetHeadroom;
+    pHdrHint->m_nPolicy = pCfg->m_hdrToneMap;
+    icStatusCMM stat = AddHintNoThrow(Hint, pHdrHint);
+    if (stat != icCmmStatOk) {
+      sErrorMsg = "failed to attach HDR tone-mapping hint for '" + pCfg->m_iccFile + "'";
+      return stat;
+    }
+  }
+
   if (!pCfg->m_pccFile.empty()) {
     // Caller-selected config paths intentionally name ICC/PCC profile files.
     // codeql[cpp/path-injection]

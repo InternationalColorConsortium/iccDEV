@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A conforming HDR Profile (ICC.1 clause 8.10.1) whose only tone-mapping
+  descriptor is the pre-rendered AToB0Tag/BToA0Tag pair of clause 8.10.3 c).
+
+  It exists to pin descriptor precedence, which no other fixture can. Clause
+  8.10.3 ranks the HAGC tag above a CMM-supplied operator and both above a
+  baked LUT, and every other HDR fixture in this directory either carries a
+  HAGC tag or carries no LUT - so in every one of them the ranking has only one
+  possible outcome. Here the two lowest-ranked descriptors are the only ones
+  present, which is what makes the choice observable:
+
+    - icHdrToneMapAuto ranks this build's own operator (the identity of NOTE 6
+      of 8.10.2) *below* a rendering the profile author actually baked, so the
+      ordinary A2B/B2A cascade resolves the profile and the HDR chain does not
+      engage.
+    - icHdrToneMapPreferHagc overrides that and takes the HDR chain anyway.
+
+  Reverse those two and the profile still renders plausibly in both cases -
+  which is exactly why it is worth a fixture rather than a review.
+
+  The AToB0Tag and BToA0Tag are identity B-curve LUTs. Their contents are
+  irrelevant to what this fixture proves; what matters is that the pair is
+  present, complete (8.10.3 c) requires the pairing, and 8.10.6 repeats it),
+  and that no headroomAdaptiveGainCurveTag accompanies them.
+
+  Colorants, chromatic adaptation and TRCs are the same BT.709/D65 set as the
+  other HDR fixtures here, so this profile validates clean.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
+         with the chromaticAdaptationTag that put them there. -->
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <!-- Standard Bradford D65 to D50 adaptation. -->
+    <chromaticAdaptationTag> <s15Fixed16ArrayType>
+      <Array>
+        1.047882  0.022919 -0.050201
+        0.029587  0.990479 -0.017059
+       -0.009232  0.015076  0.751678
+      </Array>
+    </s15Fixed16ArrayType> </chromaticAdaptationTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="1" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
+
+    <AToB0Tag> <lutAtoBType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutAtoBType> </AToB0Tag>
+
+    <BToA0Tag> <lutBtoAType>
+      <Channels InputChannels="3" OutputChannels="3"/>
+      <BCurves>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+        <Curve IdentitySize="2"/>
+      </BCurves>
+    </lutBtoAType> </BToA0Tag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR profile whose only tone-mapping descriptor is a baked AToB0/BToA0 pair]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

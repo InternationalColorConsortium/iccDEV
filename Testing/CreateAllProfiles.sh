@@ -347,6 +347,7 @@ then
 	iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
 	iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
 	iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
+	iccFromXml HdrBakedLut.xml HdrBakedLut.icc
 	iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
 	iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
 	set +x
