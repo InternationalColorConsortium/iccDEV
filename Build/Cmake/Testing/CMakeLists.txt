@@ -3233,6 +3233,95 @@ function(iccdev_add_encoding_surround_test)
   endif()
 endfunction()
 
+# CIccDefaultEncProfileConverter::ConvertFromParams deleted the luma/chroma
+# matrix element it had only borrowed from the caller's colorEncodingParams
+# struct via FindElemOfType, leaving the entry in the struct's element list. The
+# owner's later teardown walked that list and wrote through, then freed, the
+# dangling pointer -- a heap use-after-free write followed by a virtual-destructor
+# dispatch on freed memory and a second free, all on profile-controlled input.
+# The regression asserts the borrowed element survives the call intact on both
+# the succeeding and the failing return path (#1985).
+function(iccdev_add_encoding_lumamtx_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingLumaMtxTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-lumamtx-double-free.cpp"
+  )
+  target_link_libraries(iccEncodingLumaMtxTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingLumaMtxTest)
+
+  add_test(
+    NAME iccdev.encoding-lumamtx-double-free
+    COMMAND "$<TARGET_FILE:iccEncodingLumaMtxTest>"
+  )
+  set_tests_properties(iccdev.encoding-lumamtx-double-free PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;issue-1985;regression"
+  )
+  if(WIN32)
+    set(_enclumamtx_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingLumaMtxTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _enclumamtx_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-lumamtx-double-free PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_enclumamtx_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# icConvertEncodingProfile layered a colour-encoding profile's local overrides by
+# calling DeleteElem then AttachElem on pStruct -- the struct it was iterating --
+# instead of on pParams, the copy of the base encoding profile's params. DeleteElem
+# erases the list node and deletes the tag, so the loop read back an entry it had
+# just freed (heap use-after-free), advanced an erased iterator (a non-terminating
+# walk), and never wrote pParams at all, leaving the override silently discarded.
+# The regression asserts the override reaches the converter and that the profile's
+# own struct is left untouched (#1991). Against the unfixed library the call faults
+# before those assertions are reached -- heap-use-after-free under ASAN, exit 139
+# unsanitized -- and the timeout guards the erased-iterator walk, which does not
+# terminate when the read lands on still-mapped memory.
+function(iccdev_add_encoding_override_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingOverrideTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-override-uaf.cpp"
+  )
+  target_link_libraries(iccEncodingOverrideTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingOverrideTest)
+
+  add_test(
+    NAME iccdev.encoding-override-uaf
+    COMMAND "$<TARGET_FILE:iccEncodingOverrideTest>"
+  )
+  set_tests_properties(iccdev.encoding-override-uaf PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;issue-1991;regression"
+  )
+  if(WIN32)
+    set(_encoverride_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingOverrideTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _encoverride_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-override-uaf PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_encoverride_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # CIccPRMG::GetChroma normalized an arbitrary hue angle into [0, 360) with
 # "while (h < 0.0) h += 360.0;" / "while (h >= 360.0) h -= 360.0;". Those loops do
 # not terminate once |h| is large enough that 360 falls below the float's ULP
@@ -3576,6 +3665,8 @@ if(WIN32)
   iccdev_add_v2_xml_fixtures_test()
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
+  iccdev_add_encoding_lumamtx_test()
+  iccdev_add_encoding_override_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -3836,6 +3927,8 @@ iccdev_add_v2_legacy_pcs_test()
 iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
+iccdev_add_encoding_lumamtx_test()
+iccdev_add_encoding_override_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()
@@ -4261,6 +4354,26 @@ iccdev_add_script_test(
 set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
+
+# Issue #1856. Pins both halves of the XML reader's size behaviour at once: a
+# profile whose CLUT exceeds libxml2's per-text-node limit must still round
+# trip, and the depth, name-length and entity-amplification caps must stay
+# armed. The second half exists so that a future attempt to solve a size
+# problem with XML_PARSE_HUGE turns this test red instead of quietly widening
+# what the parser accepts. Builds the fixture link with iccApplyToLink, so it
+# needs the generated profiles.
+if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
+  iccdev_add_script_test(
+    iccdev.xml-parser-regressions
+    600
+    "iccdev;xml;parser;regression;issue-1856;asan;slow"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-parser-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.xml-parser-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
 
 if(ICCDEV_HAS_ICCCONNECT)
   iccdev_add_script_test(
@@ -4880,6 +4993,29 @@ iccdev_add_script_test(
   "iccdev;encoding;security;ub;issue-1410;regression"
   "${ICCDEV_REPO_ROOT}"
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1410-encoding-yxy-xyz-dbz.sh"
+ )
+
+# #1985 - CIccDefaultEncProfileConverter::ConvertFromParams (IccEncoding.cpp)
+# deleted the luma/chroma matrix element it had only borrowed from the profile's
+# colorEncodingParams ("cept") struct via FindElemOfType, leaving the entry in the
+# element list. icConvertEncodingProfile then destroyed the struct, and
+# CIccTagStruct::Cleanup wrote a null parent into the freed chunk before deleting
+# it a second time -- ASAN heap-use-after-free, SCARINESS 52
+# (8-byte-write-heap-use-after-free). The API-level regression is the
+# iccdev.encoding-lumamtx-double-free CTest; this one covers reachability, adding
+# a 'cenc' PoC profile as a transform profile through iccApplyToLink so
+# CIccXform::Create routes it into the converter. It asserts on two signals so it
+# is meaningful on every lane: a crash (measured 3/3 as exit 139 on an
+# unsanitized clang Debug build, against 255 for the fixed library's ordinary
+# rejection) and an ASAN report naming the converter. The ASAN lanes are the
+# authoritative ones -- the crash depends on the allocator recycling the chunk,
+# which is also what defeats glibc's tcache double-free check.
+iccdev_add_script_test(
+  iccdev.issue-1985-encoding-lumamtx-uaf
+  120
+  "iccdev;encoding;security;asan;issue-1985;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1985-encoding-lumamtx-uaf-regression-tests.sh"
  )
 
 # #1421 - CIccCfgProfileSequence::fromArgs decodes a packed rendering-intent code

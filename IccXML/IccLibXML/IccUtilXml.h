@@ -97,8 +97,19 @@ bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &pa
 
 // Maximum byte count for text file buffers: caps num+1 from wrapping size_t
 // and prevents downstream ParseTextArrayNum from consuming gigabytes.
-// Used at every new(std::nothrow) char[num+1] text-buffer site.
+// Used at every new(std::nothrow) char[num+1] text-buffer site, and as the
+// whole-document bound applied by icXmlReadFileBounded below.
 static const size_t icXmlMaxTextFileBytes = 256ULL * 1024 * 1024;
+
+// Reads an XML document into one contiguous buffer and parses that, instead of
+// letting libxml2 stream the file. Returns NULL if the file cannot be read, if
+// it is larger than icXmlMaxTextFileBytes, or if it does not parse; on success
+// the caller owns the document and releases it with xmlFreeDoc. nOptions is
+// passed to libxml2 unchanged, so the caller keeps control of the parser flags.
+// The implementation comment explains why the buffer rather than the file is
+// what gets parsed - it is what lets a large CLUT round-trip without
+// XML_PARSE_HUGE. Diagnostics are appended to parseStr when one is supplied.
+xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *parseStr = NULL);
 
 #define icXmlStrCmp(x, y) strcmp((const char *)(x), (const char*)(y))
 

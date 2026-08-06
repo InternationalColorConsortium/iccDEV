@@ -63,6 +63,9 @@
 
 #include <cstdlib>  /* std::strtoul, std::strtoull */
 #include <cerrno>   /* errno, ERANGE */
+#include <cstdio>   /* fopen, fseek, ftell, fread - icXmlReadFileBounded */
+#include <new>      /* std::nothrow - icXmlReadFileBounded */
+#include <string>   /* std::string, std::to_string */
 #include <time.h>
 #include "IccUtilXml.h"
 #include "IccConvertUTF.h"
@@ -526,6 +529,110 @@ bool icXmlValidateFileCount(size_t value, icUInt32Number &count, std::string &pa
 
   count = (icUInt32Number)value;
   return true;
+}
+
+xmlDoc *icXmlReadFileBounded(const char *szFilename, int nOptions, std::string *parseStr)
+{
+  // libxml2's streaming reader hands character data to the tree builder in
+  // successive chunks, and the append path that joins those chunks is where
+  // XML_MAX_TEXT_LENGTH (10 MB) is enforced. A profile whose CLUT serialises
+  // to a larger single text node is therefore refused on read even though
+  // iccToXml had just written it - issue #1856. Parsing one contiguous buffer
+  // never takes that append path, so the round trip holds without
+  // XML_PARSE_HUGE, which would additionally have disabled the nesting-depth
+  // and name-length caps for every input.
+  //
+  // What the per-node cap gave up is replaced by a whole-document bound, which
+  // is the stricter promise: it limits total parsed size instead of the size of
+  // any one node, and today the streamed path applies no document bound at all.
+  if (!szFilename || !*szFilename)
+    return NULL;
+
+  FILE *f = fopen(szFilename, "rb");
+  if (!f) {
+    if (parseStr) {
+      *parseStr += "Unable to open '";
+      *parseStr += szFilename;
+      *parseStr += "'\n";
+    }
+    return NULL;
+  }
+
+  if (fseek(f, 0, SEEK_END) != 0) {
+    fclose(f);
+    return NULL;
+  }
+  long pos = ftell(f);
+  if (pos < 0 || fseek(f, 0, SEEK_SET) != 0) {
+    fclose(f);
+    return NULL;
+  }
+
+  // Compared in a width that cannot narrow the bound where long is 32-bit.
+  if ((unsigned long long)pos > (unsigned long long)icXmlMaxTextFileBytes) {
+    if (parseStr) {
+      // Report the bound that was actually compiled in rather than a fixed
+      // number, so the message stays true if the constant is retuned.
+      *parseStr += "XML file '";
+      *parseStr += szFilename;
+      *parseStr += "' exceeds " +
+                   std::to_string((unsigned long long)icXmlMaxTextFileBytes / (1024 * 1024)) +
+                   " MiB limit\n";
+    }
+    fclose(f);
+    return NULL;
+  }
+
+  // xmlReadMemory takes the length as int; the bound above keeps every
+  // accepted size well inside that, and this states the dependency.
+  if ((unsigned long long)pos > (unsigned long long)std::numeric_limits<int>::max()) {
+    fclose(f);
+    return NULL;
+  }
+
+  size_t len = (size_t)pos;
+
+  // Allocated nothrow and reported, matching the other bounded text-buffer
+  // sites in this file. At this bound a refused allocation is a plausible
+  // outcome rather than a fatal one, and the streaming reader being replaced
+  // returned NULL on failure instead of throwing.
+  char *buf = new(std::nothrow) char[len ? len : 1];
+  if (!buf) {
+    if (parseStr) {
+      *parseStr += "Out of memory allocating ";
+      *parseStr += std::to_string((unsigned long long)len);
+      *parseStr += " bytes to parse '";
+      *parseStr += szFilename;
+      *parseStr += "'\n";
+    }
+    fclose(f);
+    return NULL;
+  }
+
+  size_t got = len ? fread(buf, 1, len, f) : 0;
+  fclose(f);
+
+  if (got != len) {
+    delete[] buf;
+    if (parseStr) {
+      *parseStr += "Unable to read '";
+      *parseStr += szFilename;
+      *parseStr += "'\n";
+    }
+    return NULL;
+  }
+
+  // The filename is passed as the document URL so libxml2 keeps reporting
+  // errors against it and still resolves relative references the same way
+  // xmlReadFile did.
+  //
+  // libxml2 copies the buffer into the document, so releasing it here does
+  // not leave the returned tree pointing at freed memory. Verified under
+  // ASAN by clobbering and freeing the buffer before walking the tree.
+  xmlDoc *doc = xmlReadMemory(buf, (int)len, szFilename, NULL, nOptions);
+  delete[] buf;
+
+  return doc;
 }
 
 xmlAttr *icXmlFindAttr(xmlNode *pNode, const char *szAttrName)
