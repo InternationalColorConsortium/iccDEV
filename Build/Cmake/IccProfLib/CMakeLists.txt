@@ -30,6 +30,7 @@ SET( CFILES
     ${SRC_PATH}/IccProfLib/IccEncoding.cpp
     ${SRC_PATH}/IccProfLib/IccEnvVar.cpp
     ${SRC_PATH}/IccProfLib/IccEval.cpp
+    ${SRC_PATH}/IccProfLib/IccHdrBake.cpp
     ${SRC_PATH}/IccProfLib/IccHdrProfile.cpp
     ${SRC_PATH}/IccProfLib/IccHdrToneMap.cpp
     ${SRC_PATH}/IccProfLib/IccIO.cpp
@@ -77,6 +78,7 @@ SET( HEADERS_PUBLIC
   ${SRC_PATH}/IccProfLib/IccEncoding.h
   ${SRC_PATH}/IccProfLib/IccEnvVar.h
   ${SRC_PATH}/IccProfLib/IccEval.h
+  ${SRC_PATH}/IccProfLib/IccHdrBake.h
   ${SRC_PATH}/IccProfLib/IccHdrProfile.h
   ${SRC_PATH}/IccProfLib/IccHdrToneMap.h
   ${SRC_PATH}/IccProfLib/IccIO.h

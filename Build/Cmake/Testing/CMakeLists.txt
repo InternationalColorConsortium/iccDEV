@@ -110,6 +110,7 @@ function(iccdev_add_check_dependencies)
       iccPawgReport
       iccFromCube
       iccFromJson
+      iccHdrFallback
       iccFromXml
       iccJpegDump
       iccPngDump
@@ -1480,6 +1481,59 @@ function(iccdev_add_hdr_profile_test)
     endforeach()
     set_tests_properties(iccdev.hdr-profile-classification PROPERTIES
       ENVIRONMENT_MODIFICATION "${_hdr_profile_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# T4 (HDR profiles): the A2B0/B2A0 fallback bake - the white paper procedure
+# that stores an HDR profile's tone-mapped SDR rendering in a lutAToBType, so
+# that a CMM implementing none of clause 8.10 still reproduces it.
+#
+# The bake is a change of representation, not a second rendering algorithm, and
+# that is what this pins. Three things it catches that look right otherwise.
+# The A curve / CLUT seam is not "curve does the transfer, CLUT does the tone
+# map": an A curve is per channel and holds only [0, 1], while a PQ EOTF
+# reaches ~49 reference whites and the HLG OOTF is a function of all three
+# channels, so the split is the peak-normalised per-channel part against
+# everything else - pinned here as an identity against ToLinear(). The baked
+# matrix is the colorant tags times 32768/65535, because PCSXYZ is
+# u1Fixed15Number; getting that wrong scales every rendering by two and still
+# validates, so the test compares the bake against the CMM's own HDR path at
+# the same target headroom. And the tag is checked after a serialisation round
+# trip, driven with no HDR hint at all, because 16-bit CLUT samples are not the
+# floats that were built and a legacy consumer is the only reader that matters
+# here.
+function(iccdev_add_hdr_bake_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHdrBakeTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hdr-bake.cpp"
+  )
+  target_link_libraries(iccHdrBakeTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccHdrBakeTest)
+
+  add_test(
+    NAME iccdev.hdr-bake
+    COMMAND "$<TARGET_FILE:iccHdrBakeTest>"
+  )
+  set_tests_properties(iccdev.hdr-bake PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;validation;cmm;hdr;regression"
+  )
+  if(WIN32)
+    set(_hdr_bake_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHdrBakeTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _hdr_bake_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hdr-bake PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_hdr_bake_windows_env_mods}"
     )
   endif()
 endfunction()
@@ -3549,6 +3603,7 @@ if(WIN32)
   iccdev_add_hagc_codec_test()
   iccdev_add_hdr_profile_test()
   iccdev_add_hdr_tonemap_test()
+  iccdev_add_hdr_bake_test()
   iccdev_add_pcc_reflectance_observer_range_test()
   iccdev_add_pcs_edge_metadata_test()
   iccdev_add_xyz_negative_z_test()
@@ -3807,6 +3862,7 @@ iccdev_add_mpe_empty_identity_test()
 iccdev_add_hagc_codec_test()
 iccdev_add_hdr_profile_test()
 iccdev_add_hdr_tonemap_test()
+iccdev_add_hdr_bake_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()

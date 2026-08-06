@@ -41,7 +41,8 @@ fi
 
 mkdir -p "$STAGE_DIR"
 
-# 17 tools: dir name -> built js basename (camelCase)
+# dir name -> built js basename (camelCase); the count is taken from the
+# array below rather than repeated, so adding a tool is one edit and not four
 TOOLS=(
     "IccDumpProfile:iccDumpProfile"
     "IccPawgReport:iccPawgReport"
@@ -51,6 +52,7 @@ TOOLS=(
     "IccFromJson:iccFromJson"
     "IccRoundTrip:iccRoundTrip"
     "IccFromCube:iccFromCube"
+    "IccHdrFallback:iccHdrFallback"
     "IccApplyNamedCmm:iccApplyNamedCmm"
     "IccApplyProfiles:iccApplyProfiles"
     "IccApplySearch:iccApplySearch"
@@ -122,7 +124,7 @@ cp -f "$SCRIPT_DIR/regression.js" "$STAGE_DIR/regression.js"
 
 echo ""
 echo "=== WASM stage summary ==="
-echo "  staged tools:  $STAGED / 17"
+echo "  staged tools:  $STAGED / ${#TOOLS[@]}"
 echo "  missing tools: $MISSING"
 echo "  stage dir:     $STAGE_DIR"
 echo "  version:       $VERSION"
@@ -130,6 +132,6 @@ echo ""
 echo "Stage contents (top level):"
 ls -lh "$STAGE_DIR" | sed -n '2,40p'
 
-if [[ $STAGED -lt 17 ]]; then
-    echo "::warning::stage.sh: only $STAGED of 17 tools staged" >&2
+if [[ $STAGED -lt ${#TOOLS[@]} ]]; then
+    echo "::warning::stage.sh: only $STAGED of ${#TOOLS[@]} tools staged" >&2
 fi

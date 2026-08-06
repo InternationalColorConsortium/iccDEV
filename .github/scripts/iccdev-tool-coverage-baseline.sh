@@ -1180,9 +1180,50 @@ fi
 echo ""
 
 # =============================================================================
-# 15. Hybrid Pipeline Integration Test (BuildAndTest.sh)
+# 15. iccHdrFallback (7 tests)
 # =============================================================================
-echo "--- 15. Hybrid Pipeline (BuildAndTest.sh) ---"
+echo "--- 15. iccHdrFallback ---"
+HDRFALLBACK="$TOOLS/IccHdrFallback/iccHdrFallback"
+HDR_HAGC="$ICCDEV_TESTING/HDR/HagcDisplay.icc"
+HDR_NOHAGC="$ICCDEV_TESTING/HDR/HdrDisplayMetadata.icc"
+
+if [ -f "$HDR_HAGC" ]; then
+  run_test "hdrfb-01" "Bake a PQ profile carrying a gain curve" \
+    "$HDRFALLBACK" "$HDR_HAGC" "$OUTDIR/hdrfb-hagc.icc"
+
+  # The small tables are the interesting allocation case as well as the fast
+  # one: a 2-point axis is the smallest grid a CLUT can interpolate over.
+  run_test "hdrfb-02" "Bake with the smallest useful tables" \
+    "$HDRFALLBACK" -grid 2 -curve 2 "$HDR_HAGC" "$OUTDIR/hdrfb-small.icc"
+
+  run_test "hdrfb-03" "Bake with the v4.4 version policy" \
+    "$HDRFALLBACK" -v44 -grid 9 -curve 64 "$HDR_HAGC" "$OUTDIR/hdrfb-v44.icc"
+
+  run_expect_exit "hdrfb-04" "Reject a non-numeric grid size" 1 \
+    "$HDRFALLBACK" -grid 33x "$HDR_HAGC" "$OUTDIR/hdrfb-bad.icc"
+
+  run_expect_exit "hdrfb-05" "Reject an unknown option" 1 \
+    "$HDRFALLBACK" -nosuchoption "$HDR_HAGC" "$OUTDIR/hdrfb-bad.icc"
+fi
+
+if [ -f "$HDR_NOHAGC" ]; then
+  # No gain curve: the bake is the EOTF and the SDR clamp, which is a
+  # different path through the baker rather than a degenerate one.
+  run_test "hdrfb-06" "Bake an HDR profile with no gain curve" \
+    "$HDRFALLBACK" "$HDR_NOHAGC" "$OUTDIR/hdrfb-nohagc.icc"
+fi
+
+# A profile with no cicpTag has no HDR transfer to invert and has to be
+# refused rather than baked as if it were SDR.
+run_expect_exit "hdrfb-07" "Refuse a profile that is not an HDR profile" 3 \
+  "$HDRFALLBACK" "$SRGB" "$OUTDIR/hdrfb-refused.icc"
+
+echo ""
+
+# =============================================================================
+# 16. Hybrid Pipeline Integration Test (BuildAndTest.sh)
+# =============================================================================
+echo "--- 16. Hybrid Pipeline (BuildAndTest.sh) ---"
 HYBRID_DIR="$ICCDEV_TESTING/hybrid"
 if [ "$SKIP_HYBRID" -eq 1 ]; then
   skip_test "hybrid-01" "Hybrid pipeline: 6-phase spectral color management" \

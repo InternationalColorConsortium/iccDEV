@@ -358,38 +358,128 @@ bool CIccHdrTransfer::Init(icUInt8Number nTransferCharacteristics,
  */
 void CIccHdrTransfer::ToLinear(icFloatNumber *dst, const icFloatNumber *src) const
 {
+  // Expressed as the composition of its two halves rather than written out a
+  // second time, so that the split the A2B baker samples through
+  // (ToLinearChannel into a 1-D curve, ChannelToReference into the CLUT) is
+  // the same function this one is, by construction rather than by test.
+  dst[0] = ToLinearChannel(src[0]);
+  dst[1] = ToLinearChannel(src[1]);
+  dst[2] = ToLinearChannel(src[2]);
+
+  ChannelToReference(dst, dst);
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHdrTransfer::ToLinearChannel
+ *
+ * Purpose:
+ *  The part of ToLinear() that acts on one channel at a time, with its output
+ *  normalised to the transfer's own peak rather than to the reference white.
+ *
+ *  Both properties are what make this half storable in a 1-D curve tag: a
+ *  curveType's samples are one channel's and are unsigned 16-bit, so they
+ *  cannot hold either a cross-channel term or a value above 1.0.  Everything
+ *  that violates one of those - the HLG OOTF's dependence on all three
+ *  channels, and the scale that turns peak-normalised light into reference
+ *  white relative light - is in ChannelToReference() instead.
+ *
+ * Args:
+ *  v = one device-encoded channel value
+ *
+ * Return:
+ *  The channel linearised and normalised so that an encoded 1.0 gives 1.0.
+ ****************************************************************************
+ */
+icFloatNumber CIccHdrTransfer::ToLinearChannel(icFloatNumber v) const
+{
+  if (m_nTransfer == icCicpTransferPQ)
+    return icPqEotf(v);
+
+  if (m_nTransfer == icCicpTransferHLG)
+    return icHlgInverseOetf(v);
+
+  return v;
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHdrTransfer::ChannelToReference
+ *
+ * Purpose:
+ *  The remainder of ToLinear(): everything that is not expressible one
+ *  channel at a time, plus the change of normalisation from the transfer's
+ *  own peak to the HDR reference white.
+ *
+ *  For PQ that is a single constant, 10 000 / CRWL.  For HLG it is the OOTF -
+ *  whose gain is a function of the scene luminance of all three channels -
+ *  followed by the same kind of constant, Lw / CRWL.  For Linear there is
+ *  nothing to do: the profile's TRC tags are the linearisation and they
+ *  already produce reference white relative values.
+ *
+ * Args:
+ *  dst = destination triplet, may alias src
+ *  src = peak-normalised linear RGB, i.e. ToLinearChannel() per channel
+ ****************************************************************************
+ */
+void CIccHdrTransfer::ChannelToReference(icFloatNumber *dst, const icFloatNumber *src) const
+{
   if (m_nTransfer == icCicpTransferPQ) {
     icFloatNumber scale = (icFloatNumber)(icPqPeakLuminance / (double)m_referenceWhite);
 
-    dst[0] = icPqEotf(src[0]) * scale;
-    dst[1] = icPqEotf(src[1]) * scale;
-    dst[2] = icPqEotf(src[2]) * scale;
+    dst[0] = src[0] * scale;
+    dst[1] = src[1] * scale;
+    dst[2] = src[2] * scale;
     return;
   }
 
   if (m_nTransfer == icCicpTransferHLG) {
-    icFloatNumber e[3];
-
-    e[0] = icHlgInverseOetf(src[0]);
-    e[1] = icHlgInverseOetf(src[1]);
-    e[2] = icHlgInverseOetf(src[2]);
-
     // Y_s uses the BT.2100 coefficients on the scene-linear triplet, before
     // the gain is applied - the OOTF is defined on scene luminance, not on
     // the display luminance it produces.
-    icFloatNumber ys = (icFloatNumber)(icHlgLumaR * e[0] + icHlgLumaG * e[1] + icHlgLumaB * e[2]);
+    icFloatNumber ys = (icFloatNumber)(icHlgLumaR * src[0] + icHlgLumaG * src[1] + icHlgLumaB * src[2]);
     icFloatNumber scale = icHlgOotfGain(ys, m_hlgGamma) *
                           (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
 
-    dst[0] = e[0] * scale;
-    dst[1] = e[1] * scale;
-    dst[2] = e[2] * scale;
+    dst[0] = src[0] * scale;
+    dst[1] = src[1] * scale;
+    dst[2] = src[2] * scale;
     return;
   }
 
   dst[0] = src[0];
   dst[1] = src[1];
   dst[2] = src[2];
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHdrTransfer::GetPeakReferenceLevel
+ *
+ * Purpose:
+ *  The reference white relative value an encoded 1.0 produces - the top of
+ *  the range ToLinear() can return, and therefore the constant that maps the
+ *  peak-normalised domain of ToLinearChannel() onto the reference white
+ *  relative domain the gain curve and the matrix work in.
+ *
+ *  For HLG this is evaluated at the neutral, where Y_s is 1.0 and the OOTF's
+ *  gain is 1.0; a saturated colour at full amplitude has a lower scene
+ *  luminance and so a lower gain, never a higher one, which is what makes
+ *  this a ceiling rather than a typical value.
+ *
+ * Return:
+ *  10 000 / CRWL for PQ, Lw / CRWL for HLG, 1.0 for Linear.
+ ****************************************************************************
+ */
+icFloatNumber CIccHdrTransfer::GetPeakReferenceLevel() const
+{
+  if (m_nTransfer == icCicpTransferPQ)
+    return (icFloatNumber)(icPqPeakLuminance / (double)m_referenceWhite);
+
+  if (m_nTransfer == icCicpTransferHLG)
+    return (icFloatNumber)((double)m_hlgPeakLuminance / (double)m_referenceWhite);
+
+  return (icFloatNumber)1.0;
 }
 
 /**
@@ -413,17 +503,43 @@ void CIccHdrTransfer::ToLinear(icFloatNumber *dst, const icFloatNumber *src) con
  */
 void CIccHdrTransfer::FromLinear(icFloatNumber *dst, const icFloatNumber *src) const
 {
+  // The same composition as ToLinear(), in the other order: the part that
+  // needs the whole triplet first, then the per-channel encoding.
+  ReferenceToChannel(dst, src);
+
+  dst[0] = FromLinearChannel(dst[0]);
+  dst[1] = FromLinearChannel(dst[1]);
+  dst[2] = FromLinearChannel(dst[2]);
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHdrTransfer::ReferenceToChannel
+ *
+ * Purpose:
+ *  Inverse of ChannelToReference(): reference white relative display light
+ *  back to the peak-normalised per-channel domain.
+ *
+ *  The HLG direction is the one worth reading.  Display light is
+ *  F_D = Lw * Y_s^(g-1) * E_s per channel, so the display luminance formed
+ *  with the same coefficients is Y_D = Lw * Y_s^(g-1) * Y_s = Lw * Y_s^g.
+ *  That gives Y_s = (Y_D / Lw)^(1/g) in closed form, and once Y_s is known
+ *  the per-channel gain is known too - no iteration is needed to undo the
+ *  OOTF.
+ *
+ * Args:
+ *  dst = destination triplet, may alias src
+ *  src = display-linear RGB relative to the HDR reference white
+ ****************************************************************************
+ */
+void CIccHdrTransfer::ReferenceToChannel(icFloatNumber *dst, const icFloatNumber *src) const
+{
   if (m_nTransfer == icCicpTransferPQ) {
     icFloatNumber scale = (icFloatNumber)((double)m_referenceWhite / icPqPeakLuminance);
 
-    // Clamped at the PQ system's own ceiling.  Reference-white-relative
-    // values above 10 000 / CRWL are luminances PQ has no code for, and
-    // feeding one to the inverse EOTF returns an encoded value above 1.0 -
-    // out of range for every consumer of the result.  Clamping here keeps the
-    // out-of-gamut handling in the one place that knows where the gamut ends.
-    dst[0] = icPqInverseEotf(icHdrClampUnit(src[0] * scale));
-    dst[1] = icPqInverseEotf(icHdrClampUnit(src[1] * scale));
-    dst[2] = icPqInverseEotf(icHdrClampUnit(src[2] * scale));
+    dst[0] = src[0] * scale;
+    dst[1] = src[1] * scale;
+    dst[2] = src[2] * scale;
     return;
   }
 
@@ -452,17 +568,44 @@ void CIccHdrTransfer::FromLinear(icFloatNumber *dst, const icFloatNumber *src) c
       return;
     }
 
-    // Same ceiling argument as PQ: the HLG OETF's domain is scene-linear
-    // [0, 1] and its inverse is only defined there.
-    dst[0] = icHlgOetf(icHdrClampUnit(fd[0] / gain));
-    dst[1] = icHlgOetf(icHdrClampUnit(fd[1] / gain));
-    dst[2] = icHlgOetf(icHdrClampUnit(fd[2] / gain));
+    dst[0] = fd[0] / gain;
+    dst[1] = fd[1] / gain;
+    dst[2] = fd[2] / gain;
     return;
   }
 
   dst[0] = src[0];
   dst[1] = src[1];
   dst[2] = src[2];
+}
+
+/**
+ ****************************************************************************
+ * Name: CIccHdrTransfer::FromLinearChannel
+ *
+ * Purpose:
+ *  Inverse of ToLinearChannel(): one peak-normalised linear channel back to
+ *  its device encoding.
+ *
+ *  The clamp is each system's own ceiling rather than a convenience.  A
+ *  peak-normalised value above 1.0 is a luminance the transfer has no code
+ *  for, and both inverse functions return something above 1.0 for one - out
+ *  of range for every consumer of the result.  Clamping here keeps the
+ *  out-of-gamut handling in the one place that knows where the gamut ends.
+ *
+ * Args:
+ *  v = one peak-normalised linear channel value
+ ****************************************************************************
+ */
+icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
+{
+  if (m_nTransfer == icCicpTransferPQ)
+    return icPqInverseEotf(icHdrClampUnit(v));
+
+  if (m_nTransfer == icCicpTransferHLG)
+    return icHlgOetf(icHdrClampUnit(v));
+
+  return v;
 }
 
 /**

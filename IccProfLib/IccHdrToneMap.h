@@ -239,6 +239,34 @@ public:
   /** Inverse of ToLinear(). */
   void FromLinear(icFloatNumber *dst, const icFloatNumber *src) const;
 
+  /**
+   * ToLinear() split at the seam a lutAToBType has between its A curves and
+   * its CLUT: the per-channel half, whose output is normalised to the
+   * transfer's own peak so that it stays inside a curveType's 0..1 range.
+   *
+   * ToLinear() is literally ToLinearChannel() on each channel followed by
+   * ChannelToReference(), so a baker that samples the two separately gets the
+   * same function and not a second transcription of it.
+   */
+  icFloatNumber ToLinearChannel(icFloatNumber v) const;
+
+  /** The rest of ToLinear(): the HLG OOTF, which is a function of the whole
+   * triplet, and the scale onto reference white relative units.  dst and src
+   * may alias. */
+  void ChannelToReference(icFloatNumber *dst, const icFloatNumber *src) const;
+
+  /** FromLinear() split at the same seam, in the other order: the triplet
+   * half, which undoes the OOTF and the reference white scale. */
+  void ReferenceToChannel(icFloatNumber *dst, const icFloatNumber *src) const;
+
+  /** FromLinear()'s per-channel half - the device encoding of one
+   * peak-normalised linear value, clamped at the transfer's own ceiling. */
+  icFloatNumber FromLinearChannel(icFloatNumber v) const;
+
+  /** The reference white relative value an encoded 1.0 produces, i.e. the
+   * constant ChannelToReference() applies at the neutral. */
+  icFloatNumber GetPeakReferenceLevel() const;
+
   icUInt8Number GetTransferCharacteristics() const { return m_nTransfer; }
   icFloatNumber GetContentReferenceWhite() const { return m_referenceWhite; }
 
