@@ -345,6 +345,10 @@ then
 	iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 	iccFromXml HagcHexData.xml HagcHexData.icc
 	iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
+	iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
+	iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
+	iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
+	iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc
 	set +x
 fi
 cd ..

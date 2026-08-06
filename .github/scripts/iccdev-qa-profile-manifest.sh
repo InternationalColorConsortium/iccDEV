@@ -113,6 +113,10 @@ classify_rationale() {
       # exits 0 for it - so it is a distinct kind of negative from a critical one.
       if grep -Fq 'not strictly increasing' "$log"; then
         echo "negative fixture: HAGC gain curve control point X values must be strictly increasing"
+      elif grep -Fq 'HDR: cicp TransferCharacteristics' "$log"; then
+        echo "negative fixture: an HDR Profile may only declare TransferCharacteristics 8, 16 or 18"
+      elif grep -Fq 'without its paired BToA0Tag' "$log"; then
+        echo "negative fixture: an AToBx tag requires its paired BToAx tag"
       else
         echo "negative fixture: profile violates the specification and must be reported"
       fi

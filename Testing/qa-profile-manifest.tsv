@@ -162,6 +162,10 @@ HDR/HagcCommonParams.icc	positive	valid	0	none	generated	-	conformant example pr
 HDR/HagcDisplay.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcHexData.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
 HDR/HagcInvalidXOrder.icc	negative	noncompliant	0	none	generated	-	negative fixture: HAGC gain curve control point X values must be strictly increasing
+HDR/HdrCicpUnspecified.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrDisplayMetadata.icc	positive	valid	0	none	generated	-	conformant example profile; validates clean
+HDR/HdrInvalidTransfer.icc	negative	noncompliant	0	none	generated	-	negative fixture: an HDR Profile may only declare TransferCharacteristics 8, 16 or 18
+HDR/HdrMissingBToA0.icc	negative	noncompliant	0	none	generated	-	negative fixture: an AToBx tag requires its paired BToAx tag
 ICS/Lab_float-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_float-IllumA_2deg-Part2.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)
 ICS/Lab_int-D65_2deg-Part1.icc	compatibility	warning	0	none	generated	-	baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)

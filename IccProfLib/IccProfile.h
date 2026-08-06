@@ -239,6 +239,13 @@ protected:
   bool CheckTagExclusion(std::string &sReport) const;
   icValidateStatus CheckHeader(std::string &sReport, const CIccProfile *pParentProfile = NULL) const;
   icValidateStatus CheckTagTypes(std::string &sReport) const;
+
+  // ICC.1 clause 8.10 HDR Profiles. Kept out of CheckRequiredTags() because
+  // what it checks is not tag presence: the rules span the header version, a
+  // cicpTag field value, and the pairing of AToBx with BToAx, and each needs a
+  // message naming the clause it comes from rather than the shared
+  // "Critical tag(s) missing" line.
+  icValidateStatus CheckHdrProfile(std::string &sReport) const;
   bool IsTypeValid(icTagSignature tagSig, icTagTypeSignature typeSig,
                    icStructSignature structSig=icSigUndefinedStruct,
                    icArraySignature arraySig=icSigUndefinedArray) const;

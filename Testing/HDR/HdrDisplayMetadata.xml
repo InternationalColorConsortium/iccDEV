@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A conforming RGB HDR Display profile per clause 8.10, carrying HDR Image and
+  HDR Display metadata but no HAGC tag.
+
+  This is the shape NOTE 3 of 8.10.1 describes: "the presence of a conforming
+  cicpTag is the sole tag-level requirement that distinguishes an HDR Profile
+  from a conventional three-component matrix-based Input or Display profile".
+  Every tone-mapping descriptor of 8.10.3 is optional, so a profile with none
+  of them is still a conforming HDR Profile, and the tone-mapping operator is
+  the consuming CMM's to supply (8.10.2 b).
+
+  The metadataTag exercises the display-headroom precedence of 8.10.5. All
+  three HDR Display entries are present and they deliberately DISAGREE:
+
+    DERH = 4.0
+    DCV  max luminance 1000, DRWL 203   ->  1000/203 = 4.926
+
+  NOTE 13 makes that disagreement the point rather than a mistake: "When all
+  three entries are present but disagree, the priority list above (a to d) is
+  authoritative: DERH wins, and the derived values from DCV/DRWL are not
+  recomputed." A reader that averages, cross-checks, or prefers the derived
+  value returns 4.926 here; a correct one returns 4.0 and reports that rule a)
+  produced it.
+
+  REGISTRY CAVEAT: the ICC dictType Metadata Registry defines the names and
+  encodings of these entries and is not reproduced in the amendment, so the
+  key names and the value syntax below are reconstructions. See the ASSUMED
+  markers in IccProfLib/IccHdrProfile.cpp. This fixture pins the behaviour of
+  the reader against those assumptions; if the registry contradicts them, the
+  fixture changes with the parser.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-05T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="false" UseWithEmbeddedDataOnly="false"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <!-- The canonical sRGB/BT.709 colorants adapted to the PCS adopted white,
+         which is what a conforming v4 matrix profile carries: the encoded values
+         are relative to D50, not to the display's own D65. The
+         chromaticAdaptationTag below is the matrix that put them there, so a
+         consumer recovering the source primaries per clause 10.3 NOTE 1 has to
+         apply its inverse to get back to D65. -->
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.436004638672" Y="0.222503662109" Z="0.013900756836"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.385101318359" Y="0.716903686523" Z="0.097106933594"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.143096923828" Y="0.060592651367" Z="0.713897705078"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <!-- Standard Bradford D65 to D50 adaptation. -->
+    <chromaticAdaptationTag> <s15Fixed16ArrayType>
+      <Array>
+        1.047882  0.022919 -0.050201
+        0.029587  0.990479 -0.017059
+       -0.009232  0.015076  0.751678
+      </Array>
+    </s15Fixed16ArrayType> </chromaticAdaptationTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="1" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
+
+    <metaDataTag> <dictType>
+      <DictEntry Name="CRWL" Value="203.0"/>
+      <DictEntry Name="CLL" Value="1000.0 400.0"/>
+      <DictEntry Name="MDCV" Value="0.708 0.292 0.170 0.797 0.131 0.046 0.3127 0.3290 1000.0 0.005"/>
+      <DictEntry Name="DERH" Value="4.0"/>
+      <DictEntry Name="DRWL" Value="203.0"/>
+      <DictEntry Name="DCV" Value="0.640 0.330 0.300 0.600 0.150 0.060 0.3127 0.3290 1000.0 0.005"/>
+    </dictType> </metaDataTag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile with HDR Image and HDR Display metadata]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>

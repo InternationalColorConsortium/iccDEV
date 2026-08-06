@@ -35,7 +35,7 @@
 <IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
-    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileVersion>4.50</ProfileVersion>
     <ProfileDeviceClass>mntr</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
@@ -76,6 +76,10 @@
     <mediaWhitePointTag> <XYZArrayType>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="9" TransferCharacteristics="18" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
 
     <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
       <HagcMetadata ApplicationVersion="1" MinApplicationVersion="1"

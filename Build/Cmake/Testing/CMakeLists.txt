@@ -1435,6 +1435,55 @@ function(iccdev_add_hagc_codec_test)
   endif()
 endfunction()
 
+# T2 (HDR profiles): the clause 8.10 HDR Profile classifier, the ITU-T H.273
+# Table 2 primaries lookup, the ColourPrimaries = 2 recovery of clauses
+# 9.2.17/10.3, and the HDR Display headroom precedence of 8.10.5.
+#
+# Three of those are silently wrong-able. The chromatic adaptation in the
+# ColourPrimaries = 2 recovery has to be applied *inverted* - the matrix column
+# tags are encoded against the PCS adopted white and the chad matrix is what put
+# them there - and getting the direction wrong still yields plausible
+# chromaticities, just D50 ones instead of the display's own. The 8.10.5
+# precedence is normative about which value wins when the entries disagree
+# (NOTE 13: DERH wins and the DCV/DRWL derivation "shall not be recomputed"), so
+# only a deliberately inconsistent fixture distinguishes a correct reader from a
+# fallback chain. And the conforming/intended split has to keep the 8.10.3 c)
+# pairing rule outside it, because a fully conforming profile can still break it.
+function(iccdev_add_hdr_profile_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHdrProfileTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hdr-profile-classification.cpp"
+  )
+  target_link_libraries(iccHdrProfileTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccHdrProfileTest)
+
+  add_test(
+    NAME iccdev.hdr-profile-classification
+    COMMAND "$<TARGET_FILE:iccHdrProfileTest>"
+  )
+  set_tests_properties(iccdev.hdr-profile-classification PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;hdr;cicp;regression"
+  )
+  if(WIN32)
+    set(_hdr_profile_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHdrProfileTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _hdr_profile_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hdr-profile-classification PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_hdr_profile_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1748: CIccPcsXform::ConnectFirst()/ConnectLast() build the PCS transforms at the two
 # outer edges of a CMM chain, and CheckPCSConnections() pushes them onto the xform list
 # like any other xform. Unlike Connect(), they left m_srcSpace/m_nSrcSamples/m_dstSpace/
@@ -3444,6 +3493,7 @@ if(WIN32)
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_mpe_empty_identity_test()
   iccdev_add_hagc_codec_test()
+  iccdev_add_hdr_profile_test()
   iccdev_add_pcc_reflectance_observer_range_test()
   iccdev_add_pcs_edge_metadata_test()
   iccdev_add_xyz_negative_z_test()
@@ -3700,6 +3750,7 @@ iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
 iccdev_add_hagc_codec_test()
+iccdev_add_hdr_profile_test()
 iccdev_add_pcc_reflectance_observer_range_test()
 iccdev_add_pcs_edge_metadata_test()
 iccdev_add_xyz_negative_z_test()

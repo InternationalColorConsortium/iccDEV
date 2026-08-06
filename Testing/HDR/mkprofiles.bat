@@ -20,3 +20,11 @@ iccFromXml HagcDisplay.xml HagcDisplay.icc
 iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 iccFromXml HagcHexData.xml HagcHexData.icc
 iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
+
+REM Clause 8.10 HDR Profile coverage: a conforming profile carrying HDR Image and
+REM HDR Display metadata but no tone-mapping descriptor, and two negatives for the
+REM TransferCharacteristics restriction and the AToBx/BToAx pairing rule.
+iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
+iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc
+iccFromXml HdrInvalidTransfer.xml HdrInvalidTransfer.icc
+iccFromXml HdrMissingBToA0.xml HdrMissingBToA0.icc

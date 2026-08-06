@@ -33,7 +33,7 @@
 <IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
-    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileVersion>4.50</ProfileVersion>
     <ProfileDeviceClass>mntr</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
@@ -74,6 +74,19 @@
     <mediaWhitePointTag> <XYZArrayType>
       <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
     </XYZArrayType> </mediaWhitePointTag>
+
+    <!-- ColourPrimaries 2 (Unspecified) is not "unknown" here: the CICP amendment
+         to clause 9.2.17 makes it a directive to recover the primaries from this
+         profile's own red/green/blue colorant tags and media white point. These
+         colorants are sRGB/BT.709, so a correct recovery yields BT.709
+         chromaticities and D50 white, not D65, because there is no
+         chromaticAdaptationTag and clause 10.3 NOTE 2 says the profile's actual
+         adopted white is then the PCS adopted white. TransferCharacteristics 8
+         (Linear) pairs with the zero-alternate HAGC block below, which says no
+         tone mapping is to be performed. -->
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="2" TransferCharacteristics="8" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
 
     <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
       <HexData>

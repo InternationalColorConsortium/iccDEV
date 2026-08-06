@@ -189,7 +189,8 @@ authorization from SunSoft Inc.
 #define icVersionNumberV4               0x04000000     /* 4.0, BCD */
 #define icVersionNumberV4_2             0x04200000     /* 4.2, BCD */
 #define icVersionNumberV4_3             0x04300000     /* 4.3, BCD */
-#define icVersionNumberV4_4             0x04400000     /* 4.3, BCD */
+#define icVersionNumberV4_4             0x04400000     /* 4.4, BCD */
+#define icVersionNumberV4_5             0x04500000     /* 4.5, BCD */
 #define icVersionNumberV5               0x05000000     /* 5.0, BCD */
 #define icVersionNumberV5_1             0x05100000     /* 5.1, BCD */
 

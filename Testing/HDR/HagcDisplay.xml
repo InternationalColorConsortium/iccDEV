@@ -24,7 +24,7 @@
 <IccProfile>
   <Header>
     <PreferredCMMType>ICCD</PreferredCMMType>
-    <ProfileVersion>4.40</ProfileVersion>
+    <ProfileVersion>4.50</ProfileVersion>
     <ProfileDeviceClass>mntr</ProfileDeviceClass>
     <DataColourSpace>RGB </DataColourSpace>
     <PCS>XYZ </PCS>
