@@ -3075,6 +3075,52 @@ function(iccdev_add_encoding_lumamtx_test)
   endif()
 endfunction()
 
+# icConvertEncodingProfile layered a colour-encoding profile's local overrides by
+# calling DeleteElem then AttachElem on pStruct -- the struct it was iterating --
+# instead of on pParams, the copy of the base encoding profile's params. DeleteElem
+# erases the list node and deletes the tag, so the loop read back an entry it had
+# just freed (heap use-after-free), advanced an erased iterator (a non-terminating
+# walk), and never wrote pParams at all, leaving the override silently discarded.
+# The regression asserts the override reaches the converter and that the profile's
+# own struct is left untouched (#1991). Against the unfixed library the call faults
+# before those assertions are reached -- heap-use-after-free under ASAN, exit 139
+# unsanitized -- and the timeout guards the erased-iterator walk, which does not
+# terminate when the read lands on still-mapped memory.
+function(iccdev_add_encoding_override_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccEncodingOverrideTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/encoding-override-uaf.cpp"
+  )
+  target_link_libraries(iccEncodingOverrideTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccEncodingOverrideTest)
+
+  add_test(
+    NAME iccdev.encoding-override-uaf
+    COMMAND "$<TARGET_FILE:iccEncodingOverrideTest>"
+  )
+  set_tests_properties(iccdev.encoding-override-uaf PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;encoding;issue-1991;regression"
+  )
+  if(WIN32)
+    set(_encoverride_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccEncodingOverrideTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _encoverride_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.encoding-override-uaf PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_encoverride_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # CIccPRMG::GetChroma normalized an arbitrary hue angle into [0, 360) with
 # "while (h < 0.0) h += 360.0;" / "while (h >= 360.0) h -= 360.0;". Those loops do
 # not terminate once |h| is large enough that 360 falls below the float's ULP
@@ -3419,6 +3465,7 @@ if(WIN32)
   iccdev_add_datetime_parse_test()
   iccdev_add_encoding_surround_test()
   iccdev_add_encoding_lumamtx_test()
+  iccdev_add_encoding_override_test()
   iccdev_add_parser_restore_calls_test()
   iccdev_add_tag_layout_shared_data_test()
   iccdev_add_pawg_q2_tonecurves_test()
@@ -3676,6 +3723,7 @@ iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()
 iccdev_add_encoding_surround_test()
 iccdev_add_encoding_lumamtx_test()
+iccdev_add_encoding_override_test()
 iccdev_add_parser_restore_calls_test()
 iccdev_add_tag_layout_shared_data_test()
 iccdev_add_pawg_q2_tonecurves_test()

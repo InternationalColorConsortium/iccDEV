@@ -655,15 +655,37 @@ icStatusEncConvert icConvertEncodingProfile(CIccProfilePtr &newIcc, CIccProfile 
 
         //Now Copy Overrides into pParams (if they exist in pEncodeIcc
         CIccTag *pOverridesTag = pEncodeIcc->FindTagOfType(icSigColorEncodingParamsTag, icSigTagStructType);
-        if (pOverridesTag) {
+        // pParams is the NewCopy of the base profile's params taken just above,
+        // and is the struct the overrides belong in. Both mutations below used to
+        // target pStruct -- pEncodeIcc's own struct, the one being iterated -- which
+        // made this loop delete each entry and re-attach a copy of itself while
+        // leaving pParams untouched, so no override ever reached the conversion.
+        // Writing to pParams instead is what the comment above describes, and it
+        // also removes the memory errors: DeleteElem erases the list node and frees
+        // the tag, so aiming it at pStruct invalidated `entry` (the subsequent
+        // entry++ walked a freed node) and freed the very tag the next line read
+        // back through it. pParams is a different struct, so iterating pStruct stays
+        // valid and the borrowed source tag is never freed (#1991).
+        if (pOverridesTag && pParams) {
           CIccTagStruct *pStruct = (CIccTagStruct*)pOverridesTag;
           TagEntryList *pTags = pStruct->GetElemList();
           if (pTags) {
             TagEntryList::iterator entry;
             for (entry=pTags->begin(); entry!=pTags->end(); entry++) {
               if (entry->pTag) {
-                pStruct->DeleteElem(entry->TagInfo.sig);
-                pStruct->AttachElem(entry->TagInfo.sig, entry->pTag->NewCopy());
+                // Copy first: on an allocation failure the base value is left in
+                // place rather than deleted and replaced with nothing. AttachElem
+                // dereferences its tag argument unguarded to set the parent object,
+                // so a null copy must never reach it.
+                CIccTag *pCopy = entry->pTag->NewCopy();
+                if (pCopy) {
+                  pParams->DeleteElem(entry->TagInfo.sig);
+                  // AttachElem refuses a signature that is still present and does
+                  // not take ownership when it does, so the copy is ours to free on
+                  // that path. The DeleteElem above should already have cleared it.
+                  if (!pParams->AttachElem(entry->TagInfo.sig, pCopy))
+                    delete pCopy;
+                }
               }
             }
           }
