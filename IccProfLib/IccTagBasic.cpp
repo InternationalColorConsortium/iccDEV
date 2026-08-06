@@ -4618,12 +4618,31 @@ CIccTagCicp::CIccTagCicp()
  *
  * Purpose: Copy Constructor
  *
+ *  The body was empty, so every copy of a cicpTag came out with all four
+ *  fields *uninitialized* - the default constructor is not delegated to, and
+ *  the members are plain icUInt8Numbers with no initialiser of their own.
+ *  NewCopy() is this constructor, and CIccProfile's own copy constructor
+ *  copies each tag through NewCopy(), so copying a profile - which
+ *  CIccXform::Create(CIccProfile&) does on every call - silently replaced its
+ *  CICP fields with whatever was on the heap. Nothing in the library read
+ *  those fields until clause 8.10 made the transfer characteristic decide
+ *  whether a profile is an HDR Profile at all, which is how a profile that
+ *  classifies as conforming when read classifies as merely HDR-intended
+ *  when copied.
+ *
+ *  It is also an uninitialized read in its own right: Write(), Describe() and
+ *  Validate() all read the four members straight out.
+ *
  * Args:
  *  ITCICP = The CIccTagCicp object to be copied
  *****************************************************************************
  */
-CIccTagCicp::CIccTagCicp(const CIccTagCicp& /* ITXYZ */)
+CIccTagCicp::CIccTagCicp(const CIccTagCicp& ITCICP)
 {
+  m_nColorPrimaries = ITCICP.m_nColorPrimaries;
+  m_nTransferCharacteristics = ITCICP.m_nTransferCharacteristics;
+  m_nMatrixCoefficients = ITCICP.m_nMatrixCoefficients;
+  m_nVideoFullRangeFlag = ITCICP.m_nVideoFullRangeFlag;
 }
 
 
