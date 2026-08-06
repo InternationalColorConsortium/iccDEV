@@ -621,7 +621,13 @@ bool icHagcMetadata::UnpackFields(const icUInt8Number *pData, icUInt32Number nSi
   m_bCommonComponentMixing = bCommonMixing;
   m_bCommonCurveParameters = bCommonCurve;
 
-  /* Table 2, bytes k+4 to k+19.  The table lists the array unconditionally but
+  /* PROPOSAL-ISSUE HAGC-01 (draft text; reads as an editing artifact) -- Table 2
+   * lists the 16-byte custom chromaticity array unconditionally while 1.2.2.7
+   * defines it only for mode 3.  The tag is variable length, so the two
+   * readings desynchronise every later record by sixteen bytes.  Resolved here
+   * as present if and only if mode 3.
+   *
+   * Table 2, bytes k+4 to k+19.  The table lists the array unconditionally but
    * 1.2.2.7 defines its contents only for mode 3, and for modes 0 to 2 the
    * chromaticities are fully determined by the named H.273 entry, so there is
    * nothing for sixteen bytes to carry.  Reading them only for mode 3 is the
@@ -1373,6 +1379,12 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
 
   if (m_metadata.m_bReferenceWhiteToneMapping) {
     /* Not a defect in the tag: the parameters are legitimately absent and are
+     * PROPOSAL-ISSUE HAGC-05 (external dependency) -- with this flag set, four
+     * header fields are deliberately zeroed in the file and their effective
+     * values come from clause C.3.8 of SMPTE ST 2094-50:2026, which is not
+     * supplied with the amendment.  The tag is therefore not merely
+     * unrenderable but unparseable without that clause.
+     *
      * meant to be derived per clause C.3.8, which this implementation does not
      * have.  Saying so is more honest than validating a curve we cannot build. */
     sReport += icMsgValidateInformation;
@@ -1513,7 +1525,13 @@ icValidateStatus CIccTagHagc::Validate(std::string sigPath, std::string &sReport
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
-  /* Proposal 1.1 also requires the embedded and not-independent header flags
+  /* PROPOSAL-ISSUE HAGC-02 (draft text; a field may have been dropped in
+   * revision) -- the proposal requires the tag to indicate whether the curve is
+   * image-specific, but no field in Tables 1 to 3 carries that indication, so
+   * the 1.1 requirement below cannot be tested.  Resolved here by not checking
+   * it at all rather than by guessing.
+   *
+   * Proposal 1.1 also requires the embedded and not-independent header flags
    * to be set when the curve is image-specific.  That condition is deliberately
    * not checked: the proposal's summary says the tag "shall indicate whether
    * the included Headroom Adaptive Gain Curve is image-specific", but no field

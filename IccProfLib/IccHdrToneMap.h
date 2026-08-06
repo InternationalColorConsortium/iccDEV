@@ -182,6 +182,24 @@ ICCPROFLIB_API icFloatNumber icHlgOotfGain(icFloatNumber sceneLuminance, icFloat
  *  conventions needs the content reference white luminance of clause 8.10.4,
  *  which is why it is a member here rather than a caller's concern.
  *
+ *  PROPOSAL-ISSUE HDR-01 (design-level; the highest-value item in the set) --
+ *  clause 8.10.2 never states where the conversion between those two
+ *  conventions happens.  Step a) leaves PQ as a fraction of 10 000 cd/m2 and
+ *  HLG scene-referred; step c)'s matrix columns and the HAGC control-point X
+ *  coordinates both expect reference-white-relative light (the HAGC encoding
+ *  caps X at 64.0, six stops over reference white, so it is plainly not a
+ *  fraction of 10 000 cd/m2); step b) mentions the CRWL of 8.10.4 only as
+ *  something that "may inform" the operator.  A literal reading evaluates the
+ *  gain curve at an abscissa wrong by 10 000 / CRWL, about 49x by default,
+ *  producing a smooth and uniformly wrong image that nothing detects.  This
+ *  class owns the conversion so that the ruling has one place to live.
+ *
+ *  PROPOSAL-ISSUE WP-03 (design-level) -- the A2B0 white paper describes the
+ *  HLG A curve as the BT.2100 EOTF "with the system gamma included", which
+ *  cannot exist: the OOTF's gain is a function of all three channels, so it
+ *  has no per-channel form in any revision.  Resolved by the split below -
+ *  the inverse OETF is per channel, the OOTF is not.
+ *
  *  This is also why the class works on a whole RGB triplet rather than one
  *  channel at a time: the HLG OOTF's gain is a function of the scene
  *  luminance of all three channels, so an HLG "per-channel curve" does not
@@ -283,6 +301,12 @@ protected:
  * Derive the control-point slopes of a gain curve whose PCHIP Slope flag is
  * set, i.e. whose slope angles were not carried in the tag (HAGC proposal
  * 1.1.3.5).
+ *
+ * PROPOSAL-ISSUE HAGC-05 (external dependency) -- the derivation this function
+ * implements lives in a clause of SMPTE ST 2094-50:2026 that is not supplied
+ * with the amendment, so the amendment is not independently implementable here.
+ * UsesDerivedSlopes() exists so a caller can report when a curve relied on the
+ * reconstruction below.
  *
  * RECONSTRUCTION, NOT A TRANSCRIPTION.  Clause 1.1.3.5 delegates the
  * derivation to clause C.3.9 of SMPTE ST 2094-50:2026, which this

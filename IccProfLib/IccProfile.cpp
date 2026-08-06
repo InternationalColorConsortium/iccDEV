@@ -3398,6 +3398,11 @@ icValidateStatus CIccProfile::CheckTagLayout(CIccIO *pIO, std::string &sReport) 
 *
 * Purpose: Apply the rules of ICC.1 clause 8.10 (HDR Profiles) to this profile.
 *
+*  PROPOSAL-ISSUE HDR-02 (design-level) -- see icGetHdrProfileInfo(). The
+*  clause as written gives a validator nothing to test, and the intended/
+*  conforming split below is this implementation's answer to that, not
+*  something the amendment asks for.
+*
 *  Clause 8.10.1's definition of an HDR Profile is self-satisfying: it requires
 *  a cicpTag whose TransferCharacteristics is 8, 16 or 18, so a profile that
 *  puts anything else there simply is not an HDR Profile and the rule can never
@@ -3473,7 +3478,15 @@ icValidateStatus CIccProfile::CheckHdrProfile(std::string &sReport) const
     rv = icMaxStatus(rv, icValidateNonCompliant);
   }
 
-  /* Clause 8.10.1 and 4.7: an HDR Profile "shall encode a profile format
+  /* PROPOSAL-ISSUE HDR-04 / WP-04 (sequencing artifact across the set) -- the
+   * HAGC amendment (2026-04-28) calls its tag "an optional version 4 tag", the
+   * A2B0 white paper (2026-05-17) writes header version 4.4, and clause 8.10.1
+   * (2026-07-13) then requires 4.5.0.0. The three documents were written in that
+   * order and have not been reconciled, so a 4.4 profile carrying HDR content is
+   * conforming to the document it was authored against. Warning, not
+   * non-compliance, until the set agrees.
+   *
+   * Clause 8.10.1 and 4.7: an HDR Profile "shall encode a profile format
    * version of 4.5.0.0". Warning for the same reason as the cicpTag above -
    * the HAGC tag's own amendment calls it "an optional version 4 tag" and does
    * not require 4.5, so a 4.4 profile carrying one is not violating the

@@ -93,7 +93,8 @@ class CIccCurve;
  * the error on steeply curved gains noticeably at about 2.5 times the CLUT
  * storage, and 17 is the smallest size worth writing.
  *
- * What the grid size buys is bounded by something it cannot fix.  At the gain
+ * PROPOSAL-ISSUE HAGC-06 (design consequence; candidate NOTE for the annex) --
+ * what the grid size buys is bounded by something it cannot fix.  At the gain
  * curve's last control point the HAGC annex's extrapolation makes the tone
  * map flat, so the surface being sampled has a crease rather than a curve,
  * and no interpolation over any grid reproduces a crease.  Measured on
@@ -112,6 +113,18 @@ class CIccCurve;
  * L^(1/icHdrBakeCurveExponent) and the CLUT raises its input coordinate back
  * to that power.
  *
+ * PROPOSAL-ISSUE WP-01 (draft text; plausibly an editing artifact, but it must
+ * be resolved either way) -- the white paper's step 1 normalises L "so that the
+ * reference-white luminance equals 1.0", and its A-curve section then justifies
+ * the fifth root by saying a 16-bit curveType "cannot represent values outside
+ * [0,1]".  The two cannot both hold: under reference-white normalisation PQ's
+ * peak is 10 000/CRWL, about 49.26, and 49.26^(1/5) = 2.18 is still outside
+ * [0,1].  The only self-consistent reading is that the curve holds
+ * PEAK-normalised light, with the 10 000/CRWL constant applied inside the CLUT,
+ * and that is what is implemented here - see GetPeakReferenceLevel().  The two
+ * readings differ by ~49x at the CLUT input and both produce a file that
+ * validates and renders something.
+ *
  * A fifth root is what the white paper specifies, for two reasons that both
  * still hold here.  It maps the working range of an HDR transfer into [0, 1],
  * which an unsigned 16-bit curveType cannot otherwise hold - PQ's peak is
@@ -124,6 +137,13 @@ class CIccCurve;
  * The target headroom the bake is evaluated at, in the linear ratio the
  * CIccCreateHdrXformHint uses: 1.0, i.e. a display whose peak luminance is
  * the HDR reference white.
+ *
+ * PROPOSAL-ISSUE HDR-03 (design-level; a decision the group has not taken) --
+ * 8.10.6 strongly recommends the AToB0/BToA0 fallback pair but never says what
+ * it should contain, and NOTE 5 puts H_target outside the profile, so a
+ * consumer of a baked tag cannot recover the headroom it was baked at.  Two
+ * conforming authors can therefore ship fallbacks differing by stops.  Fixed
+ * here at 1.0 for the encoding reason below.
  *
  * This is not a parameter and should not become one.  A baked CLUT's samples
  * are unsigned 16-bit and so cannot carry a value above 1.0, which is exactly
@@ -154,7 +174,15 @@ typedef enum {
    * of the sub-class it conforms to. */
   icHdrBakeVersionKeep = 0,
 
-  /** Set the header to 4.4.0.0, as the white paper's "Tag assembly and
+  /** PROPOSAL-ISSUE WP-04 (sequencing artifact) -- the white paper (2026-05-17)
+   * writes header version 4.4, and clause 8.10.1 (2026-07-13) later made
+   * 4.5.0.0 a requirement of the class, so following the paper strips a
+   * conforming profile of the classification the amendment gives it.  The
+   * paper's own parenthetical "(or 4.5 after acceptance...)" shows it tracking a
+   * target that had not landed.  The set needs reconciling; until then this is
+   * opt-in and the default leaves the version alone.
+   *
+   * Set the header to 4.4.0.0, as the white paper's "Tag assembly and
    * profile patching" does, for consumers that reject a version they do not
    * know.  The profile then no longer classifies as an HDR Profile under
    * clause 8.10.1 - the fallback tags are all such a consumer would have
@@ -222,8 +250,10 @@ ICCPROFLIB_API void icHdrBakeParamsInit(icHdrBakeParams &params);
  *              encoding.
  *    B curves  identity.
  *
- *  The white paper describes the tag as A curves, CLUT and matrix with the M
- *  and B curves absent.  That combination is not one of the four ICC.1 10.12
+ *  PROPOSAL-ISSUE WP-02 (design-level oversight, not an artifact - the paper's
+ *  table and its prose agree with each other and both are outside what ICC.1
+ *  10.12 permits).  The white paper describes the tag as A curves, CLUT and
+ *  matrix with the M and B curves absent.  That combination is not one of the four ICC.1 10.12
  *  permits, so the identity M and B curves above are written instead; they
  *  cost 24 bytes together and make the tag legal for the readers the whole
  *  procedure exists to serve.
@@ -235,6 +265,13 @@ ICCPROFLIB_API void icHdrBakeParamsInit(icHdrBakeParams &params);
  *  the CLUT produce the device encoding outright is the obvious shortcut and
  *  is wrong for the reason above, in the direction where it does visible
  *  damage - see BtoAClutOp().
+ *
+ *  PROPOSAL-ISSUE WP-05 (gap across the set) -- the white paper covers only the
+ *  AToB0, while ICC.1 8.3.2 and clause 8.10.6 both want the pair, so an author
+ *  following it produces half of what the amendment asks for.  The only
+ *  guidance for the other half is HAGC annex 2.2, two sentences that do not
+ *  mention where the compression belongs; the shortcut it reads as produces a
+ *  dark PQ pixel at roughly half its input code.
  *
  *  It is annex 2.2's first option, the inverted gain curve sampled on its own
  *  uniform grid, rather than its second, a numerical inversion of the baked

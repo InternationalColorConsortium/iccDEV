@@ -921,6 +921,14 @@ CIccTagLutAtoB *CIccHdrBaker::CreateAtoB() const
  *  numerical inversion of the tag built above.  Inverting the analytic form
  *  once is both more accurate and simpler than inverting an approximation.
  *
+ *  PROPOSAL-ISSUE HAGC-04 (design-level) -- annex 2.2 recommends building the
+ *  BToA "by applying the inverted Headroom Adaptive Gain Curve" without stating
+ *  that the curve is not always invertible: the gain is recoverable from the
+ *  output only when one gain is common to all three channels or when mixing is
+ *  component-only, and above the last control point the forward map is flat and
+ *  has no inverse at all.  An implementer following the annex literally emits a
+ *  BToA that silently does not invert its own AToB.  Resolved here by refusing.
+ *
  * Return:
  *  The tag, owned by the caller, or NULL - which includes the case of a gain
  *  curve with no inverse, where a BToA cannot be built at all.

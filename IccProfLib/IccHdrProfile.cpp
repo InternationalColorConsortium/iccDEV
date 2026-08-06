@@ -284,7 +284,14 @@ bool icGetProfilePrimaries(const CIccProfile *pProfile, icCicpPrimaries &primari
       !icHdrGetXyzTag(pProfile, icSigMediaWhitePointTag, white))
     return false;
 
-  /* Step 1 of NOTE 1 asks for the tristimulus values "expressed relative to
+  /* PROPOSAL-ISSUE CICP-01 (design-level; one sentence would close it) -- the
+   * amendment's NOTE 1 delegates the chromaticAdaptationTag relationship to
+   * ICC.1 9.2.15 / 9.2.36 / Annex F.3 and does not state the direction, but
+   * those clauses describe the forward relationship while this derivation needs
+   * the inverse.  The wrong direction returns a complete, plausible set of
+   * chromaticities, so the error is not self-detecting.
+   *
+   * Step 1 of NOTE 1 asks for the tristimulus values "expressed relative to
    * the profile's actual adopted white". The matrix column tags are encoded
    * relative to the *PCS* adopted white (D50); the chromaticAdaptationTag is
    * the matrix that took them there, so recovering the profile's actual
@@ -384,6 +391,13 @@ const icChar *icGetHdrTransferName(icUInt8Number nTransferCharacteristics)
 /*
  * ===========================================================================
  * HDR Image and HDR Display metadata (clauses 8.10.4 and 8.10.5)
+ *
+ * PROPOSAL-ISSUE HDR-05 (external dependency, blocking) -- 8.10.4 and 8.10.5
+ * make the ICC dictType Metadata Registry authoritative for these key names and
+ * their encodings, and the registry is not supplied with the amendment.  Every
+ * ASSUMED marker below is therefore a reconstruction, and none of them feeds a
+ * diagnostic: an assumed key name must not produce a validation message about
+ * someone else's profile.
  *
  * Every ASSUMED marker below flags a reconstruction that the ICC dictType
  * Metadata Registry - which the amendment names as authoritative and does not
@@ -878,7 +892,16 @@ bool icGetHdrProfileInfo(const CIccProfile *pProfile, icHdrProfileInfo &info)
                                                      info.primaries, &info.bPrimariesFromProfile);
   }
 
-  /* Classification. The conforming test is the full set of 8.10.1
+  /* PROPOSAL-ISSUE HDR-02 (design-level) -- 8.10.1 says an HDR Profile's
+   * TransferCharacteristics "shall be" 16, 18 or 8 and that other values
+   * "shall not be used in an HDR Profile", while NOTE 3 makes the conforming
+   * cicpTag the sole thing that distinguishes the class.  The prohibition is
+   * therefore unviolatable: a profile with any other value is not an HDR
+   * Profile rather than a non-conforming one, so no validator can report it.
+   * icHdrProfileIntended below is the non-circular hook that lets a profile
+   * plainly authored as HDR, but mistyped, still be reported.
+   *
+   * Classification. The conforming test is the full set of 8.10.1
    * requirements; the intended test is the non-circular hook described in the
    * header - HDR-specific content without the qualification to carry it. */
   if (info.bRgbMatrixBased && info.bVersion4_5 && info.bHasCicp && info.bTransferIsHdr) {
