@@ -4146,6 +4146,26 @@ set_tests_properties(iccdev.pcc-zero-illuminant-regressions PROPERTIES
   FIXTURES_REQUIRED iccdev_profiles
 )
 
+# Issue #1856. Pins both halves of the XML reader's size behaviour at once: a
+# profile whose CLUT exceeds libxml2's per-text-node limit must still round
+# trip, and the depth, name-length and entity-amplification caps must stay
+# armed. The second half exists so that a future attempt to solve a size
+# problem with XML_PARSE_HUGE turns this test red instead of quietly widening
+# what the parser accepts. Builds the fixture link with iccApplyToLink, so it
+# needs the generated profiles.
+if(TARGET iccFromXml AND TARGET iccToXml AND TARGET iccApplyToLink)
+  iccdev_add_script_test(
+    iccdev.xml-parser-regressions
+    600
+    "iccdev;xml;parser;regression;issue-1856;asan;slow"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-xml-parser-regression-tests.sh"
+  )
+  set_tests_properties(iccdev.xml-parser-regressions PROPERTIES
+    FIXTURES_REQUIRED iccdev_profiles
+  )
+endif()
+
 if(ICCDEV_HAS_ICCCONNECT)
   iccdev_add_script_test(
     iccdev.iccconnect-search-cost-regressions

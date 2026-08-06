@@ -1033,18 +1033,30 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
   xmlDoc *doc = NULL;
   xmlNode *root_element = NULL;
 
+  std::string my_parseStr;
+
+  if (!parseStr)
+    parseStr = &my_parseStr;
+
+  *parseStr = "";
+
   /* Parse the file and get the DOM.
    *
-   * Drop XML_PARSE_HUGE: it disables libxml2's depth cap, name-length
-   * cap, text-length cap, and the billion-laughs entity-expansion guard
-   * - all of which protect against crafted inputs. Keep XML_PARSE_NONET
-   * (no network), do not set XML_PARSE_NOENT (it substitutes entity
-   * references and may load local external entities), and do not set
+   * Still no XML_PARSE_HUGE: it disables the nesting-depth cap and the
+   * name-length cap for every input, and it is not needed to read back a
+   * large CLUT - icXmlReadFileBounded parses from one contiguous buffer,
+   * which avoids the streaming text-node cap that refused iccToXml's own
+   * output in issue #1856, and bounds the document instead. Keep
+   * XML_PARSE_NONET (no network), do not set XML_PARSE_NOENT (it substitutes
+   * entity references and may load local external entities), and do not set
    * XML_PARSE_DTDLOAD. ICC profiles never use DTD entities legitimately.
+   *
+   * parseStr is set up above rather than after the parse so that a rejection
+   * on size reaches the caller as a reason instead of a bare parse failure.
    */
-  doc = xmlReadFile(szFilename, NULL, XML_PARSE_NONET);
+  doc = icXmlReadFileBounded(szFilename, XML_PARSE_NONET, parseStr);
 
-  if (doc == NULL) 
+  if (doc == NULL)
     return false;
 
   if (szRelaxNGDir && szRelaxNGDir[0]) {
@@ -1074,12 +1086,9 @@ bool CIccProfileXml::LoadXml(const char *szFilename, const char *szRelaxNGDir, s
 	    return false;  
   }
    
-  std::string my_parseStr;
-
-  if (!parseStr)
-    parseStr = &my_parseStr;
-
-  *parseStr = "";
+  /* parseStr was bound and cleared before the parse above, so that a size
+   * rejection could be reported; nothing has written to it on the path that
+   * reaches here. */
 
   /*Get the root element node */
   root_element = xmlDocGetRootElement(doc);
