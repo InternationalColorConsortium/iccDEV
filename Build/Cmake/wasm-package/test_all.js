@@ -104,6 +104,34 @@ function getClutTestProfile() {
     mod.callMain(['t.icc', '1', '0']);
   })) pass++; else fail++;
 
+  // HdrFallback - bake an HDR profile's SDR rendering into an A2B0/B2A0 pair.
+  // Driven from XML rather than a stock .icc because no HDR profile is tracked
+  // under Testing/; they are all generated. Run at the default grid, which is
+  // the size a consumer gets and the one that puts a 33^3 CLUT through the
+  // WASM heap, and assert on the tags rather than just on a clean exit.
+  if (await test('IccHdrFallback', require('./IccHdrFallback/iccHdrFallback.js'), async mod => {
+    const fromXml = await require('./IccFromXml/iccFromXml.js')({ noExitRuntime: true, noInitialRun: true, print: () => {}, printErr: () => {} });
+    const hdrXml = fs.readFileSync(path.join(__dirname, 'Testing', 'HDR', 'HagcDisplay.xml'));
+    fromXml.FS.writeFile('hdr.xml', hdrXml);
+    fromXml.callMain(['hdr.xml', 'hdr.icc']);
+    const hdrIcc = fromXml.FS.readFile('hdr.icc');
+    mod.FS.writeFile('hdr.icc', hdrIcc);
+    // Check the status before reading: the tool refuses a profile it cannot
+    // bake (an MPE-based one, say) with a non-zero exit, and the readFile that
+    // would follow throws an error carrying no message at all.
+    const rc = mod.callMain(['hdr.icc', 'fallback.icc']);
+    if (rc) throw new Error('bake exited ' + rc);
+    const baked = mod.FS.readFile('fallback.icc');
+    if (baked.length <= hdrIcc.length) throw new Error('no tags added: ' + baked.length);
+    // Scan for the signatures: the size check above only proves the profile
+    // grew, and hagc has to still be there afterwards - the whole point of the
+    // bake is that an HDR-aware CMM keeps evaluating the curve.
+    const sigs = Buffer.from(baked).toString('latin1');
+    for (const sig of ['A2B0', 'B2A0', 'hagc']) {
+      if (!sigs.includes(sig)) throw new Error('missing ' + sig + ' tag');
+    }
+  })) pass++; else fail++;
+
   // Usage tests - tools that need multiple files, verify they load and print usage
   const usageTools = [
     ['IccApplyNamedCmm', 'IccApplyNamedCmm', 'iccApplyNamedCmm.js'],

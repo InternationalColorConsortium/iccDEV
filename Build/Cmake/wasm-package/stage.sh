@@ -19,7 +19,7 @@
 #     package.json
 #     IccDumpProfile/iccDumpProfile.{js,wasm}
 #     IccToXml/iccToXml.{js,wasm}
-#     ... (17 tool dirs)
+#     ... (18 tool dirs; the count lives in the TOOLS array below)
 #     IccProfLib/*.a
 #     IccXML/*.a
 #     IccJSON/*.a
