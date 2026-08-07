@@ -993,6 +993,51 @@ function(iccdev_add_getvalues_nstart_test)
   endif()
 endfunction()
 
+# #2000: CIccTagCicp's copy constructor had an empty body and a commented-out
+# parameter (/* ITXYZ */, copy-paste residue from CIccTagXYZ), so the four
+# icUInt8Number members -- which have no in-class initialiser -- were left
+# uninitialized on every copy (CWE-457). NewCopy() *is* that constructor, and
+# CIccProfile's copy constructor clones each tag through NewCopy(), which is the
+# path CIccApplyBPC takes for intents 40/41/42. Pins all three levels. The
+# fixture values are non-zero and distinct because the pre-fix reads differ per
+# level -- measured 0/0/0/0 for the stack copy and 0xBE (ASan's malloc fill) for
+# both heap copies -- so a zero fixture would leave the stack assertion toothless.
+# Header + IccProfLib only.
+function(iccdev_add_cicp_copy_ctor_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCicpCopyCtorTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/cicp-copy-ctor-uninitialized.cpp"
+  )
+  target_link_libraries(iccCicpCopyCtorTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCicpCopyCtorTest)
+
+  add_test(
+    NAME iccdev.cicp-copy-ctor-uninitialized
+    COMMAND "$<TARGET_FILE:iccCicpCopyCtorTest>"
+  )
+  set_tests_properties(iccdev.cicp-copy-ctor-uninitialized PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;tag;cicp;security;issue-2000;regression"
+  )
+  if(WIN32)
+    set(_cicp_copy_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCicpCopyCtorTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _cicp_copy_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.cicp-copy-ctor-uninitialized PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_cicp_copy_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1976: two defects on the gamt path. CIccXform::Create() forces bInput false to walk
 # the B-to-A shaped gamut tag, but m_bInput also drove GetDstSpace()/GetNumDstSamples(),
 # so the xform advertised the profile's device space while CIccCmm::AddXform() had
@@ -3572,6 +3617,7 @@ if(WIN32)
   iccdev_add_reflectance_observer_illum_range_test()
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
+  iccdev_add_cicp_copy_ctor_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
@@ -3830,6 +3876,7 @@ iccdev_add_xform_abstorel_adjust_test()
 iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
+iccdev_add_cicp_copy_ctor_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()

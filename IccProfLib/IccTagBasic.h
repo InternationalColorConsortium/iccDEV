@@ -861,7 +861,10 @@ class ICCPROFLIB_API CIccTagCicp : public CIccTag
 public:
   CIccTagCicp();
   CIccTagCicp(const CIccTagCicp& ITCICP);
-  CIccTagCicp& operator=(const CIccTagCicp& XYZTag);
+  // #2000: parameter was named XYZTag here, the same CIccTagXYZ copy-paste that
+  // left the copy constructor's body empty. The definition already calls it
+  // cicpTag; renamed so the declaration stops pointing at the wrong class.
+  CIccTagCicp& operator=(const CIccTagCicp& cicpTag);
   virtual CIccTag* NewCopy() const { return new CIccTagCicp(*this); }
   virtual ~CIccTagCicp();
 

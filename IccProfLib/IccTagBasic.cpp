@@ -4622,8 +4622,20 @@ CIccTagCicp::CIccTagCicp()
  *  ITCICP = The CIccTagCicp object to be copied
  *****************************************************************************
  */
-CIccTagCicp::CIccTagCicp(const CIccTagCicp& /* ITXYZ */)
+CIccTagCicp::CIccTagCicp(const CIccTagCicp& ITCICP)
 {
+  // #2000: this body was empty and the parameter was commented out as
+  // /* ITXYZ */ -- copy-paste residue from CIccTagXYZ's copy constructor above.
+  // A copy constructor does not delegate to CIccTagCicp(), so the four members
+  // were left uninitialized rather than zeroed, and NewCopy() below is exactly
+  // this constructor: every profile copied through CIccProfile's copy
+  // constructor (which clones each tag via NewCopy) produced a cicpTag whose
+  // fields were read indeterminate by Write, Describe and Validate. Copy them,
+  // matching operator= just below, which had it right all along.
+  m_nColorPrimaries = ITCICP.m_nColorPrimaries;
+  m_nTransferCharacteristics = ITCICP.m_nTransferCharacteristics;
+  m_nMatrixCoefficients = ITCICP.m_nMatrixCoefficients;
+  m_nVideoFullRangeFlag = ITCICP.m_nVideoFullRangeFlag;
 }
 
 
