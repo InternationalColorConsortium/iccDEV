@@ -1038,6 +1038,60 @@ function(iccdev_add_cicp_copy_ctor_test)
   endif()
 endfunction()
 
+# #2001: iccPawgReport check C5 warned on every profile carrying a cicpTag,
+# because icSigCicpTag was missing from kCommonOptional. The tag is recognised by
+# IsSpecTag() (CIccTagCreator resolves 'cicp' to "cicpTag"), so it is never
+# bucketed as a private tag and falls straight through IsAllowedForClass() to the
+# warning. Compiles PawgReport.cpp into the test the same way the #1775
+# compression test does, then drives DumpPawgReport and reads the C5 line back:
+# C5's verdict is not exposed through PawgReport.h, and the emitted text is what
+# the issue was reported against. A/B against one base profile -- the tracked
+# plain-SDR sRGB v4 preference profile as the control, and the same
+# profile plus a BT.709 cicpTag as the subject -- which is also what shows the
+# defect is not HDR-specific. Needs IccProfLib only.
+function(iccdev_add_pawg_c5_cicp_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccPawgC5CicpTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/pawg-c5-cicp-optional.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport/PawgReport.cpp"
+  )
+  target_compile_features(iccPawgC5CicpTest PRIVATE cxx_std_17)
+  target_include_directories(iccPawgC5CicpTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccPawgReport"
+  )
+  target_link_libraries(iccPawgC5CicpTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccPawgC5CicpTest)
+
+  add_test(
+    NAME iccdev.pawg-c5-cicp-optional
+    COMMAND "$<TARGET_FILE:iccPawgC5CicpTest>"
+      "${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+  # Runs in the ctest output dir because it writes the subject profile and the
+  # two captured reports beside itself.
+  set_tests_properties(iccdev.pawg-c5-cicp-optional PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;pawg;cicp;issue-2001;regression"
+  )
+  if(WIN32)
+    set(_pawg_c5_cicp_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccPawgC5CicpTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _pawg_c5_cicp_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.pawg-c5-cicp-optional PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_pawg_c5_cicp_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1976: two defects on the gamt path. CIccXform::Create() forces bInput false to walk
 # the B-to-A shaped gamut tag, but m_bInput also drove GetDstSpace()/GetNumDstSamples(),
 # so the xform advertised the profile's device space while CIccCmm::AddXform() had
@@ -3618,6 +3672,7 @@ if(WIN32)
   iccdev_add_colorimetry_methods_test()
   iccdev_add_getvalues_nstart_test()
   iccdev_add_cicp_copy_ctor_test()
+  iccdev_add_pawg_c5_cicp_test()
   iccdev_add_gamut_xform_semantics_test()
   iccdev_add_rangemap_uninitialized_test()
   iccdev_add_pcs_birefl_illuminant_range_test()
@@ -3877,6 +3932,7 @@ iccdev_add_reflectance_observer_illum_range_test()
 iccdev_add_colorimetry_methods_test()
 iccdev_add_getvalues_nstart_test()
 iccdev_add_cicp_copy_ctor_test()
+iccdev_add_pawg_c5_cicp_test()
 iccdev_add_gamut_xform_semantics_test()
 iccdev_add_rangemap_uninitialized_test()
 iccdev_add_pcs_birefl_illuminant_range_test()

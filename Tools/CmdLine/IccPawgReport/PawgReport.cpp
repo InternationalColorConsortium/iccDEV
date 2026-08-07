@@ -1104,6 +1104,14 @@ static const icTagSignature kNamedColorRequired[] = {
 static const icTagSignature kCommonOptional[] = {
   icSigCalibrationDateTimeTag,
   icSigCharTargetTag,
+  // #2000-adjacent, filed as #2001: cicpTag was missing here, so C5 warned on
+  // every profile that carries one. The reason it reached the warning rather
+  // than the private-tag bucket is not obvious from this array: IsSpecTag()
+  // asks CIccInfo::GetTagSigName, which resolves 'cicp' to "cicpTag" via
+  // CIccTagCreator, so the name does not begin with "Unknown" and the tag is
+  // never treated as private -- it falls straight through IsAllowedForClass()
+  // to the C5 warning. This affects ordinary SDR profiles, not just HDR ones.
+  icSigCicpTag,
   icSigChromaticAdaptationTag,
   icSigChromaticityTag,
   icSigColorantTableTag,
