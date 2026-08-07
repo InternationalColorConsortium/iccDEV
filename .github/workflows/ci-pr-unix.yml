@@ -316,6 +316,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           MATRIX_BUILD_TYPE: ${{ matrix.build_type }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
           WARNING_POLICY: ${{ inputs.warning-policy || 'warn' }}
         run: |
           set -euo pipefail
@@ -328,10 +329,23 @@ jobs:
           echo "CMake build type: ${MATRIX_BUILD_TYPE}"
           jobs="$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)"
           make -j"$jobs" 2>&1 | tee build.log
-          WARNING_COUNT=$(grep -cE 'warning:' build.log || true)
+          grep -E 'warning:' build.log > all-warnings.log || true
+          if [ "$MATRIX_COMPILER" = "gcc-15" ]; then
+            # GCC 15 emits this false positive from libstdc++ internals.
+            gcc15_false_positive='^/usr/include/c\+\+/15/.*warning: potential null pointer dereference \[-Wnull-dereference\]$|^cc1plus: warning: null pointer dereference \[-Wnull-dereference\]$'
+            grep -Ev "$gcc15_false_positive" all-warnings.log > actionable-warnings.log || true
+            SUPPRESSED_WARNING_COUNT=$(grep -Ec "$gcc15_false_positive" all-warnings.log || true)
+          else
+            cp all-warnings.log actionable-warnings.log
+            SUPPRESSED_WARNING_COUNT=0
+          fi
+          WARNING_COUNT=$(grep -c . actionable-warnings.log || true)
+          if [ "$SUPPRESSED_WARNING_COUNT" -gt 0 ]; then
+            echo "[INFO] Suppressed ${SUPPRESSED_WARNING_COUNT} known GCC 15 libstdc++ false-positive warning(s)"
+          fi
           if [ "$WARNING_COUNT" -gt 0 ]; then
             echo "::warning title=Compiler Warnings::${WARNING_COUNT} warning(s) detected"
-            grep -E 'warning:' build.log | sort -u | sed -n '1,20p'
+            sort -u actionable-warnings.log | sed -n '1,20p'
             if [ "$WARNING_POLICY" = "fail" ]; then
               echo "::error title=Compiler Warnings::warning-policy=fail rejected ${WARNING_COUNT} warning(s)"
               exit 1
