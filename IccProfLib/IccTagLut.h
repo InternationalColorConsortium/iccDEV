@@ -113,6 +113,20 @@ typedef enum {
   icInitIdentity,
 } icTagCurveSizeInit;
 
+// Upper limit on the number of entries in a curveType sampled table.  This is
+// iccDEV's own bound, not ICC.1's -- 10.6 encodes the count as a uInt32Number --
+// and it was introduced "to help catch errors" by 52720110, "Issue 1063, part 2"
+// (PR #1095).  It is not arbitrary:
+// CIccTagCurve::SetSize stores nSize-1 in m_nMaxIndex, which is an
+// icUInt16Number, so 65536 entries is exactly the largest table whose maximum
+// index still fits.  Raising it means widening m_nMaxIndex first.
+//
+// Centralised here per #2006 because the value is now load-bearing for a return
+// value rather than a local sanity check: SetSize() reports a request above it
+// as a failure, and Describe()/DumpLut()/IsIdentity() each assert the same bound
+// before walking m_Curve.  Same shape as MAX_CALC_ELEMENTS in IccMpeCalc.h.
+#define MAX_CURVE_ENTRIES 65536
+
 /**
 ****************************************************************************
 * Class: CIccTagCurve

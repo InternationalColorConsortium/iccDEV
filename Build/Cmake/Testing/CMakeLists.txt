@@ -2768,6 +2768,65 @@ function(iccdev_add_xml_curve_oversize_file_test)
   endif()
 endfunction()
 
+# #2006 part 4a: CIccTagCurve::SetSize() answered an over-cap request the same
+# way it answered SetSize(0) -- free the table, m_nSize = 0, return true -- so
+# the return value could not distinguish "emptied" (a success, and ICC.1 10.6's
+# identity encoding) from "refused". This pins the split contract: an over-cap
+# request now reports failure and leaves any existing table intact, and
+# CIccTagCurve::Read() consequently rejects a curveType whose declared count
+# exceeds the cap instead of loading it as a silent identity curve.
+#
+# Pure library test -- no fixtures on disk and no tool invocation -- so it needs
+# only IccProfLib and no scratch directory.
+function(iccdev_add_curve_setsize_contract_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCurveSetSizeContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/curve-setsize-contract.cpp"
+  )
+  target_compile_features(iccCurveSetSizeContractTest PRIVATE cxx_std_17)
+  target_include_directories(iccCurveSetSizeContractTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCurveSetSizeContractTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCurveSetSizeContractTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.curve-setsize-contract
+      COMMAND "$<TARGET_FILE:iccCurveSetSizeContractTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.curve-setsize-contract
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCurveSetSizeContractTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.curve-setsize-contract PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;curve;setsize;regression"
+  )
+  if(WIN32)
+    set(_curve_contract_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCurveSetSizeContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _curve_contract_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.curve-setsize-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_curve_contract_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -3710,6 +3769,7 @@ if(WIN32)
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
+  iccdev_add_curve_setsize_contract_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -3972,6 +4032,7 @@ iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
+iccdev_add_curve_setsize_contract_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
