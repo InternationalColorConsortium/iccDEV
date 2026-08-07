@@ -1563,6 +1563,16 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
       return false;
     }
 
+    // The size is checked before the buffer is taken, not after.
+    // SetRawMetadata() applies the same limit and would reject this block
+    // anyway, but only once a buffer the size of the hex text had been
+    // allocated - and the only other thing bounding that text is the 256 MiB
+    // XML file cap, which is four hundred times this limit.
+    if (nSize > icHagcMaxMetadataSize) {
+      parseStr += "HexData in headroomAdaptiveGainCurveType exceeds the maximum metadata size\n";
+      return false;
+    }
+
     CIccUInt8Array buf;
     if (!buf.SetSize(nSize) ||
         icXmlGetHexData(buf.GetBuf(), (const icChar*)pHex->children->content, nSize) != nSize) {
@@ -1586,9 +1596,15 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
   xmlNode *pChild;
   int j;
 
+  // Both fields are three bits on the wire, so 0..7 is the whole of what can
+  // be authored.  Refused rather than masked: Pack() would take an 8 down to
+  // 0, and a fixture that says 8 and produces a profile saying 0 is worse
+  // than one that will not build.
   if (!icXmlParseU8(icXmlAttrValue(pMeta, "ApplicationVersion", "0"), m.m_nApplicationVersion) ||
-      !icXmlParseU8(icXmlAttrValue(pMeta, "MinApplicationVersion", "0"), m.m_nMinApplicationVersion)) {
-    parseStr += "Invalid application version in HagcMetadata\n";
+      !icXmlParseU8(icXmlAttrValue(pMeta, "MinApplicationVersion", "0"), m.m_nMinApplicationVersion) ||
+      m.m_nApplicationVersion > icHagcMaxApplicationVersion ||
+      m.m_nMinApplicationVersion > icHagcMaxApplicationVersion) {
+    parseStr += "Invalid application version in HagcMetadata (0 to 7)\n";
     return false;
   }
 
@@ -1644,27 +1660,15 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
           parseStr += "Invalid ComponentMixingType in AlternateImage\n";
           return false;
         }
-        pAlt->m_nMixingType = (icHagcMixingType)nMixType;
+        // Types 0 to 2 fix their coefficients; SetMixingType() fills them in
+        // so the model is complete however the fixture was authored, and
+        // zeroes the array first so an explicit <Coefficients> node for type 3
+        // starts from nothing rather than from the constructor's type 0
+        // defaults.  Open-coding the fixed cases here instead - which only
+        // writes the arms each type needs - leaves a phantom kMax=1 behind on
+        // a type 3 alternate, and Pack() writes it out as a real coefficient.
+        pAlt->SetMixingType((icHagcMixingType)nMixType);
         pAlt->m_bPchipSlope = icXmlHagcBoolAttr(pChild, "PchipSlope", false);
-
-        // Types 0 to 2 fix their coefficients; fill them in here so the model
-        // is complete however the fixture was authored, then let an explicit
-        // <Coefficients> node override for type 3.
-        switch (pAlt->m_nMixingType) {
-          case icHagcMixingMax:
-            pAlt->m_coef[icHagcCoefMax] = 1.0f;
-            break;
-          case icHagcMixingComponent:
-            pAlt->m_coef[icHagcCoefComponent] = 1.0f;
-            break;
-          case icHagcMixingWeighted:
-            pAlt->m_coef[icHagcCoefRed] = pAlt->m_coef[icHagcCoefGreen] =
-              pAlt->m_coef[icHagcCoefBlue] = (icFloatNumber)(1.0 / 6.0);
-            pAlt->m_coef[icHagcCoefMax] = 0.5f;
-            break;
-          case icHagcMixingCustom:
-            break;
-        }
 
         xmlNode *pAltChild;
         for (pAltChild = pChild->children; pAltChild; pAltChild = pAltChild->next) {
@@ -1713,10 +1717,13 @@ bool CIccTagXmlHagc::ParseXml(xmlNode* pNode, std::string& parseStr)
     }
   }
 
-  // SetMetadata() packs the model, so the tag ends up holding the same raw
-  // block it would have had if it had been read from a profile. Everything
-  // downstream - Write(), Describe(), Validate() - then behaves identically
-  // whichever direction the tag was created from.
+  // SetMetadata() packs the model and then keeps a decode of those bytes, so
+  // the tag ends up holding the same raw block *and* the same model it would
+  // have had if it had been read from a profile. Everything downstream -
+  // Write(), Describe(), Validate(), the evaluator - then behaves identically
+  // whichever direction the tag was created from, including for the fields the
+  // encoding clamps, which is what establishes the domain invariants the
+  // evaluator is written against.
   if (!SetMetadata(m)) {
     parseStr += "Unable to encode HagcMetadata\n";
     return false;

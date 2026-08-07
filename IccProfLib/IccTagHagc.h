@@ -103,6 +103,24 @@ class CIccProfile;
 #define icHagcMaxControlPoints  32
 #define icHagcNumCoefficients    6
 
+/** The largest metadata block CIccTagHagc will hold, in bytes.
+ *
+ * A single tag is not a plausible place for a megabyte of SMPTE metadata; the
+ * largest layout the format can describe is well under a kilobyte.  This
+ * bound exists so a corrupt declared size cannot drive a huge allocation
+ * before the parse rejects it, mirroring what CIccTagUnknown::Read does with
+ * MAX_UNKNOWN_TAG_SIZE.  It is in the header because the XML and JSON
+ * authoring paths have to apply it to the hex text *before* they allocate a
+ * buffer to decode it into - reaching SetRawMetadata()'s copy of the check
+ * means the allocation has already happened. */
+#define icHagcMaxMetadataSize 0x00100000u
+
+/** The largest Application Version and Min Application Version the encoding
+ * can carry: both are three bit fields (proposal Table 1, byte 12).  Named so
+ * that the authoring paths can refuse a larger value instead of letting
+ * Pack() mask it down to something the author never asked for. */
+#define icHagcMaxApplicationVersion 7
+
 /** Default HDR reference white in cd/m^2, used when the tag carries no
  * Custom HDR Reference White value (proposal 1.2.2.3). */
 #define icHagcDefaultReferenceWhite 203.0
@@ -166,10 +184,19 @@ class ICCPROFLIB_API icHagcAlternateImage
 public:
   icHagcAlternateImage();
 
+  /** Set m_nMixingType and reset m_coef[] to what that type implies: the
+   * fixed values for types 0..2, all zero for type 3 (whose coefficients the
+   * caller then fills in).  This is the only correct way to change the mixing
+   * type - assigning m_nMixingType directly leaves the previous type's
+   * coefficients in place, and Pack() derives the presence flags from the
+   * values, so a leftover is written out as if it had been authored. */
+  void SetMixingType(icHagcMixingType nType);
+
   /** Alternate HDR Headroom in log2 space (proposal 1.1.3.1). */
   icFloatNumber m_headroom;
 
-  /** Component Mixing Type, 0..3 (proposal 1.1.3.2). */
+  /** Component Mixing Type, 0..3 (proposal 1.1.3.2).  Set it through
+   * SetMixingType() so m_coef[] stays consistent with it. */
   icHagcMixingType m_nMixingType;
 
   /** Component mixing coefficients indexed by icHagcCoefficient.  Populated
@@ -241,9 +268,12 @@ public:
    * SetMetadata(), A2B0 baking); tags that were read from a profile are
    * re-emitted from their retained raw bytes instead.
    *
-   * Returns false if the model cannot be represented, which today means only
-   * a control point count outside 1..icHagcMaxControlPoints or an alternate
-   * count above icHagcMaxAlternates.
+   * Returns false if the model cannot be represented: a control point count
+   * outside 1..icHagcMaxControlPoints, an alternate count above
+   * icHagcMaxAlternates, or an application version above
+   * icHagcMaxApplicationVersion.  Everything else it clamps to the encodable
+   * range, which is why CIccTagHagc::SetMetadata() keeps a decode of these
+   * bytes rather than the model it was handed.
    */
   bool Pack(std::vector<icUInt8Number> &buf) const;
 
@@ -424,11 +454,16 @@ protected:
   icUInt8Number *m_pRawData;
   icUInt32Number m_nRawSize;
 
-  /** The metadata size the tag header declared, which is what Write() would
-   * have to reproduce to be byte exact.  Kept apart from m_nRawSize because a
-   * tag can declare more metadata than the tag body has room for; the bytes
-   * actually retained are then fewer, and Validate() reports the difference
-   * rather than the read failing outright. */
+  /** The metadata size the tag header declared when the tag was read.  Kept
+   * apart from m_nRawSize because a tag can declare more metadata than the
+   * tag body has room for; the bytes actually retained are then fewer, and
+   * Validate() reports the difference rather than the read failing outright.
+   *
+   * It is not what Write() emits.  Write() declares m_nRawSize - the bytes it
+   * actually has - so a truncated tag is rewritten as the honest shorter one
+   * rather than re-declaring a length no reader would find.  Byte exactness
+   * is therefore lost on exactly the tags that were malformed to begin with,
+   * which is the right trade. */
   icUInt32Number m_nDeclaredSize;
 
   icUInt32Number m_nPadSize;

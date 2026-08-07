@@ -99,13 +99,6 @@ static const double icHagcPi = 3.14159265358979323846;
  * reads.  Getting this boundary wrong shifts every subsequent field by one. */
 #define icHagcHeaderSize 12
 
-/* A single tag is not a plausible place for hundreds of megabytes of SMPTE
- * metadata; the largest layout the format can describe is well under a
- * kilobyte.  This bound exists so a corrupt declared size cannot drive a huge
- * allocation before the parse rejects it, mirroring what CIccTagUnknown::Read
- * does with MAX_UNKNOWN_TAG_SIZE. */
-#define icHagcMaxMetadataSize 0x00100000u
-
 /**
  ****************************************************************************
  * Class: CIccHagcBitReader
@@ -351,37 +344,46 @@ static double icHagcYSign(icFloatNumber baselineHeadroom, icFloatNumber altHeadr
 
 /**
  ****************************************************************************
- * Name: icHagcSetFixedCoefficients
+ * Name: icHagcAlternateImage::SetMixingType
  *
- * Purpose: Fill in the component mixing coefficients that mixing types 0 to 2
- *  define implicitly (informative annex 1).  Doing this at decode time means
- *  every consumer of the model can read m_coef[] regardless of mixing type
- *  instead of re-deriving the fixed cases, which is exactly the kind of
- *  duplicated table that drifts.
+ * Purpose: Set the component mixing type and, with it, the coefficients that
+ *  mixing types 0 to 2 define implicitly (informative annex 1).  Doing this
+ *  in one place means every consumer of the model can read m_coef[]
+ *  regardless of mixing type instead of re-deriving the fixed cases, which is
+ *  exactly the kind of duplicated table that drifts.
+ *
+ *  The array is zeroed first, so this is also the only safe way to change the
+ *  mixing type of an alternate that already carries coefficients: an
+ *  open-coded switch that only writes the arms its type needs leaves whatever
+ *  the previous type had set behind, and because Pack() derives the presence
+ *  flags from the values, such a leftover is written out as a real
+ *  coefficient.
  *
  * Args:
  *  nType = the component mixing type
- *  coef = the six coefficients, indexed by icHagcCoefficient
  *****************************************************************************
  */
-static void icHagcSetFixedCoefficients(icHagcMixingType nType, icFloatNumber *coef)
+void icHagcAlternateImage::SetMixingType(icHagcMixingType nType)
 {
   int i;
+
+  m_nMixingType = nType;
+
   for (i = 0; i < icHagcNumCoefficients; i++)
-    coef[i] = 0.0f;
+    m_coef[i] = 0.0f;
 
   switch (nType) {
     case icHagcMixingMax:
-      coef[icHagcCoefMax] = 1.0f;
+      m_coef[icHagcCoefMax] = 1.0f;
       break;
 
     case icHagcMixingComponent:
-      coef[icHagcCoefComponent] = 1.0f;
+      m_coef[icHagcCoefComponent] = 1.0f;
       break;
 
     case icHagcMixingWeighted:
-      coef[icHagcCoefRed] = coef[icHagcCoefGreen] = coef[icHagcCoefBlue] = (icFloatNumber)(1.0 / 6.0);
-      coef[icHagcCoefMax] = 0.5f;
+      m_coef[icHagcCoefRed] = m_coef[icHagcCoefGreen] = m_coef[icHagcCoefBlue] = (icFloatNumber)(1.0 / 6.0);
+      m_coef[icHagcCoefMax] = 0.5f;
       break;
 
     case icHagcMixingCustom:
@@ -405,8 +407,7 @@ icHagcAlternateImage::icHagcAlternateImage()
   int i;
 
   m_headroom = 0.0f;
-  m_nMixingType = icHagcMixingMax;
-  icHagcSetFixedCoefficients(m_nMixingType, m_coef);
+  SetMixingType(icHagcMixingMax);
   m_nControlPoints = 0;
   m_bPchipSlope = false;
   m_nCurveReserved = 0;
@@ -656,14 +657,12 @@ bool icHagcMetadata::UnpackFields(const icUInt8Number *pData, icUInt32Number nSi
 
       if (!r.Read(2, nMixType))
         return false;
-      alt.m_nMixingType = (icHagcMixingType)nMixType;
+      alt.SetMixingType((icHagcMixingType)nMixType);
 
       for (j = 0; j < icHagcNumCoefficients; j++) {
         if (!r.ReadFlag(bFlag[j]))
           return false;
       }
-
-      icHagcSetFixedCoefficients(alt.m_nMixingType, alt.m_coef);
 
       /* Proposal 1.1.3.2.1: only type 3 serializes coefficients, and only the
        * ones whose flag is set, in icHagcCoefficient order.  The array length
@@ -762,8 +761,18 @@ bool icHagcMetadata::Pack(std::vector<icUInt8Number> &buf) const
   CIccHagcBitWriter w(buf);
   int i, j;
 
-  w.Write(3, m_nApplicationVersion & 0x07);
-  w.Write(3, m_nMinApplicationVersion & 0x07);
+  /* Refused rather than masked.  Masking is how a model that says version 8
+   * becomes a file that says version 0 with nothing reporting the change, and
+   * SetMetadata() now keeps an Unpack() of these bytes, so the model would
+   * quietly follow the file rather than the caller.  Both authoring parsers
+   * reject the value before it gets here; this is the backstop for the
+   * direct-API path. */
+  if (m_nApplicationVersion > icHagcMaxApplicationVersion ||
+      m_nMinApplicationVersion > icHagcMaxApplicationVersion)
+    return false;
+
+  w.Write(3, m_nApplicationVersion);
+  w.Write(3, m_nMinApplicationVersion);
   w.Write(2, 0);   /* reserved, shall be zero */
 
   w.WriteFlag(m_bCustomReferenceWhite);
@@ -919,6 +928,15 @@ CIccTagHagc &CIccTagHagc::operator=(const CIccTagHagc &HagcTag)
       memcpy(m_pRawData, HagcTag.m_pRawData, HagcTag.m_nRawSize);
       m_nRawSize = HagcTag.m_nRawSize;
     }
+    else {
+      /* Nothing here can report the failure - operator= has no return - so
+       * the choice is which wrong answer to give.  An empty tag is the one
+       * that fails visibly: keeping the decoded model beside no bytes would
+       * leave a copy that Describe()s as a full gain curve and Write()s as a
+       * zero length tag, i.e. a profile that silently lost its tone mapping.
+       * Cleaned up, the copy is an empty tag, which Validate() calls out. */
+      Cleanup();
+    }
   }
 
   return *this;
@@ -1000,11 +1018,30 @@ bool CIccTagHagc::SetRawMetadata(const icUInt8Number *pData, icUInt32Number nSiz
  *
  * Purpose: Replace the model and re-derive the raw block from it.
  *
+ *  The model kept is deliberately *not* the caller's copy but an Unpack() of
+ *  the bytes Pack() just produced.  Pack() only refuses a control point count
+ *  outside 1..icHagcMaxControlPoints or too many alternates; everything else
+ *  it either clamps (icHagcEncodeScaled clamps each field to its encodable
+ *  range) or re-derives (the coefficient presence flags come from the
+ *  values).  Storing the caller's copy beside those different bytes leaves a
+ *  tag whose model and wire form disagree - and the disagreement is not
+ *  cosmetic, because it is the decoder's clamps that establish the domain
+ *  invariants the evaluator relies on.  A negative control point X, say, is
+ *  unencodable, so no file can carry one, and CIccHagcEvaluator's
+ *  log(x[last]/v) is written on that basis: hand it one straight from an
+ *  authored model and it returns NaN for every pixel with nothing reporting
+ *  a problem.
+ *
+ *  Round tripping here makes the authored path structurally identical to the
+ *  read path, so those clamps are the single place the invariants are
+ *  established.  The cost is one extra decode per authored tag.
+ *
  * Args:
  *  metadata = the model to install
  *
  * Return:
- *  true = installed, false = the model could not be packed (tag unchanged)
+ *  true = installed, false = the model could not be packed or its own bytes
+ *  would not decode (tag unchanged in either case)
  *****************************************************************************
  */
 bool CIccTagHagc::SetMetadata(const icHagcMetadata &metadata)
@@ -1018,6 +1055,16 @@ bool CIccTagHagc::SetMetadata(const icHagcMetadata &metadata)
     return false;
 
   icUInt32Number nSize = (icUInt32Number)buf.size();
+
+  /* Decoded into a temporary first so that a model Pack() accepted but the
+   * decoder will not take leaves the tag exactly as it was, rather than
+   * emptied.  Failure here means Pack() and Unpack() disagree about the wire
+   * format, which is a defect in this file and not something the caller can
+   * have caused. */
+  icHagcMetadata decoded;
+  if (!decoded.Unpack(&buf[0], nSize))
+    return false;
+
   icUInt8Number *pNew = new (std::nothrow) icUInt8Number[nSize];
   if (!pNew)
     return false;
@@ -1028,9 +1075,7 @@ bool CIccTagHagc::SetMetadata(const icHagcMetadata &metadata)
   m_pRawData = pNew;
   m_nRawSize = nSize;
   m_nDeclaredSize = nSize;
-  m_metadata = metadata;
-  m_metadata.m_bUnpacked = true;
-  m_metadata.m_nTrailingBytes = 0;
+  m_metadata = decoded;
 
   return true;
 }

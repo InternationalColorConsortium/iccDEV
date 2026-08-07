@@ -690,7 +690,18 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
 {
   if (jsonExistsField(j, "rawMetadata") && j["rawMetadata"].is_string()) {
     std::vector<icUInt8Number> raw;
-    if (!icHagcJsonFromHex(j["rawMetadata"].get<std::string>(), raw)) {
+    const std::string hex = j["rawMetadata"].get<std::string>();
+
+    // Bounded on the hex text, before the decode allocates half its length.
+    // SetRawMetadata() enforces the same limit on the far side, but by then
+    // the buffer exists, and the only other thing bounding this string is the
+    // 128 MiB JSON file cap.
+    if (hex.size() / 2 > icHagcMaxMetadataSize) {
+      parseStr += "rawMetadata in headroomAdaptiveGainCurveType exceeds the maximum metadata size\n";
+      return false;
+    }
+
+    if (!icHagcJsonFromHex(hex, raw)) {
       parseStr += "Invalid rawMetadata hex in headroomAdaptiveGainCurveType\n";
       return false;
     }
@@ -706,8 +717,19 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
 
   jGetValue(j, "applicationVersion", applicationVersion);
   jGetValue(j, "minApplicationVersion", minApplicationVersion);
-  m.m_nApplicationVersion = (icUInt8Number)(applicationVersion & 0x07);
-  m.m_nMinApplicationVersion = (icUInt8Number)(minApplicationVersion & 0x07);
+
+  // Both fields are three bits on the wire, so 0..7 is the whole of what can
+  // be authored.  Refused rather than masked, and refused the same way the
+  // XML path refuses it: a document that says 8 and produces a profile saying
+  // 0 is worse than one that will not build.
+  if (applicationVersion < 0 || applicationVersion > icHagcMaxApplicationVersion ||
+      minApplicationVersion < 0 || minApplicationVersion > icHagcMaxApplicationVersion) {
+    parseStr += "Invalid application version in headroomAdaptiveGainCurveType (0 to 7)\n";
+    return false;
+  }
+
+  m.m_nApplicationVersion = (icUInt8Number)applicationVersion;
+  m.m_nMinApplicationVersion = (icUInt8Number)minApplicationVersion;
 
   if (jGetValue(j, "hdrReferenceWhite", hdrReferenceWhite)) {
     m.m_bCustomReferenceWhite = true;
@@ -772,29 +794,17 @@ bool CIccTagJsonHagc::ParseJson(const IccJson &j, std::string &parseStr)
           parseStr += "Invalid componentMixingType in headroomAdaptiveGainCurveType\n";
           return false;
         }
-        pAlt->m_nMixingType = (icHagcMixingType)mixType;
+        // Types 0 to 2 fix their coefficients; SetMixingType() fills them in
+        // so the model is complete however the document was authored, and
+        // zeroes the array first so an explicit "coefficients" object for
+        // type 3 starts from nothing rather than from the constructor's type 0
+        // defaults.  Open-coding the fixed cases here instead - which only
+        // writes the arms each type needs - leaves a phantom kMax=1 behind on
+        // a type 3 alternate, and Pack() writes it out as a real coefficient.
+        pAlt->SetMixingType((icHagcMixingType)mixType);
 
         bFlag = false; jGetValue(alt, "pchipSlope", bFlag);
         pAlt->m_bPchipSlope = bFlag;
-
-        // Types 0 to 2 fix their coefficients; fill them in so the model is
-        // complete however the document was authored, then let an explicit
-        // "coefficients" object override for type 3.
-        switch (pAlt->m_nMixingType) {
-          case icHagcMixingMax:
-            pAlt->m_coef[icHagcCoefMax] = 1.0f;
-            break;
-          case icHagcMixingComponent:
-            pAlt->m_coef[icHagcCoefComponent] = 1.0f;
-            break;
-          case icHagcMixingWeighted:
-            pAlt->m_coef[icHagcCoefRed] = pAlt->m_coef[icHagcCoefGreen] =
-              pAlt->m_coef[icHagcCoefBlue] = (icFloatNumber)(1.0 / 6.0);
-            pAlt->m_coef[icHagcCoefMax] = 0.5f;
-            break;
-          case icHagcMixingCustom:
-            break;
-        }
 
         if (jsonExistsField(alt, "coefficients") && alt["coefficients"].is_object()) {
           const IccJson &coef = alt["coefficients"];
