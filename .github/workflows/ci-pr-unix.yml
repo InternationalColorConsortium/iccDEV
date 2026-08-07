@@ -108,6 +108,15 @@ jobs:
             compiler: clang
 
     steps:
+      - name: Check out trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Validate matrix inputs
         shell: bash --noprofile --norc {0}
         env:
@@ -120,6 +129,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           OS="${MATRIX_OS}"
           COMP="${MATRIX_COMPILER}"
@@ -162,7 +172,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          source .github/scripts/sanitize-sed.sh
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           safe_event="$(sanitize_line "${PR_EVENT_NAME}")"
           safe_base="$(sanitize_ref "${PR_BASE_REF}")"
           safe_head="$(sanitize_ref "${PR_HEAD_REF}")"
@@ -202,6 +212,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           case "$MATRIX_COMPILER" in
             gcc-15)
               sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
@@ -212,6 +223,12 @@ jobs:
               curl --fail --location --silent --show-error \
                 https://apt.llvm.org/llvm-snapshot.gpg.key \
                 --output "$llvm_key"
+              gpg --show-keys --with-colons "$llvm_key" > "$RUNNER_TEMP/llvm-key-info"
+              llvm_fingerprint="$(awk -F: '$1 == "fpr" {print $10; exit}' "$RUNNER_TEMP/llvm-key-info")"
+              if [ "$llvm_fingerprint" != "6084F3CF814B57C1CF12EFD515CF4D18AF4F7421" ]; then
+                echo "Unexpected LLVM APT key fingerprint: $llvm_fingerprint" >&2
+                exit 1
+              fi
               gpg --dearmor --output "$llvm_keyring" "$llvm_key"
               sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
               printf '%s\n' \
@@ -248,6 +265,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           brew install cmake llvm wxwidgets libpng libtiff libxml2 nlohmann-json jpeg-turbo
 
       - name: Set Compiler Environment Variables
@@ -261,6 +279,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           case "$COMPILER_VERSION" in
             system|gcc-15) ;;
             *) echo "::error title=Invalid compiler version::${COMPILER_VERSION}"; exit 1 ;;
@@ -299,6 +318,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Configuring CMake project..."
           mkdir -p Build
           cd Build
@@ -323,6 +343,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Start build..."
           cd Build
           echo "Compiler: $CC ($($CC --version | head -n 1))"
@@ -363,6 +384,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           BITCODE_FOUND=0
           STATIC_POSTFIX=""
           if [ "$MATRIX_BUILD_TYPE" = "Debug" ]; then
@@ -406,6 +428,7 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           echo "Creating profiles..."
           cd Testing
           echo "=== Updating PATH ==="
@@ -458,13 +481,11 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
-          # Use canonical sanitization from .github/scripts/sanitize-sed.sh
-          if [ ! -r .github/scripts/sanitize-sed.sh ]; then
-            echo "ERROR: .github/scripts/sanitize-sed.sh not found or not readable" >&2
+          if [ ! -r .trusted-workflow/.github/scripts/sanitize-sed.sh ]; then
+            echo "ERROR: trusted sanitizer helper not found or not readable" >&2
             exit 1
           fi
-          # shellcheck disable=SC1091
-          source .github/scripts/sanitize-sed.sh
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
           SANITIZED_OS=$(sanitize_line "${MATRIX_OS}")
           SANITIZED_COMPILER=$(sanitize_line "${MATRIX_COMPILER}")
           SANITIZED_BUILD_TYPE=$(sanitize_line "${MATRIX_BUILD_TYPE}")

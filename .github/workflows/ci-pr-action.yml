@@ -786,6 +786,15 @@ jobs:
       warning-policy: ${{ steps.v.outputs.warning_policy }}
 
     steps:
+      - name: Check out trusted sanitizer helper
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha || 'master' }}
+          path: .trusted-workflow
+          sparse-checkout: .github/scripts
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Set up Matrix Runners
         id: v
         shell: bash --noprofile --norc {0}
@@ -800,6 +809,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .trusted-workflow/.github/scripts/sanitize-sed.sh
 
           # --- Define for child workflows ---
           # Windows is Hardcoded - TODO
