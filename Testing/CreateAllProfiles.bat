@@ -293,6 +293,7 @@ iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
 iccFromXml HagcDisplay.xml HagcDisplay.icc
 iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 iccFromXml HagcHexData.xml HagcHexData.icc
+iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
 iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
 iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
 iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc

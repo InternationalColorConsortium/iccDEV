@@ -30,13 +30,16 @@ iccFromXml BT2100PQNarrowDisplay.xml BT2100PQNarrowDisplay.icc
 iccFromXml BT2100HlgSceneToDisplayLink.xml BT2100HlgSceneToDisplayLink.icc
 iccFromXml BT2100PQSceneToDisplayLink.xml BT2100PQSceneToDisplayLink.icc
 
-# headroomAdaptiveGainCurveTag ('HAGC') coverage. The three positives cover the
-# three shapes the encoding takes: the full layout, the two sharing flags that
-# delete fields from every alternate after the first, and the raw-byte authoring
-# path. HagcInvalidXOrder is a negative -- see Testing/expected-invalid-fromxml.tsv.
+# headroomAdaptiveGainCurveTag ('HAGC') coverage. The four positives cover the
+# four shapes the encoding takes: the full layout, the two sharing flags that
+# delete fields from every alternate after the first, the raw-byte authoring
+# path, and the component mixing types no other fixture reaches -- type 3 with a
+# partly authored coefficient array and type 1, which serializes none at all.
+# HagcInvalidXOrder is a negative -- see Testing/expected-invalid-fromxml.tsv.
 iccFromXml HagcDisplay.xml HagcDisplay.icc
 iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 iccFromXml HagcHexData.xml HagcHexData.icc
+iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
 iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
 
 # Clause 8.10 HDR Profile coverage: a conforming profile carrying HDR Image and

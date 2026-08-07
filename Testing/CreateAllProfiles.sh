@@ -323,9 +323,9 @@ echo "====================== HDR =========================="
 # qa-profile-manifest baseline and outside the iccToXml/iccFromXml CI sweeps,
 # which both enumerate "find Testing -name '*.icc'". Adding the directory here is
 # what gives the HAGC fixtures - and the ten that were already here - any effect.
-# All fourteen were checked before this was added: the ten BT.2100 profiles and
-# the three HAGC positives validate clean, and HagcInvalidXOrder is a deliberate
-# negative recorded in Testing/expected-invalid-fromxml.tsv.
+# All were checked before this was added: the ten BT.2100 profiles and the HAGC
+# positives validate clean, and HagcInvalidXOrder is a deliberate negative
+# recorded in Testing/expected-invalid-fromxml.tsv.
 cd HDR
 find . -iname "*\.icc" -delete
 if [ "$1" != "clean" ]
@@ -344,6 +344,7 @@ then
 	iccFromXml HagcDisplay.xml HagcDisplay.icc
 	iccFromXml HagcCommonParams.xml HagcCommonParams.icc
 	iccFromXml HagcHexData.xml HagcHexData.icc
+	iccFromXml HagcMixingTypes.xml HagcMixingTypes.icc
 	iccFromXml HagcInvalidXOrder.xml HagcInvalidXOrder.icc
 	iccFromXml HdrCicpUnspecified.xml HdrCicpUnspecified.icc
 	iccFromXml HdrDisplayMetadata.xml HdrDisplayMetadata.icc

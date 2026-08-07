@@ -1436,6 +1436,130 @@ function(iccdev_add_hagc_codec_test)
   endif()
 endfunction()
 
+# T1b (HDR profiles): the invariants the *authoring* paths of the
+# headroomAdaptiveGainCurveTag have to establish for themselves, which the
+# binary read path gets for free.
+#
+# Nothing in this encoding is redundant, so the decoder's clamps are not merely
+# defensive -- they are what defines the domain CIccHagcEvaluator is written
+# against. A tag read from a file has control point X values in [0, 64] because
+# icHagcDecodeX put them there, and a coefficient array holding exactly what its
+# mixing type implies because Unpack() rebuilt it from the type. A model built in
+# memory by the XML parser, the JSON parser or a direct SetMetadata() has been
+# through neither, and the two ways that bit were:
+#
+#  - a parser that fills in the fixed coefficients of mixing types 0..2 with an
+#    open-coded switch, which only *writes* the arms each type needs and so
+#    leaves the constructor's type 0 kMax = 1 behind on a type 3 alternate.
+#    Pack() derives the presence flags from the values, so the phantom entry is
+#    written to disk as a real coefficient and the coefficient sum is 2.0 rather
+#    than 1.0 -- halving every mixed value the gain curve sees.
+#  - a SetMetadata() that stores the caller's model beside bytes Pack() clamped.
+#    A negative control point X is unencodable, so no file can carry one, and
+#    the evaluator's log(x[last]/v) is written on that basis: fed one, it
+#    returned NaN for every pixel while Init() and IsInvertible() said yes and
+#    Validate() reported nothing.
+#
+# Also pinned: the two exported entry points with no bound of their own
+# (icHagcDerivePchipSlopes' 32-element stack arrays indexed by a uInt8, and
+# CIccHdrBaker::Init's A curve size against CIccTagCurve::SetSize's
+# "silently empties and returns true" contract), and the fields the encoding
+# cannot widen. Needs IccXML (CIccProfileXml) + IccProfLib; skipped where IccXML
+# is not built.
+function(iccdev_add_hagc_authoring_invariants_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHagcAuthoringInvariantsTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hagc-authoring-invariants.cpp"
+  )
+  target_compile_features(iccHagcAuthoringInvariantsTest PRIVATE cxx_std_17)
+  target_include_directories(iccHagcAuthoringInvariantsTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccHagcAuthoringInvariantsTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccHagcAuthoringInvariantsTest)
+
+  add_test(
+    NAME iccdev.hagc-authoring-invariants
+    COMMAND "$<TARGET_FILE:iccHagcAuthoringInvariantsTest>"
+  )
+  # Repo root, not the test output directory: the XML fixture and the generated
+  # profile are both addressed relative to it.
+  set_tests_properties(iccdev.hagc-authoring-invariants PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;tag;xml;hdr;regression"
+  )
+  if(WIN32)
+    set(_hagc_auth_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHagcAuthoringInvariantsTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _hagc_auth_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hagc-authoring-invariants PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_hagc_auth_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
+# The JSON counterpart of iccdev_add_hagc_authoring_invariants_test: the JSON
+# parser carried the same open-coded mixing type switch as the XML one, and
+# masked an out of range applicationVersion instead of refusing it. Its document
+# is built in the test rather than read from Testing/, because it is the parser
+# under test and the XML side already owns the corpus fixture
+# (Testing/HDR/HagcMixingTypes.xml). Needs IccJSON (CIccProfileJson) +
+# IccProfLib; skipped where IccJSON is not built.
+function(iccdev_add_hagc_json_authoring_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccHagcJsonAuthoringTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/hagc-json-authoring.cpp"
+  )
+  target_compile_features(iccHagcJsonAuthoringTest PRIVATE cxx_std_17)
+  target_include_directories(iccHagcJsonAuthoringTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccHagcJsonAuthoringTest PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccHagcJsonAuthoringTest)
+
+  add_test(
+    NAME iccdev.hagc-json-authoring
+    COMMAND "$<TARGET_FILE:iccHagcJsonAuthoringTest>"
+  )
+  set_tests_properties(iccdev.hagc-json-authoring PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;validation;tag;json;hdr;regression"
+  )
+  if(WIN32)
+    set(_hagc_json_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccHagcJsonAuthoringTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _hagc_json_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.hagc-json-authoring PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_hagc_json_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # T2 (HDR profiles): the clause 8.10 HDR Profile classifier, the ITU-T H.273
 # Table 2 primaries lookup, the ColourPrimaries = 2 recovery of clauses
 # 9.2.17/10.3, and the HDR Display headroom precedence of 8.10.5.
@@ -3730,6 +3854,8 @@ if(WIN32)
   iccdev_add_gbd_zero_pcs_test()
   iccdev_add_mpe_empty_identity_test()
   iccdev_add_hagc_codec_test()
+  iccdev_add_hagc_authoring_invariants_test()
+  iccdev_add_hagc_json_authoring_test()
   iccdev_add_hdr_profile_test()
   iccdev_add_hdr_tonemap_test()
   iccdev_add_hdr_bake_test()
@@ -3992,6 +4118,8 @@ iccdev_add_spectral_media_white_test()
 iccdev_add_gbd_zero_pcs_test()
 iccdev_add_mpe_empty_identity_test()
 iccdev_add_hagc_codec_test()
+iccdev_add_hagc_authoring_invariants_test()
+iccdev_add_hagc_json_authoring_test()
 iccdev_add_hdr_profile_test()
 iccdev_add_hdr_tonemap_test()
 iccdev_add_hdr_bake_test()

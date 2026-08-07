@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A v4 RGB Display profile carrying a headroomAdaptiveGainCurveTag ('HAGC')
+  authored to pin the component mixing types the other HAGC fixtures leave
+  uncovered.
+
+  The profile body is the same BT.2020-primaries matrix/TRC display profile as
+  HagcDisplay.xml; only the HAGC metadata differs. Two things are being pinned
+  here, and both are about what the *parser* does with an alternate image's
+  coefficient array rather than about the profile:
+
+  - alternate 0 is component mixing type 3 (custom) with a <Coefficients> node
+    that names one attribute and omits the other five. Types 0 to 2 fix their
+    coefficients implicitly, so the parser fills them in from the type before
+    reading the node; if it fills them in without zeroing the array first, the
+    constructor's type 0 default of kMax = 1 survives the fill and is written
+    out as a real coefficient. Nothing about the file says so: the coefficient
+    array's length is the number of set presence flags, and Pack() derives
+    those flags from the values, so the phantom entry just lengthens the record
+    and doubles the coefficient sum - halving every mixed value the gain curve
+    sees. HagcDisplay.xml cannot catch this because it spells out all six
+    attributes.
+
+  - alternate 1 is component mixing type 1 (component), which no other fixture
+    uses. Its coefficients are not serialized at all, so a stale kMax there is
+    invisible on disk and shows only as an evaluator that computes a different
+    per-channel mixing decision for the freshly parsed tag than for the same
+    tag read back from the file it just wrote.
+
+  Alternate 0 tone maps down from the 3.0 stop baseline, so its control point Y
+  values are negative; alternate 1 sits above the baseline, so its Y values are
+  positive. That sign is re-derived from the headroom ordering on every read
+  (proposal 0.1.3.6) rather than carried in the encoding.
+-->
+<IccProfile>
+  <Header>
+    <PreferredCMMType>ICCD</PreferredCMMType>
+    <ProfileVersion>4.50</ProfileVersion>
+    <ProfileDeviceClass>mntr</ProfileDeviceClass>
+    <DataColourSpace>RGB </DataColourSpace>
+    <PCS>XYZ </PCS>
+    <CreationDateTime>2026-08-06T00:00:00</CreationDateTime>
+    <ProfileFlags EmbeddedInFile="true" UseWithEmbeddedDataOnly="true"/>
+    <DeviceAttributes ReflectiveOrTransparency="reflective" GlossyOrMatte="glossy" MediaPolarity="positive" MediaColour="colour"/>
+    <RenderingIntent>Relative Colorimetric</RenderingIntent>
+    <PCSIlluminant>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </PCSIlluminant>
+    <ProfileCreator>ICCD</ProfileCreator>
+  </Header>
+  <Tags>
+    <redColorantTag> <XYZArrayType>
+      <XYZNumber X="0.636962890625" Y="0.262695312500" Z="0.000000000000"/>
+    </XYZArrayType> </redColorantTag>
+
+    <greenColorantTag> <XYZArrayType>
+      <XYZNumber X="0.144622802734" Y="0.677978515625" Z="0.028076171875"/>
+    </XYZArrayType> </greenColorantTag>
+
+    <blueColorantTag> <XYZArrayType>
+      <XYZNumber X="0.168869018555" Y="0.059326171875" Z="1.060989379883"/>
+    </XYZArrayType> </blueColorantTag>
+
+    <redTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </redTRCTag>
+
+    <greenTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </greenTRCTag>
+
+    <blueTRCTag> <parametricCurveType>
+      <ParametricCurve FunctionType="0">2.2</ParametricCurve>
+    </parametricCurveType> </blueTRCTag>
+
+    <mediaWhitePointTag> <XYZArrayType>
+      <XYZNumber X="0.964202880859" Y="1.000000000000" Z="0.824905395508"/>
+    </XYZArrayType> </mediaWhitePointTag>
+
+    <cicpTag> <cicpType>
+      <cicpFields ColorPrimaries="9" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="1"/>
+    </cicpType> </cicpTag>
+
+    <headroomAdaptiveGainCurveTag> <headroomAdaptiveGainCurveType>
+      <HagcMetadata ApplicationVersion="1" MinApplicationVersion="0"
+                    BaselineHeadroom="3.0000" HeadroomAdaptiveToneMap="true"
+                    ChromaticitiesMode="0" CommonComponentMixing="false" CommonCurveParameters="false">
+       <AlternateImage Headroom="0.0000" ComponentMixingType="3" PchipSlope="false">
+        <Coefficients kRed="1.000000"/>
+        <ControlPoints>
+         <ControlPoint X="0.2500" Y="-0.10000" M="-0.400000"/>
+         <ControlPoint X="0.5000" Y="-0.20000" M="-0.300000"/>
+         <ControlPoint X="0.7500" Y="-0.30000" M="-0.200000"/>
+         <ControlPoint X="1.0000" Y="-0.40000" M="-0.100000"/>
+        </ControlPoints>
+       </AlternateImage>
+       <AlternateImage Headroom="5.0000" ComponentMixingType="1" PchipSlope="true">
+        <ControlPoints>
+         <ControlPoint X="0.5000" Y="0.20000"/>
+         <ControlPoint X="1.0000" Y="0.40000"/>
+         <ControlPoint X="1.5000" Y="0.60000"/>
+        </ControlPoints>
+       </AlternateImage>
+      </HagcMetadata>
+    </headroomAdaptiveGainCurveType> </headroomAdaptiveGainCurveTag>
+
+    <profileDescriptionTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[iccDEV HDR display profile pinning HAGC component mixing types 1 and 3]]></LocalizedText>
+    </multiLocalizedUnicodeType> </profileDescriptionTag>
+
+    <copyrightTag> <multiLocalizedUnicodeType>
+      <LocalizedText LanguageCountry="enUS"><![CDATA[Copyright (C) 2026 The International Color Consortium. Generated fixture, no measured data.]]></LocalizedText>
+    </multiLocalizedUnicodeType> </copyrightTag>
+  </Tags>
+</IccProfile>
