@@ -795,7 +795,7 @@ jobs:
       github.ref == 'refs/heads/master' ||
       (github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/ci-qa-pr-docker-testing' &&
-      inputs.publish-regression-latest == true)
+      inputs['publish-regression-latest'] == true)
     environment: ghcr-publish
     permissions:
       contents: read

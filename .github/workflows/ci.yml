@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   package-unix:
-    if: ${{ inputs.include-experimental-unix }}
+    if: ${{ inputs['include-experimental-unix'] }}
     name: "${{ matrix.platform }} vcpkg packages"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180

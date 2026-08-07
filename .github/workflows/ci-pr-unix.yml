@@ -95,7 +95,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJson(inputs.os-list || '["ubuntu-24.04", "macos-latest"]') }}
-        compiler: ${{ fromJson(inputs.compilers || '["gcc-15", "clang-22", "clang"]') }}
+        compiler: ${{ fromJson(inputs.compilers || '["gcc", "clang"]') }}
         build_type: ${{ fromJson(inputs.build-types || '["Release", "Debug"]') }}
         exclude:
           - os: macos-latest
