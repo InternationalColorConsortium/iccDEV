@@ -944,7 +944,7 @@ jobs:
 
   docker-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-docker == 'true' }}
-    name: Docker Verification
+    name: Docker Clang 22 Verification
     needs: [detect-src, validate-inputs]
     uses: ./.github/workflows/ci-docker-pr.yml
     with:

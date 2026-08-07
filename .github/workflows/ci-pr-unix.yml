@@ -40,7 +40,7 @@ on:
       compilers:
         description: "Compiler list"
         required: false
-        default: '["gcc-15", "clang-22", "clang"]'
+        default: '["gcc", "clang"]'
         type: string
       enable-lto:
         description: "Enable LTO in CMake"
@@ -58,7 +58,7 @@ on:
         default: full
         type: string
       compiler-version:
-        description: "Legacy compiler version selector: system or gcc-15"
+        description: "Compiler version selector: system or gcc-15"
         required: false
         default: system
         type: string
@@ -205,7 +205,6 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          MATRIX_COMPILER: ${{ matrix.compiler }}
           COMPILER_VERSION: ${{ inputs.compiler-version || 'system' }}
         run: |
           set -euo pipefail
@@ -284,17 +283,7 @@ jobs:
             system|gcc-15) ;;
             *) echo "::error title=Invalid compiler version::${COMPILER_VERSION}"; exit 1 ;;
           esac
-          if [ "$MATRIX_COMPILER" = "gcc-15" ]; then
-            command -v gcc-15 >/dev/null 2>&1
-            command -v g++-15 >/dev/null 2>&1
-            echo "CC=gcc-15" >> "$GITHUB_ENV"
-            echo "CXX=g++-15" >> "$GITHUB_ENV"
-          elif [ "$MATRIX_COMPILER" = "clang-22" ]; then
-            command -v clang-22 >/dev/null 2>&1
-            command -v clang++-22 >/dev/null 2>&1
-            echo "CC=clang-22" >> "$GITHUB_ENV"
-            echo "CXX=clang++-22" >> "$GITHUB_ENV"
-          elif [ "$MATRIX_COMPILER" = "gcc" ] && [ "$COMPILER_VERSION" = "gcc-15" ]; then
+          if [ "$MATRIX_COMPILER" = "gcc" ] && [ "$COMPILER_VERSION" = "gcc-15" ]; then
             command -v gcc-15 >/dev/null 2>&1
             command -v g++-15 >/dev/null 2>&1
             echo "CC=gcc-15" >> "$GITHUB_ENV"
