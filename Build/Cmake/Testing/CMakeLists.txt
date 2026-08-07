@@ -2608,6 +2608,43 @@ function(iccdev_add_pawg_compression_paths_test)
   endif()
 endfunction()
 
+# iccPawgReport section H, the HDR Profile items of ICC.1 clause 8.10.
+#
+# Unlike the compression test above, this one cannot link PawgReport.cpp and
+# call an exposed entry: the H items live in that file's anonymous namespace by
+# design, since clause 8.10's questions are report content rather than a
+# reusable measurement.  So it drives the built tool and reads its output -
+# which is also the shape a downstream consumer sees.  RunPawgHdrSectionTest.cmake
+# documents the three contracts it pins; the fixtures are generated, so the
+# script skips (not fails) when CreateAllProfiles.sh has not run.
+function(iccdev_add_pawg_hdr_section_test)
+  if(NOT TARGET iccPawgReport)
+    return()
+  endif()
+
+  add_test(
+    NAME iccdev.pawg-hdr-section
+    COMMAND
+      "${CMAKE_COMMAND}"
+      "-DICCDEV_TEST_NAME=iccdev.pawg-hdr-section"
+      "-DICCDEV_TEST_OUTDIR=${ICCDEV_TEST_OUTDIR}/iccdev-pawg-hdr-section"
+      "-DICCDEV_BUILD_DIR=${CMAKE_BINARY_DIR}"
+      "-DICCDEV_PAWG_EXE=$<TARGET_FILE:iccPawgReport>"
+      "-DICCDEV_HDR_DIR=${ICCDEV_TESTING_DIR}/HDR"
+      "-DICCDEV_SDR_PROFILE=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+      # The count a non-HDR report has always had.  It is asserted, not derived,
+      # precisely so that adding section H to every profile would break this.
+      "-DICCDEV_SDR_ITEM_COUNT=32"
+      -P "${CMAKE_CURRENT_LIST_DIR}/RunPawgHdrSectionTest.cmake"
+  )
+  set_tests_properties(iccdev.pawg-hdr-section PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;pawg;hdr;report;regression"
+  )
+  add_dependencies(check iccPawgReport)
+endfunction()
+
 # Guards the heap-use-after-free in CIccTagJsonSparseMatrixArray::ToJson (#1791):
 # the JSON sparse-matrix serializer called CIccSparseMatrix::Reset() without
 # checking the result and then walked the matrix through m_RowStart-derived
@@ -3653,6 +3690,7 @@ if(WIN32)
   iccdev_add_ziputf8_settext_contract_test()
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
+  iccdev_add_pawg_hdr_section_test()
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_mpexml_unknown_reserved_test()
@@ -3915,6 +3953,7 @@ iccdev_add_tagdata_zlib_roundtrip_test()
 iccdev_add_ziputf8_settext_contract_test()
 iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
+iccdev_add_pawg_hdr_section_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_mpexml_unknown_reserved_test()

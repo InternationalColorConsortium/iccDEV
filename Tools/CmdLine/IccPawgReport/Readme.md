@@ -24,6 +24,10 @@ The report prints 32 checklist items:
 - `C1` through `C14`: conformance checks
 - `Q1` through `Q4`: quality checks
 
+A profile of the HDR Profile sub-class of ICC.1 clause 8.10 gets a further eight, `H1` through
+`H8`. That section is **absent** — not `NOT RUN` — for every other profile, so a non-HDR report
+is byte-for-byte what it was before the section existed and still totals 32 items.
+
 **Indicators:** `PASS`, `WARN`, `FAIL`, `GAP`, `N/A`, and `NOT RUN`.
 
 | Status | Meaning |
@@ -43,6 +47,20 @@ Security checks cover the PAWG goals for channel counts, 128-byte header encodin
 Conformance checks cover tag value encoding, `cprt`/`desc` text encoding, allowed tag types, required tags for profile class, unexpected additional tags, private-tag registration and documentation status, undocumented private-tag identification, profile-class and data-colour-space consistency, header conformance, profile-version/tag consistency, media white point encoding, reserved header bytes, and four-byte tag boundaries.
 
 Quality checks report first and second round-trip CIEDE2000 differences, curve invertibility, transform smoothness metrics, and characterization-data CIEDE2000 differences when the profile contains enough supported data.
+
+HDR checks (`H1`–`H8`, ICC.1 clause 8.10) report the HDR Profile classification (conforming or
+merely intended), the 4.5.0.0 version requirement, presence of the `cicpTag`, whether its
+`TransferCharacteristics` is one of the three an HDR Profile may use, how the source primaries
+resolved (ITU-T H.273 table or the profile's own matrix columns, per clause 9.2.17), which of
+clause 8.10.3's ranked tone-mapping descriptors is present, and — the two provenance items —
+where the content HDR reference white came from and which rule of clause 8.10.5 produced the
+display headroom. The last two read entries out of the `metadataTag` whose names and encodings
+are reconstructed pending publication of the ICC dictType Metadata Registry, and the detail text
+says so rather than presenting a derived number as settled.
+
+The section is PAWG's own selection, not a rendering of the IccProfLib validation report: the
+two overlap but their intent differs, and `H5`, `H7` and `H8` are not spec violations at all, so
+they could never appear in a validation log.
 
 ## Notes
 - ICC PAWG checklist is a guide and not an exhaustive list
