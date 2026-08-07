@@ -108,6 +108,13 @@ jobs:
             compiler: clang
 
     steps:
+      - name: Check out Repository
+        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
+        with:
+          ref: ${{ inputs.target-sha || github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Check out trusted sanitizer helper
         uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
         with:
@@ -147,13 +154,6 @@ jobs:
             Release|Debug) ;;
             *) echo "ERROR: invalid build type: '$BT'. Allowed: Release, Debug"; exit 1 ;;
           esac
-
-      - name: Check out Repository
-        uses: actions/checkout@c2d88d3ecc89a9ef08eebf45d9637801dcee7eb5  # v5.0.0
-        with:
-          ref: ${{ inputs.target-sha || github.event.pull_request.head.sha || github.ref }}
-          fetch-depth: 0
-          persist-credentials: false
 
       - name: Print the PR Branch Details
         shell: bash --noprofile --norc {0}
