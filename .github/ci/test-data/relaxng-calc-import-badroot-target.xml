@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Import target for relaxng-calc-import-badroot-main.xml. Well-formed XML so
+     it parses into a document, but the root element is deliberately not
+     IccCalcImport so ParseImport rejects it after taking ownership of that
+     document. -->
+<NotAnIccCalcImport>
+	<Imports/>
+</NotAnIccCalcImport>

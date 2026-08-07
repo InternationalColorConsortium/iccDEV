@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Valid RelaxNG that compiles cleanly but cannot match an ICC profile: the
+     document root would have to be <NeverMatchesAnIccProfile>. Drives
+     CIccProfileXml::LoadXml down the "result != 0" rejection, which is the exit
+     that reports the file as invalid and returns. -->
+<element name="NeverMatchesAnIccProfile" xmlns="http://relaxng.org/ns/structure/1.0">
+  <empty/>
+</element>

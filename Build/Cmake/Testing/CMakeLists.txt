@@ -2514,6 +2514,95 @@ function(iccdev_add_xml_writer_graceful_degrade_test)
   endif()
 endfunction()
 
+# #1999: CIccProfileXml::LoadXml's RelaxNG validation block (iccFromXml -v) created an
+# xmlRelaxNGParserCtxt, an xmlRelaxNG and an xmlRelaxNGValidCtxt and freed none
+# of them on any path -- four bare `return false` exits and a fall-through, so
+# the leak happened whether validation passed or failed. The same exits also
+# returned without the xmlFreeDoc that LoadXml owes the document, and a sibling
+# in CIccMpeXmlCalculator::ParseImport dropped the DOM of an <Import> whose root
+# element is not IccCalcImport.
+#
+# The leak signal is the LeakSanitizer at-exit scan, so this must run with
+# detect_leaks=1 -- see the `cmake -E env` note below. The test also asserts the
+# accept/reject outcome at each exit, which is meaningful in non-ASan builds too.
+# Needs IccXML (CIccProfileXml) + IccProfLib; skipped where IccXML is not built.
+function(iccdev_add_xml_relaxng_validation_leak_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlRelaxNGValidationLeakTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-relaxng-validation-leak.cpp"
+  )
+  target_include_directories(iccXmlRelaxNGValidationLeakTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlRelaxNGValidationLeakTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlRelaxNGValidationLeakTest)
+
+  # The CI tool-test job and ICCDEV_TEST_ENV both export
+  # ASAN_OPTIONS=...detect_leaks=0 to silence unrelated leaks in the smoke-tested
+  # tools. Inheriting that here would disable LSan and make this a false pass on
+  # a real leak. Force it back on for this test's own process via `cmake -E env`
+  # (a CTest ENVIRONMENT property is not reliable for ASAN_OPTIONS). Set ONLY
+  # detect_leaks=1: appending halt_on_error=0 makes the runtime print the leak
+  # and still exit 0, which ctest would read as a pass.
+  #
+  # The three existing leak regressions (cmmsearch-namedcolor-ownership,
+  # xform-create-tag-ownership, iccprofileplot-pdf-leak) skip themselves entirely
+  # on MSVC, whose AddressSanitizer has no LeakSanitizer and would be handed an
+  # option it does not implement. This test is not skipped there, because its
+  # LoadXml return-value assertions pin the accept/reject behaviour at each of the
+  # four RelaxNG exits and are worth running on Windows even with no leak check;
+  # only the detect_leaks=1 wrapper is dropped.
+  set(_relaxng_leak_args
+    "${ICCDEV_TESTING_DIR}/Display/sRGB_D65_MAT.xml"
+    "${ICCDEV_REPO_ROOT}/.github/ci/test-data/relaxng-accept-any.rng"
+    "${ICCDEV_REPO_ROOT}/.github/ci/test-data/relaxng-reject-all.rng"
+    "${ICCDEV_REPO_ROOT}/.github/ci/test-data/relaxng-malformed.rng"
+    "relaxng-calc-import-badroot-main.xml"
+  )
+  if(MSVC)
+    add_test(
+      NAME iccdev.xml-relaxng-validation-leak
+      COMMAND "$<TARGET_FILE:iccXmlRelaxNGValidationLeakTest>" ${_relaxng_leak_args}
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-relaxng-validation-leak
+      COMMAND "${CMAKE_COMMAND}" -E env
+        "ASAN_OPTIONS=detect_leaks=1"
+        "$<TARGET_FILE:iccXmlRelaxNGValidationLeakTest>" ${_relaxng_leak_args}
+    )
+  endif()
+  # WORKING_DIRECTORY is the fixture directory rather than the usual output dir
+  # because <Import Filename="..."> is resolved relative to the process working
+  # directory, and IccXmlIsPathSafe rejects the absolute or "../" path that any
+  # other choice would need.
+  set_tests_properties(iccdev.xml-relaxng-validation-leak PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}/.github/ci/test-data"
+    TIMEOUT 60
+    LABELS "iccdev;xml;relaxng;leak;issue-1999;regression"
+  )
+  if(WIN32)
+    set(_relaxng_leak_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlRelaxNGValidationLeakTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _relaxng_leak_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-relaxng-validation-leak PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_relaxng_leak_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -3454,6 +3543,7 @@ if(WIN32)
   iccdev_add_pawg_compression_paths_test()
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_xml_writer_graceful_degrade_test()
+  iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -3712,6 +3802,7 @@ iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
+iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()

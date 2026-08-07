@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Deliberately permissive RelaxNG grammar: matches any element, attribute and
+     text content, so CIccProfileXml::LoadXml takes its validation-SUCCEEDS path
+     for any well-formed profile. That path is the one that used to leak the
+     RelaxNG parser context, the compiled schema and the validation context
+     without any diagnostic at all, so a schema that always passes is what pins
+     it. The repository ships no RelaxNG schema of its own, which is why this
+     fixture exists rather than reusing one. -->
+<grammar xmlns="http://relaxng.org/ns/structure/1.0">
+  <start><ref name="anything"/></start>
+  <define name="anything">
+    <element>
+      <anyName/>
+      <zeroOrMore>
+        <choice>
+          <attribute><anyName/></attribute>
+          <text/>
+          <ref name="anything"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+</grammar>
