@@ -184,7 +184,7 @@ void Usage()
   printf("    0 - Same as src\n");
   printf("    1 - icEncode8Bit\n");
   printf("    2 - icEncode16Bit\n");
-  printf("    4 - icEncodeFloat\n\n");
+  printf("    3 - icEncodeFloat\n\n");
 
   printf("  For dst_compression:\n");
   printf("    0 - No compression\n");

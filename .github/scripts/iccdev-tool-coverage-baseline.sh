@@ -886,7 +886,11 @@ echo ""
 echo "--- 8. iccApplyProfiles ---"
 APPLYPROF="$TOOLS/IccApplyProfiles/iccApplyProfiles"
 
-# dst_encoding: 0=same, 1=8bit, 2=16bit, 4=float
+# dst_encoding: 0=same, 1=8bit, 2=16bit, 3=float
+# (#1996: this line and apply-03 below said 4 for float, copied from the tool's own
+#  usage text, which was wrong from 1f0a9dd2 onwards.  4 fell into the parser's
+#  shared default label and produced an 8-bit file, so the "8bit->float" case was
+#  recorded as a PASS while measuring the 8-bit path a second time.)
 # dst_compress: 0=none, 1=LZW
 # dst_planar: 0=contig, 1=separate
 # dst_embed: 0=no, 1=embed
@@ -899,7 +903,7 @@ if [ -f "$TIFF_8BIT" ]; then
     "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_16bit.tiff" 2 1 0 0 0 "$SRGB" 1
 
   run_test "apply-03" "TIFF 8bit->float sRGB perceptual" \
-    "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_float.tiff" 4 0 0 0 0 "$SRGB" 0
+    "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_float.tiff" 3 0 0 0 0 "$SRGB" 0
 
   run_test "apply-04" "TIFF 8bit with embedded ICC" \
     "$APPLYPROF" "$TIFF_8BIT" "$OUTDIR/applied_embed.tiff" 0 0 0 1 0 "$SRGB" 1

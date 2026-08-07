@@ -513,14 +513,30 @@ int CIccCfgImageApply::fromArgs(const char** args, int nArg, bool bReset)
   m_srcImgFile = args[0];
   m_dstImgFile = args[1];
 
-  int n = atoi(args[2]);
+  // The destination encoding arrives as a positional selector, not as an
+  // icFloatColorEncoding value: 0 asks for the source image's own sample format
+  // and 1..3 name the three formats the TIFF writer emits (8 bit, 16 bit, float).
+  // The selector used to be read with bare atoi() and the switch shared its
+  // default label with case 1, so a non-numeric selector and every out-of-range
+  // one alike were silently answered with an 8-bit file and an exit status of 0
+  // (#1996).  That mattered in practice because the iccApplyProfiles usage text
+  // advertised "4 - icEncodeFloat" from 1f0a9dd2 onwards while float has always
+  // been 3 here: following the shipped documentation produced an 8-bit result
+  // with nothing to distinguish it from a request that was honoured.  Parse
+  // strictly and refuse a selector this switch does not define.  Returning 0 is
+  // how the sibling CIccCfgDataApply::fromArgs above reports a bad encoding
+  // selector, and the sole caller (iccApplyProfiles) already turns it into
+  // "Unable to parse configuration arguments" followed by Usage().
+  int n;
+  if (!icParseIntArg(args[2], n))
+    return 0;
+
   switch (n)
   {
     case 0:
       m_dstEncoding = icEncodeUnknown;
       break;
 
-    default:
     case 1:
       m_dstEncoding = icEncode8Bit;
       break;
@@ -532,11 +548,29 @@ int CIccCfgImageApply::fromArgs(const char** args, int nArg, bool bReset)
     case 3:
       m_dstEncoding = icEncodeFloat;
       break;
+
+    default:
+      return 0;
   }
 
-  m_dstCompression = atoi(args[3]) != 0 ? icDstBoolTrue : icDstBoolFalse;
-  m_dstPlanar = atoi(args[4]) != 0 ? icDstBoolTrue : icDstBoolFalse;
-  m_dstEmbedIcc = atoi(args[5]) != 0 ? icDstBoolTrue : icDstBoolFalse;
+  // The three flags that follow are documented as 0/1 but were read with bare
+  // atoi() too, which cannot fail: a typo or an empty string became 0 and was
+  // indistinguishable from an explicit "off".  Parse them the same way, then keep
+  // the existing non-zero-is-true rule so a caller that has been passing some
+  // other non-zero integer still gets the behaviour it had.
+  int nFlag;
+
+  if (!icParseIntArg(args[3], nFlag))
+    return 0;
+  m_dstCompression = nFlag != 0 ? icDstBoolTrue : icDstBoolFalse;
+
+  if (!icParseIntArg(args[4], nFlag))
+    return 0;
+  m_dstPlanar = nFlag != 0 ? icDstBoolTrue : icDstBoolFalse;
+
+  if (!icParseIntArg(args[5], nFlag))
+    return 0;
+  m_dstEmbedIcc = nFlag != 0 ? icDstBoolTrue : icDstBoolFalse;
 
   return 6;
 }
