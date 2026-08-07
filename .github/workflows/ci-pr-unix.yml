@@ -30,7 +30,7 @@ on:
       os-list:
         description: "List of operating systems"
         required: false
-        default: '["ubuntu-latest", "macos-latest"]'
+        default: '["ubuntu-24.04", "macos-latest"]'
         type: string
       build-types:
         description: "Build types"
@@ -94,7 +94,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJson(inputs.os-list || '["ubuntu-latest", "macos-latest"]') }}
+        os: ${{ fromJson(inputs.os-list || '["ubuntu-24.04", "macos-latest"]') }}
         compiler: ${{ fromJson(inputs.compilers || '["gcc-15", "clang-22", "clang"]') }}
         build_type: ${{ fromJson(inputs.build-types || '["Release", "Debug"]') }}
         exclude:
@@ -104,8 +104,6 @@ jobs:
             compiler: gcc-15
           - os: macos-latest
             compiler: clang-22
-          - os: ubuntu-latest
-            compiler: clang
           - os: ubuntu-24.04
             compiler: clang
 
@@ -128,8 +126,8 @@ jobs:
           BT="${MATRIX_BUILD_TYPE}"
 
           case "$OS" in
-            ubuntu-latest|ubuntu-24.04|macos-latest) ;;
-            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-latest, ubuntu-24.04, macos-latest"; exit 1 ;;
+            ubuntu-24.04|macos-latest) ;;
+            *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-24.04, macos-latest"; exit 1 ;;
           esac
           case "$COMP" in
             gcc|gcc-15|clang|clang-22) ;;
@@ -204,6 +202,23 @@ jobs:
           git config --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          case "$MATRIX_COMPILER" in
+            gcc-15)
+              sudo add-apt-repository --yes ppa:ubuntu-toolchain-r/test
+              ;;
+            clang-22)
+              llvm_key="$RUNNER_TEMP/llvm-snapshot.gpg.key"
+              llvm_keyring="$RUNNER_TEMP/llvm-snapshot.gpg"
+              curl --fail --location --silent --show-error \
+                https://apt.llvm.org/llvm-snapshot.gpg.key \
+                --output "$llvm_key"
+              gpg --dearmor --output "$llvm_keyring" "$llvm_key"
+              sudo install -m 0644 "$llvm_keyring" /usr/share/keyrings/llvm-snapshot.gpg
+              printf '%s\n' \
+                'deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' |
+                sudo tee /etc/apt/sources.list.d/llvm-toolchain-22.list >/dev/null
+              ;;
+          esac
           bash .github/scripts/ci-safe-apt-update.sh
           packages=(
             build-essential cmake \

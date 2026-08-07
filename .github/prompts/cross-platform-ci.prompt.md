@@ -19,7 +19,7 @@ gh run view <RUN_ID> --repo InternationalColorConsortium/iccDEV --log-failed
 | Workflow | Platform | Compiler | Key Differences |
 |----------|----------|----------|-----------------|
 | `ci-pr-action.yml` | ubuntu-24.04 | clang | Gold-standard bash governance |
-| `ci-pr-unix.yml` | ubuntu-24.04 | gcc + clang | Matrix: {gcc, clang} x {Debug, Release} |
+| `ci-pr-unix.yml` | ubuntu-24.04 | GCC 15, Clang 22 | Linux toolchains from the matching signed APT repositories |
 | `ci-pr-win.yml` | windows-latest | MSVC | vcpkg deps, PowerShell governance |
 | `ci-sanitizer-tests.yml` | ubuntu-24.04 | clang | ASan, UBSan, TSan, MSan matrix |
 | `ci-pr-wasm.yml` | ubuntu-24.04 | emcc | Release WASM PR parity gate |
