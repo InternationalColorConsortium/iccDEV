@@ -2827,6 +2827,60 @@ function(iccdev_add_curve_setsize_contract_test)
   endif()
 endfunction()
 
+# #2012/#2013/#2014: g_icTagNameTable published ten tag names matching neither
+# the signature nor their siblings. The table drives the XML element name and the
+# JSON key in both directions, so the corrected name must be the one emitted while
+# the legacy name keeps resolving through the read-only g_icAltTagNameTable.
+# Links IccProfLib only -- the contract is the factory mapping, not a round-trip.
+function(iccdev_add_tag_name_spelling_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTagNameSpellingTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tag-name-spelling.cpp"
+  )
+  target_compile_features(iccTagNameSpellingTest PRIVATE cxx_std_17)
+  target_include_directories(iccTagNameSpellingTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccTagNameSpellingTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccTagNameSpellingTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tag-name-spelling
+      COMMAND "$<TARGET_FILE:iccTagNameSpellingTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tag-name-spelling
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccTagNameSpellingTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tag-name-spelling PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;tagfactory;naming;regression"
+  )
+  if(WIN32)
+    set(_tag_name_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTagNameSpellingTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tag_name_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tag-name-spelling PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tag_name_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -3770,6 +3824,7 @@ if(WIN32)
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_curve_setsize_contract_test()
+  iccdev_add_tag_name_spelling_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -4033,6 +4088,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_curve_setsize_contract_test()
+iccdev_add_tag_name_spelling_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()

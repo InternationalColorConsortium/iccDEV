@@ -115,14 +115,19 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigBRDFMToS1Tag, "brdfMToS1Tag"},
   {icSigBRDFMToS2Tag, "brdfMToS2Tag"},
   {icSigBRDFMToS3Tag, "brdfMToS3Tag"},
-  {icSigBRDFAToB0Tag, "BRDFAToB0Tag"},
-  {icSigBRDFAToB1Tag, "BRDFAToB1Tag"},
-  {icSigBRDFAToB2Tag, "BRDFAToB2Tag"},
-  {icSigBRDFAToB3Tag, "BRDFAToB3Tag"},
-  {icSigBRDFDToB0Tag, "BRDFDToB0Tag"},
-  {icSigBRDFDToB1Tag, "BRDFDToB1Tag"},
-  {icSigBRDFDToB2Tag, "BRDFDToB2Tag"},
-  {icSigBRDFDToB3Tag, "BRDFDToB3Tag"},
+  // ICC.2-2023 9.2.14-17 and 9.2.26-29 spell these brdfAToB0Tag..brdfDToB3Tag.  The
+  // uppercase BRDF here was inconsistent with the brdfMToB/brdfMToS entries directly
+  // above, which already map an uppercase icSigBRDFM* enum to a lowercase name; the
+  // enum spelling is unrelated to the emitted name.  Legacy names read via
+  // g_icAltTagNameTable.
+  {icSigBRDFAToB0Tag, "brdfAToB0Tag"},
+  {icSigBRDFAToB1Tag, "brdfAToB1Tag"},
+  {icSigBRDFAToB2Tag, "brdfAToB2Tag"},
+  {icSigBRDFAToB3Tag, "brdfAToB3Tag"},
+  {icSigBRDFDToB0Tag, "brdfDToB0Tag"},
+  {icSigBRDFDToB1Tag, "brdfDToB1Tag"},
+  {icSigBRDFDToB2Tag, "brdfDToB2Tag"},
+  {icSigBRDFDToB3Tag, "brdfDToB3Tag"},
   {icSigSurfaceMapTag, "surfaceMapTag"},
   {icSigBToA0Tag, "BToA0Tag"},
   {icSigBToA1Tag, "BToA1Tag"},
@@ -159,7 +164,11 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigGreenTRCTag, "greenTRCTag"},
   {icSigHToS0Tag, "HToS0Tag"},
   {icSigHToS1Tag, "HToS1Tag"},
-  {icSigHToS2Tag, "HTSB2Tag"},
+  // "HTSB2Tag" matched neither the signature ('H2S2') nor the three siblings around
+  // it.  This family is uppercase by design, like AToB/BToA/MToB, so the correction is
+  // to HToS2Tag rather than to a lowercase spelling.  Legacy name reads via
+  // g_icAltTagNameTable.
+  {icSigHToS2Tag, "HToS2Tag"},
   {icSigHToS3Tag, "HToS3Tag"},
   {icSigLuminanceTag, "luminanceTag"},
   {icSigMeasurementTag, "measurementTag"},
@@ -207,7 +216,10 @@ icSigNamePair g_icTagNameTable[] = {
   {icSigOutputResponseTag, "outputResponseTag"},
   {icSigPerceptualRenderingIntentGamutTag, "perceptualRenderingIntentGamutTag"},
   {icSigSaturationRenderingIntentGamutTag, "saturationRenderingIntentGamutTag"},
-  {icSigCxFTag, "CxfTag"},
+  // ICC.2-2023 9.2.58 spells this cxfTag; CxF is the format name, not the tag name, and
+  // the neighbouring v5 entries are all lowercase-initial.  Legacy name reads via
+  // g_icAltTagNameTable.
+  {icSigCxFTag, "cxfTag"},
   {icSigSpectralDataInfoTag, "spectralDataInfoTag"},
   {icSigSpectralWhitePointTag, "spectralWhitePointTag"},
   {icSigCustomToStandardPccTag, "customToStandardPccTag"},
@@ -227,9 +239,23 @@ icSigNamePair g_icTagNameTable[] = {
 };
 
 icSigNamePair g_icAltTagNameTable[] = {
-  // Legacy names for backward compatibility with older XML/JSON files
+  // Legacy names for backward compatibility with older XML/JSON files.  Only
+  // GetTagNameSig consults this table, so entries here are read-only: a document that
+  // still carries the old name keeps loading, while nothing writes it again.
   {icSigMultiplexTypeArrayTag, "materialTypeArrayTag"},
   {icSigMultiplexDefaultValuesTag, "materialDefaultValuesTag"},
+  // Names corrected in the main table above; every one of these was previously emitted
+  // by this library, so dropping them would make iccDEV unable to read its own output.
+  {icSigBRDFAToB0Tag, "BRDFAToB0Tag"},
+  {icSigBRDFAToB1Tag, "BRDFAToB1Tag"},
+  {icSigBRDFAToB2Tag, "BRDFAToB2Tag"},
+  {icSigBRDFAToB3Tag, "BRDFAToB3Tag"},
+  {icSigBRDFDToB0Tag, "BRDFDToB0Tag"},
+  {icSigBRDFDToB1Tag, "BRDFDToB1Tag"},
+  {icSigBRDFDToB2Tag, "BRDFDToB2Tag"},
+  {icSigBRDFDToB3Tag, "BRDFDToB3Tag"},
+  {icSigHToS2Tag, "HTSB2Tag"},
+  {icSigCxFTag, "CxfTag"},
   {(icTagSignature)0,""},
 };
 
