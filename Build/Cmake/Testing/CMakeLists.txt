@@ -2702,6 +2702,72 @@ function(iccdev_add_xml_relaxng_validation_leak_test)
   endif()
 endfunction()
 
+# #2006: CIccTagCurve::SetSize() reports a request above its 65536-entry cap as success
+# after freeing the table, and the three File=/Format="text" branches of
+# CIccTagXmlCurve::ParseXml neither checked the return nor compared the resulting
+# size before writing through GetData(0). A hand-authored profile with a 65537
+# entry curve table crashed iccFromXml. The equivalent inline <Curve> branches
+# have guarded this since #1158, so the test pins the contrast as well as the
+# 65536 boundary.
+function(iccdev_add_xml_curve_oversize_file_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCXML}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccXmlCurveOversizeFileTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/xml-curve-oversize-file.cpp"
+  )
+  target_compile_features(iccXmlCurveOversizeFileTest PRIVATE cxx_std_17)
+  target_include_directories(iccXmlCurveOversizeFileTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccXML/IccLibXML"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    ${LIBXML2_INCLUDE_DIR}
+  )
+  target_link_libraries(iccXmlCurveOversizeFileTest PRIVATE
+    ${TARGET_LIB_ICCXML} ${TARGET_LIB_ICCPROFLIB} ${LIBXML2_LIBRARIES})
+  add_dependencies(check iccXmlCurveOversizeFileTest)
+
+  # The helper generates its own fixtures and chdir()s into this directory: the
+  # File= attribute is resolved relative to the process working directory and
+  # IccXmlIsPathSafe rejects absolute paths, so the table has to sit beside the
+  # document. Keeping it under the build tree stops the 65537-entry table being
+  # written into the source tree the way the hybrid pipeline does.
+  set(_curve_oversize_scratch "${CMAKE_CURRENT_BINARY_DIR}/ctest-output/xml-curve-oversize-file")
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.xml-curve-oversize-file
+      COMMAND "$<TARGET_FILE:iccXmlCurveOversizeFileTest>" "${_curve_oversize_scratch}"
+    )
+  else()
+    add_test(
+      NAME iccdev.xml-curve-oversize-file
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccXmlCurveOversizeFileTest>" "${_curve_oversize_scratch}"
+    )
+  endif()
+  set_tests_properties(iccdev.xml-curve-oversize-file PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;xml;curve;setsize;regression"
+  )
+  if(WIN32)
+    set(_curve_oversize_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccXmlCurveOversizeFileTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCXML}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _curve_oversize_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.xml-curve-oversize-file PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_curve_oversize_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -3643,6 +3709,7 @@ if(WIN32)
   iccdev_add_json_sparsematrix_huaf_test()
   iccdev_add_xml_writer_graceful_degrade_test()
   iccdev_add_xml_relaxng_validation_leak_test()
+  iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -3904,6 +3971,7 @@ iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()
 iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
+iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()

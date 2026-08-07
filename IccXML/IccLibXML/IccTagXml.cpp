@@ -3238,7 +3238,23 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
 
           else {
-            SetSize(data.GetSize());
+            // CIccTagCurve::SetSize() answers a request above its 65536-entry cap
+            // by freeing the table, setting m_nSize to 0 and returning true, so
+            // the return value alone does not say whether the size was honoured.
+            // GetData(0) then hands back NULL and the loop below writes
+            // data.GetSize() floats through it.  The three inline-curve branches
+            // further down this same function already test m_nSize against the
+            // requested size for exactly this reason; these File=/Format="text"
+            // branches never did, and are still the 2015 import code.  Match them,
+            // and release the buffer and the file this branch owns and they do not.
+            if (!SetSize(data.GetSize()) || m_nSize != data.GetSize()) {
+              parseStr += "Curve in '";
+              parseStr += filename;
+              parseStr += "' has more entries than a curveType can hold.\n";
+              delete[] buf;
+              delete file;
+              return false;
+            }
             icUInt8Number *src = data.GetBuf();
             icFloatNumber *dst = GetData(0);
 
@@ -3276,7 +3292,16 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
 
           else {
-            SetSize(data.GetSize());
+            // See the lut8 branch above: an over-cap SetSize() reports success
+            // with m_Curve NULL, and this is the loop that writes through it.
+            if (!SetSize(data.GetSize()) || m_nSize != data.GetSize()) {
+              parseStr += "Curve in '";
+              parseStr += filename;
+              parseStr += "' has more entries than a curveType can hold.\n";
+              delete[] buf;
+              delete file;
+              return false;
+            }
 
             icUInt16Number *src = data.GetBuf();
             icFloatNumber *dst = GetData(0);
@@ -3309,9 +3334,18 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
 
           else {
-            SetSize(data.GetSize());
+            // See the lut8 branch above: an over-cap SetSize() reports success
+            // with m_Curve NULL, and this is the loop that writes through it.
+            if (!SetSize(data.GetSize()) || m_nSize != data.GetSize()) {
+              parseStr += "Curve in '";
+              parseStr += filename;
+              parseStr += "' has more entries than a curveType can hold.\n";
+              delete[] buf;
+              delete file;
+              return false;
+            }
             icFloatNumber *src = data.GetBuf();
-            icFloatNumber *dst = GetData(0);          
+            icFloatNumber *dst = GetData(0);
 
             icUInt32Number i;
             for (i=0; i<data.GetSize(); i++) {
@@ -3352,10 +3386,15 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
             return false;
           }
           icFloatNumber *dst =  GetData(0);
+          // The !SetSize(num) test above catches a genuine allocation failure, so
+          // the only way to reach here with a NULL table is the over-cap refusal,
+          // which returns true after emptying the curve.  The message used to say
+          // "Curve data allocation failed", which describes the one case this
+          // branch cannot see; nothing failed to allocate, the size was refused.
           if (num && !dst) {
-            parseStr += "Curve data allocation failed for '";
+            parseStr += "Curve in '";
             parseStr += filename;
-            parseStr += "'.\n";
+            parseStr += "' has more entries than a curveType can hold.\n";
             delete file;
             return false;
           }
@@ -3393,9 +3432,9 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
           icFloatNumber *dst = GetData(0);
           if (num && !dst) {
-            parseStr += "Curve data allocation failed for '";
+            parseStr += "Curve in '";
             parseStr += filename;
-            parseStr += "'.\n";
+            parseStr += "' has more entries than a curveType can hold.\n";
             delete file;
             return false;
           }
@@ -3442,9 +3481,9 @@ bool CIccTagXmlCurve::ParseXml(xmlNode *pNode, icConvertType nType, std::string 
           }
           icFloatNumber *dst = GetData(0);
           if (num && !dst) {
-            parseStr += "Curve data allocation failed for '";
+            parseStr += "Curve in '";
             parseStr += filename;
-            parseStr += "'.\n";
+            parseStr += "' has more entries than a curveType can hold.\n";
             delete file;
             return false;
           }
