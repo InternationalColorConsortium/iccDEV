@@ -139,8 +139,20 @@ $PREFIX/tools/iccdev/iccApplyNamedCmm --help
 | `ports/iccdev/portfile.cmake` | Static-only vcpkg build script |
 | `ports/iccdev/vcpkg.json` | Port manifest (deps, features) |
 | `examples/hello-iccdev/vcpkg.json` | Consumer manifest; relies on `iccdev` transitive dependencies |
-| `.github/workflows/ci-vcpkg-ports.yml` | Cross-platform CI workflow |
+| `.github/workflows/ci-vcpkg-ports.yml` | Windows required CI workflow; Linux/macOS are manual diagnostics |
 | `Build/Cmake/CMakeLists.txt` | Upstream CMake options used by the port |
+
+## CI Policy
+
+The required vcpkg lane validates `x64-windows` only. Treat Linux and macOS
+vcpkg failures as diagnostics until those environments are stable; do not add
+them to pull-request fan-out.
+
+The manual `vcpkg platform packages` workflow defaults to Windows. Set its
+`include-experimental-unix` input only when investigating Linux or macOS. Its
+artifact bundles preserve the portable vcpkg layout:
+`vcpkg/scripts/buildsystems/vcpkg.cmake` and
+`vcpkg/installed/<triplet>/`.
 
 ## Environment Variable Gotcha
 

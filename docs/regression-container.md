@@ -335,11 +335,13 @@ gh workflow run ci-pr-action.yml \
   -f ci_scope=full
 ```
 
-The default long cycle runs the Unix GCC/Clang Release and Debug matrix, the
+The full long cycle runs the Unix GCC/Clang Release and Debug matrix, the
 regression-container GCC 15.2 strict Release LTO build, GCC 15.2 ASAN+UBSAN tool
 tests, Windows, and Docker verification. Pull request events and Web UI
-dispatches also default to `full`. Use `auto` only when path-scoped selection is
-intentional.
+dispatches default to `auto`: source, build, test, and container changes select
+the full matrix, while workflow-only changes use the preflight and
+workflow-security gates. Dispatch `full` explicitly when a long-cycle matrix is
+needed.
 
 For the fastest same-repository PR lane, provide the open PR number:
 
@@ -355,7 +357,7 @@ Fast lane uses the regression container for exact GCC 15.2, runs strict Release
 LTO plus the GCC 15.2 ASAN+UBSAN Release tool lane, and limits CTest to the most
 recent registered test by default. Windows is opt-in through the Web UI or CLI
 `include_windows` input. Docker is opt-in through the Web UI or CLI
-`include_docker` input, or the `ci:docker` maintainer label.
+`include_docker` input.
 
 Watch the run:
 

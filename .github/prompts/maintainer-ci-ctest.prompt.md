@@ -36,14 +36,15 @@ maintainers unless an iccDEV maintainer explicitly approves the change.
 
 Choose the smallest gate that proves the behavior:
 
-- `ci-pr-action` full: default long-cycle Unix GCC/Clang Release and Debug,
+- `ci-pr-action` full: explicit long-cycle Unix GCC/Clang Release and Debug,
   exact GCC 15.2 strict Release LTO, GCC 15.2 ASAN+UBSAN tool tests, Windows,
   and Docker verification.
 - `ci-pr-action` fast lane: exact GCC 15.2 strict Release LTO plus GCC 15.2
   ASAN+UBSAN Release tool validation, latest CTest by default, with Windows and
   Docker opt-in.
-- `ci-pr-action` auto: explicit path-scoped selection when the default full
-  cycle is unnecessary.
+- `ci-pr-action` auto: default path-scoped selection. Source, build, test, and
+  container changes select the full matrix; workflow-only changes use preflight
+  and workflow-security gates.
 - CTest suite: cross-platform tool/profile behavior that belongs in the normal
   local and CI test surface.
 - Focused `.github/scripts/*.sh` regression: reusable Linux regression logic or
@@ -144,7 +145,7 @@ gh run watch <run-id> --repo InternationalColorConsortium/iccDEV --exit-status
 ```
 
 Trigger workflows with shared concurrency sequentially. Use `ci-pr-action` for
-normal maintainer validation; it defaults to `ci_scope=full`. Use
+normal maintainer validation; it defaults to `ci_scope=auto`. Use
 `ci_scope=fast-lane` with an open same-repository PR number for the shortest
 exact GCC 15.2 lane. Use `ci-regression-checks` through the orchestrator for
 ASAN/UBSAN CTest coverage.

@@ -25,7 +25,6 @@ readiness.
 | Issue triage | `needs-triage`, `needs-repro`, `requires:more-information` | Maintainers |
 | Issue kind | `bug`, `feature`, `question`, `security` | Maintainers |
 | PR status | `passed`, `failed`, `pending`, `Merge Ready`, `codeql-ready` | CI and maintainers |
-| PR CI controls | `ci:skip`, `ci:full`, `ci:fast-lane`, `ci:ctest-last-N`, `ci:docker`, `ci:no-windows`, `ci:warnings-fail` | Maintainers |
 | Dependency maintenance | `bump-sha-pins` | Maintainers |
 | Scope | `Source`, `Documentation`, `Configuration`, `CI`, `Build`, `Testing`, `Tools`, `JSON`, `WASM`, `vcpkg`, and related area labels | Path labeler and maintainers |
 | Governance | `Governance`, `Labels`, `security`, `SAST`, `CodeQL`, `Sanitizers`, `Release` | Maintainers |
@@ -105,36 +104,21 @@ clean, and the review decision is approved.
 Do not use these status labels as the only merge gate. Branch protection and
 required checks remain authoritative.
 
-### PR CI Control Labels
+### PR CI Scope
 
-`ci-pr-action.yml` treats `ci:*` labels as maintainer-only, one-shot controls.
-They are evaluated only when a trusted maintainer applies the label to a
-same-repository pull request. They are not persistent policy for later pushes;
-remove and reapply the label when a new commit needs the same override.
+`ci-pr-action.yml` does not trigger on label changes. This prevents path and
+status label automation from starting another full CI run. Use labels for
+classification and review routing, not as CI controls.
 
-Fork PRs cannot use these controls. Keep fork PR validation on the default PR
-workflow path so the workflow does not fetch or build fork-only commits through
-the maintainer fast lane.
-
-Use the labels as follows:
-
-| Label | Effect |
-|-------|--------|
-| `ci:skip` | Skip build jobs for the current labeled event. Use only for administrative PRs where branch protection permits it. |
-| `ci:full` | Force the default long-cycle matrix: Unix GCC/Clang Release and Debug builds, exact GCC 15.2 strict Release LTO, ASAN+UBSAN tool tests, Windows, and Docker verification. |
-| `ci:fast-lane` | Run the exact GCC 15.2 strict Release LTO build and the GCC 15.2 ASAN+UBSAN Release tool lane. |
-| `ci:ctest-last-N` | In fast lane, run only the last `N` registered CTests, where `N` is 1 through 10. |
-| `ci:docker` | Add Docker verification to fast lane. Docker is already enabled in the default long cycle. |
-| `ci:no-windows` | Keep Windows excluded when fast lane is selected. Windows is enabled in the default long cycle. |
-| `ci:warnings-fail` | Treat compiler warnings as failures in fast-lane jobs. This is part of the default fast-lane set. |
-
-Pull requests and manual dispatches default to `ci_scope=full`. Choose
-`ci_scope=auto` explicitly for path-scoped selection. Manual
-`workflow_dispatch` fast lane uses the same same-repository restriction. Provide
-an open `pr_number`, choose `ci_scope=fast-lane`, and adjust
-`ctest_recent_limit`, `include_windows`, `include_docker`, and `warning_policy`
-only for the run being started. Fast lane defaults to the latest registered
-CTest, strict warning failure, and no Windows or Docker jobs.
+Pull requests and manual dispatches default to `ci_scope=auto`. In auto scope,
+the full matrix runs only for source, build, test, or container changes;
+workflow-only changes receive the preflight and workflow-security gates.
+Dispatch `ci_scope=full` explicitly for a long-cycle matrix. For the shortest
+same-repository PR lane, provide an open `pr_number`, choose
+`ci_scope=fast-lane`, and set `ctest_recent_limit`, `include_windows`,
+`include_docker`, and `warning_policy` on that dispatch. Fast lane defaults to
+the latest registered CTest, strict warning failure, and no Windows or Docker
+jobs.
 
 On `ci-qa-pr-docker-testing`, Docker PR verification is advisory so branch QA
 can continue while container and third-party action pins are refreshed. If the

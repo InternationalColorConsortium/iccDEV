@@ -14,6 +14,12 @@ name: vcpkg platform packages
 
 on:
   workflow_dispatch:
+    inputs:
+      include-experimental-unix:
+        description: 'Also build Linux and macOS vcpkg bundles (diagnostic only)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -24,6 +30,7 @@ concurrency:
 
 jobs:
   package-unix:
+    if: ${{ inputs.include-experimental-unix }}
     name: "${{ matrix.platform }} vcpkg packages"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
@@ -61,6 +68,7 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
 
           git clone https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
           git -C "$RUNNER_TEMP/vcpkg" checkout "$VCPKG_BASELINE"
@@ -76,6 +84,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
 
           if [ "$RUNNER_OS" = "Linux" ]; then
             export VCPKG_FORCE_SYSTEM_BINARIES=1
@@ -100,6 +109,7 @@ jobs:
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
 
           bundle_dir="$RUNNER_TEMP/iccdev-vcpkg-package-$PLATFORM_ID"
           mkdir -p "$bundle_dir/packages"
@@ -124,7 +134,10 @@ jobs:
               -exec cp {} "$package_dir/" \;
             test -n "$(find "$package_dir" -maxdepth 1 -type f -print -quit)"
           done
-          cp -a "$VCPKG_INSTALLED_DIR/$VCPKG_TRIPLET" "$bundle_dir/vcpkg"
+          mkdir -p "$bundle_dir/vcpkg/installed"
+          cp -a "$VCPKG_ROOT/scripts" "$bundle_dir/vcpkg/scripts"
+          cp -a "$VCPKG_INSTALLED_DIR/$VCPKG_TRIPLET" \
+            "$bundle_dir/vcpkg/installed/$VCPKG_TRIPLET"
           {
             echo "iccDEV vcpkg package bundle"
             echo "platform=$PLATFORM_ID"
@@ -188,6 +201,7 @@ jobs:
           git config --global --add safe.directory "$env:GITHUB_WORKSPACE"
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github\scripts\sanitize.ps1
 
           git clone https://github.com/microsoft/vcpkg.git "$env:RUNNER_TEMP\vcpkg"
           git -C "$env:RUNNER_TEMP\vcpkg" checkout "$env:VCPKG_BASELINE"
@@ -205,6 +219,7 @@ jobs:
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github\scripts\sanitize.ps1
 
           # preflight: allow-package-install reason=build-pinned-vcpkg-dependency-bundle
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
@@ -238,6 +253,7 @@ jobs:
           $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
           git config --global credential.helper ""
           if (Test-Path env:GITHUB_TOKEN) { Remove-Item env:GITHUB_TOKEN }
+          . .github\scripts\sanitize.ps1
 
           $bundleDir = "$env:RUNNER_TEMP\iccdev-vcpkg-package-$env:PLATFORM_ID"
           $packageRoot = Join-Path $bundleDir 'packages'
@@ -274,8 +290,12 @@ jobs:
             }
             $packages | Copy-Item -Destination $packageDir -Force
           }
+          $vcpkgBundleDir = Join-Path $bundleDir 'vcpkg'
+          New-Item -ItemType Directory -Force -Path (Join-Path $vcpkgBundleDir 'installed') | Out-Null
+          Copy-Item -Path "$env:VCPKG_ROOT\scripts" `
+            -Destination (Join-Path $vcpkgBundleDir 'scripts') -Recurse -Force
           Copy-Item -Path "$env:VCPKG_INSTALLED_DIR\$env:VCPKG_TRIPLET" `
-            -Destination (Join-Path $bundleDir 'vcpkg') -Recurse -Force
+            -Destination (Join-Path $vcpkgBundleDir "installed\$env:VCPKG_TRIPLET") -Recurse -Force
           @(
             'iccDEV vcpkg package bundle',
             "platform=$env:PLATFORM_ID",
@@ -313,6 +333,9 @@ jobs:
   package-summary:
     name: "Report vcpkg package success"
     needs: [package-unix, package-windows]
+    if: >-
+      ${{ always() && needs.package-windows.result == 'success' &&
+      (needs.package-unix.result == 'success' || needs.package-unix.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -338,8 +361,8 @@ jobs:
           {
             echo "## vcpkg platform packages complete"
             echo ""
-            echo "- Platforms: $(sanitize_line "linux-x64, macos-arm64, windows-x64")"
+            echo "- Platforms: $(sanitize_line "windows-x64; Linux and macOS are optional diagnostics")"
             echo "- Build types: $(sanitize_line "Debug, Release, RelWithDebInfo, MinSizeRel")"
             echo "- Artifacts: $(sanitize_line "iccdev-vcpkg-package-<platform>")"
-            echo "- Status: [OK] all platform dependency and CPack bundles uploaded"
+            echo "- Status: [OK] requested dependency and CPack bundles uploaded"
           } >> "$GITHUB_STEP_SUMMARY"  # elements-sanitized

@@ -36,8 +36,6 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-      - labeled
-      - unlabeled
   workflow_dispatch:
     inputs:
       pr_number:
@@ -46,9 +44,9 @@ on:
         default: ''
         type: string
       ci_scope:
-        description: 'CI scope: full long cycle (default), auto path scope, or an explicit fast/specialized lane'
+        description: 'CI scope: auto path scope (default), full long cycle, or an explicit fast/specialized lane'
         required: false
-        default: full
+        default: auto
         type: choice
         options:
           - full
@@ -158,7 +156,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          CI_SCOPE: ${{ inputs.ci_scope || 'full' }}
+          CI_SCOPE: ${{ inputs.ci_scope || 'auto' }}
           CTEST_RECENT_LIMIT_INPUT: ${{ inputs.ctest_recent_limit || '1' }}
           INCLUDE_WINDOWS_INPUT: ${{ inputs.include_windows && 'true' || 'false' }}
           INCLUDE_DOCKER_INPUT: ${{ inputs.include_docker && 'true' || 'false' }}
@@ -169,19 +167,16 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           PR_BASE_REF: ${{ github.base_ref || 'master' }}
           GH_EVENT_NAME: ${{ github.event_name }}
-          GH_EVENT_ACTION: ${{ github.event.action || '' }}
           GH_ACTOR: ${{ github.actor }}
           GH_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
-          LABEL_NAME: ${{ github.event.label.name || '' }}
-          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels.*.name) }}
         run: |
           set -euo pipefail
 
           git config --add safe.directory "$PWD"
           unset GITHUB_TOKEN || true
 
-          ci_scope="${CI_SCOPE:-full}"
+          ci_scope="${CI_SCOPE:-auto}"
           head_sha="${PR_HEAD_SHA}"
           target_repository="${PR_HEAD_REPO}"
           pr_number="${PR_NUMBER}"
@@ -289,24 +284,6 @@ jobs:
             warning_policy=fail
           }
 
-          apply_label_controls() {
-            local labels_json="$1"
-            if jq -e 'index("ci:no-windows")' <<< "$labels_json" >/dev/null; then
-              include_windows=false
-            fi
-            if jq -e 'index("ci:docker")' <<< "$labels_json" >/dev/null; then
-              include_docker=true
-            fi
-            if jq -e 'index("ci:warnings-fail")' <<< "$labels_json" >/dev/null; then
-              warning_policy=fail
-            fi
-            for n in 1 2 3 4 5 6 7 8 9 10; do
-              if jq -e "index(\"ci:ctest-last-${n}\")" <<< "$labels_json" >/dev/null; then
-                ctest_recent_limit="$n"
-              fi
-            done
-          }
-
           resolve_dispatch_pr() {
             local number="$1"
             local pr_json
@@ -332,46 +309,40 @@ jobs:
             pr_number="$number"
           }
 
-          # A newly applied ci:* label must be evaluated before the default full
-          # pull-request scope exits through the direct dispatch path.
-          if [ "$GH_EVENT_NAME" != "pull_request" ] ||
-             [ "$GH_EVENT_ACTION" != "labeled" ] ||
-             [[ "$LABEL_NAME" != ci:* ]]; then
-            case "$ci_scope" in
-              full|source)
-                include_windows=true
-                include_docker=true
-                ctest_recent_limit=0
-                warning_policy=fail
-                ;;
-              fast-lane)
-                if ! validate_fast_lane_actor "$GH_ACTOR"; then
+          case "$ci_scope" in
+            full|source)
+              include_windows=true
+              include_docker=true
+              ctest_recent_limit=0
+              warning_policy=fail
+              ;;
+            fast-lane)
+              if ! validate_fast_lane_actor "$GH_ACTOR"; then
+                exit 1
+              fi
+              if [ -n "$DISPATCH_PR_NUMBER" ]; then
+                resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
+              fi
+              if ! require_same_repository_pr; then
+                exit 1
+              fi
+              apply_fast_lane_defaults
+              case "$CTEST_RECENT_LIMIT_INPUT" in
+                0|1|2|3|4|5|6|7|8|9|10)
+                  ctest_recent_limit="$CTEST_RECENT_LIMIT_INPUT"
+                  ;;
+                *)
+                  echo "Invalid ctest_recent_limit: $CTEST_RECENT_LIMIT_INPUT" >&2
                   exit 1
-                fi
-                if [ -n "$DISPATCH_PR_NUMBER" ]; then
-                  resolve_dispatch_pr "$DISPATCH_PR_NUMBER"
-                fi
-                if ! require_same_repository_pr; then
-                  exit 1
-                fi
-                apply_fast_lane_defaults
-                case "$CTEST_RECENT_LIMIT_INPUT" in
-                  0|1|2|3|4|5|6|7|8|9|10)
-                    ctest_recent_limit="$CTEST_RECENT_LIMIT_INPUT"
-                    ;;
-                  *)
-                    echo "Invalid ctest_recent_limit: $CTEST_RECENT_LIMIT_INPUT" >&2
-                    exit 1
-                    ;;
-                esac
-                include_windows="$INCLUDE_WINDOWS_INPUT"
-                include_docker="$INCLUDE_DOCKER_INPUT"
-                warning_policy="$WARNING_POLICY_INPUT"
-                ;;
-              governance|docs)
-                ;;
-            esac
-          fi
+                  ;;
+              esac
+              include_windows="$INCLUDE_WINDOWS_INPUT"
+              include_docker="$INCLUDE_DOCKER_INPUT"
+              warning_policy="$WARNING_POLICY_INPUT"
+              ;;
+            governance|docs)
+              ;;
+          esac
 
           # Validate that both SHAs look like exact Git commit OIDs (40 hex chars).
           validate_sha() {
@@ -432,40 +403,6 @@ jobs:
           container_changed=false
           docs_only=false
 
-          if [ "$GH_EVENT_NAME" = "pull_request" ] &&
-             [ "$GH_EVENT_ACTION" = "labeled" ] &&
-             [[ "$LABEL_NAME" == ci:* ]]; then
-            if ! validate_fast_lane_actor "$GH_ACTOR"; then
-              exit 1
-            fi
-            if ! require_same_repository_pr; then
-              exit 1
-            fi
-            case "$LABEL_NAME" in
-              ci:skip)
-                ci_scope=skip
-                include_windows=false
-                include_docker=false
-                ctest_recent_limit=0
-                warning_policy=warn
-                ;;
-              ci:full)
-                ci_scope=full
-                include_windows=true
-                include_docker=true
-                ctest_recent_limit=0
-                warning_policy=fail
-                ;;
-              ci:fast-lane|ci:ctest-last-[1-9]|ci:ctest-last-10|ci:docker|ci:no-windows|ci:warnings-fail)
-                apply_fast_lane_defaults
-                apply_label_controls "$PR_LABELS_JSON"
-                ;;
-              *)
-                echo "Ignoring unsupported CI label: $LABEL_NAME" >&2
-                ;;
-            esac
-          fi
-
           if has_changed_file '\.(cpp|cxx|cc|c|h|hpp|hh)$'; then
             source_changed=true
           fi
@@ -503,7 +440,7 @@ jobs:
               run_full=false
               ;;
             auto)
-              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$ci_changed" == "true" || "$container_changed" == "true" ]]; then
+              if [[ "$source_changed" == "true" || "$build_config_changed" == "true" || "$testing_changed" == "true" || "$container_changed" == "true" ]]; then
                 run_full=true
               fi
               ;;
@@ -696,7 +633,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed || 'false' }}
-          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'full' }}
+          CI_SCOPE: ${{ needs.detect-src.outputs.ci_scope || 'auto' }}
           SOURCE_CHANGED: ${{ needs.detect-src.outputs.source_changed || 'false' }}
           BUILD_CONFIG_CHANGED: ${{ needs.detect-src.outputs.build_config_changed || 'false' }}
           TESTING_CHANGED: ${{ needs.detect-src.outputs.testing_changed || 'false' }}
@@ -888,6 +825,7 @@ jobs:
           write_github_output warning_policy "$WARNING_POLICY"
 
   risk-gate:
+    if: ${{ needs.detect-src.outputs.ci_changed == 'true' }}
     name: Risk Analysis Gate
     needs: [detect-src]
     uses: ./.github/workflows/ci-pr-risk-security-analysis.yml

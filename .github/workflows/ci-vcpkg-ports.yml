@@ -1,9 +1,9 @@
 ###############################################################
 #
-# ci-vcpkg-ports.yml - Cross-platform vcpkg port overlay test
+# ci-vcpkg-ports.yml - Windows vcpkg port overlay test
 #
-# Validates that the ports/iccdev overlay installs correctly
-# on Windows, Linux, and macOS via vcpkg.
+# Validates that the ports/iccdev overlay installs correctly on Windows.
+# Linux and macOS vcpkg diagnostics remain manual until those lanes stabilize.
 #
 # Last Updated 2026-04-05 23:48:42 UTC by David Hoyt
 #
@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, ubuntu-24.04, macos-14]
+        os: [windows-2022]
 
     steps:
       # Checkout (pinned SHA, no credentials)

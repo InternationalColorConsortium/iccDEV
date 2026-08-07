@@ -206,6 +206,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           COMPILER_VERSION: ${{ inputs.compiler-version || 'system' }}
+          MATRIX_COMPILER: ${{ matrix.compiler }}
         run: |
           set -euo pipefail
           git config --add safe.directory "$PWD"

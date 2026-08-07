@@ -26,7 +26,6 @@ permissions:
     branches:
       - master
       - ci-qa-flags
-      - ci-qa-pr-docker-testing
     paths:
       - "Dockerfile"
       - "Dockerfile.nixos"
