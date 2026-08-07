@@ -825,7 +825,7 @@ jobs:
           write_github_output warning_policy "$WARNING_POLICY"
 
   risk-gate:
-    if: ${{ needs.detect-src.outputs.ci_changed == 'true' }}
+    if: ${{ needs.detect-src.outputs.ci_changed == 'true' || needs.detect-src.outputs.container_changed == 'true' }}
     name: Risk Analysis Gate
     needs: [detect-src]
     uses: ./.github/workflows/ci-pr-risk-security-analysis.yml
