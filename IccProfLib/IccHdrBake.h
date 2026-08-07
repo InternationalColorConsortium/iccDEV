@@ -109,6 +109,18 @@ class CIccCurve;
 #define icHdrBakeDefaultCurveSize  1024
 
 /**
+ * The largest A curve this bake will build.
+ *
+ * Not a policy of this file but a property of what it writes into:
+ * CIccTagCurve::SetSize() refuses anything above 65536, and it does so by
+ * freeing its buffer, setting its size to zero and returning *true*.  A
+ * caller that trusts that return then writes nCurveSize floats through the
+ * unchecked operator[] onto a NULL buffer.  Rejecting the size up front is
+ * what keeps that contract from being load bearing here.
+ */
+#define icHdrBakeMaxCurveSize      65536
+
+/**
  * The exponent the A curves store their samples under, i.e. the curve holds
  * L^(1/icHdrBakeCurveExponent) and the CLUT raises its input coordinate back
  * to that power.
@@ -199,7 +211,7 @@ typedef struct {
   /** Grid points per CLUT axis; at least 2, at most 255. */
   icUInt8Number nGridPoints;
 
-  /** Entries per A curve; at least 2. */
+  /** Entries per A curve; at least 2, at most icHdrBakeMaxCurveSize. */
   icUInt32Number nCurveSize;
 
   /** HLG OOTF parameters, ignored for the other transfer characteristics.
@@ -297,6 +309,13 @@ public:
    * supported: the bake is then the EOTF and a clamp to the SDR volume, which
    * is a meaningful legacy rendering and the one clause 8.10.3's lowest
    * ranked descriptor implies.
+   *
+   * LIFETIME.  The baker does not own pProfile and does not copy it.  It
+   * keeps the pointer, and it keeps raw CIccCurve pointers into the profile's
+   * own TRC tags, so pProfile and every tag reachable from it must outlive
+   * every later call on this object.  Init(p); delete p; CreateAtoB(); is a
+   * use after free, and so is deleting the profile's rTRC between the two.
+   * Re-Init() on a different profile is fine and drops the old pointers.
    */
   bool Init(const CIccProfile *pProfile, const icHdrBakeParams *pParams = NULL);
 
@@ -354,11 +373,20 @@ public:
   bool BtoAClutOp(icFloatNumber *dst, const icFloatNumber *src) const;
 
   /** Build the AToB tag.  Caller owns the result; NULL means the bake is
-   * unsupported or an allocation failed. */
+   * unsupported or an allocation this file makes was refused.
+   *
+   * The qualifier is not pedantry.  Every allocation made here is
+   * new(std::nothrow) and unwinds, but the stage arrays come from
+   * CIccMBB::NewCurvesA/M/B and NewMatrix, which use throwing new, so an OOM
+   * inside those terminates rather than arriving as a NULL return.  The NULL
+   * checks on their results are kept because they are what a nothrow
+   * conversion upstream would need, and because a future NewCurvesA that
+   * returns NULL for a reason other than OOM would otherwise be a UAF here. */
   CIccTagLutAtoB *CreateAtoB() const;
 
   /** Build the BToA tag.  Caller owns the result; NULL also means the gain
-   * curve at this target has no inverse. */
+   * curve at this target has no inverse.  Same allocation caveat as
+   * CreateAtoB(). */
   CIccTagLutBtoA *CreateBtoA() const;
 
 protected:

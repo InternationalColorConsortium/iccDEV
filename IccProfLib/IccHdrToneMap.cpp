@@ -630,14 +630,18 @@ icFloatNumber CIccHdrTransfer::FromLinearChannel(icFloatNumber v) const
  *  slope = output, n values
  *
  * Return:
- *  false when n is zero or x is not strictly increasing, in which case slope
- *  is left untouched.
+ *  false when n is zero, above icHagcMaxControlPoints, or x is not strictly
+ *  increasing, in which case slope is left untouched.
  ****************************************************************************
  */
 bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
                              icUInt8Number n, icFloatNumber *slope)
 {
-  if (!x || !y || !slope || !n)
+  // n is an icUInt8Number, so it reaches 255, while the secant arrays below
+  // are sized by icHagcMaxControlPoints (32).  The in-library caller clamps
+  // first, but this is an exported entry point and the cap belongs with the
+  // arrays it protects, not with the one caller that happens to respect it.
+  if (!x || !y || !slope || !n || n > icHagcMaxControlPoints)
     return false;
 
   icUInt8Number i;
@@ -1117,6 +1121,16 @@ bool CIccHagcEvaluator::SharesMixing() const
 bool CIccHagcEvaluator::SetTargetHeadroom(icFloatNumber log2Headroom)
 {
   if (!m_bSupported)
+    return false;
+
+  // NaN compares false against every bracket below, so it would fall through
+  // to the interpolating branch and produce NaN weights - and from there NaN
+  // gain, NaN pixels, and nothing anywhere reporting a problem.  Both
+  // in-library callers already reject it upstream; refusing it here is what
+  // makes that a defence in depth rather than the only defence.  +/-inf is
+  // deliberately still accepted: it brackets to the top or bottom curve,
+  // which is the right answer for it.
+  if (log2Headroom != log2Headroom)
     return false;
 
   m_targetHeadroom = log2Headroom;

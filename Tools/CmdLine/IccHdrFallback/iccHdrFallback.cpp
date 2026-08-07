@@ -88,7 +88,8 @@ static void usage()
   printf("only a CMM that cannot reaches for the baked pair.\n\n");
   printf("Options:\n");
   printf("  -grid n     CLUT grid points per axis (2..255, default %d)\n", icHdrBakeDefaultGridPoints);
-  printf("  -curve n    entries per A curve (2..65536, default %d)\n", icHdrBakeDefaultCurveSize);
+  printf("  -curve n    entries per A curve (2..%d, default %d)\n",
+         icHdrBakeMaxCurveSize, icHdrBakeDefaultCurveSize);
   printf("  -hlggamma g HLG OOTF system gamma (default %g)\n", (double)icHlgDefaultGamma);
   printf("  -hlgpeak L  HLG nominal display peak luminance in cd/m^2 (default %g)\n",
          (double)icHlgDefaultPeakLuminance);
@@ -201,7 +202,9 @@ int main(int argc, char *argv[])
       params.nGridPoints = (icUInt8Number)nValue;
     }
     else if (!strcmp(szOpt, "-curve")) {
-      if (!parseUInt(szValue, 2, 65536, nValue)) {
+      // Same bound the baker enforces, named from the one place that defines
+      // it so the tool and the library cannot drift apart.
+      if (!parseUInt(szValue, 2, icHdrBakeMaxCurveSize, nValue)) {
         printf("Invalid curve size '%s'\n\n", icSanitizeConsoleText(szValue).c_str());
         usage();
         return 1;

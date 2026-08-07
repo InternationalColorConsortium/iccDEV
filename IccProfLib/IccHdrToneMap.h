@@ -324,8 +324,12 @@ protected:
  * slope angles are unaffected.  CIccHagcEvaluator::UsesDerivedSlopes()
  * reports when any contributing curve went through this function.
  *
- * x must be strictly increasing over n points.  Returns false, leaving slope
- * untouched, when it is not or when n is 0.
+ * x must be strictly increasing over n points, and n must be 1 to
+ * icHagcMaxControlPoints - the working arrays are sized by that maximum, so a
+ * larger n is refused rather than accommodated; a gain curve cannot carry more
+ * points than that in any case, its count being a 5 bit last index.  Returns
+ * false, leaving slope untouched, when either precondition fails or when n
+ * is 0.
  */
 ICCPROFLIB_API bool icHagcDerivePchipSlopes(const icFloatNumber *x, const icFloatNumber *y,
                                             icUInt8Number n, icFloatNumber *slope);
@@ -391,8 +395,10 @@ public:
    * headroom values, and extrapolating a gain exponent past the last curve
    * would amplify by an amount no one authored.
    *
-   * Returns false when the evaluator is unsupported, in which case the target
-   * is not recorded and Apply() stays the identity.
+   * Returns false when the evaluator is unsupported or log2Headroom is NaN,
+   * in which case the target is not recorded and Apply() stays whatever the
+   * last accepted target made it.  An infinite target is accepted and
+   * clamps to an endpoint curve like any other out-of-range value.
    */
   bool SetTargetHeadroom(icFloatNumber log2Headroom);
 

@@ -66,6 +66,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <new>
 
 #include "IccHdrBake.h"
 #include "IccProfile.h"
@@ -236,6 +237,15 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     // One entry is not an undersized table but a different tag: a curveType
     // of size 1 encodes a gamma, not a sampled curve.
     m_szUnsupported = "An A curve needs at least two entries";
+    return false;
+  }
+
+  if (m_params.nCurveSize > icHdrBakeMaxCurveSize) {
+    // Refused here rather than at the tag, because CIccTagCurve::SetSize()
+    // reports an oversized request as success with an empty buffer, and the
+    // curve fill that follows writes through an unchecked operator[].  See
+    // icHdrBakeMaxCurveSize.
+    m_szUnsupported = "An A curve cannot hold more than 65536 entries";
     return false;
   }
 
@@ -705,9 +715,18 @@ bool CIccHdrBaker::FromPcs(icFloatNumber *dstRgb, const icFloatNumber *srcXyz) c
  */
 static CIccTagCurve *icHdrBakeNewCurve(icUInt32Number nSize)
 {
-  CIccTagCurve *pCurve = new CIccTagCurve(0);
+  CIccTagCurve *pCurve = new (std::nothrow) CIccTagCurve(0);
 
-  if (pCurve && nSize && !pCurve->SetSize(nSize, icInitZero)) {
+  if (!pCurve)
+    return NULL;
+
+  // The size is checked rather than the return: SetSize() answers a request
+  // above its own 65536 limit by emptying the curve and returning true, so
+  // trusting the return leaves a curve of size zero that the fill below then
+  // writes nSize floats into.  CIccHdrBaker::Init() rejects such a size
+  // before we get here; this is the second lock on the same door, for the
+  // sake of any future caller of this static.
+  if (nSize && (!pCurve->SetSize(nSize, icInitZero) || pCurve->GetSize() != nSize)) {
     delete pCurve;
     return NULL;
   }
@@ -798,7 +817,10 @@ protected:
  */
 static CIccCLUT *icHdrBakeNewClut(icUInt8Number nGridPoints, IIccCLUTExec *pExec)
 {
-  CIccCLUT *pCLUT = new CIccCLUT(3, 3);
+  CIccCLUT *pCLUT = new (std::nothrow) CIccCLUT(3, 3);
+
+  if (!pCLUT)
+    return NULL;
 
   if (!pCLUT->Init(nGridPoints)) {
     delete pCLUT;
@@ -831,7 +853,10 @@ CIccTagLutAtoB *CIccHdrBaker::CreateAtoB() const
   if (!m_bSupported)
     return NULL;
 
-  CIccTagLutAtoB *pLut = new CIccTagLutAtoB();
+  CIccTagLutAtoB *pLut = new (std::nothrow) CIccTagLutAtoB();
+
+  if (!pLut)
+    return NULL;
 
   pLut->Init(3, 3);
   pLut->SetColorSpaces(icSigRgbData, icSigXYZData);
@@ -960,7 +985,10 @@ CIccTagLutBtoA *CIccHdrBaker::CreateBtoA() const
   if (!IsInvertible())
     return NULL;
 
-  CIccTagLutBtoA *pLut = new CIccTagLutBtoA();
+  CIccTagLutBtoA *pLut = new (std::nothrow) CIccTagLutBtoA();
+
+  if (!pLut)
+    return NULL;
 
   pLut->Init(3, 3);
   pLut->SetColorSpaces(icSigXYZData, icSigRgbData);
@@ -1174,8 +1202,32 @@ bool icAddHdrFallbackTags(CIccProfile *pProfile, const icHdrBakeParams *pParams,
   pProfile->DeleteTag(icSigAToB0Tag);
   pProfile->DeleteTag(icSigBToA0Tag);
 
-  pProfile->AttachTag(icSigAToB0Tag, pAtoB);
-  pProfile->AttachTag(icSigBToA0Tag, pBtoA);
+  // AttachTag() takes ownership only when it succeeds, so an ignored false
+  // return leaks the tag.  Either both go on or neither does: a profile
+  // carrying a fresh AToB0 beside a BToA0 that failed to attach - or beside
+  // the one DeleteTag() just removed - is exactly the unpaired rendering the
+  // invertibility check above refuses to create.
+  if (!pProfile->AttachTag(icSigAToB0Tag, pAtoB)) {
+    delete pAtoB;
+    delete pBtoA;
+
+    if (pReason)
+      *pReason = "AToB0Tag could not be attached";
+
+    return false;
+  }
+
+  if (!pProfile->AttachTag(icSigBToA0Tag, pBtoA)) {
+    // pAtoB is the profile's now; taking it back out again is what keeps the
+    // pairing rule true on this path too.
+    pProfile->DeleteTag(icSigAToB0Tag);
+    delete pBtoA;
+
+    if (pReason)
+      *pReason = "BToA0Tag could not be attached";
+
+    return false;
+  }
 
   if ((pParams ? pParams->nVersionPolicy : icHdrBakeVersionKeep) == icHdrBakeVersionV4_4)
     pProfile->m_Header.version = icVersionNumberV4_4;
