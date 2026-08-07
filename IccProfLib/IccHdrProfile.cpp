@@ -274,9 +274,15 @@ bool icGetProfilePrimaries(const CIccProfile *pProfile, icCicpPrimaries &primari
   if (!pProfile)
     return false;
 
-  /* Clause 4.1 of the CICP amendment scopes this to three-component
+  /* PROPOSAL-ISSUE CICP-02 (structural; the fix is two sentences already
+   * drafted) -- clause 4.1 of the CICP amendment scopes this to three-component
    * matrix-based profiles: without all three matrix column tags the value 2
-   * keeps its original "unknown" meaning and there is nothing to recover. */
+   * keeps its original "unknown" meaning and there is nothing to recover.  But
+   * clause 4.1 is the *proposal's* scope statement, not part of the amendment:
+   * only 4.2 and 4.3 are appended to ICC.1, and the paragraph 4.2 adds to
+   * 9.2.17 carries an unqualified "shall" with no scope at all.  We therefore
+   * have to cite the proposal here rather than the clause it amends, which is
+   * the whole of the finding. */
   icFloatNumber red[3], green[3], blue[3], white[3];
   if (!icHdrGetXyzTag(pProfile, icSigRedMatrixColumnTag, red) ||
       !icHdrGetXyzTag(pProfile, icSigGreenMatrixColumnTag, green) ||

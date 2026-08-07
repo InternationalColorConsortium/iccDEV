@@ -272,6 +272,15 @@ bool CIccHdrBaker::Init(const CIccProfile *pProfile, const icHdrBakeParams *pPar
     return false;
   }
 
+  /* PROPOSAL-ISSUE WP-08 (probable editing artifact; two words to the scope
+   * list) -- the white paper's "Scope and constraints" admits only PQ and HLG,
+   * but its abstract ("PQ, HLG or linear RGB profile"), its step 1 ("for
+   * Linear, the identity"), its A-curve section ("or a linearly scaled identity
+   * for the Linear case") and its "chosen for PQ and HLG" qualifier all assume
+   * a third case.  Clause 8.10.1 permits TransferCharacteristics = 8, so it is
+   * a real one.  We support it -- and because Linear, unlike PQ and HLG, has no
+   * intrinsic peak for "linearly scaled" to refer to, the scale is taken from
+   * the profile itself below. */
   if (m_transfer.UsesProfileCurves()) {
     // TransferCharacteristics = 8 (Linear): the TRC tags are the
     // linearisation, so their own output range is the headroom.  A sampled
@@ -724,6 +733,18 @@ public:
     icFloatNumber lin[3];
     icUInt8Number i;
 
+    /* PROPOSAL-ISSUE WP-07 (wording; delete one clause) -- the white paper's
+     * A-curve section says "Any CMM consuming the tag must therefore apply the
+     * inverse, x -> x^5, between the A-curve output and the CLUT lookup;
+     * equivalently, the CLUT must be sampled in the same fifth-root domain".
+     * Those two are not equivalent and only the second is available: a v4
+     * lutAToBType runs A-curves -> CLUT with no stage in between, and the
+     * paper's own audience is legacy CMMs that do nothing but follow the tag.
+     * So the undo happens HERE, at sampling time, and the tag we emit needs
+     * nothing of the CMM.  Sampling the CLUT on linear coordinates instead --
+     * the reading the first clause invites -- leaves every conformant CMM
+     * indexing a linear grid with fifth-root coordinates, worst in the shadows,
+     * with no symptom but a wrong image. */
     for (i = 0; i < 3; i++) {
       // Undo the A curves' fifth root, so that the coordinate is once again
       // the peak-normalised linear value the curve was sampled from.
