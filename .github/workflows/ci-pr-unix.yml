@@ -40,7 +40,7 @@ on:
       compilers:
         description: "Compiler list"
         required: false
-        default: '["gcc", "clang"]'
+        default: '["gcc-15", "clang-22", "clang"]'
         type: string
       enable-lto:
         description: "Enable LTO in CMake"
@@ -58,7 +58,7 @@ on:
         default: full
         type: string
       compiler-version:
-        description: "Compiler version selector: system or gcc-15"
+        description: "Legacy compiler version selector: system or gcc-15"
         required: false
         default: system
         type: string
@@ -95,11 +95,19 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJson(inputs.os-list || '["ubuntu-latest", "macos-latest"]') }}
-        compiler: ${{ fromJson(inputs.compilers || '["gcc", "clang"]') }}
+        compiler: ${{ fromJson(inputs.compilers || '["gcc-15", "clang-22", "clang"]') }}
         build_type: ${{ fromJson(inputs.build-types || '["Release", "Debug"]') }}
         exclude:
           - os: macos-latest
             compiler: gcc
+          - os: macos-latest
+            compiler: gcc-15
+          - os: macos-latest
+            compiler: clang-22
+          - os: ubuntu-latest
+            compiler: clang
+          - os: ubuntu-24.04
+            compiler: clang
 
     steps:
       - name: Validate matrix inputs
@@ -124,8 +132,8 @@ jobs:
             *) echo "ERROR: invalid matrix.os: '$OS'. Allowed: ubuntu-latest, ubuntu-24.04, macos-latest"; exit 1 ;;
           esac
           case "$COMP" in
-            gcc|clang) ;;
-            *) echo "ERROR: invalid compiler: '$COMP'. Allowed: gcc, clang"; exit 1 ;;
+            gcc|gcc-15|clang|clang-22) ;;
+            *) echo "ERROR: invalid compiler: '$COMP'. Allowed: gcc, gcc-15, clang, clang-22"; exit 1 ;;
           esac
           case "$BT" in
             Release|Debug) ;;
@@ -189,6 +197,7 @@ jobs:
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
+          MATRIX_COMPILER: ${{ matrix.compiler }}
           COMPILER_VERSION: ${{ inputs.compiler-version || 'system' }}
         run: |
           set -euo pipefail
@@ -197,12 +206,19 @@ jobs:
           unset GITHUB_TOKEN || true
           bash .github/scripts/ci-safe-apt-update.sh
           packages=(
-            build-essential cmake gcc g++ clang clang-tools \
+            build-essential cmake \
             libpng-dev libxml2-dev libtiff-dev \
             nlohmann-json3-dev libwxgtk3.2-dev wx-common \
-            python3 python3-pip curl git llvm
+            python3 python3-pip curl git
           )
-          if [ "$COMPILER_VERSION" = "gcc-15" ]; then
+          case "$MATRIX_COMPILER" in
+            gcc-15) packages+=(gcc-15 g++-15) ;;
+            clang-22) packages+=(clang-22 clang-tools-22 llvm-22) ;;
+            gcc) packages+=(gcc g++) ;;
+            clang) packages+=(clang clang-tools llvm) ;;
+            *) echo "ERROR: invalid compiler: '$MATRIX_COMPILER'"; exit 1 ;;
+          esac
+          if [ "$COMPILER_VERSION" = "gcc-15" ] && [ "$MATRIX_COMPILER" = "gcc" ]; then
             packages+=(gcc-15 g++-15)
           fi
           sudo apt-get install -y "${packages[@]}"
@@ -234,7 +250,17 @@ jobs:
             system|gcc-15) ;;
             *) echo "::error title=Invalid compiler version::${COMPILER_VERSION}"; exit 1 ;;
           esac
-          if [ "$MATRIX_COMPILER" = "gcc" ] && [ "$COMPILER_VERSION" = "gcc-15" ]; then
+          if [ "$MATRIX_COMPILER" = "gcc-15" ]; then
+            command -v gcc-15 >/dev/null 2>&1
+            command -v g++-15 >/dev/null 2>&1
+            echo "CC=gcc-15" >> "$GITHUB_ENV"
+            echo "CXX=g++-15" >> "$GITHUB_ENV"
+          elif [ "$MATRIX_COMPILER" = "clang-22" ]; then
+            command -v clang-22 >/dev/null 2>&1
+            command -v clang++-22 >/dev/null 2>&1
+            echo "CC=clang-22" >> "$GITHUB_ENV"
+            echo "CXX=clang++-22" >> "$GITHUB_ENV"
+          elif [ "$MATRIX_COMPILER" = "gcc" ] && [ "$COMPILER_VERSION" = "gcc-15" ]; then
             command -v gcc-15 >/dev/null 2>&1
             command -v g++-15 >/dev/null 2>&1
             echo "CC=gcc-15" >> "$GITHUB_ENV"

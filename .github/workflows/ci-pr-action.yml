@@ -804,16 +804,18 @@ jobs:
           # --- Define for child workflows ---
           # Windows is Hardcoded - TODO
           allowed_os=( "ubuntu-latest" "ubuntu-24.04" "macos-latest" )
-          allowed_comp=( "gcc" "clang" )
+          allowed_comp=( "gcc-15" "clang-22" "clang" )
           allowed_bt=( "Release" "Debug" )
           # --- Define for child workflows ---
           # Windows is Hardcoded - TODO
           os_raw='["ubuntu-latest","macos-latest"]'
-          comp_raw='["gcc","clang"]'
+          # Linux matches the GCC 15.2 and Clang 22.1.2 toolchains in
+          # Dockerfile.ci-regression; macOS retains its native Clang.
+          comp_raw='["gcc-15","clang-22","clang"]'
           bt_raw='["Release","Debug"]'
           if [ "$FAST_LANE" = "true" ]; then
-            os_raw='["ubuntu-24.04"]'
-            comp_raw='["gcc"]'
+            os_raw='["ubuntu-latest"]'
+            comp_raw='["gcc-15"]'
             bt_raw='["Release"]'
           fi
 
@@ -910,16 +912,13 @@ jobs:
 
   tool-tests:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' }}
-    name: Tool Smoke Tests (ASAN+UBSAN, ${{ matrix.tool_build_type }})
+    # Debug preserves the sanitizer coverage; gcc15-lto-ci covers Release LTO.
+    name: Tool Smoke Tests (ASAN+UBSAN, Debug)
     needs: [detect-src, validate-inputs]
-    strategy:
-      fail-fast: false
-      matrix:
-        tool_build_type: ${{ fromJson(needs.validate-inputs.outputs.build-types) }}
     uses: ./.github/workflows/ci-iccdev-tool-tests.yml
     with:
       regression_image_tag: ${{ needs.validate-inputs.outputs.regression-image-tag }}
-      tool_build_type: ${{ matrix.tool_build_type }}
+      tool_build_type: Debug
       ctest_mode: fast
       ctest_recent_limit: ${{ needs.validate-inputs.outputs.ctest-recent-limit }}
       warning_policy: ${{ needs.validate-inputs.outputs.warning-policy }}
