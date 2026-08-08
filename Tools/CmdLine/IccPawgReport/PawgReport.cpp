@@ -2346,7 +2346,52 @@ bool HasFail(const std::vector<PawgItem> &items)
   return false;
 }
 
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+const char *ValidationStatusName(icValidateStatus status)
+{
+  switch (status) {
+  case icValidateOK:
+    return "ok";
+  case icValidateWarning:
+    return "warning";
+  case icValidateNonCompliant:
+    return "non_compliant";
+  case icValidateCriticalError:
+    return "critical_error";
+  default:
+    return "unknown";
+  }
+}
+#endif
+
 } // namespace
+
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+int DumpPawgQaEvidence(const char *szFilename)
+{
+  std::string report;
+  icValidateStatus status = icValidateOK;
+  CIccProfile *profile = ValidateIccProfile(szFilename, report, status);
+  const bool loaded = profile != nullptr;
+
+  printf("{");
+  printf("\"schema\":\"iccdev-qa-evidence/v1\",");
+  printf("\"tool\":\"iccPawgReport\",");
+  printf("\"profile\":\"%s\",", JsonEscape(szFilename ? szFilename : "").c_str());
+  printf("\"validationStatus\":\"%s\",", ValidationStatusName(status));
+  printf("\"loaded\":%s,", loaded ? "true" : "false");
+  if (loaded) {
+    printf("\"qaFlags\":[\"ICCDEV_FLAG_LOAD\",\"ICCDEV_FLAG_VALIDATE\"]");
+  }
+  else {
+    printf("\"qaFlags\":[]");
+  }
+  printf("}\n");
+
+  delete profile;
+  return loaded ? 0 : 1;
+}
+#endif
 
 int DumpPawgReport(const char *szFilename, bool bJson)
 {

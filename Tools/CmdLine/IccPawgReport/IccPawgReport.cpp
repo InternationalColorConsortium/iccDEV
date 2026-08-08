@@ -73,16 +73,26 @@
 
 static void printUsage()
 {
-  printf("Usage: iccPawgReport {--json} profile\n");
+  printf("Usage: iccPawgReport {--json} {--qa-flags --evidence-json} profile\n");
   printf("\nEmits an ICC PAWG profile assessment checklist report aligned with\n");
   printf("https://www.color.org/profiles/assessment/index.xalter\n");
   printf("  --json   Emit machine-readable JSON evidence instead of text\n");
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+  printf("  --qa-flags      Enable maintainer QA evidence flags\n");
+  printf("  --evidence-json Emit schema-versioned QA evidence JSON\n");
+#else
+  printf("  --qa-flags and --evidence-json require ICCDEV_ENABLE_QA_FLAGS=ON at build time\n");
+#endif
   printf("iccPawgReport built with IccProfLib version " ICCPROFLIBVER "\n\n");
 }
 
 int main(int argc, char *argv[])
 {
   bool bJson = false;
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+  bool bQaFlags = false;
+  bool bEvidenceJson = false;
+#endif
   std::string profilePath;
 
   // --read used to select a ReadIccProfile() fallback here after the strict
@@ -96,6 +106,21 @@ int main(int argc, char *argv[])
     if (strcasecmp(argv[k], "--json") == 0) {
       bJson = true;
     }
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+    else if (strcasecmp(argv[k], "--qa-flags") == 0) {
+      bQaFlags = true;
+    }
+    else if (strcasecmp(argv[k], "--evidence-json") == 0) {
+      bEvidenceJson = true;
+      bQaFlags = true;
+    }
+#else
+    else if (strcasecmp(argv[k], "--qa-flags") == 0 ||
+             strcasecmp(argv[k], "--evidence-json") == 0) {
+      fprintf(stderr, "QA target flags require ICCDEV_ENABLE_QA_FLAGS=ON at build time\n");
+      return 1;
+    }
+#endif
     else if ( strcasecmp( argv[k], "-V" ) == 0
             || strcasecmp( argv[k], "--V" ) == 0
             || strcasecmp( argv[k], "-help" ) == 0
@@ -123,8 +148,23 @@ int main(int argc, char *argv[])
     return 1;
   }
 
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+  if (bQaFlags && !bEvidenceJson) {
+    fprintf(stderr, "--qa-flags requires --evidence-json for iccPawgReport\n");
+    return 1;
+  }
+  if (bEvidenceJson && bJson) {
+    fprintf(stderr, "--json and --evidence-json are mutually exclusive\n");
+    return 1;
+  }
+#endif
 
   try {
+#if defined(ICCDEV_ENABLE_QA_FLAGS)
+    if (bEvidenceJson) {
+      return DumpPawgQaEvidence(profilePath.c_str());
+    }
+#endif
     return DumpPawgReport(profilePath.c_str(), bJson);
   }
   catch (const std::exception& e) {

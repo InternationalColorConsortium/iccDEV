@@ -7,11 +7,14 @@
 ```sh
 iccPawgReport profile.icc
 iccPawgReport --json profile.icc
+iccPawgReport --qa-flags --evidence-json profile.icc
 ```
 
 Options:
 
 - `--json` out instead of text report
+- `--qa-flags --evidence-json` emits schema-versioned load and validation
+  evidence when built with `ICCDEV_ENABLE_QA_FLAGS=ON`
 
 A profile that IccProfLib refuses to parse is still assessed: the raw-byte checks run from the
 file contents directly, and the checks that need a parsed profile are reported as `NOT RUN`.
