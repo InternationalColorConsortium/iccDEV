@@ -29,6 +29,8 @@ function test_iccdev()
   [nPass, nFail] = run_test(@test_interpolation_values, 'Interpolation values', nPass, nFail);
   [nPass, nFail] = run_test(@test_sig_to_str, 'sig_to_str', nPass, nFail);
   [nPass, nFail] = run_test(@test_curve_gamma_fixture, 'curveType gamma math', nPass, nFail);
+  [nPass, nFail] = run_test(@iccdev.qa.check_colorimetry_issue_1475, ...
+    'issue #1475 colorimetry math', nPass, nFail);
 
   % --- Profile tests (need test profiles) ---
   profilePath = find_test_profile();

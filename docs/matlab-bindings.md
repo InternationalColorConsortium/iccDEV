@@ -111,6 +111,83 @@ Interpret the layers separately:
 - Agreement between both layers confirms the fixture evidence and the native
   implementation without making either test self-referential.
 
+## Spectral Colorimetry Cross-Check
+
+Issue
+[#1475](https://github.com/InternationalColorConsortium/iccDEV/issues/1475)
+distinguishes the legacy 5 nm observer/illuminant direct-sum path from the
+registry-aligned weighting tables exposed by `IccColorimetry`.
+
+Run the independent MATLAB calculation:
+
+```matlab
+test_colorimetry_issue_1475();
+run(fullfile('matlab', 'examples', 'colorimetry_issue_1475.m'));
+```
+
+The check reads the checked-in C++ table values and evaluates a perfect
+diffuser under D50 with the CIE 1931 2-degree observer:
+
+```text
+legacy 5 nm direct sum: X=0.964245566 Y=1.000000000 Z=0.824679094
+registry 10 nm table:   X=0.964240837 Y=1.000000000 Z=0.825128117
+legacy at 10 nm:        X=0.963956086 Y=1.000000000 Z=0.824057353
+canonical CIE 15:       X=0.964220000 Y=1.000000000 Z=0.825210000
+ICC PCS icD50XYZ:       X=0.964200000 Y=1.000000000 Z=0.824900000
+legacy - registry:      dX=+0.000004728 dY~0 dZ=-0.000449023
+legacy - canonical:     dX=+0.000025566 dY=0  dZ=-0.000530906
+registry - canonical:   dX=+0.000020837 dY~0 dZ=-0.000081883
+legacy - ICC PCS:       dX=+0.000045566 dY=0  dZ=-0.000220906
+registry - ICC PCS:     dX=+0.000040837 dY~0 dZ=+0.000228117
+```
+
+### Reading the difference
+
+The legacy and registry paths differ in three ways at once -- reduction method,
+sample grid, and the underlying illuminant data -- so the `-0.000449` gap cannot
+be attributed to any one of them without holding the others fixed. Two of the
+three are controlled:
+
+- **Reduction method is not the cause.** `iccdev.colorimetry-methods` asserts
+  `same-grid: DirectSum == Weighting` and `== SpragueTo1nm` to `TOL_EXACT`
+  (`1e-6`), which is already far inside the `4.5e-4` gap. Driving
+  `CIccColorimetricCalculator` with the real D50 SPD and 1931 CMFs instead of
+  that test's synthetic data, the three methods return the same `XYZ` to the
+  last bit -- measured spread `0.000e+00`. A weighting table is not
+  intrinsically closer to CIE than a direct sum is.
+- **Sample grid is not the cause either, and has the wrong sign.** Re-summing the
+  same legacy data on the 10 nm subgrid gives `Z=0.824057353`, moving `Z` by
+  `-0.000622` -- larger than the gap and in the opposite direction. The MATLAB
+  check computes this as `grid_effect` and asserts both properties.
+
+What remains is the data. This is consistent with the #1475 finding that all ten
+registry weighting tables match the published registry values exactly while
+iccDEV's own 5 nm D50 SPD (`icKnownIllums`, inherited in `889db62b`) is the
+divergent object.
+
+Which path is "closer" is therefore a choice of reference rather than a measure
+of accuracy, and the native test pins **two** references, not one: Part F checks
+the registry tables against CIE 15 (`0.96422 / 0.82521`), while Part E6 anchors
+the legacy path to the ICC PCS illuminant `icD50XYZ` (`0.9642 / 0.8249`) with an
+explicit note that the 5 nm tables sit ~5e-4 low on Z. Against CIE 15 the
+registry table is closer; against the ICC PCS white the legacy path is closer.
+The MATLAB check asserts both directions so neither reading can be quoted alone.
+
+Hosted CI also runs `iccdev.colorimetry-methods`, which exercises the compiled
+registry tables, loaded-table API, direct sum, weighting, Sprague resampling,
+normalization, and range reconciliation.
+
+Scope note: the registry tables are reachable through `IccColorimetry`, but
+`CIccColorimetricCalculator` is currently referenced only by that regression
+test -- no CMM or command-line path consumes it. The registry-aligned reduction
+is an available primitive, not a change to what the library computes today.
+
+Issue
+[#1451](https://github.com/InternationalColorConsortium/iccDEV/issues/1451)
+is downstream of this capability. The registry reduction primitive exists, but
+`iccPawgReport` still maps only measured Lab or XYZ columns; spectral-only
+characterization data needs a separate ingestion and reduction integration.
+
 Expected coverage includes profile open/read/header checks, CMM pipeline and
 bulk apply, per-thread apply handles, parent-close invalidation, native handle
 lifecycle checks, single-precision input, missing-profile errors, finite output,
@@ -231,8 +308,10 @@ image; interactive local use defaults to `latest`.
 - [ ] `build_mex` completes without unresolved dependencies.
 - [ ] `test_iccdev` passes without skipped CMM tests.
 - [ ] `run_local_qa` passes.
-- [ ] All three examples complete.
+- [ ] All documented examples complete.
 - [ ] `run_gamma_qa` decodes all three TRC tags as gamma 2.20703125.
+- [ ] Issue #1475 MATLAB QA reproduces the legacy and registry D50 XYZ values.
+- [ ] Native luminance and colorimetry CTests pass.
 - [ ] `run_docker_qa` passes when Docker is available.
 - [ ] Rebuild works after `clear classes` and `clear mex`.
 - [ ] Modified `.m` and Markdown files remain ASCII.
@@ -242,5 +321,6 @@ image; interactive local use defaults to `latest`.
 `.github/workflows/ci-matlab.yml` runs for MATLAB-related pull requests to
 `master`, selected MATLAB QA branches, and manual dispatch. It uses read-only
 permissions, trusted-base sanitizer helpers, SHA-pinned actions, a focused
-dependency-free Release build, checked-in profiles, a digest-pinned container
-interoperability job, and no cache or artifact publication.
+dependency-free MATLAB calculation stage, native luminance and colorimetry
+CTests, checked-in profiles, a digest-pinned container interoperability job,
+and no cache or artifact publication.

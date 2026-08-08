@@ -254,6 +254,47 @@ ctest --test-dir msvc -C Release `
   --output-on-failure --no-tests=error
 ```
 
+Reproduce issue
+[#1475](https://github.com/InternationalColorConsortium/iccDEV/issues/1475)
+by comparing the legacy 5 nm D50 direct sum with the registry-loaded 10 nm
+weighting table:
+
+```matlab
+test_colorimetry_issue_1475();
+run('matlab/examples/colorimetry_issue_1475.m');
+```
+
+The MATLAB check parses the tables directly from `IccTagBasic.cpp` and
+`IccColorimetry.cpp`. For a perfect diffuser under D50 with the CIE 1931
+2-degree observer, the legacy path produces `Z=0.824679094` while the registry
+table produces `Z=0.825128117`, a gap of `-0.000449`.
+
+That gap is a difference in the illuminant *data*, not in how it is integrated:
+
+- **Not the reduction method.** `iccdev.colorimetry-methods` asserts
+  `DirectSum == Weighting == SpragueTo1nm` to `TOL_EXACT` on a common grid, so a
+  weighting table is not intrinsically closer to CIE than a direct sum.
+- **Not the sample grid.** Re-summing the same legacy data on the 10 nm subgrid
+  moves `Z` by `-0.000622` -- larger than the gap and opposite in sign. The
+  check computes this as `grid_effect` and asserts it.
+
+Which path is "closer" is a choice of reference, so the check pins both
+directions: against CIE 15 (`Z=0.82521`) the registry table wins
+(`-0.000082` versus `-0.000531`), while against the ICC PCS illuminant
+`icD50XYZ` (`Z=0.8249`, what the native test anchors the legacy path to) the
+legacy path wins (`-0.000221` versus `+0.000228`).
+
+Note the registry table is reachable through `IccColorimetry` but is not yet on
+any live path: `CIccColorimetricCalculator` is referenced only by the
+colorimetry-methods regression test, so this is a parallel API rather than a
+change to what the CMM currently computes.
+
+Issue
+[#1451](https://github.com/InternationalColorConsortium/iccDEV/issues/1451)
+is related but remains a separate ingestion concern: `iccPawgReport` currently
+requires measured Lab or XYZ columns and does not derive PCS values from
+spectral-only characterization rows.
+
 The MATLAB check is an independent fixture/arithmetic model. The native CTest
 is authoritative for warning status and message behavior; both should pass.
 

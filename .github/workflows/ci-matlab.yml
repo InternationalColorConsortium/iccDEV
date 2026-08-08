@@ -79,15 +79,19 @@ jobs:
         with:
           release: R2026a
 
-      - name: Reproduce luminance normalization calculations
+      - name: Reproduce specification calculations
         # matlab-actions/run-command v3
+        # Both checks are pure arithmetic over checked-in tables and fixtures, so
+        # they run before the native build rather than depending on it.
         uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
         with:
           command: >-
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
             test_luminance_normalization();
-            run(fullfile('matlab', 'examples', 'luminance_normalization.m'))
+            run(fullfile('matlab', 'examples', 'luminance_normalization.m'));
+            test_colorimetry_issue_1475();
+            run(fullfile('matlab', 'examples', 'colorimetry_issue_1475.m'))
           generate-summary: false
 
       - name: Configure and build IccProfLib
@@ -125,12 +129,13 @@ jobs:
           }
 
           cmake --build out\matlab --config Release `
-            --target IccProfLib2-static iccLuminanceNormalizationTest --parallel
+            --target IccProfLib2-static iccLuminanceNormalizationTest `
+              iccColorimetryMethodsTest --parallel
           if ($LASTEXITCODE -ne 0) {
-            throw "Native luminance test build failed with exit code $LASTEXITCODE"
+            throw "Native regression test build failed with exit code $LASTEXITCODE"
           }
 
-      - name: Run native luminance regression
+      - name: Run native luminance and colorimetry regressions
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
           POWERSHELL_UPDATECHECK: Off
@@ -145,11 +150,11 @@ jobs:
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
           ctest --test-dir out\matlab -C Release `
-            -R '^iccdev\.luminance-normalization$' `
+            -R '^iccdev\.(luminance-normalization|colorimetry-methods)$' `
             --output-on-failure `
             --no-tests=error
           if ($LASTEXITCODE -ne 0) {
-            throw "Native luminance regression failed with exit code $LASTEXITCODE"
+            throw "Native regressions failed with exit code $LASTEXITCODE"
           }
 
       - name: Build MATLAB MEX gateway
