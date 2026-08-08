@@ -96,7 +96,13 @@ classify_rationale() {
       echo "conformant example profile; validates clean"
       ;;
     warning)
-      if grep -Fq 'appears to be normalized' "$log"; then
+      # Matches CIccInfo::CheckLuminance's message text. #1811 reworded it from
+      # "appears to be normalized!" to "possibly normalized" because a normalized Y
+      # and a physical 1 cd/m^2 Y are indistinguishable, so the tool no longer
+      # asserts what it cannot prove. The rationale string below is deliberately
+      # unchanged: the 27 rows it labels are the same 27 profiles, so the manifest
+      # itself does not need regenerating for a wording change.
+      if grep -Fq 'possibly normalized' "$log"; then
         echo "baselined: spectralViewingConditions XYZ carries normalized luminance (#1811)"
       elif grep -Fq 'sampled curve has a range of zero' "$log"; then
         echo "baselined: sampled curve has a range of zero"

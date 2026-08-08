@@ -2827,6 +2827,67 @@ function(iccdev_add_curve_setsize_contract_test)
   endif()
 endfunction()
 
+# #1811: spectralViewingConditions illuminantXYZ/surroundXYZ carry absolute
+# luminance in cd/m^2, and CIccInfo::CheckLuminance warns when Y is 1 because that
+# is what chromaticity normalization leaves behind. The check cannot be exact --
+# Testing/Display holds the same profile at Y = 1, 300 and 500, and the 300 cd/m^2
+# fixture scaled to 1 cd/m^2 *is* the normalized fixture -- so this pins that the
+# diagnostic still fires on Y = 1, stays a Warning rather than escalating to an
+# assertion, and leaves the physical values #1811 names untouched.
+#
+# Pure library test -- no fixtures on disk and no tool invocation -- so it needs
+# only IccProfLib and no scratch directory. Exercising CheckLuminance directly
+# rather than CIccTagSpectralViewingConditions::Validate keeps the missing-observer
+# critical error from masking the status under test.
+function(iccdev_add_luminance_normalization_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccLuminanceNormalizationTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/luminance-normalization-diagnostic.cpp"
+  )
+  target_compile_features(iccLuminanceNormalizationTest PRIVATE cxx_std_17)
+  target_include_directories(iccLuminanceNormalizationTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccLuminanceNormalizationTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccLuminanceNormalizationTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.luminance-normalization
+      COMMAND "$<TARGET_FILE:iccLuminanceNormalizationTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.luminance-normalization
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccLuminanceNormalizationTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.luminance-normalization PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;luminance;validation;issue-1811;regression"
+  )
+  if(WIN32)
+    set(_luminance_norm_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccLuminanceNormalizationTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _luminance_norm_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.luminance-normalization PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_luminance_norm_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #2012/#2013/#2014: g_icTagNameTable published ten tag names matching neither
 # the signature nor their siblings. The table drives the XML element name and the
 # JSON key in both directions, so the corrected name must be the one emitted while
@@ -3824,6 +3885,7 @@ if(WIN32)
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_curve_setsize_contract_test()
+  iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
@@ -4088,6 +4150,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_curve_setsize_contract_test()
+iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()

@@ -2733,14 +2733,33 @@ icValidateStatus CIccInfo::CheckData(std::string &sReport, const icDateTimeNumbe
   return rv;
 }
 
+// The only caller is CIccTagSpectralViewingConditions::Validate, which applies this
+// to illuminantXYZ and to surroundXYZ.  Both fields carry absolute luminance in
+// cd/m^2, so a Y of 1 is the signature of a producer that wrote chromaticity-
+// normalized values instead -- normalizing divides every component by Y, which is
+// what leaves Y at exactly 1.
+//
+// The test cannot be made exact, and that is a property of the data rather than of
+// this implementation: a normalized XYZ and a genuine 1 cd/m^2 XYZ are the same
+// three numbers.  Testing/Display carries the proof as a fixture pair --
+// sRGB_D65_MAT-300lx.xml is 300 x (0.9504, 1.0, 1.0889) and sRGB_D65_MAT.xml is that
+// same triple at Y = 1, which is simultaneously the normalized form and a legal
+// 1 cd/m^2 dark surround.  Surrounds do live down there; the BT.2100 fixtures in
+// this corpus use 5 cd/m^2.  So the finding is reported as a possibility rather
+// than an assertion, and stays at Warning: no value of Y on its own proves the tag
+// wrong.  Proving it wrong needs context this function is not given -- see #1811 for
+// the corpus population where illuminantXYZ and surroundXYZ disagree on units.
 icValidateStatus CIccInfo::CheckLuminance(std::string &sReport, const icFloatXYZNumber &XYZ, std::string sDesc/*=""*/)
 {
   icValidateStatus rv = icValidateOK;
 
+  // An absolute +/-0.01 window, not a relative one: it brackets exactly [0.99, 1.01].
+  // Kept as it was -- widening it would start reaching into the physical range, where
+  // the 5 cd/m^2 surrounds this corpus already uses would begin to trip it.
   if (fabs(XYZ.Y - 1.0) < 0.01) {
     sReport += icMsgValidateWarning;
     sReport += sDesc;
-    sReport += " - XYZNumber appears to be normalized! Y value should reflect absolute luminance.\n";
+    sReport += " - XYZNumber Y is possibly normalized; Y should carry absolute luminance in cd/m^2.\n";
     rv = icValidateWarning;
   }
 
