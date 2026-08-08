@@ -288,12 +288,42 @@ jobs:
 
       - name: Attest SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' && steps.sbom-size.outputs.attestable == 'true' }}
+        id: attest-sbom
+        # Rekor's transparency-log endpoint can time out after the image is published.
+        # A retry below preserves a hard failure if the service remains unavailable.
+        continue-on-error: true
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4.2.0
         with:
           subject-name: ${{ steps.image.outputs.name }}
           subject-digest: ${{ steps.build-push.outputs.digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
+
+      - name: Retry SBOM attestation
+        if: ${{ steps.attest-sbom.outcome == 'failure' }}
+        id: retry-attest-sbom
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6  # v4.2.0
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build-push.outputs.digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      - name: Require SBOM attestation
+        if: ${{ always() && steps.attest-sbom.outcome == 'failure' }}
+        env:
+          BASH_ENV: /dev/null
+          RETRY_OUTCOME: ${{ steps.retry-attest-sbom.outcome }}
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
+
+          if [ "$RETRY_OUTCOME" != "success" ]; then
+            echo "::error::SBOM attestation failed after retry"
+            exit 1
+          fi
 
       - name: Upload SBOM
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
