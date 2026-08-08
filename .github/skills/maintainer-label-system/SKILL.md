@@ -42,6 +42,9 @@ Use this skill when adding, removing, or auditing labels and label automation.
 7. If PR CI control labels change, keep them maintainer-only, one-shot, and
    restricted to same-repository pull requests.
 8. Update docs and prompts when policy or maintainer workflow changes.
+9. For a new scope label, add its canonical `.github/labels.yml` entry before
+   issue-text or path automation. Keep deletion manual after checking all active
+   label consumers.
 
 ## Validation
 

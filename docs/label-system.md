@@ -26,7 +26,7 @@ readiness.
 | Issue kind | `bug`, `feature`, `question`, `security` | Maintainers |
 | PR status | `passed`, `failed`, `pending`, `Merge Ready`, `codeql-ready` | CI and maintainers |
 | Dependency maintenance | `bump-sha-pins` | Maintainers |
-| Scope | `Source`, `Documentation`, `Configuration`, `CI`, `Build`, `Testing`, `Tools`, `JSON`, `WASM`, `vcpkg`, and related area labels | Path labeler and maintainers |
+| Scope | `Source`, `Documentation`, `Configuration`, `CI`, `Build`, `Testing`, `Tools`, `JSON`, `Python`, `WASM`, `vcpkg`, and related area labels | Path labeler and maintainers |
 | Governance | `Governance`, `Labels`, `security`, `SAST`, `CodeQL`, `Sanitizers`, `Release` | Maintainers |
 
 Keep existing public label names stable unless maintainers intentionally migrate
@@ -85,14 +85,17 @@ spans many components.
 ### Issue Triage
 
 `label.yml` runs on issue open, edit, and reopen events. It syncs the repository
-label inventory, then adds `needs-triage` and lightweight issue-kind labels from
-the issue title and body. It may also add `needs-repro` or
+label inventory, then adds `needs-triage` and lightweight issue-kind and scope
+labels from the issue title and body, including `Python` for Python, Cython,
+PyPI, pip, setuptools, or wheel reports. It may also add `needs-repro` or
 `requires:more-information` when a report is too short, contains a placeholder,
 or describes a crash without a reproducible input or command.
 
 The triage workflow is a routing aid, not a maintainer decision. Maintainers may
-adjust labels after reviewing reproductions, security impact, and required test
-coverage.
+adjust or remove labels after reviewing reproductions, security impact, and
+required test coverage. Label sync creates missing labels and updates the color
+or description of labels declared in `.github/labels.yml`; retiring a label is
+manual and must follow the deletion review in the maintainer change process.
 
 ### PR CI Status Labels
 
@@ -190,6 +193,9 @@ git diff --check
 ```
 
 6. After merge, confirm `Sync Labels` succeeded or run it manually.
+7. Before deleting a label, check open issues, open PRs, workflow references,
+   prompts, and documentation; remove the label from `.github/labels.yml`, then
+   delete it manually through GitHub.
 
 ## Security Guardrails
 

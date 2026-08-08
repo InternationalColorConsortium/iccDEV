@@ -152,6 +152,9 @@
 - name: JSON
   color: 1d76db
   description: ICC JSON parser, config, or round-trip behavior
+- name: Python
+  color: 9490cc
+  description: Python, Cython, PyPI, pip, or packaging scope
 - name: Windows
   color: c5def5
   description: Windows, MSVC, clang-cl, or PowerShell scope
