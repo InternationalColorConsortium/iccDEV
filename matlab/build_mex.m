@@ -14,8 +14,9 @@ function build_mex(varargin)
 % BSD 3-Clause License. See LICENSE.md for details.
 
   p = inputParser;
-  addParameter(p, 'BuildDir', '', @ischar);
-  addParameter(p, 'Debug', false, @islogical);
+  addParameter(p, 'BuildDir', '', @is_text_scalar);
+  addParameter(p, 'Debug', false, ...
+    @(value) islogical(value) && isscalar(value));
   parse(p, varargin{:});
 
   thisDir  = fileparts(mfilename('fullpath'));
@@ -24,7 +25,7 @@ function build_mex(varargin)
   inclDir  = fullfile(repoRoot, 'IccProfLib');
 
   % Find build directory
-  buildDir = p.Results.BuildDir;
+  buildDir = char(p.Results.BuildDir);
   if isempty(buildDir)
     buildDir = getenv('ICCDEV_BUILD_DIR');
   end
@@ -112,7 +113,6 @@ function build_mex(varargin)
   end
 
   % Build MEX arguments
-  cxxFlags = {};
   if exist('OCTAVE_VERSION', 'builtin')
     cxxFlags = {'-std=c++17'};
   elseif ispc()
@@ -125,7 +125,6 @@ function build_mex(varargin)
     cxxFlags{end+1} = '-g';
   end
 
-  outDir = thisDir;
   if exist('OCTAVE_VERSION', 'builtin')
     % Octave: place MEX alongside +iccdev/ directory (private/ not resolved)
     outDir = thisDir;
@@ -272,4 +271,9 @@ function found = has_library(searchDirs, libNames)
       end
     end
   end
+end
+
+function valid = is_text_scalar(value)
+  valid = (ischar(value) && (isempty(value) || size(value, 1) == 1)) || ...
+    (isa(value, 'string') && isscalar(value));
 end

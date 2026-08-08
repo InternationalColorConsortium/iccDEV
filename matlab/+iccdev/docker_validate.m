@@ -5,17 +5,19 @@ function result = docker_validate(profile_path, varargin)
 % BSD 3-Clause License. See LICENSE.md for details.
 
   p = inputParser;
-  addRequired(p, 'profile_path', @ischar);
+  addRequired(p, 'profile_path', @is_text_scalar);
   addParameter(p, 'Image', ...
-    'ghcr.io/internationalcolorconsortium/iccdev:latest', @ischar);
-  addParameter(p, 'Pull', false, @islogical);
+    'ghcr.io/internationalcolorconsortium/iccdev:latest', @is_text_scalar);
+  addParameter(p, 'Pull', false, ...
+    @(value) islogical(value) && isscalar(value));
   parse(p, profile_path, varargin{:});
 
-  image = validate_image(p.Results.Image);
-  [exists, attributes] = fileattrib(p.Results.profile_path); %#ok<FILEATTRIB>
+  profile_path = char(p.Results.profile_path);
+  image = validate_image(char(p.Results.Image));
+  [exists, attributes] = fileattrib(profile_path); %#ok<FILEATTRIB>
   if ~exists || attributes.directory
     error('iccdev:dockerProfileNotFound', ...
-      'Docker input profile not found: %s', p.Results.profile_path);
+      'Docker input profile not found: %s', profile_path);
   end
 
   profile_path = attributes.Name;
@@ -108,14 +110,19 @@ end
 
 function validate_host_path(path)
   if ispc()
-    unsafe = '["%%&|<>^!\r\n]';
+    unsafe = '[,"%%&|<>^!\r\n]';
   else
-    unsafe = '[''\r\n]';
+    unsafe = '[,''\r\n]';
   end
   if ~isempty(regexp(path, unsafe, 'once'))
     error('iccdev:unsafeDockerPath', ...
-      'Docker profile path contains unsupported shell characters.');
+      'Docker profile path contains unsupported mount or shell characters.');
   end
+end
+
+function valid = is_text_scalar(value)
+  valid = (ischar(value) && (isempty(value) || size(value, 1) == 1)) || ...
+    (isa(value, 'string') && isscalar(value));
 end
 
 function command = docker_command(arguments)

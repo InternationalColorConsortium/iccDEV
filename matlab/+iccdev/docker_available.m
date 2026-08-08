@@ -7,6 +7,10 @@ function [available, details] = docker_available(image)
   if nargin < 1
     image = 'ghcr.io/internationalcolorconsortium/iccdev:latest';
   end
+  if ~is_text_scalar(image)
+    error('iccdev:invalidDockerImage', ...
+      'Docker image reference must be a character vector or string scalar.');
+  end
   image = validate_image(char(image));
 
   [daemon_status, daemon_output] = system( ...
@@ -33,6 +37,11 @@ function image = validate_image(image)
     error('iccdev:invalidDockerImage', ...
       'Unsupported iccDEV Docker image reference: %s', image);
   end
+end
+
+function valid = is_text_scalar(value)
+  valid = (ischar(value) && (isempty(value) || size(value, 1) == 1)) || ...
+    (isa(value, 'string') && isscalar(value));
 end
 
 function command = docker_command(arguments)

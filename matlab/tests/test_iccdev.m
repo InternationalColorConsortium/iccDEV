@@ -40,7 +40,7 @@ function test_iccdev()
 
   [dockerAvailable, dockerDetails] = iccdev.docker_available();
   if dockerAvailable && ~isempty(profilePath)
-    [nPass, nFail] = run_test(@() test_docker_interop(profilePath), ...
+    [nPass, nFail] = run_test(@test_docker_interop, ...
       'Docker interoperability', nPass, nFail);
   else
     fprintf('  SKIP: Docker interoperability - %s\n', dockerDetails);
@@ -146,7 +146,7 @@ function [src, dst] = find_two_profiles()
   if numel(found) >= 2
     src = found{1};
     dst = found{2};
-  elseif numel(found) == 1
+  elseif isscalar(found)
     src = found{1};
     dst = found{1};  % self round-trip
   else
@@ -292,14 +292,54 @@ function test_docker_input_validation(profilePath)
     threw = true;
   end
   assert(threw, 'Unsafe Docker image references must be rejected');
+
+  commaPath = [tempname ',profile.icc'];
+  copyfile(profilePath, commaPath);
+  cleanup = onCleanup(@() delete_if_exists(commaPath));
+  identifier = '';
+  try
+    iccdev.docker_validate(commaPath);
+  catch e
+    identifier = e.identifier;
+  end
+  assert(strcmp(identifier, 'iccdev:unsafeDockerPath'), ...
+    'Docker mount paths containing commas must be rejected');
+  clear cleanup;
+
+  if exist('string', 'builtin') || exist('string', 'class')
+    identifier = '';
+    try
+      iccdev.docker_validate(string(profilePath), 'Image', ... %#ok<STRQUOT>
+        string('ghcr.io/internationalcolorconsortium/iccdev:latest;invalid')); %#ok<STRQUOT>
+    catch e
+      identifier = e.identifier;
+    end
+    assert(strcmp(identifier, 'iccdev:invalidDockerImage'), ...
+      'String scalar inputs should pass parsing before image validation');
+
+    identifier = '';
+    try
+      iccdev.docker_available( ...
+        string('ghcr.io/internationalcolorconsortium/iccdev:latest;invalid')); %#ok<STRQUOT>
+    catch e
+      identifier = e.identifier;
+    end
+    assert(strcmp(identifier, 'iccdev:invalidDockerImage'), ...
+      'docker_available should accept string scalars before validation');
+  end
 end
 
-function test_docker_interop(profilePath)
-  assert(~isempty(profilePath));
+function test_docker_interop()
   result = run_docker_qa();
   assert(result.dumpStatus == 0);
   assert(result.roundTripStatus == 0);
   assert(exist(result.profile, 'file') == 2);
+end
+
+function delete_if_exists(path)
+  if exist(path, 'file') == 2
+    delete(path);
+  end
 end
 
 function test_cmm_roundtrip(srcPath, dstPath)

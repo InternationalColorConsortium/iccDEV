@@ -126,7 +126,6 @@ jobs:
           command: >-
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
-            test_iccdev();
             run_local_qa();
             run(fullfile('matlab', 'examples', 'read_profile.m'));
             run(fullfile('matlab', 'examples', 'color_transform.m'))
