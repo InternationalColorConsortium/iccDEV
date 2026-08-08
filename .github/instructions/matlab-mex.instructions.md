@@ -30,7 +30,9 @@ matlab/
     read_profile.m        # Profile reading example
     color_transform.m     # Color transform example
     luminance_normalization.m # Explain issue #1811 fixture scaling
+    gamma_curve.m         # curveType u8Fixed8 gamma calculation example
   build_mex.m             # Build script (auto-detects library location)
+  run_gamma_qa.m          # Issue #815 gamma fixture and math verification
   tests/
     test_iccdev.m         # Test suite (MATLAB/Octave compatible)
     test_luminance_normalization.m # Dependency-free issue #1811 check
@@ -120,6 +122,7 @@ For the extended local smoke and stress checks:
 ```matlab
 addpath('matlab');
 run_local_qa();
+run_gamma_qa();
 ```
 
 For Docker CLI interoperability:

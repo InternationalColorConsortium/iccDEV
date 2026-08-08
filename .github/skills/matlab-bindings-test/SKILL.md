@@ -56,9 +56,11 @@ profiles, examples, and native handle lifecycle behavior.
    addpath('matlab/tests');
    test_iccdev();
    run_local_qa();
+   run_gamma_qa();
    run_docker_qa();
    run('matlab/examples/read_profile.m');
    run('matlab/examples/color_transform.m');
+   run('matlab/examples/gamma_curve.m');
    run('matlab/examples/docker_interop.m');
    ```
 
@@ -84,6 +86,8 @@ profiles, examples, and native handle lifecycle behavior.
 - Exact MATLAB test result.
 - Issue #1811 fixture normalization error and warning-window values, when in scope.
 - Native `iccdev.luminance-normalization` CTest result, when in scope.
+- Gamma QA result for the `rTRC`, `gTRC`, and `bTRC` issue #815 fixture.
+- Native `iccdev.curve-gamma-u8fixed8` CTest result, when in scope.
 - Example completion.
 - Docker image ID or digest and interoperability result.
 - Any skipped profile-dependent checks and why.

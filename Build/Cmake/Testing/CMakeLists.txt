@@ -2839,6 +2839,70 @@ endfunction()
 # only IccProfLib and no scratch directory. Exercising CheckLuminance directly
 # rather than CIccTagSpectralViewingConditions::Validate keeps the missing-observer
 # critical error from masking the status under test.
+# Restores the u8Fixed8Number gamma coverage that shipped with #808 and was dropped
+# in 35f5c5e6 (#968) when ci-iccdev-tool-tests.yml / ci-tool-tests.yml lost their
+# inline bodies: steps R12/R13/R8 checked all four gamma-*.icc fixtures and none of
+# it was carried over to CTest, leaving three of the four fixtures unreferenced
+# anywhere in the tree. A one-entry curveType is a u8Fixed8 exponent, so consumers
+# must undo ReadUInt16Float's /65535 with `* 65535.0 / 256.0` rather than `* 256.0`.
+# The test reads each fixture through CIccProfileJson with the JSON factories pushed
+# -- iccToJson's own path -- and pins both Describe()'s exact text and the emitted
+# JSON gamma, the latter against a derived gamma*2^-24 bound rather than the flat
+# 0.01 the old R13 used (#2044). Needs IccJSON + IccProfLib; skipped where IccJSON
+# is not built.
+function(iccdev_add_curve_gamma_u8fixed8_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCurveGammaU8Fixed8Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/curve-gamma-u8fixed8.cpp"
+  )
+  target_compile_features(iccCurveGammaU8Fixed8Test PRIVATE cxx_std_17)
+  target_include_directories(iccCurveGammaU8Fixed8Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccCurveGammaU8Fixed8Test PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccCurveGammaU8Fixed8Test)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.curve-gamma-u8fixed8
+      COMMAND "$<TARGET_FILE:iccCurveGammaU8Fixed8Test>"
+        "${ICCDEV_REPO_ROOT}/.github/ci/regression"
+    )
+  else()
+    add_test(
+      NAME iccdev.curve-gamma-u8fixed8
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccCurveGammaU8Fixed8Test>"
+        "${ICCDEV_REPO_ROOT}/.github/ci/regression"
+    )
+  endif()
+  set_tests_properties(iccdev.curve-gamma-u8fixed8 PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;json;curve;gamma;issue-815;issue-2044;regression"
+  )
+  if(WIN32)
+    set(_curve_gamma_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCurveGammaU8Fixed8Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _curve_gamma_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.curve-gamma-u8fixed8 PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_curve_gamma_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_luminance_normalization_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -3945,6 +4009,7 @@ if(WIN32)
   iccdev_add_xml_relaxng_validation_leak_test()
   iccdev_add_xml_curve_oversize_file_test()
   iccdev_add_curve_setsize_contract_test()
+  iccdev_add_curve_gamma_u8fixed8_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
   iccdev_add_struct_name_spelling_test()
@@ -4211,6 +4276,7 @@ iccdev_add_xml_writer_graceful_degrade_test()
 iccdev_add_xml_relaxng_validation_leak_test()
 iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_curve_setsize_contract_test()
+iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
 iccdev_add_struct_name_spelling_test()

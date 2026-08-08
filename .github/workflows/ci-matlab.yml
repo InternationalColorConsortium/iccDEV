@@ -18,6 +18,7 @@ on:
     branches:
       - master
       - ci-qa-matlab-examples
+      - ci-qa-matlab-examples-gamma
     paths:
       - ".github/workflows/ci-matlab.yml"
       - "Build/Cmake/**"
@@ -169,7 +170,8 @@ jobs:
             addpath(fullfile('matlab', 'tests'));
             run_local_qa();
             run(fullfile('matlab', 'examples', 'read_profile.m'));
-            run(fullfile('matlab', 'examples', 'color_transform.m'))
+            run(fullfile('matlab', 'examples', 'color_transform.m'));
+            run(fullfile('matlab', 'examples', 'gamma_curve.m'))
           generate-summary: false
 
   docker-interop:

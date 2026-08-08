@@ -3,7 +3,9 @@ function test_iccdev()
 %
 %   test_iccdev()
 %
-% Runs all tests and reports pass/fail. Requires icc_mex on the path.
+% Runs all tests and reports pass/fail/skip. Requires icc_mex on the path.
+% Groups that cannot run (missing fixture, no second profile, no Docker image)
+% are counted and listed rather than passing silently.
 %
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
@@ -12,12 +14,21 @@ function test_iccdev()
 
   nPass = 0;
   nFail = 0;
+  % Skips are counted, not just printed. Several groups below stand down when a
+  % fixture, a second profile or the Docker image is unavailable, and until this
+  % counter existed the summary line reported only passes and failures -- so a run
+  % that silently skipped a third of the suite still ended in "N passed, 0 failed"
+  % and a green CI leg. #2043 and #2044 are both examples: each reported a clean
+  % result while "Docker interoperability" had not run at all.
+  nSkip = 0;
+  skipped = {};
 
   % --- Enum tests (always work) ---
   [nPass, nFail] = run_test(@test_color_space_values, 'ColorSpace values', nPass, nFail);
   [nPass, nFail] = run_test(@test_rendering_intent_values, 'RenderingIntent values', nPass, nFail);
   [nPass, nFail] = run_test(@test_interpolation_values, 'Interpolation values', nPass, nFail);
   [nPass, nFail] = run_test(@test_sig_to_str, 'sig_to_str', nPass, nFail);
+  [nPass, nFail] = run_test(@test_curve_gamma_fixture, 'curveType gamma math', nPass, nFail);
 
   % --- Profile tests (need test profiles) ---
   profilePath = find_test_profile();
@@ -28,7 +39,8 @@ function test_iccdev()
     [nPass, nFail] = run_test(@() test_profile_header_fields(profilePath), 'Header fields', nPass, nFail);
     [nPass, nFail] = run_test(@() test_profile_double_close(profilePath), 'Double close safety', nPass, nFail);
   else
-    fprintf('  SKIP: No test profiles found\n');
+    [nSkip, skipped] = note_skip('Profile open/header/read/fields/double-close', ...
+      'no test profile found', nSkip, skipped);
   end
 
   % --- CMM tests (basic, no profiles needed) ---
@@ -39,7 +51,8 @@ function test_iccdev()
     [nPass, nFail] = run_test(@() test_docker_input_validation(profilePath), ...
       'Docker input validation', nPass, nFail);
   else
-    fprintf('  SKIP: Docker input validation - no test profile found\n');
+    [nSkip, skipped] = note_skip('Docker input validation', ...
+      'no test profile found', nSkip, skipped);
   end
 
   [dockerAvailable, dockerDetails] = iccdev.docker_available();
@@ -47,7 +60,8 @@ function test_iccdev()
     [nPass, nFail] = run_test(@test_docker_interop, ...
       'Docker interoperability', nPass, nFail);
   else
-    fprintf('  SKIP: Docker interoperability - %s\n', dockerDetails);
+    [nSkip, skipped] = note_skip('Docker interoperability', dockerDetails, ...
+      nSkip, skipped);
   end
 
   % --- CMM pipeline tests (need two compatible profiles for transform) ---
@@ -60,14 +74,35 @@ function test_iccdev()
     [nPass, nFail] = run_test(@() test_mex_apply_parent_close(srcProf, dstProf), 'MEX apply parent close', nPass, nFail);
     [nPass, nFail] = run_test(@() test_cmm_single_precision(srcProf, dstProf), 'Single precision input', nPass, nFail);
   else
-    fprintf('  SKIP: No compatible profiles for CMM pipeline tests\n');
-    fprintf('        Run CreateAllProfiles.sh to generate Display profiles\n');
+    [nSkip, skipped] = note_skip('CMM pipeline/bulk/apply-handle/single-precision', ...
+      'no compatible profile pair; run CreateAllProfiles.sh', nSkip, skipped);
   end
 
-  fprintf('\n=== Results: %d passed, %d failed ===\n', nPass, nFail);
+  fprintf('\n=== Results: %d passed, %d failed, %d skipped ===\n', ...
+    nPass, nFail, nSkip);
+  if nSkip > 0
+    % Name them again at the end. A skip scrolls past in the middle of a long
+    % run, and the count alone does not say what stopped running.
+    fprintf('Skipped groups (coverage was reduced):\n');
+    for i = 1:numel(skipped)
+      fprintf('  - %s\n', skipped{i});
+    end
+  end
   if nFail > 0
     error('iccdev:testFailed', '%d test(s) failed.', nFail);
   end
+end
+
+% Records a skipped group so it reaches the summary as well as the log. Returns
+% the updated counter and list rather than using a global, matching the
+% pass/fail threading already used by run_test.
+function [nSkip, skipped] = note_skip(what, why, nSkip, skipped)
+  if isempty(why)
+    why = 'unavailable';
+  end
+  fprintf('  SKIP: %s - %s\n', what, why);
+  nSkip = nSkip + 1;
+  skipped{end+1} = sprintf('%s (%s)', what, why);
 end
 
 function [nPass, nFail] = run_test(fn, name, nPass, nFail)
@@ -197,6 +232,14 @@ end
 function test_sig_to_str()
   s = iccdev.sig_to_str(uint32(hex2dec('52474220')));
   assert(strcmp(s, 'RGB'), 'Expected RGB, got %s', s);
+end
+
+function test_curve_gamma_fixture()
+  results = run_gamma_qa();
+  assert(numel(results) == 3, 'Expected red, green, and blue TRC results');
+  assert(all([results.raw] == 565), 'Expected raw u8Fixed8 value 565');
+  assert(all([results.gamma] == 2.20703125), ...
+    'Expected decoded gamma 2.20703125');
 end
 
 function test_profile_open(path)

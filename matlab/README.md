@@ -108,6 +108,7 @@ cmm.close();
 | `iccdev.docker_validate(profile, ...)` | Run containerized dump and round-trip validation |
 | `build_mex(...)` | Build the MEX extension |
 | `run_local_qa()` | Run local MEX regression and stress checks |
+| `run_gamma_qa()` | Verify issue #815 curveType u8Fixed8 gamma decoding |
 | `run_docker_qa(image)` | Validate the published container and output contract |
 
 ### iccdev.IccProfile
@@ -197,6 +198,32 @@ missing-profile smoke checks with:
 
 ```matlab
 run_local_qa();
+```
+
+Verify the ICC.1 `curveType` gamma calculation used by issue
+[#815](https://github.com/InternationalColorConsortium/iccDEV/issues/815)
+and PR
+[#808](https://github.com/InternationalColorConsortium/iccDEV/pull/808):
+
+```matlab
+run_gamma_qa();
+run('matlab/examples/gamma_curve.m');
+```
+
+The checked-in fixture stores 565 as a `u8Fixed8Number`, so the decoded gamma is
+`565 / 256 = 2.20703125` exactly. The library's normalized internal storage is
+`565 / 65535` held in an `icFloatNumber`, so reconstructing it as
+`stored * 65535 / 256` gives `2.2070311898824` -- within `gamma * 2^-24` of the
+encoded value, not equal to it, and still rounding back to 565.
+
+Validate the compiled library against the same arithmetic across all four
+`gamma-*.icc` fixtures:
+
+```powershell
+cmake --build msvc --config Release --target iccCurveGammaU8Fixed8Test
+ctest --test-dir msvc -C Release `
+  -R '^iccdev\.curve-gamma-u8fixed8$' `
+  --output-on-failure --no-tests=error
 ```
 
 Validate the same profile with the published container:
