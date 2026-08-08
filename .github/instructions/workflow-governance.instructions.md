@@ -288,6 +288,14 @@ totals. For WASM parity, keep `Build/Cmake/wasm-package/regression.js`,
 `.github/workflows/ci-pr-wasm.yml`, `.github/workflows/ci-pr-action.yml`, and
 `.github/workflows/ci-latest-release.yml` in sync.
 
+Release payload checks must run against the staged archive tree rather than
+only the source checkout. If a packaged test derives data paths relative to its
+installed location, preserve those paths in the archive and assert the required
+files again after artifact download. MATLAB release payloads must include the
+MEX runtime dependencies, required `Testing/` fixtures, gamma regression
+profile, and colorimetry table sources, and the staged suite must report zero
+skipped groups.
+
 ## Optional Local Hooks
 
 Maintainers can install the optional local hooks with:

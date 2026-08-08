@@ -66,6 +66,11 @@ profiles, examples, and native handle lifecycle behavior.
 
 9. Confirm `icc_mex` loads from the package private directory and any required
    runtime DLL is staged beside it.
+10. For release packaging changes, rerun the suite and examples from the staged
+    bundle root, not the source checkout. Preserve `Testing/`,
+    `.github/ci/regression/gamma-2.20703125.icc`, and the two C++ table sources
+    used by the colorimetry check at their repository-relative paths. Require
+    zero skipped test groups before publishing.
 
 ## Failure Rules
 
@@ -91,3 +96,4 @@ profiles, examples, and native handle lifecycle behavior.
 - Example completion.
 - Docker image ID or digest and interoperability result.
 - Any skipped profile-dependent checks and why.
+- For release work, staged-bundle paths and the zero-skip staged test result.
