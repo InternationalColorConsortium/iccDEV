@@ -51,6 +51,8 @@
 
 # Governance: protect key security/docs
 /AGENTS.md @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
+/CLAUDE.md @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
+/GEMINI.md @dwtza @maxderhak @colourbill-ctrl @ChrisCoxArt @xsscx
 /CODE_OF_CONDUCT.md @dwtza @maxderhak
 /CONTRIBUTING.md @dwtza @maxderhak
 /LICENSE.md @dwtza @maxderhak

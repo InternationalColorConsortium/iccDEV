@@ -4,6 +4,11 @@ This file is a short navigation aid for automated coding agents and maintainers.
 Detailed rules live in `.github/copilot-instructions.md` and
 `.github/instructions/*.instructions.md`.
 
+`AGENTS.md` is the canonical agent-instruction file. GitHub Copilot also
+recognizes `CLAUDE.md` (Anthropic Claude) and `GEMINI.md` (Google Gemini) at the
+repository root; both are thin mirrors that route back here so every agent
+shares one source of truth. Update rules here, not in the mirrors.
+
 ## Ground Rules
 
 - Check `git --no-pager status --short --branch` before edits.

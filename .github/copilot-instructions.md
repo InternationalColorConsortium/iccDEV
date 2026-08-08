@@ -20,6 +20,21 @@ commands here.
 | `matlab/**` | `instructions/matlab-mex.instructions.md` | MEX gateway, OOP layer, and `build_mex.m` |
 | `Tools/Winnt/IccIisIsapi/**` | `Tools/Winnt/IccIisIsapi/isapi-instructions.md` | IIS ISAPI setup and hardening |
 
+## Agent Instructions
+
+This repository uses all three GitHub custom-instruction types:
+
+- Repository-wide: this file (`.github/copilot-instructions.md`).
+- Path-specific: `.github/instructions/*.instructions.md`, auto-loaded by
+  `applyTo` globs.
+- Agent: `AGENTS.md` is canonical, and the nearest `AGENTS.md` in the tree
+  wins. Root `CLAUDE.md` (Anthropic Claude) and `GEMINI.md` (Google Gemini) are
+  thin mirrors that route back to `AGENTS.md` so every agent shares one source
+  of truth.
+
+Keep agent rules in `AGENTS.md`, not in the mirrors. See
+https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions
+
 ## Current JSON/Config Regression Gate
 
 JSON/config parser fixes must fail closed: reject short arrays, non-numeric
