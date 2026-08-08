@@ -103,7 +103,11 @@ cmm.close();
 | Function | Description |
 |----------|-------------|
 | `iccdev.sig_to_str(sig)` | Convert 4-byte ICC signature to ASCII string |
+| `iccdev.docker_available(image)` | Check Docker daemon and image availability |
+| `iccdev.docker_validate(profile, ...)` | Run containerized dump and round-trip validation |
 | `build_mex(...)` | Build the MEX extension |
+| `run_local_qa()` | Run local MEX regression and stress checks |
+| `run_docker_qa(image)` | Validate the published container and output contract |
 
 ### iccdev.IccProfile
 
@@ -150,9 +154,21 @@ native state.
 
 ### Windows (MSVC)
 
-```matlab
-build_mex('BuildDir', 'C:\path\to\build-matlab-full');
+Configure and build a Release tree with the same MSVC toolchain MATLAB reports
+from `mex.getCompilerConfigurations('C++', 'Installed')`:
+
+```powershell
+cmake -S Build\Cmake -B msvc -G "Visual Studio 17 2022" -A x64 `
+  -DCMAKE_TOOLCHAIN_FILE="C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake"
+cmake --build msvc --config Release --target IccProfLib2-static -- /m
 ```
+
+```matlab
+build_mex('BuildDir', 'C:\path\to\iccDEV\msvc');
+```
+
+When `ICC_USE_ZLIB=ON`, `build_mex` reads `CMakeCache.txt`, links the matching
+vcpkg zlib import library, and copies its runtime DLL beside `icc_mex`.
 
 ### Linux / macOS
 
@@ -174,6 +190,24 @@ addpath('matlab');
 addpath('matlab/tests');
 test_iccdev();
 ```
+
+Run the complete regression, profile, bulk transform, apply-handle, and
+missing-profile smoke checks with:
+
+```matlab
+run_local_qa();
+```
+
+Validate the same profile with the published container:
+
+```matlab
+run_docker_qa();
+run('matlab/examples/docker_interop.m');
+```
+
+See [MATLAB bindings and QA](../docs/matlab-bindings.md) for the Windows
+desktop workflow, profile generation, WSL2 boundaries, troubleshooting, and
+repeatable validation checklist.
 
 ## License
 

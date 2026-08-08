@@ -131,3 +131,10 @@ python/wheelhouse/
 *.mexmaci64
 *.mexw64
 *.oct
+
+# MATLAB Project metadata is local-only
+matlab/matlab.prj
+matlab/resources/
+matlab/.gitattributes
+matlab/.gitignore
+matlab/toolbox.ignore

@@ -1,0 +1,5 @@
+Built with IccProfLib version
+Data Color Space:   RgbData
+Profile ID:
+Max DeltaE:
+PRMG Interoperability - Round Trip Results

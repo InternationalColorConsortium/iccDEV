@@ -1,0 +1,67 @@
+# MATLAB Bindings Build and Test
+
+Build and validate the iccDEV MATLAB MEX gateway, object-oriented wrappers,
+profiles, examples, and native handle lifecycle behavior.
+
+## Steps
+
+1. Read `docs/matlab-bindings.md` and
+   `.github/instructions/matlab-mex.instructions.md`.
+2. Check `git status` and preserve existing generated profiles and local test
+   artifacts.
+3. Confirm MATLAB has an installed C++ compiler:
+
+   ```matlab
+   mex.getCompilerConfigurations('C++', 'Installed')
+   ```
+
+4. Build the Release static library:
+
+   ```powershell
+   cmake --build msvc --config Release --target IccProfLib2-static -- /m
+   ```
+
+5. Build the MEX gateway:
+
+   ```matlab
+   addpath('matlab');
+   build_mex('BuildDir', fullfile(pwd, 'msvc'));
+   ```
+
+6. Generate or copy canonical `Testing/Display/*.icc` profiles. Exclude logs,
+   crash artifacts, and unrelated untracked files.
+7. Run:
+
+   ```matlab
+   addpath('matlab/tests');
+   test_iccdev();
+   run_local_qa();
+   run_docker_qa();
+   run('matlab/examples/read_profile.m');
+   run('matlab/examples/color_transform.m');
+   run('matlab/examples/docker_interop.m');
+   ```
+
+8. Confirm `icc_mex` loads from the package private directory and any required
+   runtime DLL is staged beside it.
+
+## Failure Rules
+
+- Do not add `+iccdev/private` to MATLAB's path.
+- Do not link a Release MEX against Debug CRT libraries.
+- If `ICC_USE_ZLIB=ON`, require the matching zlib import library and runtime.
+- Windows MATLAB must use Windows MSVC artifacts; WSL2 artifacts are for
+  Linux/Octave validation only.
+- Docker interoperability must use the official image, read-only profile
+  mounts, no container network, and an immutable digest in hosted CI.
+- Keep MATLAB Project metadata local and ignored.
+- Close native handles before `clear mex`.
+
+## Completion Evidence
+
+- Release static library path.
+- MEX output path and dependency paths.
+- Exact MATLAB test result.
+- Example completion.
+- Docker image ID or digest and interoperability result.
+- Any skipped profile-dependent checks and why.

@@ -15,6 +15,7 @@ candidates = {
   fullfile(repoRoot, 'Testing', 'Display', 'sRGB_D65_MAT.icc')
   fullfile(repoRoot, 'Testing', 'Display', 'sRGB_D65_colorimetric.icc')
   fullfile(repoRoot, 'Testing', 'Display', 'LCDDisplay.icc')
+  fullfile(repoRoot, 'Testing', 'sRGB_v4_ICC_preference.icc')
 };
 profilePath = '';
 for i = 1:numel(candidates)

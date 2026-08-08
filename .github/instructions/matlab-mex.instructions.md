@@ -111,6 +111,19 @@ Or from Octave at the repository root:
 octave --eval "addpath('matlab'); addpath('matlab/tests'); test_iccdev();"
 ```
 
+For the extended local smoke and stress checks:
+
+```matlab
+addpath('matlab');
+run_local_qa();
+```
+
+For Docker CLI interoperability:
+
+```matlab
+run_docker_qa();
+```
+
 ## Dependencies
 
 - MATLAB R2015b+ or GNU Octave 6+
@@ -127,7 +140,18 @@ octave --eval "addpath('matlab'); addpath('matlab/tests'); test_iccdev();"
 - Normal MATLAB/Octave builds reject Debug-only `IccProfLib2` libraries. Use a
   Release iccDEV build, or call `build_mex('Debug', true)` only with a compatible
   debug MATLAB/Octave runtime.
+- A static `IccProfLib2` built with `ICC_USE_ZLIB=ON` requires zlib at MEX link
+  and load time. `build_mex.m` must read the selected build's `CMakeCache.txt`,
+  link the matching vcpkg import library on Windows, and stage its runtime DLL
+  beside the MEX binary.
+- MATLAB package `private/` directories cannot be added to the global path.
+  Native-only tests must call the hidden package bridge rather than invoking
+  `icc_mex` directly from `matlab/tests`.
 - The handle registry is global -- calling `clear mex` invalidates all handles.
   Always close profiles explicitly before clearing MEX state.
 - MATLAB's MEX compiler may differ from the system compiler.
   Use `mex -setup C++` to configure if build fails.
+- Canonical workflow and troubleshooting: `docs/matlab-bindings.md`.
+- Repeatable agent workflow: `.github/skills/matlab-bindings-test/SKILL.md`.
+- Keep `matlab.prj`, `matlab/resources/`, and MATLAB-generated project control
+  files local-only. Review staged and untracked files before pushing.

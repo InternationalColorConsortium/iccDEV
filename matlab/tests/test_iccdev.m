@@ -35,6 +35,16 @@ function test_iccdev()
   [nPass, nFail] = run_test(@test_cmm_create, 'CMM create', nPass, nFail);
   [nPass, nFail] = run_test(@test_cmm_double_close, 'CMM double close', nPass, nFail);
   [nPass, nFail] = run_test(@test_profile_not_found, 'Profile not found error', nPass, nFail);
+  [nPass, nFail] = run_test(@() test_docker_input_validation(profilePath), ...
+    'Docker input validation', nPass, nFail);
+
+  [dockerAvailable, dockerDetails] = iccdev.docker_available();
+  if dockerAvailable && ~isempty(profilePath)
+    [nPass, nFail] = run_test(@() test_docker_interop(profilePath), ...
+      'Docker interoperability', nPass, nFail);
+  else
+    fprintf('  SKIP: Docker interoperability - %s\n', dockerDetails);
+  end
 
   % --- CMM pipeline tests (need two compatible profiles for transform) ---
   [srcProf, dstProf] = find_two_profiles();
@@ -103,6 +113,7 @@ function [src, dst] = find_two_profiles()
     fullfile(testDir, 'Display', 'sRGB2014.icc')
     fullfile(testDir, 'Display', 'sRGB_D65_MAT.icc')
     fullfile(testDir, 'Display', 'sRGB_D65_colorimetric.icc')
+    fullfile(testDir, 'sRGB_v4_ICC_preference.icc')
   };
 
   found = {};
@@ -268,6 +279,29 @@ function test_profile_not_found()
   assert(threw, 'Should throw for nonexistent profile');
 end
 
+function test_docker_input_validation(profilePath)
+  if isempty(profilePath)
+    return;
+  end
+
+  threw = false;
+  try
+    iccdev.docker_validate(profilePath, 'Image', ...
+      'ghcr.io/internationalcolorconsortium/iccdev:latest;invalid');
+  catch
+    threw = true;
+  end
+  assert(threw, 'Unsafe Docker image references must be rejected');
+end
+
+function test_docker_interop(profilePath)
+  assert(~isempty(profilePath));
+  result = run_docker_qa();
+  assert(result.dumpStatus == 0);
+  assert(result.roundTripStatus == 0);
+  assert(exist(result.profile, 'file') == 2);
+end
+
 function test_cmm_roundtrip(srcPath, dstPath)
   cmm = iccdev.IccCmm();
   cmm.attach(srcPath);
@@ -346,21 +380,22 @@ function test_apply_handle_parent_close(srcPath, dstPath)
 end
 
 function test_mex_apply_parent_close(srcPath, dstPath)
-  cmm = icc_mex('cmm_create');
-  icc_mex('cmm_attach', cmm, srcPath);
-  icc_mex('cmm_attach', cmm, dstPath);
-  icc_mex('cmm_begin', cmm);
-  ah = icc_mex('apply_create', cmm);
-  icc_mex('cmm_free', cmm);
+  call_mex = @iccdev.IccCmm.call_mex_for_test;
+  cmm = call_mex('cmm_create');
+  call_mex('cmm_attach', cmm, srcPath);
+  call_mex('cmm_attach', cmm, dstPath);
+  call_mex('cmm_begin', cmm);
+  ah = call_mex('apply_create', cmm);
+  call_mex('cmm_free', cmm);
 
   failed = false;
   try
-    icc_mex('apply_apply', ah, [0.5 0.3 0.1], int32(3), int32(3));
+    call_mex('apply_apply', ah, [0.5 0.3 0.1], int32(3), int32(3));
   catch
     failed = true;
   end
   assert(failed, 'Native apply handle should fail after parent CMM is closed');
-  icc_mex('apply_free', ah);
+  call_mex('apply_free', ah);
 end
 
 function test_cmm_single_precision(srcPath, dstPath)

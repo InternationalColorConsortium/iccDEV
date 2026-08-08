@@ -38,6 +38,9 @@ shares one source of truth. Update rules here, not in the mirrors.
 | Testing details | `.github/instructions/testing.instructions.md` |
 | Python bindings | `.github/instructions/python-bindings.instructions.md` |
 | MATLAB MEX bindings | `.github/instructions/matlab-mex.instructions.md` |
+| MATLAB build and QA | `docs/matlab-bindings.md` |
+| MATLAB binding tests | `.github/skills/matlab-bindings-test/SKILL.md` |
+| MATLAB binding debug | `.github/prompts/debug-matlab-bindings.prompt.md` |
 | Python binding tests | `.github/skills/python-bindings-test/SKILL.md` |
 | WASM build tests | `.github/skills/wasm-build-test/SKILL.md` |
 | MCP subprocess debug | `.github/prompts/debug-mcp-subprocess.prompt.md` |

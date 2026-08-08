@@ -1,0 +1,209 @@
+###############################################################
+#
+# Copyright (c) 2026 International Color Consortium.
+#                 All rights reserved.
+#                 https://color.org
+#
+# Intent: Build and test the MATLAB MEX bindings on Windows.
+#
+###############################################################
+
+name: ci-matlab
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - master
+      - ci-qa-matlab-examples
+    paths:
+      - ".github/workflows/ci-matlab.yml"
+      - "Build/Cmake/**"
+      - "IccProfLib/**"
+      - "matlab/**"
+      - "Testing/sRGB_v4_ICC_preference.icc"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/ci-matlab.yml"
+      - "Build/Cmake/**"
+      - "IccProfLib/**"
+      - "matlab/**"
+      - "Testing/sRGB_v4_ICC_preference.icc"
+  workflow_dispatch:
+
+concurrency:
+  group: "ci-matlab-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows MATLAB MEX
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
+
+    steps:
+      - name: Checkout repository
+        # actions/checkout v5.0.0 (node24)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+
+      - name: Checkout trusted workflow helpers
+        # actions/checkout v5.0.0 (node24)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          sparse-checkout: .github/scripts
+          path: .trusted-helpers
+          persist-credentials: false
+
+      - name: Set up MATLAB
+        # matlab-actions/setup-matlab v2
+        uses: matlab-actions/setup-matlab@aa8bbc7b76daa63c5d456d1430cbd6cb5b626ab4
+        with:
+          release: R2026a
+
+      - name: Configure and build IccProfLib
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-helpers/.github/scripts/sanitize.ps1
+
+          cmake -S Build\Cmake -B out\matlab `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -DENABLE_TESTS=OFF `
+            -DENABLE_TOOLS=OFF `
+            -DENABLE_WXWIDGETS=OFF `
+            -DENABLE_SHARED_LIBS=OFF `
+            -DENABLE_STATIC_LIBS=ON `
+            -DENABLE_ICCXML=OFF `
+            -DENABLE_ICCJSON=OFF `
+            -DENABLE_IMAGE_TOOLS=OFF `
+            -DENABLE_CMM_TOOLS=OFF `
+            -DENABLE_IIS_TOOLS=OFF `
+            -DICC_USE_ZLIB=OFF `
+            -Wno-dev
+          if ($LASTEXITCODE -ne 0) {
+            throw "CMake configure failed with exit code $LASTEXITCODE"
+          }
+
+          cmake --build out\matlab --config Release `
+            --target IccProfLib2-static --parallel
+          if ($LASTEXITCODE -ne 0) {
+            throw "IccProfLib2-static build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Build MATLAB MEX gateway
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-helpers/.github/scripts/sanitize.ps1
+
+          $command = @(
+            "addpath('matlab')"
+            "build_mex('BuildDir', fullfile(pwd, 'out', 'matlab'))"
+          ) -join "; "
+          matlab -batch $command
+          if ($LASTEXITCODE -ne 0) {
+            throw "MATLAB MEX build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Run MATLAB QA
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-helpers/.github/scripts/sanitize.ps1
+
+          $command = @(
+            "addpath('matlab')"
+            "addpath(fullfile('matlab', 'tests'))"
+            "test_iccdev()"
+            "run_local_qa()"
+            "run(fullfile('matlab', 'examples', 'read_profile.m'))"
+            "run(fullfile('matlab', 'examples', 'color_transform.m'))"
+          ) -join "; "
+          matlab -batch $command
+          if ($LASTEXITCODE -ne 0) {
+            throw "MATLAB QA failed with exit code $LASTEXITCODE"
+          }
+
+  docker-interop:
+    name: MATLAB Docker interoperability
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        # actions/checkout v5.0.0 (node24)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+
+      - name: Checkout trusted workflow helpers
+        # actions/checkout v5.0.0 (node24)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          sparse-checkout: .github/scripts
+          path: .trusted-helpers
+          persist-credentials: false
+
+      - name: Set up MATLAB
+        # matlab-actions/setup-matlab v2
+        uses: matlab-actions/setup-matlab@aa8bbc7b76daa63c5d456d1430cbd6cb5b626ab4
+        with:
+          release: R2026a
+
+      - name: Validate published container from MATLAB
+        shell: bash --noprofile --norc {0}
+        env:
+          BASH_ENV: /dev/null
+          ICCDEV_IMAGE_REPO: ghcr.io/internationalcolorconsortium/iccdev
+          ICCDEV_IMAGE_DIGEST: >-
+            sha256:b003dcfdc04776035b51d9cdc03f90d62cc70c745da321ae29e182075bf2845d
+        run: |
+          set -euo pipefail
+          git config --global credential.helper ""
+          unset GITHUB_TOKEN || true
+          source .trusted-helpers/.github/scripts/sanitize-sed.sh
+
+          ICCDEV_IMAGE="${ICCDEV_IMAGE_REPO}@${ICCDEV_IMAGE_DIGEST}"
+          docker pull "${ICCDEV_IMAGE}"
+          export ICCDEV_IMAGE
+          matlab -batch \
+            "addpath('matlab'); run_docker_qa(getenv('ICCDEV_IMAGE'));"
