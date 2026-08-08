@@ -4,10 +4,6 @@ function result = run_docker_qa(image)
 % Copyright (c) International Color Consortium.
 % BSD 3-Clause License. See LICENSE.md for details.
 
-  if nargin < 1
-    image = 'ghcr.io/internationalcolorconsortium/iccdev:latest';
-  end
-
   matlab_dir = fileparts(mfilename('fullpath'));
   repo_root = fileparts(matlab_dir);
   profile_path = fullfile(repo_root, 'Testing', ...
@@ -15,7 +11,11 @@ function result = run_docker_qa(image)
   fixture_path = fullfile(matlab_dir, 'tests', 'fixtures', ...
     'docker_expected.txt');
 
-  result = iccdev.docker_validate(profile_path, 'Image', image);
+  if nargin < 1
+    result = iccdev.docker_validate(profile_path);
+  else
+    result = iccdev.docker_validate(profile_path, 'Image', image);
+  end
   expected = regexp(strtrim(fileread(fixture_path)), '\r?\n', 'split');
   combined_output = [result.dumpOutput char(10) result.roundTripOutput];
   for i = 1:numel(expected)

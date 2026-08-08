@@ -10,7 +10,7 @@ addpath(matlabDir);
 
 profilePath = fullfile(repoRoot, 'Testing', ...
   'sRGB_v4_ICC_preference.icc');
-image = 'ghcr.io/internationalcolorconsortium/iccdev:latest';
+image = iccdev.default_docker_image();
 
 profile = iccdev.IccProfile(profilePath);
 header = profile.header();

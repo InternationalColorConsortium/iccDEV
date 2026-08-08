@@ -330,7 +330,7 @@ function test_docker_input_validation(profilePath)
   threw = false;
   try
     iccdev.docker_validate(profilePath, 'Image', ...
-      'ghcr.io/internationalcolorconsortium/iccdev:latest;invalid');
+      [iccdev.default_docker_image() ';invalid']);
   catch
     threw = true;
   end
@@ -353,7 +353,7 @@ function test_docker_input_validation(profilePath)
     identifier = '';
     try
       iccdev.docker_validate(string(profilePath), 'Image', ... %#ok<STRQUOT>
-        string('ghcr.io/internationalcolorconsortium/iccdev:latest;invalid')); %#ok<STRQUOT>
+        string([iccdev.default_docker_image() ';invalid'])); %#ok<STRQUOT>
     catch e
       identifier = e.identifier;
     end
@@ -363,7 +363,7 @@ function test_docker_input_validation(profilePath)
     identifier = '';
     try
       iccdev.docker_available( ...
-        string('ghcr.io/internationalcolorconsortium/iccdev:latest;invalid')); %#ok<STRQUOT>
+        string([iccdev.default_docker_image() ';invalid'])); %#ok<STRQUOT>
     catch e
       identifier = e.identifier;
     end

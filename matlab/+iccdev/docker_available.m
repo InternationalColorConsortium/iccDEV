@@ -5,7 +5,7 @@ function [available, details] = docker_available(image)
 % BSD 3-Clause License. See LICENSE.md for details.
 
   if nargin < 1
-    image = 'ghcr.io/internationalcolorconsortium/iccdev:latest';
+    image = iccdev.default_docker_image();
   end
   if ~docker_is_text_scalar(image)
     error('iccdev:invalidDockerImage', ...
