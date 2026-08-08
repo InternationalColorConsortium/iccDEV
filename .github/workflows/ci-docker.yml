@@ -751,18 +751,12 @@ jobs:
             for d in "$ICCDEV_BUILD_DIR"/Tools/*; do
               [ -d "$d" ] && export PATH="$(realpath "$d"):$PATH"
             done
-            printf "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n" \
-              "unsigned-integer-overflow:*/IccMD5.cpp" \
-              "shift-base:*/IccMD5.cpp" \
-              "shift-exponent:*/IccMD5.cpp" \
-              "# Recoverable runtime UBSAN noise from libstdc++ implementation internals." \
-              "# Fatal IntegerSanitizer builds require the compile-time ignorelist instead." \
-              "unsigned-integer-overflow:*/include/c++/*/bits/basic_string.h" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/basic_string.tcc" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/stl_bvector.h" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/stl_uninitialized.h" \
-              "unsigned-integer-overflow:*/include/c++/*/bits/vector.tcc" \
-              "unsigned-integer-overflow:*/include/c++/*/ext/string_conversions.h" > silence.txt
+            # Testing/silence.txt is tracked and already holds this exact list,
+            # so assert it is present rather than rewriting it. The same list
+            # used to be maintained by hand in three places and the copy in
+            # docker/iccdev-generate-profiles.sh had already drifted two entries
+            # short of the tracked one.
+            test -r ./silence.txt
             test -x ./CreateAllProfiles.sh
             test -x ./RunTests.sh
             test -x ./HDR/mkprofiles.sh
