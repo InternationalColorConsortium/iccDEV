@@ -880,6 +880,20 @@ jobs:
     with:
       target_sha: ${{ needs.detect-src.outputs.target_sha }}
 
+  wasm-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.fast-lane != 'true' }}
+    name: WASM Build & Parity (npm-shaped)
+    needs: [detect-src, validate-inputs]
+    # PR source is untrusted; the reusable WASM workflow validates in-place
+    # and does not upload npm-shaped bundles as artifacts.
+    uses: ./.github/workflows/ci-pr-wasm.yml
+
+  python-ci:
+    if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.fast-lane != 'true' }}
+    name: Python Package and Native Smoke
+    needs: [detect-src, validate-inputs]
+    uses: ./.github/workflows/ci-json-python.yml
+
   docker-ci:
     if: ${{ needs.detect-src.outputs.src_changed == 'true' && needs.validate-inputs.outputs.include-docker == 'true' }}
     name: Docker Clang 22 Verification
@@ -904,6 +918,8 @@ jobs:
       # - scan-build
       - tool-tests
       - win-ci
+      - wasm-ci
+      - python-ci
       - docker-ci
     if: always()
     steps:
@@ -946,6 +962,8 @@ jobs:
           SCAN_RESULT: skipped
           TOOL_RESULT: ${{ needs['tool-tests'].result }}
           WIN_RESULT: ${{ needs['win-ci'].result }}
+          WASM_RESULT: ${{ needs['wasm-ci'].result }}
+          PYTHON_RESULT: ${{ needs['python-ci'].result }}
           DOCKER_RESULT: ${{ needs['docker-ci'].result }}
         run: |
           set -euo pipefail
@@ -980,6 +998,8 @@ jobs:
           SCAN_RESULT="${SCAN_RESULT:-success}"
           TOOL_RESULT="${TOOL_RESULT:-success}"
           WIN_RESULT="${WIN_RESULT:-success}"
+          WASM_RESULT="${WASM_RESULT:-success}"
+          PYTHON_RESULT="${PYTHON_RESULT:-success}"
           RISK_RESULT="${RISK_RESULT:-success}"
           GCC15_LTO_RESULT="${GCC15_LTO_RESULT:-success}"
           DOCKER_RESULT="${DOCKER_RESULT:-success}"
@@ -1004,6 +1024,8 @@ jobs:
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
           TOOL_RESULT="$(trim_and_norm "$TOOL_RESULT")"
           WIN_RESULT="$(trim_and_norm "$WIN_RESULT")"
+          WASM_RESULT="$(trim_and_norm "$WASM_RESULT")"
+          PYTHON_RESULT="$(trim_and_norm "$PYTHON_RESULT")"
           RISK_RESULT="$(trim_and_norm "$RISK_RESULT")"
           GCC15_LTO_RESULT="$(trim_and_norm "$GCC15_LTO_RESULT")"
           DOCKER_RESULT="$(trim_and_norm "$DOCKER_RESULT")"
@@ -1018,7 +1040,7 @@ jobs:
           if [[ "$DOCKER_RESULT" != "success" && "$DOCKER_RESULT" != "skipped" ]]; then
             docker_advisory=warning
           fi
-          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT")
+          required_results=("$DETECT_RESULT" "$SETUP_RESULT" "$VALIDATE_RESULT" "$RISK_RESULT" "$UNIX_RESULT" "$GCC15_LTO_RESULT" "$LINT_RESULT" "$SCAN_RESULT" "$TOOL_RESULT" "$WIN_RESULT" "$WASM_RESULT" "$PYTHON_RESULT")
           if [[ "$qa_docker_branch" != "true" ]]; then
             required_results+=("$DOCKER_RESULT")
           fi
@@ -1096,6 +1118,8 @@ jobs:
             printf "| scan-build         | %s |\n" "$(sanitize_line "$SCAN_RESULT")"
             printf "| tool-tests         | %s |\n" "$(sanitize_line "$TOOL_RESULT")"
             printf "| win-ci             | %s |\n" "$(sanitize_line "$WIN_RESULT")"
+            printf "| wasm-ci            | %s |\n" "$(sanitize_line "$WASM_RESULT")"
+            printf "| python-ci          | %s |\n" "$(sanitize_line "$PYTHON_RESULT")"
             printf "| docker-ci          | %s |\n" "$(sanitize_line "$DOCKER_RESULT")"
             if [[ "$qa_docker_branch" == "true" ]]; then
               printf "| docker-ci policy   | %s |\n" "$(sanitize_line "advisory/${docker_advisory}")"
