@@ -23,6 +23,10 @@ on:
       - "Build/Cmake/**"
       - "IccProfLib/**"
       - "matlab/**"
+      - "Testing/Display/sRGB_D65_MAT.xml"
+      - "Testing/Display/sRGB_D65_MAT-300lx.xml"
+      - "Testing/Display/sRGB_D65_MAT-500lx.xml"
+      - "Testing/HDR/BT2100PQFullDisplay.xml"
       - "Testing/sRGB_v4_ICC_preference.icc"
   pull_request:
     branches:
@@ -32,6 +36,10 @@ on:
       - "Build/Cmake/**"
       - "IccProfLib/**"
       - "matlab/**"
+      - "Testing/Display/sRGB_D65_MAT.xml"
+      - "Testing/Display/sRGB_D65_MAT-300lx.xml"
+      - "Testing/Display/sRGB_D65_MAT-500lx.xml"
+      - "Testing/HDR/BT2100PQFullDisplay.xml"
       - "Testing/sRGB_v4_ICC_preference.icc"
   workflow_dispatch:
 
@@ -70,6 +78,17 @@ jobs:
         with:
           release: R2026a
 
+      - name: Reproduce luminance normalization calculations
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        with:
+          command: >-
+            addpath('matlab');
+            addpath(fullfile('matlab', 'tests'));
+            test_luminance_normalization();
+            run(fullfile('matlab', 'examples', 'luminance_normalization.m'))
+          generate-summary: false
+
       - name: Configure and build IccProfLib
         env:
           POWERSHELL_TELEMETRY_OPTOUT: "1"
@@ -88,7 +107,7 @@ jobs:
           cmake -S Build\Cmake -B out\matlab `
             -G "Visual Studio 17 2022" `
             -A x64 `
-            -DENABLE_TESTS=OFF `
+            -DENABLE_TESTS=ON `
             -DENABLE_TOOLS=OFF `
             -DENABLE_WXWIDGETS=OFF `
             -DENABLE_SHARED_LIBS=OFF `
@@ -105,9 +124,31 @@ jobs:
           }
 
           cmake --build out\matlab --config Release `
-            --target IccProfLib2-static --parallel
+            --target IccProfLib2-static iccLuminanceNormalizationTest --parallel
           if ($LASTEXITCODE -ne 0) {
-            throw "IccProfLib2-static build failed with exit code $LASTEXITCODE"
+            throw "Native luminance test build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Run native luminance regression
+        env:
+          POWERSHELL_TELEMETRY_OPTOUT: "1"
+          POWERSHELL_UPDATECHECK: Off
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = 'Stop'
+          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
+          git config --global credential.helper ""
+          if (Test-Path Env:GITHUB_TOKEN) {
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          }
+          . .trusted-helpers/.github/scripts/sanitize.ps1
+
+          ctest --test-dir out\matlab -C Release `
+            -R '^iccdev\.luminance-normalization$' `
+            --output-on-failure `
+            --no-tests=error
+          if ($LASTEXITCODE -ne 0) {
+            throw "Native luminance regression failed with exit code $LASTEXITCODE"
           }
 
       - name: Build MATLAB MEX gateway

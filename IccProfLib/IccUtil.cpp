@@ -2753,7 +2753,14 @@ icValidateStatus CIccInfo::CheckLuminance(std::string &sReport, const icFloatXYZ
 {
   icValidateStatus rv = icValidateOK;
 
-  // An absolute +/-0.01 window, not a relative one: it brackets exactly [0.99, 1.01].
+  // An absolute +/-0.01 window, not a relative one.  The comment added here with the
+  // diagnostic said it "brackets exactly [0.99, 1.01]"; #2043 showed that to be wrong
+  // in both directions, so it is restated rather than repeated.  The comparison is
+  // strict, so in exact arithmetic the window is the OPEN interval (0.99, 1.01) and a
+  // Y of exactly 0.99 falls outside it.  XYZ.Y is an icFloatNumber, though, and the
+  // comparison promotes it to double: float(0.99) is 0.99000000953674316, which is
+  // greater than 0.99 and therefore lands inside.  The effective edge is up to one
+  // float ULP beyond the nominal one on each side; the CTest pins that directly.
   // Kept as it was -- widening it would start reaching into the physical range, where
   // the 5 cd/m^2 surrounds this corpus already uses would begin to trip it.
   if (fabs(XYZ.Y - 1.0) < 0.01) {

@@ -30,7 +30,27 @@ profiles, examples, and native handle lifecycle behavior.
 
 6. Generate or copy canonical `Testing/Display/*.icc` profiles. Exclude logs,
    crash artifacts, and unrelated untracked files.
-7. Run:
+7. When validating issue #1811 or luminance diagnostics, run both layers:
+
+   ```matlab
+   addpath('matlab');
+   addpath('matlab/tests');
+   test_luminance_normalization();
+   run('matlab/examples/luminance_normalization.m');
+   ```
+
+   ```powershell
+   cmake --build msvc --config Release `
+     --target iccLuminanceNormalizationTest
+   ctest --test-dir msvc -C Release `
+     -R '^iccdev\.luminance-normalization$' `
+     --output-on-failure --no-tests=error
+   ```
+
+   The MATLAB test confirms fixture arithmetic independently. The CTest must
+   call the real `CIccInfo::CheckLuminance`; do not treat the MATLAB model as
+   proof of native message or status behavior.
+8. Run:
 
    ```matlab
    addpath('matlab/tests');
@@ -42,7 +62,7 @@ profiles, examples, and native handle lifecycle behavior.
    run('matlab/examples/docker_interop.m');
    ```
 
-8. Confirm `icc_mex` loads from the package private directory and any required
+9. Confirm `icc_mex` loads from the package private directory and any required
    runtime DLL is staged beside it.
 
 ## Failure Rules
@@ -62,6 +82,8 @@ profiles, examples, and native handle lifecycle behavior.
 - Release static library path.
 - MEX output path and dependency paths.
 - Exact MATLAB test result.
+- Issue #1811 fixture normalization error and warning-window values, when in scope.
+- Native `iccdev.luminance-normalization` CTest result, when in scope.
 - Example completion.
 - Docker image ID or digest and interoperability result.
 - Any skipped profile-dependent checks and why.

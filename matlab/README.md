@@ -103,6 +103,7 @@ cmm.close();
 | Function | Description |
 |----------|-------------|
 | `iccdev.sig_to_str(sig)` | Convert 4-byte ICC signature to ASCII string |
+| `iccdev.qa.check_luminance_normalization()` | Reproduce spectral-viewing luminance scaling and warning-window checks |
 | `iccdev.docker_available(image)` | Check Docker daemon and image availability |
 | `iccdev.docker_validate(profile, ...)` | Run containerized dump and round-trip validation |
 | `build_mex(...)` | Build the MEX extension |
@@ -204,6 +205,30 @@ Validate the same profile with the published container:
 run_docker_qa();
 run('matlab/examples/docker_interop.m');
 ```
+
+Reproduce the issue #1811 spectral-viewing luminance calculations without
+building the MEX gateway:
+
+```matlab
+addpath('matlab');
+addpath('matlab/tests');
+test_luminance_normalization();
+run('matlab/examples/luminance_normalization.m');
+```
+
+Validate the compiled `CIccInfo::CheckLuminance` implementation separately
+from a CMake tree configured with `ENABLE_TESTS=ON`:
+
+```powershell
+cmake --build msvc --config Release `
+  --target iccLuminanceNormalizationTest
+ctest --test-dir msvc -C Release `
+  -R '^iccdev\.luminance-normalization$' `
+  --output-on-failure --no-tests=error
+```
+
+The MATLAB check is an independent fixture/arithmetic model. The native CTest
+is authoritative for warning status and message behavior; both should pass.
 
 See [MATLAB bindings and QA](../docs/matlab-bindings.md) for the Windows
 desktop workflow, profile generation, WSL2 boundaries, troubleshooting, and

@@ -72,6 +72,44 @@ run('E:\opt\iccDEV\matlab\examples\read_profile.m');
 run('E:\opt\iccDEV\matlab\examples\color_transform.m');
 ```
 
+Reproduce the spectral-viewing luminance calculations from issue #1811
+without a C++ build or MEX gateway:
+
+```matlab
+addpath('E:\opt\iccDEV\matlab');
+addpath('E:\opt\iccDEV\matlab\tests');
+test_luminance_normalization();
+run('E:\opt\iccDEV\matlab\examples\luminance_normalization.m');
+```
+
+This check reads the `sRGB_D65_MAT` fixtures authored at Y=1, 300, and
+500 cd/m^2, verifies that dividing each XYZ triple by Y produces the same
+D65 chromaticity, and records the single-precision behavior of the absolute
+`0.01` warning window around Y=1. Hosted CI also builds and runs
+`iccdev.luminance-normalization`, which calls the native
+`CIccInfo::CheckLuminance` implementation and verifies its status, message,
+nominal `0.99`/`1.01` endpoints, and adjacent representable float values.
+
+Run the same native check locally from a CMake tree configured with
+`ENABLE_TESTS=ON`:
+
+```powershell
+cmake --build msvc --config Release `
+  --target iccLuminanceNormalizationTest
+ctest --test-dir msvc -C Release `
+  -R '^iccdev\.luminance-normalization$' `
+  --output-on-failure --no-tests=error
+```
+
+Interpret the layers separately:
+
+- `test_luminance_normalization` confirms the checked-in XML values and
+  independently reproduces their double- and single-precision calculations.
+- `iccdev.luminance-normalization` calls the compiled C++ method and is
+  authoritative for validation status and diagnostic wording.
+- Agreement between both layers confirms the fixture evidence and the native
+  implementation without making either test self-referential.
+
 Expected coverage includes profile open/read/header checks, CMM pipeline and
 bulk apply, per-thread apply handles, parent-close invalidation, native handle
 lifecycle checks, single-precision input, missing-profile errors, finite output,

@@ -17,6 +17,8 @@ matlab/
   mex/
     icc_mex.cpp           # MEX gateway (702 lines) -- action-string dispatch
   +iccdev/
+    +qa/
+      check_luminance_normalization.m  # Issue #1811 fixture calculation model
     IccProfile.m          # Profile class (open, read, header, color_space)
     IccCmm.m              # Color management module wrapper
     IccApply.m            # Thread-safe per-thread apply handle
@@ -27,9 +29,11 @@ matlab/
   examples/
     read_profile.m        # Profile reading example
     color_transform.m     # Color transform example
+    luminance_normalization.m # Explain issue #1811 fixture scaling
   build_mex.m             # Build script (auto-detects library location)
   tests/
     test_iccdev.m         # Test suite (MATLAB/Octave compatible)
+    test_luminance_normalization.m # Dependency-free issue #1811 check
   README.md               # Usage documentation
 ```
 
@@ -123,6 +127,29 @@ For Docker CLI interoperability:
 ```matlab
 run_docker_qa();
 ```
+
+For issue #1811 luminance calculations, first run the dependency-free MATLAB
+model:
+
+```matlab
+test_luminance_normalization();
+run('matlab/examples/luminance_normalization.m');
+```
+
+Then run the native C++ implementation check from a CMake tree configured with
+`ENABLE_TESTS=ON`:
+
+```powershell
+cmake --build msvc --config Release --target iccLuminanceNormalizationTest
+ctest --test-dir msvc -C Release `
+  -R '^iccdev\.luminance-normalization$' `
+  --output-on-failure --no-tests=error
+```
+
+The MATLAB layer validates XML fixture scaling and emulates `icFloatNumber`
+precision. The native CTest calls `CIccInfo::CheckLuminance` and pins its
+warning status, message, nominal `0.99`/`1.01` endpoints, adjacent float
+values, and physical Y values 5, 300, and 500.
 
 ## Dependencies
 

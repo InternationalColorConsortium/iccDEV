@@ -38,6 +38,7 @@
 #include "IccUtil.h"
 
 #include <cstdio>
+#include <limits>
 #include <string>
 
 static int g_failures = 0;
@@ -94,10 +95,45 @@ int main()
   check(runCheck(500.0f, sReport) == icValidateOK, "Y=500 is accepted");
   check(sReport.empty(), "Y=500 adds nothing to the report");
 
-  // The window is an absolute +/-0.01 around 1.0, not a relative tolerance.  Pinning
-  // both sides keeps a later change from widening it into the physical range, where
-  // it would start flagging genuinely dark surrounds: 5 cd/m^2 is in use in this
-  // corpus today and must stay clean.
+  // The window is an absolute +/-0.01 around 1.0, not a relative tolerance, and the
+  // comparison is strict -- so in exact arithmetic it is the OPEN interval
+  // (0.99, 1.01).  The version of this test that shipped with the diagnostic claimed
+  // it "brackets exactly [0.99, 1.01]", which is wrong twice over, and #2043 caught
+  // it: exactly 0.99 is outside the open interval, while float(0.99) is
+  // 0.99000000953674316 -- greater than 0.99 -- and so is inside.  runCheck takes an
+  // icFloatNumber, which is float, so these four assertions describe what a caller
+  // actually observes at the edge, not what the literal 0.01 suggests.
+  //
+  // The steps to the adjacent representable values are written as epsilon rather than
+  // std::nextafter().  epsilon() is 2^-23, which is the float spacing throughout
+  // [1, 2); halving it gives 2^-24, the spacing throughout [0.5, 1).  Both are exact
+  // powers of two, so the subtraction and addition are themselves exact and evaluate
+  // identically on every compiler -- the same reason gamut-xform-semantics.cpp names
+  // its boundary as 256/65535 instead of stepping to it.
+  // Those two spacings are the ones that hold for a 24-bit significand.  If
+  // icFloatNumber ever widens, the edges move and these four cases stop describing
+  // the boundary at all, so say so at compile time rather than failing at run time
+  // with a message that would point at the window instead of at the type.
+  static_assert(std::numeric_limits<icFloatNumber>::digits == 24,
+                "the window-edge cases below assume icFloatNumber is a 32-bit float");
+
+  const icFloatNumber kEpsilon = std::numeric_limits<icFloatNumber>::epsilon();
+  const icFloatNumber kSpacingBelowOne = kEpsilon / 2;  // ULP across [0.5, 1)
+  const icFloatNumber kSpacingAboveOne = kEpsilon;      // ULP across [1, 2)
+
+  check(runCheck(0.99f, sReport) == icValidateWarning,
+        "float(0.99) is inside the window, though exactly 0.99 would not be");
+  check(runCheck(1.01f, sReport) == icValidateWarning,
+        "float(1.01) is inside the window, though exactly 1.01 would not be");
+  check(runCheck(0.99f - kSpacingBelowOne, sReport) == icValidateOK,
+        "the next float below 0.99 is outside the window");
+  check(runCheck(1.01f + kSpacingAboveOne, sReport) == icValidateOK,
+        "the next float above 1.01 is outside the window");
+
+  // Interior and clearly exterior values keep a later change from narrowing the
+  // window, or from widening it into the physical range where it would start
+  // flagging genuinely dark surrounds: 5 cd/m^2 is in use in this corpus today and
+  // must stay clean.
   check(runCheck(0.995f, sReport) == icValidateWarning, "Y=0.995 is inside the window");
   check(runCheck(1.005f, sReport) == icValidateWarning, "Y=1.005 is inside the window");
   check(runCheck(0.98f, sReport) == icValidateOK, "Y=0.98 is outside the window");
