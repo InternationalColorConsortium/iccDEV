@@ -5,15 +5,16 @@ function result = docker_validate(profile_path, varargin)
 % BSD 3-Clause License. See LICENSE.md for details.
 
   p = inputParser;
-  addRequired(p, 'profile_path', @is_text_scalar);
+  addRequired(p, 'profile_path', @docker_is_text_scalar);
   addParameter(p, 'Image', ...
-    'ghcr.io/internationalcolorconsortium/iccdev:latest', @is_text_scalar);
+    'ghcr.io/internationalcolorconsortium/iccdev:latest', ...
+    @docker_is_text_scalar);
   addParameter(p, 'Pull', false, ...
     @(value) islogical(value) && isscalar(value));
   parse(p, profile_path, varargin{:});
 
   profile_path = char(p.Results.profile_path);
-  image = validate_image(char(p.Results.Image));
+  image = docker_validate_image(char(p.Results.Image));
   [exists, attributes] = fileattrib(profile_path); %#ok<FILEATTRIB>
   if ~exists || attributes.directory
     error('iccdev:dockerProfileNotFound', ...
@@ -69,6 +70,11 @@ function result = docker_validate(profile_path, varargin)
     container_profile
   }]);
   [dump_status, dump_output] = system(dump_command);
+  if dump_status ~= 0
+    error('iccdev:dockerDumpFailed', ...
+      'iccDumpProfile failed with status %d:\n%s', ...
+      dump_status, dump_output);
+  end
 
   roundtrip_command = docker_command([common; {
     'iccRoundTrip'
@@ -85,26 +91,10 @@ function result = docker_validate(profile_path, varargin)
     'roundTripStatus', roundtrip_status, ...
     'roundTripOutput', roundtrip_output);
 
-  if dump_status ~= 0
-    error('iccdev:dockerDumpFailed', ...
-      'iccDumpProfile failed with status %d:\n%s', ...
-      dump_status, dump_output);
-  end
   if roundtrip_status ~= 0
     error('iccdev:dockerRoundTripFailed', ...
       'iccRoundTrip failed with status %d:\n%s', ...
       roundtrip_status, roundtrip_output);
-  end
-end
-
-function image = validate_image(image)
-  pattern = [ ...
-    '^ghcr\.io/internationalcolorconsortium/iccdev' ...
-    '(:[A-Za-z0-9._-]+|@sha256:[A-Fa-f0-9]{64})$' ...
-  ];
-  if isempty(regexp(image, pattern, 'once'))
-    error('iccdev:invalidDockerImage', ...
-      'Unsupported iccDEV Docker image reference: %s', image);
   end
 end
 
@@ -118,30 +108,4 @@ function validate_host_path(path)
     error('iccdev:unsafeDockerPath', ...
       'Docker profile path contains unsupported mount or shell characters.');
   end
-end
-
-function valid = is_text_scalar(value)
-  valid = (ischar(value) && (isempty(value) || size(value, 1) == 1)) || ...
-    (isa(value, 'string') && isscalar(value));
-end
-
-function command = docker_command(arguments)
-  quoted = cell(size(arguments));
-  for i = 1:numel(arguments)
-    argument = char(arguments{i});
-    if ispc()
-      if ~isempty(regexp(argument, '["%%&|<>^!\r\n]', 'once'))
-        error('iccdev:unsafeDockerArgument', ...
-          'Docker argument contains unsupported shell characters.');
-      end
-      quoted{i} = ['"' argument '"'];
-    else
-      if ~isempty(regexp(argument, '[''\r\n]', 'once'))
-        error('iccdev:unsafeDockerArgument', ...
-          'Docker argument contains unsupported shell characters.');
-      end
-      quoted{i} = ['''' argument ''''];
-    end
-  end
-  command = strjoin(quoted, ' ');
 end

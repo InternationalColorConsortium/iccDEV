@@ -7,11 +7,11 @@ function [available, details] = docker_available(image)
   if nargin < 1
     image = 'ghcr.io/internationalcolorconsortium/iccdev:latest';
   end
-  if ~is_text_scalar(image)
+  if ~docker_is_text_scalar(image)
     error('iccdev:invalidDockerImage', ...
       'Docker image reference must be a character vector or string scalar.');
   end
-  image = validate_image(char(image));
+  image = docker_validate_image(char(image));
 
   [daemon_status, daemon_output] = system( ...
     'docker version --format "{{.Server.Version}}"');
@@ -26,41 +26,4 @@ function [available, details] = docker_available(image)
   [image_status, image_output] = system(command);
   available = image_status == 0;
   details = strtrim(image_output);
-end
-
-function image = validate_image(image)
-  pattern = [ ...
-    '^ghcr\.io/internationalcolorconsortium/iccdev' ...
-    '(:[A-Za-z0-9._-]+|@sha256:[A-Fa-f0-9]{64})$' ...
-  ];
-  if isempty(regexp(image, pattern, 'once'))
-    error('iccdev:invalidDockerImage', ...
-      'Unsupported iccDEV Docker image reference: %s', image);
-  end
-end
-
-function valid = is_text_scalar(value)
-  valid = (ischar(value) && (isempty(value) || size(value, 1) == 1)) || ...
-    (isa(value, 'string') && isscalar(value));
-end
-
-function command = docker_command(arguments)
-  quoted = cell(size(arguments));
-  for i = 1:numel(arguments)
-    argument = char(arguments{i});
-    if ispc()
-      if ~isempty(regexp(argument, '["%%&|<>^!\r\n]', 'once'))
-        error('iccdev:unsafeDockerArgument', ...
-          'Docker argument contains unsupported shell characters.');
-      end
-      quoted{i} = ['"' argument '"'];
-    else
-      if ~isempty(regexp(argument, '[''\r\n]', 'once'))
-        error('iccdev:unsafeDockerArgument', ...
-          'Docker argument contains unsupported shell characters.');
-      end
-      quoted{i} = ['''' argument ''''];
-    end
-  end
-  command = strjoin(quoted, ' ');
 end

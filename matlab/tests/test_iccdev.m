@@ -35,8 +35,12 @@ function test_iccdev()
   [nPass, nFail] = run_test(@test_cmm_create, 'CMM create', nPass, nFail);
   [nPass, nFail] = run_test(@test_cmm_double_close, 'CMM double close', nPass, nFail);
   [nPass, nFail] = run_test(@test_profile_not_found, 'Profile not found error', nPass, nFail);
-  [nPass, nFail] = run_test(@() test_docker_input_validation(profilePath), ...
-    'Docker input validation', nPass, nFail);
+  if ~isempty(profilePath)
+    [nPass, nFail] = run_test(@() test_docker_input_validation(profilePath), ...
+      'Docker input validation', nPass, nFail);
+  else
+    fprintf('  SKIP: Docker input validation - no test profile found\n');
+  end
 
   [dockerAvailable, dockerDetails] = iccdev.docker_available();
   if dockerAvailable && ~isempty(profilePath)
@@ -280,10 +284,6 @@ function test_profile_not_found()
 end
 
 function test_docker_input_validation(profilePath)
-  if isempty(profilePath)
-    return;
-  end
-
   threw = false;
   try
     iccdev.docker_validate(profilePath, 'Image', ...
