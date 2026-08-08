@@ -65,8 +65,8 @@ jobs:
           persist-credentials: false
 
       - name: Set up MATLAB
-        # matlab-actions/setup-matlab v2
-        uses: matlab-actions/setup-matlab@aa8bbc7b76daa63c5d456d1430cbd6cb5b626ab4
+        # matlab-actions/setup-matlab v3
+        uses: matlab-actions/setup-matlab@2323adb8243827ea460b0def4c413545aaec46a9
         with:
           release: R2026a
 
@@ -111,56 +111,26 @@ jobs:
           }
 
       - name: Build MATLAB MEX gateway
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
-          POWERSHELL_UPDATECHECK: Off
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          git config --global credential.helper ""
-          if (Test-Path Env:GITHUB_TOKEN) {
-            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-          }
-          . .trusted-helpers/.github/scripts/sanitize.ps1
-
-          $command = @(
-            "addpath('matlab')"
-            "build_mex('BuildDir', fullfile(pwd, 'out', 'matlab'))"
-          ) -join "; "
-          matlab -batch $command
-          if ($LASTEXITCODE -ne 0) {
-            throw "MATLAB MEX build failed with exit code $LASTEXITCODE"
-          }
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        with:
+          command: >-
+            addpath('matlab');
+            build_mex('BuildDir', fullfile(pwd, 'out', 'matlab'))
+          generate-summary: false
 
       - name: Run MATLAB QA
-        env:
-          POWERSHELL_TELEMETRY_OPTOUT: "1"
-          POWERSHELL_UPDATECHECK: Off
-        run: |
-          Set-StrictMode -Version Latest
-          $ErrorActionPreference = 'Stop'
-          $PSDefaultParameterValues['*:ErrorAction'] = 'Stop'
-          $ProgressPreference = 'SilentlyContinue'
-          git config --global credential.helper ""
-          if (Test-Path Env:GITHUB_TOKEN) {
-            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
-          }
-          . .trusted-helpers/.github/scripts/sanitize.ps1
-
-          $command = @(
-            "addpath('matlab')"
-            "addpath(fullfile('matlab', 'tests'))"
-            "test_iccdev()"
-            "run_local_qa()"
-            "run(fullfile('matlab', 'examples', 'read_profile.m'))"
-            "run(fullfile('matlab', 'examples', 'color_transform.m'))"
-          ) -join "; "
-          matlab -batch $command
-          if ($LASTEXITCODE -ne 0) {
-            throw "MATLAB QA failed with exit code $LASTEXITCODE"
-          }
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        with:
+          command: >-
+            addpath('matlab');
+            addpath(fullfile('matlab', 'tests'));
+            test_iccdev();
+            run_local_qa();
+            run(fullfile('matlab', 'examples', 'read_profile.m'));
+            run(fullfile('matlab', 'examples', 'color_transform.m'))
+          generate-summary: false
 
   docker-interop:
     name: MATLAB Docker interoperability
@@ -184,26 +154,33 @@ jobs:
           persist-credentials: false
 
       - name: Set up MATLAB
-        # matlab-actions/setup-matlab v2
-        uses: matlab-actions/setup-matlab@aa8bbc7b76daa63c5d456d1430cbd6cb5b626ab4
+        # matlab-actions/setup-matlab v3
+        uses: matlab-actions/setup-matlab@2323adb8243827ea460b0def4c413545aaec46a9
         with:
           release: R2026a
 
-      - name: Validate published container from MATLAB
+      - name: Pull published container
         shell: bash --noprofile --norc {0}
         env:
           BASH_ENV: /dev/null
-          ICCDEV_IMAGE_REPO: ghcr.io/internationalcolorconsortium/iccdev
-          ICCDEV_IMAGE_DIGEST: >-
-            sha256:b003dcfdc04776035b51d9cdc03f90d62cc70c745da321ae29e182075bf2845d
+          ICCDEV_IMAGE: >-
+            ghcr.io/internationalcolorconsortium/iccdev@sha256:b003dcfdc04776035b51d9cdc03f90d62cc70c745da321ae29e182075bf2845d
         run: |
           set -euo pipefail
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
           source .trusted-helpers/.github/scripts/sanitize-sed.sh
 
-          ICCDEV_IMAGE="${ICCDEV_IMAGE_REPO}@${ICCDEV_IMAGE_DIGEST}"
           docker pull "${ICCDEV_IMAGE}"
-          export ICCDEV_IMAGE
-          matlab -batch \
-            "addpath('matlab'); run_docker_qa(getenv('ICCDEV_IMAGE'));"
+
+      - name: Validate published container from MATLAB
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        env:
+          ICCDEV_IMAGE: >-
+            ghcr.io/internationalcolorconsortium/iccdev@sha256:b003dcfdc04776035b51d9cdc03f90d62cc70c745da321ae29e182075bf2845d
+        with:
+          command: >-
+            addpath('matlab');
+            run_docker_qa(getenv('ICCDEV_IMAGE'))
+          generate-summary: false
