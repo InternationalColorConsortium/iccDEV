@@ -595,6 +595,12 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57  # v3.0.0 (node24)
 
+      - name: Set up MATLAB
+        # matlab-actions/setup-matlab v3
+        uses: matlab-actions/setup-matlab@2323adb8243827ea460b0def4c413545aaec46a9
+        with:
+          release: R2026a
+
       - name: UCI Gate 2 for Windows Powershell - Verify Branch Context
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         env:
@@ -642,6 +648,16 @@ jobs:
             Where-Object { $_.Extension -in '.exe','.dll' } |
             Sort-Object Name |
             ForEach-Object { Write-Host ("{0} {1}" -f $_.Name, $_.Length) }
+
+      - name: Build MATLAB MEX gateway
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        with:
+          command: >-
+            addpath('matlab');
+            build_mex('BuildDir', fullfile(pwd, 'Build', 'Cmake', 'build'))
+          generate-summary: false
+
       - name: Stage bundle into Testing directory
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
@@ -675,7 +691,73 @@ jobs:
           Copy-Item -Path "Testing/Readme.md"  -Destination $stage -Force
           Copy-Item -Path "LICENSE.md" -Destination $stage -Force
           Copy-Item -Path "docs"       -Destination "$stage/docs" -Recurse -Force
-          # 4. Copy full IIS sample tree (web.config, html/css/js, assets/, all ps1 helpers)
+          # 4. Copy the complete MATLAB source tree and the MEX/runtime files
+          #    produced by the tested Release build above.
+          Copy-Item -Path "matlab" -Destination "$stage/matlab" -Recurse -Force
+          New-Item -ItemType Directory -Force `
+            -Path "$stage/Testing/Display", "$stage/Testing/HDR", `
+              "$stage/IccProfLib", "$stage/.github/ci/regression" |
+            Out-Null
+          Copy-Item -Path "Testing/sRGB_v4_ICC_preference.icc" `
+            -Destination "$stage/Testing/sRGB_v4_ICC_preference.icc" -Force
+          Copy-Item -Path "Testing/sRGB_v4_ICC_preference.icc" `
+            -Destination "$stage/Testing/Display/sRGB_v4_ICC_preference.icc" -Force
+          Copy-Item -Path "Testing/Display/sRGB_D65_MAT.xml" `
+            -Destination "$stage/Testing/Display/sRGB_D65_MAT.xml" -Force
+          Copy-Item -Path "Testing/Display/sRGB_D65_MAT-300lx.xml" `
+            -Destination "$stage/Testing/Display/sRGB_D65_MAT-300lx.xml" -Force
+          Copy-Item -Path "Testing/Display/sRGB_D65_MAT-500lx.xml" `
+            -Destination "$stage/Testing/Display/sRGB_D65_MAT-500lx.xml" -Force
+          Copy-Item -Path "Testing/HDR/BT2100PQFullDisplay.xml" `
+            -Destination "$stage/Testing/HDR/BT2100PQFullDisplay.xml" -Force
+          Copy-Item -Path "IccProfLib/IccTagBasic.cpp" `
+            -Destination "$stage/IccProfLib/IccTagBasic.cpp" -Force
+          Copy-Item -Path "IccProfLib/IccColorimetry.cpp" `
+            -Destination "$stage/IccProfLib/IccColorimetry.cpp" -Force
+          Copy-Item -Path ".github/ci/regression/gamma-2.20703125.icc" `
+            -Destination "$stage/.github/ci/regression/gamma-2.20703125.icc" -Force
+          $matlabRequired = @(
+            'matlab\+iccdev\private\icc_mex.mexw64',
+            'matlab\run_local_qa.m',
+            'matlab\run_gamma_qa.m',
+            'matlab\run_docker_qa.m',
+            'matlab\tests\test_luminance_normalization.m',
+            'matlab\tests\test_colorimetry_issue_1475.m',
+            'matlab\examples\gamma_curve.m',
+            'matlab\examples\luminance_normalization.m',
+            'matlab\examples\colorimetry_issue_1475.m',
+            'matlab\examples\docker_interop.m',
+            'Testing\sRGB_v4_ICC_preference.icc',
+            'Testing\Display\sRGB_v4_ICC_preference.icc',
+            'Testing\Display\sRGB_D65_MAT.xml',
+            'Testing\Display\sRGB_D65_MAT-300lx.xml',
+            'Testing\Display\sRGB_D65_MAT-500lx.xml',
+            'Testing\HDR\BT2100PQFullDisplay.xml',
+            'IccProfLib\IccTagBasic.cpp',
+            'IccProfLib\IccColorimetry.cpp',
+            '.github\ci\regression\gamma-2.20703125.icc'
+          )
+          foreach ($required in $matlabRequired) {
+            if (-not (Test-Path (Join-Path $stage $required))) {
+              throw "Required staged MATLAB artifact missing: $required"
+            }
+          }
+          $matlabRuntime = Get-ChildItem `
+            -Path (Join-Path $stage 'matlab\+iccdev\private') `
+            -File `
+            -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -in 'z.dll','zlib1.dll' } |
+            Select-Object -First 1
+          if (-not $matlabRuntime) {
+            throw "Required staged MATLAB zlib runtime missing"
+          }
+          if (Test-Path (Join-Path $stage 'matlab\matlab.prj')) {
+            throw "Local MATLAB project metadata must not be packaged"
+          }
+          if (Test-Path (Join-Path $stage 'matlab\resources')) {
+            throw "Local MATLAB resources directory must not be packaged"
+          }
+          # 5. Copy full IIS sample tree (web.config, html/css/js, assets/, all ps1 helpers)
           #    under staging/iccDEV-Testing/IccIisIsapi/ so web.config + demo pages
           #    resolve relative to the installed ISAPI extension.
           $iisSrc = "Tools/Winnt/IccIisIsapi"
@@ -693,7 +775,7 @@ jobs:
               Copy-Item -Path $iisInstaller -Destination $stage -Force
             }
           }
-          # 5. Generate path.bat helper script
+          # 6. Generate path.bat helper script
           @'
           @echo off
           set "SCRIPT_DIR=%~dp0"
@@ -713,7 +795,7 @@ jobs:
           $allFiles = Get-ChildItem -Path $stage -Recurse -File
           $count = $allFiles.Count
           Write-Host "`n===== Staged Bundle Contents ($count files) =====" -ForegroundColor Cyan
-          foreach ($ext in @('*.exe','*.dll','*.lib','*.icc','*.md')) {
+          foreach ($ext in @('*.exe','*.dll','*.lib','*.icc','*.md','*.m','*.mexw64')) {
             $matched = @($allFiles | Where-Object { $_.Name -like $ext })
             if ($matched.Count -gt 0) {
               Write-Host "`n--- $ext ($($matched.Count)) ---"
@@ -734,6 +816,28 @@ jobs:
             }
           }
           Write-Host "`nTotal: $count files staged into $stage`n"
+
+      - name: Run staged MATLAB release QA
+        # matlab-actions/run-command v3
+        uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
+        with:
+          command: >-
+            stage = fullfile(pwd, 'staging', 'iccDEV-Testing');
+            matlab_dir = fullfile(stage, 'matlab');
+            addpath(matlab_dir);
+            addpath(fullfile(matlab_dir, 'tests'));
+            test_luminance_normalization();
+            test_colorimetry_issue_1475();
+            qa_output = evalc('run_local_qa()');
+            disp(qa_output);
+            assert(contains(qa_output, '0 skipped'), 'Staged MATLAB QA must not skip any test groups.');
+            run(fullfile(matlab_dir, 'examples', 'read_profile.m'));
+            run(fullfile(matlab_dir, 'examples', 'color_transform.m'));
+            run(fullfile(matlab_dir, 'examples', 'gamma_curve.m'));
+            run(fullfile(matlab_dir, 'examples', 'luminance_normalization.m'));
+            run(fullfile(matlab_dir, 'examples', 'colorimetry_issue_1475.m'))
+          generate-summary: false
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -1544,7 +1648,7 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
-    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' }}
+    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-qa-latest-release-packaging' }}
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 15
@@ -1629,6 +1733,40 @@ jobs:
               exit 1
             fi
           done
+
+          windows_bundle_root="artifacts/iccdev-windows-msvc/iccDEV-Testing"
+          matlab_required=(
+            "matlab/+iccdev/private/icc_mex.mexw64"
+            "matlab/run_local_qa.m"
+            "matlab/run_gamma_qa.m"
+            "matlab/run_docker_qa.m"
+            "matlab/tests/test_luminance_normalization.m"
+            "matlab/tests/test_colorimetry_issue_1475.m"
+            "matlab/examples/gamma_curve.m"
+            "matlab/examples/luminance_normalization.m"
+            "matlab/examples/colorimetry_issue_1475.m"
+            "matlab/examples/docker_interop.m"
+            "Testing/sRGB_v4_ICC_preference.icc"
+            "Testing/Display/sRGB_v4_ICC_preference.icc"
+            "Testing/Display/sRGB_D65_MAT.xml"
+            "Testing/Display/sRGB_D65_MAT-300lx.xml"
+            "Testing/Display/sRGB_D65_MAT-500lx.xml"
+            "Testing/HDR/BT2100PQFullDisplay.xml"
+            "IccProfLib/IccTagBasic.cpp"
+            "IccProfLib/IccColorimetry.cpp"
+            ".github/ci/regression/gamma-2.20703125.icc"
+          )
+          for required in "${matlab_required[@]}"; do
+            if [ ! -s "${windows_bundle_root}/${required}" ]; then
+              echo "::error::Missing expected MATLAB release artifact: ${required}"
+              exit 1
+            fi
+          done
+          if [ ! -s "${windows_bundle_root}/matlab/+iccdev/private/z.dll" ] &&
+             [ ! -s "${windows_bundle_root}/matlab/+iccdev/private/zlib1.dll" ]; then
+            echo "::error::Missing expected MATLAB zlib runtime"
+            exit 1
+          fi
 
           chmod +x .github/scripts/ci-restore-release-artifact-metadata.sh
           .github/scripts/ci-restore-release-artifact-metadata.sh artifacts
@@ -1773,7 +1911,7 @@ jobs:
             echo "| Linux (GCC) | \`iccdev-linux-gcc.zip\` |"
             echo "| Linux (Clang) | \`iccdev-linux-clang.zip\` |"
             echo "| macOS (Clang) | \`iccdev-macos-clang.zip\` |"
-            echo "| Windows (MSVC) | \`iccdev-windows-msvc.zip\` |"
+            echo "| Windows (MSVC + MATLAB R2026a MEX) | \`iccdev-windows-msvc.zip\` |"
             echo "| WASM (Emscripten) | \`iccdev-wasm-release.zip\` |"
             echo "| Doxygen HTML Docs | \`iccdev-doxygen-html.zip\` |"
             echo "| Linux CPack Runtime | \`reficcmax-*.zip\`, \`reficcmax-*.deb\`, \`reficcmax-*.rpm\` |"

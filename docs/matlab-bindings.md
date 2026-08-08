@@ -31,6 +31,19 @@ The build script selects a Release `IccProfLib2` library. If the selected CMake
 tree has `ICC_USE_ZLIB=ON`, it also links the matching Windows import library
 and stages the runtime DLL beside `icc_mex.mexw64`.
 
+The Windows archive published by `ci-latest-release.yml` includes the MATLAB
+tree, the R2026a MEX gateway, and its zlib runtime. It also preserves the
+repository-relative support paths used by QA and examples:
+
+- `Testing/` for profile and luminance fixtures.
+- `.github/ci/regression/gamma-2.20703125.icc` for gamma QA.
+- `IccProfLib/IccTagBasic.cpp` and `IccProfLib/IccColorimetry.cpp` for the
+  independent issue #1475 table check.
+
+Keep those paths intact when extracting or relocating the bundle. Release CI
+runs MATLAB from the staged archive tree before upload; testing only the source
+checkout does not prove that the published payload is self-contained.
+
 To make one checkout the default for new MATLAB sessions, set the user
 `MATLABPATH` environment variable to its `matlab` directory, then fully restart
 MATLAB Desktop.
