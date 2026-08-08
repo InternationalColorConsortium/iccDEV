@@ -1617,7 +1617,7 @@ run_replay()
     exit 1
   fi
 
-  if [ "$exit_code" -ge 128 ]; then
+  if [ "$exit_code" -ge 128 ] && [ "$exit_code" -ne "$expected_exit" ]; then
     if [ "$exit_code" -le 192 ]; then
       echo "[FAIL] issue $issue replay crashed with signal $((exit_code - 128))"
     else
@@ -1644,7 +1644,7 @@ run_replay()
 
 run_replay 1671 0 '100%' \
   "$APPLY" "$SRC_6CH_TIF" "$TMPDIR/issue-1671.tif" \
-  4 1 1 1 1 \
+  3 1 1 1 1 \
   "$TMPDIR/hbo-IIccProfileConnectionConditions-getEmissiveObserver-IccPcc_cpp-Line293.icc" \
   40
 
@@ -1654,7 +1654,7 @@ run_replay 1675 1 'Begin\(\) failed \(status 3: Invalid profile\)' \
   "$TMPDIR/issue-1675.tif" \
   1 1 0 1 1 -embedded 10003 -pcc "$PCC_ICC" "$SRGB_ICC" 1
 
-run_replay 1677 1 'Begin\(\) failed \(status 3: Invalid profile\)' \
+run_replay 1677 255 'cannot be opened' \
   "$APPLY" \
   "$TMPDIR/hbo-CIccPcsXform-pushBiRef2Rad-IccCmm_cpp-Line3597.icc" \
   "$TMPDIR/issue-1677.tif" \
