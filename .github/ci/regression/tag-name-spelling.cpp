@@ -102,6 +102,24 @@ static void expectEmitted(const TagNameFix &fix)
   printf("ok   [%s emit]: %s\n", fix.szIssue, szGot);
 }
 
+// A legacy name must stay readable without ever becoming the published name of the
+// tag it resolves to. Resolving the alias and asking what that signature emits is
+// the whole check: if the two ever agree, the entry has stopped being an alias.
+static void expectNotEmitted(const char *szAlias)
+{
+  icTagSignature sig = CIccTagCreator::GetTagNameSig(szAlias);
+  const icChar *szEmitted = CIccTagCreator::GetTagSigName(sig);
+
+  if (szEmitted && strcmp(szEmitted, szAlias) == 0) {
+    printf("FAIL [alias not emitted]: \"%s\" is the published name of 0x%08X\n",
+           szAlias, (unsigned)sig);
+    g_failures++;
+    return;
+  }
+  printf("ok   [alias not emitted]: \"%s\" emits as \"%s\"\n",
+         szAlias, szEmitted ? szEmitted : "(none)");
+}
+
 static void expectResolves(const char *szCase, const char *szName,
                            icTagSignature sigExpected)
 {
@@ -151,6 +169,21 @@ int main()
   // 6 -- a name in neither table must still be unknown. Guards against the alias
   // lookup degrading into something that answers for anything.
   expectResolves("unknown stays unknown", "notATagNameTag", icSigUnknownTag);
+
+  // 7 -- no alias may also be the published name of a tag. GetTagNameSig searches
+  // the published names first and the legacy names only on a miss, so a legacy
+  // entry that collides with a live name is unreachable: the lookup answers with
+  // the published tag and the alias silently does nothing. That is the failure
+  // this asserts against, and it is the reason the two tables are searched in
+  // sequence rather than merged into one map. Checking it through the public API
+  // -- rather than by walking the tables -- is deliberate: g_icTagNameTable and
+  // g_icAltTagNameTable do have external linkage, but they appear in no public
+  // header and carry no ICCPROFLIB_API marking, so they are not exported from the
+  // shared library and an extern declaration here would fail to link on MSVC.
+  for (size_t i = 0; i < nCorrected; i++)
+    expectNotEmitted(kCorrected[i].szOld);
+  expectNotEmitted("materialTypeArrayTag");
+  expectNotEmitted("materialDefaultValuesTag");
 
   if (g_failures) {
     printf("\n%d tag-name case(s) regressed\n", g_failures);

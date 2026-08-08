@@ -85,6 +85,10 @@ static icTagSigToNameMap g_TagSigToNameMap;
 
 typedef std::map<std::string, icTagSignature> icTagNameToSigMap;
 static icTagNameToSigMap g_TagNameToSigMap;
+//Legacy names are kept in their own map, consulted only after the published names miss,
+//so an alias can never shadow the current name of a different tag.  This mirrors
+//g_AltTagTypeNameToSigMap and GetTagTypeNameSig below, which already work this way.
+static icTagNameToSigMap g_AltTagNameToSigMap;
 
 typedef struct {
   icTagSignature sig;
@@ -531,11 +535,21 @@ icTagSignature CIccSpecTagFactory::GetTagNameSig(const icChar *szName)
   if (g_TagNameToSigMap.empty()) {
     for (int i = 0; g_icTagNameTable[i].sig; i++)
       g_TagNameToSigMap[g_icTagNameTable[i].szName] = g_icTagNameTable[i].sig;
-    for (int i = 0; g_icAltTagNameTable[i].sig; i++)
-      g_TagNameToSigMap[g_icAltTagNameTable[i].szName] = g_icAltTagNameTable[i].sig;
   }
   icTagNameToSigMap::iterator sig = g_TagNameToSigMap.find(szName);
   if (sig != g_TagNameToSigMap.end())
+    return sig->second;
+
+  //Allow conversion from alternate names (backwards compatibility with earlier versions).
+  //Folding both tables into one map let a legacy entry overwrite a published one of the
+  //same name, because the alias loop ran second and operator[] assigns unconditionally.
+  //Searching the published names first makes that impossible rather than merely unlikely.
+  if (g_AltTagNameToSigMap.empty()) {
+    for (int i = 0; g_icAltTagNameTable[i].sig; i++)
+      g_AltTagNameToSigMap[g_icAltTagNameTable[i].szName] = g_icAltTagNameTable[i].sig;
+  }
+  sig = g_AltTagNameToSigMap.find(szName);
+  if (sig != g_AltTagNameToSigMap.end())
     return sig->second;
 
   return icSigUnknownTag;
