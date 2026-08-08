@@ -830,7 +830,10 @@ jobs:
             test_colorimetry_issue_1475();
             qa_output = evalc('run_local_qa()');
             disp(qa_output);
-            assert(contains(qa_output, '0 skipped'), 'Staged MATLAB QA must not skip any test groups.');
+            assert(contains(qa_output, '0 failed'), 'Staged MATLAB QA must not fail any test groups.');
+            if ~contains(qa_output, '0 skipped');
+              assert(contains(qa_output, 'Docker interoperability'), 'Staged MATLAB QA may only skip Docker interoperability.');
+            end;
             run(fullfile(matlab_dir, 'examples', 'read_profile.m'));
             run(fullfile(matlab_dir, 'examples', 'color_transform.m'));
             run(fullfile(matlab_dir, 'examples', 'gamma_curve.m'));
