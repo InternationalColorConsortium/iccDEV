@@ -294,6 +294,96 @@ function(iccdev_add_cmmsearch_init_pcc_test)
   endforeach()
 endfunction()
 
+function(iccdev_add_cmmsearch_rebegin_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccCmmSearchRebeginTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/cmmsearch-rebegin.cpp"
+  )
+  target_link_libraries(iccCmmSearchRebeginTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+
+  add_dependencies(check iccCmmSearchRebeginTest)
+
+  # Both profiles drive the same assertion about Begin(), so this is not a
+  # regression/control pair the way cmmsearch-init-pcc is: the v5 profile carries
+  # an 'svcn' and takes the PCC-resolution path through Begin(), the v4 one does
+  # not, and the idempotency guard has to hold on both.
+  set(_cmmsearch_rebegin_cases
+    "d65-svcn=${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
+    "v4-no-svcn=${ICCDEV_TESTING_DIR}/sRGB_v4_ICC_preference.icc"
+  )
+
+  foreach(_case IN LISTS _cmmsearch_rebegin_cases)
+    string(REGEX REPLACE "=.*$" "" _case_name "${_case}")
+    string(REGEX REPLACE "^[^=]*=" "" _case_profile "${_case}")
+
+    if(WIN32)
+      add_test(
+        NAME iccdev.cmmsearch-rebegin.${_case_name}
+        COMMAND "$<TARGET_FILE:iccCmmSearchRebeginTest>" "${_case_profile}"
+      )
+    else()
+      add_test(
+        NAME iccdev.cmmsearch-rebegin.${_case_name}
+        COMMAND
+          "${CMAKE_COMMAND}" -E env
+          ${ICCDEV_TEST_ENV}
+          "$<TARGET_FILE:iccCmmSearchRebeginTest>"
+          "${_case_profile}"
+      )
+    endif()
+    set_tests_properties(iccdev.cmmsearch-rebegin.${_case_name} PROPERTIES
+      WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+      TIMEOUT 120
+      LABELS "iccdev;iccprofLib;cmmsearch;regression"
+    )
+    if(WIN32)
+      set(_cmmsearch_rebegin_windows_env_mods
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccCmmSearchRebeginTest>"
+        "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      )
+      foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+        list(APPEND _cmmsearch_rebegin_windows_env_mods
+          "PATH=path_list_prepend:${_runtime_path}")
+      endforeach()
+      set_tests_properties(iccdev.cmmsearch-rebegin.${_case_name} PROPERTIES
+        ENVIRONMENT_MODIFICATION "${_cmmsearch_rebegin_windows_env_mods}"
+      )
+    endif()
+  endforeach()
+
+  # The three-profile branch of Begin() fails quietly: a second call survives,
+  # returns icCmmStatOk and leaves the results alone while leaking the previous
+  # CIccApplyCmm, so the cases above cannot see it.  Only LeakSanitizer can, and
+  # both the CI tool-test job and ICCDEV_TEST_ENV export
+  # ASAN_OPTIONS=...detect_leaks=0, so run the same binary once more with
+  # detect_leaks=1 forced for this process alone -- the same approach
+  # iccdev.cmmsearch-namedcolor-ownership uses, including its MSVC carve-out.
+  if(MSVC)
+    message(STATUS
+      "Skipping iccdev.cmmsearch-rebegin-leak: MSVC AddressSanitizer "
+      "does not support LeakSanitizer detect_leaks=1")
+    return()
+  endif()
+
+  add_test(
+    NAME iccdev.cmmsearch-rebegin-leak
+    COMMAND
+      "${CMAKE_COMMAND}" -E env
+      "ASAN_OPTIONS=detect_leaks=1"
+      "$<TARGET_FILE:iccCmmSearchRebeginTest>"
+      "${ICCDEV_TESTING_DIR}/ApplyDataFiles/test-profiles/sRGB_D65_MAT.icc"
+      "--three-profile-only"
+  )
+  set_tests_properties(iccdev.cmmsearch-rebegin-leak PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_REPO_ROOT}"
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;cmmsearch;leak;regression"
+  )
+endfunction()
+
 function(iccdev_add_embedio_read8_bounds_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -3995,6 +4085,7 @@ if(WIN32)
   iccdev_add_iccconnect_thread_test()
   iccdev_add_iccconnect_config_parser_test()
   iccdev_add_cmmsearch_init_pcc_test()
+  iccdev_add_cmmsearch_rebegin_test()
   iccdev_add_embedio_read8_bounds_test()
   iccdev_add_fileio_getlength_position_test()
   iccdev_add_profile_write_failure_test()
@@ -4262,6 +4353,7 @@ set(ICCDEV_TEST_ENV
 iccdev_add_iccconnect_thread_test()
 iccdev_add_iccconnect_config_parser_test()
 iccdev_add_cmmsearch_init_pcc_test()
+iccdev_add_cmmsearch_rebegin_test()
 iccdev_add_embedio_read8_bounds_test()
 iccdev_add_fileio_getlength_position_test()
 iccdev_add_profile_write_failure_test()

@@ -378,8 +378,38 @@ icStatusCMM CIccCmmSearch::Begin(bool /* bAllocNewApply */, bool /* bUsePcsConve
 {
   icStatusCMM rv;
 
+  // Honor the same idempotency contract as the base (#1940).  CIccCmm::Begin
+  // opens with this exact test, so calling Begin() twice on a CIccCmm is a
+  // defined no-op -- and callers hold the base type (CIccConnectCmm keeps a
+  // CIccCmm* and only dynamic_casts down for GetSearchCmm()), so they cannot
+  // tell which override they have.  This one used to run its body again, and
+  // the body is not re-runnable: it deletes m_pDstProfile and nulls it at the
+  // end of the two-profile branch below, and nulls m_pDstInitProfile once it
+  // has been consumed, while leaving m_nAttached describing the profile set
+  // that no longer exists.  The second pass then bound those null members to
+  // the reference AddXform overload.  Guarding on m_pApply -- which the tail of
+  // this function sets -- also stops that second pass leaking the CIccApplyCmm
+  // the first one allocated and pushing a duplicate chain into m_dst_to_mid.
+  if (m_pApply)
+    return icCmmStatOk;
+
   if (m_nAttached < 2)
     return icCmmStatBadXform;
+
+  // The sub-chains below bind the src/mid/dst profiles to a reference parameter,
+  // so a null member here is a null reference and not a recoverable miss.  State
+  // what m_nAttached is supposed to guarantee and enforce it (#1940): AddXform
+  // fills the source slot at m_nAttached 0 and the destination slot at 1, and
+  // only shifts a profile into the middle slot on the way to 3, so at this point
+  // src and dst must both be set and mid must be set exactly when m_nAttached
+  // exceeds 2.  The check is not redundant with the m_pApply guard above -- a
+  // Begin() that fails after the delete at the end of the two-profile branch
+  // never reaches the m_pApply assignment, so a caller that retries on a failure
+  // status arrives here with a live m_nAttached and a dead m_pDstProfile.  The
+  // -INIT initial-destination profile stays optional: SetDstInitProfile need
+  // never be called, and every use of it below is already pointer-guarded.
+  if (!m_pSrcProfile || !m_pDstProfile || (m_nAttached > 2 && !m_pMidProfile))
+    return icCmmStatInvalidProfile;
 
   // Resolve every attached profile's connection conditions before any sub-CMM is
   // built (#1860).  The sub-chains below mix the two CIccCmm::AddXform overloads:
@@ -399,12 +429,10 @@ icStatusCMM CIccCmmSearch::Begin(bool /* bAllocNewApply */, bool /* bUsePcsConve
   // sub-chain agree and only genuinely differing PCCs get an adaptation.
   // CIccConnectCmm::CreateSearch() already does exactly this for the weighted PCC
   // profiles it attaches; this extends the same treatment to the chain profiles.
-  if (m_pSrcProfile)
-    m_pSrcProfile->ReadPccTags();
+  m_pSrcProfile->ReadPccTags();
   if (m_pMidProfile)
     m_pMidProfile->ReadPccTags();
-  if (m_pDstProfile)
-    m_pDstProfile->ReadPccTags();
+  m_pDstProfile->ReadPccTags();
   if (m_pDstInitProfile)
     m_pDstInitProfile->ReadPccTags();
 
