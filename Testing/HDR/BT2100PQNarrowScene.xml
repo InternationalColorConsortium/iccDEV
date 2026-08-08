@@ -18,7 +18,9 @@
   </Header>
   <Tags>
     <profileDescriptionTag> <multiLocalizedUnicodeType>
-      <LocalizedText LanguageCountry="enUS"><![CDATA[BT.2100 HLG Narrow Range RGB to/from Scene Light]]></LocalizedText>
+      <!-- Corrected from "HLG": this fixture encodes the ST 2084 (PQ) transfer
+           function, not ARIB STD-B67. See the cicpTag note below. -->
+      <LocalizedText LanguageCountry="enUS"><![CDATA[BT.2100 PQ Narrow Range RGB to/from Scene Light]]></LocalizedText>
     </multiLocalizedUnicodeType> </profileDescriptionTag>
 	
 	<AToB1Tag> <multiProcessElementType>
@@ -232,7 +234,10 @@
 	</XYZArrayType> </mediaWhitePointTag>
 
     <cicpTag> <cicpType>
-      <cicpFields ColorPrimaries="9" TransferCharacteristics="18" MatrixCoefficients="0" VideoFullRangeFlag="0"/>
+      <!-- ITU-T H.273 Table 3: 16 is SMPTE ST 2084 (PQ), which is the transfer
+           function the FormulaSegments above actually encode. 18 is ARIB STD-B67
+           (HLG) and belongs to the BT2100Hlg* fixtures, not to this one. -->
+      <cicpFields ColorPrimaries="9" TransferCharacteristics="16" MatrixCoefficients="0" VideoFullRangeFlag="0"/>
     </cicpType> </cicpTag>
 
 	<copyrightTag> <multiLocalizedUnicodeType>

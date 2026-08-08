@@ -5295,6 +5295,28 @@ iccdev_add_script_test(
   "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-1781-applytolink-qa-matrix.sh"
 )
 
+# #2011: the BT.2100 fixtures have to agree with themselves.  All four
+# Testing/HDR/BT2100PQ*.xml declared cicp TransferCharacteristics="18" -- ARIB
+# STD-B67 (HLG) per ITU-T H.273 Table 3 -- while carrying the SMPTE ST 2084
+# constants, which is 16; three of them also described themselves as
+# "BT.2100 HLG".  Both claims came from the HLG siblings they were copied from.
+# Nothing caught it: CIccTagCicp::Validate reads MatrixCoefficients against the
+# colour space and never inspects TransferCharacteristics at all, so every one
+# of these validated clean before the correction and validates clean after.
+# This test supplies the consistency check the library does not have, for the
+# corpus, keyed on the curve constants rather than the file name so a renamed or
+# copied fixture is still judged by what it encodes.  Two controls reintroduce
+# each half of the defect and must be caught, so a grep that stopped matching
+# cannot leave this passing on nothing.
+# Runs without the tools built; the XML -> ICC -> XML half is skipped instead.
+iccdev_add_script_test(
+  iccdev.issue-2011-hdr-cicp-transfer-regression
+  120
+  "iccdev;xml;fixtures;hdr;cicp;issue-2011;regression"
+  "${ICCDEV_REPO_ROOT}"
+  "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2011-hdr-cicp-transfer-regression.sh"
+)
+
 # Describe sink + options API smoke test. Verifies byte-equivalence
 # between the legacy std::string Describe() and the new
 # Describe(IDescribeSink&, const DescribeOptions&) virtual, plus
