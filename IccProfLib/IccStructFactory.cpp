@@ -112,13 +112,46 @@ IIccStruct* CIccBasicStructFactory::CreateStruct(icStructSignature structTypeSig
   }
 }
 
+// The published name for each struct signature: exactly one entry per signature,
+// because GetStructSigName below returns the first match and any later entry for the
+// same signature can never be emitted.  Three surfaces consult it -- both directions
+// of CIccTagJsonStruct (IccTagJson.cpp), both directions of CIccTagXmlStruct
+// (IccTagXml.cpp), and the emitted name in CIccTagStruct::Describe
+// (IccTagComposite.cpp), which is what iccDumpProfile prints.
+//
+// #2028: icSigBRDFStruct and icSigColorantInfoStruct each appeared here twice, with
+// the wrong spelling in the first -- published -- slot, which broke JSON round-tripping
+// outright for brdf.  Two independent sources have to agree for a named struct tag to
+// survive a JSON round trip and these two did not: CIccTagJsonStruct::ToJson writes
+// pStruct->GetDisplayName() (IccStructBasic.h), while CIccTagJsonStruct::ParseJson reads
+// back through GetStructSig, i.e. this table.  GetDisplayName has always returned the
+// correct "brdfTransformStructure", and that string matched neither brdf entry --
+// "Transfrom" in one and "brfdf" in the other -- so ParseJson left sigStruct 0, never
+// called SetTagStructType, and appended nothing to parseStr: the struct type was
+// silently discarded and the parse still reported success.
+//
+// XML broke too, and louder.  CIccTagXmlStruct::ToXml writes GetDisplayName() as the
+// element name for a named struct and emits a signature only in its privateStruct
+// branch, exactly as ToJson does, so it also produced <brdfTransformStructure>.
+// CIccTagXmlStruct::ParseXml resolves that element name through this table and, on a
+// miss, looks for a <StructureSignature> element -- a form only hand-authored documents
+// carry, never the writer's own named-struct output.  So the fallback could not fire and
+// the failure was total rather than silent: "Unable to find StructureSignature" and the
+// whole document refused to load.  Measured both ways before the fix.
+//
+// Neither serialization had a fixture covering it, because there is no BRDF struct tag
+// anywhere in Testing/ in either format -- the three <StructureSignature>brdf references
+// are all inside commented-out examples.
+//
+// colorantInfoStruct was not a typo but broke the ...Structure suffix every other name
+// in this table shares, and its own second entry already carried the correct form; that
+// one only ever mis-published a name -- via Describe, hence iccDumpProfile -- and read
+// back fine either way.
 static struct {
   icStructSignature sig;
   const icChar *szStructName;
 } g_icStructNames[] = {
-  {icSigBRDFStruct, "brdfTransfromStructure"},
-  {icSigColorantInfoStruct, "colorantInfoStruct"},
-  {icSigBRDFStruct, "brfdfTransformStructure"},
+  {icSigBRDFStruct, "brdfTransformStructure"},
   {icSigColorantInfoStruct, "colorantInfoStructure"},
   {icSigColorEncodingParamsSruct, "colorEncodingParamsStructure"},
   {icSigMeasurementInfoStruct, "measurementInfoStructure"},
@@ -126,6 +159,26 @@ static struct {
   {icSigProfileConnectionConditionsStruct, "profileConnectionConditionsStructure"},
   {icSigProfileInfoStruct, "profileInfoStructure"},
   {icSigTintZeroStruct, "tintZeroStructure"},
+  {(icStructSignature)0, ""},
+};
+
+// Legacy spellings, read-only: only GetStructSig consults this table, so a document
+// that still carries one of these keeps loading while nothing emits it again.  That
+// asymmetry is the contract #2023 established for g_icAltTagNameTable, expressed here
+// as a separate table rather than as trailing duplicates in the primary one.  With the
+// duplicates removed the primary table runs one entry per signature in the order the
+// icStructSignature enum declares them, which is also the order of the CreateStruct
+// switch above it; while duplicates lived there, the entry that got published was
+// decided by position alone, so any reordering -- something that reads as harmless
+// tidying next to a switch it now matches -- silently changed which spelling iccDEV
+// emitted.  Keeping the legacy names in their own table removes that coupling.
+static struct {
+  icStructSignature sig;
+  const icChar *szStructName;
+} g_icAltStructNames[] = {
+  {icSigBRDFStruct, "brdfTransfromStructure"},      // published by this library before #2028
+  {icSigBRDFStruct, "brfdfTransformStructure"},     // parsed but never emitted, also misspelled
+  {icSigColorantInfoStruct, "colorantInfoStruct"},  // published by this library before #2028
   {(icStructSignature)0, ""},
 };
 
@@ -160,6 +213,17 @@ icStructSignature CIccBasicStructFactory::GetStructSig(const icChar *szStructNam
       return g_icStructNames[i].sig;
     }
   }
+
+  //Allow conversion from legacy names (backwards compatibility with earlier versions).
+  //Published names are searched first, so a legacy spelling cannot shadow a published one
+  //of the same text -- the ordering hazard #2025 had to correct in GetTagNameSig, avoided
+  //here by construction rather than by the order the two tables happen to be written in.
+  for (i = 0; g_icAltStructNames[i].sig; i++) {
+    if (!strcmp(g_icAltStructNames[i].szStructName, szStructName)) {
+      return g_icAltStructNames[i].sig;
+    }
+  }
+
   return (icStructSignature)0;
 }
 

@@ -2942,6 +2942,66 @@ function(iccdev_add_tag_name_spelling_test)
   endif()
 endfunction()
 
+# #2028: g_icStructNames is the struct-name analogue of the tag table above and was
+# not covered by that sweep. It published brdfTransfromStructure and
+# colorantInfoStruct, each of which had a second entry for the same signature that
+# GetStructSigName's first-match could never reach. For brdf that broke JSON
+# round-tripping outright: CIccTagJsonStruct::ToJson writes GetDisplayName(), which
+# has always returned the correct brdfTransformStructure, and ParseJson reads back
+# through this table, so the struct type was silently discarded on read. The
+# corrected name must be the one emitted while both legacy spellings keep resolving
+# through the read-only g_icAltStructNames, and -- the check nothing else makes --
+# the factory table and GetDisplayName must agree for every struct signature.
+# Links IccProfLib only; the contract is the factory mapping, not a round-trip.
+function(iccdev_add_struct_name_spelling_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccStructNameSpellingTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/struct-name-spelling.cpp"
+  )
+  target_compile_features(iccStructNameSpellingTest PRIVATE cxx_std_17)
+  target_include_directories(iccStructNameSpellingTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccStructNameSpellingTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccStructNameSpellingTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.struct-name-spelling
+      COMMAND "$<TARGET_FILE:iccStructNameSpellingTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.struct-name-spelling
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccStructNameSpellingTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.struct-name-spelling PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;structfactory;naming;regression"
+  )
+  if(WIN32)
+    set(_struct_name_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccStructNameSpellingTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _struct_name_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.struct-name-spelling PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_struct_name_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -3887,6 +3947,7 @@ if(WIN32)
   iccdev_add_curve_setsize_contract_test()
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
+  iccdev_add_struct_name_spelling_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -4152,6 +4213,7 @@ iccdev_add_xml_curve_oversize_file_test()
 iccdev_add_curve_setsize_contract_test()
 iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
+iccdev_add_struct_name_spelling_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
