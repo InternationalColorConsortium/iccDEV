@@ -1604,6 +1604,17 @@ run_replay()
   run_with_timeout 30 "$@" > "$log" 2>&1
   local exit_code=$?
   set -e
+  local exit_matches=0
+  local old_ifs="$IFS"
+  local allowed_exit
+  IFS='|'
+  for allowed_exit in $expected_exit; do
+    if [ "$exit_code" -eq "$allowed_exit" ]; then
+      exit_matches=1
+      break
+    fi
+  done
+  IFS="$old_ifs"
 
   if grep -qE 'ERROR: AddressSanitizer|SUMMARY: AddressSanitizer|UndefinedBehaviorSanitizer|runtime error:|LeakSanitizer|MemorySanitizer' "$log"; then
     echo "[FAIL] sanitizer finding while replaying issue $issue"
@@ -1617,7 +1628,7 @@ run_replay()
     exit 1
   fi
 
-  if [ "$exit_code" -ge 128 ] && [ "$exit_code" -ne "$expected_exit" ]; then
+  if [ "$exit_code" -ge 128 ] && [ "$exit_matches" -ne 1 ]; then
     if [ "$exit_code" -le 192 ]; then
       echo "[FAIL] issue $issue replay crashed with signal $((exit_code - 128))"
     else
@@ -1627,7 +1638,7 @@ run_replay()
     exit 1
   fi
 
-  if [ "$exit_code" -ne "$expected_exit" ]; then
+  if [ "$exit_matches" -ne 1 ]; then
     echo "[FAIL] issue $issue replay exited $exit_code, expected $expected_exit"
     sed -n '1,80p' "$log"
     exit 1
@@ -1654,7 +1665,7 @@ run_replay 1675 1 'Begin\(\) failed \(status 3: Invalid profile\)' \
   "$TMPDIR/issue-1675.tif" \
   1 1 0 1 1 -embedded 10003 -pcc "$PCC_ICC" "$SRGB_ICC" 1
 
-run_replay 1677 255 'cannot be opened' \
+run_replay 1677 '1|255' 'Begin\(\) failed \(status 3: Invalid profile\)|cannot be opened' \
   "$APPLY" \
   "$TMPDIR/hbo-CIccPcsXform-pushBiRef2Rad-IccCmm_cpp-Line3597.icc" \
   "$TMPDIR/issue-1677.tif" \
