@@ -1177,6 +1177,12 @@ const icChar *icGetColorSig(icChar *pBuf, size_t bufSize, icUInt32Number nSig, b
     case icSigRadiantSpectralData:
     case icSigBiSpectralReflectanceData:
     case icSigSparseMatrixReflectanceData:
+    // The material connection space encodes its channel count in the low half of
+    // the signature exactly as the families above do ("mc" + count), and
+    // icNumColorSpaceChannels() already decodes it. Omitting it here sent every MCS
+    // signature to the default branch below, which cannot render the count bytes as
+    // text -- 0x6D630004 printed as 'mc??' = 6D630004 rather than "mc0004".
+    case icSigSrcMCSChannelData:
 
       pBuf[0]='\"';
       pBuf[1] = (icUInt8Number)(sig>>24);
@@ -1237,6 +1243,13 @@ const icChar *icGetColorSigStr(icChar *pBuf, size_t bufSize, icUInt32Number nSig
     case icSigRadiantSpectralData:
     case icSigBiSpectralReflectanceData:
     case icSigSparseMatrixReflectanceData:
+    // Same omission as icGetColorSig() above, but this function is also the XML and
+    // JSON header writer for <MCS> (IccProfileXml.cpp, IccProfileJson.cpp), so the
+    // fallback leaked into serialized profiles as "6D630004h" where every sibling
+    // space writes its readable "mc0004" form. The value survived either way --
+    // icGetSigVal() parses the 9-character hex escape back to the same signature --
+    // so this is a legibility fix, not a round-trip repair.
+    case icSigSrcMCSChannelData:
 
       pBuf[0] = (icUInt8Number)(sig>>24);
       pBuf[1] = (icUInt8Number)(sig>>16);
@@ -1863,6 +1876,16 @@ const icChar *CIccInfo::GetColorSpaceSigName(icColorSpaceSignature sig)
 
     case icSigSparseMatrixReflectanceData:
       snprintf(m_szStr, m_bufSize, "0x%04XChannelSparseMatrixReflectanceData", (unsigned int) icNumColorSpaceChannels(sig));
+      return m_szStr;
+
+    // Without this case an MCS signature reached the default below, which reports
+    // icGetSpaceSamples() through a "0x%X" conversion -- so a 4-channel MCS space
+    // printed as "0x4ColorData", both naming it as though it were a plain colour
+    // space and dropping the zero padding every case above emits. Named here in the
+    // sibling form so iccDumpProfile's "MCS Color Space:" line identifies the space
+    // it is labelling.
+    case icSigSrcMCSChannelData:
+      snprintf(m_szStr, m_bufSize, "0x%04XChannelMCSData", (unsigned int) icNumColorSpaceChannels(sig));
       return m_szStr;
 
     default:

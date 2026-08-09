@@ -3156,6 +3156,64 @@ function(iccdev_add_struct_name_spelling_test)
   endif()
 endfunction()
 
+# #1853 harvest: icSigSrcMCSChannelData encodes its channel count in the signature the
+# same way icSigNChannelData and the spectral families do, and icNumColorSpaceChannels
+# already decoded it -- but icGetColorSig, icGetColorSigStr and GetColorSpaceSigName
+# left it out of their case lists, so MCS spaces reached a generic fallback and printed
+# as 'mc??' = 6D630004 / 6D630004h / 0x4ColorData. icGetColorSigStr is the XML and JSON
+# <MCS> writer, so the fallback was reaching serialized profiles. No value was lost
+# (icGetSigVal parses the hex escape back), which is why the test asserts the round trip
+# as well as the spelling: the fix changes which icGetSigVal branch a real profile takes.
+# Links IccProfLib only; the contract is the naming tables, not a profile round-trip.
+function(iccdev_add_mcs_colorspace_name_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccMcsColorSpaceNameTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/mcs-colorspace-name.cpp"
+  )
+  target_compile_features(iccMcsColorSpaceNameTest PRIVATE cxx_std_17)
+  target_include_directories(iccMcsColorSpaceNameTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccMcsColorSpaceNameTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccMcsColorSpaceNameTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.mcs-colorspace-name
+      COMMAND "$<TARGET_FILE:iccMcsColorSpaceNameTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.mcs-colorspace-name
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccMcsColorSpaceNameTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.mcs-colorspace-name PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;naming;mcs;regression"
+  )
+  if(WIN32)
+    set(_mcs_name_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccMcsColorSpaceNameTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _mcs_name_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.mcs-colorspace-name PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_mcs_name_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1886: CIccMpeXmlUnknown::ToXml formatted the Reserved attribute into `line`
 # and then appended `buf`, which still held the element's type signature from the
 # icGetSigStr call above it. The value was dropped and the signature was injected
@@ -4104,6 +4162,7 @@ if(WIN32)
   iccdev_add_luminance_normalization_test()
   iccdev_add_tag_name_spelling_test()
   iccdev_add_struct_name_spelling_test()
+  iccdev_add_mcs_colorspace_name_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -4372,6 +4431,7 @@ iccdev_add_curve_gamma_u8fixed8_test()
 iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
 iccdev_add_struct_name_spelling_test()
+iccdev_add_mcs_colorspace_name_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
