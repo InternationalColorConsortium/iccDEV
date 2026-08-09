@@ -1303,4 +1303,25 @@ rm -f /tmp/test-enc-*.json /tmp/test-prec-*.json /tmp/test-dig-*.json \
       /tmp/test-cli-data.txt /tmp/test-cli-8bit.txt /tmp/test-cli-16bit.txt \
       /tmp/test-real-tiff-*.json /tmp/json-tiff-*.tif /tmp/cli-tiff-*.tif 2>/dev/null
 
+# Everything above only *counts* outcomes.  Until now the script ended in an
+# unconditional `exit 0`, so the summary was advisory and iccdev.json-cli-exercise
+# reported [PASS] with failures still on the board -- which is how the two stale
+# encoding-selector [FAIL] lines recorded in #2052 survived a full CI cycle
+# without ever reddening the test that produced them.  Honour the tally instead.
+#
+# ASAN is counted in its own bucket rather than as a failure because a sanitizer
+# hit is not a wrong exit status, but it is at least as fatal: this test carries
+# the `asan` label and is run against instrumented builds, so treat both as red.
+#
+# One consequence is deliberate.  The CTest declares FIXTURES_REQUIRED
+# iccdev_profiles, and the cases below reference generated profiles such as
+# Testing/Display/sRGB_D65_MAT.icc by relative path.  Run standalone against a
+# tree where that fixture has never executed, 74 of the 125 cases fail on the
+# missing profiles and this script now exits non-zero.  That is the correct
+# signal -- a run that measured nothing should not report success -- and it is
+# why the exit status keys off the tally rather than off the last command.
+if [ "$FAIL" -gt 0 ] || [ "$ASAN" -gt 0 ]; then
+  exit 1
+fi
+
 exit 0
