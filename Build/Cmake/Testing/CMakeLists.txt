@@ -2455,6 +2455,51 @@ function(iccdev_add_ziputf8_settext_contract_test)
   endif()
 endfunction()
 
+function(iccdev_add_ziputf8_read_inflate_contract_test)
+  if(NOT ICC_USE_ZLIB)
+    return()
+  endif()
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccZipUtf8ReadInflateContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/ziputf8-read-inflate-contract.cpp"
+  )
+  target_compile_features(iccZipUtf8ReadInflateContractTest PRIVATE cxx_std_17)
+  # Same linkage note as iccdev_add_ziputf8_settext_contract_test above: IccProfLib
+  # links ZLIB::ZLIB and defines ICC_USE_ZLIB=1 PUBLIC, so both propagate here; the
+  # explicit zlib link is belt-and-braces.
+  target_link_libraries(iccZipUtf8ReadInflateContractTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  if(TARGET ZLIB::ZLIB)
+    target_link_libraries(iccZipUtf8ReadInflateContractTest PRIVATE ZLIB::ZLIB)
+  endif()
+  add_dependencies(check iccZipUtf8ReadInflateContractTest)
+
+  add_test(
+    NAME iccdev.ziputf8-read-inflate-contract
+    COMMAND "$<TARGET_FILE:iccZipUtf8ReadInflateContractTest>"
+  )
+  set_tests_properties(iccdev.ziputf8-read-inflate-contract PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;tag;zlib;compression;issue-1853;regression"
+  )
+  if(WIN32)
+    set(_ziputf8_readinflate_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccZipUtf8ReadInflateContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _ziputf8_readinflate_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.ziputf8-read-inflate-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_ziputf8_readinflate_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_parser_restore_calls_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4151,6 +4196,7 @@ if(WIN32)
   iccdev_add_iccio_write_float_aliasing_test()
   iccdev_add_tagdata_zlib_roundtrip_test()
   iccdev_add_ziputf8_settext_contract_test()
+  iccdev_add_ziputf8_read_inflate_contract_test()
   iccdev_add_compression_describe_labels_test()
   iccdev_add_pawg_compression_paths_test()
   iccdev_add_json_sparsematrix_huaf_test()
@@ -4420,6 +4466,7 @@ iccdev_add_fileio_seek_tell_test()
 iccdev_add_iccio_write_float_aliasing_test()
 iccdev_add_tagdata_zlib_roundtrip_test()
 iccdev_add_ziputf8_settext_contract_test()
+iccdev_add_ziputf8_read_inflate_contract_test()
 iccdev_add_compression_describe_labels_test()
 iccdev_add_pawg_compression_paths_test()
 iccdev_add_json_sparsematrix_huaf_test()

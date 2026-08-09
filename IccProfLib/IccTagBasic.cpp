@@ -1399,6 +1399,17 @@ bool CIccTagZipUtf8Text::Read(icUInt32Number size, CIccIO *pIO)
 
   icUChar *pBuf = AllocBuffer(nSize);
 
+  // #1743 again, at the call site that fix did not reach. AllocBuffer() returns NULL
+  // for two unrelated reasons -- a legitimate zero-size request, and a failed
+  // malloc/icRealloc -- so NULL on its own cannot be treated as an error. A non-zero
+  // nSize with a NULL buffer is unambiguously the allocation failure: the guarded copy
+  // below is then skipped and the tag is left empty (m_pZipBuf NULL, m_nBufSize 0),
+  // but the function still reported success. That is the same silent data loss as
+  // #1521 and #1743, here on the read path, where it turns a truncated allocation into
+  // a profile that loads with a silently empty text tag.
+  if (nSize && !pBuf)
+    return false;
+
   if (m_nBufSize && pBuf) {
     if (pIO->Read8(pBuf, m_nBufSize) != m_nBufSize) {
       return false;
@@ -1508,6 +1519,22 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
   memset(&zstr, 0, sizeof(zstr));
   icUtf8Vector buf(32767, 0);
 
+  // Remember how much of str belongs to the caller, so a failed decode can hand back
+  // exactly what it was given. The loop below appends each inflated chunk to str and
+  // can then return false from inside the loop when inflate() rejects a later chunk --
+  // which left the caller holding a partial decode alongside a false return, while the
+  // no-zlib path a few lines above clears str before failing. The two configurations
+  // disagreed about what str means on failure: cleared in one, partially written in
+  // the other. Truncating back to nOrigSize on the failure path makes the failure
+  // atomic and makes both agree that false leaves nothing appended.
+  //
+  // Rewinding rather than inflating into a scratch string is deliberate. There is no
+  // bound on how much this can inflate -- the decompression cap is a separate open
+  // question -- so buffering the whole decode before handing it over would double peak
+  // memory for a hostile ratio, and would add a full copy to the success path that the
+  // existing in-place append does not pay.
+  const size_t nOrigSize = str.size();
+
   zstat = inflateInit(&zstr);
 
   if (zstat != Z_OK) {
@@ -1544,6 +1571,10 @@ bool CIccTagZipUtf8Text::GetText(std::string &str) const
     zstat = inflate(&zstr, Z_SYNC_FLUSH);
 
     if (zstat != Z_OK && zstat != Z_STREAM_END) {
+      // The only failure return that can be reached with chunks already appended, so
+      // the only one that has to rewind. The two earlier exits above run before the
+      // loop and leave str untouched by construction.
+      str.resize(nOrigSize);
       inflateEnd(&zstr);
       return false;
     }
