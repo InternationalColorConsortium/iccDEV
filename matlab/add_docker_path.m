@@ -33,8 +33,8 @@ function docker_dir = add_docker_path(docker_dir)
   end
 
   current_path = getenv('PATH');
-  entries = regexp(current_path, pathsep, 'split');
-  if ~any(strcmpi(entries, docker_dir))
+  entries = iccdev.qa.path_entries(current_path);
+  if ~iccdev.qa.path_contains(entries, docker_dir)
     setenv('PATH', [docker_dir pathsep current_path]);
   end
 end

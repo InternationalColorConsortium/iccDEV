@@ -345,7 +345,7 @@ function tool_path = find_plot_tool(build_dir)
     end
   end
 
-  path_dirs = regexp(getenv('PATH'), pathsep, 'split');
+  path_dirs = iccdev.qa.path_entries(getenv('PATH'));
   if ispc()
     path_name = 'iccProfilePlot.exe';
   else

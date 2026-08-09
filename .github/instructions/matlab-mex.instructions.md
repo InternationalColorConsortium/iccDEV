@@ -19,6 +19,8 @@ matlab/
   +iccdev/
     +qa/
       check_luminance_normalization.m  # Issue #1811 fixture calculation model
+      path_entries.m         # Safe PATH splitting without current-dir entries
+      path_contains.m        # Platform-aware PATH entry comparison
     IccProfile.m          # Profile class (open, read, header, color_space)
     IccCmm.m              # Color management module wrapper
     IccApply.m            # Thread-safe per-thread apply handle
