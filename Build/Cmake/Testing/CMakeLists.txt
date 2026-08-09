@@ -5770,6 +5770,21 @@ if(TARGET iccApplyNamedCmm)
    )
 endif()
 
+# The iccApplySearch half of the same #1674 argument-contract family. It publishes
+# the identical "-cfg <path>" usage but never received the guard added above, so
+# "iccApplySearch -cfg cfg.json anything-else" ignored the tail and still exited 0.
+# Registered separately from the iccApplyNamedCmm block because the two tools are
+# built by independent targets and either can be configured out on its own.
+if(TARGET iccApplySearch)
+  iccdev_add_script_test(
+    iccdev.applysearch-cli-args
+    120
+    "iccdev;cmm;config;cli;security;issue-1674;issue-1853;regression"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-applysearch-cli-args-regression.sh"
+   )
+endif()
+
 # Legacy v2 namedColor2Type stores each rootName in a fixed 32-byte field. A
 # malformed profile can fill all 32 bytes without a NUL terminator; the reader
 # must force termination before iccApplyNamedCmm echoes the selected name. The

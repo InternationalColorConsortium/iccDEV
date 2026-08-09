@@ -255,6 +255,19 @@ int main(int argc, const char* argv[])
   CIccCfgColorData cfgData;
 
   if (!stricmp(argv[1], "-cfg")) {
+    // Usage 1 is exactly "-cfg <path>"; every setting comes from the JSON file, so
+    // there is nothing a further argument could mean. Anything beyond argv[2] was
+    // silently discarded, and the run then reported success, so a caller could not
+    // tell an honoured argument list from an ignored one. That is the same defect
+    // #1674 fixed in the sibling tool, where iccApplyNamedCmm grew this identical
+    // argc guard (#1906); iccApplySearch shares the "-cfg" usage but never got it.
+    // The minargs test above has already established argc >= 3, so argv[2] is
+    // readable here and only a longer list can reach this branch.
+    if (argc != 3) {
+      printf("Unexpected extra arguments for -cfg\n");
+      return EXIT_FAILURE;
+    }
+
     json cfg;
     if (!loadJsonFrom(cfg, argv[2]) || !cfg.is_object()) {
       printf("Unable to read configuration from '%s'\n", argv[2]);
