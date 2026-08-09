@@ -70,7 +70,8 @@ profiles, examples, and native handle lifecycle behavior.
     bundle root, not the source checkout. Preserve `Testing/`,
     `.github/ci/regression/gamma-2.20703125.icc`, and the two C++ table sources
     used by the colorimetry check at their repository-relative paths. Require
-    zero skipped test groups before publishing.
+    zero skipped test groups before publishing unless Docker interoperability
+    is the sole skip because the pinned image is unavailable.
 
 ## Failure Rules
 
@@ -96,4 +97,6 @@ profiles, examples, and native handle lifecycle behavior.
 - Example completion.
 - Docker image ID or digest and interoperability result.
 - Any skipped profile-dependent checks and why.
-- For release work, staged-bundle paths and the zero-skip staged test result.
+- For release work, staged-bundle paths and the staged test result, including
+  confirmation that any sole Docker skip was caused by an unavailable pinned
+  image.

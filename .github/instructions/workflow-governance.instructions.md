@@ -293,8 +293,9 @@ only the source checkout. If a packaged test derives data paths relative to its
 installed location, preserve those paths in the archive and assert the required
 files again after artifact download. MATLAB release payloads must include the
 MEX runtime dependencies, required `Testing/` fixtures, gamma regression
-profile, and colorimetry table sources, and the staged suite must report zero
-skipped groups.
+profile, and colorimetry table sources. The staged suite must report zero
+skipped groups unless Docker interoperability is the sole skip because the
+pinned image is unavailable.
 
 ## Optional Local Hooks
 

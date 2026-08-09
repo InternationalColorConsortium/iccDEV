@@ -830,9 +830,12 @@ jobs:
             test_colorimetry_issue_1475();
             qa_output = evalc('run_local_qa()');
             disp(qa_output);
-            assert(contains(qa_output, '0 failed'), 'Staged MATLAB QA must not fail any test groups.');
-            if ~contains(qa_output, '0 skipped');
-              assert(contains(qa_output, 'Docker interoperability'), 'Staged MATLAB QA may only skip Docker interoperability.');
+            result = regexp(qa_output, '=== Results: \d+ passed, 0 failed, (\d+) skipped ===', 'tokens', 'once');
+            assert(~isempty(result), 'Staged MATLAB QA must report zero failures.');
+            skip_count = str2double(result{1});
+            if skip_count ~= 0;
+              skipped = regexp(qa_output, '(?m)^  - (.+)$', 'tokens');
+              assert(skip_count == 1 && numel(skipped) == 1 && startsWith(skipped{1}{1}, 'Docker interoperability ('), 'Staged MATLAB QA may only skip Docker interoperability.');
             end;
             run(fullfile(matlab_dir, 'examples', 'read_profile.m'));
             run(fullfile(matlab_dir, 'examples', 'color_transform.m'));
@@ -1652,7 +1655,7 @@ jobs:
   release:
     name: "Publish Latest Release"
     needs: [linux, macos, windows, wasm, cpack-linux, doxygen]
-    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' || github.ref == 'refs/heads/ci-qa-latest-release-packaging' }}
+    if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/ci-fix-windows-packaging-failure' }}
     runs-on: ubuntu-latest
     environment: release
     timeout-minutes: 15
