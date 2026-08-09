@@ -189,7 +189,7 @@ jobs:
             type=raw,value=latest,enable=${{ matrix.variant != 'regression' && github.ref == 'refs/heads/master' }}
             type=sha,format=long,enable=${{ matrix.variant == 'regression' }}
             type=ref,event=branch,enable=${{ matrix.variant == 'regression' }}
-            type=raw,value=run-${{ github.run_id }}-${{ github.run_attempt }},enable=${{ matrix.variant == 'regression' }}
+            type=raw,value=run-${{ github.run_id }},enable=${{ matrix.variant == 'regression' }}
 
       - name: Log in to GHCR
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
@@ -804,7 +804,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           SOURCE_REPOSITORY: ghcr.io/internationalcolorconsortium/iccdev-ci-regression
-          SOURCE_TAG: run-${{ github.run_id }}-${{ github.run_attempt }}
+          SOURCE_TAG: run-${{ github.run_id }}
           TARGET_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
         run: |
           set -euo pipefail
