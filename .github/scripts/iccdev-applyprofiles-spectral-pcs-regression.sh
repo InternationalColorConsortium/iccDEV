@@ -1628,12 +1628,27 @@ run_replay()
     exit 1
   fi
 
-  if [ "$exit_code" -ge 128 ] && [ "$exit_matches" -ne 1 ]; then
-    if [ "$exit_code" -le 192 ]; then
-      echo "[FAIL] issue $issue replay crashed with signal $((exit_code - 128))"
-    else
-      echo "[FAIL] issue $issue replay returned non-graceful exit $exit_code"
-    fi
+  # Death by signal is checked independently of expected_exit, and deliberately
+  # so.  Consulting the expectation here -- whether as the single value this
+  # once compared against or as the '|' allow-list it is now -- lets a case name
+  # its own crash as an acceptable outcome: a case declaring '1|139' takes a real
+  # SIGSEGV straight to [PASS], which is the one thing an ASAN replay harness
+  # exists to prevent.  The hole is not new and the allow-list did not introduce
+  # it; a lone expected_exit of 139 opened it just as wide.  What the allow-list
+  # changed is how easily it is reached, because a case can now pair a plausible
+  # expectation with a signal value and still look deliberate.  No signal is ever
+  # an expected outcome here, so nothing may whitelist one.
+  #
+  # Bounding the band at 192 is what keeps that strictness compatible with the
+  # graceful refusals these replays actually assert.  128..192 is the signal
+  # range.  Above it sits main() returning an error, which these cases legitimately
+  # expect and which therefore stays governed by expected_exit via the equality
+  # check below: 1677's source image is unopenable and exits 255, while 1675's
+  # profile chain is rejected and exits 1 on this branch -- 255 on master, which
+  # still returns -1 there.  This is the same idiom master carries in
+  # iccdev-applyprofiles-observer-hbo-regression.sh.
+  if [ "$exit_code" -ge 128 ] && [ "$exit_code" -le 192 ]; then
+    echo "[FAIL] issue $issue replay crashed with signal $((exit_code - 128))"
     sed -n '1,80p' "$log"
     exit 1
   fi
