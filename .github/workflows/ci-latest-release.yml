@@ -1720,6 +1720,7 @@ jobs:
           git config --global --add safe.directory "$PWD"
           git config --global credential.helper ""
           unset GITHUB_TOKEN || true
+          source .github/scripts/sanitize-sed.sh
 
           bash .github/scripts/ci-safe-apt-update.sh
           sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -1736,7 +1737,7 @@ jobs:
           )
           for artifact in "${expected[@]}"; do
             if [ ! -d "artifacts/$artifact" ]; then
-              echo "::error::Missing expected release artifact: $artifact"
+              echo "::error::Missing expected release artifact: $(sanitize_line "$artifact")"
               exit 1
             fi
           done
@@ -1765,7 +1766,7 @@ jobs:
           )
           for required in "${matlab_required[@]}"; do
             if [ ! -s "${windows_bundle_root}/${required}" ]; then
-              echo "::error::Missing expected MATLAB release artifact: ${required}"
+              echo "::error::Missing expected MATLAB release artifact: $(sanitize_line "$required")"
               exit 1
             fi
           done
