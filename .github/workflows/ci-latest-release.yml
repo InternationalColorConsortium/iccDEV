@@ -847,6 +847,7 @@ jobs:
           name: iccdev-windows-msvc
           path: staging
           if-no-files-found: error
+          include-hidden-files: true
       - name: Host System Info
         shell: pwsh -NoProfile -NoLogo -NonInteractive -Command {0}
         run: |
