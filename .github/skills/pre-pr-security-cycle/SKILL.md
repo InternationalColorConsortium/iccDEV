@@ -45,6 +45,13 @@ security automation.
    `docs/governance/UPSTREAM_PR_READINESS.md` before requesting review.
 8. Prepare a concise handoff.
 
+For focused local iteration, run
+`.github/scripts/preflight-safety-checks.sh --fast-lane=matlab` for MATLAB-only
+work, or plain `--fast-lane` for other changed workflow/script surfaces. These
+skip local CodeQL database/query work. Do not add unrelated CTest coverage:
+MATLAB-only changes use the focused MATLAB build and QA, while the full local
+or hosted preflight remains the final workflow security signal.
+
 ## SAST Selection
 
 | Change | Required static checks |

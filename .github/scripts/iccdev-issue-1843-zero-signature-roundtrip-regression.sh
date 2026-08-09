@@ -243,7 +243,7 @@ fi
 # earlier revision of this test excluded the JSON round trip from the byte
 # comparison below for exactly that reason; both formats are now checked.
 # ===========================================================================
-MPE_XML="$REPO_ROOT/Testing/Display/sRGB_D65_MAT-300lx.xml"
+MPE_XML="$REPO_ROOT/Testing/Display/sRGB_D65_MAT-300cdm2.xml"
 if [ -f "$MPE_XML" ]; then
   awk '{
     if (!de && $0 ~ /<\/MultiProcessElements>/) {

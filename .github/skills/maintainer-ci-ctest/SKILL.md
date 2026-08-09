@@ -105,6 +105,17 @@ when practical.
 
 ## Local Validation
 
+For focused workflow iteration, start with:
+
+```bash
+.github/scripts/preflight-safety-checks.sh --fast-lane
+```
+
+This scans changed workflow/script surfaces without running CTest or local
+CodeQL databases. Run only the nearest feature test during iteration, then use
+`--fast-lane=matlab` for MATLAB-only work. Use the full preflight or hosted
+gates before final handoff.
+
 ```bash
 file <changed-files>
 git diff --check

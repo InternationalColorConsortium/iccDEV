@@ -35,6 +35,12 @@ This repository uses all three GitHub custom-instruction types:
 Keep agent rules in `AGENTS.md`, not in the mirrors. See
 https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions
 
+Copilot code review reads repository-wide instructions, the nearest applicable
+`AGENTS.md`, path-specific instructions, and relevant skills from the PR head
+branch. Keep review criteria in those canonical files so instruction changes
+can be tested in the same PR. Copilot reviews are advisory `Comment` reviews,
+not approvals or blocking merge decisions; required human review still applies.
+
 ## Current JSON/Config Regression Gate
 
 JSON/config parser fixes must fail closed: reject short arrays, non-numeric

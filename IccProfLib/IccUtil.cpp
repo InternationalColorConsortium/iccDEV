@@ -2779,7 +2779,7 @@ icValidateStatus CIccInfo::CheckData(std::string &sReport, const icDateTimeNumbe
 // The test cannot be made exact, and that is a property of the data rather than of
 // this implementation: a normalized XYZ and a genuine 1 cd/m^2 XYZ are the same
 // three numbers.  Testing/Display carries the proof as a fixture pair --
-// sRGB_D65_MAT-300lx.xml is 300 x (0.9504, 1.0, 1.0889) and sRGB_D65_MAT.xml is that
+// sRGB_D65_MAT-300cdm2.xml is 300 x (0.9504, 1.0, 1.0889) and sRGB_D65_MAT.xml is that
 // same triple at Y = 1, which is simultaneously the normalized form and a legal
 // 1 cd/m^2 dark surround.  Surrounds do live down there; the BT.2100 fixtures in
 // this corpus use 5 cd/m^2.  So the finding is reported as a possibility rather
