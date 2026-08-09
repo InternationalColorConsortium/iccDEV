@@ -216,16 +216,13 @@ require_tool afl-clang-fast++
 
 mkdir -p "$work_dir"
 
-core_pattern_is_safe=0
 if [ -r /proc/sys/kernel/core_pattern ]; then
     core_pattern="$(cat /proc/sys/kernel/core_pattern)"
     case "$core_pattern" in
         '|'*)
             echo "WARNING: piped Linux core_pattern can make AFL crashes look like hangs" >&2
             ;;
-        *)
-            core_pattern_is_safe=1
-            ;;
+        *) : ;;
     esac
 else
     echo "WARNING: cannot read Linux core_pattern; AFL hangs remain blocking" >&2
