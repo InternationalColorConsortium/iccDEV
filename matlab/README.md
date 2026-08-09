@@ -38,14 +38,15 @@ ctest --test-dir build-matlab-full --output-on-failure --no-tests=error
 ### 2. Build the MEX extension
 
 ```matlab
-addpath('/path/to/iccDEV/matlab');
-build_mex('BuildDir', '/path/to/iccDEV/build-matlab-full');
+repo_root = pwd;
+addpath(fullfile(repo_root, 'matlab'));
+build_mex('BuildDir', fullfile(repo_root, 'build-matlab-full'));
 ```
 
 Or with environment variable:
 
 ```bash
-export ICCDEV_BUILD_DIR=/path/to/iccDEV/build-matlab-full
+export ICCDEV_BUILD_DIR="$PWD/build-matlab-full"
 ```
 
 ```matlab
@@ -55,7 +56,8 @@ build_mex();
 ### 3. Use it
 
 ```matlab
-addpath('/path/to/iccDEV/matlab');
+repo_root = pwd;
+addpath(fullfile(repo_root, 'matlab'));
 
 % Read a profile
 p = iccdev.IccProfile('sRGB.icc');
@@ -157,16 +159,30 @@ native state.
 ### Windows (MSVC)
 
 Configure and build a Release tree with the same MSVC toolchain MATLAB reports
-from `mex.getCompilerConfigurations('C++', 'Installed')`:
+from `mex.getCompilerConfigurations('C++', 'Selected')`. The canonical
+PowerShell workflow in
+[MATLAB bindings and QA](../docs/matlab-bindings.md#windows-desktop-setup)
+derives the checkout, MATLAB, Visual Studio, and vcpkg paths and uses argument
+arrays to avoid quoting and line-continuation errors.
 
 ```powershell
-cmake -S Build\Cmake -B msvc -G "Visual Studio 17 2022" -A x64 `
-  -DCMAKE_TOOLCHAIN_FILE="C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake"
-cmake --build msvc --config Release --target IccProfLib2-static -- /m
+$Repo = (git rev-parse --show-toplevel).Trim()
+$Build = Join-Path $Repo 'msvc'
+# Discover $Toolchain as documented in docs/matlab-bindings.md.
+$ConfigureArgs = @(
+  '-S', (Join-Path $Repo 'Build\Cmake')
+  '-B', $Build
+  '-G', 'Visual Studio 17 2022'
+  '-A', 'x64'
+  "-DCMAKE_TOOLCHAIN_FILE=$Toolchain"
+)
+cmake @ConfigureArgs
+cmake --build $Build --config Release --target IccProfLib2-static -- /m
 ```
 
 ```matlab
-build_mex('BuildDir', 'C:\path\to\iccDEV\msvc');
+repo_root = fileparts(fileparts(which('build_mex')));
+build_mex('BuildDir', fullfile(repo_root, 'msvc'));
 ```
 
 When `ICC_USE_ZLIB=ON`, `build_mex` reads `CMakeCache.txt`, links the matching
@@ -175,13 +191,14 @@ vcpkg zlib import library, and copies its runtime DLL beside `icc_mex`.
 ### Linux / macOS
 
 ```matlab
-build_mex('BuildDir', '/path/to/build-matlab-full');
+repo_root = fileparts(fileparts(which('build_mex')));
+build_mex('BuildDir', fullfile(repo_root, 'build-matlab-full'));
 ```
 
 ### GNU Octave
 
 ```bash
-export ICCDEV_BUILD_DIR=/path/to/build-matlab-full
+export ICCDEV_BUILD_DIR="$PWD/build-matlab-full"
 octave --eval "addpath('matlab'); build_mex();"
 ```
 
@@ -220,10 +237,20 @@ Validate the compiled library against the same arithmetic across all four
 `gamma-*.icc` fixtures:
 
 ```powershell
-cmake --build msvc --config Release --target iccCurveGammaU8Fixed8Test
-ctest --test-dir msvc -C Release `
-  -R '^iccdev\.curve-gamma-u8fixed8$' `
-  --output-on-failure --no-tests=error
+$NativeBuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'iccCurveGammaU8Fixed8Test'
+)
+cmake @NativeBuildArgs
+$NativeTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.curve-gamma-u8fixed8$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @NativeTestArgs
 ```
 
 Validate the same profile with the published container:
@@ -247,11 +274,20 @@ Validate the compiled `CIccInfo::CheckLuminance` implementation separately
 from a CMake tree configured with `ENABLE_TESTS=ON`:
 
 ```powershell
-cmake --build msvc --config Release `
-  --target iccLuminanceNormalizationTest
-ctest --test-dir msvc -C Release `
-  -R '^iccdev\.luminance-normalization$' `
-  --output-on-failure --no-tests=error
+$NativeBuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'iccLuminanceNormalizationTest'
+)
+cmake @NativeBuildArgs
+$NativeTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.luminance-normalization$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @NativeTestArgs
 ```
 
 Reproduce issue

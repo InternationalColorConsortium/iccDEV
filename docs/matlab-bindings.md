@@ -5,26 +5,123 @@ package for profile inspection and color transforms.
 
 ## Windows Desktop Setup
 
-Use a 64-bit Release build and the C++ compiler configured by MATLAB:
+Run the following commands from the repository root in 64-bit PowerShell. The
+setup derives paths from the checkout and installed tools; do not copy a
+machine-specific checkout, MATLAB, Visual Studio, or vcpkg path into shared
+instructions.
 
-```matlab
-cfg = mex.getCompilerConfigurations('C++', 'Installed');
-disp({cfg.Name});
-```
-
-For Visual Studio 2022 with vcpkg dependencies:
+Discover the checkout, MATLAB, Visual Studio, and vcpkg:
 
 ```powershell
-cmake -S Build\Cmake -B msvc -G "Visual Studio 17 2022" -A x64 `
-  -DCMAKE_TOOLCHAIN_FILE="C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake"
-cmake --build msvc --config Release --target IccProfLib2-static -- /m
+$ErrorActionPreference = 'Stop'
+$Repo = (git rev-parse --show-toplevel).Trim()
+$Build = Join-Path $Repo 'msvc'
+
+$MatlabCommand = Get-Command matlab -ErrorAction SilentlyContinue
+if ($MatlabCommand) {
+  $MatlabExe = $MatlabCommand.Source
+} else {
+  $MatlabPattern = Join-Path $env:ProgramFiles 'MATLAB\*\bin\matlab.exe'
+  $MatlabExe = Get-ChildItem $MatlabPattern |
+    Sort-Object FullName -Descending |
+    Select-Object -First 1 -ExpandProperty FullName
+}
+if (-not $MatlabExe) {
+  throw 'MATLAB was not found on PATH or under Program Files.'
+}
+
+$VsInstallerDir = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer'
+$VsWhere = Join-Path $VsInstallerDir 'vswhere.exe'
+if (-not (Test-Path $VsWhere)) {
+  throw 'vswhere.exe was not found. Install Visual Studio Build Tools.'
+}
+$VsWhereArgs = @(
+  '-latest'
+  '-version', '[17.0,18.0)'
+  '-products', '*'
+  '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+  '-property', 'installationPath'
+)
+$VsInstall = & $VsWhere @VsWhereArgs
+if (-not $VsInstall) {
+  throw 'A Visual Studio installation with the MSVC x64 tools was not found.'
+}
+
+if ($env:VCPKG_ROOT) {
+  $VcpkgRoot = $env:VCPKG_ROOT
+} else {
+  $VcpkgRoot = Join-Path $VsInstall 'VC\vcpkg'
+}
+$Toolchain = Join-Path $VcpkgRoot 'scripts\buildsystems\vcpkg.cmake'
+if (-not (Test-Path $Toolchain)) {
+  throw "The vcpkg CMake toolchain was not found at $Toolchain."
+}
 ```
 
-Build the gateway from MATLAB:
+Confirm that MATLAB has an installed C++ compiler:
 
-```matlab
-addpath('E:\opt\iccDEV\matlab');
-build_mex('BuildDir', 'E:\opt\iccDEV\msvc');
+```powershell
+& $MatlabExe -batch @"
+cfg = mex.getCompilerConfigurations('C++', 'Selected');
+assert(~isempty(cfg), 'No C++ MEX compiler is selected. Run mex -setup C++.');
+assert(contains(cfg.Name, 'Microsoft Visual C++ 2022'), ...
+  'Select Microsoft Visual C++ 2022 with mex -setup C++.');
+disp(cfg.Name);
+"@
+if ($LASTEXITCODE -ne 0) {
+  throw "MATLAB compiler discovery failed with exit code $LASTEXITCODE."
+}
+```
+
+Configure and build a 64-bit Release static library. Argument arrays avoid
+PowerShell line-continuation and quoting failures:
+
+```powershell
+$ConfigureArgs = @(
+  '-S', (Join-Path $Repo 'Build\Cmake')
+  '-B', $Build
+  '-G', 'Visual Studio 17 2022'
+  '-A', 'x64'
+  "-DCMAKE_TOOLCHAIN_FILE=$Toolchain"
+  '-DVCPKG_TARGET_TRIPLET=x64-windows'
+  '-DENABLE_TESTS=ON'
+  '-DENABLE_TOOLS=ON'
+  '-DENABLE_ICCXML=ON'
+  '-DENABLE_ICCJSON=ON'
+  '-DENABLE_IMAGE_TOOLS=ON'
+  '-DENABLE_CMM_TOOLS=ON'
+)
+cmake @ConfigureArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "CMake configure failed with exit code $LASTEXITCODE."
+}
+
+$BuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'IccProfLib2-static'
+  '--', '/m'
+)
+cmake @BuildArgs
+if ($LASTEXITCODE -ne 0) {
+  throw "Release library build failed with exit code $LASTEXITCODE."
+}
+```
+
+Build the gateway in a batch MATLAB process:
+
+```powershell
+$env:ICCDEV_BUILD_DIR = $Build
+$env:ICCDEV_REPO_ROOT = $Repo
+& $MatlabExe -batch @"
+repo_root = getenv('ICCDEV_REPO_ROOT');
+cd(repo_root);
+addpath(fullfile(repo_root, 'matlab'));
+build_mex();
+"@
+if ($LASTEXITCODE -ne 0) {
+  throw "MEX build failed with exit code $LASTEXITCODE."
+}
 ```
 
 The build script selects a Release `IccProfLib2` library. If the selected CMake
@@ -44,9 +141,26 @@ Keep those paths intact when extracting or relocating the bundle. Release CI
 runs MATLAB from the staged archive tree before upload; testing only the source
 checkout does not prove that the published payload is self-contained.
 
-To make one checkout the default for new MATLAB sessions, set the user
-`MATLABPATH` environment variable to its `matlab` directory, then fully restart
-MATLAB Desktop.
+To make the checkout available to new MATLAB Desktop sessions without replacing
+existing entries:
+
+```powershell
+$MatlabDir = Join-Path $Repo 'matlab'
+$UserMatlabPath = [Environment]::GetEnvironmentVariable('MATLABPATH', 'User')
+$MatlabPathEntries = @(
+  $UserMatlabPath -split ';' |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+)
+if ($MatlabPathEntries -notcontains $MatlabDir) {
+  [Environment]::SetEnvironmentVariable(
+    'MATLABPATH',
+    (@($MatlabDir) + $MatlabPathEntries) -join ';',
+    'User')
+}
+[Environment]::SetEnvironmentVariable('ICCDEV_BUILD_DIR', $Build, 'User')
+```
+
+Fully restart MATLAB Desktop after changing user environment variables.
 
 ## Profiles
 
@@ -67,8 +181,9 @@ The minimum display set includes:
 Run the focused suite:
 
 ```matlab
-addpath('E:\opt\iccDEV\matlab');
-addpath('E:\opt\iccDEV\matlab\tests');
+repo_root = fileparts(fileparts(which('build_mex')));
+addpath(fullfile(repo_root, 'matlab'));
+addpath(fullfile(repo_root, 'matlab', 'tests'));
 test_iccdev();
 ```
 
@@ -81,19 +196,21 @@ run_local_qa();
 Run the demonstrations:
 
 ```matlab
-run('E:\opt\iccDEV\matlab\examples\read_profile.m');
-run('E:\opt\iccDEV\matlab\examples\color_transform.m');
-run('E:\opt\iccDEV\matlab\examples\gamma_curve.m');
+run(fullfile(repo_root, 'matlab', 'examples', 'read_profile.m'));
+run(fullfile(repo_root, 'matlab', 'examples', 'color_transform.m'));
+run(fullfile(repo_root, 'matlab', 'examples', 'gamma_curve.m'));
 ```
 
 Reproduce the spectral-viewing luminance calculations from issue #1811
 without a C++ build or MEX gateway:
 
 ```matlab
-addpath('E:\opt\iccDEV\matlab');
-addpath('E:\opt\iccDEV\matlab\tests');
+repo_root = fileparts(fileparts(which('build_mex')));
+addpath(fullfile(repo_root, 'matlab'));
+addpath(fullfile(repo_root, 'matlab', 'tests'));
 test_luminance_normalization();
-run('E:\opt\iccDEV\matlab\examples\luminance_normalization.m');
+run(fullfile(repo_root, 'matlab', 'examples', ...
+  'luminance_normalization.m'));
 ```
 
 This check reads the `sRGB_D65_MAT` fixtures authored at Y=1, 300, and
@@ -108,11 +225,21 @@ Run the same native check locally from a CMake tree configured with
 `ENABLE_TESTS=ON`:
 
 ```powershell
-cmake --build msvc --config Release `
-  --target iccLuminanceNormalizationTest
-ctest --test-dir msvc -C Release `
-  -R '^iccdev\.luminance-normalization$' `
-  --output-on-failure --no-tests=error
+$NativeBuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'iccLuminanceNormalizationTest'
+)
+cmake @NativeBuildArgs
+
+$NativeTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.luminance-normalization$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @NativeTestArgs
 ```
 
 Interpret the layers separately:
@@ -256,7 +383,8 @@ After changing C++ gateway or IccProfLib code:
 ```matlab
 clear classes
 clear mex
-build_mex('BuildDir', 'E:\opt\iccDEV\msvc');
+repo_root = fileparts(fileparts(which('build_mex')));
+build_mex('BuildDir', fullfile(repo_root, 'msvc'));
 run_local_qa();
 ```
 
@@ -286,7 +414,8 @@ Run the MATLAB validation:
 ```matlab
 result = run_docker_qa();
 disp(result.imageId);
-run('E:\opt\iccDEV\matlab\examples\docker_interop.m');
+repo_root = fileparts(fileparts(which('build_mex')));
+run(fullfile(repo_root, 'matlab', 'examples', 'docker_interop.m'));
 ```
 
 `iccdev.docker_validate` mounts only the selected profile file read-only,

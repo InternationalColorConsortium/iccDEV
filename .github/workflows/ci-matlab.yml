@@ -19,6 +19,7 @@ on:
       - master
       - ci-qa-matlab-examples
       - ci-qa-matlab-examples-gamma
+      - ci-qa-matlab-windows-powershell
     paths:
       - ".github/workflows/ci-matlab.yml"
       - "Build/Cmake/**"
@@ -111,28 +112,39 @@ jobs:
           }
           . .trusted-helpers/.github/scripts/sanitize.ps1
 
-          cmake -S Build\Cmake -B out\matlab `
-            -G "Visual Studio 17 2022" `
-            -A x64 `
-            -DENABLE_TESTS=ON `
-            -DENABLE_TOOLS=OFF `
-            -DENABLE_WXWIDGETS=OFF `
-            -DENABLE_SHARED_LIBS=OFF `
-            -DENABLE_STATIC_LIBS=ON `
-            -DENABLE_ICCXML=OFF `
-            -DENABLE_ICCJSON=OFF `
-            -DENABLE_IMAGE_TOOLS=OFF `
-            -DENABLE_CMM_TOOLS=OFF `
-            -DENABLE_IIS_TOOLS=OFF `
-            -DICC_USE_ZLIB=OFF `
-            -Wno-dev
+          $configureArgs = @(
+            '-S', 'Build\Cmake'
+            '-B', 'out\matlab'
+            '-G', 'Visual Studio 17 2022'
+            '-A', 'x64'
+            '-DENABLE_TESTS=ON'
+            '-DENABLE_TOOLS=OFF'
+            '-DENABLE_WXWIDGETS=OFF'
+            '-DENABLE_SHARED_LIBS=OFF'
+            '-DENABLE_STATIC_LIBS=ON'
+            '-DENABLE_ICCXML=OFF'
+            '-DENABLE_ICCJSON=OFF'
+            '-DENABLE_IMAGE_TOOLS=OFF'
+            '-DENABLE_CMM_TOOLS=OFF'
+            '-DENABLE_IIS_TOOLS=OFF'
+            '-DICC_USE_ZLIB=OFF'
+            '-Wno-dev'
+          )
+          cmake @configureArgs
           if ($LASTEXITCODE -ne 0) {
             throw "CMake configure failed with exit code $LASTEXITCODE"
           }
 
-          cmake --build out\matlab --config Release `
-            --target IccProfLib2-static iccLuminanceNormalizationTest `
-              iccColorimetryMethodsTest --parallel
+          $buildArgs = @(
+            '--build', 'out\matlab'
+            '--config', 'Release'
+            '--target'
+            'IccProfLib2-static'
+            'iccLuminanceNormalizationTest'
+            'iccColorimetryMethodsTest'
+            '--parallel'
+          )
+          cmake @buildArgs
           if ($LASTEXITCODE -ne 0) {
             throw "Native regression test build failed with exit code $LASTEXITCODE"
           }

@@ -10,6 +10,7 @@ point to deeper references.
 |-------|------------------|
 | User install and packaging | `docs/install.md` |
 | User build instructions | `docs/build.md` |
+| MATLAB bindings and Windows PowerShell setup | `docs/matlab-bindings.md` |
 | CTest tool suites and add-test process | `docs/ctest.md` |
 | CLI tools and shared option tables | `docs/tools-cli-reference.md` |
 | JSON workflow | `docs/iccjson.md` |

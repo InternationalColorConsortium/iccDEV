@@ -11,21 +11,32 @@ profiles, examples, and native handle lifecycle behavior.
    artifacts.
 3. Confirm MATLAB has an installed C++ compiler:
 
-   ```matlab
-   mex.getCompilerConfigurations('C++', 'Installed')
+   ```powershell
+   $Repo = (git rev-parse --show-toplevel).Trim()
+   $Build = Join-Path $Repo 'msvc'
+   # Discover $MatlabExe and the vcpkg toolchain as documented in
+   # docs/matlab-bindings.md; do not embed local absolute paths.
+   & $MatlabExe -batch "cfg=mex.getCompilerConfigurations('C++','Selected'); assert(~isempty(cfg)); assert(contains(cfg.Name,'Microsoft Visual C++ 2022')); disp(cfg.Name)"
    ```
 
 4. Build the Release static library:
 
    ```powershell
-   cmake --build msvc --config Release --target IccProfLib2-static -- /m
+   $BuildArgs = @(
+     '--build', $Build
+     '--config', 'Release'
+     '--target', 'IccProfLib2-static'
+     '--', '/m'
+   )
+   cmake @BuildArgs
    ```
 
 5. Build the MEX gateway:
 
-   ```matlab
-   addpath('matlab');
-   build_mex('BuildDir', fullfile(pwd, 'msvc'));
+   ```powershell
+   $env:ICCDEV_BUILD_DIR = $Build
+   $env:ICCDEV_REPO_ROOT = $Repo
+   & $MatlabExe -batch "repo_root=getenv('ICCDEV_REPO_ROOT'); cd(repo_root); addpath(fullfile(repo_root, 'matlab')); build_mex()"
    ```
 
 6. Generate or copy canonical `Testing/Display/*.icc` profiles. Exclude logs,
@@ -40,11 +51,20 @@ profiles, examples, and native handle lifecycle behavior.
    ```
 
    ```powershell
-   cmake --build msvc --config Release `
-     --target iccLuminanceNormalizationTest
-   ctest --test-dir msvc -C Release `
-     -R '^iccdev\.luminance-normalization$' `
-     --output-on-failure --no-tests=error
+   $NativeBuildArgs = @(
+     '--build', $Build
+     '--config', 'Release'
+     '--target', 'iccLuminanceNormalizationTest'
+   )
+   cmake @NativeBuildArgs
+   $NativeTestArgs = @(
+     '--test-dir', $Build
+     '-C', 'Release'
+     '-R', '^iccdev\.luminance-normalization$'
+     '--output-on-failure'
+     '--no-tests=error'
+   )
+   ctest @NativeTestArgs
    ```
 
    The MATLAB test confirms fixture arithmetic independently. The CTest must
@@ -76,6 +96,8 @@ profiles, examples, and native handle lifecycle behavior.
 ## Failure Rules
 
 - Do not add `+iccdev/private` to MATLAB's path.
+- Do not publish local checkout, MATLAB, Visual Studio, or vcpkg absolute paths;
+  derive them with the canonical PowerShell workflow.
 - Do not link a Release MEX against Debug CRT libraries.
 - If `ICC_USE_ZLIB=ON`, require the matching zlib import library and runtime.
 - Windows MATLAB must use Windows MSVC artifacts; WSL2 artifacts are for

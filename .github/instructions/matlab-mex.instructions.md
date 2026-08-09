@@ -79,6 +79,10 @@ out = cmm.apply(pixelData);
 
 ## Build
 
+`docs/matlab-bindings.md` is the canonical user workflow, including portable
+Windows PowerShell discovery for the checkout, MATLAB, Visual Studio, and
+vcpkg. Do not publish machine-specific absolute paths in examples.
+
 ### MATLAB
 
 ```matlab
@@ -143,10 +147,21 @@ Then run the native C++ implementation check from a CMake tree configured with
 `ENABLE_TESTS=ON`:
 
 ```powershell
-cmake --build msvc --config Release --target iccLuminanceNormalizationTest
-ctest --test-dir msvc -C Release `
-  -R '^iccdev\.luminance-normalization$' `
-  --output-on-failure --no-tests=error
+$NativeBuildArgs = @(
+  '--build', $Build
+  '--config', 'Release'
+  '--target', 'iccLuminanceNormalizationTest'
+)
+cmake @NativeBuildArgs
+
+$NativeTestArgs = @(
+  '--test-dir', $Build
+  '-C', 'Release'
+  '-R', '^iccdev\.luminance-normalization$'
+  '--output-on-failure'
+  '--no-tests=error'
+)
+ctest @NativeTestArgs
 ```
 
 The MATLAB layer validates XML fixture scaling and emulates `icFloatNumber`
@@ -162,11 +177,9 @@ values, and physical Y values 5, 300, and 500.
 
 ## Common Pitfalls
 
-- `build_mex.m` expects the iccDEV cmake build to be completed first.
-  Run `cmake -S Build/Cmake -B build-matlab-full -DCMAKE_BUILD_TYPE=Release
-  -DENABLE_TESTS=ON -DENABLE_TOOLS=ON -DENABLE_ICCXML=ON -DENABLE_ICCJSON=ON
-  -DENABLE_IMAGE_TOOLS=ON -DENABLE_CMM_TOOLS=ON && cmake --build
-  build-matlab-full -j$(nproc)` before building MEX.
+- `build_mex.m` expects the iccDEV CMake build to be completed first. Use the
+  platform-specific argument-array workflow in `docs/matlab-bindings.md`;
+  avoid Bash operators such as `&&` and `$(nproc)` in PowerShell instructions.
 - Normal MATLAB/Octave builds reject Debug-only `IccProfLib2` libraries. Use a
   Release iccDEV build, or call `build_mex('Debug', true)` only with a compatible
   debug MATLAB/Octave runtime.
