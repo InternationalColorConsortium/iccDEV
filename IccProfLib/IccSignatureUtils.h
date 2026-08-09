@@ -153,8 +153,14 @@ inline bool IsSpaceSpectralPCS(icColorSpaceSignature sig)
 // TRACE_LOG(msg, ...)  - logs message and trace together
 // -----------------------------------------------------------------------------
 
-#ifdef __linux__
-  #include <execinfo.h>
+#if defined(__linux__) && defined(__has_include)
+  #if __has_include(<execinfo.h>)
+    #include <execinfo.h>
+    #define ICC_HAS_EXECINFO 1
+  #endif
+#endif
+
+#ifdef ICC_HAS_EXECINFO
   #define TRACE_CALLER() \
     do { \
       void* bt_buffer[10]; \
