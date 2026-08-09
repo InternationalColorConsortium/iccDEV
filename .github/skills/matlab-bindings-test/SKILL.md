@@ -76,6 +76,7 @@ profiles, examples, and native handle lifecycle behavior.
    addpath('matlab/tests');
    test_iccdev();
    run_local_qa();
+   test_add_docker_path();
    run_gamma_qa();
    test_plot();
    run_docker_qa();

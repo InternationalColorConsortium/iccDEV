@@ -113,6 +113,7 @@ cmm.close();
 | `iccdev.qa.check_luminance_normalization()` | Reproduce spectral-viewing luminance scaling and warning-window checks |
 | `iccdev.docker_available(image)` | Check Docker daemon and image availability |
 | `iccdev.docker_validate(profile, ...)` | Run containerized dump and round-trip validation |
+| `add_docker_path(directory)` | Add a user-selected Docker CLI directory to the current MATLAB process |
 | `build_mex(...)` | Build the MEX extension |
 | `run_local_qa()` | Run local MEX regression and stress checks |
 | `run_gamma_qa()` | Verify issue #815 curveType u8Fixed8 gamma decoding |
@@ -281,6 +282,16 @@ Validate the same profile with the published container:
 run_docker_qa();
 run('matlab/examples/docker_interop.m');
 ```
+
+If Docker is installed but is not on the PATH inherited by MATLAB Desktop,
+select its CLI directory explicitly:
+
+```matlab
+add_docker_path(docker_cli_directory);
+```
+
+The helper validates the directory and executable, updates only the current
+MATLAB process, and does not run Docker or QA automatically.
 
 Reproduce the issue #1811 spectral-viewing luminance calculations without
 building the MEX gateway:

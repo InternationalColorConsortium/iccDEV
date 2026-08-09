@@ -9,6 +9,15 @@ function test_plot()
   profile_path = fullfile(repo_root, 'Testing', ...
     'sRGB_v4_ICC_preference.icc');
 
+  invalid_failed = false;
+  try
+    iccdev.plot(char('first', 'second'), 'Visible', 'off');
+  catch
+    invalid_failed = true;
+  end
+  assert(invalid_failed, ...
+    'Multi-row character arrays must be rejected as profile paths.');
+
   figures = {};
   try
     plots = iccdev.plot(profile_path, 'Visible', 'off');

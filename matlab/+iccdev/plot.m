@@ -427,7 +427,7 @@ function delete_if_exists(path)
 end
 
 function tf = is_text_scalar(value)
-  tf = ischar(value);
+  tf = ischar(value) && (isempty(value) || size(value, 1) == 1);
   if ~tf && (exist('isstring', 'builtin') == 5 || ...
       exist('isstring', 'file') == 2)
     tf = isstring(value) && isscalar(value);

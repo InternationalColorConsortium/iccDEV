@@ -189,6 +189,7 @@ jobs:
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
             run_local_qa();
+            test_add_docker_path();
             test_plot();
             run(fullfile('matlab', 'examples', 'read_profile.m'));
             run(fullfile('matlab', 'examples', 'color_transform.m'));

@@ -34,6 +34,7 @@ matlab/
     gamma_curve.m         # curveType u8Fixed8 gamma calculation example
   build_mex.m             # Build script (auto-detects library location)
   run_gamma_qa.m          # Issue #815 gamma fixture and math verification
+  add_docker_path.m       # Opt-in current-process Docker PATH helper
   tests/
     test_iccdev.m         # Test suite (MATLAB/Octave compatible)
     test_luminance_normalization.m # Dependency-free issue #1811 check
@@ -128,6 +129,7 @@ For the extended local smoke and stress checks:
 addpath('matlab');
 run_local_qa();
 run_gamma_qa();
+test_add_docker_path();
 test_plot();
 ```
 

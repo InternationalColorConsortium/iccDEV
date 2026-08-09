@@ -444,6 +444,16 @@ repo_root = fileparts(fileparts(which('build_mex')));
 run(fullfile(repo_root, 'matlab', 'examples', 'docker_interop.m'));
 ```
 
+If MATLAB Desktop does not inherit the Docker CLI directory:
+
+```matlab
+add_docker_path(docker_cli_directory);
+```
+
+The directory must contain `docker.exe` on Windows or `docker` elsewhere. The
+helper updates only the current MATLAB process and does not execute Docker or
+QA.
+
 `iccdev.docker_validate` mounts only the selected profile file read-only,
 disables container networking, drops Linux capabilities, enables
 `no-new-privileges`, limits CPU, memory, and process count, and runs only fixed
