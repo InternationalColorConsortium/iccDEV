@@ -3219,6 +3219,82 @@ endfunction()
 # validity switch inline -- so they can drift apart silently; the test asserts they agree.
 # Adapted with credit from @xsscx's signature-utils.cpp on ci-qa-flags, which is what first
 # surfaced the MCS naming gap. Links IccProfLib only; header-inline contract, no fixture.
+# #1853 harvest: CTiffImg computes bytes-per-line in both directions and only checked one.
+# Open() routes it through calcBytesPerLine() (TiffImg.cpp:471,:489), which multiplies in 64
+# bits and refuses a result that will not fit in unsigned int; Create() did the same sums raw,
+# and additionally narrowed TIFFStripSize()'s signed 64-bit tmsize_t with a C cast. Reachable
+# because Create() runs before any pixel data is read (iccApplyProfiles.cpp:508), so a source
+# TIFF need only DECLARE a large ImageWidth -- and the big strip allocation that looks like it
+# would fail first is granted under Linux overcommit, so Create() returned true carrying a
+# bytes-per-line smaller than one row, which the caller then uses to size its row buffer
+# (iccApplyProfiles.cpp:539).
+#
+# This is the only regression test that compiles a Tools translation unit rather than linking
+# IccProfLib alone: CTiffImg lives in the tool, so the contract cannot be reached any other
+# way. It therefore needs libtiff, and is skipped when TIFF is unavailable.
+function(iccdev_add_tiff_create_overflow_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+  if(NOT TARGET TIFF::TIFF AND NOT TIFF_LIBRARY)
+    find_package(TIFF QUIET)
+  endif()
+  if(TARGET TIFF::TIFF)
+    set(_tiff_lib TIFF::TIFF)
+  elseif(TIFF_LIBRARY)
+    set(_tiff_lib ${TIFF_LIBRARY})
+  else()
+    message(STATUS "iccdev.tiff-create-overflow: libtiff not found, test skipped")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccTiffCreateOverflowTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/tiff-create-bytesperline-overflow.cpp"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles/TiffImg.cpp"
+  )
+  target_compile_features(iccTiffCreateOverflowTest PRIVATE cxx_std_17)
+  target_include_directories(iccTiffCreateOverflowTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccApplyProfiles"
+  )
+  target_link_libraries(iccTiffCreateOverflowTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB} ${_tiff_lib})
+  add_dependencies(check iccTiffCreateOverflowTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.tiff-create-overflow
+      COMMAND "$<TARGET_FILE:iccTiffCreateOverflowTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.tiff-create-overflow
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccTiffCreateOverflowTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.tiff-create-overflow PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 120
+    LABELS "iccdev;tools;tiff;overflow;regression"
+  )
+  if(WIN32)
+    set(_tiffcreate_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccTiffCreateOverflowTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _tiffcreate_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.tiff-create-overflow PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_tiffcreate_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_signature_utils_contract_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4268,6 +4344,7 @@ if(WIN32)
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
   iccdev_add_signature_utils_contract_test()
+  iccdev_add_tiff_create_overflow_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -4539,6 +4616,7 @@ iccdev_add_tag_name_spelling_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
 iccdev_add_signature_utils_contract_test()
+iccdev_add_tiff_create_overflow_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
