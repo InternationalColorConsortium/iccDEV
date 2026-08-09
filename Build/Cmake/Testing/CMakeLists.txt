@@ -3210,6 +3210,64 @@ endfunction()
 # (icGetSigVal parses the hex escape back), which is why the test asserts the round trip
 # as well as the spelling: the fix changes which icGetSigVal branch a real profile takes.
 # Links IccProfLib only; the contract is the naming tables, not a profile round-trip.
+# #1853 harvest: IccSignatureUtils.h had no test and no consumer -- nothing in the tree
+# included it. That is how it came to sit with an unguarded `#include <execinfo.h>` behind a
+# bare __linux__ (fixed in #2072). This test is deliberately the header's first consumer, so
+# CI compiles it from now on rather than only reading it. Coverage-wise the point is that
+# ColorSpaceSignatureToStr, IsValidColorSpaceSignature and DescribeColorSpaceSignature each
+# carry their own copy of the same signature knowledge -- Describe() re-implements the
+# validity switch inline -- so they can drift apart silently; the test asserts they agree.
+# Adapted with credit from @xsscx's signature-utils.cpp on ci-qa-flags, which is what first
+# surfaced the MCS naming gap. Links IccProfLib only; header-inline contract, no fixture.
+function(iccdev_add_signature_utils_contract_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccSignatureUtilsContractTest
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/signature-utils-contract.cpp"
+  )
+  target_compile_features(iccSignatureUtilsContractTest PRIVATE cxx_std_17)
+  target_include_directories(iccSignatureUtilsContractTest PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccSignatureUtilsContractTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccSignatureUtilsContractTest)
+
+  if(WIN32)
+    add_test(
+      NAME iccdev.signature-utils-contract
+      COMMAND "$<TARGET_FILE:iccSignatureUtilsContractTest>"
+    )
+  else()
+    add_test(
+      NAME iccdev.signature-utils-contract
+      COMMAND
+        "${CMAKE_COMMAND}" -E env
+        ${ICCDEV_TEST_ENV}
+        "$<TARGET_FILE:iccSignatureUtilsContractTest>"
+    )
+  endif()
+  set_tests_properties(iccdev.signature-utils-contract PROPERTIES
+    TIMEOUT 120
+    LABELS "iccdev;iccprofLib;signature;naming;regression"
+  )
+  if(WIN32)
+    set(_sigutils_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccSignatureUtilsContractTest>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _sigutils_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.signature-utils-contract PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_sigutils_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 function(iccdev_add_mcs_colorspace_name_test)
   if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}")
     return()
@@ -4209,6 +4267,7 @@ if(WIN32)
   iccdev_add_tag_name_spelling_test()
   iccdev_add_struct_name_spelling_test()
   iccdev_add_mcs_colorspace_name_test()
+  iccdev_add_signature_utils_contract_test()
   iccdev_add_mpexml_unknown_reserved_test()
   iccdev_add_proflib_exported_data_linkage_test()
   iccdev_add_proflib_exported_global_definitions_test()
@@ -4479,6 +4538,7 @@ iccdev_add_luminance_normalization_test()
 iccdev_add_tag_name_spelling_test()
 iccdev_add_struct_name_spelling_test()
 iccdev_add_mcs_colorspace_name_test()
+iccdev_add_signature_utils_contract_test()
 iccdev_add_mpexml_unknown_reserved_test()
 iccdev_add_proflib_exported_data_linkage_test()
 iccdev_add_proflib_exported_global_definitions_test()
