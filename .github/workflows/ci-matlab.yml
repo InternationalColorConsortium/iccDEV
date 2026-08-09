@@ -118,7 +118,7 @@ jobs:
             '-G', 'Visual Studio 17 2022'
             '-A', 'x64'
             '-DENABLE_TESTS=ON'
-            '-DENABLE_TOOLS=OFF'
+            '-DENABLE_TOOLS=ON'
             '-DENABLE_WXWIDGETS=OFF'
             '-DENABLE_SHARED_LIBS=OFF'
             '-DENABLE_STATIC_LIBS=ON'
@@ -140,6 +140,7 @@ jobs:
             '--config', 'Release'
             '--target'
             'IccProfLib2-static'
+            'iccProfilePlot'
             'iccLuminanceNormalizationTest'
             'iccColorimetryMethodsTest'
             '--parallel'
@@ -188,6 +189,7 @@ jobs:
             addpath('matlab');
             addpath(fullfile('matlab', 'tests'));
             run_local_qa();
+            test_plot();
             run(fullfile('matlab', 'examples', 'read_profile.m'));
             run(fullfile('matlab', 'examples', 'color_transform.m'));
             run(fullfile('matlab', 'examples', 'gamma_curve.m'))

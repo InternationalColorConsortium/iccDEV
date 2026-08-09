@@ -30,6 +30,8 @@ correct profile or transform results.
    - Release/Debug mismatch
    - missing static dependency or runtime DLL
    - package/private path misuse
+   - missing or stale `iccProfilePlot` executable
+   - invalid visualization JSON or MATLAB graph rendering
    - stale loaded MEX
    - missing generated profiles
    - CMM input shape or lifecycle error
@@ -93,8 +95,8 @@ correct profile or transform results.
    CTest is authoritative for what `Describe()` prints and what `ToJson()`
    emits.
 8. Fix the root cause and add the nearest MATLAB or native regression.
-9. Run `test_iccdev`, `run_local_qa`, `run_gamma_qa`, `run_docker_qa`, and all
-   examples.
+9. Run `test_iccdev`, `run_local_qa`, `run_gamma_qa`, `test_plot`,
+   `run_docker_qa`, and all examples.
 10. Preserve unrelated generated files and report exact validation results.
 11. Review staged and untracked files for credentials, licenses, tokens,
     personal data, and local MATLAB Project metadata before any push.

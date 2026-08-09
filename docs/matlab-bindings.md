@@ -1,7 +1,7 @@
 # MATLAB Bindings and QA
 
 The `matlab/` tree provides a MATLAB/Octave MEX gateway and an object-oriented
-package for profile inspection and color transforms.
+package for profile inspection, color transforms, and profile visualization.
 
 ## Windows Desktop Setup
 
@@ -99,7 +99,7 @@ if ($LASTEXITCODE -ne 0) {
 $BuildArgs = @(
   '--build', $Build
   '--config', 'Release'
-  '--target', 'IccProfLib2-static'
+  '--target', 'IccProfLib2-static', 'iccProfilePlot'
   '--', '/m'
 )
 cmake @BuildArgs
@@ -176,6 +176,31 @@ The minimum display set includes:
 - `sRGB_D65_colorimetric.icc`
 - `LCDDisplay.icc`
 
+## Profile Plotting
+
+`iccdev.plot` renders every graph visualization exposed by the data-first
+`iccProfilePlot` tool. It requires MATLAB R2016b+ or GNU Octave 7.1+ for
+`jsondecode`, plus a Java-enabled runtime for shell-free process execution:
+
+```matlab
+profile_path = fullfile(repo_root, 'Testing', ...
+  'sRGB_v4_ICC_preference.icc');
+plots = iccdev.plot(profile_path);
+```
+
+The function renders curves, chromaticity diagrams, named-color plots, and
+other graph descriptors. Raster CLUT descriptors are intentionally left to
+`iccProfilePlot raster` or `iccProfileVisualizePlot`. For noninteractive use:
+
+```matlab
+plots = iccdev.plot(profile_path, 'Visible', 'off');
+close([plots.figure]);
+```
+
+The tool is discovered through `ICCDEV_BUILD_DIR`, common repository build
+directories, or `PATH`. Pass `BuildDir` or `PlotTool` when selecting another
+build explicitly.
+
 ## Validation
 
 Run the focused suite:
@@ -191,6 +216,7 @@ Run the extended local QA entry point:
 
 ```matlab
 run_local_qa();
+test_plot();
 ```
 
 Run the demonstrations:

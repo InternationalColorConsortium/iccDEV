@@ -25,7 +25,7 @@ profiles, examples, and native handle lifecycle behavior.
    $BuildArgs = @(
      '--build', $Build
      '--config', 'Release'
-     '--target', 'IccProfLib2-static'
+     '--target', 'IccProfLib2-static', 'iccProfilePlot'
      '--', '/m'
    )
    cmake @BuildArgs
@@ -77,6 +77,7 @@ profiles, examples, and native handle lifecycle behavior.
    test_iccdev();
    run_local_qa();
    run_gamma_qa();
+   test_plot();
    run_docker_qa();
    run('matlab/examples/read_profile.m');
    run('matlab/examples/color_transform.m');

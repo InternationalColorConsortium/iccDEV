@@ -22,6 +22,7 @@ matlab/
     IccProfile.m          # Profile class (open, read, header, color_space)
     IccCmm.m              # Color management module wrapper
     IccApply.m            # Thread-safe per-thread apply handle
+    plot.m                # Render graphs from the iccProfilePlot data model
     ColorSpace.m          # Color space signature enum
     RenderingIntent.m     # Rendering intent enum
     Interpolation.m       # Interpolation method enum
@@ -127,6 +128,7 @@ For the extended local smoke and stress checks:
 addpath('matlab');
 run_local_qa();
 run_gamma_qa();
+test_plot();
 ```
 
 For Docker CLI interoperability:
@@ -180,6 +182,10 @@ values, and physical Y values 5, 300, and 500.
 - `build_mex.m` expects the iccDEV CMake build to be completed first. Use the
   platform-specific argument-array workflow in `docs/matlab-bindings.md`;
   avoid Bash operators such as `&&` and `$(nproc)` in PowerShell instructions.
+- `iccdev.plot` also requires the `iccProfilePlot` executable. Build that CMake
+  target and keep its build root in `ICCDEV_BUILD_DIR`, or pass `BuildDir` or
+  `PlotTool` explicitly. Plotting requires MATLAB R2016b+ or GNU Octave 7.1+
+  with `jsondecode` and a Java-enabled runtime.
 - Normal MATLAB/Octave builds reject Debug-only `IccProfLib2` libraries. Use a
   Release iccDEV build, or call `build_mex('Debug', true)` only with a compatible
   debug MATLAB/Octave runtime.
