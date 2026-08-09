@@ -92,23 +92,6 @@ run_trivy_config() {
   return 127
 }
 
-run_dockerfile_policy() {
-  local policy_failures=0
-  local dockerfile final_from
-
-  for dockerfile in "$@"; do
-    if grep -qiE '^[[:space:]]*FROM[[:space:]].*nixos/nix' "$dockerfile"; then
-      final_from="$(awk 'BEGIN{IGNORECASE=1} /^[[:space:]]*FROM[[:space:]]/ { line=$0 } END { print line }' "$dockerfile")"
-      if grep -qi 'nixos/nix' <<< "$final_from"; then
-        echo "[FAIL] $dockerfile final stage inherits from nixos/nix; use a minimal runtime stage to avoid channel/source closure leakage" >&2
-        policy_failures=$((policy_failures + 1))
-      fi
-    fi
-  done
-
-  [ "$policy_failures" -eq 0 ]
-}
-
 run_workflow_cache_policy() {
   .github/scripts/check-workflow-cache-policy.sh .github/workflows
 }
@@ -1082,7 +1065,6 @@ if [ "${#docker_files[@]}" -gt 0 ]; then
     skip_or_fail "trivy or docker"
   fi
 
-  run_check "Dockerfile runtime policy" run_dockerfile_policy "${docker_files[@]}"
 else
   echo "[SKIP] No changed Dockerfile files"
   echo ""

@@ -406,9 +406,9 @@ git diff --name-status \
   'Dockerfile*' '**/Dockerfile*'
 ```
 
-Carry applicable fixes for `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.mcp`,
-and `Dockerfile.ci-regression` to both branches. A successful testing-branch
-image does not replace the required `ci-qa-flags` update and hosted validation.
+Carry applicable fixes for `Dockerfile`, `Dockerfile.mcp`, and
+`Dockerfile.ci-regression` to both branches. A successful testing-branch image
+does not replace the required `ci-qa-flags` update and hosted validation.
 
 Repository rules intentionally differ by branch:
 

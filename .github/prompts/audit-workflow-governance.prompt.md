@@ -150,8 +150,6 @@ hadolint Dockerfile Dockerfile.*
 trivy config --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 .
 docker build -f Dockerfile -t iccdev-local:ubuntu .
 trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 iccdev-local:ubuntu
-docker build -f Dockerfile.nixos -t iccdev-local:nixos .
-trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 iccdev-local:nixos
 ```
 
 ### Full Run Log Grep

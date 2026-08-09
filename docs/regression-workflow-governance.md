@@ -25,7 +25,7 @@ where it belongs.
 | Workflow rules | `.github/instructions/workflow-governance.instructions.md` | Shell hardening, output sanitization, and injection prevention. |
 | Workflow trust boundaries | `docs/workflow-security-trust-boundaries.md` | Trusted-base helper model, PR workflow canaries, and visual review aids. |
 | Testing rules | `.github/instructions/testing.instructions.md` | Test directories, script expectations, and regression flow. |
-| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.nixos`, `Dockerfile.mcp`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
+| Maintainer Dockerfiles | `Dockerfile`, `Dockerfile.mcp`, `Dockerfile.ci-regression` | Release/runtime images and pinned CI dependency images. |
 
 ## When to Add a Script
 
@@ -251,7 +251,6 @@ separate from general source changes when practical.
 | File | Owner intent | Required local checks |
 |------|--------------|-----------------------|
 | `Dockerfile` | Ubuntu release/runtime image for the published `iccdev` container. | Build locally, run at least one installed tool, and check the healthcheck target. |
-| `Dockerfile.nixos` | NixOS/scratch runtime image and closure minimization. | Build locally, run one tool, and confirm closure/secret checks remain active. |
 | `Dockerfile.ci-regression` | Maintainer image for ASAN/UBSAN CTest, fuzzing, review, and hybrid timing gates. | Run a no-cache build and smoke `git`, `gh`, `curl`, `clang`, `clang++`, `gcc`, `g++`, `lldb`, `gdb`, `cmake`, `afl-fuzz`, `afl-showmap`, `iccdev-fuzz-env`, libFuzzer compilation, and `/usr/bin/time`; AFL wrapper changes also need the container bootstrap probe in `docs/afl-fuzzing.md`. |
 
 For `Dockerfile.ci-regression` publishing:

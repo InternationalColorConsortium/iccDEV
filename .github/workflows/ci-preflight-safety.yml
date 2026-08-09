@@ -303,19 +303,6 @@ jobs:
                 config --skip-check-update --severity LOW,MEDIUM,HIGH,CRITICAL --exit-code 1 /repo; then
                 failures=$((failures + 1))
               fi
-              for dockerfile in "${docker_files[@]}"; do
-                if grep -qiE '^[[:space:]]*FROM[[:space:]].*nixos/nix' "$dockerfile"; then
-                  final_from="$(
-                    awk 'BEGIN{IGNORECASE=1}
-                         /^[[:space:]]*FROM[[:space:]]/ { line=$0 }
-                         END { print line }' "$dockerfile"
-                  )"
-                  if grep -qi 'nixos/nix' <<< "$final_from"; then
-                    echo "[FAIL] $dockerfile final stage inherits from nixos/nix; use a minimal runtime stage" >&2
-                    failures=$((failures + 1))
-                  fi
-                fi
-              done
             fi
           else
             echo "[SKIP] No changed Dockerfile files"

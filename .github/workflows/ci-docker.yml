@@ -5,7 +5,7 @@
 #                 All rights reserved.
 #                 https://color.org
 #
-# Intent: ci-docker (unified Ubuntu, NixOS, and regression images)
+# Intent: ci-docker (Ubuntu and regression images)
 #
 #
 ###############################################################
@@ -33,7 +33,6 @@ env:
       - ci-qa-flags
     paths:
       - "Dockerfile"
-      - "Dockerfile.nixos"
       - "Dockerfile.ci-regression"
       - "Dockerfile.mcp"
       - ".dockerignore"
@@ -111,14 +110,6 @@ jobs:
             workdir: /opt/iccdev
             tools_dir: /opt/iccdev/Build/Tools
             run_shell: bash
-          - variant: nixos
-            runner: ubuntu-latest
-            image: iccdev-nixos
-            dockerfile: Dockerfile.nixos
-            suffix: "-nixos"
-            workdir: /workspace/iccDEV
-            tools_dir: /workspace/iccDEV/Build/Tools
-            run_shell: sh
           - variant: regression
             runner: ubuntu-24.04
             image: iccdev-ci-regression
@@ -174,7 +165,7 @@ jobs:
             echo "Invalid repository owner for image name" >&2
             exit 1
           fi
-          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-nixos|-ci-regression|-mcp)?$ ]]; then
+          if [[ ! "$MATRIX_IMAGE" =~ ^iccdev(-ci-regression|-mcp)?$ ]]; then
             echo "Invalid Docker image name" >&2
             exit 1
           fi
@@ -428,43 +419,6 @@ jobs:
             -v "$TRIVY_CACHE":/root/.cache/ \
             "$TRIVY_IMAGE" \
             "${trivy_args[@]}" "$TEST_IMAGE"
-
-      - name: Verify NixOS image hygiene
-        if: matrix.variant == 'nixos'
-        env:
-          BASH_ENV: /dev/null
-          MATRIX_VARIANT: ${{ matrix.variant }}
-        run: |
-          set -euo pipefail
-          git config --global credential.helper ""
-          unset GITHUB_TOKEN || true
-          TEST_IMAGE="iccdev-${MATRIX_VARIANT}-test:latest"
-
-          SOURCE_HITS=$(docker run --rm "$TEST_IMAGE" sh -c \
-            "find /nix/store -maxdepth 1 -name '*-source' -type d | wc -l")
-          if [ "$SOURCE_HITS" -ne 0 ]; then
-            echo "::error::NixOS image contains /nix/store/*-source paths"
-            exit 1
-          fi
-
-          KEY_HITS=$(docker run --rm "$TEST_IMAGE" sh -c "
-            grep -RIlE 'BEGIN .*PRIVATE KEY|BEGIN OPENSSH PRIVATE KEY' \
-              /nix/store /workspace/iccDEV 2>/dev/null | wc -l
-          ")
-          if [ "$KEY_HITS" -ne 0 ]; then
-            echo "::error::NixOS image contains private-key material"
-            exit 1
-          fi
-
-          CHANNEL_HITS=$(docker run --rm "$TEST_IMAGE" sh -c "
-            find /nix/store -maxdepth 1 \
-              \( -name '*-channel-*' -o -name '*manifest.nix' \) \
-              -print 2>/dev/null | wc -l
-          ")
-          if [ "$CHANNEL_HITS" -ne 0 ]; then
-            echo "::error::NixOS image contains channel/profile source artifacts"
-            exit 1
-          fi
 
       - name: Verify tools
         env:
@@ -946,7 +900,7 @@ jobs:
       packages: write  # Required to delete old GHCR package versions.
     strategy:
       matrix:
-        package: [iccdev, iccdev-nixos, iccdev-ci-regression, iccdev-mcp]
+        package: [iccdev, iccdev-ci-regression, iccdev-mcp]
     steps:
       - name: Checkout trusted workflow helpers
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
