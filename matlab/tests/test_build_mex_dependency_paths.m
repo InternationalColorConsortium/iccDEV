@@ -12,14 +12,15 @@ function test_build_mex_dependency_paths()
   mkdir(buildDir);
   triplet = 'x64-windows';
   defaultRoot = fullfile(buildDir, 'vcpkg_installed');
+
+  selected = iccdev.qa.select_vcpkg_installed_root( ...
+    buildDir, fullfile(root, 'stale'), triplet);
+  assert(strcmp(selected, defaultRoot));
+
   mkdir(fullfile(defaultRoot, triplet));
 
   selected = iccdev.qa.select_vcpkg_installed_root( ...
     buildDir, '', triplet);
-  assert(strcmp(selected, defaultRoot));
-
-  selected = iccdev.qa.select_vcpkg_installed_root( ...
-    buildDir, fullfile(root, 'stale'), triplet);
   assert(strcmp(selected, defaultRoot));
 
   relativeRoot = 'relative-vcpkg';

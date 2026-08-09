@@ -14,7 +14,7 @@ function root = select_vcpkg_installed_root(buildDir, cachedRoot, triplet)
     candidates = [{cachedRoot}; candidates];
   end
 
-  root = candidates{1};
+  root = defaultRoot;
   for i = 1:numel(candidates)
     candidate = candidates{i};
     if exist(fullfile(candidate, triplet), 'dir') == 7
