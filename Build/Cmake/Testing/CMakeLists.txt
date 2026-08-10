@@ -3700,6 +3700,61 @@ function(iccdev_add_json_fixednum_size_cap_test)
   endif()
 endfunction()
 
+# #2085: CIccTagJsonFactory registered neither u16Fixed16ArrayType ('uf32') nor
+# spectralRangeType ('srng'), both of which IccProfLib and IccTagXmlFactory carry.
+# Because the JSON factory's default arm returns CIccTagJsonUnknown rather than
+# NULL, a missing case is a silent downgrade to an opaque blob, not a fall-back to
+# the right tag. This pins registration and a value-preserving JSON round trip for
+# both, including the upper uf32 values the signed icFtoD/icDtoF helpers -- which the
+# FixedNum template used unconditionally -- cannot carry: the writer misreads from
+# 32768 up, the reader truncates from 32767.0 up. It also pins the srng reader's
+# rejection of malformed start/end/steps and the writer's handling of a bi-spectral
+# range. Note "value-preserving" is bounded by icUFtoD returning icFloatNumber
+# (float), so uf32 words are exact only below 256.0 -- a limit shared with s15Fixed16
+# and the XML path, noted in #2095. Needs IccJSON + IccProfLib; skipped where IccJSON
+# is not built.
+function(iccdev_add_json_srng_uf32_test)
+  if(NOT TARGET "${TARGET_LIB_ICCPROFLIB}" OR NOT TARGET "${TARGET_LIB_ICCJSON}")
+    return()
+  endif()
+
+  iccdev_add_regression_executable(iccJsonSrngUf32Test
+    "${ICCDEV_REPO_ROOT}/.github/ci/regression/json-srng-uf32-roundtrip.cpp"
+  )
+  target_compile_features(iccJsonSrngUf32Test PRIVATE cxx_std_17)
+  target_include_directories(iccJsonSrngUf32Test PRIVATE
+    "${ICCDEV_REPO_ROOT}/IccJSON/IccLibJSON"
+    "${ICCDEV_REPO_ROOT}/IccProfLib"
+  )
+  target_link_libraries(iccJsonSrngUf32Test PRIVATE
+    ${TARGET_LIB_ICCJSON} ${TARGET_LIB_ICCPROFLIB})
+  add_dependencies(check iccJsonSrngUf32Test)
+
+  add_test(
+    NAME iccdev.json-srng-uf32-roundtrip
+    COMMAND "$<TARGET_FILE:iccJsonSrngUf32Test>"
+  )
+  set_tests_properties(iccdev.json-srng-uf32-roundtrip PROPERTIES
+    WORKING_DIRECTORY "${ICCDEV_TEST_OUTDIR}"
+    TIMEOUT 60
+    LABELS "iccdev;json;icc2;v5;issue-2085;regression"
+  )
+  if(WIN32)
+    set(_json_srng_uf32_windows_env_mods
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:iccJsonSrngUf32Test>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCPROFLIB}>"
+      "PATH=path_list_prepend:$<TARGET_FILE_DIR:${TARGET_LIB_ICCJSON}>"
+    )
+    foreach(_runtime_path IN LISTS ICCDEV_WINDOWS_RUNTIME_PATHS)
+      list(APPEND _json_srng_uf32_windows_env_mods
+        "PATH=path_list_prepend:${_runtime_path}")
+    endforeach()
+    set_tests_properties(iccdev.json-srng-uf32-roundtrip PROPERTIES
+      ENVIRONMENT_MODIFICATION "${_json_srng_uf32_windows_env_mods}"
+    )
+  endif()
+endfunction()
+
 # #1883: the Testing corpus carried no ICC v2 profile at all -- a clean checkout's
 # 210 profiles are 208 v5 and 2 v4, with 0 'mft2' and 0 'mft1' tags -- so every
 # UseLegacyPCS()==true branch was dead code as far as CI was concerned. That
@@ -4351,6 +4406,7 @@ if(WIN32)
   iccdev_add_json_bcd_version_test()
   iccdev_add_json_writer_move_test()
   iccdev_add_json_fixednum_size_cap_test()
+  iccdev_add_json_srng_uf32_test()
   iccdev_add_v2_legacy_pcs_test()
   iccdev_add_v2_xml_fixtures_test()
   iccdev_add_datetime_parse_test()
@@ -4623,6 +4679,7 @@ iccdev_add_proflib_exported_global_definitions_test()
 iccdev_add_json_bcd_version_test()
 iccdev_add_json_writer_move_test()
 iccdev_add_json_fixednum_size_cap_test()
+iccdev_add_json_srng_uf32_test()
 iccdev_add_v2_legacy_pcs_test()
 iccdev_add_v2_xml_fixtures_test()
 iccdev_add_datetime_parse_test()

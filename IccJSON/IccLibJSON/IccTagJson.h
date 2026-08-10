@@ -297,6 +297,21 @@ public:
   virtual bool ParseJson(const IccJson &j, std::string &parseStr);
 };
 
+// #2085: spectralRangeType ('srng') had no JSON class at all, so the factory fell
+// to CIccTagJsonUnknown and the deviceSpectralRangeTag the extended-device-colour-
+// space amendment introduced (#626) was opaque to iccToJson/iccFromJson. The XML
+// side has carried CIccTagXmlSpectralRange since the type was added.
+class CIccTagJsonSpectralRange : public CIccTagSpectralRange, public CIccTagJson
+{
+public:
+  virtual ~CIccTagJsonSpectralRange() {}
+  virtual const char *GetClassName() const { return "CIccTagJsonSpectralRange"; }
+  virtual IIccExtensionTag *GetExtension() { return this; }
+
+  virtual bool ToJson(IccJson &j);
+  virtual bool ParseJson(const IccJson &j, std::string &parseStr);
+};
+
 // ---------------------------------------------------------------------------
 // Named / colorant tags
 // ---------------------------------------------------------------------------
@@ -360,7 +375,12 @@ public:
 };
 
 typedef CIccTagJsonFixedNum<icS15Fixed16Number, icSigS15Fixed16ArrayType> CIccTagJsonS15Fixed16;
-typedef CIccTagFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType>      CIccTagJsonU16Fixed16;
+// #2085: this aliased CIccTagFixedNum -- the IccProfLib base -- and so was a copy of
+// IccTagBasic.h's CIccTagU16Fixed16 with only the name changed, carrying no ToJson,
+// no ParseJson and no GetExtension(). CIccTagJsonFixedNum::GetClassName already
+// returned "CIccTagJsonU16Fixed16" for this instantiation, so the JSON template was
+// always the intended base; that branch was simply unreachable.
+typedef CIccTagJsonFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType> CIccTagJsonU16Fixed16;
 
 // Forward declaration for array helper used by CIccTagJsonNum
 template <class T, icTagTypeSignature Tsig> class CIccJsonArrayType;

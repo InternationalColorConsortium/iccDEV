@@ -850,6 +850,135 @@ bool CIccTagJsonSpectralViewingConditions::ParseJson(const IccJson &j, std::stri
 }
 
 // ===========================================================================
+// CIccTagJsonSpectralRange
+// ===========================================================================
+
+// Shared by the spectral and bi-spectral halves below, the way the XML reader
+// factors icXmlParseSpectralSteps, so the two ranges cannot drift in how strictly
+// they are checked. steps is the tag's icUInt16Number, and a count that does not
+// fit it means the document is describing a range this type cannot hold -- report
+// which range failed rather than truncating silently. Zero is accepted: that is
+// how an empty range is spelled, and it is the only legal value for a
+// BiSpectralRange the writer would have omitted.
+static bool icJsonParseSpectralRange(const IccJson &j, icSpectralRange &range,
+                                     const char *szRangeName, std::string &parseStr)
+{
+  icFloat32Number start = 0.0f, end = 0.0f;
+  int steps = 0;
+
+  // jGetValue leaves its out-param untouched and returns false when the field is
+  // present but not a number jsonToValue can hold -- a string, a null, or an
+  // integer wider than int. Discarding that result would leave the initialised 0
+  // and let the range guard below pass, so `"steps": 4294967295` would be accepted
+  // as an empty range rather than reported. Absent is a different case and stays
+  // legal: it keeps the zero, which is how the tag spells an unused range.
+  if (jsonExistsField(j, "start") && !jGetValue(j, "start", start)) {
+    parseStr += std::string("Invalid ") + szRangeName + " start\n";
+    return false;
+  }
+
+  if (jsonExistsField(j, "end") && !jGetValue(j, "end", end)) {
+    parseStr += std::string("Invalid ") + szRangeName + " end\n";
+    return false;
+  }
+
+  if (jsonExistsField(j, "steps") && !jGetValue(j, "steps", steps)) {
+    parseStr += std::string("Invalid ") + szRangeName + " steps\n";
+    return false;
+  }
+
+  if (steps < 0 || steps > 0xffff) {
+    parseStr += std::string("Invalid ") + szRangeName + " steps\n";
+    return false;
+  }
+
+  range.start = icFtoF16(start);
+  range.end   = icFtoF16(end);
+  range.steps = (icUInt16Number)steps;
+
+  return true;
+}
+
+// #2085. The key names follow CIccTagXmlSpectralRange's elements (SpectralRange /
+// BiSpectralRange) and the inner start/end/steps follow the shape the sibling
+// CIccTagJsonSpectralViewingConditions already emits for its own ranges, so an
+// srng reads the same way in JSON as the ranges embedded in an svcn do.
+bool CIccTagJsonSpectralRange::ToJson(IccJson &j)
+{
+  IccJson range;
+  range["start"] = (double)icF16toF(m_spectralRange.start);
+  range["end"]   = (double)icF16toF(m_spectralRange.end);
+  range["steps"] = (int)m_spectralRange.steps;
+  j["SpectralRange"] = std::move(range);
+
+  // A zero step count is how an absent bi-spectral range is spelled in the tag, so
+  // omit the key rather than emitting zeros a reader would have to special-case --
+  // what CIccTagXmlSpectralRange::ToXml does with the <BiSpectralRange> element.
+  //
+  // But test start/end too, not just steps. Write() emits all three fields
+  // unconditionally and Read() validates none of them, so a non-conformant tag can
+  // carry a non-zero start/end beside a zero step count. Keying the omission on
+  // steps alone would drop those two half-floats, and until this type had a JSON
+  // class at all it fell to CIccTagJsonUnknown, whose hex blob preserved them
+  // exactly -- so that would be a new lossy normalisation on a path that was not
+  // lossy before. Same reasoning as m_nReserved below: round-trip what the tag
+  // actually holds instead of quietly conforming it.
+  if (m_biSpectralRange.steps || m_biSpectralRange.start || m_biSpectralRange.end) {
+    IccJson biRange;
+    biRange["start"] = (double)icF16toF(m_biSpectralRange.start);
+    biRange["end"]   = (double)icF16toF(m_biSpectralRange.end);
+    biRange["steps"] = (int)m_biSpectralRange.steps;
+    j["BiSpectralRange"] = std::move(biRange);
+  }
+
+  // Required to be zero but carried by the tag, so round-trip it when it is not,
+  // rather than silently normalising a non-conformant profile on the way through.
+  // The XML writer drops it; emitting it only when non-zero keeps the common
+  // output identical to what a reader would infer anyway.
+  //
+  // Careful: CIccTagSpectralRange::m_nReserved (IccTagBasic.h:1839) *shadows*
+  // CIccTag::m_nReserved (:349), and this unqualified name resolves to the derived
+  // one -- which is the payload word Read()/Write() actually move, so this is the
+  // right member. The base one is separately round-tripped by CIccProfileJson as
+  // tagObj["Reserved"] (IccProfileJson.cpp:257,542) through a CIccTag*, so the two
+  // land at different depths -- ours under "data" -- and do not collide. They are
+  // genuinely different values despite the shared key name.
+  if (m_nReserved)
+    j["Reserved"] = (unsigned int)m_nReserved;
+
+  return true;
+}
+
+bool CIccTagJsonSpectralRange::ParseJson(const IccJson &j, std::string &parseStr)
+{
+  // Reset both ranges first: ParseJson runs on a tag the factory just built, but a
+  // caller reusing a tag must not inherit the previous document's bi-spectral range
+  // through the optional key below.
+  memset(&m_spectralRange, 0, sizeof(m_spectralRange));
+  memset(&m_biSpectralRange, 0, sizeof(m_biSpectralRange));
+  m_nReserved = 0;
+
+  if (!jsonExistsField(j, "SpectralRange") || !j["SpectralRange"].is_object()) {
+    parseStr += "No SpectralRange section found\n";
+    return false;
+  }
+
+  if (!icJsonParseSpectralRange(j["SpectralRange"], m_spectralRange, "SpectralRange", parseStr))
+    return false;
+
+  if (jsonExistsField(j, "BiSpectralRange") && j["BiSpectralRange"].is_object()) {
+    if (!icJsonParseSpectralRange(j["BiSpectralRange"], m_biSpectralRange, "BiSpectralRange", parseStr))
+      return false;
+  }
+
+  unsigned int reserved = 0;
+  jGetValue(j, "Reserved", reserved);
+  m_nReserved = (icUInt32Number)reserved;
+
+  return true;
+}
+
+// ===========================================================================
 // CIccTagJsonNamedColor2
 // ===========================================================================
 
@@ -1279,8 +1408,20 @@ bool CIccTagJsonFixedNum<T, Tsig>::ToJson(IccJson &j)
 
   IccJson arr = IccJson::array();
   arr.get_ref<IccJson::array_t &>().reserve(this->m_nSize);
-  for (icUInt32Number i = 0; i < this->m_nSize; i++)
-    arr.push_back(icFtoD(this->m_Num[i]));
+  // #2085: the conversion has to follow the signedness of Tsig, exactly as the XML
+  // mirror CIccTagXmlFixedNum::ToXml branches. icFtoD takes an icS15Fixed16Number,
+  // so applying it to a u16Fixed16 word reinterprets every value whose raw word has
+  // the top bit set -- that is everything from 32768 up -- as negative: 32768.0 is
+  // held as 2147483648 and emitted as -32768.0. The half of the range below that is
+  // unaffected, which is why the S15-only coverage this template had never saw it.
+  if (Tsig == icSigS15Fixed16ArrayType) {
+    for (icUInt32Number i = 0; i < this->m_nSize; i++)
+      arr.push_back(icFtoD(this->m_Num[i]));
+  }
+  else {
+    for (icUInt32Number i = 0; i < this->m_nSize; i++)
+      arr.push_back(icUFtoD(this->m_Num[i]));
+  }
   j["values"] = std::move(arr);
   return true;
 }
@@ -1297,13 +1438,24 @@ bool CIccTagJsonFixedNum<T, Tsig>::ParseJson(const IccJson &j, std::string & /*p
       double value = 0.0;
       if (!jsonToValue(arr[i], value))
         return false;
-      this->m_Num[i] = icDtoF(value);
+      // #2085: the reader mirrors the writer's branch above, and the XML reader's
+      // (CIccTagXmlFixedNum::ParseXml). icDtoF clamps its input at 32767.0
+      // (IccUtil.cpp:569), so parsing a u16Fixed16 through it truncates everything
+      // above that -- a lower threshold than the writer's, which only misreads from
+      // 32768 up. Note icDtoUF has a ceiling of its own at 65535.0, so the last
+      // 1/65536 of the type is unreachable either way; that is a separate question
+      // in IccProfLib, filed as #2095 and left alone here.
+      if (Tsig == icSigS15Fixed16ArrayType)
+        this->m_Num[i] = icDtoF(value);
+      else
+        this->m_Num[i] = icDtoUF(value);
     }
   }
   return true;
 }
 
 template class CIccTagJsonFixedNum<icS15Fixed16Number, icSigS15Fixed16ArrayType>;
+template class CIccTagJsonFixedNum<icU16Fixed16Number, icSigU16Fixed16ArrayType>;
 
 // ===========================================================================
 // CIccTagJsonNum template

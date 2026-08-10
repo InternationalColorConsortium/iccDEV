@@ -79,6 +79,7 @@ CIccTag* CIccTagJsonFactory::CreateTag(icTagTypeSignature tagSig)
   case icSigUInt32ArrayType:         return new (std::nothrow) CIccTagJsonUInt32;
   case icSigUInt64ArrayType:         return new (std::nothrow) CIccTagJsonUInt64;
   case icSigS15Fixed16ArrayType:     return new (std::nothrow) CIccTagJsonS15Fixed16;
+  case icSigU16Fixed16ArrayType:     return new (std::nothrow) CIccTagJsonU16Fixed16;
   case icSigFloat16ArrayType:        return new (std::nothrow) CIccTagJsonFloat16;
   case icSigFloat32ArrayType:        return new (std::nothrow) CIccTagJsonFloat32;
   case icSigFloat64ArrayType:        return new (std::nothrow) CIccTagJsonFloat64;
@@ -104,6 +105,7 @@ CIccTag* CIccTagJsonFactory::CreateTag(icTagTypeSignature tagSig)
   case icSigViewingConditionsType:   return new (std::nothrow) CIccTagJsonViewingConditions;
   case icSigSpectralViewingConditionsType: return new (std::nothrow) CIccTagJsonSpectralViewingConditions;
   case icSigSpectralDataInfoType:    return new (std::nothrow) CIccTagJsonSpectralDataInfo;
+  case icSigSpectralRangeType:       return new (std::nothrow) CIccTagJsonSpectralRange;
   case icSigProfileSequenceDescType: return new (std::nothrow) CIccTagJsonProfileSeqDesc;
   case icSigResponseCurveSet16Type:  return new (std::nothrow) CIccTagJsonResponseCurveSet16;
   case icSigProfileSequceIdType:     return new (std::nothrow) CIccTagJsonProfileSequenceId;
