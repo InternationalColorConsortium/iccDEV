@@ -5242,6 +5242,21 @@ if(TARGET iccApplyNamedCmm AND TARGET iccDumpProfile)
   )
 endif()
 
+# Functional correctness for the tJab/fJab calculator operators of ICC.2:2023
+# Table 94 (#2089). Kept separate from iccdev.calculator-regressions above so a
+# Jab break is named as such rather than surfacing as one failed verdict out of
+# the 86 that srgbCalcTest.xml aggregates. It builds its own profiles, so
+# unlike its neighbour it needs no iccdev_profiles fixture.
+if(TARGET iccApplyNamedCmm AND TARGET iccFromXml)
+  iccdev_add_script_test(
+    iccdev.issue-2089-jab-operators
+    120
+    "iccdev;calculator;jab;cam;issue-2089;regression;asan"
+    "${ICCDEV_REPO_ROOT}"
+    "${ICCDEV_REPO_ROOT}/.github/scripts/iccdev-issue-2089-jab-operators-regression.sh"
+  )
+endif()
+
 iccdev_add_script_test(
   iccdev.lut16-zero-curve-regressions
   300
