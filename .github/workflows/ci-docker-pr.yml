@@ -98,7 +98,9 @@ jobs:
       BASH_ENV: /dev/null
       TARGET_SHA: ${{ inputs.target_sha }}
       WARNING_POLICY: ${{ inputs.warning_policy || 'fail' }}
-      TEST_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression:latest
+      # Pin the published unpatched regression environment. Fuzz patch stacks
+      # are applied only by their dedicated AFL/CFL workflows.
+      TEST_IMAGE: ghcr.io/internationalcolorconsortium/iccdev-ci-regression@sha256:c516759b5245c6299afcd873e3fc7eb31c8a2fbcecc1d470b1bafe393f652fcb
 
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8  # v5.0.0 (node24)
@@ -162,9 +164,6 @@ jobs:
             command -v git gh clang clang++ gcc g++ cmake make realpath llvm-symbolizer
             command -v afl-fuzz afl-showmap iccdev-fuzz-env
             command -v jq curl shellcheck llvm-cov llvm-profdata file
-            test -x .github/scripts/check-fuzz-patches.sh
-            test -x .github/scripts/iccdev-apply-fuzz-patches.sh
-            test -x .github/scripts/iccdev-fuzz-patch-check-tests.sh
             test -x .github/scripts/iccdev-afl-smoke.sh
             clang --version | sed -n "1p"
             clang++ --version | sed -n "1p"
@@ -174,14 +173,10 @@ jobs:
             afl-fuzz -V 1 2>&1 | sed -n "1p" || true
             fuzz_env_output="$(iccdev-fuzz-env)"
             sed -n "1,40p" <<< "$fuzz_env_output"
-            if ! grep -q "^Patch checker: " <<< "$fuzz_env_output" || grep -q "missing or not executable" <<< "$fuzz_env_output"; then
-              echo "ERROR: iccdev-fuzz-env did not report an executable patch checker" >&2
+            if ! grep -q "^Source mode: upstream checkout without local patches$" <<< "$fuzz_env_output"; then
+              echo "ERROR: iccdev-fuzz-env did not report the unpatched source mode" >&2
               exit 1
             fi
-            .github/scripts/iccdev-fuzz-patch-check-tests.sh
-            .github/scripts/check-fuzz-patches.sh
-            .github/scripts/iccdev-apply-fuzz-patches.sh --mode afl --dry-run --strict
-            .github/scripts/iccdev-apply-fuzz-patches.sh --mode cfl --dry-run --strict
             clang --version | grep -q "clang version 22\\."
             clang++ --version | grep -q "clang version 22\\."
             gcc --version | grep -q " 15\\."

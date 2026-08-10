@@ -31,6 +31,12 @@ docker image inspect "$IMAGE" \
   --format '{{index .RepoDigests 0}} revision={{index .Config.Labels "org.opencontainers.image.revision"}}'
 ```
 
+The regression image intentionally contains an unpatched upstream checkout.
+Its AFL/CFL compilers and helper commands support smoke and build validation;
+the checked-in fuzz patch stacks are applied only by the dedicated AFL/CFL
+workflows or a source checkout that contains `.github/ci/fuzz-patches/`. Do not
+make generic Docker PR verification require embedded patch-checker scripts.
+
 ## Basic Use
 
 Start a disposable interactive shell:
@@ -293,8 +299,7 @@ Inspect the fuzzing environment:
 iccdev-fuzz-env
 ```
 
-Validate that the AFL/CFL local patch stacks match the checked-out source and
-workflow applicator semantics:
+Validate AFL/CFL patch stacks from a source checkout that includes them:
 
 ```bash
 .github/scripts/check-fuzz-patches.sh
