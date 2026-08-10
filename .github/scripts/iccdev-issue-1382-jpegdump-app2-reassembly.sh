@@ -109,5 +109,36 @@ if [ "${chunks:-0}" -lt 2 ]; then
   fail "expected multiple ICC_PROFILE APP2 segments, found ${chunks:-0}"
 fi
 
-echo "  [PASS] issue-1382-jpegdump-app2-reassembly -- single + multi-segment ICC round-trip (${chunks} chunks)"
+# 3) Marker-walk edge case: a segment declaring the minimum length of 2 -- an empty
+#    payload -- as the last thing in the file leaves the walk's read cursor exactly
+#    at end-of-buffer.  The segment pointer is taken there before the payload length
+#    is examined, so it must be formed as data() + pos, not &data[pos]: subscripting
+#    one past the end is undefined and a hardened libstdc++ build aborts on it.
+#    This case therefore goes red only under _GLIBCXX_ASSERTIONS / _GLIBCXX_DEBUG;
+#    on an ordinary build it pins the orderly refusal that must follow.
+EDGE_JPEG="$OUTDIR/zero-length-app2-at-eof.jpg"
+EDGE_LOG="$OUTDIR/zero-length-app2-at-eof.log"
+printf '\xff\xd8\xff\xe2\x00\x02' > "$EDGE_JPEG"
+rm -f "$EDGE_LOG" "$OUTDIR/edge_out.icc"
+edge_rc=0
+"$JPEGDUMP" "$EDGE_JPEG" "$OUTDIR/edge_out.icc" > "$EDGE_LOG" 2>&1 || edge_rc=$?
+if ! check_sanitizers "$EDGE_LOG"; then
+  fail "zero-length APP2 at end-of-file produced a sanitizer finding"
+fi
+# A signal lands in 128..192; the tool's own refusal path is EXIT_FAILURE, so an
+# exit inside that band is a crash and anything else is a decision the tool made.
+if [ "$edge_rc" -ge 128 ] && [ "$edge_rc" -le 192 ]; then
+  sed -n '1,40p' "$EDGE_LOG"
+  fail "zero-length APP2 at end-of-file crashed with signal $((edge_rc - 128))"
+fi
+if [ "$edge_rc" -ne 1 ]; then
+  sed -n '1,40p' "$EDGE_LOG"
+  fail "zero-length APP2 at end-of-file expected EXIT_FAILURE, got $edge_rc"
+fi
+if ! grep -F -q "No ICC_PROFILE APP2 marker found." "$EDGE_LOG"; then
+  sed -n '1,40p' "$EDGE_LOG"
+  fail "zero-length APP2 at end-of-file did not report the expected diagnostic"
+fi
+
+echo "  [PASS] issue-1382-jpegdump-app2-reassembly -- single + multi-segment ICC round-trip (${chunks} chunks), zero-length APP2 at EOF refused cleanly"
 exit 0

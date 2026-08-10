@@ -228,7 +228,14 @@ bool ExtractIccFromJpeg(const char* jpegPath, const char* iccOutPath) {
         pos += 2;
         if (segLen < 2 || pos + (segLen - 2) > n) break;
         size_t payloadLen = segLen - 2;
-        const unsigned char* seg = &data[pos];
+        // A segment may declare the minimum length of 2, i.e. an empty payload, and
+        // it may be the last thing in the file -- then pos == n here and the bounds
+        // check above passes, because pos + 0 > n is false.  &data[n] subscripts one
+        // past the end of the vector, which is undefined even though the reference is
+        // never read: a hardened libstdc++ (_GLIBCXX_ASSERTIONS) aborts on it.  Take
+        // the address arithmetically instead; data() + n is the valid end pointer, and
+        // the payloadLen >= 14 test below already stops seg from being dereferenced.
+        const unsigned char* seg = data.data() + pos;
 
         if (m == 0xE2 && payloadLen >= 14 && memcmp(seg, kSig, 12) == 0) {
             unsigned int seq = seg[12];
