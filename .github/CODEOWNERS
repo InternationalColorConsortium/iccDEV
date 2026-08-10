@@ -13,7 +13,7 @@
 # ============================================================
 
 # Fallback triage owner for paths without a more specific rule.
-* @ChrisCoxArt @xsscx
+* @ChrisCoxArt @colourbill-ctrl @xsscx
 
 # GitHub configuration, Actions workflows & PR automation
 /.github/** @xsscx @ChrisCoxArt @dwtza
