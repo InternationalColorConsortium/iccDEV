@@ -21,9 +21,9 @@ permissions:
   workflow_dispatch:
     inputs:
       target_ref:
-        description: 'Branch, tag, or ref to check out before optional target_sha'
-        required: true
-        default: master
+        description: 'Optional branch, tag, or ref to check out before optional target_sha; defaults to the workflow ref'
+        required: false
+        default: ''
         type: string
       target_sha:
         description: 'Optional full 40-character commit SHA to check out'
