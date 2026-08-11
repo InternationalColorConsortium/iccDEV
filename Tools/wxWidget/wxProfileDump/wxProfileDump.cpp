@@ -70,6 +70,7 @@ Copyright:  (c) see ICC Software License
 // ---------------------------------------------------------------------------
 #include "IccProfile.h"
 #include "IccTag.h"
+#include "IccTagEmbedIcc.h"
 #include "IccUtil.h"
 #include "IccEval.h"
 #include "IccPrmg.h"
@@ -735,6 +736,29 @@ void MyChild::OnTagClicked(wxListEvent& event)
 {
     icTagSignature tagSig = (icTagSignature)event.GetData();
 	CIccTag *pTag = m_pIcc->FindTag(tagSig);
+
+    // An embedded profile is far more useful shown as a profile than as a flat
+    // text dump of the tag, so give it a window of its own.
+    if (pTag && pTag->GetType() == icSigEmbeddedProfileType) {
+        CIccTagEmbeddedProfile *pEmbed = (CIccTagEmbeddedProfile*)pTag;
+
+        // When the outer profile came from a file the embedded profile is only
+        // attached to that file's IO, so its tags have to be pulled in before
+        // the copy below - a copy only carries tags that are already loaded.
+        if (pEmbed->ReadAll() && pEmbed->GetProfile()) {
+            // The new window owns and frees whatever profile it is given, and
+            // the tag owns its own, so hand over an independent deep copy.
+            // This also lets this window be closed while that one stays open.
+            CIccProfile *pCopy = pEmbed->GetProfile()->NewCopy();
+
+            if (pCopy) {
+                my_frame->ShowProfile(pCopy, GetTitle() + _T(" [embedded]"), wxEmptyString);
+                return;
+            }
+        }
+        // Anything went wrong - fall through to the tag dump, which at least
+        // shows what is there.
+    }
 
     MyTagDialog dialog(this, m_pIcc, tagSig, pTag);
 
