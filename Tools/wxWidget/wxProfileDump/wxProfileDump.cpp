@@ -319,10 +319,18 @@ void MyFrame::OpenFile(wxString profilePath)
 
   wxGetApp().m_history.AddFileToHistory(profilePath);
 
-  // Make another frame, containing a canvas
-  MyChild *subframe = new MyChild(my_frame, profileTitle, pIcc, profilePath);
+  ShowProfile(pIcc, profileTitle, profilePath);
+}
 
-  subframe->SetTitle(profileTitle);
+// Builds and shows an MDI window for an already-loaded profile.  Takes
+// ownership of pIcc.  A profile that did not come from a file on disk (an
+// embedded profile, for example) passes wxEmptyString as profilePath.
+void MyFrame::ShowProfile(CIccProfile *pIcc, const wxString &title, const wxString &profilePath)
+{
+  // Make another frame, containing a canvas
+  MyChild *subframe = new MyChild(my_frame, title, pIcc, profilePath);
+
+  subframe->SetTitle(title);
 
   // Give it an icon
 #ifdef __WXMSW__

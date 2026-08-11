@@ -107,6 +107,7 @@ public:
     void OnClose(wxCloseEvent& event);
 
     void OpenFile(wxString path);
+    void ShowProfile(CIccProfile *pIcc, const wxString &title, const wxString &profilePath);
 
     DECLARE_EVENT_TABLE()
 };
