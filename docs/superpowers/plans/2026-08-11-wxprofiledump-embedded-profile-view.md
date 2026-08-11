@@ -23,9 +23,15 @@
 - Build command (from repo root), used unchanged in every task:
   `cmake --build out/vs2022-x64 --target iccDumpProfileGui --config Release`
   Binary lands at `out/vs2022-x64/bin/Release/iccDumpProfileGui.exe`.
-- Manual test asset, already checked in: `Testing/hybrid/BeyondRGB.icc`.
+- Automated regression fixture: `Testing/hybrid/ICC/CMYK_Hybrid_Profile.icc`.
+  This is generated (not checked in) by `Testing/hybrid/BuildAndTest.sh` (via
+  `iccFromXml`) from the tracked `Testing/hybrid/CMYK_Hybrid_Profile.xml`.
   Confirmed via `iccDumpProfile.exe` to carry one `embeddedV5ProfileTag 'ICC5'`
-  at offset 532, size 3444.
+  at offset 2684968, size 1004012. It is absent on CI legs that skip the
+  hybrid step (macOS runs "CreateAllProfiles only", Windows has no hybrid
+  step, and the Linux hybrid step tolerates its own failure), so its absence
+  is not itself a regression -- a test built against it must skip, not fail,
+  when it is simply missing.
 - Match the surrounding file's existing style: the file mixes tab and
   space indentation; follow whatever the lines immediately adjacent to your
   edit already use rather than reformatting them.
