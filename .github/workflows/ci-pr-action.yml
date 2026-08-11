@@ -91,7 +91,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REGRESSION_IMAGE_TAG: sha-b28cafe490a14bf1decbcef0e6caa56e1308f707
+  REGRESSION_IMAGE_TAG: sha-b572e9720aea9d306d39ee667967a1293dcf1bac
 
 jobs:
   detect-src:
