@@ -228,7 +228,7 @@ jobs:
         env:
           BASH_ENV: /dev/null
           ICCDEV_IMAGE: >-
-            ghcr.io/internationalcolorconsortium/iccdev@sha256:b003dcfdc04776035b51d9cdc03f90d62cc70c745da321ae29e182075bf2845d
+            ghcr.io/internationalcolorconsortium/iccdev@sha256:7cc0354c9a37671a681f20df9cdc164bd4859c7ccb40e50d60ffa510fcb2d628
         run: |
           set -euo pipefail
           git config --global credential.helper ""
@@ -242,7 +242,7 @@ jobs:
         uses: matlab-actions/run-command@75644028e1e2aa374bbfdc968a65718a178cc264
         env:
           ICCDEV_IMAGE: >-
-            ghcr.io/internationalcolorconsortium/iccdev@sha256:b003dcfdc04776035b51d9cdc03f90d62cc70c745da321ae29e182075bf2845d
+            ghcr.io/internationalcolorconsortium/iccdev@sha256:7cc0354c9a37671a681f20df9cdc164bd4859c7ccb40e50d60ffa510fcb2d628
         with:
           command: >-
             addpath('matlab');
