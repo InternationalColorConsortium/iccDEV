@@ -1053,13 +1053,13 @@ typedef enum {
     icSigFujiFilm                       = 0x46462020,  /* 'FF  ' */
     icSigHarlequinRIP                   = 0x48434d4d,  /* 'HCMM' */
     icSigArgyllCMS                      = 0x6172676C,  /* 'argl' */
-    icSigLogoSync                       = 0x44676f53,  /* 'LgoS' */
+    icSigLogoSync                       = 0x4c676f53,  /* 'LgoS' */
     icSigHeidelberg                     = 0x48444d20,  /* 'HDM ' */
     icSigLinoColor                      = 0x4C696E6F,  /* 'Lino' */
     icSigMonaco                         = 0x6D6E636F,  /* 'mnco' */
     icSigLittleCMS                      = 0x6C636D73,  /* 'lcms' */
     icSigKodak                          = 0x4b434d53,  /* 'KCMS' */
-    icSigKonicaMinolta                  = 0x4d434d44,  /* 'MCML' actually this is 'MCMD'- which is right? Sent email to Dr. Phil Green. */
+    icSigKonicaMinolta                  = 0x4d434d4c,  /* 'MCML' */
     icSigWindowsCMS                     = 0x57435320,  /* 'WCS ' */
     icSigMutoh                          = 0x5349474E,  /* 'SIGN' */
     icSigOnyxGraphics                   = 0x4f4e5958,  /* 'ONYX' */
@@ -1070,7 +1070,7 @@ typedef enum {
     icSigSampleICC                      = 0x53494343,  /* 'SICC' */
     icSigToshiba                        = 0x54434D4D,  /* 'TCMM' */
     icSigTheImagingFactory              = 0x33324254,  /* '32BT' */
-    icSigVivo                           = 0x7669766F,  /* 'VIVO' */
+    icSigVivo                           = 0x7669766F,  /* 'vivo' */
     icSigWareToGo                       = 0x57544720,  /* 'WTG ' */
     icSigZoran                          = 0x7a633030,  /* 'zc00' */
     icSigReprointelligence              = 0x72657072,  /* 'repr' */
