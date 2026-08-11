@@ -1874,13 +1874,12 @@ function(iccdev_add_iccviz_metrics_test)
 
   iccdev_add_regression_executable(iccVizMetricsTest
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccviz-gamut-roundtrip-metrics.cpp"
-    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot/IccVizModel.cpp"
   )
   target_compile_features(iccVizMetricsTest PRIVATE cxx_std_17)
-  target_include_directories(iccVizMetricsTest PRIVATE
-    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot"
-  )
-  target_link_libraries(iccVizMetricsTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  # IccVizEngine supplies IccVizModel.cpp and the engine include directory, so
+  # this stays a genuine second translation unit against the public header
+  # while naming neither path by hand (#1975).
+  target_link_libraries(iccVizMetricsTest PRIVATE ${TARGET_LIB_ICCPROFLIB} IccVizEngine)
   add_dependencies(check iccVizMetricsTest)
 
   add_test(
@@ -1925,10 +1924,11 @@ function(iccdev_add_iccviz_degenerate_test)
     "${ICCDEV_REPO_ROOT}/.github/ci/regression/iccviz-degenerate-detection.cpp"
   )
   target_compile_features(iccVizDegenerateTest PRIVATE cxx_std_17)
-  target_include_directories(iccVizDegenerateTest PRIVATE
-    "${ICCDEV_REPO_ROOT}/Tools/CmdLine/IccProfilePlot"
-  )
-  target_link_libraries(iccVizDegenerateTest PRIVATE ${TARGET_LIB_ICCPROFLIB})
+  # Headers only, deliberately: principalStdDevs is inline in IccVizMath.hpp, so
+  # this test must NOT pull in IccVizModel.cpp.  IccVizEngineHeaders is the
+  # engine include directory without the engine source (#1975).
+  target_link_libraries(iccVizDegenerateTest PRIVATE
+    ${TARGET_LIB_ICCPROFLIB} IccVizEngineHeaders)
   add_dependencies(check iccVizDegenerateTest)
 
   add_test(

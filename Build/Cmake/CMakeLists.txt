@@ -1677,6 +1677,53 @@ function(iccdev_fixup_msvc_compile_pdb TARGET_NAME)
   endif()
 endfunction()
 
+# The one declaration of the iccviz visualization engine (#1975, follow-on to
+# #1754).  IccVizModel is the data-first API (iccviz::Enumerate / RenderGraph /
+# RenderRaster) that Tools/CmdLine/IccProfilePlot exposes to consumers outside
+# the tool: both IccProfilePlot executables drive it and the iccviz regression
+# tests link it from their own translation units.  Each of those three restated
+# the source path and the include directory by hand, so adding a file to the
+# engine meant editing several unrelated CMakeLists -- the same hand-maintained
+# duplication that let the UBSAN silence list drift in #2034.  The fuzz harness
+# on the CFL branch (see the ENABLE_FUZZING notice above) is a fourth consumer
+# of the same shape, which is what makes these sources belong to a target
+# rather than to any one tool.
+#
+# Declared here rather than in Tools/IccProfilePlot because that subdirectory is
+# inside IF(ENABLE_TOOLS) below while Testing is added after ENDIF().  A target
+# declared there would vanish from an ENABLE_TOOLS=OFF build and take the iccviz
+# regression tests with it.
+#
+# INTERFACE rather than OBJECT or STATIC, for two reasons -- note that neither
+# is "so each consumer gets its own sanitizer flags": ENABLE_SANITIZERS folds
+# its flags into CMAKE_C/CXX_FLAGS globally (see FINAL_SAN_FLAGS above), so a
+# shared object library would be instrumented exactly like everything else.
+#
+#  * INTERFACE_SOURCES compile into each consumer, which keeps the compile graph
+#    identical to what the hand-written lists produced -- same objects in the
+#    same targets.  This is a de-duplication of the declarations, not a change
+#    to how anything is built; consolidating the three compiles into one shared
+#    object library is a separate decision, deliberately not taken here.
+#  * Per-target flags do reach the engine this way, and that is the model this
+#    build already uses for fuzzing: ENABLE_FUZZING deliberately does NOT apply
+#    its flags globally, handing them to fuzz targets through
+#    target_compile_options instead.  Options set that way on a consumer reach
+#    an INTERFACE source, because it compiles as part of that consumer; they
+#    would not reach an object library compiled once on its own.
+#
+# IccVizEngineHeaders is split out for consumers that need only the headers --
+# IccVizMath.hpp is header-only, so the degeneracy test compiles no engine
+# source at all and must not be handed IccVizModel.cpp.
+get_filename_component(ICCDEV_ICCVIZ_DIR
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../Tools/CmdLine/IccProfilePlot" ABSOLUTE)
+
+add_library(IccVizEngineHeaders INTERFACE)
+target_include_directories(IccVizEngineHeaders INTERFACE "${ICCDEV_ICCVIZ_DIR}")
+
+add_library(IccVizEngine INTERFACE)
+target_link_libraries(IccVizEngine INTERFACE IccVizEngineHeaders)
+target_sources(IccVizEngine INTERFACE "${ICCDEV_ICCVIZ_DIR}/IccVizModel.cpp")
+
 IF(ENABLE_TOOLS)
   # Add XML-related tools
   IF(ENABLE_ICCXML)
