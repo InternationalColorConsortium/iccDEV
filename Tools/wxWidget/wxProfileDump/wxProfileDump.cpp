@@ -505,10 +505,14 @@ MyChild::MyChild(wxMDIParentFrame *parent, const wxString& title, CIccProfile *p
 	sizerTop->Add(sizerBox, wxSizerFlags().Expand().Border(wxALL, 5));
 
 	wxSizer *sizerBtn = new wxBoxSizer(wxHORIZONTAL);
-    if (IsRoundTripable(pIcc)) {
-  		sizerBtn->Add(new wxButton(m_panel, ID_ROUND_TRIP, _("&Round Trip Report")), wxSizerFlags().Border(wxRIGHT, 5));
+    // Both reports re-read the profile from disk by path rather than using
+    // m_pIcc, so neither is available for a profile shown without a path.
+    if (!profilePath.IsEmpty()) {
+        if (IsRoundTripable(pIcc)) {
+  		    sizerBtn->Add(new wxButton(m_panel, ID_ROUND_TRIP, _("&Round Trip Report")), wxSizerFlags().Border(wxRIGHT, 5));
+        }
+        sizerBtn->Add(new wxButton(m_panel, ID_VALIDATE_PROFILE, _("&Validate Profile")), wxSizerFlags().Border(wxRIGHT, 5));
     }
-    sizerBtn->Add(new wxButton(m_panel, ID_VALIDATE_PROFILE, _("&Validate Profile")), wxSizerFlags().Border(wxRIGHT, 5));
 
 	sizerTop->Add(sizerBtn, wxSizerFlags().Right());
 
