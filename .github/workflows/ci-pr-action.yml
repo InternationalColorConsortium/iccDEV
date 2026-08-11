@@ -864,6 +864,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           SRC_CHANGED: ${{ needs.detect-src.outputs.src_changed }}
+          CONTAINER_CHANGED: ${{ needs.detect-src.outputs.container_changed }}
           FAST_LANE: ${{ needs.validate-inputs.outputs.fast-lane }}
           DETECT_RESULT: ${{ needs.detect-src.result }}
           SETUP_RESULT: ${{ needs.setup.result }}
@@ -907,6 +908,7 @@ jobs:
           SETUP_RESULT="${SETUP_RESULT:-failure}"
           VALIDATE_RESULT="${VALIDATE_RESULT:-failure}"
           SRC_CHANGED="${SRC_CHANGED:-false}"
+          CONTAINER_CHANGED="${CONTAINER_CHANGED:-false}"
           FAST_LANE="${FAST_LANE:-false}"
           LINT_RESULT="${LINT_RESULT:-success}"
           SCAN_RESULT="${SCAN_RESULT:-success}"
@@ -932,6 +934,7 @@ jobs:
           SETUP_RESULT="$(trim_and_norm "$SETUP_RESULT")"
           VALIDATE_RESULT="$(trim_and_norm "$VALIDATE_RESULT")"
           SRC_CHANGED="$(trim_and_norm "$SRC_CHANGED")"
+          CONTAINER_CHANGED="$(trim_and_norm "$CONTAINER_CHANGED")"
           FAST_LANE="$(trim_and_norm "$FAST_LANE")"
           LINT_RESULT="$(trim_and_norm "$LINT_RESULT")"
           SCAN_RESULT="$(trim_and_norm "$SCAN_RESULT")"
@@ -952,6 +955,9 @@ jobs:
               break
             fi
           done
+          if [[ "$CONTAINER_CHANGED" == "true" && "$DOCKER_RESULT" != "success" ]]; then
+            job_res=failure
+          fi
 
           # --- write header ----------------------------------------------------
           {
