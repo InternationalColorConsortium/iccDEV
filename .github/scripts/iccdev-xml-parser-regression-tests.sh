@@ -11,14 +11,36 @@
 #      XML_MAX_TEXT_LENGTH (10 MB) used to be refused on read, so iccToXml
 #      could emit a document iccFromXml then rejected.
 #
-#   2. Relaxing that must not have been done with XML_PARSE_HUGE, which would
-#      also have disabled the nesting-depth and name-length caps for every
-#      input. The hardening cases below fail if someone later reaches for that
-#      flag to solve a size problem.
+#   2. Relaxing that must not widen what the parser accepts: the nesting-depth
+#      and name-length caps have to stay armed. The hardening cases below fail
+#      if a later change lets either of them go.
 #
-# The fix reads the document into one contiguous buffer and parses that, which
-# avoids the streaming reader's per-node accumulation limit, and bounds the
-# whole document instead (icXmlMaxTextFileBytes).
+# The fix for 1 reads the document into one contiguous buffer and parses that,
+# and bounds the whole document instead (icXmlMaxTextFileBytes).
+#
+# Issue #2108, part 1 of 2 -- the harness only; the reader is not changed here.
+#
+# Two separate things were wrong with the hardening half above.
+#
+#   a. It asserted only that iccFromXml exited non-zero. None of its fixtures is
+#      a valid ICC profile, so every one of them exits non-zero whatever the
+#      parser did -- a well-formed <IccProfile></IccProfile> exits non-zero too.
+#      Measured: with XML_PARSE_HUGE applied to the reader and the depth and
+#      name caps therefore off, this script still reported 5/5 passed and exit
+#      0, which is precisely the regression case 2 was written to catch.
+#
+#      So a refusal now has to be attributable to the parser. That puts one
+#      requirement on the reader: when it refuses a document itself rather than
+#      letting libxml2 refuse it, it has to say so, the way the document-size
+#      bound below already does. A silent NULL is indistinguishable here from
+#      "parsed fine, but is not a profile".
+#
+#   b. Case 1's mechanism no longer holds on current libxml2. v2.13.0 moved the
+#      XML_MAX_TEXT_LENGTH check into xmlSAX2Text ("SAX2: Enforce size limit in
+#      xmlSAX2Text with XML_PARSE_HUGE"), so it applies however the input is
+#      delivered and parsing from a buffer no longer avoids it. Case 1 therefore
+#      fails against libxml2 >= 2.13 and is expected to keep failing until the
+#      reader is fixed, which is the other half of #2108.
 #
 # Environment variables:
 #   ICCDEV_TOOLS_DIR   -- path to Build/Tools or build/Tools
@@ -170,8 +192,49 @@ roundtrip_large_text_node
 
 echo "=== Parser hardening still armed ==="
 
+# A parser-level refusal, as opposed to "this parsed but is not a profile".
+# libxml2 prefixes its own diagnostics with "parser error", which covers the
+# cases it refuses on its own. The second alternative is for a reader that stops
+# the parse itself: xmlStopParser sets no message, so a reader that enforces a
+# limit in its own SAX callbacks has to append one, and this is the text it is
+# expected to use.
+PARSER_DIAG='parser error|exceeds the parser'"'"'s nesting-depth or name-length limit'
+
+# Proves the assertion in reject_case() is worth something: a well-formed
+# document that violates no parser limit must be refused WITHOUT any parser
+# diagnostic, because it fails later as an invalid profile. If this ever starts
+# emitting one, every reject_case below has stopped discriminating.
+control_no_parser_diagnostic() {
+  local name="xml-control-wellformed-no-parser-error"
+  local file="$OUTDIR/control.xml"
+  local logfile="$OUTDIR/${name}.log"
+
+  if [ ! -x "$FROMXML" ]; then
+    skip "$name" "iccFromXml not built"
+    return
+  fi
+
+  printf '<IccProfile></IccProfile>' >"$file"
+
+  if "$FROMXML" "$file" "$OUTDIR/${name}.icc" >"$logfile" 2>&1; then
+    fail "$name" "an empty IccProfile document was accepted as a profile"
+    return
+  fi
+  if grep -qE "$PARSER_DIAG" "$logfile"; then
+    fail "$name" "a well-formed document produced a parser diagnostic"
+    return
+  fi
+  check_sanitizers "$name" "$logfile" || return
+  pass "$name (refused as a profile, not by the parser)"
+}
+
+# $4 selects how strictly the refusal is checked:
+#   parser -- a parser-level diagnostic is required (the caps XML_PARSE_HUGE
+#             raises, which is what this script exists to pin)
+#   exit   -- exit status only, for a property the parser owns across every
+#             supported libxml2 and which no iccDEV parser flag can change
 reject_case() {
-  local name="$1" file="$2" why="$3"
+  local name="$1" file="$2" why="$3" strictness="${4:-parser}"
   local logfile="$OUTDIR/${name}.log"
 
   if [ ! -x "$FROMXML" ]; then
@@ -183,9 +246,17 @@ reject_case() {
     fail "$name" "$why was accepted"
     return
   fi
+  # Exit status alone cannot carry this: none of these fixtures is a valid
+  # profile, so iccFromXml fails on them either way. The parser has to say so.
+  if [ "$strictness" = "parser" ] && ! grep -qE "$PARSER_DIAG" "$logfile"; then
+    fail "$name" "$why was refused as an invalid profile, not by the parser"
+    return
+  fi
   check_sanitizers "$name" "$logfile" || return
   pass "$name ($why refused)"
 }
+
+control_no_parser_diagnostic
 
 # Nesting past libxml2's 256-level default depth cap.
 python3 - "$OUTDIR/deep.xml" <<'PY'
@@ -215,7 +286,17 @@ open(sys.argv[1], "w").write(
     '<!ENTITY f "&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;">\n'
     ']>\n<IccProfile>&f;</IccProfile>\n')
 PY
-reject_case "xml-reject-entity-amplification" "$OUTDIR/laughs.xml" "a billion-laughs document"
+#
+# Checked on exit status only, deliberately. Measured against libxml2 2.9.14,
+# 2.13.8 and 2.15.2, this document's fate does not depend on XML_PARSE_HUGE on
+# any of them: 2.13 and 2.15 refuse it either way, and 2.9 accepts it either
+# way, because without XML_PARSE_NOENT -- which iccDEV does not set -- entity
+# content is not expanded and older libxml2 does not account for it. So this is
+# a property libxml2 owns and no parser flag of ours moves, and requiring a
+# parser diagnostic here would only encode the linked libxml2's version. Kept as
+# a coverage case; tightening it needs a decision on the minimum supported
+# libxml2 rather than a change to this script.
+reject_case "xml-reject-entity-amplification" "$OUTDIR/laughs.xml" "a billion-laughs document" exit
 
 ###############################################################################
 # 3. The whole-document bound replaces the per-node one
